@@ -85,6 +85,13 @@ export interface BuildChildOptions {
   readonly config: unknown;
   /** Framework name for error attribution (e.g. "sveltekit", "waku"). */
   readonly framework: string;
+  /**
+   * Extra process env for the child only. Merged over the parent's env
+   * at spawn time so Vite/nitro/`import.meta.env` see site `env` without
+   * the parent mutating `process.env` (plugins in the child may still
+   * mutate theirs — that is why this is a child).
+   */
+  readonly env?: Record<string, string> | undefined;
 }
 
 /**
@@ -168,6 +175,9 @@ export const runBuildChild = (
           stdin: "ignore",
           stdout: "pipe",
           stderr: "pipe",
+          ...(options.env !== undefined
+            ? { env: { ...process.env, ...options.env } }
+            : {}),
         }).pipe(
           Effect.mapError(
             fail(

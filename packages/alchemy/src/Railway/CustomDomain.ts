@@ -1,4 +1,3 @@
-import { Retry as RailwayRetry } from "@distilled.cloud/railway";
 import type {
   CustomDomainCreateResponse,
   CustomDomainResponse,
@@ -11,6 +10,8 @@ import * as Schedule from "effect/Schedule";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
+import { matchesAlchemyPhysicalName } from "./Metadata.ts";
+import { ownedProjects, projectEnvironmentIds } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 
 /**
@@ -327,6 +328,49 @@ export const CustomDomainProvider = () =>
     ],
     nuke: { dependsOn: ["Railway.Project"] },
 
+    list: Effect.fn(function* () {
+      const projects = yield* ownedProjects();
+      const rows = yield* Effect.forEach(projects, (project) =>
+        Effect.gen(function* () {
+          const live = yield* railway
+            .project({ id: project.projectId })
+            .pipe(
+              Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+                Effect.succeed(undefined),
+              ),
+            );
+          const services = (
+            live?.services.edges.map((edge) => edge.node) ?? []
+          ).filter(
+            (service) =>
+              service.deletedAt == null &&
+              matchesAlchemyPhysicalName(service.name),
+          );
+          const envIds = yield* projectEnvironmentIds(project);
+          const nested = yield* Effect.forEach(services, (service) =>
+            Effect.forEach(envIds, (environmentId) =>
+              listServiceDomains(
+                project.projectId,
+                environmentId,
+                service.id,
+              ).pipe(
+                Effect.map((domains) =>
+                  domains.map((domain) =>
+                    toAttrs(domain, {
+                      projectId: project.projectId,
+                      environmentId,
+                    }),
+                  ),
+                ),
+              ),
+            ).pipe(Effect.map((rows) => rows.flat())),
+          );
+          return nested.flat();
+        }),
+      );
+      return rows.flat();
+    }),
+
     diff: Effect.fn(function* ({ news, output }) {
       if (news === undefined || !isResolved(news)) return undefined;
       if (output === undefined) return undefined;
@@ -430,12 +474,6 @@ export const CustomDomainProvider = () =>
             },
           })
           .pipe(
-            RailwayRetry.none,
-            Effect.retry({
-              while: (e) => e._tag === "RailwayRateLimited",
-              schedule: Schedule.spaced("2 seconds"),
-              times: 3,
-            }),
             Effect.catchTag("RailwayValidationError", (e) =>
               alreadyExists(e.message)
                 ? Effect.succeed(undefined)

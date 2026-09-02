@@ -1,6 +1,7 @@
 import * as railway from "@distilled.cloud/railway";
 import * as Provider from "@/Provider";
 import * as Railway from "@/Railway";
+import { suitePartition } from "./suiteProject.ts";
 import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -45,21 +46,6 @@ const waitUntilAgentGone = (environmentId: string, cloudAgentId: string) =>
     }),
   );
 
-const waitUntilProjectGone = (projectId: string) =>
-  railway.project({ id: projectId }).pipe(
-    Effect.map((project) =>
-      project.deletedAt != null ? ("gone" as const) : ("found" as const),
-    ),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-      Effect.succeed("gone" as const),
-    ),
-    Effect.repeat({
-      schedule: Schedule.spaced("1 second"),
-      until: (status) => status === "gone",
-      times: 10,
-    }),
-  );
-
 const deleteAgent = (id: string) =>
   railway
     .cloudAgentDelete({ id })
@@ -73,15 +59,15 @@ test.provider(
 
       const projectOnly = yield* stack.deploy(
         Effect.gen(function* () {
-          const project = yield* Railway.Project("Site");
-          return { project };
+          const { project, environment } = yield* suitePartition;
+          return { project, environment };
         }),
       );
 
       const probe = yield* Effect.result(
         railway.cloudAgentCreate({
           input: {
-            environmentId: projectOnly.project.environmentId,
+            environmentId: projectOnly.environment.environmentId,
             name: projectOnly.project.name,
           },
         }),
@@ -93,33 +79,29 @@ test.provider(
           ),
         ).toEqual(true);
         yield* stack.destroy();
-        const projectGone = yield* waitUntilProjectGone(
-          projectOnly.project.projectId,
-        );
-        expect(projectGone).toEqual("gone");
         return;
       }
 
       yield* deleteAgent(probe.success.id);
       yield* waitUntilAgentGone(
-        projectOnly.project.environmentId,
+        projectOnly.environment.environmentId,
         probe.success.id,
       );
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const project = yield* Railway.Project("Site");
+          const { project, environment } = yield* suitePartition;
           const agent = yield* Railway.CloudAgent("Coder", {
-            environment: project,
+            environment,
           });
-          return { project, agent };
+          return { project, environment, agent };
         }),
       );
 
       expect(created.agent.cloudAgentId).toEqual(expect.any(String));
       expect(created.agent.cloudAgentId.length).toBeGreaterThan(0);
       expect(created.agent.environmentId).toEqual(
-        created.project.environmentId,
+        created.environment.environmentId,
       );
       expect(created.agent.projectId).toEqual(created.project.projectId);
       expect(created.agent.name).toEqual(expect.any(String));
@@ -139,13 +121,13 @@ test.provider(
         ].includes(created.agent.status),
       ).toEqual(true);
 
-      const listed = yield* listLive(created.project.environmentId);
+      const listed = yield* listLive(created.environment.environmentId);
       const fetched = listed.find(
         (agent) => agent.id === created.agent.cloudAgentId,
       );
       expect(fetched).toBeDefined();
       expect(fetched?.name).toEqual(created.agent.name);
-      expect(fetched?.environmentId).toEqual(created.project.environmentId);
+      expect(fetched?.environmentId).toEqual(created.environment.environmentId);
       expect(fetched?.projectId).toEqual(created.project.projectId);
 
       const provider = yield* Provider.findProvider(Railway.CloudAgent);
@@ -155,19 +137,15 @@ test.provider(
       );
       expect(found).toBeDefined();
       expect(found?.name).toEqual(created.agent.name);
-      expect(found?.environmentId).toEqual(created.project.environmentId);
+      expect(found?.environmentId).toEqual(created.environment.environmentId);
 
       yield* stack.destroy();
 
       const agentGone = yield* waitUntilAgentGone(
-        created.project.environmentId,
+        created.environment.environmentId,
         created.agent.cloudAgentId,
       );
       expect(agentGone).toEqual("gone");
-      const projectGone = yield* waitUntilProjectGone(
-        created.project.projectId,
-      );
-      expect(projectGone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 480_000 },
+  { timeout: 3_600_000 },
 );

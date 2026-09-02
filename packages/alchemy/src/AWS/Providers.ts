@@ -30,6 +30,10 @@ import {
 import { flociDual, flociServices } from "./Local/FlociServices.ts";
 import * as Provider from "../Provider.ts";
 import { Random, RandomProvider } from "../Random.ts";
+import {
+  Server as WebsiteServer,
+  ServerProvider as WebsiteServerProvider,
+} from "../Website/Server.ts";
 import * as AccessAnalyzer from "./AccessAnalyzer/index.ts";
 import * as Account from "./Account/index.ts";
 import * as ACM from "./ACM/index.ts";
@@ -419,6 +423,7 @@ export const providers = () =>
         Cognito.IdentityPool,
         Cognito.IdentityPoolRoleAttachment,
         Cognito.IdentityProvider,
+        Cognito.ManagedLoginBranding,
         Cognito.ResourceServer,
         Cognito.User,
         Cognito.UserPool,
@@ -956,7 +961,7 @@ export const providers = () =>
         WAFv2.WebACL,
         WAFv2.WebACLAssociation,
         Website.AssetDeployment,
-        Website.Server,
+        WebsiteServer,
         XRay.Group,
         XRay.ResourcePolicy,
         XRay.SamplingRule,
@@ -1198,6 +1203,9 @@ export const providers = () =>
           ),
           flociDual(Cognito.IdentityProvider, () =>
             Cognito.IdentityProviderProvider(),
+          ),
+          flociDual(Cognito.ManagedLoginBranding, () =>
+            Cognito.ManagedLoginBrandingProvider(),
           ),
           flociDual(Cognito.ResourceServer, () =>
             Cognito.ResourceServerProvider(),
@@ -1651,7 +1659,7 @@ export const providers = () =>
             Website.AssetDeploymentProvider(),
           ),
           // ServerProvider is internally dual (LocalProvider.make → ServerLocal).
-          Website.ServerProvider(),
+          WebsiteServerProvider(),
           XRay.GroupProvider(),
           XRay.ResourcePolicyProvider(),
           XRay.SamplingRuleProvider(),

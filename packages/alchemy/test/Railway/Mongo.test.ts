@@ -3,16 +3,19 @@ import * as railway from "@distilled.cloud/railway";
 import * as Alchemy from "@/index.ts";
 import * as Provider from "@/Provider";
 import * as Railway from "@/Railway";
+import { RailwayRetryPolicy } from "@/Railway/RetryPolicy.ts";
+import { suitePartition } from "./suiteProject.ts";
+import { waitUntilVolumeGone } from "./waitUntilVolumeGone.ts";
 import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import MongoApi, { Db, Site } from "./fixtures/mongo-api.ts";
-import { canPushRailwayImage } from "./fixtures/registry.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Railway.providers(),
@@ -25,66 +28,21 @@ const logLevel = Effect.provideService(
 
 const distilled = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
-    Effect.provide(CredentialsFromEnv),
-    Effect.provide(FetchHttpClient.layer),
-  );
-
-const waitUntilServiceGone = (serviceId: string) =>
-  railway.service({ id: serviceId }).pipe(
-    Effect.map((service) =>
-      service.deletedAt != null ? ("gone" as const) : ("found" as const),
+    Effect.provide(
+      Layer.mergeAll(
+        RailwayRetryPolicy,
+        CredentialsFromEnv,
+        FetchHttpClient.layer,
+      ),
     ),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-      Effect.succeed("gone" as const),
-    ),
-    Effect.repeat({
-      schedule: Schedule.spaced("1 second"),
-      until: (status) => status === "gone",
-      times: 10,
-    }),
-  );
-
-const waitUntilProjectGone = (projectId: string) =>
-  railway.project({ id: projectId }).pipe(
-    Effect.map((project) =>
-      project.deletedAt != null ? ("gone" as const) : ("found" as const),
-    ),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-      Effect.succeed("gone" as const),
-    ),
-    Effect.repeat({
-      schedule: Schedule.spaced("1 second"),
-      until: (status) => status === "gone",
-      times: 10,
-    }),
-  );
-
-const waitUntilVolumeGone = (volumeInstanceId: string) =>
-  railway.volumeInstance({ id: volumeInstanceId }).pipe(
-    Effect.map((instance) =>
-      instance.deletedAt != null ||
-      instance.isPendingDeletion ||
-      instance.state === "DELETED" ||
-      instance.state === "DELETING"
-        ? ("gone" as const)
-        : ("found" as const),
-    ),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-      Effect.succeed("gone" as const),
-    ),
-    Effect.repeat({
-      schedule: Schedule.spaced("1 second"),
-      until: (status) => status === "gone",
-      times: 10,
-    }),
   );
 
 const ping = (url: string) =>
   Railway.pingMongo(url).pipe(
-    Effect.retry({
-      schedule: Schedule.spaced("4 seconds"),
-      times: 10,
-    }),
+    // A fresh Mongo behind a freshly created TCP proxy can take minutes to
+    // accept connections under full-suite load (cold volume init + proxy
+    // port propagation). Keep retrying, bounded to ~4 minutes.
+    Effect.retry({ schedule: Schedule.spaced("5 seconds"), times: 48 }),
   );
 
 const asVariableMap = (value: unknown): Record<string, string> => {
@@ -119,6 +77,21 @@ const readServiceVariables = (
       ),
     );
 
+const waitUntilServiceGone = (serviceId: string) =>
+  railway.service({ id: serviceId }).pipe(
+    Effect.map((service) =>
+      service.deletedAt != null ? ("gone" as const) : ("found" as const),
+    ),
+    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+      Effect.succeed("gone" as const),
+    ),
+    Effect.repeat({
+      schedule: Schedule.spaced("1 second"),
+      until: (status) => status === "gone",
+      times: 10,
+    }),
+  );
+
 class NotReady extends Data.TaggedError("NotReady")<{
   status: number;
   body?: unknown;
@@ -142,19 +115,20 @@ const FixtureStack = Alchemy.Stack(
     const api = yield* MongoApi;
     return {
       projectId: project.projectId,
-      environmentId: project.environmentId,
+      environmentId: db.environmentId,
       serviceId: api.serviceId,
       url: api.url,
       publicConnectionUri: db.publicConnectionUri,
-      mode: canPushRailwayImage ? ("effect" as const) : ("image" as const),
+      mode: "effect" as const,
     };
   }),
 );
 
-const fixture = beforeAll(deploy(FixtureStack), { timeout: 480_000 });
-
+const fixture = beforeAll(deploy(FixtureStack), {
+  timeout: 3_600_000,
+});
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(FixtureStack), {
-  timeout: 480_000,
+  timeout: 3_600_000,
 });
 
 test.provider(
@@ -165,16 +139,18 @@ test.provider(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const project = yield* Railway.Project("Site");
-          const db = yield* Railway.mongo("Db", { project });
-          return { project, db };
+          const { project, environment } = yield* suitePartition;
+          const db = yield* Railway.mongo("Db", { project, environment });
+          return { project, environment, db };
         }),
       );
 
       expect(created.db.serviceId).toEqual(expect.any(String));
       expect(created.db.serviceId.length).toBeGreaterThan(0);
       expect(created.db.projectId).toEqual(created.project.projectId);
-      expect(created.db.environmentId).toEqual(created.project.environmentId);
+      expect(created.db.environmentId).toEqual(
+        created.environment.environmentId,
+      );
       expect(created.db.name).toEqual(expect.any(String));
       expect(created.db.name.length).toBeGreaterThan(0);
       expect(created.db.name.length).toBeLessThanOrEqual(32);
@@ -262,12 +238,13 @@ test.provider(
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          const project = yield* Railway.Project("Site");
+          const { project, environment } = yield* suitePartition;
           const db = yield* Railway.mongo("Db", {
             project,
+            environment,
             name: nextName,
           });
-          return { project, db };
+          return { project, environment, db };
         }),
       );
 
@@ -296,12 +273,8 @@ test.provider(
         created.db.volumeInstanceId,
       );
       expect(volumeGone).toEqual("gone");
-      const projectGone = yield* waitUntilProjectGone(
-        created.project.projectId,
-      );
-      expect(projectGone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 480_000 },
+  { timeout: 3_600_000 },
 );
 
 test(
@@ -391,5 +364,5 @@ test(
     const pong = yield* ping(out.publicConnectionUri);
     expect(pong.ok).toEqual(1);
   }).pipe(logLevel),
-  { timeout: 480_000 },
+  { timeout: 3_600_000 },
 );

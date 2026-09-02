@@ -12,8 +12,8 @@
  * - `CacheProxy` — TcpProxy so Redis is reachable from a laptop
  * - `Data` — Bucket + Put/Get/Head/List/Delete
  * - `Echo` — image Service (`hashicorp/http-echo`, healthcheck)
- * - `Ping` — Effect-native Function (`src/ping.ts`) that
- *   `ConnectPostgres`s the same Db (no registry)
+ * - `Ping` — Effect HTTP Service (`src/ping.ts`) that
+ *   `ConnectPostgres`s the same Db (Docker, not a canvas Function)
  * - `Cleanup` — canvas cron Function (`console.log("tick")`)
  * - `Api` — Effect HTTP Service (`src/api.ts`, healthcheck)
  * - `Worker` — Effect background Service that writes the volume
@@ -23,13 +23,14 @@
  * `VolumeBackup` is Pro-plan gated (`RailwayForbidden` on Hobby) and
  * omitted here; see `Railway.VolumeBackup` and the volumes hub page.
  *
- * Effect-native images are pushed to `RAILWAY_REGISTRY` (GHCR / Docker
- * Hub). Railway has no private registry of its own.
+ * Effect-native Services upload a generated Dockerfile; Railway
+ * builds the image. No GHCR.
  *
  * CustomDomain needs a hostname you control. Pass
  * `RAILWAY_TEST_DOMAIN` to attach one to Api.
  */
 import * as Alchemy from "alchemy";
+import * as Output from "alchemy/Output";
 import * as Railway from "alchemy/Railway";
 import * as Effect from "effect/Effect";
 import Api from "./src/api.ts";
@@ -37,7 +38,6 @@ import { Echo } from "./src/echo.ts";
 import Ping from "./src/ping.ts";
 import {
   Cache,
-  CacheProxy,
   Cleanup,
   Data,
   DatabaseUrl,
@@ -65,7 +65,11 @@ export default Alchemy.Stack(
     const mysql = yield* Mysql;
     const databaseUrl = yield* DatabaseUrl;
     const cache = yield* Cache;
-    const cacheProxy = yield* CacheProxy;
+    const cacheProxy = yield* Railway.TcpProxy("CacheProxy", {
+      redis: cache,
+      environment: site,
+      applicationPort: 6379,
+    });
     const data = yield* Data;
     const echo = yield* Echo;
     const ping = yield* Ping;
@@ -107,7 +111,7 @@ export default Alchemy.Stack(
       cleanupId: cleanup.serviceId,
       groupId: backend.groupId,
       redisServiceId: cache.serviceId,
-      redisProxy: `${cacheProxy.domain}:${cacheProxy.proxyPort}`,
+      redisProxy: Output.interpolate`${cacheProxy.domain}:${cacheProxy.proxyPort}`,
       bucketId: data.bucketId,
       echoUrl: echo.url,
       apiServiceId: api.serviceId,

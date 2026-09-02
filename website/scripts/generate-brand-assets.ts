@@ -120,6 +120,21 @@ function brandMarkSvg(theme: YantraTheme): string {
   return yantraSvg({ size: 512, stroke, dot, strokeWidth: 1.1 });
 }
 
+/** Opaque background treatment with a slightly smaller centered mark. */
+function backgroundLogoSvg(theme: YantraTheme, background: string): string {
+  const size = 512;
+  const markSize = 448;
+  const offset = (size - markSize) / 2;
+  const mark = brandMarkSvg(theme).replace(
+    'width="512" height="512"',
+    `width="${markSize}" height="${markSize}"`,
+  );
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+    <rect width="${size}" height="${size}" fill="${background}"/>
+    <g transform="translate(${offset} ${offset})">${mark}</g>
+  </svg>`;
+}
+
 /**
  * apple-touch-icon: opaque and generously padded. The one asset that cannot be
  * transparent — iOS composites the alpha channel against black when it masks
@@ -226,33 +241,17 @@ async function main() {
       path.join(publicDir, `icon-512${theme === "dark" ? "-dark" : ""}.png`),
       rasterize(mark, 512),
     );
-    const { stroke, dot, bg } = YANTRA_THEMES[theme];
-    const logo = yantraSvg({
-      size: 512,
-      stroke,
-      dot,
-      bg,
-      strokeWidth: 1.1,
-    });
     await writeFile(
       path.join(publicDir, `alchemy-logo-${theme}-bg.png`),
-      rasterize(logo, 512),
+      rasterize(backgroundLogoSvg(theme, YANTRA_THEMES[theme].bg), 2048),
     );
   }
 
   // 5. Light brand mark on a true-white ground for consumers that cannot use
   //    the warmer theme background or composite the transparent asset.
-  const { stroke, dot } = YANTRA_THEMES.light;
-  const whiteLogo = yantraSvg({
-    size: 512,
-    stroke,
-    dot,
-    bg: "#ffffff",
-    strokeWidth: 1.1,
-  });
   await writeFile(
     path.join(publicDir, "alchemy-logo-512-white-bg.png"),
-    rasterize(whiteLogo, 512),
+    rasterize(backgroundLogoSvg("light", "#ffffff"), 2048),
   );
 
   // 6. Backwards-compat: keep the old /favicon.png reference (used by
@@ -271,7 +270,7 @@ async function main() {
 
   // eslint-disable-next-line no-console
   console.log(
-    "[brand] wrote favicon.{svg,png}, favicon-{16,32}[-dark].png, apple-touch-icon.png, icon-512[-dark].png, alchemy-logo-{light,dark}.svg, alchemy-logo-{light,dark}-bg.png, alchemy-logo-512-white-bg.png, og-default.{svg,png}",
+    "[brand] wrote favicon.{svg,png}, favicon-{16,32}[-dark].png, apple-touch-icon.png, icon-512[-dark].png, alchemy-logo-{light,dark}.svg, alchemy-logo-{light,dark}-bg.png (2048px), alchemy-logo-512-white-bg.png (2048px), og-default.{svg,png}",
   );
 }
 

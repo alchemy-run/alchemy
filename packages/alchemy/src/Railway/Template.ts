@@ -1,4 +1,3 @@
-import { Retry as RailwayRetry } from "@distilled.cloud/railway";
 import type {
   ProjectCreateResponse,
   ProjectResponse,
@@ -24,7 +23,12 @@ import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { RailwayEnvironment } from "./Environment.ts";
 import { createRailwayName, matchesAlchemyPhysicalName } from "./Metadata.ts";
-import { createProject, listOwnedProjects } from "./Project.ts";
+import {
+  createProject,
+  environmentIdOf as projectEnvironmentId,
+  ownedProjects,
+  workspaceIdOf as projectWorkspaceId,
+} from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 
 /**
@@ -324,10 +328,7 @@ const currentWorkspaceId = Effect.fn(function* () {
 });
 
 const environmentIdFromProject = (project: CloudProject) =>
-  project.primaryEnvironmentId ??
-  project.baseEnvironmentId ??
-  project.baseEnvironment?.id ??
-  "";
+  projectEnvironmentId(project);
 
 const toAttrs = (input: {
   template: CloudTemplate;
@@ -343,11 +344,7 @@ const toAttrs = (input: {
   name: input.template.name,
   projectId: input.project.id,
   environmentId: input.environmentId,
-  workspaceId:
-    input.workspaceId ||
-    input.project.workspaceId ||
-    input.project.workspace?.id ||
-    "",
+  workspaceId: input.workspaceId || projectWorkspaceId(input.project) || "",
   workflowId: input.workflowId,
   serviceIds: input.serviceIds,
   ownsProject: input.ownsProject,
@@ -503,12 +500,6 @@ const normalizeConfig = (config: unknown): unknown => {
         : { ...service, variables: normalizeVariables(service.variables) };
   }
   return { ...config, services };
-};
-
-const rateLimited = {
-  while: (e: { _tag: string }) => e._tag === "RailwayRateLimited",
-  schedule: Schedule.spaced("31 seconds"),
-  times: 8 as const,
 };
 
 const waitForWorkflow = (workflowId: string, projectId: string) =>
@@ -681,9 +672,7 @@ export const TemplateProvider = () =>
       const workspaceId =
         output?.workspaceId ??
         (olds !== undefined ? workspaceIdOf(olds.project) : undefined) ??
-        observed.project.workspaceId ??
-        observed.project.workspace?.id ??
-        "";
+        projectWorkspaceId(observed.project);
       const attrs = toAttrs({
         template,
         project: observed.project,
@@ -700,63 +689,41 @@ export const TemplateProvider = () =>
     }),
 
     list: Effect.fn(function* () {
-      const projects = yield* listOwnedProjects();
-      const rows = yield* Effect.forEach(
-        projects,
-        (project) =>
-          Effect.gen(function* () {
-            const source = yield* sourceForProject(project.projectId);
-            const listed = yield* listProjectServices(project.projectId);
-            const services = yield* hydrateServices(listed);
-            const groups = new Map<string, ServiceResponse[]>();
-            if (source !== undefined) {
-              const matched = matchingServices({
-                services,
-                templateId: source.id,
-                sourceId: source.id,
-                ownsProject: true,
-              });
-              if (matched.length > 0) {
-                groups.set(source.id, matched);
-              }
-            }
-            for (const service of services) {
-              if (
-                service.templateId == null ||
-                service.templateId.length === 0
-              ) {
-                continue;
-              }
-              const existing = groups.get(service.templateId) ?? [];
-              if (!existing.some((row) => row.id === service.id)) {
-                existing.push(service);
-              }
-              groups.set(service.templateId, existing);
-            }
-            const live = yield* getProject(project.projectId);
-            if (live === undefined) return [] as Template["Attributes"][];
-            const attrs: Template["Attributes"][] = [];
-            for (const [templateId, group] of groups) {
-              const marketplace =
-                source?.id === templateId
-                  ? source
-                  : yield* resolveMarketplaceTemplate(templateId);
-              if (marketplace === undefined) continue;
-              attrs.push(
-                toAttrs({
-                  template: marketplace,
-                  project: live,
-                  environmentId: project.environmentId,
-                  workspaceId: project.workspaceId,
-                  serviceIds: group.map((service) => service.id),
-                  workflowId: undefined,
-                  ownsProject: false,
-                }),
-              );
-            }
-            return attrs;
-          }),
-        { concurrency: 8 },
+      const projects = yield* ownedProjects();
+      const rows = yield* Effect.forEach(projects, (project) =>
+        Effect.gen(function* () {
+          const live = yield* railway
+            .project({ id: project.projectId })
+            .pipe(
+              Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+                Effect.succeed(undefined),
+              ),
+            );
+          if (live === undefined || live.deletedAt != null) {
+            return [] as Template["Attributes"][];
+          }
+          const services = live.services.edges
+            .map((edge) => edge.node)
+            .filter((service) => service.deletedAt == null);
+          const stampedId = services.find(
+            (service) => service.templateId != null,
+          )?.templateId;
+          const source =
+            (yield* sourceForProject(project.projectId)) ??
+            (stampedId != null ? yield* getTemplateById(stampedId) : undefined);
+          if (source === undefined) return [] as Template["Attributes"][];
+          return [
+            toAttrs({
+              template: source,
+              project: live,
+              environmentId: project.environmentId,
+              workspaceId: project.workspaceId,
+              serviceIds: services.map((service) => service.id),
+              workflowId: undefined,
+              ownsProject: false,
+            }),
+          ];
+        }),
       );
       const seen = new Set<string>();
       const unique: Template["Attributes"][] = [];
@@ -823,7 +790,7 @@ export const TemplateProvider = () =>
         environmentId && environmentId.length > 0
           ? environmentId
           : environmentIdFromProject(current);
-      workspaceId = current.workspaceId ?? current.workspace?.id ?? workspaceId;
+      workspaceId = projectWorkspaceId(current, workspaceId);
 
       const observed = yield* observeDeployment({
         projectId,
@@ -843,17 +810,15 @@ export const TemplateProvider = () =>
         }
         const parsed = yield* parseConfig(rawConfig);
         const serializedConfig = normalizeConfig(parsed);
-        const deployed = yield* railway
-          .templateDeployV2({
-            input: {
-              templateId: marketplace.id,
-              serializedConfig,
-              projectId,
-              ...(environmentId.length > 0 ? { environmentId } : {}),
-              workspaceId,
-            },
-          })
-          .pipe(RailwayRetry.none, Effect.retry(rateLimited));
+        const deployed = yield* railway.templateDeployV2({
+          input: {
+            templateId: marketplace.id,
+            serializedConfig,
+            projectId,
+            ...(environmentId.length > 0 ? { environmentId } : {}),
+            workspaceId,
+          },
+        });
         projectId = deployed.projectId || projectId;
         workflowId = deployed.workflowId ?? workflowId;
         if (

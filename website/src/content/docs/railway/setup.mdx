@@ -103,8 +103,12 @@ To re-run the setup later (e.g. to rotate the token, or configure a
 separate `prod` profile):
 
 ```sh
-alchemy login --configure
-alchemy login --profile prod --configure
+# Re-run the interactive setup (e.g. to rotate the token)
+alchemy profile edit --reconfigure Railway
+
+# Or connect Railway in a separate `prod` profile
+alchemy profile create prod
+alchemy profile edit --profile prod --add Railway
 ```
 
 Inspect what's stored (secrets are redacted):
@@ -113,19 +117,13 @@ Inspect what's stored (secrets are redacted):
 alchemy profile show
 ```
 
-:::note[Docker and a registry for Effect-native Services]
+:::note[Effect-native Services]
 [`Railway.Service`](/railway/compute/services) with `main` bundles
-your Effect program, builds a `linux/amd64` image, and pushes it to
-`registry` (GHCR or Docker Hub — Railway has no private registry of
-its own). Set `registry` on the Service and one of:
-
-- `RAILWAY_REGISTRY_USERNAME` + `RAILWAY_REGISTRY_PASSWORD`
-- `GITHUB_ACTOR` + `GITHUB_TOKEN` (GHCR)
-- `DOCKERHUB_USERNAME` + `DOCKERHUB_TOKEN`
-
-Have [Docker](https://docs.docker.com/get-docker/) running on the
-machine that runs `alchemy deploy`. Image-based Services
-(`image: "hashicorp/http-echo"`) do not need Docker or a registry.
+your Effect program, generates a Dockerfile, and uploads the
+context. Railway builds the image — no GHCR, no Docker daemon on
+the machine that runs `alchemy deploy`. Image-based Services
+(`image: "hashicorp/http-echo"`) skip the build and pull a public
+tag.
 :::
 
 ## State storage

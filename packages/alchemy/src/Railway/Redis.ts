@@ -1,5 +1,4 @@
 import { randomBytes } from "node:crypto";
-import { Retry as RailwayRetry } from "@distilled.cloud/railway";
 import type {
   ProjectResponseServicesEdgesItemNode,
   ServiceCreateResponse,
@@ -17,7 +16,11 @@ import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { createRailwayName, matchesAlchemyPhysicalName } from "./Metadata.ts";
-import { listOwnedProjects, type Project } from "./Project.ts";
+import {
+  ownedProjects,
+  projectEnvironmentIds,
+  type Project,
+} from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 
 /**
@@ -210,7 +213,7 @@ const RedisResource = Resource<Redis>("Railway.Redis");
  *
  * export default class Api extends Railway.Service<Api>()(
  *   "Api",
- *   { project: Site, main: import.meta.url, registry: "ghcr.io/acme" },
+ *   { project: Site, main: import.meta.url },
  *   Effect.gen(function* () {
  *     const cache = yield* Railway.ReadWriteRedis(Cache);
  *     return {
@@ -360,12 +363,6 @@ const deployFailed = (status: string | undefined) =>
 const alreadyExists = (message: string) =>
   /already exists|already in use|duplicate/i.test(message);
 
-const rateLimited = {
-  while: (e: { _tag: string }) => e._tag === "RailwayRateLimited",
-  schedule: Schedule.spaced("2 seconds"),
-  times: 3 as const,
-};
-
 const getById = (serviceId: string) =>
   railway.service({ id: serviceId }).pipe(
     Effect.map((service) => (isGoneService(service) ? undefined : service)),
@@ -409,8 +406,10 @@ const waitForInstance = (environmentId: string, serviceId: string) =>
     }),
     Effect.retry({
       while: (e) => e._tag === "Railway.RedisPending",
-      times: 8,
-      schedule: Schedule.spaced("1 second"),
+      // serviceCreate fans the instance out to each environment
+      // asynchronously; under full-suite load the fan-out can take minutes.
+      times: 60,
+      schedule: Schedule.spaced("2 seconds"),
     }),
     Effect.catchTag("Railway.RedisPending", () =>
       getInstance(environmentId, serviceId),
@@ -439,7 +438,8 @@ const waitForDeployment = (environmentId: string, serviceId: string) =>
   }).pipe(
     Effect.retry({
       while: (e) => e._tag === "Railway.RedisDeployPending",
-      times: 10,
+      // Queued builds under full-suite load can exceed 3 minutes — allow ~8.
+      times: 96,
       schedule: Schedule.spaced("5 seconds"),
     }),
     Effect.catchTag("Railway.RedisDeployPending", () =>
@@ -486,18 +486,16 @@ const upsertVariable = (input: {
   name: string;
   value: string;
 }) =>
-  railway
-    .variableUpsert({
-      input: {
-        projectId: input.projectId,
-        environmentId: input.environmentId,
-        serviceId: input.serviceId,
-        name: input.name,
-        value: input.value,
-        skipDeploys: true,
-      },
-    })
-    .pipe(RailwayRetry.none, Effect.retry(rateLimited));
+  railway.variableUpsert({
+    input: {
+      projectId: input.projectId,
+      environmentId: input.environmentId,
+      serviceId: input.serviceId,
+      name: input.name,
+      value: input.value,
+      skipDeploys: true,
+    },
+  });
 
 const redisUrlTemplate = `redis://default:\${{${REDIS_PASSWORD_ENV}}}@\${{RAILWAY_PRIVATE_DOMAIN}}:${REDIS_PORT}`;
 
@@ -624,53 +622,37 @@ export const RedisProvider = () =>
     }),
 
     list: Effect.fn(function* () {
-      const projects = yield* listOwnedProjects();
-      const rows = yield* Effect.forEach(
-        projects,
-        (project) =>
-          listProjectServices(project.projectId).pipe(
-            Effect.flatMap((services) =>
-              Effect.forEach(
-                services.filter((service) =>
-                  matchesAlchemyPhysicalName(service.name),
-                ),
-                (service) =>
-                  Effect.gen(function* () {
-                    const instance = yield* getInstance(
-                      project.environmentId,
-                      service.id,
-                    );
-                    const image = instance?.source?.image ?? undefined;
-                    if (image !== undefined && !isRedisImage(image)) {
-                      return undefined;
-                    }
-                    if (!isRedisImage(image)) {
-                      const vars = yield* listVariableMap(
-                        project.projectId,
-                        project.environmentId,
-                        service.id,
-                      );
-                      if (vars[REDIS_PASSWORD_ENV] === undefined) {
-                        return undefined;
-                      }
-                    }
-                    return toAttrs({
-                      service,
-                      instance,
-                      projectId: project.projectId,
-                      environmentId: project.environmentId,
-                      image: image ?? DEFAULT_REDIS_IMAGE,
-                    });
-                  }),
-                { concurrency: 8 },
-              ).pipe(
-                Effect.map((items) =>
-                  items.filter((item) => item !== undefined),
-                ),
-              ),
+      const projects = yield* ownedProjects();
+      const rows = yield* Effect.forEach(projects, (project) =>
+        Effect.gen(function* () {
+          const services = yield* listProjectServices(project.projectId);
+          const envIds = yield* projectEnvironmentIds(project);
+          const items = yield* Effect.forEach(
+            services.filter((service) =>
+              matchesAlchemyPhysicalName(service.name),
             ),
-          ),
-        { concurrency: 8 },
+            (service) =>
+              Effect.gen(function* () {
+                for (const environmentId of envIds) {
+                  const instance = yield* getInstance(
+                    environmentId,
+                    service.id,
+                  );
+                  const image = instance?.source?.image ?? undefined;
+                  if (!isRedisImage(image)) continue;
+                  return toAttrs({
+                    service,
+                    instance,
+                    projectId: project.projectId,
+                    environmentId,
+                    image: image ?? DEFAULT_REDIS_IMAGE,
+                  });
+                }
+                return undefined;
+              }),
+          );
+          return items.filter((item) => item !== undefined);
+        }),
       );
       return rows.flat();
     }),
@@ -731,8 +713,6 @@ export const RedisProvider = () =>
             },
           })
           .pipe(
-            RailwayRetry.none,
-            Effect.retry(rateLimited),
             Effect.catchTag("RailwayValidationError", (e) =>
               alreadyExists(e.message)
                 ? Effect.succeed(undefined)
@@ -765,17 +745,15 @@ export const RedisProvider = () =>
       const observedStart = instance?.startCommand ?? undefined;
       const startChanged = (observedStart ?? undefined) !== startCommand;
       if (imageChanged || regionChanged || startChanged) {
-        yield* railway
-          .serviceInstanceUpdate({
-            environmentId,
-            serviceId: current.id,
-            input: {
-              ...(imageChanged ? { source: { image } } : {}),
-              ...(regionChanged ? { region: props.region } : {}),
-              ...(startChanged ? { startCommand: startCommand ?? null } : {}),
-            },
-          })
-          .pipe(RailwayRetry.none, Effect.retry(rateLimited));
+        yield* railway.serviceInstanceUpdate({
+          environmentId,
+          serviceId: current.id,
+          input: {
+            ...(imageChanged ? { source: { image } } : {}),
+            ...(regionChanged ? { region: props.region } : {}),
+            ...(startChanged ? { startCommand: startCommand ?? null } : {}),
+          },
+        });
         needsDeploy = true;
         instance = (yield* getInstance(environmentId, current.id)) ?? instance;
       }
@@ -794,11 +772,7 @@ export const RedisProvider = () =>
             environmentId,
             serviceId: current.id,
           })
-          .pipe(
-            RailwayRetry.none,
-            Effect.retry(rateLimited),
-            Effect.catchTag("RailwayValidationError", () => Effect.void),
-          );
+          .pipe(Effect.catchTag("RailwayValidationError", () => Effect.void));
       }
 
       instance =

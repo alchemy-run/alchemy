@@ -15,7 +15,7 @@ import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
-import type { ScopedPlanStatusSession } from "../Cli/Cli.ts";
+import type { ScopedPlanStatusSession } from "../Report.ts";
 import { createPhysicalName } from "../PhysicalName.ts";
 
 export class Docker extends Context.Service<
@@ -51,6 +51,8 @@ export class Docker extends Context.Service<
         "health-start-interval": string | undefined;
         "stop-timeout": string | undefined;
         p: Array<string> | undefined;
+        /** `--add-host` entries, each `hostname:address`. */
+        "add-host"?: Array<string> | undefined;
         command: Array<string> | undefined;
         label?: Record<string, string>;
         context?: string;
@@ -397,6 +399,7 @@ export declare namespace Docker {
         Array<{ HostIp: string; HostPort: string }> | null
       > | null;
       Binds: string[] | null;
+      ExtraHosts: string[] | null;
       RestartPolicy: {
         Name: string;
         MaximumRetryCount: number;
@@ -637,7 +640,12 @@ export const DockerLive = Layer.effect(
             session
               ? Stream.tapSink(
                   Sink.make<string>()(
-                    flow(Stream.splitLines, Stream.runForEach(session.note)),
+                    flow(
+                      Stream.splitLines,
+                      Stream.runForEach((line) =>
+                        session.note(line, { kind: "output" }),
+                      ),
+                    ),
                   ),
                 )
               : undefined,

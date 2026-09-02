@@ -93,12 +93,13 @@ Run `alchemy deploy` to create the Bucket on Cloudflare:
   </TabItem>
 </Tabs>
 
-The first time you deploy, Alchemy walks each provider in your stack
-(here, Cloudflare) through an interactive login and saves the
-credentials to your **`default`** [profile](/environments/profiles) at
-`~/.alchemy/profiles.json`. For Cloudflare you can sign in with
-OAuth in the browser or paste an API token — no environment
-variables required.
+Connect Cloudflare first with `alchemy profile edit --add Cloudflare`.
+Sign in with OAuth in the browser or paste an API token. The
+credentials are saved to your **`default`**
+[profile](/environments/profiles) at `~/.alchemy/profiles.json`. No
+environment variables required. Logging in only ever happens through the
+`profile` command; a deploy with nothing configured fails with the exact
+command to run.
 
 Once you're authenticated, Alchemy shows a plan, asks for
 confirmation, and provisions the resource:
@@ -119,8 +120,9 @@ Full command reference: [CLI](/cli).
 
 :::tip
 To re-run the credential prompt later (e.g. to switch from OAuth to
-an API token, or to add a `prod` profile) use
-`alchemy login --configure` or `alchemy login --profile prod --configure`.
+an API token), use `alchemy profile edit --reconfigure Cloudflare`.
+For a separate profile, run `alchemy profile create prod` followed by
+`alchemy profile edit --profile prod`.
 See [Profiles](/environments/profiles) for the full picture.
 :::
 

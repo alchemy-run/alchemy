@@ -4,18 +4,21 @@ import * as Drizzle from "@/Drizzle/Postgres.ts";
 import * as Alchemy from "@/index.ts";
 import * as Provider from "@/Provider";
 import * as Railway from "@/Railway";
+import { RailwayRetryPolicy } from "@/Railway/RetryPolicy.ts";
+import { suitePartition } from "./suiteProject.ts";
+import { waitUntilVolumeGone } from "./waitUntilVolumeGone.ts";
 import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import { MinimumLogLevel } from "effect/References";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import { PostgresFn } from "./fixtures/async-postgres-fn.ts";
 import PostgresApi, { Db, Site } from "./fixtures/postgres-api.ts";
-import PostgresFn from "./fixtures/postgres-fn.ts";
-import { canPushRailwayImage } from "./fixtures/registry.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Railway.providers(),
@@ -28,82 +31,47 @@ const logLevel = Effect.provideService(
 
 const distilled = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
-    Effect.provide(CredentialsFromEnv),
-    Effect.provide(FetchHttpClient.layer),
+    Effect.provide(
+      Layer.mergeAll(
+        RailwayRetryPolicy,
+        CredentialsFromEnv,
+        FetchHttpClient.layer,
+      ),
+    ),
   );
 
-const waitUntilServiceGone = (serviceId: string) =>
-  railway.service({ id: serviceId }).pipe(
-    Effect.map((service) =>
-      service.deletedAt != null ? ("gone" as const) : ("found" as const),
-    ),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-      Effect.succeed("gone" as const),
-    ),
-    Effect.repeat({
-      schedule: Schedule.spaced("1 second"),
-      until: (status) => status === "gone",
-      times: 10,
-    }),
-  );
-
-const waitUntilProjectGone = (projectId: string) =>
-  railway.project({ id: projectId }).pipe(
-    Effect.map((project) =>
-      project.deletedAt != null ? ("gone" as const) : ("found" as const),
-    ),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-      Effect.succeed("gone" as const),
-    ),
-    Effect.repeat({
-      schedule: Schedule.spaced("1 second"),
-      until: (status) => status === "gone",
-      times: 10,
-    }),
-  );
-
-const waitUntilVolumeGone = (volumeInstanceId: string) =>
-  railway.volumeInstance({ id: volumeInstanceId }).pipe(
-    Effect.map((instance) =>
-      instance.deletedAt != null ||
-      instance.isPendingDeletion ||
-      instance.state === "DELETED" ||
-      instance.state === "DELETING"
-        ? ("gone" as const)
-        : ("found" as const),
-    ),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-      Effect.succeed("gone" as const),
-    ),
-    Effect.repeat({
-      schedule: Schedule.spaced("1 second"),
-      until: (status) => status === "gone",
-      times: 10,
-    }),
-  );
+const firstOk = (rows: unknown): unknown => {
+  if (!Array.isArray(rows) || rows[0] == null || typeof rows[0] !== "object") {
+    return undefined;
+  }
+  return (rows[0] as { ok?: unknown }).ok;
+};
 
 const selectOne = (url: string) =>
-  Effect.gen(function* () {
-    const db = yield* Drizzle.Postgres(Effect.succeed(Redacted.make(url)));
-    return yield* db.execute("select 1 as ok");
-  }).pipe(
-    Effect.retry({
-      schedule: Schedule.spaced("4 seconds"),
-      times: 10,
-    }),
-  );
-
-const firstOk = (executed: unknown): number | undefined => {
-  const list = Array.isArray(executed)
-    ? executed
-    : executed !== null &&
-        typeof executed === "object" &&
-        Array.isArray((executed as { rows?: unknown }).rows)
-      ? (executed as { rows: unknown[] }).rows
-      : [];
-  const first = list[0] as { ok?: unknown } | undefined;
-  return first?.ok === undefined ? undefined : Number(first.ok);
-};
+  Effect.tryPromise({
+    try: async () => {
+      const pg = await import("pg");
+      const client = new pg.Client({
+        connectionString: url,
+        ssl: { rejectUnauthorized: false },
+        // pg has no default connect timeout; bound each attempt so the
+        // retry schedule (not a hung socket) owns the readiness budget.
+        connectionTimeoutMillis: 10_000,
+      });
+      await client.connect();
+      try {
+        return (await client.query("select 1 as ok")).rows;
+      } finally {
+        await client.end();
+      }
+    },
+    catch: (cause) => new Error(String(cause)),
+    // A fresh Postgres behind a freshly created TCP proxy can take minutes
+    // to accept connections under full-suite load (cold volume init + proxy
+    // port propagation) — the proxy accepts and immediately closes until
+    // the upstream is ready ("Connection terminated unexpectedly"). Keep
+    // retrying, bounded to ~4 minutes.
+  }).pipe(Effect.retry({ schedule: Schedule.spaced("5 seconds"), times: 48 }));
 
 const asVariableMap = (value: unknown): Record<string, string> => {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
@@ -137,6 +105,21 @@ const readServiceVariables = (
       ),
     );
 
+const waitUntilServiceGone = (serviceId: string) =>
+  railway.service({ id: serviceId }).pipe(
+    Effect.map((service) =>
+      service.deletedAt != null ? ("gone" as const) : ("found" as const),
+    ),
+    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+      Effect.succeed("gone" as const),
+    ),
+    Effect.repeat({
+      schedule: Schedule.spaced("1 second"),
+      until: (status) => status === "gone",
+      times: 10,
+    }),
+  );
+
 class NotReady extends Data.TaggedError("NotReady")<{
   status: number;
   body?: unknown;
@@ -161,21 +144,22 @@ const FixtureStack = Alchemy.Stack(
     const fn = yield* PostgresFn;
     return {
       projectId: project.projectId,
-      environmentId: project.environmentId,
+      environmentId: db.environmentId,
       serviceId: api.serviceId,
       url: api.url,
+      publicConnectionUri: db.publicConnectionUri,
       functionId: fn.serviceId,
       functionUrl: fn.url,
-      publicConnectionUri: db.publicConnectionUri,
-      mode: canPushRailwayImage ? ("effect" as const) : ("image" as const),
+      mode: "effect" as const,
     };
   }),
 );
 
-const fixture = beforeAll(deploy(FixtureStack), { timeout: 480_000 });
-
+const fixture = beforeAll(deploy(FixtureStack), {
+  timeout: 3_600_000,
+});
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(FixtureStack), {
-  timeout: 480_000,
+  timeout: 3_600_000,
 });
 
 test.provider(
@@ -186,16 +170,18 @@ test.provider(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const project = yield* Railway.Project("Site");
-          const db = yield* Railway.Postgres("Db", { project });
-          return { project, db };
+          const { project, environment } = yield* suitePartition;
+          const db = yield* Railway.Postgres("Db", { project, environment });
+          return { project, environment, db };
         }),
       );
 
       expect(created.db.serviceId).toEqual(expect.any(String));
       expect(created.db.serviceId.length).toBeGreaterThan(0);
       expect(created.db.projectId).toEqual(created.project.projectId);
-      expect(created.db.environmentId).toEqual(created.project.environmentId);
+      expect(created.db.environmentId).toEqual(
+        created.environment.environmentId,
+      );
       expect(created.db.name).toEqual(expect.any(String));
       expect(created.db.name.length).toBeGreaterThan(0);
       expect(created.db.name.length).toBeLessThanOrEqual(32);
@@ -270,12 +256,13 @@ test.provider(
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          const project = yield* Railway.Project("Site");
+          const { project, environment } = yield* suitePartition;
           const db = yield* Railway.Postgres("Db", {
             project,
+            environment,
             name: nextName,
           });
-          return { project, db };
+          return { project, environment, db };
         }),
       );
 
@@ -301,12 +288,8 @@ test.provider(
         created.db.volumeInstanceId,
       );
       expect(volumeGone).toEqual("gone");
-      const projectGone = yield* waitUntilProjectGone(
-        created.project.projectId,
-      );
-      expect(projectGone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 480_000 },
+  { timeout: 3_600_000 },
 );
 
 test(
@@ -400,11 +383,11 @@ test(
     const rows = yield* selectOne(out.publicConnectionUri);
     expect(firstOk(rows)).toEqual(1);
   }).pipe(logLevel),
-  { timeout: 480_000 },
+  { timeout: 3_600_000 },
 );
 
 test(
-  "a Function connects and SELECTs through ConnectPostgres",
+  "an async Function SELECTs through env.DATABASE_URL",
   Effect.gen(function* () {
     const out = yield* fixture;
     expect(out.functionId).toEqual(expect.any(String));
@@ -452,5 +435,5 @@ test(
     const health = (yield* get("/")) as { rows?: unknown };
     expect(firstOk(health.rows)).toEqual(1);
   }).pipe(logLevel),
-  { timeout: 180_000 },
+  { timeout: 3_600_000 },
 );

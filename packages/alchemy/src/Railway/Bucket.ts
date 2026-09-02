@@ -1,4 +1,3 @@
-import { Retry as RailwayRetry } from "@distilled.cloud/railway";
 import type {
   BucketCreateResponse,
   BucketS3CredentialsResultItem,
@@ -20,8 +19,13 @@ import {
   matchesAlchemyPhysicalName,
   sanitizeRailwayName,
 } from "./Metadata.ts";
-import { listOwnedProjects, type Project } from "./Project.ts";
+import {
+  ownedProjects,
+  projectEnvironmentIds,
+  type Project,
+} from "./Project.ts";
 import type { Providers } from "./Providers.ts";
+import { withEnvironmentConfigLock } from "./transient.ts";
 
 /**
  * A resource-valued prop: the resource itself, or an Effect that produces
@@ -214,7 +218,7 @@ const BucketResource = Resource<Bucket>("Railway.Bucket");
  *
  * export default class Api extends Railway.Service<Api>()(
  *   "Api",
- *   { project: Site, main: import.meta.url, registry: "ghcr.io/acme" },
+ *   { project: Site, main: import.meta.url },
  *   Effect.gen(function* () {
  *     const putObject = yield* Railway.PutObject(Data);
  *     const getObject = yield* Railway.GetObject(Data);
@@ -414,6 +418,11 @@ const findInProject = (
 const getEnvironmentConfig = (environmentId: string, projectId: string) =>
   railway.environment({ id: environmentId, projectId }).pipe(
     Effect.map((env) => parseEnvironmentConfig(env.config)),
+    Effect.retry({
+      while: (e) => e._tag === "RailwayNotFound" || e._tag === "NotFound",
+      times: 8,
+      schedule: Schedule.spaced("1 second"),
+    }),
     Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
       Effect.succeed({} as EnvironmentConfigShape),
     ),
@@ -441,24 +450,19 @@ const environmentIdsOf = (project: {
     ),
   );
 
-const rateLimited = {
-  while: (e: { _tag: string }) => e._tag === "RailwayRateLimited",
-  schedule: Schedule.spaced("2 seconds"),
-  times: 3 as const,
-};
-
 const commitBucketPatch = (input: {
   environmentId: string;
   commitMessage: string;
   patch: Record<string, unknown>;
 }) =>
-  railway
-    .environmentPatchCommit({
+  withEnvironmentConfigLock(
+    input.environmentId,
+    railway.environmentPatchCommit({
       environmentId: input.environmentId,
       commitMessage: input.commitMessage,
       patch: input.patch,
-    })
-    .pipe(RailwayRetry.none, Effect.retry(rateLimited));
+    }),
+  );
 
 const ensureDeployed = Effect.fn(function* (input: {
   bucketId: string;
@@ -485,7 +489,13 @@ const ensureDeployed = Effect.fn(function* (input: {
         },
       },
     },
-  });
+  }).pipe(
+    Effect.retry({
+      while: (e) => e._tag === "RailwayNotFound" || e._tag === "NotFound",
+      times: 8,
+      schedule: Schedule.spaced("1 second"),
+    }),
+  );
   const synced = yield* getEnvironmentConfig(
     input.environmentId,
     input.projectId,
@@ -611,7 +621,7 @@ export const BucketProvider = () =>
           ? yield* getEnvironmentConfig(envId, projectId)
           : ({} as EnvironmentConfigShape);
       if (envId.length > 0 && !isDeployed(config, found.id)) {
-        if (output === undefined) return undefined;
+        return undefined;
       }
       const attrs = toAttrs(found, {
         environmentId: envId,
@@ -623,39 +633,32 @@ export const BucketProvider = () =>
     }),
 
     list: Effect.fn(function* () {
-      const projects = yield* listOwnedProjects();
-      const rows = yield* Effect.forEach(
-        projects,
-        (project) =>
-          Effect.gen(function* () {
-            const buckets = yield* listProjectBuckets(project.projectId);
-            const owned = buckets.filter((bucket) =>
-              matchesAlchemyPhysicalName(bucket.name),
-            );
-            if (owned.length === 0) return [] as Bucket["Attributes"][];
-            const environmentIds = yield* environmentIdsOf(project);
-            const perEnv = yield* Effect.forEach(
-              environmentIds,
-              (environmentId) =>
-                getEnvironmentConfig(environmentId, project.projectId).pipe(
-                  Effect.map((config) =>
-                    owned.flatMap((bucket) => {
-                      if (!isDeployed(config, bucket.id)) return [];
-                      return [
-                        toAttrs(bucket, {
-                          environmentId,
-                          region:
-                            instanceOf(config, bucket.id)?.region ?? undefined,
-                        }),
-                      ];
+      const projects = yield* ownedProjects();
+      const rows = yield* Effect.forEach(projects, (project) =>
+        Effect.gen(function* () {
+          const envIds = yield* projectEnvironmentIds(project);
+          const buckets = yield* listProjectBuckets(project.projectId);
+          const nested = yield* Effect.forEach(envIds, (environmentId) =>
+            getEnvironmentConfig(environmentId, project.projectId).pipe(
+              Effect.map((config) =>
+                buckets
+                  .filter(
+                    (bucket) =>
+                      matchesAlchemyPhysicalName(bucket.name) &&
+                      isDeployed(config, bucket.id),
+                  )
+                  .map((bucket) =>
+                    toAttrs(bucket, {
+                      environmentId,
+                      region:
+                        instanceOf(config, bucket.id)?.region ?? undefined,
                     }),
                   ),
-                ),
-              { concurrency: 4 },
-            );
-            return perEnv.flat();
-          }),
-        { concurrency: 8 },
+              ),
+            ),
+          );
+          return nested.flat();
+        }),
       );
       const seen = new Set<string>();
       const unique: Bucket["Attributes"][] = [];
@@ -712,8 +715,12 @@ export const BucketProvider = () =>
             },
           })
           .pipe(
-            RailwayRetry.none,
-            Effect.retry(rateLimited),
+            Effect.retry({
+              while: (e) =>
+                e._tag === "RailwayNotFound" || e._tag === "NotFound",
+              times: 8,
+              schedule: Schedule.spaced("1 second"),
+            }),
             Effect.catchTag("RailwayValidationError", () =>
               Effect.succeed(undefined),
             ),

@@ -102,8 +102,12 @@ export const fromCredentials = () =>
       return yield* creds.pipe(
         Effect.flatMap((resolved) =>
           resolveWorkspaceId().pipe(
-            Effect.provideService(Credentials, creds),
-            Effect.provideService(HttpClient.HttpClient, http),
+            Effect.provide(
+              Layer.mergeAll(
+                Layer.succeed(Credentials, creds),
+                Layer.succeed(HttpClient.HttpClient, http),
+              ),
+            ),
             Effect.map((workspaceId) => ({
               ...resolved,
               workspaceId,

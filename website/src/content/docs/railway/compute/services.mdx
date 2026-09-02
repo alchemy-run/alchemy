@@ -1,12 +1,12 @@
 ---
 title: Services
-description: A container in a Railway Project — a public image, or an Effect program Alchemy bundles and pushes.
+description: A container in a Railway Project — a public image, or an Effect program Railway builds from a generated Dockerfile.
 ---
 
 A [`Service`](/providers/railway/service) is a container in a
 Railway [Project](/railway/compute/projects). Point it at a public
-image (`hashicorp/http-echo`), an Effect program (`main` +
-`registry`), or a GitHub repo (`repo` + `branch`). Several Services
+image (`hashicorp/http-echo`), an Effect program (`main`), or a
+GitHub repo (`repo` + `branch`). Several Services
 share one Project. Canvas Functions — Effect-native or one TypeScript file, no
 Docker, no registry — are [`Railway.Function`](/railway/compute/functions).
 
@@ -45,7 +45,6 @@ export default class Api extends Railway.Service<Api>()(
   {
     project: Site,
     main: import.meta.url,
-    registry: "ghcr.io/acme",
   },
   Effect.gen(function* () {
     return {};
@@ -54,9 +53,9 @@ export default class Api extends Railway.Service<Api>()(
 ```
 
 `main: import.meta.url` is the bundle entrypoint. Alchemy bundles
-this file with Rolldown, builds a Docker image (default
-`oven/bun:1`), and pushes it to `{registry}/{name}:{id}-{hash}`.
-Railway pulls `source.image` from that registry.
+this file with Rolldown, generates a Dockerfile (default
+`FROM oven/bun:1`), and uploads the context. Railway builds the
+image.
 
 ## Serve HTTP with `fetch`
 
@@ -73,7 +72,6 @@ export default class Api extends Railway.Service<Api>()(
   {
     project: Site,
     main: import.meta.url,
-    registry: "ghcr.io/acme",
   },
   Effect.gen(function* () {
 -    return {};
@@ -96,7 +94,7 @@ or Function with `bindService` / `bindFunction`. Calls stay on
 ```typescript
 export default class Query extends Railway.Service<Query>()(
   "Query",
-  { project: Site, main: import.meta.url, registry: "ghcr.io/acme" },
+  { project: Site, main: import.meta.url },
   Effect.gen(function* () {
     return {
       greet: (name: string) => Effect.succeed(`hello ${name}`),
@@ -121,8 +119,8 @@ is in place. See [Regions](/railway/compute/regions).
 ```diff lang="typescript"
 export default class Api extends Railway.Service<Api>()(
   "Api",
--  { project: Site, main: import.meta.url, registry: "ghcr.io/acme" },
-+  { project: Site, main: import.meta.url, registry: "ghcr.io/acme", region: "us-west2" },
+-  { project: Site, main: import.meta.url },
++  { project: Site, main: import.meta.url, region: "us-west2" },
 ```
 
 ## Set the port
@@ -135,8 +133,8 @@ Default `3000` for Effect-native Services. Pass `5678` for
 ```diff lang="typescript"
 export default class Api extends Railway.Service<Api>()(
   "Api",
--  { project: Site, main: import.meta.url, registry: "ghcr.io/acme", region: "us-west2" },
-+  { project: Site, main: import.meta.url, registry: "ghcr.io/acme", region: "us-west2", port: 3000 },
+-  { project: Site, main: import.meta.url, region: "us-west2" },
++  { project: Site, main: import.meta.url, region: "us-west2", port: 3000 },
 ```
 
 ## The public URL
@@ -213,15 +211,15 @@ const backend = yield* Railway.Group("Backend", {
 For an image Service, Alchemy sets `source.image` and deploys with
 `serviceInstanceDeployV2`. Docker is not required.
 
-For an Effect-native Service, Docker must be running and `registry`
-must be a prefix Railway can pull (GHCR or Docker Hub). Alchemy
-bundles `main` with Rolldown. If the hash matches the last deploy,
-it skips build and push. Otherwise it builds `linux/amd64` from
-`image` (default `oven/bun:1`) and pushes to
-`{registry}/{name}:{id}-{hash}`. Then it deploys and waits.
+For an Effect-native Service, Alchemy bundles `main` with Rolldown
+and generates a Dockerfile (`FROM oven/bun:1` unless you pass
+`image`). If the hash matches the last successful deploy, it skips
+the upload. Otherwise it tars the context and uploads it the same
+way `railway up` does. Railway builds and deploys. No local Docker
+daemon. No registry.
 
-Changed code is a new image and an in-place update. Unchanged code
-is a no-op.
+Changed code is a new Railway build and an in-place update.
+Unchanged code is a no-op.
 
 `build.install: ["pg"]` ships `pg` unbundled. Rolldown's CJS interop
 turns `pg.Client` into a namespace (`The superclass is not a
@@ -233,7 +231,6 @@ export default class Api extends Railway.Service<Api>()(
   {
     project: Site,
     main: import.meta.url,
-    registry: "ghcr.io/acme",
     build: { install: ["pg"] },
   },
   Effect.gen(function* () {
@@ -263,7 +260,6 @@ export default class Api extends Railway.Service<Api>()(
   {
     project: Site,
     main: import.meta.url,
-    registry: "ghcr.io/acme",
     port: 3000,
   },
   Effect.gen(function* () {
@@ -302,7 +298,6 @@ export default class Worker extends Railway.Service<Worker>()(
   {
     project: Site,
     main: import.meta.url,
-    registry: "ghcr.io/acme",
     region: "us-west2",
   },
   Effect.gen(function* () {
@@ -327,13 +322,13 @@ at the same `project`.
 ```typescript
 class Api extends Railway.Service<Api>()(
   "Api",
-  { project: Site, main: import.meta.url, registry: "ghcr.io/acme", port: 3000 },
+  { project: Site, main: import.meta.url, port: 3000 },
   /* HTTP */
 ) {}
 
 class Worker extends Railway.Service<Worker>()(
   "Worker",
-  { project: Site, main: import.meta.url, registry: "ghcr.io/acme" },
+  { project: Site, main: import.meta.url },
   /* mounts a disk, writes files */
 ) {}
 ```
@@ -343,8 +338,8 @@ A Volume attaches to one Service. See
 
 ## Logs
 
-Service logs live in the Railway dashboard. `alchemy logs` /
-`alchemy tail` don't support Railway Services yet.
+Service logs live in the Railway dashboard. `alchemy logs` (including
+`--tail`) doesn't support Railway Services yet.
 
 ## Where next
 

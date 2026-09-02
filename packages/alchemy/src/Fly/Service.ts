@@ -3,6 +3,7 @@ import type {
   FlyMachineGuest,
   FlyMachineMount,
   FlyMachineService,
+  FlyStatic,
   Machine as FlyMachine,
 } from "@distilled.cloud/fly-io/machines";
 import * as Data from "effect/Data";
@@ -124,9 +125,10 @@ export interface ServiceProps extends PlatformProps {
   build?: FlyBuildOptions;
   /**
    * Environment image used as the generated Dockerfile's `FROM`. Must
-   * be able to run the bun runtime.
+   * be able to run Node (websites and Effect-native Services use Node
+   * in production).
    *
-   * @default "oven/bun:1"
+   * @default "node:26-slim"
    */
   image?: string;
   /**
@@ -138,6 +140,32 @@ export interface ServiceProps extends PlatformProps {
    * from the stack, stage and logical ID. Changing it replaces the Service.
    */
   name?: string;
+  /**
+   * Extra host directories copied into the Machine image next to the
+   * bundled entry (e.g. a website `clientDirectory` at `/app/dist`).
+   * Hashed into `code.hash` so asset changes update the image.
+   * Destination is relative to `/app`.
+   */
+  extraFiles?: ReadonlyArray<{
+    source: string;
+    dest: string;
+  }>;
+  /**
+   * Fly proxy static-file maps. Matching GET paths skip the process and
+   * are served from the image (`guestPath`) or a Tigris bucket
+   * (`tigrisBucket`). Website composites publish hashed client assets
+   * this way.
+   */
+  statics?: ReadonlyArray<{
+    /** Path inside the image, or key prefix in {@link tigrisBucket}. */
+    guestPath: string;
+    /** URL prefix, e.g. `"/"`. */
+    urlPrefix: string;
+    /** Tigris bucket name. When set, files come from the bucket. */
+    tigrisBucket?: string;
+    /** Directory index file (`index.html`) for Tigris statics. */
+    indexDocument?: string;
+  }>;
 }
 
 export type Service = Resource<
@@ -202,7 +230,7 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * `app` is the parent {@link App}. Pass the declaration directly,
  * yielded or module-scope. `main: import.meta.url` is the bundle
  * entrypoint. Alchemy bundles this file with Rolldown, builds a
- * Docker image (default `oven/bun:1`), and pushes it to
+ * Docker image (default `node:26-slim`), and pushes it to
  * `registry.fly.io/{app}:{id}-{hash}`.
  *
  * **Example:** Class + App + main
@@ -492,8 +520,8 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  *
  * ### Base image
  * `image` is the generated Dockerfile's `FROM`. Default is
- * `oven/bun:1`. It must still run bun. A content-hash change of
- * `main` updates the Machine in place.
+ * `node:26-slim`. A content-hash change of `main` updates the
+ * Machine in place.
  *
  * **Example:** Override FROM
  * ```typescript
@@ -502,7 +530,7 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  *   {
  *     app: Site,
  *     main: import.meta.url,
- *     image: "oven/bun:1.2",
+ *     image: "node:26",
  *     port: 3000,
  *   },
  *   Effect.gen(function* () {
@@ -732,6 +760,29 @@ const desiredEnv = (
   ...toEnv(props.env),
 });
 
+const toFlyStatics = (
+  statics:
+    | ReadonlyArray<{
+        guestPath: string;
+        urlPrefix: string;
+        tigrisBucket?: string;
+        indexDocument?: string;
+      }>
+    | undefined,
+): FlyStatic[] | undefined => {
+  if (statics === undefined || statics.length === 0) return undefined;
+  return statics.map((entry) => ({
+    guest_path: entry.guestPath,
+    url_prefix: entry.urlPrefix,
+    ...(entry.tigrisBucket !== undefined
+      ? { tigris_bucket: entry.tigrisBucket }
+      : {}),
+    ...(entry.indexDocument !== undefined
+      ? { index_document: entry.indexDocument }
+      : {}),
+  }));
+};
+
 const buildConfig = (input: {
   image: string;
   guest: FlyMachineGuest;
@@ -739,6 +790,7 @@ const buildConfig = (input: {
   services: FlyMachineService[];
   mounts: FlyMachineMount[];
   metadata: Record<string, string>;
+  statics?: FlyStatic[];
 }): FlyMachineConfig => ({
   image: input.image,
   guest: input.guest,
@@ -746,6 +798,10 @@ const buildConfig = (input: {
   services: input.services.length > 0 ? input.services : undefined,
   mounts: input.mounts.length > 0 ? input.mounts : undefined,
   metadata: input.metadata,
+  statics:
+    input.statics !== undefined && input.statics.length > 0
+      ? input.statics
+      : undefined,
 });
 
 const sameImage = (machine: FlyMachine, image: string) => {
@@ -808,6 +864,11 @@ const metadataChanged = (
   );
 };
 
+const sameStatics = (
+  observed: FlyStatic[] | undefined,
+  desired: FlyStatic[] | undefined,
+) => deepEqual(observed ?? [], desired ?? [], { stripNullish: true });
+
 const configDrifted = (
   machine: FlyMachine,
   desired: {
@@ -817,6 +878,7 @@ const configDrifted = (
     services: FlyMachineService[];
     mounts: FlyMachineMount[];
     metadata: Record<string, string>;
+    statics?: FlyStatic[];
   },
 ) => {
   const config = machine.config;
@@ -826,7 +888,8 @@ const configDrifted = (
     !sameEnv(config?.env, desired.env) ||
     !sameServices(config?.services, desired.services) ||
     !sameMounts(config?.mounts, desired.mounts) ||
-    metadataChanged(config?.metadata, desired.metadata)
+    metadataChanged(config?.metadata, desired.metadata) ||
+    !sameStatics(config?.statics, desired.statics)
   );
 };
 
@@ -892,14 +955,17 @@ export const ServiceProvider = () =>
             }
           }
           // The code hash depends only on statically-known props (`main`,
-          // `build`, `image`, `port`). Never gate it on the WHOLE props
-          // being resolved: `app` is a resource reference that stays
-          // unresolved at diff time, so a whole-props guard makes
-          // code-only changes silently noop. By diff time the
+          // `build`, `image`, `port`, `extraFiles`, `isExternal`). Never
+          // gate it on the WHOLE props being resolved: `app` is a resource
+          // reference that stays unresolved at diff time, so a whole-props
+          // guard makes code-only changes silently noop. By diff time the
           // effect-config form has been evaluated, so the object view is
           // safe to read.
           const statics = news as Partial<
-            Pick<ServiceProps, "main" | "build" | "image" | "port">
+            Pick<
+              ServiceProps,
+              "main" | "build" | "image" | "port" | "extraFiles" | "isExternal"
+            >
           >;
           if (
             isResolved({
@@ -907,6 +973,8 @@ export const ServiceProvider = () =>
               build: statics.build,
               image: statics.image,
               port: statics.port,
+              extraFiles: statics.extraFiles,
+              isExternal: statics.isExternal,
             }) &&
             statics.main !== undefined
           ) {
@@ -978,6 +1046,7 @@ export const ServiceProvider = () =>
             props.services !== undefined
               ? props.services.map(toFlyService)
               : defaultHttpServices(port, count);
+          const statics = toFlyStatics(props.statics);
 
           const { imageRef, codeHash } = yield* hosted.resolveImage({
             id,
@@ -1008,6 +1077,7 @@ export const ServiceProvider = () =>
                 services,
                 mounts: desired.mounts,
                 metadata: desired.metadata,
+                statics,
               }),
             buildConfig: ({ mounts, metadata }) =>
               buildConfig({
@@ -1017,6 +1087,7 @@ export const ServiceProvider = () =>
                 services,
                 mounts,
                 metadata,
+                statics,
               }),
           }).pipe(
             Effect.catchTag("Fly.ReplicaNotCreated", (error) =>

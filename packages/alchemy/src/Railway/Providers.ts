@@ -1,7 +1,8 @@
 import * as Layer from "effect/Layer";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
-import { ProfileLive } from "../Auth/Profile.ts";
+import { ProfileStoreLive } from "../Auth/Profile.ts";
+import * as Command from "../Command/index.ts";
 import * as Provider from "../Provider.ts";
 import { Random, RandomProvider } from "../Random.ts";
 import { RailwayAuth } from "./AuthProvider.ts";
@@ -38,9 +39,15 @@ import {
 } from "./PrivateNetwork.ts";
 import { ReadRedisHttp } from "./ReadRedisHttp.ts";
 import { ReadWriteRedisHttp } from "./ReadWriteRedisHttp.ts";
+import { RailwayRetryPolicy } from "./RetryPolicy.ts";
 import { Redis, RedisProvider } from "./Redis.ts";
 import { Service } from "./Service.ts";
 import { ServiceProvider } from "./ServiceProvider.ts";
+import { Cdn, CdnProvider } from "./Website/Cdn.ts";
+import {
+  Server as WebsiteServer,
+  ServerProvider as WebsiteServerProvider,
+} from "../Website/Server.ts";
 import { ExecHttp, Sandbox, SandboxProvider } from "./Sandbox.ts";
 import { Volume, VolumeProvider } from "./Volume.ts";
 import { VolumeBackup, VolumeBackupProvider } from "./VolumeBackup.ts";
@@ -89,6 +96,7 @@ export const providers = () =>
       PrivateNetworkEndpoint,
       MySQL,
       Mongo,
+      Cdn,
       CustomDomain,
       Environment,
       Function,
@@ -105,6 +113,7 @@ export const providers = () =>
       CloudAgent,
       Sandbox,
       Random,
+      WebsiteServer,
     ]),
   ).pipe(
     Layer.provide(
@@ -115,6 +124,7 @@ export const providers = () =>
         PrivateNetworkEndpointProvider(),
         MySQLProvider(),
         MongoProvider(),
+        CdnProvider(),
         CustomDomainProvider(),
         EnvironmentProvider(),
         FunctionProvider(),
@@ -131,6 +141,7 @@ export const providers = () =>
         CloudAgentProvider(),
         SandboxProvider(),
         RandomProvider(),
+        WebsiteServerProvider(),
       ),
     ),
     Layer.provideMerge(
@@ -150,11 +161,13 @@ export const providers = () =>
         ExecHttp,
       ),
     ),
+    Layer.provide(RailwayRetryPolicy),
     Layer.provideMerge(fromCredentials()),
     Layer.provideMerge(Credentials.fromAuthProvider()),
     Layer.provideMerge(RailwayAuth),
-    Layer.provideMerge(ProfileLive),
+    Layer.provideMerge(ProfileStoreLive),
     Layer.provideMerge(CredentialsStoreLive),
     Layer.provideMerge(FetchHttpClient.layer),
+    Layer.provideMerge(Command.providers()),
     Layer.orDie,
   );

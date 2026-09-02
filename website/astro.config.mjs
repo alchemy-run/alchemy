@@ -137,6 +137,60 @@ function copyMarkdownSources() {
 }
 
 /**
+ * Pages that opt out of search indexing (`<meta name="robots" content="noindex…">`,
+ * set per page via Starlight `head` frontmatter, `Auth.astro`, or the
+ * reference generator) must not be advertised in the sitemap either — a
+ * sitemap entry is an explicit "please index this". Instead of maintaining a
+ * parallel path list in the sitemap filter, scan the rendered HTML once and
+ * let the filter consult the result. Runs in `astro:build:done` before the
+ * sitemap integration (Astro runs hooks in registration order), so it must
+ * be listed ahead of `sitemap()` in `integrations`.
+ */
+const noindexPaths = new Set();
+function collectNoindexPages() {
+  // Attribute order varies by emitter (Starlight `head`, hand-written
+  // layouts), so match either order.
+  const noindexRegex =
+    /<meta\b(?=[^>]*\bname="robots")(?=[^>]*\bcontent="[^"]*noindex)/i;
+  return {
+    name: "collect-noindex-pages",
+    hooks: {
+      "astro:build:done": async ({ dir, logger }) => {
+        const outDir = fileURLToPath(dir);
+        // Sequential on purpose: ~4.4k pages, and fanning the reads out
+        // holds every page's HTML in memory at once on top of an already
+        // heavy build heap.
+        /** @param {string} d */
+        async function walk(d) {
+          const entries = await fs.readdir(d, { withFileTypes: true });
+          for (const e of entries) {
+            const full = path.join(d, e.name);
+            if (e.isDirectory()) {
+              await walk(full);
+              continue;
+            }
+            if (!e.isFile() || !e.name.endsWith(".html")) continue;
+            const html = await fs.readFile(full, "utf8");
+            if (!noindexRegex.test(html)) continue;
+            // dist/foo/bar/index.html -> /foo/bar/ (sitemap URLs carry the
+            // trailing slash); dist/foo.html -> /foo.html
+            let rel =
+              "/" + path.relative(outDir, full).split(path.sep).join("/");
+            if (rel.endsWith("/index.html"))
+              rel = rel.slice(0, -"index.html".length);
+            noindexPaths.add(rel);
+          }
+        }
+        await walk(outDir);
+        logger.info(
+          `${noindexPaths.size} noindex page(s) excluded from the sitemap`,
+        );
+      },
+    },
+  };
+}
+
+/**
  * Build-output checks — one pass over every rendered HTML page:
  *
  * 1. Case-sensitive internal-link check: validates every internal
@@ -343,6 +397,7 @@ function buildOutputChecks() {
 export default defineConfig({
   site: "https://alchemy.run",
   redirects: {
+    "/cli/login": "/cli/profile",
     "/drizzle": "/sql",
     "/drizzle/migrations": "/sql/drizzle/migrations",
   },
@@ -353,11 +408,18 @@ export default defineConfig({
     pagefindIgnoreNoise(),
     copyMarkdownSources(),
     buildOutputChecks(),
+    collectNoindexPages(),
     sitemap({
       filter: (page) =>
         !page.endsWith(".html") &&
         !page.endsWith(".md") &&
-        !page.endsWith(".mdx"),
+        !page.endsWith(".mdx") &&
+        // Anything rendered with a `noindex` robots meta: `/auth/*`, and the
+        // example-less API reference stubs (see `collectNoindexPages`).
+        !noindexPaths.has(new URL(page).pathname) &&
+        // starlight-blog's paginated listings (`/blog/2/`, …) — thin pages
+        // that only repeat post excerpts; the posts themselves are listed.
+        !/\/blog\/\d+\/?$/.test(page),
     }),
     starlight({
       title: "Alchemy",
@@ -571,6 +633,7 @@ export default defineConfig({
                 { label: "deploy", link: "/cli/deploy" },
                 { label: "plan", link: "/cli/plan" },
                 { label: "destroy", link: "/cli/destroy" },
+                { label: "drift", link: "/cli/drift" },
                 { label: "nuke", link: "/cli/nuke" },
                 {
                   label: "Adopting Resources",
@@ -582,16 +645,12 @@ export default defineConfig({
               label: "Develop",
               items: [
                 { label: "dev", link: "/cli/dev" },
-                { label: "tail", link: "/cli/tail" },
                 { label: "logs", link: "/cli/logs" },
               ],
             },
             {
               label: "Auth",
-              items: [
-                { label: "login", link: "/cli/login" },
-                { label: "profile", link: "/cli/profile" },
-              ],
+              items: [{ label: "profile", link: "/cli/profile" }],
             },
             {
               label: "State",
@@ -802,6 +861,10 @@ export default defineConfig({
               label: "Observability",
               items: [
                 {
+                  label: "Native tracing",
+                  link: "/cloudflare/observability/workers-tracing",
+                },
+                {
                   label: "Axiom telemetry",
                   link: "/cloudflare/observability/axiom-observability",
                 },
@@ -989,6 +1052,43 @@ export default defineConfig({
               items: [{ autogenerate: { directory: "hetzner/tutorial" } }],
             },
             {
+              label: "Frontend",
+              items: [
+                {
+                  label: "Overview",
+                  link: "/hetzner/frontend/websites",
+                },
+                { label: "Astro", link: "/hetzner/frontend/astro" },
+                { label: "Foldkit", link: "/hetzner/frontend/foldkit" },
+                { label: "Next.js", link: "/hetzner/frontend/nextjs" },
+                { label: "Nuxt", link: "/hetzner/frontend/nuxt" },
+                { label: "Octane", link: "/hetzner/frontend/octane" },
+                {
+                  label: "React Router",
+                  link: "/hetzner/frontend/react-router",
+                },
+                {
+                  label: "SolidStart",
+                  link: "/hetzner/frontend/solidstart",
+                },
+                {
+                  label: "Static sites",
+                  link: "/hetzner/frontend/static-site",
+                },
+                {
+                  label: "SvelteKit",
+                  link: "/hetzner/frontend/sveltekit",
+                },
+                {
+                  label: "TanStack Start",
+                  link: "/hetzner/frontend/tanstack-start",
+                },
+                { label: "Vite", link: "/hetzner/frontend/vite" },
+                { label: "Vocs", link: "/hetzner/frontend/vocs" },
+                { label: "Waku", link: "/hetzner/frontend/waku" },
+              ],
+            },
+            {
               label: "Compute",
               items: [
                 { label: "Servers", link: "/hetzner/compute/servers" },
@@ -1017,6 +1117,43 @@ export default defineConfig({
             {
               label: "Tutorial",
               items: [{ autogenerate: { directory: "fly/tutorial" } }],
+            },
+            {
+              label: "Frontend",
+              items: [
+                {
+                  label: "Overview",
+                  link: "/fly/frontend/websites",
+                },
+                { label: "Astro", link: "/fly/frontend/astro" },
+                { label: "Foldkit", link: "/fly/frontend/foldkit" },
+                { label: "Next.js", link: "/fly/frontend/nextjs" },
+                { label: "Nuxt", link: "/fly/frontend/nuxt" },
+                { label: "Octane", link: "/fly/frontend/octane" },
+                {
+                  label: "React Router",
+                  link: "/fly/frontend/react-router",
+                },
+                {
+                  label: "SolidStart",
+                  link: "/fly/frontend/solidstart",
+                },
+                {
+                  label: "Static sites",
+                  link: "/fly/frontend/static-site",
+                },
+                {
+                  label: "SvelteKit",
+                  link: "/fly/frontend/sveltekit",
+                },
+                {
+                  label: "TanStack Start",
+                  link: "/fly/frontend/tanstack-start",
+                },
+                { label: "Vite", link: "/fly/frontend/vite" },
+                { label: "Vocs", link: "/fly/frontend/vocs" },
+                { label: "Waku", link: "/fly/frontend/waku" },
+              ],
             },
             {
               label: "Compute",
@@ -1053,6 +1190,43 @@ export default defineConfig({
             {
               label: "Tutorial",
               items: [{ autogenerate: { directory: "railway/tutorial" } }],
+            },
+            {
+              label: "Frontend",
+              items: [
+                {
+                  label: "Overview",
+                  link: "/railway/frontend/websites",
+                },
+                { label: "Astro", link: "/railway/frontend/astro" },
+                { label: "Foldkit", link: "/railway/frontend/foldkit" },
+                { label: "Next.js", link: "/railway/frontend/nextjs" },
+                { label: "Nuxt", link: "/railway/frontend/nuxt" },
+                { label: "Octane", link: "/railway/frontend/octane" },
+                {
+                  label: "React Router",
+                  link: "/railway/frontend/react-router",
+                },
+                {
+                  label: "SolidStart",
+                  link: "/railway/frontend/solidstart",
+                },
+                {
+                  label: "Static sites",
+                  link: "/railway/frontend/static-site",
+                },
+                {
+                  label: "SvelteKit",
+                  link: "/railway/frontend/sveltekit",
+                },
+                {
+                  label: "TanStack Start",
+                  link: "/railway/frontend/tanstack-start",
+                },
+                { label: "Vite", link: "/railway/frontend/vite" },
+                { label: "Vocs", link: "/railway/frontend/vocs" },
+                { label: "Waku", link: "/railway/frontend/waku" },
+              ],
             },
             {
               label: "Compute",

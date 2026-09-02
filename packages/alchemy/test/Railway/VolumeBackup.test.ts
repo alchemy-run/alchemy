@@ -1,6 +1,7 @@
 import * as railway from "@distilled.cloud/railway";
 import * as Provider from "@/Provider";
 import * as Railway from "@/Railway";
+import { suitePartition } from "./suiteProject.ts";
 import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -22,24 +23,26 @@ const logLevel = Effect.provideService(
 const backupEntitled = !!process.env.RAILWAY_TEST_VOLUME_BACKUP;
 
 const VolumeStack = Effect.gen(function* () {
-  const project = yield* Railway.Project("Site");
+  const { project, environment } = yield* suitePartition;
   const api = yield* Railway.Service("Api", {
     project,
+    environment,
     image: "hashicorp/http-echo",
   });
   const volume = yield* Railway.Volume("Data", {
     project,
+    environment,
     mountPath: "/data",
     service: api,
   });
-  return { project, api, volume };
+  return { project, environment, api, volume };
 });
 
 const listLive = (volumeInstanceId: string) =>
   railway
     .volumeInstanceBackupList({ volumeInstanceId })
     .pipe(
-      Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+      Effect.catchTag(["RailwayNotFound", "NotFound", "RailwayForbidden"], () =>
         Effect.succeed([]),
       ),
     );
@@ -85,21 +88,6 @@ const waitUntilBackupGone = (
     }),
   );
 
-const waitUntilProjectGone = (projectId: string) =>
-  railway.project({ id: projectId }).pipe(
-    Effect.map((project) =>
-      project.deletedAt != null ? ("gone" as const) : ("found" as const),
-    ),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-      Effect.succeed("gone" as const),
-    ),
-    Effect.repeat({
-      schedule: Schedule.spaced("1 second"),
-      until: (status) => status === "gone",
-      times: 10,
-    }),
-  );
-
 test.provider(
   "volume backup create surfaces a typed entitlement error",
   (stack) =>
@@ -122,9 +110,11 @@ test.provider(
           result.success.workflowId != null &&
           result.success.workflowId.length > 0
         ) {
-          yield* railway.workflowStatus({
-            workflowId: result.success.workflowId,
-          });
+          yield* railway
+            .workflowStatus({
+              workflowId: result.success.workflowId,
+            })
+            .pipe(Effect.catchTag(["RailwayForbidden"], () => Effect.void));
         }
         const extras = yield* listLive(created.volume.volumeInstanceId);
         for (const extra of extras) {
@@ -135,7 +125,7 @@ test.provider(
             })
             .pipe(
               Effect.catchTag(
-                ["RailwayNotFound", "NotFound"],
+                ["RailwayNotFound", "NotFound", "RailwayForbidden"],
                 () => Effect.void,
               ),
             );
@@ -147,12 +137,8 @@ test.provider(
       expect(result.failure._tag).toEqual("RailwayForbidden");
 
       yield* stack.destroy();
-      const projectGone = yield* waitUntilProjectGone(
-        created.project.projectId,
-      );
-      expect(projectGone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 480_000 },
+  { timeout: 3_600_000 },
 );
 
 test.provider.skipIf(!backupEntitled)(
@@ -166,21 +152,23 @@ test.provider.skipIf(!backupEntitled)(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const project = yield* Railway.Project("Site");
+          const { project, environment } = yield* suitePartition;
           const api = yield* Railway.Service("Api", {
             project,
+            environment,
             image: "hashicorp/http-echo",
           });
           const volume = yield* Railway.Volume("Data", {
             project,
+            environment,
             mountPath: "/data",
             service: api,
           });
           const backup = yield* Railway.VolumeBackup("Snapshot", {
             volume,
-            environment: project,
+            environment,
           });
-          return { project, api, volume, backup };
+          return { project, environment, api, volume, backup };
         }),
       );
 
@@ -192,7 +180,7 @@ test.provider.skipIf(!backupEntitled)(
       expect(created.backup.volumeId).toEqual(created.volume.volumeId);
       expect(created.backup.projectId).toEqual(created.project.projectId);
       expect(created.backup.environmentId).toEqual(
-        created.project.environmentId,
+        created.environment.environmentId,
       );
       expect(created.backup.name).toEqual(expect.any(String));
       expect(created.backup.name.length).toBeGreaterThan(0);
@@ -224,10 +212,6 @@ test.provider.skipIf(!backupEntitled)(
         created.backup.volumeInstanceBackupId,
       );
       expect(backupGone).toEqual("gone");
-      const projectGone = yield* waitUntilProjectGone(
-        created.project.projectId,
-      );
-      expect(projectGone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 480_000 },
+  { timeout: 3_600_000 },
 );
