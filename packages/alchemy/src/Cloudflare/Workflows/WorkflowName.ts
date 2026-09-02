@@ -8,7 +8,8 @@ import { sha256 } from "../../Util/sha256.ts";
  * exported class. The hash preserves uniqueness when the readable prefix must
  * be truncated to Cloudflare's 64-character limit.
  *
- * @internal
+ * Exported so a stack can reference a Workflow's physical name, for
+ * example to subscribe a Queue to it, without re-deriving it.
  */
 export const makeWorkflowName = (
   scriptName: Input<string>,
