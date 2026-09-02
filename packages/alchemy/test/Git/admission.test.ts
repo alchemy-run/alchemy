@@ -4,20 +4,22 @@
  * hold at once — a spilled push never its body, an in-memory push never
  * the caches' ceilings (DESIGN §21.2, §22.5).
  */
-import { DEFAULT_CACHE_BYTES } from "@/Git/git/PackParser.ts";
+import {
+  BACKPRESSURE_BYTES,
+  RETAIN_BYTES,
+} from "@/Git/store/StreamingSource.ts";
 import {
   MAX_PACK_BYTES,
   PUSH_MEMORY_BUDGET_MB,
   pushPermitsFor,
   STAGE_BATCH_BYTES,
 } from "@/Git/RepoObject.ts";
-import { PACK_MAX_WINDOWS, PACK_WINDOW_BYTES } from "@/Git/store/PackSource.ts";
 import { describe, expect, test } from "alchemy-test";
 
 const MiB = 1024 * 1024;
-const spilled =
-  Math.ceil((PACK_MAX_WINDOWS * PACK_WINDOW_BYTES) / MiB) +
-  Math.ceil((DEFAULT_CACHE_BYTES + STAGE_BATCH_BYTES) / MiB);
+const spilled = Math.ceil(
+  (RETAIN_BYTES + BACKPRESSURE_BYTES + STAGE_BATCH_BYTES) / MiB,
+);
 
 describe("pushPermitsFor", () => {
   test("a spilled push is charged its working set, never its body", () => {

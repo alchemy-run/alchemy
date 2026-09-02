@@ -22,7 +22,9 @@ import type { RandomAccess } from "../git/PackParser.ts";
 
 export const SLAB_BYTES = 4 * 1024 * 1024;
 export const RETAIN_BYTES = 16 * 1024 * 1024;
-export const BACKPRESSURE_BYTES = 8 * 1024 * 1024;
+export const BACKPRESSURE_BYTES = 24 * 1024 * 1024;
+// 24 MiB (was 8): the hasher chain runs behind the upload; with less room
+// ahead of the pump the upload stalled on every part (DESIGN §22.7).
 
 interface Slab {
   readonly start: number;

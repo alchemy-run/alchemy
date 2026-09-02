@@ -133,13 +133,13 @@ import {
 } from "./jobs/Compact.ts";
 import { headKey, incomingKey, wirePackId } from "./store/Keys.ts";
 import { encodeHeadSnapshot, type HeadSnapshot } from "./store/HeadSnapshot.ts";
-import {
-  PACK_MAX_WINDOWS,
-  PACK_WINDOW_BYTES,
-  sliceRandomAccess,
-} from "./store/PackSource.ts";
+import { sliceRandomAccess } from "./store/PackSource.ts";
 import { HEAD_BYTES, receiveWireBodyStreaming } from "./store/IncomingBody.ts";
-import { makeStreamingSource } from "./store/StreamingSource.ts";
+import {
+  BACKPRESSURE_BYTES,
+  makeStreamingSource,
+  RETAIN_BYTES,
+} from "./store/StreamingSource.ts";
 import { Hasher, type HasherShape } from "./Hasher.ts";
 import type { UnresolvedDelta } from "./git/PartialScan.ts";
 import { BlobStore, type BlobStoreShape } from "./BlobStore.ts";
@@ -195,7 +195,10 @@ export const MAX_PACK_BYTES = 4 * 1024 * 1024;
 
 /** Objects staged per SQL transaction during ingest (DESIGN.md §16.6). */
 /** Bytes per hasher part — the spill part size, so a part is one R2 part (DESIGN §22.7). */
-export const HASH_PART_BYTES = 8 * 1024 * 1024;
+export const HASH_PART_BYTES = 4 * 1024 * 1024;
+// 4 MiB (was 8): the hasher chain is sequential (each part needs the
+// previous part's boundary), so a smaller part shortens both the tail after
+// the upload ends and the granularity at which the upload can run ahead.
 
 export const STAGE_BATCH_OBJECTS = 2048;
 // 2048 (was 256): measured on production, staging cost tracked the number
@@ -283,15 +286,13 @@ const isolatePushGate: Effect.Effect<Semaphore.Semaphore> = Effect.suspend(
  */
 export const pushPermitsFor = (contentLength: number | undefined): number => {
   const mib = (bytes: number) => Math.ceil(bytes / (1024 * 1024));
-  // What a push can hold at once, in MiB. Spilled: the reader's window
-  // cache (PACK_MAX_WINDOWS × PACK_WINDOW_BYTES), the parser's resolved
-  // content LRU (DEFAULT_CACHE_BYTES) and one staging batch
-  // (STAGE_BATCH_BYTES) — never the body. In memory: the body plus the same
-  // LRU and batch. An unknown length is treated as spilled. Memory safety
-  // beats concurrency here: on a 64 MiB budget that admits one large push
-  // per isolate alongside several small ones.
+  // What a push can hold at once, in MiB — never its body. An unknown
+  // length is treated as spilled. Memory safety beats concurrency: on a
+  // 64 MiB budget that admits one large push per isolate alongside small ones.
   const caches = mib(PackParser.DEFAULT_CACHE_BYTES + STAGE_BATCH_BYTES);
-  const spilled = mib(PACK_MAX_WINDOWS * PACK_WINDOW_BYTES) + caches;
+  // Streaming (DESIGN §22.6–7): the feeder retains RETAIN_BYTES behind the
+  // pump and buffers BACKPRESSURE_BYTES ahead of it, plus one staging batch.
+  const spilled = mib(RETAIN_BYTES + BACKPRESSURE_BYTES + STAGE_BATCH_BYTES);
   // In memory the caches cannot outgrow what the (small) body can inflate
   // to, so charge the body twice (compressed + inflated) plus one for the
   // batch, rather than the caches' ceilings.
