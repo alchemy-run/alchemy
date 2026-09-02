@@ -137,7 +137,7 @@ loaded workers per request, so a push wider than that hashes in waves.
 Cloudflare that runs on the same thread as the caller, so it buys
 nothing there; it is the shape a hasher on another host takes.
 
-### Choosing a hasher <!-- api-prose -->
+### Choosing a hasher
 
 Measured on one client pushing a 40 MiB, 15.6k-object, delta-heavy
 pack (`loose`) and a 44 MiB pack of whole blobs (`synthetic`), with
