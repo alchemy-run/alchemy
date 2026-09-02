@@ -66,6 +66,25 @@ export const transformTypesFlags = (
     : [];
 
 /**
+ * Whether this Node supports the synchronous in-thread loader hooks
+ * (`module.registerHooks`, v22.15 / v23.5) that `bin/register-dev-mode.js`
+ * needs. Since every registerHooks-capable Node also loads `.ts` (via
+ * {@link transformTypesFlags} below v26, natively from v26), this is THE
+ * capability gate for running the CLI from source under node.
+ *
+ * `bin/cli.js` mirrors this predicate inline — it must run under plain node
+ * before any `.ts` can load. Keep the two in sync.
+ */
+export const isRegisterHooksSupported = (
+  version = process.versions.node,
+): boolean => {
+  const [major = 0, minor = 0] = version.split(".").map(Number);
+  return (
+    (major === 22 && minor >= 15) || (major === 23 && minor >= 5) || major >= 24
+  );
+};
+
+/**
  * Ask the OS for an unused TCP port, release it, and return its number.
  *
  * The port is only available, not reserved: another process can claim it

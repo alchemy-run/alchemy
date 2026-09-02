@@ -127,7 +127,7 @@ export interface WorkerLoaderClass extends Context.Service<
  *
  *         // Spin up an isolated, sandboxed Worker from inline source.
  *         const worker = yield* loader.load({
- *           compatibilityDate: "2026-01-28",
+ *           compatibilityDate: "2026-08-31",
  *           mainModule: "worker.js",
  *           modules: {
  *             "worker.js": `export default {
@@ -166,7 +166,7 @@ export interface WorkerLoaderClass extends Context.Service<
  * export default {
  *   async fetch(req: Request, env: WorkerEnv) {
  *     const worker = env.LOADER.load({
- *       compatibilityDate: "2026-01-28",
+ *       compatibilityDate: "2026-08-31",
  *       mainModule: "worker.js",
  *       modules: { "worker.js": "export default { fetch: () => new Response('ok') }" },
  *     });
@@ -184,7 +184,7 @@ export interface WorkerLoaderClass extends Context.Service<
  * **Example:** Loading and calling a dynamic Worker
  * ```typescript
  * const worker = loader.load({
- *   compatibilityDate: "2026-01-28",
+ *   compatibilityDate: "2026-08-31",
  *   mainModule: "worker.js",
  *   modules: {
  *     "worker.js": `export default {
@@ -208,7 +208,7 @@ export interface WorkerLoaderClass extends Context.Service<
  * **Example:** Blocking outbound access
  * ```typescript
  * const worker = loader.load({
- *   compatibilityDate: "2026-01-28",
+ *   compatibilityDate: "2026-08-31",
  *   mainModule: "worker.js",
  *   modules: {
  *     "worker.js": `export default {

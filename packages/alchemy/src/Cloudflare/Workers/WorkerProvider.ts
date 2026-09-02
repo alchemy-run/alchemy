@@ -16,8 +16,7 @@ import { isHttpClientError } from "effect/unstable/http/HttpClientError";
 import * as crypto from "node:crypto";
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Artifacts from "../../Artifacts.ts";
-import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
-import { hashDirectory, type MemoOptions } from "../../Command/Memo.ts";
+import type { ScopedPlanStatusSession } from "../../Report.ts";
 import { havePropsChanged, isResolved, stripEffects } from "../../Diff.ts";
 import * as ProviderLayer from "../../Local/ProviderLayer.ts";
 import * as Provider from "../../Provider.ts";
@@ -45,10 +44,10 @@ import { getCompatibility } from "./Compatibility.ts";
 import { isDurableObjectExport } from "./DurableObject.ts";
 import { LocalWorkerProvider } from "./LocalWorkerProvider.ts";
 import { makeSourceContext, resolveSource } from "./Source.ts";
+import { assertCloudflareTelemetryCompatibility } from "./Telemetry.ts";
 import {
   isSelfUrl,
   Worker,
-  type ViteOptions,
   type WorkerProps,
   type WorkerRouteConfig,
   type WorkerVersionAffinity,
@@ -57,6 +56,7 @@ import {
   getCacheBinding,
   getCronBindings,
   isContainerDecl,
+  resolveObservability,
 } from "./WorkerAsyncBindings.ts";
 import type {
   WireWorkerBinding,
@@ -1287,6 +1287,7 @@ export const LiveWorkerProvider = () =>
           if (desired.length > 0 || previous.length > 0 || live.length > 0) {
             yield* session.note(
               `Reconciling Cron Triggers (${desired.length}) ...`,
+              { kind: "status" },
             );
           }
 
@@ -2216,10 +2217,11 @@ export const LiveWorkerProvider = () =>
         );
       });
 
-      const prepareBundle = (id: string, props: WorkerProps) =>
+      const prepareBundle = (id: string, fqn: string, props: WorkerProps) =>
         (isPythonMain(props.main)
           ? readPythonWorkerBundle({
               id,
+              fqn,
               main: props.main,
               compatibility: getCompatibility(props),
             })
@@ -2251,6 +2253,8 @@ export const LiveWorkerProvider = () =>
         );
 
       const viteBuild = Effect.fn(function* (
+        id: string,
+        fqn: string,
         props: WorkerProps,
         selfUrl?: string,
       ) {
@@ -2313,6 +2317,7 @@ export const LiveWorkerProvider = () =>
               compatibilityFlags: compatibility.flags,
               viteEnvironments: props.vite?.viteEnvironments,
             },
+            fqn,
           );
         const [assets, bundle, input] = yield* Effect.all(
           [
@@ -2364,6 +2369,7 @@ export const LiveWorkerProvider = () =>
 
       const prepareAssetsAndBundle = (
         id: string,
+        fqn: string,
         workerName: string,
         props: WorkerProps,
         opts: { skipAssetsRead?: boolean; selfUrl?: string } = {},
@@ -2378,6 +2384,7 @@ export const LiveWorkerProvider = () =>
             const source = yield* resolveSource(props);
             const ctx = makeSourceContext({
               id,
+              fqn,
               workerName,
               props,
               compatibility: getCompatibility(props),
@@ -2420,7 +2427,7 @@ export const LiveWorkerProvider = () =>
             };
           }
           if (props.vite) {
-            return yield* viteBuild(props, opts.selfUrl);
+            return yield* viteBuild(id, fqn, props, opts.selfUrl);
           }
           // Assets-only Worker: no entry module at all. The script PUT goes
           // out with no modules and no main_module — Cloudflare's asset
@@ -2449,7 +2456,7 @@ export const LiveWorkerProvider = () =>
               opts.skipAssetsRead
                 ? Effect.succeed(undefined)
                 : prepareAssets(props.assets),
-              prepareBundle(id, props),
+              prepareBundle(id, fqn, props),
             ],
             { concurrency: "unbounded" },
           );
@@ -2802,6 +2809,7 @@ export const LiveWorkerProvider = () =>
        */
       const putWorkerVersion = Effect.fn(function* (
         id: string,
+        fqn: string,
         news: WorkerProps,
         bindings: ResourceBinding<Worker["Binding"]>[],
         session: ScopedPlanStatusSession,
@@ -2849,7 +2857,7 @@ export const LiveWorkerProvider = () =>
           assets,
           bundle,
           hash: preparedHash,
-        } = yield* prepareAssetsAndBundle(id, parentName, news, {
+        } = yield* prepareAssetsAndBundle(id, fqn, parentName, news, {
           skipAssetsRead: false,
         });
         const metadataHash = yield* resolveWorkerMetadataHash({
@@ -2907,7 +2915,9 @@ export const LiveWorkerProvider = () =>
           parentName,
         );
         const compatibility = getCompatibility(news);
-        yield* session.note(`Uploading version of ${parentName} ...`);
+        yield* session.note(`Uploading version of ${parentName} ...`, {
+          kind: "status",
+        });
         const created = yield* workers
           .createScriptVersion({
             accountId,
@@ -2957,6 +2967,7 @@ export const LiveWorkerProvider = () =>
         if (traffic > 0) {
           yield* session.note(
             `Deploying version at ${traffic}% of ${parentName}'s traffic ...`,
+            { kind: "status" },
           );
           deploymentId = yield* deployVersionTraffic({
             accountId,
@@ -3017,7 +3028,9 @@ export const LiveWorkerProvider = () =>
                 }),
               );
             }
-            yield* session.note("Reconciling version-affinity rules ...");
+            yield* session.note("Reconciling version-affinity rules ...", {
+              kind: "status",
+            });
           }
           const placed = yield* reconcileAffinityRules({
             scriptName: parentName,
@@ -3068,6 +3081,7 @@ export const LiveWorkerProvider = () =>
 
       const putWorker = Effect.fn(function* (
         id: string,
+        fqn: string,
         news: WorkerProps,
         bindings: ResourceBinding<Worker["Binding"]>[],
         olds: WorkerProps | undefined,
@@ -3118,7 +3132,7 @@ export const LiveWorkerProvider = () =>
           assets,
           bundle,
           hash: preparedHash,
-        } = yield* prepareAssetsAndBundle(id, name, news, {
+        } = yield* prepareAssetsAndBundle(id, fqn, name, news, {
           skipAssetsRead: prebuiltAssets?.skip,
           selfUrl,
         });
@@ -3258,7 +3272,9 @@ export const LiveWorkerProvider = () =>
         const sizeKB = size / 1024;
         const sizeMB = sizeKB / 1024;
         const bundleSize = `${sizeKB > 1024 ? `${sizeMB.toFixed(2)} MB` : `${sizeKB.toFixed(2)} KB`}`;
-        yield* session.note(`Uploading worker (${bundleSize}) ...`);
+        yield* session.note(`Uploading worker (${bundleSize}) ...`, {
+          kind: "status",
+        });
 
         // Read existing worker settings for migration tracking
         const oldSettings =
@@ -3586,13 +3602,7 @@ export const LiveWorkerProvider = () =>
           logpush: news.logpush,
           mainModule: bundle.main,
           migrations,
-          observability: news.observability ?? {
-            enabled: true,
-            logs: {
-              enabled: true,
-              invocationLogs: true,
-            },
-          },
+          observability: resolveObservability(news, bindings),
           placement: news.placement,
           tags: metadataTags,
           tailConsumers,
@@ -3639,6 +3649,7 @@ export const LiveWorkerProvider = () =>
           }
           yield* session.note(
             `Uploading version of ${name} (${bundleSize}) ...`,
+            { kind: "status" },
           );
           const created = yield* workers
             .createScriptVersion({
@@ -3682,6 +3693,7 @@ export const LiveWorkerProvider = () =>
           if (rolloutTraffic > 0) {
             yield* session.note(
               `Deploying version at ${rolloutTraffic}% of traffic ...`,
+              { kind: "status" },
             );
             deploymentId = yield* deployVersionTraffic({
               accountId,
@@ -3813,6 +3825,7 @@ export const LiveWorkerProvider = () =>
         ) {
           yield* session.note(
             `${workersDev.enabled || workersDev.previewsEnabled ? "Enabling" : "Disabling"} workers.dev subdomain...`,
+            { kind: "status" },
           );
           // Cloudflare's script registry is eventually consistent — for the
           // first few hundred ms after `putScript` returns, POST /subdomain
@@ -3892,6 +3905,7 @@ export const LiveWorkerProvider = () =>
             : [];
           yield* session.note(
             `Reconciling custom domains (${desiredHostnames.length}) ...`,
+            { kind: "status" },
           );
           // Capture hostname → zone for *currently attached* domains before
           // reconcile detaches removed ones — a removed redirect hostname's
@@ -3937,6 +3951,7 @@ export const LiveWorkerProvider = () =>
         if (desiredRoutes.length > 0 || previousRoutes.length > 0) {
           yield* session.note(
             `Reconciling worker routes (${desiredRoutes.length}) ...`,
+            { kind: "status" },
           );
         }
         const routes = yield* reconcileRoutes(
@@ -3994,7 +4009,9 @@ export const LiveWorkerProvider = () =>
                 }),
               );
             }
-            yield* session.note("Reconciling version-affinity rules ...");
+            yield* session.note("Reconciling version-affinity rules ...", {
+              kind: "status",
+            });
           }
           const placed = yield* reconcileAffinityRules({
             scriptName: name,
@@ -4105,6 +4122,7 @@ export const LiveWorkerProvider = () =>
 
       const hasChanged = Effect.fn(function* (
         id: string,
+        fqn: string,
         props: WorkerProps,
         output: Worker["Attributes"],
         bindings: readonly ResourceBinding<Worker["Binding"]>[] | undefined,
@@ -4159,6 +4177,7 @@ export const LiveWorkerProvider = () =>
           const slots = yield* source.hash(
             makeSourceContext({
               id,
+              fqn,
               workerName: output.workerName,
               props,
               compatibility: getCompatibility(props),
@@ -4219,7 +4238,7 @@ export const LiveWorkerProvider = () =>
           }
           return yield* assetsChanged(props.assets, output);
         }
-        const bundleHash = yield* prepareBundle(id, props).pipe(
+        const bundleHash = yield* prepareBundle(id, fqn, props).pipe(
           Effect.map((b) => b.hash),
         );
         if (bundleHash !== output.hash?.bundle) {
@@ -4287,6 +4306,7 @@ export const LiveWorkerProvider = () =>
           }),
         diff: Effect.fn(function* ({
           id,
+          fqn,
           news: desired,
           olds,
           output,
@@ -4461,6 +4481,7 @@ export const LiveWorkerProvider = () =>
             cronsChanged ||
             (yield* hasChanged(
               id,
+              fqn,
               news,
               output,
               Array.isArray(newBindings)
@@ -4529,6 +4550,10 @@ export const LiveWorkerProvider = () =>
         }),
         precreate: Effect.fn(function* ({ id, news, session, bindings }) {
           const { accountId } = yield* yield* CloudflareEnvironment;
+          yield* assertCloudflareTelemetryCompatibility(
+            news as WorkerProps,
+            bindings,
+          );
           const name = yield* createWorkerName(id, news.name);
           // A version worker uploads to its parent's script during
           // reconcile; pre-creating a placeholder script under this
@@ -4680,7 +4705,7 @@ export const LiveWorkerProvider = () =>
               `Cloudflare Worker precreate: reusing existing ${name}`,
             );
           } else {
-            yield* session.note("Pre-creating worker...");
+            yield* session.note("Pre-creating worker...", { kind: "status" });
             const compatibility = getCompatibility(news);
             const mainModule = "main.js";
             const placeholderScript = `${doClasses.length > 0 ? 'import { DurableObject } from "cloudflare:workers";\n\n' : ""}export default { fetch() { return new Response("Alchemy worker is being deployed...") } };\n${doClasses
@@ -4721,13 +4746,7 @@ export const LiveWorkerProvider = () =>
                         newSqliteClasses: doClasses,
                       }
                     : undefined,
-                observability: news.observability ?? {
-                  enabled: true,
-                  logs: {
-                    enabled: true,
-                    invocationLogs: true,
-                  },
-                },
+                observability: resolveObservability(news, bindings),
                 tags,
               },
               files: [
@@ -4884,6 +4903,9 @@ export const LiveWorkerProvider = () =>
                 // `streaming_tail_consumers` field. Carry the last deployed
                 // value forward like other provider-managed caches.
                 streamingTailConsumers: output?.streamingTailConsumers,
+                // The bundle hash is computed locally during deployment and
+                // cannot be reconstructed from Cloudflare's read APIs.
+                hash: output?.hash,
               } satisfies Worker["Attributes"];
               return hasAlchemyWorkerTags(id, settings.tags ?? [])
                 ? attrs
@@ -5017,6 +5039,9 @@ export const LiveWorkerProvider = () =>
               // `streaming_tail_consumers` field. Carry the last deployed
               // value forward like other provider-managed caches.
               streamingTailConsumers: output?.streamingTailConsumers,
+              // The bundle hash is computed locally during deployment and
+              // cannot be reconstructed from Cloudflare's read APIs.
+              hash: output?.hash,
               // Rule placement is provider-managed state, not observed here
               // (a getPhas call per known zone on every read); carry the
               // cleanup list forward like any other stable cache.
@@ -5055,17 +5080,26 @@ export const LiveWorkerProvider = () =>
         ),
         reconcile: Effect.fn(function* ({
           id,
+          fqn,
           news,
           olds,
           bindings,
           output,
           session,
         }) {
+          yield* assertCloudflareTelemetryCompatibility(news, bindings);
           // A version worker uploads an immutable version to its parent's
           // script instead of owning a script of its own — none of the
           // script-level observation below applies.
           if (news.version?.parent != null) {
-            return yield* putWorkerVersion(id, news, bindings, session, output);
+            return yield* putWorkerVersion(
+              id,
+              fqn,
+              news,
+              bindings,
+              session,
+              output,
+            );
           }
           const { accountId } = yield* yield* CloudflareEnvironment;
           const name =
@@ -5126,6 +5160,7 @@ export const LiveWorkerProvider = () =>
 
           return yield* putWorker(
             id,
+            fqn,
             news,
             bindings,
             olds,

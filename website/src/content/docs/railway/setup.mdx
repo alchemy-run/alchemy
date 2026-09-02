@@ -103,8 +103,12 @@ To re-run the setup later (e.g. to rotate the token, or configure a
 separate `prod` profile):
 
 ```sh
-alchemy login --configure
-alchemy login --profile prod --configure
+# Re-run the interactive setup (e.g. to rotate the token)
+alchemy profile edit --reconfigure Railway
+
+# Or connect Railway in a separate `prod` profile
+alchemy profile create prod
+alchemy profile edit --profile prod --add Railway
 ```
 
 Inspect what's stored (secrets are redacted):

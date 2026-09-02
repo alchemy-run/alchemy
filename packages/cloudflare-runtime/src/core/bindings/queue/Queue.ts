@@ -16,7 +16,7 @@ const QueueShimForwardWorker = {
     ),
 };
 import {
-  INTERNAL_WORKER_COMPATIBILITY_DATE,
+  DEFAULT_COMPATIBILITY_DATE,
   SERVICE_USER_WORKER,
 } from "../../internal/constants.ts";
 import { formatInternalWorkerModules } from "../../internal/internal-modules.ts";
@@ -162,7 +162,7 @@ export const QueueLive = Layer.effect(
           return {
             name: queueServiceName(consumer.queueName),
             worker: {
-              compatibilityDate: INTERNAL_WORKER_COMPATIBILITY_DATE,
+              compatibilityDate: DEFAULT_COMPATIBILITY_DATE,
               compatibilityFlags: [
                 "experimental",
                 "service_binding_extra_handlers",
@@ -225,7 +225,7 @@ export const QueueLive = Layer.effect(
           return {
             name: remoteShimServiceName(props.binding),
             worker: {
-              compatibilityDate: INTERNAL_WORKER_COMPATIBILITY_DATE,
+              compatibilityDate: DEFAULT_COMPATIBILITY_DATE,
               modules: formatInternalWorkerModules(
                 yield* Effect.promise(QueueShimForwardWorker.worker),
               ),

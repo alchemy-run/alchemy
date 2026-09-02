@@ -10,7 +10,7 @@ const R2BucketWorker = {
     ),
 };
 import * as Storage from "../../globals/Storage.ts";
-import { INTERNAL_WORKER_COMPATIBILITY_DATE } from "../../internal/constants.ts";
+import { DEFAULT_COMPATIBILITY_DATE } from "../../internal/constants.ts";
 import { formatInternalWorkerModules } from "../../internal/internal-modules.ts";
 import * as Plugin from "../../Plugin.ts";
 import type { BindingHook } from "../../PluginContext.ts";
@@ -104,9 +104,10 @@ export const R2BucketLive = Layer.effect(
             const r2Service: WorkerdConfig.Service = {
               name: SERVICE_R2,
               worker: {
-                compatibilityDate: INTERNAL_WORKER_COMPATIBILITY_DATE,
+                compatibilityDate: DEFAULT_COMPATIBILITY_DATE,
                 // `node:crypto` is used to synchronously compute multipart etags
-                compatibilityFlags: ["nodejs_compat"],
+                // Node.js compatibility is default-on for the 2026-08-31
+                // internal compatibility date.
                 modules: formatInternalWorkerModules(
                   yield* Effect.promise(R2BucketWorker.worker),
                 ),

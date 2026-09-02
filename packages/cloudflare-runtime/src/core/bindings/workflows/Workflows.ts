@@ -17,7 +17,7 @@ const WorkflowsWrappedBindingWorker = {
 };
 import * as Storage from "../../globals/Storage.ts";
 import {
-  INTERNAL_WORKER_COMPATIBILITY_DATE,
+  DEFAULT_COMPATIBILITY_DATE,
   SERVICE_USER_WORKER,
 } from "../../internal/constants.ts";
 import {
@@ -144,7 +144,7 @@ const makeEngineService = ({
 }): WorkerdConfig.Service => ({
   name: `workflows:${workflow.workflowName}`,
   worker: {
-    compatibilityDate: INTERNAL_WORKER_COMPATIBILITY_DATE,
+    compatibilityDate: DEFAULT_COMPATIBILITY_DATE,
     compatibilityFlags: ["experimental", ...(compatibilityFlags ?? [])],
     modules,
     durableObjectNamespaces: [

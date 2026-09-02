@@ -13,7 +13,7 @@ import * as Loopback from "../../globals/Loopback.ts";
 import type * as LoopbackServer from "../../globals/LoopbackServer.ts";
 import * as Storage from "../../globals/Storage.ts";
 import {
-  INTERNAL_WORKER_COMPATIBILITY_DATE,
+  DEFAULT_COMPATIBILITY_DATE,
   SOCKET_USER_ENTRY,
 } from "../../internal/constants.ts";
 import { formatInternalWorkerModules } from "../../internal/internal-modules.ts";
@@ -177,7 +177,7 @@ export const StreamLive = Layer.effect(
             const streamService: WorkerdConfig.Service = {
               name: SERVICE_STREAM,
               worker: {
-                compatibilityDate: INTERNAL_WORKER_COMPATIBILITY_DATE,
+                compatibilityDate: DEFAULT_COMPATIBILITY_DATE,
                 modules: formatInternalWorkerModules(
                   yield* Effect.promise(StreamWorker.worker),
                 ),
@@ -222,7 +222,7 @@ export const StreamLive = Layer.effect(
                 {
                   name: "stream:router",
                   worker: {
-                    compatibilityDate: INTERNAL_WORKER_COMPATIBILITY_DATE,
+                    compatibilityDate: DEFAULT_COMPATIBILITY_DATE,
                     modules: [
                       {
                         name: "stream/router.worker.js",

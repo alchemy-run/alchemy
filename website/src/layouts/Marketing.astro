@@ -7,6 +7,7 @@ import Footer from "../components/marketing/Footer.astro";
 import PostHog from "../components/analytics/PostHog.astro";
 import ThemeProvider from "../components/ThemeProvider.astro";
 import BrandIcons from "../brand/Icons.astro";
+import StructuredData from "../components/StructuredData.astro";
 
 interface Props {
   title?: string;
@@ -72,9 +73,12 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
 
     {/* Twitter / X */}
     <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:site" content="@alchemy_run" />
     <meta name="twitter:title" content={title} />
     {description && <meta name="twitter:description" content={description} />}
     <meta name="twitter:image" content={ogImage.href} />
+
+    <StructuredData />
 
     <PostHog />
   </head>

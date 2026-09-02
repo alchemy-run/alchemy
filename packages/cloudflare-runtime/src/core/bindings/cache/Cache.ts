@@ -10,7 +10,7 @@ const CacheWorker = {
     ),
 };
 import * as Storage from "../../globals/Storage.ts";
-import { INTERNAL_WORKER_COMPATIBILITY_DATE } from "../../internal/constants.ts";
+import { DEFAULT_COMPATIBILITY_DATE } from "../../internal/constants.ts";
 import { formatInternalWorkerModules } from "../../internal/internal-modules.ts";
 import * as Plugin from "../../Plugin.ts";
 import * as PluginContext from "../../PluginContext.ts";
@@ -90,7 +90,7 @@ export const CacheLive = Layer.effect(
             const cacheService: WorkerdConfig.Service = {
               name: SERVICE_CACHE,
               worker: {
-                compatibilityDate: INTERNAL_WORKER_COMPATIBILITY_DATE,
+                compatibilityDate: DEFAULT_COMPATIBILITY_DATE,
                 modules: formatInternalWorkerModules(
                   yield* Effect.promise(CacheWorker.worker),
                 ),

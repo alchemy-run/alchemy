@@ -11,7 +11,7 @@ const ProxyWorker = {
     ),
 };
 import * as Internet from "../globals/Internet.ts";
-import { INTERNAL_WORKER_COMPATIBILITY_DATE } from "../internal/constants.ts";
+import { DEFAULT_COMPATIBILITY_DATE } from "../internal/constants.ts";
 import { formatInternalWorkerModules } from "../internal/internal-modules.ts";
 import * as Port from "../internal/Port.ts";
 import type { RuntimeError } from "../RuntimeError.shared.ts";
@@ -141,7 +141,7 @@ export const WorkerProxyLive = Layer.effect(
             {
               name: "proxy:worker",
               worker: {
-                compatibilityDate: INTERNAL_WORKER_COMPATIBILITY_DATE,
+                compatibilityDate: DEFAULT_COMPATIBILITY_DATE,
                 modules,
                 bindings: [
                   {

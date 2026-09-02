@@ -19,7 +19,7 @@ const OutboundWorker = {
     ),
 };
 import * as Loopback from "../globals/Loopback.ts";
-import { INTERNAL_WORKER_COMPATIBILITY_DATE } from "../internal/constants.ts";
+import { DEFAULT_COMPATIBILITY_DATE } from "../internal/constants.ts";
 import { formatInternalWorkerModules } from "../internal/internal-modules.ts";
 import * as Plugin from "../Plugin.ts";
 import * as PluginContext from "../PluginContext.ts";
@@ -101,7 +101,7 @@ export const RemoteBindingsLive = Layer.effect(
       const outbound = {
         name: "remote-bindings:outbound",
         worker: {
-          compatibilityDate: INTERNAL_WORKER_COMPATIBILITY_DATE,
+          compatibilityDate: DEFAULT_COMPATIBILITY_DATE,
           modules: outboundWorker,
           bindings: [
             {
@@ -130,7 +130,7 @@ export const RemoteBindingsLive = Layer.effect(
       const client = {
         name: "remote-bindings:client",
         worker: {
-          compatibilityDate: INTERNAL_WORKER_COMPATIBILITY_DATE,
+          compatibilityDate: DEFAULT_COMPATIBILITY_DATE,
           modules: clientWorker,
           globalOutbound: { name: outbound.name },
         },
