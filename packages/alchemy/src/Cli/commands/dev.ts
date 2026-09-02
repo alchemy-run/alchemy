@@ -4,8 +4,13 @@ import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Command from "effect/unstable/cli/Command";
+import * as Flag from "effect/unstable/cli/Flag";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import { fileURLToPath } from "node:url";
+import {
+  DEFAULT_DEV_DOMAIN,
+  DEFAULT_INGRESS_PORT,
+} from "../../Local/DevIngress.ts";
 import { SPAWNER_URL_ENV_KEY } from "../../Local/RpcProviderProxy.ts";
 import * as RpcSpawner from "../../Local/RpcSpawner.ts";
 import {
@@ -39,6 +44,27 @@ import {
  * Node/Bun warn about it on every startup.
  */
 
+const tunnel = Flag.boolean("tunnel").pipe(
+  Flag.withDescription(
+    "Expose every local resource to the internet through a Cloudflare quick tunnel (one https://*.trycloudflare.com URL per resource)",
+  ),
+  Flag.withDefault(false),
+);
+
+const domain = Flag.string("domain").pipe(
+  Flag.withDescription(
+    `Domain local resources are served under as <name>.<domain>. *.localhost needs no setup; a custom domain needs hosts-file entries (see \`alchemy hosts\`). Default: ${DEFAULT_DEV_DOMAIN}`,
+  ),
+  Flag.withDefault(DEFAULT_DEV_DOMAIN),
+);
+
+const port = Flag.integer("port").pipe(
+  Flag.withDescription(
+    `Port of the shared dev ingress every <name>.<domain> host is served on. Default: ${DEFAULT_INGRESS_PORT}`,
+  ),
+  Flag.withDefault(DEFAULT_INGRESS_PORT),
+);
+
 export const devCommand = Command.make(
   "dev",
   {
@@ -48,6 +74,9 @@ export const devCommand = Command.make(
     envFile,
     stage: devStage,
     profile,
+    tunnel,
+    domain,
+    port,
   },
   Effect.fn(
     function* (rawArgs) {

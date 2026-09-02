@@ -645,6 +645,7 @@ export default defineConfig({
               label: "Develop",
               items: [
                 { label: "dev", link: "/cli/dev" },
+                { label: "hosts", link: "/cli/hosts" },
                 { label: "logs", link: "/cli/logs" },
               ],
             },

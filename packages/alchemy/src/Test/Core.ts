@@ -16,7 +16,11 @@ import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import { DEFAULT_LOCAL_ENDPOINT } from "../AWS/AuthProvider.ts";
 import { flociServices } from "../AWS/Local/FlociServices.ts";
 import { AdoptPolicy } from "../AdoptPolicy.ts";
-import { AlchemyContext, AlchemyContextLive } from "../AlchemyContext.ts";
+import {
+  AlchemyContext,
+  AlchemyContextLive,
+  type DevIngressOptions,
+} from "../AlchemyContext.ts";
 import { apply } from "../Apply.ts";
 import { provideFreshArtifactStore } from "../Artifacts.ts";
 import { AuthProviders } from "../Auth/AuthProvider.ts";
@@ -74,6 +78,13 @@ export interface MakeOptions<ROut = any> {
    * editing each `Test.make({ dev: true })`.
    */
   dev?: boolean;
+  /**
+   * Serve local resources through the shared `alchemy dev` ingress
+   * (`<name>.<domain>` on one port, optional quick tunnels) — what a real
+   * `alchemy dev` run does by default. Off unless set, so existing dev
+   * suites keep their per-resource `http://localhost:<port>` URLs.
+   */
+  ingress?: DevIngressOptions;
   /**
    * Run local providers behind the RPC sidecar proxy, matching the process
    * topology of the real `alchemy dev` command: an {@link RpcProviderProxy}
@@ -245,7 +256,10 @@ export const makeSidecarHandle = <ROut = any>(
   };
 };
 
-const overrideAlchemyContext = (overrides: { dev: boolean }) =>
+const overrideAlchemyContext = (overrides: {
+  dev: boolean;
+  ingress?: DevIngressOptions;
+}) =>
   Layer.effect(
     AlchemyContext,
     AlchemyContext.pipe(Effect.map((ctx) => ({ ...ctx, ...overrides }))),
@@ -369,7 +383,12 @@ export const toEffect = <A, ROut = any>(
     );
   }).pipe(
     Effect.provideService(AdoptPolicy, options.adopt ?? false),
-    Effect.provide(overrideAlchemyContext({ dev: resolveDev(options) })),
+    Effect.provide(
+      overrideAlchemyContext({
+        dev: resolveDev(options),
+        ingress: options.ingress,
+      }),
+    ),
     // `options.state` (e.g. `Cloudflare.state()`) itself requires
     // `AuthProviders` to read credentials, so AuthProviders must be provided
     // AFTER the state layer or the state layer's requirement is never
@@ -446,6 +465,7 @@ export const deploy = <A>(
     stack: stack as Effect.Effect<CompiledStack<A>, never, any>,
     stage: callOptions?.stage ?? options.stage ?? "test",
     dev: resolveDev(options),
+    ingress: options.ingress,
     scope: callOptions?.scope,
   }).pipe(Effect.provide(TelemetryLive));
 
@@ -458,6 +478,7 @@ export const destroy = (
     stack: stack as Effect.Effect<CompiledStack, never, any>,
     stage: callOptions?.stage ?? options.stage ?? "test",
     dev: resolveDev(options),
+    ingress: options.ingress,
     scope: callOptions?.scope,
   }).pipe(Effect.provide(TelemetryLive));
 

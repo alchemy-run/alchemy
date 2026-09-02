@@ -39,6 +39,7 @@ import {
 import { makeDevLogDirectory, makeDevLogOpener } from "../../Local/DevLog.ts";
 import { FQN_SEPARATOR } from "../../FQN.ts";
 import * as LocalProvider from "../../Local/LocalProvider.ts";
+import * as DevIngress from "../../Local/DevIngress.ts";
 import { Stack } from "../../Stack.ts";
 import { unwrapRedacted } from "../../Util/index.ts";
 import { sha256 } from "../../Util/sha256.ts";
@@ -156,6 +157,7 @@ export const LocalWorkerProvider = () =>
       const path = yield* Path.Path;
       const localRuntimeState = yield* LocalRuntimeState;
       const workerProxy = yield* WorkerProxy.WorkerProxy;
+      const devIngress = yield* DevIngress.DevIngress;
       const cloudflareEnv = yield* CloudflareEnvironment;
       const context = yield* Effect.context<RuntimeServices>();
       const rootScope = yield* Effect.scope;
@@ -236,6 +238,41 @@ export const LocalWorkerProvider = () =>
         }
         return consumers;
       });
+
+      // Per-FQN exposure through the shared dev ingress (`<name>.<domain>`,
+      // optional quick tunnel). Registered before an instance serves so the
+      // public URL is known up front (start banner, `Worker.URL`), re-pointed
+      // on every restart, and dropped by `stop`. A no-op (undefined) when the
+      // ingress is disabled — URLs then fall back to the per-worker proxy.
+      const exposures = new Map<string, DevIngress.Exposure>();
+      const exposeWorker = Effect.fn(function* (
+        fqn: string,
+        dev: WorkerProps["dev"],
+        upstream: URL | string,
+      ) {
+        const exposure = yield* devIngress.expose({
+          fqn,
+          type: "Cloudflare.Worker",
+          upstream,
+          // Guard against unresolved Outputs in `precreate` inputs.
+          subdomain:
+            typeof dev?.subdomain === "string" ? dev.subdomain : undefined,
+          tunnel: typeof dev?.tunnel === "boolean" ? dev.tunnel : undefined,
+        });
+        if (exposure) exposures.set(fqn, exposure);
+        else exposures.delete(fqn);
+        return exposure;
+      });
+      /** The URL to advertise for a worker: its ingress URL when exposed, else `fallback`. */
+      const exposedUrl = (fqn: string, fallback: URL): URL => {
+        const exposure = exposures.get(fqn);
+        return exposure ? new URL(exposure.url) : fallback;
+      };
+      /** Every URL serving a worker: ingress/tunnel URLs first, then the local ones. */
+      const exposedUrls = (fqn: string, local: string[]): string[] => {
+        const exposure = exposures.get(fqn);
+        return exposure ? [...exposure.urls, ...local] : local;
+      };
 
       const startProxy = Effect.fn(function* (
         id: string,
@@ -1076,7 +1113,7 @@ export const LocalWorkerProvider = () =>
                       : workerStartedMessage(
                           worker.fqn,
                           Date.now() - start,
-                          proxy.url,
+                          exposedUrl(worker.fqn, proxy.url),
                           workerLogDir(worker),
                         ),
                   );
@@ -1116,7 +1153,7 @@ export const LocalWorkerProvider = () =>
             workerStartedMessage(
               worker.fqn,
               Date.now() - start,
-              proxy.url,
+              exposedUrl(worker.fqn, proxy.url),
               workerLogDir(worker),
             ),
           );
@@ -1176,7 +1213,7 @@ export const LocalWorkerProvider = () =>
           workerStartedMessage(
             worker.fqn,
             Date.now() - start,
-            proxy.url,
+            exposedUrl(worker.fqn, proxy.url),
             workerLogDir(worker),
           ),
         );
@@ -1263,7 +1300,9 @@ export const LocalWorkerProvider = () =>
                   startViteChild(
                     {
                       rootDir: root,
-                      publicUrl: proxy.url.toString().replace(/\/$/, ""),
+                      publicUrl: exposedUrl(worker.fqn, proxy.url)
+                        .toString()
+                        .replace(/\/$/, ""),
                       accountId,
                       storageDirectory,
                       stack: { name: stack.name, stage: stack.stage },
@@ -1367,7 +1406,7 @@ export const LocalWorkerProvider = () =>
           workerStartedMessage(
             worker.fqn,
             Date.now() - start,
-            proxy.url,
+            exposedUrl(worker.fqn, proxy.url),
             workerLogDir(worker),
           ),
         );
@@ -1464,7 +1503,16 @@ export const LocalWorkerProvider = () =>
                   ...news.dev,
                   mode: "worker" as const,
                   port: news.dev?.port ?? DEFAULT_DEV_PORT,
-                }).pipe(Effect.flatMap((proxy) => resolveLocalUrls(proxy.url)));
+                }).pipe(
+                  Effect.flatMap((proxy) =>
+                    Effect.andThen(
+                      exposeWorker(fqn, news.dev, proxy.url),
+                      Effect.map(resolveLocalUrls(proxy.url), (local) =>
+                        exposedUrls(fqn, local),
+                      ),
+                    ),
+                  ),
+                );
           return {
             // No cloud script exists in dev — fabricate a `dev:`-marked
             // identity (the shared local-provider convention, and the
@@ -1500,7 +1548,14 @@ export const LocalWorkerProvider = () =>
           if (config.dev.mode === "external") {
             dropServeState(fqn);
             yield* closeWorkerd(fqn);
-            const urls = config.dev.url ? [config.dev.url] : [];
+            const exposure = config.dev.url
+              ? yield* exposeWorker(fqn, config.dev, config.dev.url)
+              : undefined;
+            const urls = config.dev.url
+              ? exposure
+                ? [...exposure.urls, config.dev.url]
+                : [config.dev.url]
+              : [];
             return {
               workerId: `dev:${config.name}`,
               workerName: config.name,
@@ -1526,10 +1581,13 @@ export const LocalWorkerProvider = () =>
           const needsSelfUrl =
             config.bindingDescriptors.some((b) => b.type === "self_url") ||
             Object.values(config.env ?? {}).some(isSelfUrl);
+          // Start the stable proxy and register it with the dev ingress up
+          // front: the public URL (`<name>.<domain>`, tunnel) is known before
+          // workerd starts, so `Worker.URL` and the start banner can use it.
+          const proxy = yield* maybeStartProxy(fqn, config.dev);
+          const exposure = yield* exposeWorker(fqn, config.dev, proxy.url);
           const selfUrl = needsSelfUrl
-            ? (yield* maybeStartProxy(fqn, config.dev)).url
-                .toString()
-                .replace(/\/$/, "")
+            ? (exposure?.url ?? proxy.url.toString()).replace(/\/$/, "")
             : undefined;
           // Substitute `Worker.URL` sentinels once, up front — the runtime
           // bindings, the Vite define entries, and the child-process config
@@ -1570,7 +1628,7 @@ export const LocalWorkerProvider = () =>
           // In dev, `urls` is the dev server's actual surface — localhost
           // first, then LAN addresses for wildcard hosts. Deployed domains
           // are not served by this session, so they don't appear.
-          const urls = yield* resolveLocalUrls(serverUrl);
+          const urls = exposedUrls(fqn, yield* resolveLocalUrls(serverUrl));
           return {
             workerId: `dev:${config.name}`,
             workerName: config.name,
@@ -1602,6 +1660,8 @@ export const LocalWorkerProvider = () =>
           dropServeState(fqn);
           yield* closeWorkerd(fqn);
           yield* stopProxy(fqn);
+          yield* devIngress.unexpose(fqn);
+          exposures.delete(fqn);
         }),
       } satisfies LocalProvider.LocalProviderSpec<
         Worker,

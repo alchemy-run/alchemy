@@ -26,6 +26,9 @@ A failed apply keeps dev alive so healthy resources keep serving — fix the err
 | `--profile <name>`  | Auth profile to use (defaults to `$ALCHEMY_PROFILE` or `default`) |
 | `--env-file <path>` | Load environment variables from a file                             |
 | `--config, -c <file>`            | Stack file to run (defaults to `alchemy.run.ts`)                   |
+| `--domain <domain>` | Domain local resources are served under as `<name>.<domain>` (defaults to `localhost`) |
+| `--port <port>`     | Port of the shared dev ingress every `<name>.<domain>` host is served on (defaults to `1337`) |
+| `--tunnel`          | Expose every local resource to the internet through a Cloudflare quick tunnel |
 
 `alchemy deploy` defaults to `live_$USER`. Using a different default
 here means a bare `alchemy dev` will not replace a stage you deployed.
@@ -35,6 +38,38 @@ stage — including one you also deploy.
 Tear the default local-dev stage down with
 `alchemy destroy --stage dev_$USER`.
 
+## Subdomains
+
+Every local resource is served through one shared ingress on a single port, as `http://<name>.<domain>:<port>` — `http://api.localhost:1337`, `http://web.localhost:1337`. The name is the resource's logical id in kebab-case (`MyApi` → `my-api`), namespaced innermost first (`Site/Api` → `api.site`); a Worker overrides it with `dev: { subdomain: "api" }`. The bare `http://localhost:1337` forwards to the only resource when there is one and lists them all otherwise.
+
+`*.localhost` resolves to the loopback everywhere (macOS, glibc/systemd Linux, every browser), so the default needs no setup. Distinct origins per resource mean CORS behaves exactly as it will in production, but browsers refuse cookies scoped to `Domain=localhost`. For cross-subdomain cookies use a real-looking domain:
+
+```sh
+alchemy dev --domain myapp.test
+```
+
+A custom domain needs hosts-file entries, which requires root — `alchemy dev` must not run under sudo, so it detects the missing hosts and prints the command to run once:
+
+```sh
+sudo alchemy hosts add api.myapp.test web.myapp.test
+```
+
+See [hosts](/cli/hosts).
+
+### Port 80
+
+Binding port 80 needs privileges too. `alchemy dev --port 80` falls back to `1337` when it cannot bind, then checks whether the OS forwards `:80` to the ingress; if not, it prints the one-time forwarding command for your platform (`pfctl` on macOS, `iptables` on Linux). Once forwarded, URLs are advertised without a port: `http://api.myapp.test`.
+
+## Tunnels
+
+```sh
+alchemy dev --tunnel
+```
+
+`--tunnel` exposes every local resource to the public internet through a free, account-less [Cloudflare quick tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/do-more-with-tunnels/trycloudflare/) — one `https://<random>.trycloudflare.com` URL per resource, routed through the ingress by host. A tunneled resource's `url` is its public URL (webhooks, mobile devices, and external services reach your local Worker), and the local URLs follow in `urls`. Per resource, `dev: { tunnel: true }` always tunnels and `dev: { tunnel: false }` never does.
+
+Tunnels need the `cloudflared` binary: `$ALCHEMY_CLOUDFLARED`, then `$PATH`, then `~/.alchemy/bin` are checked, and when none has it the pinned release is downloaded from GitHub automatically. Quick-tunnel hostnames are random, change on every restart, and take up to ~30 seconds to become resolvable — requesting one before then can make your OS cache a negative DNS answer for a few minutes.
+
 ## Examples
 
 ```sh
@@ -43,10 +78,17 @@ alchemy dev
 
 # Emulate the prod program locally (replaces that stage's local/live mode)
 alchemy dev --stage prod
+
+# Serve resources as http://<name>.myapp.test (after `sudo alchemy hosts add …`)
+alchemy dev --domain myapp.test
+
+# Expose every local resource through a quick tunnel
+alchemy dev --tunnel
 ```
 
 ## Where next
 
+- [hosts](/cli/hosts) — hosts-file entries for a custom `--domain`
 - [logs](/cli/logs) fetches past logs or tails them with `--tail`
 - [deploy](/cli/deploy) — deploy for real
 - [Local development](/environments/local-development) — how dev mode works under the hood
