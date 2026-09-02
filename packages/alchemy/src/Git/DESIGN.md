@@ -1776,16 +1776,42 @@ Object received it also sent out twice — to the spill and to the hashers.
 ### §22.9 The pack never enters the Durable Object
 
 The whole pipeline above now runs in the **stateless Worker**
-(`Server.ts` `receivePackRoute`): it receives the body, spills it,
-verifies it through the fan-out, stitches, resolves deltas, and ships the
-Repo DO only *rows* over RPC — `beginPush` (authorization of the parsed
-commands, the staging push row), `stagePush` (batches of staged rows;
-promoted rows are coordinates into the wire pack, inline rows carry their
-zlib bytes — `PushWire.ts`), `readPushBase` (thin-delta bases), and
-`commitPush` (connectivity over the staged rows, the commit graph, the
-transactional ref CAS, post-commit bookkeeping). The DO's memory, CPU and
-egress are untouched by push size; its part of a push is SQL. The Worker
-holds at most the streaming window plus the chunks in flight, and admits
-pushes by that working set (`isolatePushGate`).
+(`Server.ts` `receivePackRoute`): it receives the body, verifies it
+through the fan-out, stitches, resolves deltas, and ships the Repo DO only
+*rows* over RPC — `beginPush` (authorization of the parsed commands, the
+staging push row), `stagePush` (batches of staged rows, three in flight
+and joined before the commit; promoted rows are coordinates into the wire
+pack, inline rows carry their zlib bytes — `PushWire.ts`), `readPushBase`
+(thin-delta bases), and `commitPush` (connectivity over the staged rows,
+the commit graph, the transactional ref CAS, post-commit bookkeeping).
+The DO's memory, CPU and egress are untouched by push size; its part of
+a push is SQL.
+
+Moving the pipeline exposed the next wall: the receiver was sending
+every byte out twice — to the spill and to the hashers — and the last
+part was dispatched only when the multipart upload completed, because
+that was when the streaming source ended. Three changes:
+
+- **The hasher writes the spill.** Parts are body-aligned 8 MiB (R2's
+  uniform-part rule), and each `hashPart` call carries the multipart
+  upload's key and id: the hasher isolate writes the part it verifies
+  (`BlobStoreShape.uploadPart` — parts may be uploaded from any isolate;
+  `complete` takes the collected parts and sorts them). The receiver
+  sends each byte out once; the first part carries the command section
+  and the pack header before its first entry (`skip`).
+- **The source ends at body end.** `expectFallback` makes an evicted read
+  wait for the completed spill instead of failing, so the last part is
+  dispatched the moment the body ends, and results settle while the body
+  is still arriving: the consumer is a forked fiber, the producer runs
+  on the request's own (hash fibers are its children).
+- **The straddler is speculative.** The entry crossing a part edge is
+  dispatched the moment its part settles, sized from its own header out
+  of the retained bytes, so a 10 MB blob spanning three parts is hashed
+  alongside the parts rather than after the last one — and `findBoundary`
+  searches the whole part (it searched the first MiB: a part whose head
+  lay inside such a blob reported no boundary and was hashed serially).
+
+What is left is the Worker's own I/O: a single invocation receives the
+body and forwards it, and the two share the isolate's throughput.
 
 §22.10 records the measurements.

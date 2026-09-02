@@ -136,6 +136,7 @@ import {
 import {
   decodeBoundsRequest,
   encodeScanResult,
+  frame,
   HASH_ROUTE,
   HASHER_BINDING,
 } from "./Hasher.ts";
@@ -2165,7 +2166,10 @@ const make = Effect.gen(function* () {
     const partNumber = Number(query.get("part"));
     const upload =
       key !== null && uploadId !== null && Number.isFinite(partNumber)
-        ? yield* Effect.forkChild(
+        ? // Detached: it outlives the handler fiber, which returns as soon as
+          // the scan is written; the open response stream keeps the
+          // invocation alive until the part frame follows.
+          yield* Effect.forkDetach(
             workerBlobs
               .uploadPart(key, uploadId, partNumber, body)
               .pipe(Effect.provide(RuntimeContext.phantom), Effect.result),
@@ -2185,33 +2189,55 @@ const make = Effect.gen(function* () {
             resync: query.get("resync") === "1",
           })
     ).pipe(Effect.result);
-    const tScan = Date.now();
-    const part = upload === undefined ? undefined : yield* Fiber.join(upload);
-    const tUpload = Date.now();
-    if (body.length > 1 << 20) {
-      console.log(
-        `[hash] bytes=${body.length} body=${tBody - t0}ms scan=${tScan - tBody}ms upload=${tUpload - tScan}ms part=${partNumber}`,
-      );
-    }
-    if (part !== undefined && Result.isFailure(part)) {
-      return HttpServerResponse.text(
-        `spill part ${partNumber}: ${part.failure.reason}`,
-        { status: 502 },
-      );
-    }
     if (Result.isFailure(result)) {
       return HttpServerResponse.text(
         `${result.failure._tag}: ${"reason" in result.failure ? result.failure.reason : ""}`,
         { status: 422 },
       );
     }
-    return HttpServerResponse.uint8Array(
-      encodeScanResult({
-        ...result.success,
-        part: part === undefined ? undefined : part.success,
-      }),
-      { contentType: "application/octet-stream" },
-    );
+    const scanFrame = frame(encodeScanResult(result.success));
+    if (upload === undefined) {
+      return HttpServerResponse.uint8Array(scanFrame, {
+        contentType: "application/octet-stream",
+      });
+    }
+    // Two frames: the scan now, the part once its upload has finished —
+    // the open response stream keeps this invocation alive meanwhile.
+    const { readable, writable } = new IdentityTransformStream();
+    const tScan = Date.now();
+    // A plain async writer, like the clone pump: writes settle only as the
+    // response is read, and the open stream keeps this invocation alive
+    // until the part's upload has finished.
+    const partDone = Effect.runPromise(Fiber.join(upload));
+    yield* Effect.sync(() => {
+      void (async () => {
+        const writer = writable.getWriter();
+        try {
+          await writer.write(scanFrame);
+          const part = await partDone;
+          if (body.length > 1 << 20) {
+            console.log(
+              `[hash] bytes=${body.length} body=${tBody - t0}ms scan=${tScan - tBody}ms upload=${Date.now() - tScan}ms part=${partNumber}`,
+            );
+          }
+          if (Result.isFailure(part)) {
+            await writable
+              .abort(new Error(part.failure.reason))
+              .catch(() => {});
+            return;
+          }
+          await writer.write(
+            frame(new TextEncoder().encode(JSON.stringify(part.success))),
+          );
+          await writer.close();
+        } catch (error) {
+          await writable.abort(error).catch(() => {});
+        }
+      })();
+    });
+    return HttpServerResponse.raw(readable, {
+      contentType: "application/octet-stream",
+    });
   });
 
   const rawRoutes = Layer.mergeAll(

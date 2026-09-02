@@ -15,6 +15,8 @@ import {
   encodeScanResult,
   Hasher,
   HasherInline,
+  frame,
+  makeFrameReader,
 } from "@/Git/Hasher.ts";
 import { describe, expect, test } from "alchemy-test";
 import { BlobStore } from "@/Git/BlobStore.ts";
@@ -98,5 +100,42 @@ describe("Hasher", () => {
         ),
       ),
     );
+  });
+});
+
+describe("hash route framing (DESIGN §22.9)", () => {
+  test("frames split across reads are reassembled; the part frame follows the scan", async () => {
+    const scan = frame(new TextEncoder().encode("scan-bytes"));
+    const part = frame(
+      new TextEncoder().encode(JSON.stringify({ partNumber: 3, etag: "e3" })),
+    );
+    const whole = concat([scan, part]);
+    // Deliver in awkward pieces: mid-length-prefix and mid-frame cuts.
+    const cuts = [1, 3, 7, 12, whole.length];
+    let at = 0;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (at >= whole.length) return controller.close();
+        const to = cuts.find((c) => c > at) ?? whole.length;
+        controller.enqueue(whole.subarray(at, to));
+        at = to;
+      },
+    });
+    const next = makeFrameReader(body);
+    const out = await Effect.runPromise(
+      Effect.gen(function* () {
+        const first = yield* next();
+        const second = yield* next();
+        const third = yield* next();
+        return {
+          first: first && new TextDecoder().decode(first),
+          second: second && JSON.parse(new TextDecoder().decode(second)),
+          third,
+        };
+      }),
+    );
+    expect(out.first).toBe("scan-bytes");
+    expect(out.second).toEqual({ partNumber: 3, etag: "e3" });
+    expect(out.third).toBeUndefined();
   });
 });

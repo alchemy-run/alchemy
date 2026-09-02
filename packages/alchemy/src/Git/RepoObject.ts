@@ -1808,7 +1808,9 @@ export const ingestPackFrom = (
         // platform's cpuTime is the CPU attribution): `PushStats.phases`.
         const pumpStarted = Date.now();
         let regionCalls = 0;
-        const parts: Array<UploadedPart> = [];
+        // Each part's identity arrives after its upload; joined before
+        // the multipart upload is completed, never on the scan path.
+        const parts: Array<Effect.Effect<UploadedPart, PackIngestError>> = [];
         let producerDone = false;
         const wakers: Array<() => void> = [];
         const notifyConsumer = () => {
@@ -2018,7 +2020,9 @@ export const ingestPackFrom = (
             if (k >= chunks.length) break;
             const current = chunks[k]!;
             const result = yield* Fiber.join(current.fiber);
-            if (result.part !== undefined) parts.push(result.part);
+            if (result.part !== undefined) {
+              parts.push(result.part.pipe(Effect.mapError(asIngest)));
+            }
             const chunkEnd = current.base + current.payload.length;
             trace(
               `chunk ${k} base=${current.base} len=${current.payload.length} first=${result.firstOffset} consumedTo=${result.consumedTo} count=${result.count} prevEnd=${prevEnd} staged=${staged}`,
@@ -2291,7 +2295,9 @@ export const ingestPackFrom = (
         // the object and hand it to the source as the fallback reader.
         if (upload !== undefined && spill !== undefined) {
           const settled = upload;
-          yield* settled.complete(parts).pipe(
+          const uploaded: Array<UploadedPart> = [];
+          for (const part of parts) uploaded.push(yield* part);
+          yield* settled.complete(uploaded).pipe(
             Effect.mapError(
               (error) =>
                 new PackIngestError({

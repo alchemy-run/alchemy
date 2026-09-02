@@ -73,9 +73,13 @@ export interface HashPartOptions {
     | undefined;
 }
 
-/** A scan plus, when a spill was requested, the uploaded part's identity. */
+/**
+ * A scan plus, when a spill was requested, the uploaded part's identity —
+ * DEFERRED: the scan is available as soon as the hasher has it, while the
+ * part's upload to blob storage may still be in flight (DESIGN §22.9).
+ */
 export interface HashPartResult extends ScanResult {
-  readonly part?: UploadedPart | undefined;
+  readonly part?: Effect.Effect<UploadedPart, HashError> | undefined;
 }
 
 export interface HasherShape {
@@ -110,10 +114,12 @@ export const makeInlineHasher = (blobs: BlobStoreShape): HasherShape => ({
   hashPart: (payload, options) =>
     Effect.gen(function* () {
       const spill = options.spill;
+      // Detached: the caller's fiber ends with the scan; the part is joined
+      // later, before the multipart upload is completed.
       const upload =
         spill === undefined
           ? undefined
-          : yield* Effect.forkChild(
+          : yield* Effect.forkDetach(
               blobs
                 .uploadPart(
                   spill.key,
@@ -136,8 +142,10 @@ export const makeInlineHasher = (blobs: BlobStoreShape): HasherShape => ({
         skip === 0 ? payload : payload.subarray(skip),
         options,
       );
-      const part = upload === undefined ? undefined : yield* Fiber.join(upload);
-      return { ...scan, part };
+      return {
+        ...scan,
+        part: upload === undefined ? undefined : Fiber.join(upload),
+      };
     }),
   hashBoundsPart: (payload, bounds, options) =>
     hashBounds(payload, bounds, options),
@@ -196,7 +204,6 @@ interface WireEntry {
   readonly c?: [number, number]; // content [offset, length]
 }
 interface WireResult {
-  readonly part?: UploadedPart | undefined;
   readonly firstOffset: number;
   readonly entries: ReadonlyArray<WireEntry>;
   readonly unresolved: ScanResult["unresolved"];
@@ -204,7 +211,7 @@ interface WireResult {
   readonly count: number;
 }
 
-export const encodeScanResult = (result: HashPartResult): Uint8Array => {
+export const encodeScanResult = (result: ScanResult): Uint8Array => {
   const blobs: Array<Uint8Array> = [];
   let at = 0;
   const put = (bytes: Uint8Array): [number, number] => {
@@ -214,7 +221,6 @@ export const encodeScanResult = (result: HashPartResult): Uint8Array => {
     return ref;
   };
   const wire: WireResult = {
-    ...(result.part === undefined ? {} : { part: result.part }),
     firstOffset: result.firstOffset,
     entries: result.entries.map((e) => ({
       o: e.oid,
@@ -242,7 +248,7 @@ export const encodeScanResult = (result: HashPartResult): Uint8Array => {
   return out;
 };
 
-export const decodeScanResult = (bytes: Uint8Array): HashPartResult => {
+export const decodeScanResult = (bytes: Uint8Array): ScanResult => {
   const jsonLength = new DataView(bytes.buffer, bytes.byteOffset).getUint32(0);
   const wire = JSON.parse(
     new TextDecoder().decode(bytes.subarray(4, 4 + jsonLength)),
@@ -251,7 +257,6 @@ export const decodeScanResult = (bytes: Uint8Array): HashPartResult => {
   const slice = (ref: [number, number] | undefined) =>
     ref === undefined ? undefined : blobs.subarray(ref[0], ref[0] + ref[1]);
   return {
-    part: wire.part,
     firstOffset: wire.firstOffset,
     entries: wire.entries.map((e) => ({
       oid: e.o as Oid,
@@ -267,6 +272,65 @@ export const decodeScanResult = (bytes: Uint8Array): HashPartResult => {
     consumedTo: wire.consumedTo,
     count: wire.count,
   };
+};
+
+/**
+ * Response framing of the hash route: `u32 len | frame` repeated — the
+ * scan first, then (spill only) the uploaded part as JSON once its upload
+ * has finished. The client acts on the scan without waiting for the part.
+ */
+export const frame = (bytes: Uint8Array): Uint8Array => {
+  const out = new Uint8Array(4 + bytes.length);
+  new DataView(out.buffer).setUint32(0, bytes.length);
+  out.set(bytes, 4);
+  return out;
+};
+
+/** Reads length-prefixed frames off a response body, one at a time. */
+export const makeFrameReader = (body: ReadableStream<Uint8Array>) => {
+  const reader = body.getReader();
+  const pending: Array<Uint8Array> = [];
+  let pendingBytes = 0;
+  const take = (n: number): Uint8Array => {
+    const out = new Uint8Array(n);
+    let written = 0;
+    while (written < n) {
+      const head = pending[0]!;
+      const use = Math.min(head.length, n - written);
+      out.set(head.subarray(0, use), written);
+      written += use;
+      if (use === head.length) pending.shift();
+      else pending[0] = head.subarray(use);
+    }
+    pendingBytes -= n;
+    return out;
+  };
+  const peekLength = (): number | undefined => {
+    if (pendingBytes < 4) return undefined;
+    const head = take(4);
+    const len = new DataView(head.buffer).getUint32(0);
+    pending.unshift(head);
+    pendingBytes += 4;
+    return len;
+  };
+  return (): Effect.Effect<Uint8Array | undefined, HashError> =>
+    Effect.tryPromise({
+      try: async () => {
+        while (true) {
+          const len = peekLength();
+          if (len !== undefined && pendingBytes >= 4 + len) {
+            take(4);
+            return take(len);
+          }
+          const { value, done } = await reader.read();
+          if (done) return undefined;
+          pending.push(value);
+          pendingBytes += value.length;
+        }
+      },
+      catch: (error) =>
+        new HashError({ reason: `hash part body: ${String(error)}` }),
+    });
 };
 
 // ── self-binding layer ──────────────────────────────────────────────────────
@@ -301,7 +365,7 @@ export const HasherSelf: Layer.Layer<
     if (fetcher === undefined || adminKey === undefined) {
       return makeInlineHasher(blobs);
     }
-    const post = (url: string, body: Uint8Array) =>
+    const send = (url: string, body: Uint8Array) =>
       Effect.gen(function* () {
         const response = yield* Effect.tryPromise({
           try: () =>
@@ -316,31 +380,59 @@ export const HasherSelf: Layer.Layer<
           catch: (error) =>
             new HashError({ reason: `hash part fetch: ${String(error)}` }),
         });
-        const bytes = new Uint8Array(
-          yield* Effect.tryPromise({
-            try: () => response.arrayBuffer(),
-            catch: (error) =>
-              new HashError({ reason: `hash part body: ${String(error)}` }),
-          }),
-        );
-        if (response.status !== 200) {
+        if (response.status !== 200 || response.body === null) {
+          const text = yield* Effect.tryPromise({
+            try: () => response.text(),
+            catch: () => new HashError({ reason: "hash part: unreadable" }),
+          });
           return yield* new HashError({
-            reason: `hash part: status ${response.status}: ${new TextDecoder().decode(bytes.subarray(0, 200))}`,
+            reason: `hash part: status ${response.status}: ${text.slice(0, 200)}`,
           });
         }
-        return decodeScanResult(bytes);
+        return makeFrameReader(response.body);
+      });
+    const post = (url: string, body: Uint8Array) =>
+      Effect.gen(function* () {
+        const next = yield* send(url, body);
+        const first = yield* next();
+        if (first === undefined) {
+          return yield* new HashError({ reason: "hash part: empty response" });
+        }
+        return decodeScanResult(first);
       });
     return {
-      hashPart: (payload, opts) => {
-        const spill =
-          opts.spill === undefined
-            ? ""
-            : `&key=${encodeURIComponent(opts.spill.key)}&uploadId=${encodeURIComponent(opts.spill.uploadId)}&part=${opts.spill.partNumber}`;
-        return post(
-          `https://self${HASH_ROUTE}?base=${opts.base}&remaining=${opts.remaining}&max=${opts.maxObjectSize}${opts.resync ? "&resync=1" : ""}${opts.skip ? `&skip=${opts.skip}` : ""}${spill}`,
-          payload,
-        );
-      },
+      hashPart: (payload, opts) =>
+        Effect.gen(function* () {
+          const spill =
+            opts.spill === undefined
+              ? ""
+              : `&key=${encodeURIComponent(opts.spill.key)}&uploadId=${encodeURIComponent(opts.spill.uploadId)}&part=${opts.spill.partNumber}`;
+          const next = yield* send(
+            `https://self${HASH_ROUTE}?base=${opts.base}&remaining=${opts.remaining}&max=${opts.maxObjectSize}${opts.resync ? "&resync=1" : ""}${opts.skip ? `&skip=${opts.skip}` : ""}${spill}`,
+            payload,
+          );
+          const first = yield* next();
+          if (first === undefined) {
+            return yield* new HashError({
+              reason: "hash part: empty response",
+            });
+          }
+          const scan = decodeScanResult(first);
+          if (opts.spill === undefined) return scan;
+          // The part frame arrives once the hasher's upload has finished.
+          const part = next().pipe(
+            Effect.flatMap((bytes) =>
+              bytes === undefined
+                ? Effect.fail(
+                    new HashError({ reason: "hash part: no part frame" }),
+                  )
+                : Effect.succeed(
+                    JSON.parse(new TextDecoder().decode(bytes)) as UploadedPart,
+                  ),
+            ),
+          );
+          return { ...scan, part };
+        }),
       hashBoundsPart: (payload, bounds, opts) =>
         post(
           `https://self${HASH_ROUTE}?mode=bounds&base=${opts.base}&max=${opts.maxObjectSize}`,
