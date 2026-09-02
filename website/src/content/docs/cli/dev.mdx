@@ -29,6 +29,8 @@ A failed apply keeps dev alive so healthy resources keep serving — fix the err
 | `--domain <domain>` | Domain local resources are served under as `<name>.<domain>` (defaults to `localhost`) |
 | `--port <port>`     | Port of the shared dev ingress every `<name>.<domain>` host is served on (defaults to `1337`) |
 | `--tunnel`          | Expose every local resource to the internet through a Cloudflare quick tunnel |
+| `--relay <url>`     | Expose local resources through a dev relay (one connection, stable `https://<name>.<namespace>.<relay>` URLs); token from `$ALCHEMY_DEV_RELAY_TOKEN` |
+| `--relay-namespace <name>` | Namespace to claim on the relay (defaults to the stage, kebab-cased) |
 
 `alchemy deploy` defaults to `live_$USER`. Using a different default
 here means a bare `alchemy dev` will not replace a stage you deployed.
@@ -72,6 +74,22 @@ alchemy dev --tunnel
 
 Tunnels need the `cloudflared` binary: `$ALCHEMY_CLOUDFLARED`, then `$PATH`, then `~/.alchemy/bin` are checked, and when none has it the pinned release is downloaded from GitHub automatically. Quick-tunnel hostnames are random, change on every restart, and take up to ~30 seconds to become resolvable — requesting one before then can make your OS cache a negative DNS answer for a few minutes.
 
+## Relay
+
+```sh
+alchemy dev --relay https://dev.alchemy.run
+```
+
+```
+Connected to the dev relay: https://<name>.dev-sam.dev.alchemy.run
+[Api] → https://api.dev-sam.dev.alchemy.run
+[Web] → https://web.dev-sam.dev.alchemy.run
+```
+
+A relay is a Worker and Durable Object on a domain the relay operator owns. `alchemy dev` opens **one** WebSocket to it and keeps it open for the session; the relay routes every `https://<name>.<namespace>.<domain>` request down that socket by `Host`, and the local ingress answers it. Compared to quick tunnels: real subdomains, stable names across restarts, no `cloudflared`, no process per resource. The namespace is yours for the session (the stage name by default) and each resource keeps its ingress name under it, so cookies scoped to `<namespace>.<domain>` work across your resources like they will in production.
+
+Anyone can host a relay with Alchemy itself — `Local.Relay.DevRelay` deploys the Worker, its wildcard DNS record and routes onto a zone (two-level hostnames need Advanced Certificate Manager on that zone). Connectors present the relay's bearer token from `$ALCHEMY_DEV_RELAY_TOKEN`. WebSocket passthrough (HMR sockets through the relay) is not supported yet; the local URLs keep working for that.
+
 ## Examples
 
 ```sh
@@ -86,6 +104,9 @@ alchemy dev --domain myapp.test
 
 # Expose every local resource through a quick tunnel
 alchemy dev --tunnel
+
+# Expose every local resource through a dev relay at stable subdomains
+ALCHEMY_DEV_RELAY_TOKEN=… alchemy dev --relay https://dev.alchemy.run
 ```
 
 ## Where next

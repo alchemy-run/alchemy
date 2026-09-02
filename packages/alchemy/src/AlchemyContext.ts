@@ -47,6 +47,22 @@ export interface DevIngressOptions {
   readonly port: number;
   /** Expose every local host through a Cloudflare quick tunnel. */
   readonly tunnel: boolean;
+  /**
+   * Connect to an Alchemy dev relay instead of (or as well as) quick
+   * tunnels: one WebSocket from the dev sidecar to the relay, which routes
+   * `https://<name>.<namespace>.<relay domain>` back down it by `Host`.
+   */
+  readonly relay?: DevRelayOptions;
+}
+
+/** How `alchemy dev` connects to a dev relay (see `Local/Relay`). */
+export interface DevRelayOptions {
+  /** The relay's base URL, e.g. `https://dev.alchemy.run`. */
+  readonly url: string;
+  /** The namespace this session owns: hosts are `<name>.<namespace>.<domain>`. */
+  readonly namespace: string;
+  /** Bearer token presented on connect (`ALCHEMY_DEV_RELAY_TOKEN`). */
+  readonly token?: string;
 }
 
 export const AlchemyContextLive = Layer.effect(

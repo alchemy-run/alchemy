@@ -17,6 +17,10 @@ import {
   readHostsFile,
 } from "./HostsFile.ts";
 import { QuickTunnel } from "./QuickTunnel.ts";
+import {
+  RelayConnector,
+  type RelayConnection,
+} from "./Relay/RelayConnector.ts";
 
 export type { DevIngressOptions } from "../AlchemyContext.ts";
 
@@ -60,6 +64,8 @@ export interface Exposure {
   readonly urls: string[];
   /** The `https://*.trycloudflare.com` URL, when a tunnel is open. */
   readonly tunnelUrl: string | undefined;
+  /** The dev-relay URL (`https://<name>.<namespace>.<relay domain>`), when connected. */
+  readonly relayUrl?: string;
 }
 
 /**
@@ -163,7 +169,9 @@ export const layer = Layer.effect(
     if (existing !== undefined) return yield* existing;
     // The runtime services of the FIRST session build the shared instance;
     // the ingress and tunnel manager are process-wide singletons themselves.
-    const services = yield* Effect.context<Ingress.Ingress | QuickTunnel>();
+    const services = yield* Effect.context<
+      Ingress.Ingress | QuickTunnel | RelayConnector
+    >();
     const detached = yield* Scope.make();
     const instance = yield* Effect.cached(
       make(options).pipe(
@@ -182,6 +190,7 @@ const make = Effect.fn("DevIngress.make")(function* (
 ) {
   const ingress = yield* Ingress.Ingress;
   const tunnels = yield* QuickTunnel;
+  const relays = yield* RelayConnector;
   const fs = yield* Effect.serviceOption(FileSystem.FileSystem);
   const rootScope = yield* Effect.scope;
 
@@ -234,6 +243,26 @@ const make = Effect.fn("DevIngress.make")(function* (
   yield* Effect.logDebug(
     `Dev ingress serving ${served.url} (domain ${options.domain}${options.tunnel ? ", tunnels on" : ""})`,
   );
+
+  // One relay connection for the whole session: the relay routes
+  // `<label>.<namespace>.<domain>` down it, and the connector answers from
+  // this ingress with the matching local host as the route hint. A relay
+  // that can't be reached is a warning, not a dead dev session.
+  const relay: RelayConnection | undefined = options.relay
+    ? yield* relays
+        .connect({
+          ...options.relay,
+          target: served.url,
+          localHost: (label) => `${label}.${options.domain}`,
+        })
+        .pipe(
+          Effect.catchCause((cause) =>
+            Effect.logWarning(
+              `Could not connect to the dev relay at ${options.relay!.url}; serving locally only.\n${cause}`,
+            ).pipe(Effect.as(undefined)),
+          ),
+        )
+    : undefined;
 
   const registrations = new Map<string, Registration>();
   const hostOwners = new Map<string, string>();
@@ -334,13 +363,15 @@ const make = Effect.fn("DevIngress.make")(function* (
     }
 
     const tunnelUrl = registration.tunnel?.url.toString().replace(/\/$/, "");
+    const label = host.slice(0, -(options.domain.length + 1));
+    const relayUrl = relay?.publicUrl(label);
     yield* served
       .set(host, {
         upstream: input.upstream.toString(),
         label: input.fqn.split(FQN_SEPARATOR).at(-1),
         fqn: input.fqn,
         type: input.type,
-        tunnelUrl,
+        tunnelUrl: tunnelUrl ?? relayUrl,
       })
       .pipe(
         Effect.catchCause((cause) =>
@@ -352,12 +383,23 @@ const make = Effect.fn("DevIngress.make")(function* (
     yield* hostsFileCheck(host);
 
     const local = hostUrl(host, advertisePort);
-    const urls = tunnelUrl ? [tunnelUrl, local] : [local];
+    // Public first: the relay URL is stable, a quick tunnel's is not.
+    const urls = [
+      ...(relayUrl ? [relayUrl] : []),
+      ...(tunnelUrl ? [tunnelUrl] : []),
+      local,
+    ];
     if (advertisePort === undefined && served.port !== 80) {
       // Forwarded privileged port: the served port still works too.
       urls.push(hostUrl(host, served.port));
     }
-    return { host, url: urls[0]!, urls, tunnelUrl } satisfies Exposure;
+    return {
+      host,
+      url: urls[0]!,
+      urls,
+      tunnelUrl,
+      relayUrl,
+    } satisfies Exposure;
   }, lock.withPermits(1));
 
   const unexpose = Effect.fn("DevIngress.unexpose")(function* (
@@ -399,6 +441,11 @@ const probeForward = (port: number, id: string) =>
  * platform services (FileSystem, Path, HttpClient, ChildProcessSpawner).
  */
 export const layerWithRuntime = () =>
-  layer.pipe(Layer.provide(Layer.mergeAll(Ingress.layer(), QuickTunnelLayer)));
+  layer.pipe(
+    Layer.provide(
+      Layer.mergeAll(Ingress.layer(), QuickTunnelLayer, RelayConnectorLayer),
+    ),
+  );
 
 import { layer as QuickTunnelLayer } from "./QuickTunnel.ts";
+import { layer as RelayConnectorLayer } from "./Relay/RelayConnector.ts";

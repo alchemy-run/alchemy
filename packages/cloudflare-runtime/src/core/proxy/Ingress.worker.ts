@@ -38,6 +38,8 @@ export interface IngressRoute {
 }
 
 const CONTROLLER_PREFIX = "/cdn-cgi/ingress/";
+/** Header a trusted local hop sets to pick the route regardless of `Host`. */
+const ROUTE_HINT_HEADER = "x-alchemy-ingress-host";
 
 export default {
   fetch(request: Request, env: Env): Promise<Response> {
@@ -131,7 +133,13 @@ export class Ingress extends DurableObject<Env> {
   }
 
   private async handleRouted(request: Request, url: URL): Promise<Response> {
-    const host = normalizeHost(request.headers.get("host") ?? url.host);
+    // A relay connector in front of the ingress names the local host it
+    // wants explicitly (its own `Host` is the public one, and it may not be
+    // able to override the header at all) — honour that first.
+    const hinted = request.headers.get(ROUTE_HINT_HEADER);
+    const host = normalizeHost(
+      hinted ?? request.headers.get("host") ?? url.host,
+    );
     const route = this.routes.get(host);
     if (route) {
       return await this.forward(request, url, route);
@@ -158,6 +166,7 @@ export class Ingress extends DurableObject<Env> {
     proxied.pathname = original.pathname;
     proxied.search = original.search;
     const headers = new Headers(request.headers);
+    headers.delete(ROUTE_HINT_HEADER);
     // Preserve what a hop in front of us said (a tunnel reports the public
     // hostname) — otherwise the public host is the one the client dialed.
     if (!headers.has("x-forwarded-host")) {

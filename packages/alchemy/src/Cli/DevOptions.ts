@@ -13,6 +13,10 @@ export const DevOptions = Schema.Struct({
   domain: Schema.String,
   /** Port of the shared dev ingress. */
   port: Schema.Number,
+  /** Dev relay to connect to (`--relay <url>`), if any. */
+  relay: Schema.optional(Schema.String),
+  /** Namespace claimed on the relay (`--relay-namespace`). */
+  relayNamespace: Schema.optional(Schema.String),
 });
 
 export type DevOptions = typeof DevOptions.Type;
