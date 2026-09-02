@@ -1,4 +1,12 @@
-import type { Apply, Create, Delete, Plan, Replace, Update } from "@/Plan.ts";
+import type {
+  Apply,
+  Create,
+  Delete,
+  NoopUpdate,
+  Plan,
+  Replace,
+  Update,
+} from "@/Plan.ts";
 import type { ProviderService } from "@/Provider.ts";
 import type { ResourceLike } from "@/Resource.ts";
 import type { CreatedResourceState } from "@/State/index.ts";
@@ -65,6 +73,12 @@ export const createNode = (props: object, id = "Worker"): Create => ({
   action: "create",
   props,
   state: undefined,
+});
+
+export const noopNode = (props: object, id = "Worker"): NoopUpdate => ({
+  ...baseNode(id, props),
+  action: "noop",
+  state: state(id, props),
 });
 
 export const replaceNode = (

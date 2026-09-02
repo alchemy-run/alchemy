@@ -11,7 +11,7 @@ import {
 } from "../ui/index.ts";
 import { Screen, theme, type ScreenController } from "../../CliKit/index.ts";
 import type { Plan as AlchemyPlan } from "../../../Plan.ts";
-import { Plan, PlanView, PlanViewStore } from "./PlanView.tsx";
+import { Plan, PlanTree } from "./PlanView.tsx";
 
 export interface ApprovePlanProps {
   plan: AlchemyPlan;
@@ -32,9 +32,24 @@ export function ApprovePlan(props: ApprovePlanProps): JSX.Element {
   const action = plan.destroy ? "Destroy" : "Deploy";
   const glyphs = useGlyphs();
   const keys = useKeyGlyphs();
-  const store = useMemo(
-    () => new PlanViewStore(plan, { detailed }),
-    [plan, detailed],
+  const tree = useMemo(
+    () =>
+      new PlanTree(plan, {
+        detailed,
+        mode: "review",
+        label: action,
+      }),
+    [plan, detailed, action],
+  );
+  const staticTree = useMemo(
+    () =>
+      new PlanTree(plan, {
+        detailed,
+        mode: "review",
+        label: action,
+        viewport: "full",
+      }),
+    [plan, detailed, action],
   );
 
   const complete = (answer: boolean) => {
@@ -50,7 +65,7 @@ export function ApprovePlan(props: ApprovePlanProps): JSX.Element {
       verdict
     ) : (
       <Box flexDirection="column">
-        <Plan plan={plan} detailed={detailed} />
+        <Plan tree={staticTree} />
         {verdict}
       </Box>
     );
@@ -65,35 +80,29 @@ export function ApprovePlan(props: ApprovePlanProps): JSX.Element {
     else if (input.toLowerCase() === "n") complete(false);
   });
 
-  return (
-    <Box flexDirection="column" gap={1}>
-      <PlanView
-        store={store}
-        mode="review"
-        detailed={detailed}
-        viewport="virtual"
+  const prompt = (
+    <Box flexDirection="column">
+      <Text bold>{action}?</Text>
+      <ChoiceGroup
+        value={approved}
+        choices={[
+          { value: true, label: action },
+          { value: false, label: "Cancel" },
+        ]}
+        onChange={setApproved}
       />
-      <Box flexDirection="column" marginTop={1}>
-        <Text bold>{action}?</Text>
-        <ChoiceGroup
-          value={approved}
-          choices={[
-            { value: true, label: action },
-            { value: false, label: "Cancel" },
-          ]}
-          onChange={setApproved}
-        />
-        <KeyBar
-          keys={[
-            [keys.upDown, "scroll plan"],
-            [keys.leftRight, "choose"],
-            [keys.enter, "confirm"],
-            [keys.escape, "cancel"],
-          ]}
-        />
-      </Box>
+      <KeyBar
+        keys={[
+          [keys.upDown, "scroll plan"],
+          [keys.leftRight, "choose"],
+          [keys.enter, "confirm"],
+          [keys.escape, "cancel"],
+        ]}
+      />
     </Box>
   );
+
+  return <Plan tree={tree} footer={prompt} />;
 }
 
 export const approvePlanScreen = (plan: AlchemyPlan, detailed = false) =>

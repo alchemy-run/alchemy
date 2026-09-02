@@ -270,6 +270,8 @@ export const Progress = Context.Reference<ProgressReporter>(
 export interface PlanStatusSession {
   emit: (event: ApplyEvent) => Effect.Effect<void>;
   done: (outcome: "success" | "failure") => Effect.Effect<void>;
+  /** Replace the dev widget's stack output view without writing scrollback. */
+  setOutput?: (value: unknown) => Effect.Effect<void>;
 }
 
 /** A session that drops everything — the default when no renderer is ambient. */
@@ -309,6 +311,8 @@ export interface PlanDisplayOptions {
   detailed?: boolean;
   /** Stage displayed in terminal lifecycle updates. */
   stage?: string;
+  /** Keep the dev plan mounted as a collapsible widget below static logs. */
+  dev?: boolean;
 }
 
 export interface CLIService {

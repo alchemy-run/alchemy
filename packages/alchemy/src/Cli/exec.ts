@@ -23,6 +23,7 @@ import { ConsoleLogLive } from "./GlobalLog.ts";
 import { handleCliErrors, installShutdownFeedback } from "./commands/errors.ts";
 import { renderApply, renderPlanning } from "./commands/render.ts";
 import * as CliKit from "./CliKit/index.ts";
+import { stackOutputsView } from "./components/view/StackOutputs.tsx";
 import { selectCliServices } from "./selectCli.ts";
 
 // Interactive dev/deploy runs use the Sigil progress UI; CI, redirected output,
@@ -79,6 +80,7 @@ const runDev = Effect.fn(function* (options: DevOptions) {
   const applyPlan = Stacks.apply(snapshot).pipe(
     renderApply(snapshot.native, {
       stage: options.stage,
+      dev: !once,
     }),
   );
   const result = yield* once
@@ -92,7 +94,10 @@ const runDev = Effect.fn(function* (options: DevOptions) {
               ).pipe(Effect.as(undefined)),
         ),
       );
-  if (result !== undefined) yield* Console.log(result);
+  if (result !== undefined && once) {
+    const kit = yield* CliKit.CliKit;
+    yield* kit.output.print(stackOutputsView(result));
+  }
   return once ? undefined : yield* Effect.never;
 });
 

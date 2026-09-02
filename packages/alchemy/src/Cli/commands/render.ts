@@ -94,6 +94,11 @@ export const renderApply =
             ? session.emit(event)
             : Effect.void,
         ),
+        Effect.tap((value) =>
+          options?.dev && session.setOutput !== undefined
+            ? session.setOutput(value)
+            : Effect.void,
+        ),
         Effect.onExit((exit) =>
           Exit.isSuccess(exit)
             ? session.done("success")

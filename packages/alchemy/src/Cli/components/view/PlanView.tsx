@@ -5,137 +5,63 @@
  * renders through this one state-driven component, so a plan always looks
  * the same wherever it appears.
  *
- * - One {@link PlanViewStore} holds the flattened tree (namespaces,
+ * - One {@link PlanTree} holds the flattened tree (namespaces,
  *   resources, bindings, actions) plus per-row runtime state (apply status
  *   and the row's latest log message), updated from engine
  *   {@link ApplyEvent}s.
  * - Two presentation `mode`s: `review` renders action glyphs (`+ ~ - ±`),
  *   `apply` renders live statuses with spinners and per-row messages.
- * - Two `viewport`s: `full` height or `virtual` (a terminal-sized, line-based
- *   window that follows the active row and supports keyboard scrolling).
+ * - `virtual` viewports follow the active row and support keyboard scrolling;
+ *   `full` viewports produce static terminal scrollback. This choice is
+ *   independent of whether the tree will receive more events.
  * - Property diffs (`detailed`) render in every mode, and the window is
  *   line-budget aware so multi-line rows never overflow the terminal.
  */
-import {
-  useMemo,
-  useState,
-  useSyncExternalStore,
-  type JSX,
-  type ReactNode,
-} from "react";
-import { useProgress, useTitle } from "@alchemy.run/sigil";
+import { useMemo, useSyncExternalStore, type JSX, type ReactNode } from "react";
 import {
   Box,
+  KeyBar,
   Row,
   SectionHeading,
-  Spinner,
-  Status,
+  SpinnerGlyph,
   TaskRow,
   Text,
   useBorderStyle,
   useGlyphs,
-  useTerminalInput,
-  useTerminalSize,
+  useKeyGlyphs,
 } from "../ui/index.ts";
-import type {
-  CRUD,
-  Plan as AlchemyPlan,
-  ActionApply,
-  ActionDelete,
-} from "../../../Plan.ts";
-import type {
-  ApplyEvent,
-  ApplyStatus,
-  ResourceStatusChanged,
-} from "../../../Report.ts";
-import {
-  buildNamespaceTree,
-  buildPlanSummary,
-  flattenTree,
-  type ActionVerb,
-  type FlattenedItem,
-  type PlanSummaryCounts,
-} from "../../NamespaceTree.ts";
+import type { Plan as AlchemyPlan } from "../../../Plan.ts";
+import type { ApplyStatus } from "../../../Report.ts";
+import type { ActionVerb, PlanSummaryCounts } from "../../NamespaceTree.ts";
 import { formatModeNote } from "../../ModeTag.ts";
 import { theme } from "../../CliKit/index.ts";
-import type { ProviderMode } from "../../../ProviderMode.ts";
 import { formatElapsed } from "../../Format.ts";
-import {
-  actionStyle,
-  applyStatusColor,
-  isInProgress,
-  isTerminalStatus,
-} from "./statusStyle.ts";
-import {
-  matchYamlChange,
-  matchYamlKey,
-  type DeclaredPropertyYaml,
-} from "../../PropertyDiff.ts";
+import { actionStyle, applyStatusColor, isInProgress } from "./statusStyle.ts";
+import { matchYamlChange, matchYamlKey } from "../../PropertyDiff.ts";
 import { NamespaceRow, namespaceStyle } from "./PlanRow.tsx";
+import { StackOutputs } from "./StackOutputs.tsx";
+import {
+  PlanTree,
+  initialResourceState,
+  type PlanRow,
+  type PlanTreeState,
+  type ResourceRow,
+  type RowState,
+} from "./PlanTree.ts";
+import { usePlanViewport } from "./usePlanViewport.ts";
+import { usePlanPresentation } from "./usePlanPresentation.ts";
 
-// ── Row model ─────────────────────────────────────────────────────────────
-
-export type PlanRow =
-  | {
-      key: string;
-      type: "namespace";
-      id: string;
-      depth: number;
-      action: FlattenedItem["action"];
-    }
-  | {
-      key: string;
-      type: "resource";
-      id: string;
-      resourceType: string;
-      depth: number;
-      action: CRUD["action"];
-      /** For `noop` resources, persisted state status to show instead of `pending`. */
-      persistedApplyStatus?: "created" | "updated";
-      /** Resolved provider mode; `undefined` for mode-agnostic providers. */
-      providerMode?: ProviderMode;
-      /** On mode-switch replacements, the old generation's stamped mode. */
-      fromProviderMode?: ProviderMode;
-      /** Declared property diff, present when the store was built `detailed`. */
-      propertyYaml?: DeclaredPropertyYaml;
-    }
-  | {
-      key: string;
-      type: "binding";
-      /** The binding sid, nested under its host resource. */
-      id: string;
-      depth: number;
-      action: "create" | "update" | "delete" | "noop";
-    }
-  | {
-      key: string;
-      type: "task";
-      id: string;
-      depth: number;
-      action: ActionVerb;
-    };
-
-type ResourceRow = Extract<PlanRow, { type: "resource" }>;
-
-/** Runtime state of one row: latest apply status + its own log line. */
-interface RowState extends Required<
-  Pick<ResourceStatusChanged, "id" | "status">
-> {
-  key: string;
-  message?: string;
-  /** When the row first went in-progress, for the settled-duration suffix. */
-  startedAt?: number;
-  /** Wall-clock duration once the row settles. */
-  elapsedMs?: number;
-}
-
-interface PlanViewState {
-  readonly tasks: Map<string, RowState>;
-  readonly outcome?: "success" | "failure";
-  /** Total apply duration, set when the session settles. */
-  readonly elapsedMs?: number;
-}
-
+export { PlanTree } from "./PlanTree.ts";
+export type {
+  PlanOutcome,
+  PlanProgress,
+  PlanRow,
+  PlanTreeOptions,
+  PlanTreeState,
+  PlanView,
+  PlanViewport,
+  RowState,
+} from "./PlanTree.ts";
 export type { PlanSummaryCounts } from "../../NamespaceTree.ts";
 
 /**
@@ -149,480 +75,263 @@ const rowDetail = (status: ApplyStatus, message: string | undefined) =>
     message
   );
 
-const getRowKey = (item: FlattenedItem) => item.path.join("/");
-
-const buildRows = (plan: AlchemyPlan, detailed: boolean): PlanRow[] => {
-  const items = [
-    ...Object.values(plan.resources),
-    ...Object.values(plan.deletions).filter(
-      (item): item is NonNullable<AlchemyPlan["deletions"][string]> =>
-        item !== undefined,
-    ),
-  ] as CRUD[];
-  const taskItems = [
-    ...Object.values(plan.actions ?? {}),
-    ...Object.values(plan.actionDeletions ?? {}),
-  ].filter((task): task is ActionApply | ActionDelete => task !== undefined);
-  const tree = buildNamespaceTree(items, taskItems);
-  return flattenTree(tree, { includePropertyYaml: detailed }).map((item) => {
-    if (item.type === "namespace") {
-      return {
-        key: getRowKey(item),
-        type: "namespace" as const,
-        id: item.id,
-        depth: item.depth,
-        action: item.action,
-      };
-    }
-    if (item.type === "binding") {
-      return {
-        key: getRowKey(item),
-        type: "binding" as const,
-        id: item.bindingSid ?? item.id,
-        depth: item.depth,
-        action: item.action as "create" | "update" | "delete" | "noop",
-      };
-    }
-    if (item.type === "action") {
-      return {
-        key: getRowKey(item),
-        type: "task" as const,
-        id: item.id,
-        depth: item.depth,
-        action: item.action as ActionVerb,
-      };
-    }
-    return {
-      key: getRowKey(item),
-      type: "resource" as const,
-      id: item.id,
-      resourceType: item.resourceType ?? "Unknown",
-      depth: item.depth,
-      action: item.action as CRUD["action"],
-      providerMode: item.providerMode,
-      fromProviderMode: item.fromProviderMode,
-      propertyYaml: item.propertyYaml,
-      persistedApplyStatus:
-        item.action === "noop"
-          ? (() => {
-              const crud = findCrudByLogicalId(plan, item.id);
-              return crud?.action === "noop" ? crud.state.status : undefined;
-            })()
-          : undefined,
-    };
-  });
-};
-
-const initialResourceState = (row: ResourceRow): RowState => ({
-  key: row.key,
-  id: row.id,
-  status:
-    row.action === "noop" ? (row.persistedApplyStatus ?? "created") : "pending",
-});
-
-const buildInitialTasks = (rows: PlanRow[]) =>
-  new Map(
-    rows.flatMap((row): Array<[string, RowState]> => {
-      if (row.type === "resource")
-        return [[row.key, initialResourceState(row)]];
-      if (row.type === "binding") {
-        // `noop` bindings render as "no change" from the start.
-        return [
-          [
-            row.key,
-            {
-              key: row.key,
-              id: row.id,
-              status: row.action === "noop" ? "created" : "pending",
-            },
-          ],
-        ];
-      }
-      if (row.type === "task") {
-        // `noop` tasks are skipped — render as gray `•` from the start
-        // rather than briefly flashing the `ran` cyan styling.
-        return [
-          [
-            row.key,
-            {
-              key: row.key,
-              id: row.id,
-              status: row.action === "noop" ? "skipped" : "pending",
-            },
-          ],
-        ];
-      }
-      return [];
-    }),
-  );
-
-// ── Store ─────────────────────────────────────────────────────────────────
-
-/**
- * The state behind a rendered plan: the flattened rows plus each row's live
- * status and log message. A static review is simply a store nobody emits to.
- */
-export class PlanViewStore {
-  readonly rows: PlanRow[];
-  readonly summary: PlanSummaryCounts;
-  private readonly startedAtMs = Date.now();
-  private state: PlanViewState;
-  private readonly listeners = new Set<() => void>();
-
-  constructor(
-    readonly plan: AlchemyPlan,
-    options: { detailed?: boolean } = {},
-  ) {
-    this.rows = buildRows(plan, options.detailed ?? false);
-    this.summary = buildPlanSummary(plan);
-    this.state = { tasks: buildInitialTasks(this.rows) };
-  }
-
-  readonly subscribe = (listener: () => void) => {
-    this.listeners.add(listener);
-    return () => this.listeners.delete(listener);
-  };
-
-  readonly snapshot = () => this.state;
-
-  readonly finish = (outcome: "success" | "failure") => {
-    this.state = {
-      ...this.state,
-      outcome,
-      elapsedMs: Date.now() - this.startedAtMs,
-    };
-    for (const listener of this.listeners) listener();
-  };
-
-  emit(event: ApplyEvent) {
-    const next = new Map(this.state.tasks);
-    const key = event.fqn;
-    const now = Date.now();
-    // First in-progress status starts the row's clock; the settling status
-    // stops it. Renderer-side timing keeps the events themselves pure.
-    const timing = (current: RowState | undefined, status: ApplyStatus) => {
-      const startedAt =
-        current?.startedAt ?? (isInProgress(status) ? now : undefined);
-      return {
-        startedAt,
-        elapsedMs:
-          isTerminalStatus(status) && startedAt !== undefined
-            ? now - startedAt
-            : current?.elapsedMs,
-      };
-    };
-
-    if (event._tag === "apply.resource.status") {
-      if (event.bindingId) {
-        // Binding rows key as `<host resource key>/<sid>`.
-        const bindingId = event.bindingId;
-        const bindingKey = `${key}/${bindingId}`;
-        const current = next.get(bindingKey);
-        if (current) {
-          next.set(bindingKey, {
-            key: bindingKey,
-            id: bindingId,
-            status: event.status,
-            message: event.message ?? current.message,
-            ...timing(current, event.status),
-          });
-        }
-      } else {
-        const current = next.get(key);
-        if (current)
-          next.set(key, {
-            key,
-            id: event.id,
-            status: event.status,
-            message: event.message ?? current.message,
-            ...timing(current, event.status),
-          });
-      }
-    } else {
-      const current = next.get(key);
-      if (current) next.set(key, { ...current, message: event.message });
-    }
-
-    this.state = { ...this.state, tasks: next };
-    for (const listener of this.listeners) listener();
-  }
-}
-
-// ── Viewport ──────────────────────────────────────────────────────────────
-
-export type PlanViewport =
-  /** Render every row. */
-  | "full"
-  /** Terminal-sized window that follows the active row; ↑/↓ scroll. */
-  | "virtual";
-
-type VirtualPlanLine =
-  | { readonly kind: "row"; readonly row: PlanRow }
-  | {
-      readonly kind: "yaml";
-      readonly key: string;
-      readonly line: string;
-      readonly paddingLeft: number;
-    }
-  | {
-      readonly kind: "note";
-      readonly key: string;
-      readonly paddingLeft: number;
-    };
-
-const virtualPlanLines = (
-  rows: ReadonlyArray<PlanRow>,
-  detailed: boolean,
-): VirtualPlanLine[] =>
-  rows.flatMap((row): VirtualPlanLine[] => {
-    const lines: VirtualPlanLine[] = [{ kind: "row", row }];
-    if (row.type !== "resource") return lines;
-    const showYaml = detailed || row.propertyYaml?.kind === "drift";
-    if (!showYaml) return lines;
-    if (row.propertyYaml !== undefined) {
-      lines.push(
-        ...row.propertyYaml.lines.map((line, index) => ({
-          kind: "yaml" as const,
-          key: `${row.key}:yaml:${index}`,
-          line,
-          paddingLeft: row.depth * 2 + 2,
-        })),
-      );
-    } else if (
-      row.action === "update" ||
-      row.action === "adopted" ||
-      row.action === "replace"
-    ) {
-      lines.push({
-        kind: "note",
-        key: `${row.key}:note`,
-        paddingLeft: row.depth * 2 + 2,
-      });
-    }
-    return lines;
-  });
-
 // ── Component ─────────────────────────────────────────────────────────────
 
-export interface PlanViewProps {
-  store: PlanViewStore;
-  /** `review` renders action glyphs; `apply` renders live statuses. */
-  mode: "review" | "apply";
-  /** @default "full" for review, "virtual" for apply */
-  viewport?: PlanViewport;
-  /** Render property diffs beneath changed resources. */
-  detailed?: boolean;
-  /** Stage shown in the apply title. */
-  stage?: string;
+export interface PlanProps {
+  /** Reactive tree containing rows, statuses, label, and presentation state. */
+  tree: PlanTree;
+  /** Override the tree's reactive busy state. */
+  busy?: boolean;
+  /** Allow the tree to collapse behind `p`. */
+  collapsible?: boolean;
+  /** Widget rendered before the summary block. */
+  before?: ReactNode;
+  /** Widget rendered on the summary row before the summary. */
+  summaryBefore?: ReactNode;
+  /** Widget rendered on the summary row after the summary. */
+  summaryAfter?: ReactNode;
+  /** Widget rendered below the virtualized rows. */
+  footer?: ReactNode;
+  /** Widget rendered after the complete Plan. */
+  after?: ReactNode;
 }
 
-export function PlanView(props: PlanViewProps): JSX.Element {
-  const { store, mode, detailed = false, stage } = props;
-  const viewport = props.viewport ?? (mode === "apply" ? "virtual" : "full");
-  const { rows } = store;
-  const glyphs = useGlyphs();
+const usePlanTree = (tree: PlanTree): PlanTreeState => {
+  const subscribe = useMemo(() => tree.subscribe.bind(tree), [tree]);
+  const snapshot = useMemo(() => tree.snapshot.bind(tree), [tree]);
+  return useSyncExternalStore(subscribe, snapshot);
+};
+
+export function Plan(props: PlanProps): JSX.Element {
+  const {
+    tree,
+    busy: busyOverride,
+    collapsible = false,
+    before,
+    summaryBefore,
+    summaryAfter,
+    footer,
+    after,
+  } = props;
+  const { mode } = tree;
+  const keyGlyphs = useKeyGlyphs();
   const borderStyle = useBorderStyle();
-  const { rows: terminalRows } = useTerminalSize();
-  const { tasks, outcome, elapsedMs } = useSyncExternalStore(
-    store.subscribe,
-    store.snapshot,
-  );
-
-  // ── Progress accounting (apply header + sigil progress/title) ─────────
-  let completed = 0;
-  let failures = 0;
-  let noops = 0;
-  let workRows = 0;
-  for (const row of rows) {
-    if (row.type !== "resource" && row.type !== "task") continue;
-    const status = tasks.get(row.key)?.status;
-    if (row.action !== "noop") {
-      workRows++;
-      if (status !== undefined && isTerminalStatus(status)) completed++;
-    } else {
-      noops++;
-    }
-    if (status === "fail") failures++;
-  }
-  const failed = outcome === "failure" || failures > 0;
-  const finished = outcome !== undefined;
-
-  useProgress(
-    mode === "apply"
-      ? {
-          state: failed
-            ? "error"
-            : finished || workRows === 0
-              ? "inactive"
-              : "normal",
-          value: workRows === 0 ? undefined : (completed / workRows) * 100,
-        }
-      : { state: "inactive" },
-  );
-  const applyLabel =
-    workRows === 0 && !failed
-      ? "No changes"
-      : runLabel(store.plan, failed, finished);
-  const titleProgress = finished ? "" : ` ${completed}/${workRows}`;
-  useTitle(
-    mode === "apply"
-      ? stage === undefined
-        ? `${applyLabel}${titleProgress}`
-        : `${applyLabel}${titleProgress} · ${stage}`
-      : undefined,
-  );
-
-  // ── Windowing ─────────────────────────────────────────────────────────
-  const lineBudget =
-    viewport === "virtual"
-      ? Math.max(4, terminalRows - 8)
-      : Number.POSITIVE_INFINITY;
-  const budgetRows =
-    lineBudget === Number.POSITIVE_INFINITY
-      ? rows.length
-      : Math.max(1, Math.floor(lineBudget));
-  const expandedLines = useMemo(
-    () => virtualPlanLines(rows, detailed),
-    [rows, detailed],
-  );
-  const virtualizing = viewport === "virtual" && !finished;
-  const scrollLength = virtualizing ? expandedLines.length : rows.length;
-  const maxOffset = Math.max(0, scrollLength - budgetRows);
-  const activeRowIndex = rows.findIndex((row) => {
-    if (row.type !== "resource" && row.type !== "task") return false;
-    const status = tasks.get(row.key)?.status;
-    return status !== undefined && !isTerminalStatus(status);
+  const state = usePlanTree(tree);
+  const { tasks, label, visible, viewport, busy: treeBusy } = state;
+  const busy = busyOverride ?? treeBusy;
+  const {
+    progress: { completed, total: workRows },
+    collapsed,
+    showControls,
+    lineBudget,
+    refs: { beforeRef, summaryRef, controlsRef, afterRef },
+  } = usePlanPresentation({
+    tree,
+    state,
+    busy,
+    collapsible,
+    hasFooter: footer !== undefined,
   });
-  const activeIndex = virtualizing
-    ? expandedLines.findIndex(
-        (line) => line.kind === "row" && line.row === rows[activeRowIndex],
-      )
-    : activeRowIndex;
-  const followedOffset = Math.min(
-    maxOffset,
-    Math.max(
-      0,
-      (activeIndex < 0 ? rows.length : activeIndex) -
-        Math.floor(budgetRows / 3),
-    ),
-  );
-  const [manualOffset, setManualOffset] = useState<number>();
-  const offset =
-    viewport === "full"
-      ? 0
-      : Math.min(maxOffset, manualOffset ?? followedOffset);
-  const visibleRows = rows;
-  const visibleLines = virtualizing
-    ? expandedLines.slice(offset, offset + budgetRows)
-    : undefined;
-  const shownOffset = virtualizing ? offset : 0;
-  const hiddenBelow = virtualizing
-    ? expandedLines.length - shownOffset - (visibleLines?.length ?? 0)
-    : 0;
-
-  useTerminalInput((_input, key) => {
-    if (viewport !== "virtual" || finished) return;
-    const page = Math.max(1, Math.floor(lineBudget));
-    if (key.up)
-      setManualOffset((current) => Math.max(0, (current ?? offset) - 1));
-    else if (key.down)
-      setManualOffset((current) =>
-        Math.min(maxOffset, (current ?? offset) + 1),
-      );
-    else if (key.pageUp)
-      setManualOffset((current) => Math.max(0, (current ?? offset) - page));
-    else if (key.pageDown)
-      setManualOffset((current) =>
-        Math.min(maxOffset, (current ?? offset) + page),
-      );
-    else if (key.home) setManualOffset(0);
-    else if (key.end) setManualOffset(undefined);
+  const {
+    selectedView,
+    hasOutput,
+    virtual: virtualizing,
+    budget: budgetRows,
+    offset: shownOffset,
+    hiddenBelow,
+    planLines: visibleLines,
+  } = usePlanViewport({
+    tree,
+    state,
+    lineBudget,
+    collapsible,
+    collapsed,
   });
 
-  // ── Header ────────────────────────────────────────────────────────────
-  const summary =
+  // ── Summary and operation bar ─────────────────────────────────────────
+  const operationProgress =
     mode === "apply" ? (
-      finished ? (
-        <Status
-          variant={failed ? "error" : "success"}
-          detail={applySummary(completed, workRows, noops, failures, elapsedMs)}
-        >
-          {applyLabel}
-        </Status>
-      ) : (
-        <Spinner
-          label={applyLabel}
-          detail={applySummary(completed, workRows, noops, failures)}
-        />
-      )
+      <>
+        {busy ? (
+          <>
+            <SpinnerGlyph color={theme.color.brand} />
+            <Text> </Text>
+          </>
+        ) : null}
+        <SectionHeading>{label}</SectionHeading>
+        <Text tone="muted">
+          {workRows === 0 ? "" : ` (${completed}/${workRows})`}
+        </Text>
+      </>
+    ) : null;
+  const planSummary =
+    selectedView === "output" ? (
+      <SectionHeading>Output</SectionHeading>
+    ) : mode === "apply" ? (
+      <ApplySummary label="Plan" rows={tree.progressRows} tasks={tasks} />
     ) : (
-      <ReviewSummary summary={store.summary} />
+      <ReviewSummary label={label} summary={tree.summary} />
     );
+  const planKeys: ReadonlyArray<readonly [string, string]> = [
+    ...(!collapsed && viewport === "virtual"
+      ? [[keyGlyphs.upDown, `scroll ${selectedView}`] as const]
+      : []),
+    ...(!collapsed && hasOutput
+      ? [
+          [
+            keyGlyphs.leftRight,
+            selectedView === "plan" ? "show output" : "show plan",
+          ] as const,
+        ]
+      : []),
+    ["p", collapsed ? "show plan/output" : "hide widget"],
+    ["Ctrl+C", "exit"],
+  ];
+
+  if (!visible) return <></>;
 
   return (
     <Box flexDirection="column">
-      <Box
-        marginBottom={1}
-        borderStyle={borderStyle}
-        borderBottom
-        borderTop={false}
-        borderLeft={false}
-        borderRight={false}
-        borderColor={theme.color.muted}
-        borderDimColor
-      >
-        {summary}
+      <Box ref={beforeRef} flexDirection="column">
+        {before}
       </Box>
-      <Box flexDirection="column">
-        {shownOffset > 0 ? (
-          <Text tone="muted">
-            {glyphs.overflowUp} {shownOffset} earlier{" "}
-            {virtualizing ? "lines" : "rows"}
-          </Text>
-        ) : null}
-        {visibleLines === undefined
-          ? visibleRows.map((row) => (
-              <PlanRowView
-                key={row.key}
-                row={row}
-                mode={mode}
-                detailed={detailed}
-                state={tasks.get(row.key)}
-                defaultMode={store.plan.defaultMode}
-              />
-            ))
-          : visibleLines.map((line) =>
-              line.kind === "row" ? (
-                <PlanRowView
-                  key={line.row.key}
-                  row={line.row}
-                  mode={mode}
-                  detailed={detailed}
-                  includeYaml={false}
-                  state={tasks.get(line.row.key)}
-                  defaultMode={store.plan.defaultMode}
-                />
-              ) : line.kind === "yaml" ? (
-                <YamlLine
-                  key={line.key}
-                  line={line.line}
-                  paddingLeft={line.paddingLeft}
-                />
-              ) : (
-                <DetailLine key={line.key} paddingLeft={line.paddingLeft}>
-                  <Text tone="muted" dimColor>
-                    no declared property changes
-                  </Text>
-                </DetailLine>
-              ),
-            )}
-        {hiddenBelow > 0 ? (
-          <Text tone="muted">
-            {glyphs.overflowDown} {hiddenBelow} more{" "}
-            {virtualizing ? "lines" : "rows"}
-          </Text>
-        ) : null}
+      {collapsed ? null : (
+        <Box
+          ref={summaryRef}
+          marginBottom={1}
+          borderStyle={borderStyle}
+          borderTop
+          borderBottom={false}
+          borderLeft={false}
+          borderRight={false}
+          borderColor={theme.color.muted}
+          borderDimColor
+        >
+          {summaryBefore}
+          {planSummary}
+          {summaryAfter}
+        </Box>
+      )}
+      {collapsed ? null : (
+        <PlanContent
+          tree={tree}
+          state={state}
+          selectedView={selectedView}
+          virtual={virtualizing}
+          budget={budgetRows}
+          offset={shownOffset}
+          hiddenBelow={hiddenBelow}
+          lines={visibleLines}
+        />
+      )}
+      {showControls ? (
+        <Box
+          ref={controlsRef}
+          marginTop={collapsed ? 0 : 1}
+          borderStyle={borderStyle}
+          borderTop
+          borderBottom={false}
+          borderLeft={false}
+          borderRight={false}
+          borderColor={theme.color.muted}
+          borderDimColor
+        >
+          {collapsible ? (
+            <KeyBar
+              inline
+              marginTop={0}
+              before={operationProgress}
+              keys={planKeys}
+              after={footer}
+              divider={mode === "apply" || footer !== undefined}
+            />
+          ) : mode === "apply" ? (
+            <>
+              {operationProgress}
+              {footer}
+            </>
+          ) : (
+            footer
+          )}
+        </Box>
+      ) : null}
+      <Box ref={afterRef} flexDirection="column">
+        {after}
       </Box>
+    </Box>
+  );
+}
+
+function PlanContent(props: {
+  readonly tree: PlanTree;
+  readonly state: PlanTreeState;
+  readonly selectedView: "plan" | "output";
+  readonly virtual: boolean;
+  readonly budget: number;
+  readonly offset: number;
+  readonly hiddenBelow: number;
+  readonly lines: ReturnType<typeof usePlanViewport>["planLines"];
+}) {
+  const { tree, state, selectedView, virtual, budget, offset, hiddenBelow } =
+    props;
+  const glyphs = useGlyphs();
+  const overflowUnit = virtual ? "lines" : "rows";
+  return (
+    <Box flexDirection="column">
+      {offset > 0 ? (
+        <Text tone="muted">
+          {glyphs.overflowUp} {offset} earlier {overflowUnit}
+        </Text>
+      ) : null}
+      {selectedView === "output" ? (
+        <StackOutputs
+          value={state.output}
+          offset={offset}
+          limit={virtual ? budget : undefined}
+        />
+      ) : props.lines === undefined ? (
+        tree.rows.map((row) => (
+          <PlanRowView
+            key={row.key}
+            row={row}
+            mode={tree.mode}
+            detailed={tree.detailed}
+            state={state.tasks.get(row.key)}
+            defaultMode={tree.plan.defaultMode}
+          />
+        ))
+      ) : (
+        props.lines.map((line) =>
+          line.kind === "row" ? (
+            <PlanRowView
+              key={line.row.key}
+              row={line.row}
+              mode={tree.mode}
+              detailed={tree.detailed}
+              includeYaml={false}
+              state={state.tasks.get(line.row.key)}
+              defaultMode={tree.plan.defaultMode}
+            />
+          ) : line.kind === "yaml" ? (
+            <YamlLine
+              key={line.key}
+              line={line.line}
+              paddingLeft={line.paddingLeft}
+            />
+          ) : (
+            <DetailLine key={line.key} paddingLeft={line.paddingLeft}>
+              <Text tone="muted" dimColor>
+                no declared property changes
+              </Text>
+            </DetailLine>
+          ),
+        )
+      )}
+      {hiddenBelow > 0 ? (
+        <Text tone="muted">
+          {glyphs.overflowDown} {hiddenBelow} more {overflowUnit}
+        </Text>
+      ) : null}
     </Box>
   );
 }
@@ -847,7 +556,10 @@ function PlanRowView(props: {
 
 // ── Headers ───────────────────────────────────────────────────────────────
 
-function ReviewSummary(props: { summary: PlanSummaryCounts }): JSX.Element {
+function ReviewSummary(props: {
+  label: string;
+  summary: PlanSummaryCounts;
+}): JSX.Element {
   const { counts, taskCounts, bindingChanges } = props.summary;
   const parts = [
     ...(
@@ -859,6 +571,15 @@ function ReviewSummary(props: { summary: PlanSummaryCounts }): JSX.Element {
         label: `${counts[action]} to ${action}`,
         color: namespaceStyle(action).color,
       })),
+    ...(counts.noop > 0
+      ? [
+          {
+            key: "noop",
+            label: `${counts.noop} no change`,
+            color: theme.color.muted,
+          },
+        ]
+      : []),
     ...(taskCounts.run > 0
       ? [
           {
@@ -877,6 +598,15 @@ function ReviewSummary(props: { summary: PlanSummaryCounts }): JSX.Element {
           },
         ]
       : []),
+    ...(taskCounts.noop > 0
+      ? [
+          {
+            key: "task-noop",
+            label: `${taskCounts.noop} tasks no change`,
+            color: theme.color.muted,
+          },
+        ]
+      : []),
     ...(bindingChanges > 0
       ? [
           {
@@ -889,7 +619,7 @@ function ReviewSummary(props: { summary: PlanSummaryCounts }): JSX.Element {
   ];
   return (
     <>
-      <SectionHeading>Plan</SectionHeading>
+      <SectionHeading>{props.label}</SectionHeading>
       <Text tone="muted"> · </Text>
       {parts.length === 0 ? (
         <Text tone="muted">no changes</Text>
@@ -905,28 +635,68 @@ function ReviewSummary(props: { summary: PlanSummaryCounts }): JSX.Element {
   );
 }
 
-const applySummary = (
-  completed: number,
-  workRows: number,
-  noops: number,
-  failures: number,
-  elapsedMs?: number,
-) =>
-  `(${completed}/${workRows}) · ${completed} done · ${noops} noop${failures > 0 ? ` · ${failures} failed` : ""}${elapsedMs === undefined ? "" : ` · ${formatElapsed(elapsedMs)}`}`;
+const applySummaryOrder: readonly (ApplyStatus | "no change")[] = [
+  "fail",
+  "attaching",
+  "post-attach",
+  "pre-creating",
+  "creating",
+  "creating replacement",
+  "updating",
+  "adopting",
+  "deleting",
+  "orphaning",
+  "replacing",
+  "running",
+  "pending",
+  "created",
+  "updated",
+  "adopted",
+  "deleted",
+  "orphaned",
+  "replaced",
+  "ran",
+  "skipped",
+  "no change",
+];
 
-const runLabel = (plan: AlchemyPlan, failed: boolean, finished: boolean) => {
-  if (failed) {
-    if (plan.destroy) return "Destroy failed";
-    return plan.defaultMode === "local"
-      ? "Dev startup failed"
-      : "Deploy failed";
+function ApplySummary(props: {
+  label: string;
+  rows: readonly PlanRow[];
+  tasks: ReadonlyMap<string, RowState>;
+}): JSX.Element {
+  const counts = new Map<ApplyStatus | "no change", number>();
+  for (const row of props.rows) {
+    const status = props.tasks.get(row.key)?.status ?? "pending";
+    const displayStatus = row.action === "noop" ? "no change" : status;
+    counts.set(displayStatus, (counts.get(displayStatus) ?? 0) + 1);
   }
-  if (plan.destroy) return finished ? "Stack destroyed" : "Destroying stack";
-  if (plan.defaultMode === "local") {
-    return finished ? "Dev stack ready" : "Starting dev stack";
-  }
-  return finished ? "Stack deployed" : "Deploying stack";
-};
+  const parts = applySummaryOrder
+    .filter((status) => counts.has(status))
+    .map((status) => ({
+      status,
+      count: counts.get(status) ?? 0,
+    }));
+
+  return (
+    <>
+      <SectionHeading>{props.label}</SectionHeading>
+      <Text tone="muted"> · </Text>
+      {parts.length === 0 ? (
+        <Text tone="muted">no resources</Text>
+      ) : (
+        parts.map((part, index) => (
+          <Box key={part.status}>
+            {index === 0 ? null : <Text tone="muted"> · </Text>}
+            <Text color={applyStatusColor(part.status)}>
+              {part.count} {part.status}
+            </Text>
+          </Box>
+        ))
+      )}
+    </>
+  );
+}
 
 // ── Status helpers ────────────────────────────────────────────────────────
 
@@ -1048,38 +818,4 @@ function DetailLine({
   );
 }
 
-const findCrudByLogicalId = (
-  plan: AlchemyPlan,
-  logicalId: string,
-): CRUD | undefined => {
-  for (const node of Object.values(plan.resources)) {
-    if (node.resource.LogicalId === logicalId) {
-      return node;
-    }
-  }
-  for (const node of Object.values(plan.deletions)) {
-    if (node?.resource.LogicalId === logicalId) {
-      return node;
-    }
-  }
-  return undefined;
-};
-
 // ── Static convenience ────────────────────────────────────────────────────
-
-export interface PlanProps {
-  plan: AlchemyPlan;
-  /** Include declared resource inputs as YAML beneath each changed row. */
-  detailed?: boolean;
-}
-
-/** A static plan review — {@link PlanView} over a store nobody emits to. */
-export function Plan({ plan, detailed = false }: PlanProps): JSX.Element {
-  const store = useMemo(
-    () => new PlanViewStore(plan, { detailed }),
-    [plan, detailed],
-  );
-  return (
-    <PlanView store={store} mode="review" detailed={detailed} viewport="full" />
-  );
-}
