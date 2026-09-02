@@ -76,12 +76,25 @@ export default Alchemy.Stack(
   }).pipe(
     // The session sandbox image — HARDCODED to the AWS Lambda MicroVM
     // (Firecracker; the SAME guest physics as the container image,
-    // built server-side on AWS; locally, floci emulates the MicroVM
-    // API), with the alchemy repo BAKED IN (src/SandboxMicrovm.ts):
-    // each session's VM is a warm worktree of `sam/harness`. To go
-    // back to the Cloudflare Container machine, swap for
-    // `Cloudflare.AI.SandboxContainerRuntime` (and mirror the swap in
-    // src/Worker.ts + src/services/DriverCloudflare.ts).
-    Effect.provide(SandboxMicrovmRuntime),
+    // built server-side on AWS), with the alchemy repo BAKED IN
+    // (src/SandboxMicrovm.ts): each session's VM is a warm worktree of
+    // `sam/harness`. To go back to the Cloudflare Container machine,
+    // swap for `Cloudflare.AI.SandboxContainerRuntime` (and mirror the
+    // swap in src/SandboxSession.ts + src/services/DriverCloudflare.ts).
+    //
+    // NOT under `alchemy dev`: sessions run on this repository's own
+    // working tree instead (src/SandboxSession.ts spawns the host
+    // sandbox server), so the image — a docker bake of the whole repo
+    // — is left out of the dev stack entirely. Nothing resolves the
+    // image class in that mode, so an empty layer stands in for it.
+    Effect.provide(
+      Layer.unwrap(
+        Effect.map(Alchemy.AlchemyContext, (context) =>
+          context.dev
+            ? (Layer.empty as unknown as typeof SandboxMicrovmRuntime)
+            : SandboxMicrovmRuntime,
+        ),
+      ),
+    ),
   ),
 );

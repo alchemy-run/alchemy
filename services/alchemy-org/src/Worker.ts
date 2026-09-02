@@ -1,5 +1,4 @@
 import * as AI from "alchemy/AI";
-import * as AWS from "alchemy/AWS";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Git from "alchemy/Git";
 import * as Effect from "effect/Effect";
@@ -13,11 +12,11 @@ import { SpillingTools } from "./lib/SpillingTools.ts";
 import { ArtifactsSandbox } from "./lib/ArtifactsSandbox.ts";
 import { ReviewBotEvents, ReviewBotLive } from "./ReviewBot.ts";
 import { routes } from "./Routes.ts";
+import { SandboxSession } from "./SandboxSession.ts";
 import { ApprovalsD1 } from "./services/ApprovalsD1.ts";
 import { DriverCloudflare } from "./services/DriverCloudflare.ts";
 import { GitHubWorker } from "./services/GitHubWorker.ts";
 import { LedgerD1 } from "./services/LedgerD1.ts";
-import { CheckoutsSandbox } from "./services/CheckoutsSandbox.ts";
 import { QualityAssuranceGeneral } from "./skills/QualityAssurance.ts";
 import {
   OpenPullRequestLive,
@@ -29,53 +28,16 @@ import {
 import { ReadOutputLive } from "./tools/ReadOutput.ts";
 import { ReadTools, RunTools, WriteTools } from "./tools/Toolbox.ts";
 
-/**
- * Each session's own machine, resolved at CALL time from the session
- * (the layers build in the shared per-isolate graph). ONE const — the
- * toolbox, the spill store, and the checkout share the machine.
- *
- * HARDCODED to the AWS Lambda MicroVM (Firecracker) launched from the
- * shared image, driven cross-cloud from this Worker (the HTTP/token
- * binding impls mint an IAM user + assume-role for the Worker). To go
- * back to the Cloudflare Container attached to the session DO, swap
- * this const for:
- *
- * ```ts
- * const SandboxSession = Cloudflare.AI.SandboxContainerSession({
- *   enableInternet: true,
- * });
- * ```
- *
- * (and mirror the swap in services/DriverCloudflare.ts + alchemy.run.ts)
- */
-const SandboxSession = AWS.AI.SandboxMicrovmSession({
-  // the SESSION owns the machine: thread keys are `<session>::<thread>`,
-  // so every thread of a session (and its terminal) shares one MicroVM
-  machineKey: (key) => key.split("::")[0]!,
-}).pipe(
-  Layer.provide(
-    Layer.mergeAll(
-      AWS.Lambda.RunMicrovmHttp,
-      AWS.Lambda.GetMicrovmHttp,
-      AWS.Lambda.CreateAuthTokenHttp,
-      // session lifecycle → machine lifecycle: settle suspends the
-      // session's VM, resume wakes it, remove terminates it (wired in
-      // the driver)
-      AWS.Lambda.SuspendMicrovmHttp,
-      AWS.Lambda.ResumeMicrovmHttp,
-      AWS.Lambda.TerminateMicrovmHttp,
-    ),
-  ),
-);
-
-/** The artifact store on that same machine (readOutput reads what the
- *  spill net and the bash tool parked). */
+/** The artifact store on the session's machine (readOutput reads what
+ *  the spill net and the bash tool parked). */
 const Store = ArtifactsSandbox;
 
-/** Git over that same machine — ONE composition shared by both
- *  charters (the engineer claims the session repo's tree; the review
- *  bot claims the PR head's). */
-const Checkouts = CheckoutsSandbox.pipe(Layer.provide(SandboxSession));
+/** Git over that same machine — `SandboxSession` provides
+ *  `Git.Checkouts` alongside `AI.Sandbox` (the pairing is per machine:
+ *  converging git in a MicroVM, read-only over the dev workspace), ONE
+ *  composition shared by both charters (the engineer claims the session
+ *  repo's tree; the review bot claims the PR head's). */
+const Checkouts = SandboxSession;
 
 const Toolbox = Layer.mergeAll(ReadTools, RunTools, WriteTools).pipe(
   Layer.provide(Store),

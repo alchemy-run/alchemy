@@ -180,7 +180,7 @@ test(
 );
 
 test(
-  "a bake for a DIFFERENT repo is reset, not adopted",
+  "a bake for a DIFFERENT repo is REPOINTED and converged in place, not wiped",
   () =>
     run(
       Effect.gen(function* () {
@@ -193,12 +193,22 @@ test(
         const sh = execIn(host);
         const bakedUrl = yield* seedOrigin(root, sh, host, "baked", {
           "README.md": "BAKED-SENTINEL\n",
+          ".gitignore": "node_modules\n",
         });
         const otherUrl = yield* seedOrigin(root, sh, host, "other", {
           "proof.txt": "OTHER-REPO\n",
+          ".gitignore": "node_modules\n",
         });
         yield* sh("git", ["clone", bakedUrl, "tree"]);
         const tree = path.join(root, "tree");
+        // the bake's prewarm: ignored installs that must survive the
+        // repoint (the old wipe-and-reclone threw them away — and blew
+        // its exec budget doing so on a real 1.2GB bake)
+        yield* fs.makeDirectory(path.join(tree, "node_modules"));
+        yield* fs.writeFileString(
+          path.join(tree, "node_modules", "warm.txt"),
+          "WARM\n",
+        );
 
         yield* Effect.gen(function* () {
           const checkouts = yield* Git.Checkouts;
@@ -208,9 +218,16 @@ test(
           });
           expect(co.branch).toBe("main");
           const sandbox = yield* AI.Sandbox;
-          // the foreign bake is gone; the requested tree is in place
+          // the foreign bake's tracked content is gone; the requested
+          // tree is in place, on a branch, with origin REPOINTED
           expect(yield* sandbox.exists("README.md")).toBe(false);
           expect(yield* sandbox.readFile("proof.txt")).toContain("OTHER-REPO");
+          const origin = yield* sandbox.exec("git", ["remote", "get-url", "origin"]);
+          expect(origin.stdout.trim()).toBe(otherUrl);
+          const head = yield* sandbox.exec("git", ["rev-parse", "--abbrev-ref", "HEAD"]);
+          expect(head.stdout.trim()).toBe("main");
+          // ignored prewarm survives the converge
+          expect(yield* sandbox.exists("node_modules/warm.txt")).toBe(true);
         }).pipe(Effect.provide(sessionLayers(tree)));
       }),
     ),

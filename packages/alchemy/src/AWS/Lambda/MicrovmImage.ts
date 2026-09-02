@@ -35,7 +35,14 @@ const buildRolePolicyStatements: PolicyStatement[] = [
       "logs:CreateLogStream",
       "logs:PutLogEvents",
     ],
-    Resource: ["arn:aws:logs:*:*:log-group:/aws/lambda/microvms/*"],
+    // The default build/runtime group is `/aws/lambda-microvms/<image>`
+    // (monitoring docs + troubleshooting guide); the images page spells
+    // it `/aws/lambda/microvms/<image>`. Grant both — a build role that
+    // cannot create the group makes every CONTAINER_BUILD_FAILED opaque.
+    Resource: [
+      "arn:aws:logs:*:*:log-group:/aws/lambda-microvms/*",
+      "arn:aws:logs:*:*:log-group:/aws/lambda/microvms/*",
+    ],
   },
 ];
 

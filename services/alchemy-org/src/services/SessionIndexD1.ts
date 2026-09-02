@@ -31,7 +31,9 @@ export const SessionIndexD1 = Layer.effect(
     const db = yield* D1.QueryDatabase(database);
 
     const ensured = yield* Effect.cached(
-      inWorker(db.exec(TABLE.trim().replaceAll(/\s+/g, " ")).pipe(Effect.asVoid)),
+      inWorker(
+        db.exec(TABLE.trim().replaceAll(/\s+/g, " ")).pipe(Effect.asVoid),
+      ),
     );
 
     return AI.SessionIndex.of({
@@ -50,7 +52,7 @@ export const SessionIndexD1 = Layer.effect(
               db
                 .prepare(
                   `INSERT INTO session_index (id, term, key, status, ticks, created_at, updated_at)
-                   VALUES (?, ?, ?, 'running', 0, ?, ?)
+                   VALUES (?, ?, ?, 'idle', 0, ?, ?)
                    ON CONFLICT(id) DO UPDATE SET updated_at = excluded.updated_at`,
                 )
                 .bind(
@@ -157,10 +159,7 @@ export const SessionIndexD1 = Layer.effect(
         Effect.gen(function* () {
           yield* ensured;
           yield* inWorker(
-            db
-              .prepare("DELETE FROM session_index WHERE id = ?")
-              .bind(id)
-              .run(),
+            db.prepare("DELETE FROM session_index WHERE id = ?").bind(id).run(),
           );
         }),
       list: () =>
@@ -181,19 +180,17 @@ export const SessionIndexD1 = Layer.effect(
                 first_input: string | null;
               }>(),
           );
-          return rows.results.map(
-            (row): AI.SessionSummary => ({
-              id: row.id,
-              term: row.term,
-              key: row.key,
-              status: row.status,
-              ticks: row.ticks,
-              createdAt: row.created_at,
-              updatedAt: row.updated_at,
-              parent: row.parent ?? undefined,
-              firstInput: row.first_input ?? undefined,
-            }),
-          );
+          return rows.results.map((row): AI.SessionSummary => ({
+            id: row.id,
+            term: row.term,
+            key: row.key,
+            status: row.status,
+            ticks: row.ticks,
+            createdAt: row.created_at,
+            updatedAt: row.updated_at,
+            parent: row.parent ?? undefined,
+            firstInput: row.first_input ?? undefined,
+          }));
         }),
     });
   }),

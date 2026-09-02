@@ -1577,6 +1577,13 @@ export interface SessionEngine {
    *  Children settled by the cascade stay settled — resume them
    *  explicitly. */
   readonly resume: (key: string) => Effect.Effect<boolean>;
+  /** ADMIT a key durably WITHOUT building its shell or running the
+   *  charter's init: the `admitted` observation (and meta) land, so
+   *  the session lists for every client. A known key (RAM-resident or
+   *  persisted) is a no-op. The first input builds the shell over the
+   *  persisted meta exactly as a restore does — no second `admitted`.
+   *  Resolves `true` when a row was actually written. */
+  readonly admit: (key: string) => Effect.Effect<boolean>;
   /** Settle every RAM-resident session (process shutdown). */
   readonly interrupt: Effect.Effect<void>;
   /** Drop one session's RAM entry (after `settle`) so the key can be
@@ -1910,9 +1917,24 @@ export const makeSessionEngine = (
         }
         // per-session init: the thread exists (Thread in scope for
         // thread-scoped setup); no sampling yet (no Tick)
-        const initResult = yield* provideInit(s)(
+        const shell = s;
+        const initResult = yield* provideInit(shell)(
           charter as Effect.Effect<unknown, unknown>,
-        ).pipe(Effect.orDie);
+        ).pipe(
+          // an init that fails (a checkout that cannot converge, a
+          // machine that will not boot) is a session that never
+          // answers — leave the durable WHY in the transcript before
+          // dying, so the viewer sees the crash instead of silence.
+          // The shell is not registered, so the next submit retries.
+          Effect.tapCause((cause) =>
+            observe(shell, {
+              type: "crashed",
+              error: describeCrash(cause).encoded,
+              fatal: true,
+            }),
+          ),
+          Effect.orDie,
+        );
         s.turn = isFragment(initResult)
           ? Effect.succeed(initResult)
           : Effect.isEffect(initResult)
@@ -2362,6 +2384,30 @@ export const makeSessionEngine = (
       return true;
     });
 
+  const admit: SessionEngine["admit"] = (key) =>
+    Effect.gen(function* () {
+      if (sessions.has(key) || creating.has(key)) return false;
+      // a throwaway shell: only its storage handle is used — the
+      // durable row + meta land, then the shell is dropped. The
+      // first input's `buildSession` reads that meta and seeds a
+      // fresh shell from it, never re-admitting.
+      const s = yield* makeShell(key);
+      const meta = yield* s.handle.meta.pipe(
+        Effect.catchCause((cause) =>
+          Effect.as(
+            Effect.logWarning(
+              `ThreadStorage meta read failed for '${key}' of '${term}'`,
+              cause,
+            ),
+            undefined,
+          ),
+        ),
+      );
+      if (meta !== undefined) return false;
+      yield* observe(s, { type: "admitted" });
+      return true;
+    });
+
   const send: SessionEngine["send"] = (input, sendOptions) =>
     Effect.gen(function* () {
       const s = yield* ensureSession(sendOptions?.key, sendOptions?.parent);
@@ -2445,14 +2491,27 @@ export const makeSessionEngine = (
 
   const socketHost: SessionEngine["socketHost"] = (key) =>
     Effect.gen(function* () {
-      const s = yield* ensureSession(key);
+      // VIEWING is storage-only. Replay and the watermark read the
+      // durable rows directly — never through `ensureSession`, which
+      // builds the shell and runs the charter's per-session INIT (for
+      // a sandboxed agent: boot the machine, converge the checkout).
+      // A transcript must not wait on that, and must not vanish when
+      // it fails: a viewer that attached to a session whose machine
+      // was wedged saw an empty chat for minutes, then nothing. Only
+      // `submit` needs the built session, and builds it lazily.
+      const resident = sessions.get(key);
+      const handle = resident?.handle ?? (yield* storage.open(term, key));
       return {
-        replay: (fromSeq) => s.handle.observations(fromSeq),
-        watermark: Effect.sync(() => s.observed),
+        replay: (fromSeq) => handle.observations(fromSeq),
+        watermark:
+          resident !== undefined
+            ? Effect.sync(() => resident.observed)
+            : Effect.map(handle.meta, (meta) => meta?.observed ?? 0),
         // the socket's steer: admit input; the answer arrives as
         // observations, never as a response
         submit: (input) =>
           Effect.gen(function* () {
+            const s = yield* ensureSession(key);
             if (s.settledOutcome !== undefined) return;
             yield* enqueue(s, input);
             yield* kick(s.key);
@@ -2466,6 +2525,7 @@ export const makeSessionEngine = (
     steer,
     settle,
     resume,
+    admit,
     interrupt: Effect.suspend(() =>
       Effect.forEach(
         [...sessions.keys()],

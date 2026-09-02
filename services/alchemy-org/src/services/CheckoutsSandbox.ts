@@ -218,15 +218,29 @@ export const CheckoutsSandbox = Layer.effect(
               yield* writeMarker(marker);
               return checkout(marker);
             }
-            // a bake for a DIFFERENT repo is prewarm content, not a
-            // claimed tree — reset and derive the requested one
-            yield* emptyTree;
-            // an interrupted reset can survive `.git` (and its baked
-            // origin) — the repository itself must go, or `init`
-            // silently adopts it and `remote add` conflicts
-            yield* sandbox
-              .exec("rm", ["-rf", ".git"], { timeout: 60_000 })
-              .pipe(Effect.ignore);
+            // A bake for a DIFFERENT remote: REPOINT and converge in
+            // place, never wipe. git makes the tracked tree match the
+            // fetched tip whatever remote the objects came from —
+            // `reset --hard` rewrites every path that differs, `clean
+            // -fd` drops the old repo's untracked leftovers while the
+            // ignored prewarm (node_modules, lib/, the pnpm store) stays
+            // warm. The org's connected repos (`alchemy`, its
+            // `test-alchemy` sandbox) share one codebase, so this is a
+            // small delta; for an unrelated repo it is a full rewrite,
+            // which is still correct. The old path — `rm -rf` the
+            // whole 1.2GB bake and re-clone — blew its exec budget
+            // partway through and left the session in a half-deleted
+            // tree with no `.git`.
+            yield* git(["remote", "set-url", "origin", options.remote.url]);
+            yield* landOnBranch;
+            yield* git(["clean", "-fd"]);
+            const marker: Marker = {
+              key: options.key,
+              branch: ref,
+              remote: options.remote,
+            };
+            yield* writeMarker(marker);
+            return checkout(marker);
           }
 
           // greenfield: derive the tree in place (shallow — the ref's

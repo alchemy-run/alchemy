@@ -48,6 +48,19 @@ export class Sessions extends Context.Service<
       RuntimeContext
     >;
     /**
+     * OPEN one session by name — the operator's "new session": the
+     * durable `admitted` row lands (so the session LISTS, idle, for
+     * every client, before any input) without running the charter's
+     * per-session init; that still happens on the first input.
+     * Idempotent on a known key. Without this, a session existed only
+     * as the tab that named it: an unsent first message and it was
+     * gone the moment the tab lost focus.
+     */
+    readonly open: (
+      term: string,
+      key: string,
+    ) => Effect.Effect<void, never, RuntimeContext>;
+    /**
      * STOP one session from the outside — the operator's off switch.
      * Settles it (terminal: children cascade, the `settled`
      * observation lands, attached views see the end); idempotent on

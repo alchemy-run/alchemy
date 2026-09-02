@@ -345,4 +345,117 @@ describe("SessionSocket (DriverLocal)", () => {
     },
     { timeout: 30_000 },
   );
+
+  it.live(
+    "viewing never waits on the charter's INIT: a session whose init dies still replays, and a submit leaves a durable crash",
+    () => {
+      // an agent whose per-session init cannot complete — the sandboxed
+      // shape (boot the machine, converge the checkout) with the
+      // machine wedged. Before the fix `socketHost` built the session
+      // first, so `subscribe` hung/died behind the init and the viewer
+      // saw an empty transcript.
+      class Wedged extends AI.Agent<Wedged>()("Wedged") {}
+      const WedgedCharter = Effect.gen(function* () {
+        yield* AI.Thread;
+        return yield* Effect.die(new Error("machine will not boot"));
+      });
+      const model = Model.make([() => [Model.text("never"), Model.finish()]]);
+
+      return Effect.gen(function* () {
+        yield* Wedged;
+        const gateway = yield* AI.Sessions;
+        const server = yield* BunHttpServer.make({
+          port: 0,
+          gracefulShutdownTimeout: Duration.millis(100),
+        });
+        const port =
+          server.address._tag === "TcpAddress" ? server.address.port : 0;
+        yield* server.serve(
+          Effect.gen(function* () {
+            const request = yield* HttpServerRequest;
+            const url = new URL(request.url, "http://local");
+            const [, , term, ...rest] = url.pathname.split("/");
+            return yield* gateway.attach(term!, rest.join("/"), request);
+          }).pipe(Effect.provide(RuntimeContext.phantom)),
+        );
+        const wsUrl = `ws://localhost:${port}/attach/Wedged/w1`;
+
+        yield* Effect.scoped(
+          Effect.gen(function* () {
+            const client = yield* connect(wsUrl);
+            // replay answers from STORAGE alone — no init, no shell:
+            // an unknown session is an empty one, `live` at 0
+            yield* client.send({ type: "subscribe", fromSeq: 0 });
+            const replayed = yield* framesUntil(
+              client,
+              (frame) => frame.type === "live",
+            );
+            expect(replayed).toEqual([{ type: "live", seq: 0 }]);
+
+            // the steer builds the session; its init dies — the WHY
+            // lands in the transcript as a fatal crash, not silence
+            yield* client.send({ type: "submit", input: "hello?" });
+            const frames = yield* framesUntil(
+              client,
+              (frame) =>
+                frame.type === "observation" &&
+                frame.observation.type === "crashed",
+            );
+            const crashed = frames.find(
+              (frame) =>
+                frame.type === "observation" &&
+                frame.observation.type === "crashed",
+            );
+            expect(crashed).toBeDefined();
+            if (
+              crashed?.type === "observation" &&
+              crashed.observation.type === "crashed"
+            ) {
+              expect(crashed.durable).toBe(true);
+              expect(crashed.observation.fatal).toBe(true);
+              expect(AI.renderCrash(crashed.observation.error)).toContain(
+                "machine will not boot",
+              );
+            }
+          }),
+        );
+
+        // a fresh viewer replays the crash from storage — durable
+        yield* Effect.scoped(
+          Effect.gen(function* () {
+            const client = yield* connect(wsUrl);
+            yield* client.send({ type: "subscribe", fromSeq: 0 });
+            const replayed = yield* framesUntil(
+              client,
+              (frame) => frame.type === "live",
+            );
+            const types = replayed.flatMap((frame) =>
+              frame.type === "observation" ? [frame.observation.type] : [],
+            );
+            expect(types).toContain("admitted");
+            expect(types).toContain("crashed");
+          }),
+        );
+      }).pipe(
+        Effect.scoped,
+        Effect.catchCause((cause) =>
+          Cause.hasInterruptsOnly(cause)
+            ? Effect.void
+            : Effect.failCause(cause),
+        ),
+        Effect.provide(
+          Wedged.make(WedgedCharter).pipe(
+            Layer.provideMerge(
+              Layer.mergeAll(
+                InMemoryDriver.pipe(Layer.provide(model.layer)),
+                RuntimeContext.phantom,
+              ),
+            ),
+          ),
+        ),
+        Effect.provide(Socket.layerWebSocketConstructorGlobal),
+      );
+    },
+    { timeout: 30_000 },
+  );
 });

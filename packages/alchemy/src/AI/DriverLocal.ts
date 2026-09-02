@@ -286,6 +286,9 @@ export const DriverLocal: Layer.Layer<
             onSome: (index) => index.list(),
           }),
         stop,
+        // the operator's "new session": the durable admitted row, no
+        // shell, no init — the first input builds it
+        open: (term, key) => engines.get(term)?.admit(key) ?? Effect.void,
         // the operator's undo for stop: clear the settled tombstone;
         // the settled resident fiber exited its loop, so drop its
         // start marker too — the next kick forks a fresh one parked

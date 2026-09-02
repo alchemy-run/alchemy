@@ -58,6 +58,13 @@ export const imageSourceTrigger = Effect.fn(function* (options: {
             )
           : Effect.void,
       ),
+      Stream.filter((event) => event._tag !== "Start"),
+      // rolldown.watch runs an INITIAL build when the watcher starts and
+      // reports it exactly like a change. The reconcile that just finished
+      // already built that source, so the first terminal event is not a
+      // trigger — acting on it re-ran a multi-minute docker build on every
+      // `alchemy dev` start.
+      Stream.drop(1),
       Stream.filter((event) => event._tag === "Success"),
       Stream.debounce("200 millis"),
       Stream.map(() => undefined),

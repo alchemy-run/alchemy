@@ -7,6 +7,7 @@
     "test/Dev/fixtures/rpc-server-logs.ts",
     "test/Dev/fixtures/rpc-spawner-parent.ts",
     "test/Dev/fixtures/rpc-spawner-devserver-parent.ts",
+    "test/Cli/fixtures/node-clikit-layer.ts",
     // Nuxt fixtures: server routes use nitro's auto-imported globals
     // (`defineEventHandler`), which only type-check against the `.nuxt/`
     // types a nuxt build generates.

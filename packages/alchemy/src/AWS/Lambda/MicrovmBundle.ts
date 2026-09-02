@@ -283,7 +283,18 @@ export const readContextDirectory = Effect.fn(function* (dir: string) {
         (entry) =>
           Effect.gen(function* () {
             const abs = path.join(current, entry);
-            const info = yield* fs.stat(abs);
+            // stat follows symlinks; a DANGLING one (vendored test
+            // fixtures love `vendor -> ../../vendor`) is NotFound. It has
+            // no bytes to ship, so skip it rather than fail the deploy.
+            const info = yield* fs.stat(abs).pipe(
+              Effect.catchIf(
+                (error) =>
+                  error._tag === "PlatformError" &&
+                  error.reason._tag === "NotFound",
+                () => Effect.succeed(undefined),
+              ),
+            );
+            if (info === undefined) return [];
             return info.type === "Directory" ? yield* collect(abs) : [abs];
           }),
         { concurrency: 16 },

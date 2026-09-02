@@ -2,16 +2,14 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
-import * as Stream from "effect/Stream";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import { Sandbox } from "../../AI/Sandbox.ts";
 import {
-  Sandbox,
-  type SandboxEntry,
-  type SandboxExecOptions,
-  type SandboxExecResult,
-} from "../../AI/Sandbox.ts";
-import type { SandboxPtyRpc } from "../../AI/SandboxPty.ts";
+  errorText,
+  sandboxOverRpc,
+  type SandboxRpcShape,
+} from "../../AI/SandboxRpc.ts";
 import { Thread } from "../../AI/Thread.ts";
 import { CreateAuthToken } from "../Lambda/CreateAuthToken.ts";
 import { GetMicrovm } from "../Lambda/GetMicrovm.ts";
@@ -28,27 +26,9 @@ import type { Providers } from "../Providers.ts";
  * mirror of the {@link Sandbox} contract, so a connected MicroVM stub
  * satisfies the seam directly. Identical to the Cloudflare
  * `SandboxContainerShape`: the SAME guest physics on a different
- * machine. The {@link SandboxPtyRpc} half is the contract's nested
- * `pty` group flattened for the by-name RPC dispatcher.
+ * machine — see {@link SandboxRpcShape}.
  */
-export interface SandboxMicrovmShape extends SandboxPtyRpc {
-  readonly exec: (
-    command: string,
-    args?: ReadonlyArray<string>,
-    options?: SandboxExecOptions,
-  ) => Effect.Effect<SandboxExecResult, string>;
-  readonly readFile: (path: string) => Effect.Effect<string, string>;
-  readonly writeFile: (
-    path: string,
-    content: string,
-  ) => Effect.Effect<void, string>;
-  readonly deleteFile: (path: string) => Effect.Effect<void, string>;
-  readonly mkdir: (path: string) => Effect.Effect<void, string>;
-  readonly listFiles: (
-    path?: string,
-  ) => Effect.Effect<ReadonlyArray<SandboxEntry>, string>;
-  readonly exists: (path: string) => Effect.Effect<boolean, string>;
-}
+export interface SandboxMicrovmShape extends SandboxRpcShape {}
 
 /**
  * The sandbox MicroVM image declaration — the typed handle an
@@ -206,32 +186,119 @@ export const SandboxMicrovmSession = (
         { readonly stub: SandboxMicrovmShape; readonly expiresAt: number }
       >();
 
+      const runRequest = {
+        idlePolicy,
+        ...(options?.maximumDurationInSeconds !== undefined
+          ? { maximumDurationInSeconds: options.maximumDurationInSeconds }
+          : {}),
+      };
+
+      /** Poll a machine to a verdict: `running` (with its endpoint),
+       *  or `gone` — terminated/terminating/vanished. A SUSPENDED
+       *  reattach is woken (the idle policy parked it; the session is
+       *  back). PENDING/SUSPENDING keep polling. */
+      const settle = (microvmId: string) =>
+        Effect.gen(function* () {
+          const observed = yield* getMicrovm({
+            microvmIdentifier: microvmId,
+          }).pipe(Effect.result);
+          if (Result.isFailure(observed)) {
+            return observed.failure._tag === "ResourceNotFoundException"
+              ? ({ _tag: "gone" } as const)
+              : yield* Effect.fail(observed.failure);
+          }
+          const m = observed.success;
+          switch (m.state) {
+            case "RUNNING":
+              return { _tag: "running", endpoint: m.endpoint! } as const;
+            case "TERMINATED":
+            case "TERMINATING":
+              return { _tag: "gone" } as const;
+            case "SUSPENDED":
+              yield* resumeMicrovm({ microvmIdentifier: microvmId }).pipe(
+                Effect.catchTag(
+                  ["ConflictException", "ValidationException"],
+                  () => Effect.void,
+                ),
+              );
+              return yield* Effect.fail(new Error(`microvm ${m.state}`));
+            default:
+              return yield* Effect.fail(new Error(`microvm ${m.state}`));
+          }
+        }).pipe(
+          Effect.retry({
+            while: (error) => error instanceof Error,
+            schedule: Schedule.spaced("2 seconds"),
+            times: 60,
+          }),
+        );
+
+      /**
+       * Resolve the session's machine: reattach to a live one, or
+       * launch. The clientToken is a WALK, not a single value — the
+       * base token plus a generation suffix. `RunMicrovm`'s
+       * idempotency record outlives the machine it names: a token
+       * whose VM was terminated (an image update recycling old
+       * versions, idle expiry, a crash) is SPENT — AWS answers with
+       * `ValidationException: clientToken was used with different
+       * request parameters` once the image has moved on, or hands back
+       * the dead machine itself. Either way the session must never be
+       * pinned to that corpse (it was: every pre-redeploy session sat
+       * on "starting the machine" forever). A spent generation is
+       * skipped; the walk is deterministic, so a fresh isolate
+       * re-derives the same live generation instead of launching a
+       * stranger, and two isolates racing the same generation still
+       * land on one VM.
+       */
+      const MAX_GENERATIONS = 64;
+      const resolveMachine = (
+        token: string,
+        wait: boolean,
+      ): Effect.Effect<{ microvmId: string; endpoint: string }, string> =>
+        Effect.gen(function* () {
+          for (let gen = 0; gen < MAX_GENERATIONS; gen++) {
+            const clientToken = gen === 0 ? token : `${token}-g${gen}`;
+            const run = yield* runMicrovm({
+              clientToken,
+              ...runRequest,
+            }).pipe(Effect.result);
+            if (Result.isFailure(run)) {
+              if (
+                run.failure._tag === "ValidationException" &&
+                /clientToken/i.test(run.failure.message ?? "")
+              ) {
+                yield* Effect.logDebug(
+                  `[terminal-debug] ${clientToken}: spent (image moved on) — next generation`,
+                );
+                continue;
+              }
+              return yield* Effect.fail(errorText(run.failure));
+            }
+            const vm = run.success;
+            if (!wait) {
+              return { microvmId: vm.microvmId, endpoint: vm.endpoint! };
+            }
+            // wait until the VM serves before handing out the stub
+            const verdict = yield* settle(vm.microvmId).pipe(
+              Effect.mapError(errorText),
+            );
+            if (verdict._tag === "running") {
+              return { microvmId: vm.microvmId, endpoint: verdict.endpoint };
+            }
+            yield* Effect.logDebug(
+              `[terminal-debug] ${clientToken}: ${vm.microvmId} is gone — next generation`,
+            );
+          }
+          return yield* Effect.fail(
+            `no live machine for ${token} after ${MAX_GENERATIONS} generations`,
+          );
+        });
+
       const vmFor = (token: string) => {
         const existing = vms.get(token);
         if (existing !== undefined) return existing;
         const launched = Effect.cached(
-          Effect.gen(function* () {
-            const vm = yield* runMicrovm({
-              clientToken: token,
-              idlePolicy,
-              ...(options?.maximumDurationInSeconds !== undefined
-                ? { maximumDurationInSeconds: options.maximumDurationInSeconds }
-                : {}),
-            });
-            // wait until the VM serves before handing out the stub
-            yield* getMicrovm({ microvmIdentifier: vm.microvmId }).pipe(
-              Effect.flatMap((m) =>
-                m.state === "RUNNING"
-                  ? Effect.void
-                  : Effect.fail(new Error(`microvm ${m.state}`)),
-              ),
-              Effect.retry({
-                schedule: Schedule.spaced("2 seconds"),
-                times: 60,
-              }),
-            );
-            return { microvmId: vm.microvmId, endpoint: vm.endpoint! };
-          }).pipe(Effect.orDie),
+          resolveMachine(token, true).pipe(Effect.orDie),
         ).pipe(Effect.runSync);
         vms.set(token, launched);
         return launched;
@@ -342,72 +409,10 @@ export const SandboxMicrovmSession = (
           );
         });
 
-      /** Render any wire-layer error as the contract's string. */
-      const errorText = (error: unknown): string =>
-        typeof error === "string" ? error : String(error);
-
-      const fromBase64 = (b64: string): Uint8Array => {
-        const binary = atob(b64);
-        const out = new Uint8Array(binary.length);
-        for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
-        return out;
-      };
-
-      /** Concatenate one poll's chunks into a single write. */
-      const joinChunks = (b64: ReadonlyArray<string>): Uint8Array => {
-        const parts = b64.map(fromBase64);
-        const total = parts.reduce((n, p) => n + p.byteLength, 0);
-        const out = new Uint8Array(total);
-        let offset = 0;
-        for (const part of parts) {
-          out.set(part, offset);
-          offset += part.byteLength;
-        }
-        return out;
-      };
-
-      /** How long the guest holds an idle `ptyRead` before answering
-       *  empty. Under the guest's own 8s ceiling and every proxy's
-       *  idle-reap window. */
-      const PTY_POLL_WAIT_MS = 7_000;
-
       return {
-        exec: (command, args, execOptions) =>
-          withBox((stub) => stub.exec(command, args, execOptions)),
-        readFile: (path) => withBox((stub) => stub.readFile(path)),
-        writeFile: (path, content) =>
-          withBox((stub) => stub.writeFile(path, content)),
-        deleteFile: (path) => withBox((stub) => stub.deleteFile(path)),
-        mkdir: (path) => withBox((stub) => stub.mkdir(path)),
-        listFiles: (path) => withBox((stub) => stub.listFiles(path)),
-        exists: (path) => withBox((stub) => stub.exists(path)),
-        pty: {
-          open: (id, cols, rows) =>
-            withBox((stub) => stub.ptyOpen(id, cols, rows)),
-          // LONG-POLL, not a streaming response: ingress proxies on
-          // the path to the guest fully buffer response bodies, which
-          // would hold an infinite stream's bytes hostage until EOF.
-          // Each `ptyRead` is finite (ends the instant output exists,
-          // or empty after ~7s of silence), so every hop forwards it;
-          // the unfold splices the polls back into one Stream.
-          stream: (id) =>
-            Stream.unfold(0, (cursor: number) =>
-              withBox((stub) =>
-                stub.ptyRead(id, cursor, PTY_POLL_WAIT_MS),
-              ).pipe(
-                Effect.map((result) =>
-                  result.done
-                    ? undefined
-                    : ([joinChunks(result.b64), result.nextSeq] as const),
-                ),
-                Effect.mapError(errorText),
-              ),
-            ).pipe(Stream.filter((bytes) => bytes.byteLength > 0)),
-          input: (id, data) => withBox((stub) => stub.ptyInput(id, data)),
-          resize: (id, cols, rows) =>
-            withBox((stub) => stub.ptyResize(id, cols, rows)),
-          close: (id) => withBox((stub) => stub.ptyClose(id)),
-        },
+        // the contract over the connected stub — every call resolves the
+        // calling session's machine (launch / reattach / relaunch-if-gone)
+        ...sandboxOverRpc(withBox),
         lifecycle: {
           /**
            * Snapshot the session's machine on settle. Only the machine
@@ -484,16 +489,7 @@ export const SandboxMicrovmSession = (
               const vm =
                 launched !== undefined
                   ? yield* launched
-                  : yield* runMicrovm({
-                      clientToken: token,
-                      idlePolicy,
-                      ...(options?.maximumDurationInSeconds !== undefined
-                        ? {
-                            maximumDurationInSeconds:
-                              options.maximumDurationInSeconds,
-                          }
-                        : {}),
-                    }).pipe(Effect.mapError(errorText));
+                  : yield* resolveMachine(token, false);
               yield* terminateMicrovm({
                 microvmIdentifier: vm.microvmId,
               }).pipe(Effect.mapError(errorText));

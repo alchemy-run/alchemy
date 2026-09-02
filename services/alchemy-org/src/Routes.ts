@@ -295,6 +295,24 @@ export const routes = Effect.gen(function* () {
     }),
   );
 
+  /** The operator's "new session/thread": admit the key durably so it
+   *  LISTS at once — for every client, across reloads — before any
+   *  input. Its machine boots and its checkout converges on the first
+   *  input (or terminal), exactly as before. Idempotent. */
+  const openSession = HttpRouter.add(
+    "POST",
+    "/api/chats/:id",
+    Effect.gen(function* () {
+      const params = yield* HttpRouter.params;
+      const id = decodeURIComponent(String(params.id ?? ""));
+      const { term, key } = parseSessionId(id);
+      yield* sessions
+        .open(term, key)
+        .pipe(Effect.provide(RuntimeContext.phantom));
+      return yield* HttpServerResponse.json({ opened: id }, { status: 201 });
+    }),
+  );
+
   /** The operator's off switch: settle a session in place. Terminal
    *  and idempotent; the transcript stays readable. */
   const stopSession = HttpRouter.add(
@@ -478,6 +496,7 @@ export const routes = Effect.gen(function* () {
     boardStream,
     sessionMessages,
     sessionLog,
+    openSession,
     stopSession,
     resumeSession,
     removeSession,

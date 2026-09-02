@@ -35,10 +35,13 @@ export const SessionIndexMemory = (
       const id = sessionId(term, key);
       let row = rows.get(id);
       if (row === undefined) {
+        // admitted is idle until the first input opens a round — an
+        // opened-but-unfed session (the operator's "new session") sits
+        // waiting, not working
         row = {
           term,
           key,
-          status: "running",
+          status: "idle",
           ticks: 0,
           createdAt: Date.now(),
           updatedAt: Date.now(),

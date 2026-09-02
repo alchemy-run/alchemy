@@ -35,6 +35,7 @@
  */
 import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -195,6 +196,9 @@ interface SessionRpc extends MainRpc<DurableObjectState> {
   readonly settle: (
     outcome: unknown,
   ) => Effect.Effect<void, unknown, RuntimeContext>;
+  /** Admit this session durably without input (the operator's "new
+   *  session") — it lists at once; init runs on the first input. */
+  readonly open: () => Effect.Effect<void, unknown, RuntimeContext>;
   /** Reopen a settled session (the operator's undo for `stop`). */
   readonly resume: () => Effect.Effect<void, unknown, RuntimeContext>;
   /** Erase this session: settle, detach views, purge storage.
@@ -526,6 +530,79 @@ export const DurableObjectHost: Layer.Layer<
             yield* sealed(state.waitUntil(pump));
           });
 
+        /** One write of keystrokes to the PTY, waking the machine if
+         *  it has no shell. */
+        const writeInput = (
+          socket: WebSocket,
+          tag: TerminalAttachment,
+          pty: NonNullable<ReturnType<typeof sandboxPty>>,
+          data: string,
+        ) =>
+          asSession(pty.input(tag.id, data)).pipe(
+            Effect.andThen(ensurePump(socket, pty, tag)),
+            // no shell (fresh machine) or stale pump: reopen at the
+            // attachment's dimensions and retry the keystrokes once
+            Effect.catch(() =>
+              Effect.gen(function* () {
+                // the keystroke is the WAKE signal — the machine was
+                // suspended or recycled; the reopen blocks through the
+                // resume, so show the viewer what the wait is
+                yield* notifyStatus(socket, "waking the session's machine");
+                yield* asSession(pty.open(tag.id, tag.cols, tag.rows));
+                yield* ensurePump(socket, pty, tag, { restart: true });
+                yield* asSession(pty.input(tag.id, data));
+              }).pipe(Effect.catch((error) => notify(socket, error))),
+            ),
+          );
+
+        /**
+         * Keystrokes reach the PTY strictly IN ORDER. Every binary frame
+         * is one RPC round-trip to the machine and the DO runs frame
+         * handlers concurrently, so with any latency independent writes
+         * overtake each other — `git status` landed as `igts attsu`.
+         * One drain loop per terminal: frames append to its buffer, and
+         * the single in-flight write ships whatever accumulated while
+         * the previous one was on the wire — ordered, and coalesced
+         * into one write per round-trip when the viewer types faster
+         * than the link.
+         */
+        const inputBuffers = new Map<
+          string,
+          { buffer: string; draining: boolean }
+        >();
+        const enqueueInput = (
+          socket: WebSocket,
+          tag: TerminalAttachment,
+          pty: NonNullable<ReturnType<typeof sandboxPty>>,
+          data: string,
+        ) =>
+          Effect.suspend(() => {
+            const queue = inputBuffers.get(tag.id) ?? {
+              buffer: "",
+              draining: false,
+            };
+            inputBuffers.set(tag.id, queue);
+            queue.buffer += data;
+            if (queue.draining) return Effect.void;
+            queue.draining = true;
+            const drain: Effect.Effect<void> = Effect.suspend(() => {
+              if (queue.buffer.length === 0) return Effect.void;
+              const chunk = queue.buffer;
+              queue.buffer = "";
+              return writeInput(socket, tag, pty, chunk).pipe(
+                Effect.andThen(drain),
+              );
+            });
+            return drain.pipe(
+              Effect.ensuring(
+                Effect.sync(() => {
+                  queue.draining = false;
+                  if (queue.buffer.length === 0) inputBuffers.delete(tag.id);
+                }),
+              ),
+            );
+          });
+
         /**
          * One terminal frame: TEXT is a control frame (open/resize),
          * BINARY is raw keystrokes. Keystrokes double as the WAKE
@@ -566,7 +643,12 @@ export const DurableObjectHost: Layer.Layer<
                   `[terminal-debug] pty.open(${next.id}) starting`,
                 );
                 yield* asSession(pty.open(next.id, next.cols, next.rows)).pipe(
-                  Effect.catch((error) => notify(socket, error)),
+                  // a machine that cannot launch is a DEFECT of the
+                  // sandbox layer (no error channel for it) — the
+                  // viewer must still see WHY, not a frozen "starting"
+                  Effect.catchCause((cause) =>
+                    notify(socket, String(Cause.squash(cause))),
+                  ),
                 );
                 yield* Effect.logDebug(
                   `[terminal-debug] pty.open(${next.id}) done — starting pump`,
@@ -592,22 +674,11 @@ export const DurableObjectHost: Layer.Layer<
               }
               return;
             }
-            const data = new TextDecoder().decode(message);
-            yield* asSession(pty.input(tag.id, data)).pipe(
-              Effect.andThen(ensurePump(socket, pty, tag)),
-              // no shell (fresh machine) or stale pump: reopen at the
-              // attachment's dimensions and retry the keystroke once
-              Effect.catch(() =>
-                Effect.gen(function* () {
-                  // the keystroke is the WAKE signal — the machine was
-                  // suspended or recycled; the reopen blocks through the
-                  // resume, so show the viewer what the wait is
-                  yield* notifyStatus(socket, "waking the session's machine");
-                  yield* asSession(pty.open(tag.id, tag.cols, tag.rows));
-                  yield* ensurePump(socket, pty, tag, { restart: true });
-                  yield* asSession(pty.input(tag.id, data));
-                }).pipe(Effect.catch((error) => notify(socket, error))),
-              ),
+            yield* enqueueInput(
+              socket,
+              tag,
+              pty,
+              new TextDecoder().decode(message),
             );
           });
 
@@ -757,7 +828,13 @@ export const DurableObjectHost: Layer.Layer<
             Effect.gen(function* () {
               // a departed terminal viewer's pump must not pin the DO
               yield* haltPump(socket);
-              yield* Effect.ignore(socket.close(code, reason));
+              // 1005/1006/1015 are RESERVED — the runtime reports them
+              // for a peer that vanished without a close frame, and
+              // throws InvalidAccessError if echoed back
+              const echo = code === 1005 || code === 1006 || code === 1015;
+              yield* Effect.ignore(
+                socket.close(echo ? 1000 : code, echo ? "" : reason),
+              );
             }),
           deliver: (
             input: unknown,
@@ -788,6 +865,10 @@ export const DurableObjectHost: Layer.Layer<
               yield* (yield* engine).settle(me.key, outcome, { admit: true });
               // a settled session's machine snapshots itself away
               yield* machineLifecycle("suspend");
+            }),
+          open: (): Effect.Effect<void, never, RuntimeContext> =>
+            Effect.gen(function* () {
+              yield* (yield* engine).admit(me.key);
             }),
           resume: (): Effect.Effect<void, never, RuntimeContext> =>
             Effect.gen(function* () {
@@ -955,6 +1036,11 @@ export const DurableObjectHost: Layer.Layer<
           }),
         // both verbs address the session's own DO — placement
         // knowledge, exactly like attach
+        open: (term, key) =>
+          sessions
+            .getByName(sessionName(term, key))
+            .open()
+            .pipe(Effect.orDie, Effect.asVoid),
         stop: (term, key) =>
           sessions
             .getByName(sessionName(term, key))

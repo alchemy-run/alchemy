@@ -12,7 +12,7 @@ import { fileURLToPath } from "node:url";
 export const ORG_REMOTE = "https://github.com/alchemy-run/alchemy.git";
 
 /** Bump when the staging layout changes — invalidates stale stages. */
-const STAGE_VERSION = "v4";
+const STAGE_VERSION = "v7";
 
 const MARKER = ".bake-fingerprint";
 
@@ -169,8 +169,9 @@ const computeFingerprint = (scratchDir: string) =>
  * What ships:
  * - the working tree, minus what CANNOT ship: `node_modules`
  *   (darwin-native binaries), `.env*` (secrets), machine-local state
- *   (`.alchemy`, `.turbo`, `.wrangler`, `.claude`), and every nested
- *   `.git` (submodule pointers are meaningless off-host);
+ *   (`.alchemy`, `.turbo`, `.wrangler`, `.claude`), every nested
+ *   `.git` (submodule pointers are meaningless off-host), and
+ *   compiled-output source maps (dead weight — see the exclude list);
  * - `.vendor/floci` WITH its locally-built `target/` — build it on
  *   the host (`./mvnw -DskipTests package`) and the VM runs the jar;
  *   the rest of `.vendor` (vendored framework repos) stays home;
@@ -220,12 +221,14 @@ export const stageBake: Effect.Effect<
 
   // ── the working tree, wholesale ──────────────────────────────────
   // rsync --delete into the PERSISTENT staging dir: unchanged files
-  // are untouched (delta copy), removals propagate. Two passes keep
-  // the exclude logic trivial across rsync dialects (macOS ships
-  // openrsync): everything minus .vendor, then .vendor/floci alone.
+  // are untouched (delta copy), removals propagate, and
+  // --delete-excluded evicts anything a NEW exclude rule now covers.
+  // Two passes keep the exclude logic trivial across rsync dialects
+  // (macOS ships openrsync): everything minus .vendor, then
+  // .vendor/floci alone.
   const rsync = (from: string, to: string, excludes: ReadonlyArray<string>) =>
     sh(
-      `rsync -a --delete ${excludes
+      `rsync -a --delete --delete-excluded ${excludes
         .map((pattern) => `--exclude=${q(pattern)}`)
         .join(" ")} ${q(`${from}/`)} ${q(to)}`,
     );
@@ -233,6 +236,7 @@ export const stageBake: Effect.Effect<
     ".git",
     "node_modules",
     "/.vendor",
+    "/.external", // gitignored research checkouts (terraform-provider-aws…)
     "/.claude",
     ".alchemy",
     ".turbo",
@@ -240,6 +244,13 @@ export const stageBake: Effect.Effect<
     ".tmp",
     ".DS_Store",
     ".env*",
+    // compiled-output source maps (~160MB across packages/*/{lib,dist}
+    // and distilled/*/lib — js/d.ts from tsc, mjs/d.mts from tsdown):
+    // `tsc -b` judges up-to-date-ness from tsbuildinfo, not from the
+    // presence of every emitted file, so dropping them never triggers
+    // an in-session rebuild. Nothing tracked ends in .map, so
+    // `git status` stays clean.
+    "*.map",
   ]);
   yield* fs.makeDirectory(path.join(dir, ".vendor", "floci"), {
     recursive: true,
@@ -249,6 +260,20 @@ export const stageBake: Effect.Effect<
     path.join(dir, ".vendor", "floci"),
     [".git", "node_modules", ".DS_Store"],
   );
+  // The blanket `node_modules` exclude also drops TRACKED files that
+  // happen to live in a directory of that name (bundler test fixtures
+  // ship fake packages under `test/fixtures/**/node_modules/`) — put
+  // those back from the index, or the guest's `git status` reports
+  // them deleted and the fixtures' tests fail. git's default pathspec
+  // `*` matches across `/`; tar (bsd and gnu) takes the -z list.
+  yield* sh(
+    `git ls-files -z -- '*/node_modules/*' | tar -c --null -T - -f - | tar -x -f - -C ${q(dir)}`,
+    root,
+  );
+  // Dangling symlinks (a link whose target the excludes dropped, or one
+  // that was already broken on the host) have nothing to ship and trip
+  // every stat-following consumer of the context — drop them.
+  yield* sh(`find ${q(dir)} -type l ! -exec test -e {} \\; -delete`);
 
   // ── a REAL .git: depth-1 pack of HEAD from the LOCAL object store ─
   const cloneTmp = path.join(base, ".gitclone");
