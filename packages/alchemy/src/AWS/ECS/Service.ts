@@ -3725,11 +3725,24 @@ export const ServiceProvider = () =>
           yield* session.note(
             `Waiting for ECS service ${output.serviceName} to drain`,
           );
+          // Best-effort drain: a service can wedge mid-deployment ("unable to
+          // stop or start tasks during a deployment because of the service
+          // deployment configuration" — e.g. after a load balancer was
+          // detached), in which case the old task never stops on its own.
+          // The forced delete below stops it regardless, so a drain timeout
+          // must never fail the delete.
           yield* waitForServiceConvergence({
             clusterArn: output.clusterArn,
             serviceName: output.serviceName,
             mode: "drained",
-          });
+            timeout: "3 minutes",
+          }).pipe(
+            Effect.catchTag("ServiceDidNotStabilize", (error) =>
+              session.note(
+                `ECS service ${output.serviceName} did not drain in time (${error.message}); deleting with force`,
+              ),
+            ),
+          );
 
           yield* ecs
             .deleteService({
