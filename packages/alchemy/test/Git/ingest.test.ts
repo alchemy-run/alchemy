@@ -9,6 +9,12 @@ import { bufferRandomAccess } from "@/Git/git/PackParser.ts";
 import { HasherInline, Hasher } from "@/Git/Hasher.ts";
 import { ingestPackFrom } from "@/Git/RepoObject.ts";
 import { makeObjectStore } from "@/Git/store/ObjectStore.ts";
+import { makeStreamingSource } from "@/Git/store/StreamingSource.ts";
+import { hashObject, encodeTypeSize, makeSha1 } from "@/Git/git/ObjectCodec.ts";
+import { packHeader } from "@/Git/git/PackWriter.ts";
+import * as Zlib from "@/Git/git/Zlib.ts";
+import * as Fiber from "effect/Fiber";
+import { concat } from "./harness/pack.ts";
 import { describe, expect, test } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -83,4 +89,65 @@ describe("ingestPackFrom through the hasher", () => {
       }).pipe(Effect.provide(HasherInline), Effect.provide(BunServices.layer)),
     );
   });
+});
+
+describe("hasher pipeline over a streaming source with eviction", () => {
+  test(
+    "a multi-part pack whose retained window is smaller than a part stages every inline row and completes (no fallback)",
+    async () => {
+      await Effect.runPromise(
+        Effect.gen(function* () {
+          const n = 1500;
+          const pieces: Array<Uint8Array> = [packHeader(n)];
+          for (let i = 0; i < n; i++) {
+            const c = new Uint8Array(1000 + (i % 700));
+            crypto.getRandomValues(c);
+            yield* hashObject(3, c);
+            pieces.push(encodeTypeSize(3, c.length), yield* Zlib.deflate(c));
+          }
+          const body = concat(pieces);
+          const sha = makeSha1();
+          sha.update(body);
+          const pack = concat([body, sha.digest()]);
+          // Parts of 64 KiB, retention of 128 KiB, no spill/fallback: every
+          // inline row must be read back before its bytes are dropped.
+          const feeder = makeStreamingSource({
+            slabBytes: 32 * 1024,
+            retainBytes: 128 * 1024,
+            backpressureBytes: 1 << 20,
+          });
+          const sql = makeTestSqlClient();
+          const store = makeObjectStore({
+            sql,
+            blobs: makeMemoryBlobStore(),
+            repoId: "R",
+          });
+          const hasher = yield* Hasher;
+          const ingest = yield* Effect.forkChild(
+            Effect.result(
+              ingestPackFrom(feeder.source, {
+                store,
+                pushId: "p",
+                hasher,
+                partBytes: 64 * 1024,
+              }),
+            ),
+          );
+          for (let at = 0; at < pack.length; at += 50_000)
+            yield* feeder.push(pack.subarray(at, at + 50_000));
+          feeder.end();
+          const r = yield* Fiber.join(ingest).pipe(
+            Effect.timeout("20 seconds"),
+          );
+          expect(r._tag).toBe("Success");
+          const staged = yield* sql.first<{ n: number; withBytes: number }>(
+            `SELECT COUNT(*) AS n, SUM(LENGTH(zdata) > 0) AS withBytes FROM objects WHERE staged_push = 'p'`,
+          );
+          expect(staged?.n).toBe(n);
+          expect(staged?.withBytes).toBe(n);
+        }).pipe(Effect.provide(HasherInline)),
+      );
+    },
+    { timeout: 30_000 },
+  );
 });

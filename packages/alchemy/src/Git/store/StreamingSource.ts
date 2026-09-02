@@ -165,7 +165,9 @@ export const makeStreamingSource = (options?: {
       });
     });
   const wakeFallback = () => {
-    if (ended && (fallback !== undefined || failure !== undefined)) {
+    // Once the body has ended, evicted reads either get the fallback reader
+    // or fail — they must never wait forever.
+    if (ended) {
       const ws = fallbackWaiters.splice(0);
       for (const w of ws) w();
     }

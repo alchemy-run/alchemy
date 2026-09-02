@@ -289,7 +289,6 @@ export const pushPermitsFor = (contentLength: number | undefined): number => {
   // What a push can hold at once, in MiB — never its body. An unknown
   // length is treated as spilled. Memory safety beats concurrency: on a
   // 64 MiB budget that admits one large push per isolate alongside small ones.
-  const caches = mib(PackParser.DEFAULT_CACHE_BYTES + STAGE_BATCH_BYTES);
   // Streaming (DESIGN §22.6–7): the feeder retains RETAIN_BYTES behind the
   // pump and buffers BACKPRESSURE_BYTES ahead of it, plus one staging batch.
   const spilled = mib(RETAIN_BYTES + BACKPRESSURE_BYTES + STAGE_BATCH_BYTES);
@@ -1616,6 +1615,10 @@ export const ingestPackFrom = (
             });
           }
           yield* stage(incoming);
+          // Flush per part, BEFORE releasing: an inline row reads its bytes
+          // back from the source, and those bytes are only guaranteed to be
+          // retained until the release below (DESIGN §22.7).
+          yield* flush();
           for (const u of result.unresolved) unresolved.push(u);
           remaining -= result.count;
           carry = payload.subarray(result.consumedTo - consumedTo);
