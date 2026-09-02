@@ -57,15 +57,69 @@ the local runtime. A Worker opted out of local emulation with
 
 ## What you get
 
-- Effect spans nested with automatic fetch / KV / R2 / D1 spans in the
-  Workers Observability waterfall.
-- Scalar attributes (`string` / `number` / `boolean`) forwarded.
-  Nested objects, events, and links stay Effect-local.
-- Completion recorded as `effect.exit` = `success` | `failure` |
-  `interrupted` (Cloudflare has no outcome setter yet).
-- Optional `headSamplingRate` and `persist` on the Layer. Omit them to
-  keep Cloudflare's defaults. Pass `persist: false` to export without
-  dashboard persistence.
+### Effect spans in the platform waterfall
+
+`Effect.withSpan` frames nest with Cloudflare's own spans. A KV read
+inside a span shows up as its child, even when the fiber that issued it
+was forked or resumed on a later tick.
+
+```typescript
+const handle = Effect.gen(function* () {
+  const user = yield* kv.get("user:1").pipe(Effect.withSpan("load.user"));
+  yield* Effect.all([enrich(user), audit(user)], { concurrency: "unbounded" });
+}).pipe(Effect.withSpan("handle"));
+```
+
+```text
+http.server GET
+└─ handle
+   ├─ load.user
+   │  └─ kv_get
+   ├─ enrich
+   └─ audit
+```
+
+### Attributes
+
+Scalar annotations (`string`, `number`, `boolean`) are forwarded to the
+Cloudflare span. Nested objects, span events, and links stay Effect-local.
+
+```typescript
+yield* Effect.annotateCurrentSpan("user.id", userId);   // forwarded
+yield* Effect.annotateCurrentSpan("retries", 2);        // forwarded
+yield* Effect.annotateCurrentSpan("cached", true);      // forwarded
+yield* Effect.annotateCurrentSpan("input", { nested }); // Effect-local
+```
+
+### Outcome
+
+Cloudflare has no outcome setter yet, so completion is recorded as the
+`effect.exit` attribute: `success`, `failure`, or `interrupted`.
+
+```typescript
+yield* Effect.fail(new Error("boom")).pipe(
+  Effect.withSpan("failing"), // effect.exit = "failure"
+  Effect.ignore,
+);
+const fiber = yield* Effect.forkChild(
+  Effect.sleep("30 seconds").pipe(Effect.withSpan("slow")),
+);
+yield* Fiber.interrupt(fiber); // effect.exit = "interrupted"
+```
+
+### Sampling and persistence
+
+`headSamplingRate` and `persist` are passed straight through to the
+Worker's `observability.traces`. Omit them to keep Cloudflare's defaults.
+Cloudflare applies the sampling rate when it ingests the trace, so every
+invocation still sees a live `Tracer`.
+
+```typescript
+Cloudflare.Telemetry({
+  headSamplingRate: 0.1, // keep 10% of invocations
+  persist: false,        // export only, nothing in the dashboard
+})
+```
 
 ## Combining with Axiom
 
