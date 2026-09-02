@@ -23,6 +23,7 @@ const GitObjects = Cloudflare.R2.Bucket("GitObjects");
 const GitLive = Git.ServerLive.pipe(
   Layer.provide(Git.ReposDurableObject), // refs + objects + pulls in DOs
   Layer.provide(Git.RegistryDurableObject), // owner/name → repoId
+  Layer.provide(Git.HasherInline), // push verification in this Worker
   Layer.provide(Git.BlobStoreR2(GitObjects)), // packs & bundles in R2
   Layer.provide(Git.AuthTokens), // admin key + scoped repo tokens
 );

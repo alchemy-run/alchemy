@@ -233,7 +233,9 @@ const request = async <T>(
     headers: {
       // Anonymous requests carry no Authorization header at all — the
       // service grants read on public repos to tokenless callers.
-      ...(connection.token ? { Authorization: `Bearer ${connection.token}` } : {}),
+      ...(connection.token
+        ? { Authorization: `Bearer ${connection.token}` }
+        : {}),
       ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
     },
     body: body !== undefined ? JSON.stringify(body) : undefined,
@@ -552,7 +554,8 @@ export const createPull = (
   owner: string,
   repo: string,
   payload: { title: string; body?: string; base: string; head: string },
-) => request<Pull>(c, "POST", `/repos/${seg(owner)}/${seg(repo)}/pulls`, payload);
+) =>
+  request<Pull>(c, "POST", `/repos/${seg(owner)}/${seg(repo)}/pulls`, payload);
 
 /** Patches title/body, or closes/reopens via `state`. */
 export const updatePull = (

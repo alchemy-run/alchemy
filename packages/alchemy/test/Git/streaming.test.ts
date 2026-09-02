@@ -25,17 +25,17 @@ describe("StreamingSource", () => {
         const data = bytes(3000);
         // Reader starts first and blocks.
         const pending = yield* Effect.forkChild(feeder.source.read(1000, 500));
-        expect(feeder.source.readSync(0, 10)).toBeUndefined();
+        expect(feeder.source.readSync!(0, 10)).toBeUndefined();
         yield* feeder.push(data.subarray(0, 700));
         yield* feeder.push(data.subarray(700, 1600));
         const got = yield* Fiber.join(pending);
         expect(Array.from(got)).toEqual(Array.from(data.subarray(1000, 1500)));
         // Inside one slab: a view of the slab's buffer.
-        const view = feeder.source.readSync(1024, 100)!;
+        const view = feeder.source.readSync!(1024, 100)!;
         expect(view.byteOffset).toBe(0);
         expect(Array.from(view)).toEqual(Array.from(data.subarray(1024, 1124)));
         // Across a slab edge, readSync declines; read assembles.
-        expect(feeder.source.readSync(1000, 100)).toBeUndefined();
+        expect(feeder.source.readSync!(1000, 100)).toBeUndefined();
         const across = yield* feeder.source.read(1000, 100);
         expect(Array.from(across)).toEqual(
           Array.from(data.subarray(1000, 1100)),
@@ -45,7 +45,7 @@ describe("StreamingSource", () => {
         expect(yield* feeder.source.awaitEnd).toBe(3000);
         // Short read at the end.
         expect((yield* feeder.source.read(2990, 100)).length).toBe(10);
-        expect(feeder.source.readSync(2990, 100)!.length).toBe(10);
+        expect(feeder.source.readSync!(2990, 100)!.length).toBe(10);
       }),
     );
   });
@@ -62,11 +62,11 @@ describe("StreamingSource", () => {
         for (let at = 0; at < data.length; at += 1500)
           yield* feeder.push(data.subarray(at, at + 1500));
         // Nothing consumed: everything retained.
-        expect(feeder.source.readSync(0, 10)).toBeDefined();
+        expect(feeder.source.readSync!(0, 10)).toBeDefined();
         feeder.source.release(4000);
         // Now the oldest slabs are gone.
-        expect(feeder.source.readSync(0, 10)).toBeUndefined();
-        expect(feeder.source.readSync(4500, 10)).toBeDefined();
+        expect(feeder.source.readSync!(0, 10)).toBeUndefined();
+        expect(feeder.source.readSync!(4500, 10)).toBeDefined();
         // A read below the window waits for the fallback + end.
         const pending = yield* Effect.forkChild(feeder.source.read(100, 50));
         feeder.setFallback(bufferRandomAccess(data));

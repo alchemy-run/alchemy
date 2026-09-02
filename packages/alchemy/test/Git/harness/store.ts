@@ -268,9 +268,11 @@ export const makeMemoryBlobStore = (): MemoryBlobStore => {
       }),
     uploadPart: (_key, uploadId, partNumber, part) =>
       putPart(uploadId, partNumber, part),
-    delete: (key) =>
+    delete: (keys) =>
       Effect.sync(() => {
-        objects.delete(key);
+        for (const key of typeof keys === "string" ? [keys] : keys) {
+          objects.delete(key);
+        }
       }),
     list: (prefix) =>
       Stream.fromIterable(

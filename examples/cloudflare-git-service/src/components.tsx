@@ -44,8 +44,12 @@ for (const [name, language] of Object.entries({
 })) {
   hljs.registerLanguage(name, language);
 }
-hljs.registerAliases(["ts", "tsx", "mts", "cts"], { languageName: "typescript" });
-hljs.registerAliases(["js", "jsx", "mjs", "cjs"], { languageName: "javascript" });
+hljs.registerAliases(["ts", "tsx", "mts", "cts"], {
+  languageName: "typescript",
+});
+hljs.registerAliases(["js", "jsx", "mjs", "cjs"], {
+  languageName: "javascript",
+});
 hljs.registerAliases(["sh", "shell", "zsh"], { languageName: "bash" });
 hljs.registerAliases(["yml"], { languageName: "yaml" });
 hljs.registerAliases(["html", "svg"], { languageName: "xml" });
@@ -53,10 +57,7 @@ hljs.registerAliases(["py"], { languageName: "python" });
 hljs.registerAliases(["md"], { languageName: "markdown" });
 
 const escapeHtml = (code: string): string =>
-  code
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;");
+  code.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 
 const highlightExtension = markedHighlight({
   langPrefix: "hljs language-",

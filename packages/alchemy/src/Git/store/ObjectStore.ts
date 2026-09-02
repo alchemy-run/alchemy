@@ -241,6 +241,13 @@ export interface ObjectStore extends ObjectSource {
     pushId: string,
     objects: ReadonlyArray<StagedObject>,
   ) => Effect.Effect<void, StoreError>;
+  /** A live object's type and content for thin-delta resolution, or `undefined`. */
+  readonly readBase: (
+    oid: Oid,
+  ) => Effect.Effect<
+    { readonly type: ObjectType; readonly content: Uint8Array } | undefined,
+    StoreError
+  >;
   /**
    * The connectivity-check membership oracle: returns the subset of `oids`
    * that exist in **neither** the live store **nor** this push's staged
@@ -620,7 +627,7 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
       }),
     );
 
-  return {
+  const self: ObjectStore = {
     // ── ObjectSource (live objects only) ────────────────────────────────────
     has: (oid) =>
       sql
@@ -1002,6 +1009,20 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
         { prefix: [pushId], suffix: [pushId] },
       );
     }),
+    readBase: (oid) =>
+      self
+        .getMeta(oid)
+        .pipe(
+          Effect.flatMap((meta) =>
+            meta === undefined
+              ? Effect.succeed(undefined)
+              : self
+                  .readContent(oid)
+                  .pipe(
+                    Effect.map((content) => ({ type: meta.type, content })),
+                  ),
+          ),
+        ),
     insertStaged: insertStagedOne,
 
     missingObjects: (oids, pushId) =>
@@ -1020,4 +1041,5 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
         return unique.filter((oid) => !present.has(oid));
       }),
   };
+  return self;
 };

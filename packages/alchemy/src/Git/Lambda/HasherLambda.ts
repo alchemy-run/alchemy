@@ -24,12 +24,17 @@ import {
 } from "./HashEvent.ts";
 
 export const HasherLambda = (
-  fn: LambdaFunction,
+  fn: LambdaFunction | Effect.Effect<LambdaFunction, any, any>,
 ): Layer.Layer<Hasher, never, InvokeFunction> =>
   Layer.effect(
     Hasher,
     Effect.gen(function* () {
-      const invoke = yield* InvokeFunction(fn);
+      // A class-style declaration (`HasherFunction`) is yielded here — at
+      // deploy that registers the function, at runtime it resolves it.
+      const func = Effect.isEffect(fn)
+        ? yield* fn as Effect.Effect<LambdaFunction>
+        : fn;
+      const invoke = yield* InvokeFunction(func);
       const remote = (
         payload: Uint8Array,
         options: Parameters<HasherShape["hashPart"]>[1],

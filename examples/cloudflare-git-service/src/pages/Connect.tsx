@@ -61,8 +61,8 @@ export const ConnectPage = ({ onConnected }: { onConnected: () => void }) => {
             mono
           />
           <span className="block text-xs text-fg-muted">
-            Leave empty to browse public repos anonymously. The admin key
-            (<code>GIT_SERVICE_ADMIN_TOKEN</code>) or a repo token unlocks
+            Leave empty to browse public repos anonymously. The admin key (
+            <code>GIT_SERVICE_ADMIN_TOKEN</code>) or a repo token unlocks
             private repos and writes. Stored in this browser's localStorage
             only.
           </span>

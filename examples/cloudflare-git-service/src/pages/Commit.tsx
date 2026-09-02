@@ -125,12 +125,13 @@ const CommitPage = ({
       {/* summary + truncation notice */}
       <p className="mb-3 text-sm text-fg-muted">
         {files.length} file{files.length === 1 ? "" : "s"} changed
-        {diff.parent === null && " (root commit — diffed against the empty tree)"}
+        {diff.parent === null &&
+          " (root commit — diffed against the empty tree)"}
       </p>
       {diff.truncated && (
         <div className="mb-3 rounded-md border border-attention/40 bg-attention/5 px-4 py-2 text-sm text-attention">
-          This commit changes more files than shown — the list was truncated
-          at {files.length} files by the server.
+          This commit changes more files than shown — the list was truncated at{" "}
+          {files.length} files by the server.
         </div>
       )}
 

@@ -29,6 +29,7 @@ import {
   ingestPack,
   readPackHeader,
   type ResolvedEntry,
+  type ThinBaseSource,
 } from "@/Git/git/PackParser.ts";
 import { writePackBytes } from "@/Git/git/PackWriter.ts";
 import type { ManifestEntry, ObjectSource } from "@/Git/git/Store.ts";
@@ -255,7 +256,7 @@ describe("fixture pack parsing", () => {
         expect(sortedOids(summary.oids)).toEqual(
           sortedOids(manifest.packs["ofs-delta"]!.oids),
         );
-      }),
+      }).pipe(platform),
   );
 
   it.live(

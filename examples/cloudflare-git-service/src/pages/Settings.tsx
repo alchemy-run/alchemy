@@ -42,9 +42,9 @@ const StorageCard = ({ context }: { context: RepoContext }) => {
       </dl>
       {lastPush !== null && (
         <p className="mt-3 text-xs text-fg-muted">
-          Last push: {lastPush.objects} objects,{" "}
-          {formatBytes(lastPush.bytes)} — server ingest {lastPush.ingestMs}ms
-          (sql {lastPush.stageMs}ms), total {lastPush.totalMs}ms
+          Last push: {lastPush.objects} objects, {formatBytes(lastPush.bytes)} —
+          server ingest {lastPush.ingestMs}ms (sql {lastPush.stageMs}ms), total{" "}
+          {lastPush.totalMs}ms
         </p>
       )}
       <div className="mt-3">
@@ -90,9 +90,14 @@ const VisibilityCard = ({ context }: { context: RepoContext }) => {
         onClick={() => {
           setBusy(true);
           setError(null);
-          updateRepo(context.connection, context.repo.owner, context.repo.name, {
-            public: !isPublic,
-          })
+          updateRepo(
+            context.connection,
+            context.repo.owner,
+            context.repo.name,
+            {
+              public: !isPublic,
+            },
+          )
             .then((updated) => {
               setIsPublic(updated.public);
               setBusy(false);
@@ -172,7 +177,11 @@ const TokensCard = ({ context }: { context: RepoContext }) => {
           <option value="write">write</option>
           <option value="admin">admin</option>
         </select>
-        <Button kind="primary" type="submit" disabled={name.trim().length === 0}>
+        <Button
+          kind="primary"
+          type="submit"
+          disabled={name.trim().length === 0}
+        >
           Generate token
         </Button>
       </form>
@@ -230,14 +239,23 @@ const DangerCard = ({ context }: { context: RepoContext }) => {
       </p>
       <div className="flex items-center gap-2">
         <div className="w-64">
-          <Input value={confirm} onChange={setConfirm} placeholder={full} mono />
+          <Input
+            value={confirm}
+            onChange={setConfirm}
+            placeholder={full}
+            mono
+          />
         </div>
         <Button
           kind="danger"
           disabled={confirm !== full || busy}
           onClick={() => {
             setBusy(true);
-            deleteRepo(context.connection, context.repo.owner, context.repo.name)
+            deleteRepo(
+              context.connection,
+              context.repo.owner,
+              context.repo.name,
+            )
               .then(() => navigate("/"))
               .catch((cause) => {
                 setError(cause);

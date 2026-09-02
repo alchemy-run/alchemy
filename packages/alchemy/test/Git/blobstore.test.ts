@@ -1,6 +1,7 @@
 import { orderedParts } from "@/Git/BlobStore.ts";
 import { describe, expect, test } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import { RuntimeContext } from "@/RuntimeContext.ts";
 import { makeMemoryBlobStore } from "./harness/store.ts";
 
 describe("multipart parts", () => {
@@ -36,7 +37,7 @@ describe("multipart parts", () => {
           sorted: sorted._tag,
           size: head?.size,
         };
-      }),
+      }).pipe(Effect.provide(RuntimeContext.phantom)),
     );
     expect(result.unsorted).toBe("Failure");
     expect(result.sorted).toBe("Success");

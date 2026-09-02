@@ -24,6 +24,7 @@ import { makeStreamingSource } from "@/Git/store/StreamingSource.ts";
 import * as Fiber from "effect/Fiber";
 import { describe, expect, test } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import { RuntimeContext } from "@/RuntimeContext.ts";
 import { concat } from "./harness/pack.ts";
 import { makeMemoryBlobStore, makeTestSqlClient } from "./harness/store.ts";
 
@@ -108,7 +109,7 @@ describe("blobRandomAccess", () => {
         // A read past the end is clipped.
         const tail = yield* source.read(9_990, 100);
         expect(tail.length).toBe(10);
-      }),
+      }).pipe(Effect.provide(RuntimeContext.phantom)),
     );
   });
 
@@ -147,7 +148,7 @@ describe("blobRandomAccess", () => {
         }
         expect(windowed.seen).toEqual(memory.seen);
         expect(new Set(windowed.seen)).toEqual(new Set(oids));
-      }),
+      }).pipe(Effect.provide(RuntimeContext.phantom)),
     );
   });
 
@@ -173,7 +174,7 @@ describe("blobRandomAccess", () => {
         // Every window once, plus at most one re-read per window edge an
         // entry's probe straddles (the LRU holds 4, the parse is sequential).
         expect(blobs.gets.length).toBeLessThanOrEqual(windows * 2);
-      }),
+      }).pipe(Effect.provide(RuntimeContext.phantom)),
     );
   });
 });

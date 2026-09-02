@@ -70,13 +70,7 @@ export const PullStateBadge = ({ state }: { state: PullState }) => (
 
 // ── list row ────────────────────────────────────────────────────────────────
 
-const PullRow = ({
-  context,
-  pull,
-}: {
-  context: RepoContext;
-  pull: Pull;
-}) => {
+const PullRow = ({ context, pull }: { context: RepoContext; pull: Pull }) => {
   const { owner, name } = context.repo;
   return (
     <li className="flex items-start gap-3 border-b border-border-muted px-4 py-3 last:border-b-0 hover:bg-canvas-subtle">
@@ -98,8 +92,7 @@ const PullRow = ({
             : pull.state === "closed"
               ? `closed ${timeAgo(pull.updatedAt)}`
               : `opened ${timeAgo(pull.createdAt)}`}{" "}
-          ·{" "}
-          <code className="font-mono">{shortRef(pull.baseRef)}</code>
+          · <code className="font-mono">{shortRef(pull.baseRef)}</code>
           {" ← "}
           <code className="font-mono">{shortRef(pull.headRef)}</code>
         </p>
@@ -299,9 +292,7 @@ export const PullsTab = ({ context }: { context: RepoContext }) => {
         <NewPullForm
           context={context}
           onCreated={(pull) =>
-            navigate(
-              href(repo.owner, repo.name, "pulls", String(pull.number)),
-            )
+            navigate(href(repo.owner, repo.name, "pulls", String(pull.number)))
           }
         />
       )}

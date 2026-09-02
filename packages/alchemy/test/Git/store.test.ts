@@ -30,6 +30,7 @@ import {
 } from "@/Git/store/ObjectStore.ts";
 import { describe, expect, test } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import { RuntimeContext } from "@/RuntimeContext.ts";
 import * as Stream from "effect/Stream";
 import { concat, verifyPack } from "./harness/pack.ts";
 import { makeMemoryBlobStore, makeTestSqlClient } from "./harness/store.ts";
@@ -37,9 +38,10 @@ import { makeMemoryBlobStore, makeTestSqlClient } from "./harness/store.ts";
 const REPO = "01TESTREPO0000000000000000";
 
 /** Runs an effect, surfacing typed failures with their fields (not just `message`). */
-const run = <A>(effect: Effect.Effect<A, unknown>) =>
+const run = <A>(effect: Effect.Effect<A, unknown, RuntimeContext>) =>
   Effect.runPromise(
     effect.pipe(
+      Effect.provide(RuntimeContext.phantom),
       Effect.mapError((e) =>
         e instanceof Error && !("reason" in e)
           ? e

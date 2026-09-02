@@ -19,6 +19,7 @@ import { concat } from "./harness/pack.ts";
 import { describe, expect, test } from "alchemy-test";
 import { BlobStore } from "@/Git/BlobStore.ts";
 import * as Effect from "effect/Effect";
+import { RuntimeContext } from "@/RuntimeContext.ts";
 import * as Layer from "effect/Layer";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
@@ -293,6 +294,7 @@ describe("spill by the hasher (DESIGN §22.10)", () => {
               blobs,
               key: "R/incoming/X.pack",
               packId: "wire-X",
+              repoId: "R",
               threshold: opts.threshold,
             },
           }),
@@ -315,6 +317,7 @@ describe("spill by the hasher (DESIGN §22.10)", () => {
           Layer.succeed(BlobStore, makeMemoryBlobStore()),
         ),
       ),
+      Effect.provide(RuntimeContext.phantom),
     );
 
   test(
@@ -336,7 +339,7 @@ describe("spill by the hasher (DESIGN §22.10)", () => {
         Effect.gen(function* () {
           const blob = yield* out.blobs.get("R/incoming/X.pack");
           return blob === null ? undefined : yield* blob.bytes;
-        }),
+        }).pipe(Effect.provide(RuntimeContext.phantom)),
       );
       expect(stored).toEqual(out.body);
       expect(out.rows?.n).toBe(400);
@@ -385,6 +388,7 @@ describe("spill by the hasher (DESIGN §22.10)", () => {
               Layer.succeed(BlobStore, makeMemoryBlobStore()),
             ),
           ),
+          Effect.provide(RuntimeContext.phantom),
         ),
       );
       expect(out.result.parkedKey).toBe("R/incoming/X.pack");
@@ -393,7 +397,7 @@ describe("spill by the hasher (DESIGN §22.10)", () => {
         Effect.gen(function* () {
           const blob = yield* out.blobs.get("R/incoming/X.pack");
           return blob === null ? undefined : yield* blob.bytes;
-        }),
+        }).pipe(Effect.provide(RuntimeContext.phantom)),
       );
       expect(stored).toEqual(out.body);
       expect(out.rows?.n).toBe(400);

@@ -59,7 +59,7 @@ const scanInParts = (
     const all: Array<Oid> = [];
     const unresolved: Array<{ offset: number }> = [];
     let i = 0;
-    let carry = new Uint8Array(0);
+    let carry: Uint8Array = new Uint8Array(0);
     while (cursor < end) {
       const n = Math.min(partSizes(i++), end - cursor);
       const payload = concat([carry, pack.subarray(cursor, cursor + n)]);

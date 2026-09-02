@@ -328,8 +328,8 @@ const PullPage = ({
         <div className="rounded-md border border-border-muted px-4 py-8 text-center text-sm text-fg-muted">
           {detail.state === "merged" && detail.mergeCommit !== null ? (
             <>
-              Live comparison is not available for merged pull requests —
-              see the{" "}
+              Live comparison is not available for merged pull requests — see
+              the{" "}
               <Link
                 to={href(owner, name, "commit", detail.mergeCommit)}
                 className="font-mono text-accent hover:underline"
@@ -411,9 +411,8 @@ const PullPage = ({
             <>
               {compare.filesTruncated && (
                 <div className="mb-3 rounded-md border border-attention/40 bg-attention/5 px-4 py-2 text-sm text-attention">
-                  This pull request changes more files than shown — the list
-                  was truncated at {compare.files.length} files by the
-                  server.
+                  This pull request changes more files than shown — the list was
+                  truncated at {compare.files.length} files by the server.
                 </div>
               )}
               <FileDiffList context={context} files={compare.files} />

@@ -44,8 +44,10 @@ export const makeFunctionHttpBinding = <
   resources?: (func: Function) => (string | OutputType<string>)[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
-
+    // The operation is acquired per call, not at layer build: a Cloudflare
+    // Worker host provides its credentials and HTTP client around each
+    // call (WorkerAwsAccess.ts) and a Lambda host has them ambient, so
+    // the layer itself requires nothing.
     return Effect.fn(function* (func: Function) {
       const FunctionArn = yield* func.functionArn;
       const host = yield* Binding.Host;
@@ -82,13 +84,13 @@ export const makeFunctionHttpBinding = <
       return Effect.fn(`${options.tag}(${func.LogicalId})`)(function* (
         request?: Omit<I, "FunctionName">,
       ) {
+        const FunctionName = yield* FunctionArn;
         return yield* withRuntimeCredentials(
           access,
           region,
-          op({
-            ...request,
-            FunctionName: yield* FunctionArn,
-          } as I),
+          Effect.flatMap(options.operation, (op) =>
+            op({ ...request, FunctionName } as I),
+          ),
         ) as Effect.Effect<A, E>;
       });
     });
