@@ -1,6 +1,6 @@
 {
   "extends": "../../tsconfig.cloudflare.json",
-  "include": ["src/**/*.ts", "src/**/*.d.ts"],
+  "include": ["src/**/*.ts"],
   "exclude": ["src/**/test/**", "src/astro/runtime"],
   "compilerOptions": {
     "tsBuildInfoFile": ".cache/tsconfig.node.tsbuildinfo",
