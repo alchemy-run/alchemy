@@ -1,10 +1,11 @@
+import { Services } from "@distilled.cloud/forgejo";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import { ForgejoCredentials, optional, paginate } from "./Client.ts";
+import { paginate } from "./Pagination.ts";
 import type * as Forgejo from "./Providers.ts";
 
 /**
@@ -125,14 +126,6 @@ export interface ApiToken extends Resource<
  */
 export const ApiToken = Resource<ApiToken>("Forgejo.ApiToken");
 
-interface ApiAccessToken {
-  readonly id: number;
-  readonly name: string;
-  readonly sha1?: string;
-  readonly token_last_eight: string;
-  readonly created_at: string;
-}
-
 /** Order-insensitive comparison of two optional string lists. */
 const sameSet = (
   a: readonly string[] | undefined,
@@ -146,16 +139,8 @@ const sameSet = (
   );
 };
 
-const tokensPath = (username: string) =>
-  `/admin/users/${encodeURIComponent(username)}/tokens`;
-
-const tokenPath = (username: string, tokenId: number) =>
-  `${tokensPath(username)}/${encodeURIComponent(String(tokenId))}`;
-
-const listTokens = Effect.fn(function* (username: string) {
-  const client = yield* ForgejoCredentials;
-  return yield* paginate<ApiAccessToken>(client, tokensPath(username));
-});
+const listTokens = (username: string) =>
+  paginate(Services.admin.adminListUserAccessTokens, { username });
 
 /**
  * Raised when a token of this name already exists but no state row does.
@@ -280,22 +265,24 @@ export const ApiTokenProvider = () =>
         });
       }
 
-      const client = yield* ForgejoCredentials;
-      const created = yield* client.request<ApiAccessToken>(
-        "POST",
-        tokensPath(news.username),
-        {
-          body: {
-            name: news.name,
-            scopes: news.scopes === undefined ? undefined : [...news.scopes],
-            repositories:
-              news.repositories === undefined
-                ? undefined
-                : news.repositories.map(({ owner, name }) => ({ owner, name })),
-          },
-        },
-      );
-      if (created.sha1 === undefined) {
+      const created = yield* Services.admin.adminCreateUserAccessToken({
+        username: news.username,
+        name: news.name,
+        scopes: news.scopes === undefined ? undefined : [...news.scopes],
+        repositories:
+          news.repositories === undefined
+            ? undefined
+            : news.repositories.map(({ owner, name }) => ({ owner, name })),
+      });
+      // The SDK hands the generated secret out Redacted; a plain string is
+      // only ever seen from a mock that bypasses the protocol's wrapping.
+      const secret =
+        created.sha1 === undefined
+          ? undefined
+          : Redacted.isRedacted(created.sha1)
+            ? created.sha1
+            : Redacted.make(created.sha1);
+      if (secret === undefined) {
         return yield* new MissingGeneratedToken({
           username: news.username,
           name: news.name,
@@ -303,19 +290,18 @@ export const ApiTokenProvider = () =>
       }
       return {
         tokenId: created.id,
-        token: Redacted.make(created.sha1),
+        token: secret,
         tokenLastEight: created.token_last_eight,
         createdAt: created.created_at,
       };
     }),
     delete: Effect.fn(function* ({ olds, output }) {
       if (output === undefined) return;
-      const client = yield* ForgejoCredentials;
-      yield* optional(
-        client.request<void>(
-          "DELETE",
-          tokenPath(olds.username, output.tokenId),
-        ),
-      );
+      yield* Services.admin
+        .adminDeleteUserAccessToken({
+          username: olds.username,
+          token: String(output.tokenId),
+        })
+        .pipe(Effect.catchTag("NotFound", () => Effect.void));
     }),
   });

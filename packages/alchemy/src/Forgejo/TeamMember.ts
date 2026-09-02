@@ -1,14 +1,10 @@
+import { Services } from "@distilled.cloud/forgejo";
 import * as Effect from "effect/Effect";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import {
-  ForgejoCredentials,
-  ignoreInaccessible,
-  optional,
-  paginate,
-} from "./Client.ts";
 import { listAccessibleOrganizations } from "./Lists.ts";
+import { paginate } from "./Pagination.ts";
 import type * as Forgejo from "./Providers.ts";
 
 /**
@@ -75,9 +71,6 @@ export interface TeamMember extends Resource<
  */
 export const TeamMember = Resource<TeamMember>("Forgejo.TeamMember");
 
-const path = (props: TeamMemberProps) =>
-  `/teams/${props.teamId}/members/${encodeURIComponent(props.username)}`;
-
 /**
  * Provider layer implementing team-membership lifecycle.
  */
@@ -92,30 +85,30 @@ export const TeamMemberProvider = () =>
           : undefined,
       ),
     list: Effect.fn(function* () {
-      const client = yield* ForgejoCredentials;
       const organizations = yield* listAccessibleOrganizations();
+      // An organization or team the credential cannot read is skipped rather
+      // than failing the whole sweep.
       const teams = yield* Effect.forEach(
         organizations,
         (organization) =>
-          ignoreInaccessible(
-            paginate<{ readonly id: number }>(
-              client,
-              `/orgs/${encodeURIComponent(organization.username)}/teams`,
+          paginate(Services.organization.orgListTeams, {
+            org: organization.username,
+          }).pipe(
+            Effect.catchTag(["NotFound", "Forbidden"], () =>
+              Effect.succeed([]),
             ),
-            [] as readonly { readonly id: number }[],
           ),
         { concurrency: 8 },
       );
       const members = yield* Effect.forEach(
         teams.flat(),
         (team) =>
-          ignoreInaccessible(
-            paginate<{ readonly login: string }>(
-              client,
-              `/teams/${team.id}/members`,
+          paginate(Services.organization.orgListTeamMembers, {
+            id: team.id,
+          }).pipe(
+            Effect.catchTag(["NotFound", "Forbidden"], () =>
+              Effect.succeed([]),
             ),
-            [] as readonly { readonly login: string }[],
-          ).pipe(
             Effect.map((users) =>
               users.map((user) => ({
                 teamId: team.id,
@@ -128,23 +121,25 @@ export const TeamMemberProvider = () =>
       return members.flat();
     }),
     read: Effect.fn(function* ({ olds }) {
-      const client = yield* ForgejoCredentials;
-      const observed = yield* optional(
-        client.request<{ readonly login: string }>("GET", path(olds)),
-      );
+      const observed = yield* Services.organization
+        .orgListTeamMember({ id: olds.teamId, username: olds.username })
+        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
       return observed === undefined
         ? undefined
         : { teamId: olds.teamId, username: olds.username };
     }),
     reconcile: Effect.fn(function* ({ news }) {
-      const client = yield* ForgejoCredentials;
       // Membership is existence-only: adding an existing member is a no-op
       // on Forgejo's side, so the observation is folded into the write.
-      yield* client.request<void>("PUT", path(news));
+      yield* Services.organization.orgAddTeamMember({
+        id: news.teamId,
+        username: news.username,
+      });
       return { teamId: news.teamId, username: news.username };
     }),
     delete: Effect.fn(function* ({ olds }) {
-      const client = yield* ForgejoCredentials;
-      yield* optional(client.request<void>("DELETE", path(olds)));
+      yield* Services.organization
+        .orgRemoveTeamMember({ id: olds.teamId, username: olds.username })
+        .pipe(Effect.catchTag("NotFound", () => Effect.void));
     }),
   });

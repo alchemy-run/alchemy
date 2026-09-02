@@ -1,18 +1,15 @@
+import { Services } from "@distilled.cloud/forgejo";
+import type { Secret as ApiSecret } from "@distilled.cloud/forgejo/repository";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import {
-  ForgejoCredentials,
-  ignoreInaccessible,
-  optional,
-  paginate,
-} from "./Client.ts";
-import {
   listAccessibleOrganizations,
   listAccessibleRepositories,
 } from "./Lists.ts";
+import { paginate } from "./Pagination.ts";
 import type * as Forgejo from "./Providers.ts";
 
 /**
@@ -198,23 +195,59 @@ export const sameScope = (a: ActionsScope, b: ActionsScope): boolean => {
     return a.organization === b.organization;
   return a.kind === "user" && b.kind === "user";
 };
-const path = (props: SecretProps) => {
-  const scope = secretScope(props);
-  const suffix = `/${encodeURIComponent(props.name)}`;
-  if (scope.kind === "repository")
-    return `/repos/${encodeURIComponent(scope.owner)}/${encodeURIComponent(scope.repository)}/actions/secrets${suffix}`;
-  if (scope.kind === "organization")
-    return `/orgs/${encodeURIComponent(scope.organization)}/actions/secrets${suffix}`;
-  return `/user/actions/secrets${suffix}`;
-};
+
 /**
- * Secret representation returned by the Forgejo Actions API. Values are never
- * readable back, so only identity and timestamps are exposed.
+ * Forgejo has one secret endpoint family per scope, so each lifecycle step
+ * dispatches on the scope kind.
  */
-interface ApiSecret {
-  readonly name: string;
-  readonly created_at?: string;
-}
+const putSecret = Effect.fn(function* (
+  scope: ActionsScope,
+  name: string,
+  data: string,
+) {
+  if (scope.kind === "repository") {
+    return yield* Services.repository.updateRepoSecret({
+      owner: scope.owner,
+      repo: scope.repository,
+      secretname: name,
+      data,
+    });
+  }
+  if (scope.kind === "organization") {
+    return yield* Services.organization.updateOrgSecret({
+      org: scope.organization,
+      secretname: name,
+      data,
+    });
+  }
+  return yield* Services.user.updateUserSecret({ secretname: name, data });
+});
+
+const deleteSecret = Effect.fn(function* (scope: ActionsScope, name: string) {
+  if (scope.kind === "repository") {
+    return yield* Services.repository.deleteRepoSecret({
+      owner: scope.owner,
+      repo: scope.repository,
+      secretname: name,
+    });
+  }
+  if (scope.kind === "organization") {
+    return yield* Services.organization.deleteOrgSecret({
+      org: scope.organization,
+      secretname: name,
+    });
+  }
+  return yield* Services.user.deleteUserSecret({ secretname: name });
+});
+
+const toAttributes = (
+  scope: ActionsScope,
+  secret: ApiSecret,
+): SecretAttributes => ({
+  scope,
+  name: secret.name,
+  updatedAt: secret.created_at,
+});
 
 /**
  * Provider layer implementing Actions-secret lifecycle.
@@ -231,7 +264,6 @@ export const SecretProvider = () =>
           : undefined,
       ),
     list: Effect.fn(function* () {
-      const client = yield* ForgejoCredentials;
       const repositories = yield* listAccessibleRepositories();
       const organizations = yield* listAccessibleOrganizations();
 
@@ -240,74 +272,66 @@ export const SecretProvider = () =>
       // rather than failing the whole sweep.
       const repositorySecrets = yield* Effect.forEach(
         repositories,
-        (repository) =>
-          ignoreInaccessible(
-            paginate<ApiSecret>(
-              client,
-              `/repos/${encodeURIComponent(repository.owner.login)}/${encodeURIComponent(repository.name)}/actions/secrets`,
+        (repository) => {
+          const scope: ActionsScope = {
+            kind: "repository",
+            owner: repository.owner.login,
+            repository: repository.name,
+          };
+          return paginate(Services.repository.repoListActionsSecrets, {
+            owner: repository.owner.login,
+            repo: repository.name,
+          }).pipe(
+            Effect.catchTag(["NotFound", "Forbidden"], () =>
+              Effect.succeed([]),
             ),
-            [] as readonly ApiSecret[],
-          ).pipe(
             Effect.map((secrets) =>
-              secrets.map((secret) => ({
-                scope: {
-                  kind: "repository" as const,
-                  owner: repository.owner.login,
-                  repository: repository.name,
-                },
-                name: secret.name,
-                updatedAt: secret.created_at ?? "",
-              })),
+              secrets.map((secret) => toAttributes(scope, secret)),
             ),
-          ),
+          );
+        },
         { concurrency: 8 },
       );
 
       const organizationSecrets = yield* Effect.forEach(
         organizations,
-        (organization) =>
-          ignoreInaccessible(
-            paginate<ApiSecret>(
-              client,
-              `/orgs/${encodeURIComponent(organization.username)}/actions/secrets`,
+        (organization) => {
+          const scope: ActionsScope = {
+            kind: "organization",
+            organization: organization.username,
+          };
+          return paginate(Services.organization.orgListActionsSecrets, {
+            org: organization.username,
+          }).pipe(
+            Effect.catchTag(["NotFound", "Forbidden"], () =>
+              Effect.succeed([]),
             ),
-            [] as readonly ApiSecret[],
-          ).pipe(
             Effect.map((secrets) =>
-              secrets.map((secret) => ({
-                scope: {
-                  kind: "organization" as const,
-                  organization: organization.username,
-                },
-                name: secret.name,
-                updatedAt: secret.created_at ?? "",
-              })),
+              secrets.map((secret) => toAttributes(scope, secret)),
             ),
-          ),
+          );
+        },
         { concurrency: 8 },
       );
 
       // User-scoped secrets are deliberately absent: Forgejo exposes
       // `/user/actions/secrets/{name}` for PUT and DELETE but has no
       // collection endpoint to enumerate them, unlike the repository,
-      // organization, and user-variable collections. Requesting one would
-      // 404 on every sweep and be silently swallowed, which reads as if it
-      // worked. A user-scoped secret therefore has to be destroyed through
-      // the stack that declared it.
+      // organization, and user-variable collections. A user-scoped secret
+      // therefore has to be destroyed through the stack that declared it.
       return [...repositorySecrets.flat(), ...organizationSecrets.flat()];
     }),
     reconcile: Effect.fn(function* ({ news }) {
-      const client = yield* ForgejoCredentials;
       // Forgejo's secret endpoint is an upsert and the stored value can never
       // be read back, so there is nothing to observe or diff against.
-      yield* client.request<void>("PUT", path(news), {
-        body: { data: Redacted.value(news.value) },
-      });
+      const scope = secretScope(news);
+      yield* putSecret(scope, news.name, Redacted.value(news.value));
       const updatedAt = yield* Effect.sync(() => new Date().toISOString());
-      return { scope: secretScope(news), name: news.name, updatedAt };
+      return { scope, name: news.name, updatedAt };
     }),
     delete: Effect.fn(function* ({ olds }) {
-      const client = yield* ForgejoCredentials;
-      yield* optional(client.request<void>("DELETE", path(olds)));
+      yield* deleteSecret(secretScope(olds), olds.name).pipe(
+        Effect.catchTag("NotFound", () => Effect.void),
+      );
     }),
   });

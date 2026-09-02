@@ -1,33 +1,6 @@
+import { Services } from "@distilled.cloud/forgejo";
 import * as Effect from "effect/Effect";
-import { ForgejoCredentials, paginate } from "./Client.ts";
-
-/**
- * Minimal repository identity returned by Forgejo list endpoints.
- */
-export interface ListedRepository {
-  /**
-   * Repository owner login.
-   */
-  readonly owner: { readonly login: string };
-  /**
-   * Repository name.
-   */
-  readonly name: string;
-}
-
-/**
- * Minimal organization identity returned by Forgejo list endpoints.
- */
-export interface ListedOrganization {
-  /**
-   * Organization login.
-   */
-  readonly username: string;
-  /**
-   * Numeric organization ID.
-   */
-  readonly id: number;
-}
+import { paginate } from "./Pagination.ts";
 
 /**
  * List every repository accessible to the provider credential, walking all
@@ -40,8 +13,7 @@ export interface ListedOrganization {
  * {@link listAccessibleOrganizations} for what that leaves out.
  */
 export const listAccessibleRepositories = Effect.fn(function* () {
-  const client = yield* ForgejoCredentials;
-  return yield* paginate<ListedRepository>(client, "/user/repos");
+  return yield* paginate(Services.user.userCurrentListRepos, {});
 });
 
 /**
@@ -61,6 +33,5 @@ export const listAccessibleRepositories = Effect.fn(function* () {
  * deleting a stranger's organization is not.
  */
 export const listAccessibleOrganizations = Effect.fn(function* () {
-  const client = yield* ForgejoCredentials;
-  return yield* paginate<ListedOrganization>(client, "/user/orgs");
+  return yield* paginate(Services.organization.orgListCurrentUserOrgs, {});
 });

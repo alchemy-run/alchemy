@@ -6,9 +6,10 @@ description: Repositories, organizations, teams, Actions secrets and variables, 
 The Forgejo provider manages a self-hosted [Forgejo](https://forgejo.org/)
 instance as resources: organizations and teams, repositories and their
 labels and branch protection, Actions secrets and variables, and
-webhooks. It talks to Forgejo's REST API directly, so it works against
-any instance you can reach with a token — no vendor SDK, no hosted
-service.
+webhooks. It talks to Forgejo's REST API through
+[`@distilled.cloud/forgejo`](https://github.com/alchemy-run/distilled),
+an Effect SDK generated from Forgejo's own API description, so it works
+against any instance you can reach with a token — no hosted service.
 
 New here? [Set up credentials](/forgejo/setup) first.
 

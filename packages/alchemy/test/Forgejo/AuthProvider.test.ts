@@ -3,12 +3,14 @@ import { CredentialsStore } from "@/Auth/Credentials";
 import { ProfileStore } from "@/Auth/Profile";
 import * as CliKit from "@/Cli/CliKit";
 import { ForgejoAuth } from "@/Forgejo/AuthProvider";
-import { ForgejoCredentials, fromAuthProvider } from "@/Forgejo/Client.ts";
+import { fromAuthProvider } from "@/Forgejo/Credentials.ts";
+import { Credentials, Services } from "@distilled.cloud/forgejo";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "alchemy-test";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
 import {
   makeFakeCredentialsStore,
   makeFakeProfileStore,
@@ -25,7 +27,7 @@ const resolveAndCall = (
   stored?: { baseUrl: string; token: string },
 ) => {
   const server = mockForgejo((request) =>
-    request.path === "/user" ? json({ login: "alice" }) : undefined,
+    request.path === "/user" ? json({ id: 1, login: "alice" }) : undefined,
   );
 
   const authProviders: AuthProviders["Service"] = {};
@@ -45,36 +47,43 @@ const resolveAndCall = (
   );
 
   return Effect.gen(function* () {
-    const client = yield* ForgejoCredentials;
-    yield* client.request("GET", "/user");
-    return { client, server };
+    const resolved = yield* yield* Credentials;
+    yield* Services.user.userGetCurrent({});
+    return { resolved, server };
   }).pipe(Effect.provide(layer));
 };
 
 describe("Forgejo auth provider", () => {
   it.effect("resolves the instance URL and token from a stored profile", () =>
     Effect.gen(function* () {
-      const { client, server } = yield* resolveAndCall(
+      const { resolved, server } = yield* resolveAndCall(
         {},
         { baseUrl: "https://git.stored.example", token: "stored-token" },
       );
 
-      // The stored instance URL is what the client normalizes and calls.
-      expect(client.baseUrl).toBe("https://git.stored.example/api/v1");
+      // The stored instance URL is what the SDK normalizes and calls.
+      expect(resolved.apiBaseUrl).toBe("https://git.stored.example/api/v1");
+      expect(Redacted.value(resolved.token)).toBe("stored-token");
       expect(server.count("GET", "/user")).toBe(1);
+      expect(server.find("GET", "/user")?.headers.authorization).toBe(
+        "token stored-token",
+      );
     }),
   );
 
   it.effect("falls back to FORGEJO_URL and FORGEJO_TOKEN in CI", () =>
     Effect.gen(function* () {
-      const { client, server } = yield* resolveAndCall({
+      const { resolved, server } = yield* resolveAndCall({
         CI: "true",
         FORGEJO_URL: "https://git.ci.example",
         FORGEJO_TOKEN: "ci-token",
       });
 
-      expect(client.baseUrl).toBe("https://git.ci.example/api/v1");
+      expect(resolved.apiBaseUrl).toBe("https://git.ci.example/api/v1");
       expect(server.count("GET", "/user")).toBe(1);
+      expect(server.find("GET", "/user")?.headers.authorization).toBe(
+        "token ci-token",
+      );
     }),
   );
 

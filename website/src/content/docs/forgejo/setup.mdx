@@ -97,10 +97,13 @@ Effect.provide(Forgejo.fromToken({
 `Forgejo.fromEnv()` builds the same layer from `FORGEJO_URL` and
 `FORGEJO_TOKEN`, failing with `MissingForgejoEnvironment` when either
 is unset, and `Forgejo.fromAuthProvider()` is the profile-backed layer
-`providers()` uses by default.
+`providers()` uses by default. All three provide the `Credentials`
+service of [`@distilled.cloud/forgejo`](https://github.com/alchemy-run/distilled),
+the generated SDK every resource calls through.
 
-All three resolve `HttpClient` from the environment rather than
-constructing one, so a test can point the client at an in-memory
+The SDK resolves `HttpClient` from the environment rather than
+constructing one, and `providers()` hands the client it is built with to
+every resource, so a test can point the whole collection at an in-memory
 instance by providing its own:
 
 ```typescript
@@ -109,19 +112,23 @@ Forgejo.providers({ baseUrl, token }).pipe(Layer.provide(myHttpClient))
 
 ## Errors
 
-Every API failure is a tagged error, so lifecycle code and your own
-stack code can branch on it without inspecting HTTP status codes:
+Every API failure is a tagged error from the generated SDK, so lifecycle
+code and your own stack code can branch on it without inspecting HTTP
+status codes. Each operation's error union carries exactly the failures
+its endpoint declares:
 
 | Tag | Meaning |
 | --- | --- |
-| `ForgejoNotFound` | The resource does not exist (404) |
-| `ForgejoUnauthorized` | Missing, malformed, or expired credential (401) |
-| `ForgejoForbidden` | Valid credential without permission (403) |
-| `ForgejoConflict` | Already exists, or conflicts with current state (409) |
-| `ForgejoValidationError` | Forgejo rejected the payload (422) |
-| `ForgejoServerError` | Forgejo returned 5xx |
-| `ForgejoRequestError` | Any other unsuccessful status |
-| `ForgejoTransportError` | Connection failure or undecodable body |
+| `NotFound` | The resource does not exist (404) |
+| `Unauthorized` | Missing, malformed, or expired credential (401) |
+| `Forbidden` | Valid credential without permission (403) |
+| `Conflict` | Already exists, or conflicts with current state (409) |
+| `UnprocessableEntity` | Forgejo rejected the payload (422) |
+| `Locked` | The repository is archived (423) |
+| `OrganizationOwnsRepositories` | An organization delete refused while it still owns repositories; Forgejo reports this as a 500 |
+| `InternalServerError`, `BadGateway`, … | Forgejo returned 5xx |
+| `UnknownForgejoError` | Any other unsuccessful status |
+| `HttpClientError` | Connection failure |
 | `ForgejoPaginationLimit` | A list ran past the page cap, so enumeration would be incomplete |
 
 ## Next steps
