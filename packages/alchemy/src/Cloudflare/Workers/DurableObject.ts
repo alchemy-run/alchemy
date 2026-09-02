@@ -104,7 +104,7 @@ export interface DurableObjectShape {
   fetch?: HttpEffect<DurableObjectState | RuntimeContext>;
   alarm?: (
     alarmInfo?: AlarmInvocationInfo,
-  ) => Effect.Effect<void, never, never>;
+  ) => Effect.Effect<void, never, RuntimeContext>;
   webSocketMessage?: (
     socket: WebSocket,
     message: string | ArrayBuffer,
@@ -821,6 +821,40 @@ export class DurableObjectScope extends Context.Service<
  *       }
  *     }),
  * };
+ * ```
+ *
+ * ### Aborting a Durable Object
+ * `state.abort(reason?, options?)` forcibly resets the isolate. By
+ * default an in-progress alarm retries after the reset. Pass
+ * `{ retryAlarm: false }` when the alarm should stop instead — for
+ * example an alarm that deletes storage so the constructor does not
+ * recreate it.
+ *
+ * **Example:** Stop alarm retries after cleanup
+ * ```typescript
+ * export class CleanupTask extends Cloudflare.DurableObject<CleanupTask>()(
+ *   "CleanupTask",
+ *   Effect.gen(function* () {
+ *     const state = yield* Cloudflare.DurableObjectState;
+ *
+ *     return Effect.gen(function* () {
+ *       // This won't be re-run after the alarm is aborted
+ *       yield* state.storage.sql.exec(`
+ *         CREATE TABLE IF NOT EXISTS foo (
+ *           id INTEGER PRIMARY KEY
+ *         )
+ *       `);
+ *
+ *       return {
+ *         alarm: () =>
+ *           Effect.gen(function* () {
+ *             yield* state.storage.sql.exec("DROP TABLE foo");
+ *             yield* state.abort("Cleanup complete", { retryAlarm: false });
+ *           }),
+ *       };
+ *     });
+ *   }),
+ * ) {}
  * ```
  *
  * ### Using from a Worker
