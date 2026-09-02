@@ -611,6 +611,12 @@ export interface WorkerVersionOptions {
   tag?: string;
 }
 
+/**
+ * The write-only binding types a script upload may keep from the live
+ * script. See {@link WorkerProps.keepBindings}.
+ */
+export type WorkerKeepBindingType = "secret_text" | "secret_key";
+
 export interface WorkerProps<
   // PERF: unconstrained for the same reason as `Worker<Bindings>` above —
   // the `extends WorkerBindingProps` proof is expensive for generic mapped
@@ -744,6 +750,28 @@ export interface WorkerProps<
    */
   source?: WorkerSourceDescriptor;
   logpush?: boolean;
+  /**
+   * Binding types Cloudflare keeps from the live script when this Worker
+   * uploads. A script upload replaces the whole binding set, so a secret
+   * written out-of-band (`wrangler secret put`, the dashboard, a rotation
+   * job) is dropped on the next deploy unless its type is listed here.
+   *
+   * Only the two write-only types are accepted: Alchemy cannot read their
+   * values back, so it cannot own them. Every other binding type stays
+   * managed by {@link env} and bindings.
+   *
+   * **Example:** Keep secrets set outside Alchemy
+   *
+   * ```ts
+   * Cloudflare.Worker("api", {
+   *   main: "./src/api.ts",
+   *   keepBindings: ["secret_text"],
+   * });
+   * ```
+   *
+   * @default undefined — the upload owns the full binding set
+   */
+  keepBindings?: readonly WorkerKeepBindingType[];
   /**
    * Cloudflare Workers Observability settings. Controls Workers Logs
    * (`logs`) and Workers Traces (`traces`), each with their own

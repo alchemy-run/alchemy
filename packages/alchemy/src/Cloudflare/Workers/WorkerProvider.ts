@@ -1114,6 +1114,7 @@ const resolveWorkerMetadataHash = ({
     cache: props.cache,
     limits: props.limits,
     logpush: props.logpush,
+    keepBindings: props.keepBindings,
     observability: props.observability,
     placement: props.placement,
     // The source descriptor is plain JSON data; hashing it means
@@ -3597,7 +3598,7 @@ export const LiveWorkerProvider = () =>
           containers:
             metadataContainers.length > 0 ? metadataContainers : undefined,
           keepAssets,
-          keepBindings: undefined,
+          keepBindings: news.keepBindings ? [...news.keepBindings] : undefined,
           limits: news.limits,
           logpush: news.logpush,
           mainModule: bundle.main,
