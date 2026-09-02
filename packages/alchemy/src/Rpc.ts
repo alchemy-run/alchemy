@@ -11,6 +11,7 @@ import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import * as Socket from "effect/unstable/socket/Socket";
 import type { HttpEffect } from "./Http.ts";
+import { sanitizeKey } from "./RuntimeContext.ts";
 
 export type Rpc<Shape> = {
   "~alchemy/rpc": Shape;
@@ -77,6 +78,8 @@ export class RpcDecodeError extends Data.TaggedError("RpcDecodeError")<{
 export class RpcCallError extends Data.TaggedError("RpcCallError")<{
   readonly method: string;
   readonly cause: unknown;
+  /** The HTTP status the transport answered with, when the failure was a response. */
+  readonly status?: number | undefined;
 }> {
   override get message() {
     return `RPC call to "${this.method}" failed: ${
@@ -428,6 +431,35 @@ export const RPC_PATH_PREFIX = "/__rpc__/";
 export const RPC_STREAM_HEADER = "x-alchemy-rpc-stream";
 
 /**
+ * The env key a caller binding stores a network-hosted worker's URL under
+ * (a Celld fleet worker, a Rivet cluster worker): `bindWorker` binds it
+ * into the caller's environment and the runtime stub reads it back.
+ */
+export const rpcWorkerUrlKey = (workerLogicalId: string): string =>
+  sanitizeKey(`ALCHEMY_WORKER_${workerLogicalId}_URL`);
+
+/** The env key a caller binding stores the worker's auth secret under. */
+export const rpcWorkerSecretKey = (workerLogicalId: string): string =>
+  sanitizeKey(`ALCHEMY_WORKER_${workerLogicalId}_SECRET`);
+
+/**
+ * The RPC method a request addresses, or `undefined` when the request is
+ * not an RPC call. Matches the {@link RPC_PATH_PREFIX} on the URL's
+ * *pathname* only — a query string or fragment containing the prefix is
+ * not a dispatch.
+ */
+export const rpcMethodOf = (request: {
+  readonly url: string;
+}): string | undefined => {
+  const { pathname } = new URL(request.url, "http://alchemy-rpc");
+  const prefixAt = pathname.indexOf(RPC_PATH_PREFIX);
+  if (prefixAt === -1) {
+    return undefined;
+  }
+  return decodeURIComponent(pathname.slice(prefixAt + RPC_PATH_PREFIX.length));
+};
+
+/**
  * Build a typed RPC stub over a plain `fetch` transport. Any property that
  * isn't an own property of `base` is treated as a remote method: calling it
  * `POST`s `{baseUrl}{RPC_PATH_PREFIX}{name}` with the JSON-encoded arguments
@@ -501,15 +533,10 @@ export const serveRpc = <Req = never>(
 ): HttpEffect<Req> =>
   Effect.gen(function* () {
     const request = yield* HttpServerRequest;
-    const prefixAt = request.url.indexOf(RPC_PATH_PREFIX);
-    if (prefixAt === -1) {
+    const name = rpcMethodOf(request);
+    if (name === undefined) {
       return yield* fallback;
     }
-
-    let name = request.url.slice(prefixAt + RPC_PATH_PREFIX.length);
-    const queryAt = name.indexOf("?");
-    if (queryAt !== -1) name = name.slice(0, queryAt);
-    name = decodeURIComponent(name);
 
     const method = shape[name];
     if (typeof method !== "function") {

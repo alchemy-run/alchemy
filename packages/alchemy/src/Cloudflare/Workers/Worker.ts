@@ -29,6 +29,7 @@ import {
 import type { Rpc } from "../../Rpc.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import type { Self as SelfService } from "../../Self.ts";
+import { WorkerEnvironment } from "../../Workers/Worker.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Container } from "../Containers/Container.ts";
 import type { DevContainerImage } from "../Containers/ContainerApplication.ts";
@@ -65,10 +66,10 @@ export type WorkerTypeId = typeof WorkerTypeId;
 export const isWorker = <T>(value: T): value is T & Worker =>
   isResourceOfType(value, WorkerTypeId);
 
-export class WorkerEnvironment extends Context.Service<
-  WorkerEnvironment,
-  Record<string, any>
->()("Cloudflare.Workers.WorkerEnvironment") {}
+// The runtime environment service is engine-invariant and lives in
+// `src/Workers/Worker.ts`; re-exported so `Cloudflare.WorkerEnvironment`
+// keeps working.
+export { WorkerEnvironment };
 
 export class CachePurgeError extends Data.TaggedError("CachePurgeError")<{
   message: string;

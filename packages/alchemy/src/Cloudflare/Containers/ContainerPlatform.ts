@@ -12,7 +12,7 @@ import * as Server from "../../Server/index.ts";
 import type { Fetcher } from "../Fetcher.ts";
 import { fromCloudflareFetcher, toCloudflareFetcher } from "../Fetcher.ts";
 import { DurableObject } from "../Workers/DurableObject.ts";
-import { DurableObjectState } from "../Workers/DurableObjectState.ts";
+import { DurableObjectState } from "../../Workers/DurableObject.ts";
 import { Worker } from "../Workers/Worker.ts";
 import { ContainerTypeId } from "./Container.ts";
 import type {

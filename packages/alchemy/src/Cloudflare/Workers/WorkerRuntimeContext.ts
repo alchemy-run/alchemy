@@ -9,11 +9,15 @@ import {
   unpackEnvValue,
 } from "../../RuntimeContext.ts";
 import type * as Serverless from "../../Serverless/index.ts";
-import type { DurableObjectExport } from "./DurableObject.ts";
+import type {
+  DurableObjectBindingDeclaration,
+  DurableObjectExport,
+} from "../../Workers/DurableObject.ts";
+import { WorkerEnvironment } from "../../Workers/Worker.ts";
 import { makeRequestHandler } from "./HttpServer.ts";
+import { makeRpcStub } from "./Rpc.ts";
 import {
   ExportedHandlerMethods,
-  WorkerEnvironment,
   WorkerExecutionContext,
   WorkerTypeId,
   deferredExecutionContext,
@@ -79,6 +83,21 @@ export const makeWorkerRuntimeContext = (id: string): WorkerRuntimeContext => {
       Effect.sync(() => {
         exports[name] = value;
       }),
+    // The Cloudflare Durable Object flavors (see `DurableObjectHostLike`):
+    // the Worker binding contract's `bindings` array, and the workerd JSRPC
+    // stub. Celld / Rivet spread this context and override both.
+    durableObjectBinding: (decl: DurableObjectBindingDeclaration) => ({
+      bindings: [
+        {
+          type: "durable_object_namespace" as const,
+          name: decl.name,
+          className: decl.className,
+          scriptName: decl.scriptName,
+          transferredFrom: decl.transferredFrom,
+        },
+      ],
+    }),
+    durableObjectStub: (nativeStub: unknown) => makeRpcStub(nativeStub),
     planServices: Layer.mergeAll(
       Layer.succeed(WorkerEnvironment, {}),
       // Lets the init closure `yield*` WorkerExecutionContext during plan;

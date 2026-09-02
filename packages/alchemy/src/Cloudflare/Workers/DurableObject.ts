@@ -2,257 +2,46 @@ import type * as cf from "@cloudflare/workers-types";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
 import type { Scope } from "effect/Scope";
-import * as Binding from "../../Binding.ts";
 import type { HttpServerError } from "effect/unstable/http/HttpServerError";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import type { Dependencies } from "../../Dependencies.ts";
-import type { HttpEffect } from "../../Http.ts";
 import type { Input } from "../../Input.ts";
 import * as Output from "../../Output.ts";
-import { ALCHEMY_PHASE } from "../../Phase.ts";
 import type { MainRpc, PlatformServices } from "../../Platform.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { effectClass, taggedFunction } from "../../Util/effect.ts";
 import { asEffect } from "../../Util/types.ts";
-import type { Container } from "../Containers/Container.ts";
 import {
   DurableObjectState,
   fromDurableObjectState,
-} from "./DurableObjectState.ts";
-import { makeRpcStub } from "./Rpc.ts";
-import { type WebSocket } from "./WebSocket.ts";
-import {
-  isWorker,
-  WorkerEnvironment,
-  type Worker,
-  type WorkerServices,
-} from "./Worker.ts";
+  makeDurableObjectHosting,
+  requireDurableObjectHost,
+  type DurableObjectShape,
+} from "../../Workers/DurableObject.ts";
+import { WorkerEnvironment } from "../../Workers/Worker.ts";
+import type { Container } from "../Containers/Container.ts";
+import { isWorker, type Worker, type WorkerServices } from "./Worker.ts";
 
-export interface DurableObjectExport {
-  readonly kind: "durableObject";
-  readonly constructor: Effect.Effect<
-    Effect.Effect<DurableObjectShape, never, RuntimeContext>,
-    never,
-    DurableObjectState
-  >;
-  readonly services: Context.Context<never>;
-  /**
-   * RPC method names discovered from the plan-time shape. Only populated by
-   * hosts whose runtime cannot dispatch dynamic properties (Celld fleets —
-   * celld's JSRPC stalls on Proxy-returning constructors), where the
-   * generated entry bakes them into the bridge as real methods.
-   */
-  readonly methods?: readonly string[];
-}
-
-export const isDurableObjectExport = (
-  value: unknown,
-): value is DurableObjectExport =>
-  typeof value === "object" && (value as any)?.kind === "durableObject";
-
-/** A Durable Object class declaration as registered on its hosting worker. */
-export interface DurableObjectBindingDeclaration {
-  /** Binding name — the Durable Object's logical id. */
-  readonly name: string;
-  /** The exported class name backing the binding. */
-  readonly className: string;
-  /** Foreign hosting script, for cross-script bindings. */
-  readonly scriptName?: Input<string> | undefined;
-  /** Normalized former-host identifiers driving a transfer migration. */
-  readonly transferredFrom?: Input<string>[] | undefined;
-}
-
-/**
- * The shape of a resource that can HOST Durable Objects: any native worker
- * resource (Cloudflare / Celld / Rivet) — a `Platform()`-built instance
- * whose runtime context exposes `export` alongside the resource's `bind`.
- * Non-worker hosts (Lambda Functions, ECS tasks) have `bind` but no
- * `export`, which is what routes them to the remote-caller path.
- *
- * The two optional members are the per-engine variation points, set by an
- * engine's `createRuntimeContext`; absent members default to the
- * Cloudflare-native flavors (the `bindings` array shape and the workerd
- * JSRPC stub).
- */
-export interface DurableObjectHostLike {
-  readonly LogicalId: string;
-  readonly bind: (
-    template: TemplateStringsArray,
-    ...args: any[]
-  ) => (data: any) => Effect.Effect<void>;
-  readonly export: (name: string, value: any) => Effect.Effect<void>;
-  /**
-   * Host-native binding data for a Durable Object class declaration —
-   * what `host.bind` receives when a hosted DO layer registers itself.
-   * @default the Cloudflare Worker binding contract:
-   * `{ bindings: [{ type: "durable_object_namespace", ... }] }`
-   */
-  readonly durableObjectBinding?: (
-    decl: DurableObjectBindingDeclaration,
-  ) => unknown;
-  /**
-   * The engine's stub flavor over an instance stub selected from the
-   * runtime environment's native namespace binding (celld wraps with the
-   * fetch-RPC transport; Rivet's synthetic env already returns finished
-   * stubs).
-   * @default the workerd JSRPC stub (`makeRpcStub`)
-   */
-  readonly durableObjectStub?: (nativeStub: any, namespace: string) => any;
-}
-
-export const isDurableObjectHost = (
-  value: unknown,
-): value is DurableObjectHostLike =>
-  (typeof value === "object" || typeof value === "function") &&
-  value !== null &&
-  // `in` first: a resource proxy answers property READS for any attribute
-  // name with a callable `PropExpr` Output accessor, so `typeof
-  // host.export === "function"` alone is true for EVERY resource (a
-  // Lambda included). `in` forwards to the proxy target and only reports
-  // properties that really exist (`export` is Object.assigned onto worker
-  // instances by their runtime context; refs report nothing).
-  "bind" in (value as object) &&
-  "export" in (value as object) &&
-  typeof (value as { bind?: unknown }).bind === "function" &&
-  typeof (value as { export?: unknown }).export === "function";
-
-/**
- * The engine-generalized Durable Object hosting core — ONE implementation
- * of "register the class on its hosting worker and export it", shared by
- * the native surface below and the portable `Alchemy.DurableObject`
- * (`src/Worker/DurableObject.ts`). Per-engine variation rides on the host
- * (see {@link DurableObjectHostLike}); everything else — binding
- * registration, runtime-env namespace resolution, the plan-time mock-state
- * evaluation that discovers transitive bindings, and the class export —
- * is engine-invariant.
- *
- * @internal
- */
-export const makeDurableObjectHosting = (namespace: string) => {
-  const register = (
-    host: DurableObjectHostLike,
-    decl: Omit<DurableObjectBindingDeclaration, "name">,
-  ) =>
-    Effect.gen(function* () {
-      const declaration: DurableObjectBindingDeclaration = {
-        name: namespace,
-        ...decl,
-      };
-      // The engine flavors are read with `in` guards: a resource proxy
-      // answers property READS for any name with a callable `PropExpr`
-      // Output accessor, so `host.durableObjectBinding !== undefined` is
-      // true on EVERY host. `in` forwards to the proxy target and only
-      // reports properties the engine's runtime context really assigned.
-      const durableObjectBinding =
-        "durableObjectBinding" in (host as object)
-          ? host.durableObjectBinding
-          : undefined;
-      // Binding data is HOST-NATIVE: the host's runtime context shapes the
-      // declaration for its platform's worker binding contract.
-      yield* host.bind`${namespace}`(
-        durableObjectBinding !== undefined
-          ? durableObjectBinding(declaration)
-          : {
-              bindings: [
-                {
-                  type: "durable_object_namespace" as const,
-                  name: declaration.name,
-                  className: declaration.className,
-                  scriptName: declaration.scriptName,
-                  transferredFrom: declaration.transferredFrom,
-                },
-              ],
-            },
-      );
-
-      const native = yield* Effect.all([
-        Effect.serviceOption(WorkerEnvironment).pipe(
-          Effect.map(Option.getOrUndefined),
-        ),
-        ALCHEMY_PHASE,
-      ]).pipe(
-        Effect.flatMap(([env, phase]) => {
-          if (env === undefined || phase === "plan") {
-            // only undefined at plan time — nothing to call yet
-            return Effect.succeed(undefined);
-          }
-          const ns = env[namespace];
-          if (!ns) {
-            return Effect.die(
-              new Error(
-                `DurableObject '${namespace}' not found in the worker environment`,
-              ),
-            );
-          }
-          if (typeof ns.getByName !== "function") {
-            return Effect.die(
-              new Error(`DurableObject '${namespace}' is not a DurableObject`),
-            );
-          }
-          return Effect.succeed(ns);
-        }),
-      );
-
-      const stub =
-        ("durableObjectStub" in (host as object)
-          ? host.durableObjectStub
-          : undefined) ?? ((nativeStub: unknown) => makeRpcStub(nativeStub));
-      return { native, stub } as const;
-    });
-
-  const exportClass = (
-    host: DurableObjectHostLike,
-    constructor: Effect.Effect<
-      Effect.Effect<DurableObjectShape, never, any>,
-      never,
-      DurableObjectState
-    >,
-  ) =>
-    Effect.gen(function* () {
-      const phase = yield* ALCHEMY_PHASE;
-      if (phase === "plan") {
-        // Evaluate the init phase with a mock state at plan time so
-        // transitive bindings the object depends on are discovered and
-        // registered on the worker.
-        yield* constructor.pipe(
-          Effect.provide(
-            Layer.succeed(
-              DurableObjectState,
-              fromDurableObjectState({ storage: {} } as any),
-            ),
-          ),
-        );
-      }
-      // `export` lives on the runtime context assigned onto the instance —
-      // present at both plan and runtime, but not part of the resource type.
-      yield* host.export(namespace, {
-        kind: "durableObject",
-        // initialize the object's constructor (apply infra dependencies)
-        constructor,
-        // grab the object's infra dependencies so we can apply them when
-        // calling the instance's methods
-        services: yield* Effect.context<never>(),
-      } satisfies DurableObjectExport);
-    });
-
-  return { register, exportClass };
-};
-
-/** Resolve the ambient hosting worker, whatever its engine. @internal */
-export const requireDurableObjectHost = (namespace: string) =>
-  Effect.flatMap(Binding.Host, (host) =>
-    isDurableObjectHost(host)
-      ? Effect.succeed(host)
-      : Effect.die(
-          new Error(
-            `DurableObject '${namespace}' must be declared inside a Worker — ` +
-              "provide its layer on a hosting worker's impl.",
-          ),
-        ),
-  );
+// The engine-invariant Durable Object core (state contract, export record,
+// hosting seam) lives in `src/Workers/DurableObject.ts`; re-exported here so
+// `Cloudflare.*` consumers keep working.
+export {
+  DurableObjectState,
+  fromDurableObjectState,
+  isDurableObjectExport,
+  isDurableObjectHost,
+  makeDurableObjectHosting,
+  requireDurableObjectHost,
+  type AlarmInvocationInfo,
+  type DurableObjectBindingDeclaration,
+  type DurableObjectExport,
+  type DurableObjectHostLike,
+  type DurableObjectNamespaceLike,
+  type DurableObjectShape,
+  type DurableObjectStubLike,
+} from "../../Workers/DurableObject.ts";
 
 export type DurableObjectId = cf.DurableObjectId;
 export type DurableObjectJurisdiction = cf.DurableObjectJurisdiction;
@@ -264,8 +53,6 @@ export type DurableObjectGetDurableObjectOptions =
  * the "Placing a Durable Object in a Region" section on {@link DurableObject}.
  */
 export type DurableObjectLocationHint = cf.DurableObjectLocationHint;
-
-export type AlarmInvocationInfo = cf.AlarmInvocationInfo;
 
 type TypeId = "Cloudflare.DurableObject";
 const TypeId = "Cloudflare.DurableObject";
@@ -308,23 +95,6 @@ export interface DurableObject<
   jurisdiction: (
     jurisdiction: DurableObjectJurisdiction,
   ) => DurableObject<Shape>;
-}
-
-export interface DurableObjectShape {
-  fetch?: HttpEffect<DurableObjectState | RuntimeContext>;
-  alarm?: (
-    alarmInfo?: AlarmInvocationInfo,
-  ) => Effect.Effect<void, never, never>;
-  webSocketMessage?: (
-    socket: WebSocket,
-    message: string | ArrayBuffer,
-  ) => Effect.Effect<void>;
-  webSocketClose?: (
-    socket: WebSocket,
-    code: number,
-    reason: string,
-    wasClean: boolean,
-  ) => Effect.Effect<void>;
 }
 
 export type DurableObjectServices =
@@ -1370,6 +1140,8 @@ export const DurableObject: DurableObjectClass = taggedFunction(
           Type: TypeId,
           LogicalId: namespace,
           name: namespace,
+          // `durableObjectNamespaces` is a Cloudflare Worker attribute: on a
+          // Celld / Rivet host the accessor resolves to `undefined`.
           namespaceId: (
             worker as unknown as Worker
           ).durableObjectNamespaces.pipe(
@@ -1386,7 +1158,7 @@ export const DurableObject: DurableObjectClass = taggedFunction(
                 `DurableObject '${namespace}' can only be called at runtime`,
               );
             }
-            return stub(native.getByName(name, options), namespace);
+            return stub(native.getByName(name, options));
           },
           // newUniqueId: () => use((ns) => ns.newUniqueId()),
           // idFromName: (name: string) => use((ns) => ns.idFromName(name)),
