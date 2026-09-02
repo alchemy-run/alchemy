@@ -1814,4 +1814,73 @@ that was when the streaming source ended. Three changes:
 What is left is the Worker's own I/O: a single invocation receives the
 body and forwards it, and the two share the isolate's throughput.
 
-§22.10 records the measurements.
+### §22.10 Measured, and the wall
+
+The same two pushes as §22.5 — this repository's 15.6k-object, 40 MiB
+delta-heavy pack (`loose`) and a 15.3k-object, 44 MiB pack of mostly
+whole blobs (`synthetic`) — real `git push` from the same client, same
+edge, and GitHub on a fresh repository from the same client for scale.
+Cloudflare timings vary run to run by ±20%; the ranges are what was seen.
+
+| | loose push | synthetic push | incremental push | bare clone |
+| --- | --- | --- | --- | --- |
+| GitHub (fresh repo) | 3.3 s | 4.6 s | 1.2 s | 1.3 / 2.1 s |
+| start of this sweep (in-DO, sequential fan-out) | 16 s | 10.8 s | 0.9–1.3 s | 1.3 s |
+| pipeline in the Worker (§22.9) | 19 s | 12.9 s | | |
+| + hashers write the spill, body-aligned parts | 14–19 s | 9.3–12.9 s | | |
+| + speculative straddler, whole-part boundary search | 11.3–14.8 s | 7.7 s | 0.3–0.4 s | |
+| + scan-first hash responses, native receive loop | 13–14.6 s | 9.5–11 s | 0.3–0.7 s | 1.3 s |
+| **`HasherInline`** (no fan-out; the reference assembly) | 9.9–13.5 s | 8.8 s | 0.24–0.27 s | 1.3 s |
+
+The receive-side phases of a loose push at the end of the sweep (from
+the pump's own log, `Date.now` advancing only across I/O): parts 1–3
+arrive within 1.3 s (18 MiB/s, the client's rate to Cloudflare's own
+speed test), then nothing arrives for 4.5 s while three hash calls are in
+flight, then the rest; the body ends at 8.7 s and the last result settles
+at 8.7 s. The hash calls' wall times stack instead of overlapping.
+
+**Why: service-binding subrequests run on the caller's thread.** A probe
+route fanning one 8 MiB part out N times, timed from the client:
+
+| transport | n=1 | n=3 | n=6 |
+| --- | --- | --- | --- |
+| self service binding (`Cloudflare.Workers.Self`) | 1.1 s | 1.9–2.6 s | 3.9–4.5 s |
+| service binding to a second script | 0.7–1.0 s | 1.4–2.5 s | 3.6–3.9 s |
+| `fetch` to the Worker's own workers.dev URL | refused (connection lost) |
+| `fetch` to a second script's workers.dev URL | refused (connection lost) |
+
+Six calls cost six times one call over both bindings: the callee executes
+in the caller's isolate (four concurrent self calls with 8 MiB bodies hit
+the isolate's memory limit, error 1102), and the in-Worker clock does not
+even advance across the call. The fan-out therefore never parallelized
+CPU; it moved bytes around on one thread. What it did buy — and what the
+Worker-side pipeline keeps — is a Durable Object that never sees a pack
+byte, a receive that is not blocked on the spill, and hashing that
+overlaps the client's upload as well as one thread allows.
+
+Requests arriving from OUTSIDE are spread across isolates: four
+concurrent external calls of the same part finished as two pairs (2.0 s
+and 4.1 s), i.e. two-way parallelism. Cross-zone `fetch` to a hasher on
+another zone would inherit that, at the price of real network egress
+competing with the client's upload.
+
+On one thread the floor for a push is roughly `max(ingress, hash CPU)`
+plus staging and commit: for the loose pack about 2.5 s of upload and 5 s
+of hashing on a core ~10x slower than a laptop's, so 6–7 s before the
+commit — the measured 8.7–11 s is that floor plus imperfect overlap. The
+synthetic pack hashes in ~2 s and lands nearer 6 s. Reaching GitHub's
+3.3 s on the delta-heavy pack needs compute Workers do not offer per
+request: native `index-pack` in a Container (verifying 40 MiB in well
+under a second, writing R2 from its own network), or a multi-core host
+behind a cross-zone HTTP hasher. Both are layers this design admits
+(`Hasher` is a service); neither is built here.
+
+With the fan-out removed (`HasherInline`, the receiver hashing as parts
+arrive and spilling them itself), the loose push measures 9.9–13.5 s and
+the receiver's own CPU shows the hashing — 5.0–7.9 s of it — that the
+fan-out had spread over invocations on the same thread. That layer is now
+the reference assembly; `HasherSelf` stays as the shape a remote hasher
+takes.
+
+Where the pipeline is already at or past parity: incremental pushes
+(0.24–0.7 s vs 1.2 s), bare clones (§22.4), and the read path.

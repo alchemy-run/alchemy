@@ -25,7 +25,7 @@ import {
   AuthTokens,
   BlobStoreR2,
   GIT_WORKER_OPTIONS,
-  HasherSelf,
+  HasherInline,
   ReposDurableObject,
   RegistryDurableObject,
   Server,
@@ -56,7 +56,9 @@ const GitObjects = Cloudflare.R2.Bucket("GitObjects", {
 const GitLive = ServerLive.pipe(
   Layer.provide(ReposDurableObject),
   Layer.provide(RegistryDurableObject),
-  Layer.provide(HasherSelf),
+  // In-process hashing: service-binding fan-out runs on the caller's
+  // thread on Workers (DESIGN §22.10), so the simpler layer is the reference.
+  Layer.provide(HasherInline),
   Layer.provide(BlobStoreR2(GitObjects)),
   Layer.provide(AuthTokens),
 );

@@ -6,12 +6,16 @@
  *
  * Two layers:
  *
- * - {@link HasherInline} runs the scan in the calling isolate (tests, or a
- *   deployment without a self service binding).
+ * - {@link HasherInline} runs the scan in the calling isolate — the
+ *   reference assembly. On Cloudflare Workers a service-binding subrequest
+ *   executes on the caller's own thread (measured, DESIGN §22.10), so
+ *   fanning out buys no CPU there; inline avoids the copies and framing.
  * - {@link HasherSelf} posts each part to the Worker's own
  *   `/_alchemy/git/hash` route through a `Cloudflare.Workers.Self` service
- *   binding, so every part is hashed in a fresh Worker isolate with its
- *   own CPU, in parallel with the upload the DO is receiving.
+ *   binding: the same work in another invocation of the same script. Kept
+ *   for runtimes where such calls do run in parallel, and as the shape a
+ *   remote hasher (a Container running native `index-pack`, a multi-core
+ *   host behind a cross-zone URL) would take.
  *
  * The wire protocol is binary both ways (parts are megabytes; JSON would
  * base64 them): request body = the raw bytes, coordinates in the query;

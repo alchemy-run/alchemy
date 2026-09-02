@@ -18,7 +18,7 @@ import {
   AuthTokens,
   BlobStoreR2,
   GIT_WORKER_OPTIONS,
-  HasherSelf,
+  HasherInline,
   ReposDurableObject,
   RegistryDurableObject,
   Server,
@@ -55,7 +55,7 @@ const GitObjects = Cloudflare.R2.Bucket("GitObjects");
 const ProtectedGitLive = ServerLive.pipe(
   Layer.provide(ReposDurableObject),
   Layer.provide(RegistryDurableObject),
-  Layer.provide(HasherSelf),
+  Layer.provide(HasherInline),
   Layer.provide(BlobStoreR2(GitObjects)),
   Layer.provide(ProtectedMainAuth),
 );
