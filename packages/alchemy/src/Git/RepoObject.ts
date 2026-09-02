@@ -133,14 +133,16 @@ import {
 } from "./jobs/Compact.ts";
 import { headKey, incomingKey, wirePackId } from "./store/Keys.ts";
 import { encodeHeadSnapshot, type HeadSnapshot } from "./store/HeadSnapshot.ts";
-import { sliceRandomAccess } from "./store/PackSource.ts";
-import { HEAD_BYTES, receiveWireBodyStreaming } from "./store/IncomingBody.ts";
+import { blobRandomAccess, sliceRandomAccess } from "./store/PackSource.ts";
+import { SPILL_PART_BYTES } from "./store/IncomingBody.ts";
+import type { BlobMultipart, UploadedPart } from "./BlobStore.ts";
+import type { StreamingFeeder } from "./store/StreamingSource.ts";
 import {
   BACKPRESSURE_BYTES,
   makeStreamingSource,
   RETAIN_BYTES,
 } from "./store/StreamingSource.ts";
-import { Hasher, type HasherShape } from "./Hasher.ts";
+import { Hasher, type HasherShape, type HashPartResult } from "./Hasher.ts";
 import * as PartialScan from "./git/PartialScan.ts";
 import type { ScanResult } from "./git/PartialScan.ts";
 import type { UnresolvedDelta } from "./git/PartialScan.ts";
@@ -1329,6 +1331,8 @@ export interface IngestResult {
   readonly phases?: Record<string, number> | undefined;
   /** Objects staged as references into a promoted wire pack (DESIGN §22.5). */
   readonly promoted?: number | undefined;
+  /** The completed spilled object's key, when the body spilled (DESIGN §22.10). */
+  readonly parkedKey?: string | undefined;
   /** The pack's trailer checksum (hex). */
   readonly packSha: string;
   /** Staged commits (commit-graph rows are inserted at finalize). */
@@ -1395,6 +1399,8 @@ interface RawEntry {
  */
 export interface IngestStore {
   readonly insertStagedBatch: ObjectStore["insertStagedBatch"];
+  /** Awaits staging that `insertStagedBatch` may have left in flight. */
+  readonly settle?: Effect.Effect<void, StoreError> | undefined;
   /** A live base object for a thin delta, or `undefined` when absent. */
   readonly readBase: (
     oid: Oid,
@@ -1442,6 +1448,24 @@ export interface IngestOptions {
   readonly hasher?: HasherShape | undefined;
   /** Bytes per hasher part (tests shrink it). @default HASH_PART_BYTES */
   readonly partBytes?: number | undefined;
+  /**
+   * The streaming spill (DESIGN §22.10): the pump reads the whole request
+   * BODY in uniform parts, each hasher writes its part to blob storage,
+   * and the completed object is the promotion target (`packId`) and the
+   * source's fallback reader. Bodies that end within `threshold` bytes
+   * stay in memory and nothing is written.
+   */
+  readonly spill?:
+    | {
+        readonly body: RandomAccess;
+        readonly feeder: StreamingFeeder;
+        readonly packStart: number;
+        readonly blobs: BlobStoreShape;
+        readonly key: string;
+        readonly packId: string;
+        readonly threshold: number;
+      }
+    | undefined;
   /**
    * Shallow-import mode: commit parents may be absent (they become walk
    * boundaries); trees/blobs/tags must still be fully connected.
@@ -1571,7 +1595,11 @@ export const ingestPackFrom = (
       const pending = batch;
       batch = [];
       batchBytes = 0;
-      const target = options.promote?.();
+      const target =
+        options.promote?.() ??
+        (spilling && options.spill !== undefined
+          ? { packId: options.spill.packId, base: options.spill.packStart }
+          : undefined);
       const staged: Array<StagedObject> = [];
       for (const entry of pending) {
         const pack =
@@ -1588,7 +1616,8 @@ export const ingestPackFrom = (
           entry.zdata ??
           (pack === undefined
             ? Uint8Array.from(
-                yield* source.read(entry.dataOffset, entry.span ?? 0),
+                readSpan?.(entry.dataOffset, entry.span ?? 0) ??
+                  (yield* source.read(entry.dataOffset, entry.span ?? 0)),
               )
             : new Uint8Array(0));
         staged.push({
@@ -1606,6 +1635,15 @@ export const ingestPackFrom = (
     });
 
     const phases: Record<string, number> = {};
+    /** The spill's multipart upload, once the pump decided to spill. */
+    let upload: BlobMultipart | undefined;
+    let spilling = false;
+    /** Set once the spilled object is complete: it is the wire pack. */
+    let parkedKey: string | undefined;
+    /** In-memory span reads over the retained parts (set by the pump). */
+    let readSpan:
+      | ((at: number, length: number) => Uint8Array | undefined)
+      | undefined;
     /**
      * Stages a run of resolved entries (DESIGN §22.5): the parser's
      * synchronous fast path hands over up to SINK_BATCH non-delta entries
@@ -1641,7 +1679,10 @@ export const ingestPackFrom = (
      */
     const pumpThroughHasher = (hasher: HasherShape) =>
       Effect.gen(function* () {
-        const partBytes = options.partBytes ?? HASH_PART_BYTES;
+        const spill = options.spill;
+        const partBytes =
+          options.partBytes ??
+          (spill === undefined ? HASH_PART_BYTES : SPILL_PART_BYTES);
         const asIngest = (error: {
           readonly _tag: string;
           readonly reason?: string;
@@ -1675,7 +1716,6 @@ export const ingestPackFrom = (
             lag = Uint8Array.from(joined);
           }
         };
-        feed(header);
         interface Known {
           readonly oid: Oid;
           readonly type: ObjectType;
@@ -1687,26 +1727,42 @@ export const ingestPackFrom = (
         const known = new Map<number, Known>(); // by header offset
         const knownByOid = new Map<string, Known>();
         const unresolved: Array<UnresolvedDelta> = [];
-        let offset = 12;
-        let consumedTo = 12;
-        let remaining = count;
-        let carry: Uint8Array = new Uint8Array(0);
-        // Raw-chunk dispatch (DESIGN §22.9): the DO does NO scanning. Every
+        // Raw-chunk dispatch (DESIGN §22.9–10): NO scanning here. Every
         // chunk goes to a hasher as it arrives (bounded concurrency), which
         // resyncs to the first entry boundary inside the chunk and scans and
-        // hashes from there. Results are consumed in chunk order; the one
-        // entry straddling each chunk edge is stitched from the neighbouring
+        // hashes from there — and, when the body spills, writes the chunk
+        // as its part of the multipart upload. Results are consumed in
+        // chunk order, concurrently with the receive; the one entry
+        // straddling each chunk edge is stitched from the neighbouring
         // payloads and hashed by a small extra call. A boundary that does
         // not line up (a resync false positive) falls back to a sequential
         // rescan of that chunk from the known boundary.
         const gate = yield* Semaphore.make(HASH_CONCURRENCY);
         interface Chunk {
           readonly index: number;
-          readonly base: number; // absolute offset of payload[0]
+          /** Pack-relative offset of payload[0] (negative for a body-aligned first part). */
+          readonly base: number;
           readonly payload: Uint8Array;
-          readonly fiber: Fiber.Fiber<ScanResult, PackIngestError>;
+          readonly fiber: Fiber.Fiber<HashPartResult, PackIngestError>;
         }
         const chunks: Array<Chunk> = [];
+        const bytesFrom = (from: number, to: number): Uint8Array => {
+          const pieces: Array<Uint8Array> = [];
+          for (const c of chunks) {
+            const start = Math.max(from, c.base);
+            const end = Math.min(to, c.base + c.payload.length);
+            if (end > start)
+              pieces.push(c.payload.subarray(start - c.base, end - c.base));
+          }
+          return pieces.length === 1 ? pieces[0]! : concatBytes(pieces);
+        };
+        // Retained payloads serve every span read (inline rows, delta
+        // bases and deltas) so nothing goes back to the source or the
+        // spilled object during ingest.
+        readSpan = (at, length) => {
+          const bytes = bytesFrom(at, at + length);
+          return bytes.length === length ? bytes : undefined;
+        };
         const stageResult = (
           payload: Uint8Array,
           base: number,
@@ -1746,10 +1802,36 @@ export const ingestPackFrom = (
             for (const u of result.unresolved) unresolved.push(u);
             return result.count;
           });
+
+        // ── phase 1 (producer): read parts as they arrive, dispatch each ──
+        // Wall-clock phase split (Date.now advances across awaits; the
+        // platform's cpuTime is the CPU attribution): `PushStats.phases`.
+        const pumpStarted = Date.now();
+        let regionCalls = 0;
+        const parts: Array<UploadedPart> = [];
+        let producerDone = false;
+        let wakeConsumer: (() => void) | undefined;
+        const notifyConsumer = () => {
+          const w = wakeConsumer;
+          wakeConsumer = undefined;
+          w?.();
+        };
+        const awaitChunk = (k: number) =>
+          Effect.suspend(() =>
+            k < chunks.length || producerDone
+              ? Effect.void
+              : Effect.callback<void>((resume) => {
+                  wakeConsumer = () => resume(Effect.void);
+                }),
+          );
         const dispatch = (
           payload: Uint8Array,
-          base: number,
-          opts: { resync: boolean; remaining: number },
+          opts: {
+            readonly base: number;
+            readonly skip: number;
+            readonly resync: boolean;
+            readonly partNumber: number;
+          },
         ) =>
           Effect.forkChild(
             Semaphore.withPermits(
@@ -1758,58 +1840,109 @@ export const ingestPackFrom = (
             )(
               hasher
                 .hashPart(payload, {
-                  base,
-                  remaining: opts.remaining,
+                  base: opts.base,
+                  skip: opts.skip,
+                  remaining: count,
                   maxObjectSize: MAX_OBJECT_SIZE,
                   resync: opts.resync,
+                  spill:
+                    upload === undefined || spill === undefined
+                      ? undefined
+                      : {
+                          key: spill.key,
+                          uploadId: upload.uploadId,
+                          partNumber: opts.partNumber,
+                        },
                 })
                 .pipe(Effect.mapError(asIngest)),
             ),
           );
-        // Wall-clock phase split (Date.now advances across awaits; the
-        // platform's cpuTime is the CPU attribution): reported as
-        // `PushStats.phases` for tail-side diagnosis.
-        const pumpStarted = Date.now();
-        let regionCalls = 0;
-        // Phase 1: read chunks and dispatch them all.
-        let index = 0;
-        while (true) {
-          const chunk = yield* source.read(offset, partBytes);
-          if (chunk.length === 0) break;
-          feed(chunk);
-          const fiber = yield* dispatch(chunk, offset, {
-            resync: index > 0,
-            remaining: count,
-          });
-          chunks.push({ index, base: offset, payload: chunk, fiber });
-          offset += chunk.length;
-          index += 1;
-          // Chunks are retained (by the payload views) until consumed below;
-          // the source may drop them now.
-          source.release?.(offset);
-          if (chunk.length < partBytes) break;
-        }
-        phases.upload = Date.now() - pumpStarted;
-        const scanStarted = Date.now();
-        // Phase 2: consume results in chunk order. `prevEnd` is the last
-        // settled boundary. A chunk's resync result covers [firstOffset, …);
-        // whatever lies in [prevEnd, firstOffset) — usually one straddling
-        // entry, but any number when chunks are tiny — is scanned
-        // sequentially as one region from the retained payloads. Entries the
-        // region scan reaches at or past `firstOffset` are duplicates of the
-        // chunk's own result and are dropped; a region that does not end
-        // exactly at `firstOffset` means the resync was a false positive, and
-        // the chunk is rescanned sequentially from `prevEnd` instead.
-        const bytesFrom = (from: number, to: number): Uint8Array => {
-          const pieces: Array<Uint8Array> = [];
-          for (const c of chunks) {
-            const start = Math.max(from, c.base);
-            const end = Math.min(to, c.base + c.payload.length);
-            if (end > start)
-              pieces.push(c.payload.subarray(start - c.base, end - c.base));
+        const produce = Effect.gen(function* () {
+          if (spill === undefined) {
+            // Pack-relative parts from the (in-memory or spilled) source.
+            feed(header);
+            let offset = 12;
+            let index = 0;
+            while (true) {
+              const chunk = yield* source.read(offset, partBytes);
+              if (chunk.length === 0) break;
+              feed(chunk);
+              const fiber = yield* dispatch(chunk, {
+                base: offset,
+                skip: 0,
+                resync: index > 0,
+                partNumber: index + 1,
+              });
+              chunks.push({ index, base: offset, payload: chunk, fiber });
+              offset += chunk.length;
+              index += 1;
+              notifyConsumer();
+              source.release?.(offset);
+              if (chunk.length < partBytes) break;
+            }
+            return;
           }
-          return pieces.length === 1 ? pieces[0]! : concatBytes(pieces);
-        };
+          // Body-aligned parts (DESIGN §22.10): part k is body
+          // [k·P, (k+1)·P); the first carries the command section and
+          // the pack header before its first entry (`skip`).
+          const { body, packStart } = spill;
+          let index = 0;
+          while (true) {
+            const at = index * partBytes;
+            const chunk = yield* body.read(at, partBytes);
+            if (chunk.length === 0) break;
+            if (index === 0) {
+              // Decide the spill once the first part is in: a body that
+              // ended within the in-memory threshold stays in memory.
+              const ended = spill.feeder.source.ended();
+              if (!(ended && chunk.length <= spill.threshold)) {
+                upload = yield* spill.blobs.multipart(spill.key).pipe(
+                  Effect.mapError(
+                    (error) =>
+                      new PackIngestError({
+                        reason: `spill: ${error.reason}`,
+                      }),
+                  ),
+                  Effect.provide(RuntimeContext.phantom),
+                );
+                spill.feeder.expectFallback();
+                spilling = true;
+              }
+            }
+            const skip = index === 0 ? packStart + 12 : 0;
+            feed(index === 0 ? chunk.subarray(packStart) : chunk);
+            const base = at - packStart;
+            const fiber = yield* dispatch(chunk, {
+              base: base + skip,
+              skip,
+              resync: index > 0,
+              partNumber: index + 1,
+            });
+            chunks.push({ index, base, payload: chunk, fiber });
+            index += 1;
+            notifyConsumer();
+            body.release?.(at + chunk.length);
+            if (chunk.length < partBytes) break;
+          }
+        }).pipe(
+          Effect.ensuring(
+            Effect.sync(() => {
+              producerDone = true;
+              notifyConsumer();
+            }),
+          ),
+        );
+
+        // ── phase 2 (consumer): settle results in chunk order ──────────
+        // `prevEnd` is the last settled boundary. A chunk's resync result
+        // covers [firstOffset, …); whatever lies in [prevEnd, firstOffset)
+        // — usually one straddling entry, but any number when chunks are
+        // tiny — is scanned sequentially as one region from the retained
+        // payloads. Entries the region scan reaches at or past
+        // `firstOffset` are duplicates of the chunk's own result and are
+        // dropped; a region that does not end exactly at `firstOffset`
+        // means the resync was a false positive, and the chunk is rescanned
+        // sequentially from `prevEnd` instead.
         const keepBelow = (result: ScanResult, limit: number): ScanResult => {
           const entries = result.entries.filter((e) => e.offset < limit);
           const unresolved = result.unresolved.filter((u) => u.offset < limit);
@@ -1831,93 +1964,107 @@ export const ingestPackFrom = (
           process.env.GIT_PUMP_DEBUG === "1"
             ? (...args: Array<unknown>) => console.log("[pump]", ...args)
             : () => {};
-        let staged = 0;
-        let prevEnd = 12;
-        for (let k = 0; k < chunks.length; k++) {
-          const current = chunks[k]!;
-          const result = yield* Fiber.join(current.fiber);
-          const chunkEnd = current.base + current.payload.length;
-          trace(
-            `chunk ${k} base=${current.base} len=${current.payload.length} first=${result.firstOffset} consumedTo=${result.consumedTo} count=${result.count} prevEnd=${prevEnd} staged=${staged}`,
-          );
-          const sequential = () =>
-            Effect.gen(function* () {
-              // Everything from the settled boundary through this chunk,
-              // scanned in order (plus a little of the next chunk so the last
-              // entry can complete, if there is one).
-              const next = chunks[k + 1];
-              const to =
-                next === undefined
-                  ? chunkEnd
-                  : Math.min(chunkEnd + 64, next.base + next.payload.length);
-              const bytes = bytesFrom(prevEnd, to);
-              const r = yield* hasher
-                .hashPart(bytes, {
-                  base: prevEnd,
-                  remaining: count - staged,
-                  maxObjectSize: MAX_OBJECT_SIZE,
-                })
-                .pipe(Effect.mapError(asIngest));
-              return { bytes, base: prevEnd, r: keepBelow(r, chunkEnd) };
-            });
-          if (result.firstOffset < 0) {
-            // No boundary in this chunk (tiny, or inside one huge entry):
-            // its bytes are settled by a later chunk's region scan.
-            continue;
-          }
-          if (k === 0 && result.firstOffset !== 12) {
-            const again = yield* sequential();
-            staged += yield* stageResult(again.bytes, again.base, again.r);
-            prevEnd = again.r.consumedTo;
-            continue;
-          }
-          if (result.firstOffset < prevEnd) {
-            // Resync landed inside an already-settled entry: rescan.
-            const again = yield* sequential();
-            staged += yield* stageResult(again.bytes, again.base, again.r);
-            prevEnd = again.r.consumedTo;
-            continue;
-          }
-          if (result.firstOffset > prevEnd) {
-            trace(`  region [${prevEnd}, ${result.firstOffset})`);
-            regionCalls += 1;
-            const region = bytesFrom(
-              prevEnd,
-              Math.min(result.firstOffset + 64, chunkEnd),
-            );
-            const scanned = yield* hasher
-              .hashPart(region, {
-                base: prevEnd,
-                remaining: count - staged,
-                maxObjectSize: MAX_OBJECT_SIZE,
-              })
-              .pipe(Effect.mapError(asIngest));
-            const ends =
-              scanned.entries.some(
-                (e) => e.dataOffset + e.span === result.firstOffset,
-              ) ||
-              scanned.unresolved.some(
-                (u) => u.dataOffset + u.span === result.firstOffset,
-              );
+        // The consumer is the forked side: hash fibers are children of THIS
+        // fiber (a child's children die with it), so the producer runs here
+        // and the consumer settles results as they land.
+        const consume = Effect.gen(function* () {
+          let staged = 0;
+          let prevEnd = 12;
+          for (let k = 0; ; k++) {
+            yield* awaitChunk(k);
+            if (k >= chunks.length) break;
+            const current = chunks[k]!;
+            const result = yield* Fiber.join(current.fiber);
+            if (result.part !== undefined) parts.push(result.part);
+            const chunkEnd = current.base + current.payload.length;
             trace(
-              `  region scan count=${scanned.count} consumedTo=${scanned.consumedTo} ends=${ends}`,
+              `chunk ${k} base=${current.base} len=${current.payload.length} first=${result.firstOffset} consumedTo=${result.consumedTo} count=${result.count} prevEnd=${prevEnd} staged=${staged}`,
             );
-            if (!ends) {
-              trace(`  → sequential fallback`);
+            const sequential = () =>
+              Effect.gen(function* () {
+                // Everything from the settled boundary through this chunk,
+                // scanned in order (plus a little of the next chunk so the last
+                // entry can complete, if there is one).
+                yield* awaitChunk(k + 1);
+                const next = chunks[k + 1];
+                const to =
+                  next === undefined
+                    ? chunkEnd
+                    : Math.min(chunkEnd + 64, next.base + next.payload.length);
+                const bytes = bytesFrom(prevEnd, to);
+                const r = yield* hasher
+                  .hashPart(bytes, {
+                    base: prevEnd,
+                    remaining: count - staged,
+                    maxObjectSize: MAX_OBJECT_SIZE,
+                  })
+                  .pipe(Effect.mapError(asIngest));
+                return { bytes, base: prevEnd, r: keepBelow(r, chunkEnd) };
+              });
+            if (result.firstOffset < 0) {
+              // No boundary in this chunk (tiny, or inside one huge entry):
+              // its bytes are settled by a later chunk's region scan.
+              continue;
+            }
+            if (k === 0 && result.firstOffset !== 12) {
               const again = yield* sequential();
               staged += yield* stageResult(again.bytes, again.base, again.r);
               prevEnd = again.r.consumedTo;
               continue;
             }
-            staged += yield* stageResult(
-              region,
-              prevEnd,
-              keepBelow(scanned, result.firstOffset),
-            );
+            if (result.firstOffset < prevEnd) {
+              // Resync landed inside an already-settled entry: rescan.
+              const again = yield* sequential();
+              staged += yield* stageResult(again.bytes, again.base, again.r);
+              prevEnd = again.r.consumedTo;
+              continue;
+            }
+            if (result.firstOffset > prevEnd) {
+              trace(`  region [${prevEnd}, ${result.firstOffset})`);
+              regionCalls += 1;
+              const region = bytesFrom(
+                prevEnd,
+                Math.min(result.firstOffset + 64, chunkEnd),
+              );
+              const scanned = yield* hasher
+                .hashPart(region, {
+                  base: prevEnd,
+                  remaining: count - staged,
+                  maxObjectSize: MAX_OBJECT_SIZE,
+                })
+                .pipe(Effect.mapError(asIngest));
+              const ends =
+                scanned.entries.some(
+                  (e) => e.dataOffset + e.span === result.firstOffset,
+                ) ||
+                scanned.unresolved.some(
+                  (u) => u.dataOffset + u.span === result.firstOffset,
+                );
+              trace(
+                `  region scan count=${scanned.count} consumedTo=${scanned.consumedTo} ends=${ends}`,
+              );
+              if (!ends) {
+                trace(`  → sequential fallback`);
+                const again = yield* sequential();
+                staged += yield* stageResult(again.bytes, again.base, again.r);
+                prevEnd = again.r.consumedTo;
+                continue;
+              }
+              staged += yield* stageResult(
+                region,
+                prevEnd,
+                keepBelow(scanned, result.firstOffset),
+              );
+            }
+            staged += yield* stageResult(current.payload, current.base, result);
+            prevEnd = result.consumedTo;
           }
-          staged += yield* stageResult(current.payload, current.base, result);
-          prevEnd = result.consumedTo;
-        }
+          return { staged, prevEnd };
+        });
+        const consumer = yield* Effect.forkChild(consume);
+        yield* produce;
+        phases.upload = Date.now() - pumpStarted;
+        let { staged, prevEnd } = yield* Fiber.join(consumer);
         // The tail: chunks too small to hold two whole entries report no
         // boundary, so entries after the last settled boundary may remain.
         // Scan that final region sequentially (it ends at the trailer).
@@ -1939,8 +2086,8 @@ export const ingestPackFrom = (
             }
           }
         }
-        consumedTo = prevEnd;
-        phases.scan = Date.now() - scanStarted;
+        const consumedTo = prevEnd;
+        phases.scan = Date.now() - pumpStarted;
         phases.chunks = chunks.length;
         phases.regions = regionCalls;
         if (staged !== count) {
@@ -1948,7 +2095,6 @@ export const ingestPackFrom = (
             reason: `pack declared ${count} entries, scanned ${staged}`,
           });
         }
-        remaining = 0;
         const total =
           source.awaitEnd === undefined
             ? source.size
@@ -1958,9 +2104,8 @@ export const ingestPackFrom = (
             reason: `pack has ${total - 20 - consumedTo} unconsumed bytes after ${count} entries`,
           });
         }
-        if (offset < total) {
-          feed(yield* source.read(offset, total - offset));
-        }
+        // Everything read so far went through `feed`; the last part's
+        // bytes did too, so the lag now holds the trailer.
         if (lag.length !== 20) {
           return yield* new PackIngestError({
             reason: "truncated pack trailer",
@@ -1973,19 +2118,26 @@ export const ingestPackFrom = (
             reason: `pack checksum mismatch: expected ${expected}, got ${actual}`,
           });
         }
-        // Cross-part and thin deltas: bases are readable now (the body has
-        // ended, so a spilled object serves any offset). Fixpoint for chains.
+        // Cross-part and thin deltas: bases are in the retained payloads
+        // (or in the live store). Fixpoint for chains.
+        const deltasStarted = Date.now();
+        phases.unresolved = unresolved.length;
+        const spanOf = (at: number, length: number) =>
+          Effect.suspend(() => {
+            const bytes = readSpan?.(at, length);
+            return bytes === undefined
+              ? source.read(at, length)
+              : Effect.succeed(bytes);
+          });
         const inflateSpan = (item: Known) =>
           item.content !== undefined
             ? Effect.succeed(item.content)
             : item.zdata !== undefined
               ? Zlib.inflate(item.zdata).pipe(Effect.mapError(asIngest))
-              : source.read(item.dataOffset, item.span).pipe(
+              : spanOf(item.dataOffset, item.span).pipe(
                   Effect.flatMap((z) => Zlib.inflate(z)),
                   Effect.mapError(asIngest),
                 );
-        const deltasStarted = Date.now();
-        phases.unresolved = unresolved.length;
         let pending = unresolved;
         while (pending.length > 0) {
           const next: Array<UnresolvedDelta> = [];
@@ -2012,7 +2164,7 @@ export const ingestPackFrom = (
               continue;
             }
             const baseContent = yield* inflateSpan(base);
-            const delta = yield* source.read(u.dataOffset, u.span).pipe(
+            const delta = yield* spanOf(u.dataOffset, u.span).pipe(
               Effect.flatMap((z) => Zlib.inflate(z)),
               Effect.mapError(asIngest),
             );
@@ -2059,8 +2211,42 @@ export const ingestPackFrom = (
           pending = next;
         }
         phases.deltas = Date.now() - deltasStarted;
+        // Settle the spill: every part was written by its hasher; complete
+        // the object and hand it to the source as the fallback reader.
+        if (upload !== undefined && spill !== undefined) {
+          const settled = upload;
+          yield* settled.complete(parts).pipe(
+            Effect.mapError(
+              (error) =>
+                new PackIngestError({
+                  reason: `spill complete: ${error.reason}`,
+                }),
+            ),
+            Effect.provide(RuntimeContext.phantom),
+          );
+          spill.feeder.setFallback(
+            blobRandomAccess({
+              blobs: spill.blobs,
+              key: spill.key,
+              size: yield* spill.feeder.source.awaitEnd.pipe(
+                Effect.mapError(asIngest),
+              ),
+            }),
+          );
+          parkedKey = spill.key;
+        }
         return { count };
-      });
+      }).pipe(
+        // A failed ingest must not leave a dangling multipart upload —
+        // R2 bills incomplete uploads until aborted or lifecycle-expired.
+        Effect.onError(() =>
+          Effect.suspend(() =>
+            upload === undefined || parkedKey !== undefined
+              ? Effect.void
+              : upload.abort.pipe(Effect.provide(RuntimeContext.phantom)),
+          ).pipe(Effect.ignore),
+        ),
+      );
 
     const summary =
       options.hasher !== undefined
@@ -2081,11 +2267,17 @@ export const ingestPackFrom = (
           );
 
     yield* flush();
+    if (store.settle !== undefined) {
+      const at = yield* Effect.sync(() => performance.now());
+      yield* store.settle;
+      stageMs += yield* Effect.sync(() => performance.now() - at);
+    }
 
     return {
       stageMs,
       phases,
       promoted,
+      parkedKey,
       objectCount: summary.count,
       // The parser verifies the trailer itself; the checksum is not used
       // downstream, so it is not re-derived here.

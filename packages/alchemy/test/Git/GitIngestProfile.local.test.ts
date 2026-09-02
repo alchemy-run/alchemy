@@ -125,9 +125,12 @@ if (PROFILE_REPO === undefined) {
         `[ingest-profile] objects: ${JSON.stringify(meta.objects)}; clone back + fsck ok`,
       );
       const p = meta.lastPush!;
+      // Counts (chunks, regions, unresolved) are reported alongside the
+      // wall-clock phases; label them as such.
+      const counts = new Set(["chunks", "regions", "unresolved"]);
       const phases = Object.entries(p.phases ?? {})
         .sort((a, b) => b[1] - a[1])
-        .map(([k, v]) => `${k} ${v}ms`)
+        .map(([k, v]) => (counts.has(k) ? `${k}=${v}` : `${k} ${v}ms`))
         .join(", ");
       console.log(
         `[ingest-profile] ${p.objects} objects, ${(p.bytes / 1048576).toFixed(1)} MiB: ` +

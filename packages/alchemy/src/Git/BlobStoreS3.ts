@@ -46,6 +46,7 @@ import {
   BlobStoreError,
   type BlobBody,
   type BlobMeta,
+  orderedParts,
   type BlobMultipart,
   type BlobStoreShape,
 } from "./BlobStore.ts";
@@ -196,10 +197,10 @@ export const BlobStoreS3 = (
         multipart: (key) =>
           createMultipart({ Bucket, Key: key }).pipe(
             Effect.mapError(s3Error(`multipart ${key}`)),
-            Effect.map((created) => {
+            Effect.map((created): BlobMultipart => {
               const UploadId = created.UploadId ?? "";
-              const parts: Array<{ PartNumber: number; ETag?: string }> = [];
               return {
+                uploadId: UploadId,
                 uploadPart: (partNumber, part) =>
                   uploadPart({
                     Bucket,
@@ -210,36 +211,48 @@ export const BlobStoreS3 = (
                     ContentLength: part.length,
                   }).pipe(
                     Effect.mapError(s3Error(`part ${partNumber} of ${key}`)),
-                    Effect.map((uploaded) => {
-                      parts.push({
-                        PartNumber: partNumber,
-                        ETag: uploaded.ETag,
-                      });
-                    }),
+                    Effect.map((uploaded) => ({
+                      partNumber,
+                      etag: uploaded.ETag ?? "",
+                    })),
                   ),
-                complete: Effect.suspend(() =>
+                complete: (parts) =>
                   completeMultipart({
                     Bucket,
                     Key: key,
                     UploadId,
                     MultipartUpload: {
-                      Parts: [...parts].sort(
-                        (a, b) => a.PartNumber - b.PartNumber,
-                      ),
+                      Parts: orderedParts(parts).map((p) => ({
+                        PartNumber: p.partNumber,
+                        ETag: p.etag,
+                      })),
                     },
-                  }),
-                ).pipe(
-                  Effect.mapError(s3Error(`complete ${key}`)),
-                  Effect.asVoid,
-                ),
+                  }).pipe(
+                    Effect.mapError(s3Error(`complete ${key}`)),
+                    Effect.asVoid,
+                  ),
                 abort: abortMultipart({ Bucket, Key: key, UploadId }).pipe(
                   Effect.mapError(s3Error(`abort ${key}`)),
                   Effect.asVoid,
                 ),
-              } satisfies BlobMultipart;
+              };
             }),
           ),
-
+        uploadPart: (key, uploadId, partNumber, part) =>
+          uploadPart({
+            Bucket,
+            Key: key,
+            UploadId: uploadId,
+            PartNumber: partNumber,
+            Body: part,
+            ContentLength: part.length,
+          }).pipe(
+            Effect.mapError(s3Error(`part ${partNumber} of ${key}`)),
+            Effect.map((uploaded) => ({
+              partNumber,
+              etag: uploaded.ETag ?? "",
+            })),
+          ),
         delete: (keys) => {
           const list = typeof keys === "string" ? [keys] : [...keys];
           if (list.length === 0) return Effect.void;

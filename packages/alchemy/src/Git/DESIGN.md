@@ -1699,3 +1699,93 @@ fanned out but is under half the work) or changing what the client sends.
 Left: the remaining ingest CPU (inflate + SHA-1 + parse, ~7 s here) is
 the work git itself requires to trust a pack; finalize's residual is the
 flip of the delta-resolved rows. Both scale with object count, not bytes.
+
+### §22.6 Streaming ingest
+
+The push body was received whole (in memory below the threshold, spilled
+to blob storage above it) and only then parsed. Two serial phases, each
+as long as the other; and a 128 MB isolate that can hold exactly one
+large body. Ingest now parses the body **while it arrives**:
+
+- `StreamingSource` (`store/StreamingSource.ts`) is a `RandomAccess` over
+  4 MiB slabs the receiver fills. A read past what has arrived waits;
+  a read behind the retention window (16 MiB) is served from the spilled
+  object once the body has ended — and fails if it never spills, so a
+  parser that needs an evicted base defers that entry to a pass after
+  `awaitEnd` (`BaseEvictedError`). The feeder parks when it is 24 MiB
+  ahead of the parser, and a waiting reader always releases a parked
+  feeder: the two never deadlock on each other.
+- `receiveWireBodyStreaming` feeds the source and, past the threshold,
+  uploads uniform 8 MiB parts concurrently (three in flight) so no
+  round trip to blob storage stalls the request body. The part list is
+  completed in part-number order regardless of settle order
+  (`orderedMultipart`) — R2 validates the uniform-part rule against the
+  list as given, and the tail settles before earlier parts do.
+- The parser tolerates an unknown pack length: the entry loop is driven
+  by the header's count, the trailer SHA-1 is fed incrementally with a
+  20-byte lag, and the trailer is compared once the source ends.
+
+The head of the body (the pkt-line commands) is read as a 1 MiB range
+before anything else; a delete-only push is a 12-byte probe that fails.
+
+### §22.7 The hasher fan-out
+
+Verification is what git requires to trust a pack: every entry inflated
+and hashed before any ref moves. It scales with object count, and on a
+core ~10x slower than a laptop it was the bulk of a 40 MiB push. It is
+now a service — `Hasher` (`Hasher.ts`) — with two layers:
+`HasherInline` (the same isolate) and `HasherSelf`, which POSTs pack
+parts to `/_alchemy/git/hash` on the Worker's own `Self` binding, so a
+push is verified by as many isolates as it has parts. The route is
+admin-authenticated (the Worker's own key) and answers a compact binary
+result: entry coordinates, oids, and for delta-resolved entries the fresh
+zlib bytes; non-delta entries ship no bytes (their rows are promoted
+coordinates or are read back from the source).
+
+### §22.8 Raw chunks, resync, stitching
+
+A pack has no index: entry boundaries are only known by inflating. The
+first fan-out shipped each part with the previous part's incomplete tail,
+which made the dispatch a serial chain gated on each part's result — the
+fan-out degenerated to one hasher at a time. Two passes (a cheap
+boundary pre-scan in the DO, then hashing by known spans) moved the CPU
+back into the single-threaded object.
+
+The pump now dispatches **raw 4 MiB chunks as they arrive**, four in
+flight, with no dependency between them. Every chunk but the first is
+scanned in *resync* mode (`PartialScan.ts`): `findBoundary` walks the
+chunk for a zlib header (`0x78` + one of the four FLG bytes) at which two
+consecutive entries parse, and the scan proceeds from there — lenient,
+because `remaining` is only an upper bound and the last chunk runs into
+the trailer. The DO then consumes results in chunk order: the bytes
+between the last settled boundary and a chunk's first found boundary —
+one straddling entry, normally — are scanned as a region from the
+retained payloads; a region that ends exactly at the found boundary
+confirms the resync, otherwise the chunk is rescanned sequentially from
+the settled boundary. Chunks too small to hold two entries report no
+boundary and are settled by a later region. Deltas whose base lies in
+another chunk come back unresolved and are applied after the trailer,
+against bases from any chunk or from the live store.
+
+The platform's own timeline (a `wrangler tail` of the hash calls) showed
+the fan-out working and the push still slow: chunks 0–3 arrived within
+0.7 s and the rest dribbled in at ~4 MiB/s, while the receive-pack
+invocation's wall time was five times its CPU. Everything the Durable
+Object received it also sent out twice — to the spill and to the hashers.
+
+### §22.9 The pack never enters the Durable Object
+
+The whole pipeline above now runs in the **stateless Worker**
+(`Server.ts` `receivePackRoute`): it receives the body, spills it,
+verifies it through the fan-out, stitches, resolves deltas, and ships the
+Repo DO only *rows* over RPC — `beginPush` (authorization of the parsed
+commands, the staging push row), `stagePush` (batches of staged rows;
+promoted rows are coordinates into the wire pack, inline rows carry their
+zlib bytes — `PushWire.ts`), `readPushBase` (thin-delta bases), and
+`commitPush` (connectivity over the staged rows, the commit graph, the
+transactional ref CAS, post-commit bookkeeping). The DO's memory, CPU and
+egress are untouched by push size; its part of a push is SQL. The Worker
+holds at most the streaming window plus the chunks in flight, and admits
+pushes by that working set (`isolatePushGate`).
+
+§22.10 records the measurements.

@@ -156,6 +156,19 @@ export interface MemoryBlobStore extends BlobStoreShape {
 
 export const makeMemoryBlobStore = (): MemoryBlobStore => {
   const objects = new Map<string, Uint8Array>();
+  const uploads = new Map<string, Map<number, Uint8Array>>();
+  const putPart = (uploadId: string, partNumber: number, part: Uint8Array) =>
+    Effect.suspend(() => {
+      const stored = uploads.get(uploadId);
+      if (stored === undefined) {
+        return Effect.fail(
+          new BlobStoreError({ reason: `no upload ${uploadId}` }),
+        );
+      }
+      stored.set(partNumber, Uint8Array.from(part));
+      return Effect.succeed({ partNumber, etag: `etag-${partNumber}` });
+    });
+
   const gets: MemoryBlobStore["gets"] = [];
   const body = (bytes: Uint8Array): BlobBody => ({
     size: bytes.length,
@@ -203,10 +216,58 @@ export const makeMemoryBlobStore = (): MemoryBlobStore => {
         const o = objects.get(key);
         return o === undefined ? null : { key, size: o.length };
       }),
-    multipart: () =>
-      Effect.fail(
-        new BlobStoreError({ reason: "multipart unsupported in harness" }),
-      ) as never,
+    multipart: (key) =>
+      Effect.sync(() => {
+        const uploadId = `${key}#${uploads.size + 1}`;
+        uploads.set(uploadId, new Map());
+        return {
+          uploadId,
+          uploadPart: (partNumber, part) => putPart(uploadId, partNumber, part),
+          complete: (parts) =>
+            Effect.suspend(() => {
+              const stored = uploads.get(uploadId);
+              if (stored === undefined) {
+                return Effect.fail(
+                  new BlobStoreError({ reason: `no upload ${uploadId}` }),
+                );
+              }
+              // R2's rule, checked as R2 checks it: every part but the
+              // last (in the list as given) must be the same size.
+              const listed = parts.map((p) => stored.get(p.partNumber));
+              if (listed.some((p) => p === undefined)) {
+                return Effect.fail(
+                  new BlobStoreError({ reason: "complete: unknown part" }),
+                );
+              }
+              const sizes = listed.map((p) => p!.length);
+              for (let i = 0; i < sizes.length - 1; i++) {
+                if (sizes[i] !== sizes[0]) {
+                  return Effect.fail(
+                    new BlobStoreError({
+                      reason:
+                        "Your proposed upload is smaller than the minimum allowed object size",
+                    }),
+                  );
+                }
+              }
+              const total = sizes.reduce((n, x) => n + x, 0);
+              const out = new Uint8Array(total);
+              let at = 0;
+              for (const p of listed) {
+                out.set(p!, at);
+                at += p!.length;
+              }
+              objects.set(key, out);
+              uploads.delete(uploadId);
+              return Effect.void;
+            }),
+          abort: Effect.sync(() => {
+            uploads.delete(uploadId);
+          }),
+        };
+      }),
+    uploadPart: (_key, uploadId, partNumber, part) =>
+      putPart(uploadId, partNumber, part),
     delete: (key) =>
       Effect.sync(() => {
         objects.delete(key);

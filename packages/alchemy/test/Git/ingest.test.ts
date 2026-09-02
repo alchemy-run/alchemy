@@ -16,7 +16,9 @@ import * as Zlib from "@/Git/git/Zlib.ts";
 import * as Fiber from "effect/Fiber";
 import { concat } from "./harness/pack.ts";
 import { describe, expect, test } from "alchemy-test";
+import { BlobStore } from "@/Git/BlobStore.ts";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import { makeMemoryBlobStore, makeTestSqlClient } from "./harness/store.ts";
@@ -64,7 +66,14 @@ describe("ingestPackFrom through the hasher", () => {
           `SELECT oid FROM objects WHERE staged_push = 'push-1' ORDER BY oid`,
         );
         expect(staged.map((r) => r.oid)).toEqual([...expected].sort());
-      }).pipe(Effect.provide(HasherInline), Effect.provide(BunServices.layer)),
+      }).pipe(
+        Effect.provide(
+          HasherInline.pipe(
+            Layer.provide(Layer.succeed(BlobStore, makeMemoryBlobStore())),
+          ),
+        ),
+        Effect.provide(BunServices.layer),
+      ),
     );
   });
 
@@ -91,7 +100,14 @@ describe("ingestPackFrom through the hasher", () => {
         expect(r._tag).toBe("Failure");
         if (r._tag === "Failure")
           expect(r.failure.reason).toContain("checksum");
-      }).pipe(Effect.provide(HasherInline), Effect.provide(BunServices.layer)),
+      }).pipe(
+        Effect.provide(
+          HasherInline.pipe(
+            Layer.provide(Layer.succeed(BlobStore, makeMemoryBlobStore())),
+          ),
+        ),
+        Effect.provide(BunServices.layer),
+      ),
     );
   });
 });
@@ -150,7 +166,13 @@ describe("hasher pipeline over a streaming source with eviction", () => {
           );
           expect(staged?.n).toBe(n);
           expect(staged?.withBytes).toBe(n);
-        }).pipe(Effect.provide(HasherInline)),
+        }).pipe(
+          Effect.provide(
+            HasherInline.pipe(
+              Layer.provide(Layer.succeed(BlobStore, makeMemoryBlobStore())),
+            ),
+          ),
+        ),
       );
     },
     { timeout: 30_000 },
@@ -196,7 +218,14 @@ describe("raw-chunk dispatch with resync and stitching (DESIGN §22.9)", () => {
             `parts of ${partBytes}`,
           ).toEqual([...expected].sort());
         }
-      }).pipe(Effect.provide(HasherInline), Effect.provide(BunServices.layer)),
+      }).pipe(
+        Effect.provide(
+          HasherInline.pipe(
+            Layer.provide(Layer.succeed(BlobStore, makeMemoryBlobStore())),
+          ),
+        ),
+        Effect.provide(BunServices.layer),
+      ),
     );
   });
 });

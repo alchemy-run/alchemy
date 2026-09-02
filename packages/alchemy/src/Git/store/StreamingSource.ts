@@ -54,6 +54,11 @@ export interface StreamingFeeder {
   readonly push: (chunk: Uint8Array) => Effect.Effect<void, StoreError>;
   /** Ends the body; readers waiting past the end are woken. */
   readonly end: () => void;
+  /**
+   * Announces that a fallback reader WILL be set (the body is being
+   * spilled): evicted reads after `end` wait for it instead of failing.
+   */
+  readonly expectFallback: () => void;
   /** Fails every current and future read. */
   readonly fail: (error: StoreError) => void;
   /**
@@ -79,6 +84,7 @@ export const makeStreamingSource = (options?: {
   let total: number | undefined;
   let failure: StoreError | undefined;
   let fallback: RandomAccess | undefined;
+  let fallbackExpected = false;
   const readWaiters: Array<Waiter> = [];
   const endWaiters: Array<(r: Effect.Effect<number, StoreError>) => void> = [];
   const pushWaiters: Array<() => void> = [];
@@ -166,8 +172,12 @@ export const makeStreamingSource = (options?: {
     });
   const wakeFallback = () => {
     // Once the body has ended, evicted reads either get the fallback reader
-    // or fail — they must never wait forever.
-    if (ended) {
+    // or fail — they must never wait forever. When a fallback is expected
+    // (the spill completes after the body ends), they wait for it.
+    if (
+      ended &&
+      (fallback !== undefined || !fallbackExpected || failure !== undefined)
+    ) {
       const ws = fallbackWaiters.splice(0);
       for (const w of ws) w();
     }
@@ -287,6 +297,9 @@ export const makeStreamingSource = (options?: {
           });
         }
       }),
+    expectFallback: () => {
+      fallbackExpected = true;
+    },
     end: () => {
       if (ended) return;
       ended = true;

@@ -17,7 +17,10 @@ import {
   HasherInline,
 } from "@/Git/Hasher.ts";
 import { describe, expect, test } from "alchemy-test";
+import { BlobStore } from "@/Git/BlobStore.ts";
 import * as Effect from "effect/Effect";
+import { makeMemoryBlobStore } from "./harness/store.ts";
+import * as Layer from "effect/Layer";
 import { concat } from "./harness/pack.ts";
 
 describe("Hasher", () => {
@@ -87,7 +90,13 @@ describe("Hasher", () => {
         expect(Array.from(back.entries[1]!.content!)).toEqual(
           Array.from(result.entries[1]!.content!),
         );
-      }).pipe(Effect.provide(HasherInline)),
+      }).pipe(
+        Effect.provide(
+          HasherInline.pipe(
+            Layer.provide(Layer.succeed(BlobStore, makeMemoryBlobStore())),
+          ),
+        ),
+      ),
     );
   });
 });

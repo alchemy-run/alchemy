@@ -53,53 +53,36 @@ export interface BlobBody {
   readonly readable?: ReadableStream<Uint8Array> | undefined;
 }
 
-/**
- * An in-flight multipart write. Parts must be uniform in size (≥ 5 MiB)
- * except the last — the R2/S3 intersection. Implementations track part
- * bookkeeping internally; callers only push bytes and settle.
- */
-export interface BlobMultipart {
-  readonly uploadPart: (
-    partNumber: number,
-    part: Uint8Array,
-  ) => Effect.Effect<void, BlobStoreError>;
-  readonly complete: Effect.Effect<void, BlobStoreError>;
-  readonly abort: Effect.Effect<void, BlobStoreError>;
+/** One uploaded part of a multipart write, as the store identifies it. */
+export interface UploadedPart {
+  readonly partNumber: number;
+  readonly etag: string;
 }
 
 /**
- * Part bookkeeping shared by the multipart implementations: parts upload
- * concurrently and settle in any order (the spill uploads its tail while
- * earlier parts are still in flight), but the completion list must be in
- * part-number order — R2 validates the "uniform except the last" rule
- * against the list as given and rejects a small part that is not last.
+ * An in-flight multipart write. Parts must be uniform in size (≥ 5 MiB)
+ * except the last — the R2/S3 intersection. Parts may be uploaded from
+ * ANY isolate that knows the key and `uploadId` (`BlobStoreShape.uploadPart`
+ * — the push pipeline's hasher isolates do, DESIGN §22.10); the creator
+ * completes with the collected parts, in any order.
  */
-export const orderedMultipart = <
-  P extends { readonly partNumber: number },
->(upload: {
+export interface BlobMultipart {
+  readonly uploadId: string;
   readonly uploadPart: (
     partNumber: number,
     part: Uint8Array,
-  ) => Effect.Effect<P, BlobStoreError>;
+  ) => Effect.Effect<UploadedPart, BlobStoreError>;
   readonly complete: (
-    parts: ReadonlyArray<P>,
+    parts: ReadonlyArray<UploadedPart>,
   ) => Effect.Effect<void, BlobStoreError>;
   readonly abort: Effect.Effect<void, BlobStoreError>;
-}): BlobMultipart => {
-  const parts: Array<P> = [];
-  return {
-    uploadPart: (partNumber, part) =>
-      upload.uploadPart(partNumber, part).pipe(
-        Effect.map((uploaded) => {
-          parts.push(uploaded);
-        }),
-      ),
-    complete: Effect.suspend(() =>
-      upload.complete([...parts].sort((a, b) => a.partNumber - b.partNumber)),
-    ),
-    abort: upload.abort,
-  };
-};
+}
+
+/** Sorts parts by number: stores validate the uniform-part rule against the list as given. */
+export const orderedParts = (
+  parts: ReadonlyArray<UploadedPart>,
+): Array<UploadedPart> =>
+  [...parts].sort((a, b) => a.partNumber - b.partNumber);
 
 /** One listed blob (GC/purge walks). */
 export interface BlobMeta {
@@ -128,6 +111,16 @@ export interface BlobStoreShape {
   readonly multipart: (
     key: string,
   ) => Effect.Effect<BlobMultipart, BlobStoreError, RuntimeContext>;
+  /**
+   * Uploads one part of a multipart write created elsewhere (by key and
+   * `uploadId`) — the resume path the push pipeline's hasher isolates use.
+   */
+  readonly uploadPart: (
+    key: string,
+    uploadId: string,
+    partNumber: number,
+    part: Uint8Array,
+  ) => Effect.Effect<UploadedPart, BlobStoreError, RuntimeContext>;
   readonly delete: (
     keys: string | ReadonlyArray<string>,
   ) => Effect.Effect<void, BlobStoreError, RuntimeContext>;
@@ -209,21 +202,25 @@ export const makeBlobStoreR2 = (
   multipart: (key) =>
     bucket.createMultipartUpload(key).pipe(
       Effect.mapError(r2Error(`multipart ${key}`)),
-      Effect.map((upload) =>
-        orderedMultipart({
-          uploadPart: (partNumber, part) =>
-            upload
-              .uploadPart(partNumber, part)
-              .pipe(Effect.mapError(r2Error(`part ${partNumber} of ${key}`))),
-          complete: (parts) =>
-            upload
-              .complete(parts as never[])
-              .pipe(Effect.mapError(r2Error(`complete ${key}`)), Effect.asVoid),
-          abort: upload
-            .abort()
-            .pipe(Effect.mapError(r2Error(`abort ${key}`)), Effect.asVoid),
-        }),
-      ),
+      Effect.map((upload): BlobMultipart => ({
+        uploadId: upload.uploadId,
+        uploadPart: (partNumber, part) =>
+          upload
+            .uploadPart(partNumber, part)
+            .pipe(Effect.mapError(r2Error(`part ${partNumber} of ${key}`))),
+        complete: (parts) =>
+          upload
+            .complete(orderedParts(parts))
+            .pipe(Effect.mapError(r2Error(`complete ${key}`)), Effect.asVoid),
+        abort: upload
+          .abort()
+          .pipe(Effect.mapError(r2Error(`abort ${key}`)), Effect.asVoid),
+      })),
+    ),
+  uploadPart: (key, uploadId, partNumber, part) =>
+    bucket.resumeMultipartUpload(key, uploadId).pipe(
+      Effect.flatMap((upload) => upload.uploadPart(partNumber, part)),
+      Effect.mapError(r2Error(`part ${partNumber} of ${key}`)),
     ),
   delete: (keys) =>
     bucket

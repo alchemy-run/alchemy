@@ -121,7 +121,7 @@ import * as Option from "effect/Option";
 import * as Semaphore from "effect/Semaphore";
 import { Hasher } from "./Hasher.ts";
 import { encodeStagedBatch } from "./PushWire.ts";
-import { HEAD_BYTES, receiveWireBodyStreaming } from "./store/IncomingBody.ts";
+import { feedBody, HEAD_BYTES } from "./store/IncomingBody.ts";
 import { makeStreamingSource } from "./store/StreamingSource.ts";
 import { sliceRandomAccess } from "./store/PackSource.ts";
 import { incomingKey, wirePackId } from "./store/Keys.ts";
@@ -408,6 +408,8 @@ const make = Effect.gen(function* () {
   // `HasherSelf`, inline under `HasherInline`.
   const hasher = yield* Hasher;
   const pushGate = yield* isolatePushGate;
+  /** Staging batches in flight to the Repo DO per push (DESIGN §22.10). */
+  const STAGE_CONCURRENCY = 3;
 
   // The registry block, whichever backend the assembly provided.
   const registryStub = () => registry;
@@ -1756,7 +1758,10 @@ const make = Effect.gen(function* () {
     let keepParked = false;
     const receiveId = yield* ulid();
     const feeder = makeStreamingSource();
-    const spill = { started: false };
+    // Staging batches in flight to the DO. Detached from the pump's
+    // fibers (a consumer's children would die with it); the route joins
+    // them before the commit and interrupts leftovers on any other exit.
+    const staging: Array<Fiber.Fiber<void, StoreErrorClass>> = [];
     const isGzip = /\bgzip\b/i.test(request.headers["content-encoding"] ?? "");
     const receiving = yield* Effect.forkChild(
       Effect.result(
@@ -1783,19 +1788,11 @@ const make = Effect.gen(function* () {
               );
               yield* feeder.push(decoded);
               feeder.end();
-              return { total: decoded.length, parkedKey: undefined };
+              return { total: decoded.length };
             }).pipe(
               Effect.tapError((error) => Effect.sync(() => feeder.fail(error))),
             )
-          : receiveWireBodyStreaming(request.stream, {
-              blobs: workerBlobs,
-              key: incomingKey(entry.repoId, receiveId),
-              spillThreshold: MAX_PACK_BYTES,
-              feeder,
-              onSpill: () => {
-                spill.started = true;
-              },
-            }),
+          : feedBody(request.stream, feeder),
       ),
     );
     return yield* Effect.gen(function* () {
@@ -1896,14 +1893,32 @@ const make = Effect.gen(function* () {
           | { readonly type: ObjectType; readonly content: Uint8Array }
           | undefined
         >();
+        // Staging batches go to the DO concurrently (bounded) so the round
+        // trips overlap the receive; `settle` joins them before the commit.
+        const stageGate = yield* Semaphore.make(STAGE_CONCURRENCY);
         const store: IngestStore = {
           insertStagedBatch: (id, objects) =>
-            stub
-              .stagePush(id, encodeStagedBatch(objects))
-              .pipe(
-                Effect.mapError(asStoreError),
-                Effect.provide(RuntimeContext.phantom),
-              ),
+            Effect.gen(function* () {
+              // Encoded now (a copy), so the caller may release its buffers.
+              const encoded = encodeStagedBatch(objects);
+              const fiber = yield* Effect.forkDetach(
+                Semaphore.withPermits(
+                  stageGate,
+                  1,
+                )(
+                  stub
+                    .stagePush(id, encoded)
+                    .pipe(
+                      Effect.mapError(asStoreError),
+                      Effect.provide(RuntimeContext.phantom),
+                    ),
+                ),
+              );
+              staging.push(fiber);
+            }),
+          settle: Effect.gen(function* () {
+            for (const fiber of staging.splice(0)) yield* Fiber.join(fiber);
+          }),
           readBase: (oid) =>
             bases.has(oid)
               ? Effect.succeed(bases.get(oid))
@@ -1927,17 +1942,21 @@ const make = Effect.gen(function* () {
         let ingestMs = 0;
         if (hasPack) {
           const source = sliceRandomAccess(feeder.source, parsed.packStart);
-          const wire = {
-            packId: wirePackId(receiveId),
-            base: parsed.packStart,
-          };
           const ingestStarted = yield* Effect.sync(() => performance.now());
           const outcome = yield* Effect.result(
             ingestPackFrom(source, {
               store,
               pushId,
               hasher,
-              promote: () => (spill.started ? wire : undefined),
+              spill: {
+                body: feeder.source,
+                feeder,
+                packStart: parsed.packStart,
+                blobs: workerBlobs,
+                key: incomingKey(entry.repoId, receiveId),
+                packId: wirePackId(receiveId),
+                threshold: MAX_PACK_BYTES,
+              },
             }),
           );
           ingestMs = yield* since(ingestStarted);
@@ -1954,7 +1973,7 @@ const make = Effect.gen(function* () {
         if (Result.isFailure(received)) {
           return reply(errPkt(received.failure.reason));
         }
-        parkedKey = received.success.parkedKey;
+        parkedKey = ingest?.parkedKey;
         const promoted = ingest?.promoted ?? 0;
         const committed = yield* stub.commitPush({
           pushId,
@@ -1990,15 +2009,20 @@ const make = Effect.gen(function* () {
         ),
       ),
       Effect.catchTag("RepoNotFound", () => Effect.succeed(notFound)),
+      Effect.tapCause((cause) => Effect.logError("push: route failure", cause)),
       // Single owner of the spilled body: whatever path exits, the parked
       // object is dropped unless committed rows reference it.
       Effect.ensuring(
-        Effect.andThen(Fiber.interrupt(receiving), () =>
-          parkedKey === undefined || keepParked
-            ? Effect.void
-            : workerBlobs
-                .delete(parkedKey)
-                .pipe(Effect.provide(RuntimeContext.phantom), Effect.ignore),
+        Effect.andThen(
+          Effect.andThen(Fiber.interrupt(receiving), () =>
+            Fiber.interruptAll(staging.splice(0)),
+          ),
+          () =>
+            parkedKey === undefined || keepParked
+              ? Effect.void
+              : workerBlobs
+                  .delete(parkedKey)
+                  .pipe(Effect.provide(RuntimeContext.phantom), Effect.ignore),
         ),
       ),
     );
@@ -2132,28 +2156,53 @@ const make = Effect.gen(function* () {
       return HttpServerResponse.text("bad coordinates", { status: 400 });
     }
     const body = new Uint8Array(yield* request.arrayBuffer);
+    // A requested spill part uploads concurrently with the scan (DESIGN
+    // §22.10): this isolate is the writer of the part it verifies.
+    const key = query.get("key");
+    const uploadId = query.get("uploadId");
+    const partNumber = Number(query.get("part"));
+    const upload =
+      key !== null && uploadId !== null && Number.isFinite(partNumber)
+        ? yield* Effect.forkChild(
+            workerBlobs
+              .uploadPart(key, uploadId, partNumber, body)
+              .pipe(Effect.provide(RuntimeContext.phantom), Effect.result),
+          )
+        : undefined;
+    const skip = Number(query.get("skip") ?? "0");
     const result = yield* (
       boundsMode
         ? Effect.suspend(() => {
             const { bounds, payload } = decodeBoundsRequest(body);
             return hashBounds(payload, bounds, { base, maxObjectSize });
           })
-        : scanPart(body, {
+        : scanPart(skip > 0 ? body.subarray(skip) : body, {
             base,
             remaining,
             maxObjectSize,
             resync: query.get("resync") === "1",
           })
     ).pipe(Effect.result);
+    const part = upload === undefined ? undefined : yield* Fiber.join(upload);
+    if (part !== undefined && Result.isFailure(part)) {
+      return HttpServerResponse.text(
+        `spill part ${partNumber}: ${part.failure.reason}`,
+        { status: 502 },
+      );
+    }
     if (Result.isFailure(result)) {
       return HttpServerResponse.text(
         `${result.failure._tag}: ${"reason" in result.failure ? result.failure.reason : ""}`,
         { status: 422 },
       );
     }
-    return HttpServerResponse.uint8Array(encodeScanResult(result.success), {
-      contentType: "application/octet-stream",
-    });
+    return HttpServerResponse.uint8Array(
+      encodeScanResult({
+        ...result.success,
+        part: part === undefined ? undefined : part.success,
+      }),
+      { contentType: "application/octet-stream" },
+    );
   });
 
   const rawRoutes = Layer.mergeAll(

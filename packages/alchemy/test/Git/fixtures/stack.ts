@@ -56,8 +56,8 @@ const GitObjects = Cloudflare.R2.Bucket("GitObjects", {
 const GitLive = ServerLive.pipe(
   Layer.provide(ReposDurableObject),
   Layer.provide(RegistryDurableObject),
-  Layer.provide(BlobStoreR2(GitObjects)),
   Layer.provide(HasherSelf),
+  Layer.provide(BlobStoreR2(GitObjects)),
   Layer.provide(AuthTokens),
 );
 

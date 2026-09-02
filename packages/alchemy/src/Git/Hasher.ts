@@ -24,8 +24,15 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
+import * as Fiber from "effect/Fiber";
 import { WorkerEnvironment } from "../Cloudflare/Workers/Worker.ts";
+import { RuntimeContext } from "../RuntimeContext.ts";
 import { ADMIN_TOKEN_CONFIG_KEY } from "./Auth.ts";
+import {
+  BlobStore,
+  type BlobStoreShape,
+  type UploadedPart,
+} from "./BlobStore.ts";
 import type { Oid, ObjectType } from "./git/ObjectCodec.ts";
 import {
   type EntryBounds,
@@ -40,11 +47,35 @@ export class HashError extends Schema.TaggedError<HashError>()("HashError", {
 }) {}
 
 export interface HashPartOptions {
+  /** Pack-relative offset of `payload[skip]`. */
   readonly base: number;
   readonly remaining: number;
   readonly maxObjectSize: number;
   /** The payload is a raw chunk: find the first boundary first (DESIGN §22.9). */
   readonly resync?: boolean | undefined;
+  /**
+   * Scanning starts at `payload[skip]`; the bytes before it (the request's
+   * command section and the pack header, in a body-aligned first part) are
+   * spilled but not scanned.
+   */
+  readonly skip?: number | undefined;
+  /**
+   * Write the WHOLE payload as this part of a multipart upload while
+   * scanning it (DESIGN §22.10): the hasher isolate is the spill's writer,
+   * so the receiver sends each byte out once.
+   */
+  readonly spill?:
+    | {
+        readonly key: string;
+        readonly uploadId: string;
+        readonly partNumber: number;
+      }
+    | undefined;
+}
+
+/** A scan plus, when a spill was requested, the uploaded part's identity. */
+export interface HashPartResult extends ScanResult {
+  readonly part?: UploadedPart | undefined;
 }
 
 export interface HasherShape {
@@ -52,7 +83,7 @@ export interface HasherShape {
     payload: Uint8Array,
     options: HashPartOptions,
   ) => Effect.Effect<
-    ScanResult,
+    HashPartResult,
     HashError | PackFormatError | ObjectTooLargeError
   >;
   /**
@@ -74,12 +105,49 @@ export class Hasher extends Context.Service<Hasher, HasherShape>()(
   "alchemy/Git/Hasher",
 ) {}
 
-/** Runs the scan in-process. */
-export const HasherInline: Layer.Layer<Hasher> = Layer.succeed(Hasher, {
-  hashPart: (payload, options) => scanPart(payload, options),
+/** The in-process hasher: scans here; a requested spill part goes to `blobs`. */
+export const makeInlineHasher = (blobs: BlobStoreShape): HasherShape => ({
+  hashPart: (payload, options) =>
+    Effect.gen(function* () {
+      const spill = options.spill;
+      const upload =
+        spill === undefined
+          ? undefined
+          : yield* Effect.forkChild(
+              blobs
+                .uploadPart(
+                  spill.key,
+                  spill.uploadId,
+                  spill.partNumber,
+                  payload,
+                )
+                .pipe(
+                  Effect.mapError(
+                    (error) =>
+                      new HashError({
+                        reason: `spill part ${spill.partNumber}: ${error.reason}`,
+                      }),
+                  ),
+                  Effect.provide(RuntimeContext.phantom),
+                ),
+            );
+      const skip = options.skip ?? 0;
+      const scan = yield* scanPart(
+        skip === 0 ? payload : payload.subarray(skip),
+        options,
+      );
+      const part = upload === undefined ? undefined : yield* Fiber.join(upload);
+      return { ...scan, part };
+    }),
   hashBoundsPart: (payload, bounds, options) =>
     hashBounds(payload, bounds, options),
 });
+
+/** Runs the scan in-process (tests, or a deployment without a self binding). */
+export const HasherInline: Layer.Layer<Hasher, never, BlobStore> = Layer.effect(
+  Hasher,
+  Effect.map(BlobStore, makeInlineHasher),
+);
 
 /**
  * Request framing for the bounds mode: `u32 jsonLength | json(bounds) |
@@ -128,6 +196,7 @@ interface WireEntry {
   readonly c?: [number, number]; // content [offset, length]
 }
 interface WireResult {
+  readonly part?: UploadedPart | undefined;
   readonly firstOffset: number;
   readonly entries: ReadonlyArray<WireEntry>;
   readonly unresolved: ScanResult["unresolved"];
@@ -135,7 +204,7 @@ interface WireResult {
   readonly count: number;
 }
 
-export const encodeScanResult = (result: ScanResult): Uint8Array => {
+export const encodeScanResult = (result: HashPartResult): Uint8Array => {
   const blobs: Array<Uint8Array> = [];
   let at = 0;
   const put = (bytes: Uint8Array): [number, number] => {
@@ -145,6 +214,7 @@ export const encodeScanResult = (result: ScanResult): Uint8Array => {
     return ref;
   };
   const wire: WireResult = {
+    ...(result.part === undefined ? {} : { part: result.part }),
     firstOffset: result.firstOffset,
     entries: result.entries.map((e) => ({
       o: e.oid,
@@ -172,7 +242,7 @@ export const encodeScanResult = (result: ScanResult): Uint8Array => {
   return out;
 };
 
-export const decodeScanResult = (bytes: Uint8Array): ScanResult => {
+export const decodeScanResult = (bytes: Uint8Array): HashPartResult => {
   const jsonLength = new DataView(bytes.buffer, bytes.byteOffset).getUint32(0);
   const wire = JSON.parse(
     new TextDecoder().decode(bytes.subarray(4, 4 + jsonLength)),
@@ -181,6 +251,7 @@ export const decodeScanResult = (bytes: Uint8Array): ScanResult => {
   const slice = (ref: [number, number] | undefined) =>
     ref === undefined ? undefined : blobs.subarray(ref[0], ref[0] + ref[1]);
   return {
+    part: wire.part,
     firstOffset: wire.firstOffset,
     entries: wire.entries.map((e) => ({
       oid: e.o as Oid,
@@ -211,65 +282,70 @@ interface SelfFetcher {
  * config the Worker uses. Falls back to {@link HasherInline} when the
  * binding is absent from the environment.
  */
-export const HasherSelf: Layer.Layer<Hasher, never, WorkerEnvironment> =
-  Layer.effect(
-    Hasher,
-    Effect.gen(function* () {
-      const env = yield* WorkerEnvironment;
-      const fetcher = (env as Record<string, unknown>)[HASHER_BINDING] as
-        | SelfFetcher
-        | undefined;
-      const adminKey = yield* Config.redacted(ADMIN_TOKEN_CONFIG_KEY).pipe(
-        Effect.map(Redacted.value),
-        Effect.orElseSucceed(() => undefined),
-      );
-      if (fetcher === undefined || adminKey === undefined) {
-        return {
-          hashPart: (payload, opts) => scanPart(payload, opts),
-          hashBoundsPart: (payload, bounds, opts) =>
-            hashBounds(payload, bounds, opts),
-        };
-      }
-      const post = (url: string, body: Uint8Array) =>
-        Effect.gen(function* () {
-          const response = yield* Effect.tryPromise({
-            try: () =>
-              fetcher.fetch(url, {
-                method: "POST",
-                headers: {
-                  "content-type": "application/octet-stream",
-                  authorization: `Bearer ${adminKey}`,
-                },
-                body: body as unknown as BodyInit,
-              }),
-            catch: (error) =>
-              new HashError({ reason: `hash part fetch: ${String(error)}` }),
-          });
-          const bytes = new Uint8Array(
-            yield* Effect.tryPromise({
-              try: () => response.arrayBuffer(),
-              catch: (error) =>
-                new HashError({ reason: `hash part body: ${String(error)}` }),
+export const HasherSelf: Layer.Layer<
+  Hasher,
+  never,
+  WorkerEnvironment | BlobStore
+> = Layer.effect(
+  Hasher,
+  Effect.gen(function* () {
+    const env = yield* WorkerEnvironment;
+    const blobs = yield* BlobStore;
+    const fetcher = (env as Record<string, unknown>)[HASHER_BINDING] as
+      | SelfFetcher
+      | undefined;
+    const adminKey = yield* Config.redacted(ADMIN_TOKEN_CONFIG_KEY).pipe(
+      Effect.map(Redacted.value),
+      Effect.orElseSucceed(() => undefined),
+    );
+    if (fetcher === undefined || adminKey === undefined) {
+      return makeInlineHasher(blobs);
+    }
+    const post = (url: string, body: Uint8Array) =>
+      Effect.gen(function* () {
+        const response = yield* Effect.tryPromise({
+          try: () =>
+            fetcher.fetch(url, {
+              method: "POST",
+              headers: {
+                "content-type": "application/octet-stream",
+                authorization: `Bearer ${adminKey}`,
+              },
+              body: body as unknown as BodyInit,
             }),
-          );
-          if (response.status !== 200) {
-            return yield* new HashError({
-              reason: `hash part: status ${response.status}: ${new TextDecoder().decode(bytes.subarray(0, 200))}`,
-            });
-          }
-          return decodeScanResult(bytes);
+          catch: (error) =>
+            new HashError({ reason: `hash part fetch: ${String(error)}` }),
         });
-      return {
-        hashPart: (payload, opts) =>
-          post(
-            `https://self${HASH_ROUTE}?base=${opts.base}&remaining=${opts.remaining}&max=${opts.maxObjectSize}${opts.resync ? "&resync=1" : ""}`,
-            payload,
-          ),
-        hashBoundsPart: (payload, bounds, opts) =>
-          post(
-            `https://self${HASH_ROUTE}?mode=bounds&base=${opts.base}&max=${opts.maxObjectSize}`,
-            encodeBoundsRequest(payload, bounds),
-          ),
-      };
-    }),
-  );
+        const bytes = new Uint8Array(
+          yield* Effect.tryPromise({
+            try: () => response.arrayBuffer(),
+            catch: (error) =>
+              new HashError({ reason: `hash part body: ${String(error)}` }),
+          }),
+        );
+        if (response.status !== 200) {
+          return yield* new HashError({
+            reason: `hash part: status ${response.status}: ${new TextDecoder().decode(bytes.subarray(0, 200))}`,
+          });
+        }
+        return decodeScanResult(bytes);
+      });
+    return {
+      hashPart: (payload, opts) => {
+        const spill =
+          opts.spill === undefined
+            ? ""
+            : `&key=${encodeURIComponent(opts.spill.key)}&uploadId=${encodeURIComponent(opts.spill.uploadId)}&part=${opts.spill.partNumber}`;
+        return post(
+          `https://self${HASH_ROUTE}?base=${opts.base}&remaining=${opts.remaining}&max=${opts.maxObjectSize}${opts.resync ? "&resync=1" : ""}${opts.skip ? `&skip=${opts.skip}` : ""}${spill}`,
+          payload,
+        );
+      },
+      hashBoundsPart: (payload, bounds, opts) =>
+        post(
+          `https://self${HASH_ROUTE}?mode=bounds&base=${opts.base}&max=${opts.maxObjectSize}`,
+          encodeBoundsRequest(payload, bounds),
+        ),
+    };
+  }),
+);
