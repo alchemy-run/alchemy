@@ -12,21 +12,25 @@
  *   &rvt-method=getOrCreate
  *   &rvt-key={instanceName}      // the Durable Object instance name
  *   &rvt-runner={pool}           // the runner pool serving the actor
- *   &rvt-token={token}
  * body     {"args": [...]}
  * response {"output": ...}
  * ```
+ *
+ * The data plane carries no token: the engine's gateway does not enforce
+ * one on actor calls (the admin token guards the management APIs only),
+ * so the caller boundary is the engine's private network — see
+ * `Rivet.bindWorker`.
  *
  * Typed `Effect.fail`s cross the wire as alchemy's RPC error envelope in
  * `output` (the actor bridge RETURNS them — Rivet's own action-error path
  * erases payloads) and are lifted back into the error channel here via
  * {@link decodeRpcResult}. `Stream` results arrive as collected arrays (see
- * `ActorBridge.ts`).
+ * `DurableObjectBridge.ts`).
  *
  * Consumed by `Rivet.bindWorker` (callers outside the runner) and by the
- * generated runner entry's synthetic worker environment (in-runner
- * `getByName`, which round-trips through the engine so instances resolve
- * to whichever runner owns them).
+ * runner bridge's worker environment (in-runner `getByName`, which
+ * round-trips through the engine so instances resolve to whichever runner
+ * owns them).
  *
  * @internal runtime-bundled; dependency-light by design.
  */
@@ -41,8 +45,9 @@ import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import { decodeRpcResult } from "../Rpc.ts";
 
 /** A named Durable Object (actor) namespace client. */
-export interface DurableObjectNamespaceClient {
-  getByName: (name: string) => any;
+export interface RivetDurableObjectNamespaceClient<Shape = any> {
+  /** Address the instance keyed `name`; the stub's methods mirror `Shape`. */
+  getByName: (name: string) => Shape;
 }
 
 /** The engine namespace actors are created in. */
@@ -67,8 +72,6 @@ export class RivetGatewayError extends Data.TaggedError("RivetGatewayError")<{
 export interface RivetGatewayConnection {
   /** The engine guard endpoint WITHOUT auth, e.g. `http://engine.internal:6420`. */
   readonly endpoint: string;
-  /** The token checked by the engine (`rvt-token`). */
-  readonly token: string;
   /**
    * The engine namespace (`rvt-namespace`).
    * @default RIVET_ACTOR_NAMESPACE
@@ -83,17 +86,22 @@ export interface RivetGatewayConnection {
 
 /**
  * Parse a `RIVET_ENDPOINT` value in rivetkit's URL-auth form
- * (`http://{namespace}:{token}@host:port`) into a gateway connection.
- * A plain endpoint (no auth) yields an empty token and the default
- * namespace.
+ * (`http://{namespace}:{token}@host:port`) into a gateway connection plus
+ * the admin token (needed by the runner's management calls only). A plain
+ * endpoint (no auth) yields an empty token and the default namespace.
  */
-export const parseRivetEndpoint = (raw: string): RivetGatewayConnection => {
+export const parseRivetEndpoint = (
+  raw: string,
+): RivetGatewayConnection & {
+  readonly namespace: string;
+  readonly token: string;
+} => {
   const url = new URL(raw);
   const namespace = url.username
     ? decodeURIComponent(url.username)
     : RIVET_ACTOR_NAMESPACE;
   const token = url.password ? decodeURIComponent(url.password) : "";
-  return { endpoint: url.origin, token, namespace };
+  return { endpoint: url.origin, namespace, token };
 };
 
 /** Compose a `RIVET_ENDPOINT` value in rivetkit's URL-auth form. */
@@ -187,7 +195,6 @@ const makeRivetActorStub = (
                   "rvt-method": "getOrCreate",
                   "rvt-key": key,
                   "rvt-runner": connection.pool ?? RIVET_RUNNER_POOL,
-                  "rvt-token": connection.token,
                 });
                 const endpoint = connection.endpoint.replace(/\/+$/, "");
                 const url = `${endpoint}/gateway/${encodeURIComponent(
@@ -258,6 +265,6 @@ const makeRivetActorStub = (
 export const makeRivetActorClient = (
   connection: RivetGatewayConnection,
   actorName: string,
-): DurableObjectNamespaceClient => ({
+): RivetDurableObjectNamespaceClient => ({
   getByName: (name: string) => makeRivetActorStub(connection, actorName, name),
 });

@@ -7,29 +7,17 @@
  * imports alchemy's own dependencies, which an isolated install cannot
  * resolve from the consumer's project (see `Runtime/Bootstrap/Process.ts`).
  *
- * The plan-time-discovered per-class RPC surface is baked into the shim as
- * plain data — Rivet reads an actor's `actions` map once at registration,
- * so the names must be known before any instance exists.
- *
  * @internal not exported from the Rivet barrel.
  */
-import {
-  isDurableObjectExport,
-  type DurableObjectExport,
-} from "../Cloudflare/Workers/DurableObject.ts";
+import { isDurableObjectExport } from "../Workers/DurableObject.ts";
 
 export const makeRivetRunnerEntry = (
   exports: Record<string, unknown>,
   stack: { name: string; stage: string },
 ) => {
-  const classes = Object.entries(exports ?? {})
-    .filter((entry): entry is [string, DurableObjectExport] =>
-      isDurableObjectExport(entry[1]),
-    )
-    .map(([className, entry]) => ({
-      className,
-      methods: entry.methods ?? [],
-    }));
+  const classes = Object.keys(exports ?? {})
+    .filter((className) => isDurableObjectExport(exports[className]))
+    .map((className) => ({ className }));
 
   return (importPath: string) => `
 import { bootstrap } from "alchemy/Runtime/Bootstrap/RivetRunner";
