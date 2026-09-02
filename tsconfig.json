@@ -215,6 +215,9 @@
       "path": "./examples/fly-website-nextjs/tsconfig.json"
     },
     {
+      "path": "./examples/fly-website-vinext/tsconfig.json"
+    },
+    {
       "path": "./examples/fly-website-nuxt/tsconfig.json"
     },
     {
@@ -245,6 +248,9 @@
       "path": "./examples/hetzner-website-nextjs/tsconfig.json"
     },
     {
+      "path": "./examples/hetzner-website-vinext/tsconfig.json"
+    },
+    {
       "path": "./examples/hetzner-website-nuxt/tsconfig.json"
     },
     {
@@ -273,6 +279,9 @@
     },
     {
       "path": "./examples/railway-website-nextjs/tsconfig.json"
+    },
+    {
+      "path": "./examples/railway-website-vinext/tsconfig.json"
     },
     {
       "path": "./examples/railway-website-nuxt/tsconfig.json"

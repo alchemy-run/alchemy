@@ -1,0 +1,91 @@
+---
+title: vinext
+description: Deploy a vinext app to AWS with AWS.Website.Vinext — vinext build plus a streaming Lambda RSC handler, S3 + CloudFront assets, and vinext dev under alchemy dev.
+sidebar:
+  order: 9.6
+---
+
+import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
+
+export const devDeps = "@alchemy.run/frontend-frameworks";
+
+`AWS.Website.Vinext` deploys a [vinext](https://vinext.dev) app to
+AWS: the RSC server on a streaming Lambda Function URL, static
+assets in S3, and a CloudFront distribution whose edge router
+serves uploaded files from S3 and forwards everything else to the
+server.
+
+This is **not** `AWS.Website.Nextjs` (OpenNext) and **not**
+`Cloudflare.Website.Vinext` (Workers). The build runs `vinext
+build` and wraps the App Router entry as a Lambda handler. Server
+components and route handlers read `process.env`.
+
+## Install
+
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun">
+    <Code code={`bun add -d ${devDeps}`} lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code={`npm install -D ${devDeps}`} lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code={`pnpm add -D ${devDeps}`} lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code={`yarn add -D ${devDeps}`} lang="sh" />
+  </TabItem>
+</Tabs>
+
+ISR / `"use cache"` on AWS is S3, not Cloudflare KV.
+`AWS.Website.Vinext` provisions a dedicated cache bucket, sets
+`CACHE_BUCKET_NAME`, and grants the Lambda Get/Put/Delete.
+
+```typescript
+import { s3Adapter } from "@alchemy.run/frontend-frameworks/vinext/cache/s3";
+import { defineConfig } from "vite";
+import vinext from "vinext";
+
+export default defineConfig({
+  plugins: [vinext({ cache: { data: s3Adapter() } })],
+});
+```
+
+Missing `CACHE_BUCKET_NAME` (local `vinext start`) falls back to
+memory.
+
+## Declare the Website
+
+```typescript
+import * as AWS from "alchemy/AWS";
+
+export const Website = AWS.Website.Vinext("Website", {
+  env: {
+    GREETING: "Hello from vinext on AWS!",
+  },
+});
+```
+
+```typescript
+// app/page.tsx
+export const dynamic = "force-dynamic";
+
+export default function Home() {
+  return <h1>{process.env.GREETING ?? "Hello!"}</h1>;
+}
+```
+
+```typescript
+// app/api/hello/route.ts
+export function GET() {
+  return Response.json({ hello: "world" });
+}
+```
+
+`alchemy dev` runs `vinext dev`; wrap the site in `Alchemy.remote()`
+to deploy the live Lambda + CloudFront path during dev.
+
+## Where next
+
+- [`AWS.Website.Vinext` reference](/providers/aws/website/vinext)
+- [vinext on Cloudflare](/cloudflare/frontend/vinext)

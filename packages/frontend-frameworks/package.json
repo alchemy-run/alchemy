@@ -44,6 +44,7 @@
     "test:sveltekit": "vitest run src/sveltekit/test",
     "test:tanstack-start": "vitest run src/tanstack-start/test",
     "test:vite": "vitest run src/vite/test",
+    "test:vinext": "vitest run src/vinext/test",
     "test:waku": "vitest run src/waku/test",
     "test:vocs": "vitest run src/vocs/test",
     "typecheck": "tsc -b tsconfig.json && tsc --noEmit -p tsconfig.test.json"
@@ -389,6 +390,18 @@
       "worker": "./dist/vinext/index.js",
       "import": "./dist/vinext/index.js"
     },
+    "./vinext/aws": {
+      "types": "./dist/vinext/aws.d.ts",
+      "bun": "./dist/vinext/aws.js",
+      "worker": "./dist/vinext/aws.js",
+      "import": "./dist/vinext/aws.js"
+    },
+    "./vinext/node": {
+      "types": "./dist/vinext/node.d.ts",
+      "bun": "./dist/vinext/node.js",
+      "worker": "./dist/vinext/node.js",
+      "import": "./dist/vinext/node.js"
+    },
     "./vinext/cloudflare": {
       "types": "./dist/vinext/cloudflare.d.ts",
       "bun": "./dist/vinext/cloudflare.js",
@@ -400,6 +413,18 @@
       "bun": "./dist/vinext/source.js",
       "worker": "./dist/vinext/source.js",
       "import": "./dist/vinext/source.js"
+    },
+    "./vinext/cache/redis": {
+      "types": "./dist/vinext/cache/redis.d.ts",
+      "bun": "./dist/vinext/cache/redis.js",
+      "worker": "./dist/vinext/cache/redis.js",
+      "import": "./dist/vinext/cache/redis.js"
+    },
+    "./vinext/cache/s3": {
+      "types": "./dist/vinext/cache/s3.d.ts",
+      "bun": "./dist/vinext/cache/s3.js",
+      "worker": "./dist/vinext/cache/s3.js",
+      "import": "./dist/vinext/cache/s3.js"
     },
     "./vite": {
       "types": "./dist/vite/index.d.ts",

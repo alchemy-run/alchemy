@@ -82,7 +82,8 @@ The `worker/index.ts` + `vinext/server/fetch-handler` template is
 Cloudflare-only. For a long-running Node process (Railway, Fly,
 Hetzner) or Lambda (AWS), use `Website.Vinext` on that platform —
 `vinext build` plus `startProdServer` / a Lambda fetch wrap, with
-`process.env` instead of `cloudflare:workers`.
+`process.env` instead of `cloudflare:workers`. ISR on those platforms
+uses Redis (`redisAdapter`) or S3 (`s3Adapter`), not `VINEXT_KV_CACHE`.
 
 - [`AWS.Website.Vinext`](/aws/frontend/vinext)
 - [`Railway.Website.Vinext`](/railway/frontend/vinext)
