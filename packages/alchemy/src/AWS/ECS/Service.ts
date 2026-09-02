@@ -2690,7 +2690,7 @@ const observeServiceConvergence = (input: {
     };
   });
 
-const waitForServiceConvergence = (input: {
+export const waitForServiceConvergence = (input: {
   clusterArn: string;
   serviceName: string;
   expectedTaskDefinitionArn?: string;
@@ -3709,6 +3709,16 @@ export const ServiceProvider = () =>
               cluster: output.clusterArn,
               service: output.serviceName,
               desiredCount: 0,
+              // Relax the rolling-deployment gates in the same call: with the
+              // AWS default minimumHealthyPercent of 100, a service caught
+              // mid-deployment (e.g. right after a load balancer detach)
+              // refuses to stop its old task even at desiredCount 0 ("unable
+              // to stop or start tasks during a deployment because of the
+              // service deployment configuration").
+              deploymentConfiguration: {
+                minimumHealthyPercent: 0,
+                maximumPercent: 200,
+              },
             })
             .pipe(
               Effect.retry({
@@ -3718,6 +3728,11 @@ export const ServiceProvider = () =>
                   Schedule.recurs(8),
                 ]),
               }),
+              // A service that is already DRAINING/INACTIVE (a prior delete
+              // got as far as deleteService) rejects updates for good — that
+              // is the state delete wants, so fall through to the forced
+              // delete and the lingering-task stop below.
+              Effect.catchTag("ServiceNotActiveException", () => Effect.void),
               Effect.catchTag("ServiceNotFoundException", () => Effect.void),
               Effect.catchTag("ClusterNotFoundException", () => Effect.void),
             );
@@ -3725,11 +3740,24 @@ export const ServiceProvider = () =>
           yield* session.note(
             `Waiting for ECS service ${output.serviceName} to drain`,
           );
+          // Best-effort drain: a service can wedge mid-deployment ("unable to
+          // stop or start tasks during a deployment because of the service
+          // deployment configuration" — e.g. after a load balancer was
+          // detached), in which case the old task never stops on its own.
+          // The forced delete below stops it regardless, so a drain timeout
+          // must never fail the delete.
           yield* waitForServiceConvergence({
             clusterArn: output.clusterArn,
             serviceName: output.serviceName,
             mode: "drained",
-          });
+            timeout: "3 minutes",
+          }).pipe(
+            Effect.catchTag("ServiceDidNotStabilize", (error) =>
+              session.note(
+                `ECS service ${output.serviceName} did not drain in time (${error.message}); deleting with force`,
+              ),
+            ),
+          );
 
           yield* ecs
             .deleteService({
@@ -3741,6 +3769,42 @@ export const ServiceProvider = () =>
               Effect.catchTag("ServiceNotFoundException", () => Effect.void),
               Effect.catchTag("ClusterNotFoundException", () => Effect.void),
             );
+
+          // ECS will not stop a task pinned by a deployment it could not
+          // complete, even for a forced delete of a now-DRAINING service.
+          // Stop whatever the service still runs so the delete can finish.
+          const lingeringTasks = yield* ecs.listTasks
+            .pages({
+              cluster: output.clusterArn,
+              serviceName: output.serviceName,
+            })
+            .pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) => page.taskArns ?? []),
+              ),
+              Effect.catchTag(
+                ["ClusterNotFoundException", "ServiceNotFoundException"],
+                () => Effect.succeed([] as string[]),
+              ),
+            );
+          yield* Effect.forEach(
+            lingeringTasks,
+            (task) =>
+              ecs
+                .stopTask({
+                  cluster: output.clusterArn,
+                  task,
+                  reason: "alchemy delete",
+                })
+                .pipe(
+                  Effect.catchTag("ClusterNotFoundException", () =>
+                    Effect.succeed(undefined),
+                  ),
+                  Effect.asVoid,
+                ),
+            { discard: true },
+          );
 
           yield* waitForServiceConvergence({
             clusterArn: output.clusterArn,

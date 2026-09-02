@@ -1,6 +1,7 @@
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import { describe } from "alchemy-test";
 import * as ConfigProvider from "effect/ConfigProvider";
@@ -12,7 +13,13 @@ import OtelCustomWorker from "./fixtures/otel-custom-worker.ts";
 import OtelEventFlushWorker from "./fixtures/otel-event-flush-worker.ts";
 import OtelTracedWorker from "./fixtures/otel-traced-worker.ts";
 
-const { test } = Test.make({ providers: Cloudflare.providers() });
+const testOptions = { providers: Cloudflare.providers() };
+const { test, afterAll } = Test.make(testOptions);
+// File-backed scratch state shared by the body and the `afterAll` teardown:
+// the leading `destroy()` really drains a previous run's workers (a
+// stranded collector still holds the custom hostname and would fail the
+// next attach), and the trailing one runs whether the body passed or not.
+const stack = Core.scratchStack(testOptions, "Telemetry", import.meta.url);
 
 const collectorMain = pathe.resolve(
   import.meta.dirname,
@@ -40,9 +47,13 @@ const collectorWorker = () =>
   });
 
 describe("Cloudflare Worker Telemetry", () => {
-  test.provider(
+  afterAll.skipIf(!!process.env.NO_DESTROY)(stack.destroy(), {
+    timeout: 300_000,
+  });
+
+  test(
     "OTLP telemetry exports per request (otlp binding + custom Layer)",
-    (stack) =>
+    Core.withProviders(
       Effect.gen(function* () {
         yield* stack.destroy();
 
@@ -179,6 +190,9 @@ describe("Cloudflare Worker Telemetry", () => {
           label: "deployed DO rpc event batch",
         });
       }),
+      testOptions,
+      stack.name,
+    ),
     { timeout: 600_000 },
   );
 });

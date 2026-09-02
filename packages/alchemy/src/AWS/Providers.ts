@@ -260,6 +260,7 @@ export const providers = () =>
         Account.Region,
         ACM.AccountConfiguration,
         ACM.Certificate,
+        ACM.CertificateValidation,
         ACMPCA.CertificateAuthority,
         ACMPCA.CertificateAuthorityPolicy,
         ACMPCA.Permission,
@@ -519,6 +520,7 @@ export const providers = () =>
         ECS.CapacityProvider,
         ECS.Cluster,
         ECS.Service,
+        ECS.ServiceTargetGroupAttachment,
         ECS.Task,
         ECS.TaskDefinition,
         EFS.AccessPoint,
@@ -1001,6 +1003,9 @@ export const providers = () =>
             ACM.AccountConfigurationProvider(),
           ),
           flociDual(ACM.Certificate, () => ACM.CertificateProvider()),
+          flociDual(ACM.CertificateValidation, () =>
+            ACM.CertificateValidationProvider(),
+          ),
           AMP.AlertManagerDefinitionProvider(),
           AMP.AnomalyDetectorProvider(),
           AMP.LoggingConfigurationProvider(),
@@ -1323,6 +1328,7 @@ export const providers = () =>
             local: () => ECS.FlociServiceProvider(),
             dataPlane: flociServices,
           }),
+          ECS.ServiceTargetGroupAttachmentProvider(),
           flociDual(ECS.TaskDefinition, () => ECS.TaskDefinitionProvider()),
           ProviderLayer.dual(ECS.Task, {
             live: () => ECS.TaskProvider(),

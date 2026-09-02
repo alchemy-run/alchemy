@@ -8,7 +8,7 @@ import {
   type BackingPersistenceStore,
 } from "effect/unstable/persistence/Persistence";
 import { RuntimeContext } from "../../RuntimeContext.ts";
-import { DurableObjectState } from "../Workers/DurableObjectState.ts";
+import { DurableObjectState } from "../../Workers/DurableObject.ts";
 
 export const DurableObjectChatPersistence = Layer.effect(BackingPersistence)(
   Effect.gen(function* () {

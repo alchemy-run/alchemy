@@ -2,8 +2,8 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
-import { DurableObjectState } from "./DurableObjectState.ts";
-import type { SqlStorageValue } from "./DurableObjectStorage.ts";
+import { DurableObjectState } from "../../Workers/DurableObject.ts";
+import type { SqlStorageValue } from "../../Workers/DurableObjectStorage.ts";
 
 // ---------------------------------------------------------------------------
 // Scheduled Events — SQLite-backed cron/timer for Durable Objects

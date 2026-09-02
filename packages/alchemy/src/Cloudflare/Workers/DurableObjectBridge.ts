@@ -1,33 +1,37 @@
 import type * as cf from "@cloudflare/workers-types";
 import type { DurableObject as DurableObjectClass } from "cloudflare:workers";
-
-import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
-import * as Layer from "effect/Layer";
-import * as Scope from "effect/Scope";
-import * as Stream from "effect/Stream";
-
-import { HttpServerResponse } from "effect/unstable/http";
-import { buildEventTelemetry } from "../../Telemetry.ts";
-import type {
-  DurableObjectExport,
-  DurableObjectShape,
-} from "./DurableObject.ts";
 import {
-  DurableObjectState,
   fromDurableObjectState,
-} from "./DurableObjectState.ts";
-import { isScopeEjected, makeRequestEffect } from "./HttpServer.ts";
-import { fromWebSocket } from "./WebSocket.ts";
-import { getWorkerExport, handleRpcExit } from "./WorkerBridge.ts";
+  type DurableObjectExport,
+} from "../../Workers/DurableObject.ts";
+import {
+  makeDurableObjectInstance,
+  type DurableObjectInstance,
+} from "../../Workers/DurableObjectBridge.ts";
+import { fromWebSocket } from "../../Workers/WebSocket.ts";
+import { makeRequestEffect } from "./HttpServer.ts";
+import { getWorkerExport } from "./WorkerBridge.ts";
+
+export interface DurableObjectBridgeOptions {
+  /**
+   * How RPC methods reach the instance — see
+   * `Workers/DurableObjectBridge.ts`. Workerd's JSRPC dispatches through
+   * the bridge's `Proxy`; an engine whose RPC stalls on Proxy-returning
+   * constructors selects `"static"` to get real instance methods and the
+   * fetch-RPC protocol on `fetch`.
+   *
+   * @default "proxy"
+   */
+  readonly dispatch?: "proxy" | "static" | undefined;
+}
 
 /**
  * Create a DurableObjectBridge class that proxies RPC method calls through
  * the Effect runtime, encoding success/fail/stream results as RPC envelopes.
  *
- * Accepts the `DurableObject` base class and a `getExport` resolver so the
- * implementation lives in real TypeScript instead of a generated string template.
+ * Accepts the `DurableObject` base class so the implementation lives in
+ * real TypeScript instead of a generated string template.
  */
 export const makeDurableObjectBridge =
   (
@@ -43,7 +47,7 @@ export const makeDurableObjectBridge =
       };
     },
   ) =>
-  (className: string) => {
+  (className: string, options?: DurableObjectBridgeOptions) => {
     // One isolate-lifetime layer build shared by every activation of this DO
     // class: `build` memoizes the built context, so re-activations (including
     // hibernatable WebSocket wakes, which re-run the constructor) reuse it
@@ -53,41 +57,31 @@ export const makeDurableObjectBridge =
       stack,
       exportName: className,
     });
+    const dispatch = options?.dispatch ?? "proxy";
 
     return class DurableObjectBridge extends DurableObject {
-      #state;
-      #instance;
+      readonly #core: DurableObjectInstance;
       constructor(state: cf.DurableObjectState, env: any) {
         super(state as any, env);
-        this.#state = state;
 
-        this.#instance = state.blockConcurrencyWhile(() =>
-          build((promise) => void (state as any).waitUntil?.(promise)).then(
-            ({ context, export: exported, telemetry }) => {
-              const { constructor, services } = exported;
-              const doContext = Layer.succeed(
-                DurableObjectState,
-                fromDurableObjectState(this.#state),
-              ).pipe(
-                Layer.provideMerge(Layer.succeedContext(services)),
-                Layer.provideMerge(Layer.succeedContext(context)),
-              );
-              return constructor.pipe(
-                Effect.provide(doContext),
-                Effect.flatMap((instance) =>
-                  instance.pipe(Effect.provide(doContext)),
-                ),
-                Effect.map((instance) => ({
-                  instance,
-                  services,
-                  context,
-                  telemetry,
-                })),
-                Effect.runPromise,
-              );
-            },
-          ),
-        );
+        this.#core = makeDurableObjectInstance({
+          build,
+          state: fromDurableObjectState(state),
+          waitUntil: (promise) => void state.waitUntil?.(promise),
+          dispatch,
+          target: this,
+          // The whole build — including any I/O the init performs — runs
+          // inside workerd's concurrency gate: a DO constructor has no I/O
+          // context outside it, and event delivery waits for the build.
+          gate: (run) => state.blockConcurrencyWhile(run),
+        });
+        // A failed build surfaces through `#core.instance` on every call;
+        // observe it here so it does not also report as unhandled.
+        void this.#core.instance.catch(() => {});
+
+        if (dispatch === "static") {
+          return this;
+        }
 
         return new Proxy(this, {
           get: (target, prop) => {
@@ -95,105 +89,29 @@ export const makeDurableObjectBridge =
               typeof f === "function" ? f.bind(target) : f;
             if (typeof prop !== "string") return bind((target as any)[prop]);
             if (prop in target) return bind((target as any)[prop]);
-            return async (...args: any[]) =>
-              this.#execute((instance) => {
-                const method = instance[prop as keyof DurableObjectShape];
-                if (typeof method === "function") {
-                  const result = (method as any)(...args);
-                  // Effects (including nested-RPC values built by
-                  // `asEffectOrStream`, which are Effects *branded* as Streams)
-                  // must be run as effects — their resolved value may itself be
-                  // a `Stream`, which `handleRpcExit` then encodes. Only a
-                  // *genuine* `Stream` (not an Effect) is lifted into the
-                  // success channel so `handleRpcExit` encodes it directly.
-                  return Effect.isEffect(result)
-                    ? result
-                    : Stream.isStream(result)
-                      ? Effect.succeed(result)
-                      : result;
-                } else if (Effect.isEffect(method)) {
-                  return method;
-                } else {
-                  return Effect.succeed(method);
-                }
-              }, handleRpcExit);
+            return this.#core.dispatch(prop);
           },
         });
       }
 
-      async #execute(
-        fn: (instance: DurableObjectShape) => Effect.Effect<any, any, any>,
-        onExit?: (
-          exit: Exit.Exit<any, any>,
-          scope: Scope.Closeable,
-        ) => Promise<any>,
-      ) {
-        const scope = Scope.makeUnsafe();
-
-        const { instance, services, context, telemetry } = await this.#instance;
-
-        return fn(instance)
-          .pipe(
-            Effect.provide(
-              Layer.mergeAll(
-                Layer.succeed(
-                  DurableObjectState,
-                  fromDurableObjectState(this.#state),
-                ),
-                Layer.succeed(Scope.Scope, scope),
-                // The configured telemetry exporters, attached to the *call*
-                // scope by `buildEventTelemetry` so buffered telemetry
-                // flushes when the scope closes into `waitUntil` below (the
-                // isolate scope never finalizes on workerd).
-                Layer.effectContext(
-                  buildEventTelemetry(context, scope, telemetry()),
-                ),
-              ).pipe(
-                Layer.provideMerge(Layer.succeedContext(services)),
-                Layer.provideMerge(Layer.succeedContext(context)),
-              ),
-            ),
-            Effect.runPromiseExit,
-          )
-          .then((exit) =>
-            onExit
-              ? onExit(exit, scope)
-              : exit._tag === "Success"
-                ? Promise.resolve(exit.value)
-                : Promise.reject(Cause.squash(exit.cause)),
-          )
-          .finally(() =>
-            isScopeEjected(scope)
-              ? undefined
-              : this.ctx.waitUntil(
-                  // Match WorkerBridge: yield one macrotask so the
-                  // HttpMiddleware tracer's late span-end reaches the
-                  // telemetry exporter before the scope's flush finalizer.
-                  new Promise((resolve) => setTimeout(resolve, 0)).then(() =>
-                    Effect.runPromise(Scope.close(scope, Exit.void)),
-                  ),
-                ),
-          );
-      }
-
       async fetch(request: Request): Promise<any> {
-        return this.#execute((instance) =>
-          instance.fetch
-            ? makeRequestEffect(request as any, instance.fetch)
-            : Effect.succeed(
-                HttpServerResponse.text("Not implemented", {
-                  status: 404,
-                }),
-              ),
+        return this.#core.execute((instance) =>
+          makeRequestEffect(
+            request as any,
+            this.#core.fetch(instance, request),
+          ),
         );
       }
 
-      async alarm(alarmInfo?: cf.AlarmInvocationInfo) {
-        return this.#execute((instance) => instance.alarm!(alarmInfo));
+      async alarm(alarmInfo?: cf.AlarmInvocationInfo): Promise<void> {
+        await this.#core.execute((instance) => instance.alarm!(alarmInfo));
       }
 
-      async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer) {
-        return this.#execute(
+      async webSocketMessage(
+        ws: WebSocket,
+        message: string | ArrayBuffer,
+      ): Promise<void> {
+        await this.#core.execute(
           (instance) =>
             instance.webSocketMessage?.(fromWebSocket(ws as any), message) ??
             Effect.void,
@@ -205,8 +123,8 @@ export const makeDurableObjectBridge =
         code: number,
         reason: string,
         wasClean: boolean,
-      ) {
-        return this.#execute(
+      ): Promise<void> {
+        await this.#core.execute(
           (instance) =>
             instance.webSocketClose?.(
               fromWebSocket(ws as any),

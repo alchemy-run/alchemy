@@ -21,10 +21,24 @@ export interface BaseRuntimeContext {
    */
   set(id: string, output: Output): Effect.Effect<string>;
   exports?: Effect.Effect<Record<string, any>>;
+  /**
+   * Fold context-collected state into the resource's persisted Props after
+   * the init effect ran (alongside the standard `env`/`exports` stamping) —
+   * e.g. a worker's deployment target, which is only known once
+   * the impl's layers have built.
+   */
+  foldProps?(props: Record<string, unknown>): Record<string, unknown>;
   serve?<Req = never>(
     handler: HttpEffect<Req>,
     options?: { shape?: Record<string, unknown> },
   ): Effect.Effect<void, never, Req>;
+  /**
+   * Serve even when the impl shape has no `fetch` handler and no RPC
+   * methods. Set by runtimes whose served handler carries routes of its
+   * own — e.g. the Celld fleet gateway, which must serve Durable Object
+   * routing for a worker that hosts DOs but exposes no public surface.
+   */
+  alwaysServe?: boolean;
   shape?: () => Record<string, unknown>;
   /** additional services to provide to the plan  */
   planServices?: Layer.Layer<any>;
@@ -35,6 +49,13 @@ export interface BaseRuntimeContext {
    * overriding the env-driven default.
    */
   telemetry?: Layer.Layer<never, any, any>;
+  /**
+   * DNS seam implementation registered during init via a provider DNS
+   * layer (`AWS.Route53Dns()` / `Cloudflare.Dns()` — see Dns.ts). Platform
+   * resources that declare DNS records (a Celld/Rivet worker with a
+   * `domain`) read it back after the impl evaluated.
+   */
+  dns?: import("./Dns.ts").DnsService;
 }
 
 /**

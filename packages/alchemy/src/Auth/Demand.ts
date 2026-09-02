@@ -281,6 +281,12 @@ export const demandCredentials = Effect.fn("Alchemy.demandCredentials")(
     );
     if (registry === undefined || profile === undefined) return;
     const ci = yield* Config.boolean("CI").pipe(Config.withDefault(false));
+    // Mirror Resolve.ts: an EXPLICIT profile selection is authoritative
+    // even under CI=true (the alchemy-test runner defaults CI to "true");
+    // only an implicit profile is unavailable in CI.
+    const explicitProfile = Option.getOrUndefined(
+      yield* Config.option(ALCHEMY_PROFILE),
+    );
     // CI credentials come exclusively from the environment. Do not require
     // or inspect a local profile first: CI runners intentionally have no
     // profile manifest, and doing so would also risk consulting a developer's
@@ -297,12 +303,25 @@ export const demandCredentials = Effect.fn("Alchemy.demandCredentials")(
           const auth = registry[demand.provider];
           if (auth == null) return;
           if (ci) {
-            if (auth.readEnvironment === undefined) {
-              return yield* credentialsRequired(demand, profileName);
+            // Env-first in CI (mirrors Resolve.ts): a satisfied env contract
+            // wins even when ALCHEMY_PROFILE is set; an EXPLICITLY selected
+            // profile is only the fallback when env credentials are absent
+            // (the alchemy-test runner defaults CI to "true" locally).
+            const envResult =
+              auth.readEnvironment === undefined
+                ? undefined
+                : yield* Effect.result(auth.readEnvironment);
+            if (envResult !== undefined && Result.isSuccess(envResult)) {
+              return;
             }
-            return yield* auth.readEnvironment.pipe(
-              attachDemandContext(demand),
-            );
+            if (Option.isNone(configuredProfile)) {
+              if (auth.readEnvironment === undefined) {
+                return yield* credentialsRequired(demand, profileName);
+              }
+              return yield* auth.readEnvironment.pipe(
+                attachDemandContext(demand),
+              );
+            }
           }
           // Read-only precheck of the two non-CI configuration sources the
           // resolution precedence below consults: a profile entry, or —

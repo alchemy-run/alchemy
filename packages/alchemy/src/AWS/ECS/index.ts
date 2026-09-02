@@ -31,6 +31,8 @@ export * from "./RunTask.ts";
 export * from "./RunTaskHttp.ts";
 export * from "./Schedule.ts";
 export * from "./Service.ts";
+export * from "./ServiceIngress.ts";
+export * from "./ServiceTargetGroupAttachment.ts";
 export * from "./StartTask.ts";
 export * from "./StartTaskHttp.ts";
 export * from "./StopServiceDeployment.ts";

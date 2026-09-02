@@ -536,7 +536,17 @@ export const Platform = <
                   const hasRpcMethods = Object.keys(shape).some(
                     (key) => key !== "fetch",
                   );
-                  if (!fetch && !hasRpcMethods) return Effect.void;
+                  // `alwaysServe` runtimes (the Celld fleet gateway) serve
+                  // routes of their own — boot the server even for an impl
+                  // with no fetch handler and no RPC methods (e.g. a worker
+                  // that only hosts Durable Objects).
+                  if (
+                    !fetch &&
+                    !hasRpcMethods &&
+                    runtimeContext.alwaysServe !== true
+                  ) {
+                    return Effect.void;
+                  }
                   // Hand the full impl to `serve` so the runtime can expose any
                   // non-handler methods on the impl shape (RPC methods)
                   // alongside the standard `fetch` handler.
@@ -645,7 +655,7 @@ export const Platform = <
               );
 
               instance.Props = {
-                ...props,
+                ...(runtimeContext.foldProps?.(props ?? {}) ?? props),
                 env: {
                   ...props?.env,
                   ...runtimeContext.env,

@@ -308,6 +308,18 @@
       "worker": "./src/Planetscale/*/index.ts",
       "import": "./lib/Planetscale/*/index.js"
     },
+    "./Celld": {
+      "types": "./lib/Celld/index.d.ts",
+      "bun": "./src/Celld/index.ts",
+      "worker": "./src/Celld/index.ts",
+      "import": "./lib/Celld/index.js"
+    },
+    "./Rivet": {
+      "types": "./lib/Rivet/index.d.ts",
+      "bun": "./src/Rivet/index.ts",
+      "worker": "./src/Rivet/index.ts",
+      "import": "./lib/Rivet/index.js"
+    },
     "./Runtime": {
       "types": "./lib/Runtime.d.ts",
       "bun": "./src/Runtime.ts",
@@ -469,6 +481,7 @@
     "@effect/platform-bun": "catalog:effect",
     "@effect/platform-node": "catalog:effect",
     "@effect/platform-node-shared": "catalog:effect",
+    "esbuild": "catalog:cloudflare-runtime",
     "@foldkit/vite-plugin": "catalog:frontend",
     "@octanejs/adapter-cloudflare": "catalog:frontend",
     "@octanejs/vite-plugin": "catalog:frontend",
@@ -513,6 +526,7 @@
     "react-dom": "catalog:frontend",
     "react-router": "catalog:frontend",
     "react-server-dom-webpack": "catalog:frontend",
+    "rivetkit": "2.3.10",
     "solid-js": "catalog:frontend",
     "svelte": "catalog:frontend",
     "tsconfig-paths": "^4.2.0",
@@ -538,9 +552,11 @@
     "drizzle-kit": "catalog:database",
     "drizzle-orm": "catalog:database",
     "effect": "catalog:effect",
+    "esbuild": "catalog:cloudflare-runtime",
     "mongodb": "catalog:database",
     "mysql2": "catalog:database",
     "pg": "catalog:database",
+    "rivetkit": "^2.3.10",
     "vite": "catalog:build",
     "ws": "catalog:shared"
   },
@@ -572,6 +588,9 @@
     "drizzle-orm": {
       "optional": true
     },
+    "esbuild": {
+      "optional": true
+    },
     "mongodb": {
       "optional": true
     },
@@ -579,6 +598,9 @@
       "optional": true
     },
     "pg": {
+      "optional": true
+    },
+    "rivetkit": {
       "optional": true
     },
     "vite": {
