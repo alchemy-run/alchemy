@@ -5,7 +5,9 @@ import { isNonInteractive } from "../../Util/interactive.ts";
 import { CliKit } from "./CliKit.ts";
 import type { CliKitCapabilities, CliKitOptions } from "../components/types.ts";
 
-const resolveCapabilities = (options: CliKitOptions): CliKitCapabilities => {
+export const resolveCapabilities = (
+  options: CliKitOptions,
+): CliKitCapabilities => {
   const stdout = options.stdout ?? process.stdout;
   const stdin = options.stdin ?? process.stdin;
   const detected = detectCapabilities({ stdout });

@@ -1,12 +1,13 @@
 import * as Clock from "effect/Clock";
 import * as Config from "effect/Config";
+import * as ConfigProvider from "effect/ConfigProvider";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Argument from "effect/unstable/cli/Argument";
-import * as CliError from "effect/unstable/cli/CliError";
 import * as Flag from "effect/unstable/cli/Flag";
+import { loadConfigProvider } from "../../Util/ConfigProvider.ts";
 import { UserInputError } from "./errors.ts";
 
 export const USER = Config.string("USER").pipe(
@@ -14,37 +15,65 @@ export const USER = Config.string("USER").pipe(
   Config.withDefault("unknown"),
 );
 
-export const STAGE = Config.string("STAGE").pipe(
+export const ALCHEMY_STAGE = Config.string("ALCHEMY_STAGE").pipe(
   Config.option,
   Effect.map(Option.getOrUndefined),
 );
 
-export const stage = Flag.string("stage").pipe(
-  Flag.withSchema(
-    Schema.String.check(Schema.isPattern(/^[a-z0-9]+([-_a-z0-9]+)*$/gi)),
-  ),
-  Flag.withDescription("Stage to deploy to, defaults to dev_${USER}"),
-  Flag.optional,
-  Flag.map(Option.getOrUndefined),
-  Flag.mapEffect(
-    Effect.fn(function* (stage) {
-      if (stage) return stage;
-      return yield* STAGE.pipe(
-        Effect.catch(() =>
-          Effect.fail(new CliError.MissingOption({ option: "stage" })),
-        ),
-        Effect.flatMap((configured) =>
-          configured === undefined
-            ? USER.pipe(
-                Effect.map((user) => `dev_${user}`),
-                Effect.catch(() => Effect.succeed("unknown")),
-              )
-            : Effect.succeed(configured),
-        ),
-      );
-    }),
-  ),
-);
+const STAGE_NAME_PATTERN = /^[a-z0-9]+([-_a-z0-9]+)*$/i;
+
+const makeStageFlag = (kind: "live" | "dev") =>
+  Flag.string("stage").pipe(
+    Flag.withSchema(
+      Schema.String.check(Schema.isPattern(/^[a-z0-9]+([-_a-z0-9]+)*$/gi)),
+    ),
+    Flag.withDescription(
+      kind === "live"
+        ? "Stage to deploy to. Defaults to $ALCHEMY_STAGE or live_${USER}"
+        : "Stage to use for dev. Defaults to $ALCHEMY_STAGE or dev_${USER}",
+    ),
+    Flag.optional,
+    Flag.map(Option.getOrUndefined),
+  );
+
+/** `--stage` for deploy / destroy / plan / logs / drift. Default: `live_$USER`. */
+export const stage = makeStageFlag("live");
+
+/** `--stage` for `alchemy dev`. Default: `dev_$USER`. */
+export const devStage = makeStageFlag("dev");
+
+/**
+ * Resolve the target stage after the command's dotenv provider is known.
+ * `--stage` wins; otherwise `$ALCHEMY_STAGE` from process env / `--env-file`
+ * / `.env`; otherwise `live_$USER` or `dev_$USER`.
+ *
+ * `$STAGE` is not consulted. Use `$ALCHEMY_STAGE` so stage selection
+ * matches `$ALCHEMY_PROFILE`.
+ */
+export const resolveStage = Effect.fn(function* (
+  kind: "live" | "dev",
+  override: string | undefined,
+  envFile: Option.Option<string>,
+) {
+  if (override) return override;
+  const provider = yield* loadConfigProvider(envFile);
+  const configured = yield* ALCHEMY_STAGE.pipe(
+    Effect.provideService(ConfigProvider.ConfigProvider, provider),
+    Effect.catch(() => Effect.succeed(undefined)),
+  );
+  if (configured !== undefined && configured !== "") {
+    if (!STAGE_NAME_PATTERN.test(configured)) {
+      return yield* new UserInputError({
+        message: `Invalid $ALCHEMY_STAGE '${configured}'. Must match [a-z0-9]+([-_a-z0-9]+)*.`,
+      });
+    }
+    return configured;
+  }
+  return yield* USER.pipe(
+    Effect.map((user) => `${kind}_${user}`),
+    Effect.catch(() => Effect.succeed(`${kind}_unknown`)),
+  );
+});
 
 export const envFile = Flag.file("env-file").pipe(
   Flag.optional,
@@ -110,6 +139,24 @@ export const resolveConfig = <
       main: args.config ?? args.configPath ?? "alchemy.run.ts",
     };
   });
+
+export const resolveStackArgs =
+  (kind: "live" | "dev") =>
+  <
+    A extends {
+      readonly config: string | undefined;
+      readonly configPath: string | undefined;
+      readonly stage: string | undefined;
+      readonly envFile: Option.Option<string>;
+    },
+  >(
+    args: A,
+  ) =>
+    Effect.gen(function* () {
+      const resolved = yield* resolveConfig(args);
+      const stage = yield* resolveStage(kind, args.stage, args.envFile);
+      return { ...resolved, stage };
+    });
 
 export const profile = Flag.string("profile").pipe(
   Flag.withDescription(

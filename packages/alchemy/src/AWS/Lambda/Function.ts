@@ -325,13 +325,11 @@ export interface FunctionZipProps extends FunctionCommonProps {
    */
   layers?: LayerRef[];
   /**
-   * Bundler configuration for {@link main}: rolldown input options (flat),
-   * `output` overrides, `install` for native packages, plus pure-annotation
-   * options (`pure`) and the bundle analyzer. Top-level calls in `effect`,
-   * `@effect/*`, `alchemy`, `@alchemy.run/*`, and `@distilled.cloud/*` are
-   * annotated as pure by default so unused code from those packages is
-   * tree-shaken; list additional packages via `pure.packages`, or disable
-   * with `pure: false`.
+   * Bundler configuration for {@link main}: rolldown input options, `output`
+   * overrides, `install` for native packages, `pure`, and the bundle analyzer.
+   * Unused code is tree-shaken. `effect`, alchemy, and `@distilled.cloud`
+   * are marked pure so unused parts prune more aggressively. List extra
+   * packages with `pure.packages`, or disable with `pure: false`.
    */
   build?: FunctionBuildOptions;
   uploadSourceMap?: boolean;
@@ -784,20 +782,13 @@ export const normalizeFunctionUrl = (
  * ```
  *
  * ### Bundling & Tree-shaking
- * `main` is bundled with rolldown at deploy time. Top-level calls in the
- * `effect`, `@effect/*`, `alchemy`, `@alchemy.run/*`, and
- * `@distilled.cloud/*` packages receive `#__PURE__` annotations by
- * default, so anything the function doesn't use from those packages is
- * tree-shaken out of the bundle. Any other package — including your own
- * app — is left untouched unless you list it explicitly.
+ * `main` is bundled with rolldown at deploy time. Unused code is
+ * tree-shaken. `effect`, alchemy, and `@distilled.cloud` are marked
+ * pure so unused parts prune more aggressively. Your app is not
+ * marked pure.
  *
- * **Example:** Treat additional packages as pure
- * Pass package names (or picomatch globs) via `build.pure.packages` to
- * annotate them in addition to the defaults. Listing a package that also
- * declares `"sideEffects": false` (or `[]`) in its `package.json` opts it
- * into full annotation — top-level calls whose result is discarded are
- * deleted under minification when unused — so only list packages whose
- * modules really are free of meaningful top-level side effects.
+ * **Example:** Mark additional packages as pure
+ * Only list packages with no top-level side effects.
  * ```typescript
  * const func = yield* AWS.Lambda.Function("ApiFunction", {
  *   main: "./src/handler.ts",
@@ -807,7 +798,7 @@ export const normalizeFunctionUrl = (
  * });
  * ```
  *
- * **Example:** Disable pure annotations
+ * **Example:** Turn it off
  * ```typescript
  * const func = yield* AWS.Lambda.Function("ApiFunction", {
  *   main: "./src/handler.ts",

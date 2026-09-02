@@ -21,7 +21,7 @@ import {
   storedValueText,
   validateFieldValues,
 } from "../Auth/StoredAuthProvider.ts";
-import * as CliKit from "../Cli/CliKit/index.ts";
+import * as Interaction from "../Interaction.ts";
 import {
   githubHostname,
   normalizeGitHubBaseUrl,
@@ -158,7 +158,11 @@ export const makeGitHubAuth = (authOptions?: GitHubAuthOptions) =>
   AuthProviderLayer<GitHubAuthConfig, GitHubResolvedCredentials>()(
     GITHUB_AUTH_PROVIDER_NAME,
     Effect.gen(function* () {
-      const prompt = yield* CliKit.CliKit;
+      // Deferred accessors, NOT `yield* Interaction.Interaction`: resolving the service
+      // at impl build would put the terminal in the registration layer's
+      // requirements, and child processes (which only ever call `read`) build
+      // this layer with no interaction services at all.
+      const interaction = Interaction.accessors;
       const store = yield* CredentialsStore;
       const cp = yield* ChildProcessSpawner;
 
@@ -244,7 +248,7 @@ export const makeGitHubAuth = (authOptions?: GitHubAuthOptions) =>
         profileName: string,
         baseUrl?: string,
       ) {
-        const token = yield* prompt.prompt
+        const token = yield* interaction.prompt
           .password({
             message: "GitHub Personal Access Token",
             description:
@@ -257,14 +261,14 @@ export const makeGitHubAuth = (authOptions?: GitHubAuthOptions) =>
           type: "pat",
           token,
         });
-        yield* prompt.output.success("GitHub: credentials saved.");
+        yield* interaction.output.success("GitHub: credentials saved.");
         return { method: "stored" as const, baseUrl };
       });
 
       // Optional GitHub Enterprise host. Blank means github.com; anything else
       // is normalized into the REST API base URL (GHES gets `/api/v3`
       // appended, data-residency hosts get the `api.` prefix).
-      const promptBaseUrl = prompt.prompt
+      const promptBaseUrl = interaction.prompt
         .text({
           message: "GitHub host",
           description:
@@ -284,7 +288,7 @@ export const makeGitHubAuth = (authOptions?: GitHubAuthOptions) =>
 
       const configureInteractive = (profileName: string) =>
         Effect.gen(function* () {
-          const method = yield* prompt.prompt.select({
+          const method = yield* interaction.prompt.select({
             message: "GitHub authentication method",
             options,
           });
@@ -382,7 +386,9 @@ export const makeGitHubAuth = (authOptions?: GitHubAuthOptions) =>
               .delete(profileName, STORAGE_KEY)
               .pipe(
                 Effect.andThen(
-                  prompt.output.success("GitHub: stored credentials removed"),
+                  interaction.output.success(
+                    "GitHub: stored credentials removed",
+                  ),
                 ),
               ),
           ),
@@ -400,7 +406,7 @@ export const makeGitHubAuth = (authOptions?: GitHubAuthOptions) =>
                   ),
                 ),
                 Effect.tap(() =>
-                  prompt.output.success(
+                  interaction.output.success(
                     "GitHub: gh CLI authentication available.",
                   ),
                 ),
@@ -477,7 +483,7 @@ export const makeGitHubAuth = (authOptions?: GitHubAuthOptions) =>
           readonly method: string;
           readonly values: Record<string, string>;
         },
-      ): Effect.Effect<GitHubAuthConfig, AuthError> =>
+      ): Effect.Effect<GitHubAuthConfig, AuthError, Interaction.Interaction> =>
         input.method === "stored"
           ? validateFieldValues(
               GITHUB_AUTH_PROVIDER_NAME,
@@ -506,7 +512,9 @@ export const makeGitHubAuth = (authOptions?: GitHubAuthOptions) =>
                       token: storedSecret(values.token) ?? Redacted.make(""),
                     },
                   );
-                  yield* prompt.output.success("GitHub: credentials saved.");
+                  yield* interaction.output.success(
+                    "GitHub: credentials saved.",
+                  );
                   return { method: "stored" as const, baseUrl };
                 }),
               ),

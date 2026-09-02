@@ -5,7 +5,7 @@ import { useGlyphs } from "./Environment.tsx";
 import { ProgressBar, SpinnerGlyph } from "./Feedback.tsx";
 import { Box, Row, Stack } from "./Layout.tsx";
 import { Text } from "./Typography.tsx";
-import { theme } from "../../CliKit/theme.ts";
+import { theme } from "../../../Util/Theme.ts";
 
 export interface TaskRowProps {
   /** Status glyph. Ignored while `spinning`; defaults to the bullet glyph. */

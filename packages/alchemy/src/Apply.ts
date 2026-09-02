@@ -12,7 +12,7 @@ import type { ActionLike } from "./Action.ts";
 import { makeResolveContext } from "./ActionRuntimeContext.ts";
 import { stripUnowned, Unowned } from "./AdoptPolicy.ts";
 import { AlchemyContext } from "./AlchemyContext.ts";
-import type { AuthError } from "./Auth/AuthProvider.ts";
+import type { AuthError, NeedsReauth } from "./Auth/AuthProvider.ts";
 import {
   type CredentialsRequired,
   demandPlanCredentials,
@@ -105,6 +105,7 @@ export const apply = <P extends Plan>(
   | DestroyError
   | CredentialsRequired
   | AuthError
+  | NeedsReauth
   | PlatformError
   | ConfigError,
   State | Stack | Stage
@@ -562,12 +563,13 @@ const executeNode = (
 
     const scopedSession = {
       ...session,
-      note: (note: string) =>
+      note: (note, options?) =>
         session.emit({
           fqn,
           id: logicalId,
           _tag: "apply.resource.note",
           message: note,
+          kind: options?.kind,
         }),
     } satisfies ScopedPlanStatusSession;
 
@@ -1643,12 +1645,13 @@ const converge = Effect.fn(function* (
 
       const scopedSession = {
         ...session,
-        note: (note: string) =>
+        note: (note, options?) =>
           session.emit({
             fqn,
             id: logicalId,
             _tag: "apply.resource.note",
             message: note,
+            kind: options?.kind,
           }),
       } satisfies ScopedPlanStatusSession;
 
@@ -2005,12 +2008,13 @@ const collectGarbage = Effect.fn(function* (
 
         const scopedSession = {
           ...session,
-          note: (note: string) =>
+          note: (note, options?) =>
             session.emit({
               fqn,
               id: logicalId,
               _tag: "apply.resource.note",
               message: note,
+              kind: options?.kind,
             }),
         } satisfies ScopedPlanStatusSession;
 

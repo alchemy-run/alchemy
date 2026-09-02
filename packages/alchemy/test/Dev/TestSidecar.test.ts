@@ -1,5 +1,5 @@
 import * as Cloudflare from "@/Cloudflare/index.ts";
-import { CliKit } from "@/Cli/CliKit/index.ts";
+import { Interaction } from "@/Interaction.ts";
 import { RpcProviderProxy } from "@/Dev/RpcProviderProxy";
 import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
@@ -59,9 +59,12 @@ live.test(
 );
 
 live.test(
-  "test runtimes provide a non-interactive CliKit",
+  "test runtimes provide a non-interactive Interaction",
   Effect.gen(function* () {
-    const cli = yield* CliKit;
-    expect(cli.terminal.input).toBe(false);
+    const interaction = yield* Interaction;
+    const failure = yield* Effect.flip(
+      interaction.prompt.confirm({ message: "?" }),
+    );
+    expect(failure._tag).toBe("NonInteractiveTerminal");
   }),
 );

@@ -1,4 +1,4 @@
-import { NonInteractiveTerminal } from "@/Cli/CliKit/errors.ts";
+import { NonInteractiveTerminal } from "@/Interaction.ts";
 import { makeRuntime } from "@/Cli/CliKit/headless.ts";
 import { transformTypesFlags } from "@/Util/Node.ts";
 import { PlatformServices } from "@/Util/PlatformServices.ts";

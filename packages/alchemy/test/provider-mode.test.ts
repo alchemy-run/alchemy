@@ -443,6 +443,7 @@ describe("provider modes", () => {
         // A local instance whose attrs carry a `url` announces it.
         expect(notes).toContainEqual({
           _tag: "apply.resource.note",
+          fqn: "A",
           id: "A",
           message: "ready at http://localhost:1337",
         });

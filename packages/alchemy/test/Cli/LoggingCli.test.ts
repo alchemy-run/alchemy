@@ -1,5 +1,7 @@
 import { LoggingCli, formatPlanLines } from "@/Cli/LoggingCli.ts";
 import { Cli } from "@/Report.ts";
+import { PlatformServices } from "@/Util/PlatformServices.ts";
+import * as Layer from "effect/Layer";
 import { describe, expect, it, test } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Logger from "effect/Logger";
@@ -64,5 +66,60 @@ it.effect("emits plain progress through the Effect logger", () => {
     yield* cli.displayPlan(planWith([createNode({}, "Worker")]));
 
     expect(messages).toEqual([["Plan: 1 to create"], ["[Worker] create"]]);
-  }).pipe(Effect.provide(LoggingCli), Effect.provide(Logger.layer([logger])));
+  }).pipe(
+    Effect.provide(Layer.provide(LoggingCli, PlatformServices)),
+    Effect.provide(Logger.layer([logger])),
+  );
+});
+
+it.effect("streams apply notes as they arrive", () => {
+  const messages: string[] = [];
+  const logger = Logger.make<unknown, void>((options) => {
+    messages.push(String((options.message as unknown[])[0]));
+  });
+  return Effect.gen(function* () {
+    const cli = yield* Cli;
+    const session = yield* cli.startApplySession(
+      planWith([updateNode({ v: 1 }, { v: 2 }, "Website")]),
+    );
+
+    const note = (message: string, kind?: "status" | "output") =>
+      session.emit({
+        _tag: "apply.resource.note",
+        fqn: "Website",
+        id: "Website",
+        message,
+        kind,
+      });
+    const status = (status: "updating" | "updated") =>
+      session.emit({
+        _tag: "apply.resource.status",
+        fqn: "Website",
+        id: "Website",
+        type: "Cloudflare::Worker",
+        status,
+      });
+
+    yield* status("updating");
+    yield* note("Uploading worker (1.2 MB) ...", "status");
+    yield* note("build output line", "output");
+    yield* note("Uploaded 0 of 5195 assets...");
+    yield* note("Uploaded 490 of 5195 assets...");
+    // spinner-style refresh of the same message is deduped
+    yield* note("Uploaded 490 of 5195 assets...");
+    yield* note("Reconciling custom domains (1) ...", "status");
+    yield* status("updated");
+
+    const progress = messages.slice(3); // skip plan preview + blank line
+    expect(progress).toEqual([
+      "[Website] updating",
+      "[Website] build output line",
+      "[Website] Uploaded 0 of 5195 assets...",
+      "[Website] Uploaded 490 of 5195 assets...",
+      "[Website] updated — Reconciling custom domains (1) ... (0ms)",
+    ]);
+  }).pipe(
+    Effect.provide(Layer.provide(LoggingCli, PlatformServices)),
+    Effect.provide(Logger.layer([logger])),
+  );
 });

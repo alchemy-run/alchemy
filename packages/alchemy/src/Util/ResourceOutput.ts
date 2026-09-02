@@ -1,8 +1,9 @@
 import { stripVTControlCharacters } from "node:util";
 import type * as ConsoleService from "effect/Console";
 import * as Effect from "effect/Effect";
-import { makeLineBuffer } from "../Util/LineBuffer.ts";
-import { ANSI_RESET, ansiFg, colorsEnabled, theme } from "./CliKit/index.ts";
+import { makeLineBuffer } from "./LineBuffer.ts";
+import { ANSI_RESET, ansiFg, colorsEnabled } from "./Terminal.ts";
+import { theme } from "./Theme.ts";
 
 export type OutputChannel = "stdout" | "stderr";
 

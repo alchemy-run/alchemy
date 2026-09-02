@@ -1,6 +1,6 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import type { NonInteractiveTerminal } from "./Cli/CliKit/errors.ts";
+import type { NonInteractiveTerminal } from "./Interaction.ts";
 import type { Plan } from "./Plan.ts";
 import type { ProviderMode } from "./ProviderMode.ts";
 
@@ -35,12 +35,21 @@ export type ApplyStatus =
 
 export type ApplyEvent = ResourceAnnotated | ResourceStatusChanged;
 
+/**
+ * How append-only renderers surface a note (the interactive view treats every
+ * kind the same): `"status"` is transient spinner text that plain mode folds
+ * into the settle line's suffix, `"output"` is verbatim tool output streamed
+ * line by line, and `undefined` is a one-shot informational note.
+ */
+export type NoteKind = "status" | "output";
+
 export interface ResourceAnnotated {
   _tag: "apply.resource.note";
   /** Fully-qualified resource or action name used to target its plan row. */
   fqn: string;
   id: string;
   message: string;
+  kind?: NoteKind;
 }
 
 export interface ResourceStatusChanged {
@@ -289,7 +298,10 @@ export interface PlanningStatusSession {
 }
 
 export interface ScopedPlanStatusSession extends PlanStatusSession {
-  note: (note: string) => Effect.Effect<void>;
+  note: (
+    note: string,
+    options?: { readonly kind?: NoteKind },
+  ) => Effect.Effect<void>;
 }
 
 export interface PlanDisplayOptions {

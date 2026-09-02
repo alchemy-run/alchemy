@@ -6,7 +6,7 @@ import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import type * as Scope from "effect/Scope";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import { makePlainConsoleSink } from "../Cli/GlobalLog.ts";
+import { makePlainConsoleSink } from "../Util/ConsoleSink.ts";
 import type { HttpClient } from "effect/unstable/http/HttpClient";
 import { ArtifactStore, createArtifactStore } from "../Artifacts.ts";
 import type { ProviderService } from "../Provider.ts";

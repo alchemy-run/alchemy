@@ -238,7 +238,7 @@ const fresh =
         Effect.mapError(
           (e) =>
             new AuthError({
-              message: "Cloudflare OAuth refresh failed. Run: alchemy profile refresh default --provider Cloudflare",
+              message: "Cloudflare OAuth refresh failed. Run: alchemy profile refresh --profile default --provider Cloudflare",
               cause: e,
             }),
         ),

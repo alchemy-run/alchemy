@@ -54,7 +54,7 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "catalog:cloudflare-runtime",
-    "@cloudflare/vitest-pool-workers": "catalog:cloudflare-runtime",
+    "@cloudflare/vitest-plugin": "catalog:cloudflare-runtime",
     "@effect/platform-bun": "catalog:effect",
     "@effect/platform-node": "catalog:effect",
     "@effect/vitest": "catalog:effect",

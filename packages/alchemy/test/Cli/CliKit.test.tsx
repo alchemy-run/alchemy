@@ -27,9 +27,13 @@ import {
   TextField,
   useLiveStore,
 } from "@/Cli/components/ui/index.ts";
+import { tabsWindow } from "@/Cli/components/ui/Layout.tsx";
 import { makeRuntime } from "@/Cli/components/view/Runtime.tsx";
 import { isInProgress } from "@/Cli/components/view/statusStyle.ts";
-import { makeResourceLogger, makeResourceOutput } from "@/Cli/Output.ts";
+import {
+  makeResourceLogger,
+  makeResourceOutput,
+} from "@/Util/ResourceOutput.ts";
 import { stackOutputsView } from "@/Cli/components/view/StackOutputs.tsx";
 import { Plan } from "@/Cli/components/view/PlanView.tsx";
 import { ProfileDetailsBody } from "@/Cli/components/view/Profile.tsx";
@@ -234,16 +238,17 @@ it("ignores state explorer responses from before a refresh", async () => {
   }
 });
 
-it("prints stack outputs using inspect", () => {
+it("prints stack outputs using inspect without wrapping long lines", () => {
   const { service } = makeStatic();
   const apiUrl =
     "https://cloudflareworkerexample-api-clxp5k3fbtqacxdev7mx7uuxmw.testing-2b2.workers.dev";
+  // Narrow width: `wrap="none"` output lines must overflow, not break.
   const output = service.output.format(
     stackOutputsView({
       apiUrl,
       metadata: { region: "us-east-1", replicas: 2 },
     }),
-    { columns: 10_000 },
+    { columns: 40 },
   );
 
   expect(output).toBe(
@@ -724,6 +729,26 @@ it.effect("commits stdio above active Sigil views", () =>
     expect(stdout.output.lastIndexOf("node warning")).toBeLessThan(
       stdout.output.lastIndexOf("Credentials resolved"),
     );
+  }),
+);
+
+it.effect("flushes a captured partial line without waiting for unmount", () =>
+  Effect.gen(function* () {
+    const { service, stdout, stderr } = yield* makeLive({
+      captureConsole: true,
+    });
+    const store = new LiveStore("Deploying");
+    const live = yield* service.live.open(<LiveLabel store={store} />);
+    // A writer whose final chunk has no trailing newline (e.g. an error
+    // block written raw to stderr): its tail must render within the
+    // partial-flush deadline — before this, it sat buffered until the
+    // renderer unmounted at process exit, so the last line of an error
+    // only ever appeared on shutdown.
+    yield* Effect.sync(() => {
+      stderr.write("stack tail without newline");
+    });
+    yield* Effect.promise(() => stdout.waitFor("stack tail without newline"));
+    yield* live.close;
   }),
 );
 
@@ -1473,6 +1498,68 @@ it.effect(
       expect(rendered).toContain("2/4");
     }),
 );
+
+it.effect("tabs scroll horizontally instead of wrapping when overflowing", () =>
+  Effect.gen(function* () {
+    const { service } = makeStatic();
+    const tabs = Array.from({ length: 20 }, (_, i) => {
+      const label = `profile-${String(i + 1).padStart(2, "0")}`;
+      return { id: label, label, marked: i === 0 };
+    });
+
+    // Active tab in the middle: window centers on it, arrows on both sides.
+    const middle = yield* service.output.render(
+      <Tabs tabs={tabs} active="profile-10" />,
+    );
+    expect(middle).toContain("profile-10");
+    expect(middle).toContain("‹");
+    expect(middle).toContain("›");
+    expect(middle).not.toContain("profile-01");
+    expect(middle).not.toContain("profile-20");
+    // every rendered tab stays on the single tab row — no wrapped chips
+    expect(middle.trimEnd()).not.toContain("\n");
+
+    // Active tab at the start: no left arrow, right arrow only.
+    const first = yield* service.output.render(
+      <Tabs tabs={tabs} active="profile-01" />,
+    );
+    expect(first).toContain("profile-01");
+    expect(first).not.toContain("‹");
+    expect(first).toContain("›");
+
+    // Active tab at the end: left arrow only.
+    const last = yield* service.output.render(
+      <Tabs tabs={tabs} active="profile-20" />,
+    );
+    expect(last).toContain("profile-20");
+    expect(last).toContain("‹");
+    expect(last).not.toContain("›");
+
+    // Everything fits: no arrows at all.
+    const fitting = yield* service.output.render(
+      <Tabs tabs={tabs.slice(0, 3)} active="profile-02" />,
+    );
+    expect(fitting).toContain("profile-01");
+    expect(fitting).toContain("profile-03");
+    expect(fitting).not.toContain("‹");
+    expect(fitting).not.toContain("›");
+  }),
+);
+
+it("tabsWindow keeps the active tab visible within the available width", () => {
+  // 5 chips of width 12, gap 1, 74 columns → 5 fit exactly around the middle
+  const widths = Array.from({ length: 20 }, () => 12);
+  expect(tabsWindow(widths, 9, 74)).toEqual({ start: 7, end: 12 });
+  // at the edges the window pins to the boundary
+  expect(tabsWindow(widths, 0, 74)).toEqual({ start: 0, end: 5 });
+  expect(tabsWindow(widths, 19, 74)).toEqual({ start: 15, end: 20 });
+  // active always inside, even when nothing else fits
+  expect(tabsWindow(widths, 3, 12)).toEqual({ start: 3, end: 4 });
+  expect(tabsWindow(widths, 3, 5)).toEqual({ start: 3, end: 4 });
+  // out-of-range active clamps; empty input yields an empty window
+  expect(tabsWindow(widths, 99, 74)).toEqual({ start: 15, end: 20 });
+  expect(tabsWindow([], 0, 74)).toEqual({ start: 0, end: 0 });
+});
 
 it.live(
   "state explorer confirms deletes inline and keeps its position afterwards",

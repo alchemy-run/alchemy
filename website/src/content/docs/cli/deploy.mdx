@@ -48,7 +48,7 @@ When the plan contains no changes, the approval prompt is skipped automatically.
 | Option              | Description                                                                                                                |
 | ------------------- | -------------------------------------------------------------------------------------------------------------------------- |
 | `--config, -c <file>`            | Stack file to deploy (defaults to `alchemy.run.ts`)                                                                        |
-| `--stage <name>`    | Stage to deploy to (defaults to `dev_$USER`)                                                                               |
+| `--stage <name>`    | Stage to deploy to (defaults to `$ALCHEMY_STAGE` or `live_$USER`)                                                          |
 | `--yes`             | Skip the approval prompt                                                                                                   |
 | `--dry-run`         | Show the plan without applying (same as `alchemy plan`)                                                                    |
 | `--detailed`        | Show declared resource properties as YAML                                                                                  |

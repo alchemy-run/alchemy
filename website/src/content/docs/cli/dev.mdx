@@ -21,20 +21,28 @@ A failed apply keeps dev alive so healthy resources keep serving — fix the err
 
 | Option              | Description                                                        |
 | ------------------- | ------------------------------------------------------------------ |
-| `--stage <name>`    | Stage to use for dev (defaults to `dev_$USER`)                     |
+| `--stage <name>`    | Stage to use for dev (defaults to `$ALCHEMY_STAGE` or `dev_$USER`) |
 | `--force`           | Force updates for resources that would otherwise no-op             |
 | `--profile <name>`  | Auth profile to use (defaults to `$ALCHEMY_PROFILE` or `default`) |
 | `--env-file <path>` | Load environment variables from a file                             |
 | `--config, -c <file>`            | Stack file to run (defaults to `alchemy.run.ts`)                   |
 
+`alchemy deploy` defaults to `live_$USER`. Using a different default
+here means a bare `alchemy dev` will not replace a stage you deployed.
+Pass `--stage` (or `$ALCHEMY_STAGE`) to run local emulation against a specific
+stage — including one you also deploy.
+
+Tear the default local-dev stage down with
+`alchemy destroy --stage dev_$USER`.
+
 ## Examples
 
 ```sh
-# Start dev mode
+# Start dev mode (stage dev_$USER)
 alchemy dev
 
-# Use a custom stage
-alchemy dev --stage dev
+# Emulate the prod program locally (replaces that stage's local/live mode)
+alchemy dev --stage prod
 ```
 
 ## Where next

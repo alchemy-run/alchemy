@@ -4,7 +4,7 @@ import {
   Text as SigilText,
 } from "@alchemy.run/sigil";
 import type { ComponentProps } from "react";
-import { theme } from "../../CliKit/theme.ts";
+import { theme } from "../../../Util/Theme.ts";
 import { useCliEnvironment } from "./Environment.tsx";
 
 export type TextTone =

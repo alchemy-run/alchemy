@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 import * as NodeV8 from "node:v8";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import { BundleError } from "../../Bundle/Bundle.ts";
-import { pipedColorEnv } from "../../Cli/CliKit/index.ts";
+import { pipedColorEnv } from "../../Util/Terminal.ts";
 import {
   fromProcessEnv,
   RPC_SERVER_ENVIRONMENT_KEY,

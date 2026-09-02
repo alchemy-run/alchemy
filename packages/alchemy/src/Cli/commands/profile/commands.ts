@@ -17,7 +17,7 @@ import * as CliKit from "../../../Cli/CliKit/index.ts";
 import { resolveProfileName } from "../../../Auth/Resolve.ts";
 
 import { exitDeclined, failWithHelp, UserInputError } from "../errors.ts";
-import { config, envFile, yes } from "../flags.ts";
+import { config, envFile, profile, yes } from "../flags.ts";
 import { instrumentCommand } from "../instrument.ts";
 import {
   deleteProfileFlow,
@@ -28,29 +28,12 @@ import {
 } from "./flows.ts";
 import { profileHub } from "./hub.ts";
 
-const showProfile = Argument.string("profile").pipe(
-  Argument.withDescription("Profile to inspect"),
-  Argument.optional,
-);
-
 const profileName = Argument.string("name").pipe(
   Argument.withDescription("Profile name"),
 );
 
 const newProfileName = Argument.string("new-name").pipe(
   Argument.withDescription("New profile name"),
-  Argument.optional,
-);
-
-const editProfileName = Argument.string("profile").pipe(
-  Argument.withDescription(
-    "Profile whose connected accounts should be managed",
-  ),
-  Argument.optional,
-);
-
-const refreshProfileName = Argument.string("profile").pipe(
-  Argument.withDescription("Profile whose credentials should be refreshed"),
   Argument.optional,
 );
 
@@ -63,13 +46,13 @@ const refreshProviders = Flag.string("provider").pipe(
 
 const showCommand = Command.make(
   "show",
-  { name: showProfile, envFile, main: config },
-  instrumentCommand("profile.show", (a: { name: Option.Option<string> }) => ({
-    "alchemy.profile": Option.getOrUndefined(a.name) ?? "",
+  { profile, envFile, main: config },
+  instrumentCommand("profile.show", (a: { profile: string | undefined }) => ({
+    "alchemy.profile": a.profile ?? "",
   }))(
-    Effect.fn(function* ({ name, envFile, main }) {
+    Effect.fn(function* ({ profile, envFile, main }) {
       const activeProfile = yield* resolveProfileName(envFile, undefined);
-      const profileName = Option.getOrUndefined(name) ?? activeProfile;
+      const profileName = profile ?? activeProfile;
       yield* showProfileFlow({
         profileName,
         activeProfile,
@@ -120,7 +103,7 @@ const createCommand = Command.make(
     Effect.fn(function* ({ name }) {
       yield* Profiles.create({ name });
       yield* CliKit.accessors.output.success(
-        `Created profile '${name}'. Run \`alchemy profile edit ${name}\` to connect accounts.`,
+        `Created profile '${name}'. Run \`alchemy profile edit --profile ${name}\` to connect accounts.`,
       );
     }),
   ),
@@ -267,7 +250,7 @@ const resolveSetValues = Effect.fn(function* (
 const editCommand = Command.make(
   "edit",
   {
-    name: editProfileName,
+    profile,
     add: addProviders,
     reconfigure: reconfigureProviders,
     remove: removeProviders,
@@ -279,19 +262,19 @@ const editCommand = Command.make(
   instrumentCommand(
     "profile.edit",
     (a: {
-      name: Option.Option<string>;
+      profile: string | undefined;
       add: ReadonlyArray<string>;
       reconfigure: ReadonlyArray<string>;
       remove: ReadonlyArray<string>;
     }) => ({
-      "alchemy.profile": Option.getOrUndefined(a.name) ?? "",
+      "alchemy.profile": a.profile ?? "",
       "alchemy.add": a.add.join(","),
       "alchemy.re_configure": a.reconfigure.join(","),
       "alchemy.remove": a.remove.join(","),
     }),
   )(
     Effect.fn(function* ({
-      name,
+      profile,
       add,
       reconfigure,
       remove,
@@ -300,9 +283,7 @@ const editCommand = Command.make(
       envFile,
       main,
     }) {
-      const selectedProfile =
-        Option.getOrUndefined(name) ??
-        (yield* resolveProfileName(envFile, undefined));
+      const selectedProfile = yield* resolveProfileName(envFile, profile);
       let configureInput:
         | { method?: string; values: Record<string, string> }
         | undefined;
@@ -375,22 +356,20 @@ const editCommand = Command.make(
 const refreshCommand = Command.make(
   "refresh",
   {
-    name: refreshProfileName,
+    profile,
     providers: refreshProviders,
     envFile,
     main: config,
   },
   instrumentCommand(
     "profile.refresh",
-    (a: { name: Option.Option<string>; providers: ReadonlyArray<string> }) => ({
-      "alchemy.profile": Option.getOrUndefined(a.name) ?? "",
+    (a: { profile: string | undefined; providers: ReadonlyArray<string> }) => ({
+      "alchemy.profile": a.profile ?? "",
       "alchemy.providers": a.providers.join(","),
     }),
   )(
-    Effect.fn(function* ({ name, providers, envFile, main }) {
-      const selectedProfile =
-        Option.getOrUndefined(name) ??
-        (yield* resolveProfileName(envFile, undefined));
+    Effect.fn(function* ({ profile, providers, envFile, main }) {
+      const selectedProfile = yield* resolveProfileName(envFile, profile);
       const refreshStarted = new Map<string, number>();
       yield* Profiles.refresh({
         profile: selectedProfile,

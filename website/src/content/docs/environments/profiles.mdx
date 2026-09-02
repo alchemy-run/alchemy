@@ -35,7 +35,7 @@ alchemy profile edit
 # connect accounts to the `default` profile
 
 alchemy profile create work
-alchemy profile edit work
+alchemy profile edit --profile work
 alchemy deploy --profile work
 # uses profile `work`; plain `alchemy deploy` uses `default`
 ```
@@ -52,11 +52,11 @@ To re-run that flow at any time:
 alchemy profile edit
 
 # Re-configure one account directly
-alchemy profile edit work --reconfigure Cloudflare
+alchemy profile edit --profile work --reconfigure Cloudflare
 
 # Log into a separate profile
 alchemy profile create prod
-alchemy profile edit prod
+alchemy profile edit --profile prod
 ```
 
 Refreshing credentials is separate from reconfiguration. Refresh preserves the
@@ -67,7 +67,7 @@ selected authentication method, account, and scopes:
 alchemy profile refresh
 
 # Refresh only AWS SSO
-alchemy profile refresh work --provider AWS
+alchemy profile refresh --profile work --provider AWS
 ```
 
 Alchemy refreshes supported credentials lazily. If interaction is required,
@@ -88,7 +88,7 @@ redacted):
 
 ```sh
 alchemy profile show
-alchemy profile show prod
+alchemy profile show --profile prod
 ```
 
 Sample output:

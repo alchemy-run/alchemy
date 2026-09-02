@@ -2,8 +2,8 @@ import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import { CliKit } from "./CliKit.ts";
-import { NonInteractiveTerminal } from "./errors.ts";
-import { setNativeProgress } from "./terminal.ts";
+import { NonInteractiveTerminal } from "../../Interaction.ts";
+import { setNativeProgress } from "../../Util/Terminal.ts";
 import type {
   CliKitCapabilities,
   CliKitOptions,

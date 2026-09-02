@@ -679,6 +679,19 @@ function renderPage(doc: PageDoc, resolve: LinkResolver): string {
     "---",
     `title: ${yamlString(doc.title)}`,
     `description: ${yamlString(description)}`,
+    // Generated reference pages are ~4k near-identical one-paragraph +
+    // one-snippet stubs (92% of the site). Indexed as separate documents
+    // they read as programmatic thin content, dilute crawl budget, and are
+    // what surfaces as "random" search results instead of the hub and
+    // guide pages. Keep them navigable and crawlable (`follow`) but out of
+    // search indexes; the sitemap integration drops any page carrying this
+    // meta. Revisit once pages are consolidated per service / carry real
+    // prose — this is the only line to change.
+    "head:",
+    "  - tag: meta",
+    "    attrs:",
+    "      name: robots",
+    '      content: "noindex, follow"',
     "---",
   ].join("\n");
 

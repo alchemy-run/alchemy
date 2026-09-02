@@ -137,6 +137,60 @@ function copyMarkdownSources() {
 }
 
 /**
+ * Pages that opt out of search indexing (`<meta name="robots" content="noindex…">`,
+ * set per page via Starlight `head` frontmatter, `Auth.astro`, or the
+ * reference generator) must not be advertised in the sitemap either — a
+ * sitemap entry is an explicit "please index this". Instead of maintaining a
+ * parallel path list in the sitemap filter, scan the rendered HTML once and
+ * let the filter consult the result. Runs in `astro:build:done` before the
+ * sitemap integration (Astro runs hooks in registration order), so it must
+ * be listed ahead of `sitemap()` in `integrations`.
+ */
+const noindexPaths = new Set();
+function collectNoindexPages() {
+  // Attribute order varies by emitter (Starlight `head`, hand-written
+  // layouts), so match either order.
+  const noindexRegex =
+    /<meta\b(?=[^>]*\bname="robots")(?=[^>]*\bcontent="[^"]*noindex)/i;
+  return {
+    name: "collect-noindex-pages",
+    hooks: {
+      "astro:build:done": async ({ dir, logger }) => {
+        const outDir = fileURLToPath(dir);
+        // Sequential on purpose: ~4.4k pages, and fanning the reads out
+        // holds every page's HTML in memory at once on top of an already
+        // heavy build heap.
+        /** @param {string} d */
+        async function walk(d) {
+          const entries = await fs.readdir(d, { withFileTypes: true });
+          for (const e of entries) {
+            const full = path.join(d, e.name);
+            if (e.isDirectory()) {
+              await walk(full);
+              continue;
+            }
+            if (!e.isFile() || !e.name.endsWith(".html")) continue;
+            const html = await fs.readFile(full, "utf8");
+            if (!noindexRegex.test(html)) continue;
+            // dist/foo/bar/index.html -> /foo/bar/ (sitemap URLs carry the
+            // trailing slash); dist/foo.html -> /foo.html
+            let rel =
+              "/" + path.relative(outDir, full).split(path.sep).join("/");
+            if (rel.endsWith("/index.html"))
+              rel = rel.slice(0, -"index.html".length);
+            noindexPaths.add(rel);
+          }
+        }
+        await walk(outDir);
+        logger.info(
+          `${noindexPaths.size} noindex page(s) excluded from the sitemap`,
+        );
+      },
+    },
+  };
+}
+
+/**
  * Build-output checks — one pass over every rendered HTML page:
  *
  * 1. Case-sensitive internal-link check: validates every internal
@@ -354,11 +408,18 @@ export default defineConfig({
     pagefindIgnoreNoise(),
     copyMarkdownSources(),
     buildOutputChecks(),
+    collectNoindexPages(),
     sitemap({
       filter: (page) =>
         !page.endsWith(".html") &&
         !page.endsWith(".md") &&
-        !page.endsWith(".mdx"),
+        !page.endsWith(".mdx") &&
+        // Anything rendered with a `noindex` robots meta: `/auth/*`, and the
+        // example-less API reference stubs (see `collectNoindexPages`).
+        !noindexPaths.has(new URL(page).pathname) &&
+        // starlight-blog's paginated listings (`/blog/2/`, …) — thin pages
+        // that only repeat post excerpts; the posts themselves are listed.
+        !/\/blog\/\d+\/?$/.test(page),
     }),
     starlight({
       title: "Alchemy",
@@ -848,6 +909,10 @@ export default defineConfig({
             {
               label: "Observability",
               items: [
+                {
+                  label: "Native tracing",
+                  link: "/cloudflare/observability/workers-tracing",
+                },
                 {
                   label: "Axiom telemetry",
                   link: "/cloudflare/observability/axiom-observability",

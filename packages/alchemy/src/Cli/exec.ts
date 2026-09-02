@@ -21,7 +21,7 @@ import { PlatformServices } from "../Util/PlatformServices.ts";
 import * as Stacks from "../Alchemist/routes/stack.ts";
 import { DevOptions } from "./DevOptions.ts";
 import { ConsoleLogLive } from "./GlobalLog.ts";
-import { handleCliErrors } from "./commands/errors.ts";
+import { handleCliErrors, installShutdownFeedback } from "./commands/errors.ts";
 import { renderApply, renderPlanning } from "./commands/render.ts";
 import * as CliKit from "./CliKit/index.ts";
 import { selectCliServices } from "./selectCli.ts";
@@ -30,7 +30,10 @@ import { selectCliServices } from "./selectCli.ts";
 // and other non-interactive terminals still select the append-only renderer.
 // `ALCHEMY_TUI` remains the explicit override in either direction.
 const services = Layer.mergeAll(
-  Layer.provideMerge(selectCliServices(), CliKit.layer()),
+  Layer.provideMerge(
+    Layer.mergeAll(selectCliServices(), CliKit.CliKitInteraction),
+    CliKit.layer(),
+  ),
   ConsoleLogLive,
   RpcProviderProxy.fromEnv(),
   Layer.succeed(ArtifactStore, createArtifactStore()),
@@ -116,6 +119,7 @@ const makeExec = () => {
     JSON.parse(process.env.ALCHEMY_EXEC_OPTIONS!),
   );
   return Effect.gen(function* () {
+    yield* installShutdownFeedback;
     // Subscribe to the spawner's sidecar log stream BEFORE the stack runs:
     // this process owns the terminal renderer, so sidecar output printed
     // here lands in chronological order with the run's own lines instead of

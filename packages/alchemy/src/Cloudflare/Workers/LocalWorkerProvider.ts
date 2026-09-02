@@ -29,17 +29,13 @@ import * as Stream from "effect/Stream";
 import type * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
 import * as os from "node:os";
 import type * as Bundle from "../../Bundle/Bundle.ts";
-import {
-  ANSI_RESET,
-  ansiFg,
-  colorsEnabled,
-  theme,
-} from "../../Cli/CliKit/index.ts";
+import { ANSI_RESET, ansiFg, colorsEnabled } from "../../Util/Terminal.ts";
+import { theme } from "../../Util/Theme.ts";
 import {
   formatResourceTag,
   makeResourceLogger,
   makeResourceOutput,
-} from "../../Cli/Output.ts";
+} from "../../Util/ResourceOutput.ts";
 import * as LocalProvider from "../../Dev/LocalProvider.ts";
 import { FQN_SEPARATOR } from "../../FQN.ts";
 import { makeDevLogDirectory, makeDevLogOpener } from "../../Local/DevLog.ts";

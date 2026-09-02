@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
-import * as CliKit from "../Cli/CliKit/index.ts";
+import * as Interaction from "../Interaction.ts";
 import {
   AuthError,
   AuthProviderLayer,
@@ -136,9 +136,9 @@ export const validateFieldValues = (
  */
 export const collectFieldValues = (
   fields: ReadonlyArray<ConfigureField>,
-): Effect.Effect<StoredValues, AuthError, CliKit.CliKit> =>
+): Effect.Effect<StoredValues, AuthError, Interaction.Interaction> =>
   Effect.gen(function* () {
-    const prompt = yield* CliKit.CliKit;
+    const interaction = yield* Interaction.Interaction;
     const values: StoredValues = {};
     for (const field of fields) {
       const description = [
@@ -152,13 +152,13 @@ export const collectFieldValues = (
         return field.validate?.(value);
       };
       const request = field.secret
-        ? prompt.prompt.password({
+        ? interaction.prompt.password({
             message: field.label,
             description: description || undefined,
             placeholder: field.placeholder,
             validate,
           })
-        : prompt.prompt.text({
+        : interaction.prompt.text({
             message: field.label,
             description: description || undefined,
             placeholder: field.placeholder,
@@ -215,7 +215,7 @@ export const makeStoredAuthProvider = <Resolved>(
   const layer = AuthProviderLayer<StoredAuthConfig, Resolved>()(
     provider,
     Effect.gen(function* () {
-      const prompt = CliKit.accessors;
+      const interaction = Interaction.accessors;
       const store = yield* CredentialsStore;
 
       const persist = (profileName: string, values: StoredValues) =>
@@ -223,7 +223,7 @@ export const makeStoredAuthProvider = <Resolved>(
           const complete = config.complete?.(values) ?? Effect.succeed(values);
           const completed = yield* complete;
           yield* store.write(profileName, storageKey, storedSchema, completed);
-          yield* prompt.output.success(`${provider}: credentials saved.`);
+          yield* interaction.output.success(`${provider}: credentials saved.`);
           return { method: "stored" as const };
         });
 
@@ -283,7 +283,9 @@ export const makeStoredAuthProvider = <Resolved>(
           .delete(profileName, storageKey)
           .pipe(
             Effect.andThen(
-              prompt.output.success(`${provider}: stored credentials removed`),
+              interaction.output.success(
+                `${provider}: stored credentials removed`,
+              ),
             ),
           );
 

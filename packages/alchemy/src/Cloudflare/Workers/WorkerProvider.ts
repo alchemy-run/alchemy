@@ -44,6 +44,7 @@ import { getCompatibility } from "./Compatibility.ts";
 import { isDurableObjectExport } from "./DurableObject.ts";
 import { LocalWorkerProvider } from "./LocalWorkerProvider.ts";
 import { makeSourceContext, resolveSource } from "./Source.ts";
+import { assertCloudflareTelemetryCompatibility } from "./Telemetry.ts";
 import {
   isSelfUrl,
   Worker,
@@ -55,6 +56,7 @@ import {
   getCacheBinding,
   getCronBindings,
   isContainerDecl,
+  resolveObservability,
 } from "./WorkerAsyncBindings.ts";
 import type {
   WireWorkerBinding,
@@ -1285,6 +1287,7 @@ export const LiveWorkerProvider = () =>
           if (desired.length > 0 || previous.length > 0 || live.length > 0) {
             yield* session.note(
               `Reconciling Cron Triggers (${desired.length}) ...`,
+              { kind: "status" },
             );
           }
 
@@ -2912,7 +2915,9 @@ export const LiveWorkerProvider = () =>
           parentName,
         );
         const compatibility = getCompatibility(news);
-        yield* session.note(`Uploading version of ${parentName} ...`);
+        yield* session.note(`Uploading version of ${parentName} ...`, {
+          kind: "status",
+        });
         const created = yield* workers
           .createScriptVersion({
             accountId,
@@ -2962,6 +2967,7 @@ export const LiveWorkerProvider = () =>
         if (traffic > 0) {
           yield* session.note(
             `Deploying version at ${traffic}% of ${parentName}'s traffic ...`,
+            { kind: "status" },
           );
           deploymentId = yield* deployVersionTraffic({
             accountId,
@@ -3022,7 +3028,9 @@ export const LiveWorkerProvider = () =>
                 }),
               );
             }
-            yield* session.note("Reconciling version-affinity rules ...");
+            yield* session.note("Reconciling version-affinity rules ...", {
+              kind: "status",
+            });
           }
           const placed = yield* reconcileAffinityRules({
             scriptName: parentName,
@@ -3264,7 +3272,9 @@ export const LiveWorkerProvider = () =>
         const sizeKB = size / 1024;
         const sizeMB = sizeKB / 1024;
         const bundleSize = `${sizeKB > 1024 ? `${sizeMB.toFixed(2)} MB` : `${sizeKB.toFixed(2)} KB`}`;
-        yield* session.note(`Uploading worker (${bundleSize}) ...`);
+        yield* session.note(`Uploading worker (${bundleSize}) ...`, {
+          kind: "status",
+        });
 
         // Read existing worker settings for migration tracking
         const oldSettings =
@@ -3592,13 +3602,7 @@ export const LiveWorkerProvider = () =>
           logpush: news.logpush,
           mainModule: bundle.main,
           migrations,
-          observability: news.observability ?? {
-            enabled: true,
-            logs: {
-              enabled: true,
-              invocationLogs: true,
-            },
-          },
+          observability: resolveObservability(news, bindings),
           placement: news.placement,
           tags: metadataTags,
           tailConsumers,
@@ -3645,6 +3649,7 @@ export const LiveWorkerProvider = () =>
           }
           yield* session.note(
             `Uploading version of ${name} (${bundleSize}) ...`,
+            { kind: "status" },
           );
           const created = yield* workers
             .createScriptVersion({
@@ -3688,6 +3693,7 @@ export const LiveWorkerProvider = () =>
           if (rolloutTraffic > 0) {
             yield* session.note(
               `Deploying version at ${rolloutTraffic}% of traffic ...`,
+              { kind: "status" },
             );
             deploymentId = yield* deployVersionTraffic({
               accountId,
@@ -3819,6 +3825,7 @@ export const LiveWorkerProvider = () =>
         ) {
           yield* session.note(
             `${workersDev.enabled || workersDev.previewsEnabled ? "Enabling" : "Disabling"} workers.dev subdomain...`,
+            { kind: "status" },
           );
           // Cloudflare's script registry is eventually consistent — for the
           // first few hundred ms after `putScript` returns, POST /subdomain
@@ -3898,6 +3905,7 @@ export const LiveWorkerProvider = () =>
             : [];
           yield* session.note(
             `Reconciling custom domains (${desiredHostnames.length}) ...`,
+            { kind: "status" },
           );
           // Capture hostname → zone for *currently attached* domains before
           // reconcile detaches removed ones — a removed redirect hostname's
@@ -3943,6 +3951,7 @@ export const LiveWorkerProvider = () =>
         if (desiredRoutes.length > 0 || previousRoutes.length > 0) {
           yield* session.note(
             `Reconciling worker routes (${desiredRoutes.length}) ...`,
+            { kind: "status" },
           );
         }
         const routes = yield* reconcileRoutes(
@@ -4000,7 +4009,9 @@ export const LiveWorkerProvider = () =>
                 }),
               );
             }
-            yield* session.note("Reconciling version-affinity rules ...");
+            yield* session.note("Reconciling version-affinity rules ...", {
+              kind: "status",
+            });
           }
           const placed = yield* reconcileAffinityRules({
             scriptName: name,
@@ -4539,6 +4550,10 @@ export const LiveWorkerProvider = () =>
         }),
         precreate: Effect.fn(function* ({ id, news, session, bindings }) {
           const { accountId } = yield* yield* CloudflareEnvironment;
+          yield* assertCloudflareTelemetryCompatibility(
+            news as WorkerProps,
+            bindings,
+          );
           const name = yield* createWorkerName(id, news.name);
           // A version worker uploads to its parent's script during
           // reconcile; pre-creating a placeholder script under this
@@ -4690,7 +4705,7 @@ export const LiveWorkerProvider = () =>
               `Cloudflare Worker precreate: reusing existing ${name}`,
             );
           } else {
-            yield* session.note("Pre-creating worker...");
+            yield* session.note("Pre-creating worker...", { kind: "status" });
             const compatibility = getCompatibility(news);
             const mainModule = "main.js";
             const placeholderScript = `${doClasses.length > 0 ? 'import { DurableObject } from "cloudflare:workers";\n\n' : ""}export default { fetch() { return new Response("Alchemy worker is being deployed...") } };\n${doClasses
@@ -4731,13 +4746,7 @@ export const LiveWorkerProvider = () =>
                         newSqliteClasses: doClasses,
                       }
                     : undefined,
-                observability: news.observability ?? {
-                  enabled: true,
-                  logs: {
-                    enabled: true,
-                    invocationLogs: true,
-                  },
-                },
+                observability: resolveObservability(news, bindings),
                 tags,
               },
               files: [
@@ -5078,6 +5087,7 @@ export const LiveWorkerProvider = () =>
           output,
           session,
         }) {
+          yield* assertCloudflareTelemetryCompatibility(news, bindings);
           // A version worker uploads an immutable version to its parent's
           // script instead of owning a script of its own — none of the
           // script-level observation below applies.

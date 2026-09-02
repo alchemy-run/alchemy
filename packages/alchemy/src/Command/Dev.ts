@@ -3,7 +3,7 @@ import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { stripVTControlCharacters } from "node:util";
-import { makeResourceOutput } from "../Cli/Output.ts";
+import { makeResourceOutput } from "../Util/ResourceOutput.ts";
 import * as LocalProvider from "../Dev/LocalProvider.ts";
 import * as ProviderLayer from "../Dev/ProviderLayer.ts";
 import { FQN_SEPARATOR } from "../FQN.ts";
