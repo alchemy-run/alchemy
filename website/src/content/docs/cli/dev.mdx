@@ -88,7 +88,7 @@ Connected to the dev relay: https://<name>.dev-sam.dev.alchemy.run
 
 A relay is a Worker and Durable Object on a domain the relay operator owns. `alchemy dev` opens **one** WebSocket to it and keeps it open for the session; the relay routes every `https://<name>.<namespace>.<domain>` request down that socket by `Host`, and the local ingress answers it. Compared to quick tunnels: real subdomains, stable names across restarts, no `cloudflared`, no process per resource. The namespace is yours for the session (the stage name by default) and each resource keeps its ingress name under it, so cookies scoped to `<namespace>.<domain>` work across your resources like they will in production.
 
-Anyone can host a relay with Alchemy itself — `Local.Relay.DevRelay` deploys the Worker, its wildcard DNS record and routes onto a zone (two-level hostnames need Advanced Certificate Manager on that zone). Connectors present the relay's bearer token from `$ALCHEMY_DEV_RELAY_TOKEN`. WebSocket passthrough (HMR sockets through the relay) is not supported yet; the local URLs keep working for that.
+Anyone can host a relay with Alchemy itself — `yield* DevRelay` (from `alchemy/Local/Relay/Relay`) deploys the Effect-native Worker and Durable Object, their routes and wildcard DNS record onto a zone, configured by `DEV_RELAY_ZONE`, `DEV_RELAY_DOMAIN` and `DEV_RELAY_TOKEN` (two-level hostnames need Advanced Certificate Manager on that zone). Connectors present the relay's bearer token from `$ALCHEMY_DEV_RELAY_TOKEN`. WebSocket passthrough (HMR sockets through the relay) is not supported yet; the local URLs keep working for that.
 
 ## Examples
 

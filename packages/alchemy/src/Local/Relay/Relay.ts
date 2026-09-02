@@ -1,94 +1,60 @@
+import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
+import { CloudflareEnvironment } from "../../Cloudflare/CloudflareEnvironment.ts";
 import * as DNS from "../../Cloudflare/DNS/index.ts";
-import { DurableObject } from "../../Cloudflare/Workers/DurableObject.ts";
-import { Worker } from "../../Cloudflare/Workers/Worker.ts";
-import type { RelaySession } from "./relay.worker.ts";
+import { findZoneByName } from "../../Cloudflare/Zone/lookup.ts";
+import DevRelayWorker from "./RelayWorker.ts";
 
 /**
- * Deploys an Alchemy dev relay: the Worker + Durable Object in
- * `relay.worker.ts`, a wildcard DNS record, and Worker routes on a zone you
- * own, so that `alchemy dev --relay https://<domain>` gives every local
- * resource a stable `https://<name>.<namespace>.<domain>` URL over a single
- * WebSocket from the dev sidecar.
+ * Deploys an Alchemy dev relay: the Effect-native Worker + Durable Object in
+ * `RelayWorker.ts` (with its routes) plus the proxied DNS records its
+ * hostnames need, on a zone you own — so `alchemy dev --relay https://<domain>`
+ * gives every local resource a stable `https://<name>.<namespace>.<domain>`
+ * URL over a single WebSocket from the dev sidecar.
+ *
+ * Configured through `Config` (env vars / `.env`):
+ *
+ * - `DEV_RELAY_ZONE` — zone name (`example.com`)
+ * - `DEV_RELAY_DOMAIN` — relay domain (`dev.example.com`)
+ * - `DEV_RELAY_SCHEME` — `https` (default) or `http`
+ * - `DEV_RELAY_TOKEN` — optional shared bearer token
  *
  * ### Deploying a relay
- * **Example:** Relay on `dev.example.com`
+ * **Example:** In a stack
  * ```typescript
- * const relay = yield* Alchemy.Local.Relay.DevRelay("DevRelay", {
- *   zoneId: zone.zoneId,
- *   domain: "dev.example.com",
- *   token: Config.redacted("DEV_RELAY_TOKEN"),
- * });
- * // alchemy dev --relay https://dev.example.com
+ * const relay = yield* DevRelay;
+ * return { url: relay.url }; // alchemy dev --relay <url>
  * ```
  *
- * Two-level hostnames (`api.sam.dev.example.com`) need a certificate that
- * covers `*.sam.dev.example.com` — Advanced Certificate Manager (or Total
- * TLS) on the zone; Universal SSL alone only covers one wildcard level.
+ * Two-level hostnames (`api.sam.dev.example.com`) need a certificate covering
+ * `*.sam.dev.example.com` — Advanced Certificate Manager (or Total TLS) on the
+ * zone; Universal SSL only covers one wildcard level.
  */
-export interface DevRelayProps {
-  /** Zone the relay domain lives in. */
-  readonly zoneId: string;
-  /** Public domain: hosts are `<name>.<namespace>.<domain>` (e.g. `dev.example.com`). */
-  readonly domain: string;
-  /** Shared bearer token connectors must present. Omit to accept any connector (test relays only). */
-  readonly token?: Redacted.Redacted<string> | string;
-  /**
-   * Scheme announced to connectors and used in the URLs they print.
-   * @default "https"
-   */
-  readonly scheme?: "https" | "http";
-  /** Worker script name override. */
-  readonly name?: string;
-}
-
-export const DevRelay = Effect.fn("DevRelay")(function* (
-  id: string,
-  props: DevRelayProps,
-) {
-  const Sessions = DurableObject<RelaySession>(`${id}Sessions`, {
-    className: "RelaySession",
-  });
-  const worker = yield* Worker(id, {
-    name: props.name,
-    main: import.meta.resolve(
-      import.meta.url.endsWith(".ts")
-        ? "./relay.worker.ts"
-        : "./relay.worker.js",
-      import.meta.url,
-    ),
-    env: {
-      SESSIONS: Sessions,
-      RELAY_DOMAIN: props.domain,
-      RELAY_SCHEME: props.scheme ?? "https",
-      ...(props.token !== undefined
-        ? {
-            RELAY_TOKEN: Redacted.isRedacted(props.token)
-              ? props.token
-              : Redacted.make(props.token),
-          }
-        : {}),
-    },
-    routes: [
-      // The connect endpoint at the domain apex …
-      { pattern: `${props.domain}/*`, zoneId: props.zoneId },
-      // … and every `<name>.<namespace>.<domain>` (the leading wildcard
-      // matches across dots).
-      { pattern: `*.${props.domain}/*`, zoneId: props.zoneId },
-    ],
-  });
-  // Proxied placeholder records so the routes have DNS to attach to.
-  const apex = yield* DNS.Record(`${id}Apex`, {
-    zoneId: props.zoneId,
-    name: props.domain,
+export const DevRelay = Effect.gen(function* () {
+  const zoneName = yield* Config.string("DEV_RELAY_ZONE");
+  const domain = yield* Config.string("DEV_RELAY_DOMAIN");
+  const scheme = yield* Config.string("DEV_RELAY_SCHEME").pipe(
+    Config.withDefault("https"),
+  );
+  const { accountId } = yield* yield* CloudflareEnvironment;
+  const zone = yield* findZoneByName({ accountId, name: zoneName }).pipe(
+    Effect.orDie,
+  );
+  if (!zone) {
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found`));
+  }
+  const worker = yield* DevRelayWorker;
+  // Proxied placeholder records so the Worker routes have DNS to attach to.
+  const apex = yield* DNS.Record("DevRelayApex", {
+    zoneId: zone.id,
+    name: domain,
     type: "AAAA",
     content: "100::",
     proxied: true,
   });
-  const wildcard = yield* DNS.Record(`${id}Wildcard`, {
-    zoneId: props.zoneId,
-    name: `*.${props.domain}`,
+  const wildcard = yield* DNS.Record("DevRelayWildcard", {
+    zoneId: zone.id,
+    name: `*.${domain}`,
     type: "AAAA",
     content: "100::",
     proxied: true,
@@ -98,6 +64,6 @@ export const DevRelay = Effect.fn("DevRelay")(function* (
     apex,
     wildcard,
     /** Base URL to pass to `alchemy dev --relay`. */
-    url: `${props.scheme ?? "https"}://${props.domain}`,
+    url: `${scheme}://${domain}`,
   };
 });

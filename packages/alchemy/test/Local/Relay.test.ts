@@ -1,7 +1,5 @@
 import * as Alchemy from "@/index.ts";
 import * as Cloudflare from "@/Cloudflare/index.ts";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment.ts";
-import { findZoneByName } from "@/Cloudflare/Zone/lookup";
 import { DevRelay } from "@/Local/Relay/Relay.ts";
 import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
@@ -53,22 +51,17 @@ const dev = Test.make({
   },
 });
 
+// The relay reads its configuration through `Config`; set it before the
+// stack is planned (the test process resolves the live stack's Config).
+process.env.DEV_RELAY_ZONE = ZONE;
+process.env.DEV_RELAY_DOMAIN = RELAY_DOMAIN;
+process.env.DEV_RELAY_SCHEME = "http";
+
 const RelayStack = Alchemy.Stack(
   "DevRelayTestStack",
   { providers: Cloudflare.providers(), state: Cloudflare.state() },
   Effect.gen(function* () {
-    const { accountId } = yield* yield* CloudflareEnvironment;
-    const zone = yield* findZoneByName({ accountId, name: ZONE }).pipe(
-      Effect.orDie,
-    );
-    if (!zone) {
-      return yield* Effect.die(new Error(`zone "${ZONE}" not found`));
-    }
-    const relay = yield* DevRelay("DevRelay", {
-      zoneId: zone.id,
-      domain: RELAY_DOMAIN,
-      scheme: "http",
-    });
+    const relay = yield* DevRelay;
     return { url: relay.url, workerName: relay.worker.workerName };
   }),
 );
@@ -151,6 +144,12 @@ const getPublic = (
             Schedule.recurs(30),
           ]),
         }),
+        // Surface what the edge actually answered when it never settled.
+        Effect.catchTag("NotReady", (e) =>
+          Effect.die(
+            new Error(`relay answered ${e.status}: ${e.body.slice(0, 400)}`),
+          ),
+        ),
       );
   }).pipe(Effect.orDie);
 

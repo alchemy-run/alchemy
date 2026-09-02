@@ -66,6 +66,8 @@ export class RelayError extends Data.TaggedError("RelayError")<{
 const ROUTE_HINT_HEADER = "x-alchemy-ingress-host";
 
 const HELLO_TIMEOUT = "15 seconds";
+/** Connect attempts before a never-reachable relay is reported (~30s of backoff). */
+const INITIAL_ATTEMPTS = 8;
 
 interface Inflight {
   readonly controller: AbortController;
@@ -258,20 +260,30 @@ export const layer = Layer.succeed(
       }).pipe(Effect.scoped);
 
       // Keep the connection alive for the whole dev session: reconnect with
-      // backoff on drops. The first attempt's failure surfaces to the caller
-      // (bad URL / token) instead of retrying forever silently.
+      // backoff on drops. Before the first handshake, failures are retried a
+      // bounded number of times (a relay whose route/DNS was just created
+      // takes a moment to answer) and then surface to the caller — a bad URL
+      // or token must not retry forever silently.
+      let initialFailures = 0;
+      let initialGivenUp = false;
       yield* session.pipe(
         Effect.tapError((error) =>
           Effect.gen(function* () {
-            if (!(yield* Deferred.isDone(first))) {
+            if (yield* Deferred.isDone(first)) {
+              yield* Effect.logWarning(`${error.message} Reconnecting…`);
+            } else if (++initialFailures >= INITIAL_ATTEMPTS) {
+              initialGivenUp = true;
               yield* Deferred.fail(first, error);
             } else {
-              yield* Effect.logWarning(`${error.message} Reconnecting…`);
+              yield* Effect.logDebug(
+                `${error.message} Retrying (${initialFailures}/${INITIAL_ATTEMPTS})…`,
+              );
             }
           }),
         ),
         Effect.retry({
-          while: () => Deferred.isDoneUnsafe(first),
+          // Stop only once the initial handshake has been given up on.
+          while: () => !initialGivenUp,
           schedule: Schedule.min([
             Schedule.exponential("500 millis"),
             Schedule.spaced("10 seconds"),
