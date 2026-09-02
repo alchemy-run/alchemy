@@ -128,21 +128,21 @@ export const assertCloudflareTelemetryCompatibility = (
  * );
  * ```
  *
- * ### Combining with Axiom logs
- * **Example:** Native traces plus Worker-side OTLP logs
+ * ### Combining with other exporters
+ * **Example:** Native traces plus another exporter's logs and metrics
  * ```typescript
  * Effect.provide(
  *   Layer.mergeAll(
  *     Cloudflare.Telemetry(),
- *     // omit `traces` — Cloudflare.Telemetry replaced the Tracer
+ *     // omit `traces` — Cloudflare.Telemetry provides the Tracer
  *     Axiom.Telemetry({ token: Ingest, logs: Logs, metrics: Metrics }),
  *   ),
  * )
  * ```
  *
- * To ship the same waterfall (Effect + platform spans) to Axiom, use
- * `Cloudflare.Workers.ObservabilityDestination` rather than
- * `Axiom.Telemetry({ traces })`.
+ * To ship the same waterfall (Effect + platform spans) elsewhere, export
+ * it from Cloudflare with `Cloudflare.Workers.ObservabilityDestination`
+ * rather than sending a second Worker-side OTLP trace stream.
  *
  * @layer
  * @provides Tracer.Tracer

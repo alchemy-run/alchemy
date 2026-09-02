@@ -121,12 +121,13 @@ Cloudflare.Telemetry({
 })
 ```
 
-## Combining with Axiom
+## Combining with other exporters
 
-Effect has a single `Tracer`. `Cloudflare.Telemetry()` replaces it, so
-`Axiom.Telemetry({ traces })` will **not** receive Effect spans via the
-Worker-side OTLP exporter. Logs and metrics still merge, in either
-`Layer.mergeAll` order:
+Effect has a single `Tracer`, and `Cloudflare.Telemetry()` provides it.
+Any other exporter you merge in keeps its loggers and metric exporters;
+only its `traces` are superseded. With Axiom, for example, leave `traces`
+off and the logs and metrics still flow, in either `Layer.mergeAll`
+order:
 
 ```typescript
 Effect.provide(
@@ -137,8 +138,11 @@ Effect.provide(
 )
 ```
 
-To see the same waterfall (Effect + platform spans) in Axiom, export
-from Cloudflare with [`ObservabilityDestination`](/cloudflare/observability/axiom-observability)
+The same goes for the generic `Alchemy.Telemetry.layerOtlp({ logs, metrics })`.
+
+To ship the waterfall (Effect + platform spans) to another backend,
+export it from Cloudflare with an
+[`ObservabilityDestination`](/cloudflare/observability/axiom-observability)
 rather than sending a second Worker-side OTLP trace stream.
 
 ## Async Workers
