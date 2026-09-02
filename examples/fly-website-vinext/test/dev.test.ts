@@ -5,7 +5,7 @@
  *
  * Coverage:
  *   - stack output    → `url` is a local dev-server address
- *   - SSR env parity  → `/` renders the GREETING declared in alchemy.run.ts
+ *   - Home page       → `/` serves the prerendered heading
  *   - API route       → `/api/hello` serves the route handler
  *   - static assets   → `/robots.txt` from public/
  *   - HOT RELOAD      → editing app/page.tsx is served by vinext's HMR
@@ -97,7 +97,7 @@ afterAll(async () => {
       await Promise.race([exited, Bun.sleep(5_000)]);
     }
   }
-  if (hasCreds && !process.env.NO_DESTROY) {
+  if (!process.env.NO_DESTROY) {
     spawnSync("bun", [alchemyBin, "destroy", "--stage", STAGE, "--yes"], {
       cwd: root,
       stdio: "inherit",
@@ -106,9 +106,7 @@ afterAll(async () => {
   }
 }, 180_000);
 
-const hasCreds = !!process.env.FLY_API_TOKEN;
-
-(hasCreds ? test : test.skip)(
+test(
   "alchemy dev serves the vinext site locally with hot reload",
   async () => {
     proc = spawn("bun", [alchemyBin, "dev", "--stage", STAGE], {
@@ -138,6 +136,9 @@ const hasCreds = !!process.env.FLY_API_TOKEN;
 
     const robots = await (await fetchOk(new URL("/robots.txt", url))).text();
     expect(robots).toContain("User-agent:");
+
+    const isr = await (await fetchOk(new URL("/isr", url))).text();
+    expect(isr).toContain("ISR");
 
     fs.writeFileSync(pagePath, pageSource.replace(MARKER, MARKER_V2));
     await pollUntil(

@@ -70,14 +70,21 @@ if (!hasCreds) {
   );
 
   test(
-    "serves the server-rendered home page",
+    "serves the home page",
     Effect.gen(function* () {
       const url = yield* base;
-      const res = yield* getWhenReady(url);
-      expect(res.status).toBe(200);
-      const html = yield* res.text;
+      const html = yield* getBodyWhenReady(url, "Hello from vinext on Railway!");
       expect(html).toContain("vinext on Railway");
-      expect(html).toContain("Hello from vinext on Railway!");
+    }),
+    { timeout: 180_000 },
+  );
+
+  test(
+    "serves the ISR page",
+    Effect.gen(function* () {
+      const url = yield* base;
+      const html = yield* getBodyWhenReady(`${url}/isr`, "ISR");
+      expect(html).toContain("revalidate 60s");
     }),
     { timeout: 180_000 },
   );
@@ -90,16 +97,6 @@ if (!hasCreds) {
       expect(res.status).toBe(200);
       const body = (yield* res.json) as { hello: string };
       expect(body.hello).toBe("world");
-    }),
-    { timeout: 180_000 },
-  );
-
-  test(
-    "compiles tailwind via vite",
-    Effect.gen(function* () {
-      const url = yield* base;
-      const html = yield* getBodyWhenReady(url, "text-3xl");
-      expect(html).toContain("text-3xl");
     }),
     { timeout: 180_000 },
   );

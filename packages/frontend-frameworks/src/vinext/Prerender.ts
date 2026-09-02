@@ -18,10 +18,10 @@ const exists = (fs: FileSystem.FileSystem, filePath: string) =>
   fs.exists(filePath).pipe(Effect.orElseSucceed(() => false));
 
 /**
- * vinext's `kvDataAdapter()` throws during local prerender (no Worker
- * `env`) and then logs a wrangler.jsonc snippet. That hint is wrong on
- * the Alchemy path — drop those lines so deploy logs do not look like
- * a missing Wrangler file.
+ * The KV data-cache adapter throws during local prerender (no Worker
+ * `env`) and vinext may log a wrangler.jsonc snippet. That hint is
+ * wrong on the Alchemy path — drop those lines so deploy logs do not
+ * look like a missing Wrangler file.
  */
 const isWranglerKvHint = (text: string) =>
   text.includes("failed to initialize the configured data cache adapter") ||

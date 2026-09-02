@@ -39,20 +39,20 @@ components and route handlers read `process.env`.
 
 ISR / `"use cache"` on AWS is S3, not Cloudflare KV.
 `AWS.Website.Vinext` provisions a dedicated cache bucket, sets
-`CACHE_BUCKET_NAME`, and grants the Lambda Get/Put/Delete.
+`CACHE_BUCKET_NAME`, and grants the Lambda Get/Put/Delete/List.
+Register `vinext({ ...alchemy() })` — the AWS build sets
+`ALCHEMY_VINEXT_CACHE=s3` so the S3 adapter is baked in. Local
+`alchemy dev` has no bucket and stays in memory.
 
 ```typescript
-import { s3Adapter } from "@alchemy.run/frontend-frameworks/vinext/cache/s3";
+import { alchemy } from "@alchemy.run/frontend-frameworks/vinext/cache";
 import { defineConfig } from "vite";
 import vinext from "vinext";
 
 export default defineConfig({
-  plugins: [vinext({ cache: { data: s3Adapter() } })],
+  plugins: [vinext({ prerender: true, ...alchemy() })],
 });
 ```
-
-Missing `CACHE_BUCKET_NAME` (local `vinext start`) falls back to
-memory.
 
 ## Declare the Website
 

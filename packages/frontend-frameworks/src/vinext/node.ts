@@ -135,7 +135,9 @@ export const buildInChild = (config: VinextNodeBuildChildConfig) =>
         ),
       ),
     );
-    yield* runVinextBuild({ root, cli }).pipe(Effect.provide(spawnerLayer));
+    yield* runVinextBuild({ root, cli, cache: "redis" }).pipe(
+      Effect.provide(spawnerLayer),
+    );
     const dist = yield* collectVinextDist(root);
     return yield* pinServeModule(
       dist,

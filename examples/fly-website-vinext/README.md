@@ -3,7 +3,7 @@
 Deploys a [vinext](https://vinext.dev) site to Fly with
 `Fly.Website.Vinext` — Next.js API on Vite, as a long-running Node
 process on a Machine. Not OpenNext and not the Cloudflare Worker path.
-ISR / `"use cache"` persist in Upstash Redis (`redisAdapter()`).
+ISR / `"use cache"` persist in Upstash Redis (`vinext({ ...alchemy() })`).
 
 ```ts
 const redis = yield* Fly.Redis("Cache", { eviction: true });

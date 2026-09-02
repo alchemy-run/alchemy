@@ -42,7 +42,7 @@ export interface VinextProps extends FrameworkSiteProps {}
  *
  * **Example:** Redis data cache
  * ISR / `"use cache"` default to in-process memory. Set `REDIS_URL` and
- * register `redisAdapter()` for a durable store.
+ * `vinext({ ...alchemy() })` for a durable Redis store.
  * ```typescript
  * const site = yield* Hetzner.Website.Vinext("Web", {
  *   env: {

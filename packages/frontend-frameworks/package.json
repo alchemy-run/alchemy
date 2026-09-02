@@ -51,6 +51,7 @@
   },
   "dependencies": {
     "@alchemy.run/cloudflare-runtime": "workspace:*",
+    "@distilled.cloud/aws": "workspace:*",
     "@distilled.cloud/cloudflare": "workspace:*",
     "@effect/platform-node": "catalog:effect",
     "esbuild": "catalog:cloudflare-runtime",
@@ -413,6 +414,18 @@
       "bun": "./dist/vinext/source.js",
       "worker": "./dist/vinext/source.js",
       "import": "./dist/vinext/source.js"
+    },
+    "./vinext/cache": {
+      "types": "./dist/vinext/cache/index.d.ts",
+      "bun": "./dist/vinext/cache/index.js",
+      "worker": "./dist/vinext/cache/index.js",
+      "import": "./dist/vinext/cache/index.js"
+    },
+    "./vinext/cache/kv": {
+      "types": "./dist/vinext/cache/kv.d.ts",
+      "bun": "./dist/vinext/cache/kv.js",
+      "worker": "./dist/vinext/cache/kv.js",
+      "import": "./dist/vinext/cache/kv.js"
     },
     "./vinext/cache/redis": {
       "types": "./dist/vinext/cache/redis.d.ts",

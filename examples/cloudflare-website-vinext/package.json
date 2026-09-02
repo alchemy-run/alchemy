@@ -10,7 +10,6 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@vinext/cloudflare": "^1.0.0-beta.0",
     "alchemy": "workspace:*",
     "effect": "catalog:effect",
     "react": "catalog:frontend",

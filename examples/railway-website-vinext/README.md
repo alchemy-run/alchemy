@@ -4,11 +4,10 @@ Deploys a [vinext](https://vinext.dev) site to Railway with
 `Railway.Website.Vinext` — Next.js API on Vite, as a long-running Node
 process. Not OpenNext and not the Cloudflare Worker path.
 
-- `app/page.tsx` is server-rendered on the Railway Service and reads
-  `GREETING` from `process.env`.
+- `app/page.tsx` is prerendered (no `process.env` on the page).
 - `app/api/hello/route.ts` is an App Router API route.
 - `app/isr/page.tsx` is ISR (`revalidate: 60`) stored in Redis via
-  `redisAdapter()` / `REDIS_URL`.
+  `vinext({ ...alchemy() })` / `REDIS_URL`.
 - This is `vinext build` plus vinext's production server.
 
 ```ts

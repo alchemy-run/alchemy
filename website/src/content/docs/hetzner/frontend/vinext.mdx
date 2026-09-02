@@ -44,16 +44,17 @@ Register `vinext()` in `vite.config.ts`. Do **not** add
 `@cloudflare/vite-plugin` or `@vinext/cloudflare` adapters.
 
 ISR / `"use cache"` default to in-process memory. For a durable store,
-run Redis next to the server, set `REDIS_URL`, and register the same
-adapter as Railway. Missing URL falls back to memory.
+run Redis next to the server and set `REDIS_URL` on the Website.
+Register `vinext({ ...alchemy() })` — the Node build bakes the Redis
+adapter. Missing URL falls back to memory.
 
 ```typescript
-import { redisAdapter } from "@alchemy.run/frontend-frameworks/vinext/cache/redis";
+import { alchemy } from "@alchemy.run/frontend-frameworks/vinext/cache";
 import { defineConfig } from "vite";
 import vinext from "vinext";
 
 export default defineConfig({
-  plugins: [vinext({ cache: { data: redisAdapter() } })],
+  plugins: [vinext({ prerender: true, ...alchemy() })],
 });
 ```
 

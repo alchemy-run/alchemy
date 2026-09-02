@@ -31,11 +31,11 @@ export interface VinextProps extends FrameworkSiteProps {}
  * and forwards everything else to the server.
  *
  * ISR / `"use cache"` persistence is an S3 bucket (not Cloudflare KV).
- * Point `vinext({ cache: { data: s3Adapter() } })` at
- * `@alchemy.run/frontend-frameworks/vinext/cache/s3`. This resource
- * provisions the bucket, sets `CACHE_BUCKET_NAME`, and grants the
- * server Get/Put/Delete. A dedicated cache bucket keeps the graph
- * acyclic (the asset bucket is bound to CloudFront).
+ * This resource provisions the bucket, sets `CACHE_BUCKET_NAME`, and
+ * grants the Lambda Get/Put/Delete/List. Spread `alchemy()` into
+ * `vinext({ ...alchemy() })` — the AWS build bakes the S3 adapter.
+ * A dedicated cache bucket keeps the graph acyclic (the asset bucket
+ * is bound to CloudFront).
  *
  * This is **not** `AWS.Website.Nextjs` (OpenNext) and **not**
  * `Cloudflare.Website.Vinext`. During `alchemy dev` the site is
@@ -49,13 +49,13 @@ export interface VinextProps extends FrameworkSiteProps {}
  * });
  * ```
  *
- * **Example:** S3 data cache in vite.config.ts
+ * **Example:** vite.config.ts (platform-agnostic)
  * ```typescript
- * import { s3Adapter } from "@alchemy.run/frontend-frameworks/vinext/cache/s3";
+ * import { alchemy } from "@alchemy.run/frontend-frameworks/vinext/cache";
  * import vinext from "vinext";
  *
  * export default defineConfig({
- *   plugins: [vinext({ cache: { data: s3Adapter() } })],
+ *   plugins: [vinext({ prerender: true, ...alchemy() })],
  * });
  * ```
  *

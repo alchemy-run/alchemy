@@ -43,12 +43,17 @@ export const resolveVinextCli = (root: string) =>
 export const runVinextBuild = (options: {
   readonly root: string;
   readonly cli: string;
+  /** Sets `ALCHEMY_VINEXT_CACHE` so `alchemy()` bakes this adapter. */
+  readonly cache?: "redis" | "s3" | undefined;
 }) =>
   Effect.scoped(
     Effect.gen(function* () {
       const env = yield* Effect.sync(() => ({
         ...process.env,
         NODE_ENV: "production",
+        ...(options.cache !== undefined
+          ? { ALCHEMY_VINEXT_CACHE: options.cache }
+          : {}),
       }));
       const child = yield* ChildProcess.make("node", [options.cli, "build"], {
         cwd: options.root,

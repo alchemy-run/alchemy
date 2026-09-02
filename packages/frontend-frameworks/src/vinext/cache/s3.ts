@@ -1,18 +1,11 @@
 /**
  * vinext data-cache adapter builder for S3.
  *
- * Call from `vite.config.ts` — returns a serializable `{ adapter, options }`
- * descriptor. The runtime factory reads `CACHE_BUCKET_NAME` from the
- * Lambda environment (Alchemy's `AWS.Website.Vinext` sets it).
- *
- * ```ts
- * import { s3Adapter } from "@alchemy.run/frontend-frameworks/vinext/cache/s3";
- * import vinext from "vinext";
- *
- * export default defineConfig({
- *   plugins: [vinext({ cache: { data: s3Adapter() } })],
- * });
- * ```
+ * Prefer `vinext({ ...alchemy() })` — the AWS build bakes this adapter.
+ * The runtime factory reads `CACHE_BUCKET_NAME` from the Lambda
+ * environment (Alchemy's `AWS.Website.Vinext` sets it). The runtime
+ * talks distilled `@distilled.cloud/aws/s3`, the same client
+ * `AWS.S3.GetObject` / `PutObject` wrap.
  *
  * If the bucket env is missing (local `vinext start`), vinext logs and
  * falls back to the in-memory handler.

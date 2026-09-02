@@ -19,6 +19,43 @@ const VALID_KINDS = new Set([
 
 export const ENTRY_PREFIX = "cache:";
 export const TAG_PREFIX = "__tag:";
+/** Marker for logical keys hashed to fit Cloudflare KV's 512-byte limit. */
+export const HASHED_KEY_PREFIX = "__hash:";
+const KV_KEY_MAX_BYTES = 512;
+const KEY_ENCODER = new TextEncoder();
+
+/** FNV-1a 64-bit (two 32-bit rounds). Same algorithm vinext uses for KV keys. */
+export const fnv1a64 = (input: string): string => {
+  let h1 = 2166136261;
+  for (let i = 0; i < input.length; i++) {
+    h1 ^= input.charCodeAt(i);
+    h1 = (h1 * 16777619) >>> 0;
+  }
+  let h2 = 84696351;
+  for (let i = 0; i < input.length; i++) {
+    h2 ^= input.charCodeAt(i);
+    h2 = (h2 * 16777619) >>> 0;
+  }
+  return h1.toString(16).padStart(8, "0") + h2.toString(16).padStart(8, "0");
+};
+
+const normalizeAppPrefix = (appPrefix: string | undefined): string => {
+  if (!appPrefix) return "";
+  const prefix = `${appPrefix}:`;
+  const sample = `${prefix}${ENTRY_PREFIX}${HASHED_KEY_PREFIX}${fnv1a64("")}`;
+  if (KEY_ENCODER.encode(sample).length <= KV_KEY_MAX_BYTES) return prefix;
+  return `__app:${fnv1a64(appPrefix)}:`;
+};
+
+const buildStorageKey = (
+  prefix: string,
+  categoryPrefix: string,
+  logicalKey: string,
+): string => {
+  const key = `${prefix}${categoryPrefix}${logicalKey}`;
+  if (KEY_ENCODER.encode(key).length <= KV_KEY_MAX_BYTES) return key;
+  return `${prefix}${categoryPrefix}${HASHED_KEY_PREFIX}${fnv1a64(logicalKey)}`;
+};
 
 export const validateTag = (tag: string): string | null => {
   if (
@@ -202,11 +239,11 @@ export const restoreArrayBuffers = (
 };
 
 export const keySpace = (appPrefix: string | undefined) => {
-  const prefix = appPrefix ? `${appPrefix}:` : "";
+  const prefix = normalizeAppPrefix(appPrefix);
   return {
     entryPrefix: `${prefix}${ENTRY_PREFIX}`,
-    entryKey: (key: string) => `${prefix}${ENTRY_PREFIX}${key}`,
-    tagKey: (tag: string) => `${prefix}${TAG_PREFIX}${tag}`,
+    entryKey: (key: string) => buildStorageKey(prefix, ENTRY_PREFIX, key),
+    tagKey: (tag: string) => buildStorageKey(prefix, TAG_PREFIX, tag),
   };
 };
 

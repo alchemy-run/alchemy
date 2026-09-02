@@ -53,6 +53,9 @@ export default defineConfig([
       "vinext/node": "src/vinext/node.ts",
       "vinext/cloudflare": "src/vinext/cloudflare.ts",
       "vinext/source": "src/vinext/source.ts",
+      "vinext/cache/index": "src/vinext/cache/index.ts",
+      "vinext/cache/kv": "src/vinext/cache/kv.ts",
+      "vinext/cache/kv-runtime": "src/vinext/cache/kv-runtime.ts",
       "vinext/cache/redis": "src/vinext/cache/redis.ts",
       "vinext/cache/redis-runtime": "src/vinext/cache/redis-runtime.ts",
       "vinext/cache/s3": "src/vinext/cache/s3.ts",
@@ -96,7 +99,12 @@ export default defineConfig([
       ],
     },
     inputOptions: {
-      external: [/^(?:astro|cloudflare|virtual):/, /^nitropack(?:\/|$)/],
+      external: [
+        /^(?:astro|cloudflare|virtual):/,
+        /^nitropack(?:\/|$)/,
+        /^alchemy(?:\/|$)/,
+        /^@distilled\.cloud\/aws(?:\/|$)/,
+      ],
       makeAbsoluteExternalsRelative: true,
     },
     outputOptions: {

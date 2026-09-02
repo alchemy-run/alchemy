@@ -14,7 +14,8 @@ export interface VinextProps extends FrameworkSiteProps {
   /**
    * Optional Upstash Redis for ISR / `"use cache"`. Bound onto the
    * hosted Service so Alchemy writes `REDIS_URL` as an App secret.
-   * Pair with `redisAdapter()` in `vite.config.ts`.
+   * Spread `alchemy()` into `vinext({ ...alchemy() })` so the Node
+   * build bakes the Redis adapter.
    */
   redis?: Redis;
 }
@@ -29,7 +30,7 @@ export interface VinextProps extends FrameworkSiteProps {
  * — that is workerd.
  *
  * ISR / `"use cache"` persist in Redis when you pass {@link VinextProps.redis}
- * and register `redisAdapter()` — not Cloudflare KV. Missing `REDIS_URL`
+ * and `vinext({ ...alchemy() })` — not Cloudflare KV. Missing `REDIS_URL`
  * (local `vinext start` / `alchemy dev`) falls back to memory.
  *
  * During `alchemy dev` the site is `vinext dev` and no cloud resources

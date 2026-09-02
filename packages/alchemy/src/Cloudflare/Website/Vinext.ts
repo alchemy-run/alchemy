@@ -113,17 +113,13 @@ export interface VinextProps<
  * `import { env } from "cloudflare:workers"` in server components,
  * route handlers, and server actions.
  *
- * Register official `@vinext/cloudflare` adapters in `vite.config.ts`.
- * Those calls return serializable `{ adapter, options }` descriptors —
- * they never touch the Workers runtime at build or dev time.
- * `kvDataAdapter()` reads `env.VINEXT_KV_CACHE` on first request
- * (default binding name). `Website.Vinext` provisions that namespace
- * (do not bind it in `env`) and `alchemy deploy` seeds it after
- * vinext prerender. `cdnAdapter()` is optional page-level CDN cache:
- * this resource enables Workers Cache (`cache.enabled`) and binds
- * `CF_VERSION_METADATA` so `ctx.cache` exists. Alchemy does not run
- * `vinext-cloudflare deploy --experimental-warm-cdn-cache`; if an
- * adapter cannot initialize, vinext logs and falls back.
+ * Spread `alchemy()` into `vinext({ prerender: true, ...alchemy() })`.
+ * The Worker build sets `ALCHEMY_VINEXT_CACHE=kv` so the data-cache
+ * adapter is Alchemy's KV runtime (same ISR codec as Redis / S3).
+ * `Website.Vinext` provisions `VINEXT_KV_CACHE` (do not bind it in
+ * `env`) and `alchemy deploy` seeds prerender pairs into it. Workers
+ * Cache is enabled (`cache.enabled`) and `CF_VERSION_METADATA` is
+ * bound. There is no `@vinext/cloudflare` data-cache adapter.
  *
  * ### Deploying a vinext App
  * **Example:** Basic vinext site

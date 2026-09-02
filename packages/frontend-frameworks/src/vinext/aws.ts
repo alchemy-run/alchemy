@@ -132,7 +132,9 @@ export const buildInChild = (config: VinextAwsBuildChildConfig) =>
         ),
       ),
     );
-    yield* runVinextBuild({ root, cli }).pipe(Effect.provide(spawnerLayer));
+    yield* runVinextBuild({ root, cli, cache: "s3" }).pipe(
+      Effect.provide(spawnerLayer),
+    );
     const dist = yield* collectVinextDist(root);
     if (!dist.hasRsc) {
       return yield* Effect.fail(

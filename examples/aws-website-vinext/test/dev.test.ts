@@ -89,7 +89,7 @@ afterAll(async () => {
       await Promise.race([exited, Bun.sleep(5_000)]);
     }
   }
-  if (hasCreds && !process.env.NO_DESTROY) {
+  if (!process.env.NO_DESTROY) {
     spawnSync("bun", [alchemyBin, "destroy", "--stage", STAGE, "--yes"], {
       cwd: root,
       stdio: "inherit",
@@ -98,9 +98,7 @@ afterAll(async () => {
   }
 }, 180_000);
 
-const hasCreds = !!(process.env.AWS_ACCESS_KEY_ID || process.env.AWS_PROFILE);
-
-(hasCreds ? test : test.skip)(
+test(
   "alchemy dev serves the vinext site locally with hot reload",
   async () => {
     proc = spawn("bun", [alchemyBin, "dev", "--stage", STAGE], {
@@ -130,6 +128,9 @@ const hasCreds = !!(process.env.AWS_ACCESS_KEY_ID || process.env.AWS_PROFILE);
 
     const robots = await (await fetchOk(new URL("/robots.txt", url))).text();
     expect(robots).toContain("User-agent:");
+
+    const isr = await (await fetchOk(new URL("/isr", url))).text();
+    expect(isr).toContain("ISR");
 
     fs.writeFileSync(pagePath, pageSource.replace(MARKER, MARKER_V2));
     await pollUntil(

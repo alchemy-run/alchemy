@@ -6147,6 +6147,9 @@ importers:
       '@alchemy.run/cloudflare-runtime':
         specifier: workspace:*
         version: link:../cloudflare-runtime
+      '@distilled.cloud/aws':
+        specifier: workspace:*
+        version: link:../../distilled/packages/aws
       '@distilled.cloud/cloudflare':
         specifier: workspace:*
         version: link:../../distilled/packages/cloudflare

@@ -41,18 +41,18 @@ Server components and route handlers read `process.env`.
 Register `vinext()` in `vite.config.ts`. Do **not** add
 `@cloudflare/vite-plugin` or `@vinext/cloudflare` adapters.
 
-ISR / `"use cache"` persist in Redis — not Cloudflare KV. Register
-`redisAdapter()` and pass a `Fly.Redis` to the site so Alchemy writes
-`REDIS_URL` as an App secret. Missing URL (local `vinext start`) falls
-back to memory.
+ISR / `"use cache"` persist in Redis — not Cloudflare KV. Pass
+`Fly.Redis` on the Website; Alchemy writes `REDIS_URL` as an App
+secret. Register `vinext({ ...alchemy() })` — the Node build bakes the Redis
+adapter. Missing URL (`alchemy dev`) falls back to memory.
 
 ```typescript
-import { redisAdapter } from "@alchemy.run/frontend-frameworks/vinext/cache/redis";
+import { alchemy } from "@alchemy.run/frontend-frameworks/vinext/cache";
 import { defineConfig } from "vite";
 import vinext from "vinext";
 
 export default defineConfig({
-  plugins: [vinext({ cache: { data: redisAdapter() } })],
+  plugins: [vinext({ prerender: true, ...alchemy() })],
 });
 ```
 

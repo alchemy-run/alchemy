@@ -5,11 +5,11 @@ Deploys a [vinext](https://vinext.dev) site to AWS with
 Function URL, static assets on S3 + CloudFront. Not OpenNext and not
 the Cloudflare Worker path.
 
-- `app/page.tsx` is server-rendered on Lambda and reads `GREETING`
-  from `process.env`.
+- `app/page.tsx` is prerendered (no `process.env` on the page).
 - `app/api/hello/route.ts` is an App Router API route.
 - `app/isr/page.tsx` is ISR (`revalidate: 60`) stored in S3 via
-  `s3Adapter()` / `CACHE_BUCKET_NAME` (provisioned by the resource).
+  `vinext({ ...alchemy() })` / `CACHE_BUCKET_NAME` (provisioned by
+  the resource).
 - This is `vinext build` plus a Lambda fetch-handler wrap.
 
 ```ts

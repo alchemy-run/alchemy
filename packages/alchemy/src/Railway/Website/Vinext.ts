@@ -1,4 +1,7 @@
+import * as Effect from "effect/Effect";
 import * as Namespace from "../../Namespace.ts";
+import { ref } from "../ref.ts";
+import { REDIS_URL_ENV, type Redis } from "../Redis.ts";
 import { makeFrameworkSite, type FrameworkSiteProps } from "./FrameworkSite.ts";
 
 /**
@@ -12,7 +15,15 @@ export const VINEXT_FRAMEWORK_SPECIFIER =
 export const VINEXT_NODE_TARGET_SPECIFIER =
   "@alchemy.run/frontend-frameworks/vinext/node";
 
-export interface VinextProps extends FrameworkSiteProps {}
+export interface VinextProps extends FrameworkSiteProps {
+  /**
+   * Optional Redis for ISR / `"use cache"`. Alchemy writes `REDIS_URL`
+   * onto the Service from this resource. Spread `alchemy()` into
+   * `vinext({ ...alchemy() })` — the Node build bakes the Redis adapter.
+   * Missing `REDIS_URL` (`alchemy dev`) falls back to memory.
+   */
+  redis?: Redis;
+}
 
 /**
  * Deploy a [vinext](https://vinext.dev) application to Railway as a
@@ -47,27 +58,38 @@ export interface VinextProps extends FrameworkSiteProps {}
  * ```
  *
  * **Example:** Redis data cache
- * ISR / `"use cache"` persist in Redis when you pass `REDIS_URL` and
- * register `redisAdapter()` in `vite.config.ts`. Missing `REDIS_URL`
- * (local `vinext start` / `alchemy dev`) falls back to memory.
  * ```typescript
  * const project = yield* Railway.Project("Project");
  * const redis = yield* Railway.Redis("Cache", { project });
  * const site = yield* Railway.Website.Vinext("Web", {
  *   project,
- *   env: {
- *     REDIS_URL: Railway.ref(redis, "REDIS_URL"),
- *   },
+ *   redis,
  * });
  * ```
  *
  * @resource
  * @product Website
  */
-export const Vinext = (id: string, props: VinextProps = {}) =>
-  makeFrameworkSite(id, props, {
-    name: "Vinext",
-    framework: VINEXT_FRAMEWORK_SPECIFIER,
-    target: VINEXT_NODE_TARGET_SPECIFIER,
-    install: ["vinext", "react", "react-dom", "react-server-dom-webpack"],
+export const Vinext = (id: string, propsIn: VinextProps = {}) =>
+  Effect.gen(function* () {
+    const { redis, ...props } = propsIn;
+    return yield* makeFrameworkSite(
+      id,
+      {
+        ...props,
+        env:
+          redis === undefined
+            ? props.env
+            : {
+                [REDIS_URL_ENV]: ref(redis, REDIS_URL_ENV),
+                ...props.env,
+              },
+      },
+      {
+        name: "Vinext",
+        framework: VINEXT_FRAMEWORK_SPECIFIER,
+        target: VINEXT_NODE_TARGET_SPECIFIER,
+        install: ["vinext", "react", "react-dom", "react-server-dom-webpack"],
+      },
+    );
   }).pipe(Namespace.push(id));

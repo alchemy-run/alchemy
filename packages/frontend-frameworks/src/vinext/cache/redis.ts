@@ -1,21 +1,14 @@
 /**
  * vinext data-cache adapter builder for Redis.
  *
- * Call from `vite.config.ts` — returns a serializable `{ adapter, options }`
- * descriptor. The runtime factory in `redis-runtime.ts` reads `REDIS_URL`
- * (or `urlEnv`) from `process.env` on the first request.
+ * Prefer `vinext({ ...alchemy() })` — the Node build bakes this adapter.
+ * The runtime factory uses {@link connect} from `alchemy/Redis` (the same
+ * client Fly/Railway `*RedisHttp` layers use) and reads `REDIS_URL`
+ * (or `urlEnv`) from the process environment.
  *
- * ```ts
- * import { redisAdapter } from "@alchemy.run/frontend-frameworks/vinext/cache/redis";
- * import vinext from "vinext";
- *
- * export default defineConfig({
- *   plugins: [vinext({ cache: { data: redisAdapter() } })],
- * });
- * ```
- *
- * If `REDIS_URL` is missing (local `vinext start` / `alchemy dev`), vinext
- * logs and falls back to the in-memory handler.
+ * Pair with `Railway.Redis` / `Fly.Redis` so the Website host gets
+ * `REDIS_URL`. Missing URL (local `vinext start` / `alchemy dev`) makes
+ * vinext log and fall back to the in-memory handler.
  */
 import { fileURLToPath } from "node:url";
 import type { RedisAdapterOptions } from "./redis-runtime.ts";

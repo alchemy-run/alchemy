@@ -1,15 +1,12 @@
 import fs from "node:fs";
 import nodePath from "node:path";
 import { pathToFileURL } from "node:url";
+import { keySpace as makeKeySpace } from "./cache/shared.ts";
 
 export const VINEXT_KV_CACHE_BINDING = "VINEXT_KV_CACHE";
 export const VINEXT_CACHE_BINDING = "VINEXT_CACHE";
 
 const DEFAULT_KV_TTL_SECONDS = 30 * 24 * 3600;
-const ENTRY_PREFIX = "cache:";
-const HASHED_KEY_PREFIX = "__hash:";
-const KV_KEY_MAX_BYTES = 512;
-const KV_KEY_ENCODER = new TextEncoder();
 
 type CacheControlMetadata = {
   revalidate: number;
@@ -64,14 +61,12 @@ export const buildVinextPrerenderKVPairs = async (
     { buildAppPageCacheTags, buildAppRouteCacheTags },
     { normalizePregeneratedPathname },
     { getAppRouteOutputPath, getOutputPath, getRscOutputPath },
-    { fnv1a64 },
   ] = await Promise.all([
     importVinextDist("dist/server/prerender-manifest.js"),
     importVinextDist("dist/server/isr-cache.js"),
     importVinextDist("dist/server/app-page-cache.js"),
     importVinextDist("dist/server/pregenerated-concrete-paths.js"),
     importVinextDist("dist/utils/prerender-output-paths.js"),
-    importVinextDist("dist/utils/hash.js"),
   ]);
 
   const manifestPath = nodePath.join(serverDir, "vinext-prerender.json");
@@ -89,7 +84,7 @@ export const buildVinextPrerenderKVPairs = async (
   const warnings: string[] = [];
   const now = Date.now();
   const trailingSlash = manifest.trailingSlash ?? false;
-  const keySpace = createKvKeySpace(fnv1a64);
+  const keySpace = makeKeySpace(undefined);
   let routeCount = 0;
 
   for (const route of getRenderedAppRoutes(manifest.routes)) {
@@ -229,19 +224,6 @@ export const buildVinextPrerenderKVPairs = async (
   }
 
   return { routeCount, pairs, warnings };
-};
-
-const createKvKeySpace = (fnv1a64: (input: string) => string) => {
-  const buildStorageKey = (categoryPrefix: string, logicalKey: string) => {
-    const key = `${categoryPrefix}${logicalKey}`;
-    if (KV_KEY_ENCODER.encode(key).length <= KV_KEY_MAX_BYTES) {
-      return key;
-    }
-    return `${categoryPrefix}${HASHED_KEY_PREFIX}${fnv1a64(logicalKey)}`;
-  };
-  return {
-    entryKey: (logicalKey: string) => buildStorageKey(ENTRY_PREFIX, logicalKey),
-  };
 };
 
 const resolveContainedFile = (

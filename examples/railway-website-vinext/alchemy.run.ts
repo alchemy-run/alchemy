@@ -22,9 +22,9 @@ export default Alchemy.Stack(
           "tsconfig.json",
         ],
       },
+      redis,
       env: {
         GREETING: "Hello from vinext on Railway!",
-        REDIS_URL: Railway.ref(redis, "REDIS_URL"),
       },
     });
 

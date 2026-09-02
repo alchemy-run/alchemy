@@ -30,14 +30,15 @@ export class Vinext extends Cloudflare.Website.Vinext<Vinext>()("Vinext", {
 
 ## Notes
 
-- Install `vinext`, `@vitejs/plugin-rsc`, `react-server-dom-webpack`,
-  and `@vinext/cloudflare` in the app. `react-server-dom-webpack` is
-  vinext's RSC flight runtime (same package Next uses); the name is
-  historical — this app does not use webpack.
+- Install `vinext`, `@vitejs/plugin-rsc`, and `react-server-dom-webpack`
+  in the app. `react-server-dom-webpack` is vinext's RSC flight runtime
+  (same package Next uses); the name is historical — this app does not
+  use webpack.
 - Do not bind `VINEXT_KV_CACHE` or `CF_VERSION_METADATA`. `Website.Vinext`
   provisions the KV namespace, enables Workers Cache, and binds version
-  metadata. `kvDataAdapter()` / `cdnAdapter()` are official descriptors
-  from `@vinext/cloudflare` — they instantiate on first request.
+  metadata. Spread `alchemy()` into `vinext({ prerender: true, ...alchemy() })`
+  so Alchemy's KV data-cache adapter is baked. Deploy seeds prerender
+  pairs into KV.
 - Do not register `@cloudflare/vite-plugin`. Alchemy injects
   `vite-plugin-cloudflare:alchemy` (vinext matches the prefix) and
   no-ops the official plugin if it is still present.

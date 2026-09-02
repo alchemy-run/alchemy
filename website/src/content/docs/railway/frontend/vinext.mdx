@@ -53,31 +53,27 @@ Register `vinext()` in `vite.config.ts`. Do **not** add
 `@cloudflare/vite-plugin` or `@vinext/cloudflare` adapters — those
 are the Workers path.
 
-ISR / `"use cache"` default to an in-memory handler. For a durable
-store, point `cache.data` at Redis — not Cloudflare KV:
+ISR / `"use cache"` default to memory under `alchemy dev`. For a
+durable store, pass `Railway.Redis` on the Website — Alchemy writes
+`REDIS_URL` and the Node build bakes the Redis adapter. Do **not**
+put Cloudflare KV adapters in `vite.config.ts`.
 
 ```typescript
-import { redisAdapter } from "@alchemy.run/frontend-frameworks/vinext/cache/redis";
+import { alchemy } from "@alchemy.run/frontend-frameworks/vinext/cache";
 import { defineConfig } from "vite";
 import vinext from "vinext";
 
 export default defineConfig({
-  plugins: [vinext({ cache: { data: redisAdapter() } })],
+  plugins: [vinext({ prerender: true, ...alchemy() })],
 });
 ```
-
-`redisAdapter()` reads `REDIS_URL`. Pair it with `Railway.Redis` and
-a Railway variable reference. Missing `REDIS_URL` (local dev) falls
-back to memory.
 
 ```typescript
 const project = yield* Railway.Project("Project");
 const redis = yield* Railway.Redis("Cache", { project });
 const site = yield* Railway.Website.Vinext("Website", {
   project,
-  env: {
-    REDIS_URL: Railway.ref(redis, "REDIS_URL"),
-  },
+  redis,
 });
 ```
 

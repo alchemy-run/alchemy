@@ -3,8 +3,8 @@
 Deploys a [vinext](https://vinext.dev) site to a Hetzner Cloud Server
 with `Hetzner.Website.Vinext` — Next.js API on Vite, as a long-running
 Node systemd unit. Not OpenNext and not the Cloudflare Worker path.
-ISR defaults to in-process memory; set `REDIS_URL` and register
-`redisAdapter()` for a durable store.
+ISR defaults to in-process memory; set `REDIS_URL` and
+`vinext({ ...alchemy() })` for a durable Redis store.
 
 ```ts
 const site = yield* Hetzner.Website.Vinext("Vinext", {
