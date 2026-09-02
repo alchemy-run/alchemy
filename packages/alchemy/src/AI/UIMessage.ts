@@ -17,6 +17,25 @@ export interface StreamingSample {
 }
 
 /**
+ * One `input` observation as the user message it is. Ids are the
+ * durable seq (`u-${seq}`) so a snapshot and a socket replay of the
+ * same row agree — a client dedupes on it.
+ */
+export const inputToUIMessage = (
+  observation: Extract<SessionObservation, { type: "input" }>,
+): UIMessage => ({
+  id: `u-${observation.seq}`,
+  role: "user",
+  parts: [{ type: "text", text: observation.text }],
+  // structural provenance (note/reminder) + wall-clock time —
+  // clients read these, never the in-band text markers
+  metadata: {
+    at: observation.at,
+    ...(observation.kind !== undefined ? { kind: observation.kind } : {}),
+  },
+});
+
+/**
  * The Vercel AI SDK adapter, snapshot half — driver vocabulary
  * rendered into the `useChat` wire protocol (designs/ai/streaming.md;
  * only TYPES are imported from `ai`, no runtime dependency): reduce a
@@ -58,19 +77,7 @@ export const toUIMessages = (
       }
       case "input": {
         assistant = undefined;
-        messages.push({
-          id: `u-${observation.seq}`,
-          role: "user",
-          parts: [{ type: "text", text: observation.text }],
-          // structural provenance (note/reminder) + wall-clock time —
-          // clients read these, never the in-band text markers
-          metadata: {
-            at: observation.at,
-            ...(observation.kind !== undefined
-              ? { kind: observation.kind }
-              : {}),
-          },
-        });
+        messages.push(inputToUIMessage(observation));
         break;
       }
       case "assistant": {

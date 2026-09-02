@@ -286,6 +286,12 @@ export const DriverLocal: Layer.Layer<
             onSome: (index) => index.list(),
           }),
         stop,
+        // storage-only, like the socket's replay: never through the
+        // shell, so viewing a transcript can't boot its machine
+        history: (term, key) =>
+          Effect.flatMap(threadStorage.open(term, key), (handle) =>
+            handle.observations(0),
+          ),
         // the operator's "new session": the durable admitted row, no
         // shell, no init — the first input builds it
         open: (term, key) => engines.get(term)?.admit(key) ?? Effect.void,

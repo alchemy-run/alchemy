@@ -4,6 +4,9 @@ import {
   CreatePullRequestReviewHttp,
   GetIssueHttp,
   GetPullRequestHttp,
+  ListIssueCommentsHttp,
+  ListPullRequestReviewCommentsHttp,
+  ListPullRequestReviewsHttp,
   ListPullRequestsHttp,
 } from "alchemy/GitHub";
 import * as Layer from "effect/Layer";
@@ -21,5 +24,10 @@ export const GitHubWorker = Layer.mergeAll(
   CreatePullRequestReviewHttp,
   GetIssueHttp,
   GetPullRequestHttp,
+  // the pull-request SURFACE (Routes.ts): conversation, verdicts, and
+  // inline comments, read for the operator's review page
+  ListIssueCommentsHttp,
+  ListPullRequestReviewCommentsHttp,
+  ListPullRequestReviewsHttp,
   ListPullRequestsHttp,
 );

@@ -1,0 +1,6 @@
+- tablist "Session tabs":
+  - tab "Pull request"
+  - tab "main"
+  - tab ">_ 1" [selected]
+  - button "+"
+  - text: one machine · 1 thread

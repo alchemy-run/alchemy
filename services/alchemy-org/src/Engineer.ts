@@ -2,6 +2,7 @@ import * as AI from "alchemy/AI";
 import * as Git from "alchemy/Git";
 import * as GitHub from "alchemy/GitHub";
 import * as Effect from "effect/Effect";
+import { parsePullKey, pullRequestRef } from "./lib/PullRequest.ts";
 import { connected } from "./Repos.ts";
 import {
   Bash,
@@ -56,12 +57,57 @@ export const GeneralEngineer = Engineer.make(
     // same worktree; for the alchemy repo the image's bake IS the tree
     // (adopted in place — warm installs, zero clone). Legacy keys
     // (`main`, `t-…`) skip the claim and work the baked tree directly.
+    //
+    // A PULL REQUEST session is keyed `<owner>/<repo>#<n>` (the same
+    // machine the PR's review session and terminals share): its tree is
+    // the PR's head — the head BRANCH when it lives in this repository
+    // (so pushes land in the PR), `pull/N/head` for a fork. The BASE
+    // thread (the PR's "main") re-fetches it on INIT (`fresh`) so a
+    // session resumed days later starts from the PR as it is now; a
+    // `::<thread>` sibling joins the tree as it stands — a re-fetch
+    // there would `reset --hard` whatever the base thread has in flight.
     const session = sessionOf(thread.key);
+    const pullKey = parsePullKey(session);
     let workspace = "the alchemy repository";
+    let pull:
+      | {
+          number: number;
+          title: string;
+          author: string;
+          head: string;
+          base: string;
+          ref: string;
+        }
+      | undefined;
     for (const entry of connected) {
       if (!entry.sessions) continue;
       const identity = yield* GitHub.resolveRepository(entry.repository);
       const full = `${identity.owner}/${identity.repository}`;
+      if (pullKey !== undefined && pullKey.repo === full) {
+        const getPullRequest = yield* GitHub.GetPullRequest(entry.repository);
+        const found = yield* getPullRequest({
+          pull_number: pullKey.number,
+        }).pipe(Effect.orDie);
+        const ref = pullRequestRef(found);
+        yield* checkouts
+          .checkout({
+            key: session,
+            remote: GitHub.remote(entry.repository),
+            ref,
+            fresh: thread.key === session,
+          })
+          .pipe(Effect.orDie);
+        workspace = full;
+        pull = {
+          number: found.number,
+          title: found.title,
+          author: found.user?.login ?? "unknown",
+          head: found.head.ref,
+          base: found.base.ref,
+          ref,
+        };
+        break;
+      }
       if (session.startsWith(`${full}/`)) {
         yield* checkouts
           .checkout({ key: session, remote: GitHub.remote(entry.repository) })
@@ -71,12 +117,33 @@ export const GeneralEngineer = Engineer.make(
       }
     }
 
+    // the PR clause of the stance — a nested fragment so its PushBranch
+    // mention counts (mention-is-presence rides splices, not strings)
+    const subject =
+      pull === undefined
+        ? AI.fragment``
+        : pull.ref === pull.head
+          ? AI.fragment`
+            This session is about pull request #${pull.number} of
+            ${workspace} — "${pull.title}" by ${pull.author}, merging
+            ${pull.head} into ${pull.base}. Your tree IS the pull
+            request's head, checked out on the branch ${pull.head}:
+            commit fixes there and push them back with ${PushBranch} as
+            "${pull.head}" so they land in the pull request itself.`
+          : AI.fragment`
+            This session is about pull request #${pull.number} of
+            ${workspace} — "${pull.title}" by ${pull.author}, merging
+            ${pull.head} (a fork) into ${pull.base}. Your tree IS the
+            pull request's head, checked out read-only as ${pull.ref};
+            publish fixes as a new branch and pull request.`;
+
     // ── the STANCE: re-rendered before every sampling ────────────────
     return AI.fragment`
       You are a coding agent working in a checkout of ${workspace}
       on your own machine — the operator's pair of hands in
       this codebase. The operator reads your work in a chat UI; be
       direct, lead with the outcome, and keep prose tight.
+      ${subject}
 
       Explore before you conclude: ${Grep} finds content, ${Glob}
       finds files, ${ListDirectory} shows shape. Read with

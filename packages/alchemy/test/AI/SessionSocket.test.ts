@@ -347,6 +347,140 @@ describe("SessionSocket (DriverLocal)", () => {
   );
 
   it.live(
+    "the transport feeds ONE sink: a submit under an open resume gets its answer; replay surfaces user messages via onInput; Sessions.history is the snapshot",
+    () => {
+      const model = Model.make([
+        () => [Model.text("first answer"), Model.finish()],
+      ]);
+      const search = Layer.succeed(Search, ((input: { query: string }) =>
+        Effect.succeed(`results for ${input.query}`)) as never);
+
+      return Effect.gen(function* () {
+        yield* Researcher;
+        const gateway = yield* AI.Sessions;
+        const server = yield* BunHttpServer.make({
+          port: 0,
+          gracefulShutdownTimeout: Duration.millis(100),
+        });
+        const port =
+          server.address._tag === "TcpAddress" ? server.address.port : 0;
+        yield* server.serve(
+          Effect.gen(function* () {
+            const request = yield* HttpServerRequest;
+            const url = new URL(request.url, "http://local");
+            const [, , term, ...rest] = url.pathname.split("/");
+            return yield* gateway.attach(term!, rest.join("/"), request);
+          }).pipe(Effect.provide(RuntimeContext.phantom)),
+        );
+        const wsUrl = `ws://localhost:${port}/attach/Researcher/s1`;
+
+        // ── exactly what `useChat({ resume: true })` does: hold a
+        // resume stream open for the tail, THEN submit. Before the
+        // single-sink transport, both streams listened on the socket
+        // and the resume (registered first) consumed the burst — the
+        // submit's stream never saw its answer.
+        const transport = new AI.SessionSocketTransport({ url: wsUrl });
+        const echoes: Array<string> = [];
+        transport.onInput = (message) =>
+          echoes.push(
+            message.parts
+              .flatMap((part) => (part.type === "text" ? [part.text] : []))
+              .join(""),
+          );
+        const tail = yield* Effect.promise(() =>
+          transport.reconnectToStream({
+            chatId: "s1",
+            abortSignal: undefined,
+          }),
+        );
+        const turn = yield* Effect.promise(() =>
+          transport.sendMessages({
+            trigger: "submit-message",
+            chatId: "s1",
+            messageId: undefined,
+            messages: [
+              {
+                id: "u1",
+                role: "user",
+                parts: [{ type: "text", text: "first question" }],
+              },
+            ],
+            abortSignal: undefined,
+          }),
+        );
+        const chunks = yield* readAll(turn).pipe(Effect.timeout("10 seconds"));
+        const types = chunks.map((chunk) => chunk.type);
+        expect(types[0]).toBe("start");
+        expect(types.at(-1)).toBe("finish");
+        expect(chunks.find((chunk) => chunk.type === "text-delta")!.delta).toBe(
+          "first answer",
+        );
+        // the tail is still pending, unfed — the SDK cancels it on its
+        // next resume; and our OWN submit's echo was swallowed
+        expect(echoes).toEqual([]);
+        yield* Effect.promise(() => tail!.cancel());
+
+        // ── a FRESH client with no snapshot replays the history: the
+        // assistant burst arrives as chunks, the user message via
+        // onInput — the AI SDK's wire has no user role
+        const fresh = new AI.SessionSocketTransport({ url: wsUrl });
+        const replayedUsers: Array<{ id: string; text: string }> = [];
+        fresh.onInput = (message) =>
+          replayedUsers.push({
+            id: message.id,
+            text: message.parts
+              .flatMap((part) => (part.type === "text" ? [part.text] : []))
+              .join(""),
+          });
+        const replay = yield* Effect.promise(() =>
+          fresh.reconnectToStream({ chatId: "s1", abortSignal: undefined }),
+        );
+        const replayed = yield* readAll(replay!).pipe(
+          Effect.timeout("10 seconds"),
+        );
+        expect(
+          replayed.find((chunk) => chunk.type === "text-delta")!.delta,
+        ).toBe("first answer");
+        expect(replayedUsers.map((user) => user.text)).toEqual([
+          "first question",
+        ]);
+        expect(replayedUsers[0]!.id).toMatch(/^u-\d+$/);
+
+        // ── the snapshot agrees with the replay, id for id
+        const history = yield* gateway
+          .history("Researcher", "s1")
+          .pipe(Effect.provide(RuntimeContext.phantom));
+        const snapshot = AI.toUIMessages(history);
+        expect(snapshot.map((message) => message.role)).toEqual([
+          "user",
+          "assistant",
+        ]);
+        expect(snapshot[0]!.id).toBe(replayedUsers[0]!.id);
+      }).pipe(
+        Effect.scoped,
+        Effect.catchCause((cause) =>
+          Cause.hasInterruptsOnly(cause)
+            ? Effect.void
+            : Effect.failCause(cause),
+        ),
+        Effect.provide(
+          Researcher.make(ResearcherCharter).pipe(
+            Layer.provideMerge(
+              Layer.mergeAll(
+                InMemoryDriver.pipe(Layer.provide(model.layer)),
+                search,
+                RuntimeContext.phantom,
+              ),
+            ),
+          ),
+        ),
+        Effect.provide(Socket.layerWebSocketConstructorGlobal),
+      );
+    },
+    { timeout: 30_000 },
+  );
+
+  it.live(
     "viewing never waits on the charter's INIT: a session whose init dies still replays, and a submit leaves a durable crash",
     () => {
       // an agent whose per-session init cannot complete — the sandboxed

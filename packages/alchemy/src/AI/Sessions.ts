@@ -3,6 +3,7 @@ import type * as Effect from "effect/Effect";
 import type * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import type * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import type { RuntimeContext } from "../RuntimeContext.ts";
+import type { SessionObservation } from "./Events.ts";
 import type { SessionSummary } from "./SessionIndex.ts";
 
 /**
@@ -44,6 +45,23 @@ export class Sessions extends Context.Service<
       request: HttpServerRequest.HttpServerRequest,
     ) => Effect.Effect<
       HttpServerResponse.HttpServerResponse,
+      never,
+      RuntimeContext
+    >;
+    /**
+     * The durable TRANSCRIPT of one session — its observation log,
+     * oldest first — read from wherever it lives (the shared
+     * `ThreadStorage` locally; the session's own Durable Object on
+     * Cloudflare). A snapshot for a client that is about to attach:
+     * hydrate from this, then tail the socket at the watermark. A
+     * never-seen key answers empty — the chat exists from the first
+     * visit, before any input.
+     */
+    readonly history: (
+      term: string,
+      key: string,
+    ) => Effect.Effect<
+      ReadonlyArray<SessionObservation>,
       never,
       RuntimeContext
     >;

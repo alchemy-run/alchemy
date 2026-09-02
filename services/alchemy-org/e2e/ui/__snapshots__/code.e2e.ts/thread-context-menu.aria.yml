@@ -1,0 +1,10 @@
+- menu:
+  - menuitem "New thread"
+  - menuitem "New terminal"
+  - separator
+  - menuitem "Close all to the right" [disabled]
+  - menuitem "Close all"
+  - separator
+  - menuitem "Rename thread…"
+  - separator
+  - menuitem "Delete thread"

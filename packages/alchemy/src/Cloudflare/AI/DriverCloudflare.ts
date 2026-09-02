@@ -54,6 +54,7 @@ import {
   type SessionEngine,
 } from "../../AI/DriverCore.ts";
 import type { DriverError } from "../../AI/Errors.ts";
+import type { SessionObservation } from "../../AI/Events.ts";
 import { SessionIndex, sessionId } from "../../AI/SessionIndex.ts";
 import {
   handleSessionSocketFrame,
@@ -196,6 +197,13 @@ interface SessionRpc extends MainRpc<DurableObjectState> {
   readonly settle: (
     outcome: unknown,
   ) => Effect.Effect<void, unknown, RuntimeContext>;
+  /** This session's durable observation log, oldest first — the
+   *  transcript snapshot behind `Sessions.history`. */
+  readonly history: () => Effect.Effect<
+    ReadonlyArray<SessionObservation>,
+    unknown,
+    RuntimeContext
+  >;
   /** Admit this session durably without input (the operator's "new
    *  session") — it lists at once; init runs on the first input. */
   readonly open: () => Effect.Effect<void, unknown, RuntimeContext>;
@@ -866,6 +874,11 @@ export const DurableObjectHost: Layer.Layer<
               // a settled session's machine snapshots itself away
               yield* machineLifecycle("suspend");
             }),
+          // STORAGE-ONLY, like the socket's replay: straight off this
+          // instance's rows, never through the engine — reading a
+          // transcript must not need the charter, build the shell, or
+          // boot the machine. A never-seen key reads empty.
+          history: () => store.handle.observations(0),
           open: (): Effect.Effect<void, never, RuntimeContext> =>
             Effect.gen(function* () {
               yield* (yield* engine).admit(me.key);
@@ -1034,8 +1047,13 @@ export const DurableObjectHost: Layer.Layer<
             onNone: () => Effect.succeed([]),
             onSome: (index) => index.list(),
           }),
-        // both verbs address the session's own DO — placement
+        // every verb addresses the session's own DO — placement
         // knowledge, exactly like attach
+        history: (term, key) =>
+          sessions
+            .getByName(sessionName(term, key))
+            .history()
+            .pipe(Effect.orDie),
         open: (term, key) =>
           sessions
             .getByName(sessionName(term, key))

@@ -22,6 +22,10 @@ import {
   ToolInput,
   ToolOutput,
 } from "@/components/ai-elements/tool";
+import {
+  PullRequestOverview,
+  type MachineState,
+} from "@/components/pull-request";
 import { RefHoverCard } from "@/components/ref-hover-card";
 import { GhosttyTerminal } from "@/components/terminal";
 import { hasToolCard, ToolCard } from "@/components/tool-card";
@@ -65,8 +69,10 @@ import {
   GitMerge,
   GitPullRequestArrow,
   MessageSquare,
+  MessageSquareText,
   Pencil,
   Play,
+  RefreshCw,
   Square,
   SquareTerminal,
   Trash2,
@@ -127,12 +133,22 @@ interface RepoInfo {
 }
 
 /**
- * KEY CONVENTIONS. A coding SESSION owns one sandbox MicroVM and has
- * 1..* THREADS. Thread keys are `<session>` (the base thread) or
+ * KEY CONVENTIONS. A SESSION owns one sandbox MicroVM and has 1..*
+ * THREADS. Thread keys are `<session>` (the base thread) or
  * `<session>::<thread>`; the server derives the machine from the
  * session part, so every thread and the terminal share the machine.
- * Session keys are `<owner>/<repo>/<name>` (legacy keys without a
- * connected-repo prefix group as unscoped).
+ *
+ * Two kinds of session key:
+ * - a CODING session: `<owner>/<repo>/<name>` (legacy keys without a
+ *   connected-repo prefix group as unscoped) — the Code activity;
+ * - a PULL REQUEST session: `<owner>/<repo>#<n>` — the Review
+ *   activity. Its machine's tree is the PR's head, and the ReviewBot's
+ *   session (`ReviewBot:<owner>/<repo>#<n>`), the operator's engineer
+ *   threads (`Engineer:<owner>/<repo>#<n>[::<thread>]`), and the
+ *   terminals all share it.
+ *
+ * VIEW IDS are chat ids (`Engineer:…`, `ReviewBot:…`) plus one
+ * synthetic kind, `pr:<owner>/<repo>#<n>` — the PR's overview page.
  */
 const splitThreadKey = (
   key: string,
@@ -143,18 +159,43 @@ const splitThreadKey = (
     : { session: key.slice(0, at), thread: key.slice(at + 2) };
 };
 
-const sessionOfId = (id: string | undefined): string | undefined =>
-  id !== undefined && id.startsWith("Engineer:")
-    ? splitThreadKey(id.slice("Engineer:".length)).session
-    : undefined;
+/** A pull-request session key (`owner/repo#N`)? */
+const isPullSession = (session: string): boolean => /#\d+$/.test(session);
 
-/** The hash names a thread, or nothing — there is NO default session:
+/** `owner/repo#N` → N. */
+const pullNumberOf = (session: string): number =>
+  Number(session.match(/#(\d+)$/)?.[1]);
+
+/** The overview view id of a PR session. */
+const overviewId = (session: string): string => `pr:${session}`;
+
+const sessionOfId = (id: string | undefined): string | undefined => {
+  if (id === undefined) return undefined;
+  if (id.startsWith("Engineer:")) {
+    return splitThreadKey(id.slice("Engineer:".length)).session;
+  }
+  if (id.startsWith("ReviewBot:")) {
+    return splitThreadKey(id.slice("ReviewBot:".length)).session;
+  }
+  if (id.startsWith("pr:")) return id.slice("pr:".length);
+  return undefined;
+};
+
+/** A view id that belongs to the REVIEW activity (a PR session). */
+const isReviewId = (id: string | undefined): boolean => {
+  const session = sessionOfId(id);
+  return session !== undefined && isPullSession(session);
+};
+
+/** The hash names a view, or nothing — there is NO default session:
  *  merely mounting a chat view attaches a socket, which ADMITS the
  *  session server-side, so a default here would resurrect itself on
  *  every load (and after every delete). */
 const threadFromHash = (): string | undefined => {
   const raw = decodeURIComponent(window.location.hash.slice(1));
-  return raw.startsWith("Engineer:") || raw.startsWith("ReviewBot:")
+  return raw.startsWith("Engineer:") ||
+    raw.startsWith("ReviewBot:") ||
+    raw.startsWith("pr:")
     ? raw
     : undefined;
 };
@@ -248,6 +289,8 @@ interface SessionGroup {
   /** The full session key (repo prefix included when present). */
   session: string;
   repo: string | undefined;
+  /** Set for a PULL REQUEST session (`owner/repo#N`) — Review's. */
+  pull: number | undefined;
   /** The session key minus its repo prefix — the sidebar label. */
   label: string;
   /** The session's threads, oldest first (tab order). */
@@ -269,13 +312,22 @@ const groupSessions = (
   }
   return [...bySession.entries()]
     .map(([session, group]): SessionGroup => {
-      const repo = repos.find((entry) =>
-        session.startsWith(`${entry.name}/`),
+      const repo = repos.find(
+        (entry) =>
+          session.startsWith(`${entry.name}/`) ||
+          session.startsWith(`${entry.name}#`),
       )?.name;
+      const pull = isPullSession(session) ? pullNumberOf(session) : undefined;
       return {
         session,
         repo,
-        label: repo === undefined ? session : session.slice(repo.length + 1),
+        pull,
+        label:
+          pull !== undefined
+            ? `#${pull}`
+            : repo === undefined
+              ? session
+              : session.slice(repo.length + 1),
         threads: [...group].sort((a, b) => a.createdAt - b.createdAt),
         status:
           SESSION_STATUS_ORDER.find((status) =>
@@ -328,16 +380,29 @@ export const App = () => {
   // the two ACTIVITIES (Code | Review) each remember their last
   // selection, so flipping tabs restores where you were
   const [activity, setActivity] = useState<"code" | "review">(() =>
-    threadFromHash()?.startsWith("ReviewBot:") ? "review" : "code",
+    isReviewId(threadFromHash()) ? "review" : "code",
   );
   const [codeId, setCodeId] = useState<string | undefined>(() => {
     const id = threadFromHash();
-    return id?.startsWith("Engineer:") ? id : undefined;
+    return id?.startsWith("Engineer:") && !isReviewId(id) ? id : undefined;
   });
-  const [reviewId, setReviewId] = useState<string | undefined>(() => {
+  /** The selected PULL REQUEST session (`owner/repo#N`) in Review. */
+  const [reviewSession, setReviewSession] = useState<string | undefined>(() => {
     const id = threadFromHash();
-    return id?.startsWith("ReviewBot:") ? id : undefined;
+    return isReviewId(id) ? sessionOfId(id) : undefined;
   });
+  /** Per PR session, the selected non-terminal tab: `"overview"` or a
+   *  thread id (the bot's review or an engineer thread). PERSISTED like
+   *  the terminal selection — returning to a PR resumes its tab. */
+  const [reviewTab, setReviewTab] = usePersistedState<Record<string, string>>(
+    "alchemy-org:layout:review-tab",
+    {},
+  );
+  /** Each PR machine's state as the checkout door last reported it —
+   *  this page load's memory only (the machine itself is the server's). */
+  const [machines, setMachines] = useState<Record<string, MachineState>>({});
+  /** The review pipeline answered 503 — the deploy has no bot. */
+  const [reviewUnavailable, setReviewUnavailable] = useState(false);
   // ── the per-session LAYOUT — this browser's view of each session,
   // PERSISTED: which terminal tabs are open (each is one shell on the
   // session's machine), which tab is selected (`undefined` = thread
@@ -375,18 +440,26 @@ export const App = () => {
     setVisited((current) =>
       current.includes(id) ? current : [...current, id],
     );
+    const session = sessionOfId(id);
+    if (session !== undefined && isPullSession(session)) {
+      // a PULL REQUEST view: its overview, the bot's review, or one of
+      // the operator's threads on it — the Review activity
+      setReviewSession(session);
+      const tab = id.startsWith("pr:") ? "overview" : id;
+      setReviewTab((current) =>
+        current[session] === tab ? current : { ...current, [session]: tab },
+      );
+      setActivity("review");
+      return;
+    }
     if (id.startsWith("Engineer:")) {
       setCodeId(id);
       setActivity("code");
-      const session = sessionOfId(id);
       if (session !== undefined) {
         setLastThread((current) =>
           current[session] === id ? current : { ...current, [session]: id },
         );
       }
-    } else if (id.startsWith("ReviewBot:")) {
-      setReviewId(id);
-      setActivity("review");
     }
   };
 
@@ -394,6 +467,14 @@ export const App = () => {
     window.location.hash = encodeURIComponent(id);
     apply(id);
   };
+
+  // a hash that names a PR view on load must also land its tab — the
+  // persisted tab memory would otherwise win over the URL
+  useEffect(() => {
+    const id = threadFromHash();
+    if (id !== undefined && isReviewId(id)) apply(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /** Open a THREAD's chat view — the explicit act that deselects the
    *  session's terminal tab. */
@@ -407,6 +488,57 @@ export const App = () => {
       );
     }
     open(id);
+  };
+
+  /** Open a PR's OVERVIEW page (its description and conversation). */
+  const openOverview = (session: string) => openThread(overviewId(session));
+
+  /**
+   * The PR machine's "resume and pull": converge the tree every thread
+   * and terminal on this PR shares onto the PR head as it is now. The
+   * server launches or wakes the machine as a side effect, so calling
+   * this BEFORE the first thread/terminal means the machine lands on
+   * the PR branch before anyone types. Idempotent; a running call is
+   * not doubled.
+   */
+  const checkoutPull = (session: string) => {
+    if (machines[session]?.phase === "checking-out") return;
+    setMachines((current) => ({
+      ...current,
+      [session]: { phase: "checking-out" },
+    }));
+    void fetch(`/api/prs/${pullNumberOf(session)}/checkout`, {
+      method: "POST",
+    })
+      .then(async (response) => {
+        const data = (await response.json()) as
+          | { branch: string; headSha?: string }
+          | { error: string };
+        setMachines((current) => ({
+          ...current,
+          [session]:
+            "error" in data
+              ? { phase: "error", message: data.error }
+              : {
+                  phase: "ready",
+                  branch: data.branch,
+                  headSha: data.headSha,
+                },
+        }));
+      })
+      .catch((cause: unknown) =>
+        setMachines((current) => ({
+          ...current,
+          [session]: { phase: "error", message: String(cause) },
+        })),
+      );
+  };
+
+  /** A PR machine that this page has not converged yet gets pulled on
+   *  the first thread/terminal opened on it. */
+  const ensurePullMachine = (session: string) => {
+    const phase = machines[session]?.phase;
+    if (phase === undefined || phase === "error") checkoutPull(session);
   };
 
   /** A session-row click RESUMES the session where the operator left
@@ -429,17 +561,24 @@ export const App = () => {
     apply(undefined);
   };
 
-  /** A PR with no review session: clicking REQUESTS its review — the
-   *  server synthesizes the opened event and the session appears. */
+  /** A PR with no review session: REQUEST its review — the server
+   *  synthesizes the opened event and the bot's session appears. A 503
+   *  means this deploy runs no review pipeline. */
   const requestReview = (number: number) => {
     setRequested((current) => new Set(current).add(number));
-    void fetch(`/api/prs/${number}/review`, { method: "POST" }).catch(() => {
+    const forget = () =>
       setRequested((current) => {
         const next = new Set(current);
         next.delete(number);
         return next;
       });
-    });
+    void fetch(`/api/prs/${number}/review`, { method: "POST" })
+      .then((response) => {
+        if (response.ok) return;
+        if (response.status === 503) setReviewUnavailable(true);
+        forget();
+      })
+      .catch(forget);
   };
 
   // back/forward navigation drives the same path
@@ -657,14 +796,31 @@ export const App = () => {
     );
   };
 
-  /** A new THREAD in a session — rides the session's machine. */
-  const newThread = (session: string) =>
+  /** A new THREAD in a session — rides the session's machine. A PR
+   *  session's FIRST engineer thread is the base key (`Engineer:<pr>`,
+   *  the "main" of the PR); later ones append `::t-…` like any session.
+   *  Opening it on a PR pulls the PR head onto the machine first. */
+  const newThread = (session: string) => {
+    if (isPullSession(session)) {
+      ensurePullMachine(session);
+      const hasBase = threads.some((row) => row.id === `Engineer:${session}`);
+      if (!hasBase) return createThread(`Engineer:${session}`, openThread);
+    }
     createThread(`Engineer:${session}::t-${randomSuffix()}`, openThread);
+  };
 
   /** Select a terminal tab (creating the session's first — pty id
-   *  "main" — when none is open yet). Mounts on create, stays mounted. */
+   *  "main" — when none is open yet). Mounts on create, stays mounted.
+   *  A NEW terminal on a PR session pulls the PR head onto the machine
+   *  first (re-selecting an existing tab never resets anyone's tree). */
   const openTerminal = (session: string, ptyId?: string) => {
     const target = ptyId ?? terminals[session]?.[0] ?? "main";
+    if (
+      isPullSession(session) &&
+      !(terminals[session] ?? []).includes(target)
+    ) {
+      ensurePullMachine(session);
+    }
     setTerminals((current) => {
       const list = current[session] ?? [];
       return list.includes(target)
@@ -781,12 +937,20 @@ export const App = () => {
       const { [session]: _dropped, ...rest } = current;
       return rest;
     });
-    if (codeId === id && session !== undefined) {
+    if (session !== undefined) {
       const sibling = threads.find(
         (row) => row.id !== id && sessionOfId(row.id) === session,
       );
-      if (sibling !== undefined) open(sibling.id);
-      else closeCode();
+      if (isPullSession(session)) {
+        // a PR's threads come and go; the PR page itself stays
+        if (reviewTab[session] === id) {
+          if (sibling !== undefined) open(sibling.id);
+          else openOverview(session);
+        }
+      } else if (codeId === id) {
+        if (sibling !== undefined) open(sibling.id);
+        else closeCode();
+      }
     }
     void fetch(`/api/chats/${encodeURIComponent(id)}`, {
       method: "DELETE",
@@ -844,10 +1008,16 @@ export const App = () => {
       const { [input.session]: _dropped, ...rest } = current;
       return rest;
     });
-    if (codeId !== undefined && ids.has(codeId)) {
-      const sibling = threads.find(
-        (row) => !ids.has(row.id) && sessionOfId(row.id) === input.session,
-      );
+    const sibling = threads.find(
+      (row) => !ids.has(row.id) && sessionOfId(row.id) === input.session,
+    );
+    if (isPullSession(input.session)) {
+      const selected = reviewTab[input.session];
+      if (selected !== undefined && ids.has(selected)) {
+        if (sibling !== undefined) open(sibling.id);
+        else openOverview(input.session);
+      }
+    } else if (codeId !== undefined && ids.has(codeId)) {
       if (sibling !== undefined) open(sibling.id);
       else closeCode();
     }
@@ -910,12 +1080,19 @@ export const App = () => {
     });
   };
 
-  // the active/code thread is listed even before the board knows it
-  // (a just-created thread has no row yet). Review sessions live in
-  // the Review activity, never here.
+  /** The PR session's selected thread tab, if a thread is selected. */
+  const reviewThreadId =
+    reviewSession !== undefined &&
+    reviewTab[reviewSession] !== undefined &&
+    reviewTab[reviewSession] !== "overview"
+      ? reviewTab[reviewSession]
+      : undefined;
+
+  // the active/selected engineer thread is listed even before the
+  // directory knows it (a just-created thread has no row yet)
   const list = useMemo(() => {
     const byId = new Map(threads.map((thread) => [thread.id, thread]));
-    for (const id of [activeId, codeId]) {
+    for (const id of [activeId, codeId, reviewThreadId]) {
       if (id !== undefined && !byId.has(id) && id.startsWith("Engineer:")) {
         byId.set(id, {
           id,
@@ -930,9 +1107,10 @@ export const App = () => {
       }
     }
     return [...byId.values()];
-  }, [threads, activeId, codeId]);
+  }, [threads, activeId, codeId, reviewThreadId]);
 
-  /** Sessions (threads grouped by `::`-stripped key), newest first. */
+  /** Sessions (threads grouped by `::`-stripped key), newest first —
+   *  coding sessions AND pull-request sessions alike. */
   const groups = useMemo(() => groupSessions(list, repos), [list, repos]);
 
   const currentSession = sessionOfId(codeId);
@@ -941,14 +1119,57 @@ export const App = () => {
     currentSession !== undefined ? terminalSel[currentSession] : undefined;
   const terminalActive = activeTerminal !== undefined;
 
+  /** The selected PR's engineer threads (none yet is a fine state — the
+   *  PR page and the bot's review exist without any). */
+  const reviewGroup = groups.find((group) => group.session === reviewSession);
+  const reviewThreads = reviewGroup?.threads ?? [];
+  const reviewPull =
+    reviewSession !== undefined
+      ? board.prs.find((pull) => pull.number === pullNumberOf(reviewSession))
+      : undefined;
+  const reviewBotId = reviewPull?.session?.id;
+  const reviewTerminal =
+    reviewSession !== undefined ? terminalSel[reviewSession] : undefined;
+
+  /** The ONE view on screen, by id: a chat (`Engineer:…`/`ReviewBot:…`),
+   *  a PR overview (`pr:…`), or a terminal (`pty:<session>\u001f<pty>`).
+   *  Every visited view stays mounted; this decides which is visible. */
+  const activeView: string | undefined = (() => {
+    if (activity === "code") {
+      return currentSession !== undefined && activeTerminal !== undefined
+        ? `pty:${currentSession}\u001f${activeTerminal}`
+        : codeId;
+    }
+    if (reviewSession === undefined) return undefined;
+    if (reviewTerminal !== undefined) {
+      return `pty:${reviewSession}\u001f${reviewTerminal}`;
+    }
+    // a remembered thread tab that no longer exists (deleted from
+    // another tab) must not resurrect it by mounting its view
+    const tab = reviewTab[reviewSession];
+    const known =
+      tab !== undefined &&
+      tab !== "overview" &&
+      (tab === reviewBotId ||
+        tab === activeId ||
+        reviewThreads.some((row) => row.id === tab));
+    return known ? tab : overviewId(reviewSession);
+  })();
+
   // The layout store follows the directory: a session deleted here or
   // anywhere else takes its remembered tabs with it. Only once the
   // directory has actually answered — and never the session on
-  // screen, whose row may still be in flight from its POST.
+  // screen, whose row may still be in flight from its POST. PR
+  // sessions are known for as long as the board lists the PR (their
+  // terminals may exist with no thread at all).
   useEffect(() => {
     if (!directoryLoaded) return;
     const known = new Set(groups.map((group) => group.session));
     if (currentSession !== undefined) known.add(currentSession);
+    if (reviewSession !== undefined) known.add(reviewSession);
+    if (board.repo) {
+      for (const pull of board.prs) known.add(`${board.repo}#${pull.number}`);
+    }
     const prune = <T,>(store: Record<string, T>): Record<string, T> => {
       const stale = Object.keys(store).filter((key) => !known.has(key));
       if (stale.length === 0) return store;
@@ -959,7 +1180,8 @@ export const App = () => {
     setTerminals(prune);
     setTerminalSel(prune);
     setLastThread(prune);
-  }, [directoryLoaded, groups, currentSession]);
+    setReviewTab(prune);
+  }, [directoryLoaded, groups, currentSession, reviewSession, board]);
 
   /** Sessions whose views have been shown this page load. A RESTORED
    *  terminal tab mounts (and so attaches to — wakes — its machine)
@@ -972,12 +1194,15 @@ export const App = () => {
       if (session !== undefined) set.add(session);
     }
     if (currentSession !== undefined) set.add(currentSession);
+    if (reviewSession !== undefined) set.add(reviewSession);
     return set;
-  }, [visited, currentSession]);
+  }, [visited, currentSession, reviewSession]);
 
   /** Sidebar buckets: one per connected `sessions: true` repo, plus
-   *  an unscoped bucket for legacy keys (`main`, `t-…`). */
+   *  an unscoped bucket for legacy keys (`main`, `t-…`). Pull-request
+   *  sessions are Review's, never listed here. */
   const repoBuckets = useMemo(() => {
+    const coding = groups.filter((group) => group.pull === undefined);
     const buckets: Array<{
       repo: string | undefined;
       groups: SessionGroup[];
@@ -985,9 +1210,9 @@ export const App = () => {
       .filter((repo) => repo.sessions)
       .map((repo) => ({
         repo: repo.name,
-        groups: groups.filter((group) => group.repo === repo.name),
+        groups: coding.filter((group) => group.repo === repo.name),
       }));
-    const unscoped = groups.filter((group) => group.repo === undefined);
+    const unscoped = coding.filter((group) => group.repo === undefined);
     if (unscoped.length > 0 || buckets.length === 0) {
       buckets.push({ repo: undefined, groups: unscoped });
     }
@@ -995,7 +1220,288 @@ export const App = () => {
   }, [groups, repos]);
 
   const openPrCount = board.prs.filter((pull) => pull.state === "open").length;
-  const reviewRef = reviewId?.match(/^ReviewBot:(.+)#(\d+)$/);
+
+  /** A PR-row click RESUMES the PR where the operator left it: the
+   *  remembered tab (overview, the review, or a thread) — and a
+   *  selected terminal stays selected (`open` never deselects one;
+   *  only an explicit thread click does). */
+  const openPullSession = (session: string) => {
+    const remembered = reviewTab[session];
+    open(
+      remembered !== undefined && remembered !== "overview"
+        ? remembered
+        : overviewId(session),
+    );
+  };
+
+  /**
+   * THE TAB STRIP — one strip, one menu, for a coding session and a
+   * pull-request session alike: leading tabs (a PR's overview and the
+   * bot's review — not closable), then the session's engineer threads,
+   * then its terminals, so "close all to the right" is positional
+   * across kinds and every tab carries the identical actions. `selected`
+   * is the view id on screen ({@link activeView}).
+   */
+  const tabStrip = ({
+    session,
+    leading,
+    threads: rows,
+    selected,
+    summary,
+  }: {
+    session: string;
+    leading: Array<{
+      kind: "lead";
+      id: string;
+      label: ReactNode;
+      status: BoardThread["status"] | undefined;
+      onSelect: () => void;
+    }>;
+    threads: BoardThread[];
+    selected: string | undefined;
+    summary: ReactNode;
+  }) => {
+    const ptyIds = terminals[session] ?? [];
+    type Tab =
+      | (typeof leading)[number]
+      | { kind: "thread"; thread: BoardThread }
+      | { kind: "terminal"; ptyId: string; nth: number };
+    const strip: Tab[] = [
+      ...leading,
+      ...rows.map((thread) => ({ kind: "thread" as const, thread })),
+      ...ptyIds.map((ptyId, nth) => ({
+        kind: "terminal" as const,
+        ptyId,
+        nth,
+      })),
+    ];
+    const rightOf = (index: number) => {
+      const rest = strip.slice(index + 1);
+      return {
+        threads: rest.flatMap((tab) =>
+          tab.kind === "thread" ? [tab.thread] : [],
+        ),
+        terminals: rest.flatMap((tab) =>
+          tab.kind === "terminal" ? [tab.ptyId] : [],
+        ),
+      };
+    };
+    const tabClass = (isSelected: boolean, mono = false) =>
+      cn(
+        "group/tab flex items-center gap-1.5 border-b-2 px-3 py-2 text-xs",
+        mono && "font-mono",
+        isSelected
+          ? "border-foreground text-foreground"
+          : "border-transparent text-muted-foreground hover:text-foreground",
+      );
+    const tabProps = (isSelected: boolean, mono = false) => ({
+      role: "tab" as const,
+      "aria-selected": isSelected,
+      className: tabClass(isSelected, mono),
+    });
+    return (
+      <div
+        role="tablist"
+        aria-label="Session tabs"
+        className="flex items-center gap-0.5 border-b border-border px-2"
+      >
+        {strip.map((tab, index) => {
+          const right = rightOf(index);
+          const closableRight =
+            right.terminals.length > 0 || right.threads.length > 0;
+          const key =
+            tab.kind === "lead"
+              ? tab.id
+              : tab.kind === "thread"
+                ? tab.thread.id
+                : `>_${tab.ptyId}`;
+          return (
+            <Fragment key={key}>
+              {index > 0 && (
+                // subtle divider — deliberately shorter than the tab
+                <span aria-hidden className="h-4 w-px shrink-0 bg-border" />
+              )}
+              <ContextMenu>
+                <ContextMenuTrigger asChild>
+                  {tab.kind === "lead" ? (
+                    <button
+                      type="button"
+                      onClick={tab.onSelect}
+                      {...tabProps(selected === tab.id)}
+                    >
+                      {tab.status !== undefined && (
+                        <span
+                          className={cn(
+                            "inline-block size-1.5 shrink-0 rounded-full",
+                            statusDot[tab.status] ?? statusDot.idle,
+                          )}
+                        />
+                      )}
+                      {tab.label}
+                    </button>
+                  ) : tab.kind === "thread" ? (
+                    <button
+                      type="button"
+                      onClick={() => openThread(tab.thread.id)}
+                      {...tabProps(selected === tab.thread.id)}
+                    >
+                      <span
+                        className={cn(
+                          "inline-block size-1.5 shrink-0 rounded-full",
+                          statusDot[tab.thread.status] ?? statusDot.idle,
+                        )}
+                      />
+                      <span className="max-w-48 truncate">
+                        {displayName(
+                          `thread:${tab.thread.id}`,
+                          tabTitle(tab.thread),
+                        )}
+                      </span>
+                      <span
+                        role="button"
+                        title="Delete thread"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setConfirmKillThread(tab.thread);
+                        }}
+                        className="hidden shrink-0 rounded p-0.5 text-muted-foreground hover:bg-border hover:text-terracotta group-hover/tab:block"
+                      >
+                        <X className="size-3" />
+                      </span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => openTerminal(session, tab.ptyId)}
+                      {...tabProps(
+                        selected === `pty:${session}\u001f${tab.ptyId}`,
+                        true,
+                      )}
+                    >
+                      {">_"}{" "}
+                      {displayName(
+                        `terminal:${session}\u001f${tab.ptyId}`,
+                        `${tab.nth + 1}`,
+                      )}
+                      <span
+                        role="button"
+                        title="Close terminal (the shell dies)"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          killTerminal(session, tab.ptyId);
+                        }}
+                        className="hidden shrink-0 rounded p-0.5 text-muted-foreground hover:bg-border hover:text-terracotta group-hover/tab:block"
+                      >
+                        <X className="size-3" />
+                      </span>
+                    </button>
+                  )}
+                </ContextMenuTrigger>
+                <ContextMenuContent
+                  onCloseAutoFocus={(event) => event.preventDefault()}
+                >
+                  <ContextMenuItem onSelect={() => newThread(session)}>
+                    <MessageSquare /> New thread
+                  </ContextMenuItem>
+                  <ContextMenuItem onSelect={() => newTerminal(session)}>
+                    <SquareTerminal /> New terminal
+                  </ContextMenuItem>
+                  <ContextMenuSeparator />
+                  <ContextMenuItem
+                    disabled={!closableRight}
+                    onSelect={() =>
+                      requestCloseTabs(session, right.threads, right.terminals)
+                    }
+                  >
+                    Close all to the right
+                  </ContextMenuItem>
+                  <ContextMenuItem
+                    disabled={rows.length === 0 && ptyIds.length === 0}
+                    onSelect={() => requestCloseTabs(session, rows, ptyIds)}
+                  >
+                    Close all
+                  </ContextMenuItem>
+                  {tab.kind !== "lead" && (
+                    <>
+                      <ContextMenuSeparator />
+                      {tab.kind === "thread" ? (
+                        <ContextMenuItem
+                          onSelect={() =>
+                            startRename(
+                              "thread",
+                              `thread:${tab.thread.id}`,
+                              tabTitle(tab.thread),
+                            )
+                          }
+                        >
+                          <Pencil /> Rename thread…
+                        </ContextMenuItem>
+                      ) : (
+                        <ContextMenuItem
+                          onSelect={() =>
+                            startRename(
+                              "terminal",
+                              `terminal:${session}\u001f${tab.ptyId}`,
+                              `${tab.nth + 1}`,
+                            )
+                          }
+                        >
+                          <Pencil /> Rename terminal…
+                        </ContextMenuItem>
+                      )}
+                      <ContextMenuSeparator />
+                      {tab.kind === "thread" ? (
+                        <ContextMenuItem
+                          variant="destructive"
+                          onSelect={() => setConfirmKillThread(tab.thread)}
+                        >
+                          <Trash2 /> Delete thread
+                        </ContextMenuItem>
+                      ) : (
+                        <ContextMenuItem
+                          variant="destructive"
+                          onSelect={() => killTerminal(session, tab.ptyId)}
+                        >
+                          <X /> Close terminal
+                        </ContextMenuItem>
+                      )}
+                    </>
+                  )}
+                </ContextMenuContent>
+              </ContextMenu>
+            </Fragment>
+          );
+        })}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              title="New thread or terminal"
+              className="px-2 py-2 font-mono text-sm text-muted-foreground hover:text-foreground"
+            >
+              +
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align="start"
+            // let the freshly opened thread/terminal keep focus
+            // instead of returning it to the + trigger
+            onCloseAutoFocus={(event) => event.preventDefault()}
+          >
+            <DropdownMenuItem onSelect={() => newThread(session)}>
+              <MessageSquare /> New thread
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => newTerminal(session)}>
+              <SquareTerminal /> New terminal
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <span className="ml-auto pr-2 font-mono text-[10px] text-muted-foreground">
+          {summary}
+        </span>
+      </div>
+    );
+  };
 
   return (
     <div className="flex h-screen bg-background text-foreground">
@@ -1513,37 +2019,99 @@ export const App = () => {
             )}
             {board.prs.map((pull) => {
               const repo = board.repo || pull.session?.key.split("#")[0];
+              const session = `${repo}#${pull.number}`;
+              const group = groups.find((entry) => entry.session === session);
+              const threadCount =
+                (group?.threads.length ?? 0) + (pull.session ? 1 : 0);
+              const terminalCount = terminals[session]?.length ?? 0;
+              const working =
+                pull.session?.status === "running" ||
+                group?.status === "running";
               return (
-                <button
-                  key={pull.number}
-                  type="button"
-                  onClick={() =>
-                    pull.session !== undefined
-                      ? open(pull.session.id)
-                      : requestReview(pull.number)
-                  }
-                  className={cn(
-                    "flex w-full items-center gap-2 border-b border-border/50 px-3 py-2.5 text-left hover:bg-accent/50",
-                    pull.session?.id === reviewId && "bg-accent",
-                  )}
-                >
-                  <IssueBadge
-                    number={pull.number}
-                    state={pull.state}
-                    repo={repo}
-                  />
-                  <span className="min-w-0 flex-1 truncate text-[13px] font-medium">
-                    {pull.title}
-                  </span>
-                  {pull.session?.status === "running" && (
-                    <span className="size-2 shrink-0 animate-pulse rounded-full bg-moss" />
-                  )}
-                  {pull.session === undefined && (
-                    <span className="shrink-0 text-[10px] text-muted-foreground">
-                      {requested.has(pull.number) ? "reviewing…" : "review"}
-                    </span>
-                  )}
-                </button>
+                <ContextMenu key={pull.number}>
+                  <ContextMenuTrigger asChild>
+                    <button
+                      type="button"
+                      onClick={() => openPullSession(session)}
+                      className={cn(
+                        "flex w-full flex-col gap-1 border-b border-border/50 px-3 py-2 text-left hover:bg-accent/50",
+                        session === reviewSession && "bg-accent",
+                      )}
+                    >
+                      <span className="flex w-full items-center gap-2">
+                        <IssueBadge
+                          number={pull.number}
+                          state={pull.state}
+                          repo={repo}
+                        />
+                        <span className="min-w-0 flex-1 truncate text-[13px] font-medium">
+                          {pull.title}
+                        </span>
+                        {working && (
+                          <span className="size-2 shrink-0 animate-pulse rounded-full bg-moss" />
+                        )}
+                      </span>
+                      {(threadCount > 0 || terminalCount > 0) && (
+                        <span className="flex items-center gap-2 pl-1 font-mono text-[10px] text-muted-foreground">
+                          {threadCount > 0 && (
+                            <span className="flex items-center gap-1">
+                              <MessageSquare className="size-3" />
+                              {threadCount}
+                            </span>
+                          )}
+                          {terminalCount > 0 && (
+                            <span className="flex items-center gap-1">
+                              <SquareTerminal className="size-3" />
+                              {terminalCount}
+                            </span>
+                          )}
+                          {pull.session !== undefined && (
+                            <span className="ml-auto">
+                              review · {pull.session.status}
+                            </span>
+                          )}
+                        </span>
+                      )}
+                    </button>
+                  </ContextMenuTrigger>
+                  <ContextMenuContent
+                    onCloseAutoFocus={(event) => event.preventDefault()}
+                  >
+                    <ContextMenuItem
+                      onSelect={() => {
+                        openPullSession(session);
+                        newThread(session);
+                      }}
+                    >
+                      <MessageSquare /> New thread
+                    </ContextMenuItem>
+                    <ContextMenuItem
+                      onSelect={() => {
+                        openPullSession(session);
+                        newTerminal(session);
+                      }}
+                    >
+                      <SquareTerminal /> New terminal
+                    </ContextMenuItem>
+                    <ContextMenuSeparator />
+                    <ContextMenuItem
+                      disabled={
+                        pull.session !== undefined ||
+                        requested.has(pull.number) ||
+                        reviewUnavailable
+                      }
+                      onSelect={() => requestReview(pull.number)}
+                    >
+                      <MessageSquareText /> Request review
+                    </ContextMenuItem>
+                    <ContextMenuItem
+                      disabled={machines[session]?.phase === "checking-out"}
+                      onSelect={() => checkoutPull(session)}
+                    >
+                      <RefreshCw /> Pull PR head onto machine
+                    </ContextMenuItem>
+                  </ContextMenuContent>
+                </ContextMenu>
               );
             })}
             {board.prs.length === 0 && (
@@ -1556,373 +2124,198 @@ export const App = () => {
         )}
       </aside>
       <main className="relative flex min-w-0 flex-1 flex-col">
-        {/* ── CODE: the session surface — tabbed threads + terminal ── */}
-        <div
-          className={cn(
-            "absolute inset-0 flex flex-col",
-            activity === "code" ? "visible" : "pointer-events-none invisible",
-          )}
-        >
-          {currentGroup !== undefined && (
-            <div className="flex items-center gap-0.5 border-b border-border px-2">
-              {(() => {
-                // ONE tab strip, one menu: threads then terminals, so
-                // "close all to the right" is positional across both
-                // kinds and every tab carries the identical actions.
-                const session = currentGroup.session;
-                const ptyIds = terminals[session] ?? [];
-                type Tab =
-                  | { kind: "thread"; thread: BoardThread }
-                  | { kind: "terminal"; ptyId: string; nth: number };
-                const strip: Tab[] = [
-                  ...currentGroup.threads.map((thread) => ({
-                    kind: "thread" as const,
-                    thread,
-                  })),
-                  ...ptyIds.map((ptyId, nth) => ({
-                    kind: "terminal" as const,
-                    ptyId,
-                    nth,
-                  })),
-                ];
-                const rightOf = (index: number) => {
-                  const rest = strip.slice(index + 1);
-                  return {
-                    threads: rest.flatMap((tab) =>
-                      tab.kind === "thread" ? [tab.thread] : [],
-                    ),
-                    terminals: rest.flatMap((tab) =>
-                      tab.kind === "terminal" ? [tab.ptyId] : [],
-                    ),
-                  };
-                };
-                return strip.map((tab, index) => {
-                  const right = rightOf(index);
-                  const closableRight =
-                    right.terminals.length > 0 ||
-                    right.threads.some((row) => row.key.includes("::"));
-                  return (
-                    <Fragment
-                      key={
-                        tab.kind === "thread" ? tab.thread.id : `>_${tab.ptyId}`
-                      }
-                    >
-                      {index > 0 && (
-                        // subtle divider — deliberately shorter than the tab
-                        <span
-                          aria-hidden
-                          className="h-4 w-px shrink-0 bg-border"
-                        />
-                      )}
-                      <ContextMenu>
-                        <ContextMenuTrigger asChild>
-                          {tab.kind === "thread" ? (
-                            <button
-                              type="button"
-                              onClick={() => openThread(tab.thread.id)}
-                              className={cn(
-                                "group/tab flex items-center gap-1.5 border-b-2 px-3 py-2 text-xs",
-                                tab.thread.id === codeId && !terminalActive
-                                  ? "border-foreground text-foreground"
-                                  : "border-transparent text-muted-foreground hover:text-foreground",
-                              )}
-                            >
-                              <span
-                                className={cn(
-                                  "inline-block size-1.5 shrink-0 rounded-full",
-                                  statusDot[tab.thread.status] ??
-                                    statusDot.idle,
-                                )}
-                              />
-                              <span className="max-w-48 truncate">
-                                {displayName(
-                                  `thread:${tab.thread.id}`,
-                                  tabTitle(tab.thread),
-                                )}
-                              </span>
-                              <span
-                                role="button"
-                                title="Delete thread"
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  setConfirmKillThread(tab.thread);
-                                }}
-                                className="hidden shrink-0 rounded p-0.5 text-muted-foreground hover:bg-border hover:text-terracotta group-hover/tab:block"
-                              >
-                                <X className="size-3" />
-                              </span>
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => openTerminal(session, tab.ptyId)}
-                              className={cn(
-                                "group/tab flex items-center gap-1.5 border-b-2 px-3 py-2 font-mono text-xs",
-                                terminalActive && activeTerminal === tab.ptyId
-                                  ? "border-foreground text-foreground"
-                                  : "border-transparent text-muted-foreground hover:text-foreground",
-                              )}
-                            >
-                              {">_"}{" "}
-                              {displayName(
-                                `terminal:${session}\u001f${tab.ptyId}`,
-                                `${tab.nth + 1}`,
-                              )}
-                              <span
-                                role="button"
-                                title="Close terminal (the shell dies)"
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  killTerminal(session, tab.ptyId);
-                                }}
-                                className="hidden shrink-0 rounded p-0.5 text-muted-foreground hover:bg-border hover:text-terracotta group-hover/tab:block"
-                              >
-                                <X className="size-3" />
-                              </span>
-                            </button>
-                          )}
-                        </ContextMenuTrigger>
-                        <ContextMenuContent
-                          onCloseAutoFocus={(event) => event.preventDefault()}
-                        >
-                          <ContextMenuItem onSelect={() => newThread(session)}>
-                            <MessageSquare /> New thread
-                          </ContextMenuItem>
-                          <ContextMenuItem
-                            onSelect={() => newTerminal(session)}
-                          >
-                            <SquareTerminal /> New terminal
-                          </ContextMenuItem>
-                          <ContextMenuSeparator />
-                          <ContextMenuItem
-                            disabled={!closableRight}
-                            onSelect={() =>
-                              requestCloseTabs(
-                                session,
-                                right.threads,
-                                right.terminals,
-                              )
-                            }
-                          >
-                            Close all to the right
-                          </ContextMenuItem>
-                          <ContextMenuItem
-                            onSelect={() =>
-                              requestCloseTabs(
-                                session,
-                                currentGroup.threads,
-                                ptyIds,
-                              )
-                            }
-                          >
-                            Close all
-                          </ContextMenuItem>
-                          <ContextMenuSeparator />
-                          {tab.kind === "thread" ? (
-                            <ContextMenuItem
-                              onSelect={() =>
-                                startRename(
-                                  "thread",
-                                  `thread:${tab.thread.id}`,
-                                  tabTitle(tab.thread),
-                                )
-                              }
-                            >
-                              <Pencil /> Rename thread…
-                            </ContextMenuItem>
-                          ) : (
-                            <ContextMenuItem
-                              onSelect={() =>
-                                startRename(
-                                  "terminal",
-                                  `terminal:${session}\u001f${tab.ptyId}`,
-                                  `${tab.nth + 1}`,
-                                )
-                              }
-                            >
-                              <Pencil /> Rename terminal…
-                            </ContextMenuItem>
-                          )}
-                          <ContextMenuSeparator />
-                          {tab.kind === "thread" ? (
-                            <ContextMenuItem
-                              variant="destructive"
-                              onSelect={() => setConfirmKillThread(tab.thread)}
-                            >
-                              <Trash2 /> Delete thread
-                            </ContextMenuItem>
-                          ) : (
-                            <ContextMenuItem
-                              variant="destructive"
-                              onSelect={() => killTerminal(session, tab.ptyId)}
-                            >
-                              <X /> Close terminal
-                            </ContextMenuItem>
-                          )}
-                        </ContextMenuContent>
-                      </ContextMenu>
-                    </Fragment>
-                  );
-                });
-              })()}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button
-                    type="button"
-                    title="New thread or terminal"
-                    className="px-2 py-2 font-mono text-sm text-muted-foreground hover:text-foreground"
-                  >
-                    +
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent
-                  align="start"
-                  // let the freshly opened thread/terminal keep focus
-                  // instead of returning it to the + trigger
-                  onCloseAutoFocus={(event) => event.preventDefault()}
-                >
-                  <DropdownMenuItem
-                    onSelect={() => newThread(currentGroup.session)}
-                  >
-                    <MessageSquare /> New thread
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onSelect={() => newTerminal(currentGroup.session)}
-                  >
-                    <SquareTerminal /> New terminal
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-              <span className="ml-auto pr-2 font-mono text-[10px] text-muted-foreground">
-                one machine · {currentGroup.threads.length} thread
-                {currentGroup.threads.length === 1 ? "" : "s"}
+        {/* ── the SESSION CHROME — one tab strip for both activities:
+            a coding session's threads + terminals; a pull request's
+            overview + the bot's review + threads + terminals ── */}
+        {activity === "code" &&
+          currentGroup !== undefined &&
+          tabStrip({
+            session: currentGroup.session,
+            leading: [],
+            threads: currentGroup.threads,
+            selected: activeView,
+            summary: `one machine · ${currentGroup.threads.length} thread${
+              currentGroup.threads.length === 1 ? "" : "s"
+            }`,
+          })}
+        {activity === "review" && reviewSession !== undefined && (
+          <>
+            <div className="flex items-center gap-2 border-b border-border px-3 py-1.5 font-mono text-[11px] text-muted-foreground">
+              <IssueBadge
+                number={pullNumberOf(reviewSession)}
+                state={reviewPull?.state ?? "unknown"}
+                repo={board.repo || undefined}
+              />
+              <span className="min-w-0 truncate text-foreground">
+                {reviewPull?.title ?? reviewSession}
+              </span>
+              <span className="ml-auto flex shrink-0 items-center gap-1.5">
+                {machines[reviewSession]?.phase === "checking-out" && (
+                  <>
+                    <Spinner className="size-3" /> pulling…
+                  </>
+                )}
+                {machines[reviewSession]?.phase === "ready" && (
+                  <>
+                    on {(machines[reviewSession] as { branch: string }).branch}
+                  </>
+                )}
+                {machines[reviewSession]?.phase === "error" && (
+                  <span className="text-brick">machine error</span>
+                )}
               </span>
             </div>
-          )}
-          <div className="relative min-h-0 flex-1">
-            {codeId === undefined && !terminalActive && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
-                <span className="font-mono text-xs text-muted-foreground">
-                  no session selected
-                </span>
-                <button
-                  type="button"
-                  onClick={() =>
-                    newSession(repos.find((repo) => repo.sessions)?.name)
-                  }
-                  className="rounded border border-border px-3 py-1 font-mono text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
-                >
-                  + new session
-                </button>
-              </div>
-            )}
-            {visited
-              .filter((id) => id.startsWith("Engineer:"))
-              .map((id) => {
-                const shown =
-                  activity === "code" && id === codeId && !terminalActive;
-                return (
-                  <div
-                    key={id}
-                    className={cn(
-                      "absolute inset-0 flex flex-col",
-                      shown ? "visible" : "pointer-events-none invisible",
-                    )}
-                  >
-                    <ChatView
-                      id={id}
-                      active={shown}
-                      agents={[]}
-                      breadcrumb={undefined}
-                      onOpenThread={openThread}
-                    />
-                  </div>
-                );
-              })}
-            {Object.entries(terminals)
-              .filter(([session]) => visitedSessions.has(session))
-              .flatMap(([session, ptyIds]) =>
-                ptyIds.map((ptyId) => {
-                  const shown =
-                    activity === "code" &&
-                    session === currentSession &&
-                    activeTerminal === ptyId;
-                  return (
-                    <div
-                      key={`${session}\u001f${ptyId}`}
-                      className={cn(
-                        "absolute inset-0 flex flex-col",
-                        shown ? "visible" : "pointer-events-none invisible",
-                      )}
-                    >
-                      <GhosttyTerminal
-                        sessionId={`Engineer:${session}`}
-                        ptyId={ptyId}
-                        active={shown}
-                        registerKill={(kill) =>
-                          terminalKillers.current.set(
-                            `${session}\u001f${ptyId}`,
-                            kill,
-                          )
-                        }
-                      />
-                    </div>
-                  );
-                }),
-              )}
-          </div>
-        </div>
-        {/* ── REVIEW: the pull-request surface ── */}
-        <div
-          className={cn(
-            "absolute inset-0 flex flex-col",
-            activity === "review" ? "visible" : "pointer-events-none invisible",
-          )}
-        >
-          {reviewRef && (
-            <div className="flex items-center gap-3 border-b border-border px-4 py-2 font-mono text-xs text-muted-foreground">
-              <span className="truncate">
-                {reviewRef[1]}#{reviewRef[2]}
+            {tabStrip({
+              session: reviewSession,
+              leading: [
+                {
+                  kind: "lead",
+                  id: overviewId(reviewSession),
+                  label: (
+                    <>
+                      <GitPullRequestArrow className="size-3.5" /> Pull request
+                    </>
+                  ),
+                  status: undefined,
+                  onSelect: () => openOverview(reviewSession),
+                },
+                ...(reviewBotId !== undefined && reviewPull?.session
+                  ? [
+                      {
+                        kind: "lead" as const,
+                        id: reviewBotId,
+                        label: "Review",
+                        status: reviewPull.session.status,
+                        onSelect: () => openThread(reviewBotId),
+                      },
+                    ]
+                  : []),
+              ],
+              threads: reviewThreads,
+              selected: activeView,
+              summary: `one machine · ${reviewThreads.length} thread${
+                reviewThreads.length === 1 ? "" : "s"
+              }`,
+            })}
+          </>
+        )}
+        {/* ── the VIEWS: every visited one stays mounted (visibility
+            flips — scroll position, sockets, and shells survive) ── */}
+        <div className="relative min-h-0 flex-1">
+          {activity === "code" && codeId === undefined && !terminalActive && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
+              <span className="font-mono text-xs text-muted-foreground">
+                no session selected
               </span>
-              <a
-                href={`https://github.com/${reviewRef[1]}/pull/${reviewRef[2]}`}
-                target="_blank"
-                rel="noreferrer"
-                className="ml-auto shrink-0 rounded border border-border px-2 py-0.5 hover:bg-accent hover:text-foreground"
+              <button
+                type="button"
+                onClick={() =>
+                  newSession(repos.find((repo) => repo.sessions)?.name)
+                }
+                className="rounded border border-border px-3 py-1 font-mono text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
               >
-                open on GitHub ↗
-              </a>
+                + new session
+              </button>
             </div>
           )}
-          <div className="relative min-h-0 flex-1">
-            {visited
-              .filter((id) => id.startsWith("ReviewBot:"))
-              .map((id) => {
-                const shown = activity === "review" && id === reviewId;
+          {activity === "review" && reviewSession === undefined && (
+            <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+              Select a pull request.
+            </div>
+          )}
+          {visited
+            .filter(
+              (id) => id.startsWith("Engineer:") || id.startsWith("ReviewBot:"),
+            )
+            .map((id) => {
+              const shown = activeView === id;
+              return (
+                <div
+                  key={id}
+                  className={cn(
+                    "absolute inset-0 flex flex-col",
+                    shown ? "visible" : "pointer-events-none invisible",
+                  )}
+                >
+                  <ChatView
+                    id={id}
+                    active={shown}
+                    agents={[]}
+                    breadcrumb={undefined}
+                    onOpenThread={openThread}
+                  />
+                </div>
+              );
+            })}
+          {visited
+            .filter((id) => id.startsWith("pr:"))
+            .map((id) => {
+              const session = id.slice("pr:".length);
+              const number = pullNumberOf(session);
+              const pull = board.prs.find((entry) => entry.number === number);
+              const shown = activeView === id;
+              return (
+                <div
+                  key={id}
+                  className={cn(
+                    "absolute inset-0 flex flex-col",
+                    shown ? "visible" : "pointer-events-none invisible",
+                  )}
+                >
+                  <PullRequestOverview
+                    repo={session.slice(0, session.lastIndexOf("#"))}
+                    number={number}
+                    active={shown}
+                    Markdown={MarkdownText}
+                    machine={machines[session] ?? { phase: "idle" }}
+                    onCheckout={() => checkoutPull(session)}
+                    onNewThread={() => newThread(session)}
+                    onNewTerminal={() => newTerminal(session)}
+                    review={
+                      pull?.session !== undefined
+                        ? {
+                            status: "session",
+                            running: pull.session.status === "running",
+                          }
+                        : {
+                            status: "none",
+                            requested: requested.has(number),
+                            unavailable: reviewUnavailable,
+                          }
+                    }
+                    onRequestReview={() => requestReview(number)}
+                  />
+                </div>
+              );
+            })}
+          {Object.entries(terminals)
+            .filter(([session]) => visitedSessions.has(session))
+            .flatMap(([session, ptyIds]) =>
+              ptyIds.map((ptyId) => {
+                const shown = activeView === `pty:${session}\u001f${ptyId}`;
                 return (
                   <div
-                    key={id}
+                    key={`${session}\u001f${ptyId}`}
                     className={cn(
                       "absolute inset-0 flex flex-col",
                       shown ? "visible" : "pointer-events-none invisible",
                     )}
                   >
-                    <ChatView
-                      id={id}
+                    <GhosttyTerminal
+                      sessionId={`Engineer:${session}`}
+                      ptyId={ptyId}
                       active={shown}
-                      agents={[]}
-                      breadcrumb={undefined}
-                      onOpenThread={openThread}
+                      registerKill={(kill) =>
+                        terminalKillers.current.set(
+                          `${session}\u001f${ptyId}`,
+                          kill,
+                        )
+                      }
                     />
                   </div>
                 );
-              })}
-            {reviewId === undefined && (
-              <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-                Select a pull request — or click “review” to request one.
-              </div>
+              }),
             )}
-          </div>
         </div>
         {/* the operator's gate — one card per pending approval */}
         {approvals.length > 0 && (
@@ -1985,9 +2378,9 @@ const ChatView = ({
 }: { id: string; active: boolean } & ChatContext) => {
   const [initial, setInitial] = useState<{
     messages: UIMessage[];
-    /** Snapshot delivered → socket tails live; 404 (the Cloudflare
-     *  placement keeps transcripts in each session's own DO) → the
-     *  socket replays the full history instead. */
+    /** Snapshot delivered → socket tails live from the watermark. A
+     *  failed snapshot (backend unreachable) → the socket replays the
+     *  full history instead; user messages ride `onInput`. */
     hydrated: boolean;
   }>();
 
@@ -2436,7 +2829,7 @@ const Chat = ({
   // each burst so a parked IssueOwner keeps streaming. `history:
   // "live"` when the transcript hydrated from `initial` (the
   // /messages snapshot — a full replay would render every message
-  // twice); `"replay"` when no snapshot exists and the socket owns
+  // twice); `"replay"` when the snapshot failed and the socket owns
   // the history. SAME-ORIGIN like every other request: `/attach/*`
   // rides the service binding to the backend, in dev included (the
   // vite chain relays WebSocket upgrades — cloudflare-runtime's
@@ -2447,8 +2840,8 @@ const Chat = ({
   });
   // The socket stays OPEN while the thread is hidden — visited tabs
   // are never paused. Stopping on hide forced a full history REPLAY on
-  // re-select (this placement has no /messages snapshot), which
-  // rebuilt the whole conversation and snapped the scroll: the visible
+  // re-select, which rebuilt the whole conversation and snapped the
+  // scroll: the visible
   // "re-render" switching threads. A handful of idle hibernatable
   // sockets is far cheaper than that.
   const { messages, sendMessage, status } = useChat({
@@ -2764,7 +3157,11 @@ const Chat = ({
           <PromptInputBody>
             {/* pr-12 keeps typed text clear of the submit button */}
             <PromptInputTextarea
-              placeholder="Talk to the reviewer…"
+              placeholder={
+                id.startsWith("ReviewBot:")
+                  ? "Talk to the reviewer…"
+                  : "Talk to the engineer…"
+              }
               className="pr-12"
             />
           </PromptInputBody>

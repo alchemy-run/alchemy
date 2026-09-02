@@ -15,6 +15,9 @@
     "destroy": "ALCHEMY_PROFILE=testing doppler run -p alchemy-v2 -c dev -- bun alchemy destroy",
     "test": "bun test",
     "test:tools": "bun test test/tools",
+    "test:e2e": "playwright test -c e2e/playwright.config.ts",
+    "test:e2e:update": "playwright test -c e2e/playwright.config.ts --update-snapshots",
+    "test:e2e:live": "E2E_LIVE=1 playwright test -c e2e/playwright.config.ts",
     "typecheck": "bun tsc -b tsconfig.json"
   },
   "dependencies": {
@@ -44,6 +47,7 @@
     "use-stick-to-bottom": "^1.1.6"
   },
   "devDependencies": {
+    "@playwright/test": "catalog:testing",
     "@tailwindcss/vite": "^4.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",

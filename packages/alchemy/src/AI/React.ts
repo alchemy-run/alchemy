@@ -143,7 +143,41 @@ export const useChat = ({
     void chat.resumeStream();
   }, [persist, chat.status, chat.resumeStream]);
 
+  // A dropped socket (or a failed connect) parks the SDK in `error`,
+  // where `persist` would never re-subscribe — clear it and try again,
+  // backing off so a dead backend isn't hammered. The submit that
+  // failed is not retried; only the view reconnects.
+  useEffect(() => {
+    if (!persist) return;
+    if (chat.status !== "error") return;
+    const timer = setTimeout(() => {
+      chat.clearError();
+    }, RECONNECT_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [persist, chat.status, chat.clearError]);
+
+  // User messages the WIRE carried — the AI SDK's stream protocol has
+  // no user role, so the transport hands them over here: a replayed
+  // history for a client without a snapshot, a steer from another
+  // client, a note the driver appended. Ids are the durable seq, so
+  // a message the snapshot already delivered is skipped.
+  const { setMessages } = chat;
+  useEffect(() => {
+    const transport = agent.transport;
+    transport.onInput = (message) =>
+      setMessages((messages) =>
+        messages.some((existing) => existing.id === message.id)
+          ? messages
+          : [...messages, message],
+      );
+    return () => {
+      if (transport.onInput !== undefined) transport.onInput = undefined;
+    };
+  }, [agent.transport, setMessages]);
+
   return chat;
 };
+
+const RECONNECT_DELAY_MS = 3_000;
 
 export { makeChatId as chatId };

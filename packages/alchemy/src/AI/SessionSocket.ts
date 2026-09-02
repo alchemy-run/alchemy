@@ -1,7 +1,7 @@
 import type { ChatTransport, UIMessage, UIMessageChunk } from "ai";
 import * as Effect from "effect/Effect";
 import type { SessionObservation } from "./Events.ts";
-import { makeChunkTranslator } from "./UIMessage.ts";
+import { inputToUIMessage, makeChunkTranslator } from "./UIMessage.ts";
 
 /**
  * Frames a client sends to an attached session — one half of the
@@ -95,6 +95,7 @@ export const handleSessionSocketFrame =
         return Effect.void;
     }
   };
+
 export interface SessionSocketTransportOptions {
   /** The absolute `ws(s)://` URL of the session's attach endpoint. */
   readonly url: string;
@@ -115,6 +116,21 @@ export interface SessionSocketTransportOptions {
 }
 
 /**
+ * One AI SDK stream in flight over the socket: a translator plus the
+ * controller that receives its chunks. `kind` decides who is the SINK
+ * (see {@link SessionSocketTransport}).
+ */
+interface Turn {
+  readonly kind: "submit" | "resume";
+  readonly translate: ReturnType<typeof makeChunkTranslator>;
+  readonly controller: ReadableStreamDefaultController<UIMessageChunk>;
+  /** The translator has opened an assistant message — chunks are
+   *  mid-flight, so a user message must not be spliced under them. */
+  started: boolean;
+  open: boolean;
+}
+
+/**
  * An AI SDK `ChatTransport` over the session socket, for `useChat`:
  *
  * ```ts
@@ -129,6 +145,24 @@ export interface SessionSocketTransportOptions {
  * STEP-granular in v1 — each completed sampling arrives as one burst
  * of chunks (the durable `assistant` restatement); token-level deltas
  * are a translator upgrade, not a protocol change.
+ *
+ * ONE socket, ONE listener, ONE sink. The AI SDK keeps several streams
+ * pending at once — `useChat({ resume })` holds a resume stream open
+ * for the live tail while `sendMessage` opens a second for the turn —
+ * and all of them would hear the same frames. Every frame therefore
+ * goes to exactly one turn, the SINK: the newest open submit (a turn
+ * the user is waiting on), else the newest resume (the tail). The
+ * others stay pending, unfed, until the SDK cancels them (the next
+ * resume aborts the previous) or the socket closes. Frames arriving
+ * with NO sink are dropped without advancing the cursor — the next
+ * subscribe replays them.
+ *
+ * The AI SDK's wire protocol has no user message: `input`
+ * observations (a replayed history, a steer from another client, a
+ * note the driver appended) are surfaced through {@link onInput}
+ * instead, as the `UIMessage` a snapshot would have produced (same
+ * `u-${seq}` id, so the two dedupe). The echo of THIS client's own
+ * submit is swallowed — `useChat` already appended it.
  */
 export class SessionSocketTransport<
   M extends UIMessage = UIMessage,
@@ -137,6 +171,16 @@ export class SessionSocketTransport<
   private cursor = 0;
   private subscribed = false;
   private readonly options: SessionSocketTransportOptions;
+  private turns: Turn[] = [];
+  /** Text of the submit whose `input` echo hasn't come back yet. */
+  private pendingSubmit: string | undefined;
+  /** Inputs that landed mid-burst — delivered when the burst ends. */
+  private heldInputs: UIMessage[] = [];
+  /**
+   * Receives user messages the wire carried — see the class doc. Set
+   * by `useChat` (`alchemy/AI/React`); a bare transport drops them.
+   */
+  onInput: ((message: UIMessage) => void) | undefined;
 
   constructor(options: SessionSocketTransportOptions) {
     this.options = options;
@@ -157,10 +201,84 @@ export class SessionSocketTransport<
     const Ctor = this.options.webSocket ?? WebSocket;
     const socket = new Ctor(this.options.url);
     this.socket = socket;
+    socket.addEventListener("message", (event) =>
+      this.onFrame(JSON.parse(String(event.data)) as SessionSocketServerFrame),
+    );
+    socket.addEventListener(
+      "close",
+      () => {
+        // every pending turn ends — the SDK reports each as done, and
+        // the persistent view re-subscribes over a fresh socket from
+        // the cursor
+        if (this.socket === socket) this.socket = undefined;
+        for (const turn of this.turns.splice(0)) this.end(turn);
+      },
+      { once: true },
+    );
     return new Promise((resolve, reject) => {
       socket.addEventListener("open", () => resolve(socket));
       socket.addEventListener("error", reject);
     });
+  }
+
+  private sink(): Turn | undefined {
+    const open = this.turns.filter((turn) => turn.open);
+    return open.filter((turn) => turn.kind === "submit").at(-1) ?? open.at(-1);
+  }
+
+  private end(turn: Turn): void {
+    if (!turn.open) return;
+    turn.open = false;
+    try {
+      turn.controller.close();
+    } catch {
+      // already closed by a terminal observation
+    }
+    this.turns = this.turns.filter((candidate) => candidate !== turn);
+  }
+
+  private onFrame(frame: SessionSocketServerFrame): void {
+    const sink = this.sink();
+    // nobody listening: leave the cursor where it is so the next
+    // subscribe replays from here — nothing is lost, only deferred
+    if (sink === undefined) return;
+    if (frame.type === "live") {
+      // replay complete — pin the cursor to the watermark so the next
+      // subscribe never re-reads rows this client (or its hydrating
+      // snapshot) has already seen
+      this.cursor = Math.max(this.cursor, frame.seq);
+      return;
+    }
+    if (frame.type !== "observation") return;
+    if (frame.durable) {
+      // DEDUPE by seq: live broadcast is independent of subscription,
+      // so a subscribe's replay can re-deliver a row the broadcast
+      // already sent (and vice versa)
+      if (frame.observation.seq < this.cursor) return;
+      this.cursor = frame.observation.seq + 1;
+    }
+    const observation = frame.observation;
+    if (observation.type === "input") {
+      if (
+        this.pendingSubmit !== undefined &&
+        observation.text === this.pendingSubmit &&
+        observation.kind === undefined
+      ) {
+        this.pendingSubmit = undefined;
+        return;
+      }
+      const message = inputToUIMessage(observation);
+      if (sink.started) this.heldInputs.push(message);
+      else this.onInput?.(message);
+      return;
+    }
+    const { chunks, done } = sink.translate(observation);
+    if (chunks.length > 0) sink.started = true;
+    for (const chunk of chunks) sink.controller.enqueue(chunk);
+    if (done) {
+      this.end(sink);
+      for (const message of this.heldInputs.splice(0)) this.onInput?.(message);
+    }
   }
 
   /**
@@ -168,59 +286,37 @@ export class SessionSocketTransport<
    * until the translator reports completion. The socket outlives the
    * stream — the next turn reuses it.
    */
-  private stream(socket: WebSocket): ReadableStream<UIMessageChunk> {
-    const translate = makeChunkTranslator();
-    let detach: (() => void) | undefined;
+  private stream(kind: Turn["kind"]): ReadableStream<UIMessageChunk> {
+    let turn: Turn | undefined;
     return new ReadableStream<UIMessageChunk>({
       start: (controller) => {
-        const onMessage = (event: MessageEvent) => {
-          const frame = JSON.parse(
-            String(event.data),
-          ) as SessionSocketServerFrame;
-          if (frame.type === "live") {
-            // replay complete — pin the cursor to the watermark so the
-            // next subscribe never re-reads rows this client (or its
-            // hydrating snapshot) has already seen
-            this.cursor = Math.max(this.cursor, frame.seq);
-            return;
-          }
-          if (frame.type !== "observation") return;
-          if (frame.durable) {
-            // DEDUPE by seq: live broadcast is independent of
-            // subscription, so a subscribe's replay can re-deliver a
-            // row the broadcast already sent (and vice versa). A
-            // duplicate row appended twice into one reasoning/text
-            // part renders glued, duplicated transcripts.
-            if (frame.observation.seq < this.cursor) return;
-            this.cursor = frame.observation.seq + 1;
-          }
-          const { chunks, done } = translate(frame.observation);
-          for (const chunk of chunks) controller.enqueue(chunk);
-          if (done) {
-            detach?.();
-            controller.close();
-          }
+        turn = {
+          kind,
+          translate: makeChunkTranslator(),
+          controller,
+          started: false,
+          open: true,
         };
-        const onClose = () => {
-          detach?.();
-          try {
-            controller.close();
-          } catch {
-            // already closed by a terminal observation
+        // a submit supersedes any earlier submit still waiting: the
+        // sink is the newest, and the older one ends (empty) rather
+        // than hanging the SDK's request forever
+        if (kind === "submit") {
+          for (const earlier of this.turns.filter(
+            (candidate) => candidate.kind === "submit",
+          )) {
+            this.end(earlier);
           }
-        };
-        detach = () => {
-          socket.removeEventListener("message", onMessage);
-          socket.removeEventListener("close", onClose);
-        };
-        socket.addEventListener("message", onMessage);
-        socket.addEventListener("close", onClose, { once: true });
+        }
+        this.turns.push(turn);
       },
-      // `useChat().stop()` cancels the reader — without detaching, the
-      // orphaned listener keeps pumping a dead controller and the next
-      // stream's frames render nowhere
+      // `useChat().stop()` — or the SDK aborting a superseded resume —
+      // cancels the reader; the turn leaves the sink election so the
+      // next frames go to whoever is left
       cancel: () => {
-        detach?.();
+        if (turn !== undefined) {
+          turn.open = false;
+          this.turns = this.turns.filter((candidate) => candidate !== turn);
+        }
       },
     });
   }
@@ -234,7 +330,8 @@ export class SessionSocketTransport<
         : last.parts
             .flatMap((part) => (part.type === "text" ? [part.text] : []))
             .join("\n");
-    const stream = this.stream(socket);
+    const stream = this.stream("submit");
+    this.pendingSubmit = text;
     socket.send(
       JSON.stringify({
         type: "submit",
@@ -252,7 +349,7 @@ export class SessionSocketTransport<
    */
   reconnectToStream: ChatTransport<M>["reconnectToStream"] = async () => {
     const socket = await this.connect();
-    const stream = this.stream(socket);
+    const stream = this.stream("resume");
     const fromSeq =
       !this.subscribed && this.options.history === "live"
         ? ("live" as const)

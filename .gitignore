@@ -55,6 +55,7 @@ packages/cloudflare-runtime/src/rolldown/out/
 .turbo
 coverage
 test-results
+playwright-report
 .external
 .bundle-benchmark
 packages/alchemy/docs

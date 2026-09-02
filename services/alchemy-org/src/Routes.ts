@@ -1,4 +1,5 @@
 import * as AI from "alchemy/AI";
+import * as Git from "alchemy/Git";
 import * as GitHub from "alchemy/GitHub";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Effect from "effect/Effect";
@@ -10,6 +11,12 @@ import * as HttpRouter from "effect/unstable/http/HttpRouter";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { buildBoard } from "./lib/Board.ts";
+import {
+  buildPullRequestView,
+  pullRequestRef,
+  pullSessionKey,
+  type PullRequestView,
+} from "./lib/PullRequest.ts";
 import { connected, testAlchemy } from "./Repos.ts";
 import { ReviewBot } from "./ReviewBot.ts";
 import { Approvals } from "./services/Approvals.ts";
@@ -42,24 +49,22 @@ const phantomThread = (key: string): AI.ThreadService => ({
 /**
  * The org's HTTP surface. The chat list comes from the
  * {@link AI.Sessions} (the driver's outside window); each
- * transcript comes from the session's OWN storage
- * (`ThreadStorage.observations` shaped by `AI.toUIMessages`); the
- * live tail rides the session socket (`/attach`, wired by the
+ * transcript is the session's durable log (`Sessions.history`, read
+ * from wherever the placement keeps it, shaped by `AI.toUIMessages`);
+ * the live tail rides the session socket (`/attach`, wired by the
  * entrypoint). The BOARD is the review pipeline's projection: one
  * ReviewBot session per pull request, joined with GitHub's open-PR
  * list.
  */
 export const routes = Effect.gen(function* () {
   const sessions = yield* AI.Sessions;
-  // OPTIONAL: the local server reads transcripts straight from the
-  // shared storage; on Cloudflare each session's rows live in its own
-  // Durable Object — no worker-side ThreadStorage exists, snapshot
-  // endpoints 404, and the UI hydrates from the session socket's
-  // replay instead.
-  const storage = yield* Effect.serviceOption(AI.ThreadStorage);
   // OPTIONAL: the terminal door needs the session machine seam; a
   // placement without a sandbox (pure API mirror) 404s the route.
   const sandbox = yield* Effect.serviceOption(AI.Sandbox);
+  // OPTIONAL: git over that same machine — the pull-request checkout
+  // door converges a PR machine's tree from the Worker level (the same
+  // `SandboxSession` composition the charters use provides it).
+  const checkouts = yield* Effect.serviceOption(Git.Checkouts);
   // OPTIONAL: the review pipeline may be dropped from the stack (it is
   // right now — see Worker.ts) — the request-review door answers 503
   // instead of failing the whole router build.
@@ -67,6 +72,10 @@ export const routes = Effect.gen(function* () {
   const approvals = yield* Approvals;
   const listPullRequests = yield* GitHub.ListPullRequests(testAlchemy);
   const getPullRequest = yield* GitHub.GetPullRequest(testAlchemy);
+  const listIssueComments = yield* GitHub.ListIssueComments(testAlchemy);
+  const listReviews = yield* GitHub.ListPullRequestReviews(testAlchemy);
+  const listReviewComments =
+    yield* GitHub.ListPullRequestReviewComments(testAlchemy);
 
   // the CONNECTED repositories — static code (Repos.ts), reflected
   // read-only; identities resolve without provisioning
@@ -244,20 +253,15 @@ export const routes = Effect.gen(function* () {
     "GET",
     "/api/chats/:id/messages",
     Effect.gen(function* () {
-      if (Option.isNone(storage)) {
-        return yield* HttpServerResponse.json(
-          { error: "transcripts ride the session socket on this placement" },
-          { status: 404 },
-        );
-      }
       const params = yield* HttpRouter.params;
       const { term, key } = parseSessionId(
         decodeURIComponent(String(params.id ?? "")),
       );
       // an unknown session is an EMPTY one — the chat exists from the
       // first visit, before any message has been sent
-      const handle = yield* storage.value.open(term, key);
-      const log = yield* handle.observations(0);
+      const log = yield* sessions
+        .history(term, key)
+        .pipe(Effect.provide(RuntimeContext.phantom));
       return yield* HttpServerResponse.json(AI.toUIMessages(log));
     }),
   );
@@ -269,19 +273,14 @@ export const routes = Effect.gen(function* () {
     "GET",
     "/api/chats/:id/log",
     Effect.gen(function* () {
-      if (Option.isNone(storage)) {
-        return yield* HttpServerResponse.json(
-          { error: "transcripts ride the session socket on this placement" },
-          { status: 404 },
-        );
-      }
       const request = yield* HttpServerRequest;
       const params = yield* HttpRouter.params;
       const { term, key } = parseSessionId(
         decodeURIComponent(String(params.id ?? "")),
       );
-      const handle = yield* storage.value.open(term, key);
-      const log = yield* handle.observations(0);
+      const log = yield* sessions
+        .history(term, key)
+        .pipe(Effect.provide(RuntimeContext.phantom));
       const limitRaw = new URL(request.url, "http://org").searchParams.get(
         "limit",
       );
@@ -432,6 +431,143 @@ export const routes = Effect.gen(function* () {
     }),
   );
 
+  /** `:number` → the PR number, or a 400 response. */
+  const pullNumber = Effect.gen(function* () {
+    const params = yield* HttpRouter.params;
+    const number = Number(params.number);
+    return Number.isFinite(number) && number > 0 ? number : undefined;
+  });
+
+  // The PR PAGE rides the same plain-data TTL cache as the board's
+  // open-PR list (and for the same reason — see `openPullsCached`):
+  // one operator staring at a PR polls it, and four GitHub reads per
+  // poll must not burn the rate limit. Per PR, short-lived.
+  const pullViewCache = new Map<
+    number,
+    { at: number; value: PullRequestView }
+  >();
+  const readPullRequestView = (number: number) =>
+    Effect.gen(function* () {
+      const now = Date.now();
+      const cached = pullViewCache.get(number);
+      if (cached !== undefined && now - cached.at < 10_000) {
+        return cached.value;
+      }
+      const [pull, comments, reviews, inline] = yield* Effect.all(
+        [
+          getPullRequest({ pull_number: number }),
+          listIssueComments({ issue_number: number, per_page: 100 }),
+          listReviews({ pull_number: number, per_page: 100 }),
+          listReviewComments({ pull_number: number, per_page: 100 }),
+        ] as const,
+        { concurrency: 4 },
+      );
+      const value = buildPullRequestView(
+        repoName,
+        pull,
+        comments,
+        reviews,
+        inline,
+      );
+      pullViewCache.set(number, { at: now, value });
+      return value;
+    });
+
+  /**
+   * The PULL REQUEST page: the PR (title, body, branches, size) joined
+   * with its whole conversation — issue comments, reviews with their
+   * verdicts, and the inline comments each review carried — as ONE
+   * timeline, oldest first. The operator reads the PR here beside the
+   * threads and terminals working on it.
+   */
+  const pullRequest = HttpRouter.add(
+    "GET",
+    "/api/prs/:number",
+    Effect.gen(function* () {
+      const number = yield* pullNumber;
+      if (number === undefined) {
+        return yield* HttpServerResponse.json(
+          { error: "bad pull request number" },
+          { status: 400 },
+        );
+      }
+      const view = yield* readPullRequestView(number).pipe(
+        Effect.catch((error) =>
+          Effect.succeed({ error: `${error.operation}: ${error.message}` }),
+        ),
+      );
+      if ("error" in view) {
+        return yield* HttpServerResponse.json(view, { status: 404 });
+      }
+      return yield* HttpServerResponse.json(view);
+    }),
+  );
+
+  /**
+   * The PR machine's CHECKOUT door: converge the tree on the machine
+   * every session of this PR shares (`owner/repo#N` — the machine key)
+   * onto the PR's head as it is NOW. `fresh: true` re-fetches, so this
+   * is the "resume and pull" act: the operator opening a thread or a
+   * terminal on a PR calls it first, and the machine (launched or
+   * woken by the call) lands on the PR branch before anyone types.
+   * Idempotent; the charters' own INIT re-runs the same converge.
+   */
+  const pullRequestCheckout = HttpRouter.add(
+    "POST",
+    "/api/prs/:number/checkout",
+    Effect.gen(function* () {
+      if (Option.isNone(checkouts)) {
+        return yield* HttpServerResponse.json(
+          { error: "no session machines on this placement" },
+          { status: 404 },
+        );
+      }
+      const number = yield* pullNumber;
+      if (number === undefined) {
+        return yield* HttpServerResponse.json(
+          { error: "bad pull request number" },
+          { status: 400 },
+        );
+      }
+      const pull = yield* getPullRequest({ pull_number: number }).pipe(
+        Effect.catch((error) =>
+          Effect.succeed({ error: `${error.operation}: ${error.message}` }),
+        ),
+      );
+      if ("error" in pull) {
+        return yield* HttpServerResponse.json(pull, { status: 404 });
+      }
+      const key = pullSessionKey(repoName, number);
+      const result = yield* checkouts.value
+        .checkout({
+          key,
+          remote: GitHub.remote(testAlchemy),
+          ref: pullRequestRef(pull),
+          fresh: true,
+        })
+        .pipe(
+          // the phantom thread with the SESSION key lands the checkout
+          // on the PR's machine (the sandbox layer reads only `key`)
+          Effect.provideService(AI.Thread, phantomThread(key)),
+          Effect.map((checkout) => ({
+            key,
+            branch: checkout.branch,
+            root: checkout.root,
+            ref: pullRequestRef(pull),
+            headSha: pull.head.sha,
+          })),
+          // git failures are the operator's to read — a failed
+          // checkout, not a 500
+          Effect.catch((error) =>
+            Effect.succeed({ key, error: error.message }),
+          ),
+        );
+      return yield* HttpServerResponse.json(result, {
+        status: "error" in result ? 502 : 200,
+      });
+    }),
+  );
+
   /** The operator's gate: pending approval requests + the answer door. */
   const approvalsPending = HttpRouter.add(
     "GET",
@@ -501,6 +637,8 @@ export const routes = Effect.gen(function* () {
     resumeSession,
     removeSession,
     requestReview,
+    pullRequest,
+    pullRequestCheckout,
     approvalsPending,
     approvalsAnswer,
     status,

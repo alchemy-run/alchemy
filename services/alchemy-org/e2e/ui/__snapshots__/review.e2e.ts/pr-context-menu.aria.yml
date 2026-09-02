@@ -1,0 +1,6 @@
+- menu:
+  - menuitem "New thread"
+  - menuitem "New terminal"
+  - separator
+  - menuitem "Request review"
+  - menuitem "Pull PR head onto machine"
