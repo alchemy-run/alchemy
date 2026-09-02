@@ -43,7 +43,11 @@ export interface ContainerProps {
    * it.
    */
   stopTimeout?: Duration.Input;
-  /** Networks to connect after create. */
+  /**
+   * Networks the container joins. The first is set at create time, so the
+   * container never touches the default bridge; the rest are connected
+   * before start. Unset means the default bridge.
+   */
   networks?: Container.NetworkMapping[];
   /** Remove the container when it exits. @default false */
   removeOnExit?: boolean;
@@ -454,13 +458,20 @@ export const ContainerProvider = () =>
           }
 
           const internalTags = yield* createInternalTags(id);
+          // The first declared network is set at create time, so the
+          // container is never attached to the default bridge. A process that
+          // reads its address from eth0 at boot would otherwise advertise a
+          // bridge address that a later reconcile removes.
+          const [firstNetwork, ...otherNetworks] = news.networks ?? [];
           const { stdout: containerId } = yield* docker.container.create({
             ...args,
             context,
             label: { ...args.label, ...internalTags },
+            network: firstNetwork?.name,
+            "network-alias": firstNetwork?.aliases,
           });
           yield* Effect.forEach(
-            news.networks ?? [],
+            otherNetworks,
             (network) =>
               docker.network.connect({
                 network: network.name,

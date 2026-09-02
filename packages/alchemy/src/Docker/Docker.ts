@@ -59,6 +59,9 @@ export class Docker extends Context.Service<
         "security-opt": Array<string> | undefined;
         "read-only": boolean | undefined;
         label?: Record<string, string>;
+        /** The network the container is born on; unset means the default bridge. */
+        network?: string;
+        "network-alias"?: Array<string>;
         context?: string;
       }) => Effect.Effect<CommandOutput, PlatformError>;
       /** Inspects a container. */

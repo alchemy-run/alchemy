@@ -233,6 +233,36 @@ describe("Docker.Container", { concurrent: false }, () => {
       }),
   );
 
+  test.provider(
+    "is born on the first declared network, never the default bridge",
+    (stack) =>
+      Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
+        const { container, first, second } = yield* stack.deploy(
+          Effect.gen(function* () {
+            const first = yield* Docker.Network("first-network");
+            const second = yield* Docker.Network("second-network");
+            const container = yield* Docker.Container("two-net-container", {
+              image: "nginx:alpine",
+              networks: [
+                { name: first.name, aliases: ["web"] },
+                { name: second.name },
+              ],
+              start: true,
+            });
+            return { container, first, second };
+          }),
+        );
+
+        const info = yield* docker.container.inspect(container.name);
+        const networks = info.NetworkSettings.Networks ?? {};
+        expect(Object.keys(networks).sort()).toEqual(
+          [first.name, second.name].sort(),
+        );
+        expect(networks[first.name]?.Aliases).toContain("web");
+      }),
+  );
+
   test.provider("replaces the container when published ports change", (stack) =>
     Effect.gen(function* () {
       const firstPort = yield* findAvailablePort();
