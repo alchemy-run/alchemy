@@ -1,5 +1,6 @@
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
+import type { DevIngressOptions } from "../../AlchemyContext.ts";
 import { apply as applyPlan } from "../../Apply.ts";
 import * as Plan from "../../Plan.ts";
 import type { PlannedAction, PlannedResource } from "../../Report.ts";
@@ -16,6 +17,8 @@ export interface PlanInput {
   readonly updateStateStore?: boolean;
   /** Run local (emulated) providers instead of the real cloud. */
   readonly dev?: boolean;
+  /** The `alchemy dev` ingress options (`--domain`, `--port`, `--tunnel`). */
+  readonly ingress?: DevIngressOptions;
 }
 
 /** Infer the deployed stack output from an `alchemy.run.ts` module type. */

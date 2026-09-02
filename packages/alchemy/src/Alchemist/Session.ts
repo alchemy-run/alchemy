@@ -14,7 +14,7 @@ import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
 import { pathToFileURL } from "node:url";
 import { AdoptPolicy } from "../AdoptPolicy.ts";
-import { AlchemyContext } from "../AlchemyContext.ts";
+import { AlchemyContext, type DevIngressOptions } from "../AlchemyContext.ts";
 import { ArtifactStore, createArtifactStore } from "../Artifacts.ts";
 import { AuthError, AuthProviders } from "../Auth/AuthProvider.ts";
 import { SuppressMissingProviderConfig } from "../Auth/Profile.ts";
@@ -112,6 +112,8 @@ export interface OpenOptions {
   readonly adopt?: boolean;
   /** Upgrade an out-of-date state store without prompting. */
   readonly updateStateStore?: boolean;
+  /** The `alchemy dev` ingress options; travel to the sidecar via `AlchemyContext`. */
+  readonly ingress?: DevIngressOptions;
 }
 
 interface SessionServicesOptions {
@@ -181,6 +183,7 @@ const stackSessionKey = (target: Target, options: OpenOptions) =>
     options.dev ?? false,
     options.adopt ?? false,
     options.updateStateStore ?? false,
+    options.ingress ?? null,
   ]);
 
 const authRegistryKey = (options: CollectAuthProvidersOptions) =>
@@ -275,6 +278,7 @@ const openUncached = Effect.fn("openStackSessionUncached")(function* (
         dev: options.dev ?? context.dev,
         adopt: options.adopt ?? false,
         updateStateStore: options.updateStateStore ?? false,
+        ingress: options.ingress ?? context.ingress,
       })),
     ),
     Layer.succeedContext(

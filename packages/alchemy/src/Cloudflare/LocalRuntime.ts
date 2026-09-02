@@ -5,6 +5,7 @@ import * as Layer from "effect/Layer";
 import * as MutableHashMap from "effect/MutableHashMap";
 import * as Path from "effect/Path";
 import { AlchemyContext } from "../AlchemyContext.ts";
+import * as DevIngress from "../Local/DevIngress.ts";
 import * as RpcProvider from "../Local/RpcProvider.ts";
 import { LOCAL_ID_PREFIX } from "../ProviderMode.ts";
 import { CloudflareEnvironment } from "./CloudflareEnvironment.ts";
@@ -76,7 +77,7 @@ const makeLocalRuntimeServices = () =>
   RpcProvider.providerServicesEffect(
     Effect.gen(function* () {
       const getEnv = yield* CloudflareEnvironment;
-      return Layer.merge(
+      return Layer.mergeAll(
         LocalRuntimeStateLive,
         layerRuntime({
           api: {
@@ -86,6 +87,10 @@ const makeLocalRuntimeServices = () =>
             directory: yield* localStorageDirectory,
           },
         }),
+        // The shared `<name>.<domain>` front door (+ quick tunnels). Built
+        // once per stack build like the runtime itself; a no-op service when
+        // `AlchemyContext.ingress` is unset.
+        DevIngress.layerWithRuntime(),
       );
     }),
   );

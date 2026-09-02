@@ -13,7 +13,11 @@ import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import type { HttpClient } from "effect/unstable/http/HttpClient";
 import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
 import type { ActionLike } from "./Action.ts";
-import { AlchemyContext, AlchemyContextLive } from "./AlchemyContext.ts";
+import {
+  AlchemyContext,
+  AlchemyContextLive,
+  type DevIngressOptions,
+} from "./AlchemyContext.ts";
 import { type ArtifactStore, provideFreshArtifactStore } from "./Artifacts.ts";
 import { AuthProviders } from "./Auth/AuthProvider.ts";
 import { CredentialsStore, CredentialsStoreLive } from "./Auth/Credentials.ts";
@@ -314,14 +318,18 @@ const platform = Layer.mergeAll(
   Layer.provide(CredentialsStoreLive, PlatformServices),
 );
 // override alchemy state store, CLI/reporting, state, and Config
-const alchemy = (overrides?: { dev?: boolean }) =>
+const alchemy = (overrides?: { dev?: boolean; ingress?: DevIngressOptions }) =>
   Layer.mergeAll(
     // optional
     overrides?.dev
       ? Layer.provide(
           Layer.effect(
             AlchemyContext,
-            AlchemyContext.useSync((ctx) => ({ ...ctx, dev: overrides.dev! })),
+            AlchemyContext.useSync((ctx) => ({
+              ...ctx,
+              dev: overrides.dev!,
+              ingress: overrides.ingress ?? ctx.ingress,
+            })),
           ),
           AlchemyContextLive,
         )
@@ -334,6 +342,8 @@ export const evalStack = <A, B, StackErr, Err, Req>(
   options: {
     stage: string;
     dev?: boolean;
+    /** The `alchemy dev` ingress options (dev runs only). */
+    ingress?: DevIngressOptions;
     /**
      * Optional caller-supplied scope. When provided, scoped resources
      * (e.g. the dev sidecar process) live until the caller closes this
@@ -367,7 +377,10 @@ export const evalStack = <A, B, StackErr, Err, Req>(
       ).pipe(
         Layer.provideMerge(Layer.succeed(Stage, options.stage)),
         Layer.provideMerge(
-          Layer.provideMerge(alchemy({ dev: options.dev }), platform),
+          Layer.provideMerge(
+            alchemy({ dev: options.dev, ingress: options.ingress }),
+            platform,
+          ),
         ),
       ),
     ),

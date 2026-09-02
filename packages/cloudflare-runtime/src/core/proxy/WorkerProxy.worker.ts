@@ -103,8 +103,15 @@ export class WorkerProxy extends DurableObject<Env> {
       proxied.pathname = original.pathname;
       proxied.search = original.search;
       const headers = new Headers(request.headers);
-      headers.set("x-forwarded-host", original.host);
-      headers.set("x-forwarded-proto", original.protocol.replace(/:$/, ""));
+      // A hop in front of this proxy (the dev ingress, a tunnel) already
+      // knows the public host the client dialed — keep it. Otherwise the
+      // public host is the proxy's own address.
+      if (!headers.has("x-forwarded-host")) {
+        headers.set("x-forwarded-host", original.host);
+      }
+      if (!headers.has("x-forwarded-proto")) {
+        headers.set("x-forwarded-proto", original.protocol.replace(/:$/, ""));
+      }
       return await fetch(proxied, {
         method: request.method,
         headers,

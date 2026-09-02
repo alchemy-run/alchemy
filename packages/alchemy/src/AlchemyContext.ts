@@ -27,8 +27,27 @@ export class AlchemyContext extends EffectContext.Service<
      * @default false
      */
     updateStateStore?: boolean;
+    /**
+     * The `alchemy dev` ingress: every locally served resource is exposed on
+     * one shared port as `<name>.<domain>` (and, with `tunnel`, through a
+     * Cloudflare quick tunnel). Set by the `dev` command from `--domain`,
+     * `--port` and `--tunnel`; absent outside dev (and in dev tests that
+     * don't opt in), in which case resources keep their per-resource
+     * `http://localhost:<port>` URLs only.
+     */
+    ingress?: DevIngressOptions;
   }
 >()("alchemy/Context") {}
+
+/** Options of the shared `alchemy dev` ingress (see {@link AlchemyContext}). */
+export interface DevIngressOptions {
+  /** Domain local hosts are subdomains of, e.g. `localhost` or `myapp.test`. */
+  readonly domain: string;
+  /** Port the ingress listens on. */
+  readonly port: number;
+  /** Expose every local host through a Cloudflare quick tunnel. */
+  readonly tunnel: boolean;
+}
 
 export const AlchemyContextLive = Layer.effect(
   AlchemyContext,
