@@ -10,7 +10,12 @@ import {
   makeSha1,
   type Oid,
 } from "@/Git/git/ObjectCodec.ts";
-import { hashBounds, scanBounds, scanPart } from "@/Git/git/PartialScan.ts";
+import {
+  findBoundary,
+  hashBounds,
+  scanBounds,
+  scanPart,
+} from "@/Git/git/PartialScan.ts";
 import { packHeader } from "@/Git/git/PackWriter.ts";
 import * as Zlib from "@/Git/git/Zlib.ts";
 import * as BunServices from "@effect/platform-bun/BunServices";
@@ -229,6 +234,66 @@ describe("scanBounds + hashBounds (DESIGN §22.8)", () => {
         expect(partial.entries.length + partial.unresolved.length).toBe(
           half.length,
         );
+      }).pipe(Effect.provide(BunServices.layer)),
+    );
+  });
+});
+
+describe("findBoundary (DESIGN §22.9)", () => {
+  test("from arbitrary offsets in a synthetic pack, the first boundary found is a true entry start", async () => {
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const { pack, count } = yield* buildPack(200);
+        const truth = yield* scanBounds(pack.subarray(12), {
+          base: 12,
+          remaining: count,
+          maxObjectSize: 1 << 20,
+        });
+        const starts = new Set(truth.entries.map((b) => b.offset));
+        let seed = 3;
+        for (let i = 0; i < 60; i++) {
+          seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+          const at = 12 + (seed % (pack.length - 40_000));
+          const chunk = pack.subarray(at, at + 30_000);
+          const found = findBoundary(chunk, { maxObjectSize: 1 << 20 });
+          expect(found).toBeDefined();
+          expect(starts.has(at + found!)).toBe(true);
+          // And it is the FIRST true boundary at or after `at`.
+          const first = truth.entries.find(
+            (b) => b.offset >= at && b.offset + 10 < at + 30_000,
+          )!;
+          expect(at + found!).toBe(first.offset);
+        }
+      }),
+    );
+  });
+
+  test("the ofs-delta fixture: resync from every byte offset lands on a true boundary", async () => {
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const dir = path.join(import.meta.dirname, "fixtures", "packs");
+        const pack = yield* fs.readFile(path.join(dir, "ofs-delta.pack"));
+        const count = new DataView(pack.buffer, pack.byteOffset).getUint32(8);
+        const truth = yield* scanBounds(pack.subarray(12), {
+          base: 12,
+          remaining: count,
+          maxObjectSize: 1 << 20,
+        });
+        const starts = truth.entries.map((b) => b.offset);
+        // Skip the last two entries: a boundary needs a following entry.
+        const lastTestable = starts[starts.length - 2]!;
+        for (let at = 12; at < lastTestable; at++) {
+          const found = findBoundary(pack.subarray(at), {
+            maxObjectSize: 1 << 20,
+          });
+          expect(found, `from ${at}`).toBeDefined();
+          expect(
+            starts.includes(at + found!),
+            `from ${at} → ${at + found!}`,
+          ).toBe(true);
+        }
       }).pipe(Effect.provide(BunServices.layer)),
     );
   });

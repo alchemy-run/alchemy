@@ -1578,14 +1578,22 @@ export const ingestPackFrom = (
         let consumedTo = 12;
         let remaining = count;
         let carry: Uint8Array = new Uint8Array(0);
-        // Two passes per part (DESIGN §22.8): a sequential boundary scan
-        // here (the only inherently serial step), then hashing dispatched
-        // to the hasher CONCURRENTLY — no chain between parts. Inline rows
-        // take their bytes from the part payload, so the source can release
-        // a part as soon as its bounds are known.
+        // Raw-chunk dispatch (DESIGN §22.9): the DO does NO scanning. Every
+        // chunk goes to a hasher as it arrives (bounded concurrency), which
+        // resyncs to the first entry boundary inside the chunk and scans and
+        // hashes from there. Results are consumed in chunk order; the one
+        // entry straddling each chunk edge is stitched from the neighbouring
+        // payloads and hashed by a small extra call. A boundary that does
+        // not line up (a resync false positive) falls back to a sequential
+        // rescan of that chunk from the known boundary.
         const gate = yield* Semaphore.make(HASH_CONCURRENCY);
-        const inFlight: Array<Fiber.Fiber<void, PackIngestError | StoreError>> =
-          [];
+        interface Chunk {
+          readonly index: number;
+          readonly base: number; // absolute offset of payload[0]
+          readonly payload: Uint8Array;
+          readonly fiber: Fiber.Fiber<ScanResult, PackIngestError>;
+        }
+        const chunks: Array<Chunk> = [];
         const stageResult = (
           payload: Uint8Array,
           base: number,
@@ -1608,8 +1616,6 @@ export const ingestPackFrom = (
                 oid: e.oid,
                 type: e.type,
                 size: e.size,
-                // Delta-resolved entries carry fresh bytes; others take a
-                // view of the payload (used only if the row stays inline).
                 zdata:
                   e.zdata ??
                   payload.subarray(
@@ -1625,58 +1631,200 @@ export const ingestPackFrom = (
             yield* stage(incoming);
             yield* flush();
             for (const u of result.unresolved) unresolved.push(u);
+            return result.count;
           });
-        while (remaining > 0) {
+        const dispatch = (
+          payload: Uint8Array,
+          base: number,
+          opts: { resync: boolean; remaining: number },
+        ) =>
+          Effect.forkChild(
+            Semaphore.withPermits(
+              gate,
+              1,
+            )(
+              hasher
+                .hashPart(payload, {
+                  base,
+                  remaining: opts.remaining,
+                  maxObjectSize: MAX_OBJECT_SIZE,
+                  resync: opts.resync,
+                })
+                .pipe(Effect.mapError(asIngest)),
+            ),
+          );
+        // Phase 1: read chunks and dispatch them all.
+        let index = 0;
+        while (true) {
           const chunk = yield* source.read(offset, partBytes);
-          if (chunk.length === 0) {
-            return yield* new PackIngestError({
-              reason: `truncated pack: ${remaining} of ${count} entries missing`,
-            });
-          }
+          if (chunk.length === 0) break;
           feed(chunk);
-          const payload =
-            carry.length === 0 ? chunk : concatBytes([carry, chunk]);
-          const base = consumedTo;
-          const bounds = yield* PartialScan.scanBounds(payload, {
-            base,
-            remaining,
-            maxObjectSize: MAX_OBJECT_SIZE,
-          }).pipe(Effect.mapError(asIngest));
-          if (bounds.entries.length > 0) {
-            const partBounds = bounds.entries;
-            inFlight.push(
-              yield* Effect.forkChild(
-                Semaphore.withPermits(
-                  gate,
-                  1,
-                )(
-                  hasher
-                    .hashBoundsPart(payload, partBounds, {
-                      base,
-                      maxObjectSize: MAX_OBJECT_SIZE,
-                    })
-                    .pipe(
-                      Effect.mapError(asIngest),
-                      Effect.flatMap((result) =>
-                        stageResult(payload, base, result),
-                      ),
-                    ),
-                ),
-              ),
+          const fiber = yield* dispatch(chunk, offset, {
+            resync: index > 0,
+            remaining: count,
+          });
+          chunks.push({ index, base: offset, payload: chunk, fiber });
+          offset += chunk.length;
+          index += 1;
+          // Chunks are retained (by the payload views) until consumed below;
+          // the source may drop them now.
+          source.release?.(offset);
+          if (chunk.length < partBytes) break;
+        }
+        // Phase 2: consume results in chunk order. `prevEnd` is the last
+        // settled boundary. A chunk's resync result covers [firstOffset, …);
+        // whatever lies in [prevEnd, firstOffset) — usually one straddling
+        // entry, but any number when chunks are tiny — is scanned
+        // sequentially as one region from the retained payloads. Entries the
+        // region scan reaches at or past `firstOffset` are duplicates of the
+        // chunk's own result and are dropped; a region that does not end
+        // exactly at `firstOffset` means the resync was a false positive, and
+        // the chunk is rescanned sequentially from `prevEnd` instead.
+        const bytesFrom = (from: number, to: number): Uint8Array => {
+          const pieces: Array<Uint8Array> = [];
+          for (const c of chunks) {
+            const start = Math.max(from, c.base);
+            const end = Math.min(to, c.base + c.payload.length);
+            if (end > start)
+              pieces.push(c.payload.subarray(start - c.base, end - c.base));
+          }
+          return pieces.length === 1 ? pieces[0]! : concatBytes(pieces);
+        };
+        const keepBelow = (result: ScanResult, limit: number): ScanResult => {
+          const entries = result.entries.filter((e) => e.offset < limit);
+          const unresolved = result.unresolved.filter((u) => u.offset < limit);
+          // The settled boundary is the END of the last kept entry — which
+          // may lie past `limit` when that entry straddles a chunk edge.
+          let end = result.count === 0 ? result.consumedTo : -1;
+          for (const e of entries) end = Math.max(end, e.dataOffset + e.span);
+          for (const u of unresolved)
+            end = Math.max(end, u.dataOffset + u.span);
+          return {
+            firstOffset: result.firstOffset,
+            entries,
+            unresolved,
+            consumedTo: end < 0 ? result.consumedTo : end,
+            count: entries.length + unresolved.length,
+          };
+        };
+        const trace =
+          process.env.GIT_PUMP_DEBUG === "1"
+            ? (...args: Array<unknown>) => console.log("[pump]", ...args)
+            : () => {};
+        let staged = 0;
+        let prevEnd = 12;
+        for (let k = 0; k < chunks.length; k++) {
+          const current = chunks[k]!;
+          const result = yield* Fiber.join(current.fiber);
+          const chunkEnd = current.base + current.payload.length;
+          trace(
+            `chunk ${k} base=${current.base} len=${current.payload.length} first=${result.firstOffset} consumedTo=${result.consumedTo} count=${result.count} prevEnd=${prevEnd} staged=${staged}`,
+          );
+          const sequential = () =>
+            Effect.gen(function* () {
+              // Everything from the settled boundary through this chunk,
+              // scanned in order (plus a little of the next chunk so the last
+              // entry can complete, if there is one).
+              const next = chunks[k + 1];
+              const to =
+                next === undefined
+                  ? chunkEnd
+                  : Math.min(chunkEnd + 64, next.base + next.payload.length);
+              const bytes = bytesFrom(prevEnd, to);
+              const r = yield* hasher
+                .hashPart(bytes, {
+                  base: prevEnd,
+                  remaining: count - staged,
+                  maxObjectSize: MAX_OBJECT_SIZE,
+                })
+                .pipe(Effect.mapError(asIngest));
+              return { bytes, base: prevEnd, r: keepBelow(r, chunkEnd) };
+            });
+          if (result.firstOffset < 0) {
+            // No boundary in this chunk (tiny, or inside one huge entry):
+            // its bytes are settled by a later chunk's region scan.
+            continue;
+          }
+          if (k === 0 && result.firstOffset !== 12) {
+            const again = yield* sequential();
+            staged += yield* stageResult(again.bytes, again.base, again.r);
+            prevEnd = again.r.consumedTo;
+            continue;
+          }
+          if (result.firstOffset < prevEnd) {
+            // Resync landed inside an already-settled entry: rescan.
+            const again = yield* sequential();
+            staged += yield* stageResult(again.bytes, again.base, again.r);
+            prevEnd = again.r.consumedTo;
+            continue;
+          }
+          if (result.firstOffset > prevEnd) {
+            trace(`  region [${prevEnd}, ${result.firstOffset})`);
+            const region = bytesFrom(
+              prevEnd,
+              Math.min(result.firstOffset + 64, chunkEnd),
+            );
+            const scanned = yield* hasher
+              .hashPart(region, {
+                base: prevEnd,
+                remaining: count - staged,
+                maxObjectSize: MAX_OBJECT_SIZE,
+              })
+              .pipe(Effect.mapError(asIngest));
+            const ends =
+              scanned.entries.some(
+                (e) => e.dataOffset + e.span === result.firstOffset,
+              ) ||
+              scanned.unresolved.some(
+                (u) => u.dataOffset + u.span === result.firstOffset,
+              );
+            trace(
+              `  region scan count=${scanned.count} consumedTo=${scanned.consumedTo} ends=${ends}`,
+            );
+            if (!ends) {
+              trace(`  → sequential fallback`);
+              const again = yield* sequential();
+              staged += yield* stageResult(again.bytes, again.base, again.r);
+              prevEnd = again.r.consumedTo;
+              continue;
+            }
+            staged += yield* stageResult(
+              region,
+              prevEnd,
+              keepBelow(scanned, result.firstOffset),
             );
           }
-          remaining -= bounds.entries.length;
-          carry = payload.subarray(bounds.consumedTo - base);
-          consumedTo = bounds.consumedTo;
-          offset += chunk.length;
-          source.release?.(consumedTo);
-          if (bounds.entries.length === 0 && chunk.length < partBytes) {
-            return yield* new PackIngestError({
-              reason: `truncated pack entry at ${consumedTo}`,
-            });
+          staged += yield* stageResult(current.payload, current.base, result);
+          prevEnd = result.consumedTo;
+        }
+        // The tail: chunks too small to hold two whole entries report no
+        // boundary, so entries after the last settled boundary may remain.
+        // Scan that final region sequentially (it ends at the trailer).
+        if (staged < count) {
+          const last = chunks[chunks.length - 1];
+          if (last !== undefined) {
+            const to = last.base + last.payload.length;
+            if (to > prevEnd) {
+              const bytes = bytesFrom(prevEnd, to);
+              const r = yield* hasher
+                .hashPart(bytes, {
+                  base: prevEnd,
+                  remaining: count - staged,
+                  maxObjectSize: MAX_OBJECT_SIZE,
+                })
+                .pipe(Effect.mapError(asIngest));
+              staged += yield* stageResult(bytes, prevEnd, r);
+              prevEnd = r.consumedTo;
+            }
           }
         }
-        for (const fiber of inFlight) yield* Fiber.join(fiber);
+        consumedTo = prevEnd;
+        if (staged !== count) {
+          return yield* new PackIngestError({
+            reason: `pack declared ${count} entries, scanned ${staged}`,
+          });
+        }
+        remaining = 0;
         const total =
           source.awaitEnd === undefined
             ? source.size

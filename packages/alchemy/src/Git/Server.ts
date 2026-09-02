@@ -1812,7 +1812,12 @@ const make = Effect.gen(function* () {
             const { bounds, payload } = decodeBoundsRequest(body);
             return hashBounds(payload, bounds, { base, maxObjectSize });
           })
-        : scanPart(body, { base, remaining, maxObjectSize })
+        : scanPart(body, {
+            base,
+            remaining,
+            maxObjectSize,
+            resync: query.get("resync") === "1",
+          })
     ).pipe(Effect.result);
     if (Result.isFailure(result)) {
       return HttpServerResponse.text(

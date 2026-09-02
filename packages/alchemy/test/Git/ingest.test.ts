@@ -47,12 +47,17 @@ describe("ingestPackFrom through the hasher", () => {
           repoId: "R",
         });
         const hasher = yield* Hasher;
-        const result = yield* ingestPackFrom(bufferRandomAccess(pack), {
-          store,
-          pushId: "push-1",
-          hasher,
-          partBytes: 64,
-        });
+        const outcome = yield* Effect.result(
+          ingestPackFrom(bufferRandomAccess(pack), {
+            store,
+            pushId: "push-1",
+            hasher,
+            partBytes: 64,
+          }),
+        );
+        if (outcome._tag === "Failure")
+          throw new Error(`${outcome.failure._tag}: ${outcome.failure.reason}`);
+        const result = outcome.success;
         const expected = manifest.packs["ofs-delta"]!.oids;
         expect(result.objectCount).toBe(expected.length);
         const staged = yield* sql.all<{ oid: string }>(
@@ -150,4 +155,48 @@ describe("hasher pipeline over a streaming source with eviction", () => {
     },
     { timeout: 30_000 },
   );
+});
+
+describe("raw-chunk dispatch with resync and stitching (DESIGN §22.9)", () => {
+  test("the ofs-delta fixture in 64-byte chunks: every straddler stitched, every delta resolved", async () => {
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const { pack, manifest } = yield* fixture("ofs-delta.pack");
+        const sql = makeTestSqlClient();
+        const store = makeObjectStore({
+          sql,
+          blobs: makeMemoryBlobStore(),
+          repoId: "R",
+        });
+        const hasher = yield* Hasher;
+        for (const partBytes of [64, 200, 1000, 1 << 20]) {
+          yield* sql.run(`DELETE FROM objects`);
+          const outcome = yield* Effect.result(
+            ingestPackFrom(bufferRandomAccess(pack), {
+              store,
+              pushId: "p",
+              hasher,
+              partBytes,
+            }),
+          );
+          if (outcome._tag === "Failure")
+            throw new Error(
+              `parts of ${partBytes}: ${outcome.failure._tag}: ${outcome.failure.reason}`,
+            );
+          const result = outcome.success;
+          const expected = manifest.packs["ofs-delta"]!.oids;
+          expect(result.objectCount, `parts of ${partBytes}`).toBe(
+            expected.length,
+          );
+          const staged = yield* sql.all<{ oid: string }>(
+            `SELECT oid FROM objects WHERE staged_push = 'p' ORDER BY oid`,
+          );
+          expect(
+            staged.map((r) => r.oid),
+            `parts of ${partBytes}`,
+          ).toEqual([...expected].sort());
+        }
+      }).pipe(Effect.provide(HasherInline), Effect.provide(BunServices.layer)),
+    );
+  });
 });

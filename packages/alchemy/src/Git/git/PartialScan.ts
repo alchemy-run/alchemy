@@ -68,6 +68,8 @@ export interface UnresolvedDelta {
 }
 
 export interface ScanResult {
+  /** Absolute offset of the first entry scanned (after resync), or -1 if none. */
+  readonly firstOffset: number;
   readonly entries: ReadonlyArray<ScannedEntry>;
   readonly unresolved: ReadonlyArray<UnresolvedDelta>;
   /** Absolute offset of the first entry NOT consumed (carry from here). */
@@ -92,11 +94,38 @@ export const scanPart = (
     readonly maxObjectSize: number;
     /** Resolved content LRU budget for in-buffer delta bases. */
     readonly cacheBytes?: number | undefined;
+    /**
+     * `buf` does NOT necessarily start at an entry boundary (a raw chunk of
+     * a pack, DESIGN §22.9): find the first boundary with {@link findBoundary}
+     * and scan from there. No boundary within the chunk ⇒ no entries.
+     */
+    readonly resync?: boolean | undefined;
   },
 ): Effect.Effect<ScanResult, PackFormatError | ObjectTooLargeError> =>
   Effect.gen(function* () {
     const entries: Array<ScannedEntry> = [];
     const unresolved: Array<UnresolvedDelta> = [];
+    let firstOffset = -1;
+    let startAt = 0;
+    if (options.resync === true) {
+      const found = findBoundary(buf, { maxObjectSize: options.maxObjectSize });
+      if (found === undefined) {
+        return {
+          firstOffset: -1,
+          entries,
+          unresolved,
+          consumedTo: options.base,
+          count: 0,
+        };
+      }
+      startAt = found;
+      firstOffset = options.base + found;
+    }
+    // In resync mode `remaining` is only an upper bound and the buffer may
+    // run into the pack trailer: anything that does not parse as an entry
+    // ends the scan instead of failing it (the pipeline validates the count,
+    // the trailer hash and every object id downstream).
+    const lenient = options.resync === true;
     // Content of resolved entries in this buffer, by absolute offset and by
     // oid, for in-buffer delta bases. Bounded; a miss becomes unresolved.
     const byOffset = new Map<
@@ -124,7 +153,7 @@ export const scanPart = (
       cached += content.length;
     };
 
-    let pos = 0;
+    let pos = startAt;
     let count = 0;
     while (count < options.remaining && pos < buf.length) {
       const offset = options.base + pos;
@@ -133,7 +162,7 @@ export const scanPart = (
         header = decodeTypeSize(buf, pos);
       } catch (error) {
         // A header cut by the buffer edge: stop here, carry the tail.
-        if (buf.length - pos < 16) break;
+        if (lenient || buf.length - pos < 16) break;
         return yield* new PackFormatError({
           reason:
             error instanceof ObjectParseError
@@ -142,6 +171,7 @@ export const scanPart = (
         });
       }
       if (header.size > options.maxObjectSize) {
+        if (lenient) break;
         return yield* new ObjectTooLargeError({
           size: header.size,
           limit: options.maxObjectSize,
@@ -155,7 +185,7 @@ export const scanPart = (
         try {
           ofs = decodeOfsDeltaOffset(buf, at);
         } catch {
-          if (buf.length - at < 16) break;
+          if (lenient || buf.length - at < 16) break;
           return yield* new PackFormatError({
             reason: `entry at ${offset}: bad ofs-delta`,
           });
@@ -184,6 +214,7 @@ export const scanPart = (
       // (the next part, or the pack trailer for the last one).
       if (at + bytesConsumed >= buf.length) break;
       if (payload.length !== header.size) {
+        if (lenient) break;
         return yield* new PackFormatError({
           reason: `entry at ${offset}: inflated ${payload.length} bytes, header declared ${header.size}`,
         });
@@ -253,7 +284,14 @@ export const scanPart = (
       pos = at + bytesConsumed;
       count += 1;
     }
-    return { entries, unresolved, consumedTo: options.base + pos, count };
+    return {
+      firstOffset:
+        firstOffset >= 0 ? firstOffset : entries.length > 0 ? options.base : -1,
+      entries,
+      unresolved,
+      consumedTo: options.base + pos,
+      count,
+    };
   });
 
 /** One entry's coordinates from a boundary-only scan (DESIGN §22.8). */
@@ -472,6 +510,7 @@ export const hashBounds = (
     }
     const last = bounds[bounds.length - 1];
     return {
+      firstOffset: bounds[0]?.offset ?? -1,
       entries,
       unresolved,
       consumedTo:
@@ -479,3 +518,83 @@ export const hashBounds = (
       count: bounds.length,
     };
   });
+
+/**
+ * Finds the first entry boundary inside `buf` (DESIGN §22.9): the parallel
+ * answer to "where does an entry start?", so chunks of a pack can be scanned
+ * independently. A position is a boundary when it decodes as an entry
+ * header, its stream inflates to exactly the declared size, AND the entry
+ * that follows does too — two consecutive coincidences on arbitrary bytes
+ * are not a realistic false positive, and the pack trailer plus per-object
+ * hashing verify everything downstream regardless.
+ *
+ * Candidates are filtered cheaply: a deflate stream from git starts with
+ * the zlib header `0x78` followed by one of four FLG bytes, right after a
+ * 1–10 byte varint header. Returns the offset into `buf`, or `undefined`
+ * when no boundary lies within `maxSearch` bytes (the chunk is inside one
+ * huge entry — the caller stitches it from neighbours).
+ */
+export const findBoundary = (
+  buf: Uint8Array,
+  options: {
+    readonly maxObjectSize: number;
+    readonly maxSearch?: number | undefined;
+  },
+): number | undefined => {
+  const limit = Math.min(buf.length, options.maxSearch ?? 1 << 20);
+  const isZlibHeader = (i: number) =>
+    i + 1 < buf.length &&
+    buf[i] === 0x78 &&
+    (buf[i + 1] === 0x01 ||
+      buf[i + 1] === 0x5e ||
+      buf[i + 1] === 0x9c ||
+      buf[i + 1] === 0xda);
+  const parses = (pos: number): number | undefined => {
+    let header;
+    try {
+      header = decodeTypeSize(buf, pos);
+    } catch {
+      return undefined;
+    }
+    if (header.type < 1 || header.type > 7) return undefined;
+    if (header.size > options.maxObjectSize) return undefined;
+    let at = header.next;
+    if (header.type === 6) {
+      try {
+        at = decodeOfsDeltaOffset(buf, at).next;
+      } catch {
+        return undefined;
+      }
+    } else if (header.type === 7) {
+      at += 20;
+    }
+    if (!isZlibHeader(at)) return undefined;
+    const inflated = inflateEntrySync(buf, at, {
+      maxOutput: options.maxObjectSize,
+      expectedSize: header.size,
+    });
+    if (inflated === undefined || inflated.content.length !== header.size)
+      return undefined;
+    const end = at + inflated.bytesConsumed;
+    return end >= buf.length ? undefined : end;
+  };
+  for (let pos = 0; pos < limit; pos++) {
+    // Cheap pre-filter: a zlib header must appear within the next 32 bytes
+    // (header varint + optional base ref).
+    let plausible = false;
+    for (let k = pos + 1; k <= pos + 32 && k < buf.length; k++) {
+      if (isZlibHeader(k)) {
+        plausible = true;
+        break;
+      }
+    }
+    if (!plausible) continue;
+    const next = parses(pos);
+    if (next === undefined) continue;
+    // Second entry must parse too (or the buffer ends right after — accept
+    // only if the first entry ended cleanly inside the buffer).
+    const after = parses(next);
+    if (after !== undefined) return pos;
+  }
+  return undefined;
+};

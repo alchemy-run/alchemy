@@ -43,6 +43,8 @@ export interface HashPartOptions {
   readonly base: number;
   readonly remaining: number;
   readonly maxObjectSize: number;
+  /** The payload is a raw chunk: find the first boundary first (DESIGN §22.9). */
+  readonly resync?: boolean | undefined;
 }
 
 export interface HasherShape {
@@ -126,6 +128,7 @@ interface WireEntry {
   readonly c?: [number, number]; // content [offset, length]
 }
 interface WireResult {
+  readonly firstOffset: number;
   readonly entries: ReadonlyArray<WireEntry>;
   readonly unresolved: ScanResult["unresolved"];
   readonly consumedTo: number;
@@ -142,6 +145,7 @@ export const encodeScanResult = (result: ScanResult): Uint8Array => {
     return ref;
   };
   const wire: WireResult = {
+    firstOffset: result.firstOffset,
     entries: result.entries.map((e) => ({
       o: e.oid,
       t: e.type,
@@ -177,6 +181,7 @@ export const decodeScanResult = (bytes: Uint8Array): ScanResult => {
   const slice = (ref: [number, number] | undefined) =>
     ref === undefined ? undefined : blobs.subarray(ref[0], ref[0] + ref[1]);
   return {
+    firstOffset: wire.firstOffset,
     entries: wire.entries.map((e) => ({
       oid: e.o as Oid,
       type: e.t as ObjectType,
@@ -257,7 +262,7 @@ export const HasherSelf: Layer.Layer<Hasher, never, WorkerEnvironment> =
       return {
         hashPart: (payload, opts) =>
           post(
-            `https://self${HASH_ROUTE}?base=${opts.base}&remaining=${opts.remaining}&max=${opts.maxObjectSize}`,
+            `https://self${HASH_ROUTE}?base=${opts.base}&remaining=${opts.remaining}&max=${opts.maxObjectSize}${opts.resync ? "&resync=1" : ""}`,
             payload,
           ),
         hashBoundsPart: (payload, bounds, opts) =>
