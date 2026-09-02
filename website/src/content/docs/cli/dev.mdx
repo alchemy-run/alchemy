@@ -42,6 +42,8 @@ Tear the default local-dev stage down with
 
 Every local resource is served through one shared ingress on a single port, as `http://<name>.<domain>:<port>` — `http://api.localhost:1337`, `http://web.localhost:1337`. The name is the resource's logical id in kebab-case (`MyApi` → `my-api`), namespaced innermost first (`Site/Api` → `api.site`); a Worker overrides it with `dev: { subdomain: "api" }`. The bare `http://localhost:1337` forwards to the only resource when there is one and lists them all otherwise.
 
+The same applies to every other locally served HTTP surface: `Command.Dev` servers, emulated Lambda Function URLs, CloudFront distributions and API Gateway APIs all appear as `<name>.<domain>` too. Their `url` attributes keep the raw local address (emulators running in Docker dial it directly), so the subdomain shows up on the index page and in the start log instead.
+
 `*.localhost` resolves to the loopback everywhere (macOS, glibc/systemd Linux, every browser), so the default needs no setup. Distinct origins per resource mean CORS behaves exactly as it will in production, but browsers refuse cookies scoped to `Domain=localhost`. For cross-subdomain cookies use a real-looking domain:
 
 ```sh
@@ -66,7 +68,7 @@ Binding port 80 needs privileges too. `alchemy dev --port 80` falls back to `133
 alchemy dev --tunnel
 ```
 
-`--tunnel` exposes every local resource to the public internet through a free, account-less [Cloudflare quick tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/do-more-with-tunnels/trycloudflare/) — one `https://<random>.trycloudflare.com` URL per resource, routed through the ingress by host. A tunneled resource's `url` is its public URL (webhooks, mobile devices, and external services reach your local Worker), and the local URLs follow in `urls`. Per resource, `dev: { tunnel: true }` always tunnels and `dev: { tunnel: false }` never does.
+`--tunnel` exposes every local resource to the public internet through a free, account-less [Cloudflare quick tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/do-more-with-tunnels/trycloudflare/) — one `https://<random>.trycloudflare.com` URL per resource (Workers, `Command.Dev` servers, emulated Lambda URLs, CloudFront distributions, API Gateway APIs), routed through the ingress by host. A tunneled Worker's `url` is its public URL (webhooks, mobile devices, and external services reach your local Worker), and the local URLs follow in `urls`; other resources print their tunnel URL when they start. Per Worker, `dev: { tunnel: true }` always tunnels and `dev: { tunnel: false }` never does.
 
 Tunnels need the `cloudflared` binary: `$ALCHEMY_CLOUDFLARED`, then `$PATH`, then `~/.alchemy/bin` are checked, and when none has it the pinned release is downloaded from GitHub automatically. Quick-tunnel hostnames are random, change on every restart, and take up to ~30 seconds to become resolvable — requesting one before then can make your OS cache a negative DNS answer for a few minutes.
 
