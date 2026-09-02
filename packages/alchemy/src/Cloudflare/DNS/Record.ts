@@ -356,10 +356,14 @@ export const RecordProvider = () =>
     }),
 
     reconcile: Effect.fn(function* ({ news, output }) {
-      // Resolve the governing zone: explicit prop, or inferred from the
-      // record name (most-specific zone in the account wins).
-      let zoneId = news.zoneId as string | undefined;
-      let zoneName: string | undefined;
+      // Resolve the governing zone: explicit prop, else the zone this
+      // resource already resolved to (stable across reconciles — a more
+      // specific zone added to the account later must not re-home the
+      // record; `diff` replaces when the name leaves the persisted zone),
+      // else inferred from the record name (most-specific zone wins).
+      let zoneId = (news.zoneId as string | undefined) ?? output?.zoneId;
+      let zoneName: string | undefined =
+        news.zoneId === undefined ? output?.zoneName : undefined;
       if (zoneId === undefined) {
         const { accountId } = yield* yield* CloudflareEnvironment;
         for (const candidate of zoneNameCandidates(news.name)) {

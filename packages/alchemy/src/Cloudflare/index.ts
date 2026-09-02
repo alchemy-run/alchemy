@@ -37,7 +37,10 @@ export * as Devices from "./Devices/index.ts";
 export * as Diagnostics from "./Diagnostics/index.ts";
 export * as Dlp from "./Dlp/index.ts";
 export * as DNS from "./DNS/index.ts";
-export { Dns } from "./Dns.ts";
+// The `Alchemy.Dns` seam layer — exported as `CloudflareDns` (mirroring
+// `AWS.Route53Dns`) so it does not collide by case with the `DNS` resource
+// namespace above.
+export { Dns as CloudflareDns } from "./Dns.ts";
 export * as Email from "./Email/index.ts";
 export * as Firewall from "./Firewall/index.ts";
 export * as Flagship from "./Flagship/index.ts";

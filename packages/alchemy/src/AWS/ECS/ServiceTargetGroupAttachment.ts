@@ -1,9 +1,10 @@
 import * as ecs from "@distilled.cloud/aws/ecs";
+import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { isResolved } from "../../Diff.ts";
-import { toWireSeconds } from "../../Util/Duration.ts";
+import { toMillis, toWireSeconds } from "../../Util/Duration.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
@@ -24,16 +25,21 @@ export interface ServiceTargetGroupAttachmentProps {
   /**
    * ELB health-check grace period applied to the service when the target
    * group attaches, e.g. `"5 minutes"`. Keeps freshly-attached tasks alive
-   * while the application behind them warms (a Celld fleet's nodes serve
-   * nothing until the first `celld deploy` lands).
+   * while the application behind them warms up (a node that serves nothing
+   * until its first deployment lands).
    * @default "5 minutes"
    */
   healthCheckGracePeriod?: Duration.Input;
   /**
-   * Maximum time to wait for the attachment deployment (and target health)
-   * to converge. The attachment tolerates a sibling resource landing the
-   * traffic behind the targets mid-wait, so this is deliberately generous.
-   * @default "15 minutes"
+   * How long to wait for the attachment deployment (and target health) to
+   * converge, capped at 90 seconds. The wait is best-effort: the
+   * attachment is in place the moment `updateService` accepts it, so a
+   * service whose tasks are still warming past the budget is noted and
+   * the deploy continues — only a FAILED rollout (deployment circuit
+   * breaker) fails the attachment. Consumers that need healthy targets
+   * retry their first request. Skipped entirely when the service desires
+   * zero tasks (there is nothing to register).
+   * @default "90 seconds"
    */
   stabilizationTimeout?: Duration.Input;
 }
@@ -58,16 +64,25 @@ export interface ServiceTargetGroupAttachment extends Resource<
 > {}
 
 /**
+ * The attachment's ECS service does not exist (or is `INACTIVE`) in the
+ * given cluster — the attachment requires the service to exist first.
+ */
+export class EcsServiceNotFound extends Data.TaggedError("EcsServiceNotFound")<{
+  readonly cluster: string;
+  readonly serviceName: string;
+  readonly message: string;
+}> {}
+
+/**
  * Attaches an ELBv2 target group to an EXISTING ECS service via
  * `updateService` — the out-of-band counterpart of `AWS.ECS.Service`'s
  * composed `loadBalancer` prop, for ingress composed by a resource that is
- * not the service's own author (e.g. a Celld/Rivet worker exposing the
- * fleet or engine it deploys onto).
+ * not the service's own author (see `AWS.ECS.ServiceIngress`).
  *
  * The attachment merges its target group into the service's observed load
- * balancer list (never touching foreign entries), then waits for the
- * resulting deployment — including target health — to converge. Deleting
- * the attachment removes exactly its own entry.
+ * balancer list (never touching foreign entries), then waits — bounded —
+ * for the resulting deployment, including target health, to converge.
+ * Deleting the attachment removes exactly its own entry.
  *
  * ### Attaching a Target Group
  * **Example:** Expose an existing service through a composed ALB
@@ -87,6 +102,12 @@ export const ServiceTargetGroupAttachment =
   Resource<ServiceTargetGroupAttachment>(
     "AWS.ECS.ServiceTargetGroupAttachment",
   );
+
+/** Upper bound on the convergence wait (speed doctrine: never poll > 90s). */
+const MAX_STABILIZATION_MILLIS = 90_000;
+
+const stabilizationTimeout = (input: Duration.Input | undefined) =>
+  Math.min(toMillis(input ?? "90 seconds")!, MAX_STABILIZATION_MILLIS);
 
 /** The service rejects updates while transitioning; retry bounded. */
 const retryWhileNotActive = <A, E extends { _tag: string }, R>(
@@ -153,16 +174,23 @@ export const ServiceTargetGroupAttachmentProvider = () =>
     list: () => Effect.succeed([]),
 
     reconcile: Effect.fn(function* ({ news, session }) {
+      // Observe — the service is the only cloud state the attachment
+      // touches; it must exist before anything can be attached to it.
       const service = yield* describeService(news.cluster, news.serviceName);
       if (service?.serviceArn === undefined) {
-        return yield* Effect.die(
-          new Error(
-            `ECS service '${news.serviceName}' was not found in cluster ` +
+        return yield* Effect.fail(
+          new EcsServiceNotFound({
+            cluster: news.cluster,
+            serviceName: news.serviceName,
+            message:
+              `ECS service '${news.serviceName}' was not found in cluster ` +
               `'${news.cluster}' — the attachment requires the service to exist.`,
-          ),
+          }),
         );
       }
 
+      // Ensure — merge our entry into the observed load balancer list;
+      // skip the API entirely when it is already there.
       const desired: ecs.LoadBalancer = {
         targetGroupArn: news.targetGroupArn as TargetGroupArn,
         containerName: news.containerName,
@@ -180,6 +208,9 @@ export const ServiceTargetGroupAttachmentProvider = () =>
         yield* session.note(
           `Attaching ${news.targetGroupArn} to ${news.serviceName}`,
         );
+        // Changing the load balancer set starts a new deployment on its
+        // own — no `forceNewDeployment` needed (it would also force a
+        // redundant roll on every re-attach).
         yield* retryWhileNotActive(
           ecs.updateService({
             cluster: news.cluster,
@@ -196,25 +227,56 @@ export const ServiceTargetGroupAttachmentProvider = () =>
             healthCheckGracePeriodSeconds: toWireSeconds(
               news.healthCheckGracePeriod ?? "5 minutes",
             ),
-            forceNewDeployment: true,
           }),
         );
       }
 
-      // Wait for the attachment deployment — including target health — to
-      // converge. A sibling resource may land the application behind the
-      // targets mid-wait (a Celld worker's first `celld deploy`), so the
-      // window is generous.
-      yield* session.note(
-        `Waiting for ${news.serviceName} targets to become healthy`,
-      );
-      yield* waitForServiceConvergence({
-        clusterArn: news.cluster,
-        serviceName: news.serviceName,
-        expectedTaskDefinitionArn: service.taskDefinition,
-        mode: "stable",
-        timeout: news.stabilizationTimeout ?? "15 minutes",
-      });
+      // Wait — bounded, best-effort — for the attachment deployment
+      // (including target health) to converge. The attachment is already
+      // the desired cloud state; health is the service's and its
+      // consumers' concern (they retry their first request), so the wait
+      // never polls past 90s and only a FAILED rollout fails the resource.
+      // With zero desired tasks there is nothing to register: ECS leaves
+      // the zero-task deployment IN_PROGRESS until its next scheduler
+      // sweep, so waiting would only burn the budget.
+      if ((service.desiredCount ?? 0) === 0) {
+        yield* session.note(
+          `${news.serviceName} desires no tasks — nothing to wait for`,
+        );
+      } else {
+        yield* session.note(
+          `Waiting for ${news.serviceName} targets to become healthy`,
+        );
+        yield* waitForServiceConvergence({
+          clusterArn: news.cluster,
+          serviceName: news.serviceName,
+          expectedTaskDefinitionArn: service.taskDefinition,
+          mode: "stable",
+          timeout: stabilizationTimeout(news.stabilizationTimeout),
+        }).pipe(
+          Effect.catchTag("ServiceDidNotStabilize", (error) =>
+            Effect.gen(function* () {
+              // Observe, don't guess: a rollout the circuit breaker failed
+              // is a real failure; a rollout still in progress past the
+              // budget is a slow warm-up, not a broken attachment.
+              const observed = yield* describeService(
+                news.cluster,
+                news.serviceName,
+              );
+              const rolloutFailed = (observed?.deployments ?? []).some(
+                (deployment) => deployment.rolloutState === "FAILED",
+              );
+              if (rolloutFailed) {
+                return yield* Effect.fail(error);
+              }
+              yield* session.note(
+                `${news.serviceName} targets not yet healthy after the ` +
+                  "stabilization budget — continuing; consumers retry",
+              );
+            }),
+          ),
+        );
+      }
 
       return {
         cluster: news.cluster,
@@ -248,7 +310,6 @@ export const ServiceTargetGroupAttachmentProvider = () =>
           // An explicit empty list DETACHES; `undefined` means "leave
           // unchanged" on the wire.
           loadBalancers: remaining,
-          forceNewDeployment: true,
         }),
       ).pipe(
         Effect.catchTag(
@@ -268,7 +329,7 @@ export const ServiceTargetGroupAttachmentProvider = () =>
         serviceName: output.serviceName,
         expectedTaskDefinitionArn: service.taskDefinition,
         mode: "stable",
-        timeout: "3 minutes",
+        timeout: MAX_STABILIZATION_MILLIS,
       }).pipe(Effect.catch(() => Effect.void));
     }),
   });

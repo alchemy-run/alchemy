@@ -381,22 +381,20 @@ export const ListenerProvider = () =>
             DefaultActions: defaultActions,
           })
           .pipe(
-            // A DNS-validated ACM certificate may still be
-            // PENDING_VALIDATION while its validation record — declared as
-            // a SIBLING resource (e.g. via the Dns seam) — lands and
-            // propagates; ELB answers `UnsupportedCertificate` ("must have
-            // a fully-qualified domain name, a supported signature, and a
-            // supported key size") until the certificate is ISSUED, and
-            // `CertificateNotFound` while a freshly-requested ARN
-            // propagates. Ride out issuance bounded (~8 min).
+            // A freshly-issued ACM certificate ARN can lag visibility to
+            // ELB by a few seconds — ride that out, bounded (30s). A
+            // certificate that is still PENDING_VALIDATION answers
+            // `UnsupportedCertificate` and is a genuine failure here: gate
+            // the listener on `AWS.ACM.CertificateValidation` (or a
+            // Route 53-validated `AWS.ACM.Certificate`) so it depends on
+            // issuance rather than on the request.
             Effect.retry({
               while: (error): boolean =>
                 certs.length > 0 &&
-                (error._tag === "UnsupportedCertificate" ||
-                  error._tag === "CertificateNotFoundException"),
+                error._tag === "CertificateNotFoundException",
               schedule: Schedule.max([
-                Schedule.spaced("10 seconds"),
-                Schedule.recurs(48),
+                Schedule.spaced("5 seconds"),
+                Schedule.recurs(6),
               ]),
             }),
           );

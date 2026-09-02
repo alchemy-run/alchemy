@@ -65,9 +65,6 @@ import * as Bedrock from "./Bedrock/index.ts";
 import * as BedrockAgentCore from "./BedrockAgentCore/index.ts";
 import * as BedrockDataAutomation from "./BedrockDataAutomation/index.ts";
 import * as Budgets from "./Budgets/index.ts";
-import { EcsFleetHost } from "../Celld/EcsFleetHost.ts";
-import { EcsClusterHost } from "../Rivet/EcsClusterHost.ts";
-import { EcsRunnerHost } from "../Rivet/EcsRunnerHost.ts";
 import * as Chatbot from "./Chatbot/index.ts";
 import * as CloudControl from "./CloudControl/index.ts";
 import * as CloudFormation from "./CloudFormation/index.ts";
@@ -263,6 +260,7 @@ export const providers = () =>
         Account.Region,
         ACM.AccountConfiguration,
         ACM.Certificate,
+        ACM.CertificateValidation,
         ACMPCA.CertificateAuthority,
         ACMPCA.CertificateAuthorityPolicy,
         ACMPCA.Permission,
@@ -1005,6 +1003,9 @@ export const providers = () =>
             ACM.AccountConfigurationProvider(),
           ),
           flociDual(ACM.Certificate, () => ACM.CertificateProvider()),
+          flociDual(ACM.CertificateValidation, () =>
+            ACM.CertificateValidationProvider(),
+          ),
           AMP.AlertManagerDefinitionProvider(),
           AMP.AnomalyDetectorProvider(),
           AMP.LoggingConfigurationProvider(),
@@ -1948,12 +1949,6 @@ export const providers = () =>
     // provided) so the cluster-agnostic `Kubernetes.*` workload providers
     // can resolve it dynamically from the ambient stack context.
     Layer.provideMerge(EKS.EksKubernetesAdapter()),
-    // The `aws-ecs` Celld fleet host — same seam pattern: `Celld.Fleet`
-    // resolves it dynamically from the ambient stack context.
-    Layer.provideMerge(EcsFleetHost()),
-    // The `aws-ecs` Rivet cluster + runner hosts — same seam pattern.
-    Layer.provideMerge(EcsClusterHost()),
-    Layer.provideMerge(EcsRunnerHost()),
     Layer.provideMerge(
       Layer.mergeAll(
         Command.providers(),
