@@ -5,7 +5,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
-import { isResolved } from "../../Diff.ts";
+import { deepEqual, isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -19,6 +19,7 @@ import {
   toLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { matchesDesired } from "../Proto.ts";
 
 export type InstanceProps = {
   /**
@@ -66,6 +67,11 @@ export type InstanceProps = {
    */
   diskSizeGb?: number;
   /**
+   * Boot disk type short name or URL.
+   * @default "pd-standard"
+   */
+  bootDiskType?: string;
+  /**
    * VPC network URL or partial URL.
    * @default "global/networks/default"
    */
@@ -85,13 +91,39 @@ export type InstanceProps = {
    */
   preemptible?: boolean;
   /**
+   * VM provisioning model. Use `SPOT` for Spot VMs.
+   * @default "STANDARD"
+   */
+  provisioningModel?: compute.SchedulingProvisioningModelEnum;
+  /**
    * Automatically restart the VM if Compute Engine terminates it.
    * Ignored (forced off) when `preemptible` is true.
    * @default true
    */
   automaticRestart?: boolean;
+  /** Host maintenance behavior. Spot VMs require `TERMINATE`. */
+  onHostMaintenance?: compute.SchedulingOnHostMaintenanceEnum;
+  /** Action taken when a Spot VM is terminated. */
+  instanceTerminationAction?: compute.SchedulingInstanceTerminationActionEnum;
+  /**
+   * Service account email attached to the VM. Changing it replaces the
+   * instance (Compute Engine only allows it on a stopped VM).
+   */
+  serviceAccount?: string;
+  /**
+   * OAuth scopes granted to the attached service account. Changing them
+   * replaces the instance (Compute Engine only allows it on a stopped VM).
+   */
+  oauthScopes?: string[];
+  /**
+   * Shielded VM Secure Boot, vTPM, and integrity-monitoring settings.
+   * Changing it replaces the instance (Compute Engine only allows it on a
+   * stopped VM).
+   */
+  shieldedInstanceConfig?: compute.ShieldedInstanceConfig;
   /**
    * Allow packets with non-matching source/destination IPs (IP forwarding).
+   * Changing it replaces the instance.
    * @default false
    */
   canIpForward?: boolean;
@@ -128,6 +160,14 @@ export type Instance = Resource<
     deletionProtection: boolean;
     /** Whether IP forwarding is enabled. */
     canIpForward: boolean;
+    /** Effective scheduling policy. */
+    scheduling: compute.Scheduling | undefined;
+    /** Attached service account email. */
+    serviceAccount: string | undefined;
+    /** OAuth scopes granted to the attached service account. */
+    oauthScopes: string[];
+    /** Effective Shielded VM settings. */
+    shieldedInstanceConfig: compute.ShieldedInstanceConfig | undefined;
     /** Primary internal IPv4. */
     networkIP: string | undefined;
     /** Ephemeral or reserved public IPv4, if any. */
@@ -152,6 +192,25 @@ export type Instance = Resource<
  * const vm = yield* GCP.Compute.Instance("web", {
  *   zone: "us-central1-a",
  *   machineType: "e2-micro",
+ * });
+ * ```
+ *
+ * **Example:** Spot VM with a dedicated identity and Shielded VM controls
+ * ```typescript
+ * const vm = yield* GCP.Compute.Instance("runner", {
+ *   machineType: "n2-standard-4",
+ *   bootDiskType: "pd-balanced",
+ *   provisioningModel: "SPOT",
+ *   automaticRestart: false,
+ *   onHostMaintenance: "TERMINATE",
+ *   instanceTerminationAction: "STOP",
+ *   serviceAccount: runner.email,
+ *   oauthScopes: ["https://www.googleapis.com/auth/cloud-platform"],
+ *   shieldedInstanceConfig: {
+ *     enableIntegrityMonitoring: true,
+ *     enableSecureBoot: true,
+ *     enableVtpm: true,
+ *   },
  * });
  * ```
  *
@@ -210,6 +269,7 @@ const DEFAULT_SOURCE_IMAGE =
   "projects/debian-cloud/global/images/family/debian-12";
 const DEFAULT_NETWORK = "global/networks/default";
 const DEFAULT_DISK_SIZE_GB = 10;
+const DEFAULT_BOOT_DISK_TYPE = "pd-standard";
 
 const lastSegment = (value: string | undefined): string => {
   if (value === undefined || value.length === 0) return "";
@@ -232,6 +292,9 @@ const machineTypeUrl = (zone: string, machineType: string): string =>
   machineType.includes("/")
     ? machineType
     : `zones/${zone}/machineTypes/${machineType}`;
+
+const diskTypeUrl = (zone: string, diskType: string): string =>
+  diskType.includes("/") ? diskType : `zones/${zone}/diskTypes/${diskType}`;
 
 const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
@@ -264,6 +327,45 @@ const sameTags = (left: string[], right: string[]): boolean => {
   return a.every((value, index) => value === b[index]);
 };
 
+/**
+ * `serviceAccount: "default"` is shorthand for the project's Compute Engine
+ * default service account, which the API reports by its full email.
+ */
+const sameServiceAccount = (
+  observed: string | undefined,
+  desired: string,
+): boolean =>
+  observed === desired ||
+  (desired === "default" &&
+    observed !== undefined &&
+    observed.endsWith("-compute@developer.gserviceaccount.com"));
+
+const isSpot = (news: InstanceProps): boolean =>
+  (news.provisioningModel ?? "STANDARD") === "SPOT" ||
+  news.preemptible === true;
+
+/**
+ * The scheduling fields Compute Engine lets us change on a live VM, limited to
+ * what the user actually set (or what Spot forces). `preemptible` and
+ * `provisioningModel` are create-time only and trigger a replacement instead.
+ */
+const desiredScheduling = (news: InstanceProps): compute.Scheduling => {
+  const spot = isSpot(news);
+  const automaticRestart = spot ? false : news.automaticRestart !== false;
+  const onHostMaintenance =
+    news.onHostMaintenance ?? (spot ? "TERMINATE" : undefined);
+  const instanceTerminationAction =
+    news.instanceTerminationAction ??
+    (news.provisioningModel === "SPOT" ? "STOP" : undefined);
+  return {
+    automaticRestart,
+    ...(onHostMaintenance !== undefined ? { onHostMaintenance } : {}),
+    ...(instanceTerminationAction !== undefined
+      ? { instanceTerminationAction }
+      : {}),
+  };
+};
+
 const toName = (id: string, name: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     return (
@@ -293,6 +395,10 @@ const toAttrs = (instance: compute.Instance, project: string) => {
     metadata: metadataRecord(instance.metadata),
     deletionProtection: instance.deletionProtection === true,
     canIpForward: instance.canIpForward === true,
+    scheduling: instance.scheduling,
+    serviceAccount: instance.serviceAccounts?.[0]?.email,
+    oauthScopes: [...(instance.serviceAccounts?.[0]?.scopes ?? [])],
+    shieldedInstanceConfig: instance.shieldedInstanceConfig,
     networkIP: nic?.networkIP,
     natIP: nic?.accessConfigs?.[0]?.natIP,
     selfLink: instance.selfLink,
@@ -426,7 +532,8 @@ const insertBody = (
   zone: string,
   desiredLabels: Record<string, string>,
 ): compute.Instance => {
-  const preemptible = news.preemptible === true;
+  const provisioningModel = news.provisioningModel ?? "STANDARD";
+  const spot = provisioningModel === "SPOT" || news.preemptible === true;
   const metadata = news.metadata
     ? {
         items: Object.entries(news.metadata).map(([key, value]) => ({
@@ -444,16 +551,26 @@ const insertBody = (
     metadata,
     canIpForward: news.canIpForward === true,
     deletionProtection: news.deletionProtection === true,
-    scheduling: preemptible
-      ? {
-          preemptible: true,
-          automaticRestart: false,
-          onHostMaintenance: "TERMINATE",
-        }
-      : {
-          preemptible: false,
-          automaticRestart: news.automaticRestart !== false,
-        },
+    scheduling: {
+      provisioningModel,
+      preemptible: spot,
+      automaticRestart: spot ? false : news.automaticRestart !== false,
+      onHostMaintenance:
+        news.onHostMaintenance ?? (spot ? "TERMINATE" : undefined),
+      instanceTerminationAction: news.instanceTerminationAction,
+    },
+    serviceAccounts:
+      news.serviceAccount !== undefined || news.oauthScopes !== undefined
+        ? [
+            {
+              // Scopes are only meaningful against an identity; Compute Engine
+              // rejects a serviceAccounts entry without an email.
+              email: news.serviceAccount ?? "default",
+              scopes: news.oauthScopes,
+            },
+          ]
+        : undefined,
+    shieldedInstanceConfig: news.shieldedInstanceConfig,
     disks: [
       {
         boot: true,
@@ -462,6 +579,10 @@ const insertBody = (
         initializeParams: {
           sourceImage: news.sourceImage ?? DEFAULT_SOURCE_IMAGE,
           diskSizeGb: String(news.diskSizeGb ?? DEFAULT_DISK_SIZE_GB),
+          diskType: diskTypeUrl(
+            zone,
+            news.bootDiskType ?? DEFAULT_BOOT_DISK_TYPE,
+          ),
         },
       },
     ],
@@ -513,16 +634,58 @@ export const InstanceProvider = () =>
         return { action: "replace" as const, deleteFirst: true };
       }
       if (
-        olds?.sourceImage !== undefined &&
-        news.sourceImage !== undefined &&
-        olds.sourceImage !== news.sourceImage
+        olds !== undefined &&
+        (olds.sourceImage ?? DEFAULT_SOURCE_IMAGE) !==
+          (news.sourceImage ?? DEFAULT_SOURCE_IMAGE)
       ) {
         return { action: "replace" as const, deleteFirst: true };
       }
-      if (
+      const previousProvisioning = olds?.provisioningModel ?? "STANDARD";
+      const nextProvisioning = news.provisioningModel ?? "STANDARD";
+      // setServiceAccount and updateShieldedInstanceConfig are only permitted
+      // on a TERMINATED VM, and we never stop a user's VM, so these replace.
+      // When the previous props never declared them, diff against the
+      // observed VM instead so spelling out what already runs is a no-op.
+      const serviceAccountChanged =
+        olds?.serviceAccount !== undefined
+          ? olds.serviceAccount !== (news.serviceAccount ?? "")
+          : news.serviceAccount !== undefined &&
+            !sameServiceAccount(output?.serviceAccount, news.serviceAccount);
+      const oauthScopesChanged =
+        olds?.oauthScopes !== undefined
+          ? !sameTags(olds.oauthScopes, news.oauthScopes ?? [])
+          : news.oauthScopes !== undefined &&
+            !sameTags(output?.oauthScopes ?? [], news.oauthScopes);
+      const shieldedChanged =
+        olds?.shieldedInstanceConfig !== undefined
+          ? !deepEqual(
+              olds.shieldedInstanceConfig,
+              news.shieldedInstanceConfig ?? {},
+              { stripNullish: true },
+            )
+          : news.shieldedInstanceConfig !== undefined &&
+            !matchesDesired(
+              output?.shieldedInstanceConfig,
+              news.shieldedInstanceConfig,
+            );
+      const changedCreationSetting =
         olds !== undefined &&
-        (olds.preemptible === true) !== (news.preemptible === true)
-      ) {
+        ((olds.diskSizeGb ?? DEFAULT_DISK_SIZE_GB) !==
+          (news.diskSizeGb ?? DEFAULT_DISK_SIZE_GB) ||
+          lastSegment(olds.bootDiskType ?? DEFAULT_BOOT_DISK_TYPE) !==
+            lastSegment(news.bootDiskType ?? DEFAULT_BOOT_DISK_TYPE) ||
+          lastSegment(olds.network ?? DEFAULT_NETWORK) !==
+            lastSegment(news.network ?? DEFAULT_NETWORK) ||
+          lastSegment(olds.subnetwork) !== lastSegment(news.subnetwork) ||
+          (olds.associatePublicIp === true) !==
+            (news.associatePublicIp === true) ||
+          (olds.canIpForward === true) !== (news.canIpForward === true) ||
+          (olds.preemptible === true) !== (news.preemptible === true) ||
+          previousProvisioning !== nextProvisioning ||
+          serviceAccountChanged ||
+          oauthScopesChanged ||
+          shieldedChanged);
+      if (changedCreationSetting) {
         return { action: "replace" as const, deleteFirst: true };
       }
       return undefined;
@@ -682,6 +845,47 @@ export const InstanceProvider = () =>
             zone,
             resource: instanceName,
             deletionProtection: desiredProtection,
+          }),
+        );
+        current =
+          (yield* getByName(env.project, zone, instanceName)) ?? current;
+      }
+
+      const scheduling = desiredScheduling(news);
+      if (
+        Object.keys(scheduling).length > 0 &&
+        !matchesDesired(current.scheduling, scheduling)
+      ) {
+        yield* applyZoneOp(
+          env.project,
+          zone,
+          compute.setSchedulingInstances({
+            project: env.project,
+            zone,
+            instance: instanceName,
+            // Merge onto observed scheduling so the create-time fields
+            // (provisioningModel, preemptible) are preserved verbatim.
+            body: { ...current.scheduling, ...scheduling },
+          }),
+        );
+        current =
+          (yield* getByName(env.project, zone, instanceName)) ?? current;
+      }
+
+      // `description` is the one full-body update we can make without ever
+      // disturbing a running VM. Allow REFRESH but not RESTART; NO_EFFECT is
+      // only a dry-run and would never apply the change. `canIpForward` needs
+      // at least a RESTART, so it triggers a replacement in `diff` instead.
+      if ((current.description ?? "") !== (news.description ?? "")) {
+        yield* applyZoneOp(
+          env.project,
+          zone,
+          compute.updateInstances({
+            project: env.project,
+            zone,
+            instance: instanceName,
+            mostDisruptiveAllowedAction: "REFRESH",
+            body: { ...current, description: news.description ?? "" },
           }),
         );
         current =

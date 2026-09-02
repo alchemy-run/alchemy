@@ -3,7 +3,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { Unowned } from "../../AdoptPolicy.ts";
-import { isResolved } from "../../Diff.ts";
+import { deepEqual, isResolved } from "../../Diff.ts";
 import {
   deleteObjects,
   reconcileObjects,
@@ -27,6 +27,7 @@ import {
   toLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { matchesDesired } from "../Proto.ts";
 import {
   apiServerEndpoint,
   gkeConnectionOf,
@@ -79,6 +80,31 @@ export type ClusterProps = {
    */
   subnetwork?: string;
   /**
+   * Alias-IP allocation for Pods and Services. Secondary range names and
+   * CIDRs are create-time topology; changing this configuration replaces the
+   * cluster. Defaults to VPC-native alias IPs.
+   */
+  ipAllocationPolicy?: container.IPAllocationPolicy;
+  /**
+   * Private control-plane and node networking. Changing private-node mode or
+   * the control-plane CIDR replaces the cluster; private endpoint and global
+   * control-plane access settings update in place.
+   */
+  privateClusterConfig?: container.PrivateClusterConfig;
+  /** Networks allowed to reach the public control-plane endpoint. */
+  masterAuthorizedNetworksConfig?: container.MasterAuthorizedNetworksConfig;
+  /**
+   * Cluster datapath implementation (`LEGACY_DATAPATH` or
+   * `ADVANCED_DATAPATH`).
+   */
+  datapathProvider?: container.NetworkConfigDatapathProviderEnum;
+  /** Enable Shielded GKE Nodes. */
+  enableShieldedNodes?: boolean;
+  /** GKE addon configuration. */
+  addonsConfig?: container.AddonsConfig;
+  /** Fine-grained cost allocation configuration. */
+  costManagementConfig?: container.CostManagementConfig;
+  /**
    * Create an Autopilot cluster. Immutable — changing it replaces the
    * cluster. Node pool props (`initialNodeCount`, `machineType`, …) are
    * ignored when Autopilot is enabled.
@@ -94,10 +120,14 @@ export type ClusterProps = {
    * Logging service (`logging.googleapis.com/kubernetes` or `none`).
    */
   loggingService?: string;
+  /** Components exported through Cloud Logging. */
+  loggingConfig?: container.LoggingConfig;
   /**
    * Monitoring service (`monitoring.googleapis.com/kubernetes` or `none`).
    */
   monitoringService?: string;
+  /** Components exported through Cloud Monitoring. */
+  monitoringConfig?: container.MonitoringConfig;
   /**
    * Enable Kubernetes alpha APIs. The cluster is deleted after 30 days
    * and has no SLA. Immutable — changing it replaces the cluster.
@@ -114,42 +144,71 @@ export type ClusterProps = {
    */
   nodeLocations?: string[];
   /**
-   * Initial node count for the default pool. Ignored on Autopilot.
-   * Immutable — changing it replaces the cluster.
+   * Initial node count for the default pool. Ignored on Autopilot, and on
+   * update when `removeDefaultNodePool` is enabled. Otherwise immutable —
+   * changing it replaces the cluster.
    * @default 1
    */
   initialNodeCount?: number;
   /**
-   * Machine type for the default pool. Ignored on Autopilot. Immutable —
-   * changing it replaces the cluster.
+   * Machine type for the default pool. Ignored on Autopilot, and on update
+   * when `removeDefaultNodePool` is enabled. Otherwise immutable — changing
+   * it replaces the cluster.
    * @default "e2-medium"
    */
   machineType?: string;
   /**
-   * Boot disk size in GB for the default pool. Ignored on Autopilot.
-   * Immutable — changing it replaces the cluster.
+   * Boot disk size in GB for the default pool. Ignored on Autopilot, and on
+   * update when `removeDefaultNodePool` is enabled. Otherwise immutable —
+   * changing it replaces the cluster.
    * @default 20
    */
   diskSizeGb?: number;
   /**
    * Boot disk type for the default pool (`pd-standard`, `pd-balanced`,
-   * `pd-ssd`). Ignored on Autopilot. Immutable — changing it replaces
-   * the cluster.
+   * `pd-ssd`). Ignored on Autopilot, and on update when
+   * `removeDefaultNodePool` is enabled. Otherwise immutable — changing it
+   * replaces the cluster.
    * @default "pd-standard"
    */
   diskType?: string;
   /**
-   * Use Spot VMs for the default pool. Ignored on Autopilot. Immutable —
-   * changing it replaces the cluster.
+   * Use Spot VMs for the default pool. Ignored on Autopilot, and on update
+   * when `removeDefaultNodePool` is enabled. Otherwise immutable — changing
+   * it replaces the cluster.
    * @default false
    */
   spot?: boolean;
   /**
-   * Use preemptible VMs for the default pool. Ignored on Autopilot.
-   * Immutable — changing it replaces the cluster.
+   * Use preemptible VMs for the default pool. Ignored on Autopilot, and on
+   * update when `removeDefaultNodePool` is enabled. Otherwise immutable —
+   * changing it replaces the cluster.
    * @default false
    */
   preemptible?: boolean;
+  /**
+   * Service account email for the temporary/default node pool. Changing it
+   * replaces the cluster unless `removeDefaultNodePool` is enabled.
+   */
+  serviceAccount?: string;
+  /**
+   * OAuth scopes for the temporary/default node pool. Changing them replaces
+   * the cluster unless `removeDefaultNodePool` is enabled.
+   */
+  oauthScopes?: string[];
+  /**
+   * Delete GKE's bootstrap `default-pool` after the cluster becomes ready so
+   * separately declared `NodePool` resources own all nodes. While enabled,
+   * the bootstrap-pool props above never trigger a replacement.
+   * @default false
+   */
+  removeDefaultNodePool?: boolean;
+  /**
+   * Refuse normal Alchemy replacement or destruction while enabled. Account-
+   * wide forced nuke operations may bypass this guard.
+   * @default false
+   */
+  deletionProtection?: boolean;
 };
 
 export type Cluster = Resource<
@@ -201,10 +260,30 @@ export type Cluster = Resource<
     network: string | undefined;
     /** Subnetwork. */
     subnetwork: string | undefined;
+    /** Alias-IP allocation observed on the cluster. */
+    ipAllocationPolicy: container.IPAllocationPolicy | undefined;
+    /** Private-cluster configuration. */
+    privateClusterConfig: container.PrivateClusterConfig | undefined;
+    /** Control-plane authorized networks. */
+    masterAuthorizedNetworksConfig:
+      | container.MasterAuthorizedNetworksConfig
+      | undefined;
+    /** Cluster datapath provider. */
+    datapathProvider: string | undefined;
+    /** Whether Shielded GKE Nodes are enabled. */
+    enableShieldedNodes: boolean;
+    /** GKE addon configuration. */
+    addonsConfig: container.AddonsConfig | undefined;
+    /** Fine-grained cost allocation configuration. */
+    costManagementConfig: container.CostManagementConfig | undefined;
     /** Logging service. */
     loggingService: string | undefined;
+    /** Cloud Logging component configuration. */
+    loggingConfig: container.LoggingConfig | undefined;
     /** Monitoring service. */
     monitoringService: string | undefined;
+    /** Cloud Monitoring component configuration. */
+    monitoringConfig: container.MonitoringConfig | undefined;
     /** Whether Autopilot is enabled. */
     autopilot: boolean;
     /** Whether Kubernetes alpha APIs are enabled. */
@@ -227,12 +306,19 @@ export type Cluster = Resource<
 /**
  * A Google Kubernetes Engine cluster.
  *
- * Changing `clusterId`, `location`, `description`, `network`,
- * `subnetwork`, `autopilot`, `enableKubernetesAlpha`, or default-pool
- * node shape (`initialNodeCount`, `machineType`, `diskSizeGb`,
- * `diskType`, `spot`, `preemptible`) replaces the cluster. Labels,
- * logging/monitoring services, release channel, and node locations are
- * updated in place.
+ * Changing cluster identity, networking topology, Autopilot mode, or alpha API
+ * mode replaces the cluster. So does changing the default-pool node shape
+ * (`initialNodeCount`, `machineType`, `diskSizeGb`, `diskType`, `spot`,
+ * `preemptible`, `serviceAccount`, `oauthScopes`) — unless
+ * `removeDefaultNodePool` is enabled, in which case those props describe a
+ * bootstrap pool that no longer exists and are ignored on update. Turning
+ * `removeDefaultNodePool` back off replaces the cluster, since GKE only
+ * creates `default-pool` at cluster creation. Labels,
+ * endpoint access, Shielded Nodes, addons, datapath, logging/monitoring, cost
+ * management, release channel, and node locations update in place.
+ * `deletionProtection` blocks ordinary replacement and destruction until
+ * disabled — a change that would replace a protected cluster fails at plan
+ * time, so disable protection in its own deploy first.
  *
  * Provisioning typically takes several minutes.
  *
@@ -320,6 +406,12 @@ export class ClusterStillExists extends Data.TaggedError(
   name: string;
 }> {}
 
+export class ClusterDeletionProtected extends Data.TaggedError(
+  "GCP.Container.ClusterDeletionProtected",
+)<{
+  name: string;
+}> {}
+
 const lastSegment = (value: string) => {
   const trimmed = value.replace(/\/+$/, "");
   const parts = trimmed.split("/");
@@ -334,12 +426,25 @@ const normalizeChannel = (channel: string | undefined) => {
   return value === "UNSPECIFIED" || value.length === 0 ? "" : value;
 };
 
-const sameLocations = (left: string[], right: string[]) => {
+/** Order- and case-insensitive set comparison for string lists. */
+const sameStrings = (left: string[], right: string[]) => {
   if (left.length !== right.length) return false;
   const a = [...left].map((item) => item.toLowerCase()).sort();
   const b = [...right].map((item) => item.toLowerCase()).sort();
   return a.every((value, index) => value === b[index]);
 };
+
+const desiredIpAllocationPolicy = (
+  policy: container.IPAllocationPolicy | undefined,
+): container.IPAllocationPolicy => ({ useIpAliases: true, ...policy });
+
+const privateTopology = (
+  config: container.PrivateClusterConfig | undefined,
+) => ({
+  enablePrivateNodes: config?.enablePrivateNodes === true,
+  masterIpv4CidrBlock: config?.masterIpv4CidrBlock ?? "",
+  privateEndpointSubnetwork: config?.privateEndpointSubnetwork ?? "",
+});
 
 const rfc1035 = (name: string): string => {
   let next = name
@@ -432,8 +537,17 @@ const toAttrs = (
     labels: userLabels(cluster.resourceLabels),
     network: cluster.network,
     subnetwork: cluster.subnetwork,
+    ipAllocationPolicy: cluster.ipAllocationPolicy,
+    privateClusterConfig: cluster.privateClusterConfig,
+    masterAuthorizedNetworksConfig: cluster.masterAuthorizedNetworksConfig,
+    datapathProvider: cluster.networkConfig?.datapathProvider,
+    enableShieldedNodes: cluster.shieldedNodes?.enabled === true,
+    addonsConfig: cluster.addonsConfig,
+    costManagementConfig: cluster.costManagementConfig,
     loggingService: cluster.loggingService,
+    loggingConfig: cluster.loggingConfig,
     monitoringService: cluster.monitoringService,
+    monitoringConfig: cluster.monitoringConfig,
     autopilot: cluster.autopilot?.enabled === true,
     enableKubernetesAlpha: cluster.enableKubernetesAlpha === true,
     releaseChannel: cluster.releaseChannel?.channel,
@@ -575,8 +689,10 @@ const waitForOperation = (
       Effect.retry({
         while: (error) =>
           error._tag === "GCP.Container.ClusterOperationPending",
-        times: 10,
-        schedule: Schedule.spaced("8 seconds"),
+        // GKE control-plane and node-pool operations take several minutes;
+        // keep the interval flat (see AWS EKS) and budget ~15 min.
+        times: 90,
+        schedule: Schedule.spaced("10 seconds"),
       }),
     );
   });
@@ -623,8 +739,40 @@ const waitUntilReady = (name: string) =>
       while: (error) =>
         error._tag === "GCP.Container.ClusterNotReady" ||
         error._tag === "GCP.Container.ClusterNotResolved",
-      times: 10,
-      schedule: Schedule.spaced("8 seconds"),
+      // GKE control-plane and node-pool operations take several minutes;
+      // keep the interval flat (see AWS EKS) and budget ~15 min.
+      times: 90,
+      schedule: Schedule.spaced("10 seconds"),
+    }),
+  );
+
+/**
+ * GKE rejects a delete (400 "Cluster is running incompatible operation")
+ * while a create/update is still in flight — e.g. a recovery delete after an
+ * interrupted create. Wait for the cluster to leave its transitional states
+ * first; a cluster that vanishes meanwhile is fine.
+ */
+const waitUntilSettled = (name: string) =>
+  getByName(name).pipe(
+    Effect.filterOrFail(
+      (cluster) => {
+        const status = cluster?.status ?? "STATUS_UNSPECIFIED";
+        return (
+          status !== "PROVISIONING" &&
+          status !== "RECONCILING" &&
+          status !== "STOPPING"
+        );
+      },
+      (cluster) =>
+        new ClusterNotReady({
+          name,
+          status: cluster?.status ?? "STATUS_UNSPECIFIED",
+        }),
+    ),
+    Effect.retry({
+      while: (error) => error._tag === "GCP.Container.ClusterNotReady",
+      times: 90,
+      schedule: Schedule.spaced("10 seconds"),
     }),
   );
 
@@ -637,10 +785,36 @@ const waitUntilGone = (name: string) =>
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Container.ClusterStillExists",
-      times: 10,
-      schedule: Schedule.spaced("8 seconds"),
+      // GKE control-plane and node-pool operations take several minutes;
+      // keep the interval flat (see AWS EKS) and budget ~15 min.
+      times: 90,
+      schedule: Schedule.spaced("10 seconds"),
     }),
   );
+
+const ensureDefaultPoolRemoved = (
+  project: string,
+  location: string,
+  clusterName: string,
+) =>
+  Effect.gen(function* () {
+    const name = `${clusterName}/nodePools/${DEFAULT_POOL_NAME}`;
+    const operation = yield* container
+      .deleteProjectsLocationsClustersNodePools({ name })
+      .pipe(
+        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.retry({
+          while: (error) => error._tag === "Conflict",
+          times: 8,
+          schedule: Schedule.spaced("5 seconds"),
+        }),
+      );
+    if (operation === undefined) return false;
+    yield* waitForOperation(project, location, operation, {
+      notFoundOk: true,
+    });
+    return true;
+  });
 
 const defaultPool = (news: ClusterProps): container.NodePool => ({
   name: DEFAULT_POOL_NAME,
@@ -651,6 +825,8 @@ const defaultPool = (news: ClusterProps): container.NodePool => ({
     diskType: news.diskType ?? DEFAULT_DISK_TYPE,
     spot: news.spot === true,
     preemptible: news.preemptible === true,
+    serviceAccount: news.serviceAccount,
+    oauthScopes: news.oauthScopes,
     workloadMetadataConfig: { mode: "GKE_METADATA" },
   },
 });
@@ -669,9 +845,24 @@ const toCreateBody = (
     resourceLabels: desiredLabels,
     network: news.network,
     subnetwork: news.subnetwork,
+    ipAllocationPolicy: desiredIpAllocationPolicy(news.ipAllocationPolicy),
+    privateClusterConfig: news.privateClusterConfig,
+    masterAuthorizedNetworksConfig: news.masterAuthorizedNetworksConfig,
+    networkConfig:
+      news.datapathProvider !== undefined
+        ? { datapathProvider: news.datapathProvider }
+        : undefined,
+    shieldedNodes:
+      news.enableShieldedNodes !== undefined
+        ? { enabled: news.enableShieldedNodes }
+        : undefined,
+    addonsConfig: news.addonsConfig,
+    costManagementConfig: news.costManagementConfig,
     initialClusterVersion: news.initialClusterVersion,
     loggingService: news.loggingService,
+    loggingConfig: news.loggingConfig,
     monitoringService: news.monitoringService,
+    monitoringConfig: news.monitoringConfig,
     enableKubernetesAlpha: news.enableKubernetesAlpha === true,
     locations: news.nodeLocations,
     autopilot: autopilot ? { enabled: true } : undefined,
@@ -680,7 +871,6 @@ const toCreateBody = (
       channel.length > 0
         ? { channel: channel as container.ReleaseChannelChannelEnum }
         : undefined,
-    ipAllocationPolicy: { useIpAliases: true },
     nodePools: autopilot ? undefined : [defaultPool(news)],
   };
 };
@@ -721,8 +911,49 @@ export const ClusterProvider = () =>
       const previousDescription =
         olds?.description ?? output?.description ?? "";
       const nextDescription = news.description ?? previousDescription;
+      const previousServiceAccount = olds?.serviceAccount ?? "";
+      const nextServiceAccount = news.serviceAccount ?? previousServiceAccount;
+      const previousOauthScopes = olds?.oauthScopes ?? [];
+      const nextOauthScopes = news.oauthScopes ?? previousOauthScopes;
+      const ipAllocationChanged =
+        olds !== undefined
+          ? !deepEqual(
+              desiredIpAllocationPolicy(olds.ipAllocationPolicy),
+              desiredIpAllocationPolicy(news.ipAllocationPolicy),
+              { stripNullish: true },
+            )
+          : output !== undefined &&
+            !matchesDesired(
+              output.ipAllocationPolicy,
+              desiredIpAllocationPolicy(news.ipAllocationPolicy),
+            );
+      const privateTopologyChanged =
+        news.privateClusterConfig !== undefined &&
+        (olds !== undefined
+          ? !deepEqual(
+              privateTopology(olds.privateClusterConfig),
+              privateTopology(news.privateClusterConfig),
+            )
+          : output !== undefined &&
+            !matchesDesired(
+              privateTopology(output.privateClusterConfig),
+              privateTopology(news.privateClusterConfig),
+            ));
+      // Bootstrap-pool props only describe GKE's `default-pool`. When it is
+      // removed after create (either before or after the change), they no
+      // longer describe any live node and must not replace the cluster.
+      const bootstrapPoolKept =
+        news.removeDefaultNodePool !== true &&
+        olds?.removeDefaultNodePool !== true;
+      // GKE only creates `default-pool` at cluster creation, so turning
+      // `removeDefaultNodePool` back off can only be honored by replacing.
+      const bootstrapPoolRestored =
+        !nextAutopilot &&
+        olds?.removeDefaultNodePool === true &&
+        news.removeDefaultNodePool !== true;
       const nodeShapeChanged =
         !nextAutopilot &&
+        bootstrapPoolKept &&
         olds !== undefined &&
         ((olds.initialNodeCount ?? DEFAULT_NODE_COUNT) !==
           (news.initialNodeCount ?? DEFAULT_NODE_COUNT) ||
@@ -733,7 +964,10 @@ export const ClusterProvider = () =>
           (olds.diskType ?? DEFAULT_DISK_TYPE).toLowerCase() !==
             (news.diskType ?? DEFAULT_DISK_TYPE).toLowerCase() ||
           (olds.spot === true) !== (news.spot === true) ||
-          (olds.preemptible === true) !== (news.preemptible === true));
+          (olds.preemptible === true) !== (news.preemptible === true) ||
+          previousServiceAccount !== nextServiceAccount ||
+          (news.oauthScopes !== undefined &&
+            !sameStrings(previousOauthScopes, nextOauthScopes)));
 
       const replace =
         (previousId !== undefined &&
@@ -745,9 +979,22 @@ export const ClusterProvider = () =>
         previousSubnetwork !== nextSubnetwork ||
         previousAlpha !== nextAlpha ||
         previousDescription !== nextDescription ||
+        ipAllocationChanged ||
+        privateTopologyChanged ||
+        bootstrapPoolRestored ||
         nodeShapeChanged;
 
       if (!replace) return undefined;
+      // A replacement destroys the old cluster, and `delete` is driven by the
+      // OLD props — so planning one here would create the replacement and then
+      // strand it behind ClusterDeletionProtected. Fail at plan time instead.
+      // (Adoption carries no persisted props; the delete-side guard is the
+      // backstop there.)
+      if (olds?.deletionProtection === true) {
+        return yield* new ClusterDeletionProtected({
+          name: output?.name ?? previousId ?? nextId ?? "",
+        });
+      }
       return {
         action: "replace" as const,
         deleteFirst:
@@ -849,6 +1096,15 @@ export const ClusterProvider = () =>
         live = yield* waitUntilReady(name);
       }
 
+      if (!autopilot && news.removeDefaultNodePool === true) {
+        const deleted = yield* ensureDefaultPoolRemoved(
+          env.project,
+          location,
+          name,
+        );
+        if (deleted) live = yield* waitUntilReady(name);
+      }
+
       const observedLabels = tagRecord(live.resourceLabels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
@@ -869,9 +1125,18 @@ export const ClusterProvider = () =>
         news.loggingService !== undefined &&
         (live.loggingService ?? "") !== news.loggingService
       ) {
-        const logged = yield* container.setLoggingProjectsLocationsClusters({
+        // GKE refuses a logging change that would "implicitly change the
+        // monitoring service"; pin monitoring to the desired or observed
+        // value in the same update.
+        const logged = yield* container.updateProjectsLocationsClusters({
           name,
-          body: { loggingService: news.loggingService },
+          body: {
+            update: {
+              desiredLoggingService: news.loggingService,
+              desiredMonitoringService:
+                news.monitoringService ?? live.monitoringService,
+            },
+          },
         });
         yield* waitForOperation(env.project, location, logged);
         live = yield* waitUntilReady(name);
@@ -895,31 +1160,131 @@ export const ClusterProvider = () =>
       const desiredLocations = news.nodeLocations;
       const locationsChanged =
         desiredLocations !== undefined &&
-        !sameLocations(live.locations ?? [], desiredLocations);
+        !sameStrings(live.locations ?? [], desiredLocations);
       const channelChanged =
         desiredChannel.length > 0 && desiredChannel !== observedChannel;
 
-      if (channelChanged || locationsChanged) {
-        const update: container.ClusterUpdate = {};
-        if (channelChanged) {
-          update.desiredReleaseChannel = {
-            channel: desiredChannel as container.ReleaseChannelChannelEnum,
-          };
-        }
-        if (locationsChanged) {
-          update.desiredLocations = desiredLocations;
-        }
-        const updated = yield* container.updateProjectsLocationsClusters({
-          name,
-          body: { update },
+      const applyUpdate = (update: container.ClusterUpdate) =>
+        Effect.gen(function* () {
+          const updated = yield* container.updateProjectsLocationsClusters({
+            name,
+            body: { update },
+          });
+          yield* waitForOperation(env.project, location, updated);
+          return yield* waitUntilReady(name);
         });
-        yield* waitForOperation(env.project, location, updated);
-        live = yield* waitUntilReady(name);
+
+      if (channelChanged) {
+        live = yield* applyUpdate({
+          desiredReleaseChannel: {
+            channel: desiredChannel as container.ReleaseChannelChannelEnum,
+          },
+        });
+      }
+      if (locationsChanged) {
+        live = yield* applyUpdate({ desiredLocations });
+      }
+
+      if (
+        news.masterAuthorizedNetworksConfig !== undefined &&
+        !matchesDesired(
+          live.masterAuthorizedNetworksConfig,
+          news.masterAuthorizedNetworksConfig,
+        )
+      ) {
+        live = yield* applyUpdate({
+          desiredMasterAuthorizedNetworksConfig:
+            news.masterAuthorizedNetworksConfig,
+        });
+      }
+
+      const desiredPrivateEndpoint =
+        news.privateClusterConfig?.enablePrivateEndpoint;
+      if (
+        desiredPrivateEndpoint !== undefined &&
+        !matchesDesired(live.privateClusterConfig, {
+          enablePrivateEndpoint: desiredPrivateEndpoint,
+        })
+      ) {
+        live = yield* applyUpdate({
+          desiredEnablePrivateEndpoint: desiredPrivateEndpoint,
+        });
+      }
+
+      const desiredMasterGlobalAccess =
+        news.privateClusterConfig?.masterGlobalAccessConfig;
+      if (
+        desiredMasterGlobalAccess !== undefined &&
+        !matchesDesired(
+          live.privateClusterConfig?.masterGlobalAccessConfig,
+          desiredMasterGlobalAccess,
+        )
+      ) {
+        live = yield* applyUpdate({
+          desiredPrivateClusterConfig: {
+            masterGlobalAccessConfig: desiredMasterGlobalAccess,
+          },
+        });
+      }
+
+      if (
+        news.enableShieldedNodes !== undefined &&
+        (live.shieldedNodes?.enabled === true) !== news.enableShieldedNodes
+      ) {
+        live = yield* applyUpdate({
+          desiredShieldedNodes: { enabled: news.enableShieldedNodes },
+        });
+      }
+
+      if (
+        news.addonsConfig !== undefined &&
+        !matchesDesired(live.addonsConfig, news.addonsConfig)
+      ) {
+        live = yield* applyUpdate({ desiredAddonsConfig: news.addonsConfig });
+      }
+
+      if (
+        news.datapathProvider !== undefined &&
+        // GKE omits the proto3 default, so an unset provider is LEGACY.
+        (live.networkConfig?.datapathProvider ?? "LEGACY_DATAPATH") !==
+          news.datapathProvider
+      ) {
+        live = yield* applyUpdate({
+          desiredDatapathProvider:
+            news.datapathProvider as container.ClusterUpdateDesiredDatapathProviderEnum,
+        });
+      }
+
+      if (
+        news.loggingConfig !== undefined &&
+        !matchesDesired(live.loggingConfig, news.loggingConfig)
+      ) {
+        live = yield* applyUpdate({
+          desiredLoggingConfig: news.loggingConfig,
+        });
+      }
+
+      if (
+        news.monitoringConfig !== undefined &&
+        !matchesDesired(live.monitoringConfig, news.monitoringConfig)
+      ) {
+        live = yield* applyUpdate({
+          desiredMonitoringConfig: news.monitoringConfig,
+        });
+      }
+
+      if (
+        news.costManagementConfig !== undefined &&
+        !matchesDesired(live.costManagementConfig, news.costManagementConfig)
+      ) {
+        live = yield* applyUpdate({
+          desiredCostManagementConfig: news.costManagementConfig,
+        });
       }
 
       const observedPool = live.workloadIdentityConfig?.workloadPool ?? "";
       if (observedPool !== desiredPool) {
-        const identified = yield* container.updateProjectsLocationsClusters({
+        const updated = yield* container.updateProjectsLocationsClusters({
           name,
           body: {
             update: {
@@ -927,7 +1292,7 @@ export const ClusterProvider = () =>
             },
           },
         });
-        yield* waitForOperation(env.project, location, identified);
+        yield* waitForOperation(env.project, location, updated);
         live = yield* waitUntilReady(name);
       }
 
@@ -940,7 +1305,10 @@ export const ClusterProvider = () =>
       return { ...attrs, kubernetesObjects };
     }),
 
-    delete: Effect.fn(function* ({ output }) {
+    delete: Effect.fn(function* ({ olds, output, force }) {
+      if (olds.deletionProtection === true && force !== true) {
+        return yield* new ClusterDeletionProtected({ name: output.name });
+      }
       if ((output.kubernetesObjects ?? []).length > 0) {
         yield* deleteObjects({
           transport: yield* getKubernetesTransport(output),
@@ -949,12 +1317,16 @@ export const ClusterProvider = () =>
       }
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(output.location);
+      yield* waitUntilSettled(output.name);
       const operation = yield* container
         .deleteProjectsLocationsClusters({ name: output.name })
         .pipe(
           Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
           Effect.retry({
-            while: (error) => error._tag === "Conflict",
+            while: (error) =>
+              error._tag === "Conflict" ||
+              (error._tag === "BadRequest" &&
+                /incompatible operation/i.test(error.message)),
             times: 8,
             schedule: Schedule.spaced("5 seconds"),
           }),

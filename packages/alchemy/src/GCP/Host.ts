@@ -6,6 +6,7 @@ import {
   type ResourceBinding,
   type ResourceLike,
 } from "../Resource.ts";
+import { grantProjectMembers } from "./IAM/IamMember.ts";
 
 /**
  * IAM grant attached to a GCP runtime host (Cloud Run Service/Job or
@@ -159,47 +160,16 @@ const memberOf = (email: string) =>
   email.startsWith("serviceAccount:") ? email : `serviceAccount:${email}`;
 
 /**
- * Grant `roles` to `member` on the GCP project (read-modify-write of
- * `projects.setIamPolicy`). Empty `roles` is a no-op.
+ * Grant `roles` to `member` on the GCP project. Delegates to the single
+ * policy-mutation path in `IamMember.ts` (per-resource lock, etag-conflict
+ * and IAM-propagation retries, conditional bindings left alone). Empty
+ * `roles` is a no-op.
  */
 export const grantProjectIam = (
   project: string,
   member: string,
   roles: readonly string[],
-) => {
-  const unique = [...new Set(roles.filter((role) => role.length > 0))];
-  if (unique.length === 0) return Effect.void;
-  const principal = memberOf(member);
-  const resource = `projects/${project}`;
-  return Effect.gen(function* () {
-    const policy = yield* resourcemanager.getIamPolicyProjects({ resource });
-    const bindings = [...(policy.bindings ?? [])];
-    let dirty = false;
-    for (const role of unique) {
-      const existing = bindings.find((binding) => binding.role === role);
-      if (existing === undefined) {
-        bindings.push({ role, members: [principal] });
-        dirty = true;
-        continue;
-      }
-      const members = existing.members ?? [];
-      if (!members.includes(principal)) {
-        existing.members = [...members, principal];
-        dirty = true;
-      }
-    }
-    if (!dirty) return;
-    yield* resourcemanager.setIamPolicyProjects({
-      resource,
-      body: {
-        policy: {
-          ...policy,
-          bindings,
-        },
-      },
-    });
-  });
-};
+) => grantProjectMembers(project, memberOf(member), roles);
 
 /**
  * Apply collected host bindings: merge env, grant IAM to the runtime
