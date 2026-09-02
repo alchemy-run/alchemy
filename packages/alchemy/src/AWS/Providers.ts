@@ -1043,7 +1043,12 @@ export const providers = () =>
             ApiGateway.UsagePlanKeyProvider(),
           ),
           flociDual(ApiGateway.VpcLink, () => ApiGateway.VpcLinkProvider()),
-          flociDual(ApiGatewayV2.Api, () => ApiGatewayV2.ApiProvider()),
+          flociDual(ApiGatewayV2.Api, () => ApiGatewayV2.ApiProvider(), {
+            ingress: {
+              type: "AWS.ApiGatewayV2.Api",
+              upstream: (attrs) => attrs.apiEndpoint || undefined,
+            },
+          }),
           ApiGatewayV2.ApiMappingProvider(),
           flociDual(ApiGatewayV2.AuthorizerResource, () =>
             ApiGatewayV2.AuthorizerProvider(),
@@ -1136,8 +1141,17 @@ export const providers = () =>
           flociDual(CloudFront.CachePolicy, () =>
             CloudFront.CachePolicyProvider(),
           ),
-          flociDual(CloudFront.Distribution, () =>
-            CloudFront.DistributionProvider(),
+          flociDual(
+            CloudFront.Distribution,
+            () => CloudFront.DistributionProvider(),
+            // The emulated edge serves each distribution on a local port;
+            // put it on `<name>.<domain>` (and a tunnel) like a Worker.
+            {
+              ingress: {
+                type: "AWS.CloudFront.Distribution",
+                upstream: (attrs) => attrs.url,
+              },
+            },
           ),
           flociDual(CloudFront.Function, () => CloudFront.FunctionProvider()),
           flociDual(CloudFront.Invalidation, () =>

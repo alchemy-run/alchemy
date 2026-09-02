@@ -7,6 +7,10 @@ import type { RegionName } from "@distilled.cloud/aws/Region";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
+import {
+  provideDevIngress,
+  type IngressExposure,
+} from "../../Local/DevIngressClient.ts";
 import * as ProviderLayer from "../../Local/ProviderLayer.ts";
 import type { Platform } from "../../Platform.ts";
 import type { ResourceClassLike, ResourceLike } from "../../Resource.ts";
@@ -98,10 +102,22 @@ export const flociDual = <
     | Platform<R, any, any, any, any>
     | { Type: R["Type"] },
   live: () => L,
+  options?: {
+    /**
+     * Expose the emulated resource's HTTP surface through the `alchemy dev`
+     * ingress (`<name>.<domain>`, optional quick tunnel) — see
+     * `Local/DevIngressClient.ts`. Attributes are left untouched.
+     */
+    readonly ingress?: IngressExposure<R["Attributes"]>;
+  },
 ) =>
   ProviderLayer.dual(cls, {
     live,
-    local: () => provideProviderContext(live(), flociServices()),
+    local: () =>
+      provideProviderContext(
+        options?.ingress ? provideDevIngress(live(), options.ingress) : live(),
+        flociServices(),
+      ),
     // Registered as the resource's local data plane so deploy-time binding
     // clients (Action bodies, plan-time `execute`) route their API calls to
     // the emulator whenever the bound resource resolves to local mode.
