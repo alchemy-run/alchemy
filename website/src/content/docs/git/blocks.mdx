@@ -147,9 +147,15 @@ timings vary run to run by about a fifth.
 | layer | parallelism | memory | leaves Cloudflare | extra cost | loose push | synthetic push |
 | --- | --- | --- | --- | --- | --- | --- |
 | `HasherInline` | none | the Worker's | no | none | 9.9–13.5 s | 8.8 s |
-| `HasherWorkerLoader` | 4 isolates | 128 MB each | no | none | 7.1–7.8 s | 6.8 s |
+| `HasherWorkerLoader` | 4 isolates | 128 MB each | no | none | 5.9–7.2 s | 4.8–6.4 s |
 | `HasherLambda` | one Lambda per 4 MiB chunk | 3 GB each | yes | Lambda-seconds, egress | 6.8–7.9 s | 6.3–6.7 s |
 | GitHub | | | | | 3.3 s | 4.6 s |
+
+The loader numbers include the later push-path work every layer
+shares — deltas resolved as hasher jobs, delta-resolved blobs promoted
+into a resolved pack, and a commit that no longer rewrites every staged
+row — so the Lambda row would move down with it. Best runs are the
+honest server-side comparison; the spread is the client's uplink.
 
 Incremental pushes are 0.2–0.4 s on every layer (GitHub: 1.2 s); the
 choice only matters for pushes of tens of megabytes. Start with

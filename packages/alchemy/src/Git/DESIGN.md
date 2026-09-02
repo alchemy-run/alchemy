@@ -2037,3 +2037,27 @@ flip never ran. A new push may adopt rows only from pushes that are not
 committed, so a committed-unflipped row is never re-staged (and then
 GC'd) out from under a live object. Finalize on the delta-heavy push:
 0.7 s → the refs and graph alone; locally 50 ms → 2 ms.
+
+### §22.15 Where the sweep stands
+
+Same pushes and client; three runs each on the loader hasher after
+§22.13–14, best and median (the spread is the client's uplink — the
+route's own total is 3.4–3.9 s for the loose push and 2.2–3.6 s for the
+synthetic one):
+
+| | loose push | synthetic push |
+| --- | --- | --- |
+| GitHub (fresh repo) | 3.3 s | 4.6 s |
+| start of the sweep | 63.6 s | — |
+| `HasherWorkerLoader`, §22.12 | 7.1–7.8 s | 6.8 s |
+| + delta jobs, resolved pack, lazy flip, batched graph, edge-only connectivity | **5.9 s best, 6.5 s median** | **4.8 s best, 6.4 s median** |
+
+The whole-blob push meets GitHub on a good run. The delta-heavy push is
+2.6 s behind on its best run, and the route's remaining time is the
+hashing waves — ten 4 MiB chunks over four isolates, the third wave
+landing a second after the body — plus the delta rounds (0.2–0.4 s),
+the resolved pack's late write and the commit round trip (0.5–0.7 s).
+The next lever for it is more than four hashers per push: a loaded
+hasher can hold a loader binding of its own and fan a chunk out a
+second time, or a push can split its chunks across the loader and a
+Lambda. Neither is built here.
