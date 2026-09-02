@@ -25,6 +25,7 @@ import {
   AuthTokens,
   BlobStoreR2,
   GIT_WORKER_OPTIONS,
+  HasherSelf,
   ReposDurableObject,
   RegistryDurableObject,
   Server,
@@ -56,6 +57,7 @@ const GitLive = ServerLive.pipe(
   Layer.provide(ReposDurableObject),
   Layer.provide(RegistryDurableObject),
   Layer.provide(BlobStoreR2(GitObjects)),
+  Layer.provide(HasherSelf),
   Layer.provide(AuthTokens),
 );
 

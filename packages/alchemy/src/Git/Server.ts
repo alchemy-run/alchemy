@@ -114,6 +114,8 @@ import {
 } from "./git/ObjectCodec.ts";
 import { decodePktLines, flushPkt, pktText } from "./git/Pkt.ts";
 import { progressMessage, pumpPackBody, wrapSideband } from "./git/Sideband.ts";
+import { encodeScanResult, HASH_ROUTE, HASHER_BINDING } from "./Hasher.ts";
+import { scanPart } from "./git/PartialScan.ts";
 import type { StoreError } from "./git/Store.ts";
 import {
   ADMIN_HEADER,
@@ -346,6 +348,9 @@ export const GIT_WORKER_OPTIONS = {
     date: "2026-03-17",
   },
   limits: { cpuMs: 300_000 },
+  // The push pipeline hashes each spilled part in a fresh isolate of this
+  // same script through a self service binding (DESIGN §22.7, Hasher.ts).
+  env: { [HASHER_BINDING]: Cloudflare.Workers.Self },
 };
 
 const make = Effect.gen(function* () {
@@ -1775,11 +1780,48 @@ const make = Effect.gen(function* () {
     stub: (repoId) => repos.getByName(repoId),
   });
 
+  /**
+   * The push pipeline's hashing endpoint (DESIGN §22.7): a spilled part (plus
+   * carry) in the body, coordinates in the query; the scan result in the
+   * binary form `Hasher.ts` decodes. Internal: admin-authenticated, reached
+   * through the self service binding.
+   */
+  const hashPartRoute = Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const actor = yield* authService.authenticate(request.headers);
+    if (actor.kind !== "admin") {
+      return HttpServerResponse.text("forbidden", { status: 403 });
+    }
+    const query = new URL(request.url, "http://x").searchParams;
+    const base = Number(query.get("base"));
+    const remaining = Number(query.get("remaining"));
+    const maxObjectSize = Number(query.get("max"));
+    if (![base, remaining, maxObjectSize].every(Number.isFinite)) {
+      return HttpServerResponse.text("bad coordinates", { status: 400 });
+    }
+    const payload = new Uint8Array(yield* request.arrayBuffer);
+    const result = yield* scanPart(payload, {
+      base,
+      remaining,
+      maxObjectSize,
+    }).pipe(Effect.result);
+    if (Result.isFailure(result)) {
+      return HttpServerResponse.text(
+        `${result.failure._tag}: ${"reason" in result.failure ? result.failure.reason : ""}`,
+        { status: 422 },
+      );
+    }
+    return HttpServerResponse.uint8Array(encodeScanResult(result.success), {
+      contentType: "application/octet-stream",
+    });
+  });
+
   const rawRoutes = Layer.mergeAll(
     githubRoutes,
     HttpRouter.add("GET", "/:owner/:repo/info/refs", wireProxy),
     HttpRouter.add("POST", "/:owner/:repo/git-upload-pack", wireProxy),
     HttpRouter.add("POST", "/:owner/:repo/git-receive-pack", wireProxy),
+    HttpRouter.add("POST", HASH_ROUTE, hashPartRoute),
     HttpRouter.add(
       "GET",
       "/api/v1/repos/:owner/:repo/blobs/:oid/raw",

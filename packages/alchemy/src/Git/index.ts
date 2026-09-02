@@ -43,3 +43,5 @@ export {
   REGISTRY_DO_NAME,
   RESERVED_OWNERS,
 } from "./RegistryObject.ts";
+
+export { Hasher, HasherInline, HasherSelf, HASHER_BINDING } from "./Hasher.ts";

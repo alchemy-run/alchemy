@@ -160,6 +160,11 @@ export interface StagedObject {
   readonly pack?:
     | { readonly packId: string; readonly offset: number }
     | undefined;
+  /**
+   * Compressed span when `zdata` is not carried (a promoted row whose
+   * bytes live in the pack): the insert must record the real size.
+   */
+  readonly zsize?: number | undefined;
   readonly type: ObjectType;
   /** Uncompressed content size in bytes. */
   readonly size: number;
@@ -908,7 +913,7 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
                 object.oid,
                 object.type,
                 object.size,
-                object.zdata.byteLength,
+                object.zsize ?? object.zdata.byteLength,
                 object.pack!.packId,
                 object.pack!.offset,
                 pushId,

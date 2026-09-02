@@ -20,6 +20,8 @@
  */
 import { RuntimeContext } from "../../RuntimeContext.ts";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
+import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import type {
   BlobMultipart,
@@ -38,6 +40,8 @@ export const HEAD_BYTES = 1024 * 1024;
  * the pre-spill buffer, and R2's 10,000-part limit still allows ~78 GiB.
  */
 export const SPILL_PART_BYTES = 8 * 1024 * 1024;
+/** Spill parts in flight at once (DESIGN §22.7). */
+export const UPLOAD_CONCURRENCY = 3;
 
 /** Result of {@link receiveWireBody}. */
 export interface ReceivedWireBody {
@@ -213,9 +217,11 @@ export const receiveWireBodyStreaming = <E>(
     let total = 0;
     let upload: BlobMultipart | undefined;
     let nextPart = 1;
+    const inFlight: Array<Fiber.Fiber<void, StoreError>> = [];
     const asStoreError = (stage: string) => (error: BlobStoreError) =>
       new StoreError({ reason: `incoming body ${stage}: ${error.reason}` });
     return Effect.gen(function* () {
+      const uploadGate = yield* Semaphore.make(UPLOAD_CONCURRENCY);
       yield* Stream.runForEach(
         stream.pipe(
           Stream.mapError(
@@ -248,9 +254,19 @@ export const receiveWireBodyStreaming = <E>(
               return;
             }
             while (queue.size >= partBytes) {
-              yield* upload
-                .uploadPart(nextPart++, queue.pop(partBytes))
-                .pipe(Effect.mapError(asStoreError("upload part")));
+              // Parts upload concurrently with reading (bounded), so an
+              // R2 round trip never stalls the request body.
+              const fiber = yield* Effect.forkChild(
+                Semaphore.withPermits(
+                  uploadGate,
+                  1,
+                )(
+                  upload
+                    .uploadPart(nextPart++, queue.pop(partBytes))
+                    .pipe(Effect.mapError(asStoreError("upload part"))),
+                ),
+              );
+              inFlight.push(fiber);
             }
           }),
       );
@@ -263,6 +279,7 @@ export const receiveWireBodyStreaming = <E>(
           .uploadPart(nextPart++, queue.pop(queue.size))
           .pipe(Effect.mapError(asStoreError("upload part")));
       }
+      for (const fiber of inFlight) yield* Fiber.join(fiber);
       yield* upload.complete.pipe(Effect.mapError(asStoreError("complete")));
       options.feeder.setFallback(
         blobRandomAccess({

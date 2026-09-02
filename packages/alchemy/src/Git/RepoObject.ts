@@ -140,6 +140,8 @@ import {
 } from "./store/PackSource.ts";
 import { HEAD_BYTES, receiveWireBodyStreaming } from "./store/IncomingBody.ts";
 import { makeStreamingSource } from "./store/StreamingSource.ts";
+import { Hasher, type HasherShape } from "./Hasher.ts";
+import type { UnresolvedDelta } from "./git/PartialScan.ts";
 import { BlobStore, type BlobStoreShape } from "./BlobStore.ts";
 import { runPurgeJob } from "./jobs/Purge.ts";
 import { RegistryStore, ulid } from "./RegistryObject.ts";
@@ -192,6 +194,9 @@ export const MAX_PACK_BYTES = 4 * 1024 * 1024;
 // motivated it; the R2 path costs ~2x on the bytes above the threshold.
 
 /** Objects staged per SQL transaction during ingest (DESIGN.md §16.6). */
+/** Bytes per hasher part — the spill part size, so a part is one R2 part (DESIGN §22.7). */
+export const HASH_PART_BYTES = 8 * 1024 * 1024;
+
 export const STAGE_BATCH_OBJECTS = 2048;
 // 2048 (was 256): measured on production, staging cost tracked the number
 // of transaction COMMITs (~100 ms each), not rows — 61 commits for a
@@ -1313,6 +1318,14 @@ export interface IngestOptions {
     | (() => { readonly packId: string; readonly base: number } | undefined)
     | undefined;
   /**
+   * When set, entries are inflated and hashed by the hasher service one
+   * spilled part at a time (DESIGN §22.7) instead of by the in-process
+   * parser; the DO only pumps bytes and stages rows.
+   */
+  readonly hasher?: HasherShape | undefined;
+  /** Bytes per hasher part (tests shrink it). @default HASH_PART_BYTES */
+  readonly partBytes?: number | undefined;
+  /**
    * Shallow-import mode: commit parents may be absent (they become walk
    * boundaries); trees/blobs/tags must still be fully connected.
    */
@@ -1419,12 +1432,19 @@ export const ingestPackFrom = (
     // becomes a wire pack once it crosses the spill threshold, but the wire
     // object holds the body from byte 0, so entries buffered before that
     // moment can still be promoted when the flush happens after it.
-    let batch: Array<
-      StagedObject & {
-        readonly dataOffset: number;
-        readonly fromDelta: boolean;
-      }
-    > = [];
+    /** What the parser or the hasher hands over per entry. */
+    interface Incoming {
+      readonly oid: Oid;
+      readonly type: ObjectType;
+      readonly size: number;
+      /** Absent for hasher-scanned non-delta entries: read from the source if the row stays inline. */
+      readonly zdata?: Uint8Array | undefined;
+      readonly span?: number | undefined;
+      readonly dataOffset: number;
+      readonly fromDelta: boolean;
+      readonly content?: Uint8Array | undefined;
+    }
+    let batch: Array<Incoming> = [];
     let batchBytes = 0;
     let promoted = 0;
     /** Time spent in SQL staging; the rest of ingest is CPU. */
@@ -1435,7 +1455,8 @@ export const ingestPackFrom = (
       batch = [];
       batchBytes = 0;
       const target = options.promote?.();
-      const staged: Array<StagedObject> = pending.map((entry) => {
+      const staged: Array<StagedObject> = [];
+      for (const entry of pending) {
         const pack =
           target !== undefined &&
           !entry.fromDelta &&
@@ -1444,14 +1465,24 @@ export const ingestPackFrom = (
             ? { packId: target.packId, offset: target.base + entry.dataOffset }
             : undefined;
         if (pack !== undefined) promoted += 1;
-        return {
+        // A promoted row needs no bytes; an inline row needs its zdata —
+        // the hasher path did not ship it, so read the span back.
+        const zdata =
+          entry.zdata ??
+          (pack === undefined
+            ? Uint8Array.from(
+                yield* source.read(entry.dataOffset, entry.span ?? 0),
+              )
+            : new Uint8Array(0));
+        staged.push({
           oid: entry.oid,
           type: entry.type,
           size: entry.size,
-          zdata: entry.zdata,
+          zdata,
+          zsize: entry.zdata?.byteLength ?? entry.span,
           pack,
-        };
-      });
+        });
+      }
       const at = yield* Effect.sync(() => performance.now());
       yield* store.insertStagedBatch(pushId, staged);
       stageMs += yield* Effect.sync(() => performance.now() - at);
@@ -1463,20 +1494,13 @@ export const ingestPackFrom = (
      * synchronous fast path hands over up to SINK_BATCH non-delta entries
      * per fiber hop; delta-resolved entries arrive one at a time.
      */
-    const stage = (entries: ReadonlyArray<PackParser.ResolvedEntry>) =>
+    const stage = (entries: ReadonlyArray<Incoming>) =>
       Effect.gen(function* () {
         for (const entry of entries) {
-          batch.push({
-            oid: entry.oid,
-            type: entry.type,
-            size: entry.size,
-            zdata: entry.zdata,
-            dataOffset: entry.dataOffset,
-            fromDelta: entry.fromDelta,
-          });
+          batch.push(entry);
           // Counted as inline until the flush decides; promoted rows carry
           // no BLOB, so this over-counts — safe for a memory cap.
-          batchBytes += entry.zdata.byteLength;
+          batchBytes += entry.zdata?.byteLength ?? entry.span ?? 0;
           if (
             batch.length >= STAGE_BATCH_OBJECTS ||
             batchBytes >= STAGE_BATCH_BYTES
@@ -1484,24 +1508,254 @@ export const ingestPackFrom = (
             yield* flush();
           }
           if (entry.type !== ObjectType.blob) {
+            if (entry.content === undefined) {
+              return yield* new PackIngestError({
+                reason: `no content for ${entry.oid} (type ${entry.type})`,
+              });
+            }
             yield* record(entry.oid, entry.type, entry.content);
           }
         }
       });
-    const summary = yield* PackParser.ingestPack({
-      source,
-      store,
-      maxObjectSize: MAX_OBJECT_SIZE,
-      phases,
-      sink: (entry) => stage([entry]),
-      sinkBatch: stage,
-    }).pipe(
-      Effect.mapError((error) =>
-        error._tag === "StoreError" || error._tag === "PackIngestError"
-          ? error
-          : new PackIngestError({ reason: packParserReason(error) }),
-      ),
-    );
+    /**
+     * The hasher pipeline (DESIGN §22.7): pump the pack in parts through
+     * the hasher; every part carries the previous part's incomplete tail.
+     * The DO's own CPU here is a memcpy, the trailer SHA-1 and staging.
+     */
+    const pumpThroughHasher = (hasher: HasherShape) =>
+      Effect.gen(function* () {
+        const partBytes = options.partBytes ?? HASH_PART_BYTES;
+        const asIngest = (error: {
+          readonly _tag: string;
+          readonly reason?: string;
+        }) =>
+          new PackIngestError({
+            reason: `${error._tag}${error.reason === undefined ? "" : `: ${error.reason}`}`,
+          });
+        const header = yield* source.read(0, 12);
+        if (
+          header.length < 12 ||
+          header[0] !== 0x50 ||
+          header[1] !== 0x41 ||
+          header[2] !== 0x43 ||
+          header[3] !== 0x4b
+        ) {
+          return yield* new PackIngestError({ reason: "bad pack magic" });
+        }
+        const count = new DataView(header.buffer, header.byteOffset).getUint32(
+          8,
+        );
+        // Trailer SHA-1 over [0, total − 20): hash with a 20-byte lag, so
+        // the last 20 bytes seen are the trailer itself.
+        const trailerSha = makeSha1();
+        let lag = new Uint8Array(0);
+        const feed = (bytes: Uint8Array) => {
+          const joined = lag.length === 0 ? bytes : concatBytes([lag, bytes]);
+          if (joined.length > 20) {
+            trailerSha.update(joined.subarray(0, joined.length - 20));
+            lag = Uint8Array.from(joined.subarray(joined.length - 20));
+          } else {
+            lag = Uint8Array.from(joined);
+          }
+        };
+        feed(header);
+        interface Known {
+          readonly oid: Oid;
+          readonly type: ObjectType;
+          readonly dataOffset: number;
+          readonly span: number;
+          readonly zdata?: Uint8Array | undefined;
+          readonly content?: Uint8Array | undefined;
+        }
+        const known = new Map<number, Known>(); // by header offset
+        const knownByOid = new Map<string, Known>();
+        const unresolved: Array<UnresolvedDelta> = [];
+        let offset = 12;
+        let consumedTo = 12;
+        let remaining = count;
+        let carry: Uint8Array = new Uint8Array(0);
+        while (remaining > 0) {
+          const chunk = yield* source.read(offset, partBytes);
+          if (chunk.length === 0) {
+            return yield* new PackIngestError({
+              reason: `truncated pack: ${remaining} of ${count} entries missing`,
+            });
+          }
+          feed(chunk);
+          const payload =
+            carry.length === 0 ? chunk : concatBytes([carry, chunk]);
+          const result = yield* hasher
+            .hashPart(payload, {
+              base: consumedTo,
+              remaining,
+              maxObjectSize: MAX_OBJECT_SIZE,
+            })
+            .pipe(Effect.mapError(asIngest));
+          const incoming: Array<Incoming> = [];
+          for (const e of result.entries) {
+            const item: Known = {
+              oid: e.oid,
+              type: e.type,
+              dataOffset: e.dataOffset,
+              span: e.span,
+              zdata: e.zdata,
+              content: e.content,
+            };
+            known.set(e.offset, item);
+            knownByOid.set(e.oid, item);
+            incoming.push({
+              oid: e.oid,
+              type: e.type,
+              size: e.size,
+              zdata: e.zdata,
+              span: e.span,
+              dataOffset: e.dataOffset,
+              fromDelta: e.zdata !== undefined,
+              content: e.content,
+            });
+          }
+          yield* stage(incoming);
+          for (const u of result.unresolved) unresolved.push(u);
+          remaining -= result.count;
+          carry = payload.subarray(result.consumedTo - consumedTo);
+          consumedTo = result.consumedTo;
+          offset += chunk.length;
+          source.release?.(consumedTo);
+          if (result.count === 0 && chunk.length < partBytes) {
+            // A short read means the body ended; nothing more can arrive.
+            return yield* new PackIngestError({
+              reason: `truncated pack entry at ${consumedTo}`,
+            });
+          }
+        }
+        const total =
+          source.awaitEnd === undefined
+            ? source.size
+            : yield* source.awaitEnd.pipe(Effect.mapError(asIngest));
+        if (consumedTo !== total - 20) {
+          return yield* new PackIngestError({
+            reason: `pack has ${total - 20 - consumedTo} unconsumed bytes after ${count} entries`,
+          });
+        }
+        if (offset < total) {
+          feed(yield* source.read(offset, total - offset));
+        }
+        if (lag.length !== 20) {
+          return yield* new PackIngestError({
+            reason: "truncated pack trailer",
+          });
+        }
+        const expected = bytesToHex(lag);
+        const actual = trailerSha.digestHex();
+        if (expected !== actual) {
+          return yield* new PackIngestError({
+            reason: `pack checksum mismatch: expected ${expected}, got ${actual}`,
+          });
+        }
+        // Cross-part and thin deltas: bases are readable now (the body has
+        // ended, so a spilled object serves any offset). Fixpoint for chains.
+        const inflateSpan = (item: Known) =>
+          item.content !== undefined
+            ? Effect.succeed(item.content)
+            : item.zdata !== undefined
+              ? Zlib.inflate(item.zdata).pipe(Effect.mapError(asIngest))
+              : source.read(item.dataOffset, item.span).pipe(
+                  Effect.flatMap((z) => Zlib.inflate(z)),
+                  Effect.mapError(asIngest),
+                );
+        let pending = unresolved;
+        while (pending.length > 0) {
+          const next: Array<UnresolvedDelta> = [];
+          for (const u of pending) {
+            let base: Known | undefined =
+              u.baseOffset !== undefined ? known.get(u.baseOffset) : undefined;
+            if (base === undefined && u.baseOid !== undefined) {
+              base = knownByOid.get(u.baseOid);
+              if (base === undefined) {
+                const meta = yield* store.getMeta(u.baseOid);
+                if (meta !== undefined) {
+                  const content = yield* store.readContent(u.baseOid);
+                  base = {
+                    oid: u.baseOid,
+                    type: meta.type,
+                    dataOffset: -1,
+                    span: 0,
+                    content,
+                  };
+                }
+              }
+            }
+            if (base === undefined) {
+              next.push(u);
+              continue;
+            }
+            const baseContent = yield* inflateSpan(base);
+            const delta = yield* source.read(u.dataOffset, u.span).pipe(
+              Effect.flatMap((z) => Zlib.inflate(z)),
+              Effect.mapError(asIngest),
+            );
+            const content = yield* applyDelta(baseContent, delta).pipe(
+              Effect.mapError(asIngest),
+            );
+            if (content.length > MAX_OBJECT_SIZE) {
+              return yield* new PackIngestError({
+                reason: `object too large: ${content.length} > ${MAX_OBJECT_SIZE}`,
+              });
+            }
+            const oid = yield* hashObject(base.type, content);
+            const zdata = yield* Zlib.deflate(content).pipe(
+              Effect.mapError(asIngest),
+            );
+            const item: Known = {
+              oid,
+              type: base.type,
+              dataOffset: u.dataOffset,
+              span: u.span,
+              zdata,
+              content: base.type === ObjectType.blob ? undefined : content,
+            };
+            known.set(u.offset, item);
+            knownByOid.set(oid, item);
+            yield* stage([
+              {
+                oid,
+                type: base.type,
+                size: content.length,
+                zdata,
+                span: u.span,
+                dataOffset: u.dataOffset,
+                fromDelta: true,
+                content: item.content,
+              },
+            ]);
+          }
+          if (next.length === pending.length) {
+            return yield* new PackIngestError({
+              reason: `delta base not found for ${next.length} entries`,
+            });
+          }
+          pending = next;
+        }
+        return { count };
+      });
+
+    const summary =
+      options.hasher !== undefined
+        ? yield* pumpThroughHasher(options.hasher)
+        : yield* PackParser.ingestPack({
+            source,
+            store,
+            maxObjectSize: MAX_OBJECT_SIZE,
+            phases,
+            sink: (entry) => stage([entry]),
+            sinkBatch: stage,
+          }).pipe(
+            Effect.mapError((error) =>
+              error._tag === "StoreError" || error._tag === "PackIngestError"
+                ? error
+                : new PackIngestError({ reason: packParserReason(error) }),
+            ),
+          );
 
     yield* flush();
 
@@ -2017,6 +2271,9 @@ export const GitRepoLive = GitRepo.make(
     // The building-blocks seam: bulk bytes live behind whatever BlobStore
     // the user's layer graph provides (R2 by default, S3, ...).
     const blobs: BlobStoreShape = yield* BlobStore;
+    // The push pipeline's hasher (DESIGN §22.7): a self-binding fan-out in
+    // production, in-process in tests without the binding.
+    const hasher = yield* Hasher;
     // The swappable auth block — same layer graph as the Worker (§3.2):
     // authorization runs here, where the actions' facts are parsed.
     const authService = yield* Auth;
@@ -3373,6 +3630,7 @@ export const GitRepoLive = GitRepo.make(
                   ingestPackFrom(source, {
                     store: objects,
                     pushId,
+                    hasher,
                     promote: () => (spill.started ? wire : undefined),
                   }),
                 );
