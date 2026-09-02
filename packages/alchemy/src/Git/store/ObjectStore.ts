@@ -150,6 +150,15 @@ export class NotImplementedError extends Schema.TaggedError<NotImplementedError>
  * (the pack's compressed span verbatim for non-delta entries; a fresh
  * `deflate(content)` for delta-resolved ones).
  */
+/**
+ * The live-object predicate (DESIGN §22.14). A push's rows are live the
+ * moment its `pushes` row is committed; the per-row `staged_push` column
+ * is nulled afterwards, off the response path (`flipPush`), and by GC as a
+ * safety net. Reads never wait for that rewrite.
+ */
+export const LIVE_OBJECTS =
+  "(staged_push IS NULL OR staged_push IN (SELECT push_id FROM pushes WHERE state = 'committed'))";
+
 export interface StagedObject {
   readonly oid: Oid;
   /**
@@ -344,7 +353,7 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
   const readRow = (oid: Oid): Effect.Effect<ZDataRow | undefined, StoreError> =>
     sql.first<ZDataRow>(
       `SELECT oid, location, zdata, r2_key, pack_id, pack_offset, zsize
-         FROM objects WHERE oid = ? AND staged_push IS NULL`,
+         FROM objects WHERE oid = ? AND ${LIVE_OBJECTS}`,
       oid,
     );
 
@@ -514,7 +523,7 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
       }
       const rows = yield* sql.inChunks<ObjectMetaRow>(
         (ph) =>
-          `SELECT oid, type, size, zsize, location FROM objects WHERE oid IN (${ph}) AND staged_push IS NULL`,
+          `SELECT oid, type, size, zsize, location FROM objects WHERE oid IN (${ph}) AND ${LIVE_OBJECTS}`,
         unique,
       );
       for (const row of rows) {
@@ -616,7 +625,7 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
     has: (oid) =>
       sql
         .first<{ one: number }>(
-          `SELECT 1 AS one FROM objects WHERE oid = ? AND staged_push IS NULL`,
+          `SELECT 1 AS one FROM objects WHERE oid = ? AND ${LIVE_OBJECTS}`,
           oid,
         )
         .pipe(Effect.map((row) => row !== undefined)),
@@ -629,7 +638,7 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
         }
         const rows = yield* sql.inChunks<{ oid: string }>(
           (ph) =>
-            `SELECT oid FROM objects WHERE oid IN (${ph}) AND staged_push IS NULL`,
+            `SELECT oid FROM objects WHERE oid IN (${ph}) AND ${LIVE_OBJECTS}`,
           unique,
         );
         return rows.map((row) => row.oid);
@@ -638,7 +647,7 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
     getMeta: (oid) =>
       Effect.gen(function* () {
         const row = yield* sql.first<ObjectMetaRow>(
-          `SELECT oid, type, size, zsize, location FROM objects WHERE oid = ? AND staged_push IS NULL`,
+          `SELECT oid, type, size, zsize, location FROM objects WHERE oid = ? AND ${LIVE_OBJECTS}`,
           oid,
         );
         if (row === undefined) {
@@ -664,7 +673,7 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
         const rows = yield* sql.inChunks<ZDataRow>(
           (ph) =>
             `SELECT oid, location, zdata, r2_key, pack_id, pack_offset, zsize
-               FROM objects WHERE oid IN (${ph}) AND staged_push IS NULL`,
+               FROM objects WHERE oid IN (${ph}) AND ${LIVE_OBJECTS}`,
           unique,
         );
         const inflate = (z: Uint8Array) =>
@@ -724,7 +733,7 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
                 zdata: ArrayBuffer | null;
               }>(
                 (ph) =>
-                  `SELECT oid, zdata FROM objects WHERE oid IN (${ph}) AND staged_push IS NULL`,
+                  `SELECT oid, zdata FROM objects WHERE oid IN (${ph}) AND ${LIVE_OBJECTS}`,
                 run.map((entry) => entry.oid),
               );
               const zdataOf = new Map(rows.map((row) => [row.oid, row.zdata]));
@@ -763,7 +772,7 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
               zsize: number;
             }>(
               (ph) =>
-                `SELECT oid, pack_id, pack_offset, zsize FROM objects WHERE oid IN (${ph}) AND staged_push IS NULL`,
+                `SELECT oid, pack_id, pack_offset, zsize FROM objects WHERE oid IN (${ph}) AND ${LIVE_OBJECTS}`,
               packList.map((entry) => entry.oid),
             );
             coords.sort(
@@ -930,7 +939,8 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
           yield* sql.inChunks(
             (ph) =>
               `UPDATE objects SET staged_push = ? WHERE oid IN (${ph})
-                 AND staged_push IS NOT NULL AND staged_push != ?`,
+                 AND staged_push IS NOT NULL AND staged_push != ?
+                 AND staged_push NOT IN (SELECT push_id FROM pushes WHERE state = 'committed')`,
             sorted.map((object) => object.oid),
             { prefix: [pushId], suffix: [pushId] },
           );
@@ -986,7 +996,8 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
       yield* sql.inChunks(
         (ph) =>
           `UPDATE objects SET staged_push = ? WHERE oid IN (${ph})
-             AND staged_push IS NOT NULL AND staged_push != ?`,
+             AND staged_push IS NOT NULL AND staged_push != ?
+             AND staged_push NOT IN (SELECT push_id FROM pushes WHERE state = 'committed')`,
         inline.map((object) => object.oid),
         { prefix: [pushId], suffix: [pushId] },
       );
@@ -1001,7 +1012,7 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
         }
         const rows = yield* sql.inChunks<{ oid: string }>(
           (ph) =>
-            `SELECT oid FROM objects WHERE oid IN (${ph}) AND (staged_push IS NULL OR staged_push = ?)`,
+            `SELECT oid FROM objects WHERE oid IN (${ph}) AND (${LIVE_OBJECTS} OR staged_push = ?)`,
           unique,
           { suffix: [pushId] },
         );

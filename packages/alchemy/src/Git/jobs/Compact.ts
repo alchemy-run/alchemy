@@ -1,3 +1,4 @@
+import { LIVE_OBJECTS } from "../store/ObjectStore.ts";
 /**
  * The compaction alarm job (DESIGN.md §12.1) — the v2 storage plane.
  *
@@ -150,7 +151,7 @@ export const runCompactJob = (
     // Oldest-first by oid keeps runs deterministic and re-runnable.
     const rows = yield* options.sql.all<LooseRow>(
       `SELECT oid, type, size, zsize, zdata FROM objects
-        WHERE location = 'row' AND type = ${BLOB_TYPE} AND staged_push IS NULL
+        WHERE location = 'row' AND type = ${BLOB_TYPE} AND ${LIVE_OBJECTS}
         ORDER BY oid LIMIT ?`,
       maxObjects + 1,
     );
@@ -229,7 +230,7 @@ export const runCompactJob = (
           raw.exec(
             `UPDATE objects
                 SET location = 'pack', pack_id = ?, pack_offset = ?, zdata = NULL
-              WHERE oid = ? AND location = 'row' AND staged_push IS NULL`,
+              WHERE oid = ? AND location = 'row' AND ${LIVE_OBJECTS}`,
             packId,
             placement.offset + header.length,
             placement.oid,
@@ -260,7 +261,7 @@ export const shouldCompact = (
   Effect.gen(function* () {
     const row = yield* sql.first<{ n: number; bytes: number }>(
       `SELECT COUNT(*) AS n, COALESCE(SUM(zsize), 0) AS bytes
-         FROM objects WHERE location = 'row' AND type = ${BLOB_TYPE} AND staged_push IS NULL`,
+         FROM objects WHERE location = 'row' AND type = ${BLOB_TYPE} AND ${LIVE_OBJECTS}`,
     );
     if (row === undefined) return false;
     return (

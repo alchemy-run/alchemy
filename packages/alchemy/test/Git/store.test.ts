@@ -433,6 +433,56 @@ describe("insertStagedBatch", () => {
     );
   });
 
+  test("a committed push's rows are live before the flip, cannot be adopted, and GC flips them (DESIGN §22.14)", async () => {
+    await run(
+      Effect.gen(function* () {
+        const sql = makeTestSqlClient();
+        const store = makeObjectStore({
+          sql,
+          blobs: makeMemoryBlobStore(),
+          repoId: REPO,
+        });
+        const objects = [];
+        for (let i = 0; i < 6; i++) {
+          const f = yield* makeFixture(3, bytes(64, i + 300));
+          objects.push({
+            oid: f.oid,
+            type: f.type,
+            size: f.content.length,
+            zdata: f.zdata,
+          });
+        }
+        yield* sql.run(
+          `INSERT INTO pushes (push_id, started_at, state) VALUES ('push-live', ?, 'committed')`,
+          Date.now(),
+        );
+        yield* store.insertStagedBatch("push-live", objects);
+        // Live for readers although `staged_push` is still set.
+        expect(yield* store.has(objects[0]!.oid)).toBe(true);
+        const missing = yield* store.missingObjects(
+          objects.map((o) => o.oid),
+          "push-other",
+        );
+        expect(missing).toEqual([]);
+        // A later push re-staging the same oids must not steal them.
+        yield* store.insertStagedBatch("push-other", objects.slice(0, 3));
+        const still = yield* sql.first<{ n: number }>(
+          `SELECT COUNT(*) AS n FROM objects WHERE staged_push = 'push-live'`,
+        );
+        expect(still?.n).toBe(6);
+        // The deferred flip (here: what GC does) nulls the column.
+        yield* sql.run(
+          `UPDATE objects SET staged_push = NULL WHERE staged_push IN (SELECT push_id FROM pushes WHERE state = 'committed')`,
+        );
+        const flipped = yield* sql.first<{ n: number }>(
+          `SELECT COUNT(*) AS n FROM objects WHERE staged_push IS NULL`,
+        );
+        expect(flipped?.n).toBe(6);
+        expect(yield* store.has(objects[5]!.oid)).toBe(true);
+      }),
+    );
+  });
+
   test("rows left by a crashed push are adopted; live objects are left alone", async () => {
     await run(
       Effect.gen(function* () {

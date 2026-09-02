@@ -131,7 +131,7 @@ import {
   runGeometricMergeJob,
   shouldCompact,
 } from "./jobs/Compact.ts";
-import { headKey, incomingKey, wirePackId } from "./store/Keys.ts";
+import { headKey, incomingKey, packKeyOf, wirePackId } from "./store/Keys.ts";
 import { encodeHeadSnapshot, type HeadSnapshot } from "./store/HeadSnapshot.ts";
 import { blobRandomAccess, sliceRandomAccess } from "./store/PackSource.ts";
 import { SPILL_PART_BYTES } from "./store/IncomingBody.ts";
@@ -145,7 +145,11 @@ import {
 import { Hasher, type HasherShape, type HashPartResult } from "./Hasher.ts";
 import * as PartialScan from "./git/PartialScan.ts";
 import type { ScanResult } from "./git/PartialScan.ts";
-import type { UnresolvedDelta } from "./git/PartialScan.ts";
+import type {
+  DeltaBase,
+  DeltaJob,
+  UnresolvedDelta,
+} from "./git/PartialScan.ts";
 import { BlobStore, type BlobStoreShape } from "./BlobStore.ts";
 import { runPurgeJob } from "./jobs/Purge.ts";
 import { RegistryStore, ulid } from "./RegistryObject.ts";
@@ -156,6 +160,7 @@ import {
   MAX_OBJECT_SIZE,
   type ObjectStore,
   type StagedObject,
+  LIVE_OBJECTS,
 } from "./store/ObjectStore.ts";
 import type * as cf from "@cloudflare/workers-types";
 import {
@@ -1333,6 +1338,8 @@ export interface IngestResult {
   readonly promoted?: number | undefined;
   /** The completed spilled object's key, when the body spilled (DESIGN §22.10). */
   readonly parkedKey?: string | undefined;
+  /** The resolved pack's key — delta-resolved blobs, promoted (DESIGN §22.13). */
+  readonly resolvedKey?: string | undefined;
   /** The pack's trailer checksum (hex). */
   readonly packSha: string;
   /** Staged commits (commit-graph rows are inserted at finalize). */
@@ -1463,6 +1470,7 @@ export interface IngestOptions {
         readonly blobs: BlobStoreShape;
         readonly key: string;
         readonly packId: string;
+        readonly repoId: string;
         readonly threshold: number;
       }
     | undefined;
@@ -1584,6 +1592,10 @@ export const ingestPackFrom = (
       readonly dataOffset: number;
       readonly fromDelta: boolean;
       readonly content?: Uint8Array | undefined;
+      /** Already in a pack in blob storage (the resolved pack, DESIGN §22.13). */
+      readonly pack?:
+        | { readonly packId: string; readonly offset: number }
+        | undefined;
     }
     let batch: Array<Incoming> = [];
     let batchBytes = 0;
@@ -1603,12 +1615,13 @@ export const ingestPackFrom = (
       const staged: Array<StagedObject> = [];
       for (const entry of pending) {
         const pack =
-          target !== undefined &&
+          entry.pack ??
+          (target !== undefined &&
           !entry.fromDelta &&
           entry.type === ObjectType.blob &&
           entry.dataOffset >= 0
             ? { packId: target.packId, offset: target.base + entry.dataOffset }
-            : undefined;
+            : undefined);
         if (pack !== undefined) promoted += 1;
         // A promoted row needs no bytes; an inline row needs its zdata —
         // the hasher path did not ship it, so read the span back.
@@ -1640,6 +1653,15 @@ export const ingestPackFrom = (
     let spilling = false;
     /** Set once the spilled object is complete: it is the wire pack. */
     let parkedKey: string | undefined;
+    /** Set once the resolved pack(s) are written (DESIGN §22.13). */
+    let resolvedKey: string | undefined;
+    const resolvedKeys: Array<string> = [];
+    /**
+     * Delta-resolved blobs held back from staging while the body spills:
+     * their fresh zlib goes into one resolved pack in blob storage and the
+     * rows become coordinates, so the DO never writes those bytes.
+     */
+    const resolvedBlobs: Array<Incoming> = [];
     /** In-memory span reads over the retained parts (set by the pump). */
     let readSpan:
       | ((at: number, length: number) => Uint8Array | undefined)
@@ -1649,9 +1671,22 @@ export const ingestPackFrom = (
      * synchronous fast path hands over up to SINK_BATCH non-delta entries
      * per fiber hop; delta-resolved entries arrive one at a time.
      */
+    /** Every oid this push stages: connectivity only asks the store about the rest. */
+    const stagedOids = new Set<Oid>();
     const stage = (entries: ReadonlyArray<Incoming>) =>
       Effect.gen(function* () {
         for (const entry of entries) {
+          stagedOids.add(entry.oid);
+          if (
+            spilling &&
+            entry.fromDelta &&
+            entry.type === ObjectType.blob &&
+            entry.pack === undefined &&
+            entry.zdata !== undefined
+          ) {
+            resolvedBlobs.push(entry);
+            continue;
+          }
           batch.push(entry);
           // Counted as inline until the flush decides; promoted rows carry
           // no BLOB, so this over-counts — safe for a memory cap.
@@ -2290,6 +2325,49 @@ export const ingestPackFrom = (
         // (or in the live store). Fixpoint for chains.
         const deltasStarted = Date.now();
         phases.unresolved = unresolved.length;
+        // The resolved pack (DESIGN §22.13): every delta-resolved blob's
+        // fresh zlib, `typeSize header + zdata` per entry, one object; rows
+        // point at their zdata like promoted wire-pack rows do. Written in
+        // two parts so the in-chunk resolutions — most of them — upload
+        // while the cross-chunk rounds run.
+        const writeResolvedPack = (suffix: string) =>
+          Effect.gen(function* () {
+            if (resolvedBlobs.length === 0 || spill === undefined) return;
+            const packId = `${spill.packId}${suffix}`;
+            const key = packKeyOf(spill.repoId, packId);
+            const pieces: Array<Uint8Array> = [];
+            const rows: Array<Incoming> = [];
+            let cursor = 0;
+            for (const entry of resolvedBlobs) {
+              const header = encodeTypeSize(entry.type, entry.size);
+              pieces.push(header, entry.zdata!);
+              rows.push({
+                ...entry,
+                pack: { packId, offset: cursor + header.length },
+              });
+              cursor += header.length + entry.zdata!.byteLength;
+            }
+            resolvedBlobs.length = 0;
+            const bytes = concatBytes(pieces);
+            const writeStarted = Date.now();
+            const writing = yield* Effect.forkDetach(
+              spill.blobs.put(key, bytes).pipe(
+                Effect.mapError(
+                  (error) =>
+                    new PackIngestError({
+                      reason: `resolved pack: ${error.reason}`,
+                    }),
+                ),
+                Effect.provide(RuntimeContext.phantom),
+              ),
+            );
+            resolvedKeys.push(key);
+            resolvedKey = resolvedKeys.join(",");
+            phases.resolvedBytes = (phases.resolvedBytes ?? 0) + bytes.length;
+            yield* stage(rows);
+            return { writing, writeStarted };
+          });
+        const early = yield* writeResolvedPack("-r");
         const spanOf = (at: number, length: number) =>
           Effect.suspend(() => {
             const bytes = readSpan?.(at, length);
@@ -2306,9 +2384,34 @@ export const ingestPackFrom = (
                   Effect.flatMap((z) => Zlib.inflate(z)),
                   Effect.mapError(asIngest),
                 );
+        // Rounds (DESIGN §22.13): every delta whose base is known goes into
+        // byte-bounded batches the hasher resolves in parallel (its bases
+        // shipped once per batch); a delta on a still-unresolved delta waits
+        // for the next round. The receiver only assembles bytes it already
+        // holds.
+        const batchBudget = hasher.chunkBytes ?? HASH_PART_BYTES;
+        const baseBytesOf = (item: Known) =>
+          Effect.gen(function* () {
+            if (item.content !== undefined) {
+              return { bytes: item.content, isContent: true };
+            }
+            if (item.zdata !== undefined) {
+              return { bytes: item.zdata, isContent: false };
+            }
+            return {
+              bytes: yield* spanOf(item.dataOffset, item.span),
+              isContent: false,
+            };
+          });
         let pending = unresolved;
         while (pending.length > 0) {
           const next: Array<UnresolvedDelta> = [];
+          interface Ready {
+            readonly u: UnresolvedDelta;
+            readonly base: Known;
+            readonly baseKey: string;
+          }
+          const ready: Array<Ready> = [];
           for (const u of pending) {
             let base: Known | undefined =
               u.baseOffset !== undefined ? known.get(u.baseOffset) : undefined;
@@ -2324,6 +2427,7 @@ export const ingestPackFrom = (
                     span: 0,
                     content: live.content,
                   };
+                  knownByOid.set(u.baseOid, base);
                 }
               }
             }
@@ -2331,54 +2435,125 @@ export const ingestPackFrom = (
               next.push(u);
               continue;
             }
-            const baseContent = yield* inflateSpan(base);
-            const delta = yield* spanOf(u.dataOffset, u.span).pipe(
-              Effect.flatMap((z) => Zlib.inflate(z)),
-              Effect.mapError(asIngest),
-            );
-            const content = yield* applyDelta(baseContent, delta).pipe(
-              Effect.mapError(asIngest),
-            );
-            if (content.length > MAX_OBJECT_SIZE) {
-              return yield* new PackIngestError({
-                reason: `object too large: ${content.length} > ${MAX_OBJECT_SIZE}`,
-              });
-            }
-            const oid = yield* hashObject(base.type, content);
-            const zdata = yield* Zlib.deflate(content).pipe(
-              Effect.mapError(asIngest),
-            );
-            const item: Known = {
-              oid,
-              type: base.type,
-              dataOffset: u.dataOffset,
-              span: u.span,
-              zdata,
-              content: base.type === ObjectType.blob ? undefined : content,
-            };
-            known.set(u.offset, item);
-            knownByOid.set(oid, item);
-            yield* stage([
-              {
-                oid,
-                type: base.type,
-                size: content.length,
-                zdata,
-                span: u.span,
-                dataOffset: u.dataOffset,
-                fromDelta: true,
-                content: item.content,
-              },
-            ]);
+            ready.push({
+              u,
+              base,
+              baseKey:
+                base.dataOffset >= 0
+                  ? `o:${base.dataOffset}`
+                  : `oid:${base.oid}`,
+            });
           }
-          if (next.length === pending.length) {
+          if (ready.length === 0) {
             return yield* new PackIngestError({
               reason: `delta base not found for ${next.length} entries`,
             });
           }
+          // Greedy byte-bounded batches; a base shared by several deltas is
+          // carried once per batch.
+          interface Batch {
+            readonly bases: Array<DeltaBase>;
+            readonly index: Map<string, number>;
+            readonly jobs: Array<DeltaJob>;
+            readonly items: Array<Ready>;
+            bytes: number;
+          }
+          const batches: Array<Batch> = [];
+          let current: Batch | undefined;
+          for (const r of ready) {
+            const delta = yield* spanOf(r.u.dataOffset, r.u.span);
+            const baseBytes = yield* baseBytesOf(r.base);
+            const baseCost = current?.index.has(r.baseKey)
+              ? 0
+              : baseBytes.bytes.length;
+            if (
+              current === undefined ||
+              (current.jobs.length > 0 &&
+                current.bytes + delta.length + baseCost > batchBudget)
+            ) {
+              current = {
+                bases: [],
+                index: new Map(),
+                jobs: [],
+                items: [],
+                bytes: 0,
+              };
+              batches.push(current);
+            }
+            let baseIndex = current.index.get(r.baseKey);
+            if (baseIndex === undefined) {
+              baseIndex = current.bases.push(baseBytes) - 1;
+              current.index.set(r.baseKey, baseIndex);
+              current.bytes += baseBytes.bytes.length;
+            }
+            current.jobs.push({
+              id: current.jobs.length,
+              type: r.base.type,
+              base: baseIndex,
+              delta,
+            });
+            current.items.push(r);
+            current.bytes += delta.length;
+          }
+          const resolved = yield* Effect.all(
+            batches.map((batch) =>
+              hasher
+                .resolveDeltas(batch.bases, batch.jobs, {
+                  maxObjectSize: MAX_OBJECT_SIZE,
+                })
+                .pipe(
+                  Effect.catchTag("HashError", (error) => {
+                    console.warn(`[pump] ${error.reason}; resolving inline`);
+                    return PartialScan.resolveDeltas(batch.bases, batch.jobs, {
+                      maxObjectSize: MAX_OBJECT_SIZE,
+                    });
+                  }),
+                  Effect.mapError(asIngest),
+                  Effect.map((results) => ({ batch, results })),
+                ),
+            ),
+            { concurrency: hasher.concurrency ?? HASH_CONCURRENCY },
+          );
+          for (const { batch, results } of resolved) {
+            const incoming: Array<Incoming> = [];
+            for (const result of results) {
+              const r = batch.items[result.id]!;
+              const item: Known = {
+                oid: result.oid,
+                type: r.base.type,
+                dataOffset: r.u.dataOffset,
+                span: r.u.span,
+                zdata: result.zdata,
+                content: result.content,
+              };
+              known.set(r.u.offset, item);
+              knownByOid.set(result.oid, item);
+              incoming.push({
+                oid: result.oid,
+                type: r.base.type,
+                size: result.size,
+                zdata: result.zdata,
+                span: r.u.span,
+                dataOffset: r.u.dataOffset,
+                fromDelta: true,
+                content: result.content,
+              });
+            }
+            yield* stage(incoming);
+          }
           pending = next;
         }
         phases.deltas = Date.now() - deltasStarted;
+        const late = yield* writeResolvedPack("-r2");
+        yield* flush();
+        for (const pending of [early, late]) {
+          if (pending === undefined) continue;
+          yield* Fiber.join(pending.writing);
+          phases.resolvedPack = Math.max(
+            phases.resolvedPack ?? 0,
+            Date.now() - pending.writeStarted,
+          );
+        }
         // Settle the spill: every part was written by its hasher; complete
         // the object and hand it to the source as the fallback reader.
         if (upload !== undefined && spill !== undefined) {
@@ -2416,6 +2591,15 @@ export const ingestPackFrom = (
               : upload.abort.pipe(Effect.provide(RuntimeContext.phantom)),
           ).pipe(Effect.ignore),
         ),
+        Effect.onError(() =>
+          Effect.suspend(() =>
+            resolvedKeys.length === 0 || options.spill === undefined
+              ? Effect.void
+              : options.spill.blobs
+                  .delete([...resolvedKeys])
+                  .pipe(Effect.provide(RuntimeContext.phantom)),
+          ).pipe(Effect.ignore),
+        ),
       );
 
     const summary =
@@ -2448,13 +2632,18 @@ export const ingestPackFrom = (
       phases,
       promoted,
       parkedKey,
+      resolvedKey,
       objectCount: summary.count,
       // The parser verifies the trailer itself; the checksum is not used
       // downstream, so it is not re-derived here.
       packSha: "",
       commits,
-      referenced: Array.from(referenced),
-      referencedParents: Array.from(referencedParents),
+      // The connectivity check (DESIGN §22.14) needs only the edges that
+      // leave the push: everything staged here is known present.
+      referenced: Array.from(referenced).filter((oid) => !stagedOids.has(oid)),
+      referencedParents: Array.from(referencedParents).filter(
+        (oid) => !stagedOids.has(oid),
+      ),
     } satisfies IngestResult;
   });
 
@@ -3020,7 +3209,7 @@ export const GitRepoLive = GitRepo.make(
                              WHEN location = 'row' THEN 'loose'
                              ELSE location END AS bucket,
                         COUNT(*) AS n, COALESCE(SUM(zsize), 0) AS bytes
-                   FROM objects WHERE staged_push IS NULL GROUP BY bucket`,
+                   FROM objects WHERE ${LIVE_OBJECTS} GROUP BY bucket`,
               )
             : [];
           const byLocation = new Map(stats.map((row) => [row.bucket, row]));
@@ -3332,6 +3521,8 @@ export const GitRepoLive = GitRepo.make(
         /** Skip the old-oid CAS entirely (import finalize). */
         readonly unconditional?: boolean | undefined;
         readonly pushId?: string | undefined;
+        /** Leave the per-row `staged_push` rewrite to `flipPush` (after the response). */
+        readonly deferFlip?: boolean | undefined;
         readonly graph: ReadonlyArray<{
           readonly oid: string;
           readonly tree: string;
@@ -3403,31 +3594,46 @@ export const GitRepoLive = GitRepo.make(
             }
             if (anyOk || options.commands.length === 0) {
               if (options.pushId !== undefined) {
-                raw.exec(
-                  `UPDATE objects SET staged_push = NULL WHERE staged_push = ?`,
-                  options.pushId,
-                );
+                // Committing the push row is what makes its objects live
+                // (LIVE_OBJECTS, DESIGN §22.14); nulling `staged_push` on
+                // every row is a rewrite of the whole staged set and runs
+                // after the response (`flipPush`), or inside this
+                // transaction for callers that want it settled now.
+                if (options.deferFlip !== true) {
+                  raw.exec(
+                    `UPDATE objects SET staged_push = NULL WHERE staged_push = ?`,
+                    options.pushId,
+                  );
+                }
                 raw.exec(
                   `UPDATE pushes SET state = 'committed' WHERE push_id = ?`,
                   options.pushId,
                 );
               }
-              for (const commit of options.graph) {
+              // Multi-row inserts under SQLite's 100-parameter cap: a
+              // per-row exec was most of finalize once rows were
+              // coordinates (DESIGN §22.14).
+              for (let at = 0; at < options.graph.length; at += 25) {
+                const part = options.graph.slice(at, at + 25);
                 raw.exec(
-                  `INSERT OR IGNORE INTO commits (oid, tree, gen, commit_time) VALUES (?, ?, ?, ?)`,
-                  commit.oid,
-                  commit.tree,
-                  commit.gen,
-                  commit.commitTime,
-                );
-                commit.parents.forEach((parent, ord) => {
-                  raw.exec(
-                    `INSERT OR IGNORE INTO commit_parents (oid, parent, ord) VALUES (?, ?, ?)`,
+                  `INSERT OR IGNORE INTO commits (oid, tree, gen, commit_time) VALUES ${part.map(() => "(?, ?, ?, ?)").join(", ")}`,
+                  ...part.flatMap((commit) => [
                     commit.oid,
-                    parent,
-                    ord,
-                  );
-                });
+                    commit.tree,
+                    commit.gen,
+                    commit.commitTime,
+                  ]),
+                );
+              }
+              const parentRows = options.graph.flatMap((commit) =>
+                commit.parents.map((parent, ord) => [commit.oid, parent, ord]),
+              );
+              for (let at = 0; at < parentRows.length; at += 33) {
+                const part = parentRows.slice(at, at + 33);
+                raw.exec(
+                  `INSERT OR IGNORE INTO commit_parents (oid, parent, ord) VALUES ${part.map(() => "(?, ?, ?)").join(", ")}`,
+                  ...part.flat(),
+                );
               }
               if (options.onCommitted !== undefined) {
                 options.onCommitted(raw);
@@ -4075,7 +4281,26 @@ export const GitRepoLive = GitRepo.make(
         });
 
       // ── alarm jobs ───────────────────────────────────────────────────────
+      /** Nulls a committed push's `staged_push` column and drops its row. */
+      const flipPush = (pushId: string) =>
+        Effect.gen(function* () {
+          yield* sql.run(
+            `UPDATE objects SET staged_push = NULL WHERE staged_push = ?`,
+            pushId,
+          );
+          yield* sql.run(
+            `DELETE FROM pushes WHERE push_id = ? AND state = 'committed'`,
+            pushId,
+          );
+        });
+
       const runGcJob = Effect.gen(function* () {
+        // Committed pushes whose deferred flip never ran (DESIGN §22.14).
+        yield* sql.run(
+          `UPDATE objects SET staged_push = NULL WHERE staged_push IN
+             (SELECT push_id FROM pushes WHERE state = 'committed')`,
+        );
+        yield* sql.run(`DELETE FROM pushes WHERE state = 'committed'`);
         const cutoff = Date.now() - STAGING_TTL_MS;
         yield* sql.run(
           `DELETE FROM objects WHERE staged_push IN
@@ -4821,9 +5046,12 @@ export const GitRepoLive = GitRepo.make(
             commands: input.commands,
             atomic: input.atomic,
             pushId: input.pushId,
+            deferFlip: true,
             graph,
           });
           const finalizeMs = yield* since(finalizeStarted);
+          // The per-row flip, off the response path (DESIGN §22.14).
+          yield* state.waitUntil(flipPush(input.pushId).pipe(Effect.ignore));
 
           yield* setConfig(
             "last_push",

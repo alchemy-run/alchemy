@@ -140,7 +140,8 @@ import {
   HASH_ROUTE,
   HASHER_BINDING,
 } from "./Hasher.ts";
-import { hashBounds, scanPart } from "./git/PartialScan.ts";
+import { decodeDeltaBatch, encodeDeltaResults } from "./HasherProtocol.ts";
+import { hashBounds, resolveDeltas, scanPart } from "./git/PartialScan.ts";
 import type { StoreError } from "./git/Store.ts";
 import {
   ADMIN_HEADER,
@@ -1756,6 +1757,7 @@ const make = Effect.gen(function* () {
     // object through the single `ensuring` at the bottom — unless staged
     // rows reference it as a wire pack, in which case it is repo data.
     let parkedKey: string | undefined;
+    let resolvedKey: string | undefined;
     let keepParked = false;
     const receiveId = yield* ulid();
     const feeder = makeStreamingSource();
@@ -1870,7 +1872,9 @@ const make = Effect.gen(function* () {
 
       // Phase 1 in the DO: authorization (entry + per-ref policy),
       // read-only, and the staging push row.
+      const routeStarted = Date.now();
       const begun = yield* stub.beginPush(auth, { commands: parsed.commands });
+      const beginMs = Date.now() - routeStarted;
       if (begun._tag === "unauthorized") return wire401;
       if (begun._tag === "denied") return respond("ok", allNg(begun.reason));
       const pushId = begun.pushId;
@@ -1966,6 +1970,7 @@ const make = Effect.gen(function* () {
                 blobs: workerBlobs,
                 key: incomingKey(entry.repoId, receiveId),
                 packId: wirePackId(receiveId),
+                repoId: entry.repoId,
                 threshold: MAX_PACK_BYTES,
               },
             }),
@@ -1985,7 +1990,9 @@ const make = Effect.gen(function* () {
           return reply(errPkt(received.failure.reason));
         }
         parkedKey = ingest?.parkedKey;
+        resolvedKey = ingest?.resolvedKey;
         const promoted = ingest?.promoted ?? 0;
+        const commitStarted = Date.now();
         const committed = yield* stub.commitPush({
           pushId,
           commands: parsed.commands,
@@ -1999,9 +2006,16 @@ const make = Effect.gen(function* () {
             bytes: hasPack ? received.success.total - parsed.packStart : 0,
             ingestMs,
             stageMs: ingest?.stageMs ?? 0,
-            phases: ingest?.phases,
+            phases: {
+              ...ingest?.phases,
+              begin: beginMs,
+              ingestAt: commitStarted - routeStarted,
+            },
           },
         });
+        console.log(
+          `[push] begin=${beginMs}ms ingest=${Math.round(ingestMs)}ms commit=${Date.now() - commitStarted}ms total=${Date.now() - routeStarted}ms`,
+        );
         if (
           promoted > 0 &&
           parkedKey !== undefined &&
@@ -2028,12 +2042,18 @@ const make = Effect.gen(function* () {
           Effect.andThen(Fiber.interrupt(receiving), () =>
             Fiber.interruptAll(staging.splice(0)),
           ),
-          () =>
-            parkedKey === undefined || keepParked
+          () => {
+            const keys = keepParked
+              ? []
+              : [parkedKey, ...(resolvedKey?.split(",") ?? [])].filter(
+                  (key): key is string => key !== undefined && key !== "",
+                );
+            return keys.length === 0
               ? Effect.void
               : workerBlobs
-                  .delete(parkedKey)
-                  .pipe(Effect.provide(RuntimeContext.phantom), Effect.ignore),
+                  .delete(keys)
+                  .pipe(Effect.provide(RuntimeContext.phantom), Effect.ignore);
+          },
         ),
       ),
     );
@@ -2169,6 +2189,22 @@ const make = Effect.gen(function* () {
     const t0 = Date.now();
     const body = new Uint8Array(yield* request.arrayBuffer);
     const tBody = Date.now();
+    if (query.get("mode") === "deltas") {
+      const { bases, jobs } = decodeDeltaBatch(body);
+      const resolved = yield* resolveDeltas(bases, jobs, {
+        maxObjectSize,
+      }).pipe(Effect.result);
+      if (Result.isFailure(resolved)) {
+        return HttpServerResponse.text(
+          `${resolved.failure._tag}: ${"reason" in resolved.failure ? resolved.failure.reason : ""}`,
+          { status: 422 },
+        );
+      }
+      return HttpServerResponse.uint8Array(
+        frame(encodeDeltaResults(resolved.success)),
+        { contentType: "application/octet-stream" },
+      );
+    }
     // A requested spill part uploads concurrently with the scan (DESIGN
     // §22.10): this isolate is the writer of the part it verifies.
     const key = query.get("key");

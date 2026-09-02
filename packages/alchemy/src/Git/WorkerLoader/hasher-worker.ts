@@ -6,12 +6,37 @@
  * nothing else; it has no bindings and no network.
  */
 import * as Effect from "effect/Effect";
-import { encodeScanResult, frame } from "../HasherProtocol.ts";
-import { scanPart } from "../git/PartialScan.ts";
+import {
+  decodeDeltaBatch,
+  encodeDeltaResults,
+  encodeScanResult,
+  frame,
+} from "../HasherProtocol.ts";
+import { resolveDeltas, scanPart } from "../git/PartialScan.ts";
 
 export default {
   async fetch(request: Request): Promise<Response> {
     const query = new URL(request.url).searchParams;
+    if (query.get("mode") === "deltas") {
+      const maxObjectSize = Number(query.get("max"));
+      const { bases, jobs } = decodeDeltaBatch(
+        new Uint8Array(await request.arrayBuffer()),
+      );
+      const resolved = await Effect.runPromise(
+        Effect.result(resolveDeltas(bases, jobs, { maxObjectSize })),
+      );
+      if (resolved._tag === "Failure") {
+        const failure = resolved.failure;
+        return new Response(
+          `${failure._tag}: ${"reason" in failure ? failure.reason : ""}`,
+          { status: 422 },
+        );
+      }
+      return new Response(
+        frame(encodeDeltaResults(resolved.success)) as unknown as BodyInit,
+        { headers: { "content-type": "application/octet-stream" } },
+      );
+    }
     const base = Number(query.get("base"));
     const remaining = Number(query.get("remaining"));
     const maxObjectSize = Number(query.get("max"));

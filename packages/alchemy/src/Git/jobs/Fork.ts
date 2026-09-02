@@ -1,3 +1,4 @@
+import { LIVE_OBJECTS } from "../store/ObjectStore.ts";
 /**
  * The fork alarm job (DESIGN.md §2.3 Fork).
  *
@@ -171,7 +172,7 @@ export const snapshotStream = (
       Effect.gen(function* () {
         const rows = yield* sql.all<ObjectRow>(
           `SELECT oid, type, size, zsize, location, zdata, r2_key, pack_id, pack_offset, staged_push
-           FROM objects WHERE oid > ? AND staged_push IS NULL ORDER BY oid LIMIT ?`,
+           FROM objects WHERE oid > ? AND ${LIVE_OBJECTS} ORDER BY oid LIMIT ?`,
           after,
           OBJECTS_PAGE_SIZE,
         );

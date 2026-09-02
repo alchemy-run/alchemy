@@ -14,7 +14,7 @@ import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 import { InvokeFunction } from "../../AWS/Lambda/InvokeFunction.ts";
 import type { Function as LambdaFunction } from "../../AWS/Lambda/Function.ts";
-import { hashBounds, scanPart } from "../git/PartialScan.ts";
+import { hashBounds, resolveDeltas, scanPart } from "../git/PartialScan.ts";
 import { Hasher, HashError, type HasherShape } from "../Hasher.ts";
 import {
   decodeHashResponse,
@@ -96,6 +96,10 @@ export const HasherLambda = (
               );
             }),
           ),
+        // Delta batches stay on the receiver for now: a batch would need the
+        // same base64 event budget as a chunk.
+        resolveDeltas: (bases, jobs, options) =>
+          resolveDeltas(bases, jobs, options),
         hashBoundsPart: (payload, bounds, options) =>
           hashBounds(payload, bounds, options),
       } satisfies HasherShape;

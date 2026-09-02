@@ -32,9 +32,15 @@ import type {
   Worker,
   WorkerEnvironment,
 } from "../../Cloudflare/Workers/Worker.ts";
-import { hashBounds, scanPart } from "../git/PartialScan.ts";
+import { hashBounds, resolveDeltas, scanPart } from "../git/PartialScan.ts";
 import { Hasher, type HasherShape } from "../Hasher.ts";
-import { decodeScanResult, HASH_ROUTE, HashError } from "../HasherProtocol.ts";
+import {
+  decodeDeltaResults,
+  decodeScanResult,
+  encodeDeltaBatch,
+  HASH_ROUTE,
+  HashError,
+} from "../HasherProtocol.ts";
 import hasherSource from "./hasher-worker.ts?worker";
 
 /** The runtime allows four concurrent dynamic-worker invocations per request. */
@@ -81,10 +87,8 @@ export const HasherWorkerLoader = (
         modules: { "hasher.js": hasherSource },
         globalOutbound: null,
       });
-      const remote = (
-        payload: Uint8Array,
-        opts: Parameters<HasherShape["hashPart"]>[1],
-      ) =>
+      /** One call on a free slot: POST `body` to `path` on the loaded hasher, answer bytes (sans frame). */
+      const call = (path: string, body: Uint8Array) =>
         Semaphore.withPermits(
           gate,
           1,
@@ -96,9 +100,9 @@ export const HasherWorkerLoader = (
                 const worker = yield* loader.get(slot, code);
                 const response = yield* worker
                   .fetch(
-                    HttpClientRequest.post(
-                      `https://hasher${HASH_ROUTE}?base=${opts.base}&remaining=${opts.remaining}&max=${opts.maxObjectSize}${opts.resync ? "&resync=1" : ""}${opts.skip ? `&skip=${opts.skip}` : ""}`,
-                    ).pipe(HttpClientRequest.bodyUint8Array(payload)),
+                    HttpClientRequest.post(`https://hasher${path}`).pipe(
+                      HttpClientRequest.bodyUint8Array(body),
+                    ),
                   )
                   .pipe(
                     Effect.mapError(
@@ -123,12 +127,20 @@ export const HasherWorkerLoader = (
                     reason: `dynamic hasher: status ${response.status}: ${new TextDecoder().decode(bytes.subarray(0, 200))}`,
                   });
                 }
-                // One frame: `u32 len | scan`.
-                return decodeScanResult(bytes.subarray(4));
+                // One frame: `u32 len | payload`.
+                return bytes.subarray(4);
               }),
             (slot) => Effect.sync(() => void idle.push(slot)),
           ),
         );
+      const remote = (
+        payload: Uint8Array,
+        opts: Parameters<HasherShape["hashPart"]>[1],
+      ) =>
+        call(
+          `${HASH_ROUTE}?base=${opts.base}&remaining=${opts.remaining}&max=${opts.maxObjectSize}${opts.resync ? "&resync=1" : ""}${opts.skip ? `&skip=${opts.skip}` : ""}`,
+          payload,
+        ).pipe(Effect.map(decodeScanResult));
       return {
         writesSpill: false,
         chunkBytes: LOADER_CHUNK_BYTES,
@@ -142,6 +154,17 @@ export const HasherWorkerLoader = (
                 skip > 0 ? payload.subarray(skip) : payload,
                 opts,
               );
+            }),
+          ),
+        resolveDeltas: (bases, jobs, opts) =>
+          call(
+            `${HASH_ROUTE}?mode=deltas&max=${opts.maxObjectSize}`,
+            encodeDeltaBatch(bases, jobs),
+          ).pipe(
+            Effect.map(decodeDeltaResults),
+            Effect.catchTag("HashError", (error) => {
+              console.warn(`[hasher] ${error.reason}; resolving inline`);
+              return resolveDeltas(bases, jobs, opts);
             }),
           ),
         hashBoundsPart: (payload, bounds, opts) =>

@@ -43,6 +43,10 @@ import {
   hashBounds,
   scanPart,
   type ScanResult,
+  resolveDeltas,
+  type DeltaBase,
+  type DeltaJob,
+  type DeltaResolved,
 } from "./git/PartialScan.ts";
 import { ObjectTooLargeError, PackFormatError } from "./git/PackParser.ts";
 
@@ -57,8 +61,10 @@ export {
   makeFrameReader,
 } from "./HasherProtocol.ts";
 import {
+  decodeDeltaResults,
   decodeScanResult,
   encodeBoundsRequest,
+  encodeDeltaBatch,
   frame,
   HASH_ROUTE,
   HashError,
@@ -124,6 +130,18 @@ export interface HasherShape {
     HashError | PackFormatError | ObjectTooLargeError
   >;
   /**
+   * Applies a batch of deltas whose bases the caller supplies (DESIGN
+   * §22.13): the cross-chunk and thin deltas the scan left unresolved.
+   */
+  readonly resolveDeltas: (
+    bases: ReadonlyArray<DeltaBase>,
+    jobs: ReadonlyArray<DeltaJob>,
+    options: { readonly maxObjectSize: number },
+  ) => Effect.Effect<
+    Array<DeltaResolved>,
+    HashError | PackFormatError | ObjectTooLargeError
+  >;
+  /**
    * The parallel half (DESIGN §22.8): hash entries whose spans the caller
    * already found with `scanBounds`. Parts hashed this way have no chain
    * between them.
@@ -181,6 +199,7 @@ export const makeInlineHasher = (blobs: BlobStoreShape): HasherShape => ({
         part: upload === undefined ? undefined : Fiber.join(upload),
       };
     }),
+  resolveDeltas: (bases, jobs, options) => resolveDeltas(bases, jobs, options),
   hashBoundsPart: (payload, bounds, options) =>
     hashBounds(payload, bounds, options),
 });
@@ -304,6 +323,20 @@ export const HasherSelf: Layer.Layer<
           `https://self${HASH_ROUTE}?mode=bounds&base=${opts.base}&max=${opts.maxObjectSize}`,
           encodeBoundsRequest(payload, bounds),
         ),
+      resolveDeltas: (bases, jobs, opts) =>
+        Effect.gen(function* () {
+          const next = yield* send(
+            `https://self${HASH_ROUTE}?mode=deltas&max=${opts.maxObjectSize}`,
+            encodeDeltaBatch(bases, jobs),
+          );
+          const first = yield* next();
+          if (first === undefined) {
+            return yield* new HashError({
+              reason: "delta batch: empty response",
+            });
+          }
+          return decodeDeltaResults(first);
+        }),
     };
   }),
 );

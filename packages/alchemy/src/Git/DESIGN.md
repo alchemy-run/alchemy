@@ -1988,3 +1988,52 @@ CPU is the lowest of the three (0.9–1.4 s: no base64, no signing). What
 remains is the same tail as §22.11 — cross-chunk deltas, the oversize
 straddler, staging and the commit — and the four-way cap: a push wider
 than four chunks hashes in waves.
+
+### §22.13 Deltas as jobs, and the resolved pack
+
+Two receiver-side costs survived every hasher: the cross-chunk and thin
+deltas the scan leaves unresolved (515 on the delta-heavy pack) were
+applied, hashed and deflated on the receiver's thread, and every
+delta-resolved blob was staged inline — its fresh zlib written into
+SQLite and rewritten by the staged→live flip.
+
+**Delta rounds.** `Hasher.resolveDeltas(bases, jobs)` applies a batch of
+deltas whose bases the caller supplies (a base's zlib or, for a live
+object, its content), returning oid, fresh zlib and non-blob content.
+The pump resolves in rounds: every delta whose base is known joins a
+byte-bounded batch — bases shipped once per batch — and the batches run
+across the hasher's slots at once; a delta on a still-unresolved delta
+waits for the next round. The receiver only assembles bytes it already
+holds. Every layer implements it (the loaded worker and the self route
+answer `mode=deltas`; the Lambda keeps it inline until its payload budget
+is worth spending). 515 deltas: 0.26–0.37 s of round trips instead of
+receiver CPU.
+
+**The resolved pack.** While a body spills, delta-resolved blobs are held
+back from staging; after the rounds their zlib is written as one object,
+`wire-<receiveId>-r` (`typeSize header + zdata` per entry, the promoted
+layout `packKeyOf` already maps), and their rows become coordinates. The
+DO writes no blob bytes for a large push at all: on the delta-heavy pack
+every one of its 13,646 blobs is a coordinate and 1,968 trees, commits
+and tags stay resident (the resolved pack is 4.1 MB). Compaction's
+geometric merge treats it like any wire pack.
+
+### §22.14 The lazy flip
+
+With every blob a coordinate, `finalize` was still 0.6–0.7 s of a
+~4.3 s push: `UPDATE objects SET staged_push = NULL WHERE staged_push = ?`
+rewrites every staged row of a WITHOUT ROWID table keyed by random oids —
+one page per row, on the response path. A staging table would only move
+the same random-page insert to commit time.
+
+A push's objects are now live the moment its `pushes` row is committed:
+every read predicate is `LIVE_OBJECTS` —
+`staged_push IS NULL OR staged_push IN (committed pushes)` — a
+materialized subquery over a table that holds at most the pushes whose
+flip is pending. The transaction commits the refs, the graph and the
+push row; the per-row rewrite runs after the response (`flipPush`, in
+the DO's `waitUntil`), and GC flips any committed push whose deferred
+flip never ran. A new push may adopt rows only from pushes that are not
+committed, so a committed-unflipped row is never re-staged (and then
+GC'd) out from under a live object. Finalize on the delta-heavy push:
+0.7 s → the refs and graph alone; locally 50 ms → 2 ms.

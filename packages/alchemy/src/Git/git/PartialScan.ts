@@ -31,6 +31,7 @@ import {
 } from "./ObjectCodec.ts";
 import {
   deflate,
+  inflate,
   inflateEntrySync,
   inflateExactSpan,
   type InflatedEntry,
@@ -609,3 +610,96 @@ export const findBoundary = (
   }
   return undefined;
 };
+
+// ── delta resolution as a job (DESIGN §22.13) ──────────────────────────────
+
+/** One base a batch of delta jobs refers to: zlib bytes, or already-inflated content. */
+export interface DeltaBase {
+  readonly bytes: Uint8Array;
+  readonly isContent: boolean;
+}
+
+/** One delta to apply: its base (by index into the batch's bases) and its zlib bytes. */
+export interface DeltaJob {
+  readonly id: number;
+  readonly type: ObjectType;
+  readonly base: number;
+  readonly delta: Uint8Array;
+}
+
+/** A resolved delta: the object's oid and a fresh deflate; content for non-blobs. */
+export interface DeltaResolved {
+  readonly id: number;
+  readonly oid: Oid;
+  readonly size: number;
+  readonly zdata: Uint8Array;
+  readonly content?: Uint8Array | undefined;
+}
+
+/**
+ * Applies a batch of deltas whose bases the caller supplies — the work the
+ * receiver would otherwise do itself for every delta whose base lies in
+ * another chunk. Pure over its inputs, so a hasher isolate can run it.
+ */
+export const resolveDeltas = (
+  bases: ReadonlyArray<DeltaBase>,
+  jobs: ReadonlyArray<DeltaJob>,
+  options: { readonly maxObjectSize: number },
+): Effect.Effect<Array<DeltaResolved>, PackFormatError | ObjectTooLargeError> =>
+  Effect.gen(function* () {
+    const inflated = new Map<number, Uint8Array>();
+    const baseContent = (index: number) =>
+      Effect.gen(function* () {
+        const cached = inflated.get(index);
+        if (cached !== undefined) return cached;
+        const base = bases[index];
+        if (base === undefined) {
+          return yield* new PackFormatError({
+            reason: `delta base ${index} missing`,
+          });
+        }
+        const content = base.isContent
+          ? base.bytes
+          : yield* inflate(base.bytes).pipe(
+              Effect.mapError(
+                (error) => new PackFormatError({ reason: error.reason }),
+              ),
+            );
+        inflated.set(index, content);
+        return content;
+      });
+    const out: Array<DeltaResolved> = [];
+    for (const job of jobs) {
+      const base = yield* baseContent(job.base);
+      const delta = yield* inflate(job.delta).pipe(
+        Effect.mapError(
+          (error) => new PackFormatError({ reason: error.reason }),
+        ),
+      );
+      const content = yield* applyDelta(base, delta).pipe(
+        Effect.mapError(
+          (error) => new PackFormatError({ reason: error.reason }),
+        ),
+      );
+      if (content.length > options.maxObjectSize) {
+        return yield* new ObjectTooLargeError({
+          size: content.length,
+          limit: options.maxObjectSize,
+        });
+      }
+      const oid = hashObjectSync(job.type, content);
+      const zdata = yield* deflate(content).pipe(
+        Effect.mapError(
+          (error) => new PackFormatError({ reason: error.reason }),
+        ),
+      );
+      out.push({
+        id: job.id,
+        oid,
+        size: content.length,
+        zdata,
+        content: job.type === 3 ? undefined : content,
+      });
+    }
+    return out;
+  });

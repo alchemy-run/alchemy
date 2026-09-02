@@ -12,7 +12,13 @@
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import type { Oid, ObjectType } from "./git/ObjectCodec.ts";
-import type { EntryBounds, ScanResult } from "./git/PartialScan.ts";
+import type {
+  DeltaBase,
+  DeltaJob,
+  DeltaResolved,
+  EntryBounds,
+  ScanResult,
+} from "./git/PartialScan.ts";
 
 export class HashError extends Schema.TaggedError<HashError>()("HashError", {
   reason: Schema.String,
@@ -192,4 +198,112 @@ export const makeFrameReader = (body: ReadableStream<Uint8Array>) => {
       catch: (error) =>
         new HashError({ reason: `hash part body: ${String(error)}` }),
     });
+};
+
+// ── delta batches (DESIGN §22.13) ──────────────────────────────────────────
+
+/** `u32 jsonLen | json | blobs` with bases and deltas referenced as [offset, length]. */
+export const encodeDeltaBatch = (
+  bases: ReadonlyArray<DeltaBase>,
+  jobs: ReadonlyArray<DeltaJob>,
+): Uint8Array => {
+  const blobs: Array<Uint8Array> = [];
+  let at = 0;
+  const put = (bytes: Uint8Array): [number, number] => {
+    blobs.push(bytes);
+    const ref: [number, number] = [at, bytes.length];
+    at += bytes.length;
+    return ref;
+  };
+  const wire = {
+    bases: bases.map((b) => ({ r: put(b.bytes), c: b.isContent ? 1 : 0 })),
+    jobs: jobs.map((j) => ({ i: j.id, t: j.type, b: j.base, d: put(j.delta) })),
+  };
+  const json = new TextEncoder().encode(JSON.stringify(wire));
+  const out = new Uint8Array(4 + json.length + at);
+  new DataView(out.buffer).setUint32(0, json.length);
+  out.set(json, 4);
+  let cursor = 4 + json.length;
+  for (const b of blobs) {
+    out.set(b, cursor);
+    cursor += b.length;
+  }
+  return out;
+};
+
+export const decodeDeltaBatch = (
+  bytes: Uint8Array,
+): { readonly bases: Array<DeltaBase>; readonly jobs: Array<DeltaJob> } => {
+  const jsonLength = new DataView(bytes.buffer, bytes.byteOffset).getUint32(0);
+  const wire = JSON.parse(
+    new TextDecoder().decode(bytes.subarray(4, 4 + jsonLength)),
+  ) as {
+    bases: Array<{ r: [number, number]; c: number }>;
+    jobs: Array<{ i: number; t: ObjectType; b: number; d: [number, number] }>;
+  };
+  const blobs = bytes.subarray(4 + jsonLength);
+  const slice = (ref: [number, number]) =>
+    blobs.subarray(ref[0], ref[0] + ref[1]);
+  return {
+    bases: wire.bases.map((b) => ({ bytes: slice(b.r), isContent: b.c === 1 })),
+    jobs: wire.jobs.map((j) => ({
+      id: j.i,
+      type: j.t,
+      base: j.b,
+      delta: slice(j.d),
+    })),
+  };
+};
+
+export const encodeDeltaResults = (
+  results: ReadonlyArray<DeltaResolved>,
+): Uint8Array => {
+  const blobs: Array<Uint8Array> = [];
+  let at = 0;
+  const put = (bytes: Uint8Array): [number, number] => {
+    blobs.push(bytes);
+    const ref: [number, number] = [at, bytes.length];
+    at += bytes.length;
+    return ref;
+  };
+  const wire = results.map((r) => ({
+    i: r.id,
+    o: r.oid,
+    s: r.size,
+    z: put(r.zdata),
+    ...(r.content === undefined ? {} : { c: put(r.content) }),
+  }));
+  const json = new TextEncoder().encode(JSON.stringify(wire));
+  const out = new Uint8Array(4 + json.length + at);
+  new DataView(out.buffer).setUint32(0, json.length);
+  out.set(json, 4);
+  let cursor = 4 + json.length;
+  for (const b of blobs) {
+    out.set(b, cursor);
+    cursor += b.length;
+  }
+  return out;
+};
+
+export const decodeDeltaResults = (bytes: Uint8Array): Array<DeltaResolved> => {
+  const jsonLength = new DataView(bytes.buffer, bytes.byteOffset).getUint32(0);
+  const wire = JSON.parse(
+    new TextDecoder().decode(bytes.subarray(4, 4 + jsonLength)),
+  ) as Array<{
+    i: number;
+    o: string;
+    s: number;
+    z: [number, number];
+    c?: [number, number];
+  }>;
+  const blobs = bytes.subarray(4 + jsonLength);
+  const slice = (ref: [number, number]) =>
+    blobs.subarray(ref[0], ref[0] + ref[1]);
+  return wire.map((r) => ({
+    id: r.i,
+    oid: r.o as Oid,
+    size: r.s,
+    zdata: slice(r.z),
+    content: r.c === undefined ? undefined : slice(r.c),
+  }));
 };

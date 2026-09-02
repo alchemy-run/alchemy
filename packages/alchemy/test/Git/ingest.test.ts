@@ -365,6 +365,7 @@ describe("spill by the hasher (DESIGN §22.10)", () => {
               return inline.hashPart(payload, opts);
             },
             hashBoundsPart: inline.hashBoundsPart,
+            resolveDeltas: inline.resolveDeltas,
           };
           return yield* run(
             {
