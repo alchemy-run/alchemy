@@ -49,6 +49,7 @@ const examples = [
   "./examples/cloudflare-website-react-router",
   "./examples/cloudflare-website-sveltekit",
   "./examples/cloudflare-website-vite",
+  "./examples/cloudflare-website-vinext",
   "./examples/cloudflare-website-waku",
   "./examples/cloudflare-website-vocs",
   "./examples/aws-dev",
