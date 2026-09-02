@@ -4,12 +4,14 @@ export * from "./ApiToken.ts";
 export * as Auth from "./AuthProvider.ts";
 /** Forgejo branch-protection resource. */
 export * from "./BranchProtection.ts";
-/** Forgejo API client, credentials, and credential layers. */
-export * from "./Client.ts";
+/** Forgejo credentials and credential layers. */
+export * from "./Credentials.ts";
 /** Forgejo repository label resource. */
 export * from "./Label.ts";
 /** Forgejo organization resource. */
 export * from "./Organization.ts";
+/** Page walker for Forgejo list operations. */
+export * from "./Pagination.ts";
 /** Forgejo provider collection. */
 export * from "./Providers.ts";
 /** Forgejo repository resource. */
