@@ -141,6 +141,8 @@ import {
   RETAIN_BYTES,
 } from "./store/StreamingSource.ts";
 import { Hasher, type HasherShape } from "./Hasher.ts";
+import * as PartialScan from "./git/PartialScan.ts";
+import type { ScanResult } from "./git/PartialScan.ts";
 import type { UnresolvedDelta } from "./git/PartialScan.ts";
 import { BlobStore, type BlobStoreShape } from "./BlobStore.ts";
 import { runPurgeJob } from "./jobs/Purge.ts";
@@ -196,6 +198,8 @@ export const MAX_PACK_BYTES = 4 * 1024 * 1024;
 /** Objects staged per SQL transaction during ingest (DESIGN.md §16.6). */
 /** Bytes per hasher part — the spill part size, so a part is one R2 part (DESIGN §22.7). */
 export const HASH_PART_BYTES = 4 * 1024 * 1024;
+/** Hasher calls in flight per push (DESIGN §22.8). */
+export const HASH_CONCURRENCY = 4;
 // 4 MiB (was 8): the hasher chain is sequential (each part needs the
 // previous part's boundary), so a smaller part shortens both the tail after
 // the upload ends and the granularity at which the upload can run ahead.
@@ -1574,6 +1578,54 @@ export const ingestPackFrom = (
         let consumedTo = 12;
         let remaining = count;
         let carry: Uint8Array = new Uint8Array(0);
+        // Two passes per part (DESIGN §22.8): a sequential boundary scan
+        // here (the only inherently serial step), then hashing dispatched
+        // to the hasher CONCURRENTLY — no chain between parts. Inline rows
+        // take their bytes from the part payload, so the source can release
+        // a part as soon as its bounds are known.
+        const gate = yield* Semaphore.make(HASH_CONCURRENCY);
+        const inFlight: Array<Fiber.Fiber<void, PackIngestError | StoreError>> =
+          [];
+        const stageResult = (
+          payload: Uint8Array,
+          base: number,
+          result: ScanResult,
+        ) =>
+          Effect.gen(function* () {
+            const incoming: Array<Incoming> = [];
+            for (const e of result.entries) {
+              const item: Known = {
+                oid: e.oid,
+                type: e.type,
+                dataOffset: e.dataOffset,
+                span: e.span,
+                zdata: e.zdata,
+                content: e.content,
+              };
+              known.set(e.offset, item);
+              knownByOid.set(e.oid, item);
+              incoming.push({
+                oid: e.oid,
+                type: e.type,
+                size: e.size,
+                // Delta-resolved entries carry fresh bytes; others take a
+                // view of the payload (used only if the row stays inline).
+                zdata:
+                  e.zdata ??
+                  payload.subarray(
+                    e.dataOffset - base,
+                    e.dataOffset - base + e.span,
+                  ),
+                span: e.span,
+                dataOffset: e.dataOffset,
+                fromDelta: e.zdata !== undefined,
+                content: e.content,
+              });
+            }
+            yield* stage(incoming);
+            yield* flush();
+            for (const u of result.unresolved) unresolved.push(u);
+          });
         while (remaining > 0) {
           const chunk = yield* source.read(offset, partBytes);
           if (chunk.length === 0) {
@@ -1584,54 +1636,47 @@ export const ingestPackFrom = (
           feed(chunk);
           const payload =
             carry.length === 0 ? chunk : concatBytes([carry, chunk]);
-          const result = yield* hasher
-            .hashPart(payload, {
-              base: consumedTo,
-              remaining,
-              maxObjectSize: MAX_OBJECT_SIZE,
-            })
-            .pipe(Effect.mapError(asIngest));
-          const incoming: Array<Incoming> = [];
-          for (const e of result.entries) {
-            const item: Known = {
-              oid: e.oid,
-              type: e.type,
-              dataOffset: e.dataOffset,
-              span: e.span,
-              zdata: e.zdata,
-              content: e.content,
-            };
-            known.set(e.offset, item);
-            knownByOid.set(e.oid, item);
-            incoming.push({
-              oid: e.oid,
-              type: e.type,
-              size: e.size,
-              zdata: e.zdata,
-              span: e.span,
-              dataOffset: e.dataOffset,
-              fromDelta: e.zdata !== undefined,
-              content: e.content,
-            });
+          const base = consumedTo;
+          const bounds = yield* PartialScan.scanBounds(payload, {
+            base,
+            remaining,
+            maxObjectSize: MAX_OBJECT_SIZE,
+          }).pipe(Effect.mapError(asIngest));
+          if (bounds.entries.length > 0) {
+            const partBounds = bounds.entries;
+            inFlight.push(
+              yield* Effect.forkChild(
+                Semaphore.withPermits(
+                  gate,
+                  1,
+                )(
+                  hasher
+                    .hashBoundsPart(payload, partBounds, {
+                      base,
+                      maxObjectSize: MAX_OBJECT_SIZE,
+                    })
+                    .pipe(
+                      Effect.mapError(asIngest),
+                      Effect.flatMap((result) =>
+                        stageResult(payload, base, result),
+                      ),
+                    ),
+                ),
+              ),
+            );
           }
-          yield* stage(incoming);
-          // Flush per part, BEFORE releasing: an inline row reads its bytes
-          // back from the source, and those bytes are only guaranteed to be
-          // retained until the release below (DESIGN §22.7).
-          yield* flush();
-          for (const u of result.unresolved) unresolved.push(u);
-          remaining -= result.count;
-          carry = payload.subarray(result.consumedTo - consumedTo);
-          consumedTo = result.consumedTo;
+          remaining -= bounds.entries.length;
+          carry = payload.subarray(bounds.consumedTo - base);
+          consumedTo = bounds.consumedTo;
           offset += chunk.length;
           source.release?.(consumedTo);
-          if (result.count === 0 && chunk.length < partBytes) {
-            // A short read means the body ended; nothing more can arrive.
+          if (bounds.entries.length === 0 && chunk.length < partBytes) {
             return yield* new PackIngestError({
               reason: `truncated pack entry at ${consumedTo}`,
             });
           }
         }
+        for (const fiber of inFlight) yield* Fiber.join(fiber);
         const total =
           source.awaitEnd === undefined
             ? source.size

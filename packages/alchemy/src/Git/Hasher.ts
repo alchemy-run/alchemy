@@ -27,7 +27,12 @@ import * as Schema from "effect/Schema";
 import { WorkerEnvironment } from "../Cloudflare/Workers/Worker.ts";
 import { ADMIN_TOKEN_CONFIG_KEY } from "./Auth.ts";
 import type { Oid, ObjectType } from "./git/ObjectCodec.ts";
-import { scanPart, type ScanResult } from "./git/PartialScan.ts";
+import {
+  type EntryBounds,
+  hashBounds,
+  scanPart,
+  type ScanResult,
+} from "./git/PartialScan.ts";
 import { ObjectTooLargeError, PackFormatError } from "./git/PackParser.ts";
 
 export class HashError extends Schema.TaggedError<HashError>()("HashError", {
@@ -48,6 +53,19 @@ export interface HasherShape {
     ScanResult,
     HashError | PackFormatError | ObjectTooLargeError
   >;
+  /**
+   * The parallel half (DESIGN §22.8): hash entries whose spans the caller
+   * already found with `scanBounds`. Parts hashed this way have no chain
+   * between them.
+   */
+  readonly hashBoundsPart: (
+    payload: Uint8Array,
+    bounds: ReadonlyArray<EntryBounds>,
+    options: { readonly base: number; readonly maxObjectSize: number },
+  ) => Effect.Effect<
+    ScanResult,
+    HashError | PackFormatError | ObjectTooLargeError
+  >;
 }
 
 export class Hasher extends Context.Service<Hasher, HasherShape>()(
@@ -57,7 +75,38 @@ export class Hasher extends Context.Service<Hasher, HasherShape>()(
 /** Runs the scan in-process. */
 export const HasherInline: Layer.Layer<Hasher> = Layer.succeed(Hasher, {
   hashPart: (payload, options) => scanPart(payload, options),
+  hashBoundsPart: (payload, bounds, options) =>
+    hashBounds(payload, bounds, options),
 });
+
+/**
+ * Request framing for the bounds mode: `u32 jsonLength | json(bounds) |
+ * bytes`.
+ */
+export const encodeBoundsRequest = (
+  payload: Uint8Array,
+  bounds: ReadonlyArray<EntryBounds>,
+): Uint8Array => {
+  const json = new TextEncoder().encode(JSON.stringify(bounds));
+  const out = new Uint8Array(4 + json.length + payload.length);
+  new DataView(out.buffer).setUint32(0, json.length);
+  out.set(json, 4);
+  out.set(payload, 4 + json.length);
+  return out;
+};
+
+export const decodeBoundsRequest = (
+  body: Uint8Array,
+): {
+  readonly bounds: ReadonlyArray<EntryBounds>;
+  readonly payload: Uint8Array;
+} => {
+  const jsonLength = new DataView(body.buffer, body.byteOffset).getUint32(0);
+  const bounds = JSON.parse(
+    new TextDecoder().decode(body.subarray(4, 4 + jsonLength)),
+  ) as ReadonlyArray<EntryBounds>;
+  return { bounds, payload: body.subarray(4 + jsonLength) };
+};
 
 /** The internal route the self-binding layer posts to. */
 export const HASH_ROUTE = "/_alchemy/git/hash";
@@ -170,39 +219,52 @@ export const HasherSelf: Layer.Layer<Hasher, never, WorkerEnvironment> =
         Effect.orElseSucceed(() => undefined),
       );
       if (fetcher === undefined || adminKey === undefined) {
-        return { hashPart: (payload, opts) => scanPart(payload, opts) };
+        return {
+          hashPart: (payload, opts) => scanPart(payload, opts),
+          hashBoundsPart: (payload, bounds, opts) =>
+            hashBounds(payload, bounds, opts),
+        };
       }
+      const post = (url: string, body: Uint8Array) =>
+        Effect.gen(function* () {
+          const response = yield* Effect.tryPromise({
+            try: () =>
+              fetcher.fetch(url, {
+                method: "POST",
+                headers: {
+                  "content-type": "application/octet-stream",
+                  authorization: `Bearer ${adminKey}`,
+                },
+                body: body as unknown as BodyInit,
+              }),
+            catch: (error) =>
+              new HashError({ reason: `hash part fetch: ${String(error)}` }),
+          });
+          const bytes = new Uint8Array(
+            yield* Effect.tryPromise({
+              try: () => response.arrayBuffer(),
+              catch: (error) =>
+                new HashError({ reason: `hash part body: ${String(error)}` }),
+            }),
+          );
+          if (response.status !== 200) {
+            return yield* new HashError({
+              reason: `hash part: status ${response.status}: ${new TextDecoder().decode(bytes.subarray(0, 200))}`,
+            });
+          }
+          return decodeScanResult(bytes);
+        });
       return {
         hashPart: (payload, opts) =>
-          Effect.gen(function* () {
-            const url = `https://self${HASH_ROUTE}?base=${opts.base}&remaining=${opts.remaining}&max=${opts.maxObjectSize}`;
-            const response = yield* Effect.tryPromise({
-              try: () =>
-                fetcher.fetch(url, {
-                  method: "POST",
-                  headers: {
-                    "content-type": "application/octet-stream",
-                    authorization: `Bearer ${adminKey}`,
-                  },
-                  body: payload as unknown as BodyInit,
-                }),
-              catch: (error) =>
-                new HashError({ reason: `hash part fetch: ${String(error)}` }),
-            });
-            const bytes = new Uint8Array(
-              yield* Effect.tryPromise({
-                try: () => response.arrayBuffer(),
-                catch: (error) =>
-                  new HashError({ reason: `hash part body: ${String(error)}` }),
-              }),
-            );
-            if (response.status !== 200) {
-              return yield* new HashError({
-                reason: `hash part: status ${response.status}: ${new TextDecoder().decode(bytes.subarray(0, 200))}`,
-              });
-            }
-            return decodeScanResult(bytes);
-          }),
+          post(
+            `https://self${HASH_ROUTE}?base=${opts.base}&remaining=${opts.remaining}&max=${opts.maxObjectSize}`,
+            payload,
+          ),
+        hashBoundsPart: (payload, bounds, opts) =>
+          post(
+            `https://self${HASH_ROUTE}?mode=bounds&base=${opts.base}&max=${opts.maxObjectSize}`,
+            encodeBoundsRequest(payload, bounds),
+          ),
       };
     }),
   );

@@ -114,8 +114,13 @@ import {
 } from "./git/ObjectCodec.ts";
 import { decodePktLines, flushPkt, pktText } from "./git/Pkt.ts";
 import { progressMessage, pumpPackBody, wrapSideband } from "./git/Sideband.ts";
-import { encodeScanResult, HASH_ROUTE, HASHER_BINDING } from "./Hasher.ts";
-import { scanPart } from "./git/PartialScan.ts";
+import {
+  decodeBoundsRequest,
+  encodeScanResult,
+  HASH_ROUTE,
+  HASHER_BINDING,
+} from "./Hasher.ts";
+import { hashBounds, scanPart } from "./git/PartialScan.ts";
 import type { StoreError } from "./git/Store.ts";
 import {
   ADMIN_HEADER,
@@ -1794,17 +1799,21 @@ const make = Effect.gen(function* () {
     }
     const query = new URL(request.url, "http://x").searchParams;
     const base = Number(query.get("base"));
-    const remaining = Number(query.get("remaining"));
     const maxObjectSize = Number(query.get("max"));
+    const boundsMode = query.get("mode") === "bounds";
+    const remaining = boundsMode ? 0 : Number(query.get("remaining"));
     if (![base, remaining, maxObjectSize].every(Number.isFinite)) {
       return HttpServerResponse.text("bad coordinates", { status: 400 });
     }
-    const payload = new Uint8Array(yield* request.arrayBuffer);
-    const result = yield* scanPart(payload, {
-      base,
-      remaining,
-      maxObjectSize,
-    }).pipe(Effect.result);
+    const body = new Uint8Array(yield* request.arrayBuffer);
+    const result = yield* (
+      boundsMode
+        ? Effect.suspend(() => {
+            const { bounds, payload } = decodeBoundsRequest(body);
+            return hashBounds(payload, bounds, { base, maxObjectSize });
+          })
+        : scanPart(body, { base, remaining, maxObjectSize })
+    ).pipe(Effect.result);
     if (Result.isFailure(result)) {
       return HttpServerResponse.text(
         `${result.failure._tag}: ${"reason" in result.failure ? result.failure.reason : ""}`,

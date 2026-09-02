@@ -323,3 +323,28 @@ export const deflate = (
         reason: `deflateSync failed: ${error instanceof Error ? error.message : String(error)}`,
       }),
   });
+
+/**
+ * Inflates a COMPLETE deflate stream whose exact span is known (DESIGN
+ * §22.8): the plain one-shot `inflateSync`, measured ~4x cheaper than the
+ * consumed-count paths on production. Verified against the declared size.
+ */
+export const inflateExactSpan = (
+  span: Uint8Array,
+  expectedSize: number,
+): Effect.Effect<Uint8Array, ZlibError> =>
+  Effect.try({
+    try: () => {
+      const out = new Uint8Array(zlib.inflateSync(span));
+      if (out.length !== expectedSize) {
+        throw new Error(
+          `inflated ${out.length} bytes, expected ${expectedSize}`,
+        );
+      }
+      return out;
+    },
+    catch: (error) =>
+      new ZlibError({
+        reason: `inflateSync failed: ${error instanceof Error ? error.message : String(error)}`,
+      }),
+  });

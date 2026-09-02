@@ -29,7 +29,12 @@ import {
   type ObjectType,
   type Oid,
 } from "./ObjectCodec.ts";
-import { deflate, inflateEntrySync, type InflatedEntry } from "./Zlib.ts";
+import {
+  deflate,
+  inflateEntrySync,
+  inflateExactSpan,
+  type InflatedEntry,
+} from "./Zlib.ts";
 import { ObjectTooLargeError, PackFormatError } from "./PackParser.ts";
 
 export interface ScannedEntry {
@@ -249,4 +254,228 @@ export const scanPart = (
       count += 1;
     }
     return { entries, unresolved, consumedTo: options.base + pos, count };
+  });
+
+/** One entry's coordinates from a boundary-only scan (DESIGN §22.8). */
+export interface EntryBounds {
+  /** Absolute pack offset of the entry header. */
+  readonly offset: number;
+  /** 1–4 for full objects, 6/7 for OFS/REF deltas. */
+  readonly type: number;
+  /** Declared (uncompressed) size. */
+  readonly size: number;
+  /** Absolute offset and length of the compressed span. */
+  readonly dataOffset: number;
+  readonly span: number;
+  readonly baseOffset?: number | undefined;
+  readonly baseOid?: Oid | undefined;
+}
+
+export interface BoundsResult {
+  readonly entries: ReadonlyArray<EntryBounds>;
+  /** Absolute offset of the first entry NOT consumed (carry from here). */
+  readonly consumedTo: number;
+}
+
+/**
+ * Boundary-only scan (DESIGN §22.8): finds every entry's compressed span in
+ * `buf` without hashing or resolving anything — the one inherently
+ * sequential step of pack ingest (a stream's end is only known by inflating
+ * it). With spans known, hashing every part can run in parallel and can
+ * inflate exact slices with the cheap one-shot path. Same contract as
+ * {@link scanPart}: `buf` starts at an entry boundary and must extend past
+ * the last entry to consume.
+ */
+export const scanBounds = (
+  buf: Uint8Array,
+  options: {
+    readonly base: number;
+    readonly remaining: number;
+    readonly maxObjectSize: number;
+  },
+): Effect.Effect<BoundsResult, PackFormatError | ObjectTooLargeError> =>
+  Effect.gen(function* () {
+    const entries: Array<EntryBounds> = [];
+    let pos = 0;
+    let count = 0;
+    while (count < options.remaining && pos < buf.length) {
+      const offset = options.base + pos;
+      let header;
+      try {
+        header = decodeTypeSize(buf, pos);
+      } catch (error) {
+        if (buf.length - pos < 16) break;
+        return yield* new PackFormatError({
+          reason:
+            error instanceof ObjectParseError
+              ? `entry at ${offset}: ${error.reason}`
+              : `entry at ${offset}: ${String(error)}`,
+        });
+      }
+      if (header.size > options.maxObjectSize) {
+        return yield* new ObjectTooLargeError({
+          size: header.size,
+          limit: options.maxObjectSize,
+        });
+      }
+      let at = header.next;
+      let baseOffset: number | undefined;
+      let baseOid: Oid | undefined;
+      if (header.type === 6) {
+        let ofs;
+        try {
+          ofs = decodeOfsDeltaOffset(buf, at);
+        } catch {
+          if (buf.length - at < 16) break;
+          return yield* new PackFormatError({
+            reason: `entry at ${offset}: bad ofs-delta`,
+          });
+        }
+        at = ofs.next;
+        baseOffset = offset - ofs.value;
+      } else if (header.type === 7) {
+        if (at + 20 > buf.length) break;
+        baseOid = bytesToHex(buf.subarray(at, at + 20)) as Oid;
+        at += 20;
+      }
+      const inflated = inflateEntrySync(buf, at, {
+        maxOutput: options.maxObjectSize,
+        expectedSize: header.size,
+      });
+      if (inflated === undefined) break;
+      if (at + inflated.bytesConsumed >= buf.length) break;
+      if (inflated.content.length !== header.size) {
+        return yield* new PackFormatError({
+          reason: `entry at ${offset}: inflated ${inflated.content.length} bytes, header declared ${header.size}`,
+        });
+      }
+      entries.push({
+        offset,
+        type: header.type,
+        size: header.size,
+        dataOffset: options.base + at,
+        span: inflated.bytesConsumed,
+        baseOffset,
+        baseOid,
+      });
+      pos = at + inflated.bytesConsumed;
+      count += 1;
+    }
+    return { entries, consumedTo: options.base + pos };
+  });
+
+/**
+ * Hashes entries whose spans are already known (DESIGN §22.8): the parallel
+ * half. `bounds` addresses spans inside `buf` (absolute offsets; `base` is
+ * `buf[0]`'s offset). Non-delta entries are inflated with the one-shot
+ * path and hashed; deltas whose base is among these entries (or already
+ * resolved here) are applied, re-deflated and hashed; the rest are reported
+ * unresolved.
+ */
+export const hashBounds = (
+  buf: Uint8Array,
+  bounds: ReadonlyArray<EntryBounds>,
+  options: {
+    readonly base: number;
+    readonly maxObjectSize: number;
+    readonly cacheBytes?: number | undefined;
+  },
+): Effect.Effect<ScanResult, PackFormatError | ObjectTooLargeError> =>
+  Effect.gen(function* () {
+    const entries: Array<ScannedEntry> = [];
+    const unresolved: Array<UnresolvedDelta> = [];
+    const byOffset = new Map<
+      number,
+      { type: ObjectType; content: Uint8Array }
+    >();
+    const byOid = new Map<string, { type: ObjectType; content: Uint8Array }>();
+    const inflateExact = (b: EntryBounds) =>
+      inflateExactSpan(
+        buf.subarray(
+          b.dataOffset - options.base,
+          b.dataOffset - options.base + b.span,
+        ),
+        b.size,
+      ).pipe(
+        Effect.mapError(
+          (error) =>
+            new PackFormatError({
+              reason: `entry at ${b.offset}: ${error.reason}`,
+            }),
+        ),
+      );
+    for (const b of bounds) {
+      const payload = yield* inflateExact(b);
+      if (!isDelta(b.type)) {
+        const type = b.type as ObjectType;
+        const oid = hashObjectSync(type, payload);
+        entries.push({
+          oid,
+          type,
+          offset: b.offset,
+          size: payload.length,
+          dataOffset: b.dataOffset,
+          span: b.span,
+          content: type === 3 ? undefined : payload,
+        });
+        byOffset.set(b.offset, { type, content: payload });
+        byOid.set(oid, { type, content: payload });
+        continue;
+      }
+      const found =
+        b.baseOffset !== undefined
+          ? byOffset.get(b.baseOffset)
+          : byOid.get(b.baseOid!);
+      if (found === undefined) {
+        unresolved.push({
+          offset: b.offset,
+          dataOffset: b.dataOffset,
+          span: b.span,
+          baseOffset: b.baseOffset,
+          baseOid: b.baseOid,
+          size: b.size,
+        });
+        continue;
+      }
+      const content = yield* applyDelta(found.content, payload).pipe(
+        Effect.mapError(
+          (error) =>
+            new PackFormatError({
+              reason: `entry at ${b.offset}: ${error.reason}`,
+            }),
+        ),
+      );
+      if (content.length > options.maxObjectSize) {
+        return yield* new ObjectTooLargeError({
+          size: content.length,
+          limit: options.maxObjectSize,
+        });
+      }
+      const oid = hashObjectSync(found.type, content);
+      const zdata = yield* deflate(content).pipe(
+        Effect.mapError(
+          (error) => new PackFormatError({ reason: error.reason }),
+        ),
+      );
+      entries.push({
+        oid,
+        type: found.type,
+        offset: b.offset,
+        size: content.length,
+        dataOffset: b.dataOffset,
+        span: b.span,
+        zdata,
+        content: found.type === 3 ? undefined : content,
+      });
+      byOffset.set(b.offset, { type: found.type, content });
+      byOid.set(oid, { type: found.type, content });
+    }
+    const last = bounds[bounds.length - 1];
+    return {
+      entries,
+      unresolved,
+      consumedTo:
+        last === undefined ? options.base : last.dataOffset + last.span,
+      count: bounds.length,
+    };
   });
