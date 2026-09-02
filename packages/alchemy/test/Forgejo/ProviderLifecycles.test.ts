@@ -346,7 +346,7 @@ test.provider(
 
       forbidAdminOrgs = false;
       expect(Result.isFailure(result)).toBe(true);
-      expect(JSON.stringify(result)).toContain("ForgejoForbidden");
+      expect(JSON.stringify(result)).toContain("Forbidden");
     }),
 );
 

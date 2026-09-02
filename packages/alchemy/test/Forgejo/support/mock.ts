@@ -24,6 +24,10 @@ export interface RecordedRequest {
    * Parsed JSON request body, or `undefined` when the request had none.
    */
   readonly body: unknown;
+  /**
+   * Request headers, keyed by lowercase name.
+   */
+  readonly headers: Readonly<Record<string, string>>;
 }
 
 /**
@@ -86,6 +90,7 @@ export const mockForgejo = (
         path: url.pathname.replace(/^\/api\/v1/, ""),
         query: Object.fromEntries(url.searchParams),
         body: decodeBody(request.body),
+        headers: { ...request.headers },
       };
       requests.push(recorded);
       return HttpClientResponse.fromWeb(

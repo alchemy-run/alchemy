@@ -1,15 +1,12 @@
+import { Services } from "@distilled.cloud/forgejo";
+import type { Hook as ApiHook } from "@distilled.cloud/forgejo/repository";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import {
-  ForgejoCredentials,
-  ignoreInaccessible,
-  optional,
-  paginate,
-} from "./Client.ts";
 import { listAccessibleRepositories } from "./Lists.ts";
+import { paginate } from "./Pagination.ts";
 import type * as Forgejo from "./Providers.ts";
 
 /**
@@ -129,21 +126,15 @@ export interface Webhook extends Resource<
  */
 export const Webhook = Resource<Webhook>("Forgejo.Webhook");
 
-interface ApiHook {
-  readonly id: number;
-  readonly url: string;
-  readonly updated_at?: string;
-  readonly active?: boolean;
-  readonly branch_filter?: string;
-  readonly config?: Readonly<Record<string, string>>;
-  readonly events?: readonly string[];
-}
-
 /** Events Forgejo delivers when a webhook declares none. */
 const DEFAULT_EVENTS = ["push"] as const;
 
-const hooksPath = (props: Pick<WebhookProps, "owner" | "repository">) =>
-  `/repos/${encodeURIComponent(props.owner)}/${encodeURIComponent(props.repository)}/hooks`;
+const target = (props: Pick<WebhookProps, "owner" | "repository">) => ({
+  owner: props.owner,
+  repo: props.repository,
+});
+
+const urlOf = (hook: ApiHook): string => hook.config?.url ?? hook.url;
 
 const attributesOf = (
   props: Pick<WebhookProps, "owner" | "repository">,
@@ -152,11 +143,9 @@ const attributesOf = (
   webhookId: hook.id,
   owner: props.owner,
   repository: props.repository,
-  url: hook.config?.url ?? hook.url,
-  updatedAt: hook.updated_at ?? "",
+  url: urlOf(hook),
+  updatedAt: hook.updated_at,
 });
-
-const urlOf = (hook: ApiHook): string => hook.config?.url ?? hook.url;
 
 const sameEvents = (
   hook: ApiHook,
@@ -192,9 +181,22 @@ const matchesIdentity = (
 ): boolean =>
   urlOf(hook) === props.url &&
   sameEvents(hook, props.events) &&
-  (hook.active ?? true) === (props.active ?? true) &&
+  hook.active === (props.active ?? true) &&
   (hook.branch_filter ?? "") === (props.branchFilter ?? "") &&
   (hook.config?.content_type ?? "json") === (props.contentType ?? "json");
+
+/**
+ * Every hook of a repository, or none when the credential cannot read the
+ * repository: account-wide enumeration walks repositories the credential
+ * may not be able to inspect, and a single inaccessible one must not abort
+ * the whole sweep.
+ */
+const listHooks = (props: Pick<WebhookProps, "owner" | "repository">) =>
+  paginate(Services.repository.repoListHooks, target(props)).pipe(
+    Effect.catchTag(["NotFound", "Forbidden"], () =>
+      Effect.succeed([] as readonly ApiHook[]),
+    ),
+  );
 
 /**
  * Locate the live hook, by ID when one is already known and otherwise by its
@@ -217,23 +219,19 @@ const observe = Effect.fn(function* (
   >,
   webhookId: number | undefined,
 ) {
-  const client = yield* ForgejoCredentials;
   if (webhookId !== undefined) {
-    const byId = yield* optional(
-      client.request<ApiHook>("GET", `${hooksPath(props)}/${webhookId}`),
-    );
+    const byId = yield* Services.repository
+      .repoGetHook({ ...target(props), id: webhookId })
+      .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
     if (byId !== undefined) return byId;
   }
-  const hooks = yield* ignoreInaccessible(
-    paginate<ApiHook>(client, hooksPath(props)),
-    [] as readonly ApiHook[],
-  );
+  const hooks = yield* listHooks(props);
   return hooks.find((hook) => matchesIdentity(hook, props));
 });
 
 const bodyOf = (props: WebhookProps) => ({
   active: props.active ?? true,
-  events: props.events ?? [...DEFAULT_EVENTS],
+  events: props.events === undefined ? [...DEFAULT_EVENTS] : [...props.events],
   branch_filter: props.branchFilter,
   authorization_header:
     props.authorizationHeader === undefined
@@ -263,7 +261,6 @@ export const WebhookProvider = () =>
       );
     },
     list: Effect.fn(function* () {
-      const client = yield* ForgejoCredentials;
       const repositories = yield* listAccessibleRepositories();
       const hooks = yield* Effect.forEach(
         repositories,
@@ -272,12 +269,7 @@ export const WebhookProvider = () =>
             owner: repository.owner.login,
             repository: repository.name,
           };
-          // A repository whose hooks the credential cannot read is skipped
-          // rather than failing the whole sweep.
-          return ignoreInaccessible(
-            paginate<ApiHook>(client, hooksPath(props)),
-            [] as readonly ApiHook[],
-          ).pipe(
+          return listHooks(props).pipe(
             Effect.map((found) =>
               found.map((hook) => attributesOf(props, hook)),
             ),
@@ -292,35 +284,31 @@ export const WebhookProvider = () =>
       return observed === undefined ? undefined : attributesOf(olds, observed);
     }),
     reconcile: Effect.fn(function* ({ news, output }) {
-      const client = yield* ForgejoCredentials;
-      const path = hooksPath(news);
       // Observe: live state decides create-vs-update, so adoption and a
       // re-run after a failed state write both converge onto one hook.
       const observed = yield* observe(news, output?.webhookId);
 
       // `CreateHookOption` carries `type`; `EditHookOption` does not.
-      const hook = yield* client.request<ApiHook>(
-        observed === undefined ? "POST" : "PATCH",
-        observed === undefined ? path : `${path}/${observed.id}`,
-        {
-          body:
-            observed === undefined
-              ? { type: "forgejo", ...bodyOf(news) }
-              : bodyOf(news),
-        },
-      );
+      const hook =
+        observed === undefined
+          ? yield* Services.repository.repoCreateHook({
+              ...target(news),
+              type: "forgejo",
+              ...bodyOf(news),
+            })
+          : yield* Services.repository.repoEditHook({
+              ...target(news),
+              id: observed.id,
+              ...bodyOf(news),
+            });
       return attributesOf(news, hook);
     }),
     delete: Effect.fn(function* ({ output }) {
       if (output === undefined) return;
-      const client = yield* ForgejoCredentials;
       // Address the hook from `output` alone: account-wide teardown has no
       // state row, so it passes the Attributes shape as `olds` too.
-      yield* optional(
-        client.request<void>(
-          "DELETE",
-          `${hooksPath(output)}/${output.webhookId}`,
-        ),
-      );
+      yield* Services.repository
+        .repoDeleteHook({ ...target(output), id: output.webhookId })
+        .pipe(Effect.catchTag("NotFound", () => Effect.void));
     }),
   });
