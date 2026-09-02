@@ -2616,9 +2616,6 @@ importers:
 
   examples/cloudflare-website-vinext:
     dependencies:
-      '@vinext/cloudflare':
-        specifier: ^1.0.0-beta.0
-        version: 1.0.0-beta.6(vinext@1.0.0-beta.8(c27363ec5c1e587bd874e6f61596cc27))
       alchemy:
         specifier: workspace:*
         version: link:../../packages/alchemy
@@ -12468,13 +12465,6 @@ packages:
   '@vercel/og@0.8.6':
     resolution: {integrity: sha512-hBcWIOppZV14bi+eAmCZj8Elj8hVSUZJTpf1lgGBhVD85pervzQ1poM/qYfFUlPraYSZYP+ASg6To5BwYmUSGQ==}
     engines: {node: '>=16'}
-
-  '@vinext/cloudflare@1.0.0-beta.6':
-    resolution: {integrity: sha512-C0DWjPz+5YypjJNyYKrro9fv4neKGd1U1EQ7gvD+dxshFmU51/BGZKWd62yFJ+yCxf75LLNOAqFiIvzgm36zqw==}
-    engines: {node: '>=22'}
-    hasBin: true
-    peerDependencies:
-      vinext: ^1.0.0-beta.6
 
   '@vinext/types@1.0.0-beta.2':
     resolution: {integrity: sha512-kbKY/H1RWlf7yox4G6Vwk1JeM6x0Tv1EAv28f3tDYkK3brq+89vp5eZHbdw3L/pZMbAhG4oFyhT9C976y+jkhQ==}
@@ -27224,10 +27214,6 @@ snapshots:
     dependencies:
       '@resvg/resvg-wasm': 2.4.0
       satori: 0.16.0
-
-  '@vinext/cloudflare@1.0.0-beta.6(vinext@1.0.0-beta.8(c27363ec5c1e587bd874e6f61596cc27))':
-    dependencies:
-      vinext: 1.0.0-beta.8(c27363ec5c1e587bd874e6f61596cc27)
 
   '@vinext/types@1.0.0-beta.2': {}
 
