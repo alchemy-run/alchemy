@@ -3728,6 +3728,11 @@ export const ServiceProvider = () =>
                   Schedule.recurs(8),
                 ]),
               }),
+              // A service that is already DRAINING/INACTIVE (a prior delete
+              // got as far as deleteService) rejects updates for good — that
+              // is the state delete wants, so fall through to the forced
+              // delete and the lingering-task stop below.
+              Effect.catchTag("ServiceNotActiveException", () => Effect.void),
               Effect.catchTag("ServiceNotFoundException", () => Effect.void),
               Effect.catchTag("ClusterNotFoundException", () => Effect.void),
             );
