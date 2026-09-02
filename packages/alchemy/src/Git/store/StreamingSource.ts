@@ -20,7 +20,8 @@ import * as Effect from "effect/Effect";
 import { StoreError } from "../git/Store.ts";
 import type { RandomAccess } from "../git/PackParser.ts";
 
-export const SLAB_BYTES = 4 * 1024 * 1024;
+// Slabs match the pump's part size so a part read is a view, not a copy.
+export const SLAB_BYTES = 8 * 1024 * 1024;
 export const RETAIN_BYTES = 16 * 1024 * 1024;
 export const BACKPRESSURE_BYTES = 24 * 1024 * 1024;
 // 24 MiB (was 8): the hasher chain runs behind the upload; with less room
@@ -52,6 +53,13 @@ export interface StreamingFeeder {
   readonly source: StreamingSource;
   /** Appends a chunk; waits while backpressure applies. */
   readonly push: (chunk: Uint8Array) => Effect.Effect<void, StoreError>;
+  /**
+   * Appends without ever parking: for receivers whose consumer retains
+   * the whole body anyway (the push pump, DESIGN §22.10), backpressure
+   * buys nothing and the per-chunk Effect hop is the receive path's cost.
+   * Returns false once the source has ended or failed.
+   */
+  readonly pushSync: (chunk: Uint8Array) => boolean;
   /** Ends the body; readers waiting past the end are woken. */
   readonly end: () => void;
   /**
@@ -90,6 +98,21 @@ export const makeStreamingSource = (options?: {
   const pushWaiters: Array<() => void> = [];
   const fallbackWaiters: Array<() => void> = [];
 
+  const append = (chunk: Uint8Array) => {
+    let at = 0;
+    while (at < chunk.length) {
+      let slab = slabs[slabs.length - 1];
+      if (slab === undefined || slab.filled === slab.bytes.length) {
+        slab = { start: received, bytes: new Uint8Array(slabBytes), filled: 0 };
+        slabs.push(slab);
+      }
+      const take = Math.min(chunk.length - at, slab.bytes.length - slab.filled);
+      slab.bytes.set(chunk.subarray(at, at + take), slab.filled);
+      slab.filled += take;
+      received += take;
+      at += take;
+    }
+  };
   const wake = () => {
     for (let i = readWaiters.length - 1; i >= 0; i--) {
       const w = readWaiters[i]!;
@@ -262,6 +285,12 @@ export const makeStreamingSource = (options?: {
 
   return {
     source,
+    pushSync: (chunk) => {
+      if (failure !== undefined || ended) return false;
+      append(chunk);
+      wake();
+      return true;
+    },
     push: (chunk) =>
       Effect.gen(function* () {
         if (failure !== undefined) return yield* Effect.fail(failure);
@@ -270,26 +299,7 @@ export const makeStreamingSource = (options?: {
             new StoreError({ reason: "streaming source: push after end" }),
           );
         }
-        let at = 0;
-        while (at < chunk.length) {
-          let slab = slabs[slabs.length - 1];
-          if (slab === undefined || slab.filled === slab.bytes.length) {
-            slab = {
-              start: received,
-              bytes: new Uint8Array(slabBytes),
-              filled: 0,
-            };
-            slabs.push(slab);
-          }
-          const take = Math.min(
-            chunk.length - at,
-            slab.bytes.length - slab.filled,
-          );
-          slab.bytes.set(chunk.subarray(at, at + take), slab.filled);
-          slab.filled += take;
-          received += take;
-          at += take;
-        }
+        append(chunk);
         wake();
         if (!pushMayProceed()) {
           yield* Effect.callback<void>((resume) => {

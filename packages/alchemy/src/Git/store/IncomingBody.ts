@@ -14,7 +14,6 @@
  * before the pack has arrived.
  */
 import * as Effect from "effect/Effect";
-import * as Stream from "effect/Stream";
 import { StoreError } from "../git/Store.ts";
 import type { StreamingFeeder } from "./StreamingSource.ts";
 
@@ -30,32 +29,30 @@ export const SPILL_PART_BYTES = 8 * 1024 * 1024;
 
 /**
  * Feeds a request body into the streaming source and ends it when the
- * body ends. Resolves with the total; a read failure fails the feeder so
- * every waiting reader wakes with the error.
+ * body ends. A native reader loop (no per-chunk Effect hop) with a
+ * non-parking append: the pump retains the whole body, so backpressure
+ * would only slow the receive. Resolves with the total; a read failure
+ * fails the feeder so every waiting reader wakes with the error.
  */
-export const feedBody = <E>(
-  stream: Stream.Stream<Uint8Array, E>,
+export const feedBody = (
+  body: ReadableStream<Uint8Array> | null,
   feeder: StreamingFeeder,
 ): Effect.Effect<{ readonly total: number }, StoreError> =>
-  Effect.suspend(() => {
-    let total = 0;
-    return Stream.runForEach(
-      stream.pipe(
-        Stream.mapError(
-          (error) =>
-            new StoreError({ reason: `incoming body read: ${String(error)}` }),
-        ),
-      ),
-      (chunk) =>
-        Effect.gen(function* () {
-          yield* feeder.push(chunk);
-          total += chunk.length;
-        }),
-    ).pipe(
-      Effect.map(() => {
-        feeder.end();
-        return { total };
-      }),
-      Effect.tapError((error) => Effect.sync(() => feeder.fail(error))),
-    );
-  });
+  Effect.tryPromise({
+    try: async () => {
+      let total = 0;
+      if (body !== null) {
+        const reader = body.getReader();
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          total += value.length;
+          if (!feeder.pushSync(value)) break;
+        }
+      }
+      feeder.end();
+      return { total };
+    },
+    catch: (error) =>
+      new StoreError({ reason: `incoming body read: ${String(error)}` }),
+  }).pipe(Effect.tapError((error) => Effect.sync(() => feeder.fail(error))));

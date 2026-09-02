@@ -1922,6 +1922,9 @@ export const ingestPackFrom = (
               resync: index > 0,
               partNumber: index + 1,
             });
+            console.log(
+              `[pump] part ${index + 1} read at +${Date.now() - pumpStarted}ms (${chunk.length} bytes)`,
+            );
             chunks.push({ index, base, payload: chunk, fiber });
             index += 1;
             notifyConsumer();
@@ -2020,6 +2023,9 @@ export const ingestPackFrom = (
             if (k >= chunks.length) break;
             const current = chunks[k]!;
             const result = yield* Fiber.join(current.fiber);
+            console.log(
+              `[pump] part ${k + 1} settled at +${Date.now() - pumpStarted}ms`,
+            );
             if (result.part !== undefined) {
               parts.push(result.part.pipe(Effect.mapError(asIngest)));
             }
@@ -2143,6 +2149,7 @@ export const ingestPackFrom = (
         });
         const consumer = yield* Effect.forkChild(consume);
         yield* produce;
+        console.log(`[pump] body ended at +${Date.now() - pumpStarted}ms`);
         phases.upload = Date.now() - pumpStarted;
         let { staged, prevEnd } = yield* Fiber.join(consumer);
         // The tail: chunks too small to hold two whole entries report no

@@ -1793,7 +1793,17 @@ const make = Effect.gen(function* () {
             }).pipe(
               Effect.tapError((error) => Effect.sync(() => feeder.fail(error))),
             )
-          : feedBody(request.stream, feeder),
+          : Effect.flatMap(
+              HttpServerRequest.toWeb(request).pipe(
+                Effect.mapError(
+                  (error) =>
+                    new StoreErrorClass({
+                      reason: `incoming body: ${String(error)}`,
+                    }),
+                ),
+              ),
+              (web) => feedBody(web.body, feeder),
+            ),
       ),
     );
     return yield* Effect.gen(function* () {
