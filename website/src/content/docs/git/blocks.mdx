@@ -3,15 +3,16 @@ title: Building blocks
 description: The layer graph behind a git host — what each block does, and how to replace one.
 ---
 
-A git host is four decisions: where refs live, where names resolve,
-where bytes go, and who may do what. Each is a
-[Layer](/infrastructure-as-effects/layers), and you make all four in
+A git host is five decisions: where refs live, where names resolve,
+where bytes go, who may do what, and what verifies a push. Each is a
+[Layer](/infrastructure-as-effects/layers), and you make all five in
 one graph:
 
 ```typescript
 const GitLive = Git.ServerLive.pipe(
   Layer.provide(Git.ReposDurableObject),    // refs, objects, pull requests
   Layer.provide(Git.RegistryDurableObject), // owner/name -> repoId
+  Layer.provide(Git.HasherInline),          // push verification
   Layer.provide(Git.BlobStoreR2(GitObjects)), // bulk bytes
   Layer.provide(Git.AuthTokens),            // access control
 );
@@ -91,6 +92,38 @@ The package owns no bucket. You pass yours, and the one provided layer
 serves both places bytes are touched — the Worker streaming clone
 bundles, and the Durable Object reading and writing objects. See
 [Storage & maintenance](/git/storage).
+
+## `Git.Hasher`
+
+Every object a push sends has to be inflated and hashed before a ref
+moves. That is CPU, and where it runs is a layer.
+
+```typescript
+Layer.provide(Git.HasherInline)
+```
+
+The default hashes in the Worker that receives the push. It costs
+nothing extra and is the right answer for the small pushes that make up
+almost all of a repository's life.
+
+```typescript
+import * as GitLambda from "alchemy/Git/Lambda";
+
+Layer.provide(GitLambda.HasherLambda(GitLambda.HasherFunction)),
+Layer.provide(AWS.Lambda.InvokeFunctionHttp),
+```
+
+A Lambda hashes each 4 MiB chunk of a large push in its own invocation,
+all of them at once. The Worker binds the function cross-cloud: Alchemy
+mints an IAM identity for it and signs each call with an assumed role,
+so nothing about your Worker changes except the layer. The stack that
+declares it needs both provider sets. If a chunk cannot be hashed
+there — a throttle, a cold start that runs out of time — the Worker
+hashes it inline; a push never fails because its hasher did.
+
+`Git.HasherSelf` fans out through the Worker's own service binding. On
+Cloudflare that runs on the same thread as the caller, so it buys
+nothing there; it is the shape a hasher on another host takes.
 
 ## `Git.AuthTokens`
 

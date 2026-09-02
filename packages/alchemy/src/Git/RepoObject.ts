@@ -1680,9 +1680,15 @@ export const ingestPackFrom = (
     const pumpThroughHasher = (hasher: HasherShape) =>
       Effect.gen(function* () {
         const spill = options.spill;
+        // Spill parts (uniform, ≥ 5 MiB for R2) and hash chunks: a hasher
+        // may want smaller chunks than a part (a Lambda's 6 MB payload);
+        // chunks then divide parts and the pump uploads the parts itself.
         const partBytes =
           options.partBytes ??
           (spill === undefined ? HASH_PART_BYTES : SPILL_PART_BYTES);
+        const wanted = hasher.chunkBytes ?? partBytes;
+        const hashBytes =
+          wanted < partBytes && partBytes % wanted === 0 ? wanted : partBytes;
         const asIngest = (error: {
           readonly _tag: string;
           readonly reason?: string;
@@ -1754,7 +1760,26 @@ export const ingestPackFrom = (
             if (end > start)
               pieces.push(c.payload.subarray(start - c.base, end - c.base));
           }
-          return pieces.length === 1 ? pieces[0]! : concatBytes(pieces);
+          if (pieces.length === 1) return pieces[0]!;
+          // Neighbouring chunks are views of one slab: hand out one view.
+          const first = pieces[0]!;
+          let contiguous = true;
+          let end = first.byteOffset + first.byteLength;
+          for (let i = 1; i < pieces.length; i++) {
+            const piece = pieces[i]!;
+            if (piece.buffer !== first.buffer || piece.byteOffset !== end) {
+              contiguous = false;
+              break;
+            }
+            end += piece.byteLength;
+          }
+          return contiguous
+            ? new Uint8Array(
+                first.buffer,
+                first.byteOffset,
+                end - first.byteOffset,
+              )
+            : concatBytes(pieces);
         };
         // Retained payloads serve every span read (inline rows, delta
         // bases and deltas) so nothing goes back to the source or the
@@ -1771,13 +1796,27 @@ export const ingestPackFrom = (
           Effect.gen(function* () {
             const incoming: Array<Incoming> = [];
             for (const e of result.entries) {
+              // A hasher may omit non-blob content to bound its response
+              // (a Lambda): inflate it here from the fresh zdata or the
+              // retained span — trees, commits and tags are small.
+              const content =
+                e.content ??
+                (e.type === ObjectType.blob
+                  ? undefined
+                  : yield* Zlib.inflate(
+                      e.zdata ??
+                        payload.subarray(
+                          e.dataOffset - base,
+                          e.dataOffset - base + e.span,
+                        ),
+                    ).pipe(Effect.mapError(asIngest)));
               const item: Known = {
                 oid: e.oid,
                 type: e.type,
                 dataOffset: e.dataOffset,
                 span: e.span,
                 zdata: e.zdata,
-                content: e.content,
+                content,
               };
               known.set(e.offset, item);
               knownByOid.set(e.oid, item);
@@ -1794,11 +1833,12 @@ export const ingestPackFrom = (
                 span: e.span,
                 dataOffset: e.dataOffset,
                 fromDelta: e.zdata !== undefined,
-                content: e.content,
+                content,
               });
             }
             yield* stage(incoming);
-            yield* flush();
+            // Batches flush by size (STAGE_BATCH_OBJECTS / _BYTES), not per
+            // chunk: the retained parts hold every span until ingest ends.
             for (const u of result.unresolved) unresolved.push(u);
             return result.count;
           });
@@ -1850,7 +1890,9 @@ export const ingestPackFrom = (
                   maxObjectSize: MAX_OBJECT_SIZE,
                   resync: opts.resync,
                   spill:
-                    upload === undefined || spill === undefined
+                    upload === undefined ||
+                    spill === undefined ||
+                    !hasher.writesSpill
                       ? undefined
                       : {
                           key: spill.key,
@@ -1888,18 +1930,50 @@ export const ingestPackFrom = (
           }
           // Body-aligned parts (DESIGN §22.10): part k is body
           // [k·P, (k+1)·P); the first carries the command section and
-          // the pack header before its first entry (`skip`).
+          // the pack header before its first entry (`skip`). Chunks of
+          // `hashBytes` divide the parts.
           const { body, packStart } = spill;
+          const uploadGate = yield* Semaphore.make(3);
+          let partStart = 0;
+          /** Upload body [partStart, end) as the next part (pump-owned spill). */
+          const uploadPart = (end: number) =>
+            Effect.gen(function* () {
+              if (upload === undefined || end <= partStart) return;
+              const settled = upload;
+              const partNumber = Math.floor(partStart / partBytes) + 1;
+              const bytes = bytesFrom(partStart - packStart, end - packStart);
+              partStart = end;
+              const fiber = yield* Effect.forkDetach(
+                Semaphore.withPermits(
+                  uploadGate,
+                  1,
+                )(
+                  spill.blobs
+                    .uploadPart(spill.key, settled.uploadId, partNumber, bytes)
+                    .pipe(
+                      Effect.mapError(
+                        (error) =>
+                          new PackIngestError({
+                            reason: `spill part ${partNumber}: ${error.reason}`,
+                          }),
+                      ),
+                      Effect.provide(RuntimeContext.phantom),
+                    ),
+                ),
+              );
+              parts.push(Fiber.join(fiber));
+            });
           let index = 0;
+          let received = 0;
           while (true) {
-            const at = index * partBytes;
-            const chunk = yield* body.read(at, partBytes);
+            const at = index * hashBytes;
+            const chunk = yield* body.read(at, hashBytes);
             if (chunk.length === 0) break;
             if (index === 0) {
-              // Decide the spill once the first part is in: a body that
+              // Decide the spill once the first chunk is in: a body that
               // ended within the in-memory threshold stays in memory.
               const ended = spill.feeder.source.ended();
-              if (!(ended && chunk.length <= spill.threshold)) {
+              if (!(ended && spill.feeder.source.size <= spill.threshold)) {
                 upload = yield* spill.blobs.multipart(spill.key).pipe(
                   Effect.mapError(
                     (error) =>
@@ -1920,17 +1994,22 @@ export const ingestPackFrom = (
               base: base + skip,
               skip,
               resync: index > 0,
-              partNumber: index + 1,
+              partNumber: Math.floor(at / partBytes) + 1,
             });
             console.log(
-              `[pump] part ${index + 1} read at +${Date.now() - pumpStarted}ms (${chunk.length} bytes)`,
+              `[pump] chunk ${index + 1} read at +${Date.now() - pumpStarted}ms (${chunk.length} bytes)`,
             );
             chunks.push({ index, base, payload: chunk, fiber });
             index += 1;
+            received = at + chunk.length;
             notifyConsumer();
-            body.release?.(at + chunk.length);
-            if (chunk.length < partBytes) break;
+            body.release?.(received);
+            if (!hasher.writesSpill && received % partBytes === 0) {
+              yield* uploadPart(received);
+            }
+            if (chunk.length < hashBytes) break;
           }
+          if (!hasher.writesSpill) yield* uploadPart(received);
         }).pipe(
           Effect.ensuring(
             Effect.sync(() => {
@@ -2024,7 +2103,7 @@ export const ingestPackFrom = (
             const current = chunks[k]!;
             const result = yield* Fiber.join(current.fiber);
             console.log(
-              `[pump] part ${k + 1} settled at +${Date.now() - pumpStarted}ms`,
+              `[pump] chunk ${k + 1} settled at +${Date.now() - pumpStarted}ms`,
             );
             if (result.part !== undefined) {
               parts.push(result.part.pipe(Effect.mapError(asIngest)));

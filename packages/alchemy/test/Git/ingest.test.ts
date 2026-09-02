@@ -6,7 +6,7 @@
  */
 import * as BunServices from "@effect/platform-bun/BunServices";
 import { bufferRandomAccess } from "@/Git/git/PackParser.ts";
-import { HasherInline, Hasher } from "@/Git/Hasher.ts";
+import { HasherInline, Hasher, type HasherShape } from "@/Git/Hasher.ts";
 import { ingestPackFrom, ingestStoreOf } from "@/Git/RepoObject.ts";
 import { makeObjectStore } from "@/Git/store/ObjectStore.ts";
 import { makeStreamingSource } from "@/Git/store/StreamingSource.ts";
@@ -250,14 +250,17 @@ describe("spill by the hasher (DESIGN §22.10)", () => {
       return { body: concat([head, pack]), packStart: headBytes };
     });
 
-  const run = (opts: {
-    readonly n: number;
-    readonly blobBytes: number;
-    readonly headBytes: number;
-    readonly partBytes: number;
-    readonly threshold: number;
-    readonly chunk: number;
-  }) =>
+  const run = (
+    opts: {
+      readonly n: number;
+      readonly blobBytes: number;
+      readonly headBytes: number;
+      readonly partBytes: number;
+      readonly threshold: number;
+      readonly chunk: number;
+    },
+    hasherOverride?: HasherShape,
+  ) =>
     Effect.gen(function* () {
       const { body, packStart } = yield* makeBody(
         opts.n,
@@ -274,7 +277,7 @@ describe("spill by the hasher (DESIGN §22.10)", () => {
       });
       const sql = makeTestSqlClient();
       const store = makeObjectStore({ sql, blobs, repoId: "R" });
-      const hasher = yield* Hasher;
+      const hasher = hasherOverride ?? (yield* Hasher);
       const source = sliceRandomAccess(feeder.source, packStart);
       const ingest = yield* Effect.forkChild(
         Effect.result(
@@ -339,6 +342,61 @@ describe("spill by the hasher (DESIGN §22.10)", () => {
       expect(out.rows?.n).toBe(400);
       expect(out.rows?.promoted).toBe(400);
       expect(out.result.promoted).toBe(400);
+    },
+    { timeout: 30_000 },
+  );
+
+  test(
+    "a hasher that cannot write the spill (writesSpill=false, small chunks): the pump uploads the parts itself",
+    async () => {
+      const out = await Effect.runPromise(
+        Effect.gen(function* () {
+          const inline = yield* Hasher;
+          // A Lambda-shaped hasher: chunks a quarter of a part, no spill.
+          const lambdaLike: HasherShape = {
+            writesSpill: false,
+            chunkBytes: 8 * 1024,
+            hashPart: (payload, opts) => {
+              if (opts.spill !== undefined) {
+                throw new Error(
+                  "spill must not be requested from a non-spilling hasher",
+                );
+              }
+              return inline.hashPart(payload, opts);
+            },
+            hashBoundsPart: inline.hashBoundsPart,
+          };
+          return yield* run(
+            {
+              n: 400,
+              blobBytes: 600,
+              headBytes: 137,
+              partBytes: 32 * 1024,
+              threshold: 8 * 1024,
+              chunk: 7_001,
+            },
+            lambdaLike,
+          );
+        }).pipe(
+          Effect.provide(
+            Layer.provideMerge(
+              HasherInline,
+              Layer.succeed(BlobStore, makeMemoryBlobStore()),
+            ),
+          ),
+        ),
+      );
+      expect(out.result.parkedKey).toBe("R/incoming/X.pack");
+      expect(out.spilled?.size).toBe(out.body.length);
+      const stored = await Effect.runPromise(
+        Effect.gen(function* () {
+          const blob = yield* out.blobs.get("R/incoming/X.pack");
+          return blob === null ? undefined : yield* blob.bytes;
+        }),
+      );
+      expect(stored).toEqual(out.body);
+      expect(out.rows?.n).toBe(400);
+      expect(out.rows?.promoted).toBe(400);
     },
     { timeout: 30_000 },
   );

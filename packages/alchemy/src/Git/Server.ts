@@ -410,7 +410,7 @@ const make = Effect.gen(function* () {
   const hasher = yield* Hasher;
   const pushGate = yield* isolatePushGate;
   /** Staging batches in flight to the Repo DO per push (DESIGN §22.10). */
-  const STAGE_CONCURRENCY = 3;
+  const STAGE_CONCURRENCY = 6;
 
   // The registry block, whichever backend the assembly provided.
   const registryStub = () => registry;

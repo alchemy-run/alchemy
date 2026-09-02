@@ -131,6 +131,12 @@
       "worker": "./src/Git/index.ts",
       "import": "./lib/Git/index.js"
     },
+    "./Git/Lambda": {
+      "types": "./lib/Git/Lambda/index.d.ts",
+      "bun": "./src/Git/Lambda/index.ts",
+      "worker": "./src/Git/Lambda/index.ts",
+      "import": "./lib/Git/Lambda/index.js"
+    },
     "./Kubernetes": {
       "types": "./lib/Kubernetes/index.d.ts",
       "bun": "./src/Kubernetes/index.ts",

@@ -1884,3 +1884,61 @@ takes.
 
 Where the pipeline is already at or past parity: incremental pushes
 (0.24–0.7 s vs 1.2 s), bare clones (§22.4), and the read path.
+
+### §22.11 Hasher layers: the same push on other compute
+
+`Hasher` is a service precisely so the compute behind verification can be
+chosen per deployment. Three layers ship:
+
+| layer | where the scan runs | spill parts written by | parallelism | cost model |
+| --- | --- | --- | --- | --- |
+| `HasherInline` (default) | the receiving Worker | the receiver | none (one thread) | included in the Worker's CPU |
+| `HasherSelf` | another invocation of the same script | the hasher | none on Cloudflare (§22.10) | same |
+| `HasherLambda(fn)` (`alchemy/Git/Lambda`) | an AWS Lambda per chunk | the receiver | one Lambda per 4 MiB chunk, all at once | Lambda-seconds + cross-cloud egress |
+
+**`HasherLambda`.** The Git Worker binds `AWS.Lambda.InvokeFunction` on a
+Lambda declared in the same stack (`HasherFunction`, an Effect-native
+Function whose only handler answers hash events); the stack carries both
+provider sets. Binding a Lambda operation to a *Worker* host provisions —
+once per Worker — an IAM user, key and least-privilege assume-role Role,
+binds the key and role ARN onto the Worker, and signs each invoke with
+credentials assumed through a single-flight, expiry-aware resolver: the
+cross-cloud scaffolding the MicroVM bindings introduced, now shared by
+every function-scoped Lambda `*Http` binding (`WorkerAwsAccess.ts`).
+
+The invoke payload is JSON, so a chunk travels base64: chunks are 4 MiB
+(≈5.6 MB encoded, under the 6 MB limit) — the pump reads chunks of the
+hasher's declared size and, because a Lambda cannot reach the blob store,
+uploads the 8 MiB spill parts itself from the retained bytes
+(`writesSpill: false`). The response is bounded to the same limit: the
+Lambda omits non-blob content (the receiver inflates trees and commits
+from its retained bytes) and, when the fresh zdata of delta-resolved
+entries would still overflow, demotes the largest of them back to
+`unresolved` with their base references, so the receiver resolves those
+as it would any cross-chunk delta. Any failure on the Lambda side — a
+throttle, a cold-start timeout, a rejected payload — hashes that chunk
+inline: a push never fails because its hasher did.
+
+Measured, same pushes and client as §22.10 (`HasherLambda`, `us-east-1`,
+3 GB functions, the Worker on Cloudflare's edge):
+
+| | loose push | synthetic push | incremental push |
+| --- | --- | --- | --- |
+| GitHub (fresh repo) | 3.3 s | 4.6 s | 1.2 s |
+| `HasherInline` | 9.9–13.5 s | 8.8 s | 0.24–0.4 s |
+| **`HasherLambda`** | **6.8–7.9 s** | **6.3–6.7 s** | 0.27–0.8 s |
+
+The body now arrives in 0.8–2.7 s (the receiver's thread is free), the
+last chunk settles within a second of it, and the receiver's own CPU
+drops to 1.4–2.7 s: the trailer SHA-1, the staging batches, and — on the
+delta-heavy pack — 515 cross-chunk deltas resolved locally plus the
+10 MB straddler that exceeds an invoke payload and is hashed inline.
+Those, the staging round trips (0.7–1.2 s) and the commit (0.6–0.7 s)
+are what remains between this and GitHub.
+
+What this buys: every chunk verifies at once, on a core several times
+faster than a Worker's, so hashing leaves the receive's critical path;
+what it costs: the chunk crosses to AWS and the scan comes back, so a
+Lambda hasher is worth it for pushes of tens of MiB and irrelevant for the
+kilobyte pushes that dominate a repository's life — which is why it is a
+layer and not the default.

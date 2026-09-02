@@ -3,6 +3,13 @@ import * as Binding from "../../Binding.ts";
 import type { Output as OutputType } from "../../Output.ts";
 import type { Function } from "./Function.ts";
 import { isBindingHost } from "./Function.ts";
+import {
+  ensureWorkerAwsAccess,
+  isWorkerHost,
+  regionFromArn,
+  withRuntimeCredentials,
+  type WorkerAwsAccess,
+} from "./WorkerAwsAccess.ts";
 
 /**
  * Shared scaffolding for AWS Lambda control/data-plane HTTP bindings.
@@ -41,27 +48,48 @@ export const makeFunctionHttpBinding = <
 
     return Effect.fn(function* (func: Function) {
       const FunctionArn = yield* func.functionArn;
-      if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
+      const host = yield* Binding.Host;
+      const statements = [
+        {
+          Effect: "Allow" as const,
+          Action: [...options.actions],
+          Resource: options.resources?.(func) ?? [func.functionArn],
+        },
+      ];
+      // A Lambda host grants on its execution role. A Cloudflare Worker
+      // host (cross-cloud) gets a dedicated assume-role identity whose
+      // credentials are bound onto the Worker — see WorkerAwsAccess.ts.
+      let access: WorkerAwsAccess | undefined;
+      if (isBindingHost(host)) {
+        if (!globalThis.__ALCHEMY_RUNTIME__) {
           yield* host.bind`Allow(${host}, ${options.tag}(${func}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: options.resources?.(func) ?? [func.functionArn],
-              },
-            ],
+            policyStatements: statements,
           });
         }
+      } else if (host !== undefined && isWorkerHost(host)) {
+        // The identity's own provisioning errors surface at deploy as
+        // resource failures; the binding's typed surface stays the op's.
+        access = yield* ensureWorkerAwsAccess(
+          host,
+        ) as Effect.Effect<WorkerAwsAccess>;
+        if (!globalThis.__ALCHEMY_RUNTIME__) {
+          yield* access.role.bind`Allow(${host}, ${options.tag}(${func}))`({
+            policyStatements: statements,
+          }) as Effect.Effect<void>;
+        }
       }
+      const region = Effect.map(FunctionArn, regionFromArn);
       return Effect.fn(`${options.tag}(${func.LogicalId})`)(function* (
         request?: Omit<I, "FunctionName">,
       ) {
-        return yield* op({
-          ...request,
-          FunctionName: yield* FunctionArn,
-        } as I);
+        return yield* withRuntimeCredentials(
+          access,
+          region,
+          op({
+            ...request,
+            FunctionName: yield* FunctionArn,
+          } as I),
+        ) as Effect.Effect<A, E>;
       });
     });
   });

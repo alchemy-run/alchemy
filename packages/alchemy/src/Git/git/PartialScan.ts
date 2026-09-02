@@ -52,6 +52,12 @@ export interface ScannedEntry {
   readonly zdata?: Uint8Array | undefined;
   /** Inflated content for commits, trees and tags (the store parses them). */
   readonly content?: Uint8Array | undefined;
+  /**
+   * For a delta-resolved entry, its base reference — so a hasher that must
+   * bound its response can demote the entry back to `unresolved`.
+   */
+  readonly baseOffset?: number | undefined;
+  readonly baseOid?: Oid | undefined;
 }
 
 export interface UnresolvedDelta {
@@ -277,6 +283,8 @@ export const scanPart = (
             span: bytesConsumed,
             zdata,
             content: found.type === 3 ? undefined : content,
+            baseOffset,
+            baseOid,
           });
           remember(offset, oid, found.type, content);
         }

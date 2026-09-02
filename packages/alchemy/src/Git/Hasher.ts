@@ -87,6 +87,18 @@ export interface HashPartResult extends ScanResult {
 }
 
 export interface HasherShape {
+  /**
+   * Whether `hashPart` honors `spill` by writing the part itself. A hasher
+   * that cannot reach blob storage (a Lambda) answers false; the pump then
+   * uploads the spill parts from its retained bytes.
+   */
+  readonly writesSpill: boolean;
+  /**
+   * The chunk size this hasher wants (a divisor of the spill part size,
+   * 8 MiB); a Lambda is bounded by its 6 MB invoke payload. Default: the
+   * spill part size.
+   */
+  readonly chunkBytes?: number | undefined;
   readonly hashPart: (
     payload: Uint8Array,
     options: HashPartOptions,
@@ -115,6 +127,7 @@ export class Hasher extends Context.Service<Hasher, HasherShape>()(
 
 /** The in-process hasher: scans here; a requested spill part goes to `blobs`. */
 export const makeInlineHasher = (blobs: BlobStoreShape): HasherShape => ({
+  writesSpill: true,
   hashPart: (payload, options) =>
     Effect.gen(function* () {
       const spill = options.spill;
@@ -206,6 +219,8 @@ interface WireEntry {
   readonly n: number; // span
   readonly z?: [number, number]; // zdata [offset, length] in the blob area
   readonly c?: [number, number]; // content [offset, length]
+  readonly b?: number; // baseOffset (delta-resolved)
+  readonly r?: string; // baseOid (delta-resolved)
 }
 interface WireResult {
   readonly firstOffset: number;
@@ -235,6 +250,8 @@ export const encodeScanResult = (result: ScanResult): Uint8Array => {
       n: e.span,
       ...(e.zdata === undefined ? {} : { z: put(e.zdata) }),
       ...(e.content === undefined ? {} : { c: put(e.content) }),
+      ...(e.baseOffset === undefined ? {} : { b: e.baseOffset }),
+      ...(e.baseOid === undefined ? {} : { r: e.baseOid }),
     })),
     unresolved: result.unresolved,
     consumedTo: result.consumedTo,
@@ -271,6 +288,8 @@ export const decodeScanResult = (bytes: Uint8Array): ScanResult => {
       span: e.n,
       zdata: slice(e.z),
       content: slice(e.c),
+      baseOffset: e.b,
+      baseOid: e.r as Oid | undefined,
     })),
     unresolved: wire.unresolved,
     consumedTo: wire.consumedTo,
@@ -405,6 +424,7 @@ export const HasherSelf: Layer.Layer<
         return decodeScanResult(first);
       });
     return {
+      writesSpill: true,
       hashPart: (payload, opts) =>
         Effect.gen(function* () {
           const spill =
