@@ -4,8 +4,8 @@
  */
 import * as Cloudflare from "@/Cloudflare";
 import * as Effect from "effect/Effect";
-import { Counter, CounterLive } from "../counter.ts";
-import { conformanceFetch } from "../routes.ts";
+import { Counter, CounterLive } from "../conformance/counter.ts";
+import { conformanceFetch } from "../conformance/routes.ts";
 
 export default class ConformanceWorker extends Cloudflare.Worker<ConformanceWorker>()(
   "CfConformance",

@@ -308,6 +308,12 @@
       "worker": "./src/Planetscale/*/index.ts",
       "import": "./lib/Planetscale/*/index.js"
     },
+    "./Celld": {
+      "types": "./lib/Celld/index.d.ts",
+      "bun": "./src/Celld/index.ts",
+      "worker": "./src/Celld/index.ts",
+      "import": "./lib/Celld/index.js"
+    },
     "./Rivet": {
       "types": "./lib/Rivet/index.d.ts",
       "bun": "./src/Rivet/index.ts",

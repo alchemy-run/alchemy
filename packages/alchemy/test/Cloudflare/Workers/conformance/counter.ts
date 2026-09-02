@@ -25,6 +25,7 @@ export interface CounterShape {
   get: () => Effect.Effect<number, never, RuntimeContext>;
   listKeys: (prefix: string) => Effect.Effect<string[], never, RuntimeContext>;
   removeKey: (key: string) => Effect.Effect<boolean, never, RuntimeContext>;
+  sqlClear: () => Effect.Effect<void, never, RuntimeContext>;
   sqlInsert: (value: string) => Effect.Effect<void, never, RuntimeContext>;
   sqlAll: () => Effect.Effect<{ v: string }[], never, RuntimeContext>;
   armAlarm: (ms: number) => Effect.Effect<void, never, RuntimeContext>;
@@ -68,6 +69,15 @@ export const CounterLive = Counter.make(
         removeKey: (key: string) => state.storage.delete(key),
 
         // ── SQL ─────────────────────────────────────────────────
+        sqlClear: () =>
+          Effect.gen(function* () {
+            yield* (yield* state.storage.sql.exec(
+              "CREATE TABLE IF NOT EXISTS entries (v TEXT)",
+            )).toArray();
+            yield* (yield* state.storage.sql.exec(
+              "DELETE FROM entries",
+            )).toArray();
+          }),
         sqlInsert: (value: string) =>
           Effect.gen(function* () {
             // `exec` yields a cursor; `toArray` drains it.

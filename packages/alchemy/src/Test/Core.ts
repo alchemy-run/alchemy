@@ -512,16 +512,27 @@ const sanitizeStackName = (name: string) =>
  * or two concurrently-running same-named tests would read, write and — far
  * worse — destroy each other's rows.
  */
-const scratchNamespace = (file: string) =>
-  file.replace(/^test[/\\]/, "").replace(/\.test\.ts$/, "");
+const scratchNamespace = (file: string) => {
+  // A module-level `scratchStack` hands over `import.meta.url` (or an
+  // absolute path); anchor it at the run root's `test/` directory so it
+  // namespaces exactly like the adapter-supplied relative form.
+  const path = file.startsWith("file:")
+    ? decodeURIComponent(new URL(file).pathname)
+    : file;
+  return path
+    .replace(/^.*[/\\]test[/\\]/, "test/")
+    .replace(/^test[/\\]/, "")
+    .replace(/\.test\.ts$/, "");
+};
 
 /**
  * Build a fresh `ScratchStack` for `test.provider`.
  *
  * With `file` (the registration-time test file, supplied by the
- * alchemy-test adapter): the store is the durable `.alchemy/state` local
- * store and the stack name is namespaced by file so interrupted destroys
- * leave resumable rows for the next run (see {@link ScratchStack}).
+ * alchemy-test adapter — or `import.meta.url` from a module-level shared
+ * stack): the store is the durable `.alchemy/state` local store and the
+ * stack name is namespaced by file so interrupted destroys leave resumable
+ * rows for the next run (see {@link ScratchStack}).
  *
  * Without `file` (bun/vitest adapters, which cannot name their file at
  * registration time): falls back to a private in-memory store — isolated,
