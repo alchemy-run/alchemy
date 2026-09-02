@@ -123,10 +123,13 @@ const rpcProbe = (url: string, secret?: string) =>
   );
 
 /** A fetch client that surfaces redirects instead of following them. */
-const manualRedirects = FetchHttpClient.layer.pipe(
-  Layer.provide(
-    Layer.succeed(FetchHttpClient.RequestInit, { redirect: "manual" }),
-  ),
+// `FetchHttpClient` reads `RequestInit` from the request-time context, so the
+// option must be IN the provided context (merge), not merely fed to the
+// client layer's build (`Layer.provide`), or fetch silently follows the 301
+// to `https://{albHost}` and fails on the domain-only certificate.
+const manualRedirects = Layer.mergeAll(
+  FetchHttpClient.layer,
+  Layer.succeed(FetchHttpClient.RequestInit, { redirect: "manual" }),
 );
 
 /**
