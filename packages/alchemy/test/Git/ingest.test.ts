@@ -7,7 +7,7 @@
 import * as BunServices from "@effect/platform-bun/BunServices";
 import { bufferRandomAccess } from "@/Git/git/PackParser.ts";
 import { HasherInline, Hasher } from "@/Git/Hasher.ts";
-import { ingestPackFrom } from "@/Git/RepoObject.ts";
+import { ingestPackFrom, ingestStoreOf } from "@/Git/RepoObject.ts";
 import { makeObjectStore } from "@/Git/store/ObjectStore.ts";
 import { makeStreamingSource } from "@/Git/store/StreamingSource.ts";
 import { hashObject, encodeTypeSize, makeSha1 } from "@/Git/git/ObjectCodec.ts";
@@ -49,7 +49,7 @@ describe("ingestPackFrom through the hasher", () => {
         const hasher = yield* Hasher;
         const outcome = yield* Effect.result(
           ingestPackFrom(bufferRandomAccess(pack), {
-            store,
+            store: ingestStoreOf(store),
             pushId: "push-1",
             hasher,
             partBytes: 64,
@@ -82,7 +82,7 @@ describe("ingestPackFrom through the hasher", () => {
         const hasher = yield* Hasher;
         const r = yield* Effect.result(
           ingestPackFrom(bufferRandomAccess(bad), {
-            store,
+            store: ingestStoreOf(store),
             pushId: "p",
             hasher,
             partBytes: 4096,
@@ -131,7 +131,7 @@ describe("hasher pipeline over a streaming source with eviction", () => {
           const ingest = yield* Effect.forkChild(
             Effect.result(
               ingestPackFrom(feeder.source, {
-                store,
+                store: ingestStoreOf(store),
                 pushId: "p",
                 hasher,
                 partBytes: 64 * 1024,
@@ -173,7 +173,7 @@ describe("raw-chunk dispatch with resync and stitching (DESIGN §22.9)", () => {
           yield* sql.run(`DELETE FROM objects`);
           const outcome = yield* Effect.result(
             ingestPackFrom(bufferRandomAccess(pack), {
-              store,
+              store: ingestStoreOf(store),
               pushId: "p",
               hasher,
               partBytes,

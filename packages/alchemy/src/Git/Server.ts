@@ -111,9 +111,28 @@ import {
   parseTree,
   treeEntryKind,
   utf8Decode,
+  ZERO_OID,
+  type ObjectType,
 } from "./git/ObjectCodec.ts";
-import { decodePktLines, flushPkt, pktText } from "./git/Pkt.ts";
-import { progressMessage, pumpPackBody, wrapSideband } from "./git/Sideband.ts";
+import { ulid } from "./RegistryObject.ts";
+import { decodePktLines, errPkt, flushPkt, pktText } from "./git/Pkt.ts";
+import * as Fiber from "effect/Fiber";
+import * as Option from "effect/Option";
+import * as Semaphore from "effect/Semaphore";
+import { Hasher } from "./Hasher.ts";
+import { encodeStagedBatch } from "./PushWire.ts";
+import { HEAD_BYTES, receiveWireBodyStreaming } from "./store/IncomingBody.ts";
+import { makeStreamingSource } from "./store/StreamingSource.ts";
+import { sliceRandomAccess } from "./store/PackSource.ts";
+import { incomingKey, wirePackId } from "./store/Keys.ts";
+import { StoreError as StoreErrorClass } from "./git/Store.ts";
+import { RuntimeContext } from "../RuntimeContext.ts";
+import {
+  progressMessage,
+  pumpPackBody,
+  sidebandFrames,
+  wrapSideband,
+} from "./git/Sideband.ts";
 import {
   decodeBoundsRequest,
   encodeScanResult,
@@ -133,6 +152,15 @@ import {
   GitRepo,
   GitRepoLive,
   WWW_AUTHENTICATE,
+  gunzipIfNeeded,
+  ingestPackFrom,
+  isolatePushGate,
+  MAX_PACK_BYTES,
+  parseReceivePackRequest,
+  PUSH_WAIT_TIMEOUT,
+  pushPermitsFor,
+  type IngestResult,
+  type IngestStore,
   type CallerAuth,
   type CommitData,
   type CreatedTokenData,
@@ -375,6 +403,11 @@ const make = Effect.gen(function* () {
   // Worker, once per request; registry-level authorization too. Per-repo
   // authorization runs in the Repo DO, which owns the actions' facts.
   const authService = yield* Auth;
+  // The push pipeline's verifier (DESIGN §22.10): pack parts are inflated
+  // and hashed by this service — fanned out across Worker invocations by
+  // `HasherSelf`, inline under `HasherInline`.
+  const hasher = yield* Hasher;
+  const pushGate = yield* isolatePushGate;
 
   // The registry block, whichever backend the assembly provided.
   const registryStub = () => registry;
@@ -1678,6 +1711,299 @@ const make = Effect.gen(function* () {
     return served ?? internalError;
   });
 
+  /**
+   * POST git-receive-pack — the push pipeline (DESIGN §22.10). It runs
+   * HERE, in the stateless Worker: the body streams into the hasher
+   * fan-out and the blob-store spill as it arrives, and the Repo DO
+   * receives only staged ROWS (`stagePush`, promoted rows are coordinates
+   * into the wire pack) and the commit summary (`commitPush`). No pack
+   * byte enters the Durable Object, so its memory, CPU and egress are
+   * untouched by push size.
+   */
+  const receivePackRoute = Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const params = yield* HttpRouter.params;
+    const owner = (params.owner ?? "").toLowerCase();
+    let repo = (params.repo ?? "").toLowerCase();
+    if (repo.endsWith(".git")) repo = repo.slice(0, -4);
+    const resolved = yield* Effect.result(resolveCached(owner, repo));
+    if (Result.isFailure(resolved)) return internalError;
+    const entry = resolved.success;
+    if (entry === undefined) return notFound;
+    const auth = yield* authService.authenticate(request.headers);
+    const stub = repos.getByName(entry.repoId);
+    const resultType = "application/x-git-receive-pack-result";
+    const noCache = { "cache-control": "no-cache" } as const;
+    const reply = (bytes: Uint8Array) =>
+      HttpServerResponse.uint8Array(bytes, {
+        contentType: resultType,
+        headers: noCache,
+      });
+    const asStoreError = (error: {
+      readonly _tag: string;
+      readonly reason?: string;
+    }) =>
+      error instanceof StoreErrorClass
+        ? error
+        : new StoreErrorClass({
+            reason: `${error._tag}${error.reason === undefined ? "" : `: ${error.reason}`}`,
+          });
+
+    // Declared before the receive so every exit path drops the spilled
+    // object through the single `ensuring` at the bottom — unless staged
+    // rows reference it as a wire pack, in which case it is repo data.
+    let parkedKey: string | undefined;
+    let keepParked = false;
+    const receiveId = yield* ulid();
+    const feeder = makeStreamingSource();
+    const spill = { started: false };
+    const isGzip = /\bgzip\b/i.test(request.headers["content-encoding"] ?? "");
+    const receiving = yield* Effect.forkChild(
+      Effect.result(
+        isGzip
+          ? Effect.gen(function* () {
+              // gzip bodies are small by git's own rules: collect, inflate,
+              // feed.
+              const raw = yield* Stream.runCollect(request.stream).pipe(
+                Effect.map((chunks) => concatBytes(Array.from(chunks))),
+                Effect.mapError(
+                  (error) =>
+                    new StoreErrorClass({
+                      reason: `incoming body read: ${String(error)}`,
+                    }),
+                ),
+              );
+              const decoded = yield* gunzipIfNeeded(
+                raw,
+                request.headers["content-encoding"],
+              ).pipe(
+                Effect.mapError(
+                  (error) => new StoreErrorClass({ reason: error.reason }),
+                ),
+              );
+              yield* feeder.push(decoded);
+              feeder.end();
+              return { total: decoded.length, parkedKey: undefined };
+            }).pipe(
+              Effect.tapError((error) => Effect.sync(() => feeder.fail(error))),
+            )
+          : receiveWireBodyStreaming(request.stream, {
+              blobs: workerBlobs,
+              key: incomingKey(entry.repoId, receiveId),
+              spillThreshold: MAX_PACK_BYTES,
+              feeder,
+              onSpill: () => {
+                spill.started = true;
+              },
+            }),
+      ),
+    );
+    return yield* Effect.gen(function* () {
+      // The pkt-line command section precedes the pack and is small.
+      const headResult = yield* Effect.result(
+        feeder.source.read(0, HEAD_BYTES),
+      );
+      if (Result.isFailure(headResult)) {
+        return reply(errPkt(headResult.failure.reason));
+      }
+      const body = headResult.success;
+      if (!isGzip && body[0] === 0x1f && body[1] === 0x8b) {
+        return reply(errPkt("gzip-encoded push without content-encoding"));
+      }
+      const parsedResult = yield* Effect.result(parseReceivePackRequest(body));
+      if (Result.isFailure(parsedResult)) {
+        return reply(errPkt(parsedResult.failure.reason));
+      }
+      const parsed = parsedResult.success;
+      if (parsed.probe) {
+        // git's empty-flush probe when the payload exceeds http.postBuffer:
+        // reply empty 200 so it retries with the body.
+        return HttpServerResponse.empty({
+          status: 200,
+          headers: { ...noCache, "content-type": resultType },
+        });
+      }
+      const sideband = parsed.capabilities.has("side-band-64k");
+      const wantReport =
+        parsed.capabilities.has("report-status") ||
+        parsed.capabilities.has("report-status-v2");
+      const respond = (
+        unpack: string,
+        results: ReadonlyArray<{
+          readonly ref: string;
+          readonly ok: boolean;
+          readonly reason?: string | undefined;
+        }>,
+      ) => {
+        if (!wantReport) {
+          return HttpServerResponse.empty({
+            status: 200,
+            headers: { ...noCache, "content-type": resultType },
+          });
+        }
+        const lines: Array<Uint8Array> = [pktText(`unpack ${unpack}`)];
+        for (const result of results) {
+          lines.push(
+            result.ok
+              ? pktText(`ok ${result.ref}`)
+              : pktText(`ng ${result.ref} ${result.reason ?? "failed"}`),
+          );
+        }
+        lines.push(flushPkt);
+        const report = concatBytes(lines);
+        return reply(
+          sideband
+            ? concatBytes([...sidebandFrames(1, report), flushPkt])
+            : report,
+        );
+      };
+      const allNg = (reason: string) =>
+        parsed.commands.map((cmd) => ({ ref: cmd.ref, ok: false, reason }));
+
+      // Phase 1 in the DO: authorization (entry + per-ref policy),
+      // read-only, and the staging push row.
+      const begun = yield* stub.beginPush(auth, { commands: parsed.commands });
+      if (begun._tag === "unauthorized") return wire401;
+      if (begun._tag === "denied") return respond("ok", allNg(begun.reason));
+      const pushId = begun.pushId;
+
+      // Admission by ingest memory (DESIGN.md §2.1): small pushes run
+      // concurrently; only genuinely large bodies contend. ≤ 30 s, then 503.
+      const declared = Number.parseInt(
+        request.headers["content-length"] ?? "",
+        10,
+      );
+      const permits = pushPermitsFor(
+        Number.isNaN(declared) ? undefined : declared,
+      );
+      const permit = yield* Semaphore.take(pushGate, permits).pipe(
+        Effect.timeoutOption(PUSH_WAIT_TIMEOUT),
+      );
+      if (Option.isNone(permit)) {
+        return HttpServerResponse.empty({
+          status: 503,
+          headers: { "retry-after": "10" },
+        });
+      }
+      return yield* Effect.gen(function* () {
+        const startedAt = yield* Effect.sync(() => performance.now());
+        const since = (from: number) =>
+          Effect.sync(() => performance.now() - from);
+        // The DO's store surface over RPC: rows go across as encoded
+        // batches; thin-delta bases come back cached per push.
+        const bases = new Map<
+          string,
+          | { readonly type: ObjectType; readonly content: Uint8Array }
+          | undefined
+        >();
+        const store: IngestStore = {
+          insertStagedBatch: (id, objects) =>
+            stub
+              .stagePush(id, encodeStagedBatch(objects))
+              .pipe(
+                Effect.mapError(asStoreError),
+                Effect.provide(RuntimeContext.phantom),
+              ),
+          readBase: (oid) =>
+            bases.has(oid)
+              ? Effect.succeed(bases.get(oid))
+              : stub.readPushBase(oid).pipe(
+                  Effect.mapError(asStoreError),
+                  Effect.tap((found) =>
+                    Effect.sync(() => {
+                      bases.set(oid, found);
+                    }),
+                  ),
+                  Effect.provide(RuntimeContext.phantom),
+                ),
+        };
+        // Is there a pack at all? A delete-only push ends right after the
+        // commands. This waits only for 12 bytes (or the end).
+        const probe = yield* feeder.source
+          .read(parsed.packStart, 12)
+          .pipe(Effect.result);
+        const hasPack = Result.isSuccess(probe) && probe.success.length === 12;
+        let ingest: IngestResult | undefined;
+        let ingestMs = 0;
+        if (hasPack) {
+          const source = sliceRandomAccess(feeder.source, parsed.packStart);
+          const wire = {
+            packId: wirePackId(receiveId),
+            base: parsed.packStart,
+          };
+          const ingestStarted = yield* Effect.sync(() => performance.now());
+          const outcome = yield* Effect.result(
+            ingestPackFrom(source, {
+              store,
+              pushId,
+              hasher,
+              promote: () => (spill.started ? wire : undefined),
+            }),
+          );
+          ingestMs = yield* since(ingestStarted);
+          if (Result.isFailure(outcome)) {
+            yield* Effect.logError("push ingest failed", outcome.failure);
+            return respond(outcome.failure.reason, allNg("unpacker error"));
+          }
+          ingest = outcome.success;
+        }
+        // The body has been fully consumed (the parser read through the
+        // trailer); wait for the spill to complete before the rows that
+        // reference it can be committed.
+        const received = yield* Fiber.join(receiving);
+        if (Result.isFailure(received)) {
+          return reply(errPkt(received.failure.reason));
+        }
+        parkedKey = received.success.parkedKey;
+        const promoted = ingest?.promoted ?? 0;
+        const committed = yield* stub.commitPush({
+          pushId,
+          commands: parsed.commands,
+          atomic: parsed.capabilities.has("atomic"),
+          commits: ingest?.commits ?? [],
+          referenced: ingest?.referenced ?? [],
+          referencedParents: ingest?.referencedParents ?? [],
+          promoted,
+          stats: {
+            objects: ingest?.objectCount ?? 0,
+            bytes: hasPack ? received.success.total - parsed.packStart : 0,
+            ingestMs,
+            stageMs: ingest?.stageMs ?? 0,
+            phases: ingest?.phases,
+          },
+        });
+        if (
+          promoted > 0 &&
+          parkedKey !== undefined &&
+          committed.results.some((r) => r.ok)
+        ) {
+          keepParked = true;
+        }
+        void startedAt;
+        return respond(committed.unpack, committed.results);
+      }).pipe(Effect.ensuring(Semaphore.release(pushGate, permits)));
+    }).pipe(
+      Effect.catchTag("StoreError", (error) =>
+        Effect.as(
+          Effect.logError("push: storage failure", error),
+          reply(errPkt(error.reason)),
+        ),
+      ),
+      Effect.catchTag("RepoNotFound", () => Effect.succeed(notFound)),
+      // Single owner of the spilled body: whatever path exits, the parked
+      // object is dropped unless committed rows reference it.
+      Effect.ensuring(
+        Effect.andThen(Fiber.interrupt(receiving), () =>
+          parkedKey === undefined || keepParked
+            ? Effect.void
+            : workerBlobs
+                .delete(parkedKey)
+                .pipe(Effect.provide(RuntimeContext.phantom), Effect.ignore),
+        ),
+      ),
+    );
+  });
+
   /** Auth + resolve for the raw REST reads; `undefined` = already replied. */
   const rawRestPrelude = (ownerRaw: string, repoRaw: string) =>
     Effect.gen(function* () {
@@ -1834,7 +2160,7 @@ const make = Effect.gen(function* () {
     githubRoutes,
     HttpRouter.add("GET", "/:owner/:repo/info/refs", wireProxy),
     HttpRouter.add("POST", "/:owner/:repo/git-upload-pack", wireProxy),
-    HttpRouter.add("POST", "/:owner/:repo/git-receive-pack", wireProxy),
+    HttpRouter.add("POST", "/:owner/:repo/git-receive-pack", receivePackRoute),
     HttpRouter.add("POST", HASH_ROUTE, hashPartRoute),
     HttpRouter.add(
       "GET",

@@ -44,6 +44,7 @@ import {
   type IngestSummary,
   type PackIngestError,
   type ResolvedEntry,
+  type ThinBaseSource,
 } from "./PackParser.ts";
 import {
   flushPkt,
@@ -54,7 +55,6 @@ import {
   readPktLineAt,
 } from "./Pkt.ts";
 import { sidebandFrames } from "./Sideband.ts";
-import type { ObjectSource } from "./Store.ts";
 import { StoreError } from "./Store.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -242,8 +242,8 @@ export interface IngestPushOptions<E, R> {
   readonly body: Uint8Array;
   /** `request.packOffset` from {@link parseReceivePackRequest}. */
   readonly packOffset: number;
-  /** Live object store — resolves thin REF_DELTA bases. */
-  readonly store: ObjectSource;
+  /** Live objects — resolves thin REF_DELTA bases. */
+  readonly store: ThinBaseSource;
   /** Receives each resolved entry (the DO stages it under the push id). */
   readonly sink: (entry: ResolvedEntry) => Effect.Effect<void, E, R>;
   /** Per-object uncompressed cap; defaults to the parser's 64 MiB. */

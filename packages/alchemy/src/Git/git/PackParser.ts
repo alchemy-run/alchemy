@@ -256,11 +256,22 @@ export const SINK_BATCH = 256;
 /**
  * Options for {@link ingestPack}.
  */
+/** What the parser needs from the live store: thin-delta bases. */
+export interface ThinBaseSource {
+  /** A live object's type and content, or `undefined` when absent. */
+  readonly readBase: (
+    oid: Oid,
+  ) => Effect.Effect<
+    { readonly type: ObjectType; readonly content: Uint8Array } | undefined,
+    StoreError
+  >;
+}
+
 export interface IngestPackOptions<E, R> {
   /** The pack bytes. */
   readonly source: RandomAccess;
-  /** Live object store, used to resolve thin REF_DELTA bases. */
-  readonly store: ObjectSource;
+  /** Live objects, used to resolve thin REF_DELTA bases. */
+  readonly store: ThinBaseSource;
   /** Receives each resolved entry as it is produced (staging inserts). */
   readonly sink: (entry: ResolvedEntry) => Effect.Effect<void, E, R>;
   /**
@@ -510,19 +521,18 @@ export const ingestPack = <E, R>(
         }
         const cachedThin = cache.get(`oid:${baseOid}`);
         if (cachedThin !== undefined) return cachedThin;
-        const meta = yield* store.getMeta(baseOid);
-        if (meta === undefined) {
+        const live = yield* store.readBase(baseOid);
+        if (live === undefined) {
           return yield* new MissingDeltaBaseError({ baseOid });
         }
-        if (meta.size > maxObjectSize) {
+        if (live.content.length > maxObjectSize) {
           return yield* new ObjectTooLargeError({
-            size: meta.size,
+            size: live.content.length,
             limit: maxObjectSize,
             oid: baseOid,
           });
         }
-        const content = yield* store.readContent(baseOid);
-        const thin: CachedContent = { type: meta.type, content };
+        const thin: CachedContent = { type: live.type, content: live.content };
         cache.set(`oid:${baseOid}`, thin);
         return thin;
       });

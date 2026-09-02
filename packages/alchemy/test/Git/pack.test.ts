@@ -95,7 +95,7 @@ interface StoredObject {
 
 const makeMemoryStore = () => {
   const objects = new Map<string, StoredObject>();
-  const source: ObjectSource = {
+  const source: ObjectSource & ThinBaseSource = {
     has: (oid) => Effect.sync(() => objects.has(oid)),
     filterExisting: (oids) =>
       Effect.sync(() => oids.filter((oid) => objects.has(oid))),
@@ -114,6 +114,13 @@ const makeMemoryStore = () => {
       }),
     readZData: (oid) =>
       Stream.fromEffect(Effect.sync(() => objects.get(oid)!.zdata)),
+    readBase: (oid) =>
+      Effect.sync(() => {
+        const stored = objects.get(oid);
+        return stored === undefined
+          ? undefined
+          : { type: stored.type, content: stored.content };
+      }),
     readContent: (oid) => Effect.sync(() => objects.get(oid)!.content),
   };
   /** Ingest sink: stage the resolved entry (zdata is already a safe copy). */
