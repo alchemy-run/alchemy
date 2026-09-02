@@ -142,6 +142,23 @@ export type SinkFormat =
       rowGroupBytes?: number;
     };
 
+/**
+ * Optional schema declaration forwarded to the create-sink API.
+ *
+ * Sinks that write typed output (parquet, Iceberg tables in the R2 Data
+ * Catalog) can pin their column layout here instead of relying on
+ * inference. The shape is the wire schema; see the Cloudflare Pipelines
+ * "create sink" reference for the field vocabulary.
+ */
+export interface SinkSchema {
+  /** Column definitions, in the Pipelines schema field format. */
+  fields?: pipelines.SinksCreateRequestSchema["fields"];
+  /** Format-specific schema options (for example parquet compression). */
+  format?: pipelines.SinksCreateRequestSchema["format"];
+  /** Let Pipelines infer the schema from the stream when `true`. */
+  inferred?: boolean;
+}
+
 interface SinkBaseProps {
   /**
    * Name of the sink. Unique per account; must be alphanumeric and
@@ -158,6 +175,11 @@ interface SinkBaseProps {
    * @default { type: "json" }
    */
   format?: SinkFormat;
+  /**
+   * Schema forwarded to the create-sink API. Sinks have no update API, so a
+   * schema change replaces the sink.
+   */
+  schema?: SinkSchema;
 }
 
 export type SinkProps =
@@ -371,6 +393,7 @@ export const SinkProvider = () =>
             type: news.type,
             config: toRequestConfig(accountId, news),
             format: news.format,
+            schema: news.schema,
           })
           .pipe(
             Effect.catchTag("SinkAlreadyExists", (error) =>
@@ -546,6 +569,7 @@ const normalizeProps = (props: SinkProps): unknown => {
     return {
       type: props.type,
       format: props.format,
+      schema: props.schema,
       config: {
         ...props.config,
         credentials: {
@@ -560,6 +584,7 @@ const normalizeProps = (props: SinkProps): unknown => {
   return {
     type: props.type,
     format: props.format,
+    schema: props.schema,
     config: {
       ...props.config,
       token: Redacted.value(props.config.token),

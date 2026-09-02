@@ -2,6 +2,7 @@ import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
+import * as pipelines from "@distilled.cloud/cloudflare/pipelines";
 import * as user from "@distilled.cloud/cloudflare/user";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -97,6 +98,55 @@ test.provider(
       expect(match?.name).toEqual(deployed.name);
       expect(match?.type).toEqual("r2");
       expect(match?.accountId).toEqual(deployed.accountId);
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 300_000 },
+);
+
+test.provider(
+  "create forwards a declared schema to the sink",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const creds = yield* r2Credentials;
+      const fields = [
+        { name: "event_id", type: "string", required: true },
+        { name: "occurred_at", type: "timestamp", required: true },
+      ];
+
+      const deployed = yield* retryAuthBlip(
+        stack.deploy(
+          Effect.gen(function* () {
+            const bucket = yield* Cloudflare.R2.Bucket("SchemaSinkBucket", {
+              forceDestroy: true,
+            });
+            return yield* Cloudflare.Pipelines.Sink("SchemaSink", {
+              type: "r2",
+              format: { type: "parquet" },
+              schema: { fields },
+              config: {
+                bucket: bucket.bucketName,
+                credentials: creds,
+                rollingPolicy: { intervalSeconds: 10 },
+              },
+            });
+          }),
+        ),
+      );
+
+      // The wire schema round-trips: Cloudflare echoes the declared columns
+      // on the created sink instead of an inferred (empty) field list.
+      const observed = yield* pipelines.getSink({
+        accountId: deployed.accountId,
+        sinkId: deployed.sinkId,
+      });
+      expect(
+        (observed.schema?.fields ?? []).map(
+          (field) => (field as { name: string }).name,
+        ),
+      ).toEqual(fields.map((field) => field.name));
 
       yield* stack.destroy();
     }).pipe(logLevel),
