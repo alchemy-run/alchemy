@@ -9,30 +9,23 @@
  * `Runtime/Bootstrap/Process.ts`).
  *
  * The per-class `export class` statements stay in the shim — celld's
- * loader requires statically named exports — with the plan-time-discovered
- * method lists baked in (celld's JSRPC dispatch stalls on Proxy-returning
- * constructors, so the bridge materializes them as real instance methods).
+ * loader requires statically named exports.
  *
  * @internal not exported from the Celld barrel.
  */
 import {
   isDurableObjectExport,
   type DurableObjectExport,
-} from "../Cloudflare/Workers/DurableObject.ts";
+} from "../Workers/DurableObject.ts";
 import type { WorkflowExport } from "../Cloudflare/Workflows/Workflow.ts";
 
 export const makeCelldVirtualEntry = (
   exports: Record<string, DurableObjectExport | WorkflowExport>,
   stack: { name: string; stage: string },
 ) => {
-  const doClasses = Object.entries(exports)
-    .filter((entry): entry is [string, DurableObjectExport] =>
-      isDurableObjectExport(entry[1]),
-    )
-    .map(([className, entry]) => ({
-      className,
-      methods: entry.methods ?? [],
-    }));
+  const doClasses = Object.keys(exports).filter((className) =>
+    isDurableObjectExport(exports[className]),
+  );
   return (importPath: string) => `
 import { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
 import { makeFleetBootstrap } from "alchemy/Runtime/Bootstrap/CelldFleet";
@@ -49,8 +42,8 @@ export default fleet.default;
 
 ${doClasses
   .map(
-    ({ className, methods }) =>
-      `export class ${className} extends fleet.durableObject(${JSON.stringify(className)}, ${JSON.stringify(methods)}) {}`,
+    (className) =>
+      `export class ${className} extends fleet.durableObject(${JSON.stringify(className)}) {}`,
   )
   .join("\n")}
 `;

@@ -1,22 +1,44 @@
-export * from "./DurableObjectState.ts";
-export * from "./Fleet.ts";
+export { DEFAULT_CELLD_IMAGE, DEFAULT_CELLD_VERSION } from "./CelldCli.ts";
 export {
-  FleetHost,
-  findFleetHost,
-  resolveFleetHost,
+  CelldDeployError,
+  CelldDownloadError,
+  EsbuildNotFoundError,
+} from "./CelldCli.ts";
+export { DurableObjectState } from "./DurableObject.ts";
+export type {
+  DurableObjectStorage,
+  DurableObjectTransaction,
+  SqlCursor,
+  SqlStorage,
+} from "./DurableObject.ts";
+export { Ecs } from "./EcsHost.ts";
+export {
+  Fleet,
+  FleetNotComposed,
+  FleetProvider,
+  FleetTypeId,
+  HostNotProvided,
+  isFleet,
+  type FleetClass,
+  type FleetProps,
+} from "./Fleet.ts";
+export {
+  Host,
   type FleetBucket,
   type FleetConnection,
-  type FleetHostComposeOptions,
-  type FleetHostComposeResult,
-  type FleetHostOptionsRegistry,
-  type FleetHostProps,
-  type FleetHostService,
-} from "./FleetHost.ts";
+  type HostComposeResult,
+  type HostIngressResult,
+  type HostService,
+} from "./Host.ts";
+export { providers, Providers } from "./Providers.ts";
 export {
-  CELLD_ENGINE,
   CelldWorkerProvider,
-  CelldWorkerResource,
+  CelldWorkerTypeId,
+  DnsNotProvided,
+  IngressRequiresImpl,
   Worker,
+  WorkerNotConnected,
+  WorkerUnreachable,
   bindWorker,
   type CelldDurableObjectNamespaceClient,
   type CelldWorker,
@@ -28,8 +50,8 @@ export {
   type CelldWorkerResourceProps,
   type FleetRef,
 } from "./Worker.ts";
-export { DEFAULT_CELLD_IMAGE, DEFAULT_CELLD_VERSION } from "./CelldCli.ts";
-export { providers, Providers } from "./Providers.ts";
+export { CelldMigrationConflictError } from "./Wrangler.ts";
 // Internal scaffolding stays un-exported: CelldCli (deploy machinery),
-// Wrangler, FleetGateway, FleetEntry.
-export { EcsFleetHost } from "./EcsFleetHost.ts";
+// Wrangler (project rendering), FleetEntry (the bundle shim), and the
+// runtime bridges (WorkerBridge, DurableObjectBridge) consumed by
+// `Runtime/Bootstrap/CelldFleet`.

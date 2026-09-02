@@ -2,9 +2,8 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Layer from "effect/Layer";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as Provider from "../Provider.ts";
-import { Random, RandomProvider } from "../Random.ts";
 import { Fleet, FleetProvider } from "./Fleet.ts";
-import { CelldWorkerProvider, CelldWorkerResource } from "./Worker.ts";
+import { CelldWorkerProvider, Worker } from "./Worker.ts";
 
 export class Providers extends Provider.ProviderCollection<Providers>()(
   "Celld",
@@ -12,26 +11,22 @@ export class Providers extends Provider.ProviderCollection<Providers>()(
 
 /**
  * The Celld provider layer: the {@link Fleet} and `Celld.Worker`
- * providers. Fleet *hosts* are contributed by cloud provider layers —
- * e.g. targeting AWS ECS requires `AWS.providers()` in the same stack:
+ * providers. The fleet *host* is a separate Layer composed alongside —
+ * targeting AWS ECS is `Celld.Ecs()`, which also needs `AWS.providers()`
+ * in the same stack (it contributes the `Random` provider the per-worker
+ * gateway secret is minted with):
  *
  * ```ts
  * const stack = Alchemy.Stack("app", {
- *   providers: Layer.mergeAll(AWS.providers(), Celld.providers()),
+ *   providers: Layer.mergeAll(AWS.providers(), Celld.providers(), Celld.Ecs()),
  *   state: AWS.state(),
  * });
  * ```
  */
 export const providers = () =>
-  Layer.effect(
-    Providers,
-    Provider.collection([Fleet, CelldWorkerResource as any, Random]),
-  ).pipe(
+  Layer.effect(Providers, Provider.collection([Fleet, Worker])).pipe(
     Layer.provide(FleetProvider()),
     Layer.provide(CelldWorkerProvider()),
-    // The per-worker gateway secret is a `Random` node minted by the
-    // worker's props transform and by `bindWorker`.
-    Layer.provide(RandomProvider()),
     Layer.provide(Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer)),
     Layer.orDie,
   );
