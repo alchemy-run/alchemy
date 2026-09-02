@@ -202,7 +202,7 @@ export const MAX_PACK_BYTES = 4 * 1024 * 1024;
 /** Bytes per hasher part — the spill part size, so a part is one R2 part (DESIGN §22.7). */
 export const HASH_PART_BYTES = 4 * 1024 * 1024;
 /** Hasher calls in flight per push (DESIGN §22.8). */
-export const HASH_CONCURRENCY = 4;
+export const HASH_CONCURRENCY = 8;
 // 4 MiB (was 8): the hasher chain is sequential (each part needs the
 // previous part's boundary), so a smaller part shortens both the tail after
 // the upload ends and the granularity at which the upload can run ahead.
@@ -1810,20 +1810,22 @@ export const ingestPackFrom = (
         let regionCalls = 0;
         const parts: Array<UploadedPart> = [];
         let producerDone = false;
-        let wakeConsumer: (() => void) | undefined;
+        const wakers: Array<() => void> = [];
         const notifyConsumer = () => {
-          const w = wakeConsumer;
-          wakeConsumer = undefined;
-          w?.();
+          for (const w of wakers.splice(0)) w();
         };
         const awaitChunk = (k: number) =>
           Effect.suspend(() =>
             k < chunks.length || producerDone
               ? Effect.void
               : Effect.callback<void>((resume) => {
-                  wakeConsumer = () => resume(Effect.void);
+                  wakers.push(() => resume(Effect.void));
                 }),
           );
+        const availableEnd = () => {
+          const last = chunks[chunks.length - 1];
+          return last === undefined ? 12 : last.base + last.payload.length;
+        };
         const dispatch = (
           payload: Uint8Array,
           opts: {
@@ -1967,9 +1969,50 @@ export const ingestPackFrom = (
         // The consumer is the forked side: hash fibers are children of THIS
         // fiber (a child's children die with it), so the producer runs here
         // and the consumer settles results as they land.
+        // The entry straddling a part edge is hashed as soon as its part
+        // settles — sized from its own header, from the retained bytes —
+        // so a large object crossing several parts (a 10 MB blob spans
+        // three) is verified alongside the parts, not after the last one.
+        interface Speculative {
+          readonly start: number;
+          readonly fiber: Fiber.Fiber<
+            { readonly bytes: Uint8Array; readonly r: ScanResult },
+            PackIngestError
+          >;
+        }
+        const speculate = (start: number) =>
+          Effect.gen(function* () {
+            const head = bytesFrom(start, Math.min(start + 32, availableEnd()));
+            let need = start + 64;
+            try {
+              const h = decodeTypeSize(head, 0);
+              // zlib's worst case is ~0.1% + a few bytes; deltas carry an
+              // offset varint before their stream.
+              need = start + h.next + Math.ceil(h.size * 1.001) + 80;
+            } catch {
+              // Header cut by the received edge: wait for more below.
+            }
+            while (true) {
+              const end = Math.min(need, availableEnd());
+              const bytes = bytesFrom(start, end);
+              const r = yield* hasher
+                .hashPart(bytes, {
+                  base: start,
+                  remaining: 1,
+                  maxObjectSize: MAX_OBJECT_SIZE,
+                })
+                .pipe(Effect.mapError(asIngest));
+              if (r.count === 1) return { bytes, r };
+              if (producerDone && end >= availableEnd()) return { bytes, r };
+              // Not complete in what has arrived: wait for another part.
+              if (end >= availableEnd()) yield* awaitChunk(chunks.length);
+              if (end >= need) need = availableEnd();
+            }
+          });
         const consume = Effect.gen(function* () {
           let staged = 0;
           let prevEnd = 12;
+          let speculative: Speculative | undefined;
           for (let k = 0; ; k++) {
             yield* awaitChunk(k);
             if (k >= chunks.length) break;
@@ -2003,8 +2046,23 @@ export const ingestPackFrom = (
               });
             if (result.firstOffset < 0) {
               // No boundary in this chunk (tiny, or inside one huge entry):
-              // its bytes are settled by a later chunk's region scan.
+              // its bytes are settled by the pending straddler or a later
+              // chunk's region scan.
               continue;
+            }
+            if (speculative !== undefined) {
+              const sp = yield* Fiber.join(speculative.fiber);
+              const start = speculative.start;
+              speculative = undefined;
+              if (
+                sp.r.count === 1 &&
+                start === prevEnd &&
+                sp.r.consumedTo <= result.firstOffset
+              ) {
+                staged += yield* stageResult(sp.bytes, start, sp.r);
+                prevEnd = sp.r.consumedTo;
+              }
+              // Otherwise the boundary is suspect: the paths below rescan.
             }
             if (k === 0 && result.firstOffset !== 12) {
               const again = yield* sequential();
@@ -2058,6 +2116,24 @@ export const ingestPackFrom = (
             }
             staged += yield* stageResult(current.payload, current.base, result);
             prevEnd = result.consumedTo;
+            if (prevEnd < chunkEnd && staged < count) {
+              const start = prevEnd;
+              speculative = {
+                start,
+                fiber: yield* Effect.forkChild(speculate(start)),
+              };
+            }
+          }
+          // A straddler still pending at the end (the last parts held no
+          // boundary): settle it before the tail scan.
+          if (speculative !== undefined) {
+            const sp = yield* Fiber.join(speculative.fiber);
+            const start = speculative.start;
+            speculative = undefined;
+            if (sp.r.count === 1 && start === prevEnd) {
+              staged += yield* stageResult(sp.bytes, start, sp.r);
+              prevEnd = sp.r.consumedTo;
+            }
           }
           return { staged, prevEnd };
         });

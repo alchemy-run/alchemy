@@ -531,8 +531,11 @@ export const hashBounds = (
  * Candidates are filtered cheaply: a deflate stream from git starts with
  * the zlib header `0x78` followed by one of four FLG bytes, right after a
  * 1–10 byte varint header. Returns the offset into `buf`, or `undefined`
- * when no boundary lies within `maxSearch` bytes (the chunk is inside one
- * huge entry — the caller stitches it from neighbours).
+ * when no boundary lies within `maxSearch` bytes — the whole chunk by
+ * default: a part whose head is inside one large entry still has its own
+ * entries to hash, and a part that reports no boundary is hashed serially
+ * as a region by the caller (a 10 MB blob spanning three parts once cost
+ * a whole part's worth of serial hashing under a 1 MiB limit).
  */
 export const findBoundary = (
   buf: Uint8Array,
@@ -541,7 +544,7 @@ export const findBoundary = (
     readonly maxSearch?: number | undefined;
   },
 ): number | undefined => {
-  const limit = Math.min(buf.length, options.maxSearch ?? 1 << 20);
+  const limit = Math.min(buf.length, options.maxSearch ?? buf.length);
   const isZlibHeader = (i: number) =>
     i + 1 < buf.length &&
     buf[i] === 0x78 &&

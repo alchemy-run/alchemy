@@ -10,6 +10,7 @@ import { HasherInline, Hasher } from "@/Git/Hasher.ts";
 import { ingestPackFrom, ingestStoreOf } from "@/Git/RepoObject.ts";
 import { makeObjectStore } from "@/Git/store/ObjectStore.ts";
 import { makeStreamingSource } from "@/Git/store/StreamingSource.ts";
+import { sliceRandomAccess } from "@/Git/store/PackSource.ts";
 import { hashObject, encodeTypeSize, makeSha1 } from "@/Git/git/ObjectCodec.ts";
 import { packHeader } from "@/Git/git/PackWriter.ts";
 import * as Zlib from "@/Git/git/Zlib.ts";
@@ -228,4 +229,138 @@ describe("raw-chunk dispatch with resync and stitching (DESIGN §22.9)", () => {
       ),
     );
   });
+});
+
+describe("spill by the hasher (DESIGN §22.10)", () => {
+  /** A pack of `n` random blobs plus a fake command section in front. */
+  const makeBody = (n: number, blobBytes: number, headBytes: number) =>
+    Effect.gen(function* () {
+      const pieces: Array<Uint8Array> = [packHeader(n)];
+      for (let i = 0; i < n; i++) {
+        const c = new Uint8Array(blobBytes + (i % 97));
+        crypto.getRandomValues(c);
+        pieces.push(encodeTypeSize(3, c.length), yield* Zlib.deflate(c));
+      }
+      const packBody = concat(pieces);
+      const sha = makeSha1();
+      sha.update(packBody);
+      const pack = concat([packBody, sha.digest()]);
+      const head = new Uint8Array(headBytes);
+      head.fill(0x20);
+      return { body: concat([head, pack]), packStart: headBytes };
+    });
+
+  const run = (opts: {
+    readonly n: number;
+    readonly blobBytes: number;
+    readonly headBytes: number;
+    readonly partBytes: number;
+    readonly threshold: number;
+    readonly chunk: number;
+  }) =>
+    Effect.gen(function* () {
+      const { body, packStart } = yield* makeBody(
+        opts.n,
+        opts.blobBytes,
+        opts.headBytes,
+      );
+      // ONE blob store: the hasher writes the parts the pump's upload
+      // collects — in production both are the same BlobStore layer.
+      const blobs = yield* BlobStore;
+      const feeder = makeStreamingSource({
+        slabBytes: opts.partBytes,
+        retainBytes: opts.partBytes * 2,
+        backpressureBytes: 1 << 20,
+      });
+      const sql = makeTestSqlClient();
+      const store = makeObjectStore({ sql, blobs, repoId: "R" });
+      const hasher = yield* Hasher;
+      const source = sliceRandomAccess(feeder.source, packStart);
+      const ingest = yield* Effect.forkChild(
+        Effect.result(
+          ingestPackFrom(source, {
+            store: ingestStoreOf(store),
+            pushId: "p",
+            hasher,
+            partBytes: opts.partBytes,
+            spill: {
+              body: feeder.source,
+              feeder,
+              packStart,
+              blobs,
+              key: "R/incoming/X.pack",
+              packId: "wire-X",
+              threshold: opts.threshold,
+            },
+          }),
+        ),
+      );
+      for (let at = 0; at < body.length; at += opts.chunk)
+        yield* feeder.push(body.subarray(at, at + opts.chunk));
+      feeder.end();
+      const r = yield* Fiber.join(ingest).pipe(Effect.timeout("20 seconds"));
+      if (r._tag === "Failure") throw new Error(r.failure.reason);
+      const rows = yield* sql.first<{ n: number; promoted: number }>(
+        `SELECT COUNT(*) AS n, SUM(location = 'pack') AS promoted FROM objects WHERE staged_push = 'p'`,
+      );
+      const spilled = yield* blobs.head("R/incoming/X.pack");
+      return { result: r.success, rows, spilled, body, blobs };
+    }).pipe(
+      Effect.provide(
+        Layer.provideMerge(
+          HasherInline,
+          Layer.succeed(BlobStore, makeMemoryBlobStore()),
+        ),
+      ),
+    );
+
+  test(
+    "a body past the threshold is written whole by the parts' hashers; blobs are promoted into it",
+    async () => {
+      const out = await Effect.runPromise(
+        run({
+          n: 400,
+          blobBytes: 600,
+          headBytes: 137,
+          partBytes: 32 * 1024,
+          threshold: 8 * 1024,
+          chunk: 7_001,
+        }),
+      );
+      expect(out.result.parkedKey).toBe("R/incoming/X.pack");
+      expect(out.spilled?.size).toBe(out.body.length);
+      const stored = await Effect.runPromise(
+        Effect.gen(function* () {
+          const blob = yield* out.blobs.get("R/incoming/X.pack");
+          return blob === null ? undefined : yield* blob.bytes;
+        }),
+      );
+      expect(stored).toEqual(out.body);
+      expect(out.rows?.n).toBe(400);
+      expect(out.rows?.promoted).toBe(400);
+      expect(out.result.promoted).toBe(400);
+    },
+    { timeout: 30_000 },
+  );
+
+  test(
+    "a body that ends within the threshold stays in memory: nothing written, rows inline",
+    async () => {
+      const out = await Effect.runPromise(
+        run({
+          n: 20,
+          blobBytes: 100,
+          headBytes: 50,
+          partBytes: 32 * 1024,
+          threshold: 64 * 1024,
+          chunk: 1_000,
+        }),
+      );
+      expect(out.result.parkedKey).toBeUndefined();
+      expect(out.spilled).toBeNull();
+      expect(out.rows?.n).toBe(20);
+      expect(out.rows?.promoted).toBe(0);
+    },
+    { timeout: 30_000 },
+  );
 });

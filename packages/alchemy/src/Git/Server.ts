@@ -2155,7 +2155,9 @@ const make = Effect.gen(function* () {
     if (![base, remaining, maxObjectSize].every(Number.isFinite)) {
       return HttpServerResponse.text("bad coordinates", { status: 400 });
     }
+    const t0 = Date.now();
     const body = new Uint8Array(yield* request.arrayBuffer);
+    const tBody = Date.now();
     // A requested spill part uploads concurrently with the scan (DESIGN
     // §22.10): this isolate is the writer of the part it verifies.
     const key = query.get("key");
@@ -2183,7 +2185,14 @@ const make = Effect.gen(function* () {
             resync: query.get("resync") === "1",
           })
     ).pipe(Effect.result);
+    const tScan = Date.now();
     const part = upload === undefined ? undefined : yield* Fiber.join(upload);
+    const tUpload = Date.now();
+    if (body.length > 1 << 20) {
+      console.log(
+        `[hash] bytes=${body.length} body=${tBody - t0}ms scan=${tScan - tBody}ms upload=${tUpload - tScan}ms part=${partNumber}`,
+      );
+    }
     if (part !== undefined && Result.isFailure(part)) {
       return HttpServerResponse.text(
         `spill part ${partNumber}: ${part.failure.reason}`,

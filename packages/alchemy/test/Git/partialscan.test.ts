@@ -240,6 +240,38 @@ describe("scanBounds + hashBounds (DESIGN §22.8)", () => {
 });
 
 describe("findBoundary (DESIGN §22.9)", () => {
+  test("a boundary past the first MiB is found: the search covers the whole chunk", async () => {
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        // One 1.5 MiB blob followed by small ones: a chunk starting inside
+        // the big blob has its first boundary ~1.5 MiB in.
+        const big = new Uint8Array(1_500_000);
+        crypto.getRandomValues(big);
+        const pieces: Array<Uint8Array> = [
+          packHeader(4),
+          encodeTypeSize(3, big.length),
+          yield* Zlib.deflate(big),
+        ];
+        for (let i = 0; i < 3; i++) {
+          const c = new Uint8Array(500);
+          crypto.getRandomValues(c);
+          pieces.push(encodeTypeSize(3, c.length), yield* Zlib.deflate(c));
+        }
+        const body = concat(pieces);
+        const sha = makeSha1();
+        sha.update(body);
+        const pack = concat([body, sha.digest()]);
+        const bigEnd = 12 + pieces[1]!.length + pieces[2]!.length;
+        const chunk = pack.subarray(100);
+        expect(findBoundary(chunk, { maxObjectSize: 1 << 24 })).toBe(
+          bigEnd - 100,
+        );
+        expect(
+          findBoundary(chunk, { maxObjectSize: 1 << 24, maxSearch: 1 << 20 }),
+        ).toBeUndefined();
+      }),
+    );
+  });
   test("from arbitrary offsets in a synthetic pack, the first boundary found is a true entry start", async () => {
     await Effect.runPromise(
       Effect.gen(function* () {
