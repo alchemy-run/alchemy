@@ -20,8 +20,8 @@
 // exports point at .ts source), but consumers install into `node_modules/`,
 // so the path check sends them to the bundled `alchemy.js` regardless.
 //
-// Own the spawn so bun's hard-coded watcher warning can be filtered while
-// signals, IPC messages, and the child's exit status are forwarded.
+// Own the spawn so runtime diagnostics can be filtered while signals, IPC
+// messages, and the child's exit status are forwarded.
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { constants } from "node:os";
@@ -163,7 +163,7 @@ if (runtime === "bun" && isDev) {
 
 if (runtime === "node" && isDev && nodeRunsTypeScript) {
   // Run the checkout's source directly, no build required: the
-  // register-dev-mode hooks load .ts/.tsx through tsx's loader AND resolve
+  // register-dev-mode hooks load .ts/.tsx through Oxc AND resolve
   // the monorepo's own packages (`alchemy/*`, `@alchemy.run/*`,
   // `@distilled.cloud/*`) through their `bun` export condition onto src/ —
   // so the CLI, the user's stack, and every workspace dependency load one

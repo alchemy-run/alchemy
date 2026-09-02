@@ -7,8 +7,12 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import { watchImport } from "@alchemy.run/node-utils/watch-import";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { AlchemyContextLive } from "../AlchemyContext.ts";
+import { StackModuleLoader } from "../Alchemist/Session.ts";
 import { ArtifactStore, createArtifactStore } from "../Artifacts.ts";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
 import { ProfileStoreLive } from "../Auth/Profile.ts";
@@ -39,9 +43,9 @@ const services = Layer.mergeAll(
   Layer.succeed(ArtifactStore, createArtifactStore()),
   // Dev runs live in this exec child, not the `alchemy` CLI process, so
   // without this layer they'd export no telemetry at all. No root
-  // `cli.dev` span though: dev parks in Effect.never until the watcher
-  // kills the process, so a wrapping span would never end (and never
-  // export) — plan/apply spans are the trace roots instead.
+  // `cli.dev` span though: dev remains alive across reloads, so a wrapping
+  // span would not end (and export) until shutdown — plan/apply spans are the
+  // trace roots instead.
   TelemetryLive,
 ).pipe(
   Layer.provideMerge(
@@ -101,6 +105,48 @@ const runDev = Effect.fn(function* (options: DevOptions) {
   return once ? undefined : yield* Effect.never;
 });
 
+const runNodeDevWatcher = (options: DevOptions) => {
+  const entrypoint = path.resolve(options.main);
+  const root = path.dirname(entrypoint);
+  const nodeModules = `${path.sep}node_modules${path.sep}`;
+  return Effect.acquireRelease(
+    Effect.sync(() =>
+      watchImport<{ readonly default?: unknown }>(entrypoint, {
+        parentURL: import.meta.url,
+        shouldInvalidate: (url) => {
+          if (!url.startsWith("file:")) return false;
+          const file = fileURLToPath(url);
+          const relative = path.relative(root, file);
+          return (
+            !file.includes(nodeModules) &&
+            (relative === "" ||
+              (!relative.startsWith("..") && !path.isAbsolute(relative)))
+          );
+        },
+      }),
+    ),
+    (watcher) => Effect.promise(() => watcher.close()),
+  ).pipe(
+    Effect.flatMap((watcher) => {
+      const changed = Effect.callback<void>((resume) => {
+        const unsubscribe = watcher.subscribe(() => resume(Effect.void));
+        return Effect.sync(unsubscribe);
+      });
+      return Effect.forever(
+        Effect.raceFirst(
+          devKeepAlive(runDev(options)).pipe(
+            Effect.provideService(StackModuleLoader, {
+              import: () => watcher.import().then(({ value }) => value),
+            }),
+            Effect.scoped,
+          ),
+          changed,
+        ),
+      );
+    }),
+  );
+};
+
 // A mid-edit import or planning failure must keep the watch process alive so
 // the next save can restart it. Interruptions still propagate for Ctrl+C.
 export const devKeepAlive = <A, E, R>(
@@ -132,7 +178,12 @@ const makeExec = () => {
     yield* forwardSidecarLogs((entry) =>
       devLog.writeLine(`[${entry.channel}] ${entry.line}`),
     );
-    return yield* devKeepAlive(runDev(options));
+    // Bun's outer `--watch` process owns reloads and starts this module with a
+    // fresh cache each time. Node stays in this process and refreshes only the
+    // stack module graph through the Oxc/chokidar watcher above.
+    return yield* (yield* devOnce) || process.versions.bun !== undefined
+      ? devKeepAlive(runDev(options))
+      : runNodeDevWatcher(options);
   }).pipe(Effect.provide(services), Effect.scoped, handleCliErrors);
 };
 

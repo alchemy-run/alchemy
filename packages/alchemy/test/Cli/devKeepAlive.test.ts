@@ -8,10 +8,9 @@ import { importStack } from "@/Alchemist/Session.ts";
 import { devKeepAlive } from "../../src/Cli/exec";
 import { PlatformServices } from "../../src/Util/PlatformServices";
 
-// `alchemy dev` runs under `--watch`: exiting the process on error cancels
-// the watch session, so a run wrapped in `devKeepAlive` must park (stay
-// alive for the watcher to restart) on ANY failure — typed error or defect —
-// while success and interruption pass through untouched.
+// Node's import-aware dev loop interrupts a parked run when a dependency
+// changes; Bun's process watcher restarts it. In both cases a failed generation
+// must park instead of exiting the watch session, while interruption propagates.
 
 /** Resolves `true` when the effect is still running (parked) after the timeout. */
 const parks = <A, E>(effect: Effect.Effect<A, E>) =>
@@ -62,8 +61,8 @@ describe("devKeepAlive", () => {
 
   // The real-world crash: a mid-edit save makes the stack entrypoint throw at
   // module evaluation, so `importStack`'s dynamic import rejects (a defect).
-  // Before the guard this crashed the exec process and killed the watch
-  // session; wrapped in `devKeepAlive` it must park until the next save.
+  // Wrapped in `devKeepAlive`, it must park until the import watcher observes
+  // the next save and interrupts this generation.
   test("a stack module that throws at evaluation parks instead of crashing", () =>
     expect(
       parks(

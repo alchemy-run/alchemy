@@ -8,10 +8,7 @@ import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import { fileURLToPath } from "node:url";
 import { SPAWNER_URL_ENV_KEY } from "../../Local/RpcProviderProxy.ts";
 import * as RpcSpawner from "../../Local/RpcSpawner.ts";
-import {
-  isRegisterHooksSupported,
-  transformTypesFlags,
-} from "../../Util/Node.ts";
+import { isRegisterHooksSupported } from "../../Util/Node.ts";
 import { DevOptions } from "../DevOptions.ts";
 import {
   configPath,
@@ -62,7 +59,10 @@ export const devCommand = Command.make(
         process.env.NODE_EXTRA_CA_CERTS ??= Floci.FLOCI_CA_PATH;
       }
       const spawner = yield* RpcSpawner.RpcSpawner;
-      // We no longer force Bun in development because this prevents us from testing in Node.
+      // Bun keeps its native process watcher: each change replaces the exec
+      // process and therefore gets a fresh module cache. Node deliberately
+      // does not use `node --watch`; exec.ts keeps one process alive and
+      // reloads only the user's stack graph so Ctrl+C remains deterministic.
       const command =
         typeof globalThis.Bun !== "undefined"
           ? [
@@ -76,7 +76,7 @@ export const devCommand = Command.make(
           : import.meta.url.endsWith(".ts") && isRegisterHooksSupported()
             ? [
                 // Source checkout under node: run the .ts exec entry with
-                // the dev-mode hooks (tsx loader + src-condition
+                // the dev-mode hooks (Oxc loader + src-condition
                 // resolution), so dev works without a build (mirrors
                 // bin/cli.js's launcher path). `process.execPath`, not
                 // "node": the hooks are gated on THIS node's version. A
@@ -86,16 +86,11 @@ export const devCommand = Command.make(
                 ...process.execArgv,
                 "--import",
                 import.meta.resolve("../../../bin/register-dev-mode.js"),
-                "--watch",
-                "--watch-preserve-output",
                 fileURLToPath(import.meta.resolve("alchemy/bin/exec.ts")),
               ]
             : [
                 process.execPath,
                 ...process.execArgv,
-                ...transformTypesFlags(),
-                "--watch",
-                "--watch-preserve-output",
                 fileURLToPath(import.meta.resolve("alchemy/bin/exec.js")),
               ];
       const child = yield* ChildProcess.make(command[0], command.slice(1), {
