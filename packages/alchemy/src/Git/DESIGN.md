@@ -1942,3 +1942,49 @@ what it costs: the chunk crosses to AWS and the scan comes back, so a
 Lambda hasher is worth it for pushes of tens of MiB and irrelevant for the
 kilobyte pushes that dominate a repository's life — which is why it is a
 layer and not the default.
+
+### §22.12 Hasher on dynamically loaded Workers
+
+`WorkerLoader` instantiates a Worker from module source at runtime, under
+a name the runtime caches. The question that decides whether it is a
+hasher was answered by a probe (four loaded workers each running a fixed
+CPU burn, timed from the client):
+
+| | n=1 | n=4 same name | n=4 distinct names | n=8 |
+| --- | --- | --- | --- | --- |
+| CPU burn, client time | 0.44–0.79 s | 1.94 s (serial) | **0.65 s (parallel)** | refused |
+| 100 MB allocation each | ok | ok | ok, four isolates at once | refused |
+
+Distinct names are distinct isolates, and distinct isolates run **in
+parallel with the caller** — unlike a service binding (§22.10). Each has
+its own 128 MB. The runtime allows four concurrent dynamic-worker
+invocations per request; an eighth call fails with "Dynamic worker
+concurrency limit exceeded".
+
+`HasherWorkerLoader` (`alchemy/Git/WorkerLoader`) keeps four fixed names
+(`git-hasher-0..3`, warm across pushes), dispatches 4 MiB chunks over the
+hash route's own protocol, and lets the pump write the spill
+(`writesSpill: false`); the loaded hasher has no bindings and
+`globalOutbound: null`. Its module is the real scanner: the Worker
+bundler gained a `?worker` import (`WorkerModulePlugin.ts`) that bundles
+the target into one self-contained module and imports it as a string —
+nested `?worker` imports included — so `hasher-worker.ts` is ordinary
+TypeScript that shares `PartialScan` with everything else. (The loader's
+`get` also wrapped the native stub as an entrypoint and had no `fetch`;
+fixed with a regression test.)
+
+Measured, same pushes and client as §22.10:
+
+| | loose push | synthetic push | incremental push |
+| --- | --- | --- | --- |
+| GitHub (fresh repo) | 3.3 s | 4.6 s | 1.2 s |
+| `HasherInline` | 9.9–13.5 s | 8.8 s | 0.24–0.4 s |
+| `HasherLambda` | 6.8–7.9 s | 6.3–6.7 s | 0.27–0.8 s |
+| **`HasherWorkerLoader`** | **7.1–7.8 s** | **6.8 s** | 0.24 s |
+
+The body is in by 0.8–1.5 s, chunks settle in waves of four (four by
+0.9 s, the next four by 2.1 s, the last by 2.5 s), and the receiver's own
+CPU is the lowest of the three (0.9–1.4 s: no base64, no signing). What
+remains is the same tail as §22.11 — cross-chunk deltas, the oversize
+straddler, staging and the commit — and the four-way cap: a push wider
+than four chunks hashes in waves.

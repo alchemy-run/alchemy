@@ -121,9 +121,41 @@ declares it needs both provider sets. If a chunk cannot be hashed
 there — a throttle, a cold start that runs out of time — the Worker
 hashes it inline; a push never fails because its hasher did.
 
+```typescript
+import * as GitLoader from "alchemy/Git/WorkerLoader";
+
+Layer.provide(GitLoader.HasherWorkerLoader()),
+```
+
+Four dynamically loaded Workers, each in its own isolate and its own
+memory, hash a large push four chunks at a time. Nothing leaves
+Cloudflare and nothing needs credentials; the hasher module is bundled
+into your Worker at build time. The runtime allows four concurrent
+loaded workers per request, so a push wider than that hashes in waves.
+
 `Git.HasherSelf` fans out through the Worker's own service binding. On
 Cloudflare that runs on the same thread as the caller, so it buys
 nothing there; it is the shape a hasher on another host takes.
+
+### Choosing a hasher <!-- api-prose -->
+
+Measured on one client pushing a 40 MiB, 15.6k-object, delta-heavy
+pack (`loose`) and a 44 MiB pack of whole blobs (`synthetic`), with
+GitHub on a fresh repository from the same client for scale. Cloudflare
+timings vary run to run by about a fifth.
+
+| layer | parallelism | memory | leaves Cloudflare | extra cost | loose push | synthetic push |
+| --- | --- | --- | --- | --- | --- | --- |
+| `HasherInline` | none | the Worker's | no | none | 9.9–13.5 s | 8.8 s |
+| `HasherWorkerLoader` | 4 isolates | 128 MB each | no | none | 7.1–7.8 s | 6.8 s |
+| `HasherLambda` | one Lambda per 4 MiB chunk | 3 GB each | yes | Lambda-seconds, egress | 6.8–7.9 s | 6.3–6.7 s |
+| GitHub | | | | | 3.3 s | 4.6 s |
+
+Incremental pushes are 0.2–0.4 s on every layer (GitHub: 1.2 s); the
+choice only matters for pushes of tens of megabytes. Start with
+`HasherWorkerLoader` when large pushes matter and you want to stay on
+Cloudflare; reach for `HasherLambda` when a push is wider than four
+chunks and you already run AWS.
 
 ## `Git.AuthTokens`
 

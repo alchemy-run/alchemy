@@ -1743,7 +1743,9 @@ export const ingestPackFrom = (
         // payloads and hashed by a small extra call. A boundary that does
         // not line up (a resync false positive) falls back to a sequential
         // rescan of that chunk from the known boundary.
-        const gate = yield* Semaphore.make(HASH_CONCURRENCY);
+        const gate = yield* Semaphore.make(
+          hasher.concurrency ?? HASH_CONCURRENCY,
+        );
         interface Chunk {
           readonly index: number;
           /** Pack-relative offset of payload[0] (negative for a body-aligned first part). */

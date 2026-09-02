@@ -63,6 +63,16 @@ test(
   { timeout: 180_000 },
 );
 
+test(
+  "effect worker reaches a named dynamic worker via loader.get",
+  Effect.gen(function* () {
+    const { effectWorkerUrl } = yield* stack;
+    const body = yield* readJson(`${effectWorkerUrl}/get`);
+    expect(body).toMatchObject({ mode: "get", ok: true });
+  }),
+  { timeout: 180_000 },
+);
+
 // `globalOutbound: null` must reach the runtime as `null` — coercing it to
 // `undefined` (the old `?.raw` behavior) silently restores default outbound
 // access for workers meant to be sandboxed (#746). The fixture's dynamic

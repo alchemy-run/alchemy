@@ -279,7 +279,10 @@ export const WorkerLoader: WorkerLoaderClass = Object.assign(
             ) =>
               Effect.flatMap(Effect.context<Req>(), (context) =>
                 Effect.sync(() =>
-                  wrapDynamicWorkerEntrypoint(
+                  // `get` returns the same stub shape as `load`: the native
+                  // handle is a WorkerStub (`getEntrypoint()`), not an
+                  // entrypoint — wrapping it as one left `fetch` undefined.
+                  wrapWorkerStub(
                     loader.get(name, () =>
                       asEffect(getCode()).pipe(
                         Effect.provide(context),
