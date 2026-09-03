@@ -239,14 +239,23 @@ export const registerOxc = (
         return nextResolve(specifier, context);
       }
 
+      const resolutionContext =
+        options.conditions === undefined || options.conditions.length === 0
+          ? context
+          : {
+              ...context,
+              conditions: [
+                ...new Set([...options.conditions, ...context.conditions]),
+              ],
+            };
       const resolved = request
         ? resolveSpecifier(
             resolver,
             request.specifier,
-            { ...context, parentURL: request.parentURL },
+            { ...resolutionContext, parentURL: request.parentURL },
             nextResolve,
           )
-        : resolveSpecifier(resolver, specifier, context, nextResolve);
+        : resolveSpecifier(resolver, specifier, resolutionContext, nextResolve);
       if (
         namespace !== undefined &&
         resolved.url.startsWith("file:") &&
