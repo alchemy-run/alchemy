@@ -98,20 +98,19 @@ Stack with a Bucket, a KV Namespace, and a Worker bound to both:
 only touches what changed. [Stacks](/infrastructure-as-code/stack)
 covers stages, outputs, and state.
 
-A **Resource** is any cloud entity Alchemy manages: a bucket, a
-database, a queue, a Worker, a DNS record. Declaring one is inert. It
-becomes real when it is yielded:
+A **Resource** is a cloud entity in a Stack managed by Alchemy: a
+bucket, a database, a queue, a Worker, a DNS record. Declare it, then
+yield it in the Stack to add it to the plan:
 
 ```typescript
-export const Uploads = Cloudflare.R2.Bucket("Uploads"); // a declaration
+export const Uploads = Cloudflare.R2.Bucket("Uploads");
 
-const bucket = yield* Uploads; // created on deploy; bucket.bucketName is its Output
+const bucket = yield* Uploads; // bucket.bucketName is an Output
 ```
 
-Each declaration has a stable logical id, `"Uploads"` here, that
-Alchemy tracks across deploys. Its outputs, like the physical name
-Alchemy generates, are typed values you can pass into other
-resources. [Resources](/infrastructure-as-code/resource) covers props,
+Each Resource has a logical id, `"Uploads"` here, that Alchemy uses to
+track it across deploys. Its outputs, like the physical name Alchemy
+generates, are typed values you can pass into other Resources. [Resources](/infrastructure-as-code/resource) covers props,
 outputs, and references between resources.
 
 A **Provider** teaches Alchemy how to read, diff, create, update, and
