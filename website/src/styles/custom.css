@@ -746,7 +746,7 @@ p:has(> .alc-btn) {
   text-align: center;
   padding: 0.2rem 0;
   background: var(--alc-accent);
-  color: var(--alc-fg-invert);
+  color: var(--alc-fg-on-accent);
   font-size: 0.68rem;
   font-weight: 600;
   letter-spacing: 0.04em;
