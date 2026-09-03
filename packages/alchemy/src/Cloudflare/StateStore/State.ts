@@ -30,7 +30,11 @@ import {
   type HttpStateStoreCredentials,
 } from "../../State/HttpStateStore.ts";
 import { makeLocalState } from "../../State/LocalState.ts";
-import { State, type StateService } from "../../State/State.ts";
+import {
+  State,
+  isResourceState,
+  type StateService,
+} from "../../State/State.ts";
 import {
   recordStateStoreInit,
   recordStateStoreOp,
@@ -63,9 +67,8 @@ export const state = () =>
       const profileName = yield* ALCHEMY_PROFILE;
       const localStage = `${profileName}_${scriptName}`;
       const credStore = yield* CredentialsStore;
-      // `deploy --yes` flows in here (via AlchemyContext.updateStateStore) to
-      // auto-accept an out-of-date state store upgrade instead of prompting.
-      // Optional so callers that don't provide AlchemyContext keep the prompt.
+      // `deploy --yes` sets `updateStateStore`. Callers without an
+      // AlchemyContext keep the prompt.
       const autoUpdateStateStore =
         Option.getOrUndefined(yield* Effect.serviceOption(AlchemyContext))
           ?.updateStateStore ?? false;
@@ -73,14 +76,12 @@ export const state = () =>
 
       const init = Effect.gen(function* () {
         if (yield* hasLocalStack(localStage)) {
-          // if there's still a local stack, then we need to finish the bootstrap
-          // TODO(sam): what if the local stack was
+          // A local stack means an earlier bootstrap did not finish.
           return yield* deployWithLocalState({
             scriptName,
             profileName,
             isCI,
             force: false,
-            resume: true,
           });
         }
 
@@ -185,12 +186,9 @@ export const state = () =>
           CREDENTIALS_FILE,
         );
         if (credentials) {
-          // The cached `url`/`authToken` are minted per-account (the `url`
-          // encodes the account via its workers.dev subdomain). If the
-          // active account changed since they were written — or the file
-          // predates the `accountId` field — trusting the cache would
-          // silently read/write state in the wrong account, so discard it
-          // and fall through to re-derivation from the current account.
+          // The cached `url` and `authToken` belong to one account. A
+          // cache from a different account would read and write state in
+          // the wrong account.
           if (isStateStoreCredentialsStale(credentials, accountId)) {
             yield* Clank.info(
               `Cloudflare State Store credentials were minted for a different ` +
@@ -203,36 +201,37 @@ export const state = () =>
             return yield* ensureLatest(credentials);
           }
         }
-        if (yield* isStateStoreServing(accountId)) {
-          return yield* ensureLatest(
-            yield* loginWithCloudflare(profileName, false),
-          );
-        } else if (autoUpdateStateStore && !isCI) {
-          // `--yes` on a workstation: deploy the missing state store.
-          return yield* bootstrap();
-        } else if (isCI) {
-          // A CI deploy never bootstraps, with or without `--yes`. A
-          // bootstrap writes account-wide secrets, and a token that cannot
-          // see the store looks the same as an empty account.
-          return yield* Effect.die(
-            new AuthError({
+        const decision = decideStateStoreInit({
+          serving: yield* isStateStoreServing(accountId),
+          autoUpdate: autoUpdateStateStore,
+          isCI,
+        });
+        switch (decision) {
+          case "login":
+            return yield* ensureLatest(
+              yield* loginWithCloudflare(profileName, false),
+            );
+          case "bootstrap":
+            return yield* bootstrap();
+          case "refuse-ci":
+            return yield* Effect.die(
+              new AuthError({
+                message:
+                  "Cloudflare State store not found. A CI deploy does not " +
+                  "bootstrap it. Run 'alchemy bootstrap cloudflare --profile " +
+                  "<profile>' from a workstation first.",
+              }),
+            );
+          case "prompt": {
+            const shouldDeploy = yield* Clank.confirm({
               message:
-                "Cloudflare State store not found. A CI deploy does not " +
-                "bootstrap it. Run 'alchemy bootstrap cloudflare --profile " +
-                "<profile>' from a workstation first.",
-            }),
-          );
-        } else {
-          return yield* Clank.confirm({
-            message:
-              "Cloudflare State Store not found. Do you want to deploy it?",
-          }).pipe(
-            Effect.flatMap((shouldDeploy) =>
-              shouldDeploy
-                ? bootstrap()
-                : Effect.die(new Clank.PromptCancelled()),
-            ),
-          );
+                "Cloudflare State Store not found. Do you want to deploy it?",
+            });
+            if (shouldDeploy) {
+              return yield* bootstrap();
+            }
+            return yield* Effect.die(new Clank.PromptCancelled());
+          }
         }
       }).pipe(recordStateStoreInit, Effect.orDie);
 
@@ -273,43 +272,38 @@ export const bootstrap = (options: BootstrapOptions = {}) =>
       "alchemy.state_store.ci": isCI,
     });
     yield* annotateAccountHash();
+    const { accountId } =
+      yield* yield* CloudflareEnvironment.CloudflareEnvironment;
 
     if (yield* hasLocalStack(localStage)) {
-      // if there's a local stack still, we can assume we did not finish hoisting it, so finish that
       yield* Clank.info(
         `Resuming Cloudflare State Store '${scriptName}' deployment...`,
       );
-      // resume deployment
       return yield* deployWithLocalState({
         scriptName,
         profileName,
         isCI,
         force,
-        resume: true,
       }).pipe(
         Effect.tap(() =>
           Clank.success(`Cloudflare State Store '${scriptName}' is ready.`),
         ),
       );
     }
-    const { accountId } =
-      yield* yield* CloudflareEnvironment.CloudflareEnvironment;
+    if (scriptName !== STATE_STORE_SCRIPT_NAME) {
+      yield* refuseSecondStateStore(accountId, scriptName);
+    }
     if (yield* isStateStoreServing(accountId)) {
-      // this is a regular update, let's check if it needs an update and refresh credentials
       if (!force) {
         yield* Clank.info(
           `Worker '${scriptName}' already exists; adopting and refreshing credentials. ` +
             `Use --force to redeploy.`,
         );
       }
-      const credentials = yield* loginWithCloudflare(
-        profileName,
-        // force refresh during
-        true,
-      );
+      const credentials = yield* loginWithCloudflare(profileName, true);
       const { url, authToken } = credentials;
       if (!isCI) {
-        // we don't write credentials in CI because the file system is ephemeral
+        // The CI file system does not outlive the job.
         const store = yield* CredentialsStore;
         yield* store.write<StoredStateStoreCredentials>(
           profileName,
@@ -348,7 +342,6 @@ export const bootstrap = (options: BootstrapOptions = {}) =>
         profileName,
         isCI,
         force,
-        resume: false,
       }).pipe(
         Effect.tap(() =>
           Clank.success(`Cloudflare State Store '${scriptName}' is ready.`),
@@ -555,55 +548,144 @@ const deployStateStore = ({
     recordStateStoreOp("deploy"),
   );
 
+const BOOTSTRAP_STACK = "CloudflareStateStore";
+
+/**
+ * Logical ids of the `Random` resources in `Token.ts`. Both must match
+ * the ids passed to `Random(...)` there.
+ */
+const BOOTSTRAP_RANDOM_IDS = [
+  "StateStoreAuthTokenValue",
+  "StateStoreEncryptionKeyValue",
+] as const;
+
+/**
+ * A fresh bootstrap mints a new token and encryption key. When the
+ * secrets already exist, a store was deployed before, and its state
+ * becomes unreadable under a new key. A local stack that already holds
+ * both random values re-uploads the same values, so it is safe.
+ *
+ * @internal exported for unit testing.
+ */
+export const shouldRefuseFreshBootstrap = ({
+  hasLocalRandoms,
+  force,
+  existingNames,
+}: {
+  hasLocalRandoms: boolean;
+  force: boolean;
+  existingNames: ReadonlyArray<string>;
+}): boolean => {
+  if (force) return false;
+  if (existingNames.length === 0) return false;
+  return !hasLocalRandoms;
+};
+
+const findExistingSecretNames = (accountId: string) =>
+  findStateStoreSecrets(accountId).pipe(
+    Effect.map((existing) => existing.names),
+    Effect.mapError(
+      (cause) =>
+        new AuthError({
+          message:
+            "Cannot verify that this account has no Cloudflare State " +
+            "Store secrets yet. Refusing to bootstrap.",
+          cause,
+        }),
+    ),
+  );
+
+const refuseSecondStateStore = (accountId: string, scriptName: string) =>
+  Effect.gen(function* () {
+    const existingNames = yield* findExistingSecretNames(accountId);
+    if (existingNames.length === 0) return;
+    return yield* Effect.fail(
+      new AuthError({
+        message:
+          `Cannot deploy a state store named '${scriptName}': secrets ` +
+          `${existingNames.join(", ")} already exist in this account, so a ` +
+          `'${STATE_STORE_SCRIPT_NAME}' store was deployed before. Every ` +
+          "store shares the same secret names, so one Cloudflare State " +
+          "Store per account is supported. Use the default worker name.",
+      }),
+    );
+  });
+
+/** True when the local bootstrap stack holds both persisted random values. */
+const hasPersistedBootstrapRandoms = (
+  localState: StateService,
+  stage: string,
+) =>
+  Effect.gen(function* () {
+    const fqns = yield* localState.list({ stack: BOOTSTRAP_STACK, stage });
+    for (const id of BOOTSTRAP_RANDOM_IDS) {
+      const fqn = fqns.find((candidate) => candidate.split("/").at(-1) === id);
+      if (fqn === undefined) return false;
+      const persisted = yield* localState.get({
+        stack: BOOTSTRAP_STACK,
+        stage,
+        fqn,
+      });
+      if (!isResourceState(persisted)) return false;
+      if (persisted.attr?.text === undefined) return false;
+    }
+    return true;
+  });
+
 const deployWithLocalState = ({
   scriptName,
   isCI,
   force,
   profileName,
-  resume,
 }: {
   scriptName: string;
   isCI: boolean;
   force: boolean;
   profileName: string;
-  /** True when a local bootstrap stack already exists and is finished here. */
-  resume: boolean;
 }) =>
   Effect.gen(function* () {
-    if (!resume && !force) {
-      // A fresh bootstrap mints a new token and encryption key. When the
-      // secrets already exist, a store was deployed before and its state
-      // becomes unreadable under a new key. Refuse unless forced.
+    const localState = yield* makeLocalState();
+    const localStage = `${profileName}_${scriptName}`;
+    const remoteStage = scriptName;
+    if (!force) {
       const { accountId } =
         yield* yield* CloudflareEnvironment.CloudflareEnvironment;
-      const existing = yield* findStateStoreSecrets(accountId).pipe(
-        Effect.mapError(
-          (cause) =>
+      const existingNames = yield* findExistingSecretNames(accountId);
+      const hasLocal = yield* hasLocalStack(localStage);
+      const hasLocalRandoms =
+        hasLocal &&
+        (yield* hasPersistedBootstrapRandoms(localState, localStage));
+      if (
+        shouldRefuseFreshBootstrap({ hasLocalRandoms, force, existingNames })
+      ) {
+        const existing = existingNames.join(", ");
+        if (hasLocal) {
+          return yield* Effect.fail(
             new AuthError({
               message:
-                "Cannot verify that this account has no Cloudflare State " +
-                `Store secrets yet (${errorTag(cause)}). Refusing to bootstrap.`,
-              cause,
+                `Secrets ${existing} already exist in this account's Secrets ` +
+                `Store, but the local bootstrap stack '${localStage}' does not ` +
+                "hold their values. Finishing it would mint new values and make " +
+                "every stack's state unreadable. Clear the local stack first: " +
+                `run 'alchemy state clear --stack ${BOOTSTRAP_STACK} --stage ` +
+                `${localStage} --local' or delete ` +
+                `'.alchemy/state/${BOOTSTRAP_STACK}/${localStage}'.`,
             }),
-        ),
-      );
-      if (existing.names.length > 0) {
+          );
+        }
         return yield* Effect.fail(
           new AuthError({
             message:
-              `Secrets ${existing.names.join(", ")} already exist in this ` +
-              "account's Secrets Store, so a Cloudflare State Store was " +
-              "deployed before. A fresh bootstrap would replace them and make " +
-              "every stack's state unreadable. Use a token that can read " +
-              "Workers so the store is found and adopted, or pass --force to " +
-              "rotate the secrets on purpose.",
+              `Secrets ${existing} already exist in this account's Secrets ` +
+              "Store, so a Cloudflare State Store was deployed before. A " +
+              "fresh bootstrap would replace them and make every stack's " +
+              "state unreadable. Use a token that can read Workers so the " +
+              "store is found and adopted, or pass --force to rotate the " +
+              "secrets on purpose.",
           }),
         );
       }
     }
-    const localState = yield* makeLocalState();
-    const localStage = `${profileName}_${scriptName}`;
-    const remoteStage = scriptName;
     const { authToken } = yield* deployStateStore({
       stage: localStage,
       state: localState,
@@ -625,7 +707,7 @@ const deployWithLocalState = ({
     });
 
     yield* localState.deleteStack({
-      stack: "CloudflareStateStore",
+      stack: BOOTSTRAP_STACK,
       stage: localStage,
     });
 
@@ -640,16 +722,13 @@ const deployWithLocalState = ({
   );
 
 /**
- * Writes against a *just-deployed* state-store worker can fail
- * transiently while Cloudflare propagates the script, its route, and
- * its Secrets Store bindings to the edge:
+ * Writes to a just-deployed worker can fail while Cloudflare propagates
+ * the script, its route, and its Secrets Store bindings to the edge:
  *
- * - 404 — the workers.dev route isn't serving the new script yet
- * - 401 — the worker is up but its auth-token secret binding hasn't
- *   propagated, so token validation reads a stale/absent value
- * - 5xx — the Store DO dies while its encryption-key secret binding
- *   is still propagating
- * - transport errors (no response) — cold workers.dev host blips
+ * - 404: the workers.dev route does not serve the new script yet
+ * - 401: the auth-token secret binding is not propagated yet
+ * - 5xx: the encryption-key secret binding is not propagated yet
+ * - no response: transport failure on a cold workers.dev host
  *
  * @internal exported for unit testing.
  */
@@ -667,26 +746,19 @@ export const isTransientBootstrapWriteError = (error: {
   return false;
 };
 
-// check if there's a local stack that wasn't properly hoisted
+/** True when a local bootstrap stack exists for `stage`. */
 const hasLocalStack = (stage: string) =>
   Effect.gen(function* () {
     const localState = yield* makeLocalState();
-    return yield* Effect.map(
-      localState.listStages("CloudflareStateStore"),
-      // key off the profile name to avoid conflicts with other profiles
-      (stages) => stages.includes(stage),
+    return yield* Effect.map(localState.listStages(BOOTSTRAP_STACK), (stages) =>
+      stages.includes(stage),
     );
   });
 
 /**
- * Non-destructively copy every resource in the
- * `CloudflareStateStore/<scriptName>` stack from `source` into
- * `destination`, leaving every other stack in `destination` untouched.
- *
- * This intentionally does not delete anything from `destination`: at
- * bootstrap time the destination is the user's live remote state
- * store, and removing entries that happen to be missing locally would
- * be catastrophic.
+ * Copy every resource of the bootstrap stack from `source` into
+ * `destination`. Nothing is deleted from `destination`: it is the live
+ * remote store.
  */
 const hoistBootstrapStack = Effect.fn(function* ({
   source,
@@ -701,7 +773,7 @@ const hoistBootstrapStack = Effect.fn(function* ({
     stage: string;
   };
 }) {
-  const stack = "CloudflareStateStore";
+  const stack = BOOTSTRAP_STACK;
   const fqns = yield* source.state.list({ stack, stage: source.stage });
   yield* Effect.annotateCurrentSpan({
     "alchemy.state_store.stack": stack,
@@ -727,10 +799,6 @@ const hoistBootstrapStack = Effect.fn(function* ({
           .pipe(
             Effect.retry({
               while: isTransientBootstrapWriteError,
-              // Bounded at ~30s: the freshly deployed worker (and its
-              // Secrets Store bindings) can take a while to serve
-              // consistently; anything persisting past that is a real
-              // failure to surface, not to spin on.
               schedule: Schedule.max([
                 Schedule.fixed(500),
                 Schedule.recurs(60),
@@ -744,20 +812,9 @@ const hoistBootstrapStack = Effect.fn(function* ({
 }, Effect.withSpan("state_store.hoist_bootstrap_stack"));
 
 /**
- * Log in to a Cloudflare-deployed HTTP state-store.
- *
- * 1. Find the single account-wide Secrets Store.
- * 2. Upload a short-lived edge-preview worker that binds the
- *    auth-token secret and returns its value.
- * 3. Derive the state-store worker URL from
- *    {@link STATE_STORE_SCRIPT_NAME} and the account's workers.dev
- *    subdomain.
- * 4. Persist `{ url, token }` under the `http-state-store`
- *    credentials file.
- *
- * Requirements are covered by the Cloudflare provider stack —
- * `CloudflareEnvironment`, `Credentials`, `HttpClient`, and
- * `FileSystem`.
+ * Log in to the deployed state store: read the bearer token out of the
+ * account's Secrets Store, derive the worker URL from the workers.dev
+ * subdomain, and cache both for the profile.
  */
 export const loginWithCloudflare = (profileName: string, force: boolean) =>
   Effect.gen(function* () {
@@ -767,14 +824,10 @@ export const loginWithCloudflare = (profileName: string, force: boolean) =>
       yield* yield* CloudflareEnvironment.CloudflareEnvironment;
 
     if (!force) {
-      // try and read from the cached credentials first if not forcing (force will always refresh)
       const credentials = yield* credStore.read<StoredStateStoreCredentials>(
         profileName,
         CREDENTIALS_FILE,
       );
-      // Ignore a cache minted for a different account (or a legacy file with
-      // no `accountId`) — reusing it would hand back the wrong account's
-      // state-store URL. Fall through to re-derive against `accountId`.
       if (
         credentials &&
         !isStateStoreCredentialsStale(credentials, accountId)
@@ -783,10 +836,7 @@ export const loginWithCloudflare = (profileName: string, force: boolean) =>
       }
     }
 
-    // 1. Locate the single Secrets Store on the account.
-    const store = yield* SecretsStore.listStores
-      .items({ accountId })
-      .pipe(Stream.runHead, Effect.map(Option.getOrUndefined));
+    const { store, names } = yield* findStateStoreSecrets(accountId);
     if (!store) {
       return yield* Effect.fail(
         new AuthError({
@@ -795,40 +845,26 @@ export const loginWithCloudflare = (profileName: string, force: boolean) =>
         }),
       );
     }
+    if (!names.includes(AuthTokenSecretName)) {
+      return yield* Effect.fail(
+        new AuthError({
+          message:
+            `Secrets Store '${store.id}' has no ${AuthTokenSecretName}. ` +
+            "Deploy the state store first.",
+        }),
+      );
+    }
 
-    // 2. Fetch the auth-token from Secrets Store with a temporary edge-preview worker
-    const authToken = yield* readSecretViaEdge(
-      STATE_STORE_SCRIPT_NAME,
-      store.id,
-      AuthTokenSecretName,
-    ).pipe(
-      Effect.retry({
-        while: (error) =>
-          isWorkersPreviewConfigurationError(error) ||
-          isTransientEdgeSessionError(error),
-        // Cap the exponential delay at 2s so 15 retries stay within
-        // ~30s instead of doubling unboundedly.
-        schedule: Schedule.max([
-          Schedule.min([
-            Schedule.exponential(200),
-            Schedule.spaced("2 seconds"),
-          ]),
-          Schedule.recurs(15),
-        ]),
-      }),
-    );
+    const authToken = yield* readSecretWithRetry(store.id, AuthTokenSecretName);
 
-    // 3. Derive the deployed worker URL.
     const { subdomain } = yield* workers.getSubdomain({ accountId });
     const url = `https://${STATE_STORE_SCRIPT_NAME}.${subdomain}.workers.dev`;
 
     if (!isCI) {
-      // 4. Persist credentials. The profile entry is managed by
-      //    `loadOrConfigure` when this is invoked through `configure`.
       yield* credStore
         .write<StoredStateStoreCredentials>(profileName, CREDENTIALS_FILE, {
           url,
-          authToken: authToken.trim(),
+          authToken,
           accountId,
         })
         .pipe(
@@ -849,7 +885,7 @@ export const loginWithCloudflare = (profileName: string, force: boolean) =>
 
     return {
       url,
-      authToken: authToken.trim(),
+      authToken,
       accountId,
     };
   }).pipe(
@@ -869,47 +905,66 @@ export const loginWithCloudflare = (profileName: string, force: boolean) =>
     }),
   );
 
-const isStateStoreAvailable = (scriptName: string = "alchemy-state-store") =>
+/** True when the worker exists and has at least one version. */
+const isStateStoreAvailable = (scriptName: string = STATE_STORE_SCRIPT_NAME) =>
   Effect.gen(function* () {
-    // otherwise, the remote one might exist
     const { accountId } =
       yield* yield* CloudflareEnvironment.CloudflareEnvironment;
     return yield* workers.getScriptSetting({ accountId, scriptName }).pipe(
       Effect.map((setting) => setting !== undefined),
-      Effect.catchTag("WorkerNotFound", () => Effect.succeed(false)),
-      Effect.catchTag("InvalidRoute", () => Effect.succeed(false)),
-      // A worker that exists but has no versions (a previous deploy was
-      // interrupted before any content upload) can't serve — treat it
-      // as absent so bootstrap redeploys it.
-      Effect.catchTag("WorkerHasNoVersions", () => Effect.succeed(false)),
+      Effect.catchTag(
+        ["WorkerNotFound", "InvalidRoute", "WorkerHasNoVersions"],
+        () => Effect.succeed(false),
+      ),
     );
   });
 
 /**
- * Does this account have a *functioning* state-store worker,
- * verified by checking the /version endpoint
+ * Which state-store init path to take when no cached credentials exist.
+ * A CI run never bootstraps: a bootstrap writes account-wide secrets.
  *
+ * @internal exported for unit testing.
  */
+export const decideStateStoreInit = ({
+  serving,
+  autoUpdate,
+  isCI,
+}: {
+  serving: boolean;
+  autoUpdate: boolean;
+  isCI: boolean;
+}): "login" | "bootstrap" | "refuse-ci" | "prompt" => {
+  if (serving) return "login";
+  if (isCI) return "refuse-ci";
+  if (autoUpdate) return "bootstrap";
+  return "prompt";
+};
+
+/**
+ * Only a missing workers.dev subdomain proves that no store exists. A
+ * permission or transport failure leaves the answer unknown.
+ *
+ * @internal exported for unit testing.
+ */
+export const isSubdomainAbsence = (error: { readonly _tag: string }): boolean =>
+  error._tag === "SubdomainNotFound" || error._tag === "InvalidRoute";
+
+/** True when the state-store worker answers on `/version`. */
 const isStateStoreServing = (accountId: string) =>
   Effect.gen(function* () {
-    // Only a missing subdomain proves that there is no store. A
-    // permission or transport failure leaves the answer unknown, and a
-    // bootstrap on an unknown answer overwrites a live store's secrets.
     const url = yield* workers.getSubdomain({ accountId }).pipe(
       Effect.map(({ subdomain }) =>
         subdomain
           ? `https://${STATE_STORE_SCRIPT_NAME}.${subdomain}.workers.dev`
           : undefined,
       ),
-      Effect.catchTag(["SubdomainNotFound", "InvalidRoute"], () =>
-        Effect.succeed(undefined),
-      ),
+      Effect.catchIf(isSubdomainAbsence, () => Effect.succeed(undefined)),
       Effect.mapError(
         (cause) =>
           new AuthError({
             message:
               "Cannot tell whether the Cloudflare State Store exists: the " +
-              `workers.dev subdomain lookup failed (${errorTag(cause)}). ` +
+              `workers.dev subdomain lookup failed (${cause._tag}). ` +
               "Refusing to bootstrap. Give the token Workers Scripts read " +
               "access, or run 'alchemy bootstrap cloudflare' from a workstation.",
             cause,
@@ -960,10 +1015,11 @@ const waitForStateStoreVersion = (url: string) =>
     }
   }).pipe(
     Effect.retry({
-      while: (error) => error instanceof StateStoreVersionNotReady,
-      // Edge propagation is usually sub-second but production traces
-      // show redeploys occasionally serving the old version for well
-      // over 10s. Poll for ~30s before failing loudly.
+      // The edge can serve the old version, or no version, for a while
+      // after a redeploy.
+      while: (error) =>
+        error instanceof StateStoreVersionNotReady ||
+        error._tag === "AuthError",
       schedule: Schedule.max([
         Schedule.spaced("500 millis"),
         Schedule.recurs(60),
@@ -978,39 +1034,44 @@ const waitForStateStoreVersion = (url: string) =>
     }),
   );
 
+/**
+ * Probe `/version`. `observed` is `undefined` only when the route
+ * returns 404 and the worker is absent. Every other failure means the
+ * answer is unknown, and the probe fails with an AuthError.
+ */
 const checkStateStoreVersion = (url: string) =>
   Effect.gen(function* () {
     const client = yield* HttpApiClient.make(StateApi, { baseUrl: url });
     const isAvailable = yield* Effect.cached(
       isStateStoreAvailable(STATE_STORE_SCRIPT_NAME),
     );
-    // The /version route may 404 transiently after a fresh deploy
-    // while Cloudflare propagates the new script to the edge, and may
-    // also surface transport-level blips on cold workers.dev hosts.
-    // Retry the probe itself for ~10s before giving up — only after
-    // exhausting that budget do we collapse to `undefined` and let
-    // the caller treat it as a version mismatch.
+    // A 404 on an existing worker is edge propagation after a deploy.
     const result = yield* client.version.getVersion().pipe(
-      Effect.catchTag("HttpClientError", (e) =>
-        // if we get a 404 here, it means we assumed the worker shoudl exist, but it does not
-        // we should do a check to see if it does
-        e.response?.status === 404
-          ? isAvailable.pipe(
-              Effect.flatMap((isAvailable) =>
-                // if the worker is available, then we should assume it was recently created and retry by propagating the error
-                // otherwise, return undefined (we don't know the version, there is no worker)
-                isAvailable ? Effect.fail(e) : Effect.succeed(undefined),
-              ),
-            )
-          : Effect.fail(e),
-      ),
+      Effect.catchTag("HttpClientError", (error) => {
+        if (error.response?.status !== 404) return Effect.fail(error);
+        return isAvailable.pipe(
+          Effect.flatMap((available) => {
+            if (available) return Effect.fail(error);
+            return Effect.succeed(undefined);
+          }),
+        );
+      }),
       Effect.retry({
         schedule: Schedule.max([
           Schedule.spaced("250 millis"),
           Schedule.recurs(40),
         ]),
       }),
-      Effect.catch(() => Effect.succeed(undefined)),
+      Effect.mapError(
+        (cause) =>
+          new AuthError({
+            message:
+              "Cannot tell whether the Cloudflare State Store is serving: " +
+              `the version probe at ${url} failed (${cause._tag}). ` +
+              "Refusing to continue.",
+            cause,
+          }),
+      ),
     );
     const matches = result?.version === STATE_STORE_VERSION;
     yield* Effect.annotateCurrentSpan({
@@ -1029,11 +1090,7 @@ const checkStateStoreVersion = (url: string) =>
     }),
   );
 
-/**
- * Tiny ES-module worker that reads `env.SECRET.get()` and echoes it
- * back. Uploaded as an ephemeral edge-preview, called once, then
- * discarded — see {@link readSecretViaEdge}.
- */
+/** Worker source for {@link readSecretViaEdge}: it returns `env.SECRET`. */
 const SECRET_PROBE_SOURCE = `export default {
   async fetch(_request, env) {
     try {
@@ -1046,19 +1103,12 @@ const SECRET_PROBE_SOURCE = `export default {
 };`;
 
 /**
- * Upload an ephemeral edge-preview build of the given (already
- * deployed) script that binds the requested Secrets Store secret,
- * call it once with the preview token, and return the decoded value.
- * The Cloudflare REST API deliberately hides secret values; only
- * worker bindings can resolve them, so this is the out-of-band path.
+ * Read a Secrets Store value through an edge-preview worker. The REST
+ * API never returns secret values; only a worker binding can.
  *
- * `scriptName` MUST be a script that is already deployed on the
- * account with workers.dev enabled — the `cf-workers-preview-token`
- * header swaps our probe code in for an existing route, it does not
- * create one. Using an undeployed name (or a deployed script that
- * doesn't have workers.dev enabled) makes the workers.dev edge serve
- * a generic Cloudflare 400 HTML error page instead of routing to the
- * preview. The state-store script itself satisfies both conditions.
+ * `scriptName` must be deployed with workers.dev enabled. The preview
+ * token swaps the probe code into an existing route; it does not create
+ * one.
  */
 const readSecretViaEdge = (
   scriptName: string,
@@ -1084,10 +1134,6 @@ const readSecretViaEdge = (
       const body = yield* response.text.pipe(
         Effect.catch(() => Effect.succeed("")),
       );
-      // TEMP(sam): dump the full body so we can capture the exact
-      // Cloudflare error page when the probe fails in the wild. Drop
-      // this once we've confirmed the routing fix covers all the
-      // observed failure modes.
       yield* Effect.logWarning(
         `Secret probe failed (${response.status}) at ${session.url}\n${body}`,
       );
@@ -1113,19 +1159,36 @@ const readSecretViaEdge = (
     }),
   );
 
-const errorTag = (error: unknown): string =>
-  typeof error === "object" && error !== null && "_tag" in error
-    ? String((error as { _tag: unknown })._tag)
-    : "unknown error";
+/** Read one state-store secret through the edge probe, with retries. */
+const readSecretWithRetry = (storeId: string, secretName: string) =>
+  readSecretViaEdge(STATE_STORE_SCRIPT_NAME, storeId, secretName).pipe(
+    Effect.retry({
+      while: (error) =>
+        isWorkersPreviewConfigurationError(error) ||
+        isTransientEdgeSessionError(error),
+      schedule: Schedule.max([
+        Schedule.min([Schedule.exponential(200), Schedule.spaced("2 seconds")]),
+        Schedule.recurs(15),
+      ]),
+    }),
+    Effect.map((value) => value.trim()),
+  );
 
-const STATE_STORE_SECRET_NAMES: ReadonlyArray<string> = [
+type StateStoreSecretName =
+  | typeof AuthTokenSecretName
+  | typeof EncryptionKeySecretName;
+
+const STATE_STORE_SECRET_NAMES: ReadonlyArray<StateStoreSecretName> = [
   AuthTokenSecretName,
   EncryptionKeySecretName,
 ];
 
+const isStateStoreSecretName = (name: string): name is StateStoreSecretName =>
+  name === AuthTokenSecretName || name === EncryptionKeySecretName;
+
 /**
- * The account's Secrets Store and which of the state-store secrets it
- * already holds. The names are enough: the API never returns values.
+ * The account's Secrets Store and the state-store secrets it holds. The
+ * API returns names only, never values.
  */
 const findStateStoreSecrets = (accountId: string) =>
   Effect.gen(function* () {
@@ -1138,13 +1201,12 @@ const findStateStoreSecrets = (accountId: string) =>
       .pipe(
         Stream.runCollect,
         Effect.map((chunk) =>
-          Array.from(chunk).filter((s) =>
-            STATE_STORE_SECRET_NAMES.includes(s.name),
-          ),
+          Array.from(chunk).filter((s) => isStateStoreSecretName(s.name)),
         ),
         Effect.catchTag("StoreNotFound", () => Effect.succeed([])),
       );
-    return { store, secrets, names: secrets.map((s) => s.name) };
+    const names = secrets.map((s) => s.name).filter(isStateStoreSecretName);
+    return { store, secrets, names };
   });
 
 export interface StateStoreSecrets {
@@ -1156,10 +1218,9 @@ export interface StateStoreSecrets {
 }
 
 /**
- * Read the live bearer token and encryption key out of the account's
- * Secrets Store through the edge probe. This is the only way to get a
- * copy of the encryption key: every resource state in the store is
- * ciphertext under it, and a rotation makes all of it unreadable.
+ * Read the live bearer token and encryption key through the edge probe.
+ * Every resource state in the store is ciphertext under the key; a
+ * rotation makes all of it unreadable.
  */
 export const readStateStoreSecrets = Effect.fn("readStateStoreSecrets")(
   function* () {
@@ -1179,24 +1240,10 @@ export const readStateStoreSecrets = Effect.fn("readStateStoreSecrets")(
         }),
       );
     }
-    const read = (secretName: string) =>
-      readSecretViaEdge(STATE_STORE_SCRIPT_NAME, store.id, secretName).pipe(
-        Effect.retry({
-          while: (error) =>
-            isWorkersPreviewConfigurationError(error) ||
-            isTransientEdgeSessionError(error),
-          schedule: Schedule.max([
-            Schedule.min([
-              Schedule.exponential(200),
-              Schedule.spaced("2 seconds"),
-            ]),
-            Schedule.recurs(15),
-          ]),
-        }),
-        Effect.map((value) => value.trim()),
-      );
-    const authToken = yield* read(AuthTokenSecretName);
-    const encryptionKey = yield* read(EncryptionKeySecretName);
+    const readSecret = (secretName: StateStoreSecretName) =>
+      readSecretWithRetry(store.id, secretName);
+    const authToken = yield* readSecret(AuthTokenSecretName);
+    const encryptionKey = yield* readSecret(EncryptionKeySecretName);
     const { subdomain } = yield* workers.getSubdomain({ accountId });
     return {
       accountId,
@@ -1211,41 +1258,78 @@ export const readStateStoreSecrets = Effect.fn("readStateStoreSecrets")(
 /**
  * Write a backup of the token and encryption key back into the Secrets
  * Store. The Worker reads its bindings per request, so the store serves
- * the restored values at once. Cached client credentials still hold the
- * old token: delete `cloudflare-state-store.json` under
- * `~/.alchemy/credentials/<profile>/` afterwards.
+ * the restored values at once. The cached credentials for the active
+ * profile are deleted, so the next login reads the restored token.
  */
 export const restoreStateStoreSecrets = Effect.fn("restoreStateStoreSecrets")(
-  function* (backup: Pick<StateStoreSecrets, "authToken" | "encryptionKey">) {
+  function* (backup: StateStoreSecrets) {
     const { accountId } =
       yield* yield* CloudflareEnvironment.CloudflareEnvironment;
+    if (backup.accountId !== accountId) {
+      return yield* Effect.fail(
+        new AuthError({
+          message:
+            `The backup is for account '${backup.accountId}', but the active ` +
+            `profile uses account '${accountId}'. Refusing to restore.`,
+        }),
+      );
+    }
     const { store, secrets } = yield* findStateStoreSecrets(accountId);
     if (!store) {
       return yield* Effect.fail(
         new AuthError({ message: "No Secrets Store found on this account." }),
       );
     }
-    const values: Record<string, string> = {
+    if (backup.storeId !== store.id) {
+      return yield* Effect.fail(
+        new AuthError({
+          message:
+            `The backup is for Secrets Store '${backup.storeId}', but this ` +
+            `account's Secrets Store is '${store.id}'. Refusing to restore.`,
+        }),
+      );
+    }
+    const secretValues: Record<StateStoreSecretName, string> = {
       [AuthTokenSecretName]: backup.authToken,
       [EncryptionKeySecretName]: backup.encryptionKey,
     };
-    for (const name of STATE_STORE_SECRET_NAMES) {
+    const findSecretId = (name: StateStoreSecretName) => {
       const secret = secrets.find((s) => s.name === name);
-      if (!secret) {
-        return yield* Effect.fail(
-          new AuthError({
-            message: `Secrets Store '${store.id}' has no ${name}; nothing to restore into.`,
-          }),
-        );
-      }
-      yield* SecretsStore.patchStoreSecret({
+      if (secret) return Effect.succeed(secret.id);
+      return Effect.fail(
+        new AuthError({
+          message: `Secrets Store '${store.id}' has no ${name}; nothing to restore into.`,
+        }),
+      );
+    };
+    const encryptionKeyId = yield* findSecretId(EncryptionKeySecretName);
+    const authTokenId = yield* findSecretId(AuthTokenSecretName);
+
+    const patchSecret = (name: StateStoreSecretName, secretId: string) =>
+      SecretsStore.patchStoreSecret({
         accountId,
         storeId: store.id,
-        secretId: secret.id,
-        value: values[name]!,
-      });
-      yield* Clank.info(`Restored '${name}'.`);
-    }
+        secretId,
+        value: secretValues[name],
+      }).pipe(Effect.andThen(Clank.info(`Restored '${name}'.`)));
+
+    yield* patchSecret(EncryptionKeySecretName, encryptionKeyId);
+    yield* patchSecret(AuthTokenSecretName, authTokenId).pipe(
+      Effect.mapError(
+        (cause) =>
+          new AuthError({
+            message:
+              `Restored '${EncryptionKeySecretName}', but writing ` +
+              `'${AuthTokenSecretName}' failed. Run the restore again; a ` +
+              "repeat is safe.",
+            cause,
+          }),
+      ),
+    );
+
+    const profileName = yield* ALCHEMY_PROFILE;
+    const credStore = yield* CredentialsStore;
+    yield* credStore.delete(profileName, CREDENTIALS_FILE);
   },
 );
 
@@ -1272,19 +1356,14 @@ const isWorkersPreviewConfigurationError = (error: unknown) =>
     error.message.includes("Error 1031"));
 
 /**
- * Edge-preview reads are flaky in ways that clear up on their own:
- * the workers.dev edge can serve a generic Cloudflare 400/502 HTML
- * page while preview routing propagates ("Secret probe returned
- * ..."), the session-create call can hit transient API blips, and the
- * probe fetch can fail at the transport level ("fetch failed").
- * Retry everything except causes that are clearly permanent
- * (bad credentials, invalid routes).
+ * Edge-preview reads fail in ways that clear up on their own: an HTML
+ * error page while preview routing propagates, a session-create blip,
+ * or a transport failure. Only auth and route causes are permanent.
  *
  * @internal exported for unit testing.
  */
 export const isTransientEdgeSessionError = (error: unknown): boolean => {
   if (!(error instanceof EdgeSessionError)) return false;
-  // Non-200 probe responses are edge-propagation flakes, not client bugs.
   if (error.message.startsWith("Secret probe returned")) return true;
   const tag = (error.cause as { _tag?: unknown } | undefined)?._tag;
   if (
