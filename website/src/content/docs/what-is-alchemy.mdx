@@ -54,7 +54,9 @@ declares the bucket, the Worker, and the permission between them.
 Another holds the handler, which reaches for the bucket through an
 environment variable, and the two agree only by convention. Alchemy
 supports that shape too, but its model is the one above. Three ideas
-make it work.
+make it work, Runtime, Binding, and Layer, and three more underneath
+them, Stack, Resource, and Provider, are the infrastructure-as-code
+engine they run on.
 
 ## Runtime
 
@@ -118,12 +120,31 @@ Provide a DynamoDB-backed Layer and a table is instead. The handler
 doesn't change. [Layers](/infrastructure-as-effects/layers) builds one
 from scratch.
 
-## Infrastructure as Code underneath
+## Stack
 
-All of this rests on an infrastructure-as-code engine. A
-[Stack](/infrastructure-as-code/stack) groups the resources that
-deploy together, and every deploy targets a stage, an isolated
-environment with its own copy of every resource:
+All of this rests on an infrastructure-as-code engine. A **Stack** is
+the unit you deploy: an Effect that yields resources and returns the
+outputs you want printed:
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+import Api from "./src/worker.ts";
+
+export default Alchemy.Stack(
+  "MyApp",
+  { providers: Cloudflare.providers(), state: Cloudflare.state() },
+  Effect.gen(function* () {
+    const api = yield* Api;
+    return { url: api.url };
+  }),
+);
+```
+
+Every deploy targets a stage, an isolated environment with its own
+copy of every resource, so `dev` and `prod` never touch each other:
 
 ```sh
 alchemy deploy              # dev_$USER by default
@@ -131,10 +152,45 @@ alchemy deploy --stage prod
 ```
 
 Alchemy reads the current state, diffs it against your program, shows
-the plan, and applies it in dependency order. Each cloud ships as a
-set of [Providers](/infrastructure-as-code/provider), and the type
-system checks that every resource in a Stack has its provider wired
-in before you can deploy.
+the plan, and applies it in dependency order. `state` is where the
+result persists between runs. [Stacks](/infrastructure-as-code/stack)
+covers stages, outputs, and state.
+
+## Resource
+
+A **Resource** is any cloud entity Alchemy manages: a bucket, a
+database, a queue, a Worker, a DNS record. Declaring one is inert. It
+becomes real when it is yielded, inside a Stack or inside a Runtime's
+constructor:
+
+```typescript
+export const Uploads = Cloudflare.R2.Bucket("Uploads"); // a declaration
+
+const bucket = yield* Uploads; // created on deploy; bucket.bucketName is its Output
+```
+
+Each declaration has a stable logical id, `"Uploads"` here, that
+Alchemy uses to track it across deploys. Its outputs, like the
+physical name Alchemy generates, are typed values you can pass into
+other resources. [Resources](/infrastructure-as-code/resource) covers
+props, outputs, and how one resource references another.
+
+## Provider
+
+A **Provider** teaches Alchemy how to read, diff, create, update, and
+delete one resource type. Each cloud ships its providers as an Effect
+Layer, and a Stack takes as many as it needs:
+
+```typescript
+providers: Layer.mergeAll(Cloudflare.providers(), AWS.providers()),
+```
+
+The type system checks the wiring. Yield an AWS resource in a Stack
+that only provides `Cloudflare.providers()` and the program does not
+compile. [Providers](/infrastructure-as-code/provider) covers the
+built-in ones, and
+[Custom Provider](/infrastructure-as-code/custom-provider) shows how
+to write your own for a cloud or API Alchemy doesn't ship.
 
 ## Where next
 
