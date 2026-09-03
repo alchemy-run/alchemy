@@ -1408,13 +1408,51 @@ export default defineConfig({
           items: [
             { label: "Overview", link: "/git" },
             { label: "Setup", link: "/git/setup" },
-            { label: "Building blocks", link: "/git/blocks" },
-            { label: "Authentication", link: "/git/auth" },
-            { label: "Repositories", link: "/git/repositories" },
-            { label: "Cloning & pushing", link: "/git/clone-and-push" },
-            { label: "Pull requests", link: "/git/pull-requests" },
-            { label: "GitHub API compatibility", link: "/git/github-api" },
-            { label: "Storage & maintenance", link: "/git/storage" },
+            {
+              label: "Blocks",
+              items: [
+                { label: "The layer graph", link: "/git/blocks" },
+                { label: "Server", link: "/git/blocks/server" },
+                { label: "Repositories", link: "/git/blocks/repositories" },
+                { label: "Registry", link: "/git/blocks/registry" },
+                { label: "Blob store", link: "/git/blocks/blob-store" },
+                { label: "Hasher", link: "/git/blocks/hasher" },
+                { label: "Auth", link: "/git/blocks/auth" },
+              ],
+            },
+            {
+              label: "Assemblies",
+              items: [
+                { label: "Choosing an assembly", link: "/git/assemblies" },
+                { label: "Cloudflare", link: "/git/assemblies/cloudflare" },
+                {
+                  label: "Cloudflare + AWS",
+                  link: "/git/assemblies/cloudflare-aws",
+                },
+                { label: "One origin", link: "/git/assemblies/one-origin" },
+              ],
+            },
+            {
+              label: "Scale",
+              items: [
+                { label: "Scaling model", link: "/git/scale" },
+                { label: "Pushes", link: "/git/scale/pushes" },
+                { label: "Clones", link: "/git/scale/clones" },
+              ],
+            },
+            {
+              label: "Using your host",
+              items: [
+                { label: "Cloning & pushing", link: "/git/clone-and-push" },
+                { label: "Repositories", link: "/git/repositories" },
+                { label: "Pull requests", link: "/git/pull-requests" },
+                {
+                  label: "GitHub API compatibility",
+                  link: "/git/github-api",
+                },
+              ],
+            },
+            { label: "Build on it", link: "/git/build" },
           ],
         },
         {

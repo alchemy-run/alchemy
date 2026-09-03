@@ -1,0 +1,96 @@
+---
+title: Server
+description: Git.Server is the HTTP surface, three planes behind one fetch. You own the Worker it runs in and the routes it sits behind.
+---
+
+`Git.Server` is a `Context.Service` whose `fetch` answers everything a
+git host answers:
+
+```typescript
+export default Cloudflare.Worker(
+  "Git",
+  { main: import.meta.url, ...Git.GIT_WORKER_OPTIONS },
+  Effect.gen(function* () {
+    const git = yield* Git.Server;
+    return { fetch: git.fetch };
+  }).pipe(Effect.provide(GitLive)),
+);
+```
+
+It is not a Worker. You write the Worker, so you choose its name, its
+domain, its compatibility date, and what else runs beside it.
+
+## Three planes
+
+| Path | Plane | Client |
+| --- | --- | --- |
+| `/:owner/:repo.git/info/refs`, `git-upload-pack`, `git-receive-pack` | git smart HTTP | `git` |
+| `/api/v1/**` | REST, an Effect `HttpApi` | your code, `curl`, the typed client |
+| `/api/v3/**` | GitHub REST v3 facade | `gh api`, Octokit |
+
+A `git` client can only send HTTP Basic, so the wire plane takes the
+token in the password field. The other two also accept `Bearer` and
+GitHub's `token` scheme. All three hand the headers to
+[Auth](/git/blocks/auth).
+
+## Worker options
+
+```typescript
+{ main: import.meta.url, ...Git.GIT_WORKER_OPTIONS }
+```
+
+`nodejs_compat` for zlib and crypto, a 300 s CPU ceiling so a large
+push can be verified, and a service binding to the Worker itself for
+the hasher. Spread it first and put your own options after it.
+
+## Under your own routes
+
+`git.fetch` is an Effect that reads the request from context and
+returns a response, so it composes with anything else you serve. Take
+the paths you want and hand the rest to git:
+
+```typescript
+import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+
+export default Cloudflare.Worker(
+  "Git",
+  { main: import.meta.url, ...Git.GIT_WORKER_OPTIONS },
+  Effect.gen(function* () {
+    const git = yield* Git.Server;
+
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest.HttpServerRequest;
+        if (request.url === "/healthz") {
+          return HttpServerResponse.text("ok");
+        }
+        return yield* git.fetch;
+      }),
+    };
+  }).pipe(Effect.provide(GitLive)),
+);
+```
+
+To put a whole application on the same domain, keep the git host as
+its own Worker and forward the git paths to it over a service binding.
+[One origin](/git/assemblies/one-origin) shows the front door.
+
+## The typed client
+
+The REST plane is declared as `GitApi`, so the same schema types the
+server, the client, and your tests:
+
+```typescript
+import { GitApi } from "alchemy/Git";
+import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
+
+const client = yield* HttpApiClient.make(GitApi, { baseUrl: host });
+
+const repo = yield* client.repos.get({
+  params: { owner: "acme", repo: "web" },
+});
+```
+
+[Repositories](/git/repositories) and [Pull requests](/git/pull-requests)
+use it throughout.

@@ -1,0 +1,73 @@
+---
+title: Pushes
+description: A push streams through the Worker in 8 MiB parts, is hashed in parallel, and reaches the Durable Object as rows. Push size is bounded by your storage, and the numbers against GitHub.
+---
+
+A `git push` sends one pack. The Worker receives it as a stream and
+never holds it whole:
+
+1. The first 1 MiB is read for the ref commands, and
+   [Auth](/git/blocks/auth) rules on them before any pack byte is
+   inspected.
+2. The body streams through in 8 MiB parts. Each part goes to the
+   [hasher](/git/blocks/hasher) as it lands and is parked in the
+   [blob store](/git/blocks/blob-store) as a multipart upload.
+3. Hashed objects reach the repository's Durable Object as batches of
+   rows over RPC: coordinates into the parked pack for large objects,
+   inline bytes for small ones.
+4. The Durable Object checks connectivity over the staged rows,
+   updates the commit graph, moves the refs in one transaction, and
+   schedules compaction.
+
+The pack never enters the Durable Object. Its memory, CPU, and egress
+are untouched by push size, and its share of a push is SQL.
+
+## Memory
+
+The Worker retains a 16 MiB window of the body for objects that span
+parts. Peak memory is that window plus the parts in flight, whatever
+the push size. Pushes share a 64 MiB budget per isolate, and one that
+does not fit waits for an earlier one to drain.
+
+## Hashing
+
+Each 4 MiB chunk is hashed where the hasher Layer runs. Inline, that
+is the receiving thread, one chunk after another. On loaded Workers,
+four chunks at once. On Lambda, every chunk at once. An object that
+straddles two chunks is hashed from its own header the moment its
+first chunk settles, so a 10 MB blob spanning three parts does not
+wait for the last one.
+
+Deltas whose base is in another chunk are resolved as a second round
+of hasher jobs, and the resolved blobs are written out as a pack of
+their own so a fetch never re-resolves them.
+
+## Measured
+
+One client, a fresh repository on each host, the same edge. The
+delta-heavy pack is 40 MiB and 15.6k objects, the whole-blob pack is
+44 MiB:
+
+| | 40 MiB deltas | 44 MiB blobs | incremental |
+| --- | --- | --- | --- |
+| GitHub | 3.3 s | 4.6 s | 1.2 s |
+| `HasherInline` | 9.9–13.5 s | 8.8 s | 0.2–0.4 s |
+| `HasherWorkerLoader` | 5.9 s best, 6.5 s median | 4.8 s best, 6.4 s median | 0.2–0.4 s |
+| `HasherLambda` | 6.8–7.9 s | 6.3–6.7 s | 0.3–0.8 s |
+
+Server-side, the route's own time on the loader hasher is 3.4–3.9 s
+for the delta-heavy push and 2.2–3.6 s for the whole-blob push. The
+spread in the table is the client's uplink. What remains on the
+delta-heavy push is the hashing waves, ten chunks over four isolates,
+and the delta rounds behind them.
+
+The largest real push measured is the alchemy monorepo: 44,051 objects
+in a 67 MiB thin pack, cloned back byte-identical under
+`git fsck --strict`.
+
+## What a push reports
+
+`lastPush` on the repository splits the last push into ingest,
+staging, connectivity, and finalize. When a push is slow, that split
+says whether the time went to hashing, to the round trips into the
+Durable Object, or to the commit.

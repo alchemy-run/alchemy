@@ -1,0 +1,81 @@
+---
+title: Repositories
+description: One Durable Object per repository owns refs, the object index, tokens, the commit graph, and pull requests. Objects move between it and the blob store on their own.
+---
+
+`Git.ReposDurableObject` hosts one Durable Object per repository, keyed
+by a stable id:
+
+```typescript
+Layer.provide(Git.ReposDurableObject)
+```
+
+Everything that has to be consistent lives in its SQLite: refs, the
+object index, hot object bytes, tokens, the commit graph, and pull
+requests. A push is a compare-and-swap on a ref, and one Durable Object
+serializes that without a lock service. Renaming a repository never
+moves data, because the object is keyed by id and `owner/name` belongs
+to the [Registry](/git/blocks/registry).
+
+## Where objects live
+
+**Freshly pushed objects** land as rows, stored already deflated. Small
+objects stay inline. Oversize ones go straight to the
+[blob store](/git/blocks/blob-store) with only an index row kept here.
+
+**Compacted blobs** live in immutable packfiles in the blob store. A
+background job rewrites accumulated loose blobs into a pack and drops
+the rows, and that keeps a busy repository's Durable Object small.
+Commits, trees, and tags are never packed. They stay as rows, so the
+tree walk that answers every fetch runs on SQLite instead of ranged
+reads over the network.
+
+**Clone bundles** are precomputed full-clone packs keyed by a snapshot
+of the refs. The Worker streams them from the blob store, and no pack
+byte passes through the Durable Object.
+
+Objects are stored deflated, so serving a pack is concatenation plus a
+checksum rather than a recompression pass.
+
+## Jobs
+
+Maintenance runs on the Durable Object's alarms, scheduled by the work
+itself:
+
+- **Compaction** runs after a push crosses a size threshold and
+  rewrites loose blobs into a pack.
+- **Bundling** cuts a fresh clone bundle after refs move.
+- **Purge** drains a deleted repository's rows and blobs, then releases
+  its name.
+
+Every job is idempotent and resumable. An interrupted run picks up
+where it stopped on the next alarm. Compaction can also be triggered by
+hand with the admin secret:
+
+```sh
+curl -X POST "$HOST/api/v1/repos/acme/web/compact" \
+  -H "Authorization: Bearer $GIT_SERVICE_ADMIN_TOKEN"
+```
+
+## What a repository reports
+
+Fetching a repository returns its storage breakdown and the timing of
+its last push:
+
+```typescript
+const repo = yield* client.repos.get({
+  params: { owner: "acme", repo: "web" },
+});
+
+repo.objects; // loose blobs, resident commits and trees, packed, offloaded, total bytes
+repo.lastPush; // ingest, staging, connectivity, finalize, in milliseconds
+```
+
+When a push feels slow, `lastPush` says which phase to look at.
+Listings report zeros for both by design, so listing a thousand
+repositories does not wake a thousand Durable Objects.
+
+## One implementation
+
+This block ships one implementation. What the Durable Object bounds,
+and what it does not, is in the [Scaling model](/git/scale).

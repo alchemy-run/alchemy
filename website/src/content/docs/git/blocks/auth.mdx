@@ -1,0 +1,156 @@
+---
+title: Auth
+description: Auth answers two questions, who is calling and may they do this. The bundled tokens secure a fresh host in one line. Your own rules wrap or replace them.
+---
+
+`Git.Auth` is two functions. `authenticate` turns request headers into
+an actor. `authorize` decides whether that actor may perform an action
+on a repository:
+
+```typescript
+interface AuthShape {
+  authenticate(headers: Record<string, string | undefined>): Effect<Actor>;
+  authorize(input: {
+    actor: Actor;
+    repo: RepoContext | null;
+    action: GitAction;
+  }): Effect<boolean>;
+}
+```
+
+An actor is `admin`, `token`, `user`, or `anonymous`. An action is one
+of git's own facts, not a role: `Fetch`, `Push` with the parsed ref
+updates, `ReadRepo`, `UpdateRepo`, `DeleteRepo`, `CreateRepo`,
+`ListRepos`, `ManageTokens`, `Maintain`, `CreatePull`, `UpdatePull`,
+`MergePull`.
+
+`authenticate` runs once per request at the Worker. `authorize` runs
+where the facts live: at the Worker for registry-level actions, inside
+the repository's Durable Object for everything else, including a push
+once its ref commands are parsed.
+
+## The bundled tokens
+
+```typescript
+Layer.provide(Git.AuthTokens)
+```
+
+Two credentials. The **admin secret** comes from
+`GIT_SERVICE_ADMIN_TOKEN` at deploy time and may do everything:
+
+```sh
+curl -X POST "$HOST/api/v1/repos" \
+  -H "Authorization: Bearer $GIT_SERVICE_ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"owner":"acme","name":"web","public":true}'
+```
+
+**Repository tokens** are prefixed `gs_`, scoped `read`, `write`, or
+`admin`, and optionally expire. They are what git clients use, in the
+password field of the remote:
+
+```sh
+git remote add origin "https://x:gs_YOUR_TOKEN@$HOST/acme/web.git"
+```
+
+Creating a repository returns a `write` token. Mint more against a
+repository, with a TTL, for CI:
+
+```sh
+curl -X POST "$HOST/api/v1/repos/acme/web/tokens" \
+  -H "Authorization: Bearer $GIT_SERVICE_ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"ci","scope":"read","ttlSeconds":2592000}'
+```
+
+The secret is returned once. Only its SHA-256 is stored.
+
+A repository created with `public: true` serves anonymous reads: REST
+reads, the ref advertisement, and `upload-pack`, so `git clone` needs
+no credentials. Writes always need a token. An anonymous request to a
+private repository answers `401` with `WWW-Authenticate`, so git
+prompts.
+
+The bundled Layer has no notion of a user. No accounts, no
+organizations, no per-branch rules. It is the smallest thing that
+secures a fresh deployment.
+
+## Wrapping it
+
+A rule is a page of code over `GitAction`. Yield the bundled Layer
+inside your own and defer to it for everything you do not decide.
+Direct pushes to `main` that require the admin secret:
+
+```typescript
+const ProtectedMain: Layer.Layer<Git.Auth> = Layer.effect(
+  Git.Auth,
+  Effect.gen(function* () {
+    const base = yield* Git.Auth;
+    return {
+      authenticate: base.authenticate,
+      authorize: (input) =>
+        input.action._tag === "Push" &&
+        input.action.updates.some((u) => u.ref === "refs/heads/main") &&
+        input.actor.kind !== "admin"
+          ? Effect.succeed(false)
+          : base.authorize(input),
+    };
+  }),
+).pipe(Layer.provide(Git.AuthTokens));
+```
+
+```diff lang="typescript"
+const GitLive = Git.ServerLive.pipe(
+  Layer.provide(Git.ReposDurableObject),
+  Layer.provide(Git.RegistryDurableObject),
+  Layer.provide(Git.BlobStoreR2(GitObjects)),
+  Layer.provide(Git.HasherInline),
+-  Layer.provide(Git.AuthTokens),
++  Layer.provide(ProtectedMain),
+);
+```
+
+`Push` carries its `updates` twice. At the ref advertisement the list
+is empty, and the question is whether this caller may push at all. At
+commit it is exact, so a rule can look at which refs move and to what.
+
+## Your own identities
+
+Your users are `user` actors. Resolve them in `authenticate` and rule
+on them in `authorize`. Anything you do not recognize falls through to
+the tokens, so git clients keep working:
+
+```typescript
+const AuthSessions: Layer.Layer<Git.Auth> = Layer.effect(
+  Git.Auth,
+  Effect.gen(function* () {
+    const base = yield* Git.Auth;
+    const sessions = yield* Sessions; // yours, e.g. Better Auth
+
+    return {
+      authenticate: (headers) =>
+        Effect.gen(function* () {
+          const session = yield* sessions.fromHeaders(headers);
+          if (session) {
+            return { kind: "user", id: session.userId, name: session.name };
+          }
+          return yield* base.authenticate(headers);
+        }),
+      authorize: ({ actor, repo, action }) =>
+        actor.kind === "user"
+          ? Effect.succeed(
+              action._tag === "CreateRepo"
+                ? action.owner === actor.id
+                : repo !== null && isMember(actor.id, repo.owner),
+            )
+          : base.authorize({ actor, repo, action }),
+    };
+  }),
+).pipe(Layer.provide(Git.AuthTokens));
+```
+
+A `git` client can only send HTTP Basic, so `git push` keeps using
+tokens. Your `authorize` decides who may `ManageTokens`, so a
+signed-in user mints their own over the REST plane and pastes it into
+their remote. [Build on it](/git/build) puts this in front of an
+application.

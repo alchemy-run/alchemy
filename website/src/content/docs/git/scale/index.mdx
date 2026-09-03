@@ -1,0 +1,55 @@
+---
+title: Scaling model
+description: Reads scale like a CDN and writes scale like git. Every repository is its own Durable Object, clones never pass through it, and a push is bounded by storage rather than memory.
+---
+
+Every repository is its own Durable Object, so the service's capacity
+is the sum of its repositories. Within one repository, the two
+directions scale differently, and that difference is git's, not the
+host's.
+
+**Reads scale out.** A full clone streams a precomputed bundle from
+the blob store through the Worker. The repository's Durable Object
+plans the clone and never touches a pack byte, so concurrent clones
+scale with Workers and object storage. Incremental fetches are small
+by construction and run against a commit graph in SQLite.
+
+**Writes serialize on the ref.** A push is a compare-and-swap on a
+ref, and git's own semantics say two pushes to one branch cannot both
+win. One Durable Object per repository is that serialization point.
+Receiving, hashing, and staging the pack happen in the Worker and fan
+out to the [hasher](/git/blocks/hasher).
+
+| Dimension | Per repository | Bound by |
+| --- | --- | --- |
+| Clone bandwidth | edge line rate | bundle bytes live in the blob store |
+| Clone rate | thousands per second | the advertisement is cached, the Durable Object is called once per push |
+| Incremental fetch | milliseconds for recent tips | the commit graph in SQLite |
+| Push rate | 5–20 per second | a ref is a serialization point in git's own semantics |
+| Repository size | unbounded | packs live in the blob store |
+| Push size | unbounded | the body streams to the blob store as it arrives |
+
+## Where the limits are
+
+**Push rate to one branch** is inherent. Across branches and across
+repositories there is no shared limit.
+
+**The registry** is one object handling creates, deletes, and name
+lookups for the whole service. Lookups are cached at the Worker for a
+minute, and [D1](/git/blocks/registry) replicates them.
+
+**First-byte latency** for a repository's Durable Object is one
+datacenter's distance. Cached advertisements hide most of it, and
+clone bytes come from the blob store rather than the object.
+
+**Very large histories.** Computing which objects a fetch needs walks
+the commit graph. For repositories with tens of millions of objects
+that walk wants reachability bitmaps, which the service does not have
+yet.
+
+## Measured
+
+[Pushes](/git/scale/pushes) and [Clones](/git/scale/clones) carry the
+numbers. A 40 MiB push lands in 5.9 s against GitHub's 3.3 s. A real
+`git clone` of a 40 MiB repository runs at 80 MiB/s. The alchemy
+monorepo, 44,051 objects in a 67 MiB pack, is hosted on it.

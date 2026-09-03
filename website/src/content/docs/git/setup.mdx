@@ -1,15 +1,12 @@
 ---
 title: Setup
-description: Deploy your own git host to Cloudflare and push your first repository.
+description: Deploy a git host to Cloudflare and push your first repository.
 ---
 
-From an empty project to `git push`. You need a Cloudflare account with
-Workers, Durable Objects, and R2 enabled — see
-[Cloudflare setup](/cloudflare/setup) if you have not connected one.
+You need a Cloudflare account with Workers, Durable Objects, and R2
+enabled. [Cloudflare setup](/cloudflare/setup) connects one.
 
 ## Install
-
-Git ships inside the `alchemy` package — no extra dependency:
 
 ```sh
 bun add alchemy
@@ -17,28 +14,25 @@ bun add alchemy
 
 ## Define the host
 
-The package ships no Worker, so you write one. Objects live in an R2
-bucket you own, and the Durable Objects come from the package as
-layers:
-
 ```typescript
-// src/git-host.ts
-import * as Git from "alchemy/Git";
+// src/git.ts
 import * as Cloudflare from "alchemy/Cloudflare";
+import * as Git from "alchemy/Git";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
-const GitObjects = Cloudflare.R2.Bucket("GitObjects");
+export const GitObjects = Cloudflare.R2.Bucket("GitObjects");
 
 const GitLive = Git.ServerLive.pipe(
   Layer.provide(Git.ReposDurableObject),
   Layer.provide(Git.RegistryDurableObject),
   Layer.provide(Git.BlobStoreR2(GitObjects)),
+  Layer.provide(Git.HasherInline),
   Layer.provide(Git.AuthTokens),
 );
 
 export default class GitHost extends Cloudflare.Worker<GitHost>()(
-  "git",
+  "Git",
   { main: import.meta.url, ...Git.GIT_WORKER_OPTIONS },
   Effect.gen(function* () {
     const git = yield* Git.Server;
@@ -47,9 +41,8 @@ export default class GitHost extends Cloudflare.Worker<GitHost>()(
 ) {}
 ```
 
-`GIT_WORKER_OPTIONS` carries the compatibility flags and CPU limit the
-service needs — pushes do real work (inflate, delta resolution,
-connectivity checking) inside the Durable Object.
+`GIT_WORKER_OPTIONS` sets the compatibility flags and the CPU limit a
+push needs.
 
 Add it to your stack:
 
@@ -58,7 +51,7 @@ Add it to your stack:
 import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
-import GitHost from "./src/git-host.ts";
+import GitHost from "./src/git.ts";
 
 export default Alchemy.Stack(
   "GitService",
@@ -72,9 +65,9 @@ export default Alchemy.Stack(
 
 ## Set the admin secret
 
-The bundled auth plugin reads `GIT_SERVICE_ADMIN_TOKEN` from your
-environment at deploy time and binds it to the Worker as a secret. It
-manages repositories, so treat it like a root credential:
+`Git.AuthTokens` reads `GIT_SERVICE_ADMIN_TOKEN` at deploy time and
+binds it to the Worker as a secret. It creates and deletes
+repositories, so treat it as a root credential:
 
 ```sh
 export GIT_SERVICE_ADMIN_TOKEN="$(openssl rand -base64 32)"
@@ -86,7 +79,8 @@ export GIT_SERVICE_ADMIN_TOKEN="$(openssl rand -base64 32)"
 bun alchemy deploy
 ```
 
-The stack prints the Worker URL. Everything below uses it as `$HOST`.
+The stack prints the Worker's URL. The rest of this page calls it
+`$HOST`.
 
 ## Create a repository
 
@@ -97,41 +91,31 @@ curl -X POST "$HOST/api/v1/repos" \
   -d '{"owner":"acme","name":"web","public":true}'
 ```
 
-The response includes a `write` token, returned exactly once. Keep it —
-only its hash is stored.
+The response carries a `write` token, returned exactly once. Only its
+hash is stored.
 
 ## Push
 
-The token goes in the password field of the remote URL. The username is
-ignored, so anything works:
+The token goes in the password field of the remote URL. The username
+is ignored:
 
 ```sh
 git remote add origin "https://x:gs_YOUR_TOKEN@$HOST/acme/web.git"
 git push -u origin main
 ```
 
-Then clone it back to prove the round trip:
+Clone it back to prove the round trip. The repository is public, so
+this needs no credentials:
 
 ```sh
 git clone "https://$HOST/acme/web.git" verify
 git -C verify fsck --strict
 ```
 
-Because the repo was created with `public: true`, that clone needed no
-credentials at all.
+## Where next
 
-## Next
-
-- [Authentication](/git/auth) — the plugin's limits, and putting your
-  own auth in front.
-- [Building blocks](/git/blocks) — what each layer does and how to
-  replace one.
-- [Repositories](/git/repositories) — the management API.
-
-## One origin (optional)
-
-Serving a web UI from the same host keeps clone URLs on your own
-domain. Put a front-door Worker on the origin, forward the git wire
-paths and `/api/**` to the git host over a service binding, and serve
-your app for everything else — see
-[Custom domains & routes](/cloudflare/networking/custom-domains).
+- [The layer graph](/git/blocks) — what each line of `GitLive` decides.
+- [Choosing an assembly](/git/assemblies) — S3 bytes, Lambda hashing,
+  one origin with your app.
+- [Auth](/git/blocks/auth) — where the bundled tokens stop and your own
+  rules begin.

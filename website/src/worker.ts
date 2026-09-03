@@ -226,6 +226,8 @@ const REDIRECTS: Record<string, string> = {
   "/integrations/neon": "/neon",
   "/integrations/axiom": "/axiom",
   "/integrations/github": "/github",
+  "/git/auth": "/git/blocks/auth",
+  "/git/storage": "/git/blocks/repositories",
 };
 
 const resolveRedirect = (url: URL): string | undefined => {

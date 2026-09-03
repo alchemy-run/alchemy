@@ -387,6 +387,36 @@ const SECTIONS: Section[] = [
     },
   },
   {
+    heading: "Git",
+    intro:
+      "Self-hosted git as a layer graph you assemble and deploy: blocks with swappable implementations (blob store, hasher, registry, auth), assemblies by requirement and cloud, the scaling model with measurements, the REST and GitHub-compatible planes, and building a product on top.",
+    pages: {
+      slugs: [
+        "git/index",
+        "git/setup",
+        "git/blocks/index",
+        "git/blocks/server",
+        "git/blocks/repositories",
+        "git/blocks/registry",
+        "git/blocks/blob-store",
+        "git/blocks/hasher",
+        "git/blocks/auth",
+        "git/assemblies/index",
+        "git/assemblies/cloudflare",
+        "git/assemblies/cloudflare-aws",
+        "git/assemblies/one-origin",
+        "git/scale/index",
+        "git/scale/pushes",
+        "git/scale/clones",
+        "git/clone-and-push",
+        "git/repositories",
+        "git/pull-requests",
+        "git/github-api",
+        "git/build",
+      ],
+    },
+  },
+  {
     heading: "Docker",
     intro:
       "Local and CI Docker as Stack resources — images, containers, networks, and volumes driven through the active Docker CLI context; cloud container runtimes (Cloudflare Containers, ECS) consume the pushed image refs from their own hubs.",

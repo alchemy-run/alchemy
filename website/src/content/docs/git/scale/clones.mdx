@@ -1,0 +1,56 @@
+---
+title: Clones
+description: A full clone streams a precomputed bundle that never passes through the Durable Object. Compaction makes it fast, and the measured throughput.
+---
+
+A full clone of a repository whose refs have not moved is one object
+in the blob store, streamed by the Worker:
+
+1. The client asks for everything. The repository's Durable Object
+   checks the request against the current refs and answers with the
+   key of a bundle cut for exactly those refs.
+2. The Worker opens that object and pipes it to the client. The bundle
+   is stored already framed for git's side-band protocol, so the
+   Worker moves bytes and nothing else.
+
+The Durable Object handles one small request per clone, and the bytes
+scale with Workers and the blob store.
+
+## When there is no bundle
+
+Refs moved since the last bundle was cut, so a clone is assembled from
+the repository's objects and a fresh bundle is scheduled. Incremental
+fetches always take this path. They are small by construction: the
+commit graph in SQLite finds what the client lacks, commits and trees
+come from rows, and blobs come from packs in the blob store as a few
+large ranged reads.
+
+## Compaction
+
+Freshly pushed blobs are rows in the Durable Object's SQLite. A
+background job rewrites them into an immutable pack in the blob store
+and drops the rows. Commits, trees, and tags stay as rows, so the walk
+that answers every fetch never reads over the network.
+
+Measured on a real repository, 13,699 objects and 38 MiB:
+
+| | Clone back |
+| --- | --- |
+| loose, before compaction | 19.5 s |
+| after compaction | 3.4 s |
+
+## Measured
+
+The same 36 MiB, 15.6k-object repository, one client, the same edge:
+
+| Path | Throughput |
+| --- | --- |
+| a real `git clone` from a bundle | 32.7 MiB/s typical, 80 MiB/s best (0.69 s end to end) |
+| raw bundle, four concurrent streams | 93 MiB/s aggregate |
+| dynamic fetch, time to first byte | 0.43–0.56 s |
+| dynamic fetch, transfer | 7–10 MiB/s |
+
+The bundle path is the client's line rate. The dynamic path is bounded
+by pack generation inside the Durable Object, which is why clones do
+not take it and why compaction keeps incremental fetches on rows for
+everything but blobs.

@@ -1,0 +1,113 @@
+---
+title: Build on it
+description: The host has no users, no UI, and no opinion about either. Your Worker owns the surface, your Auth Layer decides who a caller is, and the typed client gives your code every operation.
+---
+
+The host is a git remote with an API. A product is what you put in
+front of it: accounts, a UI, rules about who may push where. Three
+pieces of the graph are yours to fill in.
+
+## Your surface
+
+The git host is a Worker you wrote, and it can be one your application
+never exposes. Bind it into your app's Worker and call it like a
+function:
+
+```typescript
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import GitHost from "./git.ts";
+
+export default Cloudflare.Worker(
+  "App",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const git = yield* Cloudflare.Workers.Fetch(GitHost);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const res = yield* git(
+          HttpClientRequest.get("https://git/api/v1/repos").pipe(
+            HttpClientRequest.setUrlParam("owner", "acme"),
+          ),
+        );
+        return HttpServerResponse.json(yield* res.json);
+      }),
+    };
+  }).pipe(Effect.provide(Cloudflare.Workers.FetchBinding)),
+);
+```
+
+The request crosses a service binding, never the internet, and the
+host is unreachable from outside until you decide otherwise. For typed
+calls, `GitApi` is the REST contract and `HttpApiClient.make(GitApi, …)`
+gives you every operation with its tagged errors, as
+[Repositories](/git/repositories) shows.
+
+## Your identities
+
+`Git.Auth` is where your users become actors. Resolve a session in
+`authenticate`, rule on it in `authorize`, and let everything else fall
+through to the bundled tokens so `git push` keeps working:
+
+```typescript
+const AuthSessions = Layer.effect(
+  Git.Auth,
+  Effect.gen(function* () {
+    const base = yield* Git.Auth;
+    const sessions = yield* Sessions;
+
+    return {
+      authenticate: (headers) =>
+        Effect.gen(function* () {
+          const session = yield* sessions.fromHeaders(headers);
+          return session
+            ? { kind: "user", id: session.userId }
+            : yield* base.authenticate(headers);
+        }),
+      authorize: ({ actor, repo, action }) =>
+        actor.kind === "user"
+          ? Effect.succeed(canDo(actor.id, repo, action))
+          : base.authorize({ actor, repo, action }),
+    };
+  }),
+).pipe(Layer.provide(Git.AuthTokens));
+```
+
+`canDo` is your policy over your data: organizations, roles, protected
+branches. The host asks `MergePull` and `Push` with the refs that
+move. It never asks what a team is.
+
+A signed-in user who may `ManageTokens` mints their own token over the
+REST plane, and their git client uses it. Your UI shows it once, as the
+host does. [Auth](/git/blocks/auth) has the contract in full.
+
+## Your domain
+
+Put the app and the git host on one origin so clone URLs are yours and
+the browser needs no CORS. The front door forwards the git paths over
+a service binding and serves your app for the rest.
+[One origin](/git/assemblies/one-origin) is the assembly.
+
+## What the host gives you
+
+- **Repositories**: create, fork server-side, import from any public
+  URL, delete with a background purge.
+  [Repositories](/git/repositories).
+- **Refs** with compare-and-swap writes, so your UI can create a branch
+  or move a tag without a client.
+- **Objects**: commits, logs, trees, blobs, file contents, tree diffs,
+  and three-dot comparisons computed in the repository.
+- **Pull requests** with server-side merge base and fast-forward or
+  three-way merges, guarded by `expectedHeadOid` against a branch that
+  moved. [Pull requests](/git/pull-requests).
+- **A GitHub facade** so tooling that already speaks GitHub REST works
+  against your product. [GitHub API compatibility](/git/github-api).
+
+## What it does not give you
+
+Issues, reviews, comments, checks, notifications, webhooks, and search.
+Those are the product. The host keeps the repositories correct and
+fast, and stays out of the way of what you build around them.

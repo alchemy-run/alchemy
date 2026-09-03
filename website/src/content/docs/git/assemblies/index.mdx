@@ -1,0 +1,66 @@
+---
+title: Choosing an assembly
+description: Requirements pick layers. One table from what you need to the lines that change, and the stack shape for one cloud or two.
+---
+
+Start from the default graph and change the lines your requirements
+touch:
+
+```typescript
+const GitLive = Git.ServerLive.pipe(
+  Layer.provide(Git.ReposDurableObject),
+  Layer.provide(Git.RegistryDurableObject),
+  Layer.provide(Git.BlobStoreR2(GitObjects)),
+  Layer.provide(Git.HasherInline),
+  Layer.provide(Git.AuthTokens),
+);
+```
+
+| You need | Change | Assembly |
+| --- | --- | --- |
+| Everything on one Cloudflare account | nothing | [Cloudflare](/git/assemblies/cloudflare) |
+| Large pushes verified fast, still on one cloud | `HasherWorkerLoader()` | [Cloudflare](/git/assemblies/cloudflare) |
+| Bytes stored in AWS | `BlobStoreS3({ bucket, region })` | [Cloudflare + AWS](/git/assemblies/cloudflare-aws) |
+| The widest push parallelism | `HasherLambda(HasherFunction)` | [Cloudflare + AWS](/git/assemblies/cloudflare-aws) |
+| Registry reads near users everywhere, SQL over the index | `RegistryD1(RepoIndex)` | [Registry](/git/blocks/registry) |
+| Branch rules, your own users | wrap or replace `AuthTokens` | [Auth](/git/blocks/auth) |
+| Your web app and git on one domain | a front-door Worker | [One origin](/git/assemblies/one-origin) |
+
+Every row is independent. Bytes in S3 with the loader hasher and a D1
+registry is three changed lines, and the type checker confirms the
+graph is whole.
+
+## One cloud or two
+
+A graph that only touches Cloudflare deploys with Cloudflare's
+providers:
+
+```typescript
+export default Alchemy.Stack(
+  "GitService",
+  { providers: Cloudflare.providers(), state: Cloudflare.state() },
+  Effect.gen(function* () {
+    const git = yield* GitHost;
+    return { url: git.url.as<string>() };
+  }),
+);
+```
+
+A graph that declares a Lambda or reads S3 carries both provider sets.
+The stack is otherwise identical, and Alchemy creates what each cloud
+needs:
+
+```diff lang="typescript"
+export default Alchemy.Stack(
+  "GitService",
+-  { providers: Cloudflare.providers(), state: Cloudflare.state() },
++  {
++    providers: Layer.mergeAll(Cloudflare.providers(), AWS.providers()),
++    state: Cloudflare.state(),
++  },
+  Effect.gen(function* () {
+    const git = yield* GitHost;
+    return { url: git.url.as<string>() };
+  }),
+);
+```

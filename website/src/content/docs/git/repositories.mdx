@@ -3,9 +3,8 @@ title: Repositories
 description: Create, fork, import, and manage repositories over the typed REST plane.
 ---
 
-Repositories are managed at `/api/v1/repos`, declared as an Effect
-`HttpApi` — so the same schema types the server, a generated client,
-and your tests.
+Repositories live at `/api/v1/repos`, declared as an Effect `HttpApi`.
+One schema types the server, the client, and your tests:
 
 ```typescript
 import { GitApi } from "alchemy/Git";
@@ -18,9 +17,8 @@ const created = yield* client.repos.create({
 });
 ```
 
-Everything below is also plain HTTP — use `curl`, `fetch`, or the
-[GitHub-compatible facade](/git/github-api) if you already have
-Octokit code.
+Everything below is also plain HTTP for `curl` and `fetch`, and the
+[GitHub facade](/git/github-api) covers Octokit.
 
 ## Creating
 
@@ -30,37 +28,34 @@ yield* client.repos.create({
     owner: "acme",
     name: "web",
     description: "the marketing site",
-    defaultBranch: "main",   // defaults to "main"
-    public: true,            // defaults to false
+    defaultBranch: "main", // default
+    public: true, // default false
     readOnly: false,
   },
 });
 ```
 
 The response carries the repository, its clone URL, and a `write`
-token returned exactly once. A duplicate `owner/name` is a typed
-`RepoAlreadyExists` conflict.
+token returned once. A duplicate `owner/name` is a typed
+`RepoAlreadyExists`.
 
-Owner and name are the public identity; internally the repo has a
-stable id, so renaming never moves data.
+`owner/name` is the public identity. The repository's id is stable, so
+renaming never moves data.
 
 ## Visibility
 
-`public: true` serves anonymous reads — REST reads, raw files, the ref
-advertisement, and `upload-pack` — so `git clone` works with no
-credentials. Writes always need a token. Private repos answer `401`
-with `WWW-Authenticate` to anonymous callers, which is what makes git
-prompt for credentials rather than fail outright.
+`public: true` serves anonymous reads: REST reads, raw files, the ref
+advertisement, and `upload-pack`. Writes always need a token. A private
+repository answers `401` with `WWW-Authenticate` to anonymous callers,
+so git prompts.
 
-Listings are visibility-filtered: the admin secret sees everything,
-everyone else sees public repos only.
+Listings are filtered by what the caller may see.
 
 ## Read-only
 
-`readOnly: true` rejects pushes in-band — the client gets a clear
-error on the ref rather than a transport failure. Useful for freezing
-a migrated repo or parking one you are decommissioning. It is a
-property of the repository, independent of who is asking.
+`readOnly: true` rejects pushes in-band, so the client sees a clear
+error on the ref rather than a transport failure. Use it to freeze a
+migrated repository or park one you are retiring.
 
 ## Updating
 
@@ -71,12 +66,12 @@ yield* client.repos.update({
 });
 ```
 
-`defaultBranch` must name a branch that exists; pointing it at a
+`defaultBranch` must name a branch that exists. Pointing it at a
 missing ref is a typed `RefNotFound`.
 
 ## Forking and importing
 
-Fork copies an existing repo server-side — no round trip through a
+Fork copies a repository server-side, with no round trip through a
 client:
 
 ```typescript
@@ -86,8 +81,8 @@ yield* client.repos.fork({
 });
 ```
 
-Import pulls from any public git URL. Both return immediately with
-`status: "importing"`; poll `repos.get` until it reads `"ready"`.
+Import pulls from any public git URL. Both return at once with
+`status: "importing"`. Poll `repos.get` until it reads `"ready"`.
 
 ## Deleting
 
@@ -95,11 +90,10 @@ Import pulls from any public git URL. Both return immediately with
 yield* client.repos.delete({ params: { owner: "acme", repo: "web" } });
 ```
 
-Delete answers `204` immediately and purges in the background: the
-name is released, and the repository's objects and blobs drain through
-a scheduled job. A second delete during the drain is an idempotent
-`204`, and re-issuing it re-arms a purge whose alarm was lost. Reads
-of a draining repo behave as if it were already gone.
+Delete answers `204` at once and purges in the background. The name is
+released and the objects drain through a scheduled job. A second
+delete during the drain is an idempotent `204`, and reads of a
+draining repository behave as if it were gone.
 
 ## Listing
 
@@ -107,7 +101,6 @@ of a draining repo behave as if it were already gone.
 const page = yield* client.repos.list({ query: { owner: "acme" } });
 ```
 
-Paginated with an opaque cursor. Listings come from the registry's
-denormalized columns rather than waking one Durable Object per row, so
-they stay flat as the account grows — object counts read as zero here.
-Fetch a repository directly for live stats.
+Paginated with an opaque cursor. Listings come from the
+[registry](/git/blocks/registry), so object counts read as zero here.
+Fetch a repository directly for live numbers.

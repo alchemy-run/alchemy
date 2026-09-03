@@ -1,18 +1,17 @@
 ---
 title: GitHub API compatibility
-description: Point the gh CLI and Octokit at your own host with the /api/v3 facade.
+description: Point the gh CLI and Octokit at your host with the /api/v3 facade.
 ---
 
-The service exposes a GitHub REST v3 facade at `/api/v3`, so tooling
-that already speaks GitHub works against your host without changes.
-It is a pure translation layer: the same operations as the native
-[`/api/v1` plane](/git/repositories), reshaped into GitHub's request
-and response formats.
+The host exposes a GitHub REST v3 facade at `/api/v3`, so tooling that
+already speaks GitHub works against it unchanged. It is a translation
+layer over the same operations as `/api/v1`, reshaped into GitHub's
+requests and responses.
 
 ## Using `gh`
 
-The `gh` CLI targets non-github.com hosts through GitHub Enterprise
-configuration — it sends REST to `https://<host>/api/v3/...`:
+`gh` reaches other hosts through its Enterprise settings and sends
+REST to `https://<host>/api/v3/...`:
 
 ```sh
 export GH_HOST="git.example.com"
@@ -23,12 +22,10 @@ gh api "repos/acme/web/commits"
 gh api "repos/acme/web/pulls" --paginate
 ```
 
-The host must be reachable over HTTPS — `gh` refuses plaintext for
+The host must be reachable over HTTPS. `gh` refuses plaintext for
 enterprise hosts.
 
 ## Using Octokit
-
-Point `baseUrl` at the facade:
 
 ```typescript
 import { Octokit } from "octokit";
@@ -44,39 +41,31 @@ await octokit.rest.repos.get({ owner: "acme", repo: "web" });
 ## Covered
 
 Repository metadata, branches, commits and commit detail, comparison,
-file contents, the authenticated-user probe (`/user`), and pull
-requests — list, create, get, update, merge, and changed files.
+file contents, the authenticated-user probe at `/user`, and pull
+requests: list, create, get, update, merge, and changed files.
 
-Authentication accepts GitHub's `Authorization: token <t>` scheme
-alongside `Bearer` and Basic, because that is what `gh` and Octokit
-send.
+Authentication accepts GitHub's `Authorization: token <t>` alongside
+`Bearer` and Basic, because that is what `gh` and Octokit send.
 
-Pagination uses RFC 5988 `Link` headers with `rel="next"`. The next
-URL carries an opaque cursor rather than a page number, which
-`gh api --paginate` and Octokit's paginator follow transparently —
-they treat the URL as opaque, which is exactly what keyset pagination
-needs.
+Pagination uses `Link` headers with `rel="next"`. The next URL carries
+an opaque cursor, which `gh api --paginate` and Octokit's paginator
+follow as-is.
 
 ## Shape mappings
 
-A few GitHub-isms are translated rather than stored:
-
 - A merged pull request is `state: "closed"` with `merged: true`.
-  Internally merged is its own terminal state; the facade collapses it
-  into GitHub's boolean.
-- Ids are integers derived deterministically from internal
-  identifiers, since GitHub's are numeric.
-- Errors are `{ message }` with GitHub's status conventions — `401`
+- Ids are integers derived from the internal identifiers.
+- Errors are `{ message }` with GitHub's status conventions: `401`
   "Requires authentication", `404` "Not Found", `405` for an
   unsupported merge method, `409` for a conflict.
 
 ## Not covered
 
-**GraphQL.** This is the important one: `gh`'s porcelain commands —
-`gh pr create`, `gh pr list`, `gh issue` — speak GraphQL, so they do
-not work. Use `gh api` with REST paths instead.
+**GraphQL.** `gh`'s porcelain, `gh pr create`, `gh pr list`,
+`gh issue`, speaks GraphQL and does not work. Use `gh api` with REST
+paths.
 
-Also absent, deliberately: issues, reviews, comments, checks, search,
-rename detection in file lists, and per-file line counts (additions
-and deletions report zero — the server does not compute content
-diffs; fetch blobs and diff client-side).
+Also absent: issues, reviews, comments, checks, search, rename
+detection in file lists, and per-file line counts. Additions and
+deletions report zero, since the host does not compute content diffs.
+Fetch the blobs and diff client-side.

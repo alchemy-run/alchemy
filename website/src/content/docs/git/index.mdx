@@ -1,88 +1,132 @@
 ---
 title: Git
-description: Self-hosted git on Cloudflare Workers, Durable Objects, and R2 — assembled from swappable Effect layers into a Worker you own.
+description: Git hosting you assemble from Effect Layers and deploy as Infrastructure as Effects. Choose where bytes live, what verifies a push, and who may write, then build your own product on top.
 ---
 
-`alchemy/Git` is git hosting you run yourself: `git clone` and
+`alchemy/Git` is git hosting you run yourself. `git clone` and
 `git push` over smart HTTP, a typed REST plane, pull requests, and a
-GitHub-compatible API — deployed to your own Cloudflare account.
-
-It is a **service, not an appliance**. The package ships no Worker and
-no `main` function. Every component is an Effect `Context.Service` with
-swappable `Layer` implementations, and you assemble them into a Worker
-you control:
+GitHub-compatible API, on your own Cloudflare account. It ships as a
+set of Layers, and you assemble them into a Worker you own:
 
 ```typescript
-import * as Git from "alchemy/Git";
 import * as Cloudflare from "alchemy/Cloudflare";
+import * as Git from "alchemy/Git";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 
-const GitObjects = Cloudflare.R2.Bucket("GitObjects");
+export const GitObjects = Cloudflare.R2.Bucket("GitObjects");
 
 const GitLive = Git.ServerLive.pipe(
-  Layer.provide(Git.ReposDurableObject),    // refs, objects, pull requests
-  Layer.provide(Git.RegistryDurableObject), // owner/name -> repoId
-  Layer.provide(Git.BlobStoreR2(GitObjects)), // packs & clone bundles
-  Layer.provide(Git.AuthTokens),            // the minimal auth plugin
+  Layer.provide(Git.ReposDurableObject), // refs, objects, pull requests
+  Layer.provide(Git.RegistryDurableObject), // owner/name → repo
+  Layer.provide(Git.BlobStoreR2(GitObjects)), // packs, bundles, large pushes
+  Layer.provide(Git.HasherInline), // push verification
+  Layer.provide(Git.AuthTokens), // who may read and write
 );
 
-export default class GitHost extends Cloudflare.Worker<GitHost>()(
-  "git",
+export default Cloudflare.Worker(
+  "Git",
   { main: import.meta.url, ...Git.GIT_WORKER_OPTIONS },
   Effect.gen(function* () {
     const git = yield* Git.Server;
     return { fetch: git.fetch };
   }).pipe(Effect.provide(GitLive)),
-) {}
+);
 ```
 
-That is the whole deployment. [Setup](/git/setup) walks it end to end,
-from an empty account to your first push.
+That is the whole deployment. `bun alchemy deploy` creates the bucket,
+two Durable Object namespaces, and the Worker, then prints a URL you
+can push to. [Setup](/git/setup) walks it end to end.
 
-## Why blocks
+A git host is usually an appliance. You run the binary or rent the
+service and configure it through the knobs it exposes. Here each
+decision is a line in the graph above. Bytes in S3 while compute stays
+on Cloudflare is one line:
 
-Because the interesting decisions are yours. Bytes live wherever you
-point them — R2, or S3 while compute stays on Cloudflare. Access
-control is a layer, so the bundled plugin gets you running and your own
-implementation replaces it without forking anything. And since you own
-the Worker, you own the HTTP surface: mount the git wire protocol
-publicly and put everything else behind your own routes.
+```diff lang="typescript"
+const GitLive = Git.ServerLive.pipe(
+  Layer.provide(Git.ReposDurableObject),
+  Layer.provide(Git.RegistryDurableObject),
+-  Layer.provide(Git.BlobStoreR2(GitObjects)),
++  Layer.provide(Git.BlobStoreS3({ bucket: "git-objects", region: "us-east-1" })),
+  Layer.provide(Git.HasherInline),
+  Layer.provide(Git.AuthTokens),
+);
+```
 
-See [Building blocks](/git/blocks) for the graph, and
-[Authentication](/git/auth) for both halves of the auth story.
+Protecting `main` is a page of code around the auth Layer. Hashing
+large pushes on Lambda is a hasher that runs there. Nothing else
+changes, and a missing Layer is a type error, not a 500 on your first
+clone.
 
-## What you get
+## Blocks
 
-**Git over HTTP.** Clone, incremental fetch, shallow clones, thin-pack
-push with full connectivity checking, atomic multi-ref pushes, and
-annotated tags. Standard clients, no extensions — see
-[Cloning & pushing](/git/clone-and-push).
+Six services. Each has implementations you pick from or write:
 
-**A typed REST plane** at `/api/v1`, declared as an Effect `HttpApi`:
-repositories, refs with compare-and-swap writes, commit/tree/blob
-reads, and pull requests. See [Repositories](/git/repositories).
+| Block | Decides | Ships with |
+| --- | --- | --- |
+| [Server](/git/blocks/server) | the HTTP surface: wire, REST, GitHub facade | `ServerLive` |
+| [Repositories](/git/blocks/repositories) | where refs and objects live, and the jobs that keep a repo small | `ReposDurableObject` |
+| [Registry](/git/blocks/registry) | how `owner/name` resolves | `RegistryDurableObject`, `RegistryD1` |
+| [Blob store](/git/blocks/blob-store) | where packs, bundles, and large pushes go | `BlobStoreR2`, `BlobStoreS3` |
+| [Hasher](/git/blocks/hasher) | what verifies a push, and on which compute | `HasherInline`, `HasherWorkerLoader`, `HasherLambda` |
+| [Auth](/git/blocks/auth) | who may do what | `AuthTokens` |
 
-**Pull requests** with server-side merge base, tree diffs, and
-fast-forward or three-way merges — [Pull requests](/git/pull-requests).
+[The layer graph](/git/blocks) shows how they fit together and how the
+one graph you write serves both the Worker and the Durable Objects.
 
-**GitHub API compatibility** at `/api/v3`, so `gh api` and Octokit work
-against your host unmodified — [GitHub API
-compatibility](/git/github-api).
+## Assemblies
+
+Requirements pick layers. [Choosing an assembly](/git/assemblies) maps
+them, and three are written out in full:
+
+- [Cloudflare](/git/assemblies/cloudflare) — one account, one
+  bucket, dynamic Workers hashing large pushes.
+- [Cloudflare + AWS](/git/assemblies/cloudflare-aws) — bytes in S3,
+  pushes hashed on Lambda, compute on Cloudflare.
+- [One origin](/git/assemblies/one-origin) — your app and your git
+  host on the same domain.
+
+## Scale
+
+Reads scale like a CDN and writes scale like git. Every repository is
+its own Durable Object. Clones stream from immutable bundles that never
+pass through it. A push is bounded by your storage, not by isolate
+memory. [Scaling model](/git/scale) gives the shape,
+[Pushes](/git/scale/pushes) and [Clones](/git/scale/clones) the
+measurements.
+
+## Using your host
+
+- [Cloning & pushing](/git/clone-and-push) — standard clients, what
+  the wire supports, credentials.
+- [Repositories](/git/repositories) — create, fork, import, and manage
+  over the typed REST plane.
+- [Pull requests](/git/pull-requests) — server-side merge base, diffs,
+  and merges.
+- [GitHub API compatibility](/git/github-api) — `gh api` and Octokit
+  against your host.
+
+## Build on it
+
+The service has no users, no UI, and no opinion about either. Your
+Worker owns the HTTP surface, your auth Layer decides who a caller is,
+and the typed client gives your code every operation the REST plane
+has. [Build on it](/git/build) puts a product in front of the host.
 
 ## Proven on itself
 
 The alchemy monorepo hosts on it: full history, 44,051 objects, a
-67 MiB thin pack pushed in about 90 seconds and cloned back
-byte-identically under `git fsck --strict`. Push bodies stream rather
-than buffer, so push size is bounded by your storage, not by isolate
-memory. [Storage & maintenance](/git/storage) covers how objects are
-kept small over time.
+67 MiB thin pack, cloned back byte-identical under `git fsck --strict`.
+A 40 MiB delta-heavy push lands in 5.9 s against GitHub's 3.3 s on the
+same client, a 44 MiB push of whole blobs in 4.8 s against 4.6 s, and
+incremental pushes in 0.2–0.4 s against 1.2 s.
 
 ## Not a GitHub replacement
 
-There are no issues, reviews, comments, checks, or Actions — and no
-GraphQL, so `gh` porcelain commands like `gh pr create` do not work
-(`gh api` does). What it is: a git remote you own, with an API, that
-you can build on.
+No issues, reviews, comments, checks, Actions, or GraphQL. `gh api`
+works. `gh pr create` and the rest of the porcelain do not. What it is:
+a git remote you own, with an API, that you can build on.
 
-Looking for the GitHub *provider* — managing repos, Actions secrets, and
-webhooks on github.com? That is [GitHub](/github).
+Looking for the GitHub *provider*, which manages repos, Actions
+secrets, and webhooks on github.com? That is [GitHub](/github).

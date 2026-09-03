@@ -1,12 +1,11 @@
 ---
 title: Pull requests
-description: Server-side merge base, tree diffs, and fast-forward or three-way merges.
+description: Server-side merge base, tree diffs, and fast-forward or three-way merges, computed inside the repository.
 ---
 
-Pull requests are computed server-side. Merge base, diffs, and the
-merge itself run inside the repository's Durable Object, next to the
-object store — no client-side clone, no worker fetching a whole
-history to answer "what changed".
+Pull requests are computed where the objects are. Merge base, diffs,
+and the merge itself run inside the repository's Durable Object, so
+nothing clones a history to answer what changed.
 
 ## Opening
 
@@ -23,31 +22,26 @@ const pull = yield* client.pulls.create({
 ```
 
 Branch names may be short or fully qualified. Numbers are per
-repository and start at 1. Opening a pull request against a missing
-branch, or with `base` equal to `head`, is a typed failure rather than
-a 500.
+repository and start at 1. A missing branch, or `base` equal to
+`head`, is a typed failure.
 
 ## Listing and reading
 
 ```typescript
 const page = yield* client.pulls.list({
   params: { owner: "acme", repo: "web" },
-  query: { state: "open" },   // "open" | "closed" | "merged" | "all"
+  query: { state: "open" }, // "open" | "closed" | "merged" | "all"
 });
 ```
 
-Listing is keyset-paginated, newest first. Reading a single pull
-request computes its current state live — merge base, ahead/behind
-counts, and the changed-file list — so it reflects the branches as
-they are now, not as they were when it was opened.
-
-If the head branch is deleted while the pull request is open, the
-detail degrades gracefully: the comparison fields read as null rather
-than erroring.
+Listing is keyset-paginated, newest first. Reading one pull request
+computes its state live: merge base, ahead and behind counts, and the
+changed files, as the branches are now. If the head branch is deleted
+while it is open, the comparison fields read as null.
 
 ## Diffs
 
-The same machinery is available directly, without a pull request:
+The same machinery works without a pull request:
 
 ```typescript
 // what one commit changed
@@ -62,9 +56,9 @@ yield* client.objects.compare({
 });
 ```
 
-Comparison walks the commit graph to find the merge base, then diffs
-the two trees. Identical subtrees are pruned on entry, so the cost
-tracks what actually changed rather than the size of the repository.
+Comparison finds the merge base in the commit graph and diffs the two
+trees. Identical subtrees are pruned on entry, so the cost tracks what
+changed rather than the size of the repository.
 
 ## Merging
 
@@ -75,26 +69,20 @@ yield* client.pulls.merge({
 });
 ```
 
-Two strategies, chosen automatically:
+The strategy is chosen for you. When the base has not moved, the ref
+fast-forwards and `message` is ignored. Otherwise, if the two sides
+changed disjoint files, a merge commit is written with both parents.
 
-- **Fast-forward** when the base has not moved since the branches
-  diverged. The base ref simply advances; no merge commit is written
-  and `message` is ignored.
-- **Three-way merge** otherwise, when the two sides changed disjoint
-  files. A real merge commit is written with both parents.
+Overlapping edits to one file are a typed `409`. The host does not
+merge hunks or write conflict markers. Resolve locally and push.
 
-Overlapping edits to the same file are a typed `409` conflict. The
-service does not attempt content-level hunk merging or produce
-conflict markers — resolve locally and push.
-
-Merging is terminal: a merged pull request cannot be reopened, and
-merging one twice is a typed conflict rather than a second merge
-commit.
+Merging is terminal. A merged pull request cannot be reopened, and
+merging it twice is a typed conflict.
 
 ## Races
 
-Pass `expectedHeadOid` to guard against the branch moving between the
-moment a reviewer looked and the moment they clicked merge:
+Pass `expectedHeadOid` so a branch that moved between the review and
+the click is refused rather than merged:
 
 ```typescript
 yield* client.pulls.merge({
@@ -103,11 +91,9 @@ yield* client.pulls.merge({
 });
 ```
 
-If the head advanced, the merge fails with a ref conflict instead of
-silently merging code nobody reviewed.
-
 ## Not included
 
-No reviews, comments, approvals, or required checks. A pull request
-here is a branch comparison with a title and a merge button — the
-review workflow is yours to build on top, using these endpoints.
+Reviews, comments, approvals, and required checks. A pull request here
+is a branch comparison with a title and a merge, and the review
+workflow is yours to build with these endpoints.
+[Build on it](/git/build) starts there.

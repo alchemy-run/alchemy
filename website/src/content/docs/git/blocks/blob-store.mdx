@@ -1,0 +1,87 @@
+---
+title: Blob store
+description: Bulk, immutable, content-addressed bytes. R2 by default, S3 when data has to live in AWS, or any store that can do ranged reads and multipart writes.
+---
+
+`Git.BlobStore` holds everything big: compacted packs, clone bundles,
+oversize objects, and the spilled bodies of large pushes. The contract
+is what the pack plane needs and nothing more:
+
+```typescript
+interface BlobStoreShape {
+  get(key, range?): Effect<BlobBody | null>; // ranged read
+  put(key, body, { contentLength }): Effect<void>; // whole object
+  multipart(key): Effect<BlobMultipart>; // streaming write of unknown length
+  delete(keys): Effect<void>;
+  list(prefix): Stream<BlobMeta>; // purge only, never on a serving path
+}
+```
+
+The package owns no bucket. You declare one and pass it in, and the one
+Layer serves both places bytes are touched: the Worker streaming a
+clone bundle and the Durable Object writing a pack.
+
+## R2
+
+```typescript
+export const GitObjects = Cloudflare.R2.Bucket("GitObjects");
+
+Layer.provide(Git.BlobStoreR2(GitObjects))
+```
+
+The default for a Cloudflare-hosted deployment. No egress fees and no
+cross-internet hop on the serving path.
+
+## S3
+
+```typescript
+Layer.provide(
+  Git.BlobStoreS3({ bucket: "git-objects", region: "us-east-1" }),
+)
+```
+
+Compute stays on Cloudflare and bytes live in AWS. Requests are signed
+with SigV4 over Effect's `HttpClient`, so the Layer runs unchanged in
+the Worker and in the Durable Object. The bucket must already exist.
+
+Credentials are read from `AWS_ACCESS_KEY_ID` and
+`AWS_SECRET_ACCESS_KEY` at deploy time and bound to the Worker as
+secrets. Point them elsewhere if your keys live under other names:
+
+```typescript
+Git.BlobStoreS3({
+  bucket: "git-objects",
+  region: "us-east-1",
+  credentials: { accessKeyId: "GIT_S3_KEY", secretAccessKey: "GIT_S3_SECRET" },
+})
+```
+
+Scope the key's policy to the bucket: `GetObject`, `PutObject`,
+`DeleteObject`, `ListBucket`, `AbortMultipartUpload`.
+
+Every read crosses the public internet, so expect higher serving
+latency than R2. Reads are coalesced into few large ranges, but the hop
+is real. [Cloudflare + AWS](/git/assemblies/cloudflare-aws) is the full
+assembly.
+
+## Your own
+
+Implement the five operations and any object store works:
+
+```typescript
+const BlobStoreMine: Layer.Layer<Git.BlobStore> = Layer.effect(
+  Git.BlobStore,
+  Effect.gen(function* () {
+    return {
+      get: (key, range) => /* ... */,
+      put: (key, body, options) => /* ... */,
+      multipart: (key) => /* ... */,
+      delete: (keys) => /* ... */,
+      list: (prefix) => /* ... */,
+    } satisfies Git.BlobStoreShape;
+  }),
+);
+```
+
+Multipart parts are uniform in size except the last. Both R2 and S3
+accept that, and it is what the push path writes.
