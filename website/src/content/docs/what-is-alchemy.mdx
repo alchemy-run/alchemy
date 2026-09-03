@@ -51,9 +51,10 @@ the layer on top adds.
 
 ## Infrastructure as Code
 
-The engine has three ideas. A **Stack** is the unit you deploy, an
-Effect that yields resources and returns the outputs you want
-printed:
+The core of Alchemy is Infrastructure as Code, in the same family as
+Terraform, Pulumi, CloudFormation, and the CDK. A **Stack** is the
+unit you deploy, an Effect that yields resources and returns the
+outputs you want printed:
 
 ```typescript
 // alchemy.run.ts
@@ -173,8 +174,8 @@ this page.
 
 ## Infrastructure as Effects
 
-The layer on top adds three ideas. A **Runtime** is a Resource that
-carries the code it runs: a Worker, Lambda Function, Container, or Server.
+Infrastructure as Effects is what Alchemy adds on top of that engine.
+A **Runtime** is a Resource that carries the code it runs: a Worker, Lambda Function, Container, or Server.
 That code is always written the same way, as an **Effectful
 Constructor**. Bind what you need, then return what you expose:
 
