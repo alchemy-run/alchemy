@@ -43,7 +43,9 @@ variable:
 // infrastructure
 const bucket = new R2Bucket("uploads");
 new Worker("api", { script: "src/api.ts", bindings: { BUCKET: bucket } });
+```
 
+```typescript
 // src/api.ts
 export default {
   async fetch(request, env) {

@@ -43,7 +43,9 @@ an SDK call in the handler that reads it back:
 // infrastructure: grant access and pass the name
 policy: { Action: ["dynamodb:GetItem"], Resource: [table.arn] },
 environment: { JOBS_TABLE: table.name },
+```
 
+```typescript
 // handler: hope the two above agree
 const client = new DynamoDBClient();
 await client.send(

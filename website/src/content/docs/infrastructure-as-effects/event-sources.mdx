@@ -44,7 +44,9 @@ event:
 // infrastructure: grant access and wire the trigger
 policy: { Action: ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes"], Resource: [queue.arn] },
 eventSourceMapping: { eventSourceArn: queue.arn, functionName: fn.name },
+```
 
+```typescript
 // handler: unpack the batch by hand
 export const handler = async (event) => {
   for (const record of event.Records) {
