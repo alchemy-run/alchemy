@@ -1,5 +1,5 @@
 /**
- * The spill net's contract (lib/SpillingTools.ts): presentation stays
+ * The spill net's contract (sandbox/SpillingTools.ts): presentation stays
  * direct (each mention keeps its provider tool), oversized SUCCESS
  * strings are parked in the Artifacts behind a head preview + a
  * readOutput id, bounded results and failures pass through verbatim —
@@ -11,10 +11,10 @@ import { BunServices } from "@effect/platform-bun";
 import { expect, test } from "bun:test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { SpillingTools } from "../src/lib/SpillingTools.ts";
-import { Artifacts } from "../src/lib/Artifacts.ts";
-import { ArtifactsLocal } from "../src/lib/ArtifactsLocal.ts";
-import { ReadOutputLive } from "../src/tools/ReadOutput.ts";
+import { SpillingTools } from "../src/sandbox/SpillingTools.ts";
+import { Artifacts } from "../src/sandbox/Artifacts.ts";
+import { ArtifactsLocal } from "../src/sandbox/ArtifactsLocal.ts";
+import { ReadOutputLive } from "../src/sandbox/ReadOutput.ts";
 
 const mention = (
   name: string,

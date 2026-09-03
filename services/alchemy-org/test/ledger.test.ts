@@ -5,8 +5,8 @@
  */
 import { expect, test } from "bun:test";
 import * as Effect from "effect/Effect";
-import { Ledger } from "../src/services/Ledger.ts";
-import { LedgerMemory } from "../src/services/LedgerMemory.ts";
+import { Ledger } from "../src/review/Ledger.ts";
+import { LedgerMemory } from "../src/review/LedgerMemory.ts";
 
 /** The contract, physics-agnostic: run under any Ledger Layer. */
 const contract = Effect.gen(function* () {

@@ -39,6 +39,7 @@ export interface Proposal {
         base: string;
       };
   at: number;
+  revisedAt: number | undefined;
   status: "pending" | "accepted" | "rejected" | "failed";
   resolvedAt: number | undefined;
   result: string | undefined;
@@ -96,13 +97,18 @@ export class FakeApi {
   deleted: string[] = [];
   /** Every `POST /api/prs/:n/review`, in order. */
   reviewsRequested: number[] = [];
-  /** The agents' PROPOSALS (src/services/Proposals.ts) — seed pending
+  /** The agents' PROPOSALS (src/github/Proposals.ts) — seed pending
    *  ones to exercise the inbox; `accept`/`reject` resolve them here
    *  exactly as the Worker would (an accept "lands" at a fake URL). */
   proposals: Proposal[] = [];
-  /** Every `POST /api/proposals/:id/{accept,reject}`, in order. */
-  resolved: Array<{ id: string; verb: "accept" | "reject"; reason?: string }> =
-    [];
+  /** Every `POST /api/proposals/:id/{accept,reject,revise}`, in order
+   *  (`reason` for a reject, `message` for a revise). */
+  resolved: Array<{
+    id: string;
+    verb: "accept" | "reject" | "revise";
+    reason?: string;
+    message?: string;
+  }> = [];
 
   seedChat(id: string, status: ChatRow["status"] = "idle"): ChatRow {
     const at = id.indexOf(":");
@@ -127,12 +133,13 @@ export class FakeApi {
   ): Proposal {
     const row: Proposal = {
       id: `proposal-${this.proposals.length + 1}`,
-      session: { term: "ReviewBot", key: `${REPO}#${number}` },
+      session: { term: "Reviewer", key: `${REPO}#${number}` },
       repo: REPO,
       number: payload.kind === "pull_request" ? undefined : payload.number,
       summary,
       payload,
       at: NOW.getTime() - 30_000,
+      revisedAt: undefined,
       status: "pending",
       resolvedAt: undefined,
       result: undefined,
@@ -268,14 +275,34 @@ export class FakeApi {
         ),
       );
     }
-    const proposal = path.match(/^\/api\/proposals\/([^/]+)\/(accept|reject)$/);
+    const proposal = path.match(
+      /^\/api\/proposals\/([^/]+)\/(accept|reject|revise)$/,
+    );
     if (proposal !== null && method === "POST") {
       const id = decodeURIComponent(proposal[1]!);
-      const verb = proposal[2] as "accept" | "reject";
-      const body = (request.postDataJSON() ?? {}) as { reason?: string };
+      const verb = proposal[2] as "accept" | "reject" | "revise";
+      const body = (request.postDataJSON() ?? {}) as {
+        reason?: string;
+        message?: string;
+      };
       const row = this.proposals.find((entry) => entry.id === id);
       if (row === undefined) {
         return this.json(route, { error: "unknown proposal" }, 404);
+      }
+      if (verb === "revise") {
+        // the Worker wakes the agent and answers with the UNCHANGED
+        // pending row; the agent's revision lands on a later poll —
+        // emulated here as an immediate in-place revision
+        this.resolved.push({ id, verb, message: body.message });
+        const revised: Proposal = {
+          ...row,
+          summary: `${row.summary} (revised)`,
+          revisedAt: NOW.getTime(),
+        };
+        this.proposals = this.proposals.map((entry) =>
+          entry.id === id ? revised : entry,
+        );
+        return this.json(route, row);
       }
       this.resolved.push({ id, verb, ...(body.reason ? { reason: body.reason } : {}) });
       const next: Proposal =
@@ -347,7 +374,7 @@ export class FakeApi {
       if (!this.reviewBotOnline) {
         return this.json(route, { error: "review bot is not deployed" }, 503);
       }
-      const id = `ReviewBot:${REPO}#${number}`;
+      const id = `Reviewer:${REPO}#${number}`;
       this.seedChat(id, "running");
       this.board = {
         ...this.board,

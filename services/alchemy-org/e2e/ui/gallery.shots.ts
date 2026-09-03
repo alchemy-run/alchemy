@@ -129,8 +129,8 @@ test.describe("review", () => {
     page,
     api,
   }) => {
-    api.seedChat(`ReviewBot:${PR}`, "running");
-    api.board.prs[0]!.session = { id: `ReviewBot:${PR}`, status: "running" };
+    api.seedChat(`Reviewer:${PR}`, "running");
+    api.board.prs[0]!.session = { id: `Reviewer:${PR}`, status: "running" };
     api.seedChat(`Engineer:${PR}`);
     await openApp(page, encodeHash(`pr:${PR}`));
     await expect(tab(page, "Review")).toBeVisible();
@@ -142,8 +142,8 @@ test.describe("review", () => {
     page,
     api,
   }) => {
-    api.seedChat(`ReviewBot:${PR}`, "idle");
-    api.board.prs[0]!.session = { id: `ReviewBot:${PR}`, status: "idle" };
+    api.seedChat(`Reviewer:${PR}`, "idle");
+    api.board.prs[0]!.session = { id: `Reviewer:${PR}`, status: "idle" };
     api.seedProposal(
       148,
       {

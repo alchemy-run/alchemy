@@ -11,7 +11,12 @@ import type { DriverError } from "./Errors.ts";
 import type { Fragment } from "./Fragment.ts";
 import type { Thread, Tick } from "./Thread.ts";
 import type { Services } from "./Fragment.ts";
-import { isSkill, type Skill, type SkillService } from "./Skill.ts";
+import {
+  isSkill,
+  type Skill,
+  type SkillLayer,
+  type SkillService,
+} from "./Skill.ts";
 import { isTool } from "./Tool.ts";
 
 /**
@@ -228,8 +233,10 @@ export const layer: {
    * out, the TEMPLATE's spliced tools' tags in. The teaching (prose +
    * splices) rides the service value, so different implementations of
    * one skill contract may teach different prose over different
-   * tools. A custom `Layer.effect(Coding, …)` may instead build the
-   * whole bundle inline.
+   * tools — and rides the Layer itself as static `template` / `refs`
+   * (`Teaching` in Skill.ts), so the same text can be rendered as a document
+   * without building the Layer. A custom `Layer.effect(Coding, …)` may
+   * instead build the whole bundle inline.
    */
   <
     L extends Skill<any, any> & Context.Service<any, any>,
@@ -238,7 +245,7 @@ export const layer: {
     term: L,
     template: TemplateStringsArray,
     ...refs: Refs
-  ): Layer.Layer<L["Identifier"], never, Services<Refs>>;
+  ): SkillLayer<L["Identifier"], Refs>;
   /**
    * The default AGENT Layer: interpret the charter, publish the verbs
    * as the tag's service.
@@ -249,27 +256,33 @@ export const layer: {
   ): Layer.Layer<A["Identifier"], never, Driver | CharterServices<C>>;
 } = ((term: any, charterOrTemplate?: any, ...refs: any[]) =>
   isSkill(term)
-    ? Layer.effect(
-        term as any,
-        Effect.gen(function* () {
-          const template = charterOrTemplate as TemplateStringsArray;
-          const context = yield* Effect.context<never>();
-          const tools: SkillService["tools"] = {};
-          for (const ref of refs) {
-            if (!isTool(ref)) continue;
-            const name = (ref as { "~alchemy/Name": string })["~alchemy/Name"];
-            const service = Context.getOption(context, ref as any);
-            if (Option.isNone(service)) {
-              return yield* Effect.die(
-                `AI.layer: no implementation provided for tool '${name}' of skill '${term["~alchemy/Name"]}'`,
-              );
+    ? Object.assign(
+        Layer.effect(
+          term as any,
+          Effect.gen(function* () {
+            const template = charterOrTemplate as TemplateStringsArray;
+            const context = yield* Effect.context<never>();
+            const tools: SkillService["tools"] = {};
+            for (const ref of refs) {
+              if (!isTool(ref)) continue;
+              const name = (ref as { "~alchemy/Name": string })[
+                "~alchemy/Name"
+              ];
+              const service = Context.getOption(context, ref as any);
+              if (Option.isNone(service)) {
+                return yield* Effect.die(
+                  `AI.layer: no implementation provided for tool '${name}' of skill '${term["~alchemy/Name"]}'`,
+                );
+              }
+              tools[name] = Effect.isEffect(service.value)
+                ? yield* service.value as Effect.Effect<any>
+                : service.value;
             }
-            tools[name] = Effect.isEffect(service.value)
-              ? yield* service.value as Effect.Effect<any>
-              : service.value;
-          }
-          return { template, refs, tools } satisfies SkillService;
-        }) as any,
+            return { template, refs, tools } satisfies SkillService;
+          }) as any,
+        ),
+        // the teaching as static data on the Layer (Teaching)
+        { template: charterOrTemplate as TemplateStringsArray, refs },
       )
     : Layer.effect(
         term,

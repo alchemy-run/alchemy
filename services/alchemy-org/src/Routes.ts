@@ -12,22 +12,22 @@ import * as Stream from "effect/Stream";
 import * as HttpRouter from "effect/unstable/http/HttpRouter";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import { Engineer } from "./Engineer.ts";
-import { buildBoard } from "./lib/Board.ts";
-import { makeProposalExecutor } from "./lib/ProposalActions.ts";
+import { Engineer } from "./coding/Engineer.ts";
+import { buildBoard } from "./github/Board.ts";
+import { makeProposalExecutor } from "./github/ProposalActions.ts";
 import {
   buildPullRequestView,
   pullRequestRef,
   pullSessionKey,
   type PullRequestView,
-} from "./lib/PullRequest.ts";
-import { connected, primary, publishTargets } from "./Repos.ts";
-import { ReviewBot } from "./ReviewBot.ts";
+} from "./github/PullRequest.ts";
+import { connected, primary, publishTargets } from "./github/Repos.ts";
+import { Reviewer } from "./review/Reviewer.ts";
 import {
   type Proposal,
   Proposals,
   type ProposalStatus,
-} from "./services/Proposals.ts";
+} from "./github/Proposals.ts";
 
 /** `${term}:${key}` → the session it names (the key may contain `:`). */
 const parseSessionId = (id: string): { term: string; key: string } => {
@@ -88,7 +88,7 @@ const detached = <A, E, R>(
  * from wherever the placement keeps it, shaped by `AI.toUIMessages`);
  * the live tail rides the session socket (`/attach`, wired by the
  * entrypoint). The BOARD is the review pipeline's projection: one
- * ReviewBot session per pull request, joined with GitHub's open-PR
+ * Reviewer session per pull request, joined with GitHub's open-PR
  * list.
  */
 export const routes = Effect.gen(function* () {
@@ -101,10 +101,10 @@ export const routes = Effect.gen(function* () {
   // `SandboxSession` composition the charters use provides it).
   const checkouts = yield* Effect.serviceOption(Git.Checkouts);
   const exec = yield* Cloudflare.WorkerExecutionContext;
-  // OPTIONAL: the review pipeline may be dropped from the stack (it is
-  // right now — see Worker.ts) — the request-review door answers 503
-  // instead of failing the whole router build.
-  const bot = yield* Effect.serviceOption(ReviewBot);
+  // OPTIONAL: the review pipeline may be dropped from the stack — the
+  // request-review door answers 503 instead of failing the whole
+  // router build.
+  const bot = yield* Effect.serviceOption(Reviewer);
   const engineer = yield* Effect.serviceOption(Engineer);
   const proposals = yield* Proposals;
   // the executor performs ACCEPTED proposals — the one place agent
@@ -609,7 +609,7 @@ export const routes = Effect.gen(function* () {
 
   /**
    * PROPOSALS — what the agents want to do on GitHub, awaiting the
-   * operator (services/Proposals.ts). `?status=pending` is the UI's
+   * operator (github/Proposals.ts). `?status=pending` is the UI's
    * inbox; `?number=N` the pull-request page's own list (every state,
    * newest first, so what landed stays visible beside what waits).
    */
@@ -646,7 +646,7 @@ export const routes = Effect.gen(function* () {
     options: { readonly wake: boolean },
   ) => {
     const agent =
-      proposal.session.term === "ReviewBot"
+      proposal.session.term === "Reviewer"
         ? bot
         : proposal.session.term === "Engineer"
           ? engineer
@@ -744,6 +744,49 @@ export const routes = Effect.gen(function* () {
     }),
   );
 
+  /** ASK FOR CHANGES: the proposal stays pending; the operator's words
+   *  go to the proposing session as its next message, and it revises
+   *  the proposal in place (`Proposals.revise`) — the third button
+   *  beside accept and decline, the one that iterates. */
+  const reviseProposal = HttpRouter.add(
+    "POST",
+    "/api/proposals/:id/revise",
+    Effect.gen(function* () {
+      const request = yield* HttpServerRequest;
+      const params = yield* HttpRouter.params;
+      const id = String(params.id ?? "");
+      const body = (yield* request.json.pipe(
+        Effect.catch(() => Effect.succeed({})),
+      )) as { message?: string };
+      const message =
+        typeof body.message === "string" && body.message.trim().length > 0
+          ? body.message.trim()
+          : undefined;
+      if (message === undefined) {
+        return yield* HttpServerResponse.json(
+          { error: "say what should change" },
+          { status: 400 },
+        );
+      }
+      const proposal = yield* proposals.get(id);
+      if (proposal === undefined) {
+        return yield* HttpServerResponse.json(
+          { error: "unknown proposal" },
+          { status: 404 },
+        );
+      }
+      if (proposal.status !== "pending") {
+        return yield* HttpServerResponse.json(proposal, { status: 409 });
+      }
+      yield* inform(
+        proposal,
+        `The operator asks you to REVISE your proposal (${proposal.summary}) before they post it — it stays pending; submit again to update it in place. Their words: ${message}`,
+        { wake: true },
+      );
+      return yield* HttpServerResponse.json(proposal);
+    }),
+  );
+
   const status = HttpRouter.add(
     "GET",
     "/api/status",
@@ -782,6 +825,7 @@ export const routes = Effect.gen(function* () {
     listProposals,
     acceptProposal,
     rejectProposal,
+    reviseProposal,
     status,
   );
 });

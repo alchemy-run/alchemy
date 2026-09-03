@@ -16,8 +16,8 @@ import { BunServices } from "@effect/platform-bun";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import { stageBake } from "../src/SandboxBake.ts";
-import { SANDBOX_DOCKERFILE } from "../src/SandboxMicrovm.ts";
+import { stageBake } from "../src/sandbox/SandboxBake.ts";
+import { SANDBOX_DOCKERFILE } from "../src/sandbox/SandboxMicrovm.ts";
 
 // mirror MicrovmBuildService.rewriteBaseImage + localBaseImage()
 const LOCAL_BASE =

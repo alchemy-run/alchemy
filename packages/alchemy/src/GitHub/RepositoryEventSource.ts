@@ -16,6 +16,7 @@ import {
   PullRequestClosed,
   PullRequestMerged,
   PullRequestOpened,
+  PullRequestSynchronized,
   Push,
 } from "./Events.ts";
 import type { Providers } from "./Providers.ts";
@@ -118,6 +119,7 @@ export type RepositoryEventClass =
   | typeof IssueCommented
   | typeof IssueClosed
   | typeof PullRequestOpened
+  | typeof PullRequestSynchronized
   | typeof PullRequestMerged
   | typeof PullRequestClosed
   | typeof Push;
@@ -129,6 +131,7 @@ const WIRE_NAME = {
   IssueClosed: "issues",
   IssueCommented: "issue_comment",
   PullRequestOpened: "pull_request",
+  PullRequestSynchronized: "pull_request",
   PullRequestMerged: "pull_request",
   PullRequestClosed: "pull_request",
   Push: "push",

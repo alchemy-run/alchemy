@@ -21,8 +21,12 @@
  *   recoverable from REST — the events API would be needed).
  * - `issue_comment` — comments since the cursor → `issue_comment.created`.
  * - `pull_request` — PRs sorted by update → `pull_request.opened`
- *   (created in the window) and `pull_request.closed` (closed in the
- *   window, `merged: true` when GitHub recorded a merge).
+ *   (created in the window), `pull_request.synchronize` (updated in
+ *   the window while open — the delivery id carries the HEAD SHA, so a
+ *   comment or label that bumps `updated_at` without moving the head
+ *   re-synthesizes the same id and a ledgered receiver drops it), and
+ *   `pull_request.closed` (closed in the window, `merged: true` when
+ *   GitHub recorded a merge).
  * - `push` and every other event name — UNSUPPORTED by polling (no
  *   `since`-queryable REST surface): a warning is logged once at
  *   registration and the name is skipped. `"*"` selects exactly the
@@ -309,6 +313,8 @@ export const backfillOpenPullRequests = (
             title: pull.title,
             body: pull.body ?? null,
             merged: false,
+            head: { ref: pull.head.ref, sha: pull.head.sha },
+            base: { ref: pull.base.ref },
           },
           repository: repositoryPayload(props),
         },
@@ -527,6 +533,8 @@ const pollPullRequests = (
           // correlate a PR to the issue it resolves from it
           body: pull.body ?? null,
           merged: pull.merged_at !== null,
+          head: { ref: pull.head.ref, sha: pull.head.sha },
+          base: { ref: pull.base.ref },
         },
         repository: repositoryPayload(props),
       };
@@ -543,6 +551,24 @@ const pollPullRequests = (
           payload: { action: "opened", ...base },
         }),
       );
+      if (pull.closed_at === null && pull.updated_at !== pull.created_at) {
+        // the head MAY have moved: REST has no push timestamp, so the
+        // update time gates the delivery and the head sha names it —
+        // an update that left the head alone re-synthesizes the same
+        // id, which a ledgered receiver has already seen
+        deliveries.push(
+          synthesize(Date.parse(pull.updated_at), {
+            id: deliveryId(
+              props,
+              "pull_request.synchronize",
+              pull.number,
+              pull.head.sha,
+            ),
+            name: "pull_request",
+            payload: { action: "synchronize", after: pull.head.sha, ...base },
+          }),
+        );
+      }
       if (pull.closed_at !== null) {
         // merges arrive as closed + merged, exactly like the webhook
         const closedAt = Date.parse(pull.merged_at ?? pull.closed_at);

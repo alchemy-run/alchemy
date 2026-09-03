@@ -1,6 +1,7 @@
 - text: review proposed awaiting you
-- button /ReviewBot:alchemy-run\/test-alchemy#\d+/
+- button /Reviewer:alchemy-run\/test-alchemy#\d+/
 - text: "/request changes on #\\d+ \\(1 inline comment\\)/"
 - button "show details"
 - button "post review"
+- button "ask for changes"
 - button "decline"

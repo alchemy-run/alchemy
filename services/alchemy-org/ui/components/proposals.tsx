@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { useState, type ComponentType } from "react";
 
-/* ── the server's shape (src/services/Proposals.ts) ─────────────── */
+/* ── the server's shape (src/github/Proposals.ts) ─────────────── */
 
 export interface ProposedReviewComment {
   path: string;
@@ -55,6 +55,8 @@ export interface Proposal {
   summary: string;
   payload: ProposalPayload;
   at: number;
+  /** Set when the agent revised it in place while pending. */
+  revisedAt: number | undefined;
   status: ProposalStatus;
   resolvedAt: number | undefined;
   result: string | undefined;
@@ -209,14 +211,17 @@ const ProposalBody = ({
 /**
  * One proposal — what an agent wants to do on GitHub, awaiting the
  * operator's click. The primary button IS the act (its label says
- * what lands); "decline" takes an optional reason the agent reads as
- * its next message. Resolved proposals show what became of them.
+ * what lands); "ask for changes" sends the operator's words to the
+ * agent, which revises the proposal in place (the card updates,
+ * still pending); "decline" takes an optional reason the agent reads
+ * as its next message. Resolved proposals show what became of them.
  */
 export const ProposalCard = ({
   proposal,
   Markdown,
   onAccept,
   onReject,
+  onRevise,
   onOpenSession,
   busy = false,
   compact = false,
@@ -225,6 +230,8 @@ export const ProposalCard = ({
   Markdown: Markdown;
   onAccept: () => void;
   onReject: (reason: string | undefined) => void;
+  /** Ask the agent for changes — the proposal stays pending. */
+  onRevise?: (message: string) => void;
   /** Jump to the proposing session's thread. */
   onOpenSession?: () => void;
   /** An accept is in flight (the GitHub write) — buttons lock. */
@@ -232,8 +239,13 @@ export const ProposalCard = ({
   /** The inbox overlay: summary + actions, body folded. */
   compact?: boolean;
 }) => {
-  const [declining, setDeclining] = useState(false);
+  const [mode, setMode] = useState<"actions" | "declining" | "revising">(
+    "actions",
+  );
   const [reason, setReason] = useState("");
+  const [request, setRequest] = useState("");
+  const declining = mode === "declining";
+  const revising = mode === "revising";
   const [expanded, setExpanded] = useState(!compact);
   const kind = KIND[proposal.payload.kind];
   const status = STATUS[proposal.status];
@@ -264,6 +276,14 @@ export const ProposalCard = ({
           {StatusIcon !== undefined && <StatusIcon className="size-3" />}
           {status.label}
         </span>
+        {pending && proposal.revisedAt !== undefined && (
+          <span
+            title={new Date(proposal.revisedAt).toLocaleString()}
+            className="rounded-full bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground"
+          >
+            revised
+          </span>
+        )}
         <span className="ml-auto" />
         {onOpenSession !== undefined ? (
           <button
@@ -313,7 +333,7 @@ export const ProposalCard = ({
             GitHub refused it: {proposal.error}
           </div>
         )}
-        {pending && !declining && (
+        {pending && mode === "actions" && (
           <div className="flex gap-2 pt-1">
             <button
               type="button"
@@ -324,14 +344,69 @@ export const ProposalCard = ({
               {busy && <Spinner className="size-3" />}
               {ACCEPT_LABEL[proposal.payload.kind]}
             </button>
+            {onRevise !== undefined && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => setMode("revising")}
+                className="flex-1 rounded border border-honey/50 px-2 py-1 text-xs text-honey hover:bg-honey/10 disabled:opacity-50"
+              >
+                ask for changes
+              </button>
+            )}
             <button
               type="button"
               disabled={busy}
-              onClick={() => setDeclining(true)}
+              onClick={() => setMode("declining")}
               className="flex-1 rounded border border-brick/50 px-2 py-1 text-xs text-brick hover:bg-brick/10 disabled:opacity-50"
             >
               decline
             </button>
+          </div>
+        )}
+        {pending && revising && onRevise !== undefined && (
+          <div className="flex flex-col gap-2 pt-1">
+            <textarea
+              autoFocus
+              value={request}
+              onChange={(event) => setRequest(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+                  if (request.trim().length > 0) {
+                    onRevise(request.trim());
+                    setRequest("");
+                    setMode("actions");
+                  }
+                } else if (event.key === "Escape") {
+                  setMode("actions");
+                }
+              }}
+              rows={3}
+              placeholder="what should change? the agent revises the proposal in place"
+              aria-label="requested changes"
+              className="resize-none rounded border border-border bg-transparent px-2 py-1 text-xs outline-none focus:border-ring"
+            />
+            <div className="flex gap-2">
+              <button
+                type="button"
+                disabled={request.trim().length === 0}
+                onClick={() => {
+                  onRevise(request.trim());
+                  setRequest("");
+                  setMode("actions");
+                }}
+                className="flex-1 rounded border border-honey/50 px-2 py-1 text-xs text-honey hover:bg-honey/10 disabled:opacity-50"
+              >
+                send to agent
+              </button>
+              <button
+                type="button"
+                onClick={() => setMode("actions")}
+                className="flex-1 rounded border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-accent"
+              >
+                back
+              </button>
+            </div>
           </div>
         )}
         {pending && declining && (
@@ -344,7 +419,7 @@ export const ProposalCard = ({
                 if (event.key === "Enter") {
                   onReject(reason.trim() || undefined);
                 } else if (event.key === "Escape") {
-                  setDeclining(false);
+                  setMode("actions");
                 }
               }}
               placeholder="why? (optional — the agent reads this)"
@@ -361,7 +436,7 @@ export const ProposalCard = ({
               </button>
               <button
                 type="button"
-                onClick={() => setDeclining(false)}
+                onClick={() => setMode("actions")}
                 className="flex-1 rounded border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-accent"
               >
                 back

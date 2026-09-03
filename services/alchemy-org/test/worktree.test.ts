@@ -1,6 +1,6 @@
 /**
  * The sandbox-as-worktree contract: the session image ships with the
- * repo BAKED IN (`src/SandboxMicrovm.ts` / `src/Sandbox.ts` — a real
+ * repo BAKED IN (`src/sandbox/SandboxMicrovm.ts` / `src/sandbox/SandboxContainer.ts` — a real
  * clone, `.git` and all), and a session treats that tree as its
  * branch: the tools see it, `Git.Checkouts` ADOPTS it instead of
  * re-deriving, sessions are isolated (one tree per sandbox), and the
@@ -32,22 +32,15 @@ import * as Redacted from "effect/Redacted";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import { ArtifactsLocal } from "../src/lib/ArtifactsLocal.ts";
-import { makeProposalExecutor } from "../src/lib/ProposalActions.ts";
-import { testAlchemy } from "../src/Repos.ts";
-import { CheckoutsSandbox } from "../src/services/CheckoutsSandbox.ts";
-import { Proposals } from "../src/services/Proposals.ts";
-import { ProposalsMemory } from "../src/services/ProposalsMemory.ts";
-import {
-  Bash,
-  BashLive,
-  OpenPullRequest,
-  OpenPullRequestLive,
-  PublishToken,
-  PushBranch,
-  PushBranchLive,
-  ReadOutputLive,
-} from "../src/tools/index.ts";
+import { ArtifactsLocal } from "../src/sandbox/ArtifactsLocal.ts";
+import { makeProposalExecutor } from "../src/github/ProposalActions.ts";
+import { testAlchemy } from "../src/github/Repos.ts";
+import { CheckoutsSandbox } from "../src/sandbox/CheckoutsSandbox.ts";
+import { Proposals } from "../src/github/Proposals.ts";
+import { ProposalsMemory } from "../src/github/ProposalsMemory.ts";
+import { Bash, BashLive } from "../src/coding/Bash.ts";
+import { OpenPullRequest, OpenPullRequestLive, PublishToken, PushBranch, PushBranchLive } from "../src/coding/Publish.ts";
+import { ReadOutputLive } from "../src/sandbox/ReadOutput.ts";
 
 const run = <A, E>(program: Effect.Effect<A, E, any>): Promise<A> =>
   Effect.runPromise(

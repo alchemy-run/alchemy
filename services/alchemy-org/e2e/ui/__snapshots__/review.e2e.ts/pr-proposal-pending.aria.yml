@@ -1,5 +1,5 @@
 - text: proposed by agents review proposed awaiting you
-- button /ReviewBot:alchemy-run\/test-alchemy#\d+/
+- button /Reviewer:alchemy-run\/test-alchemy#\d+/
 - text: "/request changes on #\\d+ \\(1 inline comment\\) REQUEST CHANGES/"
 - paragraph:
   - text: The helper is right but the test never exercises
@@ -10,4 +10,5 @@
   - code: "Array.from({ length: n })"
   - text: allocates — a closed form is O(1).
 - button "post review"
+- button "ask for changes"
 - button "decline"

@@ -105,7 +105,7 @@ export interface PullRequest {
   readonly user?: Actor | null;
   readonly merged?: boolean;
   readonly merge_commit_sha?: string | null;
-  readonly head?: { readonly ref: string };
+  readonly head?: { readonly ref: string; readonly sha?: string };
   readonly base?: { readonly ref: string };
 }
 
@@ -118,7 +118,9 @@ export const PullRequest: S.Schema<PullRequest> = S.Struct({
   user: S.optionalKey(S.NullOr(Actor)),
   merged: S.optionalKey(S.Boolean),
   merge_commit_sha: S.optionalKey(S.NullOr(S.String)),
-  head: S.optionalKey(S.Struct({ ref: S.String })),
+  head: S.optionalKey(
+    S.Struct({ ref: S.String, sha: S.optionalKey(S.String) }),
+  ),
   base: S.optionalKey(S.Struct({ ref: S.String })),
 });
 
@@ -178,6 +180,16 @@ export class PullRequestOpened extends (Event("PullRequestOpened", {
 })`
 A pull request was opened — number, title, body, branches, author.`) {}
 
+export class PullRequestSynchronized extends (Event("PullRequestSynchronized", {
+  repository: RepositoryInfo,
+  pullRequest: PullRequest,
+  /** The head commit the pull request now points at. */
+  after: S.String,
+})`
+The pull request's head moved — its author pushed commits (or
+force-pushed, or rebased). The code under review is no longer the
+code that was reviewed.`) {}
+
 export class PullRequestMerged extends (Event("PullRequestMerged", {
   repository: RepositoryInfo,
   pullRequest: PullRequest,
@@ -207,6 +219,7 @@ export type IssuesEvent = IssueOpened | IssueLabeled | IssueClosed;
 /** Every pull-request event (the `pull_request` webhook). */
 export type PullRequestEvent =
   | PullRequestOpened
+  | PullRequestSynchronized
   | PullRequestMerged
   | PullRequestClosed;
 
@@ -233,6 +246,7 @@ export const eventKey = (event: RepositoryEvent): string | undefined => {
     case "IssueClosed":
       return `${repo}#${event.issue.number}`;
     case "PullRequestOpened":
+    case "PullRequestSynchronized":
     case "PullRequestMerged":
     case "PullRequestClosed":
       return `${repo}#${event.pullRequest.number}`;
@@ -328,6 +342,13 @@ export const parseWebhookEvent = (
             repository,
             pullRequest,
           } satisfies PullRequestOpened);
+        case "synchronize":
+          return Option.some({
+            _tag: "PullRequestSynchronized",
+            repository,
+            pullRequest,
+            after: payload.after,
+          } satisfies PullRequestSynchronized);
         case "closed":
           // GitHub signals merges as closed+merged — two DISTINCT tags,
           // so consumers never re-derive the difference

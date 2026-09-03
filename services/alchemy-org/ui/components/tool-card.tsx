@@ -8,6 +8,7 @@ import {
   FileText,
   FolderSearch,
   FolderTree,
+  GitFork,
   GitPullRequestArrow,
   MessageSquare,
   MessageSquarePlus,
@@ -21,8 +22,8 @@ import {
 } from "lucide-react";
 import type * as AI from "alchemy/AI";
 import { useState, type ReactNode } from "react";
-import type { GeneralEngineer } from "../../src/Engineer.ts";
-import type { ReviewBotLive } from "../../src/ReviewBot.ts";
+import type { GeneralEngineer } from "../../src/coding/Engineer.ts";
+import type { ReviewerLive } from "../../src/review/Reviewer.ts";
 import { DiffCard, splitDiffOutput } from "@/components/code";
 import { RefHoverCard } from "@/components/ref-hover-card";
 import { useAnchoredToggle } from "@/lib/anchor";
@@ -239,9 +240,9 @@ const RefLink = ({ refValue }: { refValue: any }) => {
 };
 
 /**
- * Cards for the ReviewBot's wire. The compiler-checked half is the
- * CLASS-TOOL surface (`readDiff`, `readIssue` — the tags on
- * `ReviewBotLive`'s requirement channel): forget one of those cards
+ * Cards for the Reviewer's wire. The compiler-checked half is the
+ * CLASS-TOOL surface (`readDiff`, `readIssue`, `findCompanions` — the tags on
+ * `ReviewerLive`'s requirement channel): forget one of those cards
  * and this object errors, naming the missing tool. The bot's INLINE
  * tools (`add_comment`, `submit_review`, `comment`, `sync_checkout`)
  * carry no tag — they are runtime-only, so their cards and input
@@ -249,7 +250,7 @@ const RefLink = ({ refValue }: { refValue: any }) => {
  * charter. The import is type-only: erased at build, no server code
  * reaches the browser bundle.
  */
-const REVIEW_BOT: Renderers<typeof ReviewBotLive> & {
+const REVIEWER: Renderers<typeof ReviewerLive> & {
   add_comment: (input: {
     path: string;
     line: number;
@@ -299,6 +300,17 @@ const REVIEW_BOT: Renderers<typeof ReviewBotLive> & {
     title: (
       <>
         Read issue <RefLink refValue={input.issue} />
+      </>
+    ),
+    body: output === undefined ? undefined : <WindowedText text={output} />,
+  }),
+
+  findCompanions: (input, output) => ({
+    icon: GitFork,
+    title: (
+      <>
+        Find companion PRs of{" "}
+        <span className="font-mono text-mist">{input.branch}</span>
       </>
     ),
     body: output === undefined ? undefined : <WindowedText text={output} />,
@@ -627,7 +639,7 @@ const EXTRAS: Record<string, Renderer> = {
 const RENDERERS: Record<string, Renderer> = {
   ...EXTRAS,
   ...CODER,
-  ...REVIEW_BOT,
+  ...REVIEWER,
 };
 
 /** Whether a compact per-tool card exists for this tool name. */

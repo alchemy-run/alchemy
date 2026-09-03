@@ -66,10 +66,26 @@ interface StubComment {
 interface StubPull {
   number: number;
   title: string;
+  body?: string | null;
   created_at: string;
+  updated_at: string;
   closed_at: string | null;
   merged_at: string | null;
+  head: { ref: string; sha: string };
+  base: { ref: string };
 }
+
+const pull = (number: number, props: Partial<StubPull> = {}): StubPull => ({
+  number,
+  title: `pr #${number}`,
+  created_at: T(1),
+  updated_at: T(1),
+  closed_at: null,
+  merged_at: null,
+  head: { ref: `topic-${number}`, sha: `sha-${number}-1` },
+  base: { ref: "main" },
+  ...props,
+});
 
 const makeStub = () => {
   const data = {
@@ -94,9 +110,17 @@ const makeStub = () => {
         },
       },
       pulls: {
-        list: () => {
+        list: (params: { state?: "open" | "closed" | "all" }) => {
           calls.push("pulls.list");
-          return Promise.resolve({ data: [...data.pulls] });
+          // the registration-time backfill asks for OPEN pulls only
+          return Promise.resolve({
+            data: data.pulls.filter(
+              (pull) =>
+                params.state === undefined ||
+                params.state === "all" ||
+                (params.state === "open") === (pull.closed_at === null),
+            ),
+          });
         },
       },
     },
@@ -149,15 +173,7 @@ describe("GitHub.RepositoryEventSourcePolling", () => {
       const stub = makeStub();
       stub.data.issues = [issue(7, { created_at: T(1) })];
       stub.data.comments = [comment(501, 7, T(2))];
-      stub.data.pulls = [
-        {
-          number: 9,
-          title: "pr #9",
-          created_at: T(3),
-          closed_at: null,
-          merged_at: null,
-        },
-      ];
+      stub.data.pulls = [pull(9, { created_at: T(3), updated_at: T(3) })];
 
       return Effect.gen(function* () {
         const inbox = yield* Queue.unbounded<GitHub.IssuesEvent>();
@@ -198,13 +214,12 @@ describe("GitHub.RepositoryEventSourcePolling", () => {
       ];
       stub.data.comments = [comment(501, 7, T(3))];
       stub.data.pulls = [
-        {
-          number: 9,
-          title: "pr #9",
+        pull(9, {
           created_at: T(4),
+          updated_at: T(5),
           merged_at: T(5),
           closed_at: T(5),
-        },
+        }),
       ];
 
       return Effect.gen(function* () {
@@ -309,6 +324,70 @@ describe("GitHub.RepositoryEventSourcePolling", () => {
           `poll/${repo.owner}/${repo.repository}/issues.closed/5/${T(2)}`,
           `poll/${repo.owner}/${repo.repository}/issue_comment.created/501/${T(3)}`,
         ]);
+      }).pipe(Effect.provide(stub.layer));
+    },
+  );
+
+  it.effect(
+    "(e) a pull request whose head moved delivers PullRequestSynchronized keyed on the sha",
+    () => {
+      const stub = makeStub();
+      stub.data.pulls = [pull(9, { created_at: T(1), updated_at: T(1) })];
+
+      return Effect.gen(function* () {
+        const inbox = yield* Queue.unbounded<GitHub.PullRequestEvent>();
+        const raw: string[] = [];
+        yield* consumeRaw(["pull_request"], (event) =>
+          Effect.sync(() => {
+            raw.push(event.id);
+          }),
+        );
+        yield* GitHub.consumeRepositoryEvents(
+          testAlchemy,
+          {
+            events: [GitHub.PullRequestOpened, GitHub.PullRequestSynchronized],
+          },
+          (event) => Queue.offer(inbox, event).pipe(Effect.asVoid),
+        );
+
+        // opened only: created == updated, nothing to synchronize
+        const opened = yield* Queue.take(inbox);
+        expect(opened._tag).toBe("PullRequestOpened");
+
+        // the author pushes: updated_at advances and the head sha changes
+        stub.data.pulls = [
+          pull(9, {
+            created_at: T(1),
+            updated_at: T(40),
+            head: { ref: "topic-9", sha: "sha-9-2" },
+          }),
+        ];
+        yield* TestClock.adjust("30 seconds");
+        const synced = yield* Queue.take(inbox);
+        expect(synced._tag).toBe("PullRequestSynchronized");
+        expect(synced._tag === "PullRequestSynchronized" && synced.after).toBe(
+          "sha-9-2",
+        );
+        expect(GitHub.eventKey(synced)).toBe(
+          `${repo.owner}/${repo.repository}#9`,
+        );
+
+        // a comment bumps updated_at but leaves the head alone: the
+        // synthesized id is the SAME (it names the sha), so the poller's
+        // own window dedupe drops it — nothing new reaches the wire
+        stub.data.pulls = [
+          pull(9, {
+            created_at: T(1),
+            updated_at: T(70),
+            head: { ref: "topic-9", sha: "sha-9-2" },
+          }),
+        ];
+        yield* TestClock.adjust("30 seconds");
+        const syncIds = raw.filter((id) => id.includes("synchronize"));
+        expect(syncIds).toHaveLength(1);
+        expect(syncIds[0]).toBe(
+          `poll/${repo.owner}/${repo.repository}/pull_request.synchronize/9/sha-9-2`,
+        );
       }).pipe(Effect.provide(stub.layer));
     },
   );

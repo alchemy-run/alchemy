@@ -6,21 +6,13 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
-import { ArtifactsLocal } from "../../src/lib/ArtifactsLocal.ts";
-import {
-  Bash,
-  BashLive,
-  Glob,
-  GlobLive,
-  Grep,
-  GrepLive,
-  ListDirectory,
-  ListDirectoryLive,
-  ReadFile,
-  ReadFileLive,
-  ReadOutput,
-  ReadOutputLive,
-} from "../../src/tools/index.ts";
+import { ArtifactsLocal } from "../../src/sandbox/ArtifactsLocal.ts";
+import { Bash, BashLive } from "../../src/coding/Bash.ts";
+import { Glob, GlobLive } from "../../src/coding/Glob.ts";
+import { Grep, GrepLive } from "../../src/coding/Grep.ts";
+import { ListDirectory, ListDirectoryLive } from "../../src/coding/ListDirectory.ts";
+import { ReadFile, ReadFileLive } from "../../src/coding/ReadFile.ts";
+import { ReadOutput, ReadOutputLive } from "../../src/sandbox/ReadOutput.ts";
 import { Workspace, fixed as workspace } from "alchemy/Workspace";
 
 const withWorkspace = <A, E>(program: Effect.Effect<A, E, any>): Promise<A> =>

@@ -27,6 +27,32 @@ export interface SkillService {
 }
 
 /**
+ * The TEACHING a `Skill.make`…`` Layer was made from — its template and
+ * splices, types retained — carried on the Layer as static data. The
+ * Layer is the runtime skill; the teaching is the same text as a
+ * document: render it ({@link render} in DriverCore) to publish a
+ * skill's doctrine as markdown (an `AGENTS.md`, a page) from the one
+ * source the agents activate.
+ */
+export interface Teaching<
+  Refs extends ReadonlyArray<unknown> = ReadonlyArray<unknown>,
+> {
+  readonly template: TemplateStringsArray;
+  readonly refs: Refs;
+}
+
+/**
+ * The Layer `Skill.make`…`` returns: the skill's tag out, the spliced
+ * tools' tags in, AND the {@link Teaching} it was made from.
+ */
+export type SkillLayer<Self, Refs extends any[]> = Layer.Layer<
+  Self,
+  never,
+  Services<Refs>
+> &
+  Teaching<Refs>;
+
+/**
  * A `Skill` term is a **capability bundle**: prose that teaches a way
  * of working, plus the `Tool`s that work requires — packaged under
  * one NAME, as a bare `Context.Service` tag. The declaration carries
@@ -81,7 +107,7 @@ export interface Skill<Name extends string = string, Self = unknown> {
   readonly make: <const Refs extends any[]>(
     template: TemplateStringsArray,
     ...refs: Refs
-  ) => Layer.Layer<Self, never, Services<Refs>>;
+  ) => SkillLayer<Self, Refs>;
   new (_: never): SkillService & { readonly "~alchemy/Name": Name };
 }
 

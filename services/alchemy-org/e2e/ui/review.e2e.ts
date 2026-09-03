@@ -69,12 +69,12 @@ test.describe("overview", () => {
     page,
     api,
   }) => {
-    api.seedChat(`ReviewBot:${PR}`, "running");
-    api.board.prs[0]!.session = { id: `ReviewBot:${PR}`, status: "running" };
+    api.seedChat(`Reviewer:${PR}`, "running");
+    api.board.prs[0]!.session = { id: `Reviewer:${PR}`, status: "running" };
     await openApp(page, encodeHash(`pr:${PR}`));
     await expect(tab(page, "Review")).toBeVisible();
     await tab(page, "Review").click();
-    await expect(page).toHaveURL(/ReviewBot%3A/);
+    await expect(page).toHaveURL(/Reviewer%3A/);
     await expect(tab(page, "Review")).toHaveAttribute("aria-selected", "true");
   });
 
@@ -98,7 +98,7 @@ test.describe("overview", () => {
     await main(page)
       .getByRole("button", { name: /request review/ })
       .click();
-    await expect(page).toHaveURL(/ReviewBot%3A/, { timeout: 15_000 });
+    await expect(page).toHaveURL(/Reviewer%3A/, { timeout: 15_000 });
     await expect(tab(page, "Review")).toHaveAttribute("aria-selected", "true");
   });
 });
@@ -320,19 +320,47 @@ test.describe("proposals", () => {
     ]);
   });
 
+  test("asking for changes keeps it pending — the agent revises it in place", async ({
+    page,
+    api,
+  }) => {
+    const proposal = seedReview(api);
+    await openApp(page, encodeHash(`pr:${PR}`));
+    const card = main(page).locator(`[data-proposal="${proposal.id}"]`);
+    await card.getByRole("button", { name: "ask for changes" }).click();
+    await card
+      .getByLabel("requested changes")
+      .fill("drop the allocation nit; check the n = 0 test actually asserts");
+    await card.getByRole("button", { name: "send to agent" }).click();
+    // still awaiting the operator — the loop iterates, nothing resolved
+    await expect(card).toHaveAttribute("data-status", "pending");
+    expect(api.resolved).toEqual([
+      {
+        id: proposal.id,
+        verb: "revise",
+        message:
+          "drop the allocation nit; check the n = 0 test actually asserts",
+      },
+    ]);
+    // the agent's revision lands on the next poll: same card, marked
+    await expect(card).toContainText("(revised)", { timeout: 10_000 });
+    await expect(card).toContainText("revised");
+    await expect(card.getByRole("button", { name: "post review" })).toBeVisible();
+  });
+
   test("the inbox card jumps to the proposing session", async ({
     page,
     api,
   }) => {
     seedReview(api);
-    api.seedChat(`ReviewBot:${PR}`, "idle");
-    api.board.prs[0]!.session = { id: `ReviewBot:${PR}`, status: "idle" };
+    api.seedChat(`Reviewer:${PR}`, "idle");
+    api.board.prs[0]!.session = { id: `Reviewer:${PR}`, status: "idle" };
     await openApp(page);
     await page
       .getByLabel("proposals", { exact: true })
-      .getByRole("button", { name: `ReviewBot:${PR}` })
+      .getByRole("button", { name: `Reviewer:${PR}` })
       .click();
-    await expect(page).toHaveURL(routedTo(`ReviewBot:${PR}`));
+    await expect(page).toHaveURL(routedTo(`Reviewer:${PR}`));
   });
 });
 

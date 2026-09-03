@@ -119,7 +119,7 @@ interface Board {
   prs: BoardPullRequest[];
 }
 
-/** A connected repository — STATIC code (src/Repos.ts), reflected
+/** A connected repository — STATIC code (src/github/Repos.ts), reflected
  *  read-only by /api/repos. Never runtime-editable. */
 interface RepoInfo {
   name: string;
@@ -137,12 +137,12 @@ interface RepoInfo {
  * - a CODING session: `<owner>/<repo>/<name>` (legacy keys without a
  *   connected-repo prefix group as unscoped) — the Code activity;
  * - a PULL REQUEST session: `<owner>/<repo>#<n>` — the Review
- *   activity. Its machine's tree is the PR's head, and the ReviewBot's
- *   session (`ReviewBot:<owner>/<repo>#<n>`), the operator's engineer
+ *   activity. Its machine's tree is the PR's head, and the Reviewer's
+ *   session (`Reviewer:<owner>/<repo>#<n>`), the operator's engineer
  *   threads (`Engineer:<owner>/<repo>#<n>[::<thread>]`), and the
  *   terminals all share it.
  *
- * VIEW IDS are chat ids (`Engineer:…`, `ReviewBot:…`) plus one
+ * VIEW IDS are chat ids (`Engineer:…`, `Reviewer:…`) plus one
  * synthetic kind, `pr:<owner>/<repo>#<n>` — the PR's overview page.
  */
 const splitThreadKey = (
@@ -169,8 +169,8 @@ const sessionOfId = (id: string | undefined): string | undefined => {
   if (id.startsWith("Engineer:")) {
     return splitThreadKey(id.slice("Engineer:".length)).session;
   }
-  if (id.startsWith("ReviewBot:")) {
-    return splitThreadKey(id.slice("ReviewBot:".length)).session;
+  if (id.startsWith("Reviewer:")) {
+    return splitThreadKey(id.slice("Reviewer:".length)).session;
   }
   if (id.startsWith("pr:")) return id.slice("pr:".length);
   return undefined;
@@ -189,7 +189,7 @@ const isReviewId = (id: string | undefined): boolean => {
 const threadFromHash = (): string | undefined => {
   const raw = decodeURIComponent(window.location.hash.slice(1));
   return raw.startsWith("Engineer:") ||
-    raw.startsWith("ReviewBot:") ||
+    raw.startsWith("Reviewer:") ||
     raw.startsWith("pr:")
     ? raw
     : undefined;
@@ -674,7 +674,7 @@ export const App = () => {
   }, [board.prs, requested]);
 
   // PROPOSALS: what the agents want to do on GitHub, awaiting the
-  // operator (src/services/Proposals.ts) — polled as one recent list;
+  // operator (src/github/Proposals.ts) — polled as one recent list;
   // the pending ones are the inbox overlay, a pull request's own show
   // on its page in every state
   const [proposals, setProposals] = useState<Proposal[]>([]);
@@ -700,16 +700,26 @@ export const App = () => {
       clearInterval(timer);
     };
   }, []);
+  /** The operator's three verbs on a proposal: accept (the GitHub
+   *  write), reject (optional reason to the agent), and revise — "ask
+   *  for changes": the proposal stays pending, the message wakes the
+   *  agent, and it updates the card in place. */
   const settleProposal = (
     id: string,
-    verb: "accept" | "reject",
-    reason?: string,
+    verb: "accept" | "reject" | "revise",
+    text?: string,
   ) => {
     setProposalBusy((current) => new Set(current).add(id));
     void fetch(`/api/proposals/${encodeURIComponent(id)}/${verb}`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(reason === undefined ? {} : { reason }),
+      body: JSON.stringify(
+        text === undefined
+          ? {}
+          : verb === "revise"
+            ? { message: text }
+            : { reason: text },
+      ),
     })
       .then(async (response) => {
         const resolved = (await response.json().catch(() => undefined)) as
@@ -1154,7 +1164,7 @@ export const App = () => {
   const reviewTerminal =
     reviewSession !== undefined ? terminalSel[reviewSession] : undefined;
 
-  /** The ONE view on screen, by id: a chat (`Engineer:…`/`ReviewBot:…`),
+  /** The ONE view on screen, by id: a chat (`Engineer:…`/`Reviewer:…`),
    *  a PR overview (`pr:…`), or a terminal (`pty:<session>\u001f<pty>`).
    *  Every visited view stays mounted; this decides which is visible. */
   const activeView: string | undefined = (() => {
@@ -2257,7 +2267,7 @@ export const App = () => {
           )}
           {visited
             .filter(
-              (id) => id.startsWith("Engineer:") || id.startsWith("ReviewBot:"),
+              (id) => id.startsWith("Engineer:") || id.startsWith("Reviewer:"),
             )
             .map((id) => {
               const shown = activeView === id;
@@ -2327,6 +2337,9 @@ export const App = () => {
                     onRejectProposal={(id, reason) =>
                       settleProposal(id, "reject", reason)
                     }
+                    onReviseProposal={(id, message) =>
+                      settleProposal(id, "revise", message)
+                    }
                     onOpenSession={(id) => openThread(id)}
                   />
                 </div>
@@ -2377,6 +2390,9 @@ export const App = () => {
                 onAccept={() => settleProposal(proposal.id, "accept")}
                 onReject={(reason) =>
                   settleProposal(proposal.id, "reject", reason)
+                }
+                onRevise={(message) =>
+                  settleProposal(proposal.id, "revise", message)
                 }
                 onOpenSession={() =>
                   openThread(`${proposal.session.term}:${proposal.session.key}`)
@@ -3185,7 +3201,7 @@ const Chat = ({
             {/* pr-12 keeps typed text clear of the submit button */}
             <PromptInputTextarea
               placeholder={
-                id.startsWith("ReviewBot:")
+                id.startsWith("Reviewer:")
                   ? "Talk to the reviewer…"
                   : "Talk to the engineer…"
               }

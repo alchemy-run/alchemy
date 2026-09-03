@@ -36,7 +36,12 @@ import type {
   SessionSocketHost,
   SessionSocketServerFrame,
 } from "./SessionSocket.ts";
-import { isSkill, type Skill, type SkillService } from "./Skill.ts";
+import {
+  isSkill,
+  type Skill,
+  type SkillService,
+  type Teaching,
+} from "./Skill.ts";
 import {
   Thread,
   Tick,
@@ -176,14 +181,35 @@ export const renderRef = (ref: unknown): string => {
   return String(ref);
 };
 
-export const render = (
-  template: TemplateStringsArray,
-  refs: ReadonlyArray<any>,
+/**
+ * Render a template with its splices to prose — or anything that
+ * CARRIES one: a {@link Teaching} (a `Skill.make`…`` Layer), a
+ * {@link Fragment}, a term with a static template. The one text a
+ * skill's agents activate is thereby the text a document prints:
+ *
+ * ```ts
+ * const HarnessGeneral = Harness.make`…`;
+ * const markdown = AI.render(HarnessGeneral);
+ * ```
+ */
+export const render: {
+  (template: TemplateStringsArray, refs: ReadonlyArray<any>): string;
+  (teaching: Teaching): string;
+} = (
+  templateOrTeaching: TemplateStringsArray | Teaching,
+  refs?: ReadonlyArray<any>,
 ) => {
+  const [template, splices] =
+    refs === undefined
+      ? [
+          (templateOrTeaching as Teaching).template,
+          (templateOrTeaching as Teaching).refs,
+        ]
+      : [templateOrTeaching as TemplateStringsArray, refs];
   const parts = dedentTemplate(template);
   let out = parts[0] ?? "";
-  for (let index = 0; index < refs.length; index++) {
-    out += renderRef(refs[index]) + (parts[index + 1] ?? "");
+  for (let index = 0; index < splices.length; index++) {
+    out += renderRef(splices[index]) + (parts[index + 1] ?? "");
   }
   return out.trim();
 };

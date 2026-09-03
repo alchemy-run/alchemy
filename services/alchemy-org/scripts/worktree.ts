@@ -1,6 +1,6 @@
 /**
  * Session worktrees for `alchemy dev` — the host half of
- * `services/CheckoutsWorkspace.ts`. Run at the repository root (the
+ * `src/sandbox/CheckoutsWorktree.ts`. Run at the repository root (the
  * dev sandbox's root) by the Worker, over the sandbox's `exec`:
  *
  * ```

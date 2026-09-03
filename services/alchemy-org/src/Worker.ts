@@ -7,27 +7,31 @@ import * as Option from "effect/Option";
 import * as HttpRouter from "effect/unstable/http/HttpRouter";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import { GeneralEngineer } from "./Engineer.ts";
-import { SpillingTools } from "./lib/SpillingTools.ts";
-import { ArtifactsSandbox } from "./lib/ArtifactsSandbox.ts";
-import { ReviewBotEvents, ReviewBotLive } from "./ReviewBot.ts";
-import { routes } from "./Routes.ts";
-import { SandboxSession } from "./SandboxSession.ts";
-import { DriverCloudflare } from "./services/DriverCloudflare.ts";
-import { GitHubWorker } from "./services/GitHubWorker.ts";
-import { LedgerD1 } from "./services/LedgerD1.ts";
-import { ProposalsD1 } from "./services/ProposalsD1.ts";
-import { SessionRepoLive } from "./services/SessionRepo.ts";
-import { QualityAssuranceGeneral } from "./skills/QualityAssurance.ts";
+import { WriteTools } from "./coding/Editor.ts";
+import { GeneralEngineer } from "./coding/Engineer.ts";
 import {
   OpenPullRequestLive,
   PublishTokenLive,
   PushBranchLive,
-  ReadDiffLive,
-  ReadIssueLive,
-} from "./tools/index.ts";
-import { ReadOutputLive } from "./tools/ReadOutput.ts";
-import { ReadTools, RunTools, WriteTools } from "./tools/Toolbox.ts";
+} from "./coding/Publish.ts";
+import { ReadTools, RunTools } from "./coding/Toolbox.ts";
+import { GitHubWorker } from "./github/GitHubWorker.ts";
+import { ProposalsD1 } from "./github/ProposalsD1.ts";
+import { HarnessGeneral } from "./Harness.ts";
+import { DriverCloudflare } from "./platform/DriverCloudflare.ts";
+import { FindCompanionsLive } from "./review/Companions.ts";
+import { LedgerD1 } from "./review/LedgerD1.ts";
+import { QualityAssuranceGeneral } from "./review/QualityAssurance.ts";
+import { ReadDiffLive } from "./review/ReadDiff.ts";
+import { ReadIssueLive } from "./review/ReadIssue.ts";
+import { ReviewerLive } from "./review/Reviewer.ts";
+import { ReviewerEvents } from "./review/ReviewerEvents.ts";
+import { routes } from "./Routes.ts";
+import { ArtifactsSandbox } from "./sandbox/ArtifactsSandbox.ts";
+import { ReadOutputLive } from "./sandbox/ReadOutput.ts";
+import { SandboxSession } from "./sandbox/SandboxSession.ts";
+import { SessionRepoLive } from "./sandbox/SessionRepo.ts";
+import { SpillingTools } from "./sandbox/SpillingTools.ts";
 
 /** The artifact store on the session's machine (readOutput reads what
  *  the spill net and the bash tool parked). */
@@ -35,12 +39,23 @@ const Store = ArtifactsSandbox;
 
 /** Git over that same machine — `SandboxSession` provides
  *  `Git.Checkouts` alongside `AI.Sandbox` (the pairing is per machine:
- *  converging git in a MicroVM, read-only over the dev workspace), ONE
+ *  converging git in a MicroVM, worktrees over the dev checkout), ONE
  *  composition shared by both charters (the engineer claims the session
- *  repo's tree; the review bot claims the PR head's). */
+ *  repo's tree; the reviewer claims the PR head's). */
 const Checkouts = SandboxSession;
 
-const Toolbox = Layer.mergeAll(ReadTools, RunTools, WriteTools).pipe(
+/** Read + Run over the session machine — what BOTH agents hold. The
+ *  editor (`coding/Editor.ts`) is added to the engineer alone below. */
+const Toolbox = Layer.mergeAll(ReadTools, RunTools).pipe(
+  Layer.provide(Store),
+  Layer.provide(SandboxSession),
+);
+
+/** The org's own doctrine (`Harness.ts`) — a dormant skill over the
+ *  read/run tools, held by both charters for a change to this folder. */
+const Doctrine = HarnessGeneral.pipe(Layer.provide(Toolbox));
+
+const Editor = WriteTools.pipe(
   Layer.provide(Store),
   Layer.provide(SandboxSession),
 );
@@ -51,9 +66,10 @@ const Spill = SpillingTools.pipe(
   Layer.provide(SandboxSession),
 );
 
-/** The engineer over the session container — plus the PUBLISH pair:
- *  push rides the sandbox's own git, the PR the GitHub REST API, both
- *  authenticated by the host's one FQN-memoized token resource. */
+/** The engineer over the session machine — Read + Run + the editor,
+ *  plus the PUBLISH pair: push rides the sandbox's own git, the PR the
+ *  GitHub REST API, both authenticated by the host's one FQN-memoized
+ *  token resource. */
 const EngineerWorker = GeneralEngineer.pipe(
   Layer.provide(
     Layer.mergeAll(PushBranchLive, OpenPullRequestLive).pipe(
@@ -61,6 +77,8 @@ const EngineerWorker = GeneralEngineer.pipe(
       Layer.provide(PublishTokenLive),
     ),
   ),
+  Layer.provide(Editor),
+  Layer.provide(Doctrine),
   Layer.provide(Toolbox),
   Layer.provide(Spill),
   Layer.provide(Checkouts),
@@ -70,19 +88,27 @@ const EngineerWorker = GeneralEngineer.pipe(
   Layer.provide(SessionRepoLive),
 );
 
-/** The review charter: tools + checkout live INSIDE the session's
- *  container — git runs one RPC hop away, exactly the local reading
- *  experience (repo-relative paths at the tree root). */
-const ReviewBotWorkerLive = Layer.suspend(() => ReviewBotLive).pipe(
-  Layer.provide([QualityAssuranceGeneral, ReadDiffLive, ReadIssueLive]),
+/** The review charter: Read + Run (no editor — judge, not author, by
+ *  construction) plus the review tools; tools + checkout live INSIDE
+ *  the session's machine — git runs one RPC hop away, exactly the
+ *  local reading experience (repo-relative paths at the tree root). */
+const ReviewerWorkerLive = Layer.suspend(() => ReviewerLive).pipe(
+  Layer.provide([
+    QualityAssuranceGeneral,
+    ReadDiffLive,
+    ReadIssueLive,
+    FindCompanionsLive,
+    Doctrine,
+  ]),
   Layer.provide(Toolbox),
   Layer.provide(Spill),
   Layer.provide(Checkouts),
+  Layer.provide(SessionRepoLive),
 );
 
 /**
  * The ROUTER runs at the Worker level, where no session machine
- * exists: `release` is a no-op (the container recycles with its
+ * exists: `release` is a no-op (the machine recycles with its
  * session), `checkout` is the charter's act alone.
  */
 const CheckoutsRouter = Layer.succeed(Git.Checkouts, {
@@ -94,21 +120,19 @@ const CheckoutsRouter = Layer.succeed(Git.Checkouts, {
   release: () => Effect.void,
 });
 
-/** The review pipeline: webhook router + charter.
- *
- * The ROUTER half is DISABLED — not merged into {@link Org} below, so
- * no webhook is provisioned on the real repository and no PR polling
- * runs; reviews happen on the operator's request (the charter alone,
- * {@link ReviewBotWorkerLive}, IS in `Org` — `POST /api/prs/:n/review`
- * admits the session). Kept exported (and compiling) so switching to
- * event-driven reviews is one edit: put this in the `Org` mergeAll
- * instead of the bare charter. */
-export const ReviewBotWorker = ReviewBotEvents.pipe(
-  // provideMERGE: the HTTP edge addresses the bot too (click-to-review)
-  Layer.provideMerge(ReviewBotWorkerLive),
+/** The review pipeline: the GitHub event router + the charter. Every
+ *  pull request opened on the repository is reviewed as it opens and
+ *  re-reviewed on every push (`review/ReviewerEvents.ts`); the HTTP
+ *  edge addresses the charter too (`POST /api/prs/:n/review` admits a
+ *  session by hand). */
+const ReviewerWorker = ReviewerEvents.pipe(
+  // provideMERGE: the HTTP edge addresses the reviewer too
+  Layer.provideMerge(ReviewerWorkerLive),
   Layer.provide(CheckoutsRouter),
   // a REAL webhook: deploy provisions it against the Worker's URL,
-  // runtime verifies signatures and claims the delivery path
+  // runtime verifies signatures and claims the delivery path; under
+  // `alchemy dev` the Webhook resource's local provider polls GitHub
+  // and posts the same deliveries to the local Worker
   Layer.provide(Cloudflare.GitHubRepositoryEventSourceLive),
   Layer.provideMerge(LedgerD1),
 );
@@ -116,14 +140,8 @@ export const ReviewBotWorker = ReviewBotEvents.pipe(
 /** The whole org over CLOUDFLARE physics. SandboxSession is merged in
  *  so the ROUTES see `AI.Sandbox` too (the terminal door) — the same
  *  layer reference the charters consume, deduped by the build MemoMap,
- *  so the terminal lands on the same machine registry the tools use.
- *  The review CHARTER is in (click-to-review); its webhook router is
- *  not (see {@link ReviewBotWorker}). */
-const Org = Layer.mergeAll(
-  EngineerWorker,
-  ReviewBotWorkerLive,
-  SandboxSession,
-).pipe(
+ *  so the terminal lands on the same machine registry the tools use. */
+const Org = Layer.mergeAll(EngineerWorker, ReviewerWorker, SandboxSession).pipe(
   Layer.provideMerge(DriverCloudflare),
   Layer.provideMerge(GitHubWorker),
   Layer.provideMerge(ProposalsD1),
@@ -133,9 +151,9 @@ const Org = Layer.mergeAll(
 
 /**
  * The org, deployed — a Cloudflare Worker hosting both agents over
- * Cloudflare physics (the mirror of Server.ts):
+ * Cloudflare physics:
  *
- * - sessions   → Durable Objects (`services/DriverCloudflare.ts`)
+ * - sessions   → Durable Objects (`platform/DriverCloudflare.ts`)
  * - the board  → D1 (`SessionIndexD1`), fed by the driver's stream
  * - GitHub     → `*Http` bindings (a PersonalAccessToken bound as a
  *                Worker secret) + a REAL repository webhook (push
@@ -143,9 +161,10 @@ const Org = Layer.mergeAll(
  * - dedupe     → the Ledger on D1
  * - proposals  → D1 rows (the operator accepts from any instance;
  *                the executor in Routes performs the GitHub write)
- * - the tools  → each session's OWN container (`SandboxContainerSession`),
- *                started on first use, recycled after idle
- * - checkouts  → git INSIDE that container (`CheckoutsSandbox`)
+ * - the tools  → each session's OWN machine (`sandbox/SandboxSession.ts`:
+ *                a MicroVM deployed, a worktree of this checkout in dev)
+ * - checkouts  → git INSIDE that machine (`CheckoutsSandbox` /
+ *                `CheckoutsWorktree`)
  *
  * The same HTTP surface as the local server (Routes.ts) plus the
  * substrate's own doors: the GitHub webhook path is claimed by the

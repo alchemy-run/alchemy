@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState, type ComponentType } from "react";
 
-/* ── the server's projection (src/lib/PullRequest.ts) ───────────── */
+/* ── the server's projection (src/github/PullRequest.ts) ───────────── */
 
 interface Author {
   login: string;
@@ -383,6 +383,7 @@ export const PullRequestOverview = ({
   proposalBusy,
   onAcceptProposal,
   onRejectProposal,
+  onReviseProposal,
   onOpenSession,
 }: {
   repo: string;
@@ -400,11 +401,12 @@ export const PullRequestOverview = ({
     | { status: "session"; running: boolean };
   onRequestReview: () => void;
   /** What the agents proposed on THIS pull request, every state,
-   *  newest first (src/services/Proposals.ts). */
+   *  newest first (src/github/Proposals.ts). */
   proposals?: Proposal[];
   proposalBusy?: ReadonlySet<string>;
   onAcceptProposal?: (id: string) => void;
   onRejectProposal?: (id: string, reason: string | undefined) => void;
+  onReviseProposal?: (id: string, message: string) => void;
   /** Open a session's thread by `${term}:${key}`. */
   onOpenSession?: (id: string) => void;
 }) => {
@@ -646,6 +648,9 @@ export const PullRequestOverview = ({
                   busy={proposalBusy?.has(proposal.id) ?? false}
                   onAccept={() => onAcceptProposal?.(proposal.id)}
                   onReject={(reason) => onRejectProposal?.(proposal.id, reason)}
+                  onRevise={(message) =>
+                    onReviseProposal?.(proposal.id, message)
+                  }
                   onOpenSession={
                     onOpenSession === undefined
                       ? undefined

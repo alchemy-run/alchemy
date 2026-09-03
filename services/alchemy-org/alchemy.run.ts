@@ -5,7 +5,7 @@
  *   Durable Objects, board/ledger/approvals on D1, GitHub by
  *   webhook + token bindings, each session's tools on its OWN
  *   container of the circular org image (the alchemy repo baked in —
- *   Sandbox.ts);
+ *   src/sandbox/SandboxContainer.ts);
  * - `Website` — the coding-agent SPA, built by Vite at deploy and
  *   served as Worker assets, with `/api/*` and `/attach/*` forwarded
  *   to the backend over a service binding (ui/edge.ts).
@@ -23,8 +23,8 @@ import * as Cloudflare from "alchemy/Cloudflare";
 import * as GitHub from "alchemy/GitHub";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { alchemy, testAlchemy } from "./src/Repos.ts";
-import { SandboxMicrovmRuntime } from "./src/SandboxMicrovm.ts";
+import { alchemy, testAlchemy } from "./src/github/Repos.ts";
+import { SandboxMicrovmRuntime } from "./src/sandbox/SandboxMicrovm.ts";
 import Worker from "./src/Worker.ts";
 
 export default Alchemy.Stack(
@@ -83,10 +83,10 @@ export default Alchemy.Stack(
     // (src/SandboxMicrovm.ts): each session's VM is a warm worktree of
     // `sam/harness`. To go back to the Cloudflare Container machine,
     // swap for `Cloudflare.AI.SandboxContainerRuntime` (and mirror the
-    // swap in src/SandboxSession.ts + src/services/DriverCloudflare.ts).
+    // swap in src/sandbox/SandboxSession.ts + src/platform/DriverCloudflare.ts).
     //
     // NOT under `alchemy dev`: sessions run on this repository's own
-    // working tree instead (src/SandboxSession.ts spawns the host
+    // working tree instead (src/sandbox/SandboxSession.ts spawns the host
     // sandbox server), so the image — a docker bake of the whole repo
     // — is left out of the dev stack entirely. Nothing resolves the
     // image class in that mode, so an empty layer stands in for it.
