@@ -33,7 +33,7 @@ import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import { GitApi } from "@/Git/Api.ts";
-import { makeTestStack, TEST_ADMIN_TOKEN } from "./fixtures/stack.ts";
+import { makeTestStack, TEST_SECRET } from "./fixtures/stack.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
@@ -119,7 +119,7 @@ const freshRepo = Effect.fn(function* (
   owner: string,
   name: string,
 ) {
-  const admin = yield* makeClient(url, TEST_ADMIN_TOKEN);
+  const admin = yield* makeClient(url, TEST_SECRET);
   const created = yield* Effect.gen(function* () {
     yield* admin.repos.delete({ params: { owner, repo: name } }).pipe(
       Effect.catchTag("RepoNotFound", () => Effect.void),
@@ -149,8 +149,8 @@ const freshRepo = Effect.fn(function* (
   const parsed = new URL(url);
   return {
     admin,
-    token: created.token.token,
-    remote: `${parsed.protocol}//x:${created.token.token}@${parsed.host}/${owner}/${name}.git`,
+    token: TEST_SECRET,
+    remote: `${parsed.protocol}//x:${TEST_SECRET}@${parsed.host}/${owner}/${name}.git`,
   };
 });
 
@@ -159,7 +159,7 @@ const stack = beforeAll(
     Effect.tap(({ url }) =>
       Effect.gen(function* () {
         yield* Effect.logInfo(`git-service deployed at ${url}`);
-        const admin = yield* makeClient(url, TEST_ADMIN_TOKEN);
+        const admin = yield* makeClient(url, TEST_SECRET);
         yield* admin.repos.list({ query: {} }).pipe(
           edgeRetry,
           Effect.retry({

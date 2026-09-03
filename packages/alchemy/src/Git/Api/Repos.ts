@@ -12,8 +12,8 @@ import * as HttpApiEndpoint from "effect/unstable/httpapi/HttpApiEndpoint";
 import * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup";
 import * as HttpApiSchema from "effect/unstable/httpapi/HttpApiSchema";
 import {
+  Unauthorized,
   Forbidden,
-  GitAuth,
   ImportFailed,
   OwnerName,
   Paginated,
@@ -45,14 +45,14 @@ export const create = HttpApiEndpoint.post("create", "/repos", {
     readOnly: Schema.optional(Schema.Boolean),
   }),
   success: RepoCreated,
-  error: [RepoAlreadyExists, ValidationError, Forbidden],
+  error: [RepoAlreadyExists, ValidationError, Forbidden, Unauthorized],
 });
 
 /** Reads one repo (poll `status` for async fork/import/delete progress). */
 export const get = HttpApiEndpoint.get("get", "/repos/:owner/:repo", {
   params: RepoPath,
   success: Repo,
-  error: RepoNotFound,
+  error: [RepoNotFound, Unauthorized],
 });
 
 /** Patches description / default branch / readOnly. */
@@ -67,7 +67,7 @@ export const update = HttpApiEndpoint.patch("update", "/repos/:owner/:repo", {
     public: Schema.optional(Schema.Boolean),
   }),
   success: Repo,
-  error: [RepoNotFound, RefNotFound, Forbidden],
+  error: [RepoNotFound, RefNotFound, Forbidden, Unauthorized],
 });
 
 /** Lists repos (admin-key-only), optionally filtered by owner. */
@@ -80,6 +80,7 @@ export const list = HttpApiEndpoint.get("list", "/repos", {
     ),
   }),
   success: Paginated(Repo),
+  error: Unauthorized,
 });
 
 /**
@@ -90,7 +91,7 @@ export const list = HttpApiEndpoint.get("list", "/repos", {
 const del = HttpApiEndpoint.delete("delete", "/repos/:owner/:repo", {
   params: RepoPath,
   success: HttpApiSchema.NoContent,
-  error: [RepoNotFound, Forbidden],
+  error: [RepoNotFound, Forbidden, Unauthorized],
 });
 export { del as delete };
 
@@ -105,7 +106,13 @@ export const fork = HttpApiEndpoint.post("fork", "/repos/:owner/:repo/fork", {
     targetName: RepoName,
   }),
   success: RepoCreated,
-  error: [RepoNotFound, RepoAlreadyExists, RepoNotReady, Forbidden],
+  error: [
+    RepoNotFound,
+    RepoAlreadyExists,
+    RepoNotReady,
+    Forbidden,
+    Unauthorized,
+  ],
 });
 
 /**
@@ -126,7 +133,7 @@ const importRepo = HttpApiEndpoint.post("import", "/repos/import", {
     }),
   }),
   success: RepoCreated,
-  error: [RepoAlreadyExists, ImportFailed, Forbidden],
+  error: [RepoAlreadyExists, ImportFailed, Forbidden, Unauthorized],
 });
 export { importRepo as import };
 
@@ -142,7 +149,7 @@ export const compact = HttpApiEndpoint.post(
   {
     params: RepoPath,
     success: HttpApiSchema.NoContent,
-    error: [RepoNotFound, Forbidden],
+    error: [RepoNotFound, Forbidden, Unauthorized],
   },
 );
 
@@ -155,5 +162,4 @@ export default HttpApiGroup.make("repos")
   .add(del)
   .add(fork)
   .add(importRepo)
-  .add(compact)
-  .middleware(GitAuth);
+  .add(compact);

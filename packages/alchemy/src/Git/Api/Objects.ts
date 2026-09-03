@@ -14,10 +14,10 @@ import * as Schema from "effect/Schema";
 import * as HttpApiEndpoint from "effect/unstable/httpapi/HttpApiEndpoint";
 import * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup";
 import {
+  Unauthorized,
   CommitDiff,
   CommitInfo,
   Comparison,
-  GitAuth,
   NoMergeBase,
   ObjectNotFound,
   ObjectTooLarge,
@@ -38,7 +38,7 @@ export const commit = HttpApiEndpoint.get(
   {
     params: RepoOidPath,
     success: CommitInfo,
-    error: [RepoNotFound, ObjectNotFound, WrongObjectType],
+    error: [RepoNotFound, ObjectNotFound, WrongObjectType, Unauthorized],
   },
 );
 
@@ -54,7 +54,7 @@ export const log = HttpApiEndpoint.get("log", "/repos/:owner/:repo/log", {
     ),
   }),
   success: Paginated(CommitInfo),
-  error: [RepoNotFound, RefNotFound],
+  error: [RepoNotFound, RefNotFound, Unauthorized],
 });
 
 /** Reads one tree's entries. */
@@ -67,7 +67,7 @@ export const tree = HttpApiEndpoint.get(
       oid: Oid,
       entries: Schema.Array(TreeEntry),
     }),
-    error: [RepoNotFound, ObjectNotFound, WrongObjectType],
+    error: [RepoNotFound, ObjectNotFound, WrongObjectType, Unauthorized],
   },
 );
 
@@ -85,7 +85,13 @@ export const blob = HttpApiEndpoint.get(
       /** Base64 content — blobs ≤ 1 MiB only (422 otherwise; use /raw). */
       content: Schema.String,
     }),
-    error: [RepoNotFound, ObjectNotFound, WrongObjectType, ObjectTooLarge],
+    error: [
+      RepoNotFound,
+      ObjectNotFound,
+      WrongObjectType,
+      ObjectTooLarge,
+      Unauthorized,
+    ],
   },
 );
 
@@ -102,7 +108,7 @@ export const diff = HttpApiEndpoint.get(
   {
     params: RepoOidPath,
     success: CommitDiff,
-    error: [RepoNotFound, ObjectNotFound, WrongObjectType],
+    error: [RepoNotFound, ObjectNotFound, WrongObjectType, Unauthorized],
   },
 );
 
@@ -129,6 +135,7 @@ export const compare = HttpApiEndpoint.get(
       ObjectNotFound,
       WrongObjectType,
       NoMergeBase,
+      Unauthorized,
     ],
   },
 );
@@ -140,5 +147,4 @@ export default HttpApiGroup.make("objects")
   .add(tree)
   .add(blob)
   .add(diff)
-  .add(compare)
-  .middleware(GitAuth);
+  .add(compare);

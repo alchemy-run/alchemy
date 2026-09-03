@@ -9,8 +9,8 @@ import * as HttpApiEndpoint from "effect/unstable/httpapi/HttpApiEndpoint";
 import * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup";
 import * as HttpApiSchema from "effect/unstable/httpapi/HttpApiSchema";
 import {
+  Unauthorized,
   Forbidden,
-  GitAuth,
   ObjectNotFound,
   Oid,
   ReadOnlyRepo,
@@ -34,7 +34,7 @@ export const list = HttpApiEndpoint.get("list", "/repos/:owner/:repo/refs", {
     head: Schema.NullOr(Schema.String),
     refs: Schema.Array(Ref),
   }),
-  error: RepoNotFound,
+  error: [RepoNotFound, Unauthorized],
 });
 
 /** Reads one ref by full name (`?name=refs/heads/main`). */
@@ -42,7 +42,7 @@ export const get = HttpApiEndpoint.get("get", "/repos/:owner/:repo/ref", {
   params: RepoPath,
   query: Schema.Struct({ name: RefName }),
   success: Ref,
-  error: [RepoNotFound, RefNotFound],
+  error: [RepoNotFound, RefNotFound, Unauthorized],
 });
 
 /** Writes one ref with CAS semantics. */
@@ -58,7 +58,14 @@ export const update = HttpApiEndpoint.put("update", "/repos/:owner/:repo/ref", {
     expectedOid: Schema.optional(Schema.NullOr(Oid)),
   }),
   success: Ref,
-  error: [RepoNotFound, RefConflict, ObjectNotFound, ReadOnlyRepo, Forbidden],
+  error: [
+    RepoNotFound,
+    RefConflict,
+    ObjectNotFound,
+    ReadOnlyRepo,
+    Forbidden,
+    Unauthorized,
+  ],
 });
 
 /** Deletes one ref with CAS semantics. */
@@ -73,7 +80,14 @@ export const remove = HttpApiEndpoint.delete(
       expectedOid: Schema.optional(Oid),
     }),
     success: HttpApiSchema.NoContent,
-    error: [RepoNotFound, RefNotFound, RefConflict, ReadOnlyRepo, Forbidden],
+    error: [
+      RepoNotFound,
+      RefNotFound,
+      RefConflict,
+      ReadOnlyRepo,
+      Forbidden,
+      Unauthorized,
+    ],
   },
 );
 
@@ -82,5 +96,4 @@ export default HttpApiGroup.make("refs")
   .add(list)
   .add(get)
   .add(update)
-  .add(remove)
-  .middleware(GitAuth);
+  .add(remove);

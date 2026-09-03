@@ -8,8 +8,6 @@ import * as Alchemy from "@/index.ts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import {
-  ADMIN_TOKEN_CONFIG_KEY,
-  AuthTokens,
   BlobStoreR2,
   GIT_WORKER_OPTIONS,
   ReposDurableObject,
@@ -19,9 +17,8 @@ import {
 } from "@/Git/index.ts";
 import { HasherWorkerLoader } from "@/Git/Hasher/index.ts";
 
-export const TEST_ADMIN_TOKEN: string =
-  process.env[ADMIN_TOKEN_CONFIG_KEY] ?? "gs_test-admin-key-git-service-suite";
-process.env[ADMIN_TOKEN_CONFIG_KEY] ??= TEST_ADMIN_TOKEN;
+import { AuthenticateTest, PolicyTest, TEST_SECRET } from "./stack.ts";
+export { TEST_SECRET };
 
 const GitObjects = Cloudflare.R2.Bucket("GitLoaderObjects", {
   forceDestroy: true,
@@ -32,7 +29,8 @@ const GitLive = ServerLive.pipe(
   Layer.provide(RegistryDurableObject),
   Layer.provide(HasherWorkerLoader()),
   Layer.provide(BlobStoreR2(GitObjects)),
-  Layer.provide(AuthTokens),
+  Layer.provide(AuthenticateTest),
+  Layer.provide(PolicyTest),
 );
 
 export default class LoaderGitHost extends Cloudflare.Worker<LoaderGitHost>()(

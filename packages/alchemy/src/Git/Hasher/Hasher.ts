@@ -22,7 +22,6 @@
  * response = `u32 jsonLength | json | blob area`, where the JSON's entries
  * reference their content/zdata as `[offset, length]` into the blob area.
  */
-import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -31,7 +30,7 @@ import * as Schema from "effect/Schema";
 import * as Fiber from "effect/Fiber";
 import { WorkerEnvironment } from "../../Cloudflare/Workers/Worker.ts";
 import { RuntimeContext } from "../../RuntimeContext.ts";
-import { ADMIN_TOKEN_CONFIG_KEY } from "../Auth.ts";
+import { Random } from "../../Random.ts";
 import {
   BlobStore,
   type BlobStoreShape,
@@ -218,6 +217,23 @@ export const HasherInline: Layer.Layer<Hasher, never, BlobStore> = Layer.effect(
  * bytes`.
  */
 /** The `env` name of the self service binding (`GIT_WORKER_OPTIONS`). */
+/**
+ * The secret the push pipeline's internal hash route requires: a
+ * deploy-time random value bound onto the Worker (an `Alchemy.Random`
+ * resource, minted once and stable across deploys). Yielded at layer build
+ * by both the route and the self-calling hasher, so no user credential is
+ * ever involved.
+ */
+export const InternalSecret: Effect.Effect<
+  Effect.Effect<Redacted.Redacted<string>>,
+  never,
+  any
+> = Effect.gen(function* () {
+  const R = yield* Random;
+  const resource = yield* R("GitInternalSecret");
+  return yield* resource.text;
+}) as Effect.Effect<Effect.Effect<Redacted.Redacted<string>>, never, any>;
+
 export const HASHER_BINDING = "GIT_SELF";
 
 // ── self-binding layer ──────────────────────────────────────────────────────
@@ -245,22 +261,20 @@ export const HasherSelf: Layer.Layer<
     const fetcher = (env as Record<string, unknown>)[HASHER_BINDING] as
       | SelfFetcher
       | undefined;
-    const adminKey = yield* Config.redacted(ADMIN_TOKEN_CONFIG_KEY).pipe(
-      Effect.map(Redacted.value),
-      Effect.orElseSucceed(() => undefined),
-    );
-    if (fetcher === undefined || adminKey === undefined) {
+    if (fetcher === undefined) {
       return makeInlineHasher(blobs);
     }
+    const secret = yield* InternalSecret;
     const send = (url: string, body: Uint8Array) =>
       Effect.gen(function* () {
+        const token = Redacted.value(yield* secret);
         const response = yield* Effect.tryPromise({
           try: () =>
             fetcher.fetch(url, {
               method: "POST",
               headers: {
                 "content-type": "application/octet-stream",
-                authorization: `Bearer ${adminKey}`,
+                authorization: `Bearer ${token}`,
               },
               body: body as unknown as BodyInit,
             }),

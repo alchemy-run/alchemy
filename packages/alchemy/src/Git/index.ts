@@ -15,13 +15,40 @@
  * needed.
  */
 export * from "./Api.ts";
-export * from "./Auth.ts";
+export { GitApi as Api } from "./Api.ts";
 export {
-  ADMIN_TOKEN_CONFIG_KEY,
+  Authenticate,
+  AuthenticateSecret,
+  Authenticated,
+  AuthenticatedLive,
+  Caller,
+  currentCaller,
+  isReadAction,
+  parseBasic,
+  parseBearer,
+  parseSecret,
+  Policy,
+  PolicyOwners,
+  PrincipalSchema,
+  SECRET_CONFIG_KEY,
+  timingSafeEqual,
+  type GitAction,
+  type Headers,
+  type PolicyShape,
+  type Principal,
+  type RefUpdate,
+  type RepoContext,
+} from "./Auth.ts";
+export {
   GIT_WORKER_OPTIONS,
+  GithubRoutes,
+  handlers,
+  RawRoutes,
   ReposDurableObject,
   Server,
   ServerLive,
+  WireRoutes,
+  type GitGroupName,
 } from "./Server.ts";
 export {
   BlobStore,

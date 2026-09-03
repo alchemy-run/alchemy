@@ -12,9 +12,9 @@ import * as Schema from "effect/Schema";
 import * as HttpApiEndpoint from "effect/unstable/httpapi/HttpApiEndpoint";
 import * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup";
 import {
+  Unauthorized,
   BranchMissing,
   Forbidden,
-  GitAuth,
   MergeConflict,
   MergeResult,
   NothingToMerge,
@@ -66,6 +66,7 @@ export const create = HttpApiEndpoint.post(
       PullExists,
       ValidationError,
       Forbidden,
+      Unauthorized,
     ],
   },
 );
@@ -84,7 +85,7 @@ export const list = HttpApiEndpoint.get("list", "/repos/:owner/:repo/pulls", {
     ),
   }),
   success: Paginated(Pull),
-  error: RepoNotFound,
+  error: [RepoNotFound, Unauthorized],
 });
 
 /** Reads one PR with live compare fields (aheadBy/behindBy/mergeable). */
@@ -94,7 +95,7 @@ export const get = HttpApiEndpoint.get(
   {
     params: PullPath,
     success: PullDetail,
-    error: [RepoNotFound, PullNotFound],
+    error: [RepoNotFound, PullNotFound, Unauthorized],
   },
 );
 
@@ -115,7 +116,13 @@ export const update = HttpApiEndpoint.patch(
       state: Schema.optional(Schema.Literals(["open", "closed"])),
     }),
     success: Pull,
-    error: [RepoNotFound, PullNotFound, PullStateConflict, Forbidden],
+    error: [
+      RepoNotFound,
+      PullNotFound,
+      PullStateConflict,
+      Forbidden,
+      Unauthorized,
+    ],
   },
 );
 
@@ -151,6 +158,7 @@ export const merge = HttpApiEndpoint.post(
       RefConflict,
       ReadOnlyRepo,
       Forbidden,
+      Unauthorized,
     ],
   },
 );
@@ -161,5 +169,4 @@ export default HttpApiGroup.make("pulls")
   .add(list)
   .add(get)
   .add(update)
-  .add(merge)
-  .middleware(GitAuth);
+  .add(merge);

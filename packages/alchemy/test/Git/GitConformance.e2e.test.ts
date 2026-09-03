@@ -28,7 +28,7 @@ import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import { GitApi } from "@/Git/Api.ts";
-import { makeTestStack, TEST_ADMIN_TOKEN } from "./fixtures/stack.ts";
+import { makeTestStack, TEST_SECRET } from "./fixtures/stack.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
@@ -74,7 +74,7 @@ const purgeRepo = Effect.fn(function* (
   owner: string,
   repo: string,
 ) {
-  const admin = yield* makeClient(url, TEST_ADMIN_TOKEN);
+  const admin = yield* makeClient(url, TEST_SECRET);
   // edgeRetry on every step: a freshly deployed workers.dev route serves
   // transient 5xx/1042s for a few seconds (typed 404s decode fine and are
   // NOT retried — they end the poll).
@@ -100,7 +100,7 @@ const freshRepo = Effect.fn(function* (
   owner: string,
   name: string,
 ) {
-  const admin = yield* makeClient(url, TEST_ADMIN_TOKEN);
+  const admin = yield* makeClient(url, TEST_SECRET);
   // Retry the whole purge -> create CYCLE, never the bare POST: a create
   // that commits server-side but loses its response (edge 5xx mid-rollout)
   // leaves the name taken, so retrying just the POST would 409 forever.
@@ -121,11 +121,11 @@ const freshRepo = Effect.fn(function* (
   return {
     admin,
     created,
-    token: created.token.token,
+    token: TEST_SECRET,
     host: parsed.host,
     remoteFor: (token: string) =>
       `${parsed.protocol}//x:${token}@${parsed.host}/${owner}/${name}.git`,
-    remote: `${parsed.protocol}//x:${created.token.token}@${parsed.host}/${owner}/${name}.git`,
+    remote: `${parsed.protocol}//x:${TEST_SECRET}@${parsed.host}/${owner}/${name}.git`,
   };
 });
 
@@ -217,7 +217,7 @@ const stack = beforeAll(
       Effect.gen(function* () {
         // Printed so a failing live run can be probed by hand (curl/git).
         yield* Effect.logInfo(`git-service deployed at ${url}`);
-        const admin = yield* makeClient(url, TEST_ADMIN_TOKEN);
+        const admin = yield* makeClient(url, TEST_SECRET);
         // Readiness probe: retry on ANY failure, not just transport errors.
         // Right after a rollout the edge briefly serves the PREVIOUS worker
         // version, whose responses decode against the old schema — that
@@ -241,76 +241,6 @@ afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack).pipe(logLevel));
 // ═══════════════════════════════════════════════════════════════════════════
 // 1. Token flow: bootstrap → scoped tokens → revocation, end to end
 // ═══════════════════════════════════════════════════════════════════════════
-
-test(
-  "token flow: bootstrap write token pushes, read token cannot, revocation bites",
-  Effect.gen(function* () {
-    const { url } = yield* stack;
-    const repo = yield* freshRepo(url, "conf", "tokens");
-    const tmp = yield* tempDir;
-    const params = { owner: "conf", repo: "tokens" };
-
-    // seed with the bootstrap write token from RepoCreated (no extra mint)
-    yield* retrySh(
-      tmp,
-      `
-      rm -rf seed
-      git -c init.defaultBranch=main clone '${repo.remote}' seed
-      cd seed
-      echo one > a.txt
-      git add -A && git commit -m c1
-      git push origin main
-      `,
-    );
-
-    // a read-scope token can clone but not push
-    const read = yield* repo.admin.tokens.create({
-      params,
-      payload: { name: "reader", scope: "read" },
-    });
-    yield* mustSh(
-      tmp,
-      `git -c init.defaultBranch=main clone '${repo.remoteFor(read.token)}' ro`,
-    );
-    yield* mustFailSh(
-      tmp,
-      `
-      cd ro
-      echo nope > b.txt
-      git add -A && git commit -m nope
-      git push origin main
-      `,
-    );
-
-    // a second write token pushes; after revocation it cannot even fetch
-    const write = yield* repo.admin.tokens.create({
-      params,
-      payload: { name: "writer", scope: "write" },
-    });
-    yield* mustSh(
-      tmp,
-      `
-      git -c init.defaultBranch=main clone '${repo.remoteFor(write.token)}' rw
-      cd rw
-      echo two > b.txt
-      git add -A && git commit -m c2
-      git push origin main
-      `,
-    );
-    yield* repo.admin.tokens.revoke({
-      params: { ...params, id: write.id },
-    });
-    yield* mustFailSh(tmp, `cd rw && git fetch origin`);
-
-    // the repo itself is unharmed: bootstrap token still sees both commits
-    const log = yield* mustSh(
-      tmp,
-      `cd seed && git pull origin main >/dev/null 2>&1 && git log --oneline | wc -l`,
-    );
-    expect(log.stdout.trim()).toBe("2");
-  }).pipe(logLevel),
-  { timeout: 120_000 },
-);
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 2. History surgery: rebase, amend, merge, cherry-pick, revert, force-push

@@ -37,7 +37,6 @@ import * as Result from "effect/Result";
 import * as HttpRouter from "effect/unstable/http/HttpRouter";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import { parseBasicOrBearer } from "./Auth.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { RegistryEntry } from "./RegistryObject.ts";
 import type {
@@ -45,7 +44,6 @@ import type {
   CommitData,
   CommitDiffData,
   CompareData,
-  CreatedTokenData,
   FileData,
   MergePullResult,
   PullData,
@@ -145,18 +143,6 @@ export interface CompatRepoStub {
     { readonly _tag: string },
     RuntimeContext
   >;
-  readonly createToken: (
-    auth: CallerAuth,
-    input: {
-      readonly name: string;
-      readonly scope: "read" | "write" | "admin";
-      readonly ttlSeconds?: number | undefined;
-    },
-  ) => Effect.Effect<
-    CreatedTokenData,
-    { readonly _tag: string },
-    RuntimeContext
-  >;
 }
 
 export interface GithubCompatOptions {
@@ -173,9 +159,10 @@ export interface GithubCompatOptions {
     HttpServerRequest.HttpServerRequest | RuntimeContext
   >;
   /** Timing-safe admin-key check over the raw Authorization header. */
-  readonly isAdmin: (
+  /** The caller behind the request headers: a principal, or `null`. */
+  readonly caller: (
     headers: Readonly<Record<string, string | undefined>>,
-  ) => Effect.Effect<boolean, never, RuntimeContext>;
+  ) => Effect.Effect<CallerAuth, never, RuntimeContext>;
   /** Repo-DO stub by repoId (the Worker's `repos.getByName`). */
   readonly stub: (repoId: string) => CompatRepoStub;
 }
@@ -294,8 +281,8 @@ const ghUser = (login: string) => ({
   login,
   id: intId(login),
   node_id: `U_${login}`,
-  type: login === "admin" ? "User" : "Organization",
-  site_admin: login === "admin",
+  type: "User",
+  site_admin: false,
 });
 
 const ghRepo = (meta: RepoMetaData, origin: string) => ({
@@ -424,7 +411,7 @@ const ghPull = (
  * as the raw REST routes.
  */
 export const githubCompatRoutes = (options: GithubCompatOptions) => {
-  const { prelude, isAdmin, stub } = options;
+  const { prelude, caller, stub } = options;
 
   /** Repo-scoped route body: prelude, then handler with entry+auth. */
   const withRepo = <R>(
@@ -505,19 +492,16 @@ export const githubCompatRoutes = (options: GithubCompatOptions) => {
 
   return Layer.mergeAll(
     // ── the auth probe ──────────────────────────────────────────────────
-    // `gh` hits `/user` to validate its token. Repo tokens are per-repo,
-    // so the only globally verifiable identity is the admin key; other
-    // syntactically valid tokens get a generic identity and are enforced
-    // per-repo by the DO on every real operation.
+    // `gh` hits `/user` to validate its credential: answered from the
+    // principal `Authenticate` resolves.
     HttpRouter.add(
       "GET",
       "/api/v3/user",
       Effect.gen(function* () {
         const request = yield* HttpServerRequest.HttpServerRequest;
-        const credentials = parseBasicOrBearer(request.headers);
-        if (credentials === undefined) return yield* ghUnauthorized;
-        const admin = yield* isAdmin(request.headers);
-        return yield* ghJson(ghUser(admin ? "admin" : "token"));
+        const principal = yield* caller(request.headers);
+        if (principal === null) return yield* ghUnauthorized;
+        return yield* ghJson(ghUser(principal.name ?? principal.id));
       }),
     ),
 

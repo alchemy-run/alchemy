@@ -22,7 +22,7 @@ import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import { GitApi, type Oid } from "@/Git/Api.ts";
-import { makeTestStack, TEST_ADMIN_TOKEN } from "./fixtures/stack.ts";
+import { makeTestStack, TEST_SECRET } from "./fixtures/stack.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
@@ -70,7 +70,7 @@ const purgeRepo = Effect.fn(function* (
   owner: string,
   repo: string,
 ) {
-  const admin = yield* makeClient(url, TEST_ADMIN_TOKEN);
+  const admin = yield* makeClient(url, TEST_SECRET);
   // edgeRetry on every step: a freshly deployed workers.dev route serves
   // transient 5xx/1042s for a few seconds (typed 404s decode fine and are
   // NOT retried — they end the poll).
@@ -172,7 +172,7 @@ const freshRepo = Effect.fn(function* (
   owner: string,
   name: string,
 ) {
-  const admin = yield* makeClient(url, TEST_ADMIN_TOKEN);
+  const admin = yield* makeClient(url, TEST_SECRET);
   // Retry the whole purge -> create CYCLE, never the bare POST: a create
   // that commits server-side but loses its response (edge 5xx mid-rollout)
   // leaves the name taken, so retrying just the POST would 409 forever.
@@ -192,8 +192,8 @@ const freshRepo = Effect.fn(function* (
   return {
     admin,
     created,
-    token: created.token.token,
-    remote: yield* authRemote(url, created.token.token, owner, name),
+    token: TEST_SECRET,
+    remote: yield* authRemote(url, TEST_SECRET, owner, name),
   };
 });
 
@@ -217,7 +217,7 @@ const stack = beforeAll(
       Effect.gen(function* () {
         // Printed so a failing live run can be probed by hand (curl/git).
         yield* Effect.logInfo(`git-service deployed at ${url}`);
-        const admin = yield* makeClient(url, TEST_ADMIN_TOKEN);
+        const admin = yield* makeClient(url, TEST_SECRET);
         // Readiness probe: retry on ANY failure, not just transport errors.
         // Right after a rollout the edge briefly serves the PREVIOUS worker
         // version, whose responses decode against the old schema — that
@@ -301,7 +301,7 @@ test(
     const http = yield* HttpClient.HttpClient;
     const file = yield* http.get(
       `${url}/api/v1/repos/e2e/proto-basic/file?ref=refs/heads/main&path=sub/nested.txt`,
-      { headers: { authorization: `Bearer ${TEST_ADMIN_TOKEN}` } },
+      { headers: { authorization: `Bearer ${TEST_SECRET}` } },
     );
     expect(file.status).toBe(200);
     expect(yield* file.text).toBe("nested\n");
@@ -421,7 +421,7 @@ test(
       "main",
       "HEAD:refs/heads/atomic-side",
     );
-    const admin = yield* makeClient(url, TEST_ADMIN_TOKEN);
+    const admin = yield* makeClient(url, TEST_SECRET);
     const refs = yield* admin.refs.list({
       params: { owner: "e2e", repo: "proto-cas" },
       query: {},
@@ -727,7 +727,7 @@ test(
 // ── step 12: auth matrix ────────────────────────────────────────────────────
 
 test(
-  "auth matrix: garbage token 401s with auth-retry, read token clones but cannot push",
+  "auth matrix: an unknown credential is anonymous and 401s on a private repo",
   Effect.gen(function* () {
     const { url } = yield* stack;
     const { admin, remote } = yield* freshRepo(url, "e2e", "proto-auth");
@@ -756,22 +756,6 @@ test(
     expect(unauthorized.stderr.toLowerCase()).toMatch(/401|authentication/);
 
     // token embedded in the remote URL: read scope clones, cannot push
-    const readToken = yield* admin.tokens.create({
-      params,
-      payload: { name: "reader", scope: "read" },
-    });
-    const readRemote = yield* authRemote(
-      url,
-      readToken.token,
-      "e2e",
-      "proto-auth",
-    );
-    yield* retryGit(tmp, "clone", readRemote, "ro");
-    const ro = path.join(tmp, "ro");
-    yield* fs.writeFileString(path.join(ro, "f.txt"), "denied\n");
-    yield* mustGit(ro, "add", "-A");
-    yield* mustGit(ro, "commit", "-m", "denied");
-    yield* mustFailGit(ro, "push", "origin", "main");
   }).pipe(logLevel),
   { timeout: 120_000 },
 );
@@ -828,7 +812,7 @@ test.skipIf(!!process.env.FAST)(
     // the fork clones with its own bootstrap token and matches the parent
     const forkRemote = yield* authRemote(
       url,
-      forked.token.token,
+      TEST_SECRET,
       "e2e",
       "proto-fork-dst",
     );
@@ -877,7 +861,7 @@ test.skipIf(!!process.env.FAST)(
   "import: depth-limited import from a public smart-HTTP source reaches ready",
   Effect.gen(function* () {
     const { url } = yield* stack;
-    const admin = yield* makeClient(url, TEST_ADMIN_TOKEN);
+    const admin = yield* makeClient(url, TEST_SECRET);
     yield* purgeRepo(url, "e2e", "proto-import");
 
     // a tiny, stable public repo; depth-limited to stay under the 50 MiB cap.
@@ -910,15 +894,11 @@ test.skipIf(!!process.env.FAST)(
     expect(refs.refs.length).toBeGreaterThan(0);
 
     // and the imported history clones with a fresh token
-    const token = yield* admin.tokens.create({
-      params: { owner: "e2e", repo: "proto-import" },
-      payload: { name: "reader", scope: "read" },
-    });
     const path = yield* Path.Path;
     const tmp = yield* tempDir;
     const importRemote = yield* authRemote(
       url,
-      token.token,
+      TEST_SECRET,
       "e2e",
       "proto-import",
     );

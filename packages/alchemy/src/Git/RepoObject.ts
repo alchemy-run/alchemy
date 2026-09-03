@@ -53,23 +53,16 @@ import {
   RefConflict,
   RefNotFound,
   RepoNotFound,
-  TokenNotFound,
   Unauthorized,
   ValidationError,
   WrongObjectType,
   type Oid as ApiOid,
   type RepoStatus,
-  type TokenScope,
 } from "./Api.ts";
 import {
-  Auth,
-  hashToken,
-  mintToken,
-  parseBasicOrBearer,
-  requiredScope,
-  SCOPE_RANK,
-  type Actor,
+  Policy,
   type GitAction,
+  type Principal,
   type RepoContext,
 } from "./Auth.ts";
 import { applyDelta } from "./Protocol/Delta.ts";
@@ -173,7 +166,6 @@ import {
   type JobRow,
   type PullRow,
   type RefRow,
-  type TokenRow,
 } from "./Store/Sql.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -343,7 +335,29 @@ export const BUNDLE_SIDEBAND_HEADER = "x-git-bundle-sideband" as const;
  * and stripping any inbound copy) so the DO can honor admin-key wire
  * access. Never trusted from outside — only the Worker can reach the DO.
  */
-export const ADMIN_HEADER = "x-git-service-admin" as const;
+export const PRINCIPAL_HEADER = "x-git-principal" as const;
+
+/** The principal on the internal wire header (base64url JSON). */
+export const encodePrincipal = (principal: Principal): string =>
+  Buffer.from(JSON.stringify(principal), "utf8").toString("base64url");
+export const decodePrincipal = (value: string): Principal | null => {
+  try {
+    const parsed: unknown = JSON.parse(
+      Buffer.from(value, "base64url").toString("utf8"),
+    );
+    if (
+      typeof parsed === "object" &&
+      parsed !== null &&
+      typeof (parsed as { id?: unknown }).id === "string"
+    ) {
+      const { id, name } = parsed as { id: string; name?: unknown };
+      return typeof name === "string" ? { id, name } : { id };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Errors
@@ -374,14 +388,11 @@ export class WireProtocolError extends Schema.TaggedError<WireProtocolError>()(
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Who is calling — the `Actor` produced by the Auth block's
- * `authenticate` at the Worker and forwarded here over the trusted
- * internal channel. Token actors arrive unverified (the secret rides
- * along); this DO enriches them from its tokens table before asking the
- * Auth block to authorize. Kept under its historical name on the RPC
- * surface.
+ * Who is calling an RPC or a wire request: the {@link Principal} the
+ * Worker's `Authenticate` resolved, or `null` for anonymous. The DO trusts
+ * this identity (it arrives over the internal channel) and asks `Policy`.
  */
-export type CallerAuth = Actor;
+export type CallerAuth = Principal | null;
 
 /** Repo metadata as stored in the `config` table. */
 export interface RepoMetaData {
@@ -493,21 +504,6 @@ export interface RefsPage {
   readonly refs: ReadonlyArray<RefData>;
 }
 
-/** Token metadata (never the secret). */
-export interface TokenData {
-  readonly id: string;
-  readonly name: string;
-  readonly scope: TokenScope;
-  readonly createdAt: number;
-  readonly expiresAt: number | null;
-  readonly lastUsedAt: number | null;
-}
-
-/** A freshly minted token: metadata + the secret, shown exactly once. */
-export interface CreatedTokenData extends TokenData {
-  readonly token: string;
-}
-
 /** Input of {@link GitRepoShape.initRepo} (also fork/import bootstrap). */
 export interface InitRepoInput {
   readonly repoId: string;
@@ -524,8 +520,6 @@ export interface InitRepoInput {
 /** Result of init/fork/import bootstrap: the meta + a bootstrap token. */
 export interface InitRepoResult {
   readonly meta: RepoMetaData;
-  /** Bootstrap `write` token (DESIGN.md §5 `RepoCreated`). */
-  readonly token: CreatedTokenData;
 }
 
 /** Input of {@link GitRepoShape.updateRef}. */
@@ -750,7 +744,7 @@ export type RepoAuthError =
  * method may be named `delete` (Cloudflare stub proxy reserves it).
  */
 export interface GitRepoShape {
-  /** Seeds config + mints the bootstrap `write` token (repo create). */
+  /** Seeds config (repo create). */
   readonly initRepo: (
     input: InitRepoInput,
   ) => Effect.Effect<InitRepoResult, StoreError, RuntimeContext>;
@@ -774,41 +768,19 @@ export interface GitRepoShape {
   readonly startPurge: (
     auth: CallerAuth,
   ) => Effect.Effect<void, RepoAuthError, RuntimeContext>;
-  /**
-   * Verifies a token by its sha-256 hex hash against the `tokens` table:
-   * unknown/expired ⇒ `Unauthorized`; insufficient scope ⇒ `Forbidden`.
-   * Bumps `last_used_at` at hourly granularity.
-   */
-  readonly verifyToken: (
-    tokenHash: string,
-    required: TokenScope,
-  ) => Effect.Effect<
-    TokenData,
-    Unauthorized | Forbidden | StoreError,
-    RuntimeContext
-  >;
   readonly getRepoMeta: (
     auth: CallerAuth,
   ) => Effect.Effect<RepoMetaData, RepoAuthError, RuntimeContext>;
+  /** Repo metadata for the Worker's own bookkeeping (no policy check). */
+  readonly readMeta: () => Effect.Effect<
+    RepoMetaData,
+    RepoNotFound | StoreError,
+    RuntimeContext
+  >;
   readonly updateRepoMeta: (
     auth: CallerAuth,
     patch: RepoMetaPatch,
   ) => Effect.Effect<RepoMetaData, RepoAuthError | RefNotFound, RuntimeContext>;
-  readonly createToken: (
-    auth: CallerAuth,
-    input: {
-      readonly name: string;
-      readonly scope: TokenScope;
-      readonly ttlSeconds?: number | undefined;
-    },
-  ) => Effect.Effect<CreatedTokenData, RepoAuthError, RuntimeContext>;
-  readonly listTokens: (
-    auth: CallerAuth,
-  ) => Effect.Effect<ReadonlyArray<TokenData>, RepoAuthError, RuntimeContext>;
-  readonly revokeToken: (
-    auth: CallerAuth,
-    id: string,
-  ) => Effect.Effect<void, RepoAuthError | TokenNotFound, RuntimeContext>;
   readonly listRefs: (
     auth: CallerAuth,
     prefix?: string | undefined,
@@ -3057,9 +3029,6 @@ export const heapPop = (heap: Array<WalkHeapNode>): WalkHeapNode => {
   return top;
 };
 
-const isTokenScope = (s: string): s is TokenScope =>
-  s === "read" || s === "write" || s === "admin";
-
 /** Decompresses a request body when it is gzip (header or 1f8b sniff). */
 export const gunzipIfNeeded = (
   body: Uint8Array,
@@ -3116,7 +3085,6 @@ export class GitRepo extends Cloudflare.DurableObject<GitRepo, GitRepoShape>()(
       ObjectNotFound,
       WrongObjectType,
       NoMergeBase,
-      TokenNotFound,
       PullNotFound,
       PullExists,
       PullStateConflict,
@@ -3152,9 +3120,9 @@ export const GitRepoLive = GitRepo.make(
     // The push pipeline's hasher (DESIGN §22.7): a self-binding fan-out in
     // production, in-process in tests without the binding.
     const hasher = yield* Hasher;
-    // The swappable auth block — same layer graph as the Worker (§3.2):
-    // authorization runs here, where the actions' facts are parsed.
-    const authService = yield* Auth;
+    // The policy — same layer graph as the Worker: authorization runs
+    // here, where the actions' facts are parsed.
+    const policy = yield* Policy;
     const registry = yield* RegistryStore;
     const selfNamespace = yield* Cloudflare.DurableObjectScope;
 
@@ -3264,61 +3232,6 @@ export const GitRepoLive = GitRepo.make(
       const storeFor = (repoId: string): ObjectStore =>
         makeObjectStore({ sql, blobs, repoId });
 
-      // ── auth ─────────────────────────────────────────────────────────────
-      /**
-       * Resolves a token by hash: unknown/expired ⇒ `Unauthorized`,
-       * corrupt scope ⇒ `StoreError`. Bumps `last_used_at` at hourly
-       * granularity. Rank enforcement is deliberately NOT here — the
-       * scope's meaning belongs to the Auth block (`AuthTokens`), not
-       * the engine.
-       */
-      const lookupToken = Effect.fn(function* (tokenHash: string) {
-        const row = yield* sql.first<TokenRow>(
-          `SELECT * FROM tokens WHERE token_hash = ?`,
-          tokenHash,
-        );
-        const now = Date.now();
-        if (row === undefined) {
-          return yield* new Unauthorized();
-        }
-        if (row.expires_at !== null && row.expires_at <= now) {
-          return yield* new Unauthorized();
-        }
-        if (!isTokenScope(row.scope)) {
-          return yield* new StoreError({
-            reason: `corrupt token scope '${row.scope}'`,
-          });
-        }
-        // last_used_at, throttled to once per hour
-        if (row.last_used_at === null || now - row.last_used_at > 3_600_000) {
-          yield* sql.run(
-            `UPDATE tokens SET last_used_at = ? WHERE id = ?`,
-            now,
-            row.id,
-          );
-        }
-        return {
-          id: row.id,
-          name: row.name,
-          scope: row.scope,
-          createdAt: row.created_at,
-          expiresAt: row.expires_at,
-          lastUsedAt: row.last_used_at ?? now,
-        } satisfies TokenData;
-      });
-
-      /** The rank-checking verify — the legacy `verifyToken` RPC surface. */
-      const verifyTokenHash = Effect.fn(function* (
-        tokenHash: string,
-        required: TokenScope,
-      ) {
-        const token = yield* lookupToken(tokenHash);
-        if (SCOPE_RANK[token.scope] < SCOPE_RANK[required]) {
-          return yield* new Forbidden({ required });
-        }
-        return token;
-      });
-
       /** The policy view of this repo, as the Auth block sees it. */
       const repoContextOf = (meta: RepoMetaData): RepoContext => ({
         repoId: meta.repoId,
@@ -3330,68 +3243,25 @@ export const GitRepoLive = GitRepo.make(
       });
 
       /**
-       * Enforces auth for one RPC: enriches token actors from the tokens
-       * table (identity is the engine's job), then asks the Auth block
-       * for the decision (policy is the block's). Denials: anonymous ⇒
-       * 401 (WWW-Authenticate prompts for credentials); identified
-       * callers ⇒ 403, labeled with the conventional scope name.
+       * Enforces policy for one RPC. Denials: anonymous ⇒ 401
+       * (WWW-Authenticate prompts for credentials); identified callers ⇒
+       * 403 naming the action.
        */
       const authorize = Effect.fn(function* (
         auth: CallerAuth,
         action: GitAction,
       ) {
         const meta = yield* requireMeta;
-        const actor: Actor =
-          auth.kind === "token"
-            ? {
-                ...auth,
-                scope: (yield* lookupToken(yield* hashToken(auth.token))).scope,
-              }
-            : auth;
-        const allowed = yield* authService.authorize({
-          actor,
+        const allowed = yield* policy.authorize({
+          principal: auth ?? undefined,
           repo: repoContextOf(meta),
           action,
         });
         if (!allowed) {
-          return yield* actor.kind === "anonymous"
+          return yield* auth === null
             ? new Unauthorized()
-            : new Forbidden({ required: requiredScope(action) });
+            : new Forbidden({ action: action._tag });
         }
-      });
-
-      const mintRepoToken = Effect.fn(function* (input: {
-        readonly name: string;
-        readonly scope: TokenScope;
-        readonly ttlSeconds?: number | undefined;
-      }) {
-        const secret = yield* mintToken;
-        const hash = yield* hashToken(secret);
-        const id = yield* ulid();
-        const createdAt = Date.now();
-        const expiresAt =
-          input.ttlSeconds === undefined
-            ? null
-            : createdAt + input.ttlSeconds * 1000;
-        yield* sql.run(
-          `INSERT INTO tokens (id, token_hash, name, scope, created_at, expires_at, last_used_at)
-           VALUES (?, ?, ?, ?, ?, ?, NULL)`,
-          id,
-          hash,
-          input.name,
-          input.scope,
-          createdAt,
-          expiresAt,
-        );
-        return {
-          id,
-          name: input.name,
-          scope: input.scope,
-          createdAt,
-          expiresAt,
-          lastUsedAt: null,
-          token: secret,
-        } satisfies CreatedTokenData;
       });
 
       // ── refs ─────────────────────────────────────────────────────────────
@@ -3959,11 +3829,7 @@ export const GitRepoLive = GitRepo.make(
         status: RepoStatus,
       ) {
         const meta = yield* seedConfig(input, status);
-        const token = yield* mintRepoToken({
-          name: "bootstrap",
-          scope: "write",
-        });
-        return { meta, token } satisfies InitRepoResult;
+        return { meta } satisfies InitRepoResult;
       });
 
       // ── wire protocol drivers ────────────────────────────────────────────
@@ -4004,38 +3870,29 @@ export const GitRepoLive = GitRepo.make(
       });
 
       /**
-       * Resolves the wire caller. `undefined` means a credential was
-       * presented but does not verify — always a 401, even on public
-       * repos (a bad token is not an anonymous caller). Anonymous and
-       * verified actors go to the Auth block, which decides (public-repo
-       * anonymous reads are `AuthTokens` behavior, not an engine rule).
+       * Resolves the wire caller from the internal principal header the
+       * Worker set (any inbound copy was stripped there). `null` is
+       * anonymous; the policy decides what anonymous may do.
        */
       const wireActor = (
         request: HttpServerRequest.HttpServerRequest,
-      ): Effect.Effect<Actor | undefined, StoreError> =>
-        Effect.gen(function* () {
-          if (request.headers[ADMIN_HEADER] === "1") {
-            return { kind: "admin" } as const;
-          }
-          const creds = parseBasicOrBearer(request.headers);
-          if (creds === undefined) {
-            return { kind: "anonymous" } as const;
-          }
-          const hash = yield* hashToken(Redacted.value(creds.token));
-          const token = yield* lookupToken(hash).pipe(
-            Effect.catchTag("Unauthorized", () => Effect.succeed(undefined)),
-          );
-          return token === undefined
-            ? undefined
-            : ({ kind: "token", token: "", scope: token.scope } as const);
+      ): Effect.Effect<CallerAuth> =>
+        Effect.sync(() => {
+          const header = request.headers[PRINCIPAL_HEADER];
+          return header === undefined ? null : decodePrincipal(header);
         });
 
       /** One wire authorization: actor × repo × action → allowed? */
       const wireAllowed = (
-        actor: Actor,
+        actor: CallerAuth,
         meta: RepoMetaData,
         action: GitAction,
-      ) => authService.authorize({ actor, repo: repoContextOf(meta), action });
+      ) =>
+        policy.authorize({
+          principal: actor ?? undefined,
+          repo: repoContextOf(meta),
+          action,
+        });
 
       /** GET info/refs — the v0 advertisement. */
       const handleInfoRefs = (
@@ -4055,10 +3912,7 @@ export const GitRepoLive = GitRepo.make(
             service === "git-receive-pack"
               ? { _tag: "Push", updates: [] }
               : { _tag: "Fetch" };
-          if (
-            actor === undefined ||
-            !(yield* wireAllowed(actor, meta, action))
-          ) {
+          if (!(yield* wireAllowed(actor, meta, action))) {
             return wire401;
           }
           const refs = yield* listAllRefs(meta.repoId);
@@ -4080,10 +3934,7 @@ export const GitRepoLive = GitRepo.make(
       ) =>
         Effect.gen(function* () {
           const actor = yield* wireActor(request);
-          if (
-            actor === undefined ||
-            !(yield* wireAllowed(actor, meta, { _tag: "Fetch" }))
-          ) {
+          if (!(yield* wireAllowed(actor, meta, { _tag: "Fetch" }))) {
             return wire401;
           }
           const rawBody = new Uint8Array(yield* request.arrayBuffer);
@@ -4716,13 +4567,14 @@ export const GitRepoLive = GitRepo.make(
           yield* armAlarmAt(Date.now());
         }),
 
-        verifyToken: (tokenHash, required) =>
-          verifyTokenHash(tokenHash, required),
-
         getRepoMeta: Effect.fn(function* (auth: CallerAuth) {
           const meta = yield* requireMetaStats;
           yield* authorize(auth, { _tag: "ReadRepo" });
           return meta;
+        }),
+
+        readMeta: Effect.fn(function* () {
+          return yield* requireMetaStats;
         }),
 
         updateRepoMeta: Effect.fn(function* (
@@ -4762,50 +4614,6 @@ export const GitRepoLive = GitRepo.make(
           yield* syncSummary(result);
           yield* writeHeadSnapshot;
           return result;
-        }),
-
-        createToken: Effect.fn(function* (
-          auth: CallerAuth,
-          input: {
-            readonly name: string;
-            readonly scope: TokenScope;
-            readonly ttlSeconds?: number | undefined;
-          },
-        ) {
-          yield* requireMeta;
-          yield* authorize(auth, { _tag: "ManageTokens" });
-          return yield* mintRepoToken(input);
-        }),
-
-        listTokens: Effect.fn(function* (auth: CallerAuth) {
-          yield* requireMeta;
-          yield* authorize(auth, { _tag: "ManageTokens" });
-          const rows = yield* sql.all<TokenRow>(
-            `SELECT * FROM tokens ORDER BY created_at`,
-          );
-          return rows
-            .filter((row) => isTokenScope(row.scope))
-            .map((row): TokenData => ({
-              id: row.id,
-              name: row.name,
-              scope: row.scope as TokenScope,
-              createdAt: row.created_at,
-              expiresAt: row.expires_at,
-              lastUsedAt: row.last_used_at,
-            }));
-        }),
-
-        revokeToken: Effect.fn(function* (auth: CallerAuth, id: string) {
-          yield* requireMeta;
-          yield* authorize(auth, { _tag: "ManageTokens" });
-          const row = yield* sql.first<TokenRow>(
-            `SELECT * FROM tokens WHERE id = ?`,
-            id,
-          );
-          if (row === undefined) {
-            return yield* new TokenNotFound({ id });
-          }
-          yield* sql.run(`DELETE FROM tokens WHERE id = ?`, id);
         }),
 
         listRefs: Effect.fn(function* (

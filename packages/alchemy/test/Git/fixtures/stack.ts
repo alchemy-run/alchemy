@@ -11,7 +11,7 @@
  * suites never share (or race on) a deployment.
  *
  * The Worker resolves its admin secret from the deployer environment via
- * `Config.redacted("GIT_SERVICE_ADMIN_TOKEN")` at deploy time. So that suites
+ * `Config.redacted("GIT_SERVICE_SECRET")` at deploy time. So that suites
  * work out of the box (local dev especially), a deterministic default is
  * installed into `process.env` at module load — before any deploy plans run —
  * unless the caller already exported one.
@@ -21,9 +21,12 @@ import * as Cloudflare from "@/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import {
-  ADMIN_TOKEN_CONFIG_KEY,
-  AuthTokens,
+  Authenticate,
   BlobStoreR2,
+  isReadAction,
+  parseSecret,
+  Policy,
+  SECRET_CONFIG_KEY,
   GIT_WORKER_OPTIONS,
   HasherInline,
   ReposDurableObject,
@@ -34,16 +37,45 @@ import {
 
 /**
  * The admin key every suite authenticates with. Honors a caller-provided
- * `GIT_SERVICE_ADMIN_TOKEN` (the deployed-cloud suites may point at a
+ * `GIT_SERVICE_SECRET` (the deployed-cloud suites may point at a
  * standing deployment); otherwise a deterministic test-only value.
  */
-export const TEST_ADMIN_TOKEN: string =
-  process.env[ADMIN_TOKEN_CONFIG_KEY] ?? "gs_test-admin-key-git-service-suite";
+export const TEST_SECRET: string =
+  process.env[SECRET_CONFIG_KEY] ?? "test-secret-git-service-suite";
+/** A second credential, resolved to a second principal (see `AuthenticateTest`). */
+export const TEST_SECRET_DEV = "test-secret-git-service-suite-dev";
+export const TEST_PRINCIPAL = { id: "e2e", name: "Suite" } as const;
+export const TEST_PRINCIPAL_DEV = { id: "dev", name: "Dev" } as const;
+process.env[SECRET_CONFIG_KEY] ??= TEST_SECRET;
 
-// Installed at module load (test collection time), before any deploy resolves
-// `Config.redacted(ADMIN_TOKEN_CONFIG_KEY)`. `??=` keeps a caller-exported
-// value authoritative.
-process.env[ADMIN_TOKEN_CONFIG_KEY] ??= TEST_ADMIN_TOKEN;
+/**
+ * Two shared secrets, two principals: `TEST_SECRET` is the suite's owner
+ * principal, `TEST_SECRET_DEV` a second user for policy tests. Anything
+ * else is anonymous.
+ */
+export const AuthenticateTest: Layer.Layer<Authenticate> = Layer.succeed(
+  Authenticate,
+  (headers) =>
+    Effect.sync(() => {
+      const presented = parseSecret(headers);
+      if (presented === TEST_SECRET) return TEST_PRINCIPAL;
+      if (presented === TEST_SECRET_DEV) return TEST_PRINCIPAL_DEV;
+      return undefined;
+    }),
+);
+
+/**
+ * The suite's policy: any principal may do anything (the suite creates
+ * repos under several owners), anonymous callers read public repos.
+ * `PolicyOwners` has its own unit test.
+ */
+export const PolicyTest: Layer.Layer<Policy> = Layer.succeed(Policy, {
+  authorize: ({ principal, repo, action }) =>
+    Effect.succeed(
+      principal !== undefined ||
+        (repo !== null && repo.public && isReadAction(action)),
+    ),
+});
 
 /** The suites' bucket — owned by the assembly, like any user's. */
 const GitObjects = Cloudflare.R2.Bucket("GitObjects", {
@@ -60,7 +92,8 @@ const GitLive = ServerLive.pipe(
   // thread on Workers (DESIGN §22.10), so the simpler layer is the reference.
   Layer.provide(HasherInline),
   Layer.provide(BlobStoreR2(GitObjects)),
-  Layer.provide(AuthTokens),
+  Layer.provide(AuthenticateTest),
+  Layer.provide(PolicyTest),
 );
 
 /** The suites' git host: the reference building-block assembly. */

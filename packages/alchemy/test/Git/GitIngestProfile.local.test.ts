@@ -23,7 +23,7 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
-import TestGitHost, { TEST_ADMIN_TOKEN } from "./fixtures/stack.ts";
+import TestGitHost, { TEST_SECRET } from "./fixtures/stack.ts";
 
 const PROFILE_REPO = process.env.GIT_PROFILE_REPO;
 
@@ -69,7 +69,7 @@ if (PROFILE_REPO === undefined) {
       const client = yield* HttpApiClient.make(GitApi, {
         baseUrl: url,
         transformClient: HttpClient.mapRequest((r) =>
-          r.pipe(HttpClientRequest.bearerToken(TEST_ADMIN_TOKEN)),
+          r.pipe(HttpClientRequest.bearerToken(TEST_SECRET)),
         ),
       });
       yield* client.repos
@@ -82,7 +82,7 @@ if (PROFILE_REPO === undefined) {
         payload: { owner: "profile", name: "repo" },
       });
       const parsed = new URL(url);
-      const remote = `${parsed.protocol}//x:${created.token.token}@${parsed.host}/profile/repo.git`;
+      const remote = `${parsed.protocol}//x:${TEST_SECRET}@${parsed.host}/profile/repo.git`;
       const t0 = performance.now();
       const push = yield* git(
         PROFILE_REPO!,

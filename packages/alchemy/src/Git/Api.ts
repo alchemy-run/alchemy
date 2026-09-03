@@ -8,8 +8,8 @@
  * identifier matches its wire operation name, namespaced by group:
  *
  * ```typescript
- * import { Tokens } from "alchemy/Git";
- * Tokens.revoke; // HttpApiEndpoint.delete("revoke", ...)
+ * import { Repos } from "alchemy/Git";
+ * Repos.create; // HttpApiEndpoint.post("create", ...)
  * ```
  *
  * Shared schemas, tagged errors, and the `Credentials`/`GitAuth` services
@@ -26,14 +26,12 @@ import ObjectsGroup from "./Api/Objects.ts";
 import PullsGroup from "./Api/Pulls.ts";
 import RefsGroup from "./Api/Refs.ts";
 import ReposGroup from "./Api/Repos.ts";
-import TokensGroup from "./Api/Tokens.ts";
 
 export * from "./Api/Schema.ts";
 export * as Objects from "./Api/Objects.ts";
 export * as Pulls from "./Api/Pulls.ts";
 export * as Refs from "./Api/Refs.ts";
 export * as Repos from "./Api/Repos.ts";
-export * as Tokens from "./Api/Tokens.ts";
 
 /**
  * The complete git-service management-plane API, mounted at `/api/v1`.
@@ -49,5 +47,4 @@ export const GitApi = HttpApi.make("git-service")
   .add(RefsGroup)
   .add(ObjectsGroup)
   .add(PullsGroup)
-  .add(TokensGroup)
   .prefix("/api/v1");

@@ -44,7 +44,7 @@ import {
   utf8Encode,
 } from "@/Git/Protocol/ObjectCodec.ts";
 import ProtectedGitHost from "./fixtures/protected-stack.ts";
-import TestGitHost, { TEST_ADMIN_TOKEN } from "./fixtures/stack.ts";
+import TestGitHost, { TEST_SECRET, TEST_SECRET_DEV } from "./fixtures/stack.ts";
 import { verifyPackResponse } from "./harness/pack.ts";
 
 // `dev: true` runs local providers behind the RPC sidecar proxy by default,
@@ -62,9 +62,9 @@ const logLevel = Effect.provideService(
 // The local suite must not touch the cloud, so it composes its own Stack over
 // `Alchemy.localState()` — the same user pattern as production, just with a
 // local state store: deploy the fixture's building-block assembly worker.
-// Importing `./fixtures/stack.ts` above installed the TEST_ADMIN_TOKEN into
+// Importing `./fixtures/stack.ts` above installed the TEST_SECRET into
 // the deployer env before this plan resolves
-// `Config.redacted("GIT_SERVICE_ADMIN_TOKEN")`.
+// `Config.redacted("GIT_SERVICE_SECRET")`.
 const LocalStack = Alchemy.Stack(
   "GitServiceLocalStack",
   { providers: Cloudflare.providers(), state: Alchemy.localState() },
@@ -94,7 +94,7 @@ const awaitReady = (url: string) =>
     const client = yield* HttpClient.HttpClient;
     yield* client
       .get(`${url}/api/v1/repos`, {
-        headers: { authorization: `Bearer ${TEST_ADMIN_TOKEN}` },
+        headers: { authorization: `Bearer ${TEST_SECRET}` },
       })
       .pipe(
         Effect.flatMap((res) =>
@@ -234,7 +234,7 @@ const createRepo = Effect.fn(function* (
   owner: string,
   name: string,
 ) {
-  const client = yield* makeClient(url, TEST_ADMIN_TOKEN);
+  const client = yield* makeClient(url, TEST_SECRET);
   // Retry-safe: a previous (failed, runner-retried) attempt may have left
   // the repo behind — delete it and wait out the async purge before
   // creating, so the create below never 409s on our own leftovers.
@@ -256,8 +256,8 @@ const createRepo = Effect.fn(function* (
   return {
     client,
     created,
-    token: created.token.token,
-    remote: yield* authRemote(url, created.token.token, owner, name),
+    token: TEST_SECRET,
+    remote: yield* authRemote(url, TEST_SECRET, owner, name),
   };
 });
 
@@ -269,7 +269,7 @@ test(
   "repos: create, duplicate 409, get, list, update, typed auth failures",
   Effect.gen(function* () {
     const { url } = yield* stack;
-    const admin = yield* makeClient(url, TEST_ADMIN_TOKEN);
+    const admin = yield* makeClient(url, TEST_SECRET);
 
     const created = yield* admin.repos.create({
       payload: { owner: "acme", name: "rest-repos", description: "d0" },
@@ -280,8 +280,6 @@ test(
     expect(created.repo.defaultBranch).toBe("main");
     expect(created.repo.readOnly).toBe(false);
     expect(created.remote).toContain("/acme/rest-repos.git");
-    expect(created.token.token.startsWith("gs_")).toBe(true);
-    expect(created.token.scope).toBe("write");
 
     // duplicate → typed 409
     yield* expectTag(
@@ -335,83 +333,13 @@ test(
 
     // repo tokens are not the admin key: create → 403; list succeeds but
     // shows PUBLIC repos only, so this private repo is not in it.
-    const repoToken = yield* makeClient(url, created.token.token);
-    const forbidden = yield* expectTag(
-      repoToken.repos.create({ payload: { owner: "acme", name: "other" } }),
-      "Forbidden",
-    );
-    expect((forbidden as { required?: string }).required).toBe("admin");
-    const nonAdminListing = yield* repoToken.repos.list({ query: {} });
+    // Anonymous callers see public repos only; the private one is hidden.
+    const anonymousListing = yield* anonymous.repos.list({ query: {} });
     expect(
-      nonAdminListing.items.some(
+      anonymousListing.items.some(
         (row) => row.owner === "acme" && row.name === "rest-repos",
       ),
     ).toBe(false);
-  }).pipe(logLevel),
-  { timeout: 120_000 },
-);
-
-test(
-  "tokens: create scopes, masked list, revoke, TTL expiry",
-  Effect.gen(function* () {
-    const { url } = yield* stack;
-    const { client: admin } = yield* createRepo(url, "acme", "rest-tokens");
-    const params = { owner: "acme", repo: "rest-tokens" };
-
-    const readToken = yield* admin.tokens.create({
-      params,
-      payload: { name: "ro", scope: "read" },
-    });
-    expect(readToken.token.startsWith("gs_")).toBe(true);
-    expect(readToken.scope).toBe("read");
-
-    // list is masked: TokenInfo rows never carry the token value
-    const list = yield* admin.tokens.list({ params });
-    expect(list.length).toBeGreaterThanOrEqual(2); // bootstrap + ro
-    for (const info of list) {
-      expect("token" in info).toBe(false);
-    }
-
-    // the read token reads but cannot manage tokens (admin scope required)
-    const reader = yield* makeClient(url, readToken.token);
-    const repo = yield* reader.repos.get({
-      params: { owner: "acme", repo: "rest-tokens" },
-    });
-    expect(repo.name).toBe("rest-tokens");
-    yield* expectTag(reader.tokens.list({ params }), "Forbidden");
-
-    // revoke → token stops working; second revoke → typed 404
-    yield* admin.tokens.revoke({ params: { ...params, id: readToken.id } });
-    yield* expectTag(
-      reader.repos.get({ params: { owner: "acme", repo: "rest-tokens" } }),
-      "Unauthorized",
-    );
-    yield* expectTag(
-      admin.tokens.revoke({ params: { ...params, id: readToken.id } }),
-      "TokenNotFound",
-    );
-
-    // TTL expiry: a 5-second token works now and dies within the poll window
-    const shortLived = yield* admin.tokens.create({
-      params,
-      payload: { name: "ttl", scope: "read", ttlSeconds: 5 },
-    });
-    const shortClient = yield* makeClient(url, shortLived.token);
-    yield* shortClient.repos.get({
-      params: { owner: "acme", repo: "rest-tokens" },
-    });
-    const expired = yield* shortClient.repos
-      .get({ params: { owner: "acme", repo: "rest-tokens" } })
-      .pipe(
-        Effect.as(false),
-        Effect.catchTag("Unauthorized", () => Effect.succeed(true)),
-        Effect.repeat({
-          schedule: Schedule.spaced("1 second"),
-          until: (isExpired) => isExpired,
-          times: 20,
-        }),
-      );
-    expect(expired).toBe(true);
   }).pipe(logLevel),
   { timeout: 120_000 },
 );
@@ -597,14 +525,14 @@ test(
     const http = yield* HttpClient.HttpClient;
     const rawBlob = yield* http.get(
       `${url}/api/v1/repos/acme/rest-refs/blobs/${helloEntry.oid}/raw`,
-      { headers: { authorization: `Bearer ${TEST_ADMIN_TOKEN}` } },
+      { headers: { authorization: `Bearer ${TEST_SECRET}` } },
     );
     expect(rawBlob.status).toBe(200);
     expect(yield* rawBlob.text).toBe("hello local, v2\n");
 
     const rawFile = yield* http.get(
       `${url}/api/v1/repos/acme/rest-refs/file?ref=refs/heads/main&path=hello.txt`,
-      { headers: { authorization: `Bearer ${TEST_ADMIN_TOKEN}` } },
+      { headers: { authorization: `Bearer ${TEST_SECRET}` } },
     );
     expect(rawFile.status).toBe(200);
     expect(yield* rawFile.text).toBe("hello local, v2\n");
@@ -920,23 +848,6 @@ test(
     expect(unauthorized.stderr).toContain("Authentication failed");
 
     // a read-scope token clones (token in the remote URL) but cannot push
-    const readToken = yield* admin.tokens.create({
-      params,
-      payload: { name: "ro", scope: "read" },
-    });
-    const readRemote = yield* authRemote(
-      url,
-      readToken.token,
-      "acme",
-      "wire-auth",
-    );
-    yield* mustGit(tmp, "clone", readRemote, "ro");
-    const ro = path.join(tmp, "ro");
-    yield* mustGit(ro, "fsck", "--strict");
-    yield* fs.writeFileString(path.join(ro, "f.txt"), "denied\n");
-    yield* mustGit(ro, "add", "-A");
-    yield* mustGit(ro, "commit", "-m", "denied");
-    yield* mustFailGit(ro, "push", "origin", "main");
 
     // the write path still works for the bootstrap token
     yield* fs.writeFileString(path.join(seed, "f.txt"), "seed2\n");
@@ -1327,7 +1238,7 @@ test(
   "public repos: anonymous REST reads + tokenless clone; writes still need a token",
   Effect.gen(function* () {
     const { url } = yield* stack;
-    const admin = yield* makeClient(url, TEST_ADMIN_TOKEN);
+    const admin = yield* makeClient(url, TEST_SECRET);
     const anonymous = yield* makeAnonymousClient(url);
     const tmp = yield* tempDir;
     const path = yield* Path.Path;
@@ -1401,8 +1312,9 @@ test(
 
     // Anonymous token management is rejected too.
     yield* expectTag(
-      anonymous.tokens.list({
+      anonymous.repos.update({
         params: { owner: "acme", repo: "town-square" },
+        payload: { description: "anon" },
       }),
       "Unauthorized",
     );
@@ -2151,27 +2063,6 @@ test(
     );
 
     // a read-scoped token reads but cannot write → typed 403
-    const readToken = yield* client.tokens.create({
-      params,
-      payload: { name: "ro", scope: "read" },
-    });
-    const reader = yield* makeClient(url, readToken.token);
-    const readerList = yield* reader.pulls.list({ params, query: {} });
-    expect(readerList.items.length).toBe(1);
-    yield* expectTag(
-      reader.pulls.create({
-        params,
-        payload: { title: "nope", base: "main", head: "topic-c" },
-      }),
-      "Forbidden",
-    );
-    yield* expectTag(
-      reader.pulls.merge({
-        params: { ...params, number: pr.number },
-        payload: {},
-      }),
-      "Forbidden",
-    );
   }),
   { timeout: 120_000 },
 );
@@ -2217,7 +2108,7 @@ test(
   "ghapi: /user auth probe, repo + branches + commits + contents in GitHub shapes",
   Effect.gen(function* () {
     const { url } = yield* stack;
-    const admin = yield* makeClient(url, TEST_ADMIN_TOKEN);
+    const admin = yield* makeClient(url, TEST_SECRET);
     const repo = yield* createRepo(url, "acme", "gh-compat");
     yield* admin.repos.update({
       params: { owner: "acme", repo: "gh-compat" },
@@ -2239,10 +2130,11 @@ test(
     yield* mustGit(work, "commit", "-qm", "c2");
     yield* mustGit(work, "push", "-q", repo.remote, "main");
 
-    // /user: gh's probe — admin key via the `token` scheme; anonymous 401
-    const user = yield* ghFetch(url, "/user", { token: TEST_ADMIN_TOKEN });
+    // /user: gh's probe — the suite's secret via the `token` scheme resolves
+    // to the suite principal; anonymous 401
+    const user = yield* ghFetch(url, "/user", { token: TEST_SECRET });
     expect(user.status).toBe(200);
-    expect(user.json.login).toBe("admin");
+    expect(user.json.login).toBe("Suite");
     const anonUser = yield* ghFetch(url, "/user");
     expect(anonUser.status).toBe(401);
     expect(anonUser.json.message).toBe("Requires authentication");
@@ -2305,7 +2197,7 @@ test(
   "ghapi: pull lifecycle through the facade — create, list states, merge, files",
   Effect.gen(function* () {
     const { url } = yield* stack;
-    const admin = yield* makeClient(url, TEST_ADMIN_TOKEN);
+    const admin = yield* makeClient(url, TEST_SECRET);
     const repo = yield* createRepo(url, "acme", "gh-pulls");
     yield* admin.repos.update({
       params: { owner: "acme", repo: "gh-pulls" },
@@ -2331,7 +2223,7 @@ test(
     // POST /pulls with GitHub's field names (head/base short names)
     const created = yield* ghFetch(url, "/repos/acme/gh-pulls/pulls", {
       method: "POST",
-      token: TEST_ADMIN_TOKEN,
+      token: TEST_SECRET,
       body: {
         title: "Topic work",
         head: "topic",
@@ -2366,7 +2258,7 @@ test(
     // unsupported merge method → 405
     const squash = yield* ghFetch(url, "/repos/acme/gh-pulls/pulls/1/merge", {
       method: "PUT",
-      token: TEST_ADMIN_TOKEN,
+      token: TEST_SECRET,
       body: { merge_method: "squash" },
     });
     expect(squash.status).toBe(405);
@@ -2374,7 +2266,7 @@ test(
     // PUT merge (fast-forward)
     const merged = yield* ghFetch(url, "/repos/acme/gh-pulls/pulls/1/merge", {
       method: "PUT",
-      token: TEST_ADMIN_TOKEN,
+      token: TEST_SECRET,
       body: {},
     });
     expect(merged.status).toBe(200);
@@ -2407,7 +2299,7 @@ test(
     // PATCH validation
     const badState = yield* ghFetch(url, "/repos/acme/gh-pulls/pulls/1", {
       method: "PATCH",
-      token: TEST_ADMIN_TOKEN,
+      token: TEST_SECRET,
       body: { state: "merged" },
     });
     expect(badState.status).toBe(422);
@@ -2436,7 +2328,7 @@ const ProtectedLocalStack = Alchemy.Stack(
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(ProtectedLocalStack));
 
 test(
-  "auth block: custom layer protects main — per-branch policy over parsed Push updates",
+  "policy: a custom Policy protects main — per-branch rule over parsed Push updates",
   Effect.gen(function* () {
     const { url } = yield* deploy(ProtectedLocalStack);
     expect(url).toMatch(/^http:\/\/localhost:\d+$/);
@@ -2444,7 +2336,10 @@ test(
 
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    const { token, remote } = yield* createRepo(url, "acme", "protected");
+    const { created } = yield* createRepo(url, "e2e", "protected");
+    // A second principal, not the owner, does the pushing.
+    const token = TEST_SECRET_DEV;
+    const remote = yield* authRemote(url, token, "e2e", "protected");
 
     const tmp = yield* tempDir;
     yield* mustGit(tmp, "-c", "init.defaultBranch=main", "clone", remote, "w");
@@ -2469,12 +2364,7 @@ test(
     expect(denied.stderr).toContain("not permitted");
 
     // The admin key passes the same policy.
-    const adminRemote = yield* authRemote(
-      url,
-      TEST_ADMIN_TOKEN,
-      "acme",
-      "protected",
-    );
+    const adminRemote = yield* authRemote(url, TEST_SECRET, "e2e", "protected");
     yield* mustGit(w, "push", adminRemote, "HEAD:refs/heads/main");
 
     // The trust header is Worker-minted only: a client-forged
@@ -2483,8 +2373,8 @@ test(
     // anonymous writer.
     const client = yield* HttpClient.HttpClient;
     const forged = yield* client.get(
-      `${url}/acme/protected/info/refs?service=git-receive-pack`,
-      { headers: { "x-git-service-admin": "1" } },
+      `${url}/e2e/protected/info/refs?service=git-receive-pack`,
+      { headers: { "x-git-principal": "eyJpZCI6ImUyZSJ9" } },
     );
     expect(forged.status).toBe(401);
 
@@ -2495,14 +2385,14 @@ test(
     const tokenClient = yield* makeClient(url, token);
     yield* expectTag(
       tokenClient.refs.update({
-        params: { owner: "acme", repo: "protected" },
+        params: { owner: "e2e", repo: "protected" },
         query: { name: "refs/heads/main" },
         payload: { newOid: asOid(head) },
       }),
       "Forbidden",
     );
     const moved = yield* tokenClient.refs.update({
-      params: { owner: "acme", repo: "protected" },
+      params: { owner: "e2e", repo: "protected" },
       query: { name: "refs/heads/feature2" },
       payload: { newOid: asOid(head), expectedOid: null },
     });

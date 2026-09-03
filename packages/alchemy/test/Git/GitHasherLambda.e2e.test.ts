@@ -20,10 +20,7 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
-import {
-  makeLambdaTestStack,
-  TEST_ADMIN_TOKEN,
-} from "./fixtures/lambda-stack.ts";
+import { makeLambdaTestStack, TEST_SECRET } from "./fixtures/lambda-stack.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Layer.mergeAll(AWS.providers(), Cloudflare.providers()),
@@ -102,7 +99,7 @@ const stack = beforeAll(
     Effect.tap(({ url }) =>
       Effect.gen(function* () {
         yield* Effect.logInfo(`git-service (lambda hasher) deployed at ${url}`);
-        const admin = yield* makeClient(url, TEST_ADMIN_TOKEN);
+        const admin = yield* makeClient(url, TEST_SECRET);
         yield* admin.repos.list({ query: {} }).pipe(
           edgeRetry,
           Effect.retry({
@@ -121,7 +118,7 @@ test(
   "a multi-part push is hashed on Lambda and clones back under fsck --strict",
   Effect.gen(function* () {
     const { url } = yield* stack;
-    const admin = yield* makeClient(url, TEST_ADMIN_TOKEN);
+    const admin = yield* makeClient(url, TEST_SECRET);
     const owner = "lambda";
     const name = "hashed";
     yield* admin.repos.delete({ params: { owner, repo: name } }).pipe(
@@ -132,7 +129,7 @@ test(
       .create({ payload: { owner, name } })
       .pipe(edgeRetry);
     const parsed = new URL(url);
-    const remote = `${parsed.protocol}//x:${created.token.token}@${parsed.host}/${owner}/${name}.git`;
+    const remote = `${parsed.protocol}//x:${TEST_SECRET}@${parsed.host}/${owner}/${name}.git`;
     const fs = yield* FileSystem.FileSystem;
     const dir = yield* fs.makeTempDirectory({ prefix: "git-lambda-" });
     // ~14 MiB of incompressible blobs plus text files that delta well: a

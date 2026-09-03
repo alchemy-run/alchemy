@@ -1,19 +1,15 @@
 /**
  * Shared schemas of the git-service REST contract (DESIGN.md §5):
- * primitives, the tagged-error taxonomy, the `Credentials`/`GitAuth`
- * services, and the domain shapes. The per-group endpoint declarations
- * live in the sibling modules (`Repos.ts`, `Refs.ts`, `Objects.ts`,
- * `Tokens.ts`); the assembled `GitApi` lives in `../Api.ts`.
+ * primitives, the tagged-error taxonomy, and the domain shapes. The
+ * per-group endpoint declarations live in the sibling modules (`Repos.ts`,
+ * `Refs.ts`, `Objects.ts`, `Pulls.ts`); the assembled `GitApi` lives in
+ * `../Api.ts`.
  *
- * Auth model (DESIGN.md §8): the `GitAuth` middleware only *parses*
- * credentials (Basic password or Bearer token) into the `Credentials`
- * service; enforcement happens in the Repo DO, which owns the tokens table.
+ * The groups carry no middleware of their own: the `HttpApi` you mount
+ * them in decides who the caller is (`Git.Caller`), and `Git.Policy`
+ * decides what they may do, inside the Repo DO where the facts are.
  */
-import * as Context from "effect/Context";
-import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
-import * as HttpApiMiddleware from "effect/unstable/httpapi/HttpApiMiddleware";
-import * as HttpApiSecurity from "effect/unstable/httpapi/HttpApiSecurity";
 // Pulls in the `httpApiStatus` annotation augmentation used by the error
 // classes below.
 import "effect/unstable/httpapi/HttpApiSchema";
@@ -59,17 +55,6 @@ export const RefName = Schema.String.check(
 );
 
 /**
- * Access scope carried by a per-repo token (DESIGN.md §8):
- * - `read` — advertisement + upload-pack + all REST reads
- * - `write` — read + receive-pack + REST ref writes (subject to `readOnly`)
- * - `admin` — write + token create/list/revoke + repo update/delete
- */
-export const TokenScope = Schema.Literals(["read", "write", "admin"]);
-
-/** The decoded type of {@link TokenScope}. */
-export type TokenScope = typeof TokenScope.Type;
-
-/**
  * Lifecycle status of a repo. Async operations (import/fork/delete) flip
  * this field; clients poll `GET /repos/:owner/:repo` until `ready` (or 404
  * once a `deleting` repo's purge completes). There is no jobs API.
@@ -95,10 +80,10 @@ export class Unauthorized extends Schema.TaggedError<Unauthorized>()(
   { httpApiStatus: 401 },
 ) {}
 
-/** 403 — the presented token lacks the required scope. */
+/** 403 — the policy denied this action for the identified caller. */
 export class Forbidden extends Schema.TaggedError<Forbidden>()(
   "Forbidden",
-  { required: TokenScope },
+  { action: Schema.String },
   { httpApiStatus: 403 },
 ) {}
 
@@ -186,13 +171,6 @@ export class NoMergeBase extends Schema.TaggedError<NoMergeBase>()(
   { httpApiStatus: 422 },
 ) {}
 
-/** 404 — no token with the given id on this repo. */
-export class TokenNotFound extends Schema.TaggedError<TokenNotFound>()(
-  "TokenNotFound",
-  { id: Schema.String },
-  { httpApiStatus: 404 },
-) {}
-
 /** 502 — the async import job failed against the source remote. */
 export class ImportFailed extends Schema.TaggedError<ImportFailed>()(
   "ImportFailed",
@@ -265,50 +243,6 @@ export class MergeConflict extends Schema.TaggedError<MergeConflict>()(
 // ─────────────────────────────────────────────────────────────────────────────
 // Auth middleware
 // ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * The parsed request credential — a repo token (`gs_...`) or the admin key.
- *
- * Provided to every authenticated endpoint by the {@link GitAuth}
- * middleware. Handlers forward it to Repo-DO RPCs, which are the
- * enforcement point (the DO owns the tokens table; the Worker only
- * verifies the admin key). This service boundary is also the v2 identity
- * seam: an OAuth-fronting worker can provide `Credentials` without
- * touching DO enforcement code (DESIGN.md §8).
- */
-export class Credentials extends Context.Service<
-  Credentials,
-  {
-    /**
-     * The raw secret presented by the client (repo token or admin key),
-     * or `undefined` for an anonymous request — public repos allow
-     * unauthenticated reads (REST reads + `git clone`), exactly like
-     * GitHub's public repositories.
-     */
-    readonly token: Redacted.Redacted<string> | undefined;
-  }
->()("git-service/Credentials") {}
-
-/**
- * Security middleware for every REST group: accepts `Authorization:
- * Bearer <token>` or HTTP Basic (username ignored, password = token —
- * exactly how git credential helpers and `https://x:gs_...@host` remotes
- * present it), and provides {@link Credentials} to the endpoint handlers.
- *
- * Parsing only — no verification here. Missing/unparseable credentials
- * fail with {@link Unauthorized} (401). The live implementation is
- * `GitAuthLive` in `Auth.ts`.
- */
-export class GitAuth extends HttpApiMiddleware.Service<
-  GitAuth,
-  { provides: Credentials }
->()("git-service/GitAuth", {
-  security: {
-    bearer: HttpApiSecurity.bearer,
-    basic: HttpApiSecurity.basic,
-  },
-  error: Unauthorized,
-}) {}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Domain shapes
@@ -585,32 +519,6 @@ export class MergeResult extends Schema.Class<MergeResult>("MergeResult")({
   pull: Pull,
 }) {}
 
-/** Metadata of a per-repo access token (the secret itself is never listed). */
-export class TokenInfo extends Schema.Class<TokenInfo>("TokenInfo")({
-  /** Token id (ULID) — used for revocation. */
-  id: Schema.String,
-  /** Human-readable label. */
-  name: Schema.String,
-  scope: TokenScope,
-  /** Creation time, epoch milliseconds. */
-  createdAt: Schema.Number,
-  /** Expiry time (epoch milliseconds), `null` = no expiry. */
-  expiresAt: Schema.NullOr(Schema.Number),
-  /** Last verified use (epoch milliseconds, hourly granularity), `null` = never. */
-  lastUsedAt: Schema.NullOr(Schema.Number),
-}) {}
-
-/**
- * A freshly minted token: {@link TokenInfo} plus the secret value, shown
- * exactly once. Only the sha-256 hash is stored server-side.
- */
-export class CreatedToken extends TokenInfo.extend<CreatedToken>(
-  "CreatedToken",
-)({
-  /** The `gs_...` secret. Shown exactly once — store it now. */
-  token: Schema.String,
-}) {}
-
 /**
  * Response of repo create/fork/import: the repo plus a ready-to-use HTTPS
  * remote URL and a bootstrap `write` token, killing the create-then-mint
@@ -620,8 +528,6 @@ export class RepoCreated extends Schema.Class<RepoCreated>("RepoCreated")({
   repo: Repo,
   /** HTTPS clone URL for the new repo. */
   remote: Schema.String,
-  /** Bootstrap `write` token (shown exactly once). */
-  token: CreatedToken,
 }) {}
 
 /**

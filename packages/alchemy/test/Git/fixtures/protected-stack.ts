@@ -1,9 +1,9 @@
 /**
- * A SECOND building-block assembly whose Auth layer is swapped: same
- * authentication as `AuthTokens`, plus one branch-protection rule. This
- * is the swappability proof for RFC §3.2 — and the reference for
- * "implement your own auth": a policy is a page of code over
- * `GitAction`, not a reimplementation of credentials.
+ * A SECOND building-block assembly whose Policy is swapped: the suite's
+ * two principals, plus one branch-protection rule. This is the
+ * swappability proof for the Auth design — and the reference for
+ * "implement your own rule": a policy is a page of code over
+ * `GitAction`, and it never sees a credential.
  *
  * Lives in its own module (not `stack.ts`) because a Worker's generated
  * entry imports its `main` module's DEFAULT export — one Worker class
@@ -14,40 +14,35 @@ import * as Cloudflare from "@/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import {
-  Auth,
-  AuthTokens,
   BlobStoreR2,
   GIT_WORKER_OPTIONS,
   HasherInline,
+  isReadAction,
+  Policy,
   ReposDurableObject,
   RegistryDurableObject,
   Server,
   ServerLive,
 } from "@/Git/index.ts";
-// Installs the TEST_ADMIN_TOKEN into the deployer env at module load.
-import "./stack.ts";
+import { AuthenticateTest } from "./stack.ts";
 
 /**
- * The RFC §3.2 example, live: direct pushes to `refs/heads/main` are
- * admin-only, everything else defers to the default — composed by
- * WRAPPING `AuthTokens` (admin key + scoped repo tokens) rather than
- * reimplementing it.
+ * Direct pushes to `refs/heads/main` only by the repository's owner;
+ * everything else is the suite's permissive rule (any principal may act,
+ * anonymous callers read public repos).
  */
-const ProtectedMainAuth: Layer.Layer<Auth> = Layer.effect(
-  Auth,
-  Effect.gen(function* () {
-    const base = yield* Auth;
-    return {
-      authenticate: base.authenticate,
-      authorize: (input) =>
-        input.action._tag === "Push" &&
-        input.action.updates.some((u) => u.ref === "refs/heads/main") &&
-        input.actor.kind !== "admin"
-          ? Effect.succeed(false)
-          : base.authorize(input),
-    };
-  }),
-).pipe(Layer.provide(AuthTokens));
+const ProtectedMainPolicy: Layer.Layer<Policy> = Layer.succeed(Policy, {
+  authorize: ({ principal, repo, action }) =>
+    Effect.succeed(
+      principal === undefined
+        ? repo !== null && repo.public && isReadAction(action)
+        : action._tag === "Push"
+          ? action.updates.every((u) =>
+              u.ref === "refs/heads/main" ? repo?.owner === principal.id : true,
+            )
+          : true,
+    ),
+});
 
 /** This assembly's bucket (its own stack, so no clash with `stack.ts`). */
 const GitObjects = Cloudflare.R2.Bucket("GitObjects");
@@ -57,10 +52,11 @@ const ProtectedGitLive = ServerLive.pipe(
   Layer.provide(RegistryDurableObject),
   Layer.provide(HasherInline),
   Layer.provide(BlobStoreR2(GitObjects)),
-  Layer.provide(ProtectedMainAuth),
+  Layer.provide(AuthenticateTest),
+  Layer.provide(ProtectedMainPolicy),
 );
 
-/** Identical to the shared fixture's host except for the Auth block. */
+/** Identical to the shared fixture's host except for the Policy. */
 export default class ProtectedGitHost extends Cloudflare.Worker<ProtectedGitHost>()(
   "GitProtectedWorker",
   {

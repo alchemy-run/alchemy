@@ -82,16 +82,6 @@ export const REPO_DDL: ReadonlyArray<string> = [
   ord    INTEGER NOT NULL,
   PRIMARY KEY (oid, parent)
 ) WITHOUT ROWID`,
-  // per-repo access tokens (DESIGN.md §8)
-  `CREATE TABLE IF NOT EXISTS tokens (
-  id           TEXT PRIMARY KEY,
-  token_hash   TEXT NOT NULL UNIQUE,
-  name         TEXT NOT NULL,
-  scope        TEXT NOT NULL,
-  created_at   INTEGER NOT NULL,
-  expires_at   INTEGER,
-  last_used_at INTEGER
-) WITHOUT ROWID`,
   // crash-safety bookkeeping for pushes (GC'd by alarm)
   `CREATE TABLE IF NOT EXISTS pushes (
   push_id    TEXT PRIMARY KEY,
@@ -216,17 +206,6 @@ export interface CommitParentRow extends Record<string, SqlStorageValue> {
   readonly oid: string;
   readonly parent: string;
   readonly ord: number;
-}
-
-/** One `tokens` row (per-repo access token, DESIGN.md §8). */
-export interface TokenRow extends Record<string, SqlStorageValue> {
-  readonly id: string;
-  readonly token_hash: string;
-  readonly name: string;
-  readonly scope: string;
-  readonly created_at: number;
-  readonly expires_at: number | null;
-  readonly last_used_at: number | null;
 }
 
 /** One `pushes` row (`state` is `'staging' | 'committed'`). */

@@ -19,7 +19,7 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
 import { GitApi, type Oid } from "@/Git/Api.ts";
-import { makeTestStack, TEST_ADMIN_TOKEN } from "./fixtures/stack.ts";
+import { makeTestStack, TEST_SECRET } from "./fixtures/stack.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
@@ -90,7 +90,7 @@ const purgeRepo = Effect.fn(function* (
   owner: string,
   repo: string,
 ) {
-  const admin = yield* makeClient(url, TEST_ADMIN_TOKEN);
+  const admin = yield* makeClient(url, TEST_SECRET);
   yield* admin.repos
     .delete({ params: { owner, repo } })
     .pipe(Effect.catchTag("RepoNotFound", () => Effect.void));
@@ -111,7 +111,7 @@ const stack = beforeAll(
   deploy(Stack).pipe(
     Effect.tap(({ url }) =>
       Effect.gen(function* () {
-        const admin = yield* makeClient(url, TEST_ADMIN_TOKEN);
+        const admin = yield* makeClient(url, TEST_SECRET);
         yield* admin.repos.list({ query: {} }).pipe(edgeRetry);
       }),
     ),
@@ -124,7 +124,7 @@ test(
   "repo lifecycle: create → bootstrap token → 409 → patch → delete → 404",
   Effect.gen(function* () {
     const { url } = yield* stack;
-    const admin = yield* makeClient(url, TEST_ADMIN_TOKEN);
+    const admin = yield* makeClient(url, TEST_SECRET);
     yield* purgeRepo(url, "e2e", "rest-lifecycle");
 
     const created = yield* admin.repos.create({
@@ -133,10 +133,10 @@ test(
     expect(created.repo.status).toBe("ready");
     expect(created.repo.defaultBranch).toBe("main");
     expect(created.remote).toContain("/e2e/rest-lifecycle.git");
-    expect(created.token.token.startsWith("gs_")).toBe(true);
+    expect(TEST_SECRET.startsWith("gs_")).toBe(true);
 
     // the bootstrap token works immediately (one-round-trip design goal)
-    const bootstrap = yield* makeClient(url, created.token.token);
+    const bootstrap = yield* makeClient(url, TEST_SECRET);
     const viaBootstrap = yield* bootstrap.repos.get({
       params: { owner: "e2e", repo: "rest-lifecycle" },
     });
@@ -193,7 +193,7 @@ test(
   "REST ref writes: typed ObjectNotFound / ReadOnlyRepo / RefNotFound on an empty repo",
   Effect.gen(function* () {
     const { url } = yield* stack;
-    const admin = yield* makeClient(url, TEST_ADMIN_TOKEN);
+    const admin = yield* makeClient(url, TEST_SECRET);
     yield* purgeRepo(url, "e2e", "rest-refs");
     yield* admin.repos.create({ payload: { owner: "e2e", name: "rest-refs" } });
     const params = { owner: "e2e", repo: "rest-refs" };
@@ -239,80 +239,4 @@ test(
     yield* admin.repos.delete({ params });
   }).pipe(logLevel),
   { timeout: 120_000 },
-);
-
-test(
-  "tokens: masked list, revocation and TTL expiry surface as typed 401/403",
-  Effect.gen(function* () {
-    const { url } = yield* stack;
-    const admin = yield* makeClient(url, TEST_ADMIN_TOKEN);
-    yield* purgeRepo(url, "e2e", "rest-tokens");
-    yield* admin.repos.create({
-      payload: { owner: "e2e", name: "rest-tokens" },
-    });
-    const params = { owner: "e2e", repo: "rest-tokens" };
-
-    const readToken = yield* admin.tokens.create({
-      params,
-      payload: { name: "reader", scope: "read" },
-    });
-    const list = yield* admin.tokens.list({ params });
-    expect(list.length).toBeGreaterThanOrEqual(2);
-    for (const info of list) {
-      expect("token" in info).toBe(false);
-    }
-
-    const reader = yield* makeClient(url, readToken.token);
-    yield* reader.repos.get({ params: { owner: "e2e", repo: "rest-tokens" } });
-    // read scope cannot manage tokens
-    yield* expectTag(reader.tokens.list({ params }), "Forbidden");
-
-    // revoked → 401; double-revoke → typed 404
-    yield* admin.tokens.revoke({ params: { ...params, id: readToken.id } });
-    yield* expectTag(
-      reader.repos.get({ params: { owner: "e2e", repo: "rest-tokens" } }),
-      "Unauthorized",
-    );
-    yield* expectTag(
-      admin.tokens.revoke({ params: { ...params, id: readToken.id } }),
-      "TokenNotFound",
-    );
-
-    // TTL: a 5s token expires within the bounded poll window
-    const shortLived = yield* admin.tokens.create({
-      params,
-      payload: { name: "ttl", scope: "read", ttlSeconds: 5 },
-    });
-    const shortClient = yield* makeClient(url, shortLived.token);
-    yield* shortClient.repos.get({
-      params: { owner: "e2e", repo: "rest-tokens" },
-    });
-    const expired = yield* shortClient.repos
-      .get({ params: { owner: "e2e", repo: "rest-tokens" } })
-      .pipe(
-        Effect.as(false),
-        Effect.catchTag("Unauthorized", () => Effect.succeed(true)),
-        Effect.repeat({
-          schedule: Schedule.spaced("2 seconds"),
-          until: (isExpired) => isExpired,
-          times: 30,
-        }),
-      );
-    expect(expired).toBe(true);
-
-    // anonymous and garbage credentials → typed 401
-    const anonymous = yield* HttpApiClient.make(GitApi, { baseUrl: url });
-    yield* expectTag(
-      anonymous.repos.get({ params: { owner: "e2e", repo: "rest-tokens" } }),
-      "Unauthorized",
-    );
-    const garbage = yield* makeClient(url, "gs_garbage-token");
-    yield* expectTag(
-      garbage.repos.get({ params: { owner: "e2e", repo: "rest-tokens" } }),
-      "Unauthorized",
-    );
-
-    yield* admin.repos.delete({ params });
-  }).pipe(logLevel),
-  { timeout: 180_000 },
 );

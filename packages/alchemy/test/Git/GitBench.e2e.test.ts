@@ -31,7 +31,7 @@ import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import { GitApi } from "@/Git/Api.ts";
 import { verifyPackResponse } from "./harness/pack.ts";
-import { makeTestStack, TEST_ADMIN_TOKEN } from "./fixtures/stack.ts";
+import { makeTestStack, TEST_SECRET } from "./fixtures/stack.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
@@ -119,7 +119,7 @@ const purgeRepo = Effect.fn(function* (
   owner: string,
   repo: string,
 ) {
-  const admin = yield* makeClient(url, TEST_ADMIN_TOKEN);
+  const admin = yield* makeClient(url, TEST_SECRET);
   yield* admin.repos.delete({ params: { owner, repo } }).pipe(
     Effect.catchTag("RepoNotFound", () => Effect.void),
     edgeRetry,
@@ -142,7 +142,7 @@ const freshRepo = Effect.fn(function* (
   name: string,
   options?: { readonly public?: boolean },
 ) {
-  const admin = yield* makeClient(url, TEST_ADMIN_TOKEN);
+  const admin = yield* makeClient(url, TEST_SECRET);
   const created = yield* Effect.gen(function* () {
     yield* purgeRepo(url, owner, name);
     return yield* admin.repos
@@ -159,8 +159,8 @@ const freshRepo = Effect.fn(function* (
   const parsed = new URL(url);
   return {
     admin,
-    token: created.token.token,
-    remote: `${parsed.protocol}//x:${created.token.token}@${parsed.host}/${owner}/${name}.git`,
+    token: TEST_SECRET,
+    remote: `${parsed.protocol}//x:${TEST_SECRET}@${parsed.host}/${owner}/${name}.git`,
   };
 });
 
@@ -192,7 +192,7 @@ const stack = beforeAll(
     Effect.tap(({ url }) =>
       Effect.gen(function* () {
         yield* Effect.logInfo(`git-service deployed at ${url}`);
-        const admin = yield* makeClient(url, TEST_ADMIN_TOKEN);
+        const admin = yield* makeClient(url, TEST_SECRET);
         yield* admin.repos.list({ query: {} }).pipe(
           edgeRetry,
           Effect.retry({
@@ -405,7 +405,7 @@ test.skipIf(skipBench)(
   "bench: control plane — repo create/list/delete through the Registry",
   Effect.gen(function* () {
     const { url } = yield* stack;
-    const admin = yield* makeClient(url, TEST_ADMIN_TOKEN);
+    const admin = yield* makeClient(url, TEST_SECRET);
     const repos = 10 * SCALE;
     const names = Array.from({ length: repos }, (_, i) => `ctl-${i}`);
 
