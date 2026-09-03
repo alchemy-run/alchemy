@@ -22,10 +22,7 @@ import {
   profile,
   resolveStackArgs,
 } from "./flags.ts";
-import {
-  installShutdownFeedback,
-  suppressInterruptMessages,
-} from "./errors.ts";
+import { suppressInterruptMessages } from "./errors.ts";
 
 /**
  * Trust the Floci emulator CA in `alchemy dev` so cross-cloud data planes
@@ -56,9 +53,6 @@ export const devCommand = Command.make(
       // terminal and announces the Ctrl+C shutdown. Without this, a SIGINT
       // hits both processes and the interrupt message prints twice.
       yield* suppressInterruptMessages;
-      // Feedback stays silent here (suppressed — the exec child owns the
-      // terminal); this install is for the force-quit on a second Ctrl+C.
-      yield* installShutdownFeedback;
       const options = yield* Schema.encodeEffect(DevOptions)(args);
       const fs = yield* FileSystem.FileSystem;
       // Set on THIS process too, so the RPC spawner's sidecars (and the workerd
@@ -120,11 +114,6 @@ export const devCommand = Command.make(
         // Same process group as this supervisor: the exec child owns the
         // terminal (TUI stdin), so the tty's Ctrl+C must reach it directly.
         detached: false,
-        // The watcher won't die while its inner exec child is still shutting
-        // down — it forwards SIGTERM to the child and lingers. Without this
-        // bound the kill finalizer waits on it forever (the double-Ctrl+C
-        // hang); with it, a stuck shutdown escalates to SIGKILL.
-        forceKillAfter: "3 seconds",
       });
       yield* child.exitCode;
     },

@@ -423,7 +423,7 @@
     "@alchemy.run/cloudflare-runtime": "workspace:*",
     "@alchemy.run/floci": "workspace:*",
     "@alchemy.run/node-utils": "workspace:*",
-    "@alchemy.run/sigil": "0.0.0-alpha.6",
+    "@alchemy.run/sigil": "0.0.0-alpha.8",
     "@aws-sdk/credential-providers": "catalog:aws",
     "@distilled.cloud/aws": "workspace:*",
     "@distilled.cloud/axiom": "workspace:*",

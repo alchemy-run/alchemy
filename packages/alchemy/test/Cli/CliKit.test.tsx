@@ -15,6 +15,7 @@ import {
   ChoiceGroup,
   DescriptionList,
   Heading,
+  KeyBar,
   LiveStore,
   PromptFrame,
   ProgressGroup,
@@ -29,13 +30,17 @@ import {
 } from "@/Cli/components/ui/index.ts";
 import { tabsWindow } from "@/Cli/components/ui/Layout.tsx";
 import { makeRuntime } from "@/Cli/components/view/Runtime.tsx";
+import { sigilCli } from "@/Cli/components/view/SigilCli.tsx";
+import { renderApply } from "@/Cli/commands/render.ts";
 import { isInProgress } from "@/Cli/components/view/statusStyle.ts";
+import { spinnerFramesFor } from "@/Util/Theme.ts";
 import {
   makeResourceLogger,
   makeResourceOutput,
 } from "@/Util/ResourceOutput.ts";
 import { stackOutputsView } from "@/Cli/components/view/StackOutputs.tsx";
-import { Plan } from "@/Cli/components/view/PlanView.tsx";
+import { Plan, PlanTree } from "@/Cli/components/view/PlanView.tsx";
+import { ApprovePlan } from "@/Cli/components/view/ApprovePlan.tsx";
 import { ProfileDetailsBody } from "@/Cli/components/view/Profile.tsx";
 import {
   buildStageNodes,
@@ -46,9 +51,10 @@ import {
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
+import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import { expect, it } from "alchemy-test";
-import { planWith, updateNode } from "./PlanTestNodes.ts";
+import { deleteNode, noopNode, planWith, updateNode } from "./PlanTestNodes.ts";
 
 class CaptureStream extends PassThrough {
   readonly columns = 80;
@@ -258,21 +264,309 @@ it("prints stack outputs using inspect without wrapping long lines", () => {
 
 it("renders detailed plans as nested YAML", () => {
   const { service } = makeStatic();
-  const output = service.output.format(
-    <Plan
-      plan={planWith([
-        updateNode({ config: { retries: 2 } }, { config: { retries: 3 } }),
-      ])}
-      detailed
-    />,
-    { columns: 80 },
+  const tree = new PlanTree(
+    planWith([
+      updateNode({ config: { retries: 2 } }, { config: { retries: 3 } }),
+    ]),
+    { detailed: true, viewport: "full" },
   );
+  const output = service.output.format(<Plan tree={tree} />, { columns: 80 });
 
   expect(output).toContain("properties:");
   expect(output).toContain("config:");
   expect(output).toContain("│ -     retries: 2");
   expect(output).toContain("│ +     retries: 3");
   expect(output).toContain("(Test.Resource)");
+});
+
+it("keeps the plan summary visible and updates it during apply", () => {
+  const { service } = makeStatic();
+  const plan = {
+    ...planWith([
+      updateNode({ version: 1 }, { version: 2 }),
+      noopNode({ version: 1 }, "Stable"),
+    ]),
+    defaultMode: "local" as const,
+  };
+  const reviewTree = new PlanTree(plan, { viewport: "full" });
+  const reviewOutput = service.output.format(<Plan tree={reviewTree} />, {
+    columns: 80,
+  });
+  const tree = new PlanTree(plan, {
+    mode: "apply",
+    label: "Starting dev stack",
+    busy: true,
+  });
+  const output = service.output.format(<Plan tree={tree} collapsible />, {
+    columns: 160,
+  });
+
+  expect(reviewOutput).toContain("1 to update");
+  expect(reviewOutput).toContain("1 no change");
+  expect(output.indexOf("─")).toBeLessThan(
+    output.indexOf("Starting dev stack"),
+  );
+  expect(output.indexOf("Plan")).toBeLessThan(output.indexOf("Worker"));
+  expect(output.indexOf("Starting dev stack")).toBeGreaterThan(
+    output.indexOf("Worker"),
+  );
+  expect(output).toContain("1 pending");
+  expect(output).toContain("1 no change");
+  expect(
+    spinnerFramesFor(true).some((frame) =>
+      output.includes(`${frame} Starting dev stack`),
+    ),
+  ).toBe(true);
+  const keybarLine = output
+    .split("\n")
+    .find((line) => line.includes("p hide widget"));
+  expect(keybarLine).toContain("p hide widget");
+  expect(keybarLine).toContain("Ctrl+C exit");
+  expect(keybarLine).toContain("↑/↓ scroll plan");
+  expect(keybarLine).toContain("Starting dev stack");
+
+  tree.emit({
+    _tag: "apply.resource.status",
+    fqn: "Worker",
+    id: "Worker",
+    type: "Test.Resource",
+    status: "updating",
+  });
+  tree.setBusy(false);
+  tree.setViewport("full");
+  const updatingOutput = service.output.format(<Plan tree={tree} />, {
+    columns: 80,
+  });
+  expect(updatingOutput).toContain("1 updating");
+  expect(updatingOutput).not.toContain("1 pending");
+  expect(updatingOutput).toContain("1 no change");
+  expect(
+    spinnerFramesFor(true).some((frame) =>
+      updatingOutput.includes(`${frame} Starting dev stack`),
+    ),
+  ).toBe(false);
+});
+
+it("keeps a large destroy summary and confirmation visible", () => {
+  const { service } = makeStatic();
+  const deletions = Array.from({ length: 40 }, (_, index) =>
+    deleteNode({}, `Resource${index}`),
+  );
+  const plan = { ...planWith([], deletions), destroy: true };
+  const output = service.output.format(
+    <ApprovePlan
+      plan={plan}
+      controller={{ submit: () => undefined, cancel: () => undefined }}
+    />,
+    { columns: 80 },
+  );
+
+  expect(output).toContain("Destroy");
+  expect(output).toContain("40 to delete");
+  expect(output).toContain("Destroy?");
+  expect(output).toContain("more lines");
+  expect(output).toContain("↑/↓ scroll plan");
+});
+
+it("keeps apply totals on top and destroy progress on the last row", () => {
+  const { service } = makeStatic();
+  const plan = {
+    ...planWith(
+      [],
+      Array.from({ length: 10 }, (_, index) =>
+        deleteNode({}, `Resource${index}`),
+      ),
+    ),
+    destroy: true,
+  };
+  const tree = new PlanTree(plan, {
+    mode: "apply",
+    label: "Destroying stack",
+    busy: true,
+  });
+  tree.emit({
+    _tag: "apply.resource.status",
+    fqn: "Resource0",
+    id: "Resource0",
+    type: "Test.Resource",
+    status: "deleted",
+  });
+
+  const output = service.output.format(<Plan tree={tree} />, {
+    columns: 120,
+  });
+  const lines = output.split("\n");
+  const summaryLine = lines.find((line) => line.includes("Plan ·"));
+  const progressLine = lines.find((line) => line.includes("Destroying stack"));
+
+  expect(summaryLine).toContain("1 deleted");
+  expect(summaryLine).toContain("9 pending");
+  expect(progressLine).toContain("Destroying stack (1/10)");
+  expect(
+    spinnerFramesFor(true).some((frame) => progressLine?.includes(frame)),
+  ).toBe(true);
+  expect(output.indexOf("Plan ·")).toBeLessThan(output.indexOf("Resource0"));
+  expect(output.indexOf("Destroying stack")).toBeGreaterThan(
+    output.indexOf("Resource9"),
+  );
+});
+
+it("includes binding work in apply totals and failures", () => {
+  const { service } = makeStatic();
+  const worker = {
+    ...noopNode({}, "Worker"),
+    bindings: [
+      { sid: "BUCKET", action: "update" as const, data: {} },
+      { sid: "STABLE", action: "noop" as const, data: {} },
+    ],
+  };
+  const tree = new PlanTree(planWith([worker]), {
+    mode: "apply",
+    label: "Deploying stack",
+    busy: true,
+  });
+  tree.emit({
+    _tag: "apply.resource.status",
+    fqn: "Worker",
+    id: "Worker",
+    type: "Test.Resource",
+    bindingId: "BUCKET",
+    status: "fail",
+    message: "binding failed",
+  });
+
+  const output = service.output.format(<Plan tree={tree} />, { columns: 80 });
+  expect(output).toContain("1 fail");
+  expect(output).toContain("1 no change");
+  expect(output).not.toContain("2 no change");
+  expect(output).toContain("Deploying stack (1/1)");
+  expect(output).toContain("binding failed");
+});
+
+it.effect("keeps native progress active until the apply outcome settles", () =>
+  Effect.gen(function* () {
+    const { service, stdout } = yield* makeLive();
+    const tree = new PlanTree(
+      planWith([updateNode({ version: 1 }, { version: 2 })]),
+      {
+        mode: "apply",
+        label: "Deploying stack",
+        busy: true,
+      },
+    );
+    tree.emit({
+      _tag: "apply.resource.status",
+      fqn: "Worker",
+      id: "Worker",
+      type: "Test.Resource",
+      status: "updated",
+    });
+    const live = yield* service.live.open(<Plan tree={tree} />);
+    yield* Effect.promise(flushEffects);
+    expect(stdout.output).toContain("\u001B]9;4;1;100\u001B\\");
+
+    const settledAt = stdout.output.length;
+    tree.finish("failure", "Deploy failed");
+    yield* Effect.promise(flushEffects);
+    expect(stdout.output.slice(settledAt)).toContain(
+      "\u001B]9;4;2;100\u001B\\",
+    );
+    yield* live.close;
+  }),
+);
+
+it.effect("renders completed dev plans as a hideable output view", () =>
+  Effect.gen(function* () {
+    const { service, stdout } = yield* makeLive();
+    const plan = {
+      ...planWith([updateNode({ version: 1 }, { version: 2 })]),
+      defaultMode: "local" as const,
+    };
+    const tree = new PlanTree(plan, {
+      mode: "apply",
+      label: "Starting dev stack",
+    });
+    const live = yield* service.live.open(<Plan tree={tree} collapsible />);
+
+    yield* Effect.promise(() => stdout.waitFor("p hide widget"));
+    yield* Effect.sync(() => {
+      tree.setOutput({ endpoint: "http://localhost:3000" });
+      tree.finish("success", "Dev stack ready", "output");
+    });
+    yield* Effect.promise(() => stdout.waitFor("http://localhost:3000"));
+    expect(stdout.output).toContain("←/→ show plan");
+
+    tree.setView("plan");
+    expect(tree.snapshot().view).toBe("plan");
+
+    tree.setExpanded(false);
+    yield* Effect.promise(() => stdout.waitFor("p show plan/output"));
+
+    const { service: staticService } = makeStatic();
+    const hiddenOutput = staticService.output.format(
+      <Plan tree={tree} collapsible />,
+      { columns: 80 },
+    );
+    expect(hiddenOutput).not.toContain("Plan ·");
+    expect(hiddenOutput).not.toContain("Worker");
+    expect(hiddenOutput).not.toContain("http://localhost:3000");
+    expect(hiddenOutput).toContain("Dev stack ready (0/1)");
+    expect(hiddenOutput).toContain("p show plan/output");
+    yield* live.close;
+  }),
+);
+
+// A dev generation keeps its widget mounted after apply settles and parks
+// until a reload (or Ctrl+C) closes its scope. Closing that scope must remove
+// the widget: leaving it behind stacks one stale "Dev stack ready" bar per
+// reload under the live one.
+it.effect("removes the dev apply widget when its generation scope closes", () =>
+  Effect.gen(function* () {
+    const { service, stdout } = yield* makeLive();
+    const plan = {
+      ...planWith([updateNode({ version: 1 }, { version: 2 })]),
+      defaultMode: "local" as const,
+    };
+    const cli = sigilCli().pipe(Layer.provide(Layer.succeed(CliKit, service)));
+    let settledAt = 0;
+    yield* Effect.scoped(
+      Effect.gen(function* () {
+        yield* Effect.succeed({ endpoint: "http://localhost:3000" }).pipe(
+          renderApply(plan, { dev: true }),
+        );
+        yield* Effect.promise(() => stdout.waitFor("Dev stack ready"));
+        settledAt = stdout.output.length;
+      }),
+    ).pipe(Effect.provide(cli));
+
+    // Nothing else is live once the generation is gone, so the renderer
+    // unmounts and restores the cursor.
+    expect(stdout.output.slice(settledAt)).toContain("[?25h");
+  }),
+);
+
+it("virtualizes dev stack output", () => {
+  const { service } = makeStatic();
+  const tree = new PlanTree(planWith([updateNode({}, {})]), {
+    mode: "apply",
+    label: "Dev stack ready",
+  });
+  tree.setOutput(
+    Object.fromEntries(
+      Array.from({ length: 40 }, (_, index) => [`output${index}`, index]),
+    ),
+  );
+  tree.setView("output");
+
+  const output = service.output.format(<Plan tree={tree} collapsible />, {
+    columns: 80,
+  });
+  expect(output).toContain("Output");
+  expect(output).toContain("earlier lines");
+  expect(output).not.toContain("Worker");
+  expect(output).toContain("←/→ show plan");
+  expect(output).toContain("↑/↓ scroll output");
+  expect(output.split("\n").length).toBeLessThanOrEqual(21);
 });
 
 it("renders drift details without detailed mode", () => {
@@ -282,7 +576,8 @@ it("renders drift details without detailed mode", () => {
     expected: { value: "declared" },
     actual: { value: "changed-out-of-band" },
   };
-  const output = service.output.format(<Plan plan={planWith([node])} />, {
+  const tree = new PlanTree(planWith([node]), { viewport: "full" });
+  const output = service.output.format(<Plan tree={tree} />, {
     columns: 80,
   });
 
@@ -1498,6 +1793,49 @@ it.effect(
       expect(rendered).toContain("2/4");
     }),
 );
+
+it.effect("composes widgets before and after divided key hints", () =>
+  Effect.gen(function* () {
+    const { service } = makeStatic();
+    const rendered = yield* service.output.render(
+      <KeyBar
+        inline
+        marginTop={0}
+        divider
+        before={<Text>Plan summary</Text>}
+        keys={[["p", "show plan"]]}
+        after={<Text>ready</Text>}
+      />,
+    );
+
+    expect(rendered.trim().split("\n")).toHaveLength(1);
+    expect(rendered).toContain("Plan summary");
+    expect(rendered.match(/│/g)).toHaveLength(2);
+    expect(rendered).toContain("p show plan");
+    expect(rendered).toContain("ready");
+  }),
+);
+
+it("wraps individual key hints in narrow terminals", () => {
+  const { service } = makeStatic();
+  const rendered = service.output.format(
+    <KeyBar
+      inline
+      marginTop={0}
+      divider
+      before={<Text>Ready</Text>}
+      keys={[
+        ["p", "show plan"],
+        ["Ctrl+C", "exit"],
+      ]}
+    />,
+    { columns: 20 },
+  );
+
+  expect(rendered).toContain("p show plan");
+  expect(rendered).toContain("Ctrl+C exit");
+  expect(rendered.trimEnd().split("\n").length).toBeGreaterThan(1);
+});
 
 it.effect("tabs scroll horizontally instead of wrapping when overflowing", () =>
   Effect.gen(function* () {

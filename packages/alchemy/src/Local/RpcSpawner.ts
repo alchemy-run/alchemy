@@ -289,7 +289,14 @@ export const make = Effect.fn(function* ({
 export const layerServer = (
   environment: Pick<RpcServerEnvironment, "profile" | "envFile">,
 ) =>
-  Layer.effect(RpcSpawner, make(environment)).pipe(Layer.provide(httpServer()));
+  Layer.effect(RpcSpawner, make(environment)).pipe(
+    // `/logs` is deliberately long-lived. On shutdown the exec child still
+    // owns that response while this scope owns the exec child, so waiting for
+    // Node's default 20-second graceful HTTP drain creates a finalizer cycle.
+    // Stop accepting/serving immediately so the watcher finalizer can close
+    // the child; all actual sidecars still use their own bounded finalizers.
+    Layer.provide(httpServer(0, "127.0.0.1", { gracefulShutdownTimeout: 0 })),
+  );
 
 const RPC_ADDRESS_REGEX =
   /(<ALCHEMY_RPC_ADDRESS>)(.+)(<\/ALCHEMY_RPC_ADDRESS>)/;

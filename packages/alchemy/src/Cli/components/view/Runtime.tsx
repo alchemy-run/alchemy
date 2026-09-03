@@ -273,9 +273,8 @@ function TerminalRoot({ store }: TerminalRootProps) {
   const state = useSyncExternalStore(store.subscribe, store.snapshot);
   useTerminalInput(
     (input, key) => {
-      // Ctrl-C while raw-mode rendering has no active prompt: surface it as a
-      // regular SIGINT so the process-level handler owns shutdown.
-      if (key.ctrl && input === "c") process.kill(process.pid, "SIGINT");
+      if (!key.ctrl || input !== "c") return;
+      process.kill(process.pid, "SIGINT");
     },
     { active: state.active === undefined },
   );

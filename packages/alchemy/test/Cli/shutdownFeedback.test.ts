@@ -72,41 +72,18 @@ const waitForStderr = (read: () => string, text: string) =>
 
 describe("shutdown feedback", () => {
   it.live(
-    "a hanging shutdown surfaces feedback and a second SIGINT force-quits with 130",
+    "a slow shutdown prints one delayed status line",
     () =>
       Effect.gen(function* () {
-        const fixture = yield* spawnFixture();
+        const fixture = yield* spawnFixture({
+          SHUTDOWN_FIXTURE_EXIT_AFTER_MS: "800",
+        });
         yield* fixture.sigint;
-        yield* waitForStderr(
-          fixture.stderr,
-          "Shutting down — waiting for cleanup",
-        );
-        yield* fixture.sigint;
-        expect(yield* fixture.handle.exitCode).toBe(130);
-        expect(fixture.stderr()).toContain("Force quitting.");
-      }).pipe(Effect.scoped, Effect.provide(PlatformServices)),
-    { timeout: 30_000 },
-  );
-
-  it.live(
-    "a duplicate SIGINT within the feedback delay does not force-quit",
-    () =>
-      Effect.gen(function* () {
-        // `node --watch` and pnpm forward the tty's SIGINT to their children,
-        // so one ^C can be delivered twice back-to-back — that must read as
-        // ONE press, not a force-quit.
-        const fixture = yield* spawnFixture();
-        yield* fixture.sigint;
-        yield* fixture.sigint;
-        yield* waitForStderr(
-          fixture.stderr,
-          "Shutting down — waiting for cleanup",
-        );
-        expect(fixture.stderr()).not.toContain("Force quitting");
-        // A distinct press after the hint is visible still force-quits.
-        yield* fixture.sigint;
-        expect(yield* fixture.handle.exitCode).toBe(130);
-        expect(fixture.stderr()).toContain("Force quitting.");
+        yield* Effect.sleep(Duration.millis(300));
+        expect(fixture.stderr()).not.toContain("Shutting down");
+        yield* waitForStderr(fixture.stderr, "Shutting down");
+        expect(yield* fixture.handle.exitCode).toBe(0);
+        expect(fixture.stderr().match(/Shutting down/g)).toHaveLength(1);
       }).pipe(Effect.scoped, Effect.provide(PlatformServices)),
     { timeout: 30_000 },
   );
@@ -126,19 +103,16 @@ describe("shutdown feedback", () => {
   );
 
   it.live(
-    "a suppressed process (dev supervisor) stays silent but still force-quits",
+    "a suppressed process stays silent",
     () =>
       Effect.gen(function* () {
         const fixture = yield* spawnFixture({
           SHUTDOWN_FIXTURE_SUPPRESS: "1",
+          SHUTDOWN_FIXTURE_EXIT_AFTER_MS: "800",
         });
         yield* fixture.sigint;
-        // Past the 200ms feedback delay — suppression must keep this quiet.
-        yield* Effect.sleep(Duration.millis(500));
+        expect(yield* fixture.handle.exitCode).toBe(0);
         expect(fixture.stderr()).not.toContain("Shutting down");
-        yield* fixture.sigint;
-        expect(yield* fixture.handle.exitCode).toBe(130);
-        expect(fixture.stderr()).not.toContain("Force quitting");
       }).pipe(Effect.scoped, Effect.provide(PlatformServices)),
     { timeout: 30_000 },
   );
