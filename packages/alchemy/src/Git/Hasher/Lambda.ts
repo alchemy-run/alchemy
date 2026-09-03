@@ -15,13 +15,13 @@ import * as Stream from "effect/Stream";
 import { InvokeFunction } from "../../AWS/Lambda/InvokeFunction.ts";
 import type { Function as LambdaFunction } from "../../AWS/Lambda/Function.ts";
 import { hashBounds, resolveDeltas, scanPart } from "../git/PartialScan.ts";
-import { Hasher, HashError, type HasherShape } from "../Hasher.ts";
+import { Hasher, HashError, type HasherShape } from "./Hasher.ts";
 import {
   decodeHashResponse,
   encodeHashEvent,
   LAMBDA_CHUNK_BYTES,
   type HashResponse,
-} from "./HashEvent.ts";
+} from "./LambdaEvent.ts";
 
 export const HasherLambda = (
   fn: LambdaFunction | Effect.Effect<LambdaFunction, any, any>,

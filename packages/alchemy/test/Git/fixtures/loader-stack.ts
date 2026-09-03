@@ -17,7 +17,7 @@ import {
   Server,
   ServerLive,
 } from "@/Git/index.ts";
-import { HasherWorkerLoader } from "@/Git/WorkerLoader/index.ts";
+import { HasherWorkerLoader } from "@/Git/Hasher/index.ts";
 
 export const TEST_ADMIN_TOKEN: string =
   process.env[ADMIN_TOKEN_CONFIG_KEY] ?? "gs_test-admin-key-git-service-suite";

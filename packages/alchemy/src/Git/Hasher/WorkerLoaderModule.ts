@@ -11,7 +11,7 @@ import {
   encodeDeltaResults,
   encodeScanResult,
   frame,
-} from "../HasherProtocol.ts";
+} from "./Protocol.ts";
 import { resolveDeltas, scanPart } from "../git/PartialScan.ts";
 
 export default {

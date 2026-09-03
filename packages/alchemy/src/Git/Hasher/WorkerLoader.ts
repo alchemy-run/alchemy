@@ -1,7 +1,7 @@
 /**
  * `Hasher` over dynamically loaded Workers (DESIGN §22.12). A
  * `WorkerLoader` binding on the Git Worker instantiates the hasher module
- * (`hasher-worker.ts`, bundled into a string at build time by the `?worker`
+ * (`WorkerLoaderModule.ts`, bundled into a string at build time by the `?worker`
  * import) under a few fixed names; each name is its own isolate with its
  * own 128 MB, and — measured — distinct isolates run in parallel with
  * the caller, up to the runtime's four concurrent dynamic invocations per
@@ -12,12 +12,12 @@
  *
  * **Example:** A Git host hashing pushes on dynamic Workers
  * ```typescript
- * import * as GitLoader from "alchemy/Git/WorkerLoader";
+ * import * as GitHasher from "alchemy/Git/Hasher";
  *
  * const GitLive = Git.ServerLive.pipe(
  *   Layer.provide(Git.ReposDurableObject),
  *   Layer.provide(Git.RegistryDurableObject),
- *   Layer.provide(GitLoader.HasherWorkerLoader()),
+ *   Layer.provide(GitHasher.HasherWorkerLoader()),
  *   Layer.provide(Git.BlobStoreR2(GitObjects)),
  *   Layer.provide(Git.AuthTokens),
  * );
@@ -33,15 +33,15 @@ import type {
   WorkerEnvironment,
 } from "../../Cloudflare/Workers/Worker.ts";
 import { hashBounds, resolveDeltas, scanPart } from "../git/PartialScan.ts";
-import { Hasher, type HasherShape } from "../Hasher.ts";
+import { Hasher, type HasherShape } from "./Hasher.ts";
 import {
   decodeDeltaResults,
   decodeScanResult,
   encodeDeltaBatch,
   HASH_ROUTE,
   HashError,
-} from "../HasherProtocol.ts";
-import hasherSource from "./hasher-worker.ts?worker";
+} from "./Protocol.ts";
+import hasherSource from "./WorkerLoaderModule.ts?worker";
 
 /** The runtime allows four concurrent dynamic-worker invocations per request. */
 export const LOADER_MAX_CONCURRENCY = 4;

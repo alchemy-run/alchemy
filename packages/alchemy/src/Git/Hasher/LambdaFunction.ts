@@ -9,12 +9,12 @@
  * **Example:** A Git host that hashes pushes on Lambda
  * ```typescript
  * import * as Git from "alchemy/Git";
- * import * as GitLambda from "alchemy/Git/Lambda";
+ * import * as GitHasher from "alchemy/Git/Hasher";
  *
  * const GitLive = Git.ServerLive.pipe(
  *   Layer.provide(Git.ReposDurableObject),
  *   Layer.provide(Git.RegistryDurableObject),
- *   Layer.provide(GitLambda.HasherLambda(GitLambda.HasherFunction)),
+ *   Layer.provide(GitHasher.HasherLambda(GitHasher.HasherFunction)),
  *   Layer.provide(AWS.Lambda.InvokeFunctionHttp),
  *   Layer.provide(Git.BlobStoreR2(GitObjects)),
  *   Layer.provide(Git.AuthTokens),
@@ -24,7 +24,7 @@
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Lambda from "../../AWS/Lambda/Function.ts";
-import { handleHashEvent, isHashEvent } from "./HashEvent.ts";
+import { handleHashEvent, isHashEvent } from "./LambdaEvent.ts";
 
 export default class HasherFunction extends Lambda.Function<HasherFunction>()(
   "GitHasher",

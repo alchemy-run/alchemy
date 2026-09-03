@@ -1733,7 +1733,7 @@ before anything else; a delete-only push is a 12-byte probe that fails.
 Verification is what git requires to trust a pack: every entry inflated
 and hashed before any ref moves. It scales with object count, and on a
 core ~10x slower than a laptop it was the bulk of a 40 MiB push. It is
-now a service — `Hasher` (`Hasher.ts`) — with two layers:
+now a service — `Hasher` (`Hasher/Hasher.ts`) — with two layers:
 `HasherInline` (the same isolate) and `HasherSelf`, which POSTs pack
 parts to `/_alchemy/git/hash` on the Worker's own `Self` binding, so a
 push is verified by as many isolates as it has parts. The route is
@@ -1894,7 +1894,7 @@ chosen per deployment. Three layers ship:
 | --- | --- | --- | --- | --- |
 | `HasherInline` (default) | the receiving Worker | the receiver | none (one thread) | included in the Worker's CPU |
 | `HasherSelf` | another invocation of the same script | the hasher | none on Cloudflare (§22.10) | same |
-| `HasherLambda(fn)` (`alchemy/Git/Lambda`) | an AWS Lambda per chunk | the receiver | one Lambda per 4 MiB chunk, all at once | Lambda-seconds + cross-cloud egress |
+| `HasherLambda(fn)` (`alchemy/Git/Hasher`) | an AWS Lambda per chunk | the receiver | one Lambda per 4 MiB chunk, all at once | Lambda-seconds + cross-cloud egress |
 
 **`HasherLambda`.** The Git Worker binds `AWS.Lambda.InvokeFunction` on a
 Lambda declared in the same stack (`HasherFunction`, an Effect-native
@@ -1961,14 +1961,14 @@ its own 128 MB. The runtime allows four concurrent dynamic-worker
 invocations per request; an eighth call fails with "Dynamic worker
 concurrency limit exceeded".
 
-`HasherWorkerLoader` (`alchemy/Git/WorkerLoader`) keeps four fixed names
+`HasherWorkerLoader` (`alchemy/Git/Hasher`) keeps four fixed names
 (`git-hasher-0..3`, warm across pushes), dispatches 4 MiB chunks over the
 hash route's own protocol, and lets the pump write the spill
 (`writesSpill: false`); the loaded hasher has no bindings and
 `globalOutbound: null`. Its module is the real scanner: the Worker
 bundler gained a `?worker` import (`WorkerModulePlugin.ts`) that bundles
 the target into one self-contained module and imports it as a string —
-nested `?worker` imports included — so `hasher-worker.ts` is ordinary
+nested `?worker` imports included — so `WorkerLoaderModule.ts` is ordinary
 TypeScript that shares `PartialScan` with everything else. (The loader's
 `get` also wrapped the native stub as an entrypoint and had no `fetch`;
 fixed with a regression test.)

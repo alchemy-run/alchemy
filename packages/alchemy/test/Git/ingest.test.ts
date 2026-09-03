@@ -6,7 +6,7 @@
  */
 import * as BunServices from "@effect/platform-bun/BunServices";
 import { bufferRandomAccess } from "@/Git/git/PackParser.ts";
-import { HasherInline, Hasher, type HasherShape } from "@/Git/Hasher.ts";
+import { HasherInline, Hasher, type HasherShape } from "@/Git/Hasher/Hasher.ts";
 import { ingestPackFrom, ingestStoreOf } from "@/Git/RepoObject.ts";
 import { makeObjectStore } from "@/Git/store/ObjectStore.ts";
 import { makeStreamingSource } from "@/Git/store/StreamingSource.ts";

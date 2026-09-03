@@ -142,7 +142,11 @@ import {
   makeStreamingSource,
   RETAIN_BYTES,
 } from "./store/StreamingSource.ts";
-import { Hasher, type HasherShape, type HashPartResult } from "./Hasher.ts";
+import {
+  Hasher,
+  type HasherShape,
+  type HashPartResult,
+} from "./Hasher/Hasher.ts";
 import * as PartialScan from "./git/PartialScan.ts";
 import type { ScanResult } from "./git/PartialScan.ts";
 import type {

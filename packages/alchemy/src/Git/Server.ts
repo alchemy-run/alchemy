@@ -119,7 +119,7 @@ import { decodePktLines, errPkt, flushPkt, pktText } from "./git/Pkt.ts";
 import * as Fiber from "effect/Fiber";
 import * as Option from "effect/Option";
 import * as Semaphore from "effect/Semaphore";
-import { Hasher } from "./Hasher.ts";
+import { Hasher } from "./Hasher/Hasher.ts";
 import { encodeStagedBatch } from "./PushWire.ts";
 import { feedBody, HEAD_BYTES } from "./store/IncomingBody.ts";
 import { makeStreamingSource } from "./store/StreamingSource.ts";
@@ -139,8 +139,8 @@ import {
   frame,
   HASH_ROUTE,
   HASHER_BINDING,
-} from "./Hasher.ts";
-import { decodeDeltaBatch, encodeDeltaResults } from "./HasherProtocol.ts";
+} from "./Hasher/Hasher.ts";
+import { decodeDeltaBatch, encodeDeltaResults } from "./Hasher/Protocol.ts";
 import { hashBounds, resolveDeltas, scanPart } from "./git/PartialScan.ts";
 import type { StoreError } from "./git/Store.ts";
 import {

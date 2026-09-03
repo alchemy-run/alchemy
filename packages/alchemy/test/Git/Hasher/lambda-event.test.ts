@@ -4,14 +4,14 @@ import {
   encodeHashEvent,
   handleHashEvent,
   isHashEvent,
-} from "@/Git/Lambda/index.ts";
+} from "@/Git/Hasher/index.ts";
 import { encodeTypeSize, hashObject, makeSha1 } from "@/Git/git/ObjectCodec.ts";
 import { packHeader } from "@/Git/git/PackWriter.ts";
 import { scanPart } from "@/Git/git/PartialScan.ts";
 import * as Zlib from "@/Git/git/Zlib.ts";
 import { describe, expect, test } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import { concat } from "./harness/pack.ts";
+import { concat } from "../harness/pack.ts";
 
 const buildPack = (n: number) =>
   Effect.gen(function* () {

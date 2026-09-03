@@ -29,15 +29,15 @@ import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import * as Fiber from "effect/Fiber";
-import { WorkerEnvironment } from "../Cloudflare/Workers/Worker.ts";
-import { RuntimeContext } from "../RuntimeContext.ts";
-import { ADMIN_TOKEN_CONFIG_KEY } from "./Auth.ts";
+import { WorkerEnvironment } from "../../Cloudflare/Workers/Worker.ts";
+import { RuntimeContext } from "../../RuntimeContext.ts";
+import { ADMIN_TOKEN_CONFIG_KEY } from "../Auth.ts";
 import {
   BlobStore,
   type BlobStoreShape,
   type UploadedPart,
-} from "./BlobStore.ts";
-import type { Oid, ObjectType } from "./git/ObjectCodec.ts";
+} from "../BlobStore.ts";
+import type { Oid, ObjectType } from "../git/ObjectCodec.ts";
 import {
   type EntryBounds,
   hashBounds,
@@ -47,8 +47,8 @@ import {
   type DeltaBase,
   type DeltaJob,
   type DeltaResolved,
-} from "./git/PartialScan.ts";
-import { ObjectTooLargeError, PackFormatError } from "./git/PackParser.ts";
+} from "../git/PartialScan.ts";
+import { ObjectTooLargeError, PackFormatError } from "../git/PackParser.ts";
 
 export {
   decodeBoundsRequest,
@@ -59,7 +59,7 @@ export {
   HASH_ROUTE,
   HashError,
   makeFrameReader,
-} from "./HasherProtocol.ts";
+} from "./Protocol.ts";
 import {
   decodeDeltaResults,
   decodeScanResult,
@@ -69,7 +69,7 @@ import {
   HASH_ROUTE,
   HashError,
   makeFrameReader,
-} from "./HasherProtocol.ts";
+} from "./Protocol.ts";
 
 export interface HashPartOptions {
   /** Pack-relative offset of `payload[skip]`. */

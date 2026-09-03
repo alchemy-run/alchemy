@@ -138,17 +138,11 @@
       "worker": "./src/Git/index.ts",
       "import": "./lib/Git/index.js"
     },
-    "./Git/Lambda": {
-      "types": "./lib/Git/Lambda/index.d.ts",
-      "bun": "./src/Git/Lambda/index.ts",
-      "worker": "./src/Git/Lambda/index.ts",
-      "import": "./lib/Git/Lambda/index.js"
-    },
-    "./Git/WorkerLoader": {
-      "types": "./lib/Git/WorkerLoader/index.d.ts",
-      "bun": "./src/Git/WorkerLoader/index.ts",
-      "worker": "./src/Git/WorkerLoader/index.ts",
-      "import": "./lib/Git/WorkerLoader/index.js"
+    "./Git/Hasher": {
+      "types": "./lib/Git/Hasher/index.d.ts",
+      "bun": "./src/Git/Hasher/index.ts",
+      "worker": "./src/Git/Hasher/index.ts",
+      "import": "./lib/Git/Hasher/index.js"
     },
     "./Kubernetes": {
       "types": "./lib/Kubernetes/index.d.ts",

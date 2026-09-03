@@ -1,5 +1,5 @@
 /**
- * The hasher protocol (src/Git/Hasher.ts): a scan result survives the
+ * The hasher protocol (src/Git/Hasher/Hasher.ts): a scan result survives the
  * binary encoding byte for byte, and the inline layer scans in-process.
  */
 import {
@@ -17,13 +17,13 @@ import {
   HasherInline,
   frame,
   makeFrameReader,
-} from "@/Git/Hasher.ts";
+} from "@/Git/Hasher/Hasher.ts";
 import { describe, expect, test } from "alchemy-test";
 import { BlobStore } from "@/Git/BlobStore.ts";
 import * as Effect from "effect/Effect";
-import { makeMemoryBlobStore } from "./harness/store.ts";
+import { makeMemoryBlobStore } from "../harness/store.ts";
 import * as Layer from "effect/Layer";
-import { concat } from "./harness/pack.ts";
+import { concat } from "../harness/pack.ts";
 
 describe("Hasher", () => {
   test("encode/decode round-trips entries, blob references, unresolved deltas and coordinates", async () => {

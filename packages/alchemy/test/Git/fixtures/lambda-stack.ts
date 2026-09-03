@@ -19,7 +19,7 @@ import {
   Server,
   ServerLive,
 } from "@/Git/index.ts";
-import { HasherFunction, HasherLambda } from "@/Git/Lambda/index.ts";
+import { HasherFunction, HasherLambda } from "@/Git/Hasher/index.ts";
 
 export const TEST_ADMIN_TOKEN: string =
   process.env[ADMIN_TOKEN_CONFIG_KEY] ?? "gs_test-admin-key-git-service-suite";

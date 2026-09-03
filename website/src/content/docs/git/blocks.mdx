@@ -107,9 +107,9 @@ nothing extra and is the right answer for the small pushes that make up
 almost all of a repository's life.
 
 ```typescript
-import * as GitLambda from "alchemy/Git/Lambda";
+import * as GitHasher from "alchemy/Git/Hasher";
 
-Layer.provide(GitLambda.HasherLambda(GitLambda.HasherFunction)),
+Layer.provide(GitHasher.HasherLambda(GitHasher.HasherFunction)),
 Layer.provide(AWS.Lambda.InvokeFunctionHttp),
 ```
 
@@ -122,9 +122,9 @@ there — a throttle, a cold start that runs out of time — the Worker
 hashes it inline; a push never fails because its hasher did.
 
 ```typescript
-import * as GitLoader from "alchemy/Git/WorkerLoader";
+import * as GitHasher from "alchemy/Git/Hasher";
 
-Layer.provide(GitLoader.HasherWorkerLoader()),
+Layer.provide(GitHasher.HasherWorkerLoader()),
 ```
 
 Four dynamically loaded Workers, each in its own isolate and its own

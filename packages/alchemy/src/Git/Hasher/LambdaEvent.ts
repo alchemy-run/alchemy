@@ -13,7 +13,7 @@ import {
   encodeScanResult,
   HashError,
   type HashPartOptions,
-} from "../Hasher.ts";
+} from "./Hasher.ts";
 import {
   scanPart,
   type ScanResult,
