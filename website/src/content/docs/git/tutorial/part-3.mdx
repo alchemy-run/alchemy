@@ -86,6 +86,9 @@ and `gh` sends it as a bearer token. `Git.parseSecret` reads either,
 and `verifyApiKey` says whose it is:
 
 ```diff lang="typescript"
+export const AuthenticatedLive = Git.Authenticated.make(
+  Effect.gen(function* () {
+    const auth = yield* Auth;
     return Effect.fn(function* (request) {
 +      const key = Git.parseSecret(request.headers);
 +      if (key !== undefined && key !== "") {
@@ -102,6 +105,8 @@ and `verifyApiKey` says whose it is:
 +      }
       return undefined;
     });
+  }),
+);
 ```
 
 An invalid key is anonymous, not an error. The policy decides what
@@ -114,6 +119,9 @@ A request without a key carries the session cookie, or nothing:
 ```diff lang="typescript"
 +import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 
+export const AuthenticatedLive = Git.Authenticated.make(
+  Effect.gen(function* () {
+    const auth = yield* Auth;
     return Effect.fn(function* (request) {
       const key = Git.parseSecret(request.headers);
       if (key !== undefined && key !== "") {
@@ -128,6 +136,8 @@ A request without a key carries the session cookie, or nothing:
 +        ? { id: session.user.id, name: session.user.name }
 +        : undefined;
     });
+  }),
+);
 ```
 
 One handler now serves every git route: the REST plane, the wire,
