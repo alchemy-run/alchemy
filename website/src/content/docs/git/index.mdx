@@ -1,21 +1,12 @@
 ---
 title: Git
-description: Build your own git server. The hard parts of hosting git ship as blocks you assemble in one file, deploy to your own cloud, use like any remote, and reshape one block at a time.
+description: A git server as Effect Layers on Cloudflare Workers, Durable Objects, and R2. Smart HTTP for any client, a typed REST plane with pull requests, and a GitHub-compatible API, assembled in one file.
 ---
 
-You want a git remote you control. Code that stays in your cloud.
-Pushes gated by your rules, not a hosted service's roles. A product
-built on repositories, where git is the storage and your app is the
-face.
-
-What exists is appliances. A binary you run on a box, or a service you
-rent, configured through whatever knobs it exposes. And the parts of
-hosting git that are hard, packs and deltas, ref updates that must not
-race, connectivity checks, pushes larger than memory, are exactly the
-parts you don't want to write.
-
-`alchemy/Git` ships those parts as blocks. You assemble them in one
-file, and the shape is yours:
+`alchemy/Git` is a git server as a set of Effect Layers. It speaks git's
+smart HTTP to any client, serves a typed REST plane with pull requests,
+and answers the GitHub REST v3 API for `gh` and Octokit. It runs on
+Cloudflare Workers, Durable Objects, and R2, in one file:
 
 ```typescript
 import * as Cloudflare from "alchemy/Cloudflare";
@@ -44,10 +35,8 @@ export default Cloudflare.Worker(
 );
 ```
 
-`bun alchemy deploy` and you have a host that speaks git's smart HTTP
-to any client, a typed REST plane, pull requests, and a
-GitHub-compatible API, on your Cloudflare account. Each line of the
-graph is a decision. Change the line and the decision changes:
+Each line of the graph is one decision with its own implementations.
+Changing a line changes the decision and nothing else:
 
 ```diff lang="typescript"
 const GitLive = Git.ServerLive.pipe(
@@ -62,18 +51,17 @@ const GitLive = Git.ServerLive.pipe(
 );
 ```
 
-Bytes now live in S3 and `main` only moves for its owner. Nothing else
-changed, and leaving a line out is a type error, not a 500 on your
-first clone.
+Bytes now live in S3 and `main` only moves for its owner. A missing
+line is a type error.
 
 The engine holds no users and no credentials. Who is calling is one
-`HttpApi` middleware you implement, so the same host runs behind a
-shared secret, behind Better Auth, or behind whatever your product
-uses. Every route is a class with a pluggable implementation, so the
-host is also an API you extend and reshape one route at a time.
-[git.alchemy.run](https://git.alchemy.run) is this file grown up. The
-alchemy monorepo, 44,051 objects in a 67 MiB pack, is hosted on it, and
-it clones back byte-identical under `git fsck --strict`.
+`HttpApi` middleware, so the same host runs behind a shared secret,
+behind Better Auth, or behind any other authentication. Every route is
+a class with a pluggable implementation, so the host is also an API
+that can be extended and reshaped one route at a time.
+[git.alchemy.run](https://git.alchemy.run) runs this file. The alchemy
+monorepo, 44,051 objects in a 67 MiB pack, is hosted on it and clones
+back byte-identical under `git fsck --strict`.
 
 ## Build one
 
