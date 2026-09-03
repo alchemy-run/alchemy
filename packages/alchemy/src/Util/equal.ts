@@ -39,14 +39,21 @@ export const arrayEqualsUnordered = <T extends string | number>(
 };
 
 /**
- * Order-insensitive equality where an omitted list and an empty list
- * describe the same desired state — the usual contract for optional
- * list-shaped resource props.
+ * Set equality for primitive elements: order and repeats do not matter,
+ * and an omitted list equals an empty list.
  */
 export const sameElements = <T extends string | number>(
   a: ReadonlyArray<T> | undefined,
   b: ReadonlyArray<T> | undefined,
-): boolean => arrayEqualsUnordered(a ?? [], b ?? []);
+): boolean => {
+  const as = new Set(a ?? []);
+  const bs = new Set(b ?? []);
+  if (as.size !== bs.size) return false;
+  for (const x of as) {
+    if (!bs.has(x)) return false;
+  }
+  return true;
+};
 
 /**
  * Shallow equality of two string records (same keys, same values).

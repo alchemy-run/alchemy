@@ -14,6 +14,9 @@ export const hasDigitalOceanCreds = !!(
   process.env.DIGITALOCEAN_TOKEN || process.env.DIGITALOCEAN_ACCESS_TOKEN
 );
 
+/** Live suites also skip under `FAST=1`. */
+export const skipLive = !hasDigitalOceanCreds || !!process.env.FAST;
+
 /**
  * Out-of-band verification context: raw distilled calls with env
  * credentials, independent of the provider layer under test.

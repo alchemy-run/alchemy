@@ -10,12 +10,14 @@ import * as Arr from "effect/Array";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import { Unowned } from "../../AdoptPolicy.ts";
+import { OwnedBySomeoneElse, Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
+import { ReplacementRequired } from "../../ReplacementRequired.ts";
 import { Resource } from "../../Resource.ts";
 import { listAllPages } from "../paginate.ts";
+import { pollUntil, pollUntilGone } from "../poll.ts";
 import type { Providers } from "../Providers.ts";
 
 export type SshKeyProps = {
@@ -54,6 +56,10 @@ export type SshKey = Resource<
  * is the identity: changing `publicKey` replaces the resource while `name`
  * updates in place.
  *
+ * Ownership: a key carries no ownership markers. A registration of the
+ * same key material under a different name belongs to someone else and
+ * surfaces as `Unowned`, so taking it over requires `--adopt`.
+ *
  * @resource
  * @product SSH Keys
  * @category Compute
@@ -75,27 +81,31 @@ export type SshKey = Resource<
  */
 export const SshKey = Resource<SshKey>("DigitalOcean.SshKey");
 
-// DigitalOcean stores the uploaded string verbatim, comment field included.
+class SshKeyNotRenamed extends Data.TaggedError("SshKeyNotRenamed")<{
+  readonly sshKeyId: number;
+  readonly name: string;
+}> {
+  override get message() {
+    return `SSH key ${this.sshKeyId} did not show the name '${this.name}' in time.`;
+  }
+}
+
+class SshKeyStillPresent extends Data.TaggedError("SshKeyStillPresent")<{
+  readonly sshKeyId: number;
+}> {
+  override get message() {
+    return `SSH key ${this.sshKeyId} still exists after delete.`;
+  }
+}
+
+// DigitalOcean stores the key text verbatim, comment included. Only the
+// surrounding whitespace is noise.
 const normalizeKey = (publicKey: string) => publicKey.trim();
 
-class SshKeyExistsUnowned extends Data.TaggedError("SshKeyExistsUnowned")<{
-  readonly name: string;
-  readonly sshKeyId: number;
-}> {
-  override get message() {
-    return `An SSH key with this key material already exists as "${this.name}" (${this.sshKeyId}). Re-deploy with --adopt to take it over.`;
-  }
-}
-
-class SshKeyReplacementRequired extends Data.TaggedError(
-  "SshKeyReplacementRequired",
-)<{
-  readonly sshKeyId: number;
-}> {
-  override get message() {
-    return `SSH key ${this.sshKeyId}'s material changed but no replacement was planned (an unresolved prop hid the change from diff). Re-run the deploy.`;
-  }
-}
+// A key has no field for an ownership mark. The name is the only tie
+// between a registration and this resource.
+const isOurs = (key: ApiSshKey, publicKey: string, name: string) =>
+  normalizeKey(key.public_key) === publicKey && key.name === name;
 
 export const SshKeyProvider = () =>
   Provider.effect(
@@ -114,19 +124,16 @@ export const SshKeyProvider = () =>
         publicKey: key.public_key,
       });
 
-      const observeById = (identifier: string) =>
-        get({ ssh_key_identifier: identifier }).pipe(
+      const observeById = (sshKeyId: number) =>
+        get({ ssh_key_identifier: String(sshKeyId) }).pipe(
           Effect.map((r) => Option.some(r.ssh_key)),
           Effect.catchTag("NotFound", () =>
             Effect.succeed(Option.none<ApiSshKey>()),
           ),
         );
 
-      const listAll = listAllPages((q) =>
-        list(q).pipe(Effect.map((r) => r.ssh_keys ?? [])),
-      );
+      const listAll = listAllPages(list, (r) => r.ssh_keys ?? []);
 
-      /** The key material is the identity — exact content match. */
       const observeByContent = (publicKey: string) =>
         listAll.pipe(
           Effect.map((keys) =>
@@ -137,26 +144,55 @@ export const SshKeyProvider = () =>
           ),
         );
 
+      const foreignKey = (id: string, key: ApiSshKey) =>
+        new OwnedBySomeoneElse({
+          message:
+            `SSH key '${key.name}' (${key.id}) already registers this key ` +
+            "material and cannot be proven ours. Re-run with `--adopt` " +
+            "(or `adopt(true)`) to take it over.",
+          resourceType: SshKey.Type,
+          logicalId: id,
+          physicalName: key.name,
+        });
+
+      /** Finds the registration of `publicKey`. Fails when it is not ours. */
+      const observeOurs = Effect.fn(function* (
+        id: string,
+        publicKey: string,
+        name: string,
+      ) {
+        const existing = yield* observeByContent(publicKey);
+        if (
+          Option.isSome(existing) &&
+          !isOurs(existing.value, publicKey, name)
+        ) {
+          return yield* foreignKey(id, existing.value);
+        }
+        return existing;
+      });
+
+      const physicalName = (id: string) =>
+        createPhysicalName({ id, maxLength: 255 });
+
       return {
         stables: ["sshKeyId", "fingerprint", "publicKey"],
         list: Effect.fn(function* () {
           return (yield* listAll).map(toAttrs);
         }),
-        read: Effect.fn(function* ({ olds, output }) {
+        read: Effect.fn(function* ({ id, olds, output }) {
           if (output !== undefined) {
-            const existing = yield* observeById(String(output.sshKeyId));
+            const existing = yield* observeById(output.sshKeyId);
             return Option.getOrUndefined(Option.map(existing, toAttrs));
           }
-          // Identical key material proves possession of the key, not that
-          // we registered it — surface as Unowned so a takeover (and the
-          // eventual stack-destroy delete) needs an explicit `--adopt`.
           if (olds?.publicKey === undefined) return undefined;
-          const existing = yield* observeByContent(
-            normalizeKey(olds.publicKey),
-          );
-          return Option.getOrUndefined(
-            Option.map(existing, (key) => Unowned(toAttrs(key))),
-          );
+          const publicKey = normalizeKey(olds.publicKey);
+          const name = olds.name ?? (yield* physicalName(id));
+          const existing = yield* observeByContent(publicKey);
+          if (Option.isNone(existing)) return undefined;
+          if (isOurs(existing.value, publicKey, name)) {
+            return toAttrs(existing.value);
+          }
+          return Unowned(toAttrs(existing.value));
         }),
         diff: Effect.fn(function* ({ olds, news }) {
           if (!isResolved(news) || olds === undefined) return undefined;
@@ -169,59 +205,39 @@ export const SshKeyProvider = () =>
           return undefined;
         }),
         reconcile: Effect.fn(function* ({ id, news, output }) {
-          const desiredName =
-            news.name ?? (yield* createPhysicalName({ id, maxLength: 255 }));
+          const desiredName = news.name ?? (yield* physicalName(id));
           const publicKey = normalizeKey(news.publicKey);
 
-          // Observe — cached id first; else a content scan, so a crash
-          // after create converges on the existing key instead of failing
-          // on the duplicate-key 422.
           const cached =
-            output !== undefined
-              ? yield* observeById(String(output.sshKeyId))
-              : Option.none<ApiSshKey>();
-          const observed = Option.isSome(cached)
-            ? cached
-            : yield* observeByContent(publicKey);
-
-          // The key material is create-time-only: if the cached key's
-          // content no longer matches desired, the change reached reconcile
-          // without a replace plan and cannot be applied here. Failing is
-          // self-healing — the next, fully resolved plan replaces.
+            output === undefined
+              ? Option.none<ApiSshKey>()
+              : yield* observeById(output.sshKeyId);
+          // DigitalOcean cannot change the key material of an existing key.
           if (
             Option.isSome(cached) &&
             normalizeKey(cached.value.public_key) !== publicKey
           ) {
-            return yield* new SshKeyReplacementRequired({
-              sshKeyId: cached.value.id,
+            return yield* new ReplacementRequired({
+              resourceType: SshKey.Type,
+              physicalId: String(cached.value.id),
+              properties: ["publicKey"],
             });
           }
 
-          // A content match that we cannot tie to this resource (no cached
-          // id, name differs from ours) is someone else's registration of
-          // the same key — renaming it here would hijack it; `--adopt` is
-          // the only takeover path.
-          if (
-            output === undefined &&
-            Option.isSome(observed) &&
-            observed.value.name !== desiredName
-          ) {
-            return yield* new SshKeyExistsUnowned({
-              name: observed.value.name,
-              sshKeyId: observed.value.id,
-            });
-          }
+          const observed = Option.isSome(cached)
+            ? cached
+            : yield* observeOurs(id, publicKey, desiredName);
 
-          // Ensure — a 422 is the duplicate-key race with a concurrent
-          // registration: re-observe and converge on the winner.
           if (Option.isNone(observed)) {
             const created = yield* create({
               name: desiredName,
               public_key: publicKey,
             }).pipe(
               Effect.map((r) => r.ssh_key),
+              // DigitalOcean answers 422 when the key material is already
+              // registered.
               Effect.catchTag("UnprocessableEntity", (error) =>
-                observeByContent(publicKey).pipe(
+                observeOurs(id, publicKey, desiredName).pipe(
                   Effect.flatMap(
                     Option.match({
                       onNone: () => Effect.fail(error),
@@ -234,21 +250,38 @@ export const SshKeyProvider = () =>
             return toAttrs(created);
           }
 
-          // Sync — the only mutable aspect is the name.
           const key = observed.value;
-          if (key.name !== desiredName) {
-            const updated = yield* update({
-              ssh_key_identifier: String(key.id),
-              name: desiredName,
-            });
-            return toAttrs(updated.ssh_key);
-          }
-          return toAttrs(key);
+          if (key.name === desiredName) return toAttrs(key);
+          yield* update({
+            ssh_key_identifier: String(key.id),
+            name: desiredName,
+          });
+          // GET can still return the old name for a moment after PUT.
+          const renamed = yield* pollUntil(
+            observeById(key.id),
+            (observed) => observed.name === desiredName,
+            {
+              every: "1 second",
+              times: 10,
+              timeout: "30 seconds",
+              notSettled: () =>
+                new SshKeyNotRenamed({ sshKeyId: key.id, name: desiredName }),
+            },
+          );
+          return toAttrs(renamed);
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* del({ ssh_key_identifier: String(output.sshKeyId) }).pipe(
             Effect.catchTag("NotFound", () => Effect.void),
           );
+          // GET can still return the key for a moment after DELETE.
+          yield* pollUntilGone(observeById(output.sshKeyId), {
+            every: "1 second",
+            times: 10,
+            timeout: "30 seconds",
+            stillPresent: () =>
+              new SshKeyStillPresent({ sshKeyId: output.sshKeyId }),
+          });
         }),
       };
     }),
