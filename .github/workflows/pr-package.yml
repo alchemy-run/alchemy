@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - "distilled"
+      - "submodules/distilled"
       - "packages/**"
       - "scripts/**"
       - "package.json"
@@ -19,7 +19,7 @@ on:
     # past PR close so existing install URLs keep resolving.
     types: [opened, synchronize, reopened, labeled]
     paths:
-      - "distilled"
+      - "submodules/distilled"
       - "packages/**"
       - "scripts/**"
       - "package.json"
@@ -58,7 +58,7 @@ jobs:
           fetch-depth: 0
 
       - name: Checkout distilled
-        run: git submodule update --init --depth=1 --checkout -- distilled
+        run: git submodule update --init --depth=1 --checkout -- submodules/distilled
 
       - name: Restore Turbo cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0

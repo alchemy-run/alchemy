@@ -19,7 +19,7 @@ packages:
   - examples/monorepo-single-stack/*
   - examples/monorepo-multi-stack/*
   - benchmark/*
-  - distilled/packages/*
+  - submodules/distilled/packages/*
   - fixtures/*
 catalogs:
   auth:

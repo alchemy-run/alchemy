@@ -13,7 +13,7 @@
   },
   "references": [
     {
-      "path": "../../distilled/packages/aws/tsconfig.json"
+      "path": "./submodules/distilled/packages/aws/tsconfig.json"
     },
   ]
 }

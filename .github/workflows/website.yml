@@ -15,7 +15,7 @@ on:
     branches:
       - main
     paths:
-      - "distilled"
+      - "submodules/distilled"
       - "website/**"
       - "packages/**"
       - "scripts/generate-api-reference.ts"
@@ -36,7 +36,7 @@ on:
       - unlabeled
       - closed
     paths:
-      - "distilled"
+      - "submodules/distilled"
       - "website/**"
       - "packages/**"
       - "scripts/generate-api-reference.ts"
@@ -92,7 +92,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Checkout distilled
-        run: git submodule update --init --depth=1 --checkout -- distilled
+        run: git submodule update --init --depth=1 --checkout -- submodules/distilled
 
       # Mint a token for the alchemy-version-bot GitHub App so the PR
       # preview comment (created via GitHub.Comment in alchemy.run.ts)
@@ -184,7 +184,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Checkout distilled
-        run: git submodule update --init --depth=1 --checkout -- distilled
+        run: git submodule update --init --depth=1 --checkout -- submodules/distilled
 
       - name: Generate bot token
         id: bot-token

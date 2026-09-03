@@ -1031,10 +1031,10 @@ async function auditService(serviceName: string): Promise<AuditReport> {
   };
 
   const preferredDistilledPath = path.resolve(
-    `distilled/packages/aws/src/services/${config.distilled}.ts`,
+    `submodules/distilled/packages/aws/src/services/${config.distilled}.ts`,
   );
   const fallbackDistilledPath = path.resolve(
-    `.vendor/distilled/@distilled.cloud/aws/src/services/${config.distilled}.ts`,
+    `distilled/packages/aws/src/services/${config.distilled}.ts`,
   );
   const resolvedDistilledPath = await fs
     .access(preferredDistilledPath)

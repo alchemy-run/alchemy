@@ -1,6 +1,21 @@
-	# reference-only checkout of the repos — skipped by
-	# `git submodule update --init` (CI included). Fetch explicitly with
-	# `git submodule update --init --checkout -- .vendor/<repo>`.
+# First-class sibling repositories we maintain.
+#
+# Distilled is part of the TypeScript workspace and is initialized by
+# `git submodule update --init`. Floci is a large Java tree used only to
+# build the local AWS emulator, so it is skipped unless requested:
+# `git submodule update --init --checkout -- submodules/floci`.
+[submodule "distilled"]
+	path = submodules/distilled
+	url = https://github.com/alchemy-run/distilled.git
+[submodule "floci"]
+	path = submodules/floci
+	url = https://github.com/alchemy-run/floci.git
+	shallow = true
+	update = none
+
+# Reference-only checkouts of upstream repos — skipped by
+# `git submodule update --init` (CI included). Fetch explicitly with
+# `git submodule update --init --checkout -- .vendor/<repo>`.
 [submodule "vendor/alchemy"]
 	path = .vendor/alchemy
 	url = https://github.com/alchemy-run/alchemy-async.git
@@ -58,15 +73,6 @@
 [submodule "vendor/nitro-cloudflare-dev"]
 	path = .vendor/nitro-cloudflare-dev
 	url = https://github.com/nitrojs/nitro-cloudflare-dev.git
-	shallow = true
-	update = none
-	ignore = all
-[submodule "distilled"]
-	path = distilled
-	url = https://github.com/alchemy-run/distilled.git
-[submodule "vendor/floci"]
-	path = .vendor/floci
-	url = https://github.com/alchemy-run/floci.git
 	shallow = true
 	update = none
 	ignore = all

@@ -56,7 +56,7 @@
   // program input: agent worktrees (.claude is ~69GB incl. nested
   // node_modules), vendored submodules, test logs/tmp bundles, and installs.
   "files.watcherExclude": {
-    "**/distilled/**": true,
+    "**/submodules/**": true,
     "**/.claude/**": true,
     "**/.vendor/**": true,
     "**/.alchemy/**": true,
@@ -64,13 +64,13 @@
     "**/.git/**": true
   },
   "search.exclude": {
-    "**/distilled/**": true,
+    "**/submodules/**": true,
     "**/.claude/**": true,
     "**/.vendor/**": true,
     "**/.alchemy/**": true
   },
   // Keep the 200MB generated distilled surface out of the auto-import index.
-  "typescript.preferences.autoImportFileExcludePatterns": [ "**/distilled/**" ],
+  "typescript.preferences.autoImportFileExcludePatterns": [ "**/submodules/**" ],
   "[typescript]": {
     "editor.indentSize": 2,
     "editor.defaultFormatter": "oxc.oxc-vscode"
