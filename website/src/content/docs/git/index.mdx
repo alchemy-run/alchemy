@@ -1,12 +1,13 @@
 ---
 title: Git
-description: A git server as Effect Layers on Cloudflare Workers, Durable Objects, and R2. Smart HTTP for any client, a typed REST plane with pull requests, and a GitHub-compatible API, assembled in one file.
+description: A pluggable, self-hostable git server on Cloudflare Workers, Durable Objects, and R2. Smart HTTP for any client, a typed REST plane with pull requests, and a GitHub-compatible API, assembled in one file.
 ---
 
-`alchemy/Git` is a git server as a set of Effect Layers. It speaks git's
+`alchemy/Git` is a pluggable, self-hostable git server. It speaks git's
 smart HTTP to any client, serves a typed REST plane with pull requests,
 and answers the GitHub REST v3 API for `gh` and Octokit. It runs on
-Cloudflare Workers, Durable Objects, and R2, in one file:
+Cloudflare Workers, Durable Objects, and R2, and each part of it is an
+Effect Layer you can replace:
 
 ```typescript
 import * as Cloudflare from "alchemy/Cloudflare";
