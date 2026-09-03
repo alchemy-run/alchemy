@@ -58,8 +58,8 @@ export type GetBindingType<T> =
   // A named-entrypoint service binding (`Cloudflare.WorkerEntrypoint`).
   // Tested first: the marker *contains* a Worker, so the later Worker
   // branches must never see it.
-  T extends WorkerEntrypointBinding
-    ? Fetcher
+  T extends WorkerEntrypointBinding<infer Entrypoint, infer Target>
+    ? EntrypointStub<Entrypoint, Target>
     : // A Container bound in `env` is a container-backed Durable Object class —
       // the runtime binding is the class's namespace. Must be tested BEFORE the
       // generic Effect unwrap: a Container declaration is itself an Effect.
@@ -152,6 +152,37 @@ export type GetBindingType<T> =
                                                                     // we JSON.stringify when not a Redacted<string>
                                                                     string
                                                                   : T;
+
+/**
+ * Runtime type of a `Cloudflare.WorkerEntrypoint(...)` env entry.
+ *
+ * `Entrypoint` is the class the binding names, supplied as an explicit type
+ * argument (`Cloudflare.WorkerEntrypoint<typeof Api>(target, "Api")`) — the
+ * entrypoint name is a string at the value level, so nothing links it to the
+ * target module's exports on its own. With it, the entry types as that
+ * class's RPC surface (`Service<typeof Api>`); without it, the binding falls
+ * back to the target Worker's own default-entrypoint type: an Effect-native
+ * Worker's `Rpc<Shape>` wire shape, otherwise a bare `Fetcher`.
+ */
+export type EntrypointStub<Entrypoint, Target> = [Entrypoint] extends [
+  undefined,
+]
+  ? Target extends AlchemyRpc<infer Shape extends object>
+    ? RpcWireShape<Shape> & Service
+    : Fetcher
+  : Entrypoint extends AlchemyRpc<infer Shape extends object>
+    ? RpcWireShape<Shape> & Service
+    : Entrypoint extends abstract new (...args: any[]) => infer Instance
+      ? EntrypointStubOf<Instance>
+      : EntrypointStubOf<Entrypoint>;
+
+/** {@link EntrypointStub} for an entrypoint *instance* type. */
+type EntrypointStubOf<Instance> = [Instance] extends [
+  Rpc.WorkerEntrypointBranded,
+]
+  ? Service<Extract<Instance, Rpc.WorkerEntrypointBranded>>
+  : // A plain method-bag shape (no `cloudflare:workers` brand).
+    Fetcher & { [K in keyof Instance]: Instance[K] };
 
 /**
  * Cloudflare service-binding wire shape for an Effect-native Worker.
