@@ -22,8 +22,12 @@ import { CloudflareLogs } from "../../Cloudflare/Logs.ts";
 import { STATE_STORE_SCRIPT_NAME } from "../../Cloudflare/StateStore/Api.ts";
 import {
   bootstrap as bootstrapCloudflare,
+  readStateStoreSecrets,
+  restoreStateStoreSecrets,
   teardownStateStore,
 } from "../../Cloudflare/StateStore/State.ts";
+import * as FileSystem from "effect/FileSystem";
+import * as Schema from "effect/Schema";
 import * as Clank from "../../Util/Clank.ts";
 import { loadConfigProvider } from "../../Util/ConfigProvider.ts";
 import { fileLogger } from "../../Util/FileLogger.ts";
@@ -631,8 +635,100 @@ const stateLogsCommand = Command.make(
   ),
 );
 
+const secretsOutFlag = Flag.string("out").pipe(
+  Flag.withDescription(
+    "Write the state store's bearer token and encryption key to this file (mode 0600). " +
+      "Keep it in a password manager: a rotated encryption key makes every stack's state unreadable.",
+  ),
+  Flag.optional,
+  Flag.map(Option.getOrUndefined),
+);
+
+const secretsRestoreFlag = Flag.string("restore").pipe(
+  Flag.withDescription(
+    "Write the token and encryption key from this backup file back into the Secrets Store.",
+  ),
+  Flag.optional,
+  Flag.map(Option.getOrUndefined),
+);
+
+const StateStoreSecretsBackup = Schema.Struct({
+  accountId: Schema.String,
+  storeId: Schema.String,
+  url: Schema.String,
+  authToken: Schema.String,
+  encryptionKey: Schema.String,
+});
+
+/**
+ * `alchemy cloudflare state secrets --out <file>` — back up the bearer
+ * token and the encryption key of the `alchemy-state-store` Worker.
+ * `--restore <file>` writes a backup back. Values never go to stdout.
+ */
+const stateSecretsCommand = Command.make(
+  "secrets",
+  {
+    envFile,
+    profile,
+    out: secretsOutFlag,
+    restore: secretsRestoreFlag,
+  },
+  instrumentCommand(
+    "cloudflare.state.secrets",
+    (a: {
+      profile: string;
+      out: string | undefined;
+      restore: string | undefined;
+    }) => ({
+      "alchemy.profile": a.profile,
+      "alchemy.mode": a.restore ? "restore" : "backup",
+    }),
+  )(
+    Effect.fn(function* ({ envFile, profile, out, restore }) {
+      if ((out === undefined) === (restore === undefined)) {
+        return yield* Effect.die(
+          new Error("Pass exactly one of --out <file> or --restore <file>."),
+        );
+      }
+      const services = yield* cloudflareLayers(envFile, profile);
+      const fs = yield* FileSystem.FileSystem;
+
+      yield* Effect.gen(function* () {
+        if (restore !== undefined) {
+          const raw = yield* fs.readFileString(restore);
+          const parsed = yield* Effect.try({
+            try: () => JSON.parse(raw) as unknown,
+            catch: (cause) =>
+              new Error(`${restore} is not JSON: ${String(cause)}`),
+          });
+          const backup = yield* Schema.decodeUnknownEffect(
+            StateStoreSecretsBackup,
+          )(parsed);
+          yield* restoreStateStoreSecrets(backup);
+          yield* Clank.success(
+            "Secrets restored. Delete ~/.alchemy/credentials/<profile>/cloudflare-state-store.json " +
+              "so clients pick up the token again.",
+          );
+          return;
+        }
+        const secrets = yield* readStateStoreSecrets();
+        yield* fs.writeFileString(
+          out!,
+          JSON.stringify(secrets, null, 2) + "\n",
+          {
+            mode: 0o600,
+          },
+        );
+        yield* Clank.success(
+          `State store secrets written to ${out}. Move it to a password manager.`,
+        );
+      }).pipe(Effect.provide(services));
+    }),
+  ),
+);
+
 const stateCommand = Command.make("state", {}).pipe(
-  Command.withSubcommands([stateLogsCommand]),
+  Command.withSubcommands([stateLogsCommand, stateSecretsCommand]),
 );
 
 export const cloudflareCommand = Command.make("cloudflare", {}).pipe(
