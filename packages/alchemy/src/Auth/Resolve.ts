@@ -113,7 +113,17 @@ export const resolveProviderConfig = <
       auth,
       profileName,
       config,
-      resolve: auth.read(profileName, config),
+      resolve: auth.read(profileName, config, (updated) =>
+        profile.setProviderConfig(profileName, providerName, updated).pipe(
+          Effect.mapError(
+            (cause) =>
+              new AuthError({
+                message: `${providerName}: could not persist refreshed credentials for profile '${profileName}'.`,
+                cause,
+              }),
+          ),
+        ),
+      ),
       source: "profile" as const,
     };
   });

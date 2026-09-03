@@ -20,7 +20,6 @@ export interface PrismaResolvedCredentials {
 
 const prismaAuth = makeStoredAuthProvider<PrismaResolvedCredentials>({
   provider: PRISMA_AUTH_PROVIDER_NAME,
-  storageKey: "prisma-stored",
   fields: [
     {
       name: "serviceToken",
@@ -78,6 +77,6 @@ const prismaAuth = makeStoredAuthProvider<PrismaResolvedCredentials>({
  */
 export const PrismaAuth = prismaAuth.layer;
 
-/** Schema of the stored Prisma credential file (flat field record). */
+/** Schema of Prisma's inline static-token values. */
 export const PrismaStoredCredentials = prismaAuth.storedSchema;
 export type PrismaStoredCredentials = typeof PrismaStoredCredentials.Type;

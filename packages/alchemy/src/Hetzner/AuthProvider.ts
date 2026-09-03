@@ -24,7 +24,6 @@ export type HetznerResolvedCredentials = {
 
 const hetznerAuth = makeStoredAuthProvider<HetznerResolvedCredentials>({
   provider: HETZNER_AUTH_PROVIDER_NAME,
-  storageKey: "hetzner-stored",
   fields: [
     { name: "token", label: "Hetzner Cloud API Token", secret: true },
     {

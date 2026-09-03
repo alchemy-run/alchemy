@@ -76,7 +76,9 @@ export const profileHub = Effect.fn(function* (options: {
                 ? ("configured" as const)
                 : provider.status === "needs-reauth"
                   ? ("reauth" as const)
-                  : ("error" as const),
+                  : provider.status === "needs-reconfigure"
+                    ? ("reconfigure" as const)
+                    : ("error" as const),
             lines: [
               ...provider.details.map(({ key, value }) => `${key}: ${value}`),
               ...(provider.diagnostic ? [provider.diagnostic.message] : []),
@@ -122,6 +124,8 @@ export const profileHub = Effect.fn(function* (options: {
         if (action.kind === "refresh") {
           yield* Profiles.refresh({
             profile: action.name,
+            providers:
+              action.provider === undefined ? undefined : [action.provider],
             entrypoint: options.main,
             envFile,
           }).pipe(
@@ -131,7 +135,13 @@ export const profileHub = Effect.fn(function* (options: {
                 : Effect.void,
             ),
           );
-          return { ok: true, message: "Credentials refreshed." };
+          return {
+            ok: true,
+            message:
+              action.provider === undefined
+                ? "Credentials refreshed."
+                : `${action.provider} credentials refreshed.`,
+          };
         }
 
         const outcomes: string[] = [];

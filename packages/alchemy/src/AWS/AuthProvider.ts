@@ -36,7 +36,7 @@ import {
   type ProviderDetailLine,
   type ProviderDetails,
 } from "../Auth/AuthProvider.ts";
-import { CredentialsStore, displayRedacted } from "../Auth/Credentials.ts";
+import { displayRedacted } from "../Auth/Credentials.ts";
 import {
   getEnv,
   getEnvRedacted,
@@ -94,7 +94,7 @@ export const silentConsole: EffectConsole.Console = {
   warn: noop,
 };
 
-/** Manifest-entry schema for {@link AwsAuthConfig}. */
+/** Typed values stored in an AWS provider profile document. */
 export const AwsAuthConfigSchema = Schema.Union([
   Schema.Struct({
     method: Schema.Literal("sso"),
@@ -103,7 +103,14 @@ export const AwsAuthConfigSchema = Schema.Union([
       Schema.Union([Schema.Literal("oauth"), Schema.Literal("device")]),
     ),
   }),
-  Schema.Struct({ method: Schema.Literal("stored") }),
+  Schema.Struct({
+    method: Schema.Literal("stored"),
+    accountId: Schema.optional(Schema.String),
+    accessKeyId: Schema.String,
+    secretAccessKey: Schema.String,
+    sessionToken: Schema.optional(Schema.String),
+    region: Schema.String,
+  }),
   Schema.Struct({
     method: Schema.Literal("local"),
     endpoint: Schema.optional(Schema.String),
@@ -135,17 +142,6 @@ const options: Array<{
     description: "floci / LocalStack — no AWS account required",
   },
 ];
-
-export const AwsStoredCredentials = Schema.Struct({
-  accountId: Schema.String,
-  accessKeyId: Schema.RedactedFromValue(Schema.String),
-  secretAccessKey: Schema.RedactedFromValue(Schema.String),
-  sessionToken: Schema.optional(Schema.RedactedFromValue(Schema.String)),
-  region: Schema.String,
-});
-export type AwsStoredCredentials = typeof AwsStoredCredentials.Type;
-
-const STORAGE_KEY = "aws-stored";
 
 /** `--set` fields for `--method keys` (static access keys, persisted). */
 const keysFields: ReadonlyArray<ConfigureField> = [
@@ -225,8 +221,6 @@ export const AwsAuth = AuthProviderLayer<
   AWS_AUTH_PROVIDER_NAME,
   Effect.gen(function* () {
     const interaction = Interaction.accessors;
-    const store = yield* CredentialsStore;
-
     const getAccountId = ({
       accessKeyId,
       secretAccessKey,
@@ -309,16 +303,16 @@ export const AwsAuth = AuthProviderLayer<
         region,
       });
 
-      yield* store.write(profileName, STORAGE_KEY, AwsStoredCredentials, {
-        accountId,
-        accessKeyId: Redacted.make(accessKeyId),
-        secretAccessKey: Redacted.make(secretAccessKey),
-        sessionToken: sessionToken ? Redacted.make(sessionToken) : undefined,
-        region,
-      });
       yield* interaction.output.success("AWS credentials saved.");
 
-      return { method: "stored" as const };
+      return {
+        method: "stored" as const,
+        accountId,
+        accessKeyId,
+        secretAccessKey,
+        sessionToken: sessionToken || undefined,
+        region,
+      };
     });
 
     const configureInteractive = (profileName: string) =>
@@ -456,14 +450,17 @@ export const AwsAuth = AuthProviderLayer<
                   }),
               ),
             );
-            yield* store.write(profileName, STORAGE_KEY, AwsStoredCredentials, {
+            return {
+              method: "stored" as const,
               accountId,
-              accessKeyId,
-              secretAccessKey,
-              sessionToken,
+              accessKeyId: Redacted.value(accessKeyId),
+              secretAccessKey: Redacted.value(secretAccessKey),
+              sessionToken:
+                sessionToken === undefined
+                  ? undefined
+                  : Redacted.value(sessionToken),
               region,
-            });
-            return { method: "stored" as const };
+            };
           }),
         ),
         Match.when("sso", () =>
@@ -514,7 +511,11 @@ export const AwsAuth = AuthProviderLayer<
         ),
       );
 
-    const resolveCredentials = (profileName: string, config: AwsAuthConfig) =>
+    const resolveCredentials = (
+      profileName: string,
+      config: AwsAuthConfig,
+      updateConfig?: (config: AwsAuthConfig) => Effect.Effect<void, AuthError>,
+    ) =>
       Effect.gen(function* () {
         const reauth = refreshHint(AWS_AUTH_PROVIDER_NAME, profileName);
         return yield* Match.value(config)
@@ -563,76 +564,32 @@ export const AwsAuth = AuthProviderLayer<
                 } satisfies AwsResolvedCredentials;
               }),
             ),
-            Match.when({ method: "stored" }, () =>
-              store.read(profileName, STORAGE_KEY, AwsStoredCredentials).pipe(
-                Effect.flatMap((creds) =>
-                  creds == null
-                    ? Effect.fail(
-                        new NeedsReauth({
-                          provider: AWS_AUTH_PROVIDER_NAME,
-                          profile: profileName,
-                          message: `AWS stored credentials not found. ${reauth}`,
-                        }),
-                      )
-                    : Effect.succeed({
-                        accountId: creds.accountId,
-                        credentials: Effect.succeed<AwsCredentials>({
-                          accessKeyId: creds.accessKeyId,
-                          secretAccessKey: creds.secretAccessKey,
-                          sessionToken: creds.sessionToken,
-                          region: creds.region,
-                        }),
-                        region: creds.region,
-                        source: { type: "stored" as const },
-                      } satisfies AwsResolvedCredentials),
-                ),
-                // an older verson of the stored credentials didn't include the account ID, so we patch it hre
-                Effect.flatMap((creds) =>
-                  creds.accountId
-                    ? Effect.succeed(creds)
-                    : creds.credentials.pipe(
-                        Effect.flatMap((resolved) =>
-                          getAccountId({
-                            accessKeyId: resolved.accessKeyId,
-                            secretAccessKey: resolved.secretAccessKey,
-                            sessionToken: resolved.sessionToken,
-                            region: creds.region,
-                          }),
-                        ),
-                        Effect.map(
-                          (accountId) =>
-                            ({
-                              ...creds,
-                              accountId,
-                            }) satisfies AwsResolvedCredentials,
-                        ),
-                        // re-write the stored credentials
-                        Effect.tap((creds) =>
-                          creds.credentials.pipe(
-                            Effect.tap(
-                              ({
-                                accessKeyId,
-                                secretAccessKey,
-                                sessionToken,
-                              }) =>
-                                store.write(
-                                  profileName,
-                                  STORAGE_KEY,
-                                  AwsStoredCredentials,
-                                  {
-                                    accessKeyId,
-                                    secretAccessKey,
-                                    sessionToken,
-                                    region: creds.region,
-                                    accountId: creds.accountId,
-                                  },
-                                ),
-                            ),
-                          ),
-                        ),
-                      ),
-                ),
-              ),
+            Match.when({ method: "stored" }, (config) =>
+              Effect.gen(function* () {
+                const credentials: AwsCredentials = {
+                  accessKeyId: Redacted.make(config.accessKeyId),
+                  secretAccessKey: Redacted.make(config.secretAccessKey),
+                  sessionToken:
+                    config.sessionToken === undefined
+                      ? undefined
+                      : Redacted.make(config.sessionToken),
+                  region: config.region,
+                };
+                const accountId =
+                  config.accountId ?? (yield* getAccountId(credentials));
+                if (
+                  config.accountId === undefined &&
+                  updateConfig !== undefined
+                ) {
+                  yield* updateConfig({ ...config, accountId });
+                }
+                return {
+                  accountId,
+                  credentials: Effect.succeed(credentials),
+                  region: config.region,
+                  source: { type: "stored" as const },
+                } satisfies AwsResolvedCredentials;
+              }),
             ),
             Match.when({ method: "sso" }, (config) =>
               Effect.gen(function* () {
@@ -710,7 +667,7 @@ export const AwsAuth = AuthProviderLayer<
             // diagnosis. Only genuinely unexpected failures (store I/O, the
             // STS accountId backfill) get wrapped.
             Effect.mapError((e) =>
-              e._tag === "NeedsReauth" || e._tag === "AuthError"
+              e._tag === "AuthError"
                 ? e
                 : new AuthError({
                     message: "failed to resolve AWS credentials",
@@ -730,7 +687,11 @@ export const AwsAuth = AuthProviderLayer<
           );
       });
 
-    const details = (profileName: string, config: AwsAuthConfig) =>
+    const details = (
+      profileName: string,
+      config: AwsAuthConfig,
+      updateConfig?: (config: AwsAuthConfig) => Effect.Effect<void, AuthError>,
+    ) =>
       Effect.gen(function* () {
         // Profile display is observational. Resolving local credentials calls
         // ensureFloci(), which may inspect/start Docker and wait for health;
@@ -748,7 +709,11 @@ export const AwsAuth = AuthProviderLayer<
             ],
           } satisfies ProviderDetails;
         }
-        const creds = yield* resolveCredentials(profileName, config);
+        const creds = yield* resolveCredentials(
+          profileName,
+          config,
+          updateConfig,
+        );
         const reauth = refreshHint(AWS_AUTH_PROVIDER_NAME, profileName);
         // Resolve the live credentials. An expired/invalid SSO token only
         // surfaces here (the inner effect is lazy), so convert those tags
@@ -794,7 +759,7 @@ export const AwsAuth = AuthProviderLayer<
         return { lines };
       });
 
-    const logout = (profileName: string, config: AwsAuthConfig) =>
+    const logout = (_profileName: string, config: AwsAuthConfig) =>
       Match.value(config).pipe(
         Match.when({ method: "local" }, () => Effect.void),
         Match.when({ method: "sso" }, (config) =>
@@ -815,34 +780,18 @@ export const AwsAuth = AuthProviderLayer<
               }),
             ),
         ),
-        Match.when({ method: "stored" }, () =>
-          store
-            .delete(profileName, STORAGE_KEY)
-            .pipe(
-              Effect.andThen(
-                interaction.output.success("AWS: stored credentials removed"),
-              ),
-            ),
-        ),
+        Match.when({ method: "stored" }, () => Effect.void),
         Match.exhaustive,
       );
 
     const login = (profileName: string, config: AwsAuthConfig) =>
       Match.value(config)
         .pipe(
-          Match.when({ method: "local" }, () => Effect.void),
+          Match.when({ method: "local" }, (config) => Effect.succeed(config)),
           Match.when({ method: "sso" }, (config) =>
             loginSSO(config, config.authorizationMethod ?? "oauth"),
           ),
-          Match.when({ method: "stored" }, () =>
-            store
-              .read(profileName, STORAGE_KEY, AwsStoredCredentials)
-              .pipe(
-                Effect.flatMap((creds) =>
-                  creds == null ? loginStored(profileName) : Effect.void,
-                ),
-              ),
-          ),
+          Match.when({ method: "stored" }, (config) => Effect.succeed(config)),
           Match.exhaustive,
         )
         .pipe(

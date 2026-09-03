@@ -238,7 +238,8 @@ const noCredsProfile: ProfileStoreService = {
   createProfile: () => unexpectedProfileMutation,
   renameProfile: () => unexpectedProfileMutation,
   current: Effect.succeed({ name: NO_CREDS_PROFILE, source: "configuration" }),
-  setProfile: () => unexpectedProfileMutation,
+  setProviderConfig: () => unexpectedProfileMutation,
+  deleteProviderConfig: () => unexpectedProfileMutation,
   deleteProfile: () => Effect.succeed(false),
   loadProviderConfig: () => unexpectedProfileMutation,
 };
