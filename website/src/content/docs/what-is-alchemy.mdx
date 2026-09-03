@@ -44,13 +44,10 @@ export default Cloudflare.Worker(
 );
 ```
 
-```sh
-bun alchemy deploy
-```
-
-Alchemy creates the Bucket, bundles the Worker, wires the binding
-between them, and prints the URL. Let's start with the engine
-underneath, then look at what the layer on top adds.
+That one file is a complete application. The Bucket is declared next
+to the Worker that uses it, and `bucket` is a typed client the handler
+closes over. Let's start with the engine underneath, then look at what
+the layer on top adds.
 
 ## Infrastructure as Code
 
@@ -75,7 +72,14 @@ export default Alchemy.Stack(
 );
 ```
 
-Every deploy targets a stage, an isolated environment with its own
+Deploy it:
+
+```sh
+bun alchemy deploy
+```
+
+Alchemy creates the Bucket, bundles the Worker, wires the binding
+between them, and prints the URL. Every deploy targets a stage, an isolated environment with its own
 copy of every resource, so `dev` and `prod` never touch each other:
 
 ```sh
