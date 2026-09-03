@@ -179,11 +179,13 @@ export default {
 ```
 
 This works, and it is fully supported. `InferEnv` even types the env
-from the declaration, which is more than most IaC tools give you. But
-the two files are still held together by the name `Uploads`, and the
-handler knows nothing about how the Bucket got there. Infrastructure
-as Effects is what turns those two files into the one at the top of
-this page.
+from the declaration, which is more than most IaC tools give you, and
+two Workers can bind each other, a cycle most IaC engines reject
+([Circular Bindings](/infrastructure-as-effects/circular-bindings)).
+But the two files are still held together by the name `Uploads`, and
+the handler knows nothing about how the Bucket got there.
+Infrastructure as Effects is what turns those two files into the one
+at the top of this page.
 
 ## Infrastructure as Effects
 
