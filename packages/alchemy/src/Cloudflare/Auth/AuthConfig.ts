@@ -4,43 +4,37 @@ import * as Schema from "effect/Schema";
 import { AuthError } from "../../Auth/AuthProvider.ts";
 import { profileCommandHint } from "../../Util/interactive.ts";
 
-/** Manifest-entry schema for Cloudflare authentication. */
+/** Typed values stored in a Cloudflare provider profile document. */
 export const CloudflareAuthConfigSchema = Schema.Union([
   Schema.Struct({
     method: Schema.Literal("stored"),
-    credentialType: Schema.Literals(["apiToken", "apiKey"]),
+    credentialType: Schema.Literal("apiToken"),
+    apiToken: Schema.String,
+    accountId: Schema.String,
+  }),
+  Schema.Struct({
+    method: Schema.Literal("stored"),
+    credentialType: Schema.Literal("apiKey"),
+    apiKey: Schema.String,
+    email: Schema.String,
+    accountId: Schema.String,
   }),
   Schema.Struct({
     method: Schema.Literal("oauth"),
     scopes: Schema.mutable(Schema.Array(Schema.String)),
     accountId: Schema.String,
+    clientId: Schema.optional(Schema.String),
+    access: Schema.String,
+    refresh: Schema.String,
+    expires: Schema.Number,
+  }),
+  // Released v0 OAuth grants cannot be reused, but retaining the method lets
+  // `profile refresh` restart OAuth at scope selection.
+  Schema.Struct({
+    method: Schema.Literal("oauth"),
   }),
 ]);
 export type CloudflareAuthConfig = typeof CloudflareAuthConfigSchema.Type;
-
-/**
- * On-disk shape of the `method: "stored"` credentials persisted under
- * `~/.alchemy/credentials/{profile}/cloudflare-stored.json`.
- */
-export const CloudflareStoredCredentials = Schema.Union([
-  Schema.Struct({
-    type: Schema.Literal("apiToken"),
-    apiToken: Schema.RedactedFromValue(Schema.String),
-    accountId: Schema.String,
-  }),
-  Schema.Struct({
-    type: Schema.Literal("apiKey"),
-    apiKey: Schema.RedactedFromValue(Schema.String),
-    email: Schema.RedactedFromValue(Schema.String),
-    accountId: Schema.String,
-  }),
-]);
-export type CloudflareStoredCredentials =
-  typeof CloudflareStoredCredentials.Type;
-
-/** Credential-store file keys (`~/.alchemy/credentials/{profile}/{key}.json`). */
-export const STORED_STORAGE_KEY = "cloudflare-stored";
-export const OAUTH_STORAGE_KEY = "cloudflare-oauth";
 
 export type CloudflareResolvedCredentials =
   | {

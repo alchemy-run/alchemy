@@ -1,11 +1,7 @@
 import { AuthProviders } from "@/Auth/AuthProvider";
-import { CredentialsStore } from "@/Auth/Credentials";
 import { ProfileStore } from "@/Auth/Profile";
 import * as CliKit from "@/Cli/CliKit";
-import {
-  PrismaAuth,
-  type PrismaStoredCredentials,
-} from "@/Prisma/AuthProvider";
+import { PrismaAuth } from "@/Prisma/AuthProvider";
 import { PrismaEnvironment, fromProfile } from "@/Prisma/PrismaEnvironment";
 import { describe, expect, it } from "alchemy-test";
 import * as NodeServices from "@effect/platform-node/NodeServices";
@@ -13,22 +9,13 @@ import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
-import { makeFakeCredentialsStore, makeFakeProfileStore } from "./fakes.ts";
+import { makeFakeProfileStore } from "./fakes.ts";
 
-const makeProfile = (): ProfileStore["Service"] =>
+const makeProfile = (serviceToken: string): ProfileStore["Service"] =>
   makeFakeProfileStore({
     loadProviderConfig: <Config extends { method: string }>() =>
-      Effect.succeed({ method: "stored" } as Config),
+      Effect.succeed({ method: "stored", serviceToken } as Config),
   });
-
-const makeCredentialsStore = (
-  serviceToken?: string,
-): CredentialsStore["Service"] =>
-  makeFakeCredentialsStore(
-    serviceToken
-      ? ({ serviceToken } satisfies PrismaStoredCredentials)
-      : undefined,
-  );
 
 const testLayer = (
   config: Record<string, string>,
@@ -40,11 +27,10 @@ const testLayer = (
   return fromProfile().pipe(
     Layer.provideMerge(PrismaAuth),
     Layer.provideMerge(Layer.succeed(AuthProviders, authProviders)),
-    Layer.provideMerge(Layer.succeed(ProfileStore, makeProfile())),
     Layer.provideMerge(
       Layer.succeed(
-        CredentialsStore,
-        makeCredentialsStore(options.storedToken),
+        ProfileStore,
+        makeProfile(options.storedToken ?? "test-token"),
       ),
     ),
     Layer.provideMerge(

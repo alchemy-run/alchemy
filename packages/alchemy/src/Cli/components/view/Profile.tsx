@@ -14,7 +14,7 @@ import { theme } from "../../CliKit/index.ts";
 export interface ProfileProviderDisplay {
   readonly name: string;
   readonly method: string;
-  readonly status: "ready" | "configured" | "reauth" | "error";
+  readonly status: "ready" | "configured" | "reauth" | "reconfigure" | "error";
   readonly lines: ReadonlyArray<string>;
 }
 
@@ -43,6 +43,11 @@ export const providerStatusStyle = {
     color: theme.color.warning,
     glyph: "refresh",
     label: "needs re-login",
+  },
+  reconfigure: {
+    color: theme.color.warning,
+    glyph: "edit",
+    label: "needs setup",
   },
   error: {
     color: theme.color.danger,

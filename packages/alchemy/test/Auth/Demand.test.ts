@@ -111,15 +111,12 @@ const withTempHome = <A, E, R>(
           else process.env.ALCHEMY_HOME = previous;
         }),
     );
-    return yield* effect;
-  }).pipe(Effect.scoped, Effect.provide(makeTestLayer(config)));
+    return yield* effect.pipe(Effect.provide(makeTestLayer(config)));
+  }).pipe(Effect.scoped, Effect.provide(NodeServices.layer));
 
 const configureProbe = Effect.gen(function* () {
   const profile = yield* ProfileStore;
-  yield* profile.setProfile("default", {
-    id: "default",
-    providers: { [PROBE]: { method: "stored" } },
-  });
+  yield* profile.setProviderConfig("default", PROBE, { method: "stored" });
 });
 
 const demand: CredentialDemand = {

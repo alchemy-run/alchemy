@@ -76,7 +76,9 @@ export const profileHub = Effect.fn(function* (options: {
                 ? ("configured" as const)
                 : provider.status === "needs-reauth"
                   ? ("reauth" as const)
-                  : ("error" as const),
+                  : provider.status === "needs-reconfigure"
+                    ? ("reconfigure" as const)
+                    : ("error" as const),
             lines: [
               ...provider.details.map(({ key, value }) => `${key}: ${value}`),
               ...(provider.diagnostic ? [provider.diagnostic.message] : []),

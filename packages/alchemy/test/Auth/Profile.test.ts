@@ -6,7 +6,10 @@ import {
 } from "@/Auth/AuthProvider.ts";
 import {
   configFilePath,
-  PROFILE_MANIFEST_VERSION,
+  makeProviderProfileSchema,
+  PROFILE_FORMAT,
+  profileDirPath,
+  profileProviderFilePath,
   ProfileError,
   ProfileStore,
   ProfileStoreLive,
@@ -117,8 +120,8 @@ const withTempHome = <A, E, R>(
           else process.env.ALCHEMY_HOME = previous;
         }),
     );
-    return yield* effect;
-  }).pipe(Effect.scoped, Effect.provide(makeTestLayer(config)));
+    return yield* effect.pipe(Effect.provide(makeTestLayer(config)));
+  }).pipe(Effect.scoped, Effect.provide(NodeServices.layer));
 
 /** Set a process env var for the duration of the surrounding scope. */
 const withProcessEnv = (name: string, value: string) =>
@@ -191,11 +194,13 @@ it.live(
     withTempHome(
       Effect.gen(function* () {
         const profile = yield* ProfileStore;
+        const fs = yield* FileSystem.FileSystem;
         // Never written to disk, yet the reader still presents `default`
         // with its deterministic id.
         const manifest = yield* profile.readManifest;
         expect(Object.keys(manifest.profiles)).toEqual(["default"]);
         expect(manifest.profiles.default!.id).toBe("default");
+        expect(yield* fs.exists(profileDirPath("default"))).toBe(true);
         expect(yield* profile.ensureProfile("default")).toEqual({
           id: "default",
           providers: {},
@@ -215,7 +220,8 @@ it.live(
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
         const profile = yield* ProfileStore;
-        // Any manifest write persists the synthesized `default` entry.
+        // Creating a profile only creates its directory. The built-in
+        // default remains synthesized until it has a provider file.
         yield* profile.createProfile("work");
 
         const renameError = yield* profile
@@ -248,21 +254,15 @@ it.live(
           "already exists",
         );
 
-        const raw = JSON.parse(yield* fs.readFileString(configFilePath())) as {
-          version: number;
-          defaultProfile?: string;
-          profiles: Record<string, { id: string }>;
-        };
-        expect(raw.version).toBe(PROFILE_MANIFEST_VERSION);
-        expect(raw.profiles.default!.id).toBe("default");
-        expect(raw.defaultProfile).toBeUndefined();
+        expect(yield* fs.exists(profileDirPath("work"))).toBe(true);
+        expect(yield* fs.exists(configFilePath())).toBe(false);
       }),
     ),
   { exclusive: true },
 );
 
 it.live(
-  "migrates pre-id manifests and preserves unknown top-level keys",
+  "migrates centralized manifests into provider files",
   () =>
     withTempHome(
       Effect.gen(function* () {
@@ -285,30 +285,36 @@ it.live(
         );
 
         const manifest = yield* profile.readManifest;
-        // Migrated in place: id defaults to the profile name so it is
-        // deterministic before the manifest is rewritten.
         expect(manifest.profiles.legacy!.id).toBe("legacy");
         expect(manifest.profiles.legacy!.providers.Cloudflare).toEqual({
           method: "oauth",
-          scopes: ["d1.write"],
         });
-        // The built-in default is synthesized alongside the migrated entry.
         expect(manifest.profiles.default!.id).toBe("default");
 
-        // A write upgrades the version but keeps unknown top-level keys.
-        yield* profile.setProfile("legacy", manifest.profiles.legacy!);
-        const raw = JSON.parse(
-          yield* fs.readFileString(configFilePath()),
-        ) as Record<string, unknown>;
-        expect(raw.version).toBe(PROFILE_MANIFEST_VERSION);
-        expect(raw.futureField).toEqual({ anything: true });
+        const providerFile = JSON.parse(
+          yield* fs.readFileString(
+            profileProviderFilePath("legacy", "Cloudflare"),
+          ),
+        );
+        expect(providerFile).toEqual({
+          format: PROFILE_FORMAT,
+          provider: "Cloudflare",
+          metadata: {},
+          values: { method: "oauth" },
+        });
+        expect(yield* fs.exists(configFilePath())).toBe(false);
+        expect(
+          (yield* fs.readDirectory(path.dirname(configFilePath()))).filter(
+            (entry) => entry.startsWith(".profiles-v0-"),
+          ),
+        ).toHaveLength(1);
       }),
     ),
   { exclusive: true },
 );
 
 it.live(
-  "drops a legacy stored-default selection from the manifest",
+  "ignores unreleased centralized manifest versions",
   () =>
     withTempHome(
       Effect.gen(function* () {
@@ -326,23 +332,82 @@ it.live(
           }),
         );
 
-        // The stored selection has no authority: without an explicit
-        // --profile/$ALCHEMY_PROFILE the built-in `default` is used.
+        // Only released v0 is migrated. The short-lived centralized v1/v2
+        // formats are left untouched and do not enter the directory store.
         const manifest = yield* profile.readManifest;
-        expect(
-          (manifest as { defaultProfile?: string }).defaultProfile,
-        ).toBeUndefined();
+        expect(manifest.profiles.work).toBeUndefined();
         expect((yield* profile.current).name).toBe("default");
 
-        // The next write persists the removal.
         yield* profile.createProfile("scratch");
-        const raw = JSON.parse(yield* fs.readFileString(configFilePath())) as {
-          defaultProfile?: string;
-          profiles: Record<string, unknown>;
-        };
-        expect(raw.defaultProfile).toBeUndefined();
-        expect(raw.profiles.default).toBeDefined();
-        expect(raw.profiles.work).toBeDefined();
+        expect(yield* fs.exists(profileDirPath("work"))).toBe(false);
+        expect(yield* fs.exists(profileDirPath("scratch"))).toBe(true);
+        expect(yield* fs.exists(configFilePath())).toBe(true);
+      }),
+    ),
+  { exclusive: true },
+);
+
+it.live(
+  "backs up invalid provider files and continues loading the profile",
+  () =>
+    withTempHome(
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const profiles = yield* ProfileStore;
+        yield* fs.writeFileString(
+          profileProviderFilePath("default", "Cloudflare"),
+          "{not-json",
+        );
+        yield* fs.writeFileString(
+          profileProviderFilePath("default", "Other"),
+          JSON.stringify({
+            format: PROFILE_FORMAT,
+            provider: "Other",
+            metadata: {},
+            values: { method: "stored" },
+          }),
+        );
+
+        const manifest = yield* profiles.readManifest;
+        expect(manifest.profiles.default!.providers.Cloudflare).toBeUndefined();
+        expect(manifest.profiles.default!.providers.Other).toEqual({
+          method: "stored",
+        });
+        const files = yield* fs.readDirectory(profileDirPath("default"));
+        expect(files).toContain("other.json");
+        expect(
+          files.some((file) => file.startsWith("cloudflare.json.invalid-")),
+        ).toBe(true);
+      }),
+    ),
+  { exclusive: true },
+);
+
+it.live(
+  "backs up an invalid provider file before reconfiguration replaces it",
+  () =>
+    withTempHome(
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const profiles = yield* ProfileStore;
+        const file = profileProviderFilePath("default", "Cloudflare");
+        yield* fs.writeFileString(file, "{not-json");
+
+        yield* profiles.setProviderConfig("default", "Cloudflare", {
+          method: "oauth",
+        });
+
+        expect(JSON.parse(yield* fs.readFileString(file))).toEqual({
+          format: PROFILE_FORMAT,
+          provider: "Cloudflare",
+          metadata: {},
+          values: { method: "oauth" },
+        });
+        expect(
+          (yield* fs.readDirectory(profileDirPath("default"))).some((entry) =>
+            entry.startsWith("cloudflare.json.invalid-"),
+          ),
+        ).toBe(true);
       }),
     ),
   { exclusive: true },
@@ -389,13 +454,12 @@ it.live(
         expect(error).toBeInstanceOf(AuthError);
         expect((error as AuthError).message).toContain("--add");
 
-        // A manifest write persists the removal.
-        yield* profile.setProfile("ci", manifest.profiles.ci!);
-        const raw = JSON.parse(yield* fs.readFileString(configFilePath())) as {
-          profiles: Record<string, { providers: Record<string, unknown> }>;
-        };
-        expect(raw.profiles.ci!.providers[FAKE_PROVIDER]).toBeUndefined();
-        expect(raw.profiles.ci!.providers.Other).toBeDefined();
+        expect(
+          yield* fs.exists(profileProviderFilePath("ci", FAKE_PROVIDER)),
+        ).toBe(false);
+        expect(yield* fs.exists(profileProviderFilePath("ci", "Other"))).toBe(
+          true,
+        );
       }),
     ),
   { exclusive: true },
@@ -407,6 +471,40 @@ it.effect("accepts portable profile names", () =>
       "production-admin",
     );
     expect(yield* validateProfileName("team.prod_2")).toBe("team.prod_2");
+  }),
+);
+
+it.effect("lets custom providers refine metadata and values", () =>
+  Effect.gen(function* () {
+    const CustomProfile = makeProviderProfileSchema(
+      "Acme",
+      Schema.Struct({ team: Schema.String }),
+      Schema.Union([
+        Schema.Struct({
+          method: Schema.Literal("token"),
+          token: Schema.String,
+        }),
+        Schema.Struct({
+          method: Schema.Literal("oauth"),
+          access: Schema.String,
+          refresh: Schema.String,
+          scopes: Schema.Array(Schema.String),
+        }),
+      ]),
+    );
+    expect(
+      yield* Schema.decodeUnknownEffect(CustomProfile)({
+        format: PROFILE_FORMAT,
+        provider: "Acme",
+        metadata: { team: "platform" },
+        values: { method: "token", token: "secret" },
+      }),
+    ).toEqual({
+      format: PROFILE_FORMAT,
+      provider: "Acme",
+      metadata: { team: "platform" },
+      values: { method: "token", token: "secret" },
+    });
   }),
 );
 
@@ -512,7 +610,6 @@ it.live(
           .pipe(Effect.flip);
         expect(error).toBeInstanceOf(AuthError);
         expect((error as AuthError).message).toContain("--reconfigure");
-        expect((error as AuthError).message).toContain("bogus");
       }),
     ),
   { exclusive: true },

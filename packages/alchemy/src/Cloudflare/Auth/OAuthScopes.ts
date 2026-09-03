@@ -877,7 +877,7 @@ export const partitionOAuthScopes = (
 export const customOAuthScopeDefaults = (
   currentConfig?: CloudflareAuthConfig,
 ): string[] =>
-  currentConfig?.method === "oauth"
+  currentConfig?.method === "oauth" && "scopes" in currentConfig
     ? partitionOAuthScopes(currentConfig.scopes).valid
     : [...BASIC_SCOPES];
 
