@@ -2,7 +2,7 @@ import * as AI from "alchemy/AI";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as S from "effect/Schema";
-import { sha256Hex } from "../sandbox/Digest.ts";
+import { sha256Hex } from "./Digest.ts";
 import { path } from "./ReadFile.ts";
 
 const edits = AI.Parameter(
@@ -24,12 +24,12 @@ do not pad distant edits with large unchanged regions.`;
 const expectedDigest = AI.Parameter("expectedDigest", S.String)`
 The SHA-256 digest returned by readFile for this exact file version.`;
 
-export class EditFile extends AI.Tool<EditFile>()("editFile")`
+export class EditFile extends (AI.Tool<EditFile>(import.meta)("editFile")`
 Apply atomic exact-string ${edits} to the existing file at ${path}.
 The entire call is preflighted before anything is written; any
 missing, ambiguous, or overlapping edit leaves the file unchanged.
 Pass ${expectedDigest} to prove the file has not changed since you
-read it. Prefer this over writeFile for existing files.` {}
+read it. Prefer this over writeFile for existing files.`) {}
 
 /** Physics over the session {@link AI.Sandbox}. */
 export const EditFileLive = Layer.effect(

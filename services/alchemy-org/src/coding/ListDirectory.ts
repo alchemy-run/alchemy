@@ -16,11 +16,13 @@ const limit = AI.Parameter(
 )`
 Maximum entries to show (1-2000, default 500).`;
 
-export class ListDirectory extends AI.Tool<ListDirectory>()("listDirectory")`
+export class ListDirectory extends (AI.Tool<ListDirectory>(import.meta)(
+  "listDirectory",
+)`
 List the immediate contents of ${pathParam}, including dotfiles,
 sorted alphabetically with "/" after directories. This is shallow
 orientation, not recursive discovery — use glob for that. Bound the
-result with ${limit}.` {}
+result with ${limit}.`) {}
 
 /** Physics over the session {@link AI.Sandbox}. */
 export const ListDirectoryLive = Layer.effect(

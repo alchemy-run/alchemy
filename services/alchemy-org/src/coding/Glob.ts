@@ -2,8 +2,8 @@ import * as AI from "alchemy/AI";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as S from "effect/Schema";
-import { truncateHead } from "../sandbox/Output.ts";
-import { Artifacts } from "../sandbox/Artifacts.ts";
+import { truncateHead } from "../artifacts/Output.ts";
+import { Artifacts } from "../artifacts/Artifacts.ts";
 
 const pattern = AI.Parameter("pattern", S.String)`
 Glob pattern such as "*.ts", "**/*.json", or
@@ -23,11 +23,11 @@ const limit = AI.Parameter(
 Maximum paths to show (1-5000, default 1000). Complete truncated
 output is retained as an artifact ID.`;
 
-export class Glob extends AI.Tool<Glob>()("glob")`
+export class Glob extends (AI.Tool<Glob>(import.meta)("glob")`
 Find files by ${pattern}, relative to ${pathParam}. Returns sorted
 workspace-relative paths, respects .gitignore, and excludes .git.
 Use for filename discovery; use grep for file contents. Bound output
-with ${limit}.` {}
+with ${limit}.`) {}
 
 const MAX_BYTES = 50_000;
 

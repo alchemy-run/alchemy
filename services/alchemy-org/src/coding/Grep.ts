@@ -2,8 +2,8 @@ import * as AI from "alchemy/AI";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as S from "effect/Schema";
-import { truncateHead } from "../sandbox/Output.ts";
-import { Artifacts } from "../sandbox/Artifacts.ts";
+import { truncateHead } from "../artifacts/Output.ts";
+import { Artifacts } from "../artifacts/Artifacts.ts";
 
 const pattern = AI.Parameter("pattern", S.String)`
 A regular expression (full regex syntax, e.g. "log.*Error" or
@@ -58,7 +58,7 @@ Maximum output lines to show (1-2000; default 100 for content and
 500 for files/count). Complete truncated output is retained as an
 artifact ID readable with readOutput.`;
 
-export class Grep extends AI.Tool<Grep>()("grep")`
+export class Grep extends (AI.Tool<Grep>(import.meta)("grep")`
 Fast content search across the whole workspace, at any repo size.
 Searches file contents with ${pattern} — full regex syntax (e.g.
 "log.*Error", "function\\s+\\w+"), so escape literal ".", "(", "["
@@ -66,7 +66,7 @@ etc. Scope with ${pathParam}, ${glob}, or ${type}; use ${literal},
 ${ignoreCase}, ${context}, and ${multiline} only when useful.
 Choose ${outputMode} and bound the result with ${limit}. Respects
 .gitignore and skips binaries. Always search before reading files;
-use Glob for filename discovery.` {}
+use Glob for filename discovery.`) {}
 
 const MAX_BYTES = 50_000;
 

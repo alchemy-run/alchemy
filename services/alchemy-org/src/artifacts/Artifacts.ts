@@ -47,4 +47,3 @@ export const pageArtifact = (
       ? `${truncated.text}\n[Showing lines ${start}-${end} of ${lines.length}. Use offset=${end + 1} to continue.]`
       : truncated.text;
   });
-

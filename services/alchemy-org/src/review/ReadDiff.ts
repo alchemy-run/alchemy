@@ -15,14 +15,14 @@ export const PullRequestRef = S.Struct({
 export const pr = AI.Parameter("pr", PullRequestRef)`
 A reference to a pull request in the repository.`;
 
-export class ReadDiff extends AI.Tool<ReadDiff>()("readDiff")`
+export class ReadDiff extends (AI.Tool<ReadDiff>(import.meta)("readDiff")`
 Read ${pr} in full: its title, body (the "Closes #N" linkage and the
 author's claims), and the unified diff — the change itself, exactly as
 it would merge. An oversized diff is head-previewed; the full text is
-retained as an opaque ID readable with readOutput.` {}
+retained as an opaque ID readable with readOutput.`) {}
 
 /** Header + body via `pulls.get`, then the diff via `format: "diff"`.
- *  Deliberately UNBOUNDED — the spill net (sandbox/SpillingTools.ts) previews and
+ *  Deliberately UNBOUNDED — the spill net (artifacts/SpillingTools.ts) previews and
  *  retains oversized results, so nothing is discarded. */
 export const ReadDiffLive = Layer.effect(
   ReadDiff,

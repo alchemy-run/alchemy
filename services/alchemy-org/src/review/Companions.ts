@@ -16,7 +16,7 @@ the companion repository — that is the convention that pairs them.`;
  * `distilled`, the SDK factory pinned as a submodule; `floci`, the AWS
  * emulator). Read-only; a GitHub search, not a checkout.
  */
-export class FindCompanions extends AI.Tool<FindCompanions>()(
+export class FindCompanions extends (AI.Tool<FindCompanions>(import.meta)(
   "findCompanions",
 )`
 Find the companion pull requests of ${branch} in alchemy's dependency
@@ -25,7 +25,7 @@ whether it merged, its HEAD commit, and — for a repository pinned as a
 submodule — the path whose recorded commit you compare against (run
 'git ls-tree HEAD <path>' in your checkout: the pin must be the
 companion's head or its merge commit). A repository with no companion
-is reported as such; whether one was NEEDED is your judgment.` {}
+is reported as such; whether one was NEEDED is your judgment.`) {}
 
 /** One `pulls.list` per companion repository, filtered by head ref. */
 export const FindCompanionsLive = Layer.effect(
@@ -49,7 +49,12 @@ export const FindCompanionsLive = Layer.effect(
           searches,
           (search) =>
             search
-              .list({ state: "all", sort: "updated", direction: "desc", per_page: 50 })
+              .list({
+                state: "all",
+                sort: "updated",
+                direction: "desc",
+                per_page: 50,
+              })
               .pipe(
                 Effect.map((pulls) => {
                   const matches = pulls.filter(

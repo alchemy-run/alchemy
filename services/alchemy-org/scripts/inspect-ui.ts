@@ -15,7 +15,9 @@ await page.goto(URL, { waitUntil: "networkidle2", timeout: 60_000 });
 await new Promise((resolve) => setTimeout(resolve, 3000));
 await page.evaluate(() => {
   const buttons = [...document.querySelectorAll("aside button")];
-  (buttons.find((b) => b.textContent?.includes("#121")) as HTMLElement)?.click();
+  (
+    buttons.find((b) => b.textContent?.includes("#121")) as HTMLElement
+  )?.click();
 });
 await new Promise((resolve) => setTimeout(resolve, 4000));
 

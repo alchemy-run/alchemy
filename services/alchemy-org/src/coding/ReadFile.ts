@@ -2,7 +2,7 @@ import * as AI from "alchemy/AI";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as S from "effect/Schema";
-import { sha256Hex } from "../sandbox/Digest.ts";
+import { sha256Hex } from "./Digest.ts";
 
 /** The one `path` parameter every file tool (read, edit, write, and
  *  the reviewer's inline comments) shares — one description, one
@@ -25,12 +25,12 @@ const limit = AI.Parameter(
 )`
 Maximum number of lines to return (default and cap: 2000).`;
 
-export class ReadFile extends AI.Tool<ReadFile>()("readFile")`
+export class ReadFile extends (AI.Tool<ReadFile>(import.meta)("readFile")`
 Read the file at ${path}. Output is line-numbered ("N: content") and
 truncated to 2000 lines / 50KB — page large files with ${offset} and
 ${limit}. Read whole regions at once; avoid tiny slices. Every result
 includes the SHA-256 digest required by editFile/writeFile to prove
-you are changing the version you actually read.` {}
+you are changing the version you actually read.`) {}
 
 const DEFAULT_LIMIT = 2000;
 const MAX_BYTES = 50_000;

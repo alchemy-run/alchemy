@@ -42,8 +42,10 @@ export const alchemy = GitHub.Repository("alchemy", {
 /**
  * `distilled` — the Smithy-based SDK factory alchemy's providers call
  * (a submodule at `distilled/` in the alchemy tree, pinned by commit).
- * A pull request that adds a provider ships a COMPANION pull request
- * here; the review checks the pin points at it. Identity handle only.
+ * One unit with {@link alchemy}: a pull request that adds a provider
+ * ships a COMPANION pull request here, the review checks the pin
+ * points at it, and `process/DistilledGuidance.ts` is how the org
+ * works in it. Identity handle only.
  */
 export const distilled = GitHub.Repository("distilled", {
   owner: "alchemy-run",
@@ -52,14 +54,32 @@ export const distilled = GitHub.Repository("distilled", {
 
 /**
  * `floci` — the local AWS emulator alchemy's `alchemy dev` runs AWS
- * providers against (a reference-only vendor submodule). An AWS
- * provider is expected to arrive with its emulation; the review
- * looks for the companion pull request here. Identity handle only.
+ * providers against (a reference-only vendor submodule at
+ * `.vendor/floci`). One unit with {@link alchemy}: an AWS provider is
+ * expected to arrive with its emulation, the review looks for the
+ * companion pull request here, and `process/FlociGuidance.ts` is how
+ * the org works in it. Identity handle only.
  */
 export const floci = GitHub.Repository("floci", {
   owner: "alchemy-run",
   name: "floci",
 });
+
+/**
+ * A repository's `owner/name`, read from its declared identity — the
+ * way prose NAMES a repository by reference (`${nameOf(distilled)}`)
+ * rather than by a string that rots when the const moves. Splicing the
+ * constructor Effect itself renders the resource, not the name.
+ */
+export const nameOf = (repository: GitHub.RepositoryLike): string => {
+  const identity = GitHub.repositoryIdentity(repository);
+  if (identity === undefined) {
+    throw new Error(
+      "nameOf: the repository's owner/name are not plain strings — declare them statically in Repos.ts",
+    );
+  }
+  return `${identity.owner}/${identity.repository}`;
+};
 
 /**
  * The repositories a pull request on {@link alchemy} may have a
@@ -76,7 +96,7 @@ export const companions = [
  * The repositories this deploy may PUBLISH to (push branches, open
  * pull requests): each gets an authenticated `CreatePullRequest`
  * client bound at init; the session tree's `origin` picks the target
- * at call time (`coding/Publish.ts`).
+ * at call time (`coding/OpenPullRequest.ts`).
  */
 export const publishTargets = [alchemy, testAlchemy] as const;
 

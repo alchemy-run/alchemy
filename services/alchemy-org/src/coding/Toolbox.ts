@@ -4,11 +4,11 @@ import { GlobLive } from "./Glob.ts";
 import { GrepLive } from "./Grep.ts";
 import { ListDirectoryLive } from "./ListDirectory.ts";
 import { ReadFileLive } from "./ReadFile.ts";
-import { ReadOutputLive } from "../sandbox/ReadOutput.ts";
+import { ReadOutputLive } from "../artifacts/ReadOutput.ts";
 
 /**
  * The toolbox, grouped by ACCESS LEVEL — least privilege by
- * composition: QualityAssurance = Read + Run (verify, never author);
+ * composition: Verification = Read + Run (verify, never author);
  * the engineer = Read + Run + the editor (`Editor.ts`, deliberately
  * NOT a member of either group here — the write tools are granted
  * only by that layer, so a reviewer assembled from these two groups

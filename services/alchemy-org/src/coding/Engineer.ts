@@ -1,17 +1,24 @@
 import * as AI from "alchemy/AI";
 import * as Effect from "effect/Effect";
-import { Harness } from "../Harness.ts";
-import { PullRequests } from "../review/PullRequests.ts";
-import { ReadOutput } from "../sandbox/ReadOutput.ts";
-import { SessionRepo } from "../sandbox/SessionRepo.ts";
+import { DistilledGuidance } from "../process/DistilledGuidance.ts";
+import { FlociGuidance } from "../process/FlociGuidance.ts";
+import { ProviderGuidance } from "../process/ProviderGuidance.ts";
+import { PullRequests } from "../process/PullRequests.ts";
+import { Verification } from "../process/Verification.ts";
+import { OrgGuidance } from "../OrgGuidance.ts";
+import { ReadOutput } from "../artifacts/ReadOutput.ts";
+import { SessionRepo } from "../github/SessionRepo.ts";
 import { Bash } from "./Bash.ts";
 import { EditFile } from "./EditFile.ts";
 import { Glob } from "./Glob.ts";
 import { Grep } from "./Grep.ts";
 import { ListDirectory } from "./ListDirectory.ts";
-import { OpenPullRequest, PushBranch } from "./Publish.ts";
+import { OpenPullRequest } from "./OpenPullRequest.ts";
+import { PushBranch } from "./PushBranch.ts";
 import { ReadFile } from "./ReadFile.ts";
 import { WriteFile } from "./WriteFile.ts";
+
+export default import.meta.url;
 
 /**
  * The CODER — a generic coding agent, the whole product in one file:
@@ -31,7 +38,7 @@ import { WriteFile } from "./WriteFile.ts";
  *   capability envelope; publishing stops at the pull request — there
  *   is no merge button).
  */
-export class Engineer extends AI.Agent<Engineer>()("Engineer") {}
+export class Engineer extends AI.Agent<Engineer>(import.meta)("Engineer") {}
 
 export const GeneralEngineer = Engineer.make(
   Effect.gen(function* () {
@@ -42,7 +49,7 @@ export const GeneralEngineer = Engineer.make(
     // Session keys are `<owner>/<repo>/<name>` — the prefix picks the
     // session's repository from the STATIC connected list (Repos.ts);
     // a PULL REQUEST session is keyed `<owner>/<repo>#<n>` and works in
-    // the PR's head (sandbox/SessionRepo.ts). INIT only READS which
+    // the PR's head (github/SessionRepo.ts). INIT only READS which
     // tree that is, for the stance's prose — it touches no machine.
     // The tree itself lands the first time a tool reaches for it
     // (sandbox/SandboxCheckout.ts): a reply that needs no tool needs
@@ -97,7 +104,9 @@ export const GeneralEngineer = Engineer.make(
 
       Verify with ${Bash}: run the tests, the typechecker, the build.
       Claims about behavior are checked by RUNNING, never asserted
-      from reading. The test suite is the only oracle of done-ness.
+      from reading. The test suite is the only oracle of done-ness;
+      ${Verification} names the repository's own commands and what
+      counts as evidence.
 
       Author with ${EditFile} (exact-string edits against the version
       you read) and ${WriteFile} (whole files). Read before you
@@ -117,11 +126,17 @@ export const GeneralEngineer = Engineer.make(
 
       ${PullRequests}
 
-      When the work touches services/alchemy-org — the harness you are
-      running in — activate ${Harness} before you change anything: it
-      is the org's own doctrine, the same text a human coding agent
-      reads in that folder's AGENTS.md, and it names what a change
-      there must keep true.
+      Doctrine is pluggable — activate what the work touches before
+      you change anything, and no more. A provider (a resource, a
+      binding, a lifecycle rule under packages/alchemy/src) is held to
+      ${ProviderGuidance}; the repository is one unit with two others,
+      and the work usually crosses into them: ${DistilledGuidance} for
+      the SDK (a typed error, a patched schema, the companion pull
+      request and its pin) and ${FlociGuidance} for an AWS resource's
+      local emulation. A change to services/alchemy-org — the
+      harness you are running in — is held to ${OrgGuidance}, which
+      names the domain skills beneath it; it is the same text a human
+      coding agent reads in that folder's AGENTS.md.
 
       This chat (${thread.key}) is long-lived: the operator returns
       to it across days. When a task completes, say so plainly and

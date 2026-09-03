@@ -35,14 +35,12 @@ export const ArtifactsSandbox = Layer.effect(
               // Sandbox has no append primitive; artifacts are written
               // once (occasionally twice) per tool call, so read+concat
               // is fine at this cadence
-              sandbox
-                .readFile(pathOf(id))
-                .pipe(
-                  Effect.orElseSucceed(() => ""),
-                  Effect.flatMap((existing) =>
-                    sandbox.writeFile(pathOf(id), existing + chunk),
-                  ),
+              sandbox.readFile(pathOf(id)).pipe(
+                Effect.orElseSucceed(() => ""),
+                Effect.flatMap((existing) =>
+                  sandbox.writeFile(pathOf(id), existing + chunk),
                 ),
+              ),
           };
         }),
       read: (id) => sandbox.readFile(pathOf(id)),

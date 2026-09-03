@@ -32,15 +32,20 @@ import * as Redacted from "effect/Redacted";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import { ArtifactsLocal } from "../src/sandbox/ArtifactsLocal.ts";
+import { ArtifactsLocal } from "../src/artifacts/ArtifactsLocal.ts";
 import { makeProposalExecutor } from "../src/github/ProposalActions.ts";
 import { testAlchemy } from "../src/github/Repos.ts";
 import { CheckoutsSandbox } from "../src/sandbox/CheckoutsSandbox.ts";
 import { Proposals } from "../src/github/Proposals.ts";
 import { ProposalsMemory } from "../src/github/ProposalsMemory.ts";
 import { Bash, BashLive } from "../src/coding/Bash.ts";
-import { OpenPullRequest, OpenPullRequestLive, PublishToken, PushBranch, PushBranchLive } from "../src/coding/Publish.ts";
-import { ReadOutputLive } from "../src/sandbox/ReadOutput.ts";
+import {
+  OpenPullRequest,
+  OpenPullRequestLive,
+} from "../src/coding/OpenPullRequest.ts";
+import { PushBranch, PushBranchLive } from "../src/coding/PushBranch.ts";
+import { PublishToken } from "../src/github/PublishToken.ts";
+import { ReadOutputLive } from "../src/artifacts/ReadOutput.ts";
 
 const run = <A, E>(program: Effect.Effect<A, E, any>): Promise<A> =>
   Effect.runPromise(
@@ -217,9 +222,17 @@ test(
           // tree is in place, on a branch, with origin REPOINTED
           expect(yield* sandbox.exists("README.md")).toBe(false);
           expect(yield* sandbox.readFile("proof.txt")).toContain("OTHER-REPO");
-          const origin = yield* sandbox.exec("git", ["remote", "get-url", "origin"]);
+          const origin = yield* sandbox.exec("git", [
+            "remote",
+            "get-url",
+            "origin",
+          ]);
           expect(origin.stdout.trim()).toBe(otherUrl);
-          const head = yield* sandbox.exec("git", ["rev-parse", "--abbrev-ref", "HEAD"]);
+          const head = yield* sandbox.exec("git", [
+            "rev-parse",
+            "--abbrev-ref",
+            "HEAD",
+          ]);
           expect(head.stdout.trim()).toBe("main");
           // ignored prewarm survives the converge
           expect(yield* sandbox.exists("node_modules/warm.txt")).toBe(true);
@@ -299,9 +312,9 @@ const BRANCH = "test/worktree-publish";
 const gh = (pathname: string, init?: { method?: string; body?: unknown }) =>
   Effect.gen(function* () {
     const client = yield* HttpClient.HttpClient;
-    const request = HttpClientRequest.make(
-      (init?.method ?? "GET") as "GET",
-    )(`https://api.github.com/repos/${REPO}${pathname}`).pipe(
+    const request = HttpClientRequest.make((init?.method ?? "GET") as "GET")(
+      `https://api.github.com/repos/${REPO}${pathname}`,
+    ).pipe(
       HttpClientRequest.setHeaders({
         accept: "application/vnd.github+json",
         authorization: `Bearer ${LIVE_TOKEN}`,
@@ -424,7 +437,9 @@ test.skipIf(!LIVE_TOKEN)(
           const [pending] = yield* proposals.list({ status: "pending" });
           expect(pending?.payload.kind).toBe("pull_request");
           expect(pending?.repo).toBe(REPO);
-          const before = yield* gh(`/pulls?head=${REPO.split("/")[0]}:${BRANCH}&state=open`);
+          const before = yield* gh(
+            `/pulls?head=${REPO.split("/")[0]}:${BRANCH}&state=open`,
+          );
           expect((before.json as Array<unknown>).length).toBe(0);
 
           // the operator's ACCEPT — the executor opens it for real
@@ -438,9 +453,7 @@ test.skipIf(!LIVE_TOKEN)(
           expect(pr.status).toBe(200);
           expect((pr.json as { state?: string }).state).toBe("open");
         }).pipe(
-          Effect.provide(
-            Layer.mergeAll(Publish, sessionLayers(tree)),
-          ),
+          Effect.provide(Layer.mergeAll(Publish, sessionLayers(tree))),
           Effect.ensuring(cleanupRemote),
         );
       }),

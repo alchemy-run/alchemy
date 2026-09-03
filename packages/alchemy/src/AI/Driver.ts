@@ -17,6 +17,7 @@ import {
   type SkillLayer,
   type SkillService,
 } from "./Skill.ts";
+import { bindSource, isSource } from "./Source.ts";
 import { isTool } from "./Tool.ts";
 
 /**
@@ -264,6 +265,12 @@ export const layer: {
             const context = yield* Effect.context<never>();
             const tools: SkillService["tools"] = {};
             for (const ref of refs) {
+              if (isSource(ref)) {
+                // resolve the file's path where it is true (plan) and bind
+                // it for where it is not (the bundled runtime) — Source.ts
+                yield* bindSource(ref);
+                continue;
+              }
               if (!isTool(ref)) continue;
               const name = (ref as { "~alchemy/Name": string })[
                 "~alchemy/Name"

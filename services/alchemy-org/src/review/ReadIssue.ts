@@ -20,9 +20,9 @@ A reference to a GitHub issue in the repository — the spec a pull
 request cites ("Closes #N"), whose acceptance criteria are the
 review's rubric.`;
 
-export class ReadIssue extends AI.Tool<ReadIssue>()("readIssue")`
+export class ReadIssue extends (AI.Tool<ReadIssue>(import.meta)("readIssue")`
 Read ${issue} in full: its title, state, and body — the acceptance
-criteria exactly as the author wrote them.` {}
+criteria exactly as the author wrote them.`) {}
 
 /** `issues.get`, rendered as title + state + body. */
 export const ReadIssueLive = Layer.effect(

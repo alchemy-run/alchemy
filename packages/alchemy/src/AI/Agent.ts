@@ -10,6 +10,7 @@ import {
   type TurnServices,
 } from "./Driver.ts";
 import { fragment, type Services } from "./Fragment.ts";
+import { makeSource, type Source } from "./Source.ts";
 import type { Tool, ToolParameters } from "./Tool.ts";
 
 // ─────────────────────────── the Actor ────────────────────────────
@@ -158,6 +159,13 @@ export interface Agent<Name extends string = string, Self = unknown> {
   /** Phantom carrier for the tag identifier (`Self` in the `<Self>()` form). */
   "~alchemy/Self": Self;
   /**
+   * The file this agent is defined in — present when the term was
+   * declared as `AI.Agent<Self>(import.meta)(name)`. Splice
+   * `${Engineer.source}` to mention the file (a path) without
+   * delegating to the agent (see Source.ts).
+   */
+  readonly source?: Source;
+  /**
    * The driver-default implementation Layer: interpret the CHARTER
    * (init → turn), publish the resulting actor verbs as this tag's
    * service.
@@ -207,12 +215,17 @@ export interface Agent<Name extends string = string, Self = unknown> {
 }
 
 export const Agent: {
-  <Self>(): {
+  /**
+   * `AI.Agent<Self>()(name)` declares the tag; `AI.Agent<Self>(import.meta)(name)`
+   * additionally records the defining file as `source` (see Source.ts).
+   */
+  <Self>(meta?: ImportMeta): {
     <Name extends string>(
       name: Name,
     ): Agent<Name, Self> & Context.Service<Self, Actor>;
   };
-} = (() => (name: string) => makeTerm("Agent", name)) as any;
+} = ((meta?: ImportMeta) => (name: string) =>
+  makeTerm("Agent", name, undefined, undefined, meta)) as any;
 
 /** Shared constructor for the tag-bearing terms (Agent, Skill). */
 export const makeTerm = (
@@ -220,6 +233,7 @@ export const makeTerm = (
   name: string,
   template?: TemplateStringsArray,
   refs?: any[],
+  meta?: ImportMeta,
 ) => {
   const cls = class extends (Context.Service<any, any>()(
     `alchemy/AI/${kind}/${name}`,
@@ -227,6 +241,7 @@ export const makeTerm = (
   return Object.assign(cls, {
     "~alchemy/Kind": kind,
     "~alchemy/Name": name,
+    ...(meta !== undefined ? { source: makeSource(meta, kind, name) } : {}),
     ...(template !== undefined ? { template, refs } : {}),
     // the implementation Layer: `Engineer.make(charter)`, the static
     // tagged-template shorthand `Reviewer.make`…``, or a skill's

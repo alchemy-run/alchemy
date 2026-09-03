@@ -5,14 +5,17 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Ref from "effect/Ref";
 import * as S from "effect/Schema";
+import { DistilledGuidance } from "../process/DistilledGuidance.ts";
+import { FlociGuidance } from "../process/FlociGuidance.ts";
+import { ProviderGuidance } from "../process/ProviderGuidance.ts";
+import { PullRequests } from "../process/PullRequests.ts";
+import { Verification } from "../process/Verification.ts";
+import { path } from "../coding/ReadFile.ts";
 import { Proposals } from "../github/Proposals.ts";
 import { primary } from "../github/Repos.ts";
-import { path } from "../coding/ReadFile.ts";
-import { Harness } from "../Harness.ts";
-import { SessionRepo } from "../sandbox/SessionRepo.ts";
+import { OrgGuidance } from "../OrgGuidance.ts";
+import { SessionRepo } from "../github/SessionRepo.ts";
 import { FindCompanions } from "./Companions.ts";
-import { PullRequests } from "./PullRequests.ts";
-import { QualityAssurance } from "./QualityAssurance.ts";
 import { ReadDiff } from "./ReadDiff.ts";
 import { ReadIssue } from "./ReadIssue.ts";
 
@@ -34,7 +37,7 @@ import { ReadIssue } from "./ReadIssue.ts";
  *   before every sampling; the tools it mentions ARE the toolkit).
  *   The reviewer holds no editor: judge, not author, by Layer graph.
  */
-export class Reviewer extends AI.Agent<Reviewer>()("Reviewer") {}
+export class Reviewer extends AI.Agent<Reviewer>(import.meta)("Reviewer") {}
 
 /** `owner/repo#N` → N — the session's key names its pull request. */
 const prNumber = (key: string): number => Number(key.match(/#(\d+)$/)?.[1]);
@@ -263,7 +266,9 @@ export const ReviewerLive = Reviewer.make(
       Effect.fn(function* (p: { message: string }) {
         if (p.message.trim().length === 0) {
           return yield* Effect.fail(
-            new CommentFailed({ message: "an empty comment has nothing to say" }),
+            new CommentFailed({
+              message: "an empty comment has nothing to say",
+            }),
           );
         }
         const proposal = yield* proposals.propose({
@@ -322,19 +327,26 @@ export const ReviewerLive = Reviewer.make(
       ${PullRequests}
 
       Your tools operate inside a checkout of the pull request's HEAD
-      — ${QualityAssurance} is how you verify: read the changed files
-      in their surroundings, and run the tests rather than trusting
+      — ${Verification} is how you verify: read the changed files in
+      their surroundings, and run the tests rather than trusting
       anyone's claims; the verification report in the description is
       a claim like any other until you have run what it names.
       ${FindCompanions} finds the companion pull requests in distilled
       and floci by branch name, and 'git ls-tree HEAD distilled' in
-      your checkout shows the pin to compare. A diff that touches
-      services/alchemy-org — the harness this review runs in — is
-      also judged against ${Harness}, the org's own doctrine: activate
-      it, and hold the change to the layout, the least-privilege
-      topology, and the verification it names. When the head moved (an
-      event says so, or the author does), ${sync} first, then verify
-      again — the code you reviewed is not the code that is there.
+      your checkout shows the pin to compare. Doctrine is pluggable:
+      activate the skill for what the diff touches, and judge against
+      it. A provider — a resource, a binding, a lifecycle rule under
+      packages/alchemy/src — is held to ${ProviderGuidance}, and the
+      repository is one unit with two others: a diff that touches
+      distilled (a patch, a regenerated service, the submodule pin, a
+      companion) is judged by ${DistilledGuidance}; an AWS resource's
+      local emulation, or its absence, by ${FlociGuidance}. A diff
+      that touches services/alchemy-org — the harness this review runs
+      in — is held to ${OrgGuidance} and the domain skills it names:
+      the layout, the least-privilege topology, the verification.
+      When the head moved (an event says so, or the author does),
+      ${sync} first, then verify again — the code you reviewed is not
+      the code that is there.
 
       Your verdict is ONE REVIEW, prepared in the same round that
       admits you — the operator finds it waiting when they look.

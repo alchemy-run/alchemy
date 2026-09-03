@@ -3,8 +3,8 @@ import * as Layer from "effect/Layer";
 import { type Proposal, Proposals, proposalNumber } from "./Proposals.ts";
 
 /** In-memory physics — tests that drive the propose → execute path
- *  without a D1 binding (test/worktree.test.ts). The Worker uses
- *  ProposalsD1. */
+ *  without a Cloudflare binding (test/worktree.test.ts). The Worker
+ *  uses ProposalsDO. */
 export const ProposalsMemory: Layer.Layer<Proposals> = Layer.sync(
   Proposals,
   () => {
@@ -50,8 +50,10 @@ export const ProposalsMemory: Layer.Layer<Proposals> = Layer.sync(
             .filter(
               (row) =>
                 (filter?.repo === undefined || row.repo === filter.repo) &&
-                (filter?.number === undefined || row.number === filter.number) &&
-                (filter?.status === undefined || row.status === filter.status) &&
+                (filter?.number === undefined ||
+                  row.number === filter.number) &&
+                (filter?.status === undefined ||
+                  row.status === filter.status) &&
                 (filter?.session === undefined ||
                   (row.session.term === filter.session.term &&
                     row.session.key === filter.session.key)),
@@ -69,7 +71,8 @@ export const ProposalsMemory: Layer.Layer<Proposals> = Layer.sync(
             resolvedAt: Date.now(),
             result:
               resolution.status === "accepted" ? resolution.result : undefined,
-            error: resolution.status === "failed" ? resolution.error : undefined,
+            error:
+              resolution.status === "failed" ? resolution.error : undefined,
             reason:
               resolution.status === "rejected" ? resolution.reason : undefined,
           });

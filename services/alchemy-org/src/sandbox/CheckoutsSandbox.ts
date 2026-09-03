@@ -74,9 +74,7 @@ export const CheckoutsSandbox = Layer.effect(
     const readMarker: Effect.Effect<Option.Option<Marker>> = sandbox
       .readFile(MARKER)
       .pipe(
-        Effect.flatMap((text) =>
-          Effect.try(() => JSON.parse(text) as Marker),
-        ),
+        Effect.flatMap((text) => Effect.try(() => JSON.parse(text) as Marker)),
         Effect.option,
       );
 
@@ -101,7 +99,18 @@ export const CheckoutsSandbox = Layer.effect(
     const emptyTree = sandbox
       .exec(
         "find",
-        [".", "-mindepth", "1", "-maxdepth", "1", "-exec", "rm", "-rf", "{}", "+"],
+        [
+          ".",
+          "-mindepth",
+          "1",
+          "-maxdepth",
+          "1",
+          "-exec",
+          "rm",
+          "-rf",
+          "{}",
+          "+",
+        ],
         { timeout: 300_000 },
       )
       .pipe(

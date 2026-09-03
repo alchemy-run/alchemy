@@ -13,7 +13,7 @@
 import type * as AI from "alchemy/AI";
 import type { GeneralEngineer } from "../src/coding/Engineer.ts";
 import type { ReviewerLive } from "../src/review/Reviewer.ts";
-import type { QualityAssuranceGeneral } from "../src/review/QualityAssurance.ts";
+import type { VerificationGeneral } from "../src/process/Verification.ts";
 
 type Names = AI.ToolNames<typeof GeneralEngineer>;
 
@@ -111,7 +111,7 @@ const _completeReview: Registry<typeof ReviewerLive> = {
 // a SKILL's teaching carries its own wire — its tools never surface on
 // the host agent's type (encapsulation, mirroring the R channel), so
 // coverage for the pack is checked against the skill's make Layer
-type SkillNames = AI.ToolNames<typeof QualityAssuranceGeneral>;
+type SkillNames = AI.ToolNames<typeof VerificationGeneral>;
 const _skillNames: SkillNames[] = [
   "bash",
   "grep",
@@ -121,5 +121,5 @@ const _skillNames: SkillNames[] = [
   "readOutput",
 ];
 
-// @ts-expect-error — the QA skill grants no editor (judge, not author)
+// @ts-expect-error — the Verification skill grants no editor (judge, not author)
 const _noEditor: SkillNames = "editFile";

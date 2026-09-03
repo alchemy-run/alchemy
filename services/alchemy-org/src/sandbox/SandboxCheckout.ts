@@ -6,7 +6,7 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import { SessionRepo, sessionOf } from "./SessionRepo.ts";
+import { SessionRepo, sessionOf } from "../github/SessionRepo.ts";
 
 /**
  * The session's tree, CONVERGED ON FIRST TOUCH — `AI.Sandbox` over the

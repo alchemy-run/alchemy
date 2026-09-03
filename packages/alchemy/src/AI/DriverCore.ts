@@ -42,6 +42,7 @@ import {
   type SkillService,
   type Teaching,
 } from "./Skill.ts";
+import { isSource, renderSource } from "./Source.ts";
 import {
   Thread,
   Tick,
@@ -177,6 +178,9 @@ export const renderRef = (ref: unknown): string => {
   }
   if (isAgent(ref)) {
     return (ref as { "~alchemy/Name": string })["~alchemy/Name"];
+  }
+  if (isSource(ref)) {
+    return renderSource(ref);
   }
   return String(ref);
 };
@@ -813,10 +817,10 @@ export const renderStance = (
               doors.set(value["~alchemy/Name"], value);
               buffer += `\`${value["~alchemy/Name"]}\``;
             } else {
-              buffer += String(value);
+              buffer += renderRef(value);
             }
           } else {
-            buffer += String(ref);
+            buffer += renderRef(ref);
           }
           buffer += parts[index + 1] ?? "";
         }

@@ -3,8 +3,8 @@ import * as GitHub from "alchemy/GitHub";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { parsePullKey, pullRequestRef } from "../github/PullRequest.ts";
-import { connected } from "../github/Repos.ts";
+import { parsePullKey, pullRequestRef } from "./PullRequest.ts";
+import { connected } from "./Repos.ts";
 
 /** Thread keys are `<session>` or `<session>::<thread>` — the session
  *  part names the machine (and thus the one worktree on it). */

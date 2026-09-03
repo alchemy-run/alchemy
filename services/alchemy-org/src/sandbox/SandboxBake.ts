@@ -24,10 +24,9 @@ const MARKER = ".bake-fingerprint";
  * fine), so nothing correctness-critical may depend on captured
  * output.
  */
-const REPO_ROOT = fileURLToPath(new URL("../../../..", import.meta.url)).replace(
-  /\/$/,
-  "",
-);
+const REPO_ROOT = fileURLToPath(
+  new URL("../../../..", import.meta.url),
+).replace(/\/$/, "");
 
 export interface StagedBake {
   /** The staged repo directory — feed to `contextInclude.from`. */
@@ -149,9 +148,7 @@ const computeFingerprint = (scratchDir: string) =>
 
     const digest = yield* Effect.sync(() =>
       new Bun.CryptoHasher("sha256")
-        .update(
-          [porcelain, ...dirtyStats, artifacts].join("\u0000"),
-        )
+        .update([porcelain, ...dirtyStats, artifacts].join("\u0000"))
         .digest("hex")
         .slice(0, 16),
     );

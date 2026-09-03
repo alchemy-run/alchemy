@@ -2,7 +2,7 @@ import * as AI from "alchemy/AI";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as S from "effect/Schema";
-import { sha256Hex } from "../sandbox/Digest.ts";
+import { sha256Hex } from "./Digest.ts";
 import { path } from "./ReadFile.ts";
 
 const content = AI.Parameter("content", S.String)`
@@ -17,12 +17,12 @@ const expectedDigest = AI.Parameter("expectedDigest", S.optionalKey(S.String))`
 Required in overwrite mode: the SHA-256 digest returned by readFile
 for the exact version being replaced.`;
 
-export class WriteFile extends AI.Tool<WriteFile>()("writeFile")`
+export class WriteFile extends (AI.Tool<WriteFile>(import.meta)("writeFile")`
 Write complete ${content} to ${path} using ${mode}, creating parent
 directories only after all preconditions pass. Existing files may
 only be replaced with ${expectedDigest}. Use create for new files
 and overwrite only for complete rewrites — prefer editFile for
-targeted changes.` {}
+targeted changes.`) {}
 
 /** Physics over the session {@link AI.Sandbox}. */
 export const WriteFileLive = Layer.effect(

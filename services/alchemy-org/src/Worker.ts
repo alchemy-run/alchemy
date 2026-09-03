@@ -7,31 +7,32 @@ import * as Option from "effect/Option";
 import * as HttpRouter from "effect/unstable/http/HttpRouter";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { DistilledGuidanceGeneral } from "./process/DistilledGuidance.ts";
+import { FlociGuidanceGeneral } from "./process/FlociGuidance.ts";
+import { ProviderGuidanceGeneral } from "./process/ProviderGuidance.ts";
+import { VerificationGeneral } from "./process/Verification.ts";
 import { WriteTools } from "./coding/Editor.ts";
 import { GeneralEngineer } from "./coding/Engineer.ts";
-import {
-  OpenPullRequestLive,
-  PublishTokenLive,
-  PushBranchLive,
-} from "./coding/Publish.ts";
+import { OpenPullRequestLive } from "./coding/OpenPullRequest.ts";
+import { PushBranchLive } from "./coding/PushBranch.ts";
 import { ReadTools, RunTools } from "./coding/Toolbox.ts";
 import { GitHubWorker } from "./github/GitHubWorker.ts";
-import { ProposalsD1 } from "./github/ProposalsD1.ts";
-import { HarnessGeneral } from "./Harness.ts";
+import { ProposalsDO } from "./github/ProposalsDO.ts";
+import { PublishTokenLive } from "./github/PublishToken.ts";
+import { OrgDoctrine } from "./OrgGuidance.ts";
 import { DriverCloudflare } from "./platform/DriverCloudflare.ts";
 import { FindCompanionsLive } from "./review/Companions.ts";
 import { LedgerD1 } from "./review/LedgerD1.ts";
-import { QualityAssuranceGeneral } from "./review/QualityAssurance.ts";
 import { ReadDiffLive } from "./review/ReadDiff.ts";
 import { ReadIssueLive } from "./review/ReadIssue.ts";
 import { ReviewerLive } from "./review/Reviewer.ts";
 import { ReviewerEvents } from "./review/ReviewerEvents.ts";
 import { routes } from "./Routes.ts";
-import { ArtifactsSandbox } from "./sandbox/ArtifactsSandbox.ts";
-import { ReadOutputLive } from "./sandbox/ReadOutput.ts";
+import { ArtifactsSandbox } from "./artifacts/ArtifactsSandbox.ts";
+import { ReadOutputLive } from "./artifacts/ReadOutput.ts";
 import { SandboxSession } from "./sandbox/SandboxSession.ts";
-import { SessionRepoLive } from "./sandbox/SessionRepo.ts";
-import { SpillingTools } from "./sandbox/SpillingTools.ts";
+import { SessionRepoLive } from "./github/SessionRepo.ts";
+import { SpillingTools } from "./artifacts/SpillingTools.ts";
 
 /** The artifact store on the session's machine (readOutput reads what
  *  the spill net and the bash tool parked). */
@@ -51,9 +52,20 @@ const Toolbox = Layer.mergeAll(ReadTools, RunTools).pipe(
   Layer.provide(SandboxSession),
 );
 
-/** The org's own doctrine (`Harness.ts`) — a dormant skill over the
- *  read/run tools, held by both charters for a change to this folder. */
-const Doctrine = HarnessGeneral.pipe(Layer.provide(Toolbox));
+/** The pluggable doctrine both charters hold, dormant until a change
+ *  touches its domain: how alchemy is verified (`process/Verification.ts`,
+ *  over the read/run tools), how a provider is written
+ *  (`process/ProviderGuidance.ts`) and how its two companion
+ *  repositories are worked in (`process/DistilledGuidance.ts`,
+ *  `process/FlociGuidance.ts`), and the org's own entry skill with
+ *  the domain skills it names (`OrgGuidance.ts`). */
+const Guidance = Layer.mergeAll(
+  VerificationGeneral,
+  ProviderGuidanceGeneral,
+  DistilledGuidanceGeneral,
+  FlociGuidanceGeneral,
+  OrgDoctrine,
+).pipe(Layer.provide(Toolbox));
 
 const Editor = WriteTools.pipe(
   Layer.provide(Store),
@@ -78,7 +90,7 @@ const EngineerWorker = GeneralEngineer.pipe(
     ),
   ),
   Layer.provide(Editor),
-  Layer.provide(Doctrine),
+  Layer.provide(Guidance),
   Layer.provide(Toolbox),
   Layer.provide(Spill),
   Layer.provide(Checkouts),
@@ -93,13 +105,7 @@ const EngineerWorker = GeneralEngineer.pipe(
  *  the session's machine — git runs one RPC hop away, exactly the
  *  local reading experience (repo-relative paths at the tree root). */
 const ReviewerWorkerLive = Layer.suspend(() => ReviewerLive).pipe(
-  Layer.provide([
-    QualityAssuranceGeneral,
-    ReadDiffLive,
-    ReadIssueLive,
-    FindCompanionsLive,
-    Doctrine,
-  ]),
+  Layer.provide([ReadDiffLive, ReadIssueLive, FindCompanionsLive, Guidance]),
   Layer.provide(Toolbox),
   Layer.provide(Spill),
   Layer.provide(Checkouts),
@@ -144,7 +150,9 @@ const ReviewerWorker = ReviewerEvents.pipe(
 const Org = Layer.mergeAll(EngineerWorker, ReviewerWorker, SandboxSession).pipe(
   Layer.provideMerge(DriverCloudflare),
   Layer.provideMerge(GitHubWorker),
-  Layer.provideMerge(ProposalsD1),
+  // one Durable Object per pull request — the store scales with the
+  // number of pull requests, not one database's write throughput
+  Layer.provideMerge(ProposalsDO),
   Layer.provide(Cloudflare.D1.QueryDatabaseBinding),
   Layer.orDie,
 );
@@ -159,8 +167,10 @@ const Org = Layer.mergeAll(EngineerWorker, ReviewerWorker, SandboxSession).pipe(
  *                Worker secret) + a REAL repository webhook (push
  *                delivery — the polling latency disappears)
  * - dedupe     → the Ledger on D1
- * - proposals  → D1 rows (the operator accepts from any instance;
- *                the executor in Routes performs the GitHub write)
+ * - proposals  → Durable Objects partitioned by pull request
+ *                (`github/ProposalsDO.ts`; the operator accepts from
+ *                any instance, the executor in Routes performs the
+ *                GitHub write)
  * - the tools  → each session's OWN machine (`sandbox/SandboxSession.ts`:
  *                a MicroVM deployed, a worktree of this checkout in dev)
  * - checkouts  → git INSIDE that machine (`CheckoutsSandbox` /

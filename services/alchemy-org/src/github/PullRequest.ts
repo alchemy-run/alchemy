@@ -96,7 +96,11 @@ export interface PullRequestView {
   readonly htmlUrl: string;
   readonly createdAt: string;
   readonly updatedAt: string;
-  readonly head: { readonly ref: string; readonly sha: string; readonly repo: string | undefined };
+  readonly head: {
+    readonly ref: string;
+    readonly sha: string;
+    readonly repo: string | undefined;
+  };
   readonly base: { readonly ref: string; readonly repo: string };
   /** The ref a session on this PR checks out ({@link pullRequestRef}). */
   readonly checkoutRef: string;

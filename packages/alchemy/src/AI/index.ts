@@ -24,6 +24,7 @@ export * from "./SandboxServe.ts";
 export * from "./SessionIndex.ts";
 export * from "./SessionIndexMemory.ts";
 export * from "./Skill.ts";
+export * from "./Source.ts";
 export * from "./Thread.ts";
 export * from "./ThreadStorage.ts";
 export * from "./ThreadStorageMemory.ts";

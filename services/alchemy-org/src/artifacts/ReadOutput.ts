@@ -24,10 +24,10 @@ const limit = AI.Parameter(
 )`
 Maximum lines to return (1-2000, default 2000).`;
 
-export class ReadOutput extends AI.Tool<ReadOutput>()("readOutput")`
+export class ReadOutput extends (AI.Tool<ReadOutput>(import.meta)("readOutput")`
 Read complete tool output retained under ${outputId}. Page large
 artifacts with ${offset} and ${limit}. IDs are scoped to the current
-local toolbox and reveal no host filesystem path.` {}
+local toolbox and reveal no host filesystem path.`) {}
 
 export const ReadOutputLive = Layer.effect(
   ReadOutput,

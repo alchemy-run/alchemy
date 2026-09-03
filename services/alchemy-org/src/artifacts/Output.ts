@@ -74,7 +74,10 @@ export class TailCollector {
     readonly maxBytes: number;
   };
 
-  constructor(options: { readonly maxLines: number; readonly maxBytes: number }) {
+  constructor(options: {
+    readonly maxLines: number;
+    readonly maxBytes: number;
+  }) {
     this.options = options;
     this.maxBufferBytes = options.maxBytes * 2;
   }
@@ -113,7 +116,10 @@ export class HeadCollector {
     readonly maxBytes: number;
   };
 
-  constructor(options: { readonly maxLines: number; readonly maxBytes: number }) {
+  constructor(options: {
+    readonly maxLines: number;
+    readonly maxBytes: number;
+  }) {
     this.options = options;
   }
 

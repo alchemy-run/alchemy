@@ -16,7 +16,7 @@ import {
   SandboxWorktree,
   machineKey,
 } from "./SandboxWorktree.ts";
-import { SessionRepoLive } from "./SessionRepo.ts";
+import { SessionRepoLive } from "../github/SessionRepo.ts";
 
 /**
  * Deployed: each session's own AWS Lambda MicroVM (Firecracker) launched

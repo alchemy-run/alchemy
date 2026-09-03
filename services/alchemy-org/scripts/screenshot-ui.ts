@@ -14,12 +14,16 @@ await new Promise((r) => setTimeout(r, 3500));
 // open PR #141's thread
 await page.evaluate(() => {
   const buttons = [...document.querySelectorAll("aside button")];
-  (buttons.find((b) => b.textContent?.includes("#141")) as HTMLElement)?.click();
+  (
+    buttons.find((b) => b.textContent?.includes("#141")) as HTMLElement
+  )?.click();
 });
 await new Promise((r) => setTimeout(r, 4000));
 // expand the first "Read diff" tool card
 await page.evaluate(() => {
-  const cards = [...document.querySelectorAll("main [role=button], main button")];
+  const cards = [
+    ...document.querySelectorAll("main [role=button], main button"),
+  ];
   const diff = cards.find((c) => c.textContent?.includes("Read diff"));
   (diff as HTMLElement)?.click();
 });

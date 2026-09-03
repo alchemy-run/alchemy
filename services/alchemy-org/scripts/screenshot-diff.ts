@@ -1,17 +1,27 @@
 import puppeteer from "puppeteer-core";
 const browser = await puppeteer.launch({
-  executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+  executablePath:
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
   headless: true,
 });
 const page = await browser.newPage();
 page.on("pageerror", (e) => console.log("PAGEERROR:", String(e).slice(0, 500)));
-page.on("console", (m) => m.type() === "error" && console.log("CONSOLE:", m.text().slice(0, 300)));
+page.on(
+  "console",
+  (m) =>
+    m.type() === "error" && console.log("CONSOLE:", m.text().slice(0, 300)),
+);
 await page.setViewport({ width: 1440, height: 1200, deviceScaleFactor: 1 });
-await page.goto("http://localhost:62469", { waitUntil: "networkidle2", timeout: 60_000 });
+await page.goto("http://localhost:62469", {
+  waitUntil: "networkidle2",
+  timeout: 60_000,
+});
 await new Promise((r) => setTimeout(r, 3500));
 await page.evaluate(() => {
   const buttons = [...document.querySelectorAll("aside button")];
-  (buttons.find((b) => b.textContent?.includes("#141")) as HTMLElement)?.click();
+  (
+    buttons.find((b) => b.textContent?.includes("#141")) as HTMLElement
+  )?.click();
 });
 await new Promise((r) => setTimeout(r, 4000));
 // click the FIRST "Read diff" card's clickable row (cursor-pointer)

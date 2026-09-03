@@ -1,11 +1,16 @@
 import * as AI from "alchemy/AI";
+import { distilled, floci, nameOf } from "../github/Repos.ts";
+import { DistilledGuidance } from "./DistilledGuidance.ts";
+import { FlociGuidance } from "./FlociGuidance.ts";
 
 /**
  * THE STANDARD a pull request on alchemy is held to — one document,
  * spliced into both charters: the engineer writes toward it, the
  * reviewer judges against it. Prose only, on purpose: it names no tool
  * (so splicing it charges no capability to either agent) — HOW to
- * check each point is the reviewer's stance, with its own tools.
+ * check each point is the reviewer's stance, with its own tools. The
+ * companion repositories are named by reference (`nameOf`), and the
+ * skills for working in them by `.source`: naming, not activating.
  *
  * A nested fragment is one BLOCK of the rendered document: the driver
  * freezes it into the system prompt on the first tick and never
@@ -44,22 +49,23 @@ export const PullRequests = AI.fragment`
      checklists of promised future testing; no marketing copy.
 
   4. **A new provider is two pull requests.** Alchemy's providers call
-     the generated SDK in \`distilled\` (a submodule pinned by commit
-     at \`distilled/\`). A pull request that adds or extends a provider
-     — new resources, new operations, a typed error — ships a
-     COMPANION pull request in \`alchemy-run/distilled\` (JSON patches
-     under \`patches/{service}/\`, the regenerated service), opened from
-     a branch of the same name. The alchemy pull request's submodule
-     pin must point at that companion: its merge commit once it
-     merged, its head commit until then. A pin at some unrelated
-     commit, or a companion the alchemy side never mentions, is a
-     problem to name.
+     the generated SDK in ${nameOf(distilled)} (a submodule pinned by
+     commit at \`distilled/\`). A pull request that adds or extends a
+     provider — new resources, new operations, a typed error — ships a
+     COMPANION pull request there (JSON patches under
+     \`patches/{service}/\`, the regenerated service), opened from a
+     branch of the same name. The alchemy pull request's submodule pin
+     must point at that companion: its merge commit once it merged,
+     its head commit until then. A pin at some unrelated commit, or a
+     companion the alchemy side never mentions, is a problem to name.
+     How that work is done is ${DistilledGuidance.source}.
 
   5. **AWS providers prefer an emulation in floci.** \`alchemy dev\`
-     runs AWS providers against \`alchemy-run/floci\`, the local
-     emulator. A new AWS resource is expected to arrive with its
-     emulation there (a companion pull request, same branch name) so
-     the resource works locally the day it lands; where the emulation
-     is deferred, the description says so and why. Not a blocker on
-     its own — a note in the review when absent.
+     runs AWS providers against ${nameOf(floci)}, the local emulator.
+     A new AWS resource is expected to arrive with its emulation there
+     (a companion pull request, same branch name) so the resource
+     works locally the day it lands; where the emulation is deferred,
+     the description says so and why. Not a blocker on its own — a
+     note in the review when absent. How that work is done is
+     ${FlociGuidance.source}.
 `;

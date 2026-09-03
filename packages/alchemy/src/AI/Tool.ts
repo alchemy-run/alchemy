@@ -4,6 +4,7 @@ import type * as S from "effect/Schema";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { Parameter } from "./Parameter.ts";
 import type { Services } from "./Fragment.ts";
+import { makeSource, type Source } from "./Source.ts";
 
 type ParamOf<Refs, N> = Extract<
   Refs,
@@ -75,6 +76,13 @@ export interface Tool<
   refs: Refs;
   template: TemplateStringsArray;
   /**
+   * The file this tool is defined in — present when the term was
+   * declared as `AI.Tool<Self>(import.meta)(name)`. Splice
+   * `${Bash.source}` to mention the file (a path) without granting the
+   * tool (see Source.ts).
+   */
+  readonly source?: Source;
+  /**
    * The RETURN schema (`AI.Tool("readDiff", S.String)` — the optional
    * second argument). Direct tool-calling barely needs it (the model
    * sees results as text either way), but CODEMODE does: the generated
@@ -130,7 +138,11 @@ export const Tool: {
       ...refs: Refs
     ): Tool<Name, Refs>;
   };
-  <Self>(): {
+  /**
+   * `AI.Tool<Self>()(name)` declares the tag; `AI.Tool<Self>(import.meta)(name)`
+   * additionally records the defining file as `source` (see Source.ts).
+   */
+  <Self>(meta?: ImportMeta): {
     <Name extends string>(
       name: Name,
       returns?: S.Top,
@@ -151,13 +163,13 @@ export const Tool: {
         >;
     };
   };
-} = ((name?: string, returns?: any) =>
-  name
+} = ((nameOrMeta?: string | ImportMeta, returns?: any) =>
+  typeof nameOrMeta === "string"
     ? (template: TemplateStringsArray, ...refs: any[]) =>
-        makeTool(name, template, refs, returns)
+        makeTool(nameOrMeta, template, refs, returns)
     : (name: string, returns2?: any) =>
         (template: TemplateStringsArray, ...refs: any[]) =>
-          makeTool(name, template, refs, returns2)) as any;
+          makeTool(name, template, refs, returns2, nameOrMeta)) as any;
 
 // The Context.Service tag is what gives each Tool a distinct ServiceMap
 // key (`alchemy/AI/Tool/{name}`) — without it every Tool resolves to the
@@ -170,6 +182,7 @@ const makeTool = (
   template: TemplateStringsArray,
   refs: any[],
   returns?: S.Top,
+  meta?: ImportMeta,
 ) => {
   const term = function (impl: (props: any) => Effect.Effect<any, any, any>) {
     // an Effect, so init `yield*`s it — the template refs' requirements
@@ -186,6 +199,7 @@ const makeTool = (
     refs,
     template,
     ...(returns !== undefined ? { returns } : {}),
+    ...(meta !== undefined ? { source: makeSource(meta, "Tool", name) } : {}),
   }) as any;
 };
 

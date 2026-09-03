@@ -3,6 +3,7 @@ import type * as Effect from "effect/Effect";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import { makeTerm } from "./Agent.ts";
 import type { Services } from "./Fragment.ts";
+import type { Source } from "./Source.ts";
 import type * as Layer from "effect/Layer";
 
 /**
@@ -92,6 +93,13 @@ export interface Skill<Name extends string = string, Self = unknown> {
   /** Phantom carrier for the tag identifier (`Self` in the `<Self>()` form). */
   "~alchemy/Self": Self;
   /**
+   * The file this skill is defined in — present when the term was
+   * declared as `AI.Skill<Self>(import.meta)(name)`. Splice
+   * `${Harness.source}` to mention the file (a path) without granting
+   * the skill (see Source.ts).
+   */
+  readonly source?: Source;
+  /**
    * The implementation Layer: the skill's tag out, the template's
    * spliced TOOLS' tags in (a custom `Layer.effect(Coding, …)` may
    * instead build the whole bundle's physics inline).
@@ -112,12 +120,17 @@ export interface Skill<Name extends string = string, Self = unknown> {
 }
 
 export const Skill: {
-  <Self>(): {
+  /**
+   * `AI.Skill<Self>()(name)` declares the tag; `AI.Skill<Self>(import.meta)(name)`
+   * additionally records the defining file as `source` (see Source.ts).
+   */
+  <Self>(meta?: ImportMeta): {
     <const Name extends string>(
       name: Name,
     ): Skill<Name, Self> & Context.Service<Self, SkillService>;
   };
-} = (() => (name: string) => makeTerm("Skill", name)) as any;
+} = ((meta?: ImportMeta) => (name: string) =>
+  makeTerm("Skill", name, undefined, undefined, meta)) as any;
 
 export const isSkill = (value: unknown): value is Skill<string, any> =>
   (typeof value === "object" || typeof value === "function") &&

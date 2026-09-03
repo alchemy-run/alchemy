@@ -68,9 +68,12 @@ const fromRow = (row: Row): Proposal => ({
 const LIST_LIMIT = 200;
 
 /**
- * Proposals on D1 — the one place a session's Durable Object (which
- * files them) and any Worker instance (which lists and resolves them
- * for the operator) agree.
+ * Proposals on D1 — one table every session DO (which files them) and
+ * every Worker instance (which lists and resolves them for the
+ * operator) shares. A single writer: fine for one repository's traffic,
+ * and the reason the Worker runs `ProposalsDO` instead (one Durable
+ * Object per pull request). Kept as the variant for a deploy that
+ * already has its rows here.
  */
 export const ProposalsD1 = Layer.effect(
   Proposals,
@@ -188,7 +191,10 @@ export const ProposalsD1 = Layer.effect(
         Effect.gen(function* () {
           yield* ensured;
           const row = yield* inWorker(
-            db.prepare("SELECT * FROM proposals WHERE id = ?").bind(id).first<Row>(),
+            db
+              .prepare("SELECT * FROM proposals WHERE id = ?")
+              .bind(id)
+              .first<Row>(),
           );
           return row === null ? undefined : fromRow(row);
         }),
