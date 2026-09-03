@@ -1,6 +1,6 @@
 ---
 title: What is Alchemy?
-description: Alchemy is an Infrastructure as Code engine built in pure Effect, with Infrastructure as Effects on top. Declare your cloud resources and the code that runs on them in one type-safe TypeScript program, and deploy it with one command.
+description: Alchemy is Infrastructure as Code built in pure Effect, with Infrastructure as Effects on top. Declare your cloud resources and the code that runs on them in one type-safe TypeScript program, and deploy it with one command.
 next:
   link: /getting-started
   label: Getting started
@@ -8,12 +8,12 @@ next:
 
 import DeployTerminal from "../../components/marketing-islands/DeployTerminal.tsx";
 
-Alchemy is an **Infrastructure as Code** engine built in pure
+Alchemy is **Infrastructure as Code** built in pure
 [Effect](https://effect.website), with **Infrastructure as Effects**
-on top. The engine declares, diffs, and deploys cloud resources the
-way Terraform or Pulumi does. The layer on top lets the code that runs
-on those resources live in the same program, as typed Effects and
-Layers.
+on top. Infrastructure as Code declares, diffs, and deploys cloud
+resources the way Terraform or Pulumi does. Infrastructure as Effects
+lets the code that runs on those resources live in the same program,
+as typed Effects and Layers.
 
 Here is the whole thing in one file. An R2 Bucket, and a Worker that
 serves files from it:
@@ -46,8 +46,8 @@ export default Cloudflare.Worker(
 
 That one file is a complete application. The Bucket is declared next
 to the Worker that uses it, and `bucket` is a typed client the handler
-closes over. Let's start with the engine underneath, then look at what
-the layer on top adds.
+closes over. Let's start with Infrastructure as Code, then look at what
+Infrastructure as Effects adds on top.
 
 ## Infrastructure as Code
 
@@ -144,7 +144,7 @@ to write your own.
 
 ## A superset of Infrastructure as Code
 
-With only the engine, Alchemy looks like and functions like any other
+With only Infrastructure as Code, Alchemy looks like and functions like any other
 IaC tool. One file
 declares the Bucket and the Worker, passing the Bucket on the Worker's
 `env`. Another file is the handler, reaching for the Bucket through
@@ -186,14 +186,15 @@ as Effects is what turns those two files into the one at the top of
 this page.
 
 :::tip
-Alchemy's IaC engine also supports circular references in the
+Alchemy also supports circular references in the
 dependency graph, which most IaC tools reject. See
 [Circular Bindings](/infrastructure-as-effects/circular-bindings).
 :::
 
 ## Infrastructure as Effects
 
-Infrastructure as Effects is what Alchemy adds on top of that engine.
+Infrastructure as Effects is what Alchemy adds on top of
+Infrastructure as Code.
 A **Runtime** is a Resource that carries the code it runs: a Worker, Lambda Function, Container, or Server.
 That code is always written the same way, as an **Effectful
 Constructor**. Bind what you need, then return what you expose:
