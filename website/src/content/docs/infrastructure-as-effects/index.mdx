@@ -3,32 +3,11 @@ title: Infrastructure as Effects
 description: One Effect program models both your runtime code and the infrastructure it runs on — Functions carry code, Bindings wire resources into them, Phases split deploy from runtime, Layers package it all behind typed services.
 ---
 
-Most stacks are two programs. One describes the infrastructure: a
-bucket, a Worker, the permission between them. The other is the code
-that runs inside the Worker and reaches for that bucket through an
-environment variable:
-
-```typescript
-// infrastructure
-const bucket = new R2Bucket("uploads");
-new Worker("api", { script: "src/api.ts", bindings: { BUCKET: bucket } });
-
-// src/api.ts
-export default {
-  async fetch(request, env) {
-    const obj = await env.BUCKET.get("hello.txt");
-    // ...
-  },
-};
-```
-
-The two agree by convention. The name `BUCKET` is typed twice, the
-permission lives in one file and the call in another, and nothing
-tells you when they drift.
-
-Infrastructure as Effects makes them one program. A Worker is a
-[Resource](/infrastructure-as-code/resource) that carries its own code,
-and the resources it uses are wired in as typed values:
+Infrastructure as Effects is Alchemy's model for building
+applications. The code that runs inside a Worker or Lambda Function
+and the infrastructure it runs on are one Effect program. A Worker is
+a [Resource](/infrastructure-as-code/resource) that carries its own
+code, and the resources it uses are wired in as typed values:
 
 ```typescript
 import * as Cloudflare from "alchemy/Cloudflare";
@@ -54,6 +33,29 @@ export default Cloudflare.Worker(
   }).pipe(Effect.provide(Cloudflare.R2.ReadWriteBucketBinding)),
 );
 ```
+
+Traditional IaC splits this in two. One program declares the bucket,
+the Worker, and the permission between them. Another program runs
+inside the Worker and reaches for the bucket through an environment
+variable:
+
+```typescript
+// infrastructure
+const bucket = new R2Bucket("uploads");
+new Worker("api", { script: "src/api.ts", bindings: { BUCKET: bucket } });
+
+// src/api.ts
+export default {
+  async fetch(request, env) {
+    const obj = await env.BUCKET.get("hello.txt");
+  },
+};
+```
+
+The two agree by convention. `BUCKET` is typed twice, the permission
+lives in one file and the call in another, and nothing tells you when
+they drift. In Alchemy there is one program, and `bucket` is a value
+the handler closes over.
 
 Everything in this section is in that one Worker. Let's take it
 apart.

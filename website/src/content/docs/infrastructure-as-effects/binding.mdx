@@ -3,29 +3,9 @@ title: Bindings
 description: A Binding connects a Resource to a Worker or Lambda. One line declares the capability and generates the permissions, the configuration, and a typed client.
 ---
 
-A Function that reads a table needs three things: permission to call
-the API, the table's name at runtime, and a client to call it with. In
-most stacks those live in three places. A policy in the infrastructure
-code, an environment variable wired between the two, and an SDK call in
-the handler that reads it back:
-
-```typescript
-// infrastructure: grant access and pass the name
-policy: { Action: ["dynamodb:GetItem"], Resource: [table.arn] },
-environment: { JOBS_TABLE: table.name },
-
-// handler: hope the two above agree
-const client = new DynamoDBClient();
-await client.send(
-  new GetItemCommand({ TableName: process.env.JOBS_TABLE, Key }),
-);
-```
-
-Nothing checks that they agree. Rename the table, widen the policy,
-forget the env var, and you find out at runtime.
-
-A **Binding** collapses the three into one line. You yield the
-[Resource](/infrastructure-as-code/resource) and get back a client:
+A **Binding** connects a [Resource](/infrastructure-as-code/resource)
+to a Worker, Lambda Function, or Container. You yield the resource and
+get back a typed client:
 
 ```typescript
 import * as AWS from "alchemy/AWS";
@@ -51,8 +31,29 @@ export default AWS.Lambda.Function(
 ```
 
 `yield* GetItem(Jobs)` is the binding. `getItem` is the client.
-`GetItemHttp` is the implementation. Let's follow what that one line
-produces.
+`GetItemHttp` is the implementation.
+
+A Function that reads a table needs three things: permission to call
+the API, the table's name at runtime, and a client to call it with. In
+traditional IaC those live in three places. A policy in the
+infrastructure code, an environment variable wired between the two, and
+an SDK call in the handler that reads it back:
+
+```typescript
+// infrastructure: grant access and pass the name
+policy: { Action: ["dynamodb:GetItem"], Resource: [table.arn] },
+environment: { JOBS_TABLE: table.name },
+
+// handler: hope the two above agree
+const client = new DynamoDBClient();
+await client.send(
+  new GetItemCommand({ TableName: process.env.JOBS_TABLE, Key }),
+);
+```
+
+Nothing checks that they agree. Rename the table, widen the policy,
+forget the env var, and you find out at runtime. The binding is all
+three. Let's follow what that one line produces.
 
 ## Permissions
 

@@ -3,23 +3,6 @@ title: Functions & Servers
 description: Workers, Lambda Functions, and Containers ship runtime code along with their infrastructure — declared with the Effectful Constructor pattern, bind what you need, return what you expose.
 ---
 
-A Function is usually defined twice. Once as a resource, with its
-memory, runtime, and environment. Once as a handler file the resource
-points at:
-
-```typescript
-// infrastructure
-new Function("Api", { handler: "src/api.handler", memory: 512 });
-
-// src/api.ts
-export const handler = async (event) => {
-  // ...
-};
-```
-
-The resource knows nothing about what the handler needs. The handler
-knows nothing about what the resource was given. They meet at a string.
-
 In Alchemy, a Cloudflare Worker, Lambda Function, ECS Task, or
 Container is a [Resource](/infrastructure-as-code/resource) that
 carries its runtime code. The props are the cloud configuration. The
@@ -54,7 +37,13 @@ export default Cloudflare.Worker(
 );
 ```
 
-One deploy ships both. Let's look at the Effect.
+One deploy ships both. In traditional IaC a Function is defined twice,
+once as a resource with its memory and environment and once as a
+handler file the resource points at, and the two meet at a string. Here
+the handler lives inside the resource, so `bucket` is declared and used
+in one place.
+
+Let's look at the Effect.
 
 ## The Effectful Constructor
 

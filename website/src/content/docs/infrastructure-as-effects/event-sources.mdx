@@ -3,26 +3,11 @@ title: Event Sources
 description: An event source is a binding that runs your Function when something happens on a resource — one call wires the event-source mapping, the permissions, and a typed handler.
 ---
 
-Running code when a message lands on a queue takes more than a handler.
-The Function needs permission to receive and delete messages, a mapping
-that tells the queue to invoke it, and code that unpacks the raw event:
-
-```typescript
-// infrastructure: grant access and wire the trigger
-policy: { Action: ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes"], Resource: [queue.arn] },
-eventSourceMapping: { eventSourceArn: queue.arn, functionName: fn.name },
-
-// handler: unpack the batch by hand
-export const handler = async (event) => {
-  for (const record of event.Records) {
-    console.log(record.body);
-  }
-};
-```
-
 An **Event Source** is a [Binding](/infrastructure-as-effects/binding)
-that does all three in one call. You name the queue and the handler,
-and the messages arrive as an Effect `Stream`:
+that runs your Function when something happens on a resource. A message
+lands on a queue, an object lands in a bucket, a row changes in a table.
+You name the resource and a handler, and the messages arrive as an
+Effect `Stream`:
 
 ```typescript
 import * as AWS from "alchemy/AWS";
@@ -50,12 +35,29 @@ what it listens to.
 
 ## What one call wires
 
-At deploy time, `consumeQueueMessages` attaches the receive, delete,
-and get-attributes statement to the Function's role, scoped to the
-queue's ARN. It creates the event source mapping that points the queue
-at this Function, and removes it when the Function is destroyed. At
-runtime it registers the listener that turns each invocation's batch
-into `records`.
+In traditional IaC, running code when a message lands takes three
+pieces: permission to receive and delete messages, a mapping that tells
+the queue to invoke the Function, and a handler that unpacks the raw
+event:
+
+```typescript
+// infrastructure: grant access and wire the trigger
+policy: { Action: ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes"], Resource: [queue.arn] },
+eventSourceMapping: { eventSourceArn: queue.arn, functionName: fn.name },
+
+// handler: unpack the batch by hand
+export const handler = async (event) => {
+  for (const record of event.Records) {
+    console.log(record.body);
+  }
+};
+```
+
+`consumeQueueMessages` does all three. At deploy time it attaches that
+statement to the Function's role, scoped to the queue's ARN, and
+creates the event source mapping that points the queue at this
+Function. At runtime it registers the listener that turns each
+invocation's batch into `records`.
 
 `consumeQueueMessages` is the contract and `AWS.Lambda.QueueEventSource`
 is the Layer that satisfies it, the same split every binding has
