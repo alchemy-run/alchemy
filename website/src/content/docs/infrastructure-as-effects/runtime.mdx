@@ -39,37 +39,10 @@ which by convention is the Worker itself, and uploads that bundle as
 the Worker's script. Most Runtimes need no other props, because
 everything else they depend on comes in through bindings.
 
-In traditional IaC a Runtime is defined twice, once as a resource
-with its configuration and once as a handler file the resource points
-at, and the two meet at a string. Alchemy is a superset of that model,
-not a replacement. The same Worker can point at a plain `async fetch`
-handler with the bucket on its `env`:
-
-```typescript
-// alchemy.run.ts
-export const Worker = Cloudflare.Worker("Api", {
-  main: "./src/worker.ts",
-  env: { Uploads },
-});
-```
-
-```typescript
-// src/worker.ts
-export default {
-  async fetch(request: Request, env: { Uploads: R2Bucket }) {
-    const obj = await env.Uploads.get("hello.txt");
-    return obj
-      ? new Response(await obj.text())
-      : new Response("Not found", { status: 404 });
-  },
-};
-```
-
-Two files, held together by the name `Uploads`. The Effect form above
-is those two files as one, and `bucket` is a value the handler closes
-over instead of a key on `env`. Both styles deploy through the same
-provider and produce the same artifact. [Effect handlers vs async handlers](#effect-handlers-vs-async-handlers)
-compares them. The rest of this page follows the Effect.
+The rest of this page follows that Effect. Alchemy also supports the
+traditional two-file shape, a config file pointing at a plain
+`async fetch` handler, compared in
+[Effect handlers vs async handlers](#effect-handlers-vs-async-handlers).
 
 ## The Effectful Constructor
 
@@ -329,31 +302,10 @@ export default Cloudflare.Worker(
 ```
 
 Because bindings are context, a handler can depend on a service of
-your own instead of a resource. Define the contract as a
-`Context.Service`:
-
-```typescript
-export class JobService extends Context.Service<
-  JobService,
-  { getJob(id: string): Effect.Effect<Job, JobError, Alchemy.RuntimeContext> }
->()("JobService") {}
-```
-
-Implement it with a Layer that carries its own resources and bindings:
-
-```typescript
-export const JobServiceKV = Layer.effect(
-  JobService,
-  Effect.gen(function* () {
-    const kv = yield* Cloudflare.KV.ReadWriteNamespace(Cloudflare.KV.Namespace("Jobs"));
-    return { getJob: (id: string) => kv.get<Job>(id, "json") };
-  }),
-);
-```
-
-The Worker yields the service and provides the Layer. The namespace
-comes with it, and swapping in a Layer backed by DynamoDB changes
-nothing in the handler:
+your own instead of a resource. With the `JobService` contract and
+`JobServiceKV` Layer from [Layers](#layers) above, the Worker yields
+the service and provides the Layer. The namespace comes with it, and
+swapping in a Layer backed by DynamoDB changes nothing in the handler:
 
 ```typescript
 export default Cloudflare.Worker(

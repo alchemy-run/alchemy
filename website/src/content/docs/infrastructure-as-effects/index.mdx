@@ -72,55 +72,35 @@ is those two files as one. `bucket` is a value the handler closes over,
 and the code that uses the bucket sits next to the line that declares
 it.
 
-Everything in this section is in that one Worker. Let's take it
-apart.
+Everything in this section is in that one Worker. Here is the map.
 
 ## Runtimes carry their code
 
-`Cloudflare.Worker` is a **Runtime**: a Resource that carries the code
-it runs. The first two arguments are the Resource, its name and its
-configuration:
-
-```typescript
-Cloudflare.Worker(
-  "Api",
-  { main: import.meta.url },
-  // ...
-);
-```
-
-`main: import.meta.url` tells Alchemy where the code lives. At deploy
-time Alchemy bundles this file's default export, which by convention is
-the Worker itself, and uploads that bundle as the Worker's script. Most
-Runtimes need no other configuration, because everything else comes in
-through bindings.
-
-The third argument is the code, an Effect:
+`Cloudflare.Worker` is a **Runtime**. Its props are the cloud
+configuration, and `main: import.meta.url` tells Alchemy to bundle
+this file's default export as the Worker's code. The Effect is that
+code, and it always has the same shape:
 
 ```typescript
 Effect.gen(function* () {
+  // bind what you need
   const bucket = yield* Cloudflare.R2.ReadWriteBucket(Uploads);
 
-  return {
-    fetch: Effect.gen(function* () {
-      // ...
-    }),
-  };
+  // return what you expose
+  return { fetch: /* ... */ };
 });
 ```
 
-It always has the same shape. First bind what you need, then return
-what you expose. [Runtime](/infrastructure-as-effects/runtime) covers
-that shape, the `fetch` and RPC interface it returns, and the three
-ways to declare one.
+[Runtime](/infrastructure-as-effects/runtime) covers that shape, the
+`fetch` and RPC interface it returns, and the three ways to declare
+one.
 
 ## Bindings wire resources in
 
-`yield* Cloudflare.R2.ReadWriteBucket(Uploads)` is a Binding. It hands
-back `bucket`, a typed client, and generates the permission and
-configuration the client needs. On Cloudflare that is a native
-`r2_bucket` binding. On AWS it is an IAM statement scoped to one
-resource, plus the resource's name in the Function's environment:
+`yield* Cloudflare.R2.ReadWriteBucket(Uploads)` is a **Binding**. It
+hands back a typed client and generates whatever the client needs to
+work: a native binding on Cloudflare, an IAM statement and an
+environment variable on AWS:
 
 ```typescript
 const getItem = yield* AWS.DynamoDB.GetItem(Jobs);
@@ -148,14 +128,40 @@ yield* AWS.SQS.consumeQueueMessages(Inbound, (records) =>
 );
 ```
 
+## Layers package it all
+
+A Binding is a contract plus a Layer that implements it, which is why
+`ReadWriteBucketBinding` can be swapped for `ReadWriteBucketHttp`
+without touching the handler. The same split works for services of
+your own. Declare a `Context.Service`, implement it with a Layer that
+carries its own resources and bindings, and the handler depends on the
+service alone:
+
+```typescript
+Effect.gen(function* () {
+  const jobs = yield* JobService;
+
+  return {
+    fetch: Effect.gen(function* () {
+      return HttpServerResponse.json(yield* jobs.getJob("job-1"));
+    }),
+  };
+}).pipe(Effect.provide(JobServiceKV))
+```
+
+Provide `JobServiceKV` and a KV namespace is created and bound. Provide
+`JobServiceDynamo` and a DynamoDB table is instead. The handler doesn't
+change. [Layers](/infrastructure-as-effects/layers) builds one from
+scratch, and [Circular Bindings](/infrastructure-as-effects/circular-bindings)
+uses the split to let two Workers call each other.
+
 ## Two phases, one program
 
 The Worker's Effect runs in two phases. The outer Effect is the
-**Construction phase**. It runs at deploy time, where
-`ReadWriteBucket(Uploads)` records the binding, and again at cold
-start, where the same line builds the live client. The inner `fetch`
-Effect is the **Runtime phase**. It runs per request, only inside the
-deployed Worker:
+**Construction phase**. It runs at deploy time, where the binding
+records what it needs, and again at cold start, where the same line
+builds the live client. The inner `fetch` Effect is the **Runtime
+phase**. It runs per request, only inside the deployed Worker:
 
 ```typescript
 Effect.gen(function* () {
@@ -176,66 +182,6 @@ over rather than something looked up at request time.
 [Phases](/infrastructure-as-effects/phases) explains exactly what runs
 when.
 
-## Layers package it all
-
-A binding is a contract plus an implementation Layer. `ReadWriteBucket`
-names the capability. `ReadWriteBucketBinding` decides how it's
-satisfied, and can be swapped for `ReadWriteBucketHttp` without touching
-the handler.
-
-The same split works one level up, for your own services. Define the
-contract as a `Context.Service`, a typed tag that names what the
-service does:
-
-```typescript
-export class JobService extends Context.Service<
-  JobService,
-  {
-    getJob(id: string): Effect.Effect<Job, JobError, Alchemy.RuntimeContext>;
-  }
->()("JobService") {}
-```
-
-Implement it with `Layer.effect`. The resources and bindings it needs
-live inside the Layer:
-
-```typescript
-export const JobServiceKV = Layer.effect(
-  JobService,
-  Effect.gen(function* () {
-    const kv = yield* Cloudflare.KV.ReadWriteNamespace(Cloudflare.KV.Namespace("Jobs"));
-    return { getJob: (id: string) => kv.get<Job>(id, "json") };
-  }),
-);
-```
-
-A second implementation can back the same contract with a different
-resource, or a different cloud:
-
-```typescript
-export const JobServiceDynamo = Layer.effect(
-  JobService,
-  Effect.gen(function* () {
-    const getItem = yield* AWS.DynamoDB.GetItem(AWS.DynamoDB.Table("Jobs", { partitionKey: "id" }));
-    return { getJob: (id: string) => /* ... */ };
-  }),
-);
-```
-
-A Worker yields `JobService` and provides whichever Layer fits. The
-namespace or table is created, bound, and hidden behind the service:
-
-```typescript
-Effect.gen(function* () {
-  const jobs = yield* JobService;
-  // ...
-}).pipe(Effect.provide(JobServiceKV))
-```
-
-[Layers](/infrastructure-as-effects/layers) builds one from scratch,
-and [Circular Bindings](/infrastructure-as-effects/circular-bindings)
-uses the split to let two Workers call each other.
-
 ## Built into every Runtime
 
 [Telemetry](/infrastructure-as-effects/telemetry) is a Layer too.
@@ -243,10 +189,6 @@ Provide an exporter alongside your bindings and every request, queue
 batch, and cron fire exports the traces and logs Effect already emits.
 [Custom Runtime](/infrastructure-as-effects/custom-runtime) brings the
 whole model to a compute target Alchemy doesn't ship.
-
-Effect style is optional. Bindings also work as plain props on an
-`async fetch` handler with a typed env via `InferEnv`. See
-[Effect handlers vs async handlers](/infrastructure-as-effects/runtime#effect-handlers-vs-async-handlers).
 
 ## Where next
 
