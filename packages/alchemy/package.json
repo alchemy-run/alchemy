@@ -204,6 +204,12 @@
       "worker": "./src/GitHub/index.ts",
       "import": "./lib/GitHub/index.js"
     },
+    "./Forgejo": {
+      "types": "./lib/Forgejo/index.d.ts",
+      "bun": "./src/Forgejo/index.ts",
+      "worker": "./src/Forgejo/index.ts",
+      "import": "./lib/Forgejo/index.js"
+    },
     "./Endpoint": {
       "types": "./lib/Endpoint/index.d.ts",
       "bun": "./src/Endpoint/index.ts",
@@ -430,6 +436,7 @@
     "@distilled.cloud/cloudflare": "workspace:*",
     "@distilled.cloud/core": "workspace:*",
     "@distilled.cloud/fly-io": "workspace:*",
+    "@distilled.cloud/forgejo": "workspace:*",
     "@distilled.cloud/hetzner": "workspace:*",
     "@distilled.cloud/neon": "workspace:*",
     "@distilled.cloud/planetscale": "workspace:*",

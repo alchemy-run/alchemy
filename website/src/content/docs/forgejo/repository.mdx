@@ -1,0 +1,135 @@
+---
+title: Repositories
+description: Manage Forgejo repositories as Stack resources — create or adopt a repo, converge its settings on every deploy, rename in place, and opt into deletion explicitly.
+---
+
+`Forgejo.Repository` manages the lifecycle of a repository owned by a
+user or organization on your instance. The repository is created on
+first deploy and its settings are converged on every subsequent
+deploy — description, visibility, enabled units, topics — so repo
+configuration lives in code next to the infrastructure it hosts.
+
+Repositories are treated as precious: destroying the stack retains
+the repository by default, and deleting it is an explicit opt-in.
+New here? [Set up credentials](/forgejo/setup) first.
+
+## Create a repository
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Forgejo from "alchemy/Forgejo";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "MyRepos",
+  {
+    providers: Forgejo.providers(),
+    state: Alchemy.localState(),
+  },
+  Effect.gen(function* () {
+    const repo = yield* Forgejo.Repository("api", {
+      owner: "acme",
+      name: "api",
+      description: "API service",
+      private: true,
+      autoInit: true,
+    });
+
+    return { url: repo.htmlUrl, clone: repo.cloneUrl };
+  }),
+);
+```
+
+`owner` is a user or organization login. Alchemy compares it against
+the authenticated user and picks the matching create endpoint —
+`/user/repos` for your own account, `/orgs/{owner}/repos` otherwise.
+Outputs include the stable numeric `repoId`, `fullName`, `htmlUrl`,
+the `cloneUrl`/`sshUrl` clone URLs, and the resolved `defaultBranch`.
+
+## Adopt an existing repository
+
+Pointing `Repository` at a name that already exists under the owner
+doesn't fail with a name conflict. The deploy observes the live
+repository and converges its settings in place, so you can bring an
+existing repo under management just by declaring it:
+
+```typescript
+yield* Forgejo.Repository("api", {
+  owner: "acme",
+  name: "api", // already exists — settings below are applied to it
+  hasWiki: false,
+  hasActions: true,
+});
+```
+
+## Settings alchemy manages
+
+Every deploy converges the declared settings against the live
+repository:
+
+```typescript
+yield* Forgejo.Repository("internal-tools", {
+  owner: "acme",
+  name: "internal-tools",
+  private: true,
+  hasWiki: false,
+  hasProjects: false,
+  hasActions: true,
+  topics: ["internal", "tooling"],
+});
+```
+
+- **`description`, `website`** — the repository page blurb and link.
+- **`private`** — repository visibility.
+- **Units** — `hasIssues`, `hasProjects`, `hasWiki`,
+  `hasPullRequests`, `hasReleases`, `hasPackages`, `hasActions`.
+- **`archived`** — make the repository read-only.
+- **`defaultBranch`** — the branch shown and merged into by default.
+- **`template`** — mark the repository as a template.
+- **`topics`** — the declared list *replaces* the live topics, so the
+  set you declare is the whole set.
+
+Creation-only props are applied on the first deploy and ignored
+afterwards, because Forgejo cannot retroactively change them:
+`autoInit`, `gitignores`, `license`, `readme`, and
+`objectFormatName` (`"sha1"` or `"sha256"`).
+
+## Rename in place
+
+Changing `name` while the logical ID stays the same renames the
+existing repository. The deploy observes it under its previous name
+first, so history, issues, and the numeric `repoId` are preserved:
+
+```typescript
+yield* Forgejo.Repository("api", {
+  owner: "acme",
+  name: "api-v2", // was "api"
+});
+```
+
+Changing `owner` is a **replacement**, not a transfer: a new, empty
+repository is created under the new owner and the old one is retained.
+To actually move a repository between owners, transfer it in the
+Forgejo UI first, then update `owner` here and deploy with `--adopt`.
+
+## Deletion is opt-in
+
+`Repository` defaults to the `retain` removal policy, so `alchemy
+destroy` leaves the repository and its history in place. Opt a
+throwaway repository into deletion explicitly:
+
+```typescript
+import { destroy } from "alchemy/RemovalPolicy";
+
+yield* Forgejo.Repository("preview", {
+  owner: "acme",
+  name: "preview",
+}).pipe(destroy());
+```
+
+## Next steps
+
+- [Actions secrets & variables](/forgejo/actions-config) — seed CI config.
+- [Organizations & teams](/forgejo/organizations) — ownership and access.
+- [Repository reference](/providers/forgejo/repository) — every prop.

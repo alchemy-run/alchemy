@@ -57,6 +57,9 @@
       "path": "../../distilled/packages/hetzner/tsconfig.json"
     },
     {
+      "path": "../../distilled/packages/forgejo/tsconfig.json"
+    },
+    {
       "path": "../../distilled/packages/fly-io/tsconfig.json"
     },
     {
