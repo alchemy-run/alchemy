@@ -183,9 +183,21 @@ names the capability. `ReadWriteBucketBinding` decides how it's
 satisfied, and can be swapped for `ReadWriteBucketHttp` without touching
 the handler.
 
-The same split works one level up. Put resources and bindings inside a
-`Layer.effect` behind your own service, and consumers see only the
-service:
+The same split works one level up, for your own services. Define the
+contract as a `Context.Service`, a typed tag that names what the
+service does:
+
+```typescript
+export class JobService extends Context.Service<
+  JobService,
+  {
+    getJob(id: string): Effect.Effect<Job, JobError, Alchemy.RuntimeContext>;
+  }
+>()("JobService") {}
+```
+
+Implement it with `Layer.effect`. The resources and bindings it needs
+live inside the Layer:
 
 ```typescript
 export const JobServiceKV = Layer.effect(
@@ -197,8 +209,29 @@ export const JobServiceKV = Layer.effect(
 );
 ```
 
-Provide `JobServiceKV` to a Worker and the namespace is created, bound,
-and hidden behind `JobService`.
+A second implementation can back the same contract with a different
+resource, or a different cloud:
+
+```typescript
+export const JobServiceDynamo = Layer.effect(
+  JobService,
+  Effect.gen(function* () {
+    const getItem = yield* AWS.DynamoDB.GetItem(AWS.DynamoDB.Table("Jobs", { partitionKey: "id" }));
+    return { getJob: (id: string) => /* ... */ };
+  }),
+);
+```
+
+A Worker yields `JobService` and provides whichever Layer fits. The
+namespace or table is created, bound, and hidden behind the service:
+
+```typescript
+Effect.gen(function* () {
+  const jobs = yield* JobService;
+  // ...
+}).pipe(Effect.provide(JobServiceKV))
+```
+
 [Layers](/infrastructure-as-effects/layers) builds one from scratch,
 and [Circular Bindings](/infrastructure-as-effects/circular-bindings)
 uses the split to let two Workers call each other.
