@@ -3,51 +3,88 @@ title: Functions & Servers
 description: Workers, Lambda Functions, and Containers ship runtime code along with their infrastructure — declared with the Effectful Constructor pattern, bind what you need, return what you expose.
 ---
 
-Cloudflare Workers, AWS Lambda Functions, ECS Tasks, EKS
-Deployments, and Containers
-are [Resources](/infrastructure-as-code/resource) that ship **runtime code along
-with their infrastructure**. When you declare one you describe both:
+A Function is usually defined twice. Once as a resource, with its
+memory, runtime, and environment. Once as a handler file the resource
+points at:
 
-- The cloud configuration (memory, region, compatibility flags…)
-- The Effect that runs inside it
+```typescript
+// infrastructure
+new Function("Api", { handler: "src/api.handler", memory: 512 });
 
-Both deploy together as one resource.
+// src/api.ts
+export const handler = async (event) => {
+  // ...
+};
+```
 
-## The Effectful Constructor pattern
+The resource knows nothing about what the handler needs. The handler
+knows nothing about what the resource was given. They meet at a string.
 
-Every Function and Server is declared with the same shape — an
-Effect that **declares its Bindings, then returns its interface**:
+In Alchemy, a Cloudflare Worker, Lambda Function, ECS Task, or
+Container is a [Resource](/infrastructure-as-code/resource) that
+carries its runtime code. The props are the cloud configuration. The
+Effect is the code:
+
+```typescript
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+
+export const Uploads = Cloudflare.R2.Bucket("Uploads");
+
+export default Cloudflare.Worker(
+  "Api",
+  {
+    main: import.meta.url,
+    compatibility: { date: "2026-01-28" },
+    observability: { enabled: true },
+  },
+  Effect.gen(function* () {
+    const bucket = yield* Cloudflare.R2.ReadWriteBucket(Uploads);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const obj = yield* bucket.get("hello.txt");
+        return obj
+          ? HttpServerResponse.text(yield* obj.text())
+          : HttpServerResponse.text("Not found", { status: 404 });
+      }),
+    };
+  }).pipe(Effect.provide(Cloudflare.R2.ReadWriteBucketBinding)),
+);
+```
+
+One deploy ships both. Let's look at the Effect.
+
+## The Effectful Constructor
+
+Every Function and Server is declared with the same Effect. It binds
+the resources it needs, then returns the interface it exposes:
 
 ```typescript
 Effect.gen(function* () {
-  // 1. Declare Bindings — the resources this program uses.
-  const bucket = yield* Cloudflare.R2.ReadWriteBucket(Bucket);
+  // bind what you need
+  const bucket = yield* Cloudflare.R2.ReadWriteBucket(Uploads);
 
-  // 2. Return the interface — the Effects and functions it exposes.
+  // return what you expose
   return {
     fetch: Effect.gen(function* () {
       /* use bucket */
     }),
   };
-}); // + Effect.provide(<the binding Layer>) — see Bindings
+});
 ```
 
-This is the **Effectful Constructor** — one simple, repeatable
-pattern you'll use everywhere across alchemy:
-
-- A **Worker** or **Lambda Function** returns its handlers (`fetch`).
-- A **Durable Object** returns its [RPC methods](/apis/schemaless).
-- A **Workflow** returns its run function.
-- A [**Layer**](/infrastructure-as-effects/layers) returns a service
-  interface.
-
-Bind what you need, return what you expose. Learn it once and every
-runtime in alchemy is a variation on it.
+This is the **Effectful Constructor**. A Worker or Lambda Function
+returns its handlers. A Durable Object returns its RPC methods. A
+Workflow returns its run function. A
+[Layer](/infrastructure-as-effects/layers) returns a service. Learn it
+once and every runtime in Alchemy is a variation on it.
 
 ## Fetch
 
-`fetch` is the interface member that serves HTTP — a per-request
-Effect. Yield `HttpServerRequest` to read the request; return an
+`fetch` serves HTTP. It is a per-request Effect. Yield
+`HttpServerRequest` to read the request and return an
 `HttpServerResponse`:
 
 ```typescript
@@ -65,14 +102,13 @@ Effect.gen(function* () {
 });
 ```
 
-Every Worker and Lambda Function serves HTTP through this member —
-it runs per request, inside the deployed Function
-([Phases](/infrastructure-as-effects/phases) covers exactly when).
+It runs inside the deployed Function, once per request.
+[Phases](/infrastructure-as-effects/phases) covers exactly when.
 
 ## RPC
 
-The interface isn't limited to `fetch` — add methods returning
-`Effect` or `Stream`, and any resource that binds this Worker calls
+The interface isn't limited to `fetch`. Add methods that return an
+`Effect` or a `Stream`, and any resource that binds this Worker calls
 them through a typed client:
 
 ```typescript
@@ -90,63 +126,42 @@ export default class Greeter extends Cloudflare.Worker<Greeter>()(
 ) {}
 ```
 
-No schema, no runtime validation — serialization is automatic and
-the client type is inferred from the class. This is
-[Schemaless RPC](/apis/schemaless), the default for internal calls;
-the [APIs](/apis) section covers it plus the schema'd surfaces
-([Effect RPC](/apis/effect-rpc), [Effect HTTP](/apis/effect-http))
-for trust boundaries.
+No schema, no runtime validation. Serialization is automatic and the
+client type is inferred from the class. This is
+[Schemaless RPC](/apis/schemaless), the default for internal calls. The
+[APIs](/apis) section adds the schema'd surfaces for trust boundaries.
 
-## A Worker, end to end
+## Bindings
 
-Cloud configuration, a Binding, and a `fetch` handler together:
+The `yield*` lines at the top of the constructor are Bindings. Each one
+connects a resource to this Function and hands back a client:
 
 ```typescript
-import * as Cloudflare from "alchemy/Cloudflare";
-import * as Effect from "effect/Effect";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import { Bucket } from "./bucket.ts";
+const bucket = yield* Cloudflare.R2.ReadWriteBucket(Uploads);
+const kv = yield* Cloudflare.KV.ReadWriteNamespace(Sessions);
 
-export default Cloudflare.Worker(
-  "Api",
-  {
-    main: import.meta.url,
-    compatibility: { date: "2026-01-28" },
-    observability: { enabled: true },
-  },
-  Effect.gen(function* () {
-    // Init: bind a resource. The binding is the typed SDK.
-    const bucket = yield* Cloudflare.R2.ReadWriteBucket(Bucket);
-
-    return {
-      // Runtime: per-request handler.
-      fetch: Effect.gen(function* () {
-        const obj = yield* bucket.get("hello.txt");
-        return obj
-          ? HttpServerResponse.text(yield* obj.text())
-          : HttpServerResponse.text("Not found", { status: 404 });
-      }),
-    };
-  }).pipe(Effect.provide(Cloudflare.R2.ReadWriteBucketBinding)),
-);
+// inside fetch
+yield* bucket.put("key", "value");
+yield* kv.get("session-id");
 ```
 
-The props (`compatibility`, `observability`, memory, routes…)
-are the cloud configuration; the Effect is the Effectful Constructor.
-One deploy ships both.
+A Cloudflare R2 binding and an AWS S3 binding look the same from here.
+What differs is what they generate at deploy time: a native Worker
+binding on one, an IAM statement and an environment variable on the
+other. [Bindings](/infrastructure-as-effects/binding) follows one
+through everything it produces.
 
 ## Three ways to declare one
 
-**Inline** — no class, the form used above. Fine when nothing else
-needs to reference the Worker by name:
+The inline form above is enough when nothing else needs to reference
+the Worker by name:
 
 ```typescript
 export default Cloudflare.Worker("Api", { main: import.meta.url }, effect);
 ```
 
-**Inline class** — the same declaration, but the class name makes
-the type nominal instead of structural: hovers, errors, and Stack
-outputs say `Api` instead of an anonymous shape:
+Wrap it in a class and the type becomes nominal. Hovers, errors, and
+Stack outputs say `Api` instead of an anonymous shape:
 
 ```typescript
 export default class Api extends Cloudflare.Worker<Api>()(
@@ -156,15 +171,14 @@ export default class Api extends Cloudflare.Worker<Api>()(
 ) {}
 ```
 
-**Tagged** — split identity from implementation. The class declares
-only the **Tag**; `.make(props, effect)` produces the implementation
+The third form splits identity from implementation. The class declares
+only a **Tag**. `.make(props, effect)` produces the implementation
 **Layer**:
 
 ```typescript
-// src/Api.ts — the Tag: a lightweight identifier others bind to
+// src/Api.ts
 export class Api extends Cloudflare.Worker<Api, {}>()("Api") {}
 
-// same file, or a separate one — the implementation Layer
 export default Api.make(
   { main: import.meta.url },
   Effect.gen(function* () {
@@ -173,8 +187,7 @@ export default Api.make(
 );
 ```
 
-The implementation Layer is provided to the **Stack**, not to
-another Worker:
+The Layer is provided to the Stack, not to another Worker:
 
 ```typescript
 // alchemy.run.ts
@@ -190,54 +203,25 @@ export default Alchemy.Stack(
 );
 ```
 
-The split matters because other Functions bind to the **Tag** —
-never the implementation. Importing a Tag pulls in no runtime code,
-so a Worker binding to `Api` doesn't bundle `Api`'s implementation —
-a piece of code with its own dependencies that may not even target
-the same runtime (workerd vs node vs bun, serverless vs serverful).
-It also allows multiple implementations of one Tag: ship the Tag,
-and let each consumer provide the Layer that fits. This split is
-what makes
+Other Functions bind to the Tag, never the implementation. Importing a
+Tag pulls in no runtime code, so a Worker that binds `Api` doesn't
+bundle `Api`'s implementation, which may not even target the same
+runtime. One Tag can also have several implementations, each consumer
+providing the one that fits. This split is what makes
 [Circular Bindings](/infrastructure-as-effects/circular-bindings)
 possible.
 
-## Bindings in action
-
-The `yield* ReadWriteBucket(Bucket)` line above is a **binding** —
-it connects a resource to the Function's runtime:
-
-```typescript
-const bucket = yield* Cloudflare.R2.ReadWriteBucket(Bucket);
-const kv = yield* Cloudflare.KV.ReadWriteNamespace(Sessions);
-
-// Inside fetch:
-yield* bucket.put("key", "value");
-yield* kv.get("session-id");
-```
-
-Every binding obeys the same shape across providers — a Cloudflare
-R2 binding and an AWS S3 binding are interchangeable from the
-caller's point of view. Every binding is a contract (the `yield*`)
-plus an interchangeable implementation Layer (the `Effect.provide`) —
-[Bindings](/infrastructure-as-effects/binding#a-contract-and-a-layer)
-covers the deploy-time mechanics.
-
 ## Effect handlers vs async handlers
 
-Workers and Lambda Functions support two styles for the runtime
-code. Both deploy
-through the same provider and produce the same artifact.
-
-**Effect style** — handlers are Effects, with typed errors,
-composable retries, structured concurrency, and bindings resolved
-through Effect's context:
+The Effect style gives handlers typed errors, composable retries, and
+bindings resolved through Effect's context:
 
 ```typescript
 export default Cloudflare.Worker(
   "Worker",
   { main: import.meta.url },
   Effect.gen(function* () {
-    const bucket = yield* Cloudflare.R2.ReadWriteBucket(Bucket);
+    const bucket = yield* Cloudflare.R2.ReadWriteBucket(Uploads);
     return {
       fetch: Effect.gen(function* () {
         /* ... */
@@ -247,9 +231,8 @@ export default Cloudflare.Worker(
 );
 ```
 
-**Async style** — handlers are standard `async fetch` functions.
-Bindings are declared on the resource's `env` prop and typed via
-`InferEnv`:
+The async style is a standard `async fetch`. Bindings go on the
+resource's `env` prop and are typed with `InferEnv`:
 
 ```typescript
 // alchemy.run.ts
@@ -257,7 +240,7 @@ export type WorkerEnv = Cloudflare.InferEnv<typeof Worker>;
 
 export const Worker = Cloudflare.Worker("Worker", {
   main: "./src/worker.ts",
-  env: { Bucket },
+  env: { Uploads },
 });
 ```
 
@@ -267,31 +250,31 @@ import type { WorkerEnv } from "../alchemy.run.ts";
 
 export default {
   async fetch(request: Request, env: WorkerEnv) {
-    const object = await env.Bucket.get("key");
+    const object = await env.Uploads.get("key");
     return new Response(object?.body ?? null);
   },
 };
 ```
 
-Pick whichever fits your team. The Effect style unlocks
-[Layers](/infrastructure-as-effects/layers), structured retries, and fine-grained
-testing; the async style integrates better with existing handler
-code.
+Both deploy through the same provider and produce the same artifact.
+The Effect style unlocks [Layers](/infrastructure-as-effects/layers),
+structured retries, and fine-grained testing. The async style fits
+existing handler code.
 
 ## Instance scope vs request scope
 
-The Effectful Constructor has two lifetimes. The constructor runs once
-per instance (a Worker isolate, a Lambda sandbox, a server process);
-each event runs the handler in a fresh `Scope`:
+The constructor runs once per instance: a Worker isolate, a Lambda
+sandbox, a server process. Each event runs the handler in a fresh
+`Scope`:
 
 ```typescript
 Effect.gen(function* () {
-  // Instance scope: runs once, reused by every event.
-  const bucket = yield* Cloudflare.R2.ReadWriteBucket(Bucket);
+  // instance scope: runs once, reused by every event
+  const bucket = yield* Cloudflare.R2.ReadWriteBucket(Uploads);
 
   return {
     fetch: Effect.gen(function* () {
-      // Request scope: runs per event, closed when the event settles.
+      // request scope: runs per event, closed when the event settles
     }),
   };
 });
@@ -305,7 +288,7 @@ Effect.gen(function* () {
   // ✓ one-shot I/O producing a plain value, cached for every event
 
   const conn = yield* acquireConnection;
-  // ✗ disposable — the instance scope may never close, so the
+  // ✗ disposable. The instance scope may never close, so the
   //   connection may never be released
 
   return {
@@ -317,13 +300,14 @@ Effect.gen(function* () {
 });
 ```
 
-Resources shared across calls within one event are memoized on the
-request scope: `Drizzle.Postgres` opens its pool on the first query of
+Anything shared across calls within one event is memoized on the
+request scope. `Drizzle.Postgres` opens its pool on the first query of
 an event, every query in that event reuses it, and the pool closes when
-the event settles — the [SQL connection lifecycle](/sql/effect-sql/lifecycle)
-is the canonical statement of this contract for database clients.
+the event settles. The
+[SQL connection lifecycle](/sql/effect-sql/lifecycle) is the canonical
+statement of this contract.
 
-### Request finalizers
+A finalizer added inside a handler runs when the event settles:
 
 ```typescript
 fetch: Effect.gen(function* () {
@@ -332,28 +316,23 @@ fetch: Effect.gen(function* () {
 }),
 ```
 
-On workerd the finalizer runs after the response, via `ctx.waitUntil`.
-On Lambda it runs before the response leaves — keep it cheap, and put
-anything that must not be lost in the handler itself.
+On workerd it runs after the response, via `ctx.waitUntil`. On Lambda
+it runs before the response leaves, so keep it cheap and put anything
+that must not be lost in the handler itself.
 
-### Instance finalizers
-
-| Runtime                            | Instance finalizers run                                                              |
-| ---------------------------------- | ------------------------------------------------------------------------------------ |
-| workerd (Workers, DOs, Workflows)  | never — isolates are frozen or evicted without a teardown hook                       |
-| Lambda                             | in a 500 ms `SIGTERM` window at spin-down (alchemy registers an extension to get one); skipped on hard failures |
-| Servers (Containers, ECS Tasks)    | on graceful process exit                                                             |
-
-Design so nothing needs instance-level cleanup: build at instance
-scope, use at request scope.
+Instance finalizers are best effort. On workerd they never run, because
+isolates are frozen or evicted without a teardown hook. On Lambda they
+get a 500 ms `SIGTERM` window at spin-down, skipped on hard failures.
+On servers they run on graceful process exit. Design so nothing needs
+instance-level cleanup.
 
 ## Where next
 
-- [Bindings](/infrastructure-as-effects/binding) — the deploy-time
-  mechanics behind `yield* ReadWriteBucket(Bucket)`: IAM, env
-  injection, typed SDKs.
-- [RPC](/apis) — how bound resources call the methods you return.
+- [Bindings](/infrastructure-as-effects/binding) — what
+  `yield* ReadWriteBucket(Uploads)` generates: IAM, env injection, a
+  typed client.
+- [APIs](/apis) — how bound resources call the methods you return.
 - [Phases](/infrastructure-as-effects/phases) — when the constructor
   runs vs the interface it returns, and why.
-- [Custom Runtime](/infrastructure-as-effects/custom-runtime) —
-  bring the Functions & Servers model to a new compute target.
+- [Custom Runtime](/infrastructure-as-effects/custom-runtime) — bring
+  the Functions & Servers model to a new compute target.
