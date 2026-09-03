@@ -429,6 +429,8 @@
     "@distilled.cloud/axiom": "workspace:*",
     "@distilled.cloud/cloudflare": "workspace:*",
     "@distilled.cloud/core": "workspace:*",
+    "@distilled.cloud/acme": "workspace:*",
+    "@distilled.cloud/zerossl": "workspace:*",
     "@distilled.cloud/fly-io": "workspace:*",
     "@distilled.cloud/hetzner": "workspace:*",
     "@distilled.cloud/neon": "workspace:*",
