@@ -43,7 +43,20 @@ handler file the resource points at, and the two meet at a string. Here
 the handler lives inside the resource, so `bucket` is declared and used
 in one place.
 
-Let's look at the Effect.
+Alchemy is a superset of that model, not a replacement. The same
+Worker can point at a plain `async fetch` handler with the bucket on
+its `env`:
+
+```typescript
+export const Worker = Cloudflare.Worker("Api", {
+  main: "./src/worker.ts",
+  env: { Uploads },
+});
+```
+
+Both styles deploy through the same provider and produce the same
+artifact. [Effect handlers vs async handlers](#effect-handlers-vs-async-handlers)
+compares them. The rest of this page follows the Effect.
 
 ## The Effectful Constructor
 
