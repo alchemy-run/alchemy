@@ -20,7 +20,7 @@ const PORT = 13375;
 const { test } = Test.make({
   providers: Command.providers(),
   dev: true,
-  ingress: { domain: "localhost", port: PORT, tunnel: false },
+  ingress: { domain: "localhost", port: PORT },
 });
 
 const httpServerScript = pathe.join(

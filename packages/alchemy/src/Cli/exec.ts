@@ -77,7 +77,6 @@ const runDev = Effect.fn(function* (options: DevOptions) {
     ingress: {
       domain: options.domain,
       port: options.port,
-      tunnel: options.tunnel,
     },
   }).pipe(renderPlanning({ operation: "Dev", stage: options.stage }));
   const once = yield* devOnce;

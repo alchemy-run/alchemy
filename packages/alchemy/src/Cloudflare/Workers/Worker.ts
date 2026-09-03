@@ -1036,14 +1036,6 @@ export interface WorkerProps<
          * first (`Site/Api` → `api.site`).
          */
         subdomain?: string;
-        /**
-         * Expose this Worker to the internet through a Cloudflare quick
-         * tunnel under `alchemy dev`. Defaults to the `--tunnel` flag; set
-         * `true` to always tunnel this Worker, `false` to never tunnel it.
-         * When tunneled, `url` is the public `https://*.trycloudflare.com`
-         * URL and the local URLs follow in `urls`.
-         */
-        tunnel?: boolean;
       }
     | {
         /**
@@ -1060,11 +1052,6 @@ export interface WorkerProps<
          * dev`'s shared ingress. Only used when {@link url} is set.
          */
         subdomain?: string;
-        /**
-         * Expose the external dev server through a Cloudflare quick tunnel
-         * under `alchemy dev`. Only used when {@link url} is set.
-         */
-        tunnel?: boolean;
       };
 }
 

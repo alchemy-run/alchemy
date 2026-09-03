@@ -86,7 +86,7 @@ live Function URL.
 
 ## Local URLs on the dev ingress
 
-Emulated HTTP surfaces — Lambda Function URLs, CloudFront distributions, API Gateway APIs — are also put on `alchemy dev`'s shared ingress as `http://<name>.localhost:1337`, alongside any Cloudflare Workers and `Command.Dev` servers in the stack, and `alchemy dev --tunnel` exposes each through a Cloudflare quick tunnel. The resources' `url` / `functionUrl` attributes keep the emulator's own address (the emulator dials them from inside Docker), so the ingress URLs appear in the start log and on the index at `http://localhost:1337`. See [dev](/cli/dev#subdomains).
+Emulated HTTP surfaces — Lambda Function URLs, CloudFront distributions, API Gateway APIs — are also put on `alchemy dev`'s shared ingress as `http://<name>.localhost:1337`, alongside any Cloudflare Workers and `Command.Dev` servers in the stack. The resources' `url` / `functionUrl` attributes keep the emulator's own address (the emulator dials them from inside Docker), so the ingress URLs appear in the start log and on the index at `http://localhost:1337`. See [dev](/cli/dev#subdomains).
 
 ## Websites run their own dev servers
 

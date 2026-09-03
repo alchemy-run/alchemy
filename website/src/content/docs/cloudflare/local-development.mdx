@@ -79,19 +79,6 @@ production; for cookies shared across subdomains use a real-looking
 domain with `alchemy dev --domain myapp.test` (see
 [dev](/cli/dev#subdomains) and [hosts](/cli/hosts)).
 
-## Expose local Workers to the internet
-
-```sh
-alchemy dev --tunnel
-```
-
-Every local Worker also gets a public `https://<random>.trycloudflare.com`
-URL through a free Cloudflare quick tunnel — for webhooks, phones, and
-external services that must call into your machine. A tunneled Worker's
-`url` is the public one; `dev: { tunnel: true | false }` overrides the
-flag per Worker. `cloudflared` is downloaded on first use if it isn't
-installed. See [dev](/cli/dev#tunnels).
-
 ## Websites run their own dev servers
 
 Every `Cloudflare.Website.*` resource — Vite, Next.js, Astro,
@@ -142,7 +129,7 @@ dev:
 
 | Resource                 | Local behavior                                                                    |
 | ------------------------ | --------------------------------------------------------------------------------- |
-| Workers                  | workerd, with hot reload, a `http://<name>.localhost:1337` URL (and an optional quick tunnel) |
+| Workers                  | workerd, with hot reload, a `http://<name>.localhost:1337` URL |
 | Durable Objects          | run inside the local workerd, including SQLite storage                             |
 | KV Namespaces            | local simulator; Node-side capability clients hit the same store                   |
 | R2 Buckets               | local simulator                                                                    |

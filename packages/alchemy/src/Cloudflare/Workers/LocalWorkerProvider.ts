@@ -239,8 +239,8 @@ export const LocalWorkerProvider = () =>
         return consumers;
       });
 
-      // Per-FQN exposure through the shared dev ingress (`<name>.<domain>`,
-      // optional quick tunnel). Registered before an instance serves so the
+      // Per-FQN exposure through the shared dev ingress (`<name>.<domain>`).
+      // Registered before an instance serves so the
       // public URL is known up front (start banner, `Worker.URL`), re-pointed
       // on every restart, and dropped by `stop`. A no-op (undefined) when the
       // ingress is disabled — URLs then fall back to the per-worker proxy.
@@ -257,7 +257,6 @@ export const LocalWorkerProvider = () =>
           // Guard against unresolved Outputs in `precreate` inputs.
           subdomain:
             typeof dev?.subdomain === "string" ? dev.subdomain : undefined,
-          tunnel: typeof dev?.tunnel === "boolean" ? dev.tunnel : undefined,
         });
         if (exposure) exposures.set(fqn, exposure);
         else exposures.delete(fqn);
@@ -268,7 +267,7 @@ export const LocalWorkerProvider = () =>
         const exposure = exposures.get(fqn);
         return exposure ? new URL(exposure.url) : fallback;
       };
-      /** Every URL serving a worker: ingress/tunnel URLs first, then the local ones. */
+      /** Every URL serving a worker: ingress URLs first, then the local ones. */
       const exposedUrls = (fqn: string, local: string[]): string[] => {
         const exposure = exposures.get(fqn);
         return exposure ? [...exposure.urls, ...local] : local;
@@ -1582,7 +1581,7 @@ export const LocalWorkerProvider = () =>
             config.bindingDescriptors.some((b) => b.type === "self_url") ||
             Object.values(config.env ?? {}).some(isSelfUrl);
           // Start the stable proxy and register it with the dev ingress up
-          // front: the public URL (`<name>.<domain>`, tunnel) is known before
+          // front: the public URL (`<name>.<domain>`) is known before
           // workerd starts, so `Worker.URL` and the start banner can use it.
           const proxy = yield* maybeStartProxy(fqn, config.dev);
           const exposure = yield* exposeWorker(fqn, config.dev, proxy.url);

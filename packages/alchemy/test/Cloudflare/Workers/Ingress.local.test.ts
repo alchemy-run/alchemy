@@ -23,7 +23,7 @@ const PORT = 13370;
 const { test } = Test.make({
   providers: Cloudflare.providers(),
   dev: true,
-  ingress: { domain: "localhost", port: PORT, tunnel: false },
+  ingress: { domain: "localhost", port: PORT },
 });
 
 const logLevel = Effect.provideService(

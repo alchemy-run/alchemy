@@ -14,7 +14,6 @@ import {
   removeHosts,
   upsertHosts,
 } from "@/Local/HostsFile.ts";
-import { releaseAsset, releaseUrl } from "@/Local/QuickTunnel.ts";
 import { describe, expect, it } from "alchemy-test";
 
 const SYSTEM = `##
@@ -110,26 +109,5 @@ describe("DevIngress naming", () => {
     expect(portForwardCommands(80, 1337, "darwin")[0]).toContain("pfctl");
     expect(portForwardCommands(80, 1337, "linux")[0]).toContain("iptables");
     expect(portForwardCommands(80, 1337, "win32")).toEqual([]);
-  });
-});
-
-describe("QuickTunnel releases", () => {
-  it("maps platforms to cloudflared release assets", () => {
-    expect(releaseAsset("darwin", "arm64")).toEqual({
-      asset: "cloudflared-darwin-arm64.tgz",
-      archive: "tgz",
-    });
-    expect(releaseAsset("linux", "x64")).toEqual({
-      asset: "cloudflared-linux-amd64",
-      archive: "binary",
-    });
-    expect(releaseAsset("win32", "x64")).toEqual({
-      asset: "cloudflared-windows-amd64.exe",
-      archive: "binary",
-    });
-    expect(releaseAsset("freebsd", "x64")).toBeUndefined();
-    expect(releaseUrl("cloudflared-linux-amd64", "2026.8.3")).toBe(
-      "https://github.com/cloudflare/cloudflared/releases/download/2026.8.3/cloudflared-linux-amd64",
-    );
   });
 });

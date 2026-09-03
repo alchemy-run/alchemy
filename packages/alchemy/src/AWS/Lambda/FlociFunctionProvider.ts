@@ -68,7 +68,7 @@ export const FlociFunctionProvider = () =>
       // cache with the live arm's instance.
       services: AssetsLive,
       // A Function URL is served by the emulator on a floci hostname; put it
-      // on `<name>.<domain>` (and a tunnel) like a Worker.
+      // on `<name>.<domain>` like a Worker.
       ingress: {
         type: "AWS.Lambda.Function",
         upstream: (attrs) => attrs.functionUrl,

@@ -1,7 +1,6 @@
 import * as Ingress from "@alchemy.run/cloudflare-runtime/core/proxy/Ingress";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -16,7 +15,6 @@ import {
   missingHosts,
   readHostsFile,
 } from "./HostsFile.ts";
-import { QuickTunnel } from "./QuickTunnel.ts";
 
 export type { DevIngressOptions } from "../AlchemyContext.ts";
 
@@ -43,30 +41,22 @@ export interface ExposeInput {
    * FQN, kebab-cased and reversed (`Site/Api` → `api.site`).
    */
   readonly subdomain?: string;
-  /**
-   * Per-resource tunnel override: `true` opens a quick tunnel even without
-   * `--tunnel`, `false` keeps the resource local under `--tunnel`.
-   */
-  readonly tunnel?: boolean;
 }
 
 /** The public surface the ingress gives a resource. */
 export interface Exposure {
   /** The host routed to the resource (`api.localhost`). */
   readonly host: string;
-  /** The primary URL: the tunnel URL when tunneled, else the local host URL. */
+  /** The primary URL (`http://api.localhost:1337`). */
   readonly url: string;
   /** Every URL serving the resource, most public first. */
   readonly urls: string[];
-  /** The `https://*.trycloudflare.com` URL, when a tunnel is open. */
-  readonly tunnelUrl: string | undefined;
 }
 
 /**
  * The `alchemy dev` front door: one shared host-routing proxy so every
  * locally served resource is reachable as `http://<name>.<domain>[:port]`
- * on a single port, optionally exposed to the internet through a Cloudflare
- * quick tunnel per host. Lives in the dev sidecar for the whole session;
+ * on a single port. Lives in the dev sidecar for the whole session;
  * local providers call {@link expose} when an instance starts (idempotent —
  * a restart just re-points the route) and {@link unexpose} on delete.
  *
@@ -81,7 +71,7 @@ export class DevIngress extends Context.Service<
     readonly expose: (
       input: ExposeInput,
     ) => Effect.Effect<Exposure | undefined>;
-    /** Drop the resource's route (and close its tunnel). */
+    /** Drop the resource's route. */
     readonly unexpose: (fqn: string) => Effect.Effect<void>;
   }
 >()("alchemy/Local/DevIngress") {}
@@ -138,7 +128,6 @@ const disabled = DevIngress.of({
 
 interface Registration {
   host: string;
-  tunnel?: { url: URL; scope: Scope.Closeable };
 }
 
 /**
@@ -158,12 +147,12 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const { ingress: options } = yield* AlchemyContext;
     if (options === undefined) return disabled;
-    const key = `${options.domain}\u0000${options.port}\u0000${options.tunnel}`;
+    const key = `${options.domain}\u0000${options.port}`;
     const existing = instances.get(key);
     if (existing !== undefined) return yield* existing;
     // The runtime services of the FIRST session build the shared instance;
-    // the ingress and tunnel manager are process-wide singletons themselves.
-    const services = yield* Effect.context<Ingress.Ingress | QuickTunnel>();
+    // the ingress is a process-wide singleton itself.
+    const services = yield* Effect.context<Ingress.Ingress>();
     const detached = yield* Scope.make();
     const instance = yield* Effect.cached(
       make(options).pipe(
@@ -181,9 +170,7 @@ const make = Effect.fn("DevIngress.make")(function* (
   options: DevIngressOptions,
 ) {
   const ingress = yield* Ingress.Ingress;
-  const tunnels = yield* QuickTunnel;
   const fs = yield* Effect.serviceOption(FileSystem.FileSystem);
-  const rootScope = yield* Effect.scope;
 
   // Serve eagerly, before any resource's own proxy claims a port, so the
   // ingress port is stable across runs regardless of start order. A
@@ -232,7 +219,7 @@ const make = Effect.fn("DevIngress.make")(function* (
   }
 
   yield* Effect.logDebug(
-    `Dev ingress serving ${served.url} (domain ${options.domain}${options.tunnel ? ", tunnels on" : ""})`,
+    `Dev ingress serving ${served.url} (domain ${options.domain})`,
   );
 
   const registrations = new Map<string, Registration>();
@@ -274,32 +261,6 @@ const make = Effect.fn("DevIngress.make")(function* (
     return `${subdomainFor(input.fqn)}.${options.domain}`;
   };
 
-  const openTunnel = (fqn: string, host: string) =>
-    Effect.gen(function* () {
-      const scope = yield* Scope.fork(rootScope);
-      const opened = yield* tunnels
-        .open({
-          target: served.url,
-          hostHeader: host,
-          onOutput: (line) => Effect.logDebug(`[cloudflared ${host}] ${line}`),
-        })
-        .pipe(Scope.provide(scope));
-      yield* Effect.logInfo(
-        `[${fqn}] Tunnel → ${opened.url.toString().replace(/\/$/, "")} → http://${host} (the hostname can take ~30s to become reachable)`,
-      );
-      // A quick tunnel's hostname dies with its process; surface it so the
-      // user knows the public URL went away (the next restart reopens one).
-      yield* opened.exited.pipe(
-        Effect.andThen(
-          Effect.logWarning(
-            `[${fqn}] Tunnel ${opened.url} closed (cloudflared exited). Restart the resource to open a new one.`,
-          ),
-        ),
-        Effect.forkIn(scope),
-      );
-      return { url: opened.url, scope };
-    });
-
   const expose = Effect.fn("DevIngress.expose")(function* (
     input: ExposeInput,
   ): Effect.fn.Return<Exposure | undefined> {
@@ -308,39 +269,18 @@ const make = Effect.fn("DevIngress.make")(function* (
     if (previous && previous.host !== host) {
       yield* served.unset(previous.host).pipe(Effect.ignore);
       hostOwners.delete(previous.host);
-      if (previous.tunnel) {
-        yield* Scope.close(previous.tunnel.scope, Exit.void);
-        previous.tunnel = undefined;
-      }
     }
     const registration: Registration = previous ?? { host };
     registration.host = host;
     registrations.set(input.fqn, registration);
     hostOwners.set(host, input.fqn);
 
-    const wantTunnel = input.tunnel ?? options.tunnel;
-    if (wantTunnel && registration.tunnel === undefined) {
-      const tunnel = yield* openTunnel(input.fqn, host).pipe(
-        Effect.catchCause((cause) =>
-          Effect.logWarning(
-            `[${input.fqn}] Could not open a quick tunnel for ${host}; serving locally only.\n${cause}`,
-          ).pipe(Effect.as(undefined)),
-        ),
-      );
-      registration.tunnel = tunnel;
-    } else if (!wantTunnel && registration.tunnel !== undefined) {
-      yield* Scope.close(registration.tunnel.scope, Exit.void);
-      registration.tunnel = undefined;
-    }
-
-    const tunnelUrl = registration.tunnel?.url.toString().replace(/\/$/, "");
     yield* served
       .set(host, {
         upstream: input.upstream.toString(),
         label: input.fqn.split(FQN_SEPARATOR).at(-1),
         fqn: input.fqn,
         type: input.type,
-        tunnelUrl,
       })
       .pipe(
         Effect.catchCause((cause) =>
@@ -351,13 +291,12 @@ const make = Effect.fn("DevIngress.make")(function* (
       );
     yield* hostsFileCheck(host);
 
-    const local = hostUrl(host, advertisePort);
-    const urls = tunnelUrl ? [tunnelUrl, local] : [local];
+    const urls = [hostUrl(host, advertisePort)];
     if (advertisePort === undefined && served.port !== 80) {
       // Forwarded privileged port: the served port still works too.
       urls.push(hostUrl(host, served.port));
     }
-    return { host, url: urls[0]!, urls, tunnelUrl } satisfies Exposure;
+    return { host, url: urls[0]!, urls } satisfies Exposure;
   }, lock.withPermits(1));
 
   const unexpose = Effect.fn("DevIngress.unexpose")(function* (
@@ -370,9 +309,6 @@ const make = Effect.fn("DevIngress.make")(function* (
       hostOwners.delete(registration.host);
     }
     yield* served.unset(registration.host).pipe(Effect.ignore);
-    if (registration.tunnel) {
-      yield* Scope.close(registration.tunnel.scope, Exit.void);
-    }
   }, lock.withPermits(1));
 
   return DevIngress.of({ options, expose, unexpose });
@@ -394,11 +330,8 @@ const probeForward = (port: number, id: string) =>
   );
 
 /**
- * {@link layer} with its runtime dependencies: the workerd-backed ingress
- * and the cloudflared tunnel manager. Needs `AlchemyContext` plus the
- * platform services (FileSystem, Path, HttpClient, ChildProcessSpawner).
+ * {@link layer} with its runtime dependency, the workerd-backed ingress.
+ * Needs `AlchemyContext` plus the platform services (FileSystem, Path).
  */
 export const layerWithRuntime = () =>
-  layer.pipe(Layer.provide(Layer.mergeAll(Ingress.layer(), QuickTunnelLayer)));
-
-import { layer as QuickTunnelLayer } from "./QuickTunnel.ts";
+  layer.pipe(Layer.provide(Ingress.layer()));

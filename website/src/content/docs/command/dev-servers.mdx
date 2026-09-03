@@ -46,7 +46,7 @@ still matches. If nothing matches within the window, `url` is
 
 ## On the dev ingress
 
-Under `alchemy dev` the server is also reachable through the shared ingress as `http://<name>.localhost:1337` (`Dev("Web", …)` → `web.localhost`), and `alchemy dev --tunnel` gives it a public `https://*.trycloudflare.com` URL. `dev.url` stays the server's own address — emulators running in Docker dial it directly — so the ingress and tunnel URLs are printed when the server starts and listed at `http://localhost:1337`. See [dev](/cli/dev#subdomains).
+Under `alchemy dev` the server is also reachable through the shared ingress as `http://<name>.localhost:1337` (`Dev("Web", …)` → `web.localhost`). `dev.url` stays the server's own address — emulators running in Docker dial it directly — so the ingress URL is printed when the server starts and listed at `http://localhost:1337`. See [dev](/cli/dev#subdomains).
 
 ## Lifecycle
 

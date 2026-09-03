@@ -221,8 +221,8 @@ export const DevProviderLocal = () =>
             Effect.forkScoped,
           );
 
-          // Put the dev server on the shared ingress too (`<name>.<domain>`,
-          // optional quick tunnel). `url` stays the server's own address:
+          // Put the dev server on the shared ingress too (`<name>.<domain>`).
+          // `url` stays the server's own address:
           // emulators in Docker (floci's CloudFront edge) dial it directly
           // and cannot resolve `*.localhost` names.
           if (url !== undefined && Option.isSome(devIngress)) {

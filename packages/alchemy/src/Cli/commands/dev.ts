@@ -44,13 +44,6 @@ import {
  * Node/Bun warn about it on every startup.
  */
 
-const tunnel = Flag.boolean("tunnel").pipe(
-  Flag.withDescription(
-    "Expose every local resource to the internet through a Cloudflare quick tunnel (one https://*.trycloudflare.com URL per resource)",
-  ),
-  Flag.withDefault(false),
-);
-
 const domain = Flag.string("domain").pipe(
   Flag.withDescription(
     `Domain local resources are served under as <name>.<domain>. *.localhost needs no setup; a custom domain needs hosts-file entries (see \`alchemy hosts\`). Default: ${DEFAULT_DEV_DOMAIN}`,
@@ -74,7 +67,6 @@ export const devCommand = Command.make(
     envFile,
     stage: devStage,
     profile,
-    tunnel,
     domain,
     port,
   },

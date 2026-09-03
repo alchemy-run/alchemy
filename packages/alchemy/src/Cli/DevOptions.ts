@@ -7,8 +7,6 @@ export const DevOptions = Schema.Struct({
   envFile: Schema.OptionFromOptional(Schema.String),
   profile: Schema.optional(Schema.String),
   force: Schema.Boolean,
-  /** Expose every local resource through a Cloudflare quick tunnel. */
-  tunnel: Schema.Boolean,
   /** Domain local resources are served under (`<name>.<domain>`). */
   domain: Schema.String,
   /** Port of the shared dev ingress. */

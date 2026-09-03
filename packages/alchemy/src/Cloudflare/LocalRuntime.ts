@@ -87,7 +87,7 @@ const makeLocalRuntimeServices = () =>
             directory: yield* localStorageDirectory,
           },
         }),
-        // The shared `<name>.<domain>` front door (+ quick tunnels). Built
+        // The shared `<name>.<domain>` front door. Built
         // once per stack build like the runtime itself; a no-op service when
         // `AlchemyContext.ingress` is unset.
         DevIngress.layerWithRuntime(),

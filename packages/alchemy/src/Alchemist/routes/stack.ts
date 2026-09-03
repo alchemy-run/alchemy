@@ -17,7 +17,7 @@ export interface PlanInput {
   readonly updateStateStore?: boolean;
   /** Run local (emulated) providers instead of the real cloud. */
   readonly dev?: boolean;
-  /** The `alchemy dev` ingress options (`--domain`, `--port`, `--tunnel`). */
+  /** The `alchemy dev` ingress options (`--domain`, `--port`). */
   readonly ingress?: DevIngressOptions;
 }
 

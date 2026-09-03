@@ -103,7 +103,7 @@ export class WorkerProxy extends DurableObject<Env> {
       proxied.pathname = original.pathname;
       proxied.search = original.search;
       const headers = new Headers(request.headers);
-      // A hop in front of this proxy (the dev ingress, a tunnel) already
+      // A hop in front of this proxy (the dev ingress) already
       // knows the public host the client dialed — keep it. Otherwise the
       // public host is the proxy's own address.
       if (!headers.has("x-forwarded-host")) {

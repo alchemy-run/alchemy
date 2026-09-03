@@ -1145,7 +1145,7 @@ export const providers = () =>
             CloudFront.Distribution,
             () => CloudFront.DistributionProvider(),
             // The emulated edge serves each distribution on a local port;
-            // put it on `<name>.<domain>` (and a tunnel) like a Worker.
+            // put it on `<name>.<domain>` like a Worker.
             {
               ingress: {
                 type: "AWS.CloudFront.Distribution",

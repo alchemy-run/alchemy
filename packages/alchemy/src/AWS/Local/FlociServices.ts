@@ -105,7 +105,7 @@ export const flociDual = <
   options?: {
     /**
      * Expose the emulated resource's HTTP surface through the `alchemy dev`
-     * ingress (`<name>.<domain>`, optional quick tunnel) — see
+     * ingress (`<name>.<domain>`) — see
      * `Local/DevIngressClient.ts`. Attributes are left untouched.
      */
     readonly ingress?: IngressExposure<R["Attributes"]>;

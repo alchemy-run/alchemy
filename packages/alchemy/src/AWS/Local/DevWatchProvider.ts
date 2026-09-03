@@ -111,7 +111,7 @@ export interface DevWatchSpec<Props, Attrs> {
   readonly services?: Layer.Layer<any, any, any>;
   /**
    * Expose the emulated resource's HTTP surface through the `alchemy dev`
-   * ingress (`<name>.<domain>`, optional quick tunnel) after every
+   * ingress (`<name>.<domain>`) after every
    * successful reconcile — see {@link withDevIngress}. Attributes are left
    * untouched.
    */

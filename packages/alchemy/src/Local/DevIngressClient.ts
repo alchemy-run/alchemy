@@ -210,16 +210,16 @@ export interface IngressExposure<A> {
   readonly type: string;
   /** The local upstream URL to route to, or `undefined` to expose nothing. */
   readonly upstream: (attrs: A) => string | undefined;
-  /** Optional per-resource subdomain / tunnel overrides read from the props. */
-  readonly options?: (props: any) => Pick<ExposeInput, "subdomain" | "tunnel">;
+  /** Optional per-resource subdomain override read from the props. */
+  readonly options?: (props: any) => Pick<ExposeInput, "subdomain">;
 }
 
 /**
  * Wrap a provider so that every successful `reconcile` also exposes the
- * resource through the dev ingress (`<name>.<domain>`, optional tunnel) and
+ * resource through the dev ingress (`<name>.<domain>`) and
  * `delete` withdraws it. Attributes are returned unchanged — emulators
  * running inside Docker (floci's CloudFront edge dialing a dev server, for
- * one) must keep dialing the raw loopback URL, so the ingress/tunnel URLs
+ * one) must keep dialing the raw loopback URL, so the ingress URLs
  * are surfaced on the index page and in the logs instead.
  */
 export const withDevIngress = <R extends ResourceLike>(

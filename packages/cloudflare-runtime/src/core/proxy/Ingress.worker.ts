@@ -8,7 +8,7 @@ import * as Schema from "effect/Schema";
  * worker's stable `WorkerProxy` — and the ingress forwards the request
  * verbatim (method, path, query, body, WebSocket upgrades), stamping
  * `X-Forwarded-Host` / `X-Forwarded-Proto` with the public host unless a
- * hop in front of us (a Cloudflare quick tunnel) already did.
+ * hop in front of us (a reverse proxy) already did.
  *
  * Routes are mutated through an authenticated controller API under
  * `/cdn-cgi/ingress/…`; `/cdn-cgi/ingress/health` is public and carries the
@@ -33,8 +33,6 @@ export interface IngressRoute {
   readonly fqn?: string;
   /** Resource type (`Cloudflare.Worker`, `Command.Dev`, …). */
   readonly type?: string;
-  /** Public tunnel URL exposing this host, when one is open. */
-  readonly tunnelUrl?: string;
 }
 
 const CONTROLLER_PREFIX = "/cdn-cgi/ingress/";
@@ -158,7 +156,7 @@ export class Ingress extends DurableObject<Env> {
     proxied.pathname = original.pathname;
     proxied.search = original.search;
     const headers = new Headers(request.headers);
-    // Preserve what a hop in front of us said (a tunnel reports the public
+    // Preserve what a hop in front of us said (a proxy reports the public
     // hostname) — otherwise the public host is the one the client dialed.
     if (!headers.has("x-forwarded-host")) {
       headers.set(
@@ -202,17 +200,11 @@ export class Ingress extends DurableObject<Env> {
     const items = routes
       .map(([host, route]) => {
         const href = `${url.protocol}//${host}${port ? `:${port}` : ""}`;
-        const tunnel = route.tunnelUrl
-          ? `<a class="tunnel" href="${escapeHtml(route.tunnelUrl)}">${escapeHtml(
-              route.tunnelUrl,
-            )}</a>`
-          : "";
         return `<li>
   <div class="name">${escapeHtml(route.label ?? host)}<span class="type">${escapeHtml(
     route.type ?? "",
   )}</span></div>
   <a href="${escapeHtml(href)}">${escapeHtml(href)}</a>
-  ${tunnel}
   <div class="upstream">→ ${escapeHtml(route.upstream)}</div>
 </li>`;
       })
@@ -312,14 +304,13 @@ const renderPage = (title: string, body: string): string => `<!doctype html>
   .type { font-weight: 400; color: #6b6b70; font-size: .8rem; margin-left: .5rem; }
   a { color: #1a5fd6; text-decoration: none; word-break: break-all; }
   a:hover { text-decoration: underline; }
-  .tunnel { display: block; color: #0b7a4b; }
   .upstream, .muted { color: #6b6b70; font-size: .85rem; }
   code { font: .9em ui-monospace, SFMono-Regular, Menlo, monospace; }
   .hosts li { margin: .25rem 0; }
   @media (prefers-color-scheme: dark) {
     body { background: #111113; color: #ececef; }
     .routes li { background: #1b1b1f; border-color: #2b2b31; }
-    a { color: #7aa7ff; } .tunnel { color: #4cc38a; }
+    a { color: #7aa7ff; }
     .type, .upstream, .muted { color: #8c8c93; }
   }
 </style>

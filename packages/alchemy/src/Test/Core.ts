@@ -80,7 +80,7 @@ export interface MakeOptions<ROut = any> {
   dev?: boolean;
   /**
    * Serve local resources through the shared `alchemy dev` ingress
-   * (`<name>.<domain>` on one port, optional quick tunnels) — what a real
+   * (`<name>.<domain>` on one port) — what a real
    * `alchemy dev` run does by default. Off unless set, so existing dev
    * suites keep their per-resource `http://localhost:<port>` URLs.
    */
