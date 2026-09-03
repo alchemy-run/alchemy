@@ -79,7 +79,10 @@ test(
   "serves the static page",
   Effect.gen(function* () {
     const url = yield* base;
-    const html = yield* getBodyWhenReady(`${url}/static`, "Prerendered at deploy");
+    const html = yield* getBodyWhenReady(
+      `${url}/static`,
+      "Prerendered at deploy",
+    );
     expect(html).toContain("This page is statically generated.");
   }),
   { timeout: 180_000 },
@@ -92,6 +95,19 @@ test(
     const html = yield* getBodyWhenReady(`${url}/isr`, "revalidate=30");
     expect(html).toContain('data-testid="isr-time"');
     expect(html).toContain("Refresh cache now");
+
+    const stamp = (body: string) => {
+      const match = body.match(
+        /data-testid="isr-time"[^>]*>[\s\S]*?Rendered at:\s*([^<]+)/,
+      );
+      return match?.[1]?.trim();
+    };
+    const first = stamp(html);
+    expect(first).toBeTruthy();
+
+    // Second fetch should reuse the seeded / KV-backed ISR entry.
+    const again = yield* getBodyWhenReady(`${url}/isr`, "revalidate=30");
+    expect(stamp(again)).toBe(first);
   }),
   { timeout: 180_000 },
 );
@@ -202,5 +218,3 @@ test(
   }),
   { timeout: 180_000 },
 );
-
-
