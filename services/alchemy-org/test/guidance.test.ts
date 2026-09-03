@@ -14,9 +14,10 @@ import { expect, test } from "bun:test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import { DistilledGuidanceGeneral } from "../src/process/DistilledGuidance.ts";
-import { FlociGuidanceGeneral } from "../src/process/FlociGuidance.ts";
-import { ProviderGuidanceGeneral } from "../src/process/ProviderGuidance.ts";
+import { DistillationGeneral } from "../src/process/Distillation.ts";
+import { AwsEmulationGeneral } from "../src/process/AwsEmulation.ts";
+import { CloudflareEmulationGeneral } from "../src/process/CloudflareEmulation.ts";
+import { ProviderEngineeringGeneral } from "../src/process/ProviderEngineering.ts";
 import { VerificationGeneral } from "../src/process/Verification.ts";
 import { Bash } from "../src/coding/Bash.ts";
 import { CharterGuidanceGeneral } from "../src/CharterGuidance.ts";
@@ -53,9 +54,10 @@ test("the domain guidance skills are prose — they splice sources and skills, n
     CharterGuidanceGeneral,
     SandboxGuidanceGeneral,
     ProposalsGuidanceGeneral,
-    ProviderGuidanceGeneral,
-    DistilledGuidanceGeneral,
-    FlociGuidanceGeneral,
+    ProviderEngineeringGeneral,
+    DistillationGeneral,
+    AwsEmulationGeneral,
+    CloudflareEmulationGeneral,
   ]) {
     expect(names(teaching.refs)).toEqual([]);
   }

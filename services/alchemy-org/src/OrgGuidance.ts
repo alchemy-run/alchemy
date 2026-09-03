@@ -67,8 +67,9 @@ export const OrgGuidanceGeneral = OrgGuidance.make`
     the alchemy repository and the two it moves with, distilled (the
     SDK factory it pins) and floci (the AWS emulator it runs against)
     — the pull request standard, how a change is verified, how a
-    provider is written, and one skill for working in each companion
-    repository.
+    provider is engineered, the distillation loop that feeds SDK
+    mismatches back into distilled, and one emulation skill per cloud
+    (floci for AWS, the in-tree \`cloudflare-runtime\` for Cloudflare).
   - \`platform/\` — Cloudflare seams: the driver, the database, the model.
   - \`Routes.ts\` is the HTTP API the UI speaks; \`Worker.ts\` composes
     everything onto Cloudflare; this file is the org's own entry, and
@@ -123,16 +124,12 @@ export const OrgGuidanceGeneral = OrgGuidance.make`
  * The org's doctrine, whole: the entry skill above WITH the domain
  * skills it names, as one Layer — what both charters are given.
  */
-export const OrgDoctrine = OrgGuidanceGeneral.pipe(
-  Layer.provideMerge(
-    Layer.mergeAll(
-      ToolGuidanceGeneral,
-      CharterGuidanceGeneral,
-      SandboxGuidanceGeneral,
-      ProposalsGuidanceGeneral,
-    ),
-  ),
-);
+export const OrgDoctrine = Layer.provideMerge(OrgGuidanceGeneral, [
+  ToolGuidanceGeneral,
+  CharterGuidanceGeneral,
+  SandboxGuidanceGeneral,
+  ProposalsGuidanceGeneral,
+]);
 
 /**
  * `AGENTS.md`, whole — the entry skill and then each domain skill it

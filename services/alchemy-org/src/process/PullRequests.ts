@@ -1,7 +1,8 @@
 import * as AI from "alchemy/AI";
 import { distilled, floci, nameOf } from "../github/Repos.ts";
-import { DistilledGuidance } from "./DistilledGuidance.ts";
-import { FlociGuidance } from "./FlociGuidance.ts";
+import { Distillation } from "./Distillation.ts";
+import { AwsEmulation } from "./AwsEmulation.ts";
+import { CloudflareEmulation } from "./CloudflareEmulation.ts";
 
 /**
  * THE STANDARD a pull request on alchemy is held to — one document,
@@ -58,14 +59,18 @@ export const PullRequests = AI.fragment`
      must point at that companion: its merge commit once it merged,
      its head commit until then. A pin at some unrelated commit, or a
      companion the alchemy side never mentions, is a problem to name.
-     How that work is done is ${DistilledGuidance.source}.
+     How that work is done is ${Distillation.source}.
 
-  5. **AWS providers prefer an emulation in floci.** \`alchemy dev\`
-     runs AWS providers against ${nameOf(floci)}, the local emulator.
-     A new AWS resource is expected to arrive with its emulation there
-     (a companion pull request, same branch name) so the resource
-     works locally the day it lands; where the emulation is deferred,
-     the description says so and why. Not a blocker on its own — a
-     note in the review when absent. How that work is done is
-     ${FlociGuidance.source}.
+  5. **A resource works under \`alchemy dev\` the day it lands.** For
+     AWS that is an emulation in ${nameOf(floci)}, the emulator
+     \`alchemy dev\` runs AWS providers against: a new AWS resource is
+     expected to arrive with a companion pull request there (same
+     branch name); where the emulation is deferred, the description
+     says so and why — not a blocker on its own, a note in the review
+     when absent. How that work is done is ${AwsEmulation.source}. For
+     Cloudflare it is a local provider over the in-tree workerd runtime
+     (\`packages/cloudflare-runtime\`), registered with
+     \`ProviderLayer.dual\` and proven by a \`{Resource}.local.test.ts\`
+     beside the live test; a Cloudflare resource without one is not
+     done locally. How that work is done is ${CloudflareEmulation.source}.
 `;

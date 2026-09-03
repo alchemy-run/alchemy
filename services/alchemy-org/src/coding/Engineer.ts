@@ -1,8 +1,9 @@
 import * as AI from "alchemy/AI";
 import * as Effect from "effect/Effect";
-import { DistilledGuidance } from "../process/DistilledGuidance.ts";
-import { FlociGuidance } from "../process/FlociGuidance.ts";
-import { ProviderGuidance } from "../process/ProviderGuidance.ts";
+import { Distillation } from "../process/Distillation.ts";
+import { AwsEmulation } from "../process/AwsEmulation.ts";
+import { CloudflareEmulation } from "../process/CloudflareEmulation.ts";
+import { ProviderEngineering } from "../process/ProviderEngineering.ts";
 import { PullRequests } from "../process/PullRequests.ts";
 import { Verification } from "../process/Verification.ts";
 import { OrgGuidance } from "../OrgGuidance.ts";
@@ -129,12 +130,14 @@ export const GeneralEngineer = Engineer.make(
       Doctrine is pluggable — activate what the work touches before
       you change anything, and no more. A provider (a resource, a
       binding, a lifecycle rule under packages/alchemy/src) is held to
-      ${ProviderGuidance}; the repository is one unit with two others,
-      and the work usually crosses into them: ${DistilledGuidance} for
-      the SDK (a typed error, a patched schema, the companion pull
-      request and its pin) and ${FlociGuidance} for an AWS resource's
-      local emulation. A change to services/alchemy-org — the
-      harness you are running in — is held to ${OrgGuidance}, which
+      ${ProviderEngineering}. Coverage of a cloud is produced by
+      ${Distillation} — build, test live, feed every SDK mismatch back
+      into distilled as a patch, regenerate, test again, ship both
+      pull requests — and a resource is finished locally by its
+      emulation: ${AwsEmulation} in floci for AWS,
+      ${CloudflareEmulation} over the in-tree workerd runtime for
+      Cloudflare. A change to services/alchemy-org — the harness you
+      are running in — is held to ${OrgGuidance}, which
       names the domain skills beneath it; it is the same text a human
       coding agent reads in that folder's AGENTS.md.
 

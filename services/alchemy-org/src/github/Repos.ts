@@ -44,8 +44,9 @@ export const alchemy = GitHub.Repository("alchemy", {
  * (a submodule at `distilled/` in the alchemy tree, pinned by commit).
  * One unit with {@link alchemy}: a pull request that adds a provider
  * ships a COMPANION pull request here, the review checks the pin
- * points at it, and `process/DistilledGuidance.ts` is how the org
- * works in it. Identity handle only.
+ * points at it, and `process/Distillation.ts` is the loop that feeds
+ * what alchemy's tests surface back here as patches. Identity handle
+ * only.
  */
 export const distilled = GitHub.Repository("distilled", {
   owner: "alchemy-run",
@@ -57,7 +58,7 @@ export const distilled = GitHub.Repository("distilled", {
  * providers against (a reference-only vendor submodule at
  * `.vendor/floci`). One unit with {@link alchemy}: an AWS provider is
  * expected to arrive with its emulation, the review looks for the
- * companion pull request here, and `process/FlociGuidance.ts` is how
+ * companion pull request here, and `process/AwsEmulation.ts` is how
  * the org works in it. Identity handle only.
  */
 export const floci = GitHub.Repository("floci", {

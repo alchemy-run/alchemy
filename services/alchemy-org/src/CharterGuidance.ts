@@ -1,5 +1,5 @@
 import * as AI from "alchemy/AI";
-import { ProviderGuidance } from "./process/ProviderGuidance.ts";
+import { ProviderEngineering } from "./process/ProviderEngineering.ts";
 import { Bash } from "./coding/Bash.ts";
 import { ToolGuidance } from "./coding/ToolGuidance.ts";
 import { ProposalsGuidance } from "./github/ProposalsGuidance.ts";
@@ -47,7 +47,7 @@ export const CharterGuidanceGeneral = CharterGuidance.make`
 
   Doctrine is PLUGGABLE. Guidance lives beside the code it governs, one
   small skill per domain (${ToolGuidance.source}, ${SandboxGuidance.source},
-  ${ProposalsGuidance.source}, ${ProviderGuidance.source}), and a stance
+  ${ProposalsGuidance.source}, ${ProviderEngineering.source}), and a stance
   names the skills its work can touch; a skill that grows past one
   domain is two skills. A rule that spans every domain — this one,
   ${CharterGuidance.source}, and the org's entry skill that names it —

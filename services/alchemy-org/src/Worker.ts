@@ -7,9 +7,10 @@ import * as Option from "effect/Option";
 import * as HttpRouter from "effect/unstable/http/HttpRouter";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import { DistilledGuidanceGeneral } from "./process/DistilledGuidance.ts";
-import { FlociGuidanceGeneral } from "./process/FlociGuidance.ts";
-import { ProviderGuidanceGeneral } from "./process/ProviderGuidance.ts";
+import { DistillationGeneral } from "./process/Distillation.ts";
+import { AwsEmulationGeneral } from "./process/AwsEmulation.ts";
+import { CloudflareEmulationGeneral } from "./process/CloudflareEmulation.ts";
+import { ProviderEngineeringGeneral } from "./process/ProviderEngineering.ts";
 import { VerificationGeneral } from "./process/Verification.ts";
 import { WriteTools } from "./coding/Editor.ts";
 import { GeneralEngineer } from "./coding/Engineer.ts";
@@ -54,16 +55,19 @@ const Toolbox = Layer.mergeAll(ReadTools, RunTools).pipe(
 
 /** The pluggable doctrine both charters hold, dormant until a change
  *  touches its domain: how alchemy is verified (`process/Verification.ts`,
- *  over the read/run tools), how a provider is written
- *  (`process/ProviderGuidance.ts`) and how its two companion
- *  repositories are worked in (`process/DistilledGuidance.ts`,
- *  `process/FlociGuidance.ts`), and the org's own entry skill with
+ *  over the read/run tools), how a provider is built and tested
+ *  (`process/ProviderEngineering.ts`), the flywheel that feeds SDK
+ *  mismatches back into distilled (`process/Distillation.ts`), how an
+ *  resource is emulated locally (`process/AwsEmulation.ts` for floci,
+ *  `process/CloudflareEmulation.ts` for the workerd runtime), and
+ *  the org's own entry skill with
  *  the domain skills it names (`OrgGuidance.ts`). */
 const Guidance = Layer.mergeAll(
   VerificationGeneral,
-  ProviderGuidanceGeneral,
-  DistilledGuidanceGeneral,
-  FlociGuidanceGeneral,
+  ProviderEngineeringGeneral,
+  DistillationGeneral,
+  AwsEmulationGeneral,
+  CloudflareEmulationGeneral,
   OrgDoctrine,
 ).pipe(Layer.provide(Toolbox));
 

@@ -5,9 +5,10 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Ref from "effect/Ref";
 import * as S from "effect/Schema";
-import { DistilledGuidance } from "../process/DistilledGuidance.ts";
-import { FlociGuidance } from "../process/FlociGuidance.ts";
-import { ProviderGuidance } from "../process/ProviderGuidance.ts";
+import { Distillation } from "../process/Distillation.ts";
+import { AwsEmulation } from "../process/AwsEmulation.ts";
+import { CloudflareEmulation } from "../process/CloudflareEmulation.ts";
+import { ProviderEngineering } from "../process/ProviderEngineering.ts";
 import { PullRequests } from "../process/PullRequests.ts";
 import { Verification } from "../process/Verification.ts";
 import { path } from "../coding/ReadFile.ts";
@@ -336,11 +337,13 @@ export const ReviewerLive = Reviewer.make(
       your checkout shows the pin to compare. Doctrine is pluggable:
       activate the skill for what the diff touches, and judge against
       it. A provider — a resource, a binding, a lifecycle rule under
-      packages/alchemy/src — is held to ${ProviderGuidance}, and the
-      repository is one unit with two others: a diff that touches
-      distilled (a patch, a regenerated service, the submodule pin, a
-      companion) is judged by ${DistilledGuidance}; an AWS resource's
-      local emulation, or its absence, by ${FlociGuidance}. A diff
+      packages/alchemy/src — is held to ${ProviderEngineering}; whether
+      the SDK mismatches its tests surfaced went back into distilled
+      as patches (never caught in alchemy), with the companion pull
+      request and the pin to prove it, is judged by ${Distillation};
+      a resource's local emulation, or its absence, by ${AwsEmulation}
+      (floci) or ${CloudflareEmulation} (the workerd runtime and the
+      local provider, with its \`.local.test.ts\`). A diff
       that touches services/alchemy-org — the harness this review runs
       in — is held to ${OrgGuidance} and the domain skills it names:
       the layout, the least-privilege topology, the verification.

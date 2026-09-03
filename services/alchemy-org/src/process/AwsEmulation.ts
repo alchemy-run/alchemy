@@ -4,19 +4,21 @@ import { FindCompanions } from "../review/Companions.ts";
 import { SandboxGuidance } from "../sandbox/SandboxGuidance.ts";
 
 /**
- * How the org works in FLOCI — the local AWS emulator `alchemy dev`
- * runs AWS providers against, and one unit with the alchemy
- * repository: an AWS resource is not done locally until floci speaks
- * its API. Activated when a change adds or alters an AWS provider,
- * touches `.vendor/floci`, or is a companion pull request in
- * `alchemy-run/floci`.
+ * AWS EMULATION — building an AWS resource's local emulation in floci,
+ * the emulator `alchemy dev` runs AWS providers against, so the SAME
+ * reconciler that runs against AWS runs on a laptop with no account. One
+ * unit with the alchemy repository: an AWS resource is not done locally
+ * until floci speaks its API. Activated when a change adds or alters an
+ * AWS provider, touches `.vendor/floci`, or is a companion pull request
+ * in `alchemy-run/floci`. Cloudflare's local physics are a different
+ * craft — `CloudflareEmulation.ts`, the in-tree workerd runtime.
  */
-export class FlociGuidance extends AI.Skill<FlociGuidance>(import.meta)(
-  "FlociGuidance",
+export class AwsEmulation extends AI.Skill<AwsEmulation>(import.meta)(
+  "AwsEmulation",
 ) {}
 
-export const FlociGuidanceGeneral = FlociGuidance.make`
-  # Working in floci
+export const AwsEmulationGeneral = AwsEmulation.make`
+  # Emulating AWS in floci
 
   ${nameOf(floci)} is alchemy's fork of floci: a Java 25 / Quarkus
   LocalStack-style AWS emulator on port 4566 that speaks the REAL AWS

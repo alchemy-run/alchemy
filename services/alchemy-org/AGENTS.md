@@ -37,8 +37,9 @@ barrel `index.ts`: import the file.
   the alchemy repository and the two it moves with, distilled (the
   SDK factory it pins) and floci (the AWS emulator it runs against)
   — the pull request standard, how a change is verified, how a
-  provider is written, and one skill for working in each companion
-  repository.
+  provider is engineered, the distillation loop that feeds SDK
+  mismatches back into distilled, and one emulation skill per cloud
+  (floci for AWS, the in-tree `cloudflare-runtime` for Cloudflare).
 - `platform/` — Cloudflare seams: the driver, the database, the model.
 - `Routes.ts` is the HTTP API the UI speaks; `Worker.ts` composes
   everything onto Cloudflare; this file is the org's own entry, and
@@ -144,7 +145,7 @@ make the grant visible in the Layer graph.
 
 Doctrine is PLUGGABLE. Guidance lives beside the code it governs, one
 small skill per domain (`src/coding/ToolGuidance.ts`, `src/sandbox/SandboxGuidance.ts`,
-`src/github/ProposalsGuidance.ts`, `src/process/ProviderGuidance.ts`), and a stance
+`src/github/ProposalsGuidance.ts`, `src/process/ProviderEngineering.ts`), and a stance
 names the skills its work can touch; a skill that grows past one
 domain is two skills. A rule that spans every domain — this one,
 `src/CharterGuidance.ts`, and the org's entry skill that names it —

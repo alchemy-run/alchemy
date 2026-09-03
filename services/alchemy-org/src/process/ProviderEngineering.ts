@@ -1,21 +1,24 @@
 import * as AI from "alchemy/AI";
-import { DistilledGuidance } from "./DistilledGuidance.ts";
-import { FlociGuidance } from "./FlociGuidance.ts";
+import { Distillation } from "./Distillation.ts";
+import { AwsEmulation } from "./AwsEmulation.ts";
+import { CloudflareEmulation } from "./CloudflareEmulation.ts";
 
 /**
- * How a cloud PROVIDER is written in alchemy — resources, bindings, the
- * lifecycle, the SDK, the tests. Activated when a change touches
- * `packages/alchemy/src/{Cloud}/{Service}/`. The repository's root
- * `AGENTS.md` is the full text; this is the shape of it a review or a
- * change must hold, every time. The SDK side (distilled) and the
- * emulator side (floci) are their own skills, named here by `.source`.
+ * PROVIDER ENGINEERING — building, maintaining, and testing a cloud
+ * provider in alchemy: the resource contract, its bindings, the
+ * reconciler, the typed SDK it calls, and the live tests that prove it.
+ * The per-service inner loop of the repository's root `AGENTS.md`, as
+ * the shape a change or a review must hold every time. Activated when
+ * a change touches `packages/alchemy/src/{Cloud}/{Service}/` or its
+ * tests. The SDK side is {@link Distillation}, the local-emulator side
+ * {@link AwsEmulation} — named here by `.source`, activated on their own.
  */
-export class ProviderGuidance extends AI.Skill<ProviderGuidance>(import.meta)(
-  "ProviderGuidance",
-) {}
+export class ProviderEngineering extends AI.Skill<ProviderEngineering>(
+  import.meta,
+)("ProviderEngineering") {}
 
-export const ProviderGuidanceGeneral = ProviderGuidance.make`
-  # Providers in alchemy
+export const ProviderEngineeringGeneral = ProviderEngineering.make`
+  # Engineering a provider in alchemy
 
   A resource's contract and provider live in ONE file,
   \`packages/alchemy/src/{Cloud}/{Service}/{Resource}.ts\`; each
@@ -49,16 +52,13 @@ export const ProviderGuidanceGeneral = ProviderGuidance.make`
   ## Typed errors
 
   Every error an operation can produce is a tagged error in the
-  distilled SDK's type-level union. An unmatched error (an
-  \`Unknown*Error\`, a check on \`.status\`, a duck-typed \`_tag\`
-  predicate, a widening cast) is fixed with a JSON Patch in distilled
-  and a regenerate of that service — never a catch in alchemy.
-  \`Effect.catchTag\` that fails to type-check is the signal to patch.
-  A provider change therefore usually has a COMPANION pull request in
-  distilled, and the alchemy side's submodule pin must point at it;
-  the patch format, the regenerate commands, and the companion
-  convention are ${DistilledGuidance.source} — activate it for the
-  distilled side of the work.
+  distilled SDK's type-level union, handled with \`Effect.catchTag\` /
+  \`Effect.retry({ while: (e) => e._tag === … })\` — fully inferred, no
+  casts. An error the union does not name is not handled in alchemy at
+  all: it is a turn of the loop in ${Distillation.source} — patch the
+  service model, regenerate, handle the typed tag. A provider change
+  that touched the SDK is therefore two pull requests, and the alchemy
+  side's submodule pin must point at its companion.
 
   ## Effect only
 
@@ -81,8 +81,10 @@ export const ProviderGuidanceGeneral = ProviderGuidance.make`
   never a mock. A resource with a local provider registers both
   variants with \`ProviderLayer.dual\` and ships a
   \`{Resource}.local.test.ts\` covering the local roundtrip and the
-  \`Alchemy.remote()\` opt-out — for AWS the local variant is the same
-  reconciler against the floci emulator, so the emulation is part of
-  the resource (${FlociGuidance.source}). Entitlement-gated lifecycles
-  keep an ungated probe asserting the typed rejection and skipIf-gate
-  the rest behind an env var.`;
+  \`Alchemy.remote()\` opt-out. The local physics are their own craft:
+  for AWS the same reconciler runs against the floci emulator, so the
+  emulation is part of the resource (${AwsEmulation.source}); for
+  Cloudflare the local variant is a second provider over the in-tree
+  workerd runtime (${CloudflareEmulation.source}). Entitlement-gated
+  lifecycles keep an ungated probe asserting the typed rejection and
+  skipIf-gate the rest behind an env var.`;
