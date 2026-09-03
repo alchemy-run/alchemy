@@ -4,6 +4,7 @@ import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import { AlchemyContext } from "../../AlchemyContext.ts";
 import type { Input } from "../../Input.ts";
 import * as Namespace from "../../Namespace.ts";
 import * as RemovalPolicy from "../../RemovalPolicy.ts";
@@ -263,56 +264,75 @@ export const EmailEventSourceLive = Layer.effect(
         message: ForwardableEmailMessage,
       ) => Effect.Effect<void, E, Req>,
     ) {
-      // Deploy-time: provision the Email.Routing toggle plus the routing
-      // resource that hands matched mail to this Worker. Skipped once
-      // running inside the deployed Worker (the global guard) and when
-      // `zone` is omitted (bring-your-own routing). Namespaced under the
-      // host so logical identity is stable per Worker.
-      if (!globalThis.__ALCHEMY_RUNTIME__ && props.zone !== undefined) {
-        const zone = props.zone;
-        const matchers = props.matchers;
-        yield* Namespace.push(
-          host.LogicalId,
-          Effect.gen(function* () {
-            // Routing is a per-zone singleton shared with other rules on
-            // the zone, so destroying this Worker must not disable it.
-            yield* Routing("EmailRouting", {
-              zone,
-              enabled: true,
-            }).pipe(RemovalPolicy.retain());
+      // Deploy-time only: provision the Email.Routing toggle plus the
+      // routing resource that hands matched mail to this Worker.
+      //
+      // The guard is a bare `__ALCHEMY_RUNTIME__` check with every other
+      // condition nested inside, so the bundler folds it away and drops the
+      // whole block — and with it `AlchemyContext`, `Namespace`, `Routing`,
+      // `CatchAll` and `Rule` — from the deployed Worker. Hoisting the `dev`
+      // lookup out into a compound condition would keep it (and the context
+      // it reaches for) live in the runtime bundle.
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        // Under `alchemy dev` the Worker only exists locally, so Cloudflare's
+        // mail pipeline has nothing to deliver to. Pointing a real zone's
+        // catch-all at a script that was never uploaded would fail — and if it
+        // did land, it would silently take over inbound mail for the whole zone
+        // and drop it. Local inbound is driven by the runtime's
+        // `POST /cdn-cgi/handler/email?from=&to=` trigger route instead, which
+        // dispatches to the same listener registered below.
+        const dev = yield* Effect.serviceOption(AlchemyContext).pipe(
+          Effect.map((ctx) => (ctx._tag === "Some" ? ctx.value.dev : false)),
+        );
 
-            const action = {
-              type: "worker" as const,
-              value: [host.workerName],
-            };
+        // Also skipped when `zone` is omitted (bring-your-own routing).
+        // Namespaced under the host so logical identity is stable per Worker.
+        if (props.zone !== undefined && !dev) {
+          const zone = props.zone;
+          const matchers = props.matchers;
+          yield* Namespace.push(
+            host.LogicalId,
+            Effect.gen(function* () {
+              // Routing is a per-zone singleton shared with other rules on
+              // the zone, so destroying this Worker must not disable it.
+              yield* Routing("EmailRouting", {
+                zone,
+                enabled: true,
+              }).pipe(RemovalPolicy.retain());
 
-            // Catch-all is a per-zone SINGLETON living behind
-            // `/rules/catch_all`, not an ordinary rule. Cloudflare surfaces
-            // it in `listRules` but rejects mutating it through the rule
-            // endpoint ("Invalid rule operation"), so creating it as an
-            // `Email.Rule` would produce a row the engine cannot delete.
-            // Route an all-matcher subscription to `Email.CatchAll`
-            // instead — the resource that owns that endpoint.
-            if (isCatchAll(matchers)) {
-              yield* CatchAll("EmailCatchAll", {
+              const action = {
+                type: "worker" as const,
+                value: [host.workerName],
+              };
+
+              // Catch-all is a per-zone SINGLETON living behind
+              // `/rules/catch_all`, not an ordinary rule. Cloudflare surfaces
+              // it in `listRules` but rejects mutating it through the rule
+              // endpoint ("Invalid rule operation"), so creating it as an
+              // `Email.Rule` would produce a row the engine cannot delete.
+              // Route an all-matcher subscription to `Email.CatchAll`
+              // instead — the resource that owns that endpoint.
+              if (isCatchAll(matchers)) {
+                yield* CatchAll("EmailCatchAll", {
+                  zone,
+                  name: props.ruleName ?? host.LogicalId,
+                  enabled: props.enabled ?? true,
+                  actions: [action],
+                });
+                return;
+              }
+
+              yield* Rule("EmailRule", {
                 zone,
                 name: props.ruleName ?? host.LogicalId,
                 enabled: props.enabled ?? true,
+                priority: props.priority ?? 0,
+                matchers: matchers!,
                 actions: [action],
               });
-              return;
-            }
-
-            yield* Rule("EmailRule", {
-              zone,
-              name: props.ruleName ?? host.LogicalId,
-              enabled: props.enabled ?? true,
-              priority: props.priority ?? 0,
-              matchers: matchers!,
-              actions: [action],
-            });
-          }),
-        );
+            }),
+          );
+        }
       }
 
       // Resolve the runtime context per-call rather than at layer
