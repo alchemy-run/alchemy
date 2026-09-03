@@ -204,16 +204,17 @@ const promptOAuthScopes = (currentConfig?: CloudflareAuthConfig) =>
     const mode = yield* interaction.prompt
       .select({
         message: "Cloudflare OAuth scopes",
+        initialValue: "all" as const,
         options: [
-          {
-            value: "basic" as const,
-            label: "Basic Scopes",
-            description: "recommended — covers typical Alchemy use cases",
-          },
           {
             value: "all" as const,
             label: "All Scopes",
             description: "authorize every available Cloudflare permission",
+          },
+          {
+            value: "basic" as const,
+            label: "Basic Scopes",
+            description: "covers typical Alchemy use cases",
           },
           {
             value: "custom" as const,

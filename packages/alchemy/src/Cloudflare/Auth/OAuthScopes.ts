@@ -870,7 +870,7 @@ export const partitionOAuthScopes = (
 /**
  * Initial selections for the custom-scope prompt. Reconfiguration restores
  * the existing OAuth grant while dropping scopes no longer offered by the
- * current client; first-time and stored-credential setup use the basic set.
+ * current client; first-time and stored-credential setup select every scope.
  */
 export const customOAuthScopeDefaults = (currentConfig?: {
   readonly method: string;
@@ -879,7 +879,7 @@ export const customOAuthScopeDefaults = (currentConfig?: {
 }): string[] =>
   currentConfig?.method === "oauth" && currentConfig.scopes !== undefined
     ? partitionOAuthScopes(currentConfig.scopes).valid
-    : [...BASIC_SCOPES];
+    : [...ALL_SCOPE_IDS];
 
 /** Reusable scope bundles for common OAuth authorization flows. */
 export const OAUTH_SCOPE_TEMPLATES = {

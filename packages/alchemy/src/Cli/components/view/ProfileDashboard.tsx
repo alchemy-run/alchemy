@@ -421,9 +421,21 @@ function Dashboard({ store, initialSelected }: DashboardProps): JSX.Element {
       setMode("create");
     } else if (entry === undefined) {
       return;
-    } else if (key.left || input === "h" || (key.shift && key.tab)) {
+    } else if (
+      key.up ||
+      key.left ||
+      input === "k" ||
+      input === "h" ||
+      (key.shift && key.tab)
+    ) {
       setSelected((s) => (s + entries.length - 1) % entries.length);
-    } else if (key.right || input === "l" || key.tab) {
+    } else if (
+      key.down ||
+      key.right ||
+      input === "j" ||
+      input === "l" ||
+      key.tab
+    ) {
       setSelected((s) => (s + 1) % entries.length);
     } else if (input === "R" && !entry.isDefault) {
       setMode("rename");
@@ -506,8 +518,10 @@ function Dashboard({ store, initialSelected }: DashboardProps): JSX.Element {
           ["q", "quit"],
         ]
       : [
-          [keyGlyphs.leftRight, "switch"],
-          ...(details?.state === "ready" ? ([["e", "edit"]] as const) : []),
+          [keyGlyphs.upDown, "select profile"],
+          ...(details?.state === "ready"
+            ? ([["e", "configure"]] as const)
+            : []),
           ...(flow?.kind === "refresh" ? [] : ([["r", "refresh"]] as const)),
           ["n", "new"],
           ...(entry.isDefault
