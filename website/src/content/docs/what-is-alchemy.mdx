@@ -183,9 +183,12 @@ Effect.gen(function* () {
 ```
 
 The outer Effect runs at deploy time and again at cold start. The
-handlers it returns run per request. [Runtime](/infrastructure-as-effects/runtime)
-covers the shape, the `fetch` and RPC interface, and the ways to
-declare one.
+handlers it returns run per request.
+
+:::note
+[Runtime](/infrastructure-as-effects/runtime) covers the shape, the
+`fetch` and RPC interface, and the three ways to declare one.
+:::
 
 `yield* Cloudflare.R2.ReadWriteBucket(Uploads)` is a **Binding**. It
 hands back a typed client and generates whatever that client needs to
@@ -200,8 +203,12 @@ const getItem = yield* AWS.DynamoDB.GetItem(Jobs);
 ```
 
 There is no `env.Uploads` to reach for and no hand-written policy. The
-binding is the SDK. [Bindings](/infrastructure-as-effects/binding)
-follows one through everything it generates.
+binding is the SDK.
+
+:::note
+[Bindings](/infrastructure-as-effects/binding) follows one binding
+through the permissions, configuration, and client it generates.
+:::
 
 A Binding is a contract plus a **Layer** that implements it, which is
 why `ReadWriteBucketBinding` can be swapped for `ReadWriteBucketHttp`
@@ -223,10 +230,13 @@ Effect.gen(function* () {
 
 Provide `JobServiceKV` and a KV Namespace is created and bound.
 Provide a DynamoDB-backed Layer and a Table is instead. The handler
-doesn't change. [Layers](/infrastructure-as-effects/layers) builds one
-from scratch, and the
-[Infrastructure as Effects](/infrastructure-as-effects) overview puts
-the three ideas together.
+doesn't change.
+
+:::note
+[Layers](/infrastructure-as-effects/layers) builds one from scratch,
+and the [Infrastructure as Effects](/infrastructure-as-effects)
+overview puts the three ideas together.
+:::
 
 ## Where next
 

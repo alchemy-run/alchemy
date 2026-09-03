@@ -113,6 +113,11 @@ Every building block binds the same way. See
 [Durable Objects](/cloudflare/compute/durable-objects), or walk
 through it step by step in [tutorial part 2](/cloudflare/tutorial/part-2).
 
+:::note
+[Bindings](/infrastructure-as-effects/binding) explains what a binding
+generates at deploy time and how the Layer you provide implements it.
+:::
+
 ## Call another Worker
 
 Workers call each other's methods directly. No HTTP routes, no schema,
@@ -171,12 +176,15 @@ against `Greeter`'s declared shape end to end.
 
 Importing the `Greeter` class pulls in no runtime code. Alchemy marks
 `.make()` as pure, so the bundler drops the implementation from every
-Worker that only binds it. [Runtime](/infrastructure-as-effects/runtime#three-ways-to-declare-one)
+Worker that only binds it. For external clients across a trust
+boundary, where payloads need schema validation before they touch your
+code, reach for [Effect RPC](/cloudflare/apis/effect-rpc) instead.
+
+:::note
+[Runtime](/infrastructure-as-effects/runtime#three-ways-to-declare-one)
 covers the three declaration forms, and
-[Schemaless RPC](/apis/schemaless) the calling convention. For
-external clients across a trust boundary, where payloads need schema
-validation before they touch your code, reach for
-[Effect RPC](/cloudflare/apis/effect-rpc) instead.
+[Schemaless RPC](/apis/schemaless) the calling convention.
+:::
 
 ## Serve static assets
 
