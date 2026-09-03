@@ -57,10 +57,10 @@ automatically.
 `details` and `read` use the tagged `NeedsReauth` error for missing, expired,
 or rotated credentials. The profile UI renders it as "needs re-login."
 
-`readEnvironment` never receives or creates a profile. It is used when
-`CI=true`, and outside CI when every required variable in the provider's
-contract is explicitly exported in the process environment and no profile
-was explicitly selected. See
+`readEnvironment` never receives or creates a profile. It is used whenever
+every required variable in the provider's contract is present in config (the
+process environment, `.env`, or `--env-file`), taking precedence over any
+selected profile, and always when `CI=true`. See
 [environment variables outside CI](/environments/profiles#environment-variables-outside-ci).
 `environment` declares every variable `readEnvironment` consumes
 (`name`, `required`, `secret`, `description`, `alternatives`). Alchemy validates
@@ -210,11 +210,12 @@ the provider's `readEnvironment` capability. It does not manufacture an
 [provider environment-variable table](/environments/profiles#ci-environment-variables-by-provider)
 for the exact inputs.
 
-Outside CI, the same capability runs when the provider's required variables
-are all explicitly exported in `process.env` **and** no profile was selected
-explicitly. Alchemy prints a warning that names the variables it used. Passing
-`--profile` (or setting `ALCHEMY_PROFILE`) restores the profile's authority
-and the variables are ignored.
+Outside CI, the same capability runs first whenever the provider's required
+variables are all present in config (process environment, `.env`, or
+`--env-file`) — even when `--profile` or `ALCHEMY_PROFILE` selected a
+profile. The check is per provider, so one provider can come from the
+environment while the others in the same run come from the profile. Alchemy
+logs the variables it used. Unset them to fall back to the profile.
 
 ## Refresh in practice
 
