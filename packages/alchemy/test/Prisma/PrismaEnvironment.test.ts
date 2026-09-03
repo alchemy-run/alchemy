@@ -14,7 +14,7 @@ import { makeFakeProfileStore } from "./fakes.ts";
 const makeProfile = (serviceToken: string): ProfileStore["Service"] =>
   makeFakeProfileStore({
     loadProviderConfig: <Config extends { method: string }>() =>
-      Effect.succeed({ method: "stored", serviceToken } as Config),
+      Effect.succeed({ method: "stored", serviceToken } as unknown as Config),
   });
 
 const testLayer = (

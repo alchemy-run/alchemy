@@ -1,5 +1,3 @@
-import type { CloudflareAuthConfig } from "./AuthConfig.ts";
-
 /** Scopes enabled on Alchemy's public Cloudflare OAuth client. */
 export const OAUTH_SCOPE_GROUPS = [
   {
@@ -874,10 +872,12 @@ export const partitionOAuthScopes = (
  * the existing OAuth grant while dropping scopes no longer offered by the
  * current client; first-time and stored-credential setup use the basic set.
  */
-export const customOAuthScopeDefaults = (
-  currentConfig?: CloudflareAuthConfig,
-): string[] =>
-  currentConfig?.method === "oauth" && "scopes" in currentConfig
+export const customOAuthScopeDefaults = (currentConfig?: {
+  readonly method: string;
+  readonly scopes?: ReadonlyArray<string>;
+  readonly [key: string]: unknown;
+}): string[] =>
+  currentConfig?.method === "oauth" && currentConfig.scopes !== undefined
     ? partitionOAuthScopes(currentConfig.scopes).valid
     : [...BASIC_SCOPES];
 
