@@ -1,6 +1,12 @@
 ---
 title: Getting started
 description: Install Alchemy and create your first Stack in under two minutes.
+prev:
+  link: /what-is-alchemy
+  label: What is Alchemy?
+next:
+  link: /cloudflare/tutorial/part-2
+  label: "Tutorial Part 2: Add a Worker"
 ---
 
 import Terminal from "../../components/Terminal.astro";
@@ -128,26 +134,30 @@ See [Profiles](/environments/profiles) for the full picture.
 
 ## Where next
 
+You just completed [Part 1](/cloudflare/tutorial/part-1) of the
+tutorial. The next part adds a Worker that reads and writes the
+bucket, and introduces the ideas the rest of the docs build on.
+
 <div class="next-steps">
 
-<a href="/cloudflare/tutorial/part-1" class="next-card">
-  <strong>Tutorial — recommended</strong>
-  <span>Adds a Worker to this Stack and covers the core concepts.</span>
+<a href="/cloudflare/tutorial/part-2" class="next-card">
+  <strong>Tutorial Part 2: Add a Worker — recommended</strong>
+  <span>Bind the Bucket to a Worker and serve it over HTTP.</span>
+</a>
+
+<a href="/infrastructure-as-effects" class="next-card">
+  <strong>Infrastructure as Effects</strong>
+  <span>The model behind it: Runtimes, Bindings, and Layers.</span>
 </a>
 
 <a href="/cloudflare" class="next-card">
   <strong>Cloudflare</strong>
-  <span>Pick your provider — Workers, R2, KV, D1, and more.</span>
+  <span>Workers, R2, KV, D1, Durable Objects, and more.</span>
 </a>
 
 <a href="/aws" class="next-card">
   <strong>AWS</strong>
-  <span>Pick your provider — Lambda, S3, SQS, DynamoDB, and more.</span>
-</a>
-
-<a href="/migrating-from-v1" class="next-card">
-  <strong>Migrating from v1</strong>
-  <span>Upgrading from async/await Alchemy? Start here.</span>
+  <span>Lambda, S3, SQS, DynamoDB, and more.</span>
 </a>
 
 <a href="/cli" class="next-card">

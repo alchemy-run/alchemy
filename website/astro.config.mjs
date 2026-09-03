@@ -456,7 +456,6 @@ export default defineConfig({
           items: [
             { label: "What is Alchemy?", link: "/what-is-alchemy" },
             { label: "Getting started", link: "/getting-started" },
-            { label: "Migrating from v1", link: "/migrating-from-v1" },
             {
               label: "Infrastructure as Code",
               items: [
@@ -669,6 +668,7 @@ export default defineConfig({
                 { label: "cloudflare", link: "/cli/cloudflare" },
               ],
             },
+            { label: "Migrating from v1", link: "/migrating-from-v1" },
           ],
         },
         {
