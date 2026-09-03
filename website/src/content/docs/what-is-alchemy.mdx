@@ -171,19 +171,25 @@ this page.
 
 The layer on top adds three ideas. A **Runtime** is a Resource that
 carries the code it runs: a Worker, Lambda Function, Container, or Server.
-Its Effect always has the same shape. Bind what you need, then return
-what you expose:
+That code is always written the same way, as an **Effectful
+Constructor**. Bind what you need, then return what you expose:
 
 ```typescript
 Effect.gen(function* () {
+  // bind what you need
   const bucket = yield* Cloudflare.R2.ReadWriteBucket(Uploads);
 
+  // return what you expose
   return { fetch: /* ... */ };
 });
 ```
 
-The outer Effect runs at deploy time and again at cold start. The
-handlers it returns run per request.
+The outer Effect is the Construction phase. It runs at deploy time,
+where the bindings are recorded, and again at cold start, where they
+become live clients. What it returns is the Runtime phase, the handlers
+that run per request. A Worker returns `fetch`, a Durable Object
+returns its RPC methods, a Workflow returns its run function, and
+every Runtime in Alchemy is a variation on that one shape.
 
 :::note
 [Runtime](/infrastructure-as-effects/runtime) covers the shape, the
