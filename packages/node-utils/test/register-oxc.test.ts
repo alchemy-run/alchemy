@@ -66,6 +66,18 @@ const makeProject = () => {
     'export const fromWorkspaceDep: string = "ws";\n',
   );
   write(
+    at("node_modules/conditional/package.json"),
+    '{"name":"conditional","type":"module","exports":{".":{"bun":"./src/index.ts","import":"./lib/index.js"}}}',
+  );
+  write(
+    at("node_modules/conditional/src/index.ts"),
+    'export const selected: string = "src";\n',
+  );
+  write(
+    at("node_modules/conditional/lib/index.js"),
+    'export const selected = "lib";\n',
+  );
+  write(
     at("src/lib/helper.ts"),
     'export const helper = (): string => "helper";\n',
   );
@@ -155,6 +167,25 @@ describe("registerOxc", () => {
     });
     // Inline source maps are applied to stack traces.
     expect(frame).toMatch(/entry\.ts:16:/);
+  });
+
+  it("adds configured package export conditions to project resolution", () => {
+    const root = makeProject();
+    write(
+      path.join(root, "src/conditional.ts"),
+      'export { selected } from "conditional";\n',
+    );
+    const result = runNode(
+      root,
+      `
+      const { registerOxc } = await import(${JSON.stringify(registerUrl)});
+      registerOxc({ conditions: ["bun"] });
+      const conditional = await import("./src/conditional.ts");
+      console.log(conditional.selected);
+      `,
+    );
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout.trim()).toBe("src");
   });
 
   it("isolates namespaced imports and leaves node_modules to Node with a filter", () => {

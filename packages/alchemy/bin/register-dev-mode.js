@@ -45,4 +45,4 @@ const { registerOxc } = await import("@alchemy.run/node-utils/register-oxc");
 // Oxc discovers the nearest tsconfig for each transformed file. Alchemy's
 // TSX therefore uses Alchemy's React settings while the user's config and its
 // dependencies retain their own compiler settings.
-registerOxc();
+registerOxc({ conditions: ["bun"] });

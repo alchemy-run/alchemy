@@ -18,6 +18,12 @@ export type SourceTransform = (
 
 export interface ImportLoaderOptions {
   /**
+   * Additional package export conditions used during module resolution.
+   * They are made available alongside Node's ambient conditions to both the
+   * TypeScript-aware resolver and Node's package exports resolver.
+   */
+  readonly conditions?: ReadonlyArray<string> | undefined;
+  /**
    * Oxc transform configuration, layered over the nearest `tsconfig.json`
    * of each transformed file (`jsx`, decorators, …).
    */
