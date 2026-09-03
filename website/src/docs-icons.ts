@@ -41,6 +41,7 @@ export const TAB_ICONS: Record<string, string | undefined> = {
   Axiom: l("activity"),
   "Better Auth": l("key-round"),
   GitHub: b("github"),
+  Git: b("git"),
   Docker: b("docker"),
   Kubernetes: b("kubernetes"),
   Drizzle: b("drizzle"),
