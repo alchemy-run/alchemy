@@ -1,10 +1,13 @@
 /** @effect-diagnostics anyUnknownInErrorContext:off */
 /** @effect-diagnostics missingEffectError:off */
+import * as Cause from "effect/Cause";
 import * as Config from "effect/Config";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
+import { cachedInScope } from "./Util/Memoize.ts";
 import { asEffect } from ".//Util/types.ts";
 import { isAction, type ActionLike } from "./Action.ts";
 import {
@@ -665,6 +668,10 @@ export const make = <A>(
       return { row, renamedFrom: undefined, renameMoved: false };
     });
 
+    // Shared resolutions run in fibers of the plan's own scope (see
+    // `cachedInScope`): a diff that fails or is cancelled must not take the
+    // resolution every other diff is waiting on down with it.
+    const memoScope = yield* Effect.scope;
     const resolvedResources: Record<string, Effect.Effect<any>> = {};
 
     const resolveResource = (
@@ -679,7 +686,7 @@ export const make = <A>(
         }
         // @ts-expect-error
         return yield* (resolvedResources[resourceExpr.src.FQN] ??=
-          yield* Effect.cached(
+          yield* cachedInScope(memoScope)(
             Effect.gen(function* () {
               const resource = resourceExpr.src;
 
@@ -1690,13 +1697,32 @@ export const make = <A>(
       }
     });
 
+    // Every diff runs to completion and every failure is reported. With
+    // fail-fast `Effect.all`, the first exit to arrive wins the aggregate
+    // cause — and when a diff is cancelled by a sibling's failure (or ends
+    // interrupt-only for any other reason) that can be a bare interruption,
+    // hiding the InvalidReferenceError or provider error that actually
+    // broke the plan.
+    const diffExits = yield* Effect.all(
+      resources.map((resource) =>
+        Effect.exit(Effect.tap(diffResource(resource), resourcePlanned)),
+      ),
+      { concurrency: "unbounded" },
+    );
+    const diffFailures = diffExits.filter(Exit.isFailure);
+    if (diffFailures.length > 0) {
+      const reasons = diffFailures.flatMap((exit) => exit.cause.reasons);
+      const failures = reasons.filter(
+        (reason) => !Cause.isInterruptReason(reason),
+      );
+      return yield* Effect.failCause(
+        Cause.fromReasons(failures.length > 0 ? failures : reasons),
+      );
+    }
     const resourceGraph = Object.fromEntries(
-      (yield* Effect.all(
-        resources.map((resource) =>
-          Effect.tap(diffResource(resource), resourcePlanned),
-        ),
-        { concurrency: "unbounded" },
-      )).map((update) => [update.resource.FQN, update]),
+      diffExits
+        .filter(Exit.isSuccess)
+        .map((exit) => [exit.value.resource.FQN, exit.value]),
     ) as Plan["resources"];
 
     // ── Action plan nodes ────────────────────────────────────────────────
@@ -2069,6 +2095,8 @@ export const make = <A>(
       defaultMode: runDefaultMode,
     } satisfies Plan<A> as Plan<A>;
   }).pipe(
+    // Owns the memoized resolutions' fibers for the plan's duration.
+    Effect.scoped,
     ensureArtifactStore,
     Effect.withSpan("plan.make", {
       attributes: {

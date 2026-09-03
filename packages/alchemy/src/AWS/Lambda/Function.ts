@@ -595,7 +595,7 @@ export const normalizeFunctionUrl = (
  * - **Async** — plain handler export, no Effect runtime in the bundle.
  * - **Effect** — Effect implementation with typed bindings and event sources.
  *
- * See [Effect handlers vs async handlers](/infrastructure-as-effects/functions-and-servers#effect-handlers-vs-async-handlers)
+ * See [Effect handlers vs async handlers](/infrastructure-as-effects/runtime#effect-handlers-vs-async-handlers)
  * for plain handler patterns, or the
  * [Lambda guide](/aws/compute/lambda)
  * for the full Effect-based approach with bindings, event sources, and sinks.
@@ -1643,9 +1643,15 @@ export const FunctionProvider = () =>
             (e.message?.includes("KMS key is invalid for CreateGrant") &&
               e.message?.includes("ARN does not refer to a valid principal")));
 
-        const noteRolePropagationWait = () =>
+        const isSecurityGroupPropagationError = (
+          e: Lambda.CreateFunctionError,
+        ) =>
+          e._tag === "InvalidParameterValueException" &&
+          e.message?.includes("InvalidGroup.NotFound");
+
+        const noteCreateDependencyWait = () =>
           session.note(
-            `Waiting for Lambda execution role to become assumable: ${functionName} (${Math.ceil((Date.now() - waitStartedAt) / 1000)}s)`,
+            `Waiting for Lambda creation dependencies to propagate: ${functionName} (${Math.ceil((Date.now() - waitStartedAt) / 1000)}s)`,
           );
 
         const tags = yield* createInternalTags(id);
@@ -1763,7 +1769,7 @@ export const FunctionProvider = () =>
               }).pipe(
                 Effect.tapError((e) =>
                   isRolePropagationError(e)
-                    ? noteRolePropagationWait()
+                    ? noteCreateDependencyWait()
                     : Effect.void,
                 ),
                 Effect.retry({
@@ -1798,7 +1804,7 @@ export const FunctionProvider = () =>
               }).pipe(
                 Effect.tapError((e) =>
                   isRolePropagationError(e)
-                    ? noteRolePropagationWait()
+                    ? noteCreateDependencyWait()
                     : Effect.void,
                 ),
                 Effect.retry({
@@ -1820,9 +1826,10 @@ export const FunctionProvider = () =>
             }),
           ),
           Effect.retry({
-            while: (e) => isRolePropagationError(e),
+            while: (e) =>
+              isRolePropagationError(e) || isSecurityGroupPropagationError(e),
             schedule: Schedule.fixed(1000).pipe(
-              Schedule.tap(() => noteRolePropagationWait()),
+              Schedule.tap(() => noteCreateDependencyWait()),
             ),
           }),
           Effect.catchTags({

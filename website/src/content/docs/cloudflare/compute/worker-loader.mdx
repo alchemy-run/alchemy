@@ -13,7 +13,7 @@ untrusted plugins, or executing Workers an AI agent just wrote.
 
 ## Bind a loader to a Worker
 
-`yield*` `Cloudflare.WorkerLoader(name)` in the Worker's init phase.
+`yield*` `Cloudflare.WorkerLoader(name)` in the Worker's Construction phase.
 It registers the `worker_loader` binding on the deployed Worker and
 returns the runtime handle in one step — no layer to provide:
 

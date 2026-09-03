@@ -95,30 +95,77 @@ export function Alert({
   );
 }
 
-type KeyBarProps = {
+export interface KeyBarProps {
   readonly keys: ReadonlyArray<readonly [key: string, label: string]>;
   readonly marginTop?: number;
-};
+  readonly inline?: boolean;
+  /** Widget rendered before the key hints. */
+  readonly before?: ReactNode;
+  /** Widget rendered after the key hints. */
+  readonly after?: ReactNode;
+  /** Draw border rails between populated widget/key sections. */
+  readonly divider?: boolean;
+}
 
-export function KeyBar({ keys, marginTop = 1 }: KeyBarProps) {
+export function KeyBar({
+  keys,
+  marginTop = 1,
+  inline = false,
+  before,
+  after,
+  divider = false,
+}: KeyBarProps) {
+  const borderStyle = useBorderStyle();
+  const sectionBorder = {
+    borderStyle,
+    borderLeft: true,
+    borderRight: false,
+    borderTop: false,
+    borderBottom: false,
+    borderColor: theme.color.muted,
+    borderDimColor: true,
+    marginLeft: 1,
+    paddingLeft: 1,
+  } as const;
   return (
     <Box
-      width="100%"
+      width={inline ? undefined : "100%"}
       flexWrap="wrap"
       marginTop={marginTop}
-      paddingLeft={theme.space.indent}
+      paddingLeft={before === undefined ? theme.space.indent : 0}
     >
-      {keys.map(([key, label], index) => (
-        <Box key={`${key}:${label}`}>
-          {index === 0 ? null : <Text tone="muted"> • </Text>}
-          <Text>
-            <Text bold color={theme.color.brand}>
-              {key}
+      {before === undefined ? null : <Box>{before}</Box>}
+      <Box
+        flexWrap="wrap"
+        {...(divider && before !== undefined
+          ? sectionBorder
+          : before === undefined
+            ? {}
+            : { marginLeft: 1 })}
+      >
+        {keys.map(([key, label], index) => (
+          <Box key={`${key}:${label}`}>
+            {index === 0 ? null : <Text tone="muted"> • </Text>}
+            <Text>
+              <Text bold color={theme.color.brand}>
+                {key}
+              </Text>
+              <Text tone="muted"> {label}</Text>
             </Text>
-            <Text tone="muted"> {label}</Text>
-          </Text>
+          </Box>
+        ))}
+      </Box>
+      {after === undefined ? null : (
+        <Box
+          {...(divider
+            ? sectionBorder
+            : {
+                marginLeft: 1,
+              })}
+        >
+          {after}
         </Box>
-      ))}
+      )}
     </Box>
   );
 }

@@ -19,7 +19,7 @@ import {
 } from "../../Dev/RpcServerEnvironment.ts";
 import { Stack } from "../../Stack.ts";
 import { unwrapRedacted } from "../../Util/index.ts";
-import { transformTypesFlags } from "../../Util/Node.ts";
+import { nodeLoaderArgs } from "../../Util/Node.ts";
 import {
   type ViteBuildChildConfig,
   type ViteBuildChildResult,
@@ -116,7 +116,7 @@ export const startViteChild = (
         nodeExecPath ?? process.execPath,
         isBun && nodeExecPath === undefined
           ? ["run", runner]
-          : [...(runner.endsWith(".ts") ? transformTypesFlags() : []), runner],
+          : [...nodeLoaderArgs(runner), runner],
         {
           cwd: config.rootDir,
           stdin: Stream.succeed(serializedConfig),
@@ -204,12 +204,7 @@ export const runViteBuildChild = (
       const child = yield* spawner.spawn(
         ChildProcess.make(
           process.execPath,
-          isBun
-            ? ["run", runner]
-            : [
-                ...(runner.endsWith(".ts") ? transformTypesFlags() : []),
-                runner,
-              ],
+          isBun ? ["run", runner] : [...nodeLoaderArgs(runner), runner],
           {
             cwd: config.rootDir,
             stdin: Stream.succeed(serializedConfig),

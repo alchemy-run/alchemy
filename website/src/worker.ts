@@ -175,9 +175,10 @@ const REDIRECTS: Record<string, string> = {
   "/concepts/observability": "/testing/observability",
   "/concepts/outputs": "/infrastructure-as-code/outputs",
   "/concepts/phases": "/infrastructure-as-effects/phases",
-  "/concepts/platform": "/infrastructure-as-effects/functions-and-servers",
-  "/infrastructure-as-effects/platform":
-    "/infrastructure-as-effects/functions-and-servers",
+  "/concepts/platform": "/infrastructure-as-effects/runtime",
+  "/infrastructure-as-effects/platform": "/infrastructure-as-effects/runtime",
+  "/infrastructure-as-effects/functions-and-servers":
+    "/infrastructure-as-effects/runtime",
   "/rpc": "/apis",
   "/rpc/schemaless": "/apis/schemaless",
   "/rpc/effect-rpc": "/apis/effect-rpc",

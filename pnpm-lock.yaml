@@ -325,7 +325,7 @@ catalogs:
       version: 0.5.10
     ai:
       specifier: ^6.0.62
-      version: 6.0.273
+      version: 6.0.275
     fast-xml-parser:
       specifier: ^5.3.4
       version: 5.10.1
@@ -5331,8 +5331,8 @@ importers:
         specifier: workspace:*
         version: link:../node-utils
       '@alchemy.run/sigil':
-        specifier: 0.0.0-alpha.6
-        version: 0.0.0-alpha.6(@types/react@19.2.18)(react-devtools-core@7.0.1)(react@19.2.8)
+        specifier: 0.0.0-alpha.8
+        version: 0.0.0-alpha.8(@types/react@19.2.18)(react-devtools-core@7.0.1)(react@19.2.8)
       '@aws-sdk/credential-providers':
         specifier: catalog:aws
         version: 3.1095.0
@@ -5407,7 +5407,7 @@ importers:
         version: 8.10.162
       ai:
         specifier: catalog:shared
-        version: 6.0.273(zod@4.4.3)
+        version: 6.0.275(zod@4.4.3)
       aws4fetch:
         specifier: catalog:aws
         version: 1.0.20
@@ -5459,7 +5459,7 @@ importers:
     devDependencies:
       '@ai-sdk/react':
         specifier: ^3.0.0
-        version: 3.0.276(react@19.2.8)(zod@4.4.3)
+        version: 3.0.278(react@19.2.8)(zod@4.4.3)
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
         version: link:../frontend-frameworks
@@ -5946,6 +5946,13 @@ importers:
         version: 1.0.0-beta.7(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(react-dom@19.2.8(react@19.2.8))(react-server-dom-webpack@19.2.8(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(webpack@5.109.2(cssnano@8.0.5(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26)))(react@19.2.8)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)
 
   packages/node-utils:
+    dependencies:
+      chokidar:
+        specifier: ^5.0.0
+        version: 5.0.0
+      rolldown:
+        specifier: 1.2.5
+        version: 1.2.5
     devDependencies:
       '@types/bun':
         specifier: catalog:tooling
@@ -5967,7 +5974,7 @@ importers:
     dependencies:
       '@ai-sdk/react':
         specifier: ^3.0.0
-        version: 3.0.276(react@19.2.8)(zod@4.4.3)
+        version: 3.0.278(react@19.2.8)(zod@4.4.3)
       '@effect/ai-anthropic':
         specifier: catalog:effect
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)
@@ -5991,7 +5998,7 @@ importers:
         version: 1.0.2(react@19.2.8)
       ai:
         specifier: catalog:shared
-        version: 6.0.273(zod@4.4.3)
+        version: 6.0.275(zod@4.4.3)
       alchemy:
         specifier: workspace:*
         version: link:../../packages/alchemy
@@ -6168,8 +6175,8 @@ packages:
   '@actions/io@1.1.3':
     resolution: {integrity: sha512-wi9JjgKLYS7U/z8PPbco+PvTb/nRWjeoFlJ1Qer83k/3C5PHQi28hiVdeE2kHXmIL99mQFawx8qt/JPjZilJ8Q==}
 
-  '@ai-sdk/gateway@3.0.186':
-    resolution: {integrity: sha512-l8+DAYaSQ4ph/kbAem3GEu/C5WstoMQqSPuAcHfyFwXNBkh+oN+qGsVxFQdUViJ7W5USoMr6XrQiu+RX1A9Yyw==}
+  '@ai-sdk/gateway@3.0.187':
+    resolution: {integrity: sha512-/GT3+jybfK2//uUVFEFYGqsBHnnN4QIirynwRcECxlYKmEBFA3GrtsGSwunH0j4WcFtncniEO7MCN1MWSuXSiA==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -6184,14 +6191,14 @@ packages:
     resolution: {integrity: sha512-XeZW1CcDF2GMbH4wejW6xBRI2QCOgnkVYUnxoeDadB1mf85riL2bMUeDoh+6gJ/r4mjNfzUPW8OjLjvwTP0u1Q==}
     engines: {node: '>=18'}
 
-  '@ai-sdk/react@3.0.276':
-    resolution: {integrity: sha512-7qzM+7RLbZe3aJstuYc0a9b2Ev5N31TE/PTFzS7FTCeecbakUt5JkXEjHkNOsFFXCZkpYqvgoT0nz+P4A6uwEw==}
+  '@ai-sdk/react@3.0.278':
+    resolution: {integrity: sha512-++jE7MB2ejGvDqVo24t3l22tH3zgnZjsJEbarEAzlzTt8HK9ByVIlmBZultkwUkW7xcqJuNllWxGmjBSwozEzA==}
     engines: {node: '>=18'}
     peerDependencies:
       react: ^18 || ~19.0.1 || ~19.1.2 || ^19.2.1
 
-  '@alchemy.run/sigil@0.0.0-alpha.6':
-    resolution: {integrity: sha512-kbFZCNxVv1rIkuJcq23hELB3aF63zZDKMgrBLRzOtVaweAJ2ZCEKfRqC1iWgaUh/J4vERDvFE/tnNiipfwOHyQ==}
+  '@alchemy.run/sigil@0.0.0-alpha.8':
+    resolution: {integrity: sha512-RFMxcEjgHk9QkUpPhsZTBuV2PnD5vZtVnjHaTiSh4heg/ULSaPx6Lxw4qA/55p4XralAZ3ecXPIzVURcGFPhcw==}
     engines: {node: '>=22'}
     peerDependencies:
       '@types/react': '>=19.2.0'
@@ -13479,8 +13486,8 @@ packages:
     resolution: {integrity: sha512-kja8j7PjmncONqaTsB8fQ+wE2mSU2DJ9D4XKoJ5PFWIdRMa6SLSN1ff4mOr4jCbfRSsxR4keIiySJU0N9T5hIQ==}
     engines: {node: '>= 8.0.0'}
 
-  ai@6.0.273:
-    resolution: {integrity: sha512-FbX1TxGbhKbu14T+rzXxUjYnR6BzDq91Ve7A/71EngmpwVP2Df8z42M0sXqE7HJTinrz31JhjqSnGy5V8tVReQ==}
+  ai@6.0.275:
+    resolution: {integrity: sha512-+8WtrzDNtD2VWn1MMFJ9hWEND7h8zKxCi92Q38EiGzruqeLc5STuWLtwp9KtCEUfm0bUUrVHSYc30dIcvBUZ6A==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -20281,7 +20288,7 @@ snapshots:
 
   '@actions/io@1.1.3': {}
 
-  '@ai-sdk/gateway@3.0.186(zod@4.4.3)':
+  '@ai-sdk/gateway@3.0.187(zod@4.4.3)':
     dependencies:
       '@ai-sdk/provider': 3.0.15
       '@ai-sdk/provider-utils': 4.0.50(zod@4.4.3)
@@ -20300,17 +20307,17 @@ snapshots:
     dependencies:
       json-schema: 0.4.0
 
-  '@ai-sdk/react@3.0.276(react@19.2.8)(zod@4.4.3)':
+  '@ai-sdk/react@3.0.278(react@19.2.8)(zod@4.4.3)':
     dependencies:
       '@ai-sdk/provider-utils': 4.0.50(zod@4.4.3)
-      ai: 6.0.273(zod@4.4.3)
+      ai: 6.0.275(zod@4.4.3)
       react: 19.2.8
       swr: 2.5.1(react@19.2.8)
       throttleit: 2.1.0
     transitivePeerDependencies:
       - zod
 
-  '@alchemy.run/sigil@0.0.0-alpha.6(@types/react@19.2.18)(react-devtools-core@7.0.1)(react@19.2.8)':
+  '@alchemy.run/sigil@0.0.0-alpha.8(@types/react@19.2.18)(react-devtools-core@7.0.1)(react@19.2.8)':
     dependencies:
       react: 19.2.8
       react-reconciler: 0.33.0(react@19.2.8)
@@ -29058,9 +29065,9 @@ snapshots:
     dependencies:
       humanize-ms: 1.2.1
 
-  ai@6.0.273(zod@4.4.3):
+  ai@6.0.275(zod@4.4.3):
     dependencies:
-      '@ai-sdk/gateway': 3.0.186(zod@4.4.3)
+      '@ai-sdk/gateway': 3.0.187(zod@4.4.3)
       '@ai-sdk/provider': 3.0.15
       '@ai-sdk/provider-utils': 4.0.50(zod@4.4.3)
       '@opentelemetry/api': 1.9.1

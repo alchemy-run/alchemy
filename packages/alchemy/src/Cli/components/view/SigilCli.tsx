@@ -10,7 +10,7 @@ import { CliKit } from "../../CliKit/index.ts";
 import type { ApplyEvent } from "../../../Report.ts";
 import { formatElapsed } from "../../Format.ts";
 import { approvePlanScreen } from "./ApprovePlan.tsx";
-import { Plan as PlanComponent, PlanView, PlanViewStore } from "./PlanView.tsx";
+import { Plan as PlanComponent, PlanTree } from "./PlanView.tsx";
 
 export const sigilCli = () =>
   Layer.effect(
@@ -44,9 +44,13 @@ const displayPlan = Effect.fn(function* <P extends Plan>(
   plan: P,
   options?: import("../../../Report.ts").PlanDisplayOptions,
 ) {
-  yield* cli.output.print(
-    <PlanComponent plan={plan} detailed={options?.detailed} />,
-  );
+  const tree = new PlanTree(plan, {
+    detailed: options?.detailed,
+    mode: "review",
+    label: "Plan",
+    viewport: "full",
+  });
+  yield* cli.output.print(<PlanComponent tree={tree} />);
 });
 
 const startPlanningSession = Effect.fn(function* (
@@ -105,33 +109,61 @@ const startApplySession = Effect.fn(function* <P extends Plan>(
   plan: P,
   options?: import("../../../Report.ts").PlanDisplayOptions,
 ) {
-  // Detailed applies render their YAML diffs inline in the progress tree;
-  // persistOnClose keeps the final full render (diffs included) in
-  // scrollback, covering --yes deployments too.
-  const progress = new PlanViewStore(plan, { detailed: options?.detailed });
+  // Detailed applies render their YAML diffs inline in the progress tree.
+  // One-shot operations persist the final render; dev keeps its live block
+  // mounted so logs remain static above the collapsible plan and keybar.
+  const labels = plan.destroy
+    ? {
+        active: "Destroying stack",
+        success: "Stack destroyed",
+        failure: "Destroy failed",
+      }
+    : plan.defaultMode === "local"
+      ? {
+          active: "Starting dev stack",
+          success: "Dev stack ready",
+          failure: "Dev startup failed",
+        }
+      : {
+          active: "Deploying stack",
+          success: "Stack deployed",
+          failure: "Deploy failed",
+        };
+  const progress = new PlanTree(plan, {
+    detailed: options?.detailed,
+    mode: "apply",
+    label: labels.active,
+    titleDetail: options?.stage,
+    busy: true,
+  });
   // The session outlives this effect — the caller settles it via `done` on
   // every exit path (Apply.ts's onExit). live.open is Scope-bound, so give
-  // it a manually managed scope that `done` closes; Apply deliberately runs
-  // the session in the ambient scope, so we cannot lean on Effect.scoped
-  // here.
+  // it a manually managed scope. One-shot operations close it in `done`;
+  // dev retains it after `done` and tears it down through `close` when the
+  // generation is interrupted (a reload or Ctrl+C), so a replaced
+  // generation never leaves its widget behind.
   const scope = yield* Scope.make();
   const live = yield* cli.live
-    .open(
-      <PlanView
-        store={progress}
-        mode="apply"
-        detailed={options?.detailed}
-        stage={options?.stage}
-      />,
-      { persistOnClose: true },
-    )
+    .open(<PlanComponent tree={progress} collapsible={options?.dev} />, {
+      persistOnClose: !options?.dev,
+    })
     .pipe(Scope.provide(scope));
+  const close = live.close.pipe(Effect.ensuring(Scope.close(scope, Exit.void)));
   return {
     done: (outcome) =>
-      Effect.sync(() => progress.finish(outcome)).pipe(
-        Effect.andThen(live.close),
-        Effect.ensuring(Scope.close(scope, Exit.void)),
-      ),
+      Effect.sync(() => {
+        const outputReady = progress.snapshot().output !== undefined;
+        progress.finish(
+          outcome,
+          labels[outcome],
+          options?.dev && outcome === "success" && outputReady
+            ? "output"
+            : "plan",
+        );
+        if (!options?.dev) progress.setViewport("full");
+      }).pipe(Effect.andThen(options?.dev ? Effect.void : close)),
+    close,
     emit: (event: ApplyEvent) => Effect.sync(() => progress.emit(event)),
+    setOutput: (value: unknown) => Effect.sync(() => progress.setOutput(value)),
   } satisfies PlanStatusSession;
 });

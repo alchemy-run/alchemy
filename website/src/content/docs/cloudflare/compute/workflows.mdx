@@ -117,7 +117,7 @@ exactly once. Outside a task it runs on every replay.
 
 ## Use bindings inside tasks
 
-Bind a resource in the outer init phase to get a typed client, then
+Bind a resource in the outer Construction phase to get a typed client, then
 use it inside a step — here a [KV](/cloudflare/data/kv) namespace:
 
 ```typescript
@@ -155,13 +155,13 @@ Per-run resources like `Drizzle.Postgres` pools follow this: the
 pool opens on the first query inside a step, is reused by every
 later step in the same invocation, and closes when the invocation
 settles (the [SQL connection lifecycle](/sql/effect-sql/lifecycle)
-in workflow terms). The workflow's init closure shares the isolate-lifetime
+in workflow terms). The workflow's constructor shares the isolate-lifetime
 layer build with the hosting Worker — pure assembly, no cleanup; see
-[Instance scope vs request scope](/infrastructure-as-effects/functions-and-servers#instance-scope-vs-request-scope).
+[Instance scope vs request scope](/infrastructure-as-effects/runtime#instance-scope-vs-request-scope).
 
 ## Trigger from a Worker
 
-Yield the workflow class in a Worker's init phase to get a typed
+Yield the workflow class in a Worker's Construction phase to get a typed
 handle:
 
 ```typescript

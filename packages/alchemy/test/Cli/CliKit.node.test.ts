@@ -1,6 +1,6 @@
 import { NonInteractiveTerminal } from "@/Interaction.ts";
 import { makeRuntime } from "@/Cli/CliKit/headless.ts";
-import { transformTypesFlags } from "@/Util/Node.ts";
+import { nodeLoaderArgs } from "@/Util/Node.ts";
 import { PlatformServices } from "@/Util/PlatformServices.ts";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -58,7 +58,7 @@ const hasBin = (bin: string): boolean => {
   }
 };
 
-// Same spawn as the Vite child: bun `run` vs node + transform-types flags.
+// Same spawn as the Vite child: bun `run` vs node + the Oxc loader.
 // Node is not gated on `process.features.typescript === "transform"` —
 // ViteChild still prefers a Node binary whenever one is on PATH, and the
 // crash is `.tsx` under that Node, not missing type-stripping.
@@ -71,7 +71,7 @@ const childRuntimes = [
   {
     name: "node",
     available: hasBin("node"),
-    argv: (entry: string) => ["node", ...transformTypesFlags(), entry],
+    argv: (entry: string) => ["node", ...nodeLoaderArgs(entry), entry],
   },
 ] as const;
 

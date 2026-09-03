@@ -39,7 +39,7 @@ this file with Rolldown, builds a Docker image (default
 
 ## Serve HTTP with `fetch`
 
-Return `fetch` from the init Effect to boot an HTTP server.
+Return `fetch` from the constructor Effect to boot an HTTP server.
 
 ```diff lang="typescript"
 import * as Fly from "alchemy/Fly";
@@ -180,7 +180,7 @@ Alchemy waits until the Machine is `started`. It does not poll
 
 ## Config
 
-Yield `Config` in init. Alchemy reads the value from the env of
+Yield `Config` in the constructor. Alchemy reads the value from the env of
 whoever deploys and writes it onto the Machine. Do not pass
 `env: { ... }` on a Service.
 
