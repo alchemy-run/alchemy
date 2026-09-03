@@ -1,6 +1,7 @@
 import { loadInternalWorker } from "../internal/internal-worker.ts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as HttpBody from "effect/unstable/http/HttpBody";
 import * as HttpClient from "effect/unstable/http/HttpClient";
@@ -170,9 +171,29 @@ export const RegistryProxyLive = Layer.effect(
                   }
                   yield* registry.subscribe(subscribed).pipe(
                     Stream.runForEach((targets) =>
-                      http.post(`http://127.0.0.1:${proxyPort}/`, {
-                        body: HttpBody.jsonUnsafe(targets),
-                      }),
+                      http
+                        .post(`http://127.0.0.1:${proxyPort}/`, {
+                          body: HttpBody.jsonUnsafe(targets),
+                        })
+                        .pipe(
+                          Effect.retry({
+                            schedule: Schedule.exponential("50 millis"),
+                            times: 5,
+                          }),
+                          // A push that still fails must NOT kill the
+                          // subscription: this fiber is the only thing that
+                          // keeps the proxy's target map current, and a dead
+                          // one freezes this worker's view of every other
+                          // worker for the rest of the session. Each push
+                          // carries the full map, so the next registry change
+                          // recovers whatever this one dropped.
+                          Effect.catchCause((cause) =>
+                            Effect.logDebug(
+                              "Failed to push registry targets to the proxy",
+                              cause,
+                            ),
+                          ),
+                        ),
                     ),
                     Effect.forkScoped,
                   );

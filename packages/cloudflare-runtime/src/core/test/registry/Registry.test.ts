@@ -235,6 +235,54 @@ describe.each(watcherModes)(
   },
 );
 
+// The filesystem watcher is best-effort, and it stops in two shapes: the
+// stream FAILS (`fs.watch` rejected outright — inotify limits, an unmounted
+// directory) or it ENDS (the handle closed), which is indistinguishable from
+// an idle watcher. Either way a registry that stops refreshing is invisible —
+// a worker in one process never learns that a worker in another process came
+// up, and its service bindings answer "worker not found" for the rest of the
+// session — so discovery must not depend on the watcher alone.
+describe.each([
+  ["fails", () => Stream.die(new Error("inotify watch limit reached"))],
+  ["ends", () => Stream.empty],
+] as const)("Registry (watcher %s)", (label, watch) => {
+  const services = Registry.RegistryLive.pipe(
+    Layer.provideMerge(Paths.PathsLive),
+    Layer.provide(configProvider({ fileSystemSupportsWatcher: true })),
+    Layer.provideMerge(
+      Layer.effect(
+        FileSystem.FileSystem,
+        Effect.map(FileSystem.FileSystem, (fs) =>
+          FileSystem.FileSystem.of({ ...fs, watch }),
+        ),
+      ).pipe(Layer.provide(NodeServices.layer)),
+    ),
+    Layer.provideMerge(NodeServices.layer),
+  );
+
+  it.live("resolves entries registered by another process", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const directory = yield* Paths.state("alchemy", "registry");
+      yield* Registry.Registry;
+
+      const scriptName = `test-worker-watcher-${label}`;
+      // Another process registering a worker is just a file appearing in the
+      // directory — this registry never sees the `write` call, so a re-read of
+      // the directory is the only way it can discover the entry.
+      yield* fs.writeFileString(
+        path.join(directory, `${scriptName}.json`),
+        JSON.stringify(registryEntry(scriptName)),
+      );
+
+      yield* waitForRegistryEntry(subscriberEntry(scriptName), {
+        toBeDefined: true,
+      }).pipe(Effect.timeout("10 seconds"));
+    }).pipe(Effect.provide(services)),
+  );
+});
+
 const registryEntry = (scriptName: string): RegistryEntry => ({
   scriptName,
   debugPortAddress: "127.0.0.1:12345",
