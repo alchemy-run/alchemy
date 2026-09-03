@@ -11,19 +11,15 @@
 //    Packages without a `bun` condition (e.g. the published sigil) are
 //    untouched — an enabled condition their exports never mention simply
 //    doesn't match.
-// 2. tsx's loader handles the actual `.ts`/`.tsx` loading — esbuild
-//    transforms with tsx's own on-disk cache and source maps. Node's
-//    built-in `--experimental-transform-types` covers plain `.ts` but not
-//    JSX, and its wasm stripper re-runs uncached on every `node --watch`
-//    restart (~7s for a full stack graph vs ~1s pre-built).
+// 2. node-utils handles the actual `.ts`/`.tsx` loading with Rolldown's Oxc
+//    transformer and source maps. Node's built-in TypeScript support does not
+//    cover TSX and cannot apply each package's nearest tsconfig.
 //
 // Dev-only: the launcher (`bin/cli.js`) and the dev supervisor pass this
 // via `--import` when spawning node in a checkout. Published installs run
-// bundled `.js` and never load it (it is excluded from the tarball, and
-// tsx is a devDependency).
+// bundled `.js` and never load it; this file is excluded from the tarball.
+// In a checkout, the source loader resolves from the workspace package.
 import { registerHooks } from "node:module";
-import { fileURLToPath } from "node:url";
-import { register } from "tsx/esm/api";
 
 /** @param {string} specifier */
 const isMonorepoPackage = (specifier) =>
@@ -42,13 +38,11 @@ registerHooks({
   },
 });
 
-register({
-  // Pin tsx to alchemy's tsconfig, not whatever happens to be in the
-  // invoking project's cwd (tsx resolves its tsconfig from the working
-  // directory). Running `alchemy dev` from an example would otherwise
-  // transpile alchemy's own .tsx with that project's JSX settings — e.g.
-  // classic-runtime `React.createElement` with no React import, or
-  // `jsxImportSource: "solid-js"` — breaking the React files inside the
-  // CLI. Same trade the bun launcher makes with `--tsconfig-override`.
-  tsconfig: fileURLToPath(new URL("../tsconfig.json", import.meta.url)),
-});
+// This import must happen after the condition hook is installed so a clean
+// checkout resolves node-utils to source without requiring a prior build.
+const { registerOxc } = await import("@alchemy.run/node-utils/register-oxc");
+
+// Oxc discovers the nearest tsconfig for each transformed file. Alchemy's
+// TSX therefore uses Alchemy's React settings while the user's config and its
+// dependencies retain their own compiler settings.
+registerOxc();

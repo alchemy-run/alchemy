@@ -68,6 +68,7 @@ examples/cloudflare-worker/src/scratch.ts
 
 !/packages/alchemy/bin/cli.js
 !/packages/alchemy/bin/register-dev-mode.js
+!/packages/alchemy/bin/register-oxc.js
 .vendor/*
 .tmp
 # the lockfile-pinning test fixture is a checked-in lockfile, not a generated one

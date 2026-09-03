@@ -143,7 +143,7 @@ const root = Command.make("alchemy", {}, () =>
  * How this CLI process is running, appended to `--version` in a checkout
  * for debugging the launcher's implicit mode selection (`bin/cli.js`): the
  * runtime, and whether we're executing `.ts` source (bun, or node with type
- * stripping + the register-tsx hook) or built output — `node <x>, lib` is
+ * stripping + the Oxc register hook) or built output — `node <x>, lib` is
  * the tell for the old-node fallback that still needs a build. Published
  * installs print the plain version string.
  */
