@@ -76,14 +76,40 @@ apart.
 
 ## Runtimes carry their code
 
-`Cloudflare.Worker("Api", props, effect)` is a **Runtime**: a Resource
-that carries the code it runs. The props are the cloud configuration. The Effect is the code
-that runs inside it. One deploy ships both, and the Effect always has
-the same shape: bind what you need, then return what you expose.
+`Cloudflare.Worker` is a **Runtime**: a Resource that carries the code
+it runs. The first two arguments are the Resource, its name and its
+configuration:
 
-[Runtime](/infrastructure-as-effects/runtime)
-covers that shape, the `fetch` and RPC interface it returns, and the
-three ways to declare one.
+```typescript
+Cloudflare.Worker(
+  "Api",
+  { main: import.meta.url },
+  // ...
+);
+```
+
+`main: import.meta.url` says the code is this file. Most Runtimes need
+no other configuration, because everything else comes in through
+bindings.
+
+The third argument is the code, an Effect:
+
+```typescript
+Effect.gen(function* () {
+  const bucket = yield* Cloudflare.R2.ReadWriteBucket(Uploads);
+
+  return {
+    fetch: Effect.gen(function* () {
+      // ...
+    }),
+  };
+});
+```
+
+It always has the same shape. First bind what you need, then return
+what you expose. [Runtime](/infrastructure-as-effects/runtime) covers
+that shape, the `fetch` and RPC interface it returns, and the three
+ways to declare one.
 
 ## Bindings wire resources in
 
