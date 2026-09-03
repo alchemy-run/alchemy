@@ -8,6 +8,7 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import { watchImport } from "@alchemy.run/node-utils/watch-import";
+import { trackBunImports } from "@alchemy.run/node-utils/watch-import-bun";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -20,9 +21,10 @@ import { makeDevLogOpener } from "../Local/DevLog.ts";
 import * as RpcProviderProxy from "../Local/RpcProviderProxy.ts";
 import { forwardSidecarLogs } from "../Local/RpcSpawner.ts";
 import { TelemetryLive } from "../Telemetry/Layer.ts";
+import { initialCwd } from "../Util/Node.ts";
 import { PlatformServices } from "../Util/PlatformServices.ts";
 import * as Stacks from "../Alchemist/routes/stack.ts";
-import { DevOptions } from "./DevOptions.ts";
+import { DEV_RELOAD_EXIT_CODE, DevOptions } from "./DevOptions.ts";
 import { ConsoleLogLive } from "./GlobalLog.ts";
 import { handleCliErrors, installShutdownFeedback } from "./commands/errors.ts";
 import { renderApply, renderPlanning } from "./commands/render.ts";
@@ -105,6 +107,38 @@ const runDev = Effect.fn(function* (options: DevOptions) {
   return once ? undefined : yield* Effect.never;
 });
 
+/**
+ * Resolves with the files behind the next debounced change batch. The
+ * listener detaches itself on delivery — `Effect.callback` only runs its
+ * cleanup on interruption, so a listener left behind would fire once per
+ * past generation on every later change.
+ */
+const nextChange = (watcher: {
+  subscribe: (
+    listener: (change: { paths: ReadonlySet<string> }) => void,
+  ) => () => void;
+}) =>
+  Effect.callback<ReadonlySet<string>>((resume) => {
+    const unsubscribe = watcher.subscribe(({ paths }) => {
+      unsubscribe();
+      resume(Effect.succeed(paths));
+    });
+    return Effect.sync(unsubscribe);
+  });
+
+const logReload = (paths: ReadonlySet<string>) =>
+  Effect.logInfo(
+    `Reloading stack: changed ${[...paths]
+      .map((file) => path.relative(initialCwd, file))
+      .join(", ")}`,
+  );
+
+/**
+ * Node: one process, many generations. The Oxc loader imports the stack graph
+ * under a fresh namespace each time; a change to any file it loaded
+ * interrupts the parked run (whose scope tears down the dev widget) and the
+ * loop imports the next generation.
+ */
 const runNodeDevWatcher = (options: DevOptions) => {
   const entrypoint = path.resolve(options.main);
   const root = path.dirname(entrypoint);
@@ -128,24 +162,54 @@ const runNodeDevWatcher = (options: DevOptions) => {
     (watcher) => Effect.promise(() => watcher.close()),
   ).pipe(
     Effect.flatMap((watcher) => {
-      const changed = Effect.callback<void>((resume) => {
-        const unsubscribe = watcher.subscribe(() => resume(Effect.void));
-        return Effect.sync(unsubscribe);
-      });
+      const generation = devKeepAlive(runDev(options)).pipe(
+        Effect.provideService(StackModuleLoader, {
+          import: () => watcher.import().then(({ value }) => value),
+        }),
+        Effect.scoped,
+      );
       return Effect.forever(
-        Effect.raceFirst(
-          devKeepAlive(runDev(options)).pipe(
-            Effect.provideService(StackModuleLoader, {
-              import: () => watcher.import().then(({ value }) => value),
-            }),
-            Effect.scoped,
+        Effect.raceFirst(generation, nextChange(watcher)).pipe(
+          Effect.flatMap((paths) =>
+            paths === undefined ? Effect.void : logReload(paths),
           ),
-          changed,
         ),
       );
     }),
   );
 };
+
+/**
+ * Bun: one process per generation. Bun cannot evict evaluated modules, so the
+ * tracker only records which project files the stack graph loads; the first
+ * change to one of them logs, lets the generation scope tear down the dev
+ * widget, and exits with DEV_RELOAD_EXIT_CODE for the supervisor to respawn.
+ */
+const runBunDevWatcher = (options: DevOptions) =>
+  Effect.acquireRelease(
+    Effect.sync(() =>
+      trackBunImports({ root: path.dirname(path.resolve(options.main)) }),
+    ),
+    (tracker) => Effect.promise(() => tracker.close()),
+  ).pipe(
+    Effect.flatMap((tracker) =>
+      Effect.raceFirst(
+        devKeepAlive(runDev(options)).pipe(Effect.scoped),
+        nextChange(tracker),
+      ),
+    ),
+    Effect.flatMap((paths) =>
+      paths === undefined
+        ? Effect.void
+        : logReload(paths).pipe(
+            Effect.andThen(
+              Effect.sync(() => {
+                process.exitCode = DEV_RELOAD_EXIT_CODE;
+              }),
+            ),
+          ),
+    ),
+  );
 
 // A mid-edit import or planning failure must keep the watch process alive so
 // the next save can restart it. Interruptions still propagate for Ctrl+C.
@@ -178,12 +242,13 @@ const makeExec = () => {
     yield* forwardSidecarLogs((entry) =>
       devLog.writeLine(`[${entry.channel}] ${entry.line}`),
     );
-    // Bun's outer `--watch` process owns reloads and starts this module with a
-    // fresh cache each time. Node stays in this process and refreshes only the
-    // stack module graph through the Oxc/chokidar watcher above.
-    return yield* (yield* devOnce) || process.versions.bun !== undefined
+    // Single-pass runs park nothing. Otherwise Node reloads the stack graph in
+    // this process; Bun exits for the supervisor to respawn (see above).
+    return yield* (yield* devOnce)
       ? devKeepAlive(runDev(options))
-      : runNodeDevWatcher(options);
+      : process.versions.bun !== undefined
+        ? runBunDevWatcher(options)
+        : runNodeDevWatcher(options);
   }).pipe(Effect.provide(services), Effect.scoped, handleCliErrors);
 };
 

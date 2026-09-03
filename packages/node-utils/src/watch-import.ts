@@ -1,7 +1,11 @@
 import { randomUUID } from "node:crypto";
-import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { watch, type ChokidarOptions, type FSWatcher } from "chokidar";
+import {
+  DependencyWatcher,
+  type DependencyChange,
+  type DependencyChangeListener,
+  type DependencyWatcherOptions,
+} from "./dependency-watcher.ts";
 import {
   createImportLoader,
   type ImportLoader,
@@ -14,50 +18,33 @@ export interface ImportGeneration<T> {
   readonly dependencies: ReadonlySet<string>;
 }
 
-export interface ImportChange {
-  readonly paths: ReadonlySet<string>;
-}
+export type ImportChange = DependencyChange;
 
-export interface ImportWatcherOptions extends ImportLoaderOptions {
+export interface ImportWatcherOptions
+  extends ImportLoaderOptions, DependencyWatcherOptions {
   readonly parentURL: string;
-  /** Chokidar options passed to the dependency watcher. */
-  readonly watch?: ChokidarOptions | undefined;
-  readonly debounceMs?: number | undefined;
 }
 
-export type ImportChangeListener = (change: ImportChange) => void;
+export type ImportChangeListener = DependencyChangeListener;
 
 /**
  * Imports fresh Node module generations and watches the exact files loaded by
- * the current generation. Chokidar follows editor atomic-save replacements
- * without polling by default. Bun callers should use Bun's process watcher,
- * which naturally starts each generation with a fresh module cache.
+ * the current generation. Bun callers should use `BunImportTracker` from
+ * `./watch-import-bun.ts`: Bun cannot evict evaluated modules, so a change
+ * there restarts the process instead of importing a new generation.
  */
 export class ImportWatcher<T = unknown> {
   readonly #specifier: string;
   readonly #options: ImportWatcherOptions;
-  readonly #listeners = new Set<ImportChangeListener>();
-  readonly #watcher: FSWatcher;
+  readonly #watcher: DependencyWatcher;
   #registration: ImportLoader | undefined;
   #dependencies = new Set<string>();
-  #pending = new Set<string>();
-  #timer: NodeJS.Timeout | undefined;
   #closed = false;
 
   constructor(specifier: string, options: ImportWatcherOptions) {
     this.#specifier = specifier;
     this.#options = options;
-    this.#watcher = watch([], {
-      ...options.watch,
-      ignoreInitial: true,
-    });
-    this.#watcher.on("all", (_event, changed) => {
-      const absolute = path.resolve(
-        options.watch?.cwd ?? process.cwd(),
-        changed,
-      );
-      if (this.#dependencies.has(absolute)) this.#queue(absolute);
-    });
+    this.#watcher = new DependencyWatcher(options);
   }
 
   get dependencies(): ReadonlySet<string> {
@@ -65,8 +52,7 @@ export class ImportWatcher<T = unknown> {
   }
 
   subscribe(listener: ImportChangeListener): () => void {
-    this.#listeners.add(listener);
-    return () => this.#listeners.delete(listener);
+    return this.#watcher.subscribe(listener);
   }
 
   async import(): Promise<ImportGeneration<T>> {
@@ -85,7 +71,10 @@ export class ImportWatcher<T = unknown> {
       onImport: (url) => {
         if (!url.startsWith("file:")) return;
         dependencies.add(fileURLToPath(url));
-        if (this.#dependencies === dependencies) this.#syncWatchers();
+        // A lazy import evaluated after this generation became current
+        // extends the watched set immediately.
+        if (this.#dependencies === dependencies)
+          this.#watcher.set(dependencies);
       },
     });
     try {
@@ -93,12 +82,14 @@ export class ImportWatcher<T = unknown> {
       await this.#registration?.unregister();
       this.#registration = registration;
       this.#dependencies = dependencies;
-      this.#syncWatchers();
+      this.#watcher.set(dependencies);
       return { value, namespace, dependencies };
     } catch (error) {
       await registration.unregister();
+      // Keep watching everything the failed import touched so the next save
+      // of any of those files retries.
       this.#dependencies = new Set([...this.#dependencies, ...dependencies]);
-      this.#syncWatchers();
+      this.#watcher.set(this.#dependencies);
       throw error;
     }
   }
@@ -106,48 +97,12 @@ export class ImportWatcher<T = unknown> {
   async close(): Promise<void> {
     if (this.#closed) return;
     this.#closed = true;
-    if (this.#timer !== undefined) clearTimeout(this.#timer);
     await this.#registration?.unregister();
     await this.#watcher.close();
-    this.#listeners.clear();
   }
 
   async [Symbol.asyncDispose](): Promise<void> {
     await this.close();
-  }
-
-  #syncWatchers(): void {
-    const previous = this.#watcher.getWatched();
-    const watched = new Set(
-      Object.entries(previous).flatMap(([directory, files]) =>
-        files.map((file) =>
-          path.resolve(
-            this.#options.watch?.cwd ?? process.cwd(),
-            directory,
-            file,
-          ),
-        ),
-      ),
-    );
-    const removed = [...watched].filter(
-      (dependency) => !this.#dependencies.has(dependency),
-    );
-    const added = [...this.#dependencies].filter(
-      (dependency) => !watched.has(dependency),
-    );
-    if (removed.length > 0) void this.#watcher.unwatch(removed);
-    if (added.length > 0) this.#watcher.add(added);
-  }
-
-  #queue(changed: string): void {
-    this.#pending.add(changed);
-    if (this.#timer !== undefined) clearTimeout(this.#timer);
-    this.#timer = setTimeout(() => {
-      this.#timer = undefined;
-      const paths = this.#pending;
-      this.#pending = new Set();
-      for (const listener of this.#listeners) listener({ paths });
-    }, this.#options.debounceMs ?? 50);
   }
 }
 

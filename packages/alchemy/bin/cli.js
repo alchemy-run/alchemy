@@ -211,7 +211,5 @@ const program =
 foregroundChild(
   program,
   args,
-  (line) =>
-    !line.includes("is not in the project directory and will not be watched") &&
-    !line.includes("directory mismatch for directory"),
+  (line) => !line.includes("directory mismatch for directory"),
 );

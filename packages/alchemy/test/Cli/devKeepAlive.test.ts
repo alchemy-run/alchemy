@@ -8,9 +8,9 @@ import { importStack } from "@/Alchemist/Session.ts";
 import { devKeepAlive } from "../../src/Cli/exec";
 import { PlatformServices } from "../../src/Util/PlatformServices";
 
-// Node's import-aware dev loop interrupts a parked run when a dependency
-// changes; Bun's process watcher restarts it. In both cases a failed generation
-// must park instead of exiting the watch session, while interruption propagates.
+// The dev loop interrupts a parked run when a stack dependency changes (Node
+// reloads in-process; Bun exits for the supervisor to respawn). In both cases a
+// failed generation must park instead of exiting, while interruption propagates.
 
 /** Resolves `true` when the effect is still running (parked) after the timeout. */
 const parks = <A, E>(effect: Effect.Effect<A, E>) =>

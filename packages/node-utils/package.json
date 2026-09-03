@@ -52,6 +52,11 @@
       "types": "./lib/watch-import.d.ts",
       "bun": "./src/watch-import.ts",
       "import": "./lib/watch-import.js"
+    },
+    "./watch-import-bun": {
+      "types": "./lib/watch-import-bun.d.ts",
+      "bun": "./src/watch-import-bun.ts",
+      "import": "./lib/watch-import-bun.js"
     }
   },
   "dependencies": {
