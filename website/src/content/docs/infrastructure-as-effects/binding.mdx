@@ -201,9 +201,9 @@ One contract, both phases.
 
 ## Event Sources and Sinks
 
-Some bindings run your Function instead of being called from it. An
-[Event Source](/infrastructure-as-effects/event-sources) triggers on
-a resource and hands you the messages as a `Stream`:
+An [Event Source](/infrastructure-as-effects/event-sources) is a
+Binding that runs an Effect or `Stream` in the background, whenever
+something happens on the resource:
 
 ```typescript
 yield* AWS.SQS.consumeQueueMessages(Inbound, (records) =>
@@ -211,8 +211,8 @@ yield* AWS.SQS.consumeQueueMessages(Inbound, (records) =>
 );
 ```
 
-A [Sink](/infrastructure-as-effects/sinks) is the write side. Bind a
-queue as a `Sink` and run a `Stream` into it:
+A [Sink](/infrastructure-as-effects/sinks) is the converse, a Binding
+you sink a `Stream` into:
 
 ```typescript
 const sink = yield* AWS.SQS.QueueSink(Outbound);
