@@ -83,3 +83,5 @@ examples/cloudflare-worker/src/scratch.ts
 
 # research clones (analyzed, never committed)
 /vendor/
+
+.tool-output/

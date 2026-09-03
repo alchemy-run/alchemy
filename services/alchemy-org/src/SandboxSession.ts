@@ -3,11 +3,14 @@ import * as AI from "alchemy/AI";
 import * as AWS from "alchemy/AWS";
 import * as Command from "alchemy/Command";
 import type * as Git from "alchemy/Git";
+import type * as GitHub from "alchemy/GitHub";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import { CheckoutsSandbox } from "./services/CheckoutsSandbox.ts";
 import { CheckoutsWorkspace } from "./services/CheckoutsWorkspace.ts";
+import { SandboxCheckout } from "./services/SandboxCheckout.ts";
+import { SessionRepoLive } from "./services/SessionRepo.ts";
 
 /** Thread keys are `<session>::<thread>` — the SESSION owns the machine,
  *  so every thread of a session (and its terminal) shares one. */
@@ -45,21 +48,34 @@ const SandboxMicrovm = AWS.AI.SandboxMicrovmSession({ machineKey }).pipe(
  * `alchemy dev`: THIS repository's working tree, served by
  * `scripts/sandbox-dev.ts` (a `Command.Dev` beside the local Worker)
  * and reached at a fixed address — no image build, no launch. Every
- * session shares the one tree, and git is read-only over it
- * (`CheckoutsWorkspace`): the point is exercising sessions, tools, and
- * terminals in seconds, not isolation.
+ * session gets its own linked worktree of this repository under
+ * `.alchemy/worktrees/` (`CheckoutsWorkspace`), which `SandboxCheckout`
+ * re-roots the session's tools and terminal into: sessions edit and
+ * build in seconds, and the developer's own checkout stays theirs.
  */
 const SandboxWorkspace = (url: Effect.Effect<string | undefined>) =>
   AI.SandboxHttp({ url, machineKey });
 
 /** The machine plus git over it — ONE build per machine so the
  *  toolbox, the spill store, the checkout, and the terminal door all
- *  land on the same registry. */
+ *  land on the same registry. The `AI.Sandbox` handed out is the
+ *  CONVERGING one (`SandboxCheckout`): the session's tree lands on the
+ *  machine the first time anything touches it, never at INIT. Git
+ *  itself runs over the raw machine — it IS the converge. */
 const machine = <R>(
   sandbox: Layer.Layer<AI.Sandbox, never, R>,
   checkouts: Layer.Layer<Git.Checkouts, never, AI.Sandbox>,
-): Layer.Layer<AI.Sandbox | Git.Checkouts, never, R> =>
-  Layer.mergeAll(sandbox, checkouts.pipe(Layer.provide(sandbox)));
+): Layer.Layer<
+  AI.Sandbox | Git.Checkouts,
+  never,
+  R | GitHub.GetPullRequest
+> => {
+  const git = checkouts.pipe(Layer.provide(sandbox));
+  const converging = SandboxCheckout.pipe(
+    Layer.provide(Layer.mergeAll(sandbox, git, SessionRepoLive)),
+  );
+  return Layer.mergeAll(converging, git);
+};
 
 /**
  * Each session's own machine (`AI.Sandbox`) and git over it

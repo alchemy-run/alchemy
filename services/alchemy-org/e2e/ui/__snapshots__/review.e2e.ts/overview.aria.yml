@@ -32,6 +32,7 @@
     - link /#\d+/:
       - /url: https://github.com/alchemy-run/test-alchemy/issues/12
     - text: .
+  - img "alchemy-review-bot"
   - text: alchemy-review-bot requested changes
   - link "2d ago":
     - /url: https://github.com/alchemy-run/test-alchemy/pull/148#pullrequestreview-4970310543
@@ -42,6 +43,7 @@
     - code: sumToN(5)
     - text: /returns \d+ instead of \d+\./
   - button "flow-test/sum.ts:4 ▸ diff"
+  - img "alchemy-review-bot"
   - text: alchemy-review-bot
   - link "2d ago":
     - /url: https://github.com/alchemy-run/test-alchemy/pull/148#discussion_r3811506339

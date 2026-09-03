@@ -209,6 +209,10 @@ export const toUIMessages = (
 export const makeChunkTranslator = () => {
   let started = false;
   let openStep = false;
+  // the tick whose step is open because a LIVE tool-call announced it
+  // (see the `tool-call` case) — its `assistant` restatement joins that
+  // step instead of opening a second one
+  let liveStepTick: number | undefined;
   // calls THIS stream has announced — an output for an unseen call
   // (a subscribe that opened mid-burst) must be dropped, or the AI
   // SDK fabricates an orphan tool part with no name and no input
@@ -224,18 +228,53 @@ export const makeChunkTranslator = () => {
       if (openStep) {
         chunks.push({ type: "finish-step" });
         openStep = false;
+        liveStepTick = undefined;
       }
     };
 
     switch (observation.type) {
+      // A tool call the in-flight sampling just made: its handler may
+      // run for a long time (a machine waking, a tree converging, a
+      // test suite) before the durable `assistant` restates it — so
+      // the viewer learns of the call NOW, as a running tool part, and
+      // is not left staring at nothing while the handler works.
+      case "tool-call": {
+        if (!started) {
+          chunks.push({
+            type: "start",
+            messageId: `a-live-${observation.tick}`,
+          });
+          started = true;
+        }
+        if (!openStep || liveStepTick !== observation.tick) {
+          closeStep();
+          chunks.push({ type: "start-step" });
+          openStep = true;
+          liveStepTick = observation.tick;
+        }
+        knownCalls.add(observation.toolCallId);
+        chunks.push({
+          type: "tool-input-available",
+          toolCallId: observation.toolCallId,
+          toolName: observation.toolName,
+          input: observation.input,
+          dynamic: true,
+        });
+        break;
+      }
       case "assistant": {
         if (!started) {
           chunks.push({ type: "start", messageId: `a-${observation.seq}` });
           started = true;
         }
-        closeStep();
-        chunks.push({ type: "start-step" });
-        openStep = true;
+        // the step a live tool-call of THIS sampling already opened is
+        // this sampling's step — restate into it
+        if (!openStep || liveStepTick !== observation.tick) {
+          closeStep();
+          chunks.push({ type: "start-step" });
+          openStep = true;
+        }
+        liveStepTick = undefined;
         if (
           observation.reasoning !== undefined &&
           observation.reasoning.length > 0

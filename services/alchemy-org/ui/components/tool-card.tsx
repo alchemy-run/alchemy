@@ -26,6 +26,7 @@ import type { ReviewBotLive } from "../../src/ReviewBot.ts";
 import { DiffCard, splitDiffOutput } from "@/components/code";
 import { RefHoverCard } from "@/components/ref-hover-card";
 import { useAnchoredToggle } from "@/lib/anchor";
+import { Ansi, stripAnsi } from "@/lib/ansi";
 import { cn } from "@/lib/utils";
 
 /* ── helpers ─────────────────────────────────────────────────── */
@@ -109,9 +110,10 @@ const DiffText = ({ text }: { text: string }) => (
   </pre>
 );
 
+/** Plain monospace block; string children render their ANSI colors. */
 const Mono = ({ children }: { children: ReactNode }) => (
   <pre className="max-h-80 overflow-auto whitespace-pre-wrap p-2 font-mono text-[11px] leading-4">
-    {children}
+    {typeof children === "string" ? <Ansi text={children} /> : children}
   </pre>
 );
 
@@ -126,11 +128,11 @@ const WindowedText = ({ text, head = 8, tail = 12 }: {
   const omitted = lines.length - head - tail;
   return (
     <Mono>
-      {lines.slice(0, head).join("\n")}
+      <Ansi text={lines.slice(0, head).join("\n")} />
       {"\n"}
       <span className="text-muted-foreground">… +{omitted} lines</span>
       {"\n"}
-      {lines.slice(-tail).join("\n")}
+      <Ansi text={lines.slice(-tail).join("\n")} />
     </Mono>
   );
 };
@@ -150,9 +152,12 @@ export interface ToolCallView {
   readonly summary?: string;
 }
 
-/** The last non-empty line — where a command's verdict usually is. */
+/** The last non-empty line — where a command's verdict usually is.
+ *  Plain text: the summary row is truncated by character count. */
 const lastLine = (text: string): string | undefined => {
-  const lines = text.split("\n").filter((line) => line.trim().length > 0);
+  const lines = stripAnsi(text)
+    .split("\n")
+    .filter((line) => line.trim().length > 0);
   return lines.length > 0 ? lines[lines.length - 1] : undefined;
 };
 
@@ -441,7 +446,7 @@ const CODER: Renderers<typeof GeneralEngineer> = {
           {/no matches/i.test(output) ? "0" : countLines(output)}
         </span>
       ),
-    summary: output === undefined ? undefined : firstLine(output),
+    summary: output === undefined ? undefined : firstLine(stripAnsi(output)),
     body: output === undefined ? undefined : <WindowedText text={output} />,
   }),
 
@@ -721,7 +726,7 @@ export const ToolCard = ({
       {open && failed && errorText !== undefined && (
         <div className="border-t border-brick/40 bg-brick/10 px-2.5 py-1.5">
           <pre className="whitespace-pre-wrap font-mono text-[11px] text-brick">
-            {errorText}
+            <Ansi text={errorText} />
           </pre>
         </div>
       )}

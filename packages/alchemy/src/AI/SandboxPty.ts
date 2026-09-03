@@ -21,14 +21,16 @@ import { Workspace } from "../Workspace/Workspace.ts";
  */
 export interface SandboxPtyRpc {
   /**
-   * Ensure a PTY named `id` exists: spawn a login shell in the
-   * workspace root on first open; an existing PTY just adopts the
-   * caller's dimensions (reattach after a client reconnect).
+   * Ensure a PTY named `id` exists: spawn a login shell on first open
+   * — in `cwd` (workspace-relative) when given, else the workspace
+   * root; an existing PTY just adopts the caller's dimensions
+   * (reattach after a client reconnect).
    */
   readonly ptyOpen: (
     id: string,
     cols: number,
     rows: number,
+    cwd?: string,
   ) => Effect.Effect<void, string>;
   /**
    * Long-poll the PTY's output from `fromSeq`: returns immediately
@@ -129,13 +131,19 @@ const toBase64 = (bytes: Uint8Array): string => {
   return btoa(binary);
 };
 
-/** If bash is in the image use a login bash; otherwise fall back to
- *  the POSIX shell — either way the PTY holds a real interactive
- *  shell. */
+/** The user's own login shell when the host declares one (the dev
+ *  sandbox IS the developer's machine — their zsh/fish, their rc
+ *  files); else a login bash if the image has it; else the POSIX
+ *  shell. A `$SHELL` that is itself plain `sh` yields to bash. Either
+ *  way the PTY holds a real interactive shell. */
 const SHELL_COMMAND = [
   "/bin/sh",
   "-lc",
-  "command -v bash >/dev/null 2>&1 && exec bash -l; exec sh -l",
+  [
+    'case "${SHELL##*/}" in ""|sh|dash) ;; *) [ -x "$SHELL" ] && exec "$SHELL" -l ;; esac',
+    "command -v bash >/dev/null 2>&1 && exec bash -l",
+    "exec sh -l",
+  ].join("; "),
 ];
 
 /**
@@ -183,7 +191,13 @@ export const makeSandboxPty: Effect.Effect<SandboxPtyRpc, never, Workspace> =
       };
       const proc = bun!.spawn(SHELL_COMMAND, {
         cwd,
-        env: { ...process.env, TERM: "xterm-256color" },
+        env: {
+          ...process.env,
+          TERM: "xterm-256color",
+          // macOS's /bin/bash 3.2 greets every interactive start with a
+          // "default shell is now zsh" notice — moot in a sandbox
+          BASH_SILENCE_DEPRECATION_WARNING: "1",
+        },
         terminal: {
           cols,
           rows,
@@ -236,6 +250,7 @@ export const makeSandboxPty: Effect.Effect<SandboxPtyRpc, never, Workspace> =
       id: string,
       cols: number,
       rows: number,
+      cwd?: string,
     ) {
       if (unavailable !== undefined) return yield* Effect.fail(unavailable);
       const existing = ptys.get(id);
@@ -252,9 +267,13 @@ export const makeSandboxPty: Effect.Effect<SandboxPtyRpc, never, Workspace> =
         });
         return;
       }
-      const cwd = yield* workspace.root;
+      // an omitted cwd arrives as `null` over JSON RPC — same as absent
+      const dir =
+        cwd == null || cwd === "."
+          ? yield* workspace.root
+          : yield* workspace.resolveExisting(cwd);
       const spawned = yield* Effect.try({
-        try: () => spawn(id, cols, rows, cwd),
+        try: () => spawn(id, cols, rows, dir),
         catch: (cause) => `failed to spawn pty '${id}': ${String(cause)}`,
       });
       ptys.set(id, spawned);

@@ -11,10 +11,11 @@ import * as GitHub from "alchemy/GitHub";
  * alchemy.run.ts `yield*`s the same const to provision it — resources
  * are memoized by FQN, so every yield resolves the one instance.
  *
- * This is the `test-alchemy` SANDBOX: a repo we own and can reset, so
- * live iteration opens pull requests here without touching production
- * codebases. Pointing the pipeline at the real alchemy repositories is
- * a one-line change to this file once the loop has proven itself.
+ * This is the `test-alchemy` SANDBOX: a repo we own and can reset,
+ * where the loop was proven before it moved to the real repository
+ * ({@link connected}). Still provisioned by the Stack (dropping the
+ * yield would orphan — and on the next deploy delete — the repo) but
+ * no longer connected to the UI.
  */
 export const testAlchemy = GitHub.Repository("test-alchemy", {
   owner: "alchemy-run",
@@ -55,9 +56,19 @@ export const publishTargets = [alchemy, testAlchemy] as const;
  * - `sessions` — coding sessions may be created under the repo
  *   (session keys are `<owner>/<repo>/<name>`; threads within a
  *   session append `::<thread>` and share the session's sandbox).
- * - `reviews` — the ReviewBot watches the repo's pull requests
- *   (review session keys are `<owner>/<repo>#<n>`).
+ * - `reviews` — the ReviewBot reviews the repo's pull requests on the
+ *   operator's request (review session keys are `<owner>/<repo>#<n>`).
+ *
+ * This is the REAL alchemy repository: nothing an agent does here
+ * reaches GitHub without the operator — reviews, comments, merges, and
+ * pull requests are PROPOSALS the operator accepts in the UI
+ * (services/Proposals.ts); pushing a topic branch is the one direct
+ * write.
  */
 export const connected = [
-  { repository: testAlchemy, sessions: true, reviews: true },
+  { repository: alchemy, sessions: true, reviews: true },
 ] as const;
+
+/** The connected repository the review surface (board, PR pages,
+ *  proposals) serves — ONE for now. */
+export const primary = connected[0].repository;

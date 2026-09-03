@@ -33,9 +33,11 @@ import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import { ArtifactsLocal } from "../src/lib/ArtifactsLocal.ts";
+import { makeProposalExecutor } from "../src/lib/ProposalActions.ts";
 import { testAlchemy } from "../src/Repos.ts";
-import { Approvals } from "../src/services/Approvals.ts";
 import { CheckoutsSandbox } from "../src/services/CheckoutsSandbox.ts";
+import { Proposals } from "../src/services/Proposals.ts";
+import { ProposalsMemory } from "../src/services/ProposalsMemory.ts";
 import {
   Bash,
   BashLive,
@@ -365,17 +367,18 @@ test.skipIf(!LIVE_TOKEN)(
                 PublishToken,
                 Effect.succeed(Redacted.make(LIVE_TOKEN!)),
               ),
-              // openPullRequest's binding: the REAL octokit operation
-              // off ambient credentials (no PersonalAccessToken
-              // resource — the deploy-time half of the Http impl)
-              GitHub.CreatePullRequestLocal.pipe(
-                Layer.provide(GitHub.fromToken(LIVE_TOKEN!)),
-              ),
-              Layer.succeed(Approvals, {
-                ask: () => Effect.succeed("allowed-once" as const),
-                pending: () => Effect.succeed([]),
-                answer: () => Effect.succeed(false),
-              }),
+              // the proposal inbox the tool files into, and the REAL
+              // octokit operations the executor performs the accepted
+              // proposal with — off ambient credentials (no
+              // PersonalAccessToken resource — the deploy-time half of
+              // the Http impl)
+              ProposalsMemory,
+              Layer.mergeAll(
+                GitHub.CreatePullRequestLocal,
+                GitHub.CreatePullRequestReviewLocal,
+                GitHub.CreateIssueCommentLocal,
+                GitHub.MergePullRequestLocal,
+              ).pipe(Layer.provide(GitHub.fromToken(LIVE_TOKEN!))),
             ),
           ),
         );
@@ -410,9 +413,10 @@ test.skipIf(!LIVE_TOKEN)(
           const ref = yield* gh(`/git/ref/heads/${encodeURIComponent(BRANCH)}`);
           expect(ref.status).toBe(200);
 
-          // the REAL openPullRequest tool (approval gate answered)
+          // the REAL openPullRequest tool: it PROPOSES — nothing on
+          // GitHub yet
           const open = yield* OpenPullRequest;
-          const opened = (yield* (open as any)({
+          const proposed = (yield* (open as any)({
             head: BRANCH,
             base: "main",
             title: "test: sandbox worktree publish",
@@ -422,10 +426,21 @@ test.skipIf(!LIVE_TOKEN)(
               key: "worktree-publish-test",
             } as unknown as AI.Thread["Service"]),
           )) as string;
-          expect(opened).toMatch(/opened pull request #\d+/);
+          expect(proposed).toMatch(/pull request proposed as proposal-\d+/);
+          const proposals = yield* Proposals;
+          const [pending] = yield* proposals.list({ status: "pending" });
+          expect(pending?.payload.kind).toBe("pull_request");
+          expect(pending?.repo).toBe(REPO);
+          const before = yield* gh(`/pulls?head=${REPO.split("/")[0]}:${BRANCH}&state=open`);
+          expect((before.json as Array<unknown>).length).toBe(0);
+
+          // the operator's ACCEPT — the executor opens it for real
+          const execute = yield* makeProposalExecutor([testAlchemy]);
+          const url = yield* execute(pending!);
+          expect(url).toMatch(/\/pull\/\d+$/);
 
           // out-of-band: the PR is real — then close it and delete the ref
-          const number = Number(/#(\d+)/.exec(opened)![1]);
+          const number = Number(/\/pull\/(\d+)$/.exec(url)![1]);
           const pr = yield* gh(`/pulls/${number}`);
           expect(pr.status).toBe(200);
           expect((pr.json as { state?: string }).state).toBe("open");

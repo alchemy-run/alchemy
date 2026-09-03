@@ -23,7 +23,7 @@ import * as Cloudflare from "alchemy/Cloudflare";
 import * as GitHub from "alchemy/GitHub";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { testAlchemy } from "./src/Repos.ts";
+import { alchemy, testAlchemy } from "./src/Repos.ts";
 import { SandboxMicrovmRuntime } from "./src/SandboxMicrovm.ts";
 import Worker from "./src/Worker.ts";
 
@@ -40,7 +40,10 @@ export default Alchemy.Stack(
     state: Cloudflare.state(),
   },
   Effect.gen(function* () {
-    const repo = yield* testAlchemy;
+    // the sandbox repo stays provisioned (its webhook + install are
+    // real resources); the UI and the bots work the real one
+    yield* testAlchemy;
+    const repo = yield* alchemy;
     const org = yield* Worker;
 
     const site = yield* Cloudflare.Website.Vite("Website", {

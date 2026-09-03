@@ -22,6 +22,7 @@ import {
   ToolInput,
   ToolOutput,
 } from "@/components/ai-elements/tool";
+import { ProposalCard, type Proposal } from "@/components/proposals";
 import {
   PullRequestOverview,
   type MachineState,
@@ -61,6 +62,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useAnchoredToggle } from "@/lib/anchor";
 import { cn } from "@/lib/utils";
+import { Ansi } from "@/lib/ansi";
 import type { UIMessage } from "ai";
 import { useAgent, useChat } from "alchemy/AI/React";
 import {
@@ -115,13 +117,6 @@ interface Board {
   /** `owner/repo` — the repository the bot reviews. */
   repo: string;
   prs: BoardPullRequest[];
-}
-
-interface ApprovalRequest {
-  id: string;
-  session: { term: string; key: string };
-  action: string;
-  at: number;
 }
 
 /** A connected repository — STATIC code (src/Repos.ts), reflected
@@ -678,19 +673,24 @@ export const App = () => {
     }
   }, [board.prs, requested]);
 
-  // the OPERATOR's gate: pending approval requests (armed deploys
-  // only — the list stays empty when ORG_APPROVALS is unset)
-  const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
+  // PROPOSALS: what the agents want to do on GitHub, awaiting the
+  // operator (src/services/Proposals.ts) — polled as one recent list;
+  // the pending ones are the inbox overlay, a pull request's own show
+  // on its page in every state
+  const [proposals, setProposals] = useState<Proposal[]>([]);
+  const [proposalBusy, setProposalBusy] = useState<ReadonlySet<string>>(
+    new Set(),
+  );
   useEffect(() => {
     let live = true;
     const load = () =>
-      fetch("/api/approvals")
+      fetch("/api/proposals")
         .then(
           (response) =>
-            (response.ok ? response.json() : []) as Promise<ApprovalRequest[]>,
+            (response.ok ? response.json() : []) as Promise<Proposal[]>,
         )
         .then((list) => {
-          if (live) setApprovals(list);
+          if (live) setProposals(list);
         })
         .catch(() => {});
     load();
@@ -700,13 +700,36 @@ export const App = () => {
       clearInterval(timer);
     };
   }, []);
-  const answerApproval = (id: string, outcome: "allowed-once" | "rejected") => {
-    setApprovals((current) => current.filter((request) => request.id !== id));
-    void fetch(`/api/approvals/${encodeURIComponent(id)}`, {
+  const settleProposal = (
+    id: string,
+    verb: "accept" | "reject",
+    reason?: string,
+  ) => {
+    setProposalBusy((current) => new Set(current).add(id));
+    void fetch(`/api/proposals/${encodeURIComponent(id)}/${verb}`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ outcome }),
-    }).catch(() => {});
+      body: JSON.stringify(reason === undefined ? {} : { reason }),
+    })
+      .then(async (response) => {
+        const resolved = (await response.json().catch(() => undefined)) as
+          | Proposal
+          | { error: string }
+          | undefined;
+        if (resolved !== undefined && "id" in resolved) {
+          setProposals((current) =>
+            current.map((entry) => (entry.id === id ? resolved : entry)),
+          );
+        }
+      })
+      .catch(() => {})
+      .finally(() =>
+        setProposalBusy((current) => {
+          const next = new Set(current);
+          next.delete(id);
+          return next;
+        }),
+      );
   };
 
   const randomSuffix = () =>
@@ -1155,6 +1178,15 @@ export const App = () => {
         reviewThreads.some((row) => row.id === tab));
     return known ? tab : overviewId(reviewSession);
   })();
+
+  // the inbox skips proposals whose pull request page is the one on
+  // screen — that page shows them in place, with the same buttons
+  const pendingProposals = proposals.filter(
+    (proposal) =>
+      proposal.status === "pending" &&
+      (proposal.number === undefined ||
+        activeView !== `pr:${proposal.repo}#${proposal.number}`),
+  );
 
   // The layout store follows the directory: a session deleted here or
   // anywhere else takes its remembered tabs with it. Only once the
@@ -2284,6 +2316,18 @@ export const App = () => {
                           }
                     }
                     onRequestReview={() => requestReview(number)}
+                    proposals={proposals.filter(
+                      (proposal) =>
+                        proposal.number === number &&
+                        proposal.repo ===
+                          session.slice(0, session.lastIndexOf("#")),
+                    )}
+                    proposalBusy={proposalBusy}
+                    onAcceptProposal={(id) => settleProposal(id, "accept")}
+                    onRejectProposal={(id, reason) =>
+                      settleProposal(id, "reject", reason)
+                    }
+                    onOpenSession={(id) => openThread(id)}
                   />
                 </div>
               );
@@ -2317,44 +2361,27 @@ export const App = () => {
               }),
             )}
         </div>
-        {/* the operator's gate — one card per pending approval */}
-        {approvals.length > 0 && (
-          <div className="absolute bottom-4 right-4 z-20 flex w-96 flex-col gap-2">
-            {approvals.map((request) => (
-              <div
-                key={request.id}
-                className="rounded-lg border border-honey/50 bg-background p-3 shadow-lg"
-              >
-                <div className="mb-1 font-mono text-[10px] uppercase text-honey">
-                  approval requested
-                </div>
-                <button
-                  type="button"
-                  onClick={() =>
-                    openThread(`${request.session.term}:${request.session.key}`)
-                  }
-                  className="mb-2 block w-full truncate text-left font-mono text-[11px] text-muted-foreground hover:text-foreground"
-                >
-                  {request.session.key}
-                </button>
-                <div className="mb-3 text-sm">{request.action}</div>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => answerApproval(request.id, "allowed-once")}
-                    className="flex-1 rounded border border-moss/50 px-2 py-1 text-xs text-moss hover:bg-moss/10"
-                  >
-                    approve once
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => answerApproval(request.id, "rejected")}
-                    className="flex-1 rounded border border-brick/50 px-2 py-1 text-xs text-brick hover:bg-brick/10"
-                  >
-                    reject
-                  </button>
-                </div>
-              </div>
+        {/* the inbox — one card per pending proposal, anywhere in the app */}
+        {pendingProposals.length > 0 && (
+          <div
+            aria-label="proposals"
+            className="absolute bottom-4 right-4 z-20 flex max-h-[70vh] w-[26rem] flex-col gap-2 overflow-y-auto"
+          >
+            {pendingProposals.map((proposal) => (
+              <ProposalCard
+                key={proposal.id}
+                proposal={proposal}
+                Markdown={MarkdownText}
+                compact
+                busy={proposalBusy.has(proposal.id)}
+                onAccept={() => settleProposal(proposal.id, "accept")}
+                onReject={(reason) =>
+                  settleProposal(proposal.id, "reject", reason)
+                }
+                onOpenSession={() =>
+                  openThread(`${proposal.session.term}:${proposal.session.key}`)
+                }
+              />
             ))}
           </div>
         )}
@@ -3127,7 +3154,7 @@ const Chat = ({
                                   output={
                                     typeof tool.output === "string" ? (
                                       <pre className="whitespace-pre-wrap p-3 text-xs">
-                                        {tool.output}
+                                        <Ansi text={tool.output} />
                                       </pre>
                                     ) : tool.output !== undefined ? (
                                       <pre className="whitespace-pre-wrap p-3 text-xs">

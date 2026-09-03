@@ -8,6 +8,44 @@ export { expect };
  *  ("2 days ago") are computed against this, never against now. */
 export const NOW = new Date("2026-08-21T12:00:00Z");
 
+/** The agents' proposal shape, as `GET /api/proposals` reports it
+ *  (mirrors ui/components/proposals.tsx). */
+export interface Proposal {
+  id: string;
+  session: { term: string; key: string };
+  repo: string;
+  number: number | undefined;
+  summary: string;
+  payload:
+    | {
+        kind: "review";
+        number: number;
+        verdict: "approve" | "request_changes" | "comment";
+        body: string;
+        comments: Array<{
+          path: string;
+          line: number;
+          start_line?: number;
+          body: string;
+        }>;
+      }
+    | { kind: "comment"; number: number; body: string }
+    | { kind: "merge"; number: number; method: "merge" | "squash" | "rebase" }
+    | {
+        kind: "pull_request";
+        title: string;
+        body: string;
+        head: string;
+        base: string;
+      };
+  at: number;
+  status: "pending" | "accepted" | "rejected" | "failed";
+  resolvedAt: number | undefined;
+  result: string | undefined;
+  error: string | undefined;
+  reason: string | undefined;
+}
+
 export const REPO = "alchemy-run/test-alchemy";
 
 type PullRequestView = typeof pr148;
@@ -58,6 +96,13 @@ export class FakeApi {
   deleted: string[] = [];
   /** Every `POST /api/prs/:n/review`, in order. */
   reviewsRequested: number[] = [];
+  /** The agents' PROPOSALS (src/services/Proposals.ts) — seed pending
+   *  ones to exercise the inbox; `accept`/`reject` resolve them here
+   *  exactly as the Worker would (an accept "lands" at a fake URL). */
+  proposals: Proposal[] = [];
+  /** Every `POST /api/proposals/:id/{accept,reject}`, in order. */
+  resolved: Array<{ id: string; verb: "accept" | "reject"; reason?: string }> =
+    [];
 
   seedChat(id: string, status: ChatRow["status"] = "idle"): ChatRow {
     const at = id.indexOf(":");
@@ -74,6 +119,30 @@ export class FakeApi {
     return row;
   }
 
+  /** A pending proposal from the bot's review session on PR `number`. */
+  seedProposal(
+    number: number,
+    payload: Proposal["payload"],
+    summary: string,
+  ): Proposal {
+    const row: Proposal = {
+      id: `proposal-${this.proposals.length + 1}`,
+      session: { term: "ReviewBot", key: `${REPO}#${number}` },
+      repo: REPO,
+      number: payload.kind === "pull_request" ? undefined : payload.number,
+      summary,
+      payload,
+      at: NOW.getTime() - 30_000,
+      status: "pending",
+      resolvedAt: undefined,
+      result: undefined,
+      error: undefined,
+      reason: undefined,
+    };
+    this.proposals = [row, ...this.proposals];
+    return row;
+  }
+
   async install(page: Page): Promise<void> {
     await page.route("**/api/**", (route) => this.handle(route));
     // nothing in the `ui` project leaves the machine: avatars, the
@@ -81,8 +150,9 @@ export class FakeApi {
     await page.route(/^https?:\/\/(?!localhost|127\.0\.0\.1)/, (route) =>
       route.abort(),
     );
-    // the chat socket: accept and stay silent (no agent behind it)
-    await page.routeWebSocket(/\/attach\//, () => {});
+    // the chat socket: replays the seeded transcript on `subscribe`,
+    // then goes quiet (no agent behind it)
+    await page.routeWebSocket(/\/attach\//, (ws) => this.attachChat(ws));
     // the terminal socket: a scripted "machine" — see `FakeTerminal`
     await page.routeWebSocket(/\/terminal\//, (ws) =>
       this.terminal.attach(ws.url(), ws),
@@ -90,6 +160,79 @@ export class FakeApi {
   }
 
   readonly terminal = new FakeTerminal();
+
+  /** Durable observations per chat id, in seq order — what the socket
+   *  replays when the transcript view subscribes. */
+  transcripts: Record<string, unknown[]> = {};
+
+  private attachChat(ws: WebSocketRoute) {
+    const path = decodeURIComponent(new URL(ws.url()).pathname);
+    // /attach/<term>/<key…>
+    const [, , term, ...rest] = path.split("/");
+    const id = `${term}:${rest.join("/")}`;
+    ws.onMessage((raw) => {
+      const frame = JSON.parse(String(raw)) as { type: string };
+      if (frame.type !== "subscribe") return;
+      const rows = this.transcripts[id] ?? [];
+      for (const observation of rows) {
+        ws.send(JSON.stringify({ type: "observation", durable: true, observation }));
+      }
+      ws.send(JSON.stringify({ type: "live", seq: rows.length }));
+    });
+  }
+
+  /**
+   * One finished turn in chat `id`: the user asks, the agent runs
+   * `command` through `bash`, and answers `reply`. `stdout` may carry
+   * ANSI escapes — the point of seeding it.
+   */
+  seedBash(
+    id: string,
+    turn: {
+      ask: string;
+      command: string;
+      exit?: number;
+      stdout: string;
+      stderr?: string;
+      reply: string;
+    },
+  ): void {
+    this.seedChat(id);
+    const at = id.indexOf(":");
+    const envelope = (seq: number) => ({
+      term: id.slice(0, at),
+      key: id.slice(at + 1),
+      seq,
+      at: NOW.getTime() - 60_000 + seq * 1000,
+    });
+    const callId = `call-${(this.transcripts[id]?.length ?? 0) + 1}`;
+    const output =
+      `exit: ${turn.exit ?? 0}\n--- stdout ---\n${turn.stdout || "(no output)"}` +
+      `\n--- stderr ---\n${turn.stderr || "(no output)"}`;
+    const rows = this.transcripts[id] ?? [];
+    const seq = rows.length;
+    this.transcripts[id] = [
+      ...rows,
+      { ...envelope(seq), type: "input", text: turn.ask },
+      {
+        ...envelope(seq + 1),
+        type: "assistant",
+        tick: 0,
+        ms: 800,
+        text: "",
+        toolCalls: [{ id: callId, name: "bash", input: { command: turn.command } }],
+      },
+      {
+        ...envelope(seq + 2),
+        type: "tool-result",
+        toolCallId: callId,
+        toolName: "bash",
+        output,
+        isFailure: false,
+      },
+      { ...envelope(seq + 3), type: "assistant", tick: 1, ms: 600, text: turn.reply, toolCalls: [] },
+    ];
+  }
 
   private json(route: Route, body: unknown, status = 200) {
     return route.fulfill({
@@ -113,7 +256,42 @@ export class FakeApi {
       return route.abort();
     }
     if (path === "/api/board") return this.json(route, this.board);
-    if (path === "/api/approvals") return this.json(route, []);
+    if (path === "/api/proposals") {
+      const status = url.searchParams.get("status");
+      const number = url.searchParams.get("number");
+      return this.json(
+        route,
+        this.proposals.filter(
+          (row) =>
+            (status === null || row.status === status) &&
+            (number === null || row.number === Number(number)),
+        ),
+      );
+    }
+    const proposal = path.match(/^\/api\/proposals\/([^/]+)\/(accept|reject)$/);
+    if (proposal !== null && method === "POST") {
+      const id = decodeURIComponent(proposal[1]!);
+      const verb = proposal[2] as "accept" | "reject";
+      const body = (request.postDataJSON() ?? {}) as { reason?: string };
+      const row = this.proposals.find((entry) => entry.id === id);
+      if (row === undefined) {
+        return this.json(route, { error: "unknown proposal" }, 404);
+      }
+      this.resolved.push({ id, verb, ...(body.reason ? { reason: body.reason } : {}) });
+      const next: Proposal =
+        verb === "accept"
+          ? {
+              ...row,
+              status: "accepted",
+              resolvedAt: NOW.getTime(),
+              result: `https://github.com/${row.repo}/pull/${row.number ?? 149}`,
+            }
+          : { ...row, status: "rejected", resolvedAt: NOW.getTime(), reason: body.reason };
+      this.proposals = this.proposals.map((entry) =>
+        entry.id === id ? next : entry,
+      );
+      return this.json(route, next);
+    }
 
     if (path === "/api/chats" && method === "GET") {
       return this.json(route, this.chats);

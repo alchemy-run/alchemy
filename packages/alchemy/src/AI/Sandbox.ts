@@ -60,11 +60,16 @@ export interface SandboxEntry {
  * the shell.
  */
 export interface SandboxPty {
-  /** Ensure PTY `id` exists (spawn a login shell on first open). */
+  /**
+   * Ensure PTY `id` exists (spawn a login shell on first open). `cwd`
+   * is where that shell starts, sandbox-relative (default: the
+   * sandbox root); an existing PTY keeps its own.
+   */
   readonly open: (
     id: string,
     cols: number,
     rows: number,
+    cwd?: string,
   ) => Effect.Effect<void, string>;
   /** Retained tail (repaint), then live output until the shell exits. */
   readonly stream: (id: string) => Stream.Stream<Uint8Array, string>;

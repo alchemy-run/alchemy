@@ -1,7 +1,9 @@
 import * as AI from "alchemy/AI";
+import * as Cloudflare from "alchemy/Cloudflare";
 import * as Git from "alchemy/Git";
 import * as GitHub from "alchemy/GitHub";
 import { RuntimeContext } from "alchemy/RuntimeContext";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -10,16 +12,22 @@ import * as Stream from "effect/Stream";
 import * as HttpRouter from "effect/unstable/http/HttpRouter";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { Engineer } from "./Engineer.ts";
 import { buildBoard } from "./lib/Board.ts";
+import { makeProposalExecutor } from "./lib/ProposalActions.ts";
 import {
   buildPullRequestView,
   pullRequestRef,
   pullSessionKey,
   type PullRequestView,
 } from "./lib/PullRequest.ts";
-import { connected, testAlchemy } from "./Repos.ts";
+import { connected, primary, publishTargets } from "./Repos.ts";
 import { ReviewBot } from "./ReviewBot.ts";
-import { Approvals } from "./services/Approvals.ts";
+import {
+  type Proposal,
+  Proposals,
+  type ProposalStatus,
+} from "./services/Proposals.ts";
 
 /** `${term}:${key}` → the session it names (the key may contain `:`). */
 const parseSessionId = (id: string): { term: string; key: string } => {
@@ -47,6 +55,33 @@ const phantomThread = (key: string): AI.ThreadService => ({
 });
 
 /**
+ * Run `work` to completion even if THIS request is abandoned — the
+ * browser navigated away, the tab reloaded — and hand the result to
+ * the response when it is still wanted.
+ *
+ * Without this, workerd tears the request's I/O down with the client:
+ * the fiber's in-flight call to the machine never settles, and every
+ * lock or memo it held (the checkout layer's one-mutator-at-a-time
+ * gate, the sandbox's per-session converge) is held FOREVER — the next
+ * checkout on this isolate hangs until it is recycled. `waitUntil`
+ * keeps the invocation alive for the work; the request merely awaits.
+ */
+const detached = <A, E, R>(
+  exec: Cloudflare.WorkerExecutionContext["Service"],
+  work: Effect.Effect<A, E, R>,
+): Effect.Effect<A, E, R | RuntimeContext> =>
+  Effect.gen(function* () {
+    const gate = yield* Deferred.make<A, E>();
+    yield* exec.waitUntil(
+      work.pipe(
+        Effect.exit,
+        Effect.flatMap((exit) => Deferred.done(gate, exit)),
+      ),
+    );
+    return yield* Deferred.await(gate);
+  });
+
+/**
  * The org's HTTP surface. The chat list comes from the
  * {@link AI.Sessions} (the driver's outside window); each
  * transcript is the session's durable log (`Sessions.history`, read
@@ -65,17 +100,22 @@ export const routes = Effect.gen(function* () {
   // door converges a PR machine's tree from the Worker level (the same
   // `SandboxSession` composition the charters use provides it).
   const checkouts = yield* Effect.serviceOption(Git.Checkouts);
+  const exec = yield* Cloudflare.WorkerExecutionContext;
   // OPTIONAL: the review pipeline may be dropped from the stack (it is
   // right now — see Worker.ts) — the request-review door answers 503
   // instead of failing the whole router build.
   const bot = yield* Effect.serviceOption(ReviewBot);
-  const approvals = yield* Approvals;
-  const listPullRequests = yield* GitHub.ListPullRequests(testAlchemy);
-  const getPullRequest = yield* GitHub.GetPullRequest(testAlchemy);
-  const listIssueComments = yield* GitHub.ListIssueComments(testAlchemy);
-  const listReviews = yield* GitHub.ListPullRequestReviews(testAlchemy);
+  const engineer = yield* Effect.serviceOption(Engineer);
+  const proposals = yield* Proposals;
+  // the executor performs ACCEPTED proposals — the one place agent
+  // intent becomes a GitHub write, and it runs on the operator's click
+  const execute = yield* makeProposalExecutor(publishTargets);
+  const listPullRequests = yield* GitHub.ListPullRequests(primary);
+  const getPullRequest = yield* GitHub.GetPullRequest(primary);
+  const listIssueComments = yield* GitHub.ListIssueComments(primary);
+  const listReviews = yield* GitHub.ListPullRequestReviews(primary);
   const listReviewComments =
-    yield* GitHub.ListPullRequestReviewComments(testAlchemy);
+    yield* GitHub.ListPullRequestReviewComments(primary);
 
   // the CONNECTED repositories — static code (Repos.ts), reflected
   // read-only; identities resolve without provisioning
@@ -97,7 +137,7 @@ export const routes = Effect.gen(function* () {
   };
   const encoder = new TextEncoder();
 
-  const identity = yield* GitHub.resolveRepository(testAlchemy);
+  const identity = yield* GitHub.resolveRepository(primary);
   const repoName = `${identity.owner}/${identity.repository}`;
 
   // GitHub's PR list rides ONE isolate-wide TTL cache: the board SSE
@@ -538,69 +578,169 @@ export const routes = Effect.gen(function* () {
         return yield* HttpServerResponse.json(pull, { status: 404 });
       }
       const key = pullSessionKey(repoName, number);
-      const result = yield* checkouts.value
-        .checkout({
+      const result = yield* detached(
+        exec,
+        checkouts.value.checkout({
           key,
-          remote: GitHub.remote(testAlchemy),
+          remote: GitHub.remote(primary),
           ref: pullRequestRef(pull),
           fresh: true,
-        })
-        .pipe(
-          // the phantom thread with the SESSION key lands the checkout
-          // on the PR's machine (the sandbox layer reads only `key`)
-          Effect.provideService(AI.Thread, phantomThread(key)),
-          Effect.map((checkout) => ({
-            key,
-            branch: checkout.branch,
-            root: checkout.root,
-            ref: pullRequestRef(pull),
-            headSha: pull.head.sha,
-          })),
-          // git failures are the operator's to read — a failed
-          // checkout, not a 500
-          Effect.catch((error) =>
-            Effect.succeed({ key, error: error.message }),
-          ),
-        );
+        }),
+      ).pipe(
+        // the phantom thread with the SESSION key lands the checkout
+        // on the PR's machine (the sandbox layer reads only `key`)
+        Effect.provideService(AI.Thread, phantomThread(key)),
+        Effect.map((checkout) => ({
+          key,
+          branch: checkout.branch,
+          root: checkout.root,
+          ref: pullRequestRef(pull),
+          headSha: pull.head.sha,
+        })),
+        // git failures are the operator's to read — a failed
+        // checkout, not a 500
+        Effect.catch((error) => Effect.succeed({ key, error: error.message })),
+      );
       return yield* HttpServerResponse.json(result, {
         status: "error" in result ? 502 : 200,
       });
     }),
   );
 
-  /** The operator's gate: pending approval requests + the answer door. */
-  const approvalsPending = HttpRouter.add(
+  /**
+   * PROPOSALS — what the agents want to do on GitHub, awaiting the
+   * operator (services/Proposals.ts). `?status=pending` is the UI's
+   * inbox; `?number=N` the pull-request page's own list (every state,
+   * newest first, so what landed stays visible beside what waits).
+   */
+  const listProposals = HttpRouter.add(
     "GET",
-    "/api/approvals",
+    "/api/proposals",
     Effect.gen(function* () {
-      return yield* HttpServerResponse.json(yield* approvals.pending());
+      const request = yield* HttpServerRequest;
+      const url = new URL(request.url, "http://worker");
+      const status = url.searchParams.get("status");
+      const number = url.searchParams.get("number");
+      const list = yield* proposals.list({
+        ...(status === "pending" ||
+        status === "accepted" ||
+        status === "rejected" ||
+        status === "failed"
+          ? { status: status as ProposalStatus }
+          : {}),
+        ...(number !== null && Number.isFinite(Number(number))
+          ? { number: Number(number) }
+          : {}),
+      });
+      return yield* HttpServerResponse.json(list);
     }),
   );
 
-  const approvalsAnswer = HttpRouter.add(
+  /** Tell the proposing session what became of its proposal — the
+   *  agent learns outcomes as MESSAGES in its own thread. A decline
+   *  wakes it (it may revise); an acceptance is filed without waking
+   *  (nothing to do — read on its next turn). */
+  const inform = (
+    proposal: Proposal,
+    text: string,
+    options: { readonly wake: boolean },
+  ) => {
+    const agent =
+      proposal.session.term === "ReviewBot"
+        ? bot
+        : proposal.session.term === "Engineer"
+          ? engineer
+          : Option.none();
+    return Option.isNone(agent)
+      ? Effect.void
+      : agent.value
+          .send(text, { key: proposal.session.key, wake: options.wake })
+          .pipe(Effect.ignore);
+  };
+
+  const acceptProposal = HttpRouter.add(
     "POST",
-    "/api/approvals/:id",
+    "/api/proposals/:id/accept",
+    Effect.gen(function* () {
+      const params = yield* HttpRouter.params;
+      const id = String(params.id ?? "");
+      const proposal = yield* proposals.get(id);
+      if (proposal === undefined) {
+        return yield* HttpServerResponse.json(
+          { error: "unknown proposal" },
+          { status: 404 },
+        );
+      }
+      if (proposal.status !== "pending") {
+        // resolved elsewhere already — the world outranks the click
+        return yield* HttpServerResponse.json(proposal, { status: 409 });
+      }
+      const outcome = yield* execute(proposal).pipe(Effect.result);
+      if (outcome._tag === "Success") {
+        yield* proposals.resolve(id, {
+          status: "accepted",
+          result: outcome.success,
+        });
+        yield* inform(
+          proposal,
+          `<note>The operator accepted your proposal (${proposal.summary}); it is now on GitHub: ${outcome.success}</note>`,
+          { wake: false },
+        );
+      } else {
+        yield* proposals.resolve(id, {
+          status: "failed",
+          error: outcome.failure,
+        });
+        yield* inform(
+          proposal,
+          `The operator accepted your proposal (${proposal.summary}), but GitHub refused it: ${outcome.failure}. Fix what it names and propose again.`,
+          { wake: true },
+        );
+      }
+      return yield* HttpServerResponse.json(yield* proposals.get(id), {
+        status: outcome._tag === "Success" ? 200 : 502,
+      });
+    }),
+  );
+
+  const rejectProposal = HttpRouter.add(
+    "POST",
+    "/api/proposals/:id/reject",
     Effect.gen(function* () {
       const request = yield* HttpServerRequest;
       const params = yield* HttpRouter.params;
       const id = String(params.id ?? "");
       const body = (yield* request.json.pipe(
         Effect.catch(() => Effect.succeed({})),
-      )) as { outcome?: string };
-      const outcome =
-        body.outcome === "allowed-once" || body.outcome === "rejected"
-          ? body.outcome
+      )) as { reason?: string };
+      const reason =
+        typeof body.reason === "string" && body.reason.trim().length > 0
+          ? body.reason.trim()
           : undefined;
-      if (outcome === undefined) {
+      const proposal = yield* proposals.get(id);
+      if (proposal === undefined) {
         return yield* HttpServerResponse.json(
-          { error: "outcome must be 'allowed-once' or 'rejected'" },
-          { status: 400 },
+          { error: "unknown proposal" },
+          { status: 404 },
         );
       }
-      const answered = yield* approvals.answer(id, outcome);
-      // an unknown id is fine: answered elsewhere or expired — the
-      // world outranks the click
-      return yield* HttpServerResponse.json({ answered });
+      const changed = yield* proposals.resolve(id, {
+        status: "rejected",
+        ...(reason !== undefined ? { reason } : {}),
+      });
+      if (changed) {
+        yield* inform(
+          proposal,
+          `The operator declined your proposal (${proposal.summary}).` +
+            (reason === undefined
+              ? " No reason was given — ask if you need one, or move on."
+              : ` Their reason: ${reason}`),
+          { wake: true },
+        );
+      }
+      return yield* HttpServerResponse.json(yield* proposals.get(id), {
+        status: changed ? 200 : 409,
+      });
     }),
   );
 
@@ -639,8 +779,9 @@ export const routes = Effect.gen(function* () {
     requestReview,
     pullRequest,
     pullRequestCheckout,
-    approvalsPending,
-    approvalsAnswer,
+    listProposals,
+    acceptProposal,
+    rejectProposal,
     status,
   );
 });

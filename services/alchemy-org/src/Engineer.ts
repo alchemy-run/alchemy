@@ -1,9 +1,6 @@
 import * as AI from "alchemy/AI";
-import * as Git from "alchemy/Git";
-import * as GitHub from "alchemy/GitHub";
 import * as Effect from "effect/Effect";
-import { parsePullKey, pullRequestRef } from "./lib/PullRequest.ts";
-import { connected } from "./Repos.ts";
+import { SessionRepo } from "./services/SessionRepo.ts";
 import {
   Bash,
   EditFile,
@@ -37,85 +34,31 @@ import {
  */
 export class Engineer extends AI.Agent<Engineer>()("Engineer") {}
 
-/** Thread keys are `<session>` or `<session>::<thread>` — the session
- *  part names the machine (and thus the one worktree on it). */
-const sessionOf = (key: string): string => {
-  const at = key.indexOf("::");
-  return at < 0 ? key : key.slice(0, at);
-};
-
 export const GeneralEngineer = Engineer.make(
   Effect.gen(function* () {
     // ── INIT: once per chat ──────────────────────────────────────────
     const thread = yield* AI.Thread;
-    const checkouts = yield* Git.Checkouts;
+    const repo = yield* SessionRepo;
 
     // Session keys are `<owner>/<repo>/<name>` — the prefix picks the
-    // session's repository from the STATIC connected list (Repos.ts).
-    // The checkout claims the machine's one tree under the SESSION key,
-    // so every thread of the session (sharing the machine) adopts the
-    // same worktree; for the alchemy repo the image's bake IS the tree
-    // (adopted in place — warm installs, zero clone). Legacy keys
-    // (`main`, `t-…`) skip the claim and work the baked tree directly.
-    //
-    // A PULL REQUEST session is keyed `<owner>/<repo>#<n>` (the same
-    // machine the PR's review session and terminals share): its tree is
-    // the PR's head — the head BRANCH when it lives in this repository
-    // (so pushes land in the PR), `pull/N/head` for a fork. The BASE
-    // thread (the PR's "main") re-fetches it on INIT (`fresh`) so a
-    // session resumed days later starts from the PR as it is now; a
-    // `::<thread>` sibling joins the tree as it stands — a re-fetch
-    // there would `reset --hard` whatever the base thread has in flight.
-    const session = sessionOf(thread.key);
-    const pullKey = parsePullKey(session);
-    let workspace = "the alchemy repository";
-    let pull:
-      | {
-          number: number;
-          title: string;
-          author: string;
-          head: string;
-          base: string;
-          ref: string;
-        }
-      | undefined;
-    for (const entry of connected) {
-      if (!entry.sessions) continue;
-      const identity = yield* GitHub.resolveRepository(entry.repository);
-      const full = `${identity.owner}/${identity.repository}`;
-      if (pullKey !== undefined && pullKey.repo === full) {
-        const getPullRequest = yield* GitHub.GetPullRequest(entry.repository);
-        const found = yield* getPullRequest({
-          pull_number: pullKey.number,
-        }).pipe(Effect.orDie);
-        const ref = pullRequestRef(found);
-        yield* checkouts
-          .checkout({
-            key: session,
-            remote: GitHub.remote(entry.repository),
-            ref,
-            fresh: thread.key === session,
-          })
-          .pipe(Effect.orDie);
-        workspace = full;
-        pull = {
-          number: found.number,
-          title: found.title,
-          author: found.user?.login ?? "unknown",
-          head: found.head.ref,
-          base: found.base.ref,
-          ref,
-        };
-        break;
-      }
-      if (session.startsWith(`${full}/`)) {
-        yield* checkouts
-          .checkout({ key: session, remote: GitHub.remote(entry.repository) })
-          .pipe(Effect.orDie);
-        workspace = full;
-        break;
-      }
-    }
+    // session's repository from the STATIC connected list (Repos.ts);
+    // a PULL REQUEST session is keyed `<owner>/<repo>#<n>` and works in
+    // the PR's head (services/SessionRepo.ts). INIT only READS which
+    // tree that is, for the stance's prose — it touches no machine.
+    // The tree itself lands the first time a tool reaches for it
+    // (services/SandboxCheckout.ts): a reply that needs no tool needs
+    // no machine, and the wait shows on the tool that does. A GitHub
+    // hiccup here costs the PR prose, never the session.
+    const tree = yield* repo.resolve(thread.key).pipe(
+      Effect.catch((reason) =>
+        Effect.as(
+          Effect.logWarning(`Engineer INIT: tree unresolved — ${reason}`),
+          undefined,
+        ),
+      ),
+    );
+    const workspace = tree?.repo ?? "the alchemy repository";
+    const pull = tree?.pull;
 
     // the PR clause of the stance — a nested fragment so its PushBranch
     // mention counts (mention-is-presence rides splices, not strings)
@@ -163,9 +106,11 @@ export const GeneralEngineer = Engineer.make(
       Publish when the operator asks: commit your work (bash: git
       add / git commit with a conventional-commit message), push it
       with ${PushBranch} (a topic branch, never a protected one),
-      then open the pull request with ${OpenPullRequest}. Publishing
-      stops at the pull request — merging is the operator's act, on
-      GitHub.
+      then PROPOSE the pull request with ${OpenPullRequest}. Nothing
+      you propose reaches GitHub on its own: the operator accepts or
+      declines each proposal in the UI, and you learn the outcome
+      here. Publishing stops at the proposal — merging is the
+      operator's act.
 
       This chat (${thread.key}) is long-lived: the operator returns
       to it across days. When a task completes, say so plainly and

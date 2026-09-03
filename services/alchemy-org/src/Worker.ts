@@ -13,10 +13,11 @@ import { ArtifactsSandbox } from "./lib/ArtifactsSandbox.ts";
 import { ReviewBotEvents, ReviewBotLive } from "./ReviewBot.ts";
 import { routes } from "./Routes.ts";
 import { SandboxSession } from "./SandboxSession.ts";
-import { ApprovalsD1 } from "./services/ApprovalsD1.ts";
 import { DriverCloudflare } from "./services/DriverCloudflare.ts";
 import { GitHubWorker } from "./services/GitHubWorker.ts";
 import { LedgerD1 } from "./services/LedgerD1.ts";
+import { ProposalsD1 } from "./services/ProposalsD1.ts";
+import { SessionRepoLive } from "./services/SessionRepo.ts";
 import { QualityAssuranceGeneral } from "./skills/QualityAssurance.ts";
 import {
   OpenPullRequestLive,
@@ -64,6 +65,9 @@ const EngineerWorker = GeneralEngineer.pipe(
   Layer.provide(Spill),
   Layer.provide(Checkouts),
   Layer.provide(SandboxSession),
+  // which tree the session works in — for the stance's prose only; the
+  // checkout itself happens on first tool touch (SandboxCheckout)
+  Layer.provide(SessionRepoLive),
 );
 
 /** The review charter: tools + checkout live INSIDE the session's
@@ -92,10 +96,13 @@ const CheckoutsRouter = Layer.succeed(Git.Checkouts, {
 
 /** The review pipeline: webhook router + charter.
  *
- * DISABLED for now — not merged into {@link Org} below, so the webhook
- * resource, the PR polling, and the ReviewBot sessions all drop out of
- * the stack. Kept exported (and compiling) so re-enabling is one edit:
- * add it back to the `Org` mergeAll. */
+ * The ROUTER half is DISABLED — not merged into {@link Org} below, so
+ * no webhook is provisioned on the real repository and no PR polling
+ * runs; reviews happen on the operator's request (the charter alone,
+ * {@link ReviewBotWorkerLive}, IS in `Org` — `POST /api/prs/:n/review`
+ * admits the session). Kept exported (and compiling) so switching to
+ * event-driven reviews is one edit: put this in the `Org` mergeAll
+ * instead of the bare charter. */
 export const ReviewBotWorker = ReviewBotEvents.pipe(
   // provideMERGE: the HTTP edge addresses the bot too (click-to-review)
   Layer.provideMerge(ReviewBotWorkerLive),
@@ -110,11 +117,16 @@ export const ReviewBotWorker = ReviewBotEvents.pipe(
  *  so the ROUTES see `AI.Sandbox` too (the terminal door) — the same
  *  layer reference the charters consume, deduped by the build MemoMap,
  *  so the terminal lands on the same machine registry the tools use.
- *  (ReviewBotWorker deliberately absent — reviews are disabled.) */
-const Org = Layer.mergeAll(EngineerWorker, SandboxSession).pipe(
+ *  The review CHARTER is in (click-to-review); its webhook router is
+ *  not (see {@link ReviewBotWorker}). */
+const Org = Layer.mergeAll(
+  EngineerWorker,
+  ReviewBotWorkerLive,
+  SandboxSession,
+).pipe(
   Layer.provideMerge(DriverCloudflare),
   Layer.provideMerge(GitHubWorker),
-  Layer.provideMerge(ApprovalsD1),
+  Layer.provideMerge(ProposalsD1),
   Layer.provide(Cloudflare.D1.QueryDatabaseBinding),
   Layer.orDie,
 );
@@ -129,7 +141,8 @@ const Org = Layer.mergeAll(EngineerWorker, SandboxSession).pipe(
  *                Worker secret) + a REAL repository webhook (push
  *                delivery — the polling latency disappears)
  * - dedupe     → the Ledger on D1
- * - approvals  → D1 rows (the operator answers from any instance)
+ * - proposals  → D1 rows (the operator accepts from any instance;
+ *                the executor in Routes performs the GitHub write)
  * - the tools  → each session's OWN container (`SandboxContainerSession`),
  *                started on first use, recycled after idle
  * - checkouts  → git INSIDE that container (`CheckoutsSandbox`)

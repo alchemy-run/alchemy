@@ -101,8 +101,12 @@ export const sandboxOverRpc = (
     listFiles: (path) => withStub((stub) => stub.listFiles(path)),
     exists: (path) => withStub((stub) => stub.exists(path)),
     pty: {
-      open: (id, cols, rows) =>
-        withPty(id, (stub, id) => stub.ptyOpen(id, cols, rows)),
+      open: (id, cols, rows, cwd) =>
+        withPty(id, (stub, id) =>
+          cwd === undefined
+            ? stub.ptyOpen(id, cols, rows)
+            : stub.ptyOpen(id, cols, rows, cwd),
+        ),
       stream: (id) =>
         Stream.unfold(0, (cursor: number) =>
           withPty(id, (stub, id) =>

@@ -6,9 +6,10 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Ref from "effect/Ref";
 import * as S from "effect/Schema";
-import { testAlchemy } from "./Repos.ts";
-import { Approvals } from "./services/Approvals.ts";
+import { SIGNATURE } from "./lib/ProposalActions.ts";
+import { primary } from "./Repos.ts";
 import { Ledger } from "./services/Ledger.ts";
+import { Proposals } from "./services/Proposals.ts";
 import { QualityAssurance } from "./skills/QualityAssurance.ts";
 import { ReadDiff, ReadIssue } from "./tools/index.ts";
 import { message, path } from "./Vocabulary.ts";
@@ -34,13 +35,6 @@ import { message, path } from "./Vocabulary.ts";
  */
 export class ReviewBot extends AI.Agent<ReviewBot>()("ReviewBot") {}
 
-/**
- * Every comment the bot posts carries this invisible marker, and the
- * router skips comment events that contain it — the bot never wakes
- * on its own words. Deterministic; no identity lookup.
- */
-const SIGNATURE = "<!-- review-bot -->";
-
 /** `owner/repo#N` → N — the session's key names its pull request. */
 const prNumber = (key: string): number => Number(key.match(/#(\d+)$/)?.[1]);
 
@@ -63,6 +57,13 @@ const verdict = AI.Parameter(
 )`
 "approve" when the diff satisfies its rubric; "request_changes" when
 the pending inline comments list what a fix round must address.`;
+
+const mergeMethod = AI.Parameter(
+  "mergeMethod",
+  S.Literals(["squash", "merge", "rebase"]),
+)`
+How the pull request lands on its base: "squash" (the default here —
+one commit per pull request), "merge" (a merge commit), or "rebase".`;
 
 /* ── the tools' DECLARED failures (error mention-is-presence) ────── */
 
@@ -109,7 +110,7 @@ export const ReviewBotEvents = Layer.effectDiscard(
     const checkouts = yield* Git.Checkouts;
 
     yield* GitHub.consumeRepositoryEvents(
-      testAlchemy,
+      primary,
       {
         events: [
           GitHub.IssueCommented,
@@ -160,28 +161,30 @@ export const ReviewBotLive = ReviewBot.make(
   Effect.gen(function* () {
     // ── INIT: once per pull request ─────────────────────────────────
     const checkouts = yield* Git.Checkouts;
-    const createComment = yield* GitHub.CreateIssueComment(testAlchemy);
-    const createReview = yield* GitHub.CreatePullRequestReview(testAlchemy);
-    const approvals = yield* Approvals;
+    const proposals = yield* Proposals;
     const thread = yield* AI.Thread;
     const number = prNumber(thread.key);
+    const identity = yield* GitHub.resolveRepository(primary);
+    const repo = `${identity.owner}/${identity.repository}`;
+    const session = { term: "ReviewBot", key: thread.key };
 
     // the review under construction: inline comments buffer here until
-    // submit_review posts them atomically with the verdict
+    // submit_review files them atomically with the verdict
     const pending = yield* Ref.make<ReadonlyArray<PendingComment>>([]);
 
     // The PR's ACTUAL code, not just its diff: `pull/N/head` is where
-    // GitHub serves every PR's tip (fork PRs included). `fresh: true`
-    // so a re-activated session reviews the head as it is now.
+    // GitHub serves every PR's tip (fork PRs included). NOT run at INIT
+    // — the machine's tree converges the first time a tool touches it
+    // (services/SandboxCheckout.ts, keyed by this session); this is the
+    // explicit RE-FETCH for when the author pushed.
     const checkout = checkouts
       .checkout({
         key: thread.key,
-        remote: GitHub.remote(testAlchemy),
+        remote: GitHub.remote(primary),
         ref: `pull/${number}/head`,
         fresh: true,
       })
       .pipe(Effect.mapError((error) => error.message));
-    yield* checkout.pipe(Effect.orDie);
 
     const sync = yield* AI.Tool("sync_checkout")`
       Re-fetch the pull request's head into your checkout — call it
@@ -234,96 +237,96 @@ export const ReviewBotLive = ReviewBot.make(
 
     const submitReview = yield* AI.Tool("submit_review")`
       Submit the review: your ${verdict} and ${message} — the overview
-      the author reads first — posted atomically with every buffered
-      add_comment. THIS is your verdict's one voice; a round that ends
-      without it is an unfinished review. Fails with ${ReviewRejected}
-      when GitHub refuses the review (bad anchors) — the buffer is
-      discarded; re-add corrected comments and submit again.`(
+      the author reads first — filed atomically with every buffered
+      add_comment as ONE PROPOSAL for the operator. THIS is your
+      verdict's one voice; a round that ends without it is an
+      unfinished review. Nothing reaches GitHub until the operator
+      accepts the proposal in the UI; if they decline, you are told
+      why and can revise. Fails with ${ReviewRejected} when the
+      proposal is malformed — the buffer survives for a corrected
+      resubmit.`(
       Effect.fn(function* (p: { verdict: string; message: string }) {
-        // the OPERATOR's gate (services/Approvals.ts): pass-through
-        // unless armed (`ORG_APPROVALS=ask`); armed, only an explicit
-        // allowed-once posts — fail closed, the buffer survives for a
-        // corrected resubmit
-        const outcome = yield* approvals.ask({
-          session: { term: "ReviewBot", key: thread.key },
-          action: `submit_review ${p.verdict.toUpperCase()} on #${number}`,
-        });
-        if (outcome !== "allowed-once") {
+        if (p.verdict !== "approve" && p.verdict !== "request_changes") {
           return yield* Effect.fail(
             new ReviewRejected({
-              message:
-                `the operator ${outcome === "rejected" ? "rejected" : "did not approve"} ` +
-                `this review — it was NOT posted. Your buffered comments are ` +
-                `intact; adjust per any operator feedback and submit again.`,
+              message: `verdict must be "approve" or "request_changes", got ${JSON.stringify(p.verdict)}`,
             }),
           );
         }
         const comments = yield* Ref.getAndSet(pending, []);
-        const banner =
-          p.verdict === "approve" ? "**APPROVE**" : "**REQUEST CHANGES**";
-        const review = yield* createReview({
-          pull_number: number,
-          event: p.verdict === "approve" ? "APPROVE" : "REQUEST_CHANGES",
-          body: `${p.message}\n\n${SIGNATURE}`,
-          comments: [...comments],
-        }).pipe(
-          // GitHub forbids verdict reviews on the author's own pull
-          // request; the sandbox often IS author-owned. Downgrade to a
-          // COMMENT-event review with the verdict as a banner — inline
-          // comments land either way.
-          Effect.catchIf(
-            (error) => error.message.includes("own pull request"),
-            () =>
-              createReview({
-                pull_number: number,
-                event: "COMMENT",
-                body: `${banner}\n\n${p.message}\n\n${SIGNATURE}`,
-                comments: [...comments],
-              }),
-          ),
-          Effect.mapError(
-            (error) =>
-              new ReviewRejected({
-                message:
-                  `${error.operation} failed: ${error.message}. Your ` +
-                  `${comments.length} buffered comment(s) were discarded — ` +
-                  `re-add corrected comments (anchors must be lines the ` +
-                  `diff shows) and submit again.`,
-              }),
-          ),
+        const proposal = yield* proposals.propose({
+          session,
+          repo,
+          summary: `${p.verdict === "approve" ? "approve" : "request changes on"} #${number} (${comments.length} inline comment${comments.length === 1 ? "" : "s"})`,
+          payload: {
+            kind: "review",
+            number,
+            verdict: p.verdict,
+            body: p.message,
+            comments,
+          },
+        });
+        return (
+          `review proposed as ${proposal.id} (${p.verdict.toUpperCase()}, ` +
+          `${comments.length} inline comment(s)) — awaiting the operator, who ` +
+          `posts it to GitHub or declines it from the UI. Your round is done; ` +
+          `you will be told the outcome.`
         );
-        return `review submitted (${comments.length} inline comment(s)): ${review.html_url}`;
       }),
     );
 
     const comment = yield* AI.Tool("comment")`
-      Post ${message} as a plain comment on the pull request thread —
-      conversation, not verdict: answering the author's question,
+      Propose ${message} as a plain comment on the pull request thread
+      — conversation, not verdict: answering the author's question,
       noting what you are waiting on. Markdown; complete; you will not
-      get to clarify. Fails with ${CommentFailed} when GitHub refuses
-      it.`(
+      get to clarify. The operator posts it from the UI. Fails with
+      ${CommentFailed} when the message is empty.`(
       Effect.fn(function* (p: { message: string }) {
-        const created = yield* createComment({
-          issue_number: number,
-          body: `${p.message}\n\n${SIGNATURE}`,
-        }).pipe(
-          Effect.mapError(
-            (error) =>
-              new CommentFailed({
-                message: `${error.operation} failed: ${error.message}`,
-              }),
-          ),
-        );
-        return `commented: ${created.html_url}`;
+        if (p.message.trim().length === 0) {
+          return yield* Effect.fail(
+            new CommentFailed({ message: "an empty comment has nothing to say" }),
+          );
+        }
+        const proposal = yield* proposals.propose({
+          session,
+          repo,
+          summary: `comment on #${number}`,
+          payload: { kind: "comment", number, body: p.message },
+        });
+        return `comment proposed as ${proposal.id} — awaiting the operator`;
+      }),
+    );
+
+    const proposeMerge = yield* AI.Tool("propose_merge")`
+      Propose MERGING the pull request with ${mergeMethod} and
+      ${message} (the one-line case for merging now — what was
+      verified, what the review found). Only after a review you
+      submitted approved it; the operator merges from the UI, or
+      declines. You hold no merge button.`(
+      Effect.fn(function* (p: { mergeMethod: string; message: string }) {
+        const method =
+          p.mergeMethod === "merge" || p.mergeMethod === "rebase"
+            ? p.mergeMethod
+            : ("squash" as const);
+        const proposal = yield* proposals.propose({
+          session,
+          repo,
+          summary: `${method}-merge #${number}: ${p.message}`,
+          payload: { kind: "merge", number, method },
+        });
+        return `merge proposed as ${proposal.id} (${method}) — awaiting the operator`;
       }),
     );
 
     // ── the STANCE: one static system prompt for the PR's whole life
     return AI.fragment`
-      You review one pull request in ${testAlchemy}; this session is
+      You review one pull request in ${primary}; this session is
       its whole life — the opening event, every comment, and your own
       replies. You did not write this code and never saw its author's
-      reasoning: independent judgment is your value.
+      reasoning: independent judgment is your value. You write NOTHING
+      to GitHub yourself: every review, comment, and merge you produce
+      is a PROPOSAL the operator accepts or declines in their UI, and
+      you are told the outcome here.
 
       ${ReadDiff} is the change: title, body, and the unified diff.
       When the body cites an issue ("Closes #N"), ${ReadIssue} is the
@@ -349,8 +352,12 @@ export const ReviewBotLive = ReviewBot.make(
       the review submitted is an unfinished review — never stop to
       "verify" or "consider"; verify with tools, then submit. Answer
       follow-up questions with a plain ${comment} — conversation
-      carries no verdict, and you hold no merge button. Comments you
-      posted yourself may echo back as events: they are your own
-      words — never reply to them.`;
+      carries no verdict. When a review you submitted APPROVED the
+      change and the operator accepted it, you may ${proposeMerge};
+      the merge itself is the operator's click. When the operator
+      DECLINES a proposal, their reason arrives as your next message:
+      revise and propose again, or explain why you stand by it.
+      Comments you proposed and the operator posted may echo back as
+      events: they are your own words — never reply to them.`;
   }),
 );

@@ -86,6 +86,7 @@ export default defineConfig({
           {
             name: "live",
             testDir: "./live",
+            testMatch: /.*\.e2e\.ts/,
             // one machine, one directory — serialize so sessions the
             // tests create and delete never interleave
             fullyParallel: false,

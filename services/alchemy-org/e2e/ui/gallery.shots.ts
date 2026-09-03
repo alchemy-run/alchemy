@@ -51,6 +51,29 @@ test.describe("code", () => {
     await expect(page).toHaveScreenshot("code-03-session-terminal.png");
   });
 
+  test("06 a build's colored output in the transcript", async ({
+    page,
+    api,
+  }) => {
+    api.seedBash(`Engineer:${REPO}/s-alpha`, {
+      ask: "build the runtime package",
+      command: "pnpm --filter @alchemy.run/cloudflare-runtime build",
+      stdout: [
+        "\u001b[35m.\u001b[39m \u001b[96mprepare\u001b[39m: \u001b[33m@alchemy.run/cloudflare-runtime:build: \u001b[0m\u001b[34mℹ\u001b[39m building for \u001b[1mproduction\u001b[22m",
+        "\u001b[2mdist/core/node/\u001b[22m\u001b[32m\u001b[1mbindings/AiSearch.d.mts\u001b[22m\u001b[39m  \u001b[2m0.51 kB\u001b[22m \u001b[2m│ gzip: 0.25 kB\u001b[22m",
+        "\u001b[2mdist/core/node/\u001b[22m\u001b[32m\u001b[1mbindings/rate-limit/RateLimitProps.shared.d.mts\u001b[22m\u001b[39m  \u001b[2m0.48 kB\u001b[22m",
+        "\u001b[33m▲\u001b[39m \u001b[33mwarning\u001b[39m: unused export \u001b[36mlegacyBinding\u001b[39m",
+        "\u001b[32m✓\u001b[39m built in \u001b[1m1.42s\u001b[22m",
+      ].join("\n"),
+      reply: "Built clean — one unused-export warning in `legacyBinding`.",
+    });
+    await openApp(page, encodeHash(`Engineer:${REPO}/s-alpha`));
+    // expand the bash card
+    await main(page).getByRole("button", { name: /pnpm --filter/ }).click();
+    await expect(main(page)).toContainText("built in");
+    await expect(page).toHaveScreenshot("code-06-ansi-output.png");
+  });
+
   test("04 tab context menu", async ({ page, api }) => {
     api.seedChat(`Engineer:${REPO}/s-alpha`);
     api.seedChat(`Engineer:${REPO}/s-alpha::t-review-notes`);
@@ -113,6 +136,34 @@ test.describe("review", () => {
     await expect(tab(page, "Review")).toBeVisible();
     await expect(tab(page, "main")).toBeVisible();
     await expect(page).toHaveScreenshot("review-05-review-and-thread-tabs.png");
+  });
+
+  test("08 a review proposed by the bot, awaiting the operator", async ({
+    page,
+    api,
+  }) => {
+    api.seedChat(`ReviewBot:${PR}`, "idle");
+    api.board.prs[0]!.session = { id: `ReviewBot:${PR}`, status: "idle" };
+    api.seedProposal(
+      148,
+      {
+        kind: "review",
+        number: 148,
+        verdict: "request_changes",
+        body: "The helper is right but the test never exercises `n = 0`.",
+        comments: [
+          {
+            path: "src/sum.ts",
+            line: 4,
+            body: "`Array.from({ length: n })` allocates — a closed form is O(1).",
+          },
+        ],
+      },
+      "request changes on #148 (1 inline comment)",
+    );
+    await openApp(page, encodeHash(`pr:${PR}`));
+    await expect(main(page)).toContainText("proposed by agents");
+    await expect(page).toHaveScreenshot("review-08-proposal.png");
   });
 
   test("06 a terminal on the PR's machine", async ({ page, api }) => {

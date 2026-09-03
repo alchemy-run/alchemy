@@ -1,4 +1,5 @@
 import { CodeCard } from "@/components/code";
+import { ProposalCard, type Proposal } from "@/components/proposals";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 import {
@@ -150,28 +151,40 @@ const REVIEW_STATE: Record<
   },
 };
 
-const Avatar = ({ author, size = 5 }: { author: Author; size?: 4 | 5 | 6 }) =>
-  author.avatarUrl ? (
+const AVATAR_SIZE = {
+  4: "size-4",
+  5: "size-5",
+  6: "size-6",
+  8: "size-8",
+} as const;
+
+const Avatar = ({
+  author,
+  size = 5,
+}: {
+  author: Author;
+  size?: keyof typeof AVATAR_SIZE;
+}) => {
+  // a failed load (offline, blocked) shows the disc, not alt text
+  const [broken, setBroken] = useState(false);
+  return author.avatarUrl && !broken ? (
     <img
       src={author.avatarUrl}
       alt={author.login}
-      className={cn(
-        "shrink-0 rounded-full",
-        size === 4 && "size-4",
-        size === 5 && "size-5",
-        size === 6 && "size-6",
-      )}
+      onError={() => setBroken(true)}
+      className={cn("shrink-0 rounded-full", AVATAR_SIZE[size])}
     />
   ) : (
     <span
+      role="img"
+      aria-label={author.login}
       className={cn(
-        "shrink-0 rounded-full bg-muted",
-        size === 4 && "size-4",
-        size === 5 && "size-5",
-        size === 6 && "size-6",
+        "block shrink-0 rounded-full border border-border bg-muted",
+        AVATAR_SIZE[size],
       )}
     />
   );
+};
 
 const Timestamp = ({ iso, href }: { iso: string; href: string }) => (
   <a
@@ -187,7 +200,20 @@ const Timestamp = ({ iso, href }: { iso: string; href: string }) => (
 
 type Markdown = ComponentType<{ text: string; repo?: string }>;
 
-/** A GitHub-style comment card: author strip, then the markdown body. */
+/* ── the conversation's geometry (GitHub's) ──
+   A GUTTER on the left holds the connector line and, for comments, the
+   author's avatar; cards fill the width from the gutter's edge. The
+   line is drawn once, behind everything: cards are opaque, so it shows
+   only in the gaps between items and beside event rows (reviews),
+   whose icon badge sits centered on it. A comment is never flanked by
+   a line — the card's own border is its left edge. */
+const GUTTER = "pl-11"; // 44px: a 32px avatar + 12px of air
+const LINE_LEFT = "left-[59px]"; // 44px gutter + 16px = the badge's center
+const BADGE = "size-8"; // 32px, on the line: center = 44 + 16
+
+/** A GitHub-style comment card: the author's avatar in the gutter,
+ *  the verb strip, then the markdown body. Opaque, so it hides the
+ *  timeline line behind it. */
 const CommentCard = ({
   author,
   createdAt,
@@ -206,20 +232,24 @@ const CommentCard = ({
   /** Replaces the default "commented" verb line. */
   heading?: React.ReactNode;
 }) => (
-  <div className="rounded-lg border border-border">
-    <div className="flex items-center gap-2 rounded-t-lg border-b border-border bg-muted/30 px-3 py-1.5 text-xs">
-      <Avatar author={author} size={4} />
-      <span className="font-medium">{author.login}</span>
-      <span className="text-muted-foreground">{heading ?? "commented"}</span>
-      <span className="ml-auto" />
-      <Timestamp iso={createdAt} href={htmlUrl} />
+  <div className="relative">
+    <div className="absolute top-0 -left-11">
+      <Avatar author={author} size={8} />
     </div>
-    <div className="px-3 py-2 text-[13px]">
-      {body.trim().length > 0 ? (
-        <Markdown text={body} repo={repo} />
-      ) : (
-        <span className="italic text-muted-foreground">No description.</span>
-      )}
+    <div className="rounded-lg border border-border bg-background">
+      <div className="flex items-center gap-2 rounded-t-lg border-b border-border bg-muted/30 px-3 py-1.5 text-xs">
+        <span className="font-medium">{author.login}</span>
+        <span className="text-muted-foreground">{heading ?? "commented"}</span>
+        <span className="ml-auto" />
+        <Timestamp iso={createdAt} href={htmlUrl} />
+      </div>
+      <div className="px-3 py-2 text-[13px]">
+        {body.trim().length > 0 ? (
+          <Markdown text={body} repo={repo} />
+        ) : (
+          <span className="italic text-muted-foreground">No description.</span>
+        )}
+      </div>
     </div>
   </div>
 );
@@ -242,7 +272,7 @@ const InlineCommentCard = ({
         ? `${comment.path}:${comment.startLine}-${comment.line}`
         : `${comment.path}:${comment.line}`;
   return (
-    <div className="rounded-md border border-border/70">
+    <div className="rounded-md border border-border/70 bg-background">
       <button
         type="button"
         onClick={() => setShowHunk(!showHunk)}
@@ -291,8 +321,16 @@ const ReviewCard = ({
   const StateIcon = state.icon;
   return (
     <div className="flex flex-col gap-2">
+      {/* the event row: its badge sits ON the line, the words beside */}
       <div className="flex items-center gap-2 text-xs">
-        <StateIcon className={cn("size-4 shrink-0", state.className)} />
+        <span
+          className={cn(
+            "flex shrink-0 items-center justify-center rounded-full border border-border bg-muted",
+            BADGE,
+          )}
+        >
+          <StateIcon className={cn("size-4", state.className)} />
+        </span>
         <Avatar author={item.author} size={4} />
         <span className="font-medium">{item.author.login}</span>
         <span className={cn("text-muted-foreground", state.className)}>
@@ -301,13 +339,13 @@ const ReviewCard = ({
         <span className="ml-auto" />
         <Timestamp iso={item.createdAt} href={item.htmlUrl} />
       </div>
-      {item.body.trim().length > 0 && (
-        <div className="rounded-lg border border-border px-3 py-2 text-[13px]">
-          <Markdown text={item.body} repo={repo} />
-        </div>
-      )}
-      {item.comments.length > 0 && (
-        <div className="flex flex-col gap-2 pl-6">
+      {(item.body.trim().length > 0 || item.comments.length > 0) && (
+        <div className="flex flex-col gap-2 pl-10">
+          {item.body.trim().length > 0 && (
+            <div className="rounded-lg border border-border bg-background px-3 py-2 text-[13px]">
+              <Markdown text={item.body} repo={repo} />
+            </div>
+          )}
           {item.comments.map((comment) => (
             <InlineCommentCard
               key={comment.id}
@@ -341,6 +379,11 @@ export const PullRequestOverview = ({
   onNewTerminal,
   review,
   onRequestReview,
+  proposals,
+  proposalBusy,
+  onAcceptProposal,
+  onRejectProposal,
+  onOpenSession,
 }: {
   repo: string;
   number: number;
@@ -356,6 +399,14 @@ export const PullRequestOverview = ({
     | { status: "none"; requested: boolean; unavailable: boolean }
     | { status: "session"; running: boolean };
   onRequestReview: () => void;
+  /** What the agents proposed on THIS pull request, every state,
+   *  newest first (src/services/Proposals.ts). */
+  proposals?: Proposal[];
+  proposalBusy?: ReadonlySet<string>;
+  onAcceptProposal?: (id: string) => void;
+  onRejectProposal?: (id: string, reason: string | undefined) => void;
+  /** Open a session's thread by `${term}:${key}`. */
+  onOpenSession?: (id: string) => void;
 }) => {
   const [view, setView] = useState<PullRequestView | undefined>(undefined);
   const [error, setError] = useState<string | undefined>(undefined);
@@ -570,42 +621,86 @@ export const PullRequestOverview = ({
           </span>
         </div>
 
-        {/* ── description ── */}
-        <CommentCard
-          author={view.author}
-          createdAt={view.createdAt}
-          htmlUrl={view.htmlUrl}
-          body={view.body}
-          repo={view.repo}
-          Markdown={Markdown}
-          heading="opened this pull request"
-        />
-
-        {/* ── the conversation ── */}
-        {view.timeline.length > 0 && (
-          <div className="relative flex flex-col gap-4 border-l-2 border-border/60 pl-5">
-            {view.timeline.map((item) =>
-              item.kind === "comment" ? (
-                <CommentCard
-                  key={`c${item.id}`}
-                  author={item.author}
-                  createdAt={item.createdAt}
-                  htmlUrl={item.htmlUrl}
-                  body={item.body}
-                  repo={view.repo}
+        {/* ── PROPOSALS: what the agents want to do here, awaiting the
+            operator's click (pending first), then what became of the
+            rest — the record of the bot's hand on this pull request ── */}
+        {proposals !== undefined && proposals.length > 0 && (
+          <div
+            aria-label="proposals on this pull request"
+            className="flex flex-col gap-2"
+          >
+            <div className="font-mono text-[10px] uppercase text-muted-foreground">
+              proposed by agents
+            </div>
+            {[...proposals]
+              .sort(
+                (a, b) =>
+                  Number(b.status === "pending") -
+                    Number(a.status === "pending") || b.at - a.at,
+              )
+              .map((proposal) => (
+                <ProposalCard
+                  key={proposal.id}
+                  proposal={proposal}
                   Markdown={Markdown}
+                  busy={proposalBusy?.has(proposal.id) ?? false}
+                  onAccept={() => onAcceptProposal?.(proposal.id)}
+                  onReject={(reason) => onRejectProposal?.(proposal.id, reason)}
+                  onOpenSession={
+                    onOpenSession === undefined
+                      ? undefined
+                      : () =>
+                          onOpenSession(
+                            `${proposal.session.term}:${proposal.session.key}`,
+                          )
+                  }
                 />
-              ) : (
-                <ReviewCard
-                  key={`r${item.id}`}
-                  item={item}
-                  repo={view.repo}
-                  Markdown={Markdown}
-                />
-              ),
-            )}
+              ))}
           </div>
         )}
+
+        {/* ── the conversation: description, then the timeline ── */}
+        <div className={cn("relative flex flex-col gap-4", GUTTER)}>
+          {/* the connector, drawn once behind the whole column */}
+          {view.timeline.length > 0 && (
+            <div
+              aria-hidden
+              className={cn(
+                "absolute top-4 bottom-4 w-0.5 bg-border/60",
+                LINE_LEFT,
+              )}
+            />
+          )}
+          <CommentCard
+            author={view.author}
+            createdAt={view.createdAt}
+            htmlUrl={view.htmlUrl}
+            body={view.body}
+            repo={view.repo}
+            Markdown={Markdown}
+            heading="opened this pull request"
+          />
+          {view.timeline.map((item) =>
+            item.kind === "comment" ? (
+              <CommentCard
+                key={`c${item.id}`}
+                author={item.author}
+                createdAt={item.createdAt}
+                htmlUrl={item.htmlUrl}
+                body={item.body}
+                repo={view.repo}
+                Markdown={Markdown}
+              />
+            ) : (
+              <ReviewCard
+                key={`r${item.id}`}
+                item={item}
+                repo={view.repo}
+                Markdown={Markdown}
+              />
+            ),
+          )}
+        </div>
         {view.timeline.length === 0 && (
           <div className="py-2 text-center text-xs text-muted-foreground">
             No comments yet.

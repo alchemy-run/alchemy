@@ -2,7 +2,11 @@ import * as Context from "effect/Context";
 
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { Events, type SessionObservation } from "./Events.ts";
+import {
+  Events,
+  isLiveObservation,
+  type SessionObservation,
+} from "./Events.ts";
 
 /** One session's index id: `${term}:${key}`. */
 export const sessionId = (term: string, key: string) => `${term}:${key}`;
@@ -69,6 +73,12 @@ export const SessionIndexStream: Layer.Layer<Events, never, SessionIndex> =
   Layer.effect(
     Events,
     Effect.map(SessionIndex, (index) => ({
-      emit: (observation) => Effect.ignore(index.ingest(observation)),
+      // the index holds SUMMARIES: live facts (token deltas, in-flight
+      // tool calls) change nothing it records, and ingesting them was
+      // one index write per streamed token
+      emit: (observation) =>
+        isLiveObservation(observation.type)
+          ? Effect.void
+          : Effect.ignore(index.ingest(observation)),
     })),
   );

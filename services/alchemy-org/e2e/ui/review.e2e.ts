@@ -5,6 +5,7 @@
  * PR head onto that machine first.
  */
 import {
+  type FakeApi,
   REPO,
   encodeHash,
   expect,
@@ -238,5 +239,124 @@ test.describe("activities stay apart", () => {
     await expect(page.getByRole("menu")).toMatchAriaSnapshot({
       name: "pr-context-menu.aria.yml",
     });
+  });
+});
+
+/** The bot never writes to GitHub: a review, comment, or merge it
+ *  produces is a PROPOSAL, and the click that lands it is here. */
+test.describe("proposals", () => {
+  const seedReview = (api: FakeApi) =>
+    api.seedProposal(
+      148,
+      {
+        kind: "review",
+        number: 148,
+        verdict: "request_changes",
+        body: "The helper is right but the test never exercises `n = 0`.",
+        comments: [
+          {
+            path: "src/sum.ts",
+            line: 4,
+            body: "`Array.from({ length: n })` allocates — a closed form is O(1).",
+          },
+        ],
+      },
+      "request changes on #148 (1 inline comment)",
+    );
+
+  test("a pending proposal shows in the inbox and on its pull request", async ({
+    page,
+    api,
+  }) => {
+    seedReview(api);
+    await openApp(page);
+    // anywhere in the app: the inbox, bottom right
+    const inbox = page.getByLabel("proposals", { exact: true });
+    await expect(inbox).toContainText("request changes on #148");
+    await expect(inbox).toMatchAriaSnapshot({ name: "inbox-pending.aria.yml" });
+    // on the pull request itself: in place, and the inbox steps aside
+    await openApp(page, encodeHash(`pr:${PR}`));
+    await expect(
+      main(page).getByLabel("proposals on this pull request"),
+    ).toMatchAriaSnapshot({ name: "pr-proposal-pending.aria.yml" });
+    await expect(inbox).toHaveCount(0);
+    // seeing a proposal is not acting on it
+    expect(api.resolved).toEqual([]);
+  });
+
+  test("accepting posts it — the card records where it landed", async ({
+    page,
+    api,
+  }) => {
+    const proposal = seedReview(api);
+    await openApp(page, encodeHash(`pr:${PR}`));
+    const card = main(page).locator(`[data-proposal="${proposal.id}"]`);
+    await card.getByRole("button", { name: "post review" }).click();
+    await expect(card).toHaveAttribute("data-status", "accepted");
+    await expect(card).toContainText(`${REPO}/pull/148`);
+    expect(api.resolved).toEqual([{ id: proposal.id, verb: "accept" }]);
+  });
+
+  test("declining takes a reason the agent will read", async ({
+    page,
+    api,
+  }) => {
+    const proposal = seedReview(api);
+    await openApp(page, encodeHash(`pr:${PR}`));
+    const card = main(page).locator(`[data-proposal="${proposal.id}"]`);
+    await card.getByRole("button", { name: "decline" }).click();
+    await card
+      .getByLabel("reason for declining")
+      .fill("n = 0 is covered by the property test");
+    await card.getByRole("button", { name: "confirm decline" }).click();
+    await expect(card).toHaveAttribute("data-status", "rejected");
+    await expect(card).toContainText("n = 0 is covered");
+    expect(api.resolved).toEqual([
+      {
+        id: proposal.id,
+        verb: "reject",
+        reason: "n = 0 is covered by the property test",
+      },
+    ]);
+  });
+
+  test("the inbox card jumps to the proposing session", async ({
+    page,
+    api,
+  }) => {
+    seedReview(api);
+    api.seedChat(`ReviewBot:${PR}`, "idle");
+    api.board.prs[0]!.session = { id: `ReviewBot:${PR}`, status: "idle" };
+    await openApp(page);
+    await page
+      .getByLabel("proposals", { exact: true })
+      .getByRole("button", { name: `ReviewBot:${PR}` })
+      .click();
+    await expect(page).toHaveURL(routedTo(`ReviewBot:${PR}`));
+  });
+});
+
+test.describe("transcript", () => {
+  test("a command's ANSI colors render as color, not escape codes", async ({
+    page,
+    api,
+  }) => {
+    api.seedBash(`Engineer:${REPO}/s-alpha`, {
+      ask: "run the build",
+      command: "pnpm build",
+      stdout: "\u001b[32m✓\u001b[39m built in \u001b[1m1.42s\u001b[22m\n\u001b[K",
+      reply: "Built.",
+    });
+    await openApp(page, encodeHash(`Engineer:${REPO}/s-alpha`));
+    const card = main(page).getByRole("button", { name: /pnpm build/ });
+    // collapsed: the summary line is the verdict, escape-free
+    await expect(main(page)).toContainText("✓ built in 1.42s");
+    await card.click();
+    const body = main(page).locator("pre").filter({ hasText: "built in" });
+    await expect(body).not.toContainText("[32m");
+    await expect(body.locator("span").filter({ hasText: "✓" })).toHaveCSS(
+      "color",
+      /rgb\(/,
+    );
   });
 });

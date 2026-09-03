@@ -40,6 +40,25 @@
   --brick: #b3462e;
   --mist: #4a7a8a; /* slate teal */
   --terracotta: #c56e3c;
+
+  /* the 16 terminal colors (ui/lib/ansi.tsx) — the earthy palette
+     tuned for readability on parchment */
+  --ansi-black: #2a2620;
+  --ansi-red: #b3462e;
+  --ansi-green: #5c7a3e;
+  --ansi-yellow: #a8781c;
+  --ansi-blue: #3d6a9a;
+  --ansi-magenta: #8a4f8c;
+  --ansi-cyan: #3a7a8a;
+  --ansi-white: #85714f;
+  --ansi-bright-black: #6b5f4d;
+  --ansi-bright-red: #c56e3c;
+  --ansi-bright-green: #6f9448;
+  --ansi-bright-yellow: #d49a2a;
+  --ansi-bright-blue: #4a7fb5;
+  --ansi-bright-magenta: #a666a8;
+  --ansi-bright-cyan: #4a9aac;
+  --ansi-bright-white: #2a2620;
 }
 
 .dark {
@@ -68,6 +87,23 @@
   --brick: #d76a4e;
   --mist: #6da4b4;
   --terracotta: #d8835a;
+
+  --ansi-black: #4a4238;
+  --ansi-red: #d76a4e;
+  --ansi-green: #8fb15e;
+  --ansi-yellow: #e8b04a;
+  --ansi-blue: #6f9fd4;
+  --ansi-magenta: #c58ac4;
+  --ansi-cyan: #6da4b4;
+  --ansi-white: #d4c9b0;
+  --ansi-bright-black: #7a6e5c;
+  --ansi-bright-red: #e88a6e;
+  --ansi-bright-green: #a9c97a;
+  --ansi-bright-yellow: #f2c56a;
+  --ansi-bright-blue: #8fb8e8;
+  --ansi-bright-magenta: #d9a6d8;
+  --ansi-bright-cyan: #8fc4d2;
+  --ansi-bright-white: #faf6ec;
 }
 
 @theme inline {

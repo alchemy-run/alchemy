@@ -7,7 +7,7 @@ import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as S from "effect/Schema";
 import { publishTargets } from "../Repos.ts";
-import { Approvals } from "../services/Approvals.ts";
+import { Proposals } from "../services/Proposals.ts";
 
 const branch = AI.Parameter("branch", S.String)`
 Branch name to publish the tree's current HEAD as (e.g.
@@ -36,9 +36,11 @@ for you.`) {}
 export class OpenPullRequest extends (AI.Tool<OpenPullRequest>()(
   "openPullRequest",
 )`
-Open a pull request on the origin repository: ${head} into ${base},
+PROPOSE a pull request on the origin repository: ${head} into ${base},
 titled ${title}, described by ${body}. Push the branch first with
-pushBranch. Returns the pull request URL.`) {}
+pushBranch. The pull request is not opened by you: the operator
+accepts the proposal in the UI (it opens then) or declines it — you
+are told either way.`) {}
 
 /**
  * The credential the publish pair authenticates with — a runtime read
@@ -128,36 +130,31 @@ export const PushBranchLive = Layer.effect(
 );
 
 /**
- * Open the pull request through the {@link GitHub.CreatePullRequest}
- * BINDING (octokit-backed): one authenticated client per repository in
- * {@link publishTargets}, bound at init; the tree's `origin` picks the
- * target at call time. The targets are deferred `Repository` identity
- * handles — the binding resolves their identity statically and never
- * provisions them, so the org still claims no ownership of the
- * repositories it contributes to. Gated by {@link Approvals} (disarmed
- * deploys answer immediately).
+ * PROPOSE the pull request: the tree's `origin` names the target (one
+ * of {@link publishTargets} — anything else fails closed), the request
+ * is filed with {@link Proposals}, and the OPERATOR opens it from the
+ * UI (lib/ProposalActions.ts performs the `CreatePullRequest` call
+ * then). The tool never touches GitHub itself. The targets are
+ * deferred `Repository` identity handles — resolved statically, never
+ * provisioned, so the org still claims no ownership of the
+ * repositories it contributes to.
  */
 export const OpenPullRequestLive = Layer.effect(
   OpenPullRequest,
   Effect.gen(function* () {
     const sandbox = yield* AI.Sandbox;
-    const approvals = yield* Approvals;
+    const proposals = yield* Proposals;
     const git = gitIn(sandbox);
 
-    const targets = yield* Effect.forEach(
-      publishTargets,
-      Effect.fn(function* (repo) {
-        const identity = GitHub.repositoryIdentity(repo);
-        if (identity === undefined) {
-          return yield* Effect.die(
-            new Error(
-              "publishTargets must declare owner/name as plain strings",
-            ),
-          );
-        }
-        return { identity, client: yield* GitHub.CreatePullRequest(repo) };
-      }),
-    );
+    const targets = publishTargets.map((repo) => {
+      const identity = GitHub.repositoryIdentity(repo);
+      if (identity === undefined) {
+        throw new Error(
+          "publishTargets must declare owner/name as plain strings",
+        );
+      }
+      return `${identity.owner}/${identity.repository}`;
+    });
 
     return ((input: {
       head: string;
@@ -170,16 +167,10 @@ export const OpenPullRequestLive = Layer.effect(
         // context (the layer builds in the shared per-isolate graph)
         const thread = yield* AI.Thread;
         const origin = yield* originOf(git);
-        const target = targets.find(
-          (t) =>
-            t.identity.owner === origin.owner &&
-            t.identity.repository === origin.repository,
-        );
-        if (target === undefined) {
+        const repo = `${origin.owner}/${origin.repository}`;
+        if (!targets.includes(repo)) {
           return yield* Effect.fail(
-            `the tree's origin ${origin.owner}/${origin.repository} is not a repository this deploy publishes to — targets: ${targets
-              .map((t) => `${t.identity.owner}/${t.identity.repository}`)
-              .join(", ")}`,
+            `the tree's origin ${repo} is not a repository this deploy publishes to — targets: ${targets.join(", ")}`,
           );
         }
         const base =
@@ -188,29 +179,22 @@ export const OpenPullRequestLive = Layer.effect(
             Effect.orElseSucceed(() => "main"),
           ));
 
-        const outcome = yield* approvals.ask({
+        const proposal = yield* proposals.propose({
           session: { term: "Engineer", key: thread.key },
-          action: `open pull request on ${origin.owner}/${origin.repository}: "${input.title}" (${input.head} → ${base})`,
-        });
-        if (outcome !== "allowed-once") {
-          return yield* Effect.fail(
-            `the operator did not approve opening this pull request (${outcome}) — ask them in chat, then try again`,
-          );
-        }
-
-        const pull = yield* target
-          .client({
+          repo,
+          summary: `open pull request "${input.title}" (${input.head} → ${base})`,
+          payload: {
+            kind: "pull_request",
             title: input.title,
             body: input.body,
             head: input.head,
             base,
-          })
-          .pipe(
-            Effect.mapError(
-              (error) => `${error.operation} failed: ${error.message}`,
-            ),
-          );
-        return `opened pull request #${pull.number}: ${pull.html_url}`;
+          },
+        });
+        return (
+          `pull request proposed as ${proposal.id} on ${repo} (${input.head} → ${base}) — ` +
+          `awaiting the operator, who opens it from the UI or declines. You will be told the outcome.`
+        );
       })) as never;
   }),
 );
