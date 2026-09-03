@@ -3,16 +3,26 @@ title: Event Sources
 description: An event source is a binding that runs your Function when something happens on a resource — one call wires the event-source mapping, the permissions, and a typed handler.
 ---
 
+Running code when a message lands on a queue takes more than a handler.
+The Function needs permission to receive and delete messages, a mapping
+that tells the queue to invoke it, and code that unpacks the raw event:
+
+```typescript
+// infrastructure: grant access and wire the trigger
+policy: { Action: ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes"], Resource: [queue.arn] },
+eventSourceMapping: { eventSourceArn: queue.arn, functionName: fn.name },
+
+// handler: unpack the batch by hand
+export const handler = async (event) => {
+  for (const record of event.Records) {
+    console.log(record.body);
+  }
+};
+```
+
 An **Event Source** is a [Binding](/infrastructure-as-effects/binding)
-that runs your Function when something happens on a resource. A message
-lands on a queue, an object lands in a bucket, a row changes in a table.
-Your handler receives the records as an Effect `Stream`.
-
-Let's look at how they work.
-
-## Consuming a queue
-
-Start with a Lambda Function and a queue:
+that does all three in one call. You name the queue and the handler,
+and the messages arrive as an Effect `Stream`:
 
 ```typescript
 import * as AWS from "alchemy/AWS";
@@ -25,40 +35,14 @@ export default AWS.Lambda.Function(
   "OrderProcessor",
   { main: import.meta.url },
   Effect.gen(function* () {
-    // TODO: consume the queue
-  }),
+    yield* AWS.SQS.consumeQueueMessages(Orders, (records) =>
+      records.pipe(
+        Stream.map((record) => record.body),
+        Stream.runForEach((body) => Effect.log(`order: ${body}`)),
+      ),
+    );
+  }).pipe(Effect.provide(AWS.Lambda.QueueEventSource)),
 );
-```
-
-Consume the queue. Each batch arrives as `records`, a `Stream` of
-messages with a `body`:
-
-```diff lang="typescript"
- export default AWS.Lambda.Function(
-   "OrderProcessor",
-   { main: import.meta.url },
-   Effect.gen(function* () {
--    // TODO: consume the queue
-+    yield* AWS.SQS.consumeQueueMessages(Orders, (records) =>
-+      records.pipe(
-+        Stream.map((record) => record.body),
-+        Stream.runForEach((body) => Effect.log(`order: ${body}`)),
-+      ),
-+    );
-   }),
- );
-```
-
-Provide `AWS.Lambda.QueueEventSource` to implement it:
-
-```diff lang="typescript"
-   Effect.gen(function* () {
-     yield* AWS.SQS.consumeQueueMessages(Orders, (records) =>
-       // ...
-     );
--  }),
-+  }).pipe(Effect.provide(AWS.Lambda.QueueEventSource)),
- );
 ```
 
 A pure consumer returns nothing from its constructor. It only declares
@@ -66,18 +50,46 @@ what it listens to.
 
 ## What one call wires
 
-That one `consumeQueueMessages` call grants `sqs:ReceiveMessage`,
-`sqs:DeleteMessage`, and `sqs:GetQueueAttributes` on the queue's ARN.
-It creates an event source mapping that points the queue at this
-Function. And it registers the runtime listener that turns each
-invocation's batch into `records`.
-
-There is no mapping resource to declare, no policy JSON, and no
-`event.Records` to unpack.
+At deploy time, `consumeQueueMessages` attaches the receive, delete,
+and get-attributes statement to the Function's role, scoped to the
+queue's ARN. It creates the event source mapping that points the queue
+at this Function, and removes it when the Function is destroyed. At
+runtime it registers the listener that turns each invocation's batch
+into `records`.
 
 `consumeQueueMessages` is the contract and `AWS.Lambda.QueueEventSource`
-is one Layer that satisfies it. This is the same split every binding has
+is the Layer that satisfies it, the same split every binding has
 ([a contract and a Layer](/infrastructure-as-effects/binding#a-contract-and-a-layer)).
+
+## It's a real Effect Stream
+
+`records` is the same `Stream` from any Effect program, so every
+combinator composes. Map table changes to JSON and run them straight
+into a queue:
+
+```typescript
+const sink = yield* AWS.SQS.QueueSink(Outbound);
+
+yield* AWS.DynamoDB.consumeTableChanges(
+  Jobs,
+  { streamViewType: "NEW_AND_OLD_IMAGES", startingPosition: "TRIM_HORIZON" },
+  (stream) =>
+    stream.pipe(
+      Stream.map((record) =>
+        JSON.stringify({
+          eventName: record.eventName,
+          keys: record.dynamodb.Keys,
+        }),
+      ),
+      Stream.run(sink),
+    ),
+);
+```
+
+`Stream.throttle` or `Stream.groupedWithin` drop in anywhere along the
+chain. That `sink` is a [Sink](/infrastructure-as-effects/sinks), the
+write-side dual of an event source. Its permissions are generated the
+same way.
 
 ## The same shape on Cloudflare
 
@@ -112,8 +124,9 @@ export default Cloudflare.Worker(
 );
 ```
 
-At deploy time this creates the queue consumer that dispatches batches
-to this Worker. At runtime it registers the `queue` listener.
+There is no IAM here. At deploy time the call creates the queue
+consumer that dispatches batches to this Worker. At runtime it
+registers the `queue` listener.
 
 ## Batching and retries
 
@@ -188,35 +201,6 @@ the `scheduled` listener is registered. GitHub works the same way:
 `consumeRepositoryEvents` creates a repository webhook pointing at the
 Worker's URL, and the runtime listener verifies each delivery's HMAC
 signature before calling your handler.
-
-## It's a real Effect Stream
-
-The `Stream` your handler receives is the same `Stream` from any Effect
-program, so every combinator composes. Map table changes to JSON and
-run them straight into a queue:
-
-```typescript
-const sink = yield* AWS.SQS.QueueSink(Outbound);
-
-yield* AWS.DynamoDB.consumeTableChanges(
-  Jobs,
-  { streamViewType: "NEW_AND_OLD_IMAGES", startingPosition: "TRIM_HORIZON" },
-  (stream) =>
-    stream.pipe(
-      Stream.map((record) =>
-        JSON.stringify({
-          eventName: record.eventName,
-          keys: record.dynamodb.Keys,
-        }),
-      ),
-      Stream.run(sink),
-    ),
-);
-```
-
-`Stream.throttle` or `Stream.groupedWithin` drop in anywhere along the
-chain. That `sink` is a [Sink](/infrastructure-as-effects/sinks), the
-write-side dual of an event source.
 
 ## Every event source
 
