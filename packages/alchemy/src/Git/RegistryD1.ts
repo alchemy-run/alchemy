@@ -25,7 +25,7 @@
  *   Layer.provide(Git.RegistryD1(RepoIndex)),
  *   Layer.provide(Git.BlobStoreR2(GitObjects)),
  *   Layer.provide(Git.PolicyOwners),
- *   Layer.provide(Git.AuthenticateSecret({ principal: { id: "acme" } })),
+ *   Layer.provide(Git.AuthenticatedSecret({ principal: "acme" })),
  * );
  * ```
  *

@@ -23,7 +23,7 @@ const GitLive = Git.ServerLive.pipe(
   Layer.provide(Git.BlobStoreR2(GitObjects)), // packs, bundles, large pushes
   Layer.provide(Git.HasherInline), // push verification
   Layer.provide(Git.PolicyOwners), // owners write, anyone reads public
-  Layer.provide(Git.AuthenticatedSecret({ principal: { id: "acme" } })), // one secret, one principal
+  Layer.provide(Git.AuthenticatedSecret({ principal: "acme" })), // one secret; whoever presents it is "acme"
 );
 
 export default Cloudflare.Worker(
@@ -48,7 +48,7 @@ const GitLive = Git.ServerLive.pipe(
   Layer.provide(Git.HasherInline),
 -  Layer.provide(Git.PolicyOwners),
 +  Layer.provide(ProtectedMain),
-  Layer.provide(Git.AuthenticatedSecret({ principal: { id: "acme" } })),
+  Layer.provide(Git.AuthenticatedSecret({ principal: "acme" })),
 );
 ```
 

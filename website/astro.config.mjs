@@ -1446,9 +1446,9 @@ export default defineConfig({
               items: [
                 { label: "Overview", link: "/git/blocks" },
                 { label: "Server", link: "/git/blocks/server" },
-                { label: "Repositories", link: "/git/blocks/repositories" },
+                { label: "Repository", link: "/git/blocks/repositories" },
                 { label: "Registry", link: "/git/blocks/registry" },
-                { label: "Blob store", link: "/git/blocks/blob-store" },
+                { label: "Blob Store", link: "/git/blocks/blob-store" },
                 { label: "Hasher", link: "/git/blocks/hasher" },
                 { label: "Auth", link: "/git/blocks/auth" },
               ],

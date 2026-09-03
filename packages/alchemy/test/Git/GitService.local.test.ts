@@ -64,7 +64,7 @@ const logLevel = Effect.provideService(
 // local state store: deploy the fixture's building-block assembly worker.
 // Importing `./fixtures/stack.ts` above installed the TEST_SECRET into
 // the deployer env before this plan resolves
-// `Config.redacted("GIT_SERVICE_SECRET")`.
+// the suite fixture's `AuthenticatedTest`.
 const LocalStack = Alchemy.Stack(
   "GitServiceLocalStack",
   { providers: Cloudflare.providers(), state: Alchemy.localState() },

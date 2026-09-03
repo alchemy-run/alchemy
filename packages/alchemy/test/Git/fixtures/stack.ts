@@ -26,7 +26,6 @@ import {
   isReadAction,
   parseSecret,
   Policy,
-  SECRET_CONFIG_KEY,
   GIT_WORKER_OPTIONS,
   HasherInline,
   ReposDurableObject,
@@ -36,17 +35,17 @@ import {
 } from "@/Git/index.ts";
 
 /**
- * The admin key every suite authenticates with. Honors a caller-provided
+ * The secret every suite authenticates with. Honors a caller-provided
  * `GIT_SERVICE_SECRET` (the deployed-cloud suites may point at a
  * standing deployment); otherwise a deterministic test-only value.
  */
 export const TEST_SECRET: string =
-  process.env[SECRET_CONFIG_KEY] ?? "test-secret-git-service-suite";
+  process.env.GIT_SERVICE_SECRET ?? "test-secret-git-service-suite";
 /** A second credential, resolved to a second principal (see `AuthenticateTest`). */
 export const TEST_SECRET_DEV = "test-secret-git-service-suite-dev";
 export const TEST_PRINCIPAL = { id: "e2e", name: "Suite" } as const;
 export const TEST_PRINCIPAL_DEV = { id: "dev", name: "Dev" } as const;
-process.env[SECRET_CONFIG_KEY] ??= TEST_SECRET;
+process.env.GIT_SERVICE_SECRET ??= TEST_SECRET;
 
 /**
  * Two shared secrets, two principals: `TEST_SECRET` is the suite's owner

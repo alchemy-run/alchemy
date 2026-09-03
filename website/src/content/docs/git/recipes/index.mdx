@@ -13,7 +13,7 @@ const GitLive = Git.ServerLive.pipe(
   Layer.provide(Git.BlobStoreR2(GitObjects)),
   Layer.provide(Git.HasherInline),
   Layer.provide(Git.PolicyOwners),
-  Layer.provide(Git.AuthenticatedSecret({ principal: { id: "acme" } })),
+  Layer.provide(Git.AuthenticatedSecret({ principal: "acme" })),
 );
 ```
 

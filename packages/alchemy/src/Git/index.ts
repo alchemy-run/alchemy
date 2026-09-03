@@ -35,7 +35,7 @@ export {
   Policy,
   PolicyOwners,
   PrincipalSchema,
-  SECRET_CONFIG_KEY,
+  SECRET_RESOURCE_ID,
   timingSafeEqual,
   type GitAction,
   type Headers,

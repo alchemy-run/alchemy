@@ -70,7 +70,7 @@ const GitLive = Git.ServerLive.pipe(
 -  Layer.provide(Git.HasherInline),
 +  Layer.provide(GitHasher.HasherWorkerLoader()),
   Layer.provide(Git.PolicyOwners),
-  Layer.provide(Git.AuthenticatedSecret({ principal: { id: "acme" } })),
+  Layer.provide(Git.AuthenticatedSecret({ principal: "acme" })),
 );
 ```
 
@@ -110,7 +110,7 @@ The same 36 MiB, 15.6k-object repository, one client, the same edge:
 The bundle path is the client's line rate. Compaction is what keeps it
 that way: on a real repository of 13,699 objects, cloning back took
 19.5 s before compaction and 3.4 s after.
-[Repositories](/git/blocks/repositories) has the clone path.
+[Repository](/git/blocks/repositories) has the clone path.
 
 The largest real push measured is the alchemy monorepo: 44,051 objects
 in a 67 MiB thin pack, cloned back byte-identical under

@@ -16,12 +16,14 @@ bun add alchemy
 
 ```typescript
 // src/git.ts
+import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Git from "alchemy/Git";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
 export const GitObjects = Cloudflare.R2.Bucket("GitObjects");
+export const GitSecret = Alchemy.Random("GitSecret");
 
 const GitLive = Git.ServerLive.pipe(
   Layer.provide(Git.ReposDurableObject),
@@ -29,7 +31,7 @@ const GitLive = Git.ServerLive.pipe(
   Layer.provide(Git.BlobStoreR2(GitObjects)),
   Layer.provide(Git.HasherInline),
   Layer.provide(Git.PolicyOwners),
-  Layer.provide(Git.AuthenticatedSecret({ principal: { id: "acme" } })),
+  Layer.provide(Git.AuthenticatedSecret({ principal: "acme", secret: GitSecret })),
 );
 
 export default class GitHost extends Cloudflare.Worker<GitHost>()(
@@ -44,35 +46,36 @@ export default class GitHost extends Cloudflare.Worker<GitHost>()(
 
 `GIT_WORKER_OPTIONS` sets the compatibility flags and the CPU limit a
 push needs. `AuthenticatedSecret` is the smallest thing that secures a
-fresh host: one shared secret, and whoever presents it is the principal
-`acme`, who owns the repositories it creates.
+fresh host: one shared secret. A request that presents it is acting as
+the principal `acme`, and `acme` is the owner name of the repositories
+it creates, as in `acme/web`. Any other request is anonymous. The
+secret is an `Alchemy.Random`, minted on the first deploy and stable
+after it.
 
-Add it to your stack:
+Add both to your stack. The `Random` is a resource like any other, so
+the stack can output its value:
 
 ```typescript
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
+import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
-import GitHost from "./src/git.ts";
+import * as Redacted from "effect/Redacted";
+import GitHost, { GitSecret } from "./src/git.ts";
 
 export default Alchemy.Stack(
   "GitService",
   { providers: Cloudflare.providers(), state: Cloudflare.state() },
   Effect.gen(function* () {
     const git = yield* GitHost;
-    return { url: git.url.as<string>() };
+    const secret = yield* GitSecret;
+    return {
+      url: git.url.as<string>(),
+      secret: Output.map(secret.text, Redacted.value),
+    };
   }),
 );
-```
-
-## Set the secret
-
-`AuthenticatedSecret` reads `GIT_SERVICE_SECRET` at deploy time and
-binds it to the Worker as a secret:
-
-```sh
-export GIT_SERVICE_SECRET="$(openssl rand -base64 32)"
 ```
 
 ## Deploy
@@ -81,8 +84,13 @@ export GIT_SERVICE_SECRET="$(openssl rand -base64 32)"
 bun alchemy deploy
 ```
 
-The stack prints the Worker's URL. The rest of this page calls it
-`$HOST`.
+The stack prints the Worker's URL and the secret. The rest of this page
+calls them `$HOST` and `$GIT_SERVICE_SECRET`:
+
+```sh
+export HOST=...
+export GIT_SERVICE_SECRET=...
+```
 
 ## Create a repository
 

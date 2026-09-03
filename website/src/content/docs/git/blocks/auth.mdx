@@ -70,11 +70,16 @@ const AuthenticatedLive = Git.Authenticated.make(
 );
 ```
 
-`AuthenticatedSecret` is the shipped starter: one secret from `Config`,
-one principal.
+`AuthenticatedSecret` is the shipped starter: one secret, an
+`Alchemy.Random` minted on the first deploy, and one principal, who a
+request presenting the secret is acting as. `"acme"` is the owner name
+of the repositories it creates. Declare the `Random` yourself to read
+the secret back from the stack:
 
 ```typescript
-Layer.provide(Git.AuthenticatedSecret({ principal: { id: "acme" } }))
+export const GitSecret = Alchemy.Random("GitSecret");
+
+Layer.provide(Git.AuthenticatedSecret({ principal: "acme", secret: GitSecret }))
 ```
 
 ## Caller

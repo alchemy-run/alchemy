@@ -16,8 +16,8 @@
  *   is judged inside the repository's Durable Object with the refs it
  *   wants to move. {@link PolicyOwners} is the default.
  */
+import { Random } from "../Random.ts";
 import { RuntimeContext } from "../RuntimeContext.ts";
-import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Encoding from "effect/Encoding";
@@ -335,44 +335,70 @@ export const timingSafeEqual = (a: string, b: string): Effect.Effect<boolean> =>
 // Shipped implementation
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** The `Config` key {@link AuthenticatedSecret} reads by default. */
-export const SECRET_CONFIG_KEY = "GIT_SERVICE_SECRET" as const;
+/** The id of the `Alchemy.Random` {@link AuthenticatedSecret} declares when none is passed. */
+export const SECRET_RESOURCE_ID = "GitServiceSecret" as const;
 
 /**
  * One shared secret, one principal: the smallest thing that secures a
- * fresh host. The secret is read from `Config` at deploy time and bound to
- * the Worker; a request that presents it (Bearer, or the Basic password a
- * `git` client sends) is `principal`, anything else is anonymous.
+ * fresh host. The secret is an `Alchemy.Random`, minted on the first
+ * deploy, stable across deploys, and bound to the Worker; a request that
+ * presents it (Bearer, or the Basic password a `git` client sends) is
+ * `principal`, anything else is anonymous.
+ *
+ * Declare the `Random` yourself to read it back from the stack:
  *
  * **Example:** the starter host
  * ```typescript
- * Layer.provide(Git.AuthenticatedSecret({ principal: { id: "acme" } }))
+ * export const GitSecret = Alchemy.Random("GitSecret");
+ *
+ * // whoever presents the secret is "acme", and acme/web is theirs
+ * Layer.provide(Git.AuthenticatedSecret({ principal: "acme", secret: GitSecret }))
+ *
+ * // alchemy.run.ts
+ * const secret = yield* GitSecret;
+ * return { url: git.url.as<string>(), secret: Output.map(secret.text, Redacted.value) };
  * ```
  *
  * @layer
  * @provides Git.Authenticated
  */
 export const AuthenticatedSecret = (options: {
-  /** The principal a matching secret resolves to; repositories it creates are owned by `principal.id`. */
-  readonly principal: Principal;
-  /** @default "GIT_SERVICE_SECRET" */
-  readonly configKey?: string | undefined;
+  /**
+   * Who a request presenting the secret is acting as. A string is the
+   * principal's id, which is the owner name of the repositories it
+   * creates: `"acme"` owns `acme/web`.
+   */
+  readonly principal: string | Principal;
+  /**
+   * The `Alchemy.Random` holding the secret. Declared for you as
+   * {@link SECRET_RESOURCE_ID} when omitted.
+   */
+  readonly secret?: Effect.Effect<Random, never, any> | undefined;
 }): Layer.Layer<Authenticated> =>
   Authenticated.make(
     Effect.gen(function* () {
-      // A missing secret is a misconfigured deploy: die at layer build,
-      // never at request time.
-      const secret = yield* Config.redacted(
-        options.configKey ?? SECRET_CONFIG_KEY,
-      ).pipe(Effect.orDie);
+      const principal: Principal =
+        typeof options.principal === "string"
+          ? { id: options.principal }
+          : options.principal;
+      // Yielding the resource class gives a constructor whose providers are
+      // the host stack's, so declaring the secret here needs nothing from
+      // the caller. A user-declared Random is the same resource, yielded.
+      const resource =
+        options.secret === undefined
+          ? yield* (yield* Random)(SECRET_RESOURCE_ID)
+          : yield* options.secret as Effect.Effect<Random>;
+      // Yielded at build time, the attribute is a runtime accessor over the
+      // value bound onto the Worker.
+      const secret = yield* resource.text;
       return Effect.fn(function* (request) {
         const presented = parseSecret(request.headers);
         if (presented === undefined || presented === "") return undefined;
         const matches = yield* timingSafeEqual(
           presented,
-          Redacted.value(secret),
+          Redacted.value(yield* secret),
         );
-        return matches ? options.principal : undefined;
+        return matches ? principal : undefined;
       });
     }),
   );

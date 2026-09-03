@@ -22,7 +22,7 @@ const GitLive = Git.ServerLive.pipe(
   Layer.provide(Git.BlobStoreR2(GitObjects)),
   Layer.provide(GitHasher.HasherWorkerLoader()),
   Layer.provide(Git.PolicyOwners),
-  Layer.provide(Git.AuthenticatedSecret({ principal: { id: "acme" } })),
+  Layer.provide(Git.AuthenticatedSecret({ principal: "acme" })),
 );
 
 export default class GitHost extends Cloudflare.Worker<GitHost>()(
@@ -53,7 +53,6 @@ export default Alchemy.Stack(
 ```
 
 ```sh
-export GIT_SERVICE_SECRET="$(openssl rand -base64 32)"
 bun alchemy deploy
 ```
 
@@ -80,7 +79,7 @@ const GitLive = Git.ServerLive.pipe(
 -  Layer.provide(GitHasher.HasherWorkerLoader()),
 +  Layer.provide(Git.HasherInline),
   Layer.provide(Git.PolicyOwners),
-  Layer.provide(Git.AuthenticatedSecret({ principal: { id: "acme" } })),
+  Layer.provide(Git.AuthenticatedSecret({ principal: "acme" })),
 );
 ```
 
@@ -97,7 +96,7 @@ const GitLive = Git.ServerLive.pipe(
   Layer.provide(Git.BlobStoreR2(GitObjects)),
   Layer.provide(GitHasher.HasherWorkerLoader()),
   Layer.provide(Git.PolicyOwners),
-  Layer.provide(Git.AuthenticatedSecret({ principal: { id: "acme" } })),
+  Layer.provide(Git.AuthenticatedSecret({ principal: "acme" })),
 );
 ```
 

@@ -202,7 +202,7 @@ const GitLive = Git.ReposDurableObject.pipe(
   Layer.provideMerge(Git.HasherInline),
   Layer.provideMerge(Git.BlobStoreR2(GitObjects)),
   Layer.provideMerge(Git.PolicyOwners),
--  Layer.provideMerge(Git.AuthenticatedSecret({ principal: { id: "acme" } })),
+-  Layer.provideMerge(Git.AuthenticatedSecret({ principal: "acme" })),
 );
 ```
 

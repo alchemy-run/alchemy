@@ -16,7 +16,7 @@ const GitLive = Git.ServerLive.pipe(
   Layer.provide(Git.BlobStoreR2(GitObjects)),
   Layer.provide(Git.HasherInline),
   Layer.provide(Git.PolicyOwners),
-  Layer.provide(Git.AuthenticatedSecret({ principal: { id: "acme" } })),
+  Layer.provide(Git.AuthenticatedSecret({ principal: "acme" })),
 );
 ```
 
@@ -50,9 +50,9 @@ policy runs wherever the facts it needs live.
 | Block | Decides | Ships with |
 | --- | --- | --- |
 | [Server](/git/blocks/server) | the HTTP surface: every plane as one `HttpApi` of routes you can replace | `Handlers`, `ServerLive` |
-| [Repositories](/git/blocks/repositories) | where refs and objects live, the jobs that keep a repository small | `ReposDurableObject` |
+| [Repository](/git/blocks/repositories) | where refs and objects live, the jobs that keep a repository small | `ReposDurableObject` |
 | [Registry](/git/blocks/registry) | how `owner/name` resolves, and listings | `RegistryDurableObject`, `RegistryD1` |
-| [Blob store](/git/blocks/blob-store) | where packs, bundles, and large pushes go | `BlobStoreR2`, `BlobStoreS3` |
+| [Blob Store](/git/blocks/blob-store) | where packs, bundles, and large pushes go | `BlobStoreR2`, `BlobStoreS3` |
 | [Hasher](/git/blocks/hasher) | what verifies a push, and on which compute | `HasherInline`, `HasherWorkerLoader`, `HasherLambda` |
 | [Auth](/git/blocks/auth) | who is calling, and what they may do | `AuthenticatedSecret`, `PolicyOwners` |
 
@@ -69,7 +69,7 @@ const GitLive = Git.ServerLive.pipe(
   Layer.provide(Git.BlobStoreR2(GitObjects)),
   Layer.provide(Git.HasherInline),
   Layer.provide(Git.PolicyOwners),
-  Layer.provide(Git.AuthenticatedSecret({ principal: { id: "acme" } })),
+  Layer.provide(Git.AuthenticatedSecret({ principal: "acme" })),
 );
 ```
 
@@ -82,7 +82,7 @@ const GitLive = Git.ServerLive.pipe(
   Layer.provide(Git.RegistryDurableObject),
   Layer.provide(Git.HasherInline),
   Layer.provide(Git.PolicyOwners),
-  Layer.provide(Git.AuthenticatedSecret({ principal: { id: "acme" } })),
+  Layer.provide(Git.AuthenticatedSecret({ principal: "acme" })),
 );
 // Layer<Server, never, BlobStore>
 //                      ^ still required; providing it to the Worker is a type error

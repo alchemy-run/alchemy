@@ -130,18 +130,26 @@ const GitLive = Git.ServerLive.pipe(
 ## Who is calling
 
 `Git.Authenticated` is the middleware every git route declares. It
-turns a request into a principal, or anonymous. The smallest thing
-that secures a fresh host is one shared secret: whoever presents it is
-`acme`, and repositories `acme` creates are `acme`'s:
+turns a request into a principal, who the request is acting as, or
+anonymous. The smallest thing that secures a fresh host is one shared
+secret: a request that presents it is acting as `acme`, and `acme` is
+the owner name of the repositories it creates, as in `acme/web`. The
+secret is an `Alchemy.Random`, a resource minted on the first deploy
+and stable after it, declared here so the stack can read it back:
 
 ```diff lang="typescript"
++import * as Alchemy from "alchemy";
+
+export const GitObjects = Cloudflare.R2.Bucket("GitObjects");
++export const GitSecret = Alchemy.Random("GitSecret");
+
 const GitLive = Git.ServerLive.pipe(
   Layer.provide(Git.ReposDurableObject),
   Layer.provide(Git.RegistryDurableObject),
   Layer.provide(Git.BlobStoreR2(GitObjects)),
   Layer.provide(Git.HasherInline),
   Layer.provide(Git.PolicyOwners),
-+  Layer.provide(Git.AuthenticatedSecret({ principal: { id: "acme" } })),
++  Layer.provide(Git.AuthenticatedSecret({ principal: "acme", secret: GitSecret })),
 );
 ```
 
@@ -152,36 +160,42 @@ rules.
 
 ## Add it to a stack
 
+The `Random` is a resource like any other, so the stack yields it and
+outputs its value:
+
 ```typescript
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
+import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
-import GitHost from "./src/git.ts";
+import * as Redacted from "effect/Redacted";
+import GitHost, { GitSecret } from "./src/git.ts";
 
 export default Alchemy.Stack(
   "GitService",
   { providers: Cloudflare.providers(), state: Cloudflare.state() },
   Effect.gen(function* () {
     const git = yield* GitHost;
-    return { url: git.url.as<string>() };
+    const secret = yield* GitSecret;
+    return {
+      url: git.url.as<string>(),
+      secret: Output.map(secret.text, Redacted.value),
+    };
   }),
 );
 ```
 
 ## Deploy
 
-The secret is read from your environment at deploy time and bound to
-the Worker as a secret:
-
 ```sh
-export GIT_SERVICE_SECRET="$(openssl rand -base64 32)"
 bun alchemy deploy
 ```
 
-The stack prints the Worker's URL. It created a bucket, two Durable
-Object namespaces, and one Worker, and nothing runs until a request
-arrives.
+The stack prints the Worker's URL and the secret. It created a bucket,
+two Durable Object namespaces, one random secret bound to one Worker,
+and nothing runs until a request arrives. Part 2 calls them `$HOST`
+and `$GIT_SERVICE_SECRET`.
 
 ## Where next
 

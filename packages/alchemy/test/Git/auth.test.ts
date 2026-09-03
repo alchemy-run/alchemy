@@ -4,9 +4,8 @@
  * no cloud.
  */
 import { describe, expect, it } from "alchemy-test";
-import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
 import * as Context from "effect/Context";
 import * as HttpRouter from "effect/unstable/http/HttpRouter";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
@@ -46,14 +45,13 @@ describe("header parsing", () => {
 });
 
 describe("AuthenticatedSecret", () => {
-  const layer = AuthenticatedSecret({ principal: { id: "acme" } }).pipe(
-    Layer.provide(
-      Layer.succeed(
-        ConfigProvider.ConfigProvider,
-        ConfigProvider.fromUnknown({ GIT_SERVICE_SECRET: "hunter2" }),
-      ),
-    ),
-  );
+  // A stand-in for the `Alchemy.Random`: its `text` attribute, resolved.
+  const layer = AuthenticatedSecret({
+    principal: { id: "acme" },
+    secret: Effect.succeed({
+      text: Effect.succeed(Effect.succeed(Redacted.make("hunter2"))),
+    } as never),
+  });
   /** Runs the middleware over a request and reads the `Caller` it provides. */
   const authenticate = (headers: Record<string, string | undefined>) =>
     Effect.gen(function* () {

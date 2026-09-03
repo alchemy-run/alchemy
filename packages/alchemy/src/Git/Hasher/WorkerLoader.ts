@@ -20,7 +20,7 @@
  *   Layer.provide(GitHasher.HasherWorkerLoader()),
  *   Layer.provide(Git.BlobStoreR2(GitObjects)),
  *   Layer.provide(Git.PolicyOwners),
- *   Layer.provide(Git.AuthenticateSecret({ principal: { id: "acme" } })),
+ *   Layer.provide(Git.AuthenticatedSecret({ principal: "acme" })),
  * );
  * ```
  */

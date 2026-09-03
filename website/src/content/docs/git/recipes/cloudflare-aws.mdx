@@ -23,7 +23,7 @@ const GitLive = Git.ServerLive.pipe(
   Layer.provide(GitHasher.HasherLambda(GitHasher.HasherFunction)),
   Layer.provide(AWS.Lambda.InvokeFunctionHttp),
   Layer.provide(Git.PolicyOwners),
-  Layer.provide(Git.AuthenticatedSecret({ principal: { id: "acme" } })),
+  Layer.provide(Git.AuthenticatedSecret({ principal: "acme" })),
 );
 
 export default class GitHost extends Cloudflare.Worker<GitHost>()(
@@ -59,7 +59,6 @@ export default Alchemy.Stack(
 ```
 
 ```sh
-export GIT_SERVICE_SECRET="$(openssl rand -base64 32)"
 export AWS_ACCESS_KEY_ID=...        # a key scoped to the bucket
 export AWS_SECRET_ACCESS_KEY=...
 bun alchemy deploy
@@ -107,7 +106,7 @@ const GitLive = Git.ServerLive.pipe(
 +  Layer.provide(GitHasher.HasherLambda(GitHasher.HasherFunction)),
 +  Layer.provide(AWS.Lambda.InvokeFunctionHttp),
   Layer.provide(Git.PolicyOwners),
-  Layer.provide(Git.AuthenticatedSecret({ principal: { id: "acme" } })),
+  Layer.provide(Git.AuthenticatedSecret({ principal: "acme" })),
 );
 ```
 
