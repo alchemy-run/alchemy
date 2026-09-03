@@ -367,9 +367,7 @@ export const GIT_WORKER_OPTIONS = {
 };
 
 const makeCore = Effect.gen(function* () {
-  // ── init: DO namespaces + admin key ────────────────────────────────────
-  // Both namespaces are wrapped so RPC-boundary errors regain their class
-  // ── init: DO namespaces + admin key ────────────────────────────────────
+  // ── init: DO namespaces ────────────────────────────────────────────────
   // RPC-boundary tagged errors are reconstructed by the stubs themselves —
   // both DO classes declare `errors: [...]` (see DurableObjectProps.errors).
   const registry = yield* RegistryStore;
@@ -466,11 +464,11 @@ const makeCore = Effect.gen(function* () {
       ),
     );
 
-  // ── request → Actor (the Auth block's authenticate) ────────────────────
+  // ── request → caller ───────────────────────────────────────────────────
   /**
-   * The REST caller's identity, resolved by the Auth block from the raw
-   * request headers. An absent/unparseable credential is the ANONYMOUS
-   * actor — endpoints that need auth deny it at authorize time.
+   * The REST caller, as the `HttpApi` middleware provided it: a principal,
+   * or `null` for anonymous. No middleware at all is anonymous too, which
+   * the policy confines to public reads.
    */
   const restAuth = Effect.map(currentCaller, (principal) => principal ?? null);
 
@@ -668,9 +666,9 @@ const makeCore = Effect.gen(function* () {
         )
         .handle("list", ({ query }) =>
           Effect.gen(function* () {
-            // Whoever the Auth block lets list everything (the admin key,
-            // under AuthTokens) sees all repos; everyone else (tokenless
-            // included) sees public repos only — GitHub's model.
+            // Whoever the policy lets list everything sees all repos;
+            // everyone else (anonymous included) sees public repos only —
+            // GitHub's model.
             const principal = yield* currentCaller;
             const isAdmin = yield* policy.authorize({
               principal,
@@ -2249,9 +2247,12 @@ type GitApiLike = HttpApi.HttpApi<any, any>;
 export type GitGroupName = "repos" | "refs" | "objects" | "pulls";
 /** The middleware services the git groups of an `HttpApi` require (yours, applied with `.middleware(...)`). */
 export type GitMiddleware<Groups extends HttpApiGroup.Constraint> =
-  HttpApiEndpoint.Middleware<
-    HttpApiGroup.Endpoints<HttpApiGroup.WithIdentifier<Groups, GitGroupName>>
-  >;
+  | HttpApiEndpoint.Middleware<
+      HttpApiGroup.Endpoints<HttpApiGroup.WithIdentifier<Groups, GitGroupName>>
+    >
+  | HttpApiEndpoint.MiddlewareServices<
+      HttpApiGroup.Endpoints<HttpApiGroup.WithIdentifier<Groups, GitGroupName>>
+    >;
 
 /**
  * The engine's HTTP planes as pieces, built once per Worker and shared by

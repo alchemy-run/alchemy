@@ -8,48 +8,103 @@
 
 // ── configuration ───────────────────────────────────────────────────────────
 
-const URL_KEY = "git-service:url";
-const TOKEN_KEY = "git-service:token";
-
-/** Base URL baked in at deploy (`env.VITE_GIT_URL` on Website.Vite). */
 const builtinUrl: string | undefined = import.meta.env.VITE_GIT_URL;
 
+/**
+ * Where the service lives. Same origin as the SPA in the single-origin
+ * deployment, so the Better Auth session cookie rides along with every
+ * request (`credentials: "include"`).
+ */
 export interface Connection {
   readonly url: string;
-  /** Absent = anonymous: public repos are readable without any token. */
-  readonly token?: string | undefined;
 }
 
-/**
- * Same-origin by default: the deployed site fronts the git service behind
- * one host (see `src/worker.ts`), so with no explicit configuration the
- * API is simply `location.origin`. A baked-in VITE_GIT_URL (split
- * deployments, local `vite preview` against a remote service) overrides
- * that; localStorage only matters when neither is set and the user
- * connected to a service by hand.
- */
-export const getConnection = (): Connection | null => {
-  const url = builtinUrl ?? localStorage.getItem(URL_KEY) ?? location.origin;
-  const token = localStorage.getItem(TOKEN_KEY);
-  return { url: url.replace(/\/+$/, ""), token: token ?? undefined };
+export const getConnection = (): Connection => ({
+  url: (builtinUrl ?? location.origin).replace(/\/+$/, ""),
+});
+
+// ── auth (Better Auth, mounted at /api/auth) ────────────────────────────────
+
+export interface User {
+  readonly id: string;
+  readonly name: string;
+  readonly email: string;
+}
+
+const authRequest = async <T>(
+  c: Connection,
+  method: string,
+  path: string,
+  body?: unknown,
+): Promise<T> => {
+  const res = await fetch(`${c.url}/api/auth${path}`, {
+    method,
+    credentials: "include",
+    headers: body !== undefined ? { "Content-Type": "application/json" } : {},
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    let message = text;
+    try {
+      message = (JSON.parse(text) as { message?: string }).message ?? text;
+    } catch {
+      /* not JSON */
+    }
+    throw new ApiError(res.status, "AuthError", message || res.statusText);
+  }
+  const text = await res.text();
+  return (text.length === 0 ? null : JSON.parse(text)) as T;
 };
 
-export const defaultUrl = (): string =>
-  builtinUrl ?? localStorage.getItem(URL_KEY) ?? location.origin;
+export const getSession = (c: Connection): Promise<User | null> =>
+  authRequest<{ user: User } | null>(c, "GET", "/get-session").then(
+    (session) => session?.user ?? null,
+  );
 
-export const saveConnection = (url: string, token?: string): void => {
-  localStorage.setItem(URL_KEY, url.replace(/\/+$/, ""));
-  if (token) localStorage.setItem(TOKEN_KEY, token);
-  else localStorage.removeItem(TOKEN_KEY);
-};
+export const signUp = (
+  c: Connection,
+  input: { name: string; email: string; password: string },
+): Promise<User> =>
+  authRequest<{ user: User }>(c, "POST", "/sign-up/email", input).then(
+    (r) => r.user,
+  );
 
-export const signOut = (): void => {
-  localStorage.removeItem(TOKEN_KEY);
-};
+export const signIn = (
+  c: Connection,
+  input: { email: string; password: string },
+): Promise<User> =>
+  authRequest<{ user: User }>(c, "POST", "/sign-in/email", input).then(
+    (r) => r.user,
+  );
 
-// ── API types (mirroring src/Git/Api/Schema.ts) ─────────────────────────────────
+export const signOut = (c: Connection): Promise<void> =>
+  authRequest<unknown>(c, "POST", "/sign-out", {}).then(() => undefined);
 
-export type TokenScope = "read" | "write" | "admin";
+/** An API key: the password a `git` remote carries. Values are shown once. */
+export interface ApiKey {
+  readonly id: string;
+  readonly name: string | null;
+  /** The first characters of the key, for recognition. */
+  readonly start: string | null;
+  readonly createdAt: string;
+  readonly expiresAt: string | null;
+}
+
+export const listApiKeys = (c: Connection): Promise<ApiKey[]> =>
+  authRequest<ApiKey[]>(c, "GET", "/api-key/list");
+
+export const createApiKey = (
+  c: Connection,
+  name: string,
+): Promise<ApiKey & { key: string }> =>
+  authRequest(c, "POST", "/api-key/create", { name });
+
+export const deleteApiKey = (c: Connection, keyId: string): Promise<void> =>
+  authRequest<unknown>(c, "POST", "/api-key/delete", { keyId }).then(
+    () => undefined,
+  );
+
 export type RepoStatus = "ready" | "importing" | "forking" | "deleting";
 
 export interface ObjectStats {
@@ -76,7 +131,7 @@ export interface Repo {
   defaultBranch: string;
   description: string | null;
   readOnly: boolean;
-  /** Readable (REST + clone) without a token. */
+  /** Readable (REST + clone) without signing in. */
   public: boolean;
   forkOf: string | null;
   status: RepoStatus;
@@ -162,23 +217,9 @@ export interface Comparison {
   filesTruncated: boolean;
 }
 
-export interface TokenInfo {
-  id: string;
-  name: string;
-  scope: TokenScope;
-  createdAt: number;
-  expiresAt: number | null;
-  lastUsedAt: number | null;
-}
-
-export interface CreatedToken extends TokenInfo {
-  token: string;
-}
-
 export interface RepoCreated {
   repo: Repo;
   remote: string;
-  token: CreatedToken;
 }
 
 export interface Page<T> {
@@ -230,14 +271,10 @@ const request = async <T>(
 ): Promise<T> => {
   const res = await fetch(`${connection.url}/api/v1${path}`, {
     method,
-    headers: {
-      // Anonymous requests carry no Authorization header at all — the
-      // service grants read on public repos to tokenless callers.
-      ...(connection.token
-        ? { Authorization: `Bearer ${connection.token}` }
-        : {}),
-      ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
-    },
+    // The Better Auth session cookie is the credential; anonymous
+    // requests carry none and the policy confines them to public reads.
+    credentials: "include",
+    headers: body !== undefined ? { "Content-Type": "application/json" } : {},
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
   if (!res.ok) throw await parseError(res);
@@ -354,7 +391,7 @@ export const getFile = async (
   const res = await fetch(
     `${c.url}/api/v1/repos/${seg(owner)}/${seg(repo)}/file?${params}`,
     {
-      headers: c.token ? { Authorization: `Bearer ${c.token}` } : {},
+      credentials: "include",
     },
   );
   if (!res.ok) throw await parseError(res);
@@ -405,7 +442,7 @@ const getBlobRaw = async (
 ): Promise<Uint8Array> => {
   const res = await fetch(
     `${c.url}/api/v1/repos/${seg(owner)}/${seg(repo)}/blobs/${seg(oid)}/raw`,
-    { headers: c.token ? { Authorization: `Bearer ${c.token}` } : {} },
+    { credentials: "include" },
   );
   if (!res.ok) throw await parseError(res);
   return new Uint8Array(await res.arrayBuffer());
@@ -593,34 +630,4 @@ export const mergePull = (
     "POST",
     `/repos/${seg(owner)}/${seg(repo)}/pulls/${number}/merge`,
     payload ?? {},
-  );
-
-// ── tokens ──────────────────────────────────────────────────────────────────
-
-export const listTokens = (c: Connection, owner: string, repo: string) =>
-  request<TokenInfo[]>(c, "GET", `/repos/${seg(owner)}/${seg(repo)}/tokens`);
-
-export const createToken = (
-  c: Connection,
-  owner: string,
-  repo: string,
-  payload: { name: string; scope: TokenScope; ttlSeconds?: number },
-) =>
-  request<CreatedToken>(
-    c,
-    "POST",
-    `/repos/${seg(owner)}/${seg(repo)}/tokens`,
-    payload,
-  );
-
-export const revokeToken = (
-  c: Connection,
-  owner: string,
-  repo: string,
-  id: string,
-) =>
-  request<unknown>(
-    c,
-    "DELETE",
-    `/repos/${seg(owner)}/${seg(repo)}/tokens/${seg(id)}`,
   );

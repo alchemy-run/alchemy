@@ -231,7 +231,7 @@ export const PullsTab = ({ context }: { context: RepoContext }) => {
   const [showNew, setShowNew] = useState(false);
   const { navigate } = useRouter();
   const { connection, repo } = context;
-  const signedIn = connection.token !== undefined;
+  const signedIn = context.user !== null;
 
   const load = async (state: PullState, nextCursor?: string) => {
     try {

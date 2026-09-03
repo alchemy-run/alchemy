@@ -17,7 +17,8 @@
  *   Layer.provide(GitHasher.HasherLambda(GitHasher.HasherFunction)),
  *   Layer.provide(AWS.Lambda.InvokeFunctionHttp),
  *   Layer.provide(Git.BlobStoreR2(GitObjects)),
- *   Layer.provide(Git.AuthTokens),
+ *   Layer.provide(Git.PolicyOwners),
+ *   Layer.provide(Git.AuthenticateSecret({ principal: { id: "acme" } })),
  * );
  * ```
  */

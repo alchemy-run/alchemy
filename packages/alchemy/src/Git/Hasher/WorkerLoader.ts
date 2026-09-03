@@ -19,7 +19,8 @@
  *   Layer.provide(Git.RegistryDurableObject),
  *   Layer.provide(GitHasher.HasherWorkerLoader()),
  *   Layer.provide(Git.BlobStoreR2(GitObjects)),
- *   Layer.provide(Git.AuthTokens),
+ *   Layer.provide(Git.PolicyOwners),
+ *   Layer.provide(Git.AuthenticateSecret({ principal: { id: "acme" } })),
  * );
  * ```
  */

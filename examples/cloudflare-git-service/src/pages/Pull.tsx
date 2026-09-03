@@ -111,7 +111,7 @@ const PullPage = ({
   const [busy, setBusy] = useState(false);
   const [generation, setGeneration] = useState(0);
   const { connection, repo } = context;
-  const signedIn = connection.token !== undefined;
+  const signedIn = context.user !== null;
 
   useEffect(() => {
     let cancelled = false;

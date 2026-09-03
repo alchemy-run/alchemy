@@ -1,13 +1,12 @@
 /**
- * Front-door worker for the single-origin deployment: the SPA, the REST
- * API, and the git wire protocol all live on ONE host (e.g.
- * git.alchemy.run). API and wire requests are forwarded to the GitWorker
- * over a private service binding; everything else is served from the Vite
- * static assets.
+ * Front-door worker for the single-origin deployment: the SPA, the API,
+ * the auth routes, and the git wire protocol all live on ONE host. API and
+ * wire requests are forwarded to the GitHost over a private service
+ * binding; everything else is served from the Vite static assets.
  *
- * One origin matters beyond aesthetics: clone URLs shown in the UI are
- * same-host (no `workers.dev`, which some ad-block/malware lists block),
- * and the SPA needs no CORS.
+ * One origin matters beyond aesthetics: the session cookie Better Auth
+ * sets is first-party for the SPA, clone URLs shown in the UI are
+ * same-host, and nothing needs CORS.
  */
 
 interface Fetcher {
@@ -15,14 +14,14 @@ interface Fetcher {
 }
 
 interface Env {
-  /** Service binding to the GitWorker (REST + wire planes). */
+  /** Service binding to the GitHost (REST, auth, and wire planes). */
   GIT: Fetcher;
   /** The Vite-built static assets. */
   ASSETS: Fetcher;
 }
 
-/** `/api/v1/**` (native REST) and `/api/v3/**` (GitHub compat facade). */
-const API_PREFIX = /^\/api\/v[13]\//;
+/** `/api/v1/**` (REST), `/api/v3/**` (GitHub facade), `/api/auth/**` (Better Auth). */
+const API_PREFIX = /^\/api\//;
 
 /**
  * The git smart-HTTP wire endpoints: `/:owner/:repo[.git]/info/refs`,
@@ -36,8 +35,9 @@ export default {
     const { pathname } = new URL(request.url);
     if (API_PREFIX.test(pathname) || WIRE_PATH.test(pathname)) {
       // Forwarded verbatim: the Host header stays this origin, so the
-      // GitWorker derives same-host clone/remote URLs, and push bodies
-      // stream through the binding untouched.
+      // GitHost derives same-host clone/remote URLs and Better Auth scopes
+      // its cookie to it, and push bodies stream through the binding
+      // untouched.
       return env.GIT.fetch(request);
     }
     return env.ASSETS.fetch(request);

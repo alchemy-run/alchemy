@@ -43,7 +43,8 @@ import { Unauthorized } from "./Api/Schema.ts";
 
 /**
  * The identity your authentication resolved. `id` is what repositories are
- * owned by (`repo.owner === principal.id` is the default policy's test).
+ * owned by: owner names are lowercased, so a repository is a principal's
+ * when `repo.owner === principal.id.toLowerCase()` ({@link owns}).
  */
 export interface Principal {
   readonly id: string;
@@ -212,10 +213,13 @@ export const PolicyOwners: Layer.Layer<Policy> = Layer.succeed(Policy, {
         ? repo !== null && repo.public && isReadAction(action)
         : repo === null
           ? true
-          : repo.owner === principal.id ||
-            (repo.public && isReadAction(action)),
+          : owns(principal, repo) || (repo.public && isReadAction(action)),
     ),
 });
+
+/** Owner names are lowercased by the engine; a principal's id need not be. */
+export const owns = (principal: Principal, repo: RepoContext): boolean =>
+  repo.owner === principal.id.toLowerCase();
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Header parsing

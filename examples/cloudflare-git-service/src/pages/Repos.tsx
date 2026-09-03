@@ -6,6 +6,7 @@ import {
   type Connection,
   type Repo,
   type RepoCreated,
+  type User,
 } from "../api.ts";
 import {
   Badge,
@@ -55,20 +56,20 @@ const RepoRow = ({ repo }: { repo: Repo }) => (
   </li>
 );
 
-/** Post-create panel: the remote + bootstrap token are shown exactly once. */
+/** Post-create panel: the remote to add. The password is one of your API keys. */
 const CreatedPanel = ({ created }: { created: RepoCreated }) => (
   <div className="mb-4 space-y-3 rounded-md border border-success/40 bg-success/5 p-4 text-sm">
     <p className="font-medium text-success">
-      Repository {created.repo.owner}/{created.repo.name} created. The write
-      token below is shown exactly once — store it now.
+      Repository {created.repo.owner}/{created.repo.name} created. Push with one
+      of your API keys as the password (Settings → API keys).
     </p>
     <div className="flex items-center gap-2">
       <code className="grow overflow-x-auto rounded bg-canvas-subtle px-2 py-1 font-mono text-xs">
         git remote add origin{" "}
-        {created.remote.replace("://", `://x:${created.token.token}@`)}
+        {created.remote.replace("://", "://x:YOUR_API_KEY@")}
       </code>
       <CopyButton
-        text={`git remote add origin ${created.remote.replace("://", `://x:${created.token.token}@`)}`}
+        text={`git remote add origin ${created.remote.replace("://", "://x:YOUR_API_KEY@")}`}
       />
     </div>
   </div>
@@ -76,12 +77,15 @@ const CreatedPanel = ({ created }: { created: RepoCreated }) => (
 
 const NewRepoForm = ({
   connection,
+  user,
   onCreated,
 }: {
   connection: Connection;
+  user: User;
   onCreated: (created: RepoCreated) => void;
 }) => {
-  const [owner, setOwner] = useState("");
+  // Repositories are owned by a principal's id, so the owner is you.
+  const [owner, setOwner] = useState(user.id);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [isPublic, setIsPublic] = useState(true);
@@ -130,7 +134,7 @@ const NewRepoForm = ({
           checked={isPublic}
           onChange={(event) => setIsPublic(event.target.checked)}
         />
-        Public — anyone can read and clone without a token
+        Public — anyone can read and clone without signing in
       </label>
       {error != null && <ErrorBox error={error} />}
       <Button kind="primary" type="submit" disabled={busy || !owner || !name}>
@@ -140,7 +144,13 @@ const NewRepoForm = ({
   );
 };
 
-export const ReposPage = ({ connection }: { connection: Connection }) => {
+export const ReposPage = ({
+  connection,
+  user,
+}: {
+  connection: Connection;
+  user: User | null;
+}) => {
   const [repos, setRepos] = useState<Repo[] | null>(null);
   const [cursor, setCursor] = useState<string | null>(null);
   const [error, setError] = useState<unknown>(null);
@@ -165,7 +175,7 @@ export const ReposPage = ({ connection }: { connection: Connection }) => {
   useEffect(() => {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [connection.url, connection.token]);
+  }, [connection.url, user?.id]);
 
   if (error != null) return <ErrorBox error={error} />;
   if (repos === null) return <Spinner />;
@@ -174,14 +184,17 @@ export const ReposPage = ({ connection }: { connection: Connection }) => {
     <div>
       <div className="mb-4 flex items-center justify-between">
         <h1 className="text-xl font-semibold">Repositories</h1>
-        <Button kind="primary" onClick={() => setShowNew((value) => !value)}>
-          New repository
-        </Button>
+        {user !== null && (
+          <Button kind="primary" onClick={() => setShowNew((value) => !value)}>
+            New repository
+          </Button>
+        )}
       </div>
       {created !== null && <CreatedPanel created={created} />}
-      {showNew && (
+      {showNew && user !== null && (
         <NewRepoForm
           connection={connection}
+          user={user}
           onCreated={(result) => {
             setCreated(result);
             setShowNew(false);

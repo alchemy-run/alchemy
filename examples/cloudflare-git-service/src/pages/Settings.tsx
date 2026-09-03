@@ -1,15 +1,13 @@
-/** The Settings tab: access tokens, storage stats, compaction, delete. */
+/** The Settings tab: API keys, storage stats, compaction, delete. */
 import { useEffect, useState } from "react";
 import {
   compactRepo,
-  createToken,
+  createApiKey,
+  deleteApiKey,
   deleteRepo,
-  listTokens,
-  revokeToken,
+  listApiKeys,
   updateRepo,
-  type CreatedToken,
-  type TokenInfo,
-  type TokenScope,
+  type ApiKey,
 } from "../api.ts";
 import {
   Badge,
@@ -115,37 +113,44 @@ const VisibilityCard = ({ context }: { context: RepoContext }) => {
   );
 };
 
-const TokensCard = ({ context }: { context: RepoContext }) => {
-  const [tokens, setTokens] = useState<TokenInfo[] | null>(null);
+const ApiKeysCard = ({ context }: { context: RepoContext }) => {
+  const [keys, setKeys] = useState<ApiKey[] | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [name, setName] = useState("");
-  const [scope, setScope] = useState<TokenScope>("write");
-  const [minted, setMinted] = useState<CreatedToken | null>(null);
+  const [minted, setMinted] = useState<(ApiKey & { key: string }) | null>(null);
   const { connection, repo } = context;
+  const remote = `${connection.url}/${repo.owner}/${repo.name}.git`;
 
   const load = () =>
-    listTokens(connection, repo.owner, repo.name)
-      .then((items) => setTokens(items))
+    listApiKeys(connection)
+      .then((items) => setKeys(items))
       .catch(setError);
 
   useEffect(() => {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [repo.repoId]);
+  }, []);
 
   return (
     <section className="rounded-md border border-border-muted p-4">
-      <h2 className="mb-3 font-semibold">Access tokens</h2>
+      <h2 className="mb-1 font-semibold">API keys</h2>
+      <p className="mb-3 text-sm text-fg-muted">
+        A key is the password of your git remote. Keys belong to your account
+        and work on every repository you own.
+      </p>
       {minted !== null && (
         <div className="mb-3 space-y-2 rounded-md border border-success/40 bg-success/5 p-3 text-sm">
           <p className="font-medium text-success">
-            Token “{minted.name}” created — shown exactly once:
+            Key “{minted.name}” created — shown exactly once:
           </p>
           <div className="flex items-center gap-2">
             <code className="grow overflow-x-auto rounded bg-canvas-subtle px-2 py-1 font-mono text-xs">
-              {minted.token}
+              git remote add origin{" "}
+              {remote.replace("://", `://x:${minted.key}@`)}
             </code>
-            <CopyButton text={minted.token} />
+            <CopyButton
+              text={`git remote add origin ${remote.replace("://", `://x:${minted.key}@`)}`}
+            />
           </div>
         </div>
       )}
@@ -153,12 +158,9 @@ const TokensCard = ({ context }: { context: RepoContext }) => {
         className="mb-4 flex flex-wrap items-center gap-2"
         onSubmit={(event) => {
           event.preventDefault();
-          createToken(connection, repo.owner, repo.name, {
-            name: name.trim(),
-            scope,
-          })
-            .then((token) => {
-              setMinted(token);
+          createApiKey(connection, name.trim())
+            .then((key) => {
+              setMinted(key);
               setName("");
               void load();
             })
@@ -166,50 +168,39 @@ const TokensCard = ({ context }: { context: RepoContext }) => {
         }}
       >
         <div className="w-48">
-          <Input value={name} onChange={setName} placeholder="Token name" />
+          <Input value={name} onChange={setName} placeholder="Key name" />
         </div>
-        <select
-          value={scope}
-          onChange={(event) => setScope(event.target.value as TokenScope)}
-          className="rounded-md border border-border-muted bg-canvas px-2 py-1.5 text-sm"
-        >
-          <option value="read">read</option>
-          <option value="write">write</option>
-          <option value="admin">admin</option>
-        </select>
         <Button
           kind="primary"
           type="submit"
           disabled={name.trim().length === 0}
         >
-          Generate token
+          Generate key
         </Button>
       </form>
       {error != null && <ErrorBox error={error} />}
-      {tokens === null ? (
+      {keys === null ? (
         <Spinner />
-      ) : tokens.length === 0 ? (
-        <p className="text-sm text-fg-muted">No tokens.</p>
+      ) : keys.length === 0 ? (
+        <p className="text-sm text-fg-muted">No keys.</p>
       ) : (
         <ul className="divide-y divide-border-muted">
-          {tokens.map((token) => (
+          {keys.map((key) => (
             <li
-              key={token.id}
+              key={key.id}
               className="flex items-center justify-between gap-4 py-2 text-sm"
             >
               <div className="flex items-center gap-2">
-                <span className="font-medium">{token.name}</span>
-                <Badge>{token.scope}</Badge>
+                <span className="font-medium">{key.name ?? "unnamed"}</span>
+                {key.start !== null && <Badge>{key.start}…</Badge>}
                 <span className="text-xs text-fg-muted">
-                  created {timeAgo(token.createdAt)}
-                  {token.lastUsedAt !== null &&
-                    ` · used ${timeAgo(token.lastUsedAt)}`}
+                  created {timeAgo(new Date(key.createdAt).getTime())}
                 </span>
               </div>
               <Button
                 kind="danger"
                 onClick={() => {
-                  revokeToken(connection, repo.owner, repo.name, token.id)
+                  deleteApiKey(connection, key.id)
                     .then(() => void load())
                     .catch(setError);
                 }}
@@ -234,7 +225,7 @@ const DangerCard = ({ context }: { context: RepoContext }) => {
     <section className="rounded-md border border-danger/40 p-4">
       <h2 className="mb-2 font-semibold text-danger">Danger zone</h2>
       <p className="mb-3 text-sm text-fg-muted">
-        Deleting a repository destroys its refs, objects, and tokens. Type{" "}
+        Deleting a repository destroys its refs and objects. Type{" "}
         <code className="font-mono">{full}</code> to confirm.
       </p>
       <div className="flex items-center gap-2">
@@ -275,7 +266,7 @@ export const SettingsTab = ({ context }: { context: RepoContext }) => (
   <div className="space-y-4">
     <StorageCard context={context} />
     <VisibilityCard context={context} />
-    <TokensCard context={context} />
+    <ApiKeysCard context={context} />
     <DangerCard context={context} />
   </div>
 );

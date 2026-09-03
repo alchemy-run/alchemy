@@ -36,11 +36,9 @@ export * as Repos from "./Api/Repos.ts";
 /**
  * The complete git-service management-plane API, mounted at `/api/v1`.
  *
- * Authorization matrix (enforced in the Repo DO, DESIGN.md §8):
- * admin key → everything; repo `admin` token → its repo's write + token
- * create/list/revoke + repo update/delete; `write` → its repo's reads +
- * receive-pack + ref writes; `read` → its repo's reads + upload-pack
- * only. Repo create / list-all / fork / import are admin-key-only.
+ * Authorization is `Git.Policy`'s, asked inside the Repo DO with the
+ * action's parsed facts. The groups carry no middleware of their own: the
+ * `HttpApi` you mount them in decides who the caller is.
  */
 export const GitApi = HttpApi.make("git-service")
   .add(ReposGroup)

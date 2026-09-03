@@ -331,9 +331,9 @@ export const BUNDLE_COUNT_HEADER = "x-git-bundle-count" as const;
 export const BUNDLE_SIDEBAND_HEADER = "x-git-bundle-sideband" as const;
 
 /**
- * Internal header the Worker sets (after verifying the deployer admin key
- * and stripping any inbound copy) so the DO can honor admin-key wire
- * access. Never trusted from outside — only the Worker can reach the DO.
+ * Internal header the Worker sets (after resolving the principal through
+ * `Authenticate` and stripping any inbound copy) so the DO knows who is
+ * calling. Never trusted from outside — only the Worker can reach the DO.
  */
 export const PRINCIPAL_HEADER = "x-git-principal" as const;
 

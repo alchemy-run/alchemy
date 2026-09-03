@@ -24,6 +24,7 @@ export {
   Caller,
   currentCaller,
   isReadAction,
+  owns,
   parseBasic,
   parseBearer,
   parseSecret,

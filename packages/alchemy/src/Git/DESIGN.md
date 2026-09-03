@@ -669,19 +669,42 @@ Codec inventory: pkt-line reader/writer (65516 payload cap, flush/delim/ERR), si
 
 ---
 
-## 8. Auth / token model
+## 8. Auth model: nothing inside the engine
 
-**Two credential kinds:**
+The engine holds no credentials and no users. Authentication happens in
+the HTTP layer the user owns, and the engine asks one pure question per
+action. Three services (`Auth.ts`):
 
-1. **Admin key** — a single deployer-provisioned secret (`Config.redacted("GIT_SERVICE_ADMIN_TOKEN")` on the Worker, or Cloudflare Secrets Store via `ReadSecret` + `ReadSecretBinding`). Verified **at the Worker** with `crypto.subtle.timingSafeEqual`. Grants: repo create/update/delete/list-all, fork/import, and implicit admin on every repo. This solves the bootstrap problem (repo creation needs auth before any repo token exists). Intended topology (Artifacts' model): *the customer's own Worker* holds the admin key, applies its business authz, and mints short-lived repo tokens for its users/agents — who gets a token is the customer's problem.
-2. **Per-repo tokens** — minted via `POST /repos/:o/:r/tokens` (and one bootstrap `write` token returned in `RepoCreated`), format `gs_<base64url(32 random bytes)>`, shown once. Stored as `hex(sha256(token))` in the **repo's own DO** `tokens` table with scope `read | write | admin`:
-   - `read` → advertisement + upload-pack + all REST reads
-   - `write` → read + receive-pack + REST ref writes (subject to `readOnly`)
-   - `admin` → write + token create/list/revoke + repo update/delete
+- **`Principal`** — the identity the user's authentication resolved
+  (`{ id, name? }`). Owner names are lowercased, so a repository is a
+  principal's when `repo.owner === principal.id.toLowerCase()`.
+- **`Caller`** — what an `HttpApi` middleware provides to the REST
+  handlers: a principal or anonymous. The git groups (`Git.Api`) carry no
+  middleware of their own; `ServerLive` applies the default
+  `Authenticated` bridge, an app mounting the groups in its own `HttpApi`
+  applies its own (a Better Auth session, in the example).
+- **`Authenticate`** — headers → principal, for the routes an
+  `HttpApiMiddleware` cannot wrap: the git wire protocol (a `git` client
+  can only send HTTP Basic, token in the password field), the raw blob
+  and file reads, and the GitHub facade.
+- **`Policy`** — yes/no over `(principal | undefined, repo | null,
+  GitAction)`, asked inside the Repo DO with the parsed facts (a push
+  carries the refs it wants to move). `PolicyOwners` is the default:
+  anonymous reads public, a principal may create and list, and owns what
+  it owns.
 
-**Enforcement lives in the Repo DO** — the natural consequence of tokens living there. The Worker parses credentials (HttpApi middleware for REST; Basic header for git routes — username ignored, password = token, exactly how git credential helpers and `https://x:gs_...@host/o/r.git` remotes work; Bearer also accepted on REST) and forwards them; every Repo-DO RPC and the wire-protocol `fetch` handler starts with `verifyToken(sha256(token), requiredScope)` — a single indexed SQL lookup checking expiry (high-entropy token ⇒ hash lookup is not timing-sensitive), bumping `last_used_at` throttled to once/hour. Missing/invalid ⇒ REST: tagged `Unauthorized`/`Forbidden`; git wire: `401` + `WWW-Authenticate: Basic realm="git-service"` on `info/refs` (git retries with credentials), `ERR` pkt once a 200 has begun. `readOnly` repos: tokens still mint and read, but receive-pack and ref writes fail (`ng` / `ReadOnlyRepo`).
+The Worker resolves the principal once, strips any inbound
+`x-git-principal`, sets it for the DO, and the DO trusts it (only the
+Worker can reach the DO). The push pipeline's internal hash route
+authenticates with `InternalSecret`, a deploy-time `Alchemy.Random`
+value no user holds.
 
-No users, no orgs, no OAuth in v1. The seam for v2 identity: `Credentials` is already a Context service — an OAuth-fronting worker (ripgit's pattern: verify at the edge, strip `Authorization`, forward actor headers over a service binding) slots in without touching the DO enforcement code.
+Shipped implementations: `AuthenticateSecret({ principal })`, one shared
+secret for a fresh host (the tutorial's starter), and `Authenticated` +
+`AuthenticatedLive`, the default REST middleware over `Authenticate`.
+Tokens are an implementation outside the engine: the example uses Better
+Auth API keys (`@better-auth/api-key`) as the git password, verified in
+its `Authenticate` layer. There is no tokens table and no admin key.
 
 ---
 

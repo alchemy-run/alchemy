@@ -225,14 +225,15 @@ export const HasherInline: Layer.Layer<Hasher, never, BlobStore> = Layer.effect(
  * ever involved.
  */
 export const InternalSecret: Effect.Effect<
-  Effect.Effect<Redacted.Redacted<string>>,
-  never,
-  any
+  Effect.Effect<Redacted.Redacted<string>>
 > = Effect.gen(function* () {
+  // Yielding the resource class gives a constructor whose providers are
+  // the host stack's (the same way the Cloudflare `*Http` bindings mint
+  // tokens), so declaring the secret here needs nothing from the caller.
   const R = yield* Random;
   const resource = yield* R("GitInternalSecret");
   return yield* resource.text;
-}) as Effect.Effect<Effect.Effect<Redacted.Redacted<string>>, never, any>;
+});
 
 export const HASHER_BINDING = "GIT_SELF";
 
@@ -245,8 +246,8 @@ interface SelfFetcher {
 /**
  * Posts each part to the Worker's own hash route through the self service
  * binding (`GIT_WORKER_OPTIONS` declares it as `GIT_SELF`). The internal
- * call authenticates with the service's admin key, read from the same
- * config the Worker uses. Falls back to {@link HasherInline} when the
+ * call authenticates with {@link InternalSecret}, a deploy-time random
+ * value no user ever holds. Falls back to {@link HasherInline} when the
  * binding is absent from the environment.
  */
 export const HasherSelf: Layer.Layer<

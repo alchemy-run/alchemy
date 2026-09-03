@@ -178,6 +178,14 @@ describe("PolicyOwners", () => {
             action: { _tag: "ListRepos" },
           }),
         ).toBe(true);
+        // Owner names are lowercased by the engine; ids need not be.
+        expect(
+          yield* decide({
+            principal: { id: "DANA" },
+            repo: repo("dana", false),
+            action: push,
+          }),
+        ).toBe(true);
       }),
   );
 });
