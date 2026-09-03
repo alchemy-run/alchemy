@@ -8,7 +8,7 @@ import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import { fileURLToPath } from "node:url";
 import { SPAWNER_URL_ENV_KEY } from "../../Local/RpcProviderProxy.ts";
 import * as RpcSpawner from "../../Local/RpcSpawner.ts";
-import { isRegisterHooksSupported } from "../../Util/Node.ts";
+import { nodeLoaderArgs } from "../../Util/Node.ts";
 import { DEV_RELOAD_EXIT_CODE, DevOptions } from "../DevOptions.ts";
 import {
   configPath,
@@ -73,26 +73,29 @@ export const devCommand = Command.make(
               ...process.execArgv,
               fileURLToPath(import.meta.resolve("alchemy/bin/exec.ts")),
             ]
-          : import.meta.url.endsWith(".ts") && isRegisterHooksSupported()
-            ? [
-                // Source checkout under node: run the .ts exec entry with
-                // the dev-mode hooks (Oxc loader + src-condition
-                // resolution), so dev works without a build (mirrors
-                // bin/cli.js's launcher path). `process.execPath`, not
-                // "node": the hooks are gated on THIS node's version. A
-                // duplicate --import inherited via execArgv is harmless —
-                // the second import of the same URL hits the module cache.
+          : (() => {
+              // Node: the exec entry runs with alchemy's Oxc loader hooks,
+              // exactly as bin/cli.js started this process (checkout: the
+              // .ts entry plus src-condition resolution; published: the .js
+              // bundle plus the loader for the user's stack). Node's own
+              // TypeScript support is never relied on. `process.execPath`,
+              // not "node": the hooks are gated on THIS node's version. A
+              // duplicate --import inherited via execArgv is harmless — the
+              // second import of the same URL hits the module cache.
+              const entry = fileURLToPath(
+                import.meta.resolve(
+                  import.meta.url.endsWith(".ts")
+                    ? "alchemy/bin/exec.ts"
+                    : "alchemy/bin/exec.js",
+                ),
+              );
+              return [
                 process.execPath,
                 ...process.execArgv,
-                "--import",
-                import.meta.resolve("../../../bin/register-dev-mode.js"),
-                fileURLToPath(import.meta.resolve("alchemy/bin/exec.ts")),
-              ]
-            : [
-                process.execPath,
-                ...process.execArgv,
-                fileURLToPath(import.meta.resolve("alchemy/bin/exec.js")),
+                ...nodeLoaderArgs(entry),
+                entry,
               ];
+            })();
       const runChild = Effect.gen(function* () {
         const child = yield* ChildProcess.make(command[0], command.slice(1), {
           stdin: "inherit",

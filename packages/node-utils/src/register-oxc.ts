@@ -21,6 +21,9 @@ export type {
 
 const protocol = "alchemy-import:";
 const namespaceParameter = "alchemy-import-namespace";
+const globalRegistrationKey = Symbol.for(
+  "@alchemy.run/node-utils/register-oxc",
+);
 
 interface ImportRequest {
   readonly namespace?: string | undefined;
@@ -80,6 +83,18 @@ const resolve = (
 export const registerOxc = (
   options: ImportLoaderRegistrationOptions = {},
 ): ImportLoader => {
+  // One global (un-namespaced) registration per process. Alchemy starts every
+  // Node process with `--import` of a file that calls this, and in-process
+  // callers (the dev exec child, tests) may call it again; a second copy of
+  // the hooks would only re-run the resolve chain. The marker lives on
+  // globalThis because a checkout can load this module twice (src/ and lib/).
+  const globalRegistration = globalThis as typeof globalThis & {
+    [globalRegistrationKey]?: ImportLoader;
+  };
+  if (options.namespace === undefined) {
+    const existing = globalRegistration[globalRegistrationKey];
+    if (existing !== undefined) return existing;
+  }
   const transformer = new SourceTransformer(options);
   const shouldInvalidate = options.shouldInvalidate ?? (() => true);
   const hooks = registerHooks({
@@ -126,16 +141,17 @@ export const registerOxc = (
       if (!cleanUrl.startsWith("file:")) return nextLoad(cleanUrl, context);
       options.onImport?.(cleanUrl);
 
-      const transformed = transformer.transform(
-        fileURLToPath(cleanUrl),
-        cleanUrl,
-      );
+      const filePath = fileURLToPath(cleanUrl);
+      if (options.filter !== undefined && !options.filter(filePath)) {
+        return nextLoad(cleanUrl, context);
+      }
+      const transformed = transformer.transform(filePath, cleanUrl);
       if (transformed === undefined) return nextLoad(cleanUrl, context);
       return { ...transformed, shortCircuit: true };
     },
   });
 
-  return {
+  const loader: ImportLoader = {
     import<T>(specifier: string, parentURL: string) {
       const request: ImportRequest = {
         namespace: options.namespace,
@@ -150,6 +166,13 @@ export const registerOxc = (
     },
     unregister() {
       hooks.deregister();
+      if (globalRegistration[globalRegistrationKey] === loader) {
+        delete globalRegistration[globalRegistrationKey];
+      }
     },
   };
+  if (options.namespace === undefined) {
+    globalRegistration[globalRegistrationKey] = loader;
+  }
+  return loader;
 };

@@ -25,6 +25,13 @@ export interface ImportLoaderOptions {
   readonly shouldInvalidate?:
     | ((url: string, parentURL: string | undefined) => boolean)
     | undefined;
+  /**
+   * Limits transformation to matching absolute file paths; everything else
+   * loads through Node untouched. Lets a published install transpile only
+   * the user's own TypeScript while alchemy and its dependencies run their
+   * built JavaScript.
+   */
+  readonly filter?: ((path: string) => boolean) | undefined;
 }
 
 export interface ImportLoaderRegistrationOptions extends ImportLoaderOptions {
