@@ -270,6 +270,23 @@ code stays at the Stack, and the guard erases the rest.
 [Phases](/infrastructure-as-effects/phases#the-__alchemy_runtime__-guard)
 covers the guard in depth.
 
+The granularity pays off twice. Every binding has its own Layer, and
+each Layer carries exactly one client and registers exactly one grant.
+Provide the two you use and you get two clients in the bundle and two
+statements on the role, nothing more:
+
+```typescript
+Effect.provide(
+  Layer.mergeAll(
+    AWS.DynamoDB.GetItemHttp, // ships getItem, grants dynamodb:GetItem
+    AWS.DynamoDB.PutItemHttp, // ships putItem, grants dynamodb:PutItem
+  ),
+)
+```
+
+The same choice that keeps the bundle small keeps the permissions and
+environment minimal.
+
 ## Where next
 
 - [Layers](/infrastructure-as-effects/layers) — hide bindings behind a
