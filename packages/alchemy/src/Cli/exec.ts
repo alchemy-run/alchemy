@@ -94,11 +94,13 @@ const runDev = Effect.fn(function* (options: DevOptions) {
     ? applyPlan
     : applyPlan.pipe(
         Effect.catchCause((cause) =>
-          Cause.hasInterruptsOnly(cause)
-            ? Effect.failCause(cause)
-            : Console.error(
-                `alchemy dev: apply failed; keeping dev alive so healthy resources keep serving.\n${Cause.pretty(cause)}`,
-              ).pipe(Effect.as(undefined)),
+          Console.error(
+            describeFailure(
+              "apply",
+              cause,
+              "keeping dev alive so healthy resources keep serving",
+            ),
+          ).pipe(Effect.as(undefined)),
         ),
       );
   if (result !== undefined && once) {
@@ -214,18 +216,36 @@ const runBunDevWatcher = (options: DevOptions) =>
     ),
   );
 
+/**
+ * A run that ended by itself with nothing but interruptions in its cause was
+ * cancelled from the inside — a provider or engine race, never the user —
+ * so it must be reported like any other failure. Ctrl+C is different: it
+ * interrupts the fiber running this code, so `catchCause` never gets to
+ * park it (a parked `Effect.never` is interrupted straight away too).
+ */
+const describeFailure = (
+  what: string,
+  cause: Cause.Cause<unknown>,
+  next: string,
+) =>
+  Cause.hasInterruptsOnly(cause)
+    ? `alchemy dev: ${what} was interrupted internally (a bug in a provider or the engine — please report it with the trace below); ${next}.\n${Cause.pretty(cause)}`
+    : `alchemy dev: ${what} failed; ${next}.\n${Cause.pretty(cause)}`;
+
 // A mid-edit import or planning failure must keep the watch process alive so
-// the next save can restart it. Interruptions still propagate for Ctrl+C.
+// the next save can restart it. Ctrl+C still tears the run down.
 export const devKeepAlive = <A, E, R>(
   effect: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R> =>
   effect.pipe(
     Effect.catchCause((cause) =>
-      Cause.hasInterruptsOnly(cause)
-        ? Effect.failCause(cause)
-        : Console.error(
-            `alchemy dev: run failed; waiting for the next file change to retry.\n${Cause.pretty(cause)}`,
-          ).pipe(Effect.andThen(Effect.never)),
+      Console.error(
+        describeFailure(
+          "run",
+          cause,
+          "waiting for the next file change to retry",
+        ),
+      ).pipe(Effect.andThen(Effect.never)),
     ),
   );
 

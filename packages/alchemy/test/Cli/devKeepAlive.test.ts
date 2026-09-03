@@ -36,14 +36,30 @@ describe("devKeepAlive", () => {
       ),
     ).resolves.toBe(true));
 
-  test("an interrupt-only cause propagates instead of parking", async () => {
-    const exit = await Effect.runPromiseExit(
-      devKeepAlive(Effect.failCause(Cause.interrupt())),
-    );
-    expect(exit._tag === "Failure" && Cause.hasInterruptsOnly(exit.cause)).toBe(
-      true,
-    );
-  });
+  // A run that ends by itself with nothing but interruptions in its cause was
+  // cancelled from the inside (a provider or engine race), not by the user.
+  // It must park like any other failure; letting it propagate exited dev
+  // with a bare "Interrupted." and no hint of what went wrong (#1461).
+  test("an internal interrupt-only cause parks instead of exiting", () =>
+    expect(
+      parks(devKeepAlive(Effect.failCause(Cause.interrupt()))),
+    ).resolves.toBe(true));
+
+  test("interruption tears down a run that is still working (Ctrl-C in dev)", () =>
+    expect(
+      Effect.runPromise(
+        Effect.gen(function* () {
+          const fiber = yield* Effect.forkChild(
+            devKeepAlive(Effect.sleep("1 second")),
+          );
+          yield* Effect.sleep("20 millis");
+          const exit = yield* Fiber.interrupt(fiber).pipe(
+            Effect.andThen(Fiber.await(fiber)),
+          );
+          return exit._tag === "Failure" && Cause.hasInterruptsOnly(exit.cause);
+        }),
+      ),
+    ).resolves.toBe(true));
 
   test("interruption still tears down a parked run (Ctrl-C in dev)", () =>
     expect(
