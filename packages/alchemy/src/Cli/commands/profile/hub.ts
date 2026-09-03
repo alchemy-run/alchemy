@@ -124,6 +124,7 @@ export const profileHub = Effect.fn(function* (options: {
         if (action.kind === "refresh") {
           yield* Profiles.refresh({
             profile: action.name,
+            providers: [action.provider],
             entrypoint: options.main,
             envFile,
           }).pipe(
@@ -133,7 +134,10 @@ export const profileHub = Effect.fn(function* (options: {
                 : Effect.void,
             ),
           );
-          return { ok: true, message: "Credentials refreshed." };
+          return {
+            ok: true,
+            message: `${action.provider} credentials refreshed.`,
+          };
         }
 
         const outcomes: string[] = [];

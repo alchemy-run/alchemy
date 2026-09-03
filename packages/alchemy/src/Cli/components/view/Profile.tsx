@@ -172,12 +172,15 @@ export function ProfileDetailsBody({
   providers,
   reauthHint,
   refreshingProvider,
+  focusedProvider,
 }: {
   readonly providers: ReadonlyArray<ProfileProviderDisplay>;
   /** Muted hint appended to rows with `status: "reauth"`. */
   readonly reauthHint?: string;
   /** Provider whose detail rows are temporarily replaced by refresh status. */
   readonly refreshingProvider?: string;
+  /** Provider currently focused by an interactive parent view. */
+  readonly focusedProvider?: string;
 }): JSX.Element {
   const glyphs = useGlyphs();
   const borderStyle = useBorderStyle();
@@ -207,6 +210,13 @@ export function ProfileDetailsBody({
             >
               <Gutter>
                 <Box flexDirection="row">
+                  {focusedProvider === undefined ? null : (
+                    <Text tone="brand">
+                      {provider.name === focusedProvider
+                        ? glyphs.selected
+                        : " "}{" "}
+                    </Text>
+                  )}
                   <Box width={nameWidth} flexShrink={0}>
                     <Text bold color={theme.color.accent}>
                       {provider.name}
@@ -218,7 +228,10 @@ export function ProfileDetailsBody({
                   <Text color={status.color}>
                     {glyphs[status.glyph]} {status.label}
                   </Text>
-                  {reauthHint !== undefined && provider.status === "reauth" ? (
+                  {reauthHint !== undefined &&
+                  provider.status === "reauth" &&
+                  (focusedProvider === undefined ||
+                    provider.name === focusedProvider) ? (
                     <Text tone="muted"> — {reauthHint}</Text>
                   ) : null}
                 </Box>

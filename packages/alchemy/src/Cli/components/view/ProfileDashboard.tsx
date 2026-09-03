@@ -4,7 +4,8 @@
  * mounted for the whole session and screens replace each other in place:
  *
  *   overview — chip tabs (default profile first), selected profile's
- *              provider details, keybind bar, inline rename/new/delete
+ *              provider details with an up/down focus cursor, keybind bar,
+ *              inline rename/new/delete/remove
  *   edit     — replaces the overview: per-provider cycle rows
  *              (keep / reconfigure / remove, add for unconnected)
  *
@@ -78,7 +79,7 @@ export type FlowAction =
       reconfigure: string[];
       remove: string[];
     }
-  | { kind: "refresh"; name: string };
+  | { kind: "refresh"; name: string; provider: string };
 
 export type ExternalAction = FlowAction | { kind: "exit" };
 
@@ -191,11 +192,13 @@ class DashStore extends LiveStore<DashState> {
 type DetailsPaneProps = {
   details: Details;
   refreshingProvider?: string;
+  focusedProvider?: string;
 };
 
 function DetailsPane({
   details,
   refreshingProvider,
+  focusedProvider,
 }: DetailsPaneProps): JSX.Element {
   if (details.state === "loading") {
     return <Spinner label="resolving credentials…" />;
@@ -215,6 +218,7 @@ function DetailsPane({
       providers={details.providers}
       reauthHint="press r to re-login"
       refreshingProvider={refreshingProvider}
+      focusedProvider={focusedProvider}
     />
   );
 }
@@ -314,13 +318,14 @@ function EditScreen({
 
 // --- main component ---------------------------------------------------------
 
-type Mode = "normal" | "rename" | "create" | "delete";
+type Mode = "normal" | "rename" | "create" | "delete" | "remove";
 
 type DashboardControlsProps = {
   readonly mode: Mode;
   readonly busy: boolean;
   readonly flow: Flow | undefined;
   readonly entry: DashboardEntry | undefined;
+  readonly provider: ProfileProviderDisplay | undefined;
   readonly keybinds: ReadonlyArray<readonly [string, string]>;
   readonly keyGlyphs: ReturnType<typeof useKeyGlyphs>;
   readonly store: DashStore;
@@ -332,6 +337,7 @@ function DashboardControls({
   busy,
   flow,
   entry,
+  provider,
   keybinds,
   keyGlyphs,
   store,
@@ -348,6 +354,28 @@ function DashboardControls({
         onSubmit={(confirmed) => {
           setMode("normal");
           if (confirmed) store.dispatch({ kind: "delete", name: entry.name });
+        }}
+        onCancel={() => setMode("normal")}
+      />
+    );
+  }
+  if (mode === "remove" && entry !== undefined && provider !== undefined) {
+    return (
+      <InlineConfirm
+        message={`Remove '${provider.name}' from profile '${entry.name}'?`}
+        confirmLabel="Remove"
+        cancelLabel="Cancel"
+        onSubmit={(confirmed) => {
+          setMode("normal");
+          if (confirmed) {
+            store.dispatch({
+              kind: "edit-apply",
+              name: entry.name,
+              add: [],
+              reconfigure: [],
+              remove: [provider.name],
+            });
+          }
         }}
         onCancel={() => setMode("normal")}
       />
@@ -392,6 +420,7 @@ function Dashboard({ store, initialSelected }: DashboardProps): JSX.Element {
   const state = useLiveStore(store);
   const keyGlyphs = useKeyGlyphs();
   const [selected, setSelected] = useState(initialSelected);
+  const [focusedProvider, setFocusedProvider] = useState(0);
   const [mode, setMode] = useState<Mode>("normal");
   const [screen, setScreen] = useState<"overview" | "edit">("overview");
   const { entries, focus: requestedFocus, flow, busy, notice } = state;
@@ -407,6 +436,13 @@ function Dashboard({ store, initialSelected }: DashboardProps): JSX.Element {
   const entry = entries[index];
   const details =
     entry === undefined ? undefined : store.detailsFor(entry.name);
+  const providers = details?.state === "ready" ? details.providers : [];
+  const providerIndex = Math.min(
+    Math.max(focusedProvider, 0),
+    providers.length - 1,
+  );
+  const provider = providers[providerIndex];
+  useEffect(() => setFocusedProvider(0), [entry?.name]);
 
   useTerminalInput((input, key) => {
     // flow prompts, the edit screen, and the inline TextField/InlineConfirm
@@ -421,18 +457,38 @@ function Dashboard({ store, initialSelected }: DashboardProps): JSX.Element {
       setMode("create");
     } else if (entry === undefined) {
       return;
-    } else if (key.up || key.left || (key.shift && key.tab)) {
+    } else if (key.shift && key.tab) {
       setSelected((s) => (s + entries.length - 1) % entries.length);
-    } else if (key.down || key.right || key.tab) {
+    } else if (key.tab) {
       setSelected((s) => (s + 1) % entries.length);
+    } else if (key.up && providers.length > 0) {
+      setFocusedProvider(
+        (current) => (current + providers.length - 1) % providers.length,
+      );
+    } else if (key.down && providers.length > 0) {
+      setFocusedProvider((current) => (current + 1) % providers.length);
     } else if (input === "R" && !entry.isDefault) {
       setMode("rename");
-    } else if (input === "d" && !entry.isDefault) {
+    } else if (input === "D" && !entry.isDefault) {
       setMode("delete");
-    } else if (input === "e" && details?.state === "ready") {
+    } else if (input === "a" && details?.state === "ready") {
       setScreen("edit");
-    } else if (input === "r") {
-      store.dispatch({ kind: "refresh", name: entry.name });
+    } else if (input === "e" && provider !== undefined) {
+      store.dispatch({
+        kind: "edit-apply",
+        name: entry.name,
+        add: [],
+        reconfigure: [provider.name],
+        remove: [],
+      });
+    } else if (input === "r" && provider !== undefined) {
+      store.dispatch({
+        kind: "refresh",
+        name: entry.name,
+        provider: provider.name,
+      });
+    } else if (input === "d" && provider !== undefined) {
+      setMode("remove");
     }
   });
 
@@ -506,17 +562,24 @@ function Dashboard({ store, initialSelected }: DashboardProps): JSX.Element {
           ["q", "quit"],
         ]
       : [
-          [keyGlyphs.upDown, "select profile"],
+          [keyGlyphs.tab, "switch profile"],
+          ...(provider === undefined
+            ? []
+            : ([
+                [keyGlyphs.upDown, "focus provider"],
+                ["e", "reconfigure"],
+                ["r", "refresh"],
+                ["d", "remove"],
+              ] as const)),
           ...(details?.state === "ready"
-            ? ([["e", "configure"]] as const)
+            ? ([["a", "manage providers"]] as const)
             : []),
-          ...(flow?.kind === "refresh" ? [] : ([["r", "refresh"]] as const)),
           ["n", "new"],
           ...(entry.isDefault
             ? []
             : ([
                 ["R", "rename"],
-                ["d", "delete"],
+                ["D", "delete profile"],
               ] as const)),
           ["q", "quit"],
         ];
@@ -547,6 +610,7 @@ function Dashboard({ store, initialSelected }: DashboardProps): JSX.Element {
             <Box>
               <DetailsPane
                 details={details ?? { state: "loading" }}
+                focusedProvider={provider?.name}
                 refreshingProvider={
                   flow?.kind === "refresh" ? flow.provider : undefined
                 }
@@ -569,6 +633,7 @@ function Dashboard({ store, initialSelected }: DashboardProps): JSX.Element {
           busy={busy}
           flow={flow}
           entry={entry}
+          provider={provider}
           keybinds={keybinds}
           keyGlyphs={keyGlyphs}
           store={store}
@@ -708,6 +773,8 @@ export const runProfileDashboardSession = <R,>(
                   store.setFlow({
                     kind: action.kind,
                     name: action.name,
+                    provider:
+                      action.kind === "refresh" ? action.provider : undefined,
                     // refresh keeps the overview on screen with a spinner; only
                     // account editing takes over the whole view
                     inline: action.kind === "refresh",
