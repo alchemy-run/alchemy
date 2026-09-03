@@ -1,30 +1,32 @@
 ---
 title: "Part 3: Your own API"
-description: Put the git routes inside your HttpApi behind Better Auth, verify API keys for git clients, add a route of your own, replace one of the engine's, and serve your app from the same origin. The engine never sees a credential.
+description: Git.Server is designed to be embedded. Build your own API around it with Better Auth, add a route of your own, replace one of the engine's, and serve your application from the same origin.
 ---
 
-You have a host secured by one shared secret. Your product has users,
-and they need to sign in, mint their own credentials, and reach the API
-from a browser. By the end of this part the git routes sit inside your
-`HttpApi` behind your authentication, git clients authenticate with API
-keys, and the engine is unchanged.
+`Git.Server` is designed to be embedded in your application. It holds
+few opinions about how the application is built, how users are
+organized, or who has access to what. To authorize, build your own API
+around the embedded server, then build your Git-enabled application on
+that API.
 
-## Who decides who is calling
+This part does that with Better Auth. Users sign in from a browser,
+mint their own API keys, and push with them, and the engine is
+unchanged.
+
+## What the server asks of your API
 
 Every git route declares one middleware, `Git.Authenticated`, and asks
 it for one thing: `Git.Caller`, a principal or anonymous. The REST
 plane, the git wire, the raw reads, and the GitHub facade all run
-behind it, so you implement it once. Anonymous is an answer, not an
-error: the policy decides what anonymous may do.
+behind it, so you implement it once, with whatever your application
+uses to know who is calling. Anonymous is an answer, not an error: the
+policy decides what anonymous may do.
 
-Better Auth supplies the answer. Sessions for browsers, API keys for
-git.
+## Better Auth as a service
 
 ```sh
 bun add @alchemy.run/better-auth better-auth @better-auth/api-key
 ```
-
-## Better Auth as a service
 
 Better Auth is built once per Worker, so make it a service the rest of
 the file can ask for:
@@ -161,10 +163,11 @@ export const MeLive = Me.make(
 `Me.make` is the implementation as a Layer. Its `init` returns the
 handler; `Effect.succeed` because this one has nothing to set up.
 
-## Your API
+## Your API around the server
 
 A route goes in a group, a group goes in an API. `Git.Api` is the git
-groups, and yours is one more:
+groups, and yours is one more. This API is the boundary your
+application talks to:
 
 ```typescript
 import * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup";
@@ -327,11 +330,12 @@ const api = yield* HttpApiBuilder.layer(AppApi).pipe(
 The nearer implementation wins. Every git route can be replaced this
 way, and the group it lives in never knows.
 
-## Your app on the same origin
+## Your application on the same origin
 
-Serve your UI from a front-door Worker that forwards `/api/**` and the
-git paths to the host over a service binding. The session cookie is
-first-party, clone URLs are on your domain, and nothing needs CORS:
+The application is a front-door Worker that serves your UI and
+forwards `/api/**` and the git paths to the host over a service
+binding. The session cookie is first-party, clone URLs are on your
+domain, and nothing needs CORS:
 
 ```typescript
 // src/worker.ts
@@ -364,9 +368,10 @@ print clone URLs for the wrong domain.
 
 ## Where next
 
-Every signed-in user can now create repositories and push to their
-own. [Part 4](/git/tutorial/part-4) writes the rules: who reads what,
-and who may move `main`. The complete app, with a React UI that signs
+You built your own API around the embedded server, and an application
+on that API. Every signed-in user can create repositories and push to
+their own. [Part 4](/git/tutorial/part-4) writes the rules: who reads
+what, and who may move `main`. The complete app, with a React UI that signs
 in and mints keys, is
 [examples/cloudflare-git-service](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-git-service).
 [Auth](/git/blocks/auth) has the contracts in full, and
