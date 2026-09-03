@@ -138,8 +138,13 @@ something happens on the resource. A
 you sink a `Stream` into:
 
 ```typescript
+const outbound = yield* AWS.SQS.QueueSink(Outbound);
+
 yield* AWS.SQS.consumeQueueMessages(Inbound, (records) =>
-  records.pipe(Stream.map(transform), Stream.run(outboundSink)),
+  records.pipe(
+    Stream.map((record) => record.body.toUpperCase()),
+    Stream.run(outbound),
+  ),
 );
 ```
 
