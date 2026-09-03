@@ -30,6 +30,8 @@ import {
 } from "@/Cli/components/ui/index.ts";
 import { tabsWindow } from "@/Cli/components/ui/Layout.tsx";
 import { makeRuntime } from "@/Cli/components/view/Runtime.tsx";
+import { sigilCli } from "@/Cli/components/view/SigilCli.tsx";
+import { renderApply } from "@/Cli/commands/render.ts";
 import { isInProgress } from "@/Cli/components/view/statusStyle.ts";
 import { spinnerFramesFor } from "@/Util/Theme.ts";
 import {
@@ -49,6 +51,7 @@ import {
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
+import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import { expect, it } from "alchemy-test";
 import { deleteNode, noopNode, planWith, updateNode } from "./PlanTestNodes.ts";
@@ -510,6 +513,35 @@ it.effect("renders completed dev plans as a hideable output view", () =>
     expect(hiddenOutput).toContain("Dev stack ready (0/1)");
     expect(hiddenOutput).toContain("p show plan/output");
     yield* live.close;
+  }),
+);
+
+// A dev generation keeps its widget mounted after apply settles and parks
+// until a reload (or Ctrl+C) closes its scope. Closing that scope must remove
+// the widget: leaving it behind stacks one stale "Dev stack ready" bar per
+// reload under the live one.
+it.effect("removes the dev apply widget when its generation scope closes", () =>
+  Effect.gen(function* () {
+    const { service, stdout } = yield* makeLive();
+    const plan = {
+      ...planWith([updateNode({ version: 1 }, { version: 2 })]),
+      defaultMode: "local" as const,
+    };
+    const cli = sigilCli().pipe(Layer.provide(Layer.succeed(CliKit, service)));
+    let settledAt = 0;
+    yield* Effect.scoped(
+      Effect.gen(function* () {
+        yield* Effect.succeed({ endpoint: "http://localhost:3000" }).pipe(
+          renderApply(plan, { dev: true }),
+        );
+        yield* Effect.promise(() => stdout.waitFor("Dev stack ready"));
+        settledAt = stdout.output.length;
+      }),
+    ).pipe(Effect.provide(cli));
+
+    // Nothing else is live once the generation is gone, so the renderer
+    // unmounts and restores the cursor.
+    expect(stdout.output.slice(settledAt)).toContain("[?25h");
   }),
 );
 

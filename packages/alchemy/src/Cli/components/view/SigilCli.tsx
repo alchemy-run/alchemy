@@ -139,13 +139,16 @@ const startApplySession = Effect.fn(function* <P extends Plan>(
   // The session outlives this effect — the caller settles it via `done` on
   // every exit path (Apply.ts's onExit). live.open is Scope-bound, so give
   // it a manually managed scope. One-shot operations close it in `done`;
-  // dev deliberately retains it for the lifetime of its watch process.
+  // dev retains it after `done` and tears it down through `close` when the
+  // generation is interrupted (a reload or Ctrl+C), so a replaced
+  // generation never leaves its widget behind.
   const scope = yield* Scope.make();
   const live = yield* cli.live
     .open(<PlanComponent tree={progress} collapsible={options?.dev} />, {
       persistOnClose: !options?.dev,
     })
     .pipe(Scope.provide(scope));
+  const close = live.close.pipe(Effect.ensuring(Scope.close(scope, Exit.void)));
   return {
     done: (outcome) =>
       Effect.sync(() => {
@@ -158,13 +161,8 @@ const startApplySession = Effect.fn(function* <P extends Plan>(
             : "plan",
         );
         if (!options?.dev) progress.setViewport("full");
-      }).pipe(
-        Effect.andThen(
-          options?.dev
-            ? Effect.void
-            : live.close.pipe(Effect.ensuring(Scope.close(scope, Exit.void))),
-        ),
-      ),
+      }).pipe(Effect.andThen(options?.dev ? Effect.void : close)),
+    close,
     emit: (event: ApplyEvent) => Effect.sync(() => progress.emit(event)),
     setOutput: (value: unknown) => Effect.sync(() => progress.setOutput(value)),
   } satisfies PlanStatusSession;

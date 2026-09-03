@@ -1,6 +1,8 @@
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Option from "effect/Option";
+import * as Scope from "effect/Scope";
 import { Progress } from "../../Alchemist/Progress.ts";
 import type { Plan } from "../../Plan.ts";
 import * as Report from "../../Report.ts";
@@ -87,6 +89,15 @@ export const renderApply =
     Effect.gen(function* () {
       const cli = yield* Report.Cli;
       const session = yield* cli.startApplySession(plan, options);
+      // Dev keeps the widget mounted after apply settles and parks in the
+      // ambient scope; bind the widget's teardown to that scope so a reload
+      // or Ctrl+C removes it instead of stacking it under the next one.
+      if (options?.dev && session.close !== undefined) {
+        const scope = yield* Effect.serviceOption(Scope.Scope);
+        if (Option.isSome(scope)) {
+          yield* Scope.addFinalizer(scope.value, session.close);
+        }
+      }
       return yield* effect.pipe(
         Effect.provideService(Progress, (event) =>
           event._tag === "apply.resource.status" ||
