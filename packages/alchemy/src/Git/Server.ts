@@ -105,7 +105,7 @@ import {
 import type * as HttpApi from "effect/unstable/httpapi/HttpApi";
 import type * as HttpApiEndpoint from "effect/unstable/httpapi/HttpApiEndpoint";
 import type * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup";
-import { githubCompatRoutes } from "./GithubCompat.ts";
+import { gitHubCompatRoutes } from "./GitHubCompat.ts";
 import { BlobStore, type BlobStoreError } from "./BlobStore.ts";
 import { bundleCovers, type BundleInfo } from "./Jobs/Bundle.ts";
 import { headKey } from "./Store/Keys.ts";
@@ -2076,7 +2076,7 @@ const makeCore = Effect.gen(function* () {
 
   // GitHub REST v3 compatibility facade (`gh api`, Octokit): reuses the
   // same prelude + DO stubs; auth enforcement stays in the DO.
-  const githubApi = githubCompatRoutes({
+  const gitHubApi = gitHubCompatRoutes({
     prelude: rawRestPrelude,
     caller: (headers) =>
       Effect.map(authenticate(headers), (principal) => principal ?? null),
@@ -2238,7 +2238,7 @@ const makeCore = Effect.gen(function* () {
     HttpRouter.add("GET", "/api/v1/repos/:owner/:repo/file", fileRoute),
   );
 
-  return { handlers, protocolApi, rawApi, githubApi };
+  return { handlers, protocolApi, rawApi, gitHubApi };
 });
 
 /** Any `HttpApi` that carries the git groups (derive it from {@link GitApi}). */
@@ -2300,8 +2300,8 @@ export const RawApi = Layer.unwrap(
 ).pipe(Layer.provide(CoreLive));
 
 /** The GitHub REST v3 facade at `/api/v3`. Authenticates through {@link Authenticate}. */
-export const GithubApi = Layer.unwrap(
-  Effect.map(Core, (core) => core.githubApi),
+export const GitHubApi = Layer.unwrap(
+  Effect.map(Core, (core) => core.gitHubApi),
 ).pipe(Layer.provide(CoreLive));
 
 const makeServer = Effect.gen(function* () {
@@ -2311,7 +2311,7 @@ const makeServer = Effect.gen(function* () {
     Layer.provide(core.handlers(api).pipe(Layer.provide(AuthenticatedLive))),
     Layer.merge(core.protocolApi),
     Layer.merge(core.rawApi),
-    Layer.merge(core.githubApi),
+    Layer.merge(core.gitHubApi),
     Layer.provide([Etag.layer, HttpPlatformStub, Path.layer]),
     HttpRouter.toHttpEffect,
     // Browser clients (e.g. the example SPA) call the REST plane

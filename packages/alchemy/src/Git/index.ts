@@ -42,7 +42,7 @@ export {
 } from "./Auth.ts";
 export {
   GIT_WORKER_OPTIONS,
-  GithubApi,
+  GitHubApi,
   handlers,
   RawApi,
   ReposDurableObject,

@@ -145,7 +145,7 @@ export interface CompatRepoStub {
   >;
 }
 
-export interface GithubCompatOptions {
+export interface GitHubCompatOptions {
   /**
    * The Worker's `rawRestPrelude`: resolves `owner/repo`, parses
    * credentials (anonymous allowed — public repos), and 404s/500s early.
@@ -410,7 +410,7 @@ const ghPull = (
  * `prelude` (resolution + credential parsing + anonymous-public policy)
  * as the raw REST routes.
  */
-export const githubCompatRoutes = (options: GithubCompatOptions) => {
+export const gitHubCompatRoutes = (options: GitHubCompatOptions) => {
   const { prelude, caller, stub } = options;
 
   /** Repo-scoped route body: prelude, then handler with entry+auth. */

@@ -1299,7 +1299,7 @@ across even 16 shards with parsing overlapped in the Worker ≈ 1–2 s.
 
 ## 20. GitHub REST v3 compatibility (Tier 1)
 
-`src/GithubCompat.ts` mounts a `/api/v3/**` facade so GitHub-flavored
+`src/GitHubCompat.ts` mounts a `/api/v3/**` facade so GitHub-flavored
 tooling talks to the service unmodified:
 
 ```sh

@@ -136,7 +136,7 @@ today).
                               │
         ┌─────────────────────┴──────────────────────┐
    Worker runtime                             Repo DO runtime
-   Wire/Rest/GithubCompat routes              protocol engine
+   Wire/Rest/GitHubCompat routes              protocol engine
    Registry resolution · Auth                 ObjectStore · RefStore
    BlobStore (bundle splice reads)            PullStore · TokenStore
                                               jobs · BlobStore (packs/spill)
@@ -394,8 +394,8 @@ store" is now a layer, not a fork.
 - **`Registry`** — `owner/name → repoId` resolution + listing (contract
   over the Registry DO; a single-tenant "static registry" layer becomes
   possible for users who want exactly one repo and no registry DO).
-- **`Git.Wire` / `Git.Rest` / `Git.GithubCompat`** — the three HTTP plane
-  services with `Git.WireLive` / `Git.RestLive` / `Git.GithubCompatLive`
+- **`Git.Wire` / `Git.Rest` / `Git.GitHubCompat`** — the three HTTP plane
+  services with `Git.WireLive` / `Git.RestLive` / `Git.GitHubCompatLive`
   route layers, independently mountable. Each depends only on
   `Registry`, `Auth`, `Repos` (the DO namespace), and (Wire only)
   `BlobStore`.
