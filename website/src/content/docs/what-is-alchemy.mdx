@@ -6,6 +6,8 @@ next:
   label: Getting started
 ---
 
+import DeployTerminal from "../../components/marketing-islands/DeployTerminal.tsx";
+
 Alchemy is an **Infrastructure as Code** engine built in pure
 [Effect](https://effect.website), with **Infrastructure as Effects**
 on top. The engine declares, diffs, and deploys cloud resources the
@@ -82,8 +84,13 @@ alchemy deploy --stage prod
 ```
 
 Alchemy reads the current state, diffs it against your program, shows
-the plan, and applies it in dependency order. `state` is where the
-result persists between runs. [Stacks](/infrastructure-as-code/stack)
+the plan, and applies it in dependency order. Here is that loop for a
+Stack with a bucket, a KV namespace, and a Worker bound to both:
+
+<DeployTerminal client:visible />
+
+`state` is where the result persists between runs, so the next deploy
+only touches what changed. [Stacks](/infrastructure-as-code/stack)
 covers stages, outputs, and state.
 
 A **Resource** is any cloud entity Alchemy manages: a bucket, a
