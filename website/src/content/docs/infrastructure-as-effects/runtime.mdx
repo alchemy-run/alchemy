@@ -328,6 +328,48 @@ export default Cloudflare.Worker(
 );
 ```
 
+Because bindings are context, a handler can depend on a service of
+your own instead of a resource. Define the contract as a
+`Context.Service`:
+
+```typescript
+export class JobService extends Context.Service<
+  JobService,
+  { getJob(id: string): Effect.Effect<Job, JobError, Alchemy.RuntimeContext> }
+>()("JobService") {}
+```
+
+Implement it with a Layer that carries its own resources and bindings:
+
+```typescript
+export const JobServiceKV = Layer.effect(
+  JobService,
+  Effect.gen(function* () {
+    const kv = yield* Cloudflare.KV.ReadWriteNamespace(Cloudflare.KV.Namespace("Jobs"));
+    return { getJob: (id: string) => kv.get<Job>(id, "json") };
+  }),
+);
+```
+
+The Worker yields the service and provides the Layer. The namespace
+comes with it, and swapping in a Layer backed by DynamoDB changes
+nothing in the handler:
+
+```typescript
+export default Cloudflare.Worker(
+  "Worker",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const jobs = yield* JobService;
+    return {
+      fetch: Effect.gen(function* () {
+        return HttpServerResponse.json(yield* jobs.getJob("job-1"));
+      }),
+    };
+  }).pipe(Effect.provide(JobServiceKV)),
+);
+```
+
 The async style is a standard `async fetch`. Bindings go on the
 resource's `env` prop and are typed with `InferEnv`:
 
@@ -347,16 +389,21 @@ import type { WorkerEnv } from "../alchemy.run.ts";
 
 export default {
   async fetch(request: Request, env: WorkerEnv) {
-    const object = await env.Uploads.get("key");
-    return new Response(object?.body ?? null);
+    const obj = await env.Uploads.get("hello.txt");
+    return obj
+      ? new Response(await obj.text())
+      : new Response("Not found", { status: 404 });
   },
 };
 ```
 
-Both deploy through the same provider and produce the same artifact.
-The Effect style unlocks [Layers](#layers),
-structured retries, and fine-grained testing. The async style fits
-existing handler code.
+There is no service boundary here. The handler reaches for `env.Uploads`
+directly, so a different storage backend means a different handler.
+
+Both styles deploy through the same provider and produce the same
+artifact. The Effect style unlocks [Layers](#layers), structured
+retries, and fine-grained testing. The async style fits existing
+handler code.
 
 ## Instance scope vs request scope
 
