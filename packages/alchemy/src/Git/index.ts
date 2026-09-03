@@ -57,7 +57,19 @@ export {
 } from "./BlobStore.ts";
 export { BlobStoreS3, type BlobStoreS3Options } from "./BlobStoreS3.ts";
 export { RegistryD1 } from "./RegistryD1.ts";
-export { GitRepo, GitRepoLive, MAX_PACK_BYTES } from "./RepoObject.ts";
+export {
+  GitRepo,
+  GitRepoLive,
+  MAX_PACK_BYTES,
+  type CallerAuth,
+  type CommitPushInput,
+  type CommitPushResult,
+  type GitRepoShape,
+  type RepoMetaData,
+  RepoStore,
+  type RepoStoreShape,
+  type RepoStub,
+} from "./RepoObject.ts";
 export {
   Registry,
   RegistryDurableObject,

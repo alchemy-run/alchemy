@@ -194,6 +194,7 @@ import {
   BUNDLE_SIDEBAND_HEADER,
   GitRepo,
   GitRepoLive,
+  RepoStore,
   WWW_AUTHENTICATE,
   gunzipIfNeeded,
   ingestPackFrom,
@@ -395,7 +396,7 @@ const makeCore = Effect.gen(function* () {
   // RPC-boundary tagged errors are reconstructed by the stubs themselves —
   // both DO classes declare `errors: [...]` (see DurableObjectProps.errors).
   const registry = yield* RegistryStore;
-  const repos = yield* GitRepo;
+  const repos = yield* RepoStore;
   // The Worker streams clone bundles straight out of R2 (DESIGN.md §11):
   // the DO plans the clone, the bytes bypass it entirely.
   // The Worker-side view of the blob store (clone-bundle splice reads)
@@ -2429,11 +2430,19 @@ export const ServerLive = Layer.effect(Server, makeServer);
  */
 
 /**
- * Hosts the `GitRepo` Durable Object (refs, objects, tokens, pulls, the
- * wire protocol) and provides its namespace service. Requires a
+ * Hosts the `GitRepo` Durable Object (refs, objects, pulls, the wire
+ * protocol) and provides {@link RepoStore} over its namespace. Requires a
  * {@link BlobStore} — provide `Git.BlobStoreR2(yourBucket)` in the same
- * layer graph; one provision serves this DO and the Worker-side reads.
+ * layer graph; one provision serves this DO and the Worker-side reads —
+ * plus the {@link Hasher}, the {@link Policy}, and the registry.
  *
  * @layer
+ * @provides Git.RepoStore
  */
-export const ReposDurableObject = GitRepoLive;
+export const ReposDurableObject = Layer.effect(
+  RepoStore,
+  Effect.gen(function* () {
+    const namespace = yield* GitRepo;
+    return { getByName: (repoId) => namespace.getByName(repoId) };
+  }),
+).pipe(Layer.provideMerge(GitRepoLive));

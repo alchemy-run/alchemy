@@ -1,101 +1,225 @@
 ---
 title: Repository
-description: One Durable Object per repository owns refs, the object index, the commit graph, and pull requests. Objects move between it and the blob store on their own.
+description: One Durable Object per repository, behind the Git.RepoStore service. Provide it, call it from your own routes, wrap it to hook pushes and ref updates, or implement its shape over another store.
 ---
 
-`Git.ReposDurableObject` hosts one Durable Object per repository, keyed
-by a stable id:
+`Git.ReposDurableObject` hosts one Durable Object per repository and
+provides `Git.RepoStore`, the service every route reaches it through:
 
 ```typescript
-Layer.provide(Git.ReposDurableObject)
+const GitLive = Git.ServerLive.pipe(
+  Layer.provide(Git.ReposDurableObject),
+  // ReposDurableObject requires:
+  Layer.provide(Git.BlobStoreR2(GitObjects)), // packs, bundles, spilled pushes
+  Layer.provide(Git.HasherInline),            // push verification
+  Layer.provide(Git.PolicyOwners),            // authorization, asked in the DO
+  Layer.provide(Git.RegistryDurableObject),   // owner/name → repoId
+);
 ```
 
-Everything that has to be consistent lives in its SQLite: refs, the
-object index, hot object bytes, the commit graph, and pull
-requests. A push is a compare-and-swap on a ref, and one Durable Object
-serializes that without a lock service. Renaming a repository never
-moves data, because the object is keyed by id and `owner/name` belongs
-to the [Registry](/git/blocks/registry).
+The object is keyed by the repository's id, a ULID the
+[Registry](/git/blocks/registry) hands out, so a rename never moves
+data. Its SQLite holds everything that has to be consistent: refs, the
+object index, hot object bytes, the commit graph, and pull requests. A
+push is a compare-and-swap on a ref inside one transaction.
 
-## Where objects live
+## The service
 
-**Freshly pushed objects** land as rows, stored already deflated. Small
-objects stay inline. Oversize ones go straight to the
-[blob store](/git/blocks/blob-store) with only an index row kept here.
+```typescript
+const repos = yield* Git.RepoStore;
+const repo = repos.getByName(repoId); // a typed RPC stub over the Durable Object
+```
 
-**Compacted blobs** live in immutable packfiles in the blob store. A
-background job rewrites accumulated loose blobs into a pack and drops
-the rows, and that keeps a busy repository's Durable Object small.
-Commits, trees, and tags are never packed. They stay as rows, so the
-tree walk that answers every fetch runs on SQLite instead of ranged
-reads over the network.
+The stub is `Git.GitRepoShape`. Methods that act on behalf of a caller
+take the principal first, `Principal | null`, and ask `Git.Policy`
+before doing anything:
 
-**Clone bundles** are precomputed full-clone packs keyed by a snapshot
-of the refs. The Worker streams them from the blob store, and no pack
-byte passes through the Durable Object.
+```typescript
+interface GitRepoShape {
+  // lifecycle
+  initRepo(input): Effect<InitRepoResult, StoreError>;
+  startImport(input): Effect<InitRepoResult, StoreError>;
+  startFork(input): Effect<InitRepoResult, StoreError>;
+  startCompact(auth): Effect<void, RepoAuthError | StoreError>;
+  startPurge(auth): Effect<void, RepoAuthError | StoreError>;
 
-## How a clone is served
+  // metadata
+  getRepoMeta(auth): Effect<RepoMetaData, RepoAuthError | RepoNotFound>;
+  readMeta(): Effect<RepoMetaData | undefined>;
+  updateRepoMeta(auth, input): Effect<RepoMetaData, RepoAuthError | RefNotFound>;
 
-A full clone of a repository whose refs have not moved is one object
-in the blob store. The Durable Object checks the request against the
-current refs and answers with the key of the bundle cut for them. The
-Worker opens that object and pipes it to the client. The bundle is
-stored already framed for git's side-band protocol, so the Worker
-moves bytes and nothing else.
+  // refs
+  listRefs(auth, input): Effect<RefsPage, RepoAuthError>;
+  getRef(auth, input): Effect<RefData, RepoAuthError | RefNotFound>;
+  updateRef(auth, input): Effect<RefData, RepoAuthError | RefConflict | ObjectNotFound | ReadOnlyRepo>;
+  removeRef(auth, input): Effect<void, RepoAuthError | RefNotFound | RefConflict | ReadOnlyRepo>;
 
-When refs moved since the last bundle was cut, the clone is assembled
-from the repository's objects and a fresh bundle is scheduled.
-Incremental fetches always take this path. The commit graph in SQLite
-finds what the client lacks, commits and trees come from rows, and
-blobs come from packs in the blob store as a few large ranged reads.
+  // objects
+  readObject(auth, input): Effect<ObjectData, RepoAuthError | ObjectNotFound | WrongObjectType>;
+  readCommitLog(auth, input): Effect<CommitLogPage, RepoAuthError | RefNotFound>;
+  readCommitDiff(auth, input): Effect<CommitDiffData, RepoAuthError | ObjectNotFound>;
+  compareCommits(auth, input): Effect<CompareData, RepoAuthError | RefNotFound | NoMergeBase>;
+  readFileAtPath(auth, input): Effect<FileData, RepoAuthError | ObjectNotFound>;
 
-Compaction is what keeps the dynamic path fast. On a real repository
-of 13,699 objects, cloning back took 19.5 s before compaction and
-3.4 s after. [Scaling](/git/recipes/scaling) has the throughput
-numbers.
+  // pull requests
+  createPull(auth, input): Effect<PullData, RepoAuthError | BranchMissing | PullExists>;
+  listPulls(auth, input): Effect<PullsPage, RepoAuthError>;
+  getPull(auth, number): Effect<PullDetailData, RepoAuthError | PullNotFound>;
+  updatePull(auth, input): Effect<PullData, RepoAuthError | PullNotFound | PullStateConflict>;
+  mergePull(auth, input): Effect<MergePullResult, RepoAuthError | MergeConflict | RefConflict | …>;
 
-Objects are stored deflated, so serving a pack is concatenation plus a
-checksum rather than a recompression pass.
+  // the push pipeline: rows in, never pack bytes
+  beginPush(auth, input): Effect<BeginPushResult, RepoAuthError | ReadOnlyRepo>;
+  stagePush(input): Effect<void, StoreError>;
+  readPushBase(input): Effect<PushBase, StoreError>;
+  commitPush(input): Effect<CommitPushResult, RepoNotFound | StoreError>;
+
+  // the wire: info/refs and upload-pack run inside the object
+  fetch: HttpEffect;
+}
+```
+
+Every error is a tagged class the stub reconstructs across the RPC
+boundary, so `Effect.catchTag("RefConflict", …)` works in the Worker.
+
+## Call it from a route of your own
+
+Resolve the id through the registry, then talk to the object. A route
+that answers the default branch's tip:
+
+```typescript
+export class Tip extends Http.get<Tip>()("tip", "/api/v1/repos/:owner/:repo/tip", {
+  params: Git.RepoPath,
+  success: Git.Ref,
+  error: [Git.RepoNotFound, Git.RefNotFound, Git.Forbidden, Git.Unauthorized],
+  middleware: [Git.Authenticated],
+}) {}
+
+export const TipLive = Tip.make(
+  Effect.gen(function* () {
+    const registry = yield* Git.RegistryStore;
+    const repos = yield* Git.RepoStore;
+    return Effect.fn(function* ({ params }) {
+      const { principal } = yield* Git.Caller;
+      const entry = yield* registry
+        .resolve(params.owner, params.repo)
+        .pipe(Effect.catchTag("StoreError", (error) => Effect.die(error)));
+      if (entry === undefined) return yield* new Git.RepoNotFound(params);
+      const repo = repos.getByName(entry.repoId);
+      const meta = yield* repo
+        .getRepoMeta(principal ?? null)
+        .pipe(Effect.catchTag("StoreError", (error) => Effect.die(error)));
+      const ref = yield* repo
+        .getRef(principal ?? null, `refs/heads/${meta.defaultBranch}`)
+        .pipe(Effect.catchTag("StoreError", (error) => Effect.die(error)));
+      return new Git.Ref({ name: ref.name, oid: ref.oid as Git.Oid });
+    });
+  }),
+);
+```
+
+## Wrap it
+
+`Git.RepoStore` is a service, so a Layer can provide a decorated one.
+Every push commits through `commitPush` and every REST ref write
+through `updateRef`, so wrapping those two is a hook on every ref
+move:
+
+```typescript
+// src/hooks.ts
+const afterPush = (repoId: string, result: Git.CommitPushResult) =>
+  Effect.log(`push to ${repoId}`, result.results.map((r) => r.ref));
+
+export const ReposWithHooks = Layer.effect(
+  Git.RepoStore,
+  Effect.map(Git.RepoStore, (repos) => ({
+    getByName: (repoId) => {
+      const stub = repos.getByName(repoId);
+      return new Proxy(stub, {
+        get: (target, key, receiver) =>
+          key === "commitPush"
+            ? (input: Git.CommitPushInput) =>
+                target.commitPush(input).pipe(
+                  Effect.tap((result) => afterPush(repoId, result)),
+                )
+            : Reflect.get(target, key, receiver),
+      });
+    },
+  })),
+).pipe(Layer.provide(Git.ReposDurableObject));
+```
+
+```diff lang="typescript"
+const GitLive = Git.ServerLive.pipe(
+-  Layer.provide(Git.ReposDurableObject),
++  Layer.provide(ReposWithHooks),
+```
+
+The wrapper runs in the Worker, where the routes call the object.
+`commitPush` carries the ref commands and what they resolved to;
+`updateRef` and `mergePull` are the other two ways a ref moves. A
+Queue producer or a Workflow trigger goes in `afterPush` the same way.
+
+## Implement your own
+
+The contract is `Git.GitRepoShape` behind `Git.RepoStore`. A different
+store provides the same service, and nothing else in the graph changes:
+
+```typescript
+export const ReposMine = Layer.effect(
+  Git.RepoStore,
+  Effect.gen(function* () {
+    // return { getByName: (repoId) => GitRepoShape }
+  }),
+);
+```
+
+The registry, the blob store, and the policy are the seams it can
+reuse. The wire protocol (`fetch`) and the push pipeline are the parts
+that assume the object's transactional storage, so a store without a
+per-repository serialization point starts there.
+
+## Where the bytes are
+
+| Objects | Live in | Because |
+| --- | --- | --- |
+| commits, trees, tags | SQLite rows, deflated | the tree walk behind every fetch runs on SQLite |
+| fresh blobs | SQLite rows, deflated | a push commits as one transaction |
+| oversize blobs | the blob store, one index row here | never buffered in the object |
+| compacted blobs | immutable packs in the blob store | a busy repository's object stays small |
+| clone bundles | the blob store, keyed by a refs hash | the Worker streams them, no pack byte transits the object |
+
+A full clone whose refs have not moved is one object in the blob
+store; the Worker pipes it. Otherwise the clone is assembled from rows
+and packs, and a fresh bundle is scheduled. Objects are stored
+deflated, so a pack is concatenation plus a checksum.
 
 ## Jobs
 
-Maintenance runs on the Durable Object's alarms, scheduled by the work
-itself:
+Maintenance runs on the object's alarms, armed by the work itself.
+Every job is idempotent and resumable:
 
-- **Compaction** runs after a push crosses a size threshold and
-  rewrites loose blobs into a pack.
-- **Bundling** cuts a fresh clone bundle after refs move.
-- **Purge** drains a deleted repository's rows and blobs, then releases
-  its name.
-
-Every job is idempotent and resumable. An interrupted run picks up
-where it stopped on the next alarm. Compaction can also be triggered by
-hand by a principal the policy allows `Maintain`:
+| Job | Armed by | Does |
+| --- | --- | --- |
+| compaction | a push crossing a size threshold, or `startCompact` | rewrites loose blobs into a pack |
+| bundling | refs moving | cuts a fresh clone bundle |
+| purge | `startPurge` | drains rows and blobs, then frees the name |
+| fork, import | `startFork`, `startImport` | copies from a sibling object or fetches from a remote |
 
 ```sh
 curl -X POST "$HOST/api/v1/repos/acme/web/compact" \
   -H "Authorization: Bearer $GIT_SERVICE_SECRET"
 ```
 
-## What a repository reports
-
-Fetching a repository returns its storage breakdown and the timing of
-its last push:
+## What it reports
 
 ```typescript
-const repo = yield* client.repos.get({
-  params: { owner: "acme", repo: "web" },
-});
+const repo = yield* client.repos.get({ params: { owner: "acme", repo: "web" } });
 
-repo.objects; // loose blobs, resident commits and trees, packed, offloaded, total bytes
-repo.lastPush; // ingest, staging, connectivity, finalize, in milliseconds
+repo.objects;  // { loose, resident, packed, r2, bytes }
+repo.lastPush; // { ingestMs, stageMs, connectivityMs, finalizeMs, totalMs }
 ```
 
-When a push feels slow, `lastPush` says which phase to look at.
-Listings report zeros for both by design, so listing a thousand
-repositories does not wake a thousand Durable Objects.
-
-## One implementation
-
-This block ships one implementation. What the Durable Object bounds,
-and what it does not, is in [Scaling](/git/recipes/scaling).
+Listings report zeros for both, so listing a thousand repositories does
+not wake a thousand objects. [Scaling](/git/recipes/scaling) has the
+throughput numbers behind the layout above.

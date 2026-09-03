@@ -28,6 +28,7 @@
 import * as Cloudflare from "../Cloudflare/index.ts";
 import type { HttpEffect } from "../Http.ts";
 import { RuntimeContext } from "../RuntimeContext.ts";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Option from "effect/Option";
@@ -3099,10 +3100,32 @@ export class GitRepo extends Cloudflare.DurableObject<GitRepo, GitRepoShape>()(
   },
 ) {}
 
-/** The stub type of a sibling repo (used by the fork job). */
-type RepoStub = ReturnType<
+/**
+ * A repository's RPC stub: {@link GitRepoShape} as the Worker calls it,
+ * with `fetch` taking the request.
+ */
+export type RepoStub = ReturnType<
   Cloudflare.Workers.DurableObject<GitRepoShape>["getByName"]
 >;
+
+/** What {@link RepoStore} provides: a repository's stub by id. */
+export interface RepoStoreShape {
+  /** The repository's stub, by its registry id (a ULID). */
+  readonly getByName: (repoId: string) => RepoStub;
+}
+
+/**
+ * `Git.RepoStore` — the repository block as a service: every route reaches
+ * a repository through it. `ReposDurableObject` provides it over the
+ * {@link GitRepo} Durable Object namespace. It is the seam for decorating
+ * repositories (hook `commitPush`, `updateRef`, `mergePull` to observe ref
+ * moves) or for implementing {@link GitRepoShape} over another store.
+ *
+ * @binding
+ */
+export class RepoStore extends Context.Service<RepoStore, RepoStoreShape>()(
+  "alchemy/Git/RepoStore",
+) {}
 
 /**
  * The Repo DO implementation Layer. Requires the {@link BlobStore}
