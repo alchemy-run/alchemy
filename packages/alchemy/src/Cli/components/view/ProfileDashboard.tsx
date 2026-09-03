@@ -421,21 +421,9 @@ function Dashboard({ store, initialSelected }: DashboardProps): JSX.Element {
       setMode("create");
     } else if (entry === undefined) {
       return;
-    } else if (
-      key.up ||
-      key.left ||
-      input === "k" ||
-      input === "h" ||
-      (key.shift && key.tab)
-    ) {
+    } else if (key.up || key.left || (key.shift && key.tab)) {
       setSelected((s) => (s + entries.length - 1) % entries.length);
-    } else if (
-      key.down ||
-      key.right ||
-      input === "j" ||
-      input === "l" ||
-      key.tab
-    ) {
+    } else if (key.down || key.right || key.tab) {
       setSelected((s) => (s + 1) % entries.length);
     } else if (input === "R" && !entry.isDefault) {
       setMode("rename");
