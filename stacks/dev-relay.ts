@@ -7,12 +7,13 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
 /**
- * Alchemy's hosted dev relay: `alchemy dev --relay https://<DEV_RELAY_DOMAIN>`
- * gives every local resource a stable `https://<name>.<namespace>.<domain>`
- * URL over one WebSocket from the dev sidecar.
+ * Alchemy's hosted dev relay at `alchemy.town`: `alchemy dev --relay
+ * https://alchemy.town` gives every local resource a stable
+ * `https://<name>.<namespace>.alchemy.town` URL over one WebSocket from the
+ * dev sidecar. User content lives on its own domain, never on alchemy.run.
  *
  * ```sh
- * DEV_RELAY_ZONE=alchemy.run DEV_RELAY_DOMAIN=dev.alchemy.run \
+ * DEV_RELAY_ZONE=alchemy.town DEV_RELAY_DOMAIN=alchemy.town \
  * DEV_RELAY_TOKEN=… ZERO_SSL_KEY=… alchemy deploy --config stacks/dev-relay.ts --stage prod
  * ```
  *

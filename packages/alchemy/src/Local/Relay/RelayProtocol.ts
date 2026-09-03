@@ -67,7 +67,7 @@ export interface RequestFrame {
   readonly method: string;
   /** Path and query, e.g. `/echo?x=1`. */
   readonly url: string;
-  /** The public host the client dialed, e.g. `api.sam.dev.alchemy.run`. */
+  /** The public host the client dialed, e.g. `api.sam.alchemy.town`. */
   readonly host: string;
   /** The label routed to (`api`). */
   readonly label: string;

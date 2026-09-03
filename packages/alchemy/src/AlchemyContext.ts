@@ -54,7 +54,7 @@ export interface DevIngressOptions {
 
 /** How `alchemy dev` connects to a dev relay (see `Local/Relay`). */
 export interface DevRelayOptions {
-  /** The relay's base URL, e.g. `https://dev.alchemy.run`. */
+  /** The relay's base URL, e.g. `https://alchemy.town`. */
   readonly url: string;
   /** The namespace this session owns: hosts are `<name>.<namespace>.<domain>`. */
   readonly namespace: string;

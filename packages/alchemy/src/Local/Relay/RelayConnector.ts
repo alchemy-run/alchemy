@@ -51,7 +51,7 @@ export interface ConnectInput extends DevRelayOptions {
 export interface RelayConnection {
   /** Handshake data: the relay's domain and public scheme. */
   readonly hello: HelloFrame;
-  /** The public URL for `label`, e.g. `https://api.sam.dev.alchemy.run`. */
+  /** The public URL for `label`, e.g. `https://api.sam.alchemy.town`. */
   readonly publicUrl: (label: string) => string;
 }
 

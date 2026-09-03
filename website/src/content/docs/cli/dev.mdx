@@ -66,16 +66,16 @@ Binding port 80 needs privileges too. `alchemy dev --port 80` falls back to `133
 ## Relay
 
 ```sh
-alchemy dev --relay https://dev.alchemy.run
+alchemy dev --relay https://alchemy.town
 ```
 
 ```
-Connected to the dev relay: https://<name>.dev-sam.dev.alchemy.run
-[Api] → https://api.dev-sam.dev.alchemy.run
-[Web] → https://web.dev-sam.dev.alchemy.run
+Connected to the dev relay: https://<name>.dev-sam.alchemy.town
+[Api] → https://api.dev-sam.alchemy.town
+[Web] → https://web.dev-sam.alchemy.town
 ```
 
-A relay is a small service on a domain the relay operator owns. `alchemy dev` opens **one** WebSocket to it and keeps it open for the session; the relay routes every `https://<name>.<namespace>.<domain>` request down that socket by `Host`, and the local ingress answers it. Real subdomains, stable names across restarts, no extra process per resource. The namespace is yours for the session (the stage name by default) and each resource keeps its ingress name under it, so cookies scoped to `<namespace>.<domain>` work across your resources like they will in production.
+Alchemy hosts one at `alchemy.town`, a domain that carries only dev traffic — nothing on it is ours, and nothing of ours is on it. A relay is a small service on a domain the relay operator owns. `alchemy dev` opens **one** WebSocket to it and keeps it open for the session; the relay routes every `https://<name>.<namespace>.<domain>` request down that socket by `Host`, and the local ingress answers it. Real subdomains, stable names across restarts, no extra process per resource. The namespace is yours for the session (the stage name by default) and each resource keeps its ingress name under it, so cookies scoped to `<namespace>.<domain>` work across your resources like they will in production.
 
 The first time a namespace connects, the relay issues a `*.<namespace>.<domain>` certificate for it (about a minute — `alchemy dev` says when it is uploaded; Fly's edges pick it up over the next few minutes) and renews it in the background.
 
@@ -94,7 +94,7 @@ alchemy dev --stage prod
 alchemy dev --domain myapp.test
 
 # Expose every local resource through a dev relay at stable subdomains
-ALCHEMY_DEV_RELAY_TOKEN=… alchemy dev --relay https://dev.alchemy.run
+ALCHEMY_DEV_RELAY_TOKEN=… alchemy dev --relay https://alchemy.town
 ```
 
 ## Where next

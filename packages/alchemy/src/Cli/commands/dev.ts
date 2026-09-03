@@ -60,7 +60,7 @@ const port = Flag.integer("port").pipe(
 
 const relay = Flag.string("relay").pipe(
   Flag.withDescription(
-    "Dev relay to expose local resources through, e.g. https://dev.alchemy.run — one connection, stable https://<name>.<namespace>.<relay> URLs. Token from $ALCHEMY_DEV_RELAY_TOKEN.",
+    "Dev relay to expose local resources through, e.g. https://alchemy.town — one connection, stable https://<name>.<namespace>.<relay> URLs. Token from $ALCHEMY_DEV_RELAY_TOKEN.",
   ),
   Flag.optional,
   Flag.map(Option.getOrUndefined),
