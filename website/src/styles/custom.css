@@ -726,38 +726,32 @@ p:has(> .alc-btn) {
   font-size: 0.9rem;
   line-height: 1.5;
 }
-/* A corner ribbon marks the recommended card; the title stays one line. */
+/* A small tab sits on the top edge of the recommended card, outside the
+   content, so it never collides with the title or description. */
 .next-card--recommended {
   position: relative;
-  overflow: hidden;
   border-color: color-mix(
     in srgb,
     var(--alc-accent) 45%,
     var(--alc-hairline-2)
   );
 }
-.next-card--recommended::after {
-  /* A 12rem band rotated 45deg, centered 3rem in from the top-right
-     corner on both axes, so the segment visible inside the card is
-     ~6rem long: enough for the word at this size. */
+.next-card--recommended::before {
   content: "Recommended";
   position: absolute;
-  top: 2.3rem;
-  right: -3rem;
-  width: 12rem;
-  line-height: 1.3rem;
-  transform: rotate(45deg);
-  text-align: center;
+  top: 0;
+  right: 1.25rem;
+  transform: translateY(-50%);
+  padding: 0.15rem 0.6rem;
+  border-radius: 999px;
   background: var(--alc-accent);
   color: var(--alc-fg-on-accent);
-  font-size: 0.6rem;
+  font-size: 0.66rem;
   font-weight: 600;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
+  line-height: 1.4;
   pointer-events: none;
-}
-.next-card--recommended strong {
-  padding-right: 4.5rem;
 }
 @media (max-width: 600px) {
   .next-steps {
