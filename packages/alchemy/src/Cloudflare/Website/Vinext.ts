@@ -118,9 +118,11 @@ export interface VinextProps<
  * they never touch the Workers runtime at build or dev time.
  * `kvDataAdapter()` reads `env.VINEXT_KV_CACHE` on first request
  * (default binding name). `Website.Vinext` provisions that namespace
- * (do not bind it in `env`) and `alchemy deploy` seeds it after
- * vinext prerender. `cdnAdapter()` is optional page-level CDN cache:
- * this resource enables Workers Cache (`cache.enabled`) and binds
+ * (do not bind it in `env`). After `vite build`, vinext prerender
+ * writes local `dist/server` artifacts; deploy seeds those pairs into
+ * KV. Do not set `appPrefix` on `kvDataAdapter` yet — seed keys omit
+ * it. `cdnAdapter()` is optional page-level CDN cache: this resource
+ * enables Workers Cache (`cache.enabled`) and binds
  * `CF_VERSION_METADATA` so `ctx.cache` exists. Alchemy does not run
  * `vinext-cloudflare deploy --experimental-warm-cdn-cache`; if an
  * adapter cannot initialize, vinext logs and falls back.

@@ -12,7 +12,8 @@ Vite. This is **not** `Cloudflare.Website.Nextjs`, which runs
 
 Alchemy loads the project's `vite.config.ts` (it must register
 `vinext()`), injects the Cloudflare Vite plugin, deploys the RSC
-Worker plus client assets, prerenders routes, and seeds
+Worker plus client assets, runs vinext prerender into local
+`dist/server` artifacts, and seeds those pairs into
 `VINEXT_KV_CACHE` for ISR / `"use cache"`. There is no
 `wrangler.jsonc` and no `@vinext/cloudflare deploy`.
 
@@ -76,15 +77,22 @@ Bindings on the resource are available as
 `import { env } from "cloudflare:workers"` in server components,
 route handlers, and server actions.
 
+## Notes
+
+- Deploy runs `vite build`, then vinext prerender (local `dist/server`
+  artifacts), then seeds those pairs into `VINEXT_KV_CACHE`.
+  `alchemy dev` does not seed the production data-cache store.
+- Do not set `appPrefix` on `kvDataAdapter` — seed keys omit it, so a
+  prefix would miss at runtime.
+- Prerender cache entry/key shape tracks `@vinext/cloudflare`
+  (`prerender-kv-populate.ts`, `cache/kv-key.ts`,
+  `cache/kv-data-adapter.runtime.ts`). Re-sync Alchemy's
+  `PrerenderCache` when those change.
+
 ## Node and other platforms
 
 The `worker/index.ts` + `vinext/server/fetch-handler` template is
-Cloudflare-only. For a long-running Node process (Railway, Fly,
-Hetzner) or Lambda (AWS), use `Website.Vinext` on that platform —
-`vinext build` plus `startProdServer` / a Lambda fetch wrap, with
-`process.env` instead of `cloudflare:workers`.
-
-- [`AWS.Website.Vinext`](/aws/frontend/vinext)
-- [`Railway.Website.Vinext`](/railway/frontend/vinext)
-- [`Fly.Website.Vinext`](/fly/frontend/vinext)
-- [`Hetzner.Website.Vinext`](/hetzner/frontend/vinext)
+Cloudflare-only. Support for long-running Node (Railway, Fly, Hetzner)
+and Lambda (AWS) — same App Router app, `process.env` instead of
+`cloudflare:workers`, and Redis / S3 data-cache stores — is a follow-up
+to this Cloudflare path.

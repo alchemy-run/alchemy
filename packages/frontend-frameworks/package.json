@@ -44,6 +44,7 @@
     "test:sveltekit": "vitest run src/sveltekit/test",
     "test:tanstack-start": "vitest run src/tanstack-start/test",
     "test:vite": "vitest run src/vite/test",
+    "test:vinext": "vitest run src/vinext/test",
     "test:waku": "vitest run src/waku/test",
     "test:vocs": "vitest run src/vocs/test",
     "typecheck": "tsc -b tsconfig.json && tsc --noEmit -p tsconfig.test.json"
