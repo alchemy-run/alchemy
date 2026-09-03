@@ -5,8 +5,9 @@ description: One Effect program models both your runtime code and the infrastruc
 
 Infrastructure as Effects is Alchemy's model for building
 applications. The code that runs inside a Worker or Lambda Function
-and the infrastructure it runs on are one Effect program. A Worker is
-a [Resource](/infrastructure-as-code/resource) that carries its own
+and the infrastructure it runs on are one Effect program. A
+**Runtime**, such as a Worker, is a
+[Resource](/infrastructure-as-code/resource) that carries its own
 code, and the resources it uses are wired in as typed values:
 
 ```typescript
