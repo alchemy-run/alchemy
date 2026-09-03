@@ -364,7 +364,7 @@ export class DurableObjectScope extends Context.Service<
  * ```
  *
  * There are two ways to define a Durable Object. See the
- * [Functions & Servers](/infrastructure-as-effects/functions-and-servers) page
+ * [Runtime](/infrastructure-as-effects/runtime) page
  * for the full explanation.
  *
  * - **Inline** — Effect implementation passed directly, single file.

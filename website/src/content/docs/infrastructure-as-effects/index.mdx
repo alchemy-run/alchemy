@@ -1,6 +1,6 @@
 ---
 title: Infrastructure as Effects
-description: One Effect program models both your runtime code and the infrastructure it runs on — Functions carry code, Bindings wire resources into them, Phases split deploy from runtime, Layers package it all behind typed services.
+description: One Effect program models both your runtime code and the infrastructure it runs on — Runtimes carry code, Bindings wire resources into them, Phases split deploy from runtime, Layers package it all behind typed services.
 ---
 
 Infrastructure as Effects is Alchemy's model for building
@@ -60,14 +60,14 @@ the handler closes over.
 Everything in this section is in that one Worker. Let's take it
 apart.
 
-## Functions carry their code
+## Runtimes carry their code
 
-`Cloudflare.Worker("Api", props, effect)` is a Resource like any
-other. The props are the cloud configuration. The Effect is the code
+`Cloudflare.Worker("Api", props, effect)` is a **Runtime**: a Resource
+that carries the code it runs. The props are the cloud configuration. The Effect is the code
 that runs inside it. One deploy ships both, and the Effect always has
 the same shape: bind what you need, then return what you expose.
 
-[Functions & Servers](/infrastructure-as-effects/functions-and-servers)
+[Runtime](/infrastructure-as-effects/runtime)
 covers that shape, the `fetch` and RPC interface it returns, and the
 three ways to declare one.
 
@@ -108,8 +108,8 @@ permission. It runs again at cold start, where the binding builds the
 live client. The inner `fetch` Effect runs per request, only inside the
 deployed Worker.
 
-Init and runtime are one program, so a binding declared at init is a
-value the handler closes over. [Phases](/infrastructure-as-effects/phases)
+Construct and runtime are one program, so a binding declared in the
+constructor is a value the handler closes over. [Phases](/infrastructure-as-effects/phases)
 explains exactly what runs when.
 
 ## Layers package it all
@@ -139,7 +139,7 @@ and hidden behind `JobService`.
 and [Circular Bindings](/infrastructure-as-effects/circular-bindings)
 uses the split to let two Workers call each other.
 
-## Built into every runtime
+## Built into every Runtime
 
 [Telemetry](/infrastructure-as-effects/telemetry) is a Layer too.
 Provide an exporter alongside your bindings and every request, queue
@@ -149,11 +149,11 @@ whole model to a compute target Alchemy doesn't ship.
 
 Effect style is optional. Bindings also work as plain props on an
 `async fetch` handler with a typed env via `InferEnv`. See
-[Effect handlers vs async handlers](/infrastructure-as-effects/functions-and-servers#effect-handlers-vs-async-handlers).
+[Effect handlers vs async handlers](/infrastructure-as-effects/runtime#effect-handlers-vs-async-handlers).
 
 ## Where next
 
-1. [Functions & Servers](/infrastructure-as-effects/functions-and-servers) — Resources that carry runtime code.
+1. [Runtime](/infrastructure-as-effects/runtime) — Resources that carry the code they run.
 2. [Bindings](/infrastructure-as-effects/binding) — what one `yield*` generates.
 3. [Event Sources](/infrastructure-as-effects/event-sources) — resources that trigger your Function, as Effect `Stream`s.
 4. [Sinks](/infrastructure-as-effects/sinks) — resources you write to, as Effect `Sink`s.

@@ -504,8 +504,8 @@ export default defineConfig({
                   link: "/infrastructure-as-effects",
                 },
                 {
-                  label: "Functions & Servers",
-                  link: "/infrastructure-as-effects/functions-and-servers",
+                  label: "Runtime",
+                  link: "/infrastructure-as-effects/runtime",
                 },
                 {
                   label: "Bindings",

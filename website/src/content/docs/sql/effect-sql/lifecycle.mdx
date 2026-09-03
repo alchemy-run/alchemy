@@ -88,7 +88,7 @@ they cannot disagree.
 The contract is identical off Cloudflare: each Lambda invocation and
 each server request gets a fresh execution scope, clients build on
 first query and release on settle.
-[Functions & Servers](/infrastructure-as-effects/functions-and-servers#instance-scope-vs-request-scope)
+[Runtime](/infrastructure-as-effects/runtime#instance-scope-vs-request-scope)
 covers the instance-scope rules — what init may do, when instance
 finalizers run, and the Lambda SIGTERM window.
 
@@ -99,5 +99,5 @@ finalizers run, and the Lambda SIGTERM window.
   clients this contract governs.
 - [Workers: isolate scope vs request scope](/cloudflare/compute/workers#isolate-scope-vs-request-scope)
   — the same rules from the Worker's point of view.
-- [Functions & Servers](/infrastructure-as-effects/functions-and-servers)
+- [Runtime](/infrastructure-as-effects/runtime)
   — the cross-cloud runtime model.
