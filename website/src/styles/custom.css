@@ -753,6 +753,21 @@ p:has(> .alc-btn) {
   line-height: 1.4;
   pointer-events: none;
 }
+/* Provider brand marks in place of a description on the directory card. */
+.next-card .provider-icons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 0.9rem;
+  margin-top: 0.6rem;
+  color: var(--alc-fg-2);
+}
+.next-card .provider-icons svg {
+  flex: none;
+  transition: color var(--alc-dur) var(--alc-ease);
+}
+.next-card:hover .provider-icons {
+  color: var(--alc-fg-1);
+}
 @media (max-width: 600px) {
   .next-steps {
     grid-template-columns: 1fr;
