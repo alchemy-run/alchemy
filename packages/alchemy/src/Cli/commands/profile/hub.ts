@@ -124,7 +124,8 @@ export const profileHub = Effect.fn(function* (options: {
         if (action.kind === "refresh") {
           yield* Profiles.refresh({
             profile: action.name,
-            providers: [action.provider],
+            providers:
+              action.provider === undefined ? undefined : [action.provider],
             entrypoint: options.main,
             envFile,
           }).pipe(
@@ -136,7 +137,10 @@ export const profileHub = Effect.fn(function* (options: {
           );
           return {
             ok: true,
-            message: `${action.provider} credentials refreshed.`,
+            message:
+              action.provider === undefined
+                ? "Credentials refreshed."
+                : `${action.provider} credentials refreshed.`,
           };
         }
 

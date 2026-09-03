@@ -34,6 +34,7 @@ import {
   Text,
   TextField,
   Toast,
+  useBorderStyle,
   useCycleNavigation,
   useGlyphs,
   useKeyGlyphs,
@@ -79,7 +80,7 @@ export type FlowAction =
       reconfigure: string[];
       remove: string[];
     }
-  | { kind: "refresh"; name: string; provider: string };
+  | { kind: "refresh"; name: string; provider?: string };
 
 export type ExternalAction = FlowAction | { kind: "exit" };
 
@@ -219,6 +220,7 @@ function DetailsPane({
       reauthHint="press r to re-login"
       refreshingProvider={refreshingProvider}
       focusedProvider={focusedProvider}
+      showFocusRail
     />
   );
 }
@@ -419,7 +421,7 @@ type DashboardProps = {
 function Dashboard({ store, initialSelected }: DashboardProps): JSX.Element {
   const state = useLiveStore(store);
   const keyGlyphs = useKeyGlyphs();
-  const glyphs = useGlyphs();
+  const borderStyle = useBorderStyle();
   const [selected, setSelected] = useState(initialSelected);
   // -1 is the profile-level slot: no provider is focused and profile actions
   // are shown. Up/down cycles through this slot and every connected provider.
@@ -474,14 +476,16 @@ function Dashboard({ store, initialSelected }: DashboardProps): JSX.Element {
       moveProviderFocus(1);
     } else if (provider === undefined && input === "R" && !entry.isDefault) {
       setMode("rename");
-    } else if (provider === undefined && input === "D" && !entry.isDefault) {
+    } else if (provider === undefined && input === "d" && !entry.isDefault) {
       setMode("delete");
     } else if (
       provider === undefined &&
-      input === "a" &&
+      input === "e" &&
       details?.state === "ready"
     ) {
       setScreen("edit");
+    } else if (provider === undefined && input === "r") {
+      store.dispatch({ kind: "refresh", name: entry.name });
     } else if (provider === undefined && input === "n") {
       setMode("create");
     } else if (input === "e" && provider !== undefined) {
@@ -585,14 +589,17 @@ function Dashboard({ store, initialSelected }: DashboardProps): JSX.Element {
               ] as const)
             : ([
                 ...(details?.state === "ready"
-                  ? ([["a", "manage providers"]] as const)
+                  ? ([
+                      ["e", "edit"],
+                      ["r", "refresh"],
+                    ] as const)
                   : []),
                 ["n", "new"],
                 ...(entry.isDefault
                   ? []
                   : ([
                       ["R", "rename"],
-                      ["D", "delete profile"],
+                      ["d", "delete"],
                     ] as const)),
               ] as ReadonlyArray<readonly [string, string]>)),
           ["q", "quit"],
@@ -613,17 +620,23 @@ function Dashboard({ store, initialSelected }: DashboardProps): JSX.Element {
           <Text tone="muted">No profiles yet — press n to create one.</Text>
         ) : (
           <>
-            <Text>
-              <Text tone="brand">
-                {provider === undefined ? glyphs.selected : " "}{" "}
-              </Text>
+            <Box
+              flexDirection="row"
+              paddingLeft={provider === undefined ? 0 : 1}
+              borderStyle={borderStyle}
+              borderLeft={provider === undefined}
+              borderRight={false}
+              borderTop={false}
+              borderBottom={false}
+              borderColor={theme.color.brand}
+            >
               <Text bold color={theme.color.accent}>
                 {entry.name}
               </Text>
               {annotation === "" ? null : (
                 <Text tone="muted"> · {annotation}</Text>
               )}
-            </Text>
+            </Box>
             <Box>
               <DetailsPane
                 details={details ?? { state: "loading" }}

@@ -173,6 +173,7 @@ export function ProfileDetailsBody({
   reauthHint,
   refreshingProvider,
   focusedProvider,
+  showFocusRail = false,
 }: {
   readonly providers: ReadonlyArray<ProfileProviderDisplay>;
   /** Muted hint appended to rows with `status: "reauth"`. */
@@ -181,6 +182,8 @@ export function ProfileDetailsBody({
   readonly refreshingProvider?: string;
   /** Provider currently focused by an interactive parent view. */
   readonly focusedProvider?: string;
+  /** Reserve a stable focus rail column for an interactive parent view. */
+  readonly showFocusRail?: boolean;
 }): JSX.Element {
   const glyphs = useGlyphs();
   const borderStyle = useBorderStyle();
@@ -195,28 +198,24 @@ export function ProfileDetailsBody({
       ) : (
         providers.map((provider, providerIndex) => {
           const status = providerStatusStyle[provider.status];
+          const focused = showFocusRail && provider.name === focusedProvider;
           return (
             <Box
               key={provider.name}
               flexDirection="column"
               paddingTop={providerIndex === 0 ? 0 : 1}
+              paddingLeft={showFocusRail ? (focused ? 0 : 1) : 0}
               borderStyle={borderStyle}
               borderTop={providerIndex > 0}
               borderBottom={false}
-              borderLeft={false}
+              borderLeft={focused}
               borderRight={false}
               borderColor={theme.color.muted}
+              borderLeftColor={theme.color.brand}
               borderDimColor
             >
               <Gutter>
                 <Box flexDirection="row">
-                  {focusedProvider === undefined ? null : (
-                    <Text tone="brand">
-                      {provider.name === focusedProvider
-                        ? glyphs.selected
-                        : " "}{" "}
-                    </Text>
-                  )}
                   <Box width={nameWidth} flexShrink={0}>
                     <Text bold color={theme.color.accent}>
                       {provider.name}
