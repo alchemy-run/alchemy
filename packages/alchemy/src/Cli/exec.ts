@@ -3,14 +3,14 @@ import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import { watchImport } from "@alchemy.run/node-utils/watch-import";
 import { trackBunImports } from "@alchemy.run/node-utils/watch-import-bun";
-import { realpathSync } from "node:fs";
-import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { AlchemyContextLive } from "../AlchemyContext.ts";
@@ -129,12 +129,14 @@ const nextChange = (watcher: {
     return Effect.sync(unsubscribe);
   });
 
-const logReload = (paths: ReadonlySet<string>) =>
-  Effect.logInfo(
+const logReload = Effect.fn(function* (paths: ReadonlySet<string>) {
+  const path = yield* Path.Path;
+  yield* Effect.logInfo(
     `Reloading stack: changed ${[...paths]
       .map((file) => path.relative(initialCwd, file))
       .join(", ")}`,
   );
+});
 
 /**
  * Node: one process, many generations. The Oxc loader imports the stack graph
@@ -142,15 +144,17 @@ const logReload = (paths: ReadonlySet<string>) =>
  * interrupts the parked run (whose scope tears down the dev widget) and the
  * loop imports the next generation.
  */
-const runNodeDevWatcher = (options: DevOptions) => {
+const runNodeDevWatcher = Effect.fn(function* (options: DevOptions) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
   // Node reports real paths for loaded files (symlinked checkouts, macOS
   // `/tmp`), so the project root the graph is scoped to must be real too.
   // Scope to the invocation directory, not the entrypoint's directory: a
   // config under `infra/` commonly imports application code from `src/`.
-  const entrypoint = realpathSync.native(path.resolve(options.main));
-  const root = realpathSync.native(initialCwd);
+  const entrypoint = yield* fs.realPath(path.resolve(options.main));
+  const root = yield* fs.realPath(initialCwd);
   const nodeModules = `${path.sep}node_modules${path.sep}`;
-  return Effect.acquireRelease(
+  return yield* Effect.acquireRelease(
     Effect.sync(() =>
       watchImport<{ readonly default?: unknown }>(entrypoint, {
         parentURL: import.meta.url,
@@ -186,7 +190,7 @@ const runNodeDevWatcher = (options: DevOptions) => {
       );
     }),
   );
-};
+});
 
 /**
  * Bun: one process per generation. Bun cannot evict evaluated modules, so the

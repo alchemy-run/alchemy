@@ -65,57 +65,57 @@ export const devCommand = Command.make(
       // stack graph itself. Under Node it reloads the graph in-process; under
       // Bun (which cannot evict evaluated modules) it tears down and exits
       // with DEV_RELOAD_EXIT_CODE, and this supervisor starts a fresh child.
-      const command =
-        typeof globalThis.Bun !== "undefined"
-          ? [
-              "bun",
-              "run",
-              ...process.execArgv,
-              fileURLToPath(import.meta.resolve("alchemy/bin/exec.ts")),
-            ]
-          : (() => {
-              // Node: the exec entry runs with alchemy's Oxc loader hooks,
-              // exactly as bin/cli.js started this process (checkout: the
-              // .ts entry plus src-condition resolution; published: the .js
-              // bundle plus the loader for the user's stack). Node's own
-              // TypeScript support is never relied on. `process.execPath`,
-              // not "node": the hooks are gated on THIS node's version. A
-              // duplicate --import inherited via execArgv is harmless — the
-              // second import of the same URL hits the module cache.
-              const entry = fileURLToPath(
-                import.meta.resolve(
-                  import.meta.url.endsWith(".ts")
-                    ? "alchemy/bin/exec.ts"
-                    : "alchemy/bin/exec.js",
-                ),
-              );
-              return [
-                process.execPath,
-                ...process.execArgv,
-                ...nodeLoaderArgs(entry),
-                entry,
-              ];
-            })();
-      const runChild = Effect.gen(function* () {
-        const child = yield* ChildProcess.make(command[0], command.slice(1), {
-          stdin: "inherit",
-          stdout: "inherit",
-          stderr: "inherit",
-          env: {
-            ALCHEMY_EXEC_OPTIONS: JSON.stringify(options),
-            ALCHEMY_DEV: "true",
-            ...(process.env.NODE_EXTRA_CA_CERTS
-              ? { NODE_EXTRA_CA_CERTS: process.env.NODE_EXTRA_CA_CERTS }
-              : {}),
-            [SPAWNER_URL_ENV_KEY]: spawner.url,
-          },
-          extendEnv: true,
-          // Same process group as this supervisor: the exec child owns the
-          // terminal (TUI stdin), so the tty's Ctrl+C must reach it directly.
-          detached: false,
-        });
-        return yield* child.exitCode;
-      }).pipe(Effect.scoped);
+      let command: [string, ...string[]];
+      if (typeof globalThis.Bun !== "undefined") {
+        command = [
+          "bun",
+          "run",
+          ...process.execArgv,
+          fileURLToPath(import.meta.resolve("alchemy/bin/exec.ts")),
+        ];
+      } else {
+        // Node: the exec entry runs with alchemy's Oxc loader hooks,
+        // exactly as bin/cli.js started this process (checkout: the
+        // .ts entry plus src-condition resolution; published: the .js
+        // bundle plus the loader for the user's stack). Node's own
+        // TypeScript support is never relied on. `process.execPath`,
+        // not "node": the hooks are gated on THIS node's version. A
+        // duplicate --import inherited via execArgv is harmless — the
+        // second import of the same URL hits the module cache.
+        const entry = fileURLToPath(
+          import.meta.resolve(
+            import.meta.url.endsWith(".ts")
+              ? "alchemy/bin/exec.ts"
+              : "alchemy/bin/exec.js",
+          ),
+        );
+        command = [
+          process.execPath,
+          ...process.execArgv,
+          ...nodeLoaderArgs(entry),
+          entry,
+        ];
+      }
+      const runChild = ChildProcess.make(command[0], command.slice(1), {
+        stdin: "inherit",
+        stdout: "inherit",
+        stderr: "inherit",
+        env: {
+          ALCHEMY_EXEC_OPTIONS: JSON.stringify(options),
+          ALCHEMY_DEV: "true",
+          ...(process.env.NODE_EXTRA_CA_CERTS
+            ? { NODE_EXTRA_CA_CERTS: process.env.NODE_EXTRA_CA_CERTS }
+            : {}),
+          [SPAWNER_URL_ENV_KEY]: spawner.url,
+        },
+        extendEnv: true,
+        // Same process group as this supervisor: the exec child owns the
+        // terminal (TUI stdin), so the tty's Ctrl+C must reach it directly.
+        detached: false,
+      }).pipe(
+        Effect.flatMap((child) => child.exitCode),
+        Effect.scoped,
+      );
       // Each child gets its own scope so a reload exit releases the old
       // handle before the replacement starts; the sidecar spawner lives in
       // the command scope and survives every restart.
