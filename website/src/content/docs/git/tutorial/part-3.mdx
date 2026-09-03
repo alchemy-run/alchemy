@@ -3,6 +3,8 @@ title: "Part 3: Your own API"
 description: Git.Server is designed to be embedded. Build your own API around it with Better Auth, add a route of your own, replace one of the engine's, and serve your application from the same origin.
 ---
 
+import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
+
 `Git.Server` is designed to be embedded in your application. It holds
 few opinions about how the application is built, how users are
 organized, or who has access to what. To authorize, build your own API
@@ -24,9 +26,20 @@ policy decides what anonymous may do.
 
 ## Better Auth as a service
 
-```sh
-bun add @alchemy.run/better-auth better-auth @better-auth/api-key
-```
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun">
+    <Code code="bun add @alchemy.run/better-auth better-auth @better-auth/api-key" lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code="npm install @alchemy.run/better-auth better-auth @better-auth/api-key" lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code="pnpm add @alchemy.run/better-auth better-auth @better-auth/api-key" lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code="yarn add @alchemy.run/better-auth better-auth @better-auth/api-key" lang="sh" />
+  </TabItem>
+</Tabs>
 
 Better Auth is built once per Worker, so make it a service the rest of
 the file can ask for:
@@ -266,9 +279,20 @@ export default class GitHost extends Cloudflare.Worker<GitHost>()(
 ) {}
 ```
 
-```sh
-bun alchemy deploy
-```
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun">
+    <Code code="bun alchemy deploy" lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code="npm run alchemy deploy" lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code="pnpm alchemy deploy" lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code="yarn alchemy deploy" lang="sh" />
+  </TabItem>
+</Tabs>
 
 ## Try it
 

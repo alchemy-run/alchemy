@@ -3,6 +3,8 @@ title: "Part 1: A git server in one file"
 description: Build the git host from an empty file. Each line you add is one decision, and by the end you have deployed it.
 ---
 
+import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
+
 You have a Cloudflare account connected to alchemy and an empty
 project. By the end of this part a git server is deployed, and you
 know what each line of it decides. [Setup](/git/setup) deploys the
@@ -10,9 +12,20 @@ finished file directly if you would rather start there.
 
 ## Install
 
-```sh
-bun add alchemy
-```
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun">
+    <Code code="bun add alchemy" lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code="npm install alchemy" lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code="pnpm add alchemy" lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code="yarn add alchemy" lang="sh" />
+  </TabItem>
+</Tabs>
 
 ## A Worker that serves git
 
@@ -188,9 +201,20 @@ export default Alchemy.Stack(
 
 ## Deploy
 
-```sh
-bun alchemy deploy
-```
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun">
+    <Code code="bun alchemy deploy" lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code="npm run alchemy deploy" lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code="pnpm alchemy deploy" lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code="yarn alchemy deploy" lang="sh" />
+  </TabItem>
+</Tabs>
 
 The stack prints the Worker's URL and the secret. It created a bucket,
 two Durable Object namespaces, one random secret bound to one Worker,

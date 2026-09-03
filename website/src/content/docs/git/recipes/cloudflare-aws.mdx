@@ -3,6 +3,8 @@ title: Bytes in S3, hashing on Lambda
 description: Compute on Cloudflare, bytes in S3, and large pushes hashed one Lambda per chunk. One stack carries both provider sets, and Alchemy mints the cross-cloud identity.
 ---
 
+import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
+
 The Worker and the Durable Objects stay on Cloudflare. Packs, bundles,
 and spilled pushes live in S3, and every 4 MiB chunk of a push is
 hashed on its own Lambda:
@@ -59,9 +61,20 @@ export default Alchemy.Stack(
 );
 ```
 
-```sh
-bun alchemy deploy
-```
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun">
+    <Code code="bun alchemy deploy" lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code="npm run alchemy deploy" lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code="pnpm alchemy deploy" lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code="yarn alchemy deploy" lang="sh" />
+  </TabItem>
+</Tabs>
 
 ## What gets created
 

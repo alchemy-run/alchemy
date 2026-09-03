@@ -3,6 +3,8 @@ title: "Part 4: Your own rules"
 description: A policy is a page of code over git's own facts. Protect main, decide who reads what, and let a team share a repository. It never sees a credential.
 ---
 
+import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
+
 You have users signing in and pushing to their own repositories. Now
 the rules: pushes to `main` should only come from the owner, and a
 teammate should be able to push everywhere else. By the end of this
@@ -79,9 +81,20 @@ const GitLive = Git.ReposDurableObject.pipe(
 );
 ```
 
-```sh
-bun alchemy deploy
-```
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun">
+    <Code code="bun alchemy deploy" lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code="npm run alchemy deploy" lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code="pnpm alchemy deploy" lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code="yarn alchemy deploy" lang="sh" />
+  </TabItem>
+</Tabs>
 
 ## Try it
 
