@@ -182,3 +182,19 @@ export class RuntimeContext extends Context.Service<
 export const CurrentRuntimeContext = Effect.serviceOption(RuntimeContext).pipe(
   Effect.map(Option.getOrUndefined),
 );
+
+/**
+ * Bind a PLAIN plan-time value into the runtime's env under an
+ * (already-canonical) key — `RuntimeContext.set` for callers that must
+ * not import `Output` themselves. `Output` is the engine's expression
+ * root (it reaches `Stack`, state, the terminal UI), and the AI terms
+ * that bind their source paths (`AI/Source.ts`) sit in the browser's
+ * import graph through `alchemy/AI/React`; this seam lets them set a
+ * literal without carrying the engine along. Provided beside
+ * {@link RuntimeContext} where the platform runs a Function's init
+ * (`Platform.ts`); absent in a bare test, where nothing is bound.
+ */
+export class RuntimeLiteral extends Context.Service<
+  RuntimeLiteral,
+  (key: string, value: unknown) => Effect.Effect<string>
+>()("RuntimeLiteral") {}

@@ -2,8 +2,11 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
-import * as Output from "../Output.ts";
-import { RuntimeContext, sanitizeKey } from "../RuntimeContext.ts";
+import {
+  RuntimeContext,
+  RuntimeLiteral,
+  sanitizeKey,
+} from "../RuntimeContext.ts";
 
 /**
  * Where a term is DEFINED — the source file of an `AI.Agent`, `AI.Skill`,
@@ -133,6 +136,13 @@ export const resolveSources = (
  * would have said. Both services are optional: without a
  * `RuntimeContext` nothing is stored, without a `FileSystem` nothing is
  * resolved, so the same Layer builds in a Worker, at plan, and in a test.
+ *
+ * The store goes through {@link RuntimeLiteral}, not `RuntimeContext.set`
+ * directly: `set` takes an `Output`, and `Output` is the engine's root
+ * (`Stack`, state, the terminal UI) — while this module sits in the
+ * browser's import graph through `DriverCore` → `UIMessage` →
+ * `SessionSocket` → `React`. The platform provides both services
+ * together at init, so where one is present the other is.
  */
 export const bindSource = (source: Source): Effect.Effect<void> =>
   Effect.gen(function* () {
@@ -145,10 +155,11 @@ export const bindSource = (source: Source): Effect.Effect<void> =>
       );
     }
     const ctx = yield* Effect.serviceOption(RuntimeContext);
-    if (Option.isNone(ctx)) return;
-    const key = yield* ctx.value.set(
+    const literal = yield* Effect.serviceOption(RuntimeLiteral);
+    if (Option.isNone(ctx) || Option.isNone(literal)) return;
+    const key = yield* literal.value(
       sanitizeKey(`alchemy_source_${source["~alchemy/Name"]}`),
-      Output.literal(source.path ?? source["~alchemy/Name"]),
+      source.path ?? source["~alchemy/Name"],
     );
     const bound = yield* ctx.value.get<string>(key);
     if (typeof bound === "string" && bound.length > 0) {

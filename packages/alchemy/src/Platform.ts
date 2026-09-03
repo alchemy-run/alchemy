@@ -26,6 +26,7 @@ import type { Rpc } from "./Rpc.ts";
 import {
   CurrentRuntimeContext,
   RuntimeContext,
+  RuntimeLiteral,
   sanitizeKey,
   type BaseRuntimeContext,
 } from "./RuntimeContext.ts";
@@ -688,6 +689,11 @@ export const Platform = <
                         Layer.succeed(Platform.Platform, runtimeContext),
                         Layer.succeed(PlatformContext, runtimeContext),
                         Layer.succeed(RuntimeContext, runtimeContext),
+                        // the Output-free `set` for modules kept out of the
+                        // engine's import graph — see RuntimeLiteral
+                        Layer.succeed(RuntimeLiteral, (key, value) =>
+                          runtimeContext.set(key, Output.literal(value)),
+                        ),
                         // Host contexts (EC2 instances, ECS tasks, processes)
                         // carry a `run` for registering long-running loops.
                         // Expose it as `Host` so an inline program can
