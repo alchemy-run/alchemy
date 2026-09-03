@@ -109,9 +109,23 @@ const bucket = yield* Uploads; // bucket.bucketName is an Output
 ```
 
 Each Resource has a logical id, `"Uploads"` here, that Alchemy uses to
-track it across deploys. Its outputs, like the physical name Alchemy
-generates, are typed values you can pass into other Resources. [Resources](/infrastructure-as-code/resource) covers props,
-outputs, and references between resources.
+track it across deploys. Its outputs are typed values you can pass
+into other Resources. Here the physical bucket name Alchemy generated
+becomes an environment variable on a Worker:
+
+```typescript
+const bucket = yield* Uploads;
+
+yield* Cloudflare.Worker("Api", {
+  main: "./src/api.ts",
+  env: { BUCKET_NAME: bucket.bucketName },
+});
+```
+
+:::note
+[Resources](/infrastructure-as-code/resource) covers props, outputs,
+and references between Resources.
+:::
 
 A **Provider** teaches Alchemy how to read, diff, create, update, and
 delete one resource type. Each cloud ships its providers as an Effect
