@@ -56,7 +56,9 @@ export const Worker = Cloudflare.Worker("Api", {
 export default {
   async fetch(request: Request, env: { Uploads: R2Bucket }) {
     const obj = await env.Uploads.get("hello.txt");
-    return new Response(obj?.body ?? "Not found", { status: obj ? 200 : 404 });
+    return obj
+      ? new Response(await obj.text())
+      : new Response("Not found", { status: 404 });
   },
 };
 ```

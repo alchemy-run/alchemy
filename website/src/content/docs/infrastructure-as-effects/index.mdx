@@ -34,30 +34,42 @@ export default Cloudflare.Worker(
 );
 ```
 
-Traditional IaC splits this in two. One program declares the bucket,
-the Worker, and the permission between them. Another program runs
-inside the Worker and reaches for the bucket through an environment
-variable:
+Traditional IaC splits this in two. One file declares the bucket and
+the Worker. Another file is the code the Worker runs, reaching for the
+bucket through its environment. Alchemy supports that shape too:
 
 ```typescript
-// infrastructure
-const bucket = new R2Bucket("uploads");
-new Worker("api", { script: "src/api.ts", bindings: { BUCKET: bucket } });
+// alchemy.run.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+
+export const Uploads = Cloudflare.R2.Bucket("Uploads");
+
+export const Api = Cloudflare.Worker("Api", {
+  main: "./src/api.ts",
+  env: { Uploads },
+});
+
+export type ApiEnv = Cloudflare.InferEnv<typeof Api>;
 ```
 
 ```typescript
 // src/api.ts
+import type { ApiEnv } from "../alchemy.run.ts";
+
 export default {
-  async fetch(request, env) {
-    const obj = await env.BUCKET.get("hello.txt");
+  async fetch(request: Request, env: ApiEnv) {
+    const obj = await env.Uploads.get("hello.txt");
+    return obj
+      ? new Response(await obj.text())
+      : new Response("Not found", { status: 404 });
   },
 };
 ```
 
-The two agree by convention. `BUCKET` is typed twice, the permission
-lives in one file and the call in another, and nothing tells you when
-they drift. In Alchemy there is one program, and `bucket` is a value
-the handler closes over.
+Two files, held together by the name `Uploads`. The Effect form above
+is those two files as one. `bucket` is a value the handler closes over,
+and the code that uses the bucket sits next to the line that declares
+it.
 
 Everything in this section is in that one Worker. Let's take it
 apart.
