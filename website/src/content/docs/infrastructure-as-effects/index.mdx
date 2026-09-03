@@ -131,11 +131,11 @@ const getItem = yield* AWS.DynamoDB.GetItem(Jobs);
 There is no `env.Uploads` to reach for. The binding is the SDK. See
 [Bindings](/infrastructure-as-effects/binding) for how they work.
 
-Some bindings run your Function instead of being called from it. An
-[Event Source](/infrastructure-as-effects/event-sources) triggers on a
-resource and hands you the messages as an Effect `Stream`. A
-[Sink](/infrastructure-as-effects/sinks) is the write side, a resource
-you run a `Stream` into:
+An [Event Source](/infrastructure-as-effects/event-sources) is a
+Binding that runs an Effect or `Stream` in the background, whenever
+something happens on the resource. A
+[Sink](/infrastructure-as-effects/sinks) is the converse, a Binding
+you sink a `Stream` into:
 
 ```typescript
 yield* AWS.SQS.consumeQueueMessages(Inbound, (records) =>
