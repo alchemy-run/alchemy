@@ -5,7 +5,7 @@
  * the bench and the unit tests so "bytes received" never stands in for
  * "a whole pack" (DESIGN §22.4).
  */
-import { makeSha1 } from "@/Git/git/ObjectCodec.ts";
+import { makeSha1 } from "@/Git/Protocol/ObjectCodec.ts";
 
 export const verifyPackResponse = (
   raw: Uint8Array,

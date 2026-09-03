@@ -24,20 +24,20 @@ import { RuntimeContext } from "../../RuntimeContext.ts";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import type { ObjectType, Oid } from "../git/ObjectCodec.ts";
+import type { ObjectType, Oid } from "../Protocol/ObjectCodec.ts";
 import {
   concatBytes,
   encodeTypeSize,
   type PackEntryType,
-} from "../git/ObjectCodec.ts";
-import type { ManifestEntry } from "../git/Store.ts";
+} from "../Protocol/ObjectCodec.ts";
+import type { ManifestEntry } from "../Protocol/Store.ts";
 import {
   StoreError,
   type ObjectLocation,
   type ObjectMeta,
   type ObjectSource,
-} from "../git/Store.ts";
-import * as Zlib from "../git/Zlib.ts";
+} from "../Protocol/Store.ts";
+import * as Zlib from "../Protocol/Zlib.ts";
 import { objectKey, packKeyOf } from "./Keys.ts";
 import type { ObjectMetaRow, SqlClient } from "./Sql.ts";
 

@@ -11,7 +11,7 @@ import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
-import { applyDelta, readDeltaHeader } from "@/Git/git/Delta.ts";
+import { applyDelta, readDeltaHeader } from "@/Git/Protocol/Delta.ts";
 import {
   bytesToHex,
   concatBytes,
@@ -32,7 +32,7 @@ import {
   treeEntryCompare,
   utf8Decode,
   utf8Encode,
-} from "@/Git/git/ObjectCodec.ts";
+} from "@/Git/Protocol/ObjectCodec.ts";
 import {
   decodePktLines,
   decodePktStream,
@@ -43,9 +43,9 @@ import {
   pktPayloadText,
   pktText,
   readPktLineAt,
-} from "@/Git/git/Pkt.ts";
-import { SIDEBAND_DATA_MAX, sidebandFrames } from "@/Git/git/Sideband.ts";
-import { deflate, inflate, inflateEntry } from "@/Git/git/Zlib.ts";
+} from "@/Git/Protocol/Pkt.ts";
+import { SIDEBAND_DATA_MAX, sidebandFrames } from "@/Git/Protocol/Sideband.ts";
+import { deflate, inflate, inflateEntry } from "@/Git/Protocol/Zlib.ts";
 
 describe("pkt-line", () => {
   it.live("encodes data, text (LF-appended), flush, and ERR pkts", () =>

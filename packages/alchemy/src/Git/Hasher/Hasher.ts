@@ -37,7 +37,7 @@ import {
   type BlobStoreShape,
   type UploadedPart,
 } from "../BlobStore.ts";
-import type { Oid, ObjectType } from "../git/ObjectCodec.ts";
+import type { Oid, ObjectType } from "../Protocol/ObjectCodec.ts";
 import {
   type EntryBounds,
   hashBounds,
@@ -47,8 +47,11 @@ import {
   type DeltaBase,
   type DeltaJob,
   type DeltaResolved,
-} from "../git/PartialScan.ts";
-import { ObjectTooLargeError, PackFormatError } from "../git/PackParser.ts";
+} from "../Protocol/PartialScan.ts";
+import {
+  ObjectTooLargeError,
+  PackFormatError,
+} from "../Protocol/PackParser.ts";
 
 export {
   decodeBoundsRequest,

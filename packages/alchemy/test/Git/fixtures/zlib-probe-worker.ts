@@ -1,7 +1,7 @@
 /**
  * Probe fixture: what does THIS workerd's `node:zlib` offer for a
  * synchronous, exact-span inflate, and what does each path cost? (See
- * `src/Git/git/Zlib.ts`.) `?n=<count>` runs each path that many times so
+ * `src/Git/Protocol/Zlib.ts`.) `?n=<count>` runs each path that many times so
  * the CLIENT can measure wall time — workerd freezes `performance.now()`
  * during synchronous work, so the worker cannot time itself.
  */

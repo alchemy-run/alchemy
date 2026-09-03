@@ -32,7 +32,11 @@ import type {
   Worker,
   WorkerEnvironment,
 } from "../../Cloudflare/Workers/Worker.ts";
-import { hashBounds, resolveDeltas, scanPart } from "../git/PartialScan.ts";
+import {
+  hashBounds,
+  resolveDeltas,
+  scanPart,
+} from "../Protocol/PartialScan.ts";
 import { Hasher, type HasherShape } from "./Hasher.ts";
 import {
   decodeDeltaResults,

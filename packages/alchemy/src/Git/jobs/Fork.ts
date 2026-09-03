@@ -24,7 +24,7 @@ import * as Encoding from "effect/Encoding";
 import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
-import { StoreError } from "../git/Store.ts";
+import { StoreError } from "../Protocol/Store.ts";
 import type {
   CommitParentRow,
   CommitRow,

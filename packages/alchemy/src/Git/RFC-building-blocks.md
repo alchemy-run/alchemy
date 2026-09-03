@@ -469,7 +469,7 @@ Each phase lands green on the full suite before the next starts.
 > project focus is Cloudflare-native assemblies.
 
 What the Repo DO actually provides, and the AWS-native replacement for
-each. The pure `git/` codec layer, `BlobStore` (S3 layer shipped), and
+each. The pure `Protocol/` codec layer, `BlobStore` (S3 layer shipped), and
 the HTTP planes (Effect `HttpApi`/`HttpRouter` — portable to alchemy's
 Lambda hosts) need **no** work. The rest:
 

@@ -42,7 +42,7 @@ import {
   parseCommit,
   utf8Decode,
   utf8Encode,
-} from "@/Git/git/ObjectCodec.ts";
+} from "@/Git/Protocol/ObjectCodec.ts";
 import ProtectedGitHost from "./fixtures/protected-stack.ts";
 import TestGitHost, { TEST_ADMIN_TOKEN } from "./fixtures/stack.ts";
 import { verifyPackResponse } from "./harness/pack.ts";

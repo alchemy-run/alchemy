@@ -23,7 +23,7 @@ import type { BlobStoreError, BlobStoreShape } from "../BlobStore.ts";
 import { RuntimeContext } from "../../RuntimeContext.ts";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
-import { StoreError } from "../git/Store.ts";
+import { StoreError } from "../Protocol/Store.ts";
 import { repoPrefix } from "../store/Keys.ts";
 
 /** R2 `list` pages drained per alarm run (1000 keys per page). */

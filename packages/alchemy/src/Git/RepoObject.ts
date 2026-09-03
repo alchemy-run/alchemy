@@ -10,7 +10,7 @@
  *
  * NOTE: the protocol *choreography* (advertisement builder, request
  * parsers, pack writer/parser) is implemented in this file against the
- * pure codec primitives in `src/git/` (`Pkt`, `Sideband`, `ObjectCodec`,
+ * pure codec primitives in `src/Git/Protocol/` (`Pkt`, `Sideband`, `ObjectCodec`,
  * `Delta`, `Zlib`, `Store`). DESIGN.md places these in
  * `src/git/{Advertise,UploadPack,ReceivePack,PackParser,PackWriter}.ts`;
  * they live here (exported) until the git-layer split lands — moving them
@@ -72,9 +72,9 @@ import {
   type GitAction,
   type RepoContext,
 } from "./Auth.ts";
-import { applyDelta } from "./git/Delta.ts";
-import * as PackParser from "./git/PackParser.ts";
-import type { RandomAccess } from "./git/PackParser.ts";
+import { applyDelta } from "./Protocol/Delta.ts";
+import * as PackParser from "./Protocol/PackParser.ts";
+import type { RandomAccess } from "./Protocol/PackParser.ts";
 import {
   bytesToHex,
   concatBytes,
@@ -96,7 +96,7 @@ import {
   ZERO_OID,
   type ObjectTypeName,
   type Oid,
-} from "./git/ObjectCodec.ts";
+} from "./Protocol/ObjectCodec.ts";
 import {
   decodePktLines,
   errPkt,
@@ -105,24 +105,24 @@ import {
   pktText,
   readPktLineAt,
   type PktLine,
-} from "./git/Pkt.ts";
+} from "./Protocol/Pkt.ts";
 import {
   progressMessage,
   pumpPackBody,
   sidebandFrames,
-} from "./git/Sideband.ts";
+} from "./Protocol/Sideband.ts";
 import {
   StoreError,
   type ManifestEntry,
   type ObjectSource,
-} from "./git/Store.ts";
+} from "./Protocol/Store.ts";
 import {
   applyTreeChanges,
   conflictingPaths,
   diffTrees,
   type DiffEntryData,
-} from "./git/TreeDiff.ts";
-import * as Zlib from "./git/Zlib.ts";
+} from "./Protocol/TreeDiff.ts";
+import * as Zlib from "./Protocol/Zlib.ts";
 import { runImport, type ImportSource } from "./jobs/Import.ts";
 import { runForkJob, snapshotStream, type SnapshotChunk } from "./jobs/Fork.ts";
 import { bundleCovers, runBundleJob, type BundleInfo } from "./jobs/Bundle.ts";
@@ -147,13 +147,13 @@ import {
   type HasherShape,
   type HashPartResult,
 } from "./Hasher/Hasher.ts";
-import * as PartialScan from "./git/PartialScan.ts";
-import type { ScanResult } from "./git/PartialScan.ts";
+import * as PartialScan from "./Protocol/PartialScan.ts";
+import type { ScanResult } from "./Protocol/PartialScan.ts";
 import type {
   DeltaBase,
   DeltaJob,
   UnresolvedDelta,
-} from "./git/PartialScan.ts";
+} from "./Protocol/PartialScan.ts";
 import { BlobStore, type BlobStoreShape } from "./BlobStore.ts";
 import { runPurgeJob } from "./jobs/Purge.ts";
 import { RegistryStore, ulid } from "./RegistryObject.ts";
@@ -226,9 +226,9 @@ export const STAGE_BATCH_OBJECTS = 2048;
 export const STAGE_BATCH_BYTES = 8 * 1024 * 1024;
 
 // The tree-diff caps (`MAX_DIFF_FILES`, `MAX_DIFF_TREE_READS`) live with
-// the pure walk in `git/TreeDiff.ts`; re-exported here alongside the other
+// the pure walk in `Protocol/TreeDiff.ts`; re-exported here alongside the other
 // serving-plane bounds.
-export { MAX_DIFF_FILES, MAX_DIFF_TREE_READS } from "./git/TreeDiff.ts";
+export { MAX_DIFF_FILES, MAX_DIFF_TREE_READS } from "./Protocol/TreeDiff.ts";
 
 /** Max commits popped by the merge-base paint walk. */
 export const MAX_COMPARE_WALK = 10_000;
@@ -594,8 +594,8 @@ export interface CommitLogPage {
 }
 
 // `DiffEntryData` (one changed file) is defined next to the pure walk in
-// `git/TreeDiff.ts`; re-exported here with the other RPC data shapes.
-export type { DiffEntryData } from "./git/TreeDiff.ts";
+// `Protocol/TreeDiff.ts`; re-exported here with the other RPC data shapes.
+export type { DiffEntryData } from "./Protocol/TreeDiff.ts";
 
 /** Result of {@link GitRepoShape.readCommitDiff}. */
 export interface CommitDiffData {

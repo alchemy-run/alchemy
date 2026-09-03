@@ -30,10 +30,10 @@ import {
   makeSha1,
   type Oid,
   type PackEntryType,
-} from "../git/ObjectCodec.ts";
-import { StoreError, type ManifestEntry } from "../git/Store.ts";
+} from "../Protocol/ObjectCodec.ts";
+import { StoreError, type ManifestEntry } from "../Protocol/Store.ts";
 import { bundleKey, bundleSidebandKey } from "../store/Keys.ts";
-import { sidebandFramedLength, sidebandRechunk } from "../git/Sideband.ts";
+import { sidebandFramedLength, sidebandRechunk } from "../Protocol/Sideband.ts";
 
 /** A ref as it appears in a bundle's covered snapshot. */
 export interface BundleRef {

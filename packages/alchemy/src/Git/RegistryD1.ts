@@ -40,7 +40,7 @@ import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { Database } from "../Cloudflare/D1/Database.ts";
 import type { QueryDatabaseClient } from "../Cloudflare/D1/QueryDatabase.ts";
 import { RepoAlreadyExists, ValidationError } from "./Api.ts";
-import { StoreError } from "./git/Store.ts";
+import { StoreError } from "./Protocol/Store.ts";
 import {
   DEFAULT_LIST_LIMIT,
   RegistryStore,

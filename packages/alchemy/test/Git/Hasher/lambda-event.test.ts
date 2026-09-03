@@ -5,10 +5,14 @@ import {
   handleHashEvent,
   isHashEvent,
 } from "@/Git/Hasher/index.ts";
-import { encodeTypeSize, hashObject, makeSha1 } from "@/Git/git/ObjectCodec.ts";
-import { packHeader } from "@/Git/git/PackWriter.ts";
-import { scanPart } from "@/Git/git/PartialScan.ts";
-import * as Zlib from "@/Git/git/Zlib.ts";
+import {
+  encodeTypeSize,
+  hashObject,
+  makeSha1,
+} from "@/Git/Protocol/ObjectCodec.ts";
+import { packHeader } from "@/Git/Protocol/PackWriter.ts";
+import { scanPart } from "@/Git/Protocol/PartialScan.ts";
+import * as Zlib from "@/Git/Protocol/Zlib.ts";
 import { describe, expect, test } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { concat } from "../harness/pack.ts";

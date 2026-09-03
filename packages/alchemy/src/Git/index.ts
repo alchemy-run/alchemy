@@ -9,9 +9,9 @@
  *   {@link Registry} Durable Objects, and the building-block layers
  *   function (yielded inside your own `Alchemy.Stack`).
  *
- * Internals (wire-protocol codecs under `git/`, storage under `store/`,
+ * Internals (wire-protocol codecs under `Protocol/`, storage under `store/`,
  * alarm jobs under `jobs/`) are deliberately not re-exported here — deep
- * import them via `alchemy/Git/git/Pkt.ts` style paths when
+ * import them via `alchemy/Git/Protocol/Pkt.ts` style paths when
  * needed.
  */
 export * from "./Api.ts";

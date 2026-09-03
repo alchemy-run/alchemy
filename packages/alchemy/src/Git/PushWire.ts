@@ -10,7 +10,7 @@
  * metadata and the byte length of its zdata run, in order.
  */
 import type { StagedObject } from "./store/ObjectStore.ts";
-import type { ObjectType } from "./git/ObjectCodec.ts";
+import type { ObjectType } from "./Protocol/ObjectCodec.ts";
 
 interface RowMeta {
   /** oid */

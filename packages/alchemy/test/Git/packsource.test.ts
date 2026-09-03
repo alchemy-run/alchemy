@@ -10,14 +10,14 @@ import {
   makeSha1,
   encodeTypeSize,
   type Oid,
-} from "@/Git/git/ObjectCodec.ts";
+} from "@/Git/Protocol/ObjectCodec.ts";
 import {
   bufferRandomAccess,
   ingestPack,
   SINK_BATCH,
-} from "@/Git/git/PackParser.ts";
-import { packHeader } from "@/Git/git/PackWriter.ts";
-import * as Zlib from "@/Git/git/Zlib.ts";
+} from "@/Git/Protocol/PackParser.ts";
+import { packHeader } from "@/Git/Protocol/PackWriter.ts";
+import * as Zlib from "@/Git/Protocol/Zlib.ts";
 import { makeObjectStore } from "@/Git/store/ObjectStore.ts";
 import { blobRandomAccess, sliceRandomAccess } from "@/Git/store/PackSource.ts";
 import { makeStreamingSource } from "@/Git/store/StreamingSource.ts";

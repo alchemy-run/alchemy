@@ -15,7 +15,7 @@
  * emitted (it does not enumerate-then-truncate) and
  * {@link MAX_DIFF_TREE_READS} bounds tree opens defensively.
  *
- * Like the rest of `src/git/`, this module depends only on data-shaped
+ * Like the rest of `src/Git/Protocol/`, this module depends only on data-shaped
  * store contracts so it stays unit-testable with in-memory fakes.
  */
 import * as Effect from "effect/Effect";

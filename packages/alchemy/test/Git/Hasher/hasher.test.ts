@@ -7,9 +7,9 @@ import {
   encodeTypeSize,
   makeSha1,
   type Oid,
-} from "@/Git/git/ObjectCodec.ts";
-import { packHeader } from "@/Git/git/PackWriter.ts";
-import * as Zlib from "@/Git/git/Zlib.ts";
+} from "@/Git/Protocol/ObjectCodec.ts";
+import { packHeader } from "@/Git/Protocol/PackWriter.ts";
+import * as Zlib from "@/Git/Protocol/Zlib.ts";
 import {
   decodeScanResult,
   encodeScanResult,

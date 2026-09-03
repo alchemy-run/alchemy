@@ -25,7 +25,7 @@ import * as Layer from "effect/Layer";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import * as Effect from "effect/Effect";
 import { RepoAlreadyExists, ValidationError } from "./Api.ts";
-import { StoreError } from "./git/Store.ts";
+import { StoreError } from "./Protocol/Store.ts";
 import {
   initRegistrySchema,
   makeSqlClient,

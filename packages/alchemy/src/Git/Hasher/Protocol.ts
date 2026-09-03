@@ -11,14 +11,14 @@
  */
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
-import type { Oid, ObjectType } from "../git/ObjectCodec.ts";
+import type { Oid, ObjectType } from "../Protocol/ObjectCodec.ts";
 import type {
   DeltaBase,
   DeltaJob,
   DeltaResolved,
   EntryBounds,
   ScanResult,
-} from "../git/PartialScan.ts";
+} from "../Protocol/PartialScan.ts";
 
 export class HashError extends Schema.TaggedError<HashError>()("HashError", {
   reason: Schema.String,

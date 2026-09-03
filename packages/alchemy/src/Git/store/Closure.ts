@@ -27,7 +27,7 @@ import {
   type ObjectType,
   type Oid,
   type ParsedTag,
-} from "../git/ObjectCodec.ts";
+} from "../Protocol/ObjectCodec.ts";
 import {
   StoreError,
   type ClosureRequest,
@@ -36,7 +36,7 @@ import {
   type ManifestEntry,
   type ObjectMeta,
   type ObjectSource,
-} from "../git/Store.ts";
+} from "../Protocol/Store.ts";
 import type { SqlClient } from "./Sql.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -651,7 +651,7 @@ Conventions honored: no `Input<T>` in props; Effect 4 APIs only (`Effect.result`
 
 ## 7. Core codec plan: write it in Effect; the zlib boundary is `node:zlib`
 
-**Reuse verdict: write our own; port algorithms, import nothing (at runtime).** isomorphic-git is Promise-based, filesystem-shaped, and not streaming-safe under 128 MB (it *is* used as a **devDependency test client** for wire-level negative tests); wasm-git drags libgit2 through WASM for a problem that is ~1500 lines of well-specified codec; ripgit's Rust is the right recipe in the wrong language. The wire formats are small, frozen, and exhaustively documented — the risk is in choreography, not codecs, and choreography must be ours anyway. Everything is pure functions / Stream transforms in `src/git/` with zero platform imports, so the entire codec layer unit-tests in plain bun without a deploy. Port with attribution: `applyDelta` (~80 lines) and tree sort-order from isomorphic-git; OFS-delta offset codec cross-checked against ripgit and gitformat-pack.
+**Reuse verdict: write our own; port algorithms, import nothing (at runtime).** isomorphic-git is Promise-based, filesystem-shaped, and not streaming-safe under 128 MB (it *is* used as a **devDependency test client** for wire-level negative tests); wasm-git drags libgit2 through WASM for a problem that is ~1500 lines of well-specified codec; ripgit's Rust is the right recipe in the wrong language. The wire formats are small, frozen, and exhaustively documented — the risk is in choreography, not codecs, and choreography must be ours anyway. Everything is pure functions / Stream transforms in `src/Git/Protocol/` with zero platform imports, so the entire codec layer unit-tests in plain bun without a deploy. Port with attribution: `applyDelta` (~80 lines) and tree sort-order from isomorphic-git; OFS-delta offset codec cross-checked against ripgit and gitformat-pack.
 
 **The zlib boundary (the one platform-sensitive decision), per empirical workerd verification (workerd 1.20260801.1):**
 
@@ -663,7 +663,7 @@ Conventions honored: no `Input<T>` in props; Effect 4 APIs only (`Effect.result`
 | Compression at rest | `zlib.deflateSync(content)` (level 6) | Only runs for delta-resolved objects — the ingest fast path stores the pack's compressed span **verbatim** for non-delta entries. |
 | Hashing | `node:crypto` `createHash("sha1")` incremental | Pack trailers and large objects; loose ids hash `"<type> <size>\0" + content`. |
 
-`git/PackParser.ts` (via a thin `Zlib` helper) is the **only** module allowed to touch `node:zlib`. No pako, no fflate.
+`Protocol/PackParser.ts` (via a thin `Zlib` helper) is the **only** module allowed to touch `node:zlib`. No pako, no fflate.
 
 Codec inventory: pkt-line reader/writer (65516 payload cap, flush/delim/ERR), sideband mux, type/size varint (little-endian 7-bit), OFS_DELTA offset (big-endian 7-bit **with the +1 bias per continuation** — the classic bug), delta instruction stream (copy/insert, `size==0 ⇒ 0x10000`), tree entry encode/parse with the `foo` < `foo/` directory sort quirk, commit/tag header parsing (continuation lines, gpgsig), pack header/trailer. Each has table-driven unit tests plus round-trip tests against real-git-generated fixture packs checked into `test/fixtures/packs/` (normal, thin, ofs-heavy, ref-delta, big-blob, empty), with `git index-pack --strict` / `git fsck` as the oracle for writer output.
 
@@ -752,7 +752,7 @@ Every cut, its consequence, and the seam that makes it additive (seams marked **
 
 ---
 
-*Implementable from this document plus the repo: start with `src/git/` (Tier-1 tests green offline), then `store/`, then `RepoObject.ts` choreography, then the Worker/API mount, then the e2e suite. `packages/alchemy/src/Cloudflare/StateStore/Api.ts` is the mounting reference; `test/Cloudflare/Workers/fixtures/http-api/` is the Worker+DO+R2 reference; `packages/better-auth` is the packaging reference.*
+*Implementable from this document plus the repo: start with `src/Git/Protocol/` (Tier-1 tests green offline), then `store/`, then `RepoObject.ts` choreography, then the Worker/API mount, then the e2e suite. `packages/alchemy/src/Cloudflare/StateStore/Api.ts` is the mounting reference; `test/Cloudflare/Workers/fixtures/http-api/` is the Worker+DO+R2 reference; `packages/better-auth` is the packaging reference.*
 ---
 
 # Part II — v2: scaling to enormous repositories

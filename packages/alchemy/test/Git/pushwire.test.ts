@@ -1,5 +1,5 @@
 import { decodeStagedBatch, encodeStagedBatch } from "@/Git/PushWire.ts";
-import { ObjectType } from "@/Git/git/ObjectCodec.ts";
+import { ObjectType } from "@/Git/Protocol/ObjectCodec.ts";
 import { describe, expect, test } from "alchemy-test";
 
 describe("push batch codec", () => {

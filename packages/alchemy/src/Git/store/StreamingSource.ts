@@ -17,8 +17,8 @@
  *   instead of growing memory.
  */
 import * as Effect from "effect/Effect";
-import { StoreError } from "../git/Store.ts";
-import type { RandomAccess } from "../git/PackParser.ts";
+import { StoreError } from "../Protocol/Store.ts";
+import type { RandomAccess } from "../Protocol/PackParser.ts";
 
 // Slabs match the pump's part size so a part read is a view, not a copy.
 export const SLAB_BYTES = 8 * 1024 * 1024;

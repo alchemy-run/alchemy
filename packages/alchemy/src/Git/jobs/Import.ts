@@ -16,13 +16,13 @@ import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import { concatBytes, isOid, ZERO_OID } from "../git/ObjectCodec.ts";
+import { concatBytes, isOid, ZERO_OID } from "../Protocol/ObjectCodec.ts";
 import {
   flushPkt,
   pktPayloadText,
   pktText,
   readPktLineAt,
-} from "../git/Pkt.ts";
+} from "../Protocol/Pkt.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Errors & shapes

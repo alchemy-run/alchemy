@@ -113,9 +113,9 @@ import {
   utf8Decode,
   ZERO_OID,
   type ObjectType,
-} from "./git/ObjectCodec.ts";
+} from "./Protocol/ObjectCodec.ts";
 import { ulid } from "./RegistryObject.ts";
-import { decodePktLines, errPkt, flushPkt, pktText } from "./git/Pkt.ts";
+import { decodePktLines, errPkt, flushPkt, pktText } from "./Protocol/Pkt.ts";
 import * as Fiber from "effect/Fiber";
 import * as Option from "effect/Option";
 import * as Semaphore from "effect/Semaphore";
@@ -125,14 +125,14 @@ import { feedBody, HEAD_BYTES } from "./store/IncomingBody.ts";
 import { makeStreamingSource } from "./store/StreamingSource.ts";
 import { sliceRandomAccess } from "./store/PackSource.ts";
 import { incomingKey, wirePackId } from "./store/Keys.ts";
-import { StoreError as StoreErrorClass } from "./git/Store.ts";
+import { StoreError as StoreErrorClass } from "./Protocol/Store.ts";
 import { RuntimeContext } from "../RuntimeContext.ts";
 import {
   progressMessage,
   pumpPackBody,
   sidebandFrames,
   wrapSideband,
-} from "./git/Sideband.ts";
+} from "./Protocol/Sideband.ts";
 import {
   decodeBoundsRequest,
   encodeScanResult,
@@ -141,8 +141,8 @@ import {
   HASHER_BINDING,
 } from "./Hasher/Hasher.ts";
 import { decodeDeltaBatch, encodeDeltaResults } from "./Hasher/Protocol.ts";
-import { hashBounds, resolveDeltas, scanPart } from "./git/PartialScan.ts";
-import type { StoreError } from "./git/Store.ts";
+import { hashBounds, resolveDeltas, scanPart } from "./Protocol/PartialScan.ts";
+import type { StoreError } from "./Protocol/Store.ts";
 import {
   ADMIN_HEADER,
   buildAdvertisement,

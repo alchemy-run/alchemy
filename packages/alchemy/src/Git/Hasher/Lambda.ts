@@ -14,7 +14,11 @@ import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 import { InvokeFunction } from "../../AWS/Lambda/InvokeFunction.ts";
 import type { Function as LambdaFunction } from "../../AWS/Lambda/Function.ts";
-import { hashBounds, resolveDeltas, scanPart } from "../git/PartialScan.ts";
+import {
+  hashBounds,
+  resolveDeltas,
+  scanPart,
+} from "../Protocol/PartialScan.ts";
 import { Hasher, HashError, type HasherShape } from "./Hasher.ts";
 import {
   decodeHashResponse,

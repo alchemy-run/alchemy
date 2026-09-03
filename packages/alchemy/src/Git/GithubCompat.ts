@@ -56,7 +56,7 @@ import type {
   CommitLogPage,
   SignatureData,
 } from "./RepoObject.ts";
-import type { DiffEntryData } from "./git/TreeDiff.ts";
+import type { DiffEntryData } from "./Protocol/TreeDiff.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Dependencies injected by the Worker

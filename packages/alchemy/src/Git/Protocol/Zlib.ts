@@ -1,5 +1,5 @@
 /**
- * The zlib boundary — the ONLY module in `src/git/` allowed to touch
+ * The zlib boundary — the ONLY module in `src/Git/Protocol/` allowed to touch
  * `node:zlib` (per DESIGN §7).
  *
  * | Need                                          | Tool                          |

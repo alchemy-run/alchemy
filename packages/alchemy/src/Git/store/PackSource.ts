@@ -19,8 +19,8 @@
 import { RuntimeContext } from "../../RuntimeContext.ts";
 import * as Effect from "effect/Effect";
 import type { BlobStoreShape } from "../BlobStore.ts";
-import type { RandomAccess } from "../git/PackParser.ts";
-import { StoreError } from "../git/Store.ts";
+import type { RandomAccess } from "../Protocol/PackParser.ts";
+import { StoreError } from "../Protocol/Store.ts";
 
 /** Bytes fetched per window. */
 export const PACK_WINDOW_BYTES = 4 * 1024 * 1024;

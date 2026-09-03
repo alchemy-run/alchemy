@@ -12,7 +12,7 @@ import {
   encodeScanResult,
   frame,
 } from "./Protocol.ts";
-import { resolveDeltas, scanPart } from "../git/PartialScan.ts";
+import { resolveDeltas, scanPart } from "../Protocol/PartialScan.ts";
 
 export default {
   async fetch(request: Request): Promise<Response> {

@@ -4,7 +4,7 @@
  * The concrete implementations live in `src/store/` (DO SQLite + R2); the
  * protocol layer (`UploadPack`, `ReceivePack`, `PackParser`, `PackWriter`,
  * `Advertise`) depends only on these data-shaped contracts, which keeps the
- * entire `src/git/` layer unit-testable in plain bun with in-memory fakes.
+ * entire `src/Git/Protocol/` layer unit-testable in plain bun with in-memory fakes.
  */
 import type * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";

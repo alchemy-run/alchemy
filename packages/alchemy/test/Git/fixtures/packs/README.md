@@ -3,7 +3,7 @@
 These packfiles were generated **once** by the real `git` CLI and are committed
 verbatim — they are never regenerated at test time (per DESIGN.md §9 Tier 1).
 `pack.test.ts` reads them via the Effect `FileSystem` service and uses them as
-parse/write round-trip oracles for `src/git/PackParser.ts` / `PackWriter.ts`.
+parse/write round-trip oracles for `src/Git/Protocol/PackParser.ts` / `PackWriter.ts`.
 
 ## The fixture repository
 

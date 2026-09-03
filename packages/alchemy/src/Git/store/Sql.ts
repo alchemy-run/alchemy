@@ -22,7 +22,7 @@ import type {
   SqlStorageValue,
 } from "../../Cloudflare/Workers/index.ts";
 import * as Effect from "effect/Effect";
-import { StoreError } from "../git/Store.ts";
+import { StoreError } from "../Protocol/Store.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DDL (exact, DESIGN.md §3.1)

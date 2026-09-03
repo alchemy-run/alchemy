@@ -10,11 +10,11 @@ import {
   hashObject,
   type Oid,
   type ObjectType,
-} from "@/Git/git/ObjectCodec.ts";
-import { bufferRandomAccess, ingestPack } from "@/Git/git/PackParser.ts";
-import { packHeader } from "@/Git/git/PackWriter.ts";
-import type { ManifestEntry } from "@/Git/git/Store.ts";
-import * as Zlib from "@/Git/git/Zlib.ts";
+} from "@/Git/Protocol/ObjectCodec.ts";
+import { bufferRandomAccess, ingestPack } from "@/Git/Protocol/PackParser.ts";
+import { packHeader } from "@/Git/Protocol/PackWriter.ts";
+import type { ManifestEntry } from "@/Git/Protocol/Store.ts";
+import * as Zlib from "@/Git/Protocol/Zlib.ts";
 import {
   runCompactJob,
   runGeometricMergeJob,

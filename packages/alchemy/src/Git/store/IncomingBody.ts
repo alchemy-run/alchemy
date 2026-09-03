@@ -14,7 +14,7 @@
  * before the pack has arrived.
  */
 import * as Effect from "effect/Effect";
-import { StoreError } from "../git/Store.ts";
+import { StoreError } from "../Protocol/Store.ts";
 import type { StreamingFeeder } from "./StreamingSource.ts";
 
 /** Head prefix that is enough for command-section parsing. */

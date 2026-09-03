@@ -37,8 +37,8 @@ import {
   encodeTypeSize,
   makeSha1,
   type PackEntryType,
-} from "../git/ObjectCodec.ts";
-import { StoreError } from "../git/Store.ts";
+} from "../Protocol/ObjectCodec.ts";
+import { StoreError } from "../Protocol/Store.ts";
 import { packKey, isWirePackId, packKeyOf } from "../store/Keys.ts";
 import type { SqlClient } from "../store/Sql.ts";
 

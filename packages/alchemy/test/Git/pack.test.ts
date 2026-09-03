@@ -23,17 +23,17 @@ import {
   decodeTypeSize,
   hashObject,
   type ObjectType,
-} from "@/Git/git/ObjectCodec.ts";
+} from "@/Git/Protocol/ObjectCodec.ts";
 import {
   bufferRandomAccess,
   ingestPack,
   readPackHeader,
   type ResolvedEntry,
   type ThinBaseSource,
-} from "@/Git/git/PackParser.ts";
-import { writePackBytes } from "@/Git/git/PackWriter.ts";
-import type { ManifestEntry, ObjectSource } from "@/Git/git/Store.ts";
-import { inflate, inflateEntry } from "@/Git/git/Zlib.ts";
+} from "@/Git/Protocol/PackParser.ts";
+import { writePackBytes } from "@/Git/Protocol/PackWriter.ts";
+import type { ManifestEntry, ObjectSource } from "@/Git/Protocol/Store.ts";
+import { inflate, inflateEntry } from "@/Git/Protocol/Zlib.ts";
 import { makeStreamingSource } from "@/Git/store/StreamingSource.ts";
 import * as Fiber from "effect/Fiber";
 

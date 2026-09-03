@@ -1,5 +1,5 @@
 /**
- * Sideband framing (src/Git/git/Sideband.ts): the single-copy frame, the
+ * Sideband framing (src/Git/Protocol/Sideband.ts): the single-copy frame, the
  * whole-chunk framer the native pump uses, and the deterministic re-chunker
  * that writes a bundle's pre-framed twin — whose output must be a pure
  * function of the input bytes, however the input is chunked.
@@ -10,7 +10,7 @@ import {
   sidebandFrameAll,
   sidebandFramedLength,
   sidebandRechunk,
-} from "@/Git/git/Sideband.ts";
+} from "@/Git/Protocol/Sideband.ts";
 import { describe, expect, test } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";

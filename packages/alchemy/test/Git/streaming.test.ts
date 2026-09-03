@@ -4,8 +4,8 @@
  * consumed slabs and falls back to the spilled reader, and the feeder is
  * throttled by backpressure.
  */
-import { bufferRandomAccess } from "@/Git/git/PackParser.ts";
-import { StoreError } from "@/Git/git/Store.ts";
+import { bufferRandomAccess } from "@/Git/Protocol/PackParser.ts";
+import { StoreError } from "@/Git/Protocol/Store.ts";
 import { makeStreamingSource } from "@/Git/store/StreamingSource.ts";
 import { describe, expect, test } from "alchemy-test";
 import * as Effect from "effect/Effect";

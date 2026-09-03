@@ -1,5 +1,5 @@
 /**
- * The partial-pack scanner (src/Git/git/PartialScan.ts): the hashing
+ * The partial-pack scanner (src/Git/Protocol/PartialScan.ts): the hashing
  * Worker's unit of work. Entries are settled inside a buffer that starts
  * at an entry boundary; the tail is carried; deltas whose base lies in an
  * earlier buffer are reported unresolved.
@@ -9,15 +9,15 @@ import {
   encodeTypeSize,
   makeSha1,
   type Oid,
-} from "@/Git/git/ObjectCodec.ts";
+} from "@/Git/Protocol/ObjectCodec.ts";
 import {
   findBoundary,
   hashBounds,
   scanBounds,
   scanPart,
-} from "@/Git/git/PartialScan.ts";
-import { packHeader } from "@/Git/git/PackWriter.ts";
-import * as Zlib from "@/Git/git/Zlib.ts";
+} from "@/Git/Protocol/PartialScan.ts";
+import { packHeader } from "@/Git/Protocol/PackWriter.ts";
+import * as Zlib from "@/Git/Protocol/Zlib.ts";
 import * as BunServices from "@effect/platform-bun/BunServices";
 import { describe, expect, test } from "alchemy-test";
 import * as Effect from "effect/Effect";

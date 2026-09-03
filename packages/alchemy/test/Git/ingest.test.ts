@@ -5,15 +5,19 @@
  * and thin-pack bases from the store are exercised in-process.
  */
 import * as BunServices from "@effect/platform-bun/BunServices";
-import { bufferRandomAccess } from "@/Git/git/PackParser.ts";
+import { bufferRandomAccess } from "@/Git/Protocol/PackParser.ts";
 import { HasherInline, Hasher, type HasherShape } from "@/Git/Hasher/Hasher.ts";
 import { ingestPackFrom, ingestStoreOf } from "@/Git/RepoObject.ts";
 import { makeObjectStore } from "@/Git/store/ObjectStore.ts";
 import { makeStreamingSource } from "@/Git/store/StreamingSource.ts";
 import { sliceRandomAccess } from "@/Git/store/PackSource.ts";
-import { hashObject, encodeTypeSize, makeSha1 } from "@/Git/git/ObjectCodec.ts";
-import { packHeader } from "@/Git/git/PackWriter.ts";
-import * as Zlib from "@/Git/git/Zlib.ts";
+import {
+  hashObject,
+  encodeTypeSize,
+  makeSha1,
+} from "@/Git/Protocol/ObjectCodec.ts";
+import { packHeader } from "@/Git/Protocol/PackWriter.ts";
+import * as Zlib from "@/Git/Protocol/Zlib.ts";
 import * as Fiber from "effect/Fiber";
 import { concat } from "./harness/pack.ts";
 import { describe, expect, test } from "alchemy-test";
