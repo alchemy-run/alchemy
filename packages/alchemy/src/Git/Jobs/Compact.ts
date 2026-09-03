@@ -1,4 +1,4 @@
-import { LIVE_OBJECTS } from "../store/ObjectStore.ts";
+import { LIVE_OBJECTS } from "../Store/ObjectStore.ts";
 /**
  * The compaction alarm job (DESIGN.md §12.1) — the v2 storage plane.
  *
@@ -39,8 +39,8 @@ import {
   type PackEntryType,
 } from "../Protocol/ObjectCodec.ts";
 import { StoreError } from "../Protocol/Store.ts";
-import { packKey, isWirePackId, packKeyOf } from "../store/Keys.ts";
-import type { SqlClient } from "../store/Sql.ts";
+import { packKey, isWirePackId, packKeyOf } from "../Store/Keys.ts";
+import type { SqlClient } from "../Store/Sql.ts";
 
 /** Objects moved per alarm run. */
 export const MAX_OBJECTS_PER_RUN = 2_000;

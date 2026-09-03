@@ -1,4 +1,4 @@
-import { LIVE_OBJECTS } from "../store/ObjectStore.ts";
+import { LIVE_OBJECTS } from "../Store/ObjectStore.ts";
 /**
  * The fork alarm job (DESIGN.md §2.3 Fork).
  *
@@ -31,7 +31,7 @@ import type {
   ObjectRow,
   RefRow,
   SqlClient,
-} from "../store/Sql.ts";
+} from "../Store/Sql.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Snapshot wire shapes

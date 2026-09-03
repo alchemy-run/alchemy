@@ -15,7 +15,7 @@ import {
   placeholders,
   REPO_DDL,
   type SqlClient,
-} from "@/Git/store/Sql.ts";
+} from "@/Git/Store/Sql.ts";
 import { StoreError } from "@/Git/Protocol/Store.ts";
 
 type Value = string | number | ArrayBuffer | Uint8Array | null;

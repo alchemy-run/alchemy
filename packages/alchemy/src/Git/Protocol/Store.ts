@@ -122,7 +122,7 @@ export interface RefsSnapshot {
 
 /**
  * Inputs to the fetch closure computation (implemented over the commit graph
- * in `src/store/Closure.ts`).
+ * in `src/Git/Store/Closure.ts`).
  */
 export interface ClosureRequest {
   /** Requested tips (from `want` lines). */

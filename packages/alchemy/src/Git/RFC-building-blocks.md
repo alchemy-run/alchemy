@@ -231,7 +231,7 @@ already satisfies.
 
 Consumers refactored onto it: `ObjectStore` (stops leaking `bucket`),
 `PackSource` (`r2RandomAccess` → `blobRandomAccess`), `IncomingBody`,
-`jobs/Compact`, `jobs/Bundle`, `jobs/Purge`, the Worker's bundle splice.
+`Jobs/Compact`, `Jobs/Bundle`, `Jobs/Purge`, the Worker's bundle splice.
 
 ### 3.2 `Auth` — authentication + domain-specific authorization
 

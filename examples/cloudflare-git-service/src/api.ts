@@ -1,7 +1,7 @@
 /**
  * Plain-fetch client of the git-service REST API (`/api/v1`).
  *
- * The types mirror `alchemy/Git`'s API schemas (`src/api/Schema.ts`)
+ * The types mirror `alchemy/Git`'s API schemas (`src/Git/Api/Schema.ts`)
  * by hand — the SPA deliberately ships no Effect runtime; it is an example
  * of consuming the service from any plain JS frontend.
  */
@@ -47,7 +47,7 @@ export const signOut = (): void => {
   localStorage.removeItem(TOKEN_KEY);
 };
 
-// ── API types (mirroring src/api/Schema.ts) ─────────────────────────────────
+// ── API types (mirroring src/Git/Api/Schema.ts) ─────────────────────────────────
 
 export type TokenScope = "read" | "write" | "admin";
 export type RepoStatus = "ready" | "importing" | "forking" | "deleting";

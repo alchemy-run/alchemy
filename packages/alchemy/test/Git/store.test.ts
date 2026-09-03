@@ -1,5 +1,5 @@
 /**
- * Object store unit tests (src/Git/store/ObjectStore.ts, jobs/Compact.ts)
+ * Object store unit tests (src/Git/Store/ObjectStore.ts, Jobs/Compact.ts)
  * over the bun:sqlite + in-memory blob harness. Every emitted pack is
  * re-parsed by the real pack parser, so the bytes — not just the counts —
  * are verified.
@@ -20,14 +20,14 @@ import {
   runGeometricMergeJob,
   shouldCompact,
   BLOB_TYPE,
-} from "@/Git/jobs/Compact.ts";
-import { packKey, packKeyOf, wirePackId } from "@/Git/store/Keys.ts";
+} from "@/Git/Jobs/Compact.ts";
+import { packKey, packKeyOf, wirePackId } from "@/Git/Store/Keys.ts";
 import {
   makeObjectStore,
   STAGE_INSERT_ROWS,
   WINDOW_BYTES,
   WINDOW_CACHE_BYTES,
-} from "@/Git/store/ObjectStore.ts";
+} from "@/Git/Store/ObjectStore.ts";
 import { describe, expect, test } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { RuntimeContext } from "@/RuntimeContext.ts";

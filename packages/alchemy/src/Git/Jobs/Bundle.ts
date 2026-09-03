@@ -32,7 +32,7 @@ import {
   type PackEntryType,
 } from "../Protocol/ObjectCodec.ts";
 import { StoreError, type ManifestEntry } from "../Protocol/Store.ts";
-import { bundleKey, bundleSidebandKey } from "../store/Keys.ts";
+import { bundleKey, bundleSidebandKey } from "../Store/Keys.ts";
 import { sidebandFramedLength, sidebandRechunk } from "../Protocol/Sideband.ts";
 
 /** A ref as it appears in a bundle's covered snapshot. */

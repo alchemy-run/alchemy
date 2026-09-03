@@ -56,7 +56,7 @@ import {
   type RegistryShape,
   type RepoSummary,
 } from "./RegistryObject.ts";
-import { REGISTRY_DDL, type RegistryRepoRow } from "./store/Sql.ts";
+import { REGISTRY_DDL, type RegistryRepoRow } from "./Store/Sql.ts";
 
 /**
  * D1's executors put failures in the defect channel (their error channel
@@ -83,7 +83,7 @@ export const RegistryD1 = (database: Database): Layer.Layer<RegistryStore> =>
       const db: QueryDatabaseClient =
         yield* Cloudflare.D1.QueryDatabase(database);
 
-      // The DDL is shared with the DO (store/Sql.ts) — one definition, so
+      // The DDL is shared with the DO (Store/Sql.ts) — one definition, so
       // the backends can never drift apart.
       const ready = Effect.suspend(() =>
         Effect.forEach(REGISTRY_DDL, (statement) =>

@@ -7,7 +7,7 @@
 import {
   BACKPRESSURE_BYTES,
   RETAIN_BYTES,
-} from "@/Git/store/StreamingSource.ts";
+} from "@/Git/Store/StreamingSource.ts";
 import {
   MAX_PACK_BYTES,
   PUSH_MEMORY_BUDGET_MB,

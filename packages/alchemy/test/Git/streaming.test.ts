@@ -1,12 +1,12 @@
 /**
- * The streaming pack source (src/Git/store/StreamingSource.ts): reads
+ * The streaming pack source (src/Git/Store/StreamingSource.ts): reads
  * block until bytes arrive, in-slab reads are views, retention drops
  * consumed slabs and falls back to the spilled reader, and the feeder is
  * throttled by backpressure.
  */
 import { bufferRandomAccess } from "@/Git/Protocol/PackParser.ts";
 import { StoreError } from "@/Git/Protocol/Store.ts";
-import { makeStreamingSource } from "@/Git/store/StreamingSource.ts";
+import { makeStreamingSource } from "@/Git/Store/StreamingSource.ts";
 import { describe, expect, test } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";

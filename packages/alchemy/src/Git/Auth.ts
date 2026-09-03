@@ -28,7 +28,7 @@ import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import crypto from "node:crypto";
 import { Credentials, GitAuth, Unauthorized } from "./Api.ts";
-import type { TokenScope } from "./api/Schema.ts";
+import type { TokenScope } from "./Api/Schema.ts";
 
 /**
  * Prefix of every minted per-repo token. The full format is

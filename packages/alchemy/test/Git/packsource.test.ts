@@ -1,5 +1,5 @@
 /**
- * The spilled-pack reader (src/Git/store/PackSource.ts): windowed random
+ * The spilled-pack reader (src/Git/Store/PackSource.ts): windowed random
  * access over blob storage. Reads within a window must be VIEWS of the
  * cached slab (a copy per probe read was the 40 s spilled-push ingest), and
  * a parse through tiny windows — many window boundaries, straddling
@@ -18,9 +18,9 @@ import {
 } from "@/Git/Protocol/PackParser.ts";
 import { packHeader } from "@/Git/Protocol/PackWriter.ts";
 import * as Zlib from "@/Git/Protocol/Zlib.ts";
-import { makeObjectStore } from "@/Git/store/ObjectStore.ts";
-import { blobRandomAccess, sliceRandomAccess } from "@/Git/store/PackSource.ts";
-import { makeStreamingSource } from "@/Git/store/StreamingSource.ts";
+import { makeObjectStore } from "@/Git/Store/ObjectStore.ts";
+import { blobRandomAccess, sliceRandomAccess } from "@/Git/Store/PackSource.ts";
+import { makeStreamingSource } from "@/Git/Store/StreamingSource.ts";
 import * as Fiber from "effect/Fiber";
 import { describe, expect, test } from "alchemy-test";
 import * as Effect from "effect/Effect";

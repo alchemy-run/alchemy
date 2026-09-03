@@ -123,25 +123,25 @@ import {
   type DiffEntryData,
 } from "./Protocol/TreeDiff.ts";
 import * as Zlib from "./Protocol/Zlib.ts";
-import { runImport, type ImportSource } from "./jobs/Import.ts";
-import { runForkJob, snapshotStream, type SnapshotChunk } from "./jobs/Fork.ts";
-import { bundleCovers, runBundleJob, type BundleInfo } from "./jobs/Bundle.ts";
+import { runImport, type ImportSource } from "./Jobs/Import.ts";
+import { runForkJob, snapshotStream, type SnapshotChunk } from "./Jobs/Fork.ts";
+import { bundleCovers, runBundleJob, type BundleInfo } from "./Jobs/Bundle.ts";
 import {
   runCompactJob,
   runGeometricMergeJob,
   shouldCompact,
-} from "./jobs/Compact.ts";
-import { headKey, incomingKey, packKeyOf, wirePackId } from "./store/Keys.ts";
-import { encodeHeadSnapshot, type HeadSnapshot } from "./store/HeadSnapshot.ts";
-import { blobRandomAccess, sliceRandomAccess } from "./store/PackSource.ts";
-import { SPILL_PART_BYTES } from "./store/IncomingBody.ts";
+} from "./Jobs/Compact.ts";
+import { headKey, incomingKey, packKeyOf, wirePackId } from "./Store/Keys.ts";
+import { encodeHeadSnapshot, type HeadSnapshot } from "./Store/HeadSnapshot.ts";
+import { blobRandomAccess, sliceRandomAccess } from "./Store/PackSource.ts";
+import { SPILL_PART_BYTES } from "./Store/IncomingBody.ts";
 import type { BlobMultipart, UploadedPart } from "./BlobStore.ts";
-import type { StreamingFeeder } from "./store/StreamingSource.ts";
+import type { StreamingFeeder } from "./Store/StreamingSource.ts";
 import {
   BACKPRESSURE_BYTES,
   makeStreamingSource,
   RETAIN_BYTES,
-} from "./store/StreamingSource.ts";
+} from "./Store/StreamingSource.ts";
 import {
   Hasher,
   type HasherShape,
@@ -155,17 +155,17 @@ import type {
   UnresolvedDelta,
 } from "./Protocol/PartialScan.ts";
 import { BlobStore, type BlobStoreShape } from "./BlobStore.ts";
-import { runPurgeJob } from "./jobs/Purge.ts";
+import { runPurgeJob } from "./Jobs/Purge.ts";
 import { RegistryStore, ulid } from "./RegistryObject.ts";
 import { decodeStagedBatch } from "./PushWire.ts";
-import { computeClosure } from "./store/Closure.ts";
+import { computeClosure } from "./Store/Closure.ts";
 import {
   makeObjectStore,
   MAX_OBJECT_SIZE,
   type ObjectStore,
   type StagedObject,
   LIVE_OBJECTS,
-} from "./store/ObjectStore.ts";
+} from "./Store/ObjectStore.ts";
 import type * as cf from "@cloudflare/workers-types";
 import {
   initRepoSchema,
@@ -174,7 +174,7 @@ import {
   type PullRow,
   type RefRow,
   type TokenRow,
-} from "./store/Sql.ts";
+} from "./Store/Sql.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -1499,7 +1499,7 @@ export interface IngestOptions {
  * Ingests a pack from a {@link RandomAccess} source — the path that has **no
  * size cap** (DESIGN.md §3.6). Memory is bounded by the source's read
  * window and the delta LRU rather than by the pack, so the source can be an
- * R2 object of any size (see `store/PackSource.ts`).
+ * R2 object of any size (see `Store/PackSource.ts`).
  *
  * Delegates the wire-format work to the pure `PackParser` (which the pack
  * fixtures in `test/pack.test.ts` cover directly) and does the repo-side

@@ -24,7 +24,7 @@ import { RuntimeContext } from "../../RuntimeContext.ts";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { StoreError } from "../Protocol/Store.ts";
-import { repoPrefix } from "../store/Keys.ts";
+import { repoPrefix } from "../Store/Keys.ts";
 
 /** R2 `list` pages drained per alarm run (1000 keys per page). */
 export const MAX_PAGES_PER_RUN = 10;

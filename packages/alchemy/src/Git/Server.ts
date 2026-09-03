@@ -102,9 +102,9 @@ import {
 } from "./Auth.ts";
 import { githubCompatRoutes } from "./GithubCompat.ts";
 import { BlobStore, type BlobStoreError } from "./BlobStore.ts";
-import { bundleCovers, type BundleInfo } from "./jobs/Bundle.ts";
-import { headKey } from "./store/Keys.ts";
-import { decodeHeadSnapshot } from "./store/HeadSnapshot.ts";
+import { bundleCovers, type BundleInfo } from "./Jobs/Bundle.ts";
+import { headKey } from "./Store/Keys.ts";
+import { decodeHeadSnapshot } from "./Store/HeadSnapshot.ts";
 import {
   concatBytes,
   parseCommit,
@@ -121,10 +121,10 @@ import * as Option from "effect/Option";
 import * as Semaphore from "effect/Semaphore";
 import { Hasher } from "./Hasher/Hasher.ts";
 import { encodeStagedBatch } from "./PushWire.ts";
-import { feedBody, HEAD_BYTES } from "./store/IncomingBody.ts";
-import { makeStreamingSource } from "./store/StreamingSource.ts";
-import { sliceRandomAccess } from "./store/PackSource.ts";
-import { incomingKey, wirePackId } from "./store/Keys.ts";
+import { feedBody, HEAD_BYTES } from "./Store/IncomingBody.ts";
+import { makeStreamingSource } from "./Store/StreamingSource.ts";
+import { sliceRandomAccess } from "./Store/PackSource.ts";
+import { incomingKey, wirePackId } from "./Store/Keys.ts";
 import { StoreError as StoreErrorClass } from "./Protocol/Store.ts";
 import { RuntimeContext } from "../RuntimeContext.ts";
 import {

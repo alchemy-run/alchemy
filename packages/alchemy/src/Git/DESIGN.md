@@ -752,7 +752,7 @@ Every cut, its consequence, and the seam that makes it additive (seams marked **
 
 ---
 
-*Implementable from this document plus the repo: start with `src/Git/Protocol/` (Tier-1 tests green offline), then `store/`, then `RepoObject.ts` choreography, then the Worker/API mount, then the e2e suite. `packages/alchemy/src/Cloudflare/StateStore/Api.ts` is the mounting reference; `test/Cloudflare/Workers/fixtures/http-api/` is the Worker+DO+R2 reference; `packages/better-auth` is the packaging reference.*
+*Implementable from this document plus the repo: start with `src/Git/Protocol/` (Tier-1 tests green offline), then `Store/`, then `RepoObject.ts` choreography, then the Worker/API mount, then the e2e suite. `packages/alchemy/src/Cloudflare/StateStore/Api.ts` is the mounting reference; `test/Cloudflare/Workers/fixtures/http-api/` is the Worker+DO+R2 reference; `packages/better-auth` is the packaging reference.*
 ---
 
 # Part II — v2: scaling to enormous repositories
@@ -1020,7 +1020,7 @@ and a fresh clone of it.
 ### 16.4 Push size: the cap is gone, the large path needs a cursor
 
 A push larger than the in-memory threshold is **no longer rejected**. The
-body is parked in R2 and parsed back through `store/PackSource.ts`, an
+body is parked in R2 and parsed back through `Store/PackSource.ts`, an
 R2-backed `RandomAccess` with window-coalesced reads — the seam
 `PackParser` was written against from the start. The DO's ingest now runs
 on `PackParser` (which the pack fixtures cover directly) rather than its
@@ -1067,7 +1067,7 @@ whole body inside the 128 MB isolate before any parsing — OOM, 500, after
 ~7 s. Everything downstream (R2 parking, windowed parsing) was already
 size-independent; the *receive* wasn't.
 
-The fix is `store/IncomingBody.ts`: the body is consumed as a stream.
+The fix is `Store/IncomingBody.ts`: the body is consumed as a stream.
 Bodies that finish within `MAX_PACK_BYTES` return as one buffer (the fast
 path); the moment the threshold is crossed, everything received and
 everything still arriving spills to R2 via **multipart upload** in uniform
@@ -1420,7 +1420,7 @@ plain full clone with no usable bundle. Comparing across runs compared
 two different things.
 
 A bundle+delta splice was built and reverted. It is defeated by a
-deliberate v1 tradeoff in `store/Closure.ts`: boundary (common) commits'
+deliberate v1 tradeoff in `Store/Closure.ts`: boundary (common) commits'
 tree/blob closures are **not** subtracted, so
 `computeClosure(wants, haves = bundle refs)` returns a whole snapshot
 rather than a delta. The spliced pack measured exactly 2x the bundle
@@ -1707,7 +1707,7 @@ to blob storage above it) and only then parsed. Two serial phases, each
 as long as the other; and a 128 MB isolate that can hold exactly one
 large body. Ingest now parses the body **while it arrives**:
 
-- `StreamingSource` (`store/StreamingSource.ts`) is a `RandomAccess` over
+- `StreamingSource` (`Store/StreamingSource.ts`) is a `RandomAccess` over
   4 MiB slabs the receiver fills. A read past what has arrived waits;
   a read behind the retention window (16 MiB) is served from the spilled
   object once the body has ended — and fails if it never spills, so a

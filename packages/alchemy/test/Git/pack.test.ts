@@ -34,7 +34,7 @@ import {
 import { writePackBytes } from "@/Git/Protocol/PackWriter.ts";
 import type { ManifestEntry, ObjectSource } from "@/Git/Protocol/Store.ts";
 import { inflate, inflateEntry } from "@/Git/Protocol/Zlib.ts";
-import { makeStreamingSource } from "@/Git/store/StreamingSource.ts";
+import { makeStreamingSource } from "@/Git/Store/StreamingSource.ts";
 import * as Fiber from "effect/Fiber";
 
 // ── manifest shape (test/fixtures/packs/manifest.json) ──────────────────────

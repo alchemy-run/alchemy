@@ -30,7 +30,7 @@ import {
   initRegistrySchema,
   makeSqlClient,
   type RegistryRepoRow,
-} from "./store/Sql.ts";
+} from "./Store/Sql.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ULID

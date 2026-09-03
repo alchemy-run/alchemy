@@ -13,7 +13,7 @@
  * ```
  *
  * Shared schemas, tagged errors, and the `Credentials`/`GitAuth` services
- * live in `api/Schema.ts` and are re-exported flatly from here.
+ * live in `Api/Schema.ts` and are re-exported flatly from here.
  *
  * The git wire protocol (`/:owner/:repo.git/info/refs`,
  * `git-upload-pack`, `git-receive-pack`) and the raw streaming blob/file
@@ -22,18 +22,18 @@
  * keeping binary streaming out of schema land.
  */
 import * as HttpApi from "effect/unstable/httpapi/HttpApi";
-import ObjectsGroup from "./api/Objects.ts";
-import PullsGroup from "./api/Pulls.ts";
-import RefsGroup from "./api/Refs.ts";
-import ReposGroup from "./api/Repos.ts";
-import TokensGroup from "./api/Tokens.ts";
+import ObjectsGroup from "./Api/Objects.ts";
+import PullsGroup from "./Api/Pulls.ts";
+import RefsGroup from "./Api/Refs.ts";
+import ReposGroup from "./Api/Repos.ts";
+import TokensGroup from "./Api/Tokens.ts";
 
-export * from "./api/Schema.ts";
-export * as Objects from "./api/Objects.ts";
-export * as Pulls from "./api/Pulls.ts";
-export * as Refs from "./api/Refs.ts";
-export * as Repos from "./api/Repos.ts";
-export * as Tokens from "./api/Tokens.ts";
+export * from "./Api/Schema.ts";
+export * as Objects from "./Api/Objects.ts";
+export * as Pulls from "./Api/Pulls.ts";
+export * as Refs from "./Api/Refs.ts";
+export * as Repos from "./Api/Repos.ts";
+export * as Tokens from "./Api/Tokens.ts";
 
 /**
  * The complete git-service management-plane API, mounted at `/api/v1`.
