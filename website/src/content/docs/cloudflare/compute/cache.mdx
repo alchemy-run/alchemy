@@ -14,7 +14,7 @@ standard response headers — `Cache-Control` (including
 
 ## Enable the cache on a Worker
 
-`yield*` `Cloudflare.cache()` in the Worker's init phase. It turns
+`yield*` `Cloudflare.cache()` in the Worker's Construction phase. It turns
 Workers Cache on at deploy time and returns the runtime client — no
 layer to provide:
 

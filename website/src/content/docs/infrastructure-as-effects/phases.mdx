@@ -1,6 +1,6 @@
 ---
 title: Phases
-description: Alchemy programs run in two phases — plantime/construct drives the deploy, runtime handles requests. Knowing which is which is the key to writing Workers and Lambda Functions.
+description: Alchemy programs run in two phases — Construction drives the deploy, Runtime handles requests. Knowing which is which is the key to writing Workers and Lambda Functions.
 ---
 
 import DAG from "../../../components/DAG.astro";
@@ -10,14 +10,14 @@ runtime serves requests. Function resources — Workers, Lambdas,
 Containers — express both in a single program by **returning an
 Effect from inside an Effect**.
 
-## Construct vs runtime
+## Construction vs Runtime
 
 ```typescript
 Cloudflare.Worker(
   "Worker",
   { main: import.meta.url },
   Effect.gen(function* () {
-    // ─── Construct phase ───
+    // ─── Construction phase ───
     const bucket = yield* Cloudflare.R2.ReadWriteBucket(Bucket);
 
     return {
@@ -31,19 +31,19 @@ Cloudflare.Worker(
 );
 ```
 
-| Phase     | Code   | When it runs                          |
-| --------- | ------ | ------------------------------------- |
-| Construct | outer  | At plantime **and** at cold start     |
+| Phase        | Code   | When it runs                          |
+| ------------ | ------ | ------------------------------------- |
+| Construction | outer  | At plantime **and** at cold start     |
 | Runtime | inner  | Only inside a deployed handler        |
 
-The `bucket` value is established once during construct and captured
+The `bucket` value is established once during Construction and captured
 by the runtime closure. The constructor runs at most once per cold start; the
 runtime body runs per request with everything already wired up.
 Each phase has its own `Scope` with very different lifetimes —
 [Instance scope vs request scope](/infrastructure-as-effects/runtime#instance-scope-vs-request-scope)
 covers where cleanup can (and cannot) happen.
 
-The runtime phase is the *only* place where `Alchemy.RuntimeContext`
+The Runtime phase is the *only* place where `Alchemy.RuntimeContext`
 is available. Any Effect whose requirements include `RuntimeContext`
 can only execute inside the runtime closure — the type system
 rejects it everywhere else. The next page builds the
@@ -143,7 +143,7 @@ provisioning lives behind the guard, never on the runtime path.
 
 ## Why this matters
 
-The construct/runtime split lets you write code that:
+The Construction/Runtime split lets you write code that:
 
 1. **Resolves infrastructure references at deploy time** — bindings
    know which bucket ARN, queue URL, etc. to inject.

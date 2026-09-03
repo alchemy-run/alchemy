@@ -75,7 +75,7 @@ triggers any runtime code by importing the other's class.
 
 ## Add A's runtime, binding B
 
-Attach A's implementation with `A.make(...)`. Inside the Construct phase,
+Attach A's implementation with `A.make(...)`. Inside the Construction phase,
 `yield* Cloudflare.Workers.bindWorker(B)` produces a typed stub whose
 methods dispatch to B's deployed Worker at runtime. A also exposes its
 own `work` RPC method so B can call back into it.

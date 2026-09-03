@@ -30,7 +30,7 @@ service and volume are deleted. Data is not copied.
 
 ## Connect from a Service
 
-Yield `ConnectMySQL` in Service init. Provide
+Yield `ConnectMySQL` in the Service's constructor. Provide
 `ConnectMySQLHttp`. Pass `conn.connectionString` to Drizzle or SQL.
 
 ```typescript

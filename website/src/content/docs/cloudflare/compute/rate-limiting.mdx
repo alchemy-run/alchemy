@@ -13,7 +13,7 @@ itself and ships with the Worker.
 
 ## Bind a rate limit to a Worker
 
-`yield*` `Cloudflare.RateLimit(name, props)` in the Worker's init
+`yield*` `Cloudflare.RateLimit(name, props)` in the Worker's constructor
 phase and provide `RateLimitBinding` as a layer:
 
 ```typescript

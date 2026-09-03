@@ -103,14 +103,31 @@ yield* AWS.SQS.consumeQueueMessages(Inbound, (records) =>
 
 ## Two phases, one program
 
-The outer Effect runs at deploy time, where the binding records its
-permission. It runs again at cold start, where the binding builds the
-live client. The inner `fetch` Effect runs per request, only inside the
-deployed Worker.
+The Worker's Effect runs in two phases. The outer Effect is the
+**Construction phase**. It runs at deploy time, where
+`ReadWriteBucket(Uploads)` records the binding, and again at cold
+start, where the same line builds the live client. The inner `fetch`
+Effect is the **Runtime phase**. It runs per request, only inside the
+deployed Worker:
 
-Construct and runtime are one program, so a binding declared in the
-constructor is a value the handler closes over. [Phases](/infrastructure-as-effects/phases)
-explains exactly what runs when.
+```typescript
+Effect.gen(function* () {
+  // Construction: deploy time and cold start
+  const bucket = yield* Cloudflare.R2.ReadWriteBucket(Uploads);
+
+  return {
+    // Runtime: per request, inside the deployed Worker
+    fetch: Effect.gen(function* () {
+      const obj = yield* bucket.get("hello.txt");
+    }),
+  };
+});
+```
+
+Both phases are one program, so `bucket` is a value the handler closes
+over rather than something looked up at request time.
+[Phases](/infrastructure-as-effects/phases) explains exactly what runs
+when.
 
 ## Layers package it all
 

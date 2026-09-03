@@ -59,7 +59,7 @@ image.
 
 ## Serve HTTP with `fetch`
 
-Return `fetch` from the init Effect to boot an HTTP server.
+Return `fetch` from the constructor Effect to boot an HTTP server.
 
 ```diff lang="typescript"
 import * as Railway from "alchemy/Railway";
@@ -246,7 +246,7 @@ is set).
 
 ## Config
 
-Yield `Config` in init. Alchemy reads the value from the env of
+Yield `Config` in the constructor. Alchemy reads the value from the env of
 whoever deploys and writes it onto the Service. Do not pass
 `env: { ... }` on a Service unless you are packing a known-plain
 value.

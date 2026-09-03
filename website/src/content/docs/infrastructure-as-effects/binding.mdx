@@ -220,9 +220,10 @@ Both generate their permissions and configuration the same way.
 
 ## How it works under the hood
 
-One line does two jobs because it runs twice. At deploy time it
-registers the policy and environment on the host. At runtime, inside
-the deployed bundle, it only returns the client:
+One line does two jobs because the **Construction phase** runs twice.
+At deploy time it registers the policy and environment on the host.
+At cold start, inside the deployed bundle, a guard skips that and the
+line only returns the client for the **Runtime phase** to use:
 
 ```typescript
 if (!globalThis.__ALCHEMY_RUNTIME__) {

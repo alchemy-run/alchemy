@@ -86,7 +86,10 @@ Effect.gen(function* () {
 });
 ```
 
-This is the **Effectful Constructor**. A Worker or Lambda Function
+This is the **Effectful Constructor**. The outer Effect is the
+**Construction phase**, which runs at deploy time and again at cold
+start. What it returns is the **Runtime phase**, which runs per
+request inside the deployed Runtime. A Worker or Lambda Function
 returns its handlers. A Durable Object returns its RPC methods. A
 Workflow returns its run function. A
 [Layer](/infrastructure-as-effects/layers) returns a service. Learn it
@@ -137,8 +140,28 @@ export default class Greeter extends Cloudflare.Worker<Greeter>()(
 ) {}
 ```
 
-No schema, no runtime validation. Serialization is automatic and the
-client type is inferred from the class. This is
+Another Worker binds `Greeter` and calls `greet` as if it were local:
+
+```typescript
+import Greeter from "./Greeter.ts";
+
+export default Cloudflare.Worker(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const greeter = yield* Cloudflare.Workers.bindWorker(Greeter);
+
+    return {
+      fetch: Effect.gen(function* () {
+        return HttpServerResponse.text(yield* greeter.greet("world"));
+      }),
+    };
+  }),
+);
+```
+
+No schema, no runtime validation. Serialization is automatic and
+`greeter.greet` is typed from the class. This is
 [Schemaless RPC](/apis/schemaless), the default for internal calls. The
 [APIs](/apis) section adds the schema'd surfaces for trust boundaries.
 

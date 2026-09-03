@@ -31,7 +31,7 @@ Every Effect AI provider is two stacked layers:
 2. A **language model** Layer that picks the model and any defaults
    (`OpenAiLanguageModel.layer({ model: "gpt-4o-mini" })`, …).
 
-You build that stack once in the Runtime's **Construct phase** and
+You build that stack once in the Runtime's **Construction phase** and
 `Effect.provide(...)` it on the handler:
 
 ```typescript
@@ -58,7 +58,7 @@ procedure, a Workflow, or any other Effect.
 Every upstream provider's client Layer (`OpenAiClient.layer`,
 `AnthropicClient.layer`, …) takes an `apiKey: Redacted<string>`.
 [`Config.redacted`](/environments/secrets) resolved in the Runtime's
-Construct phase gives you exactly that `Redacted<string>` — and Alchemy
+Construction phase gives you exactly that `Redacted<string>` — and Alchemy
 automatically binds the value as a `secret_text` binding
 (Cloudflare) or environment variable (Lambda) at deploy time:
 
@@ -73,7 +73,7 @@ const apiKey = yield* Config.redacted("OPENAI_API_KEY");
 `ConfigProvider` (e.g. `.env`) at deploy time, records the binding,
 and resolves from that binding again at runtime — one line, both
 phases. See [Concepts › Secrets and Config](/environments/secrets) for
-the Construct/Runtime split, `.env`, and transformations.
+the Construction/Runtime split, `.env`, and transformations.
 
 Because the value is in scope right in the constructor, the model Layer can be
 built eagerly — no `Layer.unwrap` needed:
@@ -164,7 +164,7 @@ backing layer does.
 For Workers AI models on Cloudflare, the shortest path is the native
 [Workers AI binding](/cloudflare/ai/workers-ai): no API key, no HTTP
 client layer, no resource to declare. `yield*
-Cloudflare.Workers.AI()` in the Construct phase attaches the binding, and
+Cloudflare.Workers.AI()` in the Construction phase attaches the binding, and
 `ai.model({...})` builds the `LanguageModel` Layer directly on top of
 it:
 
@@ -201,7 +201,7 @@ declares the gateway as a resource and
 `.model({...})` builds the same `LanguageModel` Layer shape, proxied
 through the gateway.
 
-Bind the gateway in the Construct phase and call `aiGateway.model({...})`
+Bind the gateway in the Construction phase and call `aiGateway.model({...})`
 with a Workers AI model id. It returns a `LanguageModel` Layer
 directly — no API key, no `Layer.unwrap`, since the gateway binding
 handles auth and the URL:

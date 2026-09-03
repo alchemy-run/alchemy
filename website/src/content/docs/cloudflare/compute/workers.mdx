@@ -18,8 +18,8 @@ queue consumers, cron jobs, RPC services. Every other building block
 ## Deploy a Worker
 
 A Worker follows a two-phase pattern: the outer `Effect.gen` is the
-**init phase** (binds resources at deploy time), and the handlers it
-returns are the **runtime phase** (run on each request).
+**Construction phase** (binds resources at deploy time), and the handlers it
+returns are the **Runtime phase** (run on each request).
 
 ```typescript
 // src/worker.ts
@@ -73,7 +73,7 @@ subdomain, and prints the URL as a stack output.
 ## Bindings
 
 Workers reach other resources through **bindings** — typed clients
-resolved in the init phase. Given an R2 bucket declared in its own
+resolved in the Construction phase. Given an R2 bucket declared in its own
 file (`export const Bucket = Cloudflare.R2.Bucket("Bucket")`), bind
 it by yielding `Cloudflare.R2.ReadWriteBucket(...)` and providing
 its binding layer:
@@ -89,7 +89,7 @@ export default Cloudflare.Worker(
   "Worker",
   { main: import.meta.url },
   Effect.gen(function* () {
-    // init: register the binding, get a typed client
+    // Construction: register the binding, get a typed client
     const bucket = yield* Cloudflare.R2.ReadWriteBucket(Bucket);
 
     return {
@@ -199,7 +199,7 @@ validation before they touch your code — reach for
 
 ## Isolate scope vs request scope
 
-The Worker's init closure runs **once per isolate**: the bridge
+The Worker's constructor runs **once per isolate**: the bridge
 builds your layers on the first event, and every later event —
 fetch, RPC, cron, queue — reuses them. Each event then runs with a
 **fresh `Scope`** that the bridge closes after the response via
@@ -218,7 +218,7 @@ request scope to the stream — its finalizers run when the stream
 completes instead of when the handler returns.
 
 workerd has no isolate-teardown hook, so a finalizer added in the
-init closure **never runs** — acquire anything that needs cleanup
+constructor **never runs** — acquire anything that needs cleanup
 (connections, pools) inside handlers, where it's scoped to the
 event. `Drizzle.Postgres` follows this pattern: one pool per event,
 opened on the first query, closed when the event settles — the
@@ -375,7 +375,7 @@ A Worker often needs to know the URL it is served at — to build
 absolute links, register webhooks, or hand a frontend its API
 origin. That URL only exists at deploy time, and a Worker can't
 reference its own `url` Output, so `Worker.URL` injects it as a
-binding on the Worker itself. Yield it in the init phase; the
+binding on the Worker itself. Yield it in the Construction phase; the
 accessor it returns is yielded again inside a handler:
 
 ```typescript
@@ -604,7 +604,7 @@ reference them cross-script instead.
 The `version_metadata` binding exposes the deployed Worker version —
 `id`, `tag`, and `timestamp` — at runtime, so responses, logs, and
 error reports can say exactly which deploy produced them. Yield
-`VersionMetadata()` in the init phase and provide its layer; the
+`VersionMetadata()` in the Construction phase and provide its layer; the
 accessor it returns is yielded again inside a handler, where the
 binding actually exists:
 
