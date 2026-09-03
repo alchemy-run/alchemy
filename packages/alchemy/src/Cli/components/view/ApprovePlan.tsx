@@ -41,17 +41,6 @@ export function ApprovePlan(props: ApprovePlanProps): JSX.Element {
       }),
     [plan, detailed, action],
   );
-  const staticTree = useMemo(
-    () =>
-      new PlanTree(plan, {
-        detailed,
-        mode: "review",
-        label: action,
-        viewport: "full",
-      }),
-    [plan, detailed, action],
-  );
-
   const complete = (answer: boolean) => {
     const verdict = (
       <Text color={answer ? theme.color.success : theme.color.danger}>
@@ -61,11 +50,12 @@ export function ApprovePlan(props: ApprovePlanProps): JSX.Element {
     // On approval the plan disappears — the apply progress that follows
     // shows every row again. A declined plan stays on screen (complete,
     // unscrolled) so the user can review what they just turned down.
+    if (!answer) tree.setViewport("full");
     const summary = answer ? (
       verdict
     ) : (
       <Box flexDirection="column">
-        <Plan tree={staticTree} />
+        <Plan tree={tree} />
         {verdict}
       </Box>
     );

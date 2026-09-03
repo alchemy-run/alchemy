@@ -80,8 +80,6 @@ const rowDetail = (status: ApplyStatus, message: string | undefined) =>
 export interface PlanProps {
   /** Reactive tree containing rows, statuses, label, and presentation state. */
   tree: PlanTree;
-  /** Override the tree's reactive busy state. */
-  busy?: boolean;
   /** Allow the tree to collapse behind `p`. */
   collapsible?: boolean;
   /** Widget rendered before the summary block. */
@@ -105,7 +103,6 @@ const usePlanTree = (tree: PlanTree): PlanTreeState => {
 export function Plan(props: PlanProps): JSX.Element {
   const {
     tree,
-    busy: busyOverride,
     collapsible = false,
     before,
     summaryBefore,
@@ -117,8 +114,7 @@ export function Plan(props: PlanProps): JSX.Element {
   const keyGlyphs = useKeyGlyphs();
   const borderStyle = useBorderStyle();
   const state = usePlanTree(tree);
-  const { tasks, label, visible, viewport, busy: treeBusy } = state;
-  const busy = busyOverride ?? treeBusy;
+  const { tasks, label, viewport, busy } = state;
   const {
     progress: { completed, total: workRows },
     collapsed,
@@ -187,8 +183,6 @@ export function Plan(props: PlanProps): JSX.Element {
     ["p", collapsed ? "show plan/output" : "hide widget"],
     ["Ctrl+C", "exit"],
   ];
-
-  if (!visible) return <></>;
 
   return (
     <Box flexDirection="column">

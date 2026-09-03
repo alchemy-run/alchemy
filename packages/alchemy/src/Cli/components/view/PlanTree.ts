@@ -82,7 +82,6 @@ export interface PlanProgress {
 export interface PlanTreeState {
   readonly tasks: Map<string, RowState>;
   readonly label: string;
-  readonly visible: boolean;
   readonly expanded: boolean;
   readonly viewport: PlanViewport;
   readonly busy: boolean;
@@ -96,12 +95,8 @@ export interface PlanTreeOptions {
   readonly mode?: "review" | "apply";
   readonly label?: string;
   readonly titleDetail?: string;
-  readonly expanded?: boolean;
-  readonly visible?: boolean;
   readonly viewport?: PlanViewport;
   readonly busy?: boolean;
-  readonly outcome?: PlanOutcome;
-  readonly output?: unknown;
 }
 
 const getRowKey = (item: FlattenedItem) => item.path.join("/");
@@ -238,12 +233,11 @@ export class PlanTree {
     this.state = {
       tasks: buildInitialTasks(this.rows),
       label: options.label ?? "Plan",
-      visible: options.visible ?? true,
-      expanded: options.expanded ?? true,
+      expanded: true,
       viewport: options.viewport ?? "virtual",
       busy: options.busy ?? false,
-      outcome: options.outcome,
-      output: options.output,
+      outcome: undefined,
+      output: undefined,
       view: "plan",
     };
   }
@@ -272,16 +266,8 @@ export class PlanTree {
     return { completed, failures, total };
   }
 
-  setLabel(label: string) {
-    this.update({ label });
-  }
-
   setExpanded(expanded: boolean) {
     this.update({ expanded });
-  }
-
-  setVisible(visible: boolean) {
-    this.update({ visible });
   }
 
   setViewport(viewport: PlanViewport) {

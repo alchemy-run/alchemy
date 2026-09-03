@@ -17,13 +17,13 @@ export const usePlanPresentation = (options: {
 }) => {
   const { tree, state, busy, collapsible, hasFooter } = options;
   const { mode } = tree;
-  const { label, visible, expanded, viewport, outcome } = state;
+  const { label, expanded, viewport, outcome } = state;
   const { completed, failures, total } = tree.progress();
   const collapsed = collapsible && !expanded;
   const settled = !busy && completed >= total;
 
   useProgress(
-    visible && mode === "apply"
+    mode === "apply"
       ? {
           state:
             outcome === "failure" || failures > 0
@@ -38,9 +38,7 @@ export const usePlanPresentation = (options: {
   const titleProgress = settled || total === 0 ? "" : ` ${completed}/${total}`;
   const titleDetail = tree.titleDetail ? ` · ${tree.titleDetail}` : "";
   useTitle(
-    visible && mode === "apply"
-      ? `${label}${titleProgress}${titleDetail}`
-      : undefined,
+    mode === "apply" ? `${label}${titleProgress}${titleDetail}` : undefined,
   );
 
   const beforeRef = useRef<DOMElement>(null);
@@ -53,7 +51,7 @@ export const usePlanPresentation = (options: {
     mode === "apply" || (!collapsed && (collapsible || hasFooter));
 
   useLayoutEffect(() => {
-    if (!visible || collapsed || viewport !== "virtual") return;
+    if (collapsed || viewport !== "virtual") return;
     const height = (ref: { readonly current: DOMElement | null }) =>
       ref.current === null ? 0 : measureElement(ref.current).height;
     const measured =

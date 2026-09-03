@@ -74,7 +74,7 @@ export const usePlanViewport = (options: {
 }): PlanWindow => {
   const { tree, state, lineBudget, collapsible, collapsed } = options;
   const { rows, detailed } = tree;
-  const { tasks, output, view, viewport, visible } = state;
+  const { tasks, output, view, viewport } = state;
   const hasOutput = output !== undefined;
   const selectedView = view === "output" && hasOutput ? "output" : "plan";
   const virtual = viewport === "virtual";
@@ -135,7 +135,6 @@ export const usePlanViewport = (options: {
     }));
 
   useTerminalInput((input, key) => {
-    if (!visible) return;
     if (collapsible && !key.ctrl && !key.meta && input.toLowerCase() === "p") {
       tree.setExpanded(collapsed);
       return;
