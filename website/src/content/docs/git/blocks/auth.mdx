@@ -1,21 +1,19 @@
 ---
 title: Auth
-description: The engine holds no users and no credentials. Your HTTP layer says who is calling, through Caller and Authenticate, and Policy answers what they may do, inside the repository with git's own facts.
+description: The engine holds no users and no credentials. One middleware you implement says who is calling, and Policy answers what they may do, inside the repository with git's own facts.
 ---
 
-Authentication happens outside the engine, in the HTTP layer you own.
-The engine asks one pure question per action. Three services carry
+Authentication happens outside the engine, in the HTTP middleware you
+own. The engine asks one pure question per action. Three services carry
 that split:
 
 | Service | Answers | Runs |
 | --- | --- | --- |
-| `Git.Caller` | who is calling a REST endpoint | provided by your `HttpApi` middleware |
-| `Git.Authenticate` | who is calling the wire, raw, and GitHub routes | at the Worker, per request |
+| `Git.Authenticated` | who is calling | the middleware every git route declares, at the Worker, once per request |
+| `Git.Caller` | the answer, as every handler sees it | provided by `Authenticated` |
 | `Git.Policy` | may they do this | where the facts are, inside the repository's Durable Object |
 
-Shipped: `PolicyOwners`, `AuthenticateSecret`, and `Authenticated`, the
-default middleware that bridges `Authenticate` into `Caller` so one
-implementation serves every plane.
+Shipped: `AuthenticatedSecret` and `PolicyOwners`.
 
 ## Principal
 
@@ -32,11 +30,57 @@ Repositories are owned by a principal's id. Owner names are lowercased,
 so `Git.owns(principal, repo)` compares `repo.owner` with
 `principal.id.toLowerCase()`.
 
+## Authenticated
+
+An `HttpApi` middleware that provides `Git.Caller`. Every git route
+declares it: the REST plane, the git wire, the raw reads, and the
+GitHub facade, so one implementation serves them all, and `git`
+clients, which can only send HTTP Basic with the credential in the
+password field, go through the same code as browsers.
+
+```typescript
+class Authenticated extends HttpApiMiddleware.Service<
+  Authenticated,
+  { provides: Caller }
+>()("alchemy/Git/Authenticated", { error: Unauthorized }) {
+  static make<E, R>(init: Effect<Resolve, E, R>): Layer<Authenticated, E, R>;
+}
+
+type Resolve = (request: HttpServerRequest) => Effect<Principal | undefined>;
+```
+
+`make` takes an `init` that runs once when the layer is built and
+returns the per-request resolver. `undefined` is anonymous, never a
+failure. `Git.parseBasic`, `Git.parseBearer`, and `Git.parseSecret`
+read the header for you. An API key verified by Better Auth:
+
+```typescript
+const AuthenticatedLive = Git.Authenticated.make(
+  Effect.gen(function* () {
+    const auth = yield* Auth;
+    return Effect.fn(function* (request) {
+      const key = Git.parseSecret(request.headers);
+      if (key === undefined) return undefined;
+      const verified = yield* auth.api.verifyApiKey({ body: { key } });
+      return verified.valid && verified.key
+        ? { id: verified.key.referenceId }
+        : undefined;
+    });
+  }),
+);
+```
+
+`AuthenticatedSecret` is the shipped starter: one secret from `Config`,
+one principal.
+
+```typescript
+Layer.provide(Git.AuthenticatedSecret({ principal: { id: "acme" } }))
+```
+
 ## Caller
 
-What an `HttpApi` middleware provides to every REST handler: a principal,
-or anonymous. No middleware at all is anonymous too, which the policy
-confines to public reads.
+What every handler behind `Authenticated` sees: a principal, or
+anonymous, which the policy confines to public reads.
 
 ```typescript
 class Caller extends Context.Service<
@@ -45,64 +89,20 @@ class Caller extends Context.Service<
 >()("alchemy/Git/Caller") {}
 ```
 
-Your middleware declares it provides `Caller` and is applied to the API
-that carries the git groups:
+A route of your own asks for it the same way once it declares the
+middleware:
 
 ```typescript
-export class Session extends HttpApiMiddleware.Service<
-  Session,
-  { provides: Git.Caller }
->()("app/Session", { error: Git.Unauthorized }) {}
+export class Me extends Http.get<Me>()("me", "/api/v1/me", {
+  success: Git.PrincipalSchema,
+  error: Git.Unauthorized,
+  middleware: [Git.Authenticated],
+}) {}
 
-export const AppApi = Git.Api.add(Me).middleware(Session);
-```
-
-A session cookie is the usual source. [Part 3](/git/tutorial/part-3)
-implements it over Better Auth.
-
-## Authenticate
-
-A `git` client can only send HTTP Basic with the credential in the
-password field, so the wire routes cannot sit behind an `HttpApi`
-middleware. They, the raw blob and file reads, and the GitHub facade
-resolve the caller through `Authenticate`:
-
-```typescript
-class Authenticate extends Context.Service<
-  Authenticate,
-  (headers: Headers) => Effect<Principal | undefined>
->()("alchemy/Git/Authenticate") {}
-```
-
-`undefined` is anonymous, never a failure. `Git.parseBasic`,
-`Git.parseBearer`, and `Git.parseSecret` read the header for you. An
-API key verified by Better Auth:
-
-```typescript
-const AuthenticateLive = Layer.succeed(
-  Git.Authenticate,
-  Effect.fn(function* (headers) {
-    const key = Git.parseSecret(headers);
-    if (key === undefined) return undefined;
-    const verified = yield* auth.api.verifyApiKey({ body: { key } });
-    return verified.valid && verified.key
-      ? { id: verified.key.referenceId }
-      : undefined;
-  }),
+export const MeLive = Me.make(
+  Effect.succeed(() => Effect.map(Git.Caller, ({ principal }) => /* … */)),
 );
 ```
-
-`AuthenticateSecret` is the shipped starter: one secret from `Config`,
-one principal.
-
-```typescript
-Layer.provide(Git.AuthenticateSecret({ principal: { id: "acme" } }))
-```
-
-When browsers and git clients should authenticate the same way,
-`Git.Authenticated` is an `HttpApi` middleware over `Authenticate`, and
-`ServerLive` applies it. Provide one `Authenticate` and every plane
-agrees.
 
 ## Policy
 
@@ -158,7 +158,7 @@ may create and list, and owns what it owns. A policy may be a
 The Worker resolves the principal once, strips any inbound
 `x-git-principal` header, and forwards the resolved one to the Durable
 Object, which trusts it because only the Worker can reach it. The push
-pipeline's internal hash route authenticates with a deploy-time random
-secret no user holds. There is no tokens table and no admin key.
-Credentials are your authentication's, and only your authentication
-ever sees them.
+pipeline's internal hash route is the one route without the middleware;
+it authenticates with a deploy-time random secret no user holds. There
+is no tokens table and no admin key. Credentials are your
+authentication's, and only your authentication ever sees them.

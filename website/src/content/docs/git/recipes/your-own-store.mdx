@@ -16,7 +16,7 @@ const GitLive = Git.ServerLive.pipe(
 +  Layer.provide(BlobStoreMine),
   Layer.provide(Git.HasherInline),
   Layer.provide(Git.PolicyOwners),
-  Layer.provide(Git.AuthenticateSecret({ principal: { id: "acme" } })),
+  Layer.provide(Git.AuthenticatedSecret({ principal: { id: "acme" } })),
 );
 ```
 

@@ -70,7 +70,7 @@ const GitLive = Git.ServerLive.pipe(
 -  Layer.provide(Git.HasherInline),
 +  Layer.provide(GitHasher.HasherWorkerLoader()),
   Layer.provide(Git.PolicyOwners),
-  Layer.provide(Git.AuthenticateSecret({ principal: { id: "acme" } })),
+  Layer.provide(Git.AuthenticatedSecret({ principal: { id: "acme" } })),
 );
 ```
 

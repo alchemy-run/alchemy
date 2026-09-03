@@ -129,9 +129,10 @@ const GitLive = Git.ServerLive.pipe(
 
 ## Who is calling
 
-`Git.Authenticate` turns a request into a principal, or anonymous. The
-smallest thing that secures a fresh host is one shared secret: whoever
-presents it is `acme`, and repositories `acme` creates are `acme`'s:
+`Git.Authenticated` is the middleware every git route declares. It
+turns a request into a principal, or anonymous. The smallest thing
+that secures a fresh host is one shared secret: whoever presents it is
+`acme`, and repositories `acme` creates are `acme`'s:
 
 ```diff lang="typescript"
 const GitLive = Git.ServerLive.pipe(
@@ -140,7 +141,7 @@ const GitLive = Git.ServerLive.pipe(
   Layer.provide(Git.BlobStoreR2(GitObjects)),
   Layer.provide(Git.HasherInline),
   Layer.provide(Git.PolicyOwners),
-+  Layer.provide(Git.AuthenticateSecret({ principal: { id: "acme" } })),
++  Layer.provide(Git.AuthenticatedSecret({ principal: { id: "acme" } })),
 );
 ```
 

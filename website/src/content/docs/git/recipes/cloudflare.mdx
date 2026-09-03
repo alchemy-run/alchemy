@@ -22,7 +22,7 @@ const GitLive = Git.ServerLive.pipe(
   Layer.provide(Git.BlobStoreR2(GitObjects)),
   Layer.provide(GitHasher.HasherWorkerLoader()),
   Layer.provide(Git.PolicyOwners),
-  Layer.provide(Git.AuthenticateSecret({ principal: { id: "acme" } })),
+  Layer.provide(Git.AuthenticatedSecret({ principal: { id: "acme" } })),
 );
 
 export default class GitHost extends Cloudflare.Worker<GitHost>()(
@@ -80,7 +80,7 @@ const GitLive = Git.ServerLive.pipe(
 -  Layer.provide(GitHasher.HasherWorkerLoader()),
 +  Layer.provide(Git.HasherInline),
   Layer.provide(Git.PolicyOwners),
-  Layer.provide(Git.AuthenticateSecret({ principal: { id: "acme" } })),
+  Layer.provide(Git.AuthenticatedSecret({ principal: { id: "acme" } })),
 );
 ```
 
@@ -97,7 +97,7 @@ const GitLive = Git.ServerLive.pipe(
   Layer.provide(Git.BlobStoreR2(GitObjects)),
   Layer.provide(GitHasher.HasherWorkerLoader()),
   Layer.provide(Git.PolicyOwners),
-  Layer.provide(Git.AuthenticateSecret({ principal: { id: "acme" } })),
+  Layer.provide(Git.AuthenticatedSecret({ principal: { id: "acme" } })),
 );
 ```
 

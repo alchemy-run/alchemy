@@ -117,6 +117,7 @@ const git = (cwd: string, ...args: string[]) =>
           ...process.env,
           GIT_TERMINAL_PROMPT: "0",
           GIT_CONFIG_NOSYSTEM: "1",
+          GIT_TRACE_CURL: process.env.GIT_TRACE_CURL ?? "",
           GIT_AUTHOR_NAME: "integ",
           GIT_AUTHOR_EMAIL: "integ@example.com",
           GIT_COMMITTER_NAME: "integ",

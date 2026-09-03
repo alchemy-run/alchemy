@@ -23,7 +23,7 @@ const GitLive = Git.ServerLive.pipe(
   Layer.provide(GitHasher.HasherLambda(GitHasher.HasherFunction)),
   Layer.provide(AWS.Lambda.InvokeFunctionHttp),
   Layer.provide(Git.PolicyOwners),
-  Layer.provide(Git.AuthenticateSecret({ principal: { id: "acme" } })),
+  Layer.provide(Git.AuthenticatedSecret({ principal: { id: "acme" } })),
 );
 
 export default class GitHost extends Cloudflare.Worker<GitHost>()(
@@ -107,7 +107,7 @@ const GitLive = Git.ServerLive.pipe(
 +  Layer.provide(GitHasher.HasherLambda(GitHasher.HasherFunction)),
 +  Layer.provide(AWS.Lambda.InvokeFunctionHttp),
   Layer.provide(Git.PolicyOwners),
-  Layer.provide(Git.AuthenticateSecret({ principal: { id: "acme" } })),
+  Layer.provide(Git.AuthenticatedSecret({ principal: { id: "acme" } })),
 );
 ```
 

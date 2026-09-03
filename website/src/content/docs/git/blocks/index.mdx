@@ -16,7 +16,7 @@ const GitLive = Git.ServerLive.pipe(
   Layer.provide(Git.BlobStoreR2(GitObjects)),
   Layer.provide(Git.HasherInline),
   Layer.provide(Git.PolicyOwners),
-  Layer.provide(Git.AuthenticateSecret({ principal: { id: "acme" } })),
+  Layer.provide(Git.AuthenticatedSecret({ principal: { id: "acme" } })),
 );
 ```
 
@@ -42,19 +42,19 @@ own on its first request:
 
 `Git.BlobStoreR2(GitObjects)` appears once and serves both sides: the
 Worker streaming a clone bundle and the Durable Object writing a pack.
-`Policy` is the same. `Authenticate` runs at the Worker, and the policy
-runs wherever the facts it needs live.
+`Policy` is the same. `Authenticated` runs at the Worker, and the
+policy runs wherever the facts it needs live.
 
 ## The blocks
 
 | Block | Decides | Ships with |
 | --- | --- | --- |
-| [Server](/git/blocks/server) | the HTTP surface and the Worker it runs in | `ServerLive` |
+| [Server](/git/blocks/server) | the HTTP surface: every plane as one `HttpApi` of routes you can replace | `Handlers`, `ServerLive` |
 | [Repositories](/git/blocks/repositories) | where refs and objects live, the jobs that keep a repository small | `ReposDurableObject` |
 | [Registry](/git/blocks/registry) | how `owner/name` resolves, and listings | `RegistryDurableObject`, `RegistryD1` |
 | [Blob store](/git/blocks/blob-store) | where packs, bundles, and large pushes go | `BlobStoreR2`, `BlobStoreS3` |
 | [Hasher](/git/blocks/hasher) | what verifies a push, and on which compute | `HasherInline`, `HasherWorkerLoader`, `HasherLambda` |
-| [Auth](/git/blocks/auth) | who is calling, and what they may do | `PolicyOwners`, `AuthenticateSecret`, `Authenticated` |
+| [Auth](/git/blocks/auth) | who is calling, and what they may do | `AuthenticatedSecret`, `PolicyOwners` |
 
 ## Replacing a block
 
@@ -69,7 +69,7 @@ const GitLive = Git.ServerLive.pipe(
   Layer.provide(Git.BlobStoreR2(GitObjects)),
   Layer.provide(Git.HasherInline),
   Layer.provide(Git.PolicyOwners),
-  Layer.provide(Git.AuthenticateSecret({ principal: { id: "acme" } })),
+  Layer.provide(Git.AuthenticatedSecret({ principal: { id: "acme" } })),
 );
 ```
 
@@ -82,7 +82,7 @@ const GitLive = Git.ServerLive.pipe(
   Layer.provide(Git.RegistryDurableObject),
   Layer.provide(Git.HasherInline),
   Layer.provide(Git.PolicyOwners),
-  Layer.provide(Git.AuthenticateSecret({ principal: { id: "acme" } })),
+  Layer.provide(Git.AuthenticatedSecret({ principal: { id: "acme" } })),
 );
 // Layer<Server, never, BlobStore>
 //                      ^ still required; providing it to the Worker is a type error
@@ -102,7 +102,7 @@ const BlobStoreMine = Layer.effect(
 
 ## Where next
 
-- [Server](/git/blocks/server) — the three planes behind `git.fetch`,
-  and mounting it under your own routes.
+- [Server](/git/blocks/server) — the three planes as one `HttpApi`,
+  and replacing a route.
 - [Recipes](/git/recipes) — which lines change for which
   requirements.

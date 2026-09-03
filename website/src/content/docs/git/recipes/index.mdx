@@ -13,7 +13,7 @@ const GitLive = Git.ServerLive.pipe(
   Layer.provide(Git.BlobStoreR2(GitObjects)),
   Layer.provide(Git.HasherInline),
   Layer.provide(Git.PolicyOwners),
-  Layer.provide(Git.AuthenticateSecret({ principal: { id: "acme" } })),
+  Layer.provide(Git.AuthenticatedSecret({ principal: { id: "acme" } })),
 );
 ```
 
@@ -25,7 +25,7 @@ const GitLive = Git.ServerLive.pipe(
 | The widest push parallelism | `HasherLambda(HasherFunction)` | [Bytes in S3, hashing on Lambda](/git/recipes/cloudflare-aws) |
 | Bytes somewhere that is neither R2 nor S3 | your own `BlobStore` | [Bring your own store](/git/recipes/your-own-store) |
 | Registry reads near users everywhere, SQL over the index | `RegistryD1(RepoIndex)` | [Registry](/git/blocks/registry) |
-| Your own users and credentials | your `HttpApi` middleware and `Authenticate` | [Tutorial Part 3](/git/tutorial/part-3) |
+| Your own users and credentials | your `Authenticated` middleware | [Tutorial Part 3](/git/tutorial/part-3) |
 | Branch rules, teams | your `Policy` | [Tutorial Part 4](/git/tutorial/part-4) |
 | Your web app and git on one domain | a front-door Worker | [Tutorial Part 3](/git/tutorial/part-3) |
 

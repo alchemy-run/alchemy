@@ -29,7 +29,7 @@ const GitLive = Git.ServerLive.pipe(
   Layer.provide(Git.BlobStoreR2(GitObjects)),
   Layer.provide(Git.HasherInline),
   Layer.provide(Git.PolicyOwners),
-  Layer.provide(Git.AuthenticateSecret({ principal: { id: "acme" } })),
+  Layer.provide(Git.AuthenticatedSecret({ principal: { id: "acme" } })),
 );
 
 export default class GitHost extends Cloudflare.Worker<GitHost>()(
@@ -43,7 +43,7 @@ export default class GitHost extends Cloudflare.Worker<GitHost>()(
 ```
 
 `GIT_WORKER_OPTIONS` sets the compatibility flags and the CPU limit a
-push needs. `AuthenticateSecret` is the smallest thing that secures a
+push needs. `AuthenticatedSecret` is the smallest thing that secures a
 fresh host: one shared secret, and whoever presents it is the principal
 `acme`, who owns the repositories it creates.
 
@@ -68,7 +68,7 @@ export default Alchemy.Stack(
 
 ## Set the secret
 
-`AuthenticateSecret` reads `GIT_SERVICE_SECRET` at deploy time and
+`AuthenticatedSecret` reads `GIT_SERVICE_SECRET` at deploy time and
 binds it to the Worker as a secret:
 
 ```sh

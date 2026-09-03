@@ -1,6 +1,6 @@
 ---
 title: Server
-description: The HTTP planes as pieces. Git.Api and Git.handlers for the REST groups, ProtocolApi, RawApi, and GitHubApi for the rest, and ServerLive as the one-line composition.
+description: Every plane as one HttpApi of route classes. Groups you can pick, Handlers you can replace one at a time, Http.handlers to mount it under your middleware, and ServerLive as the one-line composition.
 ---
 
 `Git.Server` is the composed HTTP surface behind one `fetch`, and
@@ -19,68 +19,100 @@ export default Cloudflare.Worker(
 
 It is not a Worker. You write the Worker, so you choose its name, its
 domain, its compatibility date, and what else runs beside it. And
-`ServerLive` is not the only way in: every plane it composes is
-exported on its own.
+`ServerLive` is not the only way in: everything it composes is an
+ordinary Effect `HttpApi`, exported piece by piece.
 
-## Three planes
+## Three planes, one API
 
-| Path | Plane | Client |
+| Group | Path | Client |
 | --- | --- | --- |
-| `/:owner/:repo.git/info/refs`, `git-upload-pack`, `git-receive-pack` | git smart HTTP | `git` |
-| `/api/v1/**` | REST, an Effect `HttpApi` | your code, `curl`, the typed client |
-| `/api/v3/**` | GitHub REST v3 facade | `gh api`, Octokit |
+| `Git.Protocol` | `/:owner/:repo.git/info/refs`, `git-upload-pack`, `git-receive-pack` | `git` |
+| `Git.Repos`, `Git.Refs`, `Git.Objects`, `Git.Pulls` | `/api/v1/**` | your code, `curl`, the typed client |
+| `Git.GitHub` | `/api/v3/**` | `gh api`, Octokit |
 
-## The pieces
-
-**`Git.Api`** is the REST plane as an `HttpApi`: the `repos`, `refs`,
-`objects`, and `pulls` groups under `/api/v1`, with no middleware of
-their own. Derive your API from it and apply yours:
+`Git.Api` is all six groups. Derive yours from it, or build one from a
+subset:
 
 ```typescript
-export const AppApi = Git.Api.add(Me).middleware(Session);
+export class AppApi extends Git.Api.add(AppRoutes) {}
+
+// or: no pull requests, no GitHub facade
+export class SmallApi extends HttpApi.make("git")
+  .add(Git.Repos).add(Git.Refs).add(Git.Objects).add(Git.Protocol) {}
 ```
 
-**`Git.handlers(api)`** implements the git groups of an API derived
-from `Git.Api`. Its requirements are the middleware you applied, so
-the compiler asks for `Session`'s implementation:
+## Routes
+
+Every endpoint is an `alchemy/Http` route class: an `HttpApiEndpoint`
+that also names the tag of its implementation. It goes in a group like
+any endpoint, and the client, OpenAPI, and middleware come from Effect
+unchanged.
 
 ```typescript
-Layer.provide(Git.handlers(AppApi).pipe(Layer.provide(SessionLive)))
+export class GetRepo extends Http.get<GetRepo>()("get", "/repos/:owner/:repo", {
+  params: RepoPath,
+  success: Repo,
+  error: [RepoNotFound, Unauthorized],
+  middleware: [Authenticated],
+}) {}
 ```
 
-**`Git.ProtocolApi`** is the git wire protocol plus the push pipeline's
-internal hash route, **`Git.RawApi`** the streaming blob and file
-reads under `/api/v1`, and **`Git.GitHubApi`** the facade under
-`/api/v3`. They are `HttpRouter` Layers merged beside the API, and
-they resolve the caller through `Git.Authenticate` because a `git`
-client can only send HTTP Basic:
+`middleware` is the middleware the route relies on. Every git route
+declares `Git.Authenticated`, except the push pipeline's internal hash
+route, so `Http.handlers` asks you for one implementation of it and the
+handler can ask for `Git.Caller`.
+
+`Route.make(init)` is an implementation as a Layer. `init` runs once
+when the layer is built and returns the per-request handler:
 
 ```typescript
-const api = yield* HttpApiBuilder.layer(AppApi).pipe(
-  Layer.provide(Git.handlers(AppApi).pipe(Layer.provide(SessionLive))),
-  Layer.provide(MeLive.pipe(Layer.provide(SessionLive))),
-  Layer.merge(Git.ProtocolApi),
-  Layer.merge(Git.RawApi),
-  Layer.merge(Git.GitHubApi),
-  Layer.provide(AuthenticateLive),
-  Layer.provide([Etag.layer, HttpPlatformStub, Path.layer]),
-  HttpRouter.toHttpEffect,
+export const GetRepoLive = GetRepo.make(
+  Effect.gen(function* () {
+    const repos = yield* Git.GitRepo;                // build time
+    return Effect.fn(function* ({ params }) {       // request time
+      const { principal } = yield* Git.Caller;
+      return yield* repos.get(principal, params.owner, params.repo);
+    });
+  }),
 );
 ```
 
-`HttpPlatformStub` is the same stand-in the
-[Effect HTTP API](/cloudflare/apis/effect-http-api) guide uses, since
-Workers have no filesystem. [Part 3 of the tutorial](/git/tutorial/part-3)
-builds this composition from the ground up.
+The handler receives the decoded request, `params`, `query`,
+`payload`, `headers`, and the raw `request`, and returns the declared
+success or a raw `HttpServerResponse`. The wire routes stream: they
+declare no payload, read `request.stream`, and answer with the
+response they build.
 
-**`Git.ServerLive`** is the composition above with the default
-middleware, `Git.Authenticated`, which bridges `Authenticate` into
-`Caller` so one implementation serves every plane. Provide it and
-`Authenticate`, and `git.fetch` is the whole host.
+## Handlers
 
-All of the pieces share one core per Worker: the registry cache, the
-Durable Object stubs, and the push admission gate are built once
-however many of them you merge.
+`Git.Handlers` is the default implementation of every route, one
+`*Live` Layer each, `Git.GetRepoLive` through `Git.ReceivePackLive`.
+Replace any one by providing another Layer for the same route nearer
+the API:
+
+```typescript
+HttpApiBuilder.layer(AppApi).pipe(
+  Layer.provide(Http.handlers(AppApi)),          // mounts every route group
+  Layer.provide([MeLive, GitHubUserLive]),       // yours, and one override
+  Layer.provide(Git.Handlers),                   // the defaults for the rest
+  Layer.provide(AuthenticatedLive),              // the middleware
+  Layer.provide(Http.Platform),                  // no filesystem on Workers
+  HttpRouter.toHttpEffect,
+)
+```
+
+`Http.handlers(api)` builds the ordinary `HttpApiBuilder.group` for
+every group of the API whose endpoints are all routes, under that API's
+middleware, and requires the route tags and the middleware they
+declare. Leave a route unimplemented and the compiler names it, not the
+group. A group with a plain endpoint is yours to implement with
+`HttpApiBuilder.group` as usual.
+
+**`Git.ServerLive`** is this composition over `Git.Api` with
+`Git.Handlers`. Provide it and `Authenticated`, and `git.fetch` is the
+whole host. Every route shares one core per Worker: the registry cache,
+the Durable Object stubs, and the push admission gate are built once
+however many routes you mount.
 
 ## Worker options
 
@@ -119,8 +151,8 @@ its own Worker and forward the git paths to it over a service binding.
 
 ## The typed client
 
-The REST plane is declared as `GitApi`, so the same schema types the
-server, the client, and your tests:
+The API is a value, so the same schema types the server, the client,
+and your tests:
 
 ```typescript
 import { GitApi } from "alchemy/Git";

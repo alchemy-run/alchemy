@@ -46,7 +46,7 @@ requests: list, create, get, update, merge, and changed files.
 
 Authentication accepts GitHub's `Authorization: token <t>` alongside
 `Bearer` and Basic, because that is what `gh` and Octokit send. The
-credential is whatever your `Authenticate` Layer verifies, and `/user`
+credential is whatever your `Authenticated` middleware verifies, and `/user`
 answers with the principal it resolved.
 
 Pagination uses `Link` headers with `rel="next"`. The next URL carries
