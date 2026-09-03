@@ -1,26 +1,36 @@
-import fs from "node:fs";
+/**
+ * Deploy-time prerender → KV seed pairs.
+ *
+ * Does **not** reimplement the pair walk. Calls the project's
+ * `@vinext/cloudflare` `buildPrerenderKVPairs` (same module official
+ * `vinext-cloudflare deploy` uses):
+ *
+ * https://github.com/cloudflare/vinext/blob/main/packages/cloudflare/src/prerender-kv-populate.ts
+ *
+ * Flow: `vite build` + vinext prerender write `dist/server` artifacts;
+ * deploy loads that helper from the app's `@vinext/cloudflare` install and
+ * uploads pairs into `VINEXT_KV_CACHE`. That helper accepts `appPrefix`;
+ * we pass none so seeded keys match a default `kvDataAdapter()`.
+ */
+import * as Effect from "effect/Effect";
 import nodePath from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { ModuleLoadError } from "../core/Loader.ts";
 
 export const VINEXT_KV_CACHE_BINDING = "VINEXT_KV_CACHE";
 export const VINEXT_CACHE_BINDING = "VINEXT_CACHE";
-
-const DEFAULT_KV_TTL_SECONDS = 30 * 24 * 3600;
-const ENTRY_PREFIX = "cache:";
-const HASHED_KEY_PREFIX = "__hash:";
-const KV_KEY_MAX_BYTES = 512;
-const KV_KEY_ENCODER = new TextEncoder();
-
-type CacheControlMetadata = {
-  revalidate: number;
-  expire?: number;
-  stale?: number;
-};
 
 export type VinextPrerenderKVPair = {
   key: string;
   value: string;
   expirationTtl?: number;
+  metadata?: Record<string, unknown>;
+};
+
+type UpstreamKVBulkPair = {
+  key: string;
+  value: string;
+  expiration_ttl?: number;
   metadata?: Record<string, unknown>;
 };
 
@@ -43,260 +53,80 @@ export const vinextCacheNamespaceFromEnv = (
 };
 
 /**
- * Walk prerender artifacts with Node fs. vinext's internals are Promise
- * APIs; the walk stays async and reports skip warnings for the Effect
- * caller to log.
+ * Resolve `@vinext/cloudflare`'s `prerender-kv-populate` from `projectRoot`.
+ * The function is not on the package `exports` map — load the sibling of
+ * the exported `cache/kv-key` entry (same layout as the published dist).
  */
-export const buildVinextPrerenderKVPairs = async (
-  vinextRoot: string,
-  serverDir: string,
-): Promise<{
-  routeCount: number;
-  pairs: VinextPrerenderKVPair[];
-  warnings: string[];
-}> => {
-  const importVinextDist = (rel: string) =>
-    import(pathToFileURL(nodePath.join(vinextRoot, rel)).href);
-
-  const [
-    { readPrerenderManifest, getRenderedAppRoutes, getRenderedMetadataRoutes },
-    { appIsrCacheKey },
-    { buildAppPageCacheTags, buildAppRouteCacheTags },
-    { normalizePregeneratedPathname },
-    { getAppRouteOutputPath, getOutputPath, getRscOutputPath },
-    { fnv1a64 },
-  ] = await Promise.all([
-    importVinextDist("dist/server/prerender-manifest.js"),
-    importVinextDist("dist/server/isr-cache.js"),
-    importVinextDist("dist/server/app-page-cache.js"),
-    importVinextDist("dist/server/pregenerated-concrete-paths.js"),
-    importVinextDist("dist/utils/prerender-output-paths.js"),
-    importVinextDist("dist/utils/hash.js"),
-  ]);
-
-  const manifestPath = nodePath.join(serverDir, "vinext-prerender.json");
-  const manifest = readPrerenderManifest(manifestPath);
-  if (!manifest?.buildId || !Array.isArray(manifest.routes)) {
-    return { routeCount: 0, pairs: [], warnings: [] };
-  }
-
-  const prerenderDir = nodePath.join(serverDir, "prerendered-routes");
-  if (!fs.existsSync(prerenderDir)) {
-    return { routeCount: 0, pairs: [], warnings: [] };
-  }
-
-  const pairs: VinextPrerenderKVPair[] = [];
-  const warnings: string[] = [];
-  const now = Date.now();
-  const trailingSlash = manifest.trailingSlash ?? false;
-  const keySpace = createKvKeySpace(fnv1a64);
-  let routeCount = 0;
-
-  for (const route of getRenderedAppRoutes(manifest.routes)) {
-    const artifactPathname = route.path ?? route.route;
-    const cachePathname = normalizePregeneratedPathname(artifactPathname);
-    let htmlPath: string;
-    let rscPath: string;
-    try {
-      htmlPath = resolveContainedFile(
-        prerenderDir,
-        getOutputPath(artifactPathname, trailingSlash),
+const loadBuildPrerenderKVPairs = (
+  projectRoot: string,
+): Effect.Effect<
+  (
+    serverDir: string,
+    options?: { appPrefix?: string; now?: number; ttlSeconds?: number },
+  ) => { routeCount: number; pairs: UpstreamKVBulkPair[] },
+  ModuleLoadError
+> =>
+  Effect.tryPromise({
+    try: async () => {
+      const from = pathToFileURL(
+        nodePath.join(projectRoot, "package.json"),
+      ).href;
+      const kvKeyPath = fileURLToPath(
+        import.meta.resolve("@vinext/cloudflare/cache/kv-key", from),
       );
-      rscPath = resolveContainedFile(
-        prerenderDir,
-        getRscOutputPath(artifactPathname),
-      );
-    } catch (error) {
-      warnings.push(
-        `[vinext] Skipping prerender KV seed for ${artifactPathname}: ${formatUnknownError(error)}`,
-      );
-      continue;
-    }
-    if (!fs.existsSync(htmlPath)) continue;
-
-    if (typeof route.revalidate === "number" && route.revalidate <= 0) continue;
-    const revalidateSeconds =
-      typeof route.revalidate === "number" ? route.revalidate : undefined;
-    const expireSeconds =
-      typeof route.expire === "number" ? route.expire : undefined;
-    const staleSeconds =
-      typeof route.stale === "number" && route.stale >= 0
-        ? route.stale
-        : undefined;
-    const expirationTtl =
-      revalidateSeconds === undefined ? undefined : DEFAULT_KV_TTL_SECONDS;
-    const tags = buildAppPageCacheTags(cachePathname, route.tags ?? []);
-    const metadata = buildMetadata(tags);
-    const htmlKey = appIsrCacheKey(cachePathname, "html", manifest.buildId);
-    const rscKey = appIsrCacheKey(cachePathname, "rsc", manifest.buildId);
-
-    pairs.push({
-      key: keySpace.entryKey(htmlKey),
-      value: buildCacheEntry(
-        {
-          kind: "APP_PAGE",
-          html: fs.readFileSync(htmlPath, "utf-8"),
-          headers: route.headers,
-        },
-        tags,
-        now,
-        revalidateSeconds,
-        expireSeconds,
-        staleSeconds,
-      ),
-      ...(expirationTtl !== undefined ? { expirationTtl } : {}),
-      ...(metadata ? { metadata } : {}),
-    });
-
-    if (fs.existsSync(rscPath)) {
-      const rscData = fs.readFileSync(rscPath, "base64");
-      pairs.push({
-        key: keySpace.entryKey(rscKey),
-        value: buildCacheEntry(
-          {
-            kind: "APP_PAGE",
-            html: "",
-            rscData,
-          },
-          tags,
-          now,
-          revalidateSeconds,
-          expireSeconds,
-          staleSeconds,
+      const populateHref = pathToFileURL(
+        nodePath.join(
+          nodePath.dirname(kvKeyPath),
+          "..",
+          "prerender-kv-populate.js",
         ),
-        ...(expirationTtl !== undefined ? { expirationTtl } : {}),
-        ...(metadata ? { metadata } : {}),
-      });
-    }
-
-    routeCount++;
-  }
-
-  for (const route of getRenderedMetadataRoutes(manifest.routes)) {
-    const pathname = route.path ?? route.route;
-    let artifactPath: string;
-    try {
-      artifactPath = resolveContainedFile(
-        prerenderDir,
-        getAppRouteOutputPath(pathname),
-      );
-    } catch (error) {
-      warnings.push(
-        `[vinext] Skipping metadata prerender KV seed for ${pathname}: ${formatUnknownError(error)}`,
-      );
-      continue;
-    }
-    if (!fs.existsSync(artifactPath)) continue;
-
-    const cachePathname = normalizePregeneratedPathname(pathname);
-    if (typeof route.revalidate === "number" && route.revalidate <= 0) continue;
-    const revalidateSeconds =
-      typeof route.revalidate === "number" ? route.revalidate : undefined;
-    const expireSeconds =
-      typeof route.expire === "number" ? route.expire : undefined;
-    const staleSeconds =
-      typeof route.stale === "number" && route.stale >= 0
-        ? route.stale
-        : undefined;
-    const expirationTtl =
-      revalidateSeconds === undefined ? undefined : DEFAULT_KV_TTL_SECONDS;
-    const tags = buildAppRouteCacheTags(
-      cachePathname,
-      route.tags ?? [],
-      route.routeSegments ?? [],
-    );
-    const metadata = buildMetadata(tags);
-    const routeKey = appIsrCacheKey(cachePathname, "route", manifest.buildId);
-    pairs.push({
-      key: keySpace.entryKey(routeKey),
-      value: buildCacheEntry(
-        {
-          kind: "APP_ROUTE",
-          body: fs.readFileSync(artifactPath, "base64"),
-          headers: route.headers ?? {},
-          status: route.responseStatus ?? 200,
-        },
-        tags,
-        now,
-        revalidateSeconds,
-        expireSeconds,
-        staleSeconds,
-      ),
-      ...(expirationTtl !== undefined ? { expirationTtl } : {}),
-      ...(metadata ? { metadata } : {}),
-    });
-    routeCount++;
-  }
-
-  return { routeCount, pairs, warnings };
-};
-
-const createKvKeySpace = (fnv1a64: (input: string) => string) => {
-  const buildStorageKey = (categoryPrefix: string, logicalKey: string) => {
-    const key = `${categoryPrefix}${logicalKey}`;
-    if (KV_KEY_ENCODER.encode(key).length <= KV_KEY_MAX_BYTES) {
-      return key;
-    }
-    return `${categoryPrefix}${HASHED_KEY_PREFIX}${fnv1a64(logicalKey)}`;
-  };
-  return {
-    entryKey: (logicalKey: string) => buildStorageKey(ENTRY_PREFIX, logicalKey),
-  };
-};
-
-const resolveContainedFile = (
-  rootDir: string,
-  relativePath: string,
-): string => {
-  const resolvedRoot = nodePath.resolve(rootDir);
-  const resolvedFile = nodePath.resolve(resolvedRoot, relativePath);
-  const relative = nodePath.relative(resolvedRoot, resolvedFile);
-  if (
-    relative === "" ||
-    relative.startsWith("..") ||
-    nodePath.isAbsolute(relative)
-  ) {
-    throw new Error(
-      `[vinext] Refusing to read prerender artifact outside ${resolvedRoot}`,
-    );
-  }
-  return resolvedFile;
-};
-
-const buildCacheEntry = (
-  value: Record<string, unknown>,
-  tags: string[],
-  now: number,
-  revalidateSeconds: number | undefined,
-  expireSeconds: number | undefined,
-  staleSeconds: number | undefined,
-): string => {
-  const cacheControl: CacheControlMetadata | undefined =
-    revalidateSeconds === undefined
-      ? undefined
-      : {
-          revalidate: revalidateSeconds,
-          ...(expireSeconds === undefined ? {} : { expire: expireSeconds }),
-          ...(staleSeconds === undefined ? {} : { stale: staleSeconds }),
-        };
-
-  return JSON.stringify({
-    value,
-    tags,
-    lastModified: now,
-    revalidateAt:
-      revalidateSeconds === undefined ? null : now + revalidateSeconds * 1000,
-    expireAt: expireSeconds === undefined ? null : now + expireSeconds * 1000,
-    ...(cacheControl ? { cacheControl } : {}),
+      ).href;
+      const mod = (await import(populateHref)) as {
+        buildPrerenderKVPairs: (
+          serverDir: string,
+          options?: { appPrefix?: string; now?: number; ttlSeconds?: number },
+        ) => { routeCount: number; pairs: UpstreamKVBulkPair[] };
+      };
+      return mod.buildPrerenderKVPairs;
+    },
+    catch: (cause) =>
+      new ModuleLoadError({
+        specifier: "@vinext/cloudflare/prerender-kv-populate",
+        root: projectRoot,
+        cause,
+      }),
   });
-};
 
-const buildMetadata = (tags: string[]): Record<string, unknown> | undefined => {
-  const metadata = { tags };
-  return JSON.stringify(metadata).length <= 1024 ? metadata : undefined;
-};
+const toAlchemyPair = (pair: UpstreamKVBulkPair): VinextPrerenderKVPair => ({
+  key: pair.key,
+  value: pair.value,
+  ...(pair.expiration_ttl !== undefined
+    ? { expirationTtl: pair.expiration_ttl }
+    : {}),
+  ...(pair.metadata !== undefined ? { metadata: pair.metadata } : {}),
+});
 
-const formatUnknownError = (error: unknown): string => {
-  if (error instanceof Error && error.message) return error.message;
-  return String(error);
+/**
+ * Build KV seed pairs for `serverDir` via the app's `@vinext/cloudflare`.
+ */
+export const buildVinextPrerenderKVPairs = (
+  projectRoot: string,
+  serverDir: string,
+): Effect.Effect<
+  { routeCount: number; pairs: VinextPrerenderKVPair[] },
+  ModuleLoadError
+> =>
+  Effect.gen(function* () {
+    const buildPrerenderKVPairs = yield* loadBuildPrerenderKVPairs(projectRoot);
+    const { routeCount, pairs } = buildPrerenderKVPairs(serverDir);
+    return {
+      routeCount,
+      pairs: pairs.map(toAlchemyPair),
+    };
+  });
+
+/** @internal */
+export const _prerenderCacheForTests = {
+  loadUpstreamBuildPrerenderKVPairs: loadBuildPrerenderKVPairs,
+  toAlchemyPair,
 };

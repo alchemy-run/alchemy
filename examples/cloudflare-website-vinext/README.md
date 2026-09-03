@@ -5,11 +5,8 @@ Workers with `Cloudflare.Website.Vinext` — Vite plus the Next.js API,
 KV-backed ISR, no `wrangler.jsonc`. This is not the OpenNext path used
 by `Cloudflare.Website.Nextjs`.
 
-Alchemy loads the project's `vite.config.ts`, injects the Cloudflare
-Vite plugin, deploys the RSC Worker plus client assets, prerenders
-routes, and seeds `VINEXT_KV_CACHE`. Values passed via `env` are
-available in server components and route handlers as
-`import { env } from "cloudflare:workers"`.
+Setup, bindings Alchemy owns, and the prerender → KV seed path are
+documented under [vinext on Cloudflare](https://alchemy.run/cloudflare/frontend/vinext/).
 
 - Home is SSR and reads `GREETING`. `/static` is prerendered. `/isr`
   is ISR. `/use-cache` is a dynamic page plus `"use cache"`.
@@ -27,19 +24,3 @@ export class Vinext extends Cloudflare.Website.Vinext<Vinext>()("Vinext", {
   },
 });
 ```
-
-## Notes
-
-- Install `vinext`, `@vitejs/plugin-rsc`, `react-server-dom-webpack`,
-  and `@vinext/cloudflare` in the app. `react-server-dom-webpack` is
-  vinext's RSC flight runtime (same package Next uses); the name is
-  historical — this app does not use webpack.
-- Do not bind `VINEXT_KV_CACHE` or `CF_VERSION_METADATA`. `Website.Vinext`
-  provisions the KV namespace, enables Workers Cache, and binds version
-  metadata. `kvDataAdapter()` / `cdnAdapter()` are official descriptors
-  from `@vinext/cloudflare` — they instantiate on first request.
-- Do not register `@cloudflare/vite-plugin`. Alchemy injects
-  `vite-plugin-cloudflare:alchemy` (vinext matches the prefix) and
-  no-ops the official plugin if it is still present.
-- Unchanged sources skip the Vite build on subsequent deploys (the
-  project tree is content-hashed, scoped by `memo.include`).
