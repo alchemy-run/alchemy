@@ -675,6 +675,8 @@ export const providers = () =>
         Command.providers(),
         KeyPairProvider(),
         RandomProvider(),
+        // DNS-01 solver for `ACME.Certificate` over this account's zones.
+        Dns.AcmeDnsSolverLive,
       ),
     ),
     // Plan-executable data-source capabilities (`Binding.Service.execute`).
