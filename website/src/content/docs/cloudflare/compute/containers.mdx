@@ -462,7 +462,7 @@ The Durable Object class name defaults to the binding name (the
 differently. The type parameter (`Container<Sandbox>`) is the class
 from `worker.ts` above — it types `env.Sandbox` as
 `DurableObjectNamespace<Sandbox>` through
-[`InferEnv`](/cloudflare/compute/workers#typed-env-for-async-workers),
+[`InferEnv`](/cloudflare/compute/workers#async-workers),
 so the handler reaches the container with full types:
 
 ```typescript

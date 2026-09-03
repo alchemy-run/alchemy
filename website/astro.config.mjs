@@ -696,25 +696,15 @@ export default defineConfig({
                   label: "Python Workers",
                   link: "/cloudflare/compute/python-workers",
                 },
-                {
-                  label: "Durable Objects",
-                  link: "/cloudflare/compute/durable-objects",
-                },
-                { label: "Containers", link: "/cloudflare/compute/containers" },
-                { label: "Workflows", link: "/cloudflare/compute/workflows" },
-                {
-                  label: "Cross-worker DOs",
-                  link: "/cloudflare/compute/cross-worker-durable-object",
-                },
-                {
-                  label: "WebSockets",
-                  link: "/cloudflare/compute/hibernatable-websockets",
-                },
+                { label: "Workers Cache", link: "/cloudflare/compute/cache" },
                 {
                   label: "Rate limiting",
                   link: "/cloudflare/compute/rate-limiting",
                 },
-                { label: "Workers Cache", link: "/cloudflare/compute/cache" },
+                {
+                  label: "Browser rendering",
+                  link: "/cloudflare/compute/browser-rendering",
+                },
                 {
                   label: "Worker Loader",
                   link: "/cloudflare/compute/worker-loader",
@@ -724,9 +714,19 @@ export default defineConfig({
                   link: "/cloudflare/compute/workers-for-platforms",
                 },
                 {
-                  label: "Browser rendering",
-                  link: "/cloudflare/compute/browser-rendering",
+                  label: "Durable Objects",
+                  link: "/cloudflare/compute/durable-objects",
                 },
+                {
+                  label: "Cross-worker DOs",
+                  link: "/cloudflare/compute/cross-worker-durable-object",
+                },
+                {
+                  label: "WebSockets",
+                  link: "/cloudflare/compute/hibernatable-websockets",
+                },
+                { label: "Containers", link: "/cloudflare/compute/containers" },
+                { label: "Workflows", link: "/cloudflare/compute/workflows" },
               ],
             },
             {
