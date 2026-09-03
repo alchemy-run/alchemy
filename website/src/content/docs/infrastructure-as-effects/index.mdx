@@ -125,9 +125,8 @@ const getItem = yield* AWS.DynamoDB.GetItem(Jobs);
 // → Jobs_tableName=Jobs-a1b2c3
 ```
 
-There is no `env.BUCKET`. The binding is the SDK.
-[Bindings](/infrastructure-as-effects/binding) follows one binding
-through everything it produces.
+There is no `env.Uploads` to reach for. The binding is the SDK. See
+[Bindings](/infrastructure-as-effects/binding) for how they work.
 
 Some bindings run your Function instead of being called from it. An
 [Event Source](/infrastructure-as-effects/event-sources) triggers on a
