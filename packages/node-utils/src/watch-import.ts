@@ -2,7 +2,6 @@ import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import {
   DependencyWatcher,
-  type DependencyChange,
   type DependencyChangeListener,
   type DependencyWatcherOptions,
 } from "./dependency-watcher.ts";
@@ -18,14 +17,10 @@ export interface ImportGeneration<T> {
   readonly dependencies: ReadonlySet<string>;
 }
 
-export type ImportChange = DependencyChange;
-
 export interface ImportWatcherOptions
   extends ImportLoaderOptions, DependencyWatcherOptions {
   readonly parentURL: string;
 }
-
-export type ImportChangeListener = DependencyChangeListener;
 
 /**
  * Imports fresh Node module generations and watches the exact files loaded by
@@ -51,7 +46,7 @@ export class ImportWatcher<T = unknown> {
     return this.#dependencies;
   }
 
-  subscribe(listener: ImportChangeListener): () => void {
+  subscribe(listener: DependencyChangeListener): () => void {
     return this.#watcher.subscribe(listener);
   }
 
