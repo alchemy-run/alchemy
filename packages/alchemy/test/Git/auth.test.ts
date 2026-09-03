@@ -7,9 +7,14 @@ import { describe, expect, it } from "alchemy-test";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Context from "effect/Context";
+import * as HttpRouter from "effect/unstable/http/HttpRouter";
+import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import {
-  Authenticate,
-  AuthenticateSecret,
+  Authenticated,
+  AuthenticatedSecret,
+  Caller,
   parseBasic,
   parseBearer,
   parseSecret,
@@ -40,8 +45,8 @@ describe("header parsing", () => {
   });
 });
 
-describe("AuthenticateSecret", () => {
-  const layer = AuthenticateSecret({ principal: { id: "acme" } }).pipe(
+describe("AuthenticatedSecret", () => {
+  const layer = AuthenticatedSecret({ principal: { id: "acme" } }).pipe(
     Layer.provide(
       Layer.succeed(
         ConfigProvider.ConfigProvider,
@@ -49,10 +54,36 @@ describe("AuthenticateSecret", () => {
       ),
     ),
   );
+  /** Runs the middleware over a request and reads the `Caller` it provides. */
   const authenticate = (headers: Record<string, string | undefined>) =>
     Effect.gen(function* () {
-      const fn = yield* Authenticate;
-      return yield* fn(headers);
+      const middleware = yield* Authenticated;
+      let seen: { id: string } | undefined;
+      const request = HttpServerRequest.fromWeb(
+        new Request("http://git.test/", {
+          headers: Object.fromEntries(
+            Object.entries(headers).filter(
+              (entry): entry is [string, string] => entry[1] !== undefined,
+            ),
+          ),
+        }),
+      );
+      // The middleware never reads the endpoint, group, or route context.
+      const routeContext = Context.make(
+        HttpServerRequest.HttpServerRequest,
+        request,
+      ).pipe(
+        Context.add(HttpServerRequest.ParsedSearchParams, {}),
+        Context.add(HttpRouter.RouteContext, {} as never),
+      );
+      yield* middleware(
+        Effect.gen(function* () {
+          seen = (yield* Caller).principal;
+          return HttpServerResponse.empty();
+        }),
+        { endpoint: {} as never, group: {} as never },
+      ).pipe(Effect.provide(routeContext));
+      return seen;
     }).pipe(Effect.provide(layer), Effect.provide(RuntimeContext.phantom));
 
   it.effect("resolves the principal for the matching secret only", () =>

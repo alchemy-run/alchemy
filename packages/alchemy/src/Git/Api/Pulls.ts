@@ -8,9 +8,10 @@
  * sides relative to the merge base) — a conflicting PR is a typed 409, the
  * server never writes conflict markers.
  */
+import * as Http from "../../Http/index.ts";
 import * as Schema from "effect/Schema";
-import * as HttpApiEndpoint from "effect/unstable/httpapi/HttpApiEndpoint";
 import * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup";
+import { Authenticated } from "../Auth.ts";
 import {
   Unauthorized,
   BranchMissing,
@@ -46,7 +47,7 @@ export const PullPath = Schema.Struct({
  * Opens a PR. `base`/`head` accept short (`main`) or full
  * (`refs/heads/main`) branch names — only branches are legal (no tags).
  */
-export const create = HttpApiEndpoint.post(
+export class CreatePull extends Http.post<CreatePull>()(
   "create",
   "/repos/:owner/:repo/pulls",
   {
@@ -68,39 +69,46 @@ export const create = HttpApiEndpoint.post(
       Forbidden,
       Unauthorized,
     ],
+    middleware: [Authenticated],
   },
-);
+) {}
 
 /** Lists PRs, newest first. `state` defaults to `open`. Anonymous on public repos. */
-export const list = HttpApiEndpoint.get("list", "/repos/:owner/:repo/pulls", {
-  params: RepoPath,
-  query: Schema.Struct({
-    /** Filter by lifecycle state. @default open */
-    state: Schema.optional(
-      Schema.Literals(["open", "closed", "merged", "all"]),
-    ),
-    cursor: Schema.optional(Schema.String),
-    limit: Schema.optional(
-      Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 100 })),
-    ),
-  }),
-  success: Paginated(Pull),
-  error: [RepoNotFound, Unauthorized],
-});
+export class ListPulls extends Http.get<ListPulls>()(
+  "list",
+  "/repos/:owner/:repo/pulls",
+  {
+    params: RepoPath,
+    query: Schema.Struct({
+      /** Filter by lifecycle state. @default open */
+      state: Schema.optional(
+        Schema.Literals(["open", "closed", "merged", "all"]),
+      ),
+      cursor: Schema.optional(Schema.String),
+      limit: Schema.optional(
+        Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 100 })),
+      ),
+    }),
+    success: Paginated(Pull),
+    error: [RepoNotFound, Unauthorized],
+    middleware: [Authenticated],
+  },
+) {}
 
 /** Reads one PR with live compare fields (aheadBy/behindBy/mergeable). */
-export const get = HttpApiEndpoint.get(
+export class GetPull extends Http.get<GetPull>()(
   "get",
   "/repos/:owner/:repo/pulls/:number",
   {
     params: PullPath,
     success: PullDetail,
     error: [RepoNotFound, PullNotFound, Unauthorized],
+    middleware: [Authenticated],
   },
-);
+) {}
 
 /** Patches title/body, or closes/reopens via `state`. */
-export const update = HttpApiEndpoint.patch(
+export class UpdatePull extends Http.patch<UpdatePull>()(
   "update",
   "/repos/:owner/:repo/pulls/:number",
   {
@@ -123,14 +131,15 @@ export const update = HttpApiEndpoint.patch(
       Forbidden,
       Unauthorized,
     ],
+    middleware: [Authenticated],
   },
-);
+) {}
 
 /**
  * Merges an open PR: fast-forward when possible, else a merge commit iff
  * the three-way tree merge is trivial.
  */
-export const merge = HttpApiEndpoint.post(
+export class MergePull extends Http.post<MergePull>()(
   "merge",
   "/repos/:owner/:repo/pulls/:number/merge",
   {
@@ -160,13 +169,11 @@ export const merge = HttpApiEndpoint.post(
       Forbidden,
       Unauthorized,
     ],
+    middleware: [Authenticated],
   },
-);
+) {}
 
-/** The assembled `pulls` group. */
-export default HttpApiGroup.make("pulls")
-  .add(create)
-  .add(list)
-  .add(get)
-  .add(update)
-  .add(merge);
+/** The `pulls` group, mounted at `/api/v1`. */
+export class Pulls extends HttpApiGroup.make("pulls")
+  .add(CreatePull, ListPulls, GetPull, UpdatePull, MergePull)
+  .prefix("/api/v1") {}

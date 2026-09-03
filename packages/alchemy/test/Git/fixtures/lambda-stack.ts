@@ -19,7 +19,7 @@ import {
 } from "@/Git/index.ts";
 import { HasherFunction, HasherLambda } from "@/Git/Hasher/index.ts";
 
-import { AuthenticateTest, PolicyTest, TEST_SECRET } from "./stack.ts";
+import { AuthenticatedTest, PolicyTest, TEST_SECRET } from "./stack.ts";
 export { TEST_SECRET };
 
 const GitObjects = Cloudflare.R2.Bucket("GitLambdaObjects", {
@@ -32,7 +32,7 @@ const GitLive = ServerLive.pipe(
   Layer.provide(HasherLambda(HasherFunction)),
   Layer.provide(AWS.Lambda.InvokeFunctionHttp),
   Layer.provide(BlobStoreR2(GitObjects)),
-  Layer.provide(AuthenticateTest),
+  Layer.provide(AuthenticatedTest),
   Layer.provide(PolicyTest),
 );
 

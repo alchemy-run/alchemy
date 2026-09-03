@@ -24,7 +24,7 @@ import {
   Server,
   ServerLive,
 } from "@/Git/index.ts";
-import { AuthenticateTest } from "./stack.ts";
+import { AuthenticatedTest } from "./stack.ts";
 
 /**
  * Direct pushes to `refs/heads/main` only by the repository's owner;
@@ -52,7 +52,7 @@ const ProtectedGitLive = ServerLive.pipe(
   Layer.provide(RegistryDurableObject),
   Layer.provide(HasherInline),
   Layer.provide(BlobStoreR2(GitObjects)),
-  Layer.provide(AuthenticateTest),
+  Layer.provide(AuthenticatedTest),
   Layer.provide(ProtectedMainPolicy),
 );
 

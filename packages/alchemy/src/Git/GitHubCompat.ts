@@ -158,11 +158,8 @@ export interface GitHubCompatOptions {
     never,
     HttpServerRequest.HttpServerRequest | RuntimeContext
   >;
-  /** Timing-safe admin-key check over the raw Authorization header. */
-  /** The caller behind the request headers: a principal, or `null`. */
-  readonly caller: (
-    headers: Readonly<Record<string, string | undefined>>,
-  ) => Effect.Effect<CallerAuth, never, RuntimeContext>;
+  /** The caller of the current request, as the middleware resolved it: a principal, or `null`. */
+  readonly caller: Effect.Effect<CallerAuth, never, RuntimeContext>;
   /** Repo-DO stub by repoId (the Worker's `repos.getByName`). */
   readonly stub: (repoId: string) => CompatRepoStub;
 }
@@ -490,35 +487,24 @@ export const gitHubCompatRoutes = (options: GitHubCompatOptions) => {
           .readCommitLog(auth, { ref: revision, limit: 1 })
           .pipe(Effect.map((page) => page.items[0]?.oid ?? revision));
 
-  return Layer.mergeAll(
-    // ── the auth probe ──────────────────────────────────────────────────
-    // `gh` hits `/user` to validate its credential: answered from the
-    // principal `Authenticate` resolves.
-    HttpRouter.add(
-      "GET",
-      "/api/v3/user",
+  return {
+    /** `GET /api/v3/user` */
+    user: () =>
       Effect.gen(function* () {
         const request = yield* HttpServerRequest.HttpServerRequest;
-        const principal = yield* caller(request.headers);
+        const principal = yield* caller;
         if (principal === null) return yield* ghUnauthorized;
         return yield* ghJson(ghUser(principal.name ?? principal.id));
       }),
-    ),
-
-    // ── repos ───────────────────────────────────────────────────────────
-    HttpRouter.add(
-      "GET",
-      "/api/v3/repos/:owner/:repo",
+    /** `GET /api/v3/repos/:owner/:repo` */
+    repo: () =>
       withRepo(({ repo, auth, origin }) =>
         repo
           .getRepoMeta(auth)
           .pipe(Effect.flatMap((meta) => ghJson(ghRepo(meta, origin)))),
       ),
-    ),
-
-    HttpRouter.add(
-      "GET",
-      "/api/v3/repos/:owner/:repo/branches",
+    /** `GET /api/v3/repos/:owner/:repo/branches` */
+    branches: () =>
       withRepo(({ repo, auth }) =>
         repo.listRefs(auth, "refs/heads/").pipe(
           Effect.flatMap((page) =>
@@ -532,12 +518,8 @@ export const gitHubCompatRoutes = (options: GitHubCompatOptions) => {
           ),
         ),
       ),
-    ),
-
-    // ── commits ─────────────────────────────────────────────────────────
-    HttpRouter.add(
-      "GET",
-      "/api/v3/repos/:owner/:repo/commits",
+    /** `GET /api/v3/repos/:owner/:repo/commits` */
+    commits: () =>
       withRepo(({ repo, auth, origin, repoUrl, url }) =>
         repo
           .readCommitLog(auth, {
@@ -560,11 +542,8 @@ export const gitHubCompatRoutes = (options: GitHubCompatOptions) => {
             ),
           ),
       ),
-    ),
-
-    HttpRouter.add(
-      "GET",
-      "/api/v3/repos/:owner/:repo/commits/:sha",
+    /** `GET /api/v3/repos/:owner/:repo/commits/:sha` */
+    commit: () =>
       withRepo(({ repo, auth, origin, repoUrl, params }) =>
         Effect.gen(function* () {
           const oid = yield* resolveSha(repo, auth, params.sha ?? "");
@@ -578,12 +557,8 @@ export const gitHubCompatRoutes = (options: GitHubCompatOptions) => {
           });
         }),
       ),
-    ),
-
-    // ── contents ────────────────────────────────────────────────────────
-    HttpRouter.add(
-      "GET",
-      "/api/v3/repos/:owner/:repo/contents/*",
+    /** `GET /api/v3/repos/:owner/:repo/contents/*` */
+    contents: () =>
       withRepo(({ repo, auth, url, repoUrl }) =>
         Effect.gen(function* () {
           const marker = "/contents/";
@@ -606,12 +581,8 @@ export const gitHubCompatRoutes = (options: GitHubCompatOptions) => {
           });
         }),
       ),
-    ),
-
-    // ── pulls ───────────────────────────────────────────────────────────
-    HttpRouter.add(
-      "GET",
-      "/api/v3/repos/:owner/:repo/pulls",
+    /** `GET /api/v3/repos/:owner/:repo/pulls` */
+    pulls: () =>
       withRepo(({ repo, auth, entry, origin, repoUrl, url }) =>
         Effect.gen(function* () {
           // GitHub's `closed` includes merged; our store distinguishes.
@@ -647,11 +618,8 @@ export const gitHubCompatRoutes = (options: GitHubCompatOptions) => {
           );
         }),
       ),
-    ),
-
-    HttpRouter.add(
-      "POST",
-      "/api/v3/repos/:owner/:repo/pulls",
+    /** `POST /api/v3/repos/:owner/:repo/pulls` */
+    createPull: () =>
       withRepo(({ repo, auth, origin, request }) =>
         Effect.gen(function* () {
           const body = (yield* request.json.pipe(
@@ -678,11 +646,8 @@ export const gitHubCompatRoutes = (options: GitHubCompatOptions) => {
           return yield* ghJson(ghPull(pull, meta, origin), { status: 201 });
         }),
       ),
-    ),
-
-    HttpRouter.add(
-      "GET",
-      "/api/v3/repos/:owner/:repo/pulls/:number",
+    /** `GET /api/v3/repos/:owner/:repo/pulls/:number` */
+    pull: () =>
       withRepo(({ repo, auth, origin, params }) =>
         Effect.gen(function* () {
           const number = Number.parseInt(params.number ?? "", 10);
@@ -692,11 +657,8 @@ export const gitHubCompatRoutes = (options: GitHubCompatOptions) => {
           return yield* ghJson(ghPull(pull, meta, origin));
         }),
       ),
-    ),
-
-    HttpRouter.add(
-      "PATCH",
-      "/api/v3/repos/:owner/:repo/pulls/:number",
+    /** `PATCH /api/v3/repos/:owner/:repo/pulls/:number` */
+    updatePull: () =>
       withRepo(({ repo, auth, origin, params, request }) =>
         Effect.gen(function* () {
           const number = Number.parseInt(params.number ?? "", 10);
@@ -721,11 +683,8 @@ export const gitHubCompatRoutes = (options: GitHubCompatOptions) => {
           return yield* ghJson(ghPull(pull, meta, origin));
         }),
       ),
-    ),
-
-    HttpRouter.add(
-      "PUT",
-      "/api/v3/repos/:owner/:repo/pulls/:number/merge",
+    /** `PUT /api/v3/repos/:owner/:repo/pulls/:number/merge` */
+    mergePull: () =>
       withRepo(({ repo, auth, params, request }) =>
         Effect.gen(function* () {
           const number = Number.parseInt(params.number ?? "", 10);
@@ -760,11 +719,8 @@ export const gitHubCompatRoutes = (options: GitHubCompatOptions) => {
           });
         }),
       ),
-    ),
-
-    HttpRouter.add(
-      "GET",
-      "/api/v3/repos/:owner/:repo/pulls/:number/files",
+    /** `GET /api/v3/repos/:owner/:repo/pulls/:number/files` */
+    pullFiles: () =>
       withRepo(({ repo, auth, params }) =>
         Effect.gen(function* () {
           const number = Number.parseInt(params.number ?? "", 10);
@@ -788,6 +744,5 @@ export const gitHubCompatRoutes = (options: GitHubCompatOptions) => {
           return yield* ghJson([]);
         }),
       ),
-    ),
-  );
+  };
 };

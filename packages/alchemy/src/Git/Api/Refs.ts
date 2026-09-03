@@ -4,10 +4,11 @@
  * Ref names contain `/`, so the single-ref endpoints address the ref via
  * the `name` query parameter, not a path segment.
  */
+import * as Http from "../../Http/index.ts";
 import * as Schema from "effect/Schema";
-import * as HttpApiEndpoint from "effect/unstable/httpapi/HttpApiEndpoint";
 import * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup";
 import * as HttpApiSchema from "effect/unstable/httpapi/HttpApiSchema";
+import { Authenticated } from "../Auth.ts";
 import {
   Unauthorized,
   Forbidden,
@@ -23,53 +24,68 @@ import {
 } from "./Schema.ts";
 
 /** Lists refs, optionally filtered by prefix (e.g. `refs/heads/`). */
-export const list = HttpApiEndpoint.get("list", "/repos/:owner/:repo/refs", {
-  params: RepoPath,
-  query: Schema.Struct({
-    /** Filter by prefix, e.g. `refs/heads/`. */
-    prefix: Schema.optional(Schema.String),
-  }),
-  success: Schema.Struct({
-    /** The default branch's full ref name, `null` on an unborn repo. */
-    head: Schema.NullOr(Schema.String),
-    refs: Schema.Array(Ref),
-  }),
-  error: [RepoNotFound, Unauthorized],
-});
+export class ListRefs extends Http.get<ListRefs>()(
+  "list",
+  "/repos/:owner/:repo/refs",
+  {
+    params: RepoPath,
+    query: Schema.Struct({
+      /** Filter by prefix, e.g. `refs/heads/`. */
+      prefix: Schema.optional(Schema.String),
+    }),
+    success: Schema.Struct({
+      /** The default branch's full ref name, `null` on an unborn repo. */
+      head: Schema.NullOr(Schema.String),
+      refs: Schema.Array(Ref),
+    }),
+    error: [RepoNotFound, Unauthorized],
+    middleware: [Authenticated],
+  },
+) {}
 
 /** Reads one ref by full name (`?name=refs/heads/main`). */
-export const get = HttpApiEndpoint.get("get", "/repos/:owner/:repo/ref", {
-  params: RepoPath,
-  query: Schema.Struct({ name: RefName }),
-  success: Ref,
-  error: [RepoNotFound, RefNotFound, Unauthorized],
-});
+export class GetRef extends Http.get<GetRef>()(
+  "get",
+  "/repos/:owner/:repo/ref",
+  {
+    params: RepoPath,
+    query: Schema.Struct({ name: RefName }),
+    success: Ref,
+    error: [RepoNotFound, RefNotFound, Unauthorized],
+    middleware: [Authenticated],
+  },
+) {}
 
 /** Writes one ref with CAS semantics. */
-export const update = HttpApiEndpoint.put("update", "/repos/:owner/:repo/ref", {
-  params: RepoPath,
-  query: Schema.Struct({ name: RefName }),
-  payload: Schema.Struct({
-    newOid: Oid,
-    /**
-     * CAS token: current oid the ref must hold. `null` = the ref must
-     * not exist (create). Absent = unconditional write.
-     */
-    expectedOid: Schema.optional(Schema.NullOr(Oid)),
-  }),
-  success: Ref,
-  error: [
-    RepoNotFound,
-    RefConflict,
-    ObjectNotFound,
-    ReadOnlyRepo,
-    Forbidden,
-    Unauthorized,
-  ],
-});
+export class UpdateRef extends Http.put<UpdateRef>()(
+  "update",
+  "/repos/:owner/:repo/ref",
+  {
+    params: RepoPath,
+    query: Schema.Struct({ name: RefName }),
+    payload: Schema.Struct({
+      newOid: Oid,
+      /**
+       * CAS token: current oid the ref must hold. `null` = the ref must
+       * not exist (create). Absent = unconditional write.
+       */
+      expectedOid: Schema.optional(Schema.NullOr(Oid)),
+    }),
+    success: Ref,
+    error: [
+      RepoNotFound,
+      RefConflict,
+      ObjectNotFound,
+      ReadOnlyRepo,
+      Forbidden,
+      Unauthorized,
+    ],
+    middleware: [Authenticated],
+  },
+) {}
 
 /** Deletes one ref with CAS semantics. */
-export const remove = HttpApiEndpoint.delete(
+export class RemoveRef extends Http.del<RemoveRef>()(
   "remove",
   "/repos/:owner/:repo/ref",
   {
@@ -88,12 +104,11 @@ export const remove = HttpApiEndpoint.delete(
       Forbidden,
       Unauthorized,
     ],
+    middleware: [Authenticated],
   },
-);
+) {}
 
-/** The assembled `refs` group. */
-export default HttpApiGroup.make("refs")
-  .add(list)
-  .add(get)
-  .add(update)
-  .add(remove);
+/** The `refs` group, mounted at `/api/v1`. */
+export class Refs extends HttpApiGroup.make("refs")
+  .add(ListRefs, GetRef, UpdateRef, RemoveRef)
+  .prefix("/api/v1") {}

@@ -144,6 +144,12 @@
       "worker": "./src/Git/Hasher/index.ts",
       "import": "./lib/Git/Hasher/index.js"
     },
+    "./Http": {
+      "types": "./lib/Http/index.d.ts",
+      "bun": "./src/Http/index.ts",
+      "worker": "./src/Http/index.ts",
+      "import": "./lib/Http/index.js"
+    },
     "./Kubernetes": {
       "types": "./lib/Kubernetes/index.d.ts",
       "bun": "./src/Kubernetes/index.ts",

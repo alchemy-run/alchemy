@@ -1,26 +1,20 @@
 /**
  * Who is calling, and may they do this. The git engine holds no
  * credentials and no users: authentication happens outside it, in the
- * HTTP layer you own, and the engine asks one pure question about each
- * action.
+ * HTTP middleware you own, and the engine asks one pure question about
+ * each action.
  *
  * - {@link Principal} is the identity your authentication resolved.
- * - {@link Caller} is the service an `HttpApi` middleware provides to the
- *   REST handlers: a principal, or anonymous.
- * - {@link Authenticate} resolves a principal from request headers for the
- *   routes an `HttpApiMiddleware` cannot wrap: the git wire protocol (a
- *   `git` client can only send HTTP Basic), the raw blob and file reads,
- *   and the GitHub facade.
+ * - {@link Caller} is the service the middleware provides to every route:
+ *   a principal, or anonymous.
+ * - {@link Authenticated} is the middleware contract every git route
+ *   declares. Implement it once, for browsers and `git` clients alike; the
+ *   engine ships {@link AuthenticatedSecret}, one shared secret for one
+ *   principal.
  * - {@link Policy} answers yes or no for a principal, a repository, and a
  *   {@link GitAction}. It runs where the action's facts are parsed: a push
  *   is judged inside the repository's Durable Object with the refs it
- *   wants to move.
- *
- * Shipped implementations: {@link PolicyOwners} (owners write, anyone
- * reads public repositories), {@link AuthenticateSecret} (one shared
- * secret, the smallest thing that secures a fresh host), and
- * {@link Authenticated}, the default middleware that bridges
- * `Authenticate` into `Caller` so one implementation serves every plane.
+ *   wants to move. {@link PolicyOwners} is the default.
  */
 import { RuntimeContext } from "../RuntimeContext.ts";
 import * as Config from "effect/Config";
@@ -59,10 +53,10 @@ export const PrincipalSchema = Schema.Struct({
 });
 
 /**
- * The caller of a REST endpoint, as provided by the `HttpApi` middleware in
- * front of it: a {@link Principal}, or `undefined` for an anonymous request.
- * Handlers read it with `Effect.serviceOption(Caller)`; no middleware means
- * anonymous, which the policy confines to public reads.
+ * The caller of a request, as the {@link Authenticated} middleware
+ * provided it: a {@link Principal}, or `undefined` for an anonymous
+ * request. Anonymous is not a failure; the policy decides what anonymous
+ * may do.
  */
 export class Caller extends Context.Service<
   Caller,
@@ -73,29 +67,74 @@ export class Caller extends Context.Service<
 export type Headers = Readonly<Record<string, string | undefined>>;
 
 /**
- * Resolve a principal from request headers, for the routes an
- * `HttpApiMiddleware` cannot wrap. `undefined` is anonymous, never a
- * failure: the policy decides what anonymous may do.
+ * Resolves the caller of a request. Runs at the Worker, once per request,
+ * before every git route: the REST plane, the git wire (a `git` client
+ * sends HTTP Basic with the credential in the password field), the raw
+ * reads, and the GitHub facade. `undefined` is anonymous, never a failure.
+ */
+export type Resolve = (
+  request: HttpServerRequest.HttpServerRequest,
+) => Effect.Effect<Principal | undefined, never, RuntimeContext>;
+
+/**
+ * The middleware contract every git route declares: it provides
+ * {@link Caller}. Implement it with `Authenticated.make`, whose `init`
+ * runs once at build time and returns the per-request {@link Resolve}.
  *
- * **Example:** API keys verified by Better Auth
+ * **Example:** Better Auth sessions for browsers, API keys for `git`
  * ```typescript
- * const AuthenticateLive = Layer.succeed(
- *   Git.Authenticate,
- *   Effect.fn(function* (headers) {
- *     const basic = Git.parseBasic(headers);
- *     if (basic === undefined) return undefined;
- *     const verified = yield* auth.api.verifyApiKey({ body: { key: basic.password } });
- *     return verified.valid && verified.key ? { id: verified.key.userId } : undefined;
+ * const AuthenticatedLive = Git.Authenticated.make(
+ *   Effect.gen(function* () {
+ *     const auth = yield* Auth;
+ *     return Effect.fn(function* (request) {
+ *       const key = Git.parseSecret(request.headers);
+ *       if (key !== undefined) {
+ *         const verified = yield* auth.api.verifyApiKey({ body: { key } });
+ *         return verified.valid && verified.key ? { id: verified.key.referenceId } : undefined;
+ *       }
+ *       const session = yield* auth.getSession();
+ *       return session ? { id: session.user.id, name: session.user.name } : undefined;
+ *     });
  *   }),
  * );
  * ```
+ *
+ * @binding
  */
-export class Authenticate extends Context.Service<
-  Authenticate,
-  (
-    headers: Headers,
-  ) => Effect.Effect<Principal | undefined, never, RuntimeContext>
->()("alchemy/Git/Authenticate") {}
+export class Authenticated extends HttpApiMiddleware.Service<
+  Authenticated,
+  { provides: Caller }
+>()("alchemy/Git/Authenticated", { error: Unauthorized }) {
+  /**
+   * An implementation of the middleware as a Layer. `init` runs once, when
+   * the layer is built, and returns the per-request {@link Resolve}.
+   */
+  static readonly make = <E, R>(
+    init: Effect.Effect<Resolve, E, R>,
+  ): Layer.Layer<Authenticated, E, R> =>
+    Layer.effect(
+      Authenticated,
+      Effect.map(
+        init,
+        (resolve) => (httpEffect) =>
+          Effect.gen(function* () {
+            const request = yield* HttpServerRequest.HttpServerRequest;
+            const principal = yield* resolve(request).pipe(
+              Effect.provide(RuntimeContext.phantom),
+            );
+            return yield* Effect.provideService(httpEffect, Caller, {
+              principal,
+            });
+          }),
+      ),
+    );
+}
+
+/** The caller of the current request, anonymous when no middleware provided one. */
+export const currentCaller: Effect.Effect<Principal | undefined> = Effect.map(
+  Effect.serviceOption(Caller),
+  (caller) => (Option.isSome(caller) ? caller.value.principal : undefined),
+);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Actions and policy
@@ -293,10 +332,10 @@ export const timingSafeEqual = (a: string, b: string): Effect.Effect<boolean> =>
   Effect.sync(() => crypto.timingSafeEqual(sha256(a), sha256(b)));
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Shipped implementations
+// Shipped implementation
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** The `Config` key {@link AuthenticateSecret} reads by default. */
+/** The `Config` key {@link AuthenticatedSecret} reads by default. */
 export const SECRET_CONFIG_KEY = "GIT_SERVICE_SECRET" as const;
 
 /**
@@ -307,28 +346,27 @@ export const SECRET_CONFIG_KEY = "GIT_SERVICE_SECRET" as const;
  *
  * **Example:** the starter host
  * ```typescript
- * Layer.provide(Git.AuthenticateSecret({ principal: { id: "acme" } }))
+ * Layer.provide(Git.AuthenticatedSecret({ principal: { id: "acme" } }))
  * ```
  *
  * @layer
- * @provides Git.Authenticate
+ * @provides Git.Authenticated
  */
-export const AuthenticateSecret = (options: {
+export const AuthenticatedSecret = (options: {
   /** The principal a matching secret resolves to; repositories it creates are owned by `principal.id`. */
   readonly principal: Principal;
   /** @default "GIT_SERVICE_SECRET" */
   readonly configKey?: string | undefined;
-}): Layer.Layer<Authenticate> =>
-  Layer.effect(
-    Authenticate,
+}): Layer.Layer<Authenticated> =>
+  Authenticated.make(
     Effect.gen(function* () {
       // A missing secret is a misconfigured deploy: die at layer build,
       // never at request time.
       const secret = yield* Config.redacted(
         options.configKey ?? SECRET_CONFIG_KEY,
       ).pipe(Effect.orDie);
-      return Effect.fn(function* (headers: Headers) {
-        const presented = parseSecret(headers);
+      return Effect.fn(function* (request) {
+        const presented = parseSecret(request.headers);
         if (presented === undefined || presented === "") return undefined;
         const matches = yield* timingSafeEqual(
           presented,
@@ -338,49 +376,3 @@ export const AuthenticateSecret = (options: {
       });
     }),
   );
-
-/**
- * The default `HttpApi` middleware for the REST plane: resolves the
- * {@link Caller} through {@link Authenticate}, so one implementation
- * serves the wire, the raw routes, and the API. Anonymous requests pass
- * through as anonymous; the policy confines them.
- *
- * Bring your own middleware instead when browsers and git clients should
- * authenticate differently: provide {@link Caller} from a session, and
- * `Authenticate` from an API key.
- */
-export class Authenticated extends HttpApiMiddleware.Service<
-  Authenticated,
-  { provides: Caller }
->()("alchemy/Git/Authenticated", { error: Unauthorized }) {}
-
-/**
- * @layer
- * @provides Git.Authenticated
- */
-export const AuthenticatedLive: Layer.Layer<
-  Authenticated,
-  never,
-  Authenticate
-> = Layer.effect(
-  Authenticated,
-  Effect.gen(function* () {
-    const authenticate = yield* Authenticate;
-    return (httpEffect) =>
-      Effect.gen(function* () {
-        const request = yield* HttpServerRequest.HttpServerRequest;
-        const principal = yield* authenticate(request.headers).pipe(
-          Effect.provide(RuntimeContext.phantom),
-        );
-        return yield* Effect.provideService(httpEffect, Caller, {
-          principal,
-        });
-      });
-  }),
-);
-
-/** The caller of the current REST request, anonymous when no middleware provided one. */
-export const currentCaller: Effect.Effect<Principal | undefined> = Effect.map(
-  Effect.serviceOption(Caller),
-  (caller) => (Option.isSome(caller) ? caller.value.principal : undefined),
-);

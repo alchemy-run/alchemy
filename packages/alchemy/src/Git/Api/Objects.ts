@@ -1,18 +1,13 @@
 /**
- * The `objects` group: commit, log, tree, and small-blob reads
- * (DESIGN.md §5).
- *
- * Raw streaming reads are registered as RAW `HttpRouter` routes
- * (octet-stream), outside HttpApi schema-land by design (same policy as
- * the git wire endpoints):
- *
- * - `GET /api/v1/repos/:owner/:repo/blobs/:oid/raw`
- * - `GET /api/v1/repos/:owner/:repo/file?ref=<refname|oid>&path=<path>`
- *   (tree-walk per segment)
+ * The `objects` group: commit, log, tree, blob, diff, and compare reads,
+ * plus the two raw streaming reads (DESIGN.md §5): a blob's bytes as an
+ * octet-stream, and a file at a path under a ref. The raw routes declare
+ * no success schema and answer with the response they build.
  */
+import * as Http from "../../Http/index.ts";
 import * as Schema from "effect/Schema";
-import * as HttpApiEndpoint from "effect/unstable/httpapi/HttpApiEndpoint";
 import * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup";
+import { Authenticated } from "../Auth.ts";
 import {
   Unauthorized,
   CommitDiff,
@@ -32,33 +27,39 @@ import {
 } from "./Schema.ts";
 
 /** Reads one commit. */
-export const commit = HttpApiEndpoint.get(
+export class GetCommit extends Http.get<GetCommit>()(
   "commit",
   "/repos/:owner/:repo/commits/:oid",
   {
     params: RepoOidPath,
     success: CommitInfo,
     error: [RepoNotFound, ObjectNotFound, WrongObjectType, Unauthorized],
+    middleware: [Authenticated],
   },
-);
+) {}
 
 /** Pages the commit history from a ref or oid. */
-export const log = HttpApiEndpoint.get("log", "/repos/:owner/:repo/log", {
-  params: RepoPath,
-  query: Schema.Struct({
-    /** Refname or oid to start from. @default HEAD */
-    ref: Schema.optional(Schema.String),
-    cursor: Schema.optional(Schema.String),
-    limit: Schema.optional(
-      Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 100 })),
-    ),
-  }),
-  success: Paginated(CommitInfo),
-  error: [RepoNotFound, RefNotFound, Unauthorized],
-});
+export class GetLog extends Http.get<GetLog>()(
+  "log",
+  "/repos/:owner/:repo/log",
+  {
+    params: RepoPath,
+    query: Schema.Struct({
+      /** Refname or oid to start from. @default HEAD */
+      ref: Schema.optional(Schema.String),
+      cursor: Schema.optional(Schema.String),
+      limit: Schema.optional(
+        Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 100 })),
+      ),
+    }),
+    success: Paginated(CommitInfo),
+    error: [RepoNotFound, RefNotFound, Unauthorized],
+    middleware: [Authenticated],
+  },
+) {}
 
 /** Reads one tree's entries. */
-export const tree = HttpApiEndpoint.get(
+export class GetTree extends Http.get<GetTree>()(
   "tree",
   "/repos/:owner/:repo/trees/:oid",
   {
@@ -68,11 +69,12 @@ export const tree = HttpApiEndpoint.get(
       entries: Schema.Array(TreeEntry),
     }),
     error: [RepoNotFound, ObjectNotFound, WrongObjectType, Unauthorized],
+    middleware: [Authenticated],
   },
-);
+) {}
 
 /** Reads a small blob as base64 JSON (≤ 1 MiB; 422 otherwise — use /raw). */
-export const blob = HttpApiEndpoint.get(
+export class GetBlob extends Http.get<GetBlob>()(
   "blob",
   "/repos/:owner/:repo/blobs/:oid",
   {
@@ -92,8 +94,9 @@ export const blob = HttpApiEndpoint.get(
       ObjectTooLarge,
       Unauthorized,
     ],
+    middleware: [Authenticated],
   },
-);
+) {}
 
 /**
  * The changed-file list of a commit vs its FIRST parent (empty tree for a
@@ -102,22 +105,23 @@ export const blob = HttpApiEndpoint.get(
  * `removed` + `added`; clients may pair entries whose old/new oids match
  * for a cheap exact-rename display.
  */
-export const diff = HttpApiEndpoint.get(
+export class GetDiff extends Http.get<GetDiff>()(
   "diff",
   "/repos/:owner/:repo/commits/:oid/diff",
   {
     params: RepoOidPath,
     success: CommitDiff,
     error: [RepoNotFound, ObjectNotFound, WrongObjectType, Unauthorized],
+    middleware: [Authenticated],
   },
-);
+) {}
 
 /**
  * Three-dot comparison: merge base, ahead/behind counts, head-side
  * commits, and the file diff of mergeBase..head. `base`/`head` accept a
  * refname (short or full) or a 40-hex oid; annotated tags are peeled.
  */
-export const compare = HttpApiEndpoint.get(
+export class Compare extends Http.get<Compare>()(
   "compare",
   "/repos/:owner/:repo/compare",
   {
@@ -137,14 +141,40 @@ export const compare = HttpApiEndpoint.get(
       NoMergeBase,
       Unauthorized,
     ],
+    middleware: [Authenticated],
   },
-);
+) {}
 
-/** The assembled `objects` group. */
-export default HttpApiGroup.make("objects")
-  .add(commit)
-  .add(log)
-  .add(tree)
-  .add(blob)
-  .add(diff)
-  .add(compare);
+/**
+ * A blob's bytes as an octet-stream, no size cap (the per-object 64 MiB
+ * ingest cap is the outer bound). Streams the response it builds.
+ */
+export class GetBlobRaw extends Http.get<GetBlobRaw>()(
+  "blobRaw",
+  "/repos/:owner/:repo/blobs/:oid/raw",
+  { middleware: [Authenticated] },
+) {}
+
+/**
+ * A file at `?path=` under `?ref=` (refname or oid; the default branch
+ * when absent), walked tree by tree, as an octet-stream.
+ */
+export class GetFile extends Http.get<GetFile>()(
+  "file",
+  "/repos/:owner/:repo/file",
+  { middleware: [Authenticated] },
+) {}
+
+/** The `objects` group, mounted at `/api/v1`. */
+export class Objects extends HttpApiGroup.make("objects")
+  .add(
+    GetCommit,
+    GetLog,
+    GetTree,
+    GetBlob,
+    GetDiff,
+    Compare,
+    GetBlobRaw,
+    GetFile,
+  )
+  .prefix("/api/v1") {}

@@ -17,7 +17,7 @@ import {
 } from "@/Git/index.ts";
 import { HasherWorkerLoader } from "@/Git/Hasher/index.ts";
 
-import { AuthenticateTest, PolicyTest, TEST_SECRET } from "./stack.ts";
+import { AuthenticatedTest, PolicyTest, TEST_SECRET } from "./stack.ts";
 export { TEST_SECRET };
 
 const GitObjects = Cloudflare.R2.Bucket("GitLoaderObjects", {
@@ -29,7 +29,7 @@ const GitLive = ServerLive.pipe(
   Layer.provide(RegistryDurableObject),
   Layer.provide(HasherWorkerLoader()),
   Layer.provide(BlobStoreR2(GitObjects)),
-  Layer.provide(AuthenticateTest),
+  Layer.provide(AuthenticatedTest),
   Layer.provide(PolicyTest),
 );
 

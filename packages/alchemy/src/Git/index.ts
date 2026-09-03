@@ -3,11 +3,17 @@
  * Durable Objects, and R2, built with Alchemy Effect-native Workers.
  *
  * Public surface:
- * - The REST contract ({@link GitApi}) with its schemas and tagged errors.
- * - Auth plumbing (credential parsing, token mint/hash helpers).
- * - The deployable pieces: {@link Server} + {@link ServerLive}, the {@link GitRepo} /
- *   {@link Registry} Durable Objects, and the building-block layers
- *   function (yielded inside your own `Alchemy.Stack`).
+ * - The HTTP contract ({@link GitApi}, aliased {@link Api}): every plane as
+ *   one `HttpApi`, each endpoint an `alchemy/Http` route class, each group a
+ *   class, with the schemas and tagged errors.
+ * - {@link Handlers}, the default implementation of every route, and the
+ *   per-route `*Live` Layers it is made of.
+ * - Auth: {@link Authenticated} (the middleware contract), {@link Caller},
+ *   {@link Policy}, and the shipped {@link AuthenticatedSecret} and
+ *   {@link PolicyOwners}.
+ * - The deployable pieces: {@link Server} + {@link ServerLive}, the
+ *   {@link GitRepo} / {@link Registry} Durable Objects, and the storage and
+ *   hasher blocks.
  *
  * Internals (wire-protocol codecs under `Protocol/`, storage under `Store/`,
  * alarm jobs under `Jobs/`) are deliberately not re-exported here — deep
@@ -17,10 +23,8 @@
 export * from "./Api.ts";
 export { GitApi as Api } from "./Api.ts";
 export {
-  Authenticate,
-  AuthenticateSecret,
   Authenticated,
-  AuthenticatedLive,
+  AuthenticatedSecret,
   Caller,
   currentCaller,
   isReadAction,
@@ -39,18 +43,9 @@ export {
   type Principal,
   type RefUpdate,
   type RepoContext,
+  type Resolve,
 } from "./Auth.ts";
-export {
-  GIT_WORKER_OPTIONS,
-  GitHubApi,
-  handlers,
-  RawApi,
-  ReposDurableObject,
-  Server,
-  ServerLive,
-  ProtocolApi,
-  type GitGroupName,
-} from "./Server.ts";
+export * from "./Server.ts";
 export {
   BlobStore,
   BlobStoreR2,
