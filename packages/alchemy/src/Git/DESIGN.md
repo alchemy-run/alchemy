@@ -574,7 +574,7 @@ export const GitApi = HttpApi.make("git-service")
 
 **Authorization matrix** (enforced in the Repo DO, §8): admin key → everything; repo `admin` token → its repo's write + token create/list/revoke + repo update/delete; `write` → its repo's reads + receive-pack + ref writes; `read` → its repo's reads + upload-pack only. Repo create/list-all/fork/import are admin-key-only.
 
-`GitAuthLive` follows `StateAuthLive` exactly: `Layer.effect(GitAuth, ...)` returning `{ bearer, basic }` handlers that wrap the endpoint effect with a `Credentials` provision (Basic: password field is the token, username ignored). Handlers pass `Credentials` to Repo-DO RPCs, which are the enforcement point. Mounting uses the canonical composition — `HttpApiBuilder.layer(GitApi)` + group handler layers + `GitAuthLive` + `[Etag.layer, HttpPlatformStub, Path.layer]` (the `HttpPlatform` stub copied verbatim from `StateStore/Api.ts:333`) + `Layer.merge(rawRoutes)` + `HttpRouter.toHttpEffect` assigned to `fetch`.
+`GitAuthLive` follows `StateAuthLive` exactly: `Layer.effect(GitAuth, ...)` returning `{ bearer, basic }` handlers that wrap the endpoint effect with a `Credentials` provision (Basic: password field is the token, username ignored). Handlers pass `Credentials` to Repo-DO RPCs, which are the enforcement point. Mounting uses the canonical composition — `HttpApiBuilder.layer(GitApi)` + group handler layers + `GitAuthLive` + `[Etag.layer, HttpPlatformStub, Path.layer]` (the `HttpPlatform` stub copied verbatim from `StateStore/Api.ts:333`) + `Layer.merge(rawApi)` + `HttpRouter.toHttpEffect` assigned to `fetch`.
 
 ---
 

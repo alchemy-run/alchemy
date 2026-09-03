@@ -2076,7 +2076,7 @@ const makeCore = Effect.gen(function* () {
 
   // GitHub REST v3 compatibility facade (`gh api`, Octokit): reuses the
   // same prelude + DO stubs; auth enforcement stays in the DO.
-  const githubRoutes = githubCompatRoutes({
+  const githubApi = githubCompatRoutes({
     prelude: rawRestPrelude,
     caller: (headers) =>
       Effect.map(authenticate(headers), (principal) => principal ?? null),
@@ -2222,14 +2222,14 @@ const makeCore = Effect.gen(function* () {
       GitMiddleware<Groups>
     >;
 
-  const protocolRoutes = Layer.mergeAll(
+  const protocolApi = Layer.mergeAll(
     HttpRouter.add("GET", "/:owner/:repo/info/refs", wireProxy),
     HttpRouter.add("POST", "/:owner/:repo/git-upload-pack", wireProxy),
     HttpRouter.add("POST", "/:owner/:repo/git-receive-pack", receivePackRoute),
     HttpRouter.add("POST", HASH_ROUTE, hashPartRoute),
   );
 
-  const rawRoutes = Layer.mergeAll(
+  const rawApi = Layer.mergeAll(
     HttpRouter.add(
       "GET",
       "/api/v1/repos/:owner/:repo/blobs/:oid/raw",
@@ -2238,7 +2238,7 @@ const makeCore = Effect.gen(function* () {
     HttpRouter.add("GET", "/api/v1/repos/:owner/:repo/file", fileRoute),
   );
 
-  return { handlers, protocolRoutes, rawRoutes, githubRoutes };
+  return { handlers, protocolApi, rawApi, githubApi };
 });
 
 /** Any `HttpApi` that carries the git groups (derive it from {@link GitApi}). */
@@ -2287,21 +2287,21 @@ export const handlers = <
  * can only send HTTP Basic, so an `HttpApi` middleware cannot wrap these.
  * Merge into the router beside your API.
  */
-export const ProtocolRoutes = Layer.unwrap(
-  Effect.map(Core, (core) => core.protocolRoutes),
+export const ProtocolApi = Layer.unwrap(
+  Effect.map(Core, (core) => core.protocolApi),
 ).pipe(Layer.provide(CoreLive));
 
 /**
  * The raw streaming reads outside schema land: blob bytes and a file at a
  * path under `/api/v1`. Authenticates through {@link Authenticate}.
  */
-export const RawRoutes = Layer.unwrap(
-  Effect.map(Core, (core) => core.rawRoutes),
+export const RawApi = Layer.unwrap(
+  Effect.map(Core, (core) => core.rawApi),
 ).pipe(Layer.provide(CoreLive));
 
 /** The GitHub REST v3 facade at `/api/v3`. Authenticates through {@link Authenticate}. */
-export const GithubRoutes = Layer.unwrap(
-  Effect.map(Core, (core) => core.githubRoutes),
+export const GithubApi = Layer.unwrap(
+  Effect.map(Core, (core) => core.githubApi),
 ).pipe(Layer.provide(CoreLive));
 
 const makeServer = Effect.gen(function* () {
@@ -2309,9 +2309,9 @@ const makeServer = Effect.gen(function* () {
   const api = GitApi.middleware(Authenticated);
   const fetch = yield* HttpApiBuilder.layer(api).pipe(
     Layer.provide(core.handlers(api).pipe(Layer.provide(AuthenticatedLive))),
-    Layer.merge(core.protocolRoutes),
-    Layer.merge(core.rawRoutes),
-    Layer.merge(core.githubRoutes),
+    Layer.merge(core.protocolApi),
+    Layer.merge(core.rawApi),
+    Layer.merge(core.githubApi),
     Layer.provide([Etag.layer, HttpPlatformStub, Path.layer]),
     HttpRouter.toHttpEffect,
     // Browser clients (e.g. the example SPA) call the REST plane

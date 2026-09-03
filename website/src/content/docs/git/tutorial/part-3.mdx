@@ -141,9 +141,9 @@ export const AppLive = Layer.effect(
     const api = yield* HttpApiBuilder.layer(AppApi).pipe(
       Layer.provide(Git.handlers(AppApi).pipe(Layer.provide(SessionLive))),
       Layer.provide(MeLive.pipe(Layer.provide(SessionLive))),
-      Layer.merge(Git.ProtocolRoutes), // git clients, through Authenticate
-      Layer.merge(Git.RawRoutes), // raw blob and file reads
-      Layer.merge(Git.GithubRoutes), // /api/v3 for gh and Octokit
+      Layer.merge(Git.ProtocolApi), // git clients, through Authenticate
+      Layer.merge(Git.RawApi), // raw blob and file reads
+      Layer.merge(Git.GithubApi), // /api/v3 for gh and Octokit
       Layer.provide(AuthenticateLive),
       Layer.provide([Etag.layer, HttpPlatformStub, Path.layer]),
       HttpRouter.toHttpEffect,

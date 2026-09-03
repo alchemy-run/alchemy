@@ -42,13 +42,13 @@ export {
 } from "./Auth.ts";
 export {
   GIT_WORKER_OPTIONS,
-  GithubRoutes,
+  GithubApi,
   handlers,
-  RawRoutes,
+  RawApi,
   ReposDurableObject,
   Server,
   ServerLive,
-  ProtocolRoutes,
+  ProtocolApi,
   type GitGroupName,
 } from "./Server.ts";
 export {
