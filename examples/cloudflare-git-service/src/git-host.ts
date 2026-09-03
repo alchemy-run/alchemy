@@ -140,7 +140,7 @@ export const AppLive = Layer.effect(
     const api = yield* HttpApiBuilder.layer(AppApi).pipe(
       Layer.provide(Git.handlers(AppApi).pipe(Layer.provide(SessionLive))),
       Layer.provide(MeLive.pipe(Layer.provide(SessionLive))),
-      Layer.merge(Git.WireRoutes), // /:owner/:repo.git/* — a git client can only send Basic
+      Layer.merge(Git.ProtocolRoutes), // /:owner/:repo.git/* — a git client can only send Basic
       Layer.merge(Git.RawRoutes), // raw blob and file reads
       Layer.merge(Git.GithubRoutes), // /api/v3, for gh and Octokit
       Layer.provide(AuthenticateLive),

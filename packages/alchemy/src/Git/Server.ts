@@ -2222,7 +2222,7 @@ const makeCore = Effect.gen(function* () {
       GitMiddleware<Groups>
     >;
 
-  const wireRoutes = Layer.mergeAll(
+  const protocolRoutes = Layer.mergeAll(
     HttpRouter.add("GET", "/:owner/:repo/info/refs", wireProxy),
     HttpRouter.add("POST", "/:owner/:repo/git-upload-pack", wireProxy),
     HttpRouter.add("POST", "/:owner/:repo/git-receive-pack", receivePackRoute),
@@ -2238,7 +2238,7 @@ const makeCore = Effect.gen(function* () {
     HttpRouter.add("GET", "/api/v1/repos/:owner/:repo/file", fileRoute),
   );
 
-  return { handlers, wireRoutes, rawRoutes, githubRoutes };
+  return { handlers, protocolRoutes, rawRoutes, githubRoutes };
 });
 
 /** Any `HttpApi` that carries the git groups (derive it from {@link GitApi}). */
@@ -2287,8 +2287,8 @@ export const handlers = <
  * can only send HTTP Basic, so an `HttpApi` middleware cannot wrap these.
  * Merge into the router beside your API.
  */
-export const WireRoutes = Layer.unwrap(
-  Effect.map(Core, (core) => core.wireRoutes),
+export const ProtocolRoutes = Layer.unwrap(
+  Effect.map(Core, (core) => core.protocolRoutes),
 ).pipe(Layer.provide(CoreLive));
 
 /**
@@ -2309,7 +2309,7 @@ const makeServer = Effect.gen(function* () {
   const api = GitApi.middleware(Authenticated);
   const fetch = yield* HttpApiBuilder.layer(api).pipe(
     Layer.provide(core.handlers(api).pipe(Layer.provide(AuthenticatedLive))),
-    Layer.merge(core.wireRoutes),
+    Layer.merge(core.protocolRoutes),
     Layer.merge(core.rawRoutes),
     Layer.merge(core.githubRoutes),
     Layer.provide([Etag.layer, HttpPlatformStub, Path.layer]),

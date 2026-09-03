@@ -1,6 +1,6 @@
 ---
 title: Server
-description: The HTTP planes as pieces. Git.Api and Git.handlers for the REST groups, WireRoutes, RawRoutes, and GithubRoutes for the rest, and ServerLive as the one-line composition.
+description: The HTTP planes as pieces. Git.Api and Git.handlers for the REST groups, ProtocolRoutes, RawRoutes, and GithubRoutes for the rest, and ServerLive as the one-line composition.
 ---
 
 `Git.Server` is the composed HTTP surface behind one `fetch`, and
@@ -48,7 +48,7 @@ the compiler asks for `Session`'s implementation:
 Layer.provide(Git.handlers(AppApi).pipe(Layer.provide(SessionLive)))
 ```
 
-**`Git.WireRoutes`** is the git wire protocol plus the push pipeline's
+**`Git.ProtocolRoutes`** is the git wire protocol plus the push pipeline's
 internal hash route, **`Git.RawRoutes`** the streaming blob and file
 reads under `/api/v1`, and **`Git.GithubRoutes`** the facade under
 `/api/v3`. They are `HttpRouter` Layers merged beside the API, and
@@ -59,7 +59,7 @@ client can only send HTTP Basic:
 const api = yield* HttpApiBuilder.layer(AppApi).pipe(
   Layer.provide(Git.handlers(AppApi).pipe(Layer.provide(SessionLive))),
   Layer.provide(MeLive.pipe(Layer.provide(SessionLive))),
-  Layer.merge(Git.WireRoutes),
+  Layer.merge(Git.ProtocolRoutes),
   Layer.merge(Git.RawRoutes),
   Layer.merge(Git.GithubRoutes),
   Layer.provide(AuthenticateLive),

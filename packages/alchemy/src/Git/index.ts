@@ -48,7 +48,7 @@ export {
   ReposDurableObject,
   Server,
   ServerLive,
-  WireRoutes,
+  ProtocolRoutes,
   type GitGroupName,
 } from "./Server.ts";
 export {
