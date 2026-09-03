@@ -33,9 +33,13 @@ export interface IngressRoute {
   readonly fqn?: string;
   /** Resource type (`Cloudflare.Worker`, `Command.Dev`, …). */
   readonly type?: string;
+  /** Public URL exposing this host (a dev relay), when one is connected. */
+  readonly publicUrl?: string;
 }
 
 const CONTROLLER_PREFIX = "/cdn-cgi/ingress/";
+/** Header a trusted local hop sets to pick the route regardless of `Host`. */
+const ROUTE_HINT_HEADER = "x-alchemy-ingress-host";
 
 export default {
   fetch(request: Request, env: Env): Promise<Response> {
@@ -129,7 +133,13 @@ export class Ingress extends DurableObject<Env> {
   }
 
   private async handleRouted(request: Request, url: URL): Promise<Response> {
-    const host = normalizeHost(request.headers.get("host") ?? url.host);
+    // A relay connector in front of the ingress names the local host it
+    // wants explicitly (its own `Host` is the public one, and it may not be
+    // able to override the header at all) — honour that first.
+    const hinted = request.headers.get(ROUTE_HINT_HEADER);
+    const host = normalizeHost(
+      hinted ?? request.headers.get("host") ?? url.host,
+    );
     const route = this.routes.get(host);
     if (route) {
       return await this.forward(request, url, route);
@@ -156,6 +166,7 @@ export class Ingress extends DurableObject<Env> {
     proxied.pathname = original.pathname;
     proxied.search = original.search;
     const headers = new Headers(request.headers);
+    headers.delete(ROUTE_HINT_HEADER);
     // Preserve what a hop in front of us said (a proxy reports the public
     // hostname) — otherwise the public host is the one the client dialed.
     if (!headers.has("x-forwarded-host")) {
@@ -200,11 +211,17 @@ export class Ingress extends DurableObject<Env> {
     const items = routes
       .map(([host, route]) => {
         const href = `${url.protocol}//${host}${port ? `:${port}` : ""}`;
+        const publicLink = route.publicUrl
+          ? `<a class="public" href="${escapeHtml(route.publicUrl)}">${escapeHtml(
+              route.publicUrl,
+            )}</a>`
+          : "";
         return `<li>
   <div class="name">${escapeHtml(route.label ?? host)}<span class="type">${escapeHtml(
     route.type ?? "",
   )}</span></div>
   <a href="${escapeHtml(href)}">${escapeHtml(href)}</a>
+  ${publicLink}
   <div class="upstream">→ ${escapeHtml(route.upstream)}</div>
 </li>`;
       })
@@ -304,13 +321,14 @@ const renderPage = (title: string, body: string): string => `<!doctype html>
   .type { font-weight: 400; color: #6b6b70; font-size: .8rem; margin-left: .5rem; }
   a { color: #1a5fd6; text-decoration: none; word-break: break-all; }
   a:hover { text-decoration: underline; }
+  .public { display: block; color: #0b7a4b; }
   .upstream, .muted { color: #6b6b70; font-size: .85rem; }
   code { font: .9em ui-monospace, SFMono-Regular, Menlo, monospace; }
   .hosts li { margin: .25rem 0; }
   @media (prefers-color-scheme: dark) {
     body { background: #111113; color: #ececef; }
     .routes li { background: #1b1b1f; border-color: #2b2b31; }
-    a { color: #7aa7ff; }
+    a { color: #7aa7ff; } .public { color: #4cc38a; }
     .type, .upstream, .muted { color: #8c8c93; }
   }
 </style>

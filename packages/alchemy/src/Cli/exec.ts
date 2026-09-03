@@ -77,6 +77,15 @@ const runDev = Effect.fn(function* (options: DevOptions) {
     ingress: {
       domain: options.domain,
       port: options.port,
+      relay: options.relay
+        ? {
+            url: options.relay,
+            namespace:
+              options.relayNamespace ??
+              options.stage.toLowerCase().replace(/[^a-z0-9-]+/g, "-"),
+            token: process.env.ALCHEMY_DEV_RELAY_TOKEN,
+          }
+        : undefined,
     },
   }).pipe(renderPlanning({ operation: "Dev", stage: options.stage }));
   const once = yield* devOnce;

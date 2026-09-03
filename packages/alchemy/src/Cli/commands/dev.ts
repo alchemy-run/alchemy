@@ -58,6 +58,22 @@ const port = Flag.integer("port").pipe(
   Flag.withDefault(DEFAULT_INGRESS_PORT),
 );
 
+const relay = Flag.string("relay").pipe(
+  Flag.withDescription(
+    "Dev relay to expose local resources through, e.g. https://dev.alchemy.run — one connection, stable https://<name>.<namespace>.<relay> URLs. Token from $ALCHEMY_DEV_RELAY_TOKEN.",
+  ),
+  Flag.optional,
+  Flag.map(Option.getOrUndefined),
+);
+
+const relayNamespace = Flag.string("relay-namespace").pipe(
+  Flag.withDescription(
+    "Namespace to claim on the relay (hosts are <name>.<namespace>.<relay>). Default: the stage, kebab-cased",
+  ),
+  Flag.optional,
+  Flag.map(Option.getOrUndefined),
+);
+
 export const devCommand = Command.make(
   "dev",
   {
@@ -69,6 +85,8 @@ export const devCommand = Command.make(
     profile,
     domain,
     port,
+    relay,
+    relayNamespace,
   },
   Effect.fn(
     function* (rawArgs) {

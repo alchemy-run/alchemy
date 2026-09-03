@@ -15,6 +15,10 @@ import {
   missingHosts,
   readHostsFile,
 } from "./HostsFile.ts";
+import {
+  RelayConnector,
+  type RelayConnection,
+} from "./Relay/RelayConnector.ts";
 
 export type { DevIngressOptions } from "../AlchemyContext.ts";
 
@@ -51,6 +55,8 @@ export interface Exposure {
   readonly url: string;
   /** Every URL serving the resource, most public first. */
   readonly urls: string[];
+  /** The dev-relay URL (`https://<name>.<namespace>.<relay domain>`), when connected. */
+  readonly relayUrl?: string;
 }
 
 /**
@@ -151,8 +157,8 @@ export const layer = Layer.effect(
     const existing = instances.get(key);
     if (existing !== undefined) return yield* existing;
     // The runtime services of the FIRST session build the shared instance;
-    // the ingress is a process-wide singleton itself.
-    const services = yield* Effect.context<Ingress.Ingress>();
+    // the ingress and relay connector are process-wide singletons themselves.
+    const services = yield* Effect.context<Ingress.Ingress | RelayConnector>();
     const detached = yield* Scope.make();
     const instance = yield* Effect.cached(
       make(options).pipe(
@@ -170,6 +176,7 @@ const make = Effect.fn("DevIngress.make")(function* (
   options: DevIngressOptions,
 ) {
   const ingress = yield* Ingress.Ingress;
+  const relays = yield* RelayConnector;
   const fs = yield* Effect.serviceOption(FileSystem.FileSystem);
 
   // Serve eagerly, before any resource's own proxy claims a port, so the
@@ -221,6 +228,26 @@ const make = Effect.fn("DevIngress.make")(function* (
   yield* Effect.logDebug(
     `Dev ingress serving ${served.url} (domain ${options.domain})`,
   );
+
+  // One relay connection for the whole session: the relay routes
+  // `<label>.<namespace>.<domain>` down it, and the connector answers from
+  // this ingress with the matching local host as the route hint. A relay
+  // that can't be reached is a warning, not a dead dev session.
+  const relay: RelayConnection | undefined = options.relay
+    ? yield* relays
+        .connect({
+          ...options.relay,
+          target: served.url,
+          localHost: (label) => `${label}.${options.domain}`,
+        })
+        .pipe(
+          Effect.catchCause((cause) =>
+            Effect.logWarning(
+              `Could not connect to the dev relay at ${options.relay!.url}; serving locally only.\n${cause}`,
+            ).pipe(Effect.as(undefined)),
+          ),
+        )
+    : undefined;
 
   const registrations = new Map<string, Registration>();
   const hostOwners = new Map<string, string>();
@@ -275,12 +302,15 @@ const make = Effect.fn("DevIngress.make")(function* (
     registrations.set(input.fqn, registration);
     hostOwners.set(host, input.fqn);
 
+    const label = host.slice(0, -(options.domain.length + 1));
+    const relayUrl = relay?.publicUrl(label);
     yield* served
       .set(host, {
         upstream: input.upstream.toString(),
         label: input.fqn.split(FQN_SEPARATOR).at(-1),
         fqn: input.fqn,
         type: input.type,
+        publicUrl: relayUrl,
       })
       .pipe(
         Effect.catchCause((cause) =>
@@ -291,12 +321,16 @@ const make = Effect.fn("DevIngress.make")(function* (
       );
     yield* hostsFileCheck(host);
 
-    const urls = [hostUrl(host, advertisePort)];
+    // Public first: the relay URL is stable across restarts.
+    const urls = [
+      ...(relayUrl ? [relayUrl] : []),
+      hostUrl(host, advertisePort),
+    ];
     if (advertisePort === undefined && served.port !== 80) {
       // Forwarded privileged port: the served port still works too.
       urls.push(hostUrl(host, served.port));
     }
-    return { host, url: urls[0]!, urls } satisfies Exposure;
+    return { host, url: urls[0]!, urls, relayUrl } satisfies Exposure;
   }, lock.withPermits(1));
 
   const unexpose = Effect.fn("DevIngress.unexpose")(function* (
@@ -330,8 +364,13 @@ const probeForward = (port: number, id: string) =>
   );
 
 /**
- * {@link layer} with its runtime dependency, the workerd-backed ingress.
- * Needs `AlchemyContext` plus the platform services (FileSystem, Path).
+ * {@link layer} with its runtime dependencies: the workerd-backed ingress
+ * and the relay connector. Needs `AlchemyContext` plus the platform
+ * services (FileSystem, Path).
  */
 export const layerWithRuntime = () =>
-  layer.pipe(Layer.provide(Ingress.layer()));
+  layer.pipe(
+    Layer.provide(Layer.mergeAll(Ingress.layer(), RelayConnectorLayer)),
+  );
+
+import { layer as RelayConnectorLayer } from "./Relay/RelayConnector.ts";

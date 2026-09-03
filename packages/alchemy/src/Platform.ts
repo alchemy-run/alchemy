@@ -29,7 +29,7 @@ import {
   sanitizeKey,
   type BaseRuntimeContext,
 } from "./RuntimeContext.ts";
-import { Self } from "./Self.ts";
+import { Self, type Self as SelfService } from "./Self.ts";
 import { ServerHost, type ProcessContext } from "./Server/Process.ts";
 import type { Stack, StackServices } from "./Stack.ts";
 import type { Stage } from "./Stage.ts";
@@ -196,7 +196,11 @@ export interface Platform<
       const Id extends string,
       Shape extends MainShape,
       PropsReq = never,
-      InitReq extends Services | PlatformServices | Resource = never,
+      // Unconstrained: an init that binds another provider's resources
+      // (a Fly Service issuing certificates through Cloudflare DNS) needs
+      // that provider's collection, which the Stack supplies. The platform
+      // itself provides `Self` and its own services while building the init.
+      InitReq = never,
     >(
       id: Id,
       props:
@@ -212,7 +216,10 @@ export interface Platform<
       never,
       | Resource["Providers"]
       | Exclude<PropsReq, Services | PlatformServices | Resource>
-      | Exclude<InitReq, Services | PlatformServices | Resource>
+      | Exclude<
+          InitReq,
+          Services | PlatformServices | Resource | SelfService<any>
+        >
     > &
       Named<Id> & {
         new (
@@ -224,10 +231,7 @@ export interface Platform<
       id: Id,
     ): Effect.Effect<Resource & Rpc<Self>, never, Resource["Providers"]> &
       Named<Id> & {
-        make<
-          PropsReq = never,
-          InitReq extends Services | PlatformServices | Resource = never,
-        >(
+        make<PropsReq = never, InitReq = never>(
           props:
             | InputProps<InlineProps>
             | Effect.Effect<
@@ -240,7 +244,10 @@ export interface Platform<
           Self,
           never,
           | Resource["Providers"]
-          | Exclude<PropsReq | InitReq, Services | PlatformServices | Resource>
+          | Exclude<
+              PropsReq | InitReq,
+              Services | PlatformServices | Resource | SelfService<any>
+            >
         >;
         new (_: never): BaseShape & Named<Id> & Tag<Resource["Type"]>;
       };
