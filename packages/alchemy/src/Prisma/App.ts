@@ -21,6 +21,7 @@ import { destroyApp } from "./ComputeLifecycle.ts";
 import { ensureAppImmutableIdentity } from "./Internal/AppIdentity.ts";
 import type { Project } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
+import { desiredBranchId } from "./Branches.ts";
 import {
   concreteIdsChanged,
   isInputObject,
@@ -125,45 +126,6 @@ export interface App extends Resource<
  */
 export const App = Resource<App>("Prisma.App");
 
-const desiredBranchId = Effect.fn(function* (
-  client: PrismaManagementClient,
-  projectId: string,
-  props: Pick<AppProps, "branchId" | "branchGitName">,
-) {
-  if (props.branchId !== undefined && !isPrismaDevId(props.branchId)) {
-    return { resolved: true as const, id: props.branchId };
-  }
-  if (props.branchGitName !== undefined) {
-    const branches = yield* client.listBranches(projectId, {
-      gitName: props.branchGitName,
-      limit: 100,
-    });
-    if (branches.length > 1) {
-      return yield* Effect.fail(
-        new Error(
-          `Prisma returned multiple branches named '${props.branchGitName}' in project '${projectId}'; refusing an ambiguous App match.`,
-        ),
-      );
-    }
-    return branches[0]
-      ? { resolved: true as const, id: branches[0].id }
-      : { resolved: false as const };
-  }
-  const branches = yield* client.listBranches(projectId, { limit: 100 });
-  const defaults = branches.filter((branch) => branch.isDefault);
-  if (defaults.length > 1) {
-    return yield* Effect.fail(
-      new Error(
-        `Prisma returned multiple default branches for project '${projectId}'; refusing an ambiguous App match.`,
-      ),
-    );
-  }
-  const defaultBranch = defaults[0];
-  return defaultBranch
-    ? { resolved: true as const, id: defaultBranch.id }
-    : { resolved: false as const };
-});
-
 const createDisplayName = (id: string, displayName: string | undefined) =>
   displayName === undefined
     ? createPhysicalName({ id })
@@ -180,13 +142,13 @@ const findApp = Effect.fn(function* (
     limit: 100,
   })).filter((app) => app.name === displayName);
   if (candidates.length === 0) return undefined;
-  const branch = yield* desiredBranchId(client, projectId, props);
-  if (!branch.resolved) return undefined;
-  const matches = candidates.filter((app) => app.branchId === branch.id);
+  const branchId = yield* desiredBranchId(client, projectId, props);
+  if (branchId === undefined) return undefined;
+  const matches = candidates.filter((app) => app.branchId === branchId);
   if (matches.length > 1) {
     return yield* Effect.fail(
       new Error(
-        `Prisma returned multiple Apps named '${displayName}' on branch '${branch.id}' in project '${projectId}'; refusing an ambiguous ownership match.`,
+        `Prisma returned multiple Apps named '${displayName}' on branch '${branchId}' in project '${projectId}'; refusing an ambiguous ownership match.`,
       ),
     );
   }
@@ -214,11 +176,11 @@ const branchNeedsSync = Effect.fn(function* (
     return app.branchId !== props.branchId;
   }
   if (props.branchGitName === undefined) {
-    const branch = yield* desiredBranchId(client, projectId, props);
-    return !branch.resolved || app.branchId !== branch.id;
+    const branchId = yield* desiredBranchId(client, projectId, props);
+    return branchId === undefined || app.branchId !== branchId;
   }
-  const branch = yield* desiredBranchId(client, projectId, props);
-  return !branch.resolved || branch.id !== app.branchId;
+  const branchId = yield* desiredBranchId(client, projectId, props);
+  return branchId === undefined || branchId !== app.branchId;
 });
 
 const validateAppProps = (props: AppProps) =>
@@ -300,12 +262,12 @@ const ProviderLive = () =>
           if (output.name !== resolvedUpdateProps.displayName) {
             return { action: "update" } as const;
           }
-          const branch = yield* desiredBranchId(
+          const branchId = yield* desiredBranchId(
             client,
             newProjectId ?? output.projectId,
             resolvedUpdateProps,
           );
-          return !branch.resolved || output.branchId !== branch.id
+          return branchId === undefined || output.branchId !== branchId
             ? ({ action: "update" } as const)
             : undefined;
         }),
@@ -338,8 +300,8 @@ const ProviderLive = () =>
           yield* validateAppProps(news);
           const projectId = yield* resolveProjectId(news.project);
           const displayName = yield* createDisplayName(id, news.displayName);
-          const branch = yield* desiredBranchId(client, projectId, news);
-          if (!branch.resolved) {
+          const branchId = yield* desiredBranchId(client, projectId, news);
+          if (branchId === undefined) {
             return yield* Effect.fail(
               new Error(
                 news.branchGitName === undefined
@@ -364,7 +326,7 @@ const ProviderLive = () =>
                 projectId,
                 displayName,
                 regionId: news.regionId,
-                branchId: branch.id,
+                branchId: branchId,
                 branchGitName: undefined,
               })
               .pipe(
@@ -405,14 +367,14 @@ const ProviderLive = () =>
           if (app.name !== displayName || needsBranchSync) {
             app = yield* client.updateApp(app.id, {
               displayName,
-              branchId: branch.id,
+              branchId: branchId,
               branchGitName: undefined,
             });
           }
-          if (app.name !== displayName || app.branchId !== branch.id) {
+          if (app.name !== displayName || app.branchId !== branchId) {
             return yield* Effect.fail(
               new Error(
-                `Prisma App '${app.id}' did not converge to display name '${displayName}' and branch '${branch.id ?? "null"}'. Refusing to persist mismatched App state.`,
+                `Prisma App '${app.id}' did not converge to display name '${displayName}' and branch '${branchId ?? "null"}'. Refusing to persist mismatched App state.`,
               ),
             );
           }
