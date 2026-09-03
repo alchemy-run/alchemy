@@ -454,8 +454,8 @@ export default defineConfig({
         {
           label: "Core",
           items: [
-            { label: "What is Alchemy?", link: "/what-is-alchemy" },
             { label: "Getting started", link: "/getting-started" },
+            { label: "What is Alchemy?", link: "/what-is-alchemy" },
             {
               label: "Infrastructure as Code",
               items: [

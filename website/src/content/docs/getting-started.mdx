@@ -1,12 +1,9 @@
 ---
 title: Getting started
 description: Install Alchemy and create your first Stack in under two minutes.
-prev:
+next:
   link: /what-is-alchemy
   label: What is Alchemy?
-next:
-  link: /cloudflare/tutorial/part-2
-  label: "Tutorial Part 2: Add a Worker"
 ---
 
 import Terminal from "../../components/Terminal.astro";
@@ -14,6 +11,12 @@ import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
 import { effectVersion } from "../../versions";
 
 export const pkgs = `"alchemy@latest" "effect@${effectVersion}" "@effect/platform-bun@${effectVersion}" "@effect/platform-node@${effectVersion}"`;
+
+:::tip
+Want the idea before the install? [What is Alchemy?](/what-is-alchemy)
+explains the model in a few minutes. Otherwise, read on and it's the
+next page.
+:::
 
 ## Prerequisites
 
@@ -134,20 +137,26 @@ See [Profiles](/environments/profiles) for the full picture.
 
 ## Where next
 
-You just completed [Part 1](/cloudflare/tutorial/part-1) of the
-tutorial. The next part adds a Worker that reads and writes the
-bucket, and introduces the ideas the rest of the docs build on.
+You have a live Stack. [What is Alchemy?](/what-is-alchemy) explains
+what just happened and the model the rest of the docs build on. Then
+[Part 2](/cloudflare/tutorial/part-2) of the tutorial picks up from
+this exact Stack and adds a Worker.
 
 <div class="next-steps">
 
+<a href="/what-is-alchemy" class="next-card">
+  <strong>What is Alchemy? — recommended</strong>
+  <span>Infrastructure as Code built in Effect, with Infrastructure as Effects on top.</span>
+</a>
+
 <a href="/cloudflare/tutorial/part-2" class="next-card">
-  <strong>Tutorial Part 2: Add a Worker — recommended</strong>
+  <strong>Tutorial Part 2: Add a Worker</strong>
   <span>Bind the Bucket to a Worker and serve it over HTTP.</span>
 </a>
 
 <a href="/infrastructure-as-effects" class="next-card">
   <strong>Infrastructure as Effects</strong>
-  <span>The model behind it: Runtimes, Bindings, and Layers.</span>
+  <span>The full model: Runtimes, Bindings, and Layers.</span>
 </a>
 
 <a href="/cloudflare" class="next-card">
