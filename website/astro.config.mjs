@@ -465,10 +465,6 @@ export default defineConfig({
                   label: "Resources",
                   link: "/infrastructure-as-code/resource",
                 },
-                {
-                  label: "Renaming Resources",
-                  link: "/infrastructure-as-code/renaming",
-                },
                 { label: "Actions", link: "/infrastructure-as-code/action" },
                 {
                   label: "Inputs & Outputs",
@@ -479,8 +475,12 @@ export default defineConfig({
                   link: "/infrastructure-as-code/references",
                 },
                 {
-                  label: "Resource lifecycle",
+                  label: "Resource Lifecycle",
                   link: "/infrastructure-as-code/resource-lifecycle",
+                },
+                {
+                  label: "Renaming Resources",
+                  link: "/infrastructure-as-code/renaming",
                 },
                 {
                   label: "Providers",
@@ -491,7 +491,7 @@ export default defineConfig({
                   link: "/infrastructure-as-code/custom-provider",
                 },
                 {
-                  label: "Local Providers",
+                  label: "Local Provider",
                   link: "/infrastructure-as-code/local-provider",
                 },
               ],
