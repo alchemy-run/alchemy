@@ -1,0 +1,83 @@
+---
+title: vinext
+description: "Deploy a vinext app to Fly with Fly.Website.Vinext — vinext build plus a Node startProdServer Machine, and vinext dev under alchemy dev."
+sidebar:
+  order: 9.6
+---
+
+import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
+
+export const devDeps = "@alchemy.run/frontend-frameworks";
+
+`Fly.Website.Vinext` deploys a [vinext](https://vinext.dev) app to
+Fly as a long-running Node process. It runs `vinext build`, then
+vinext's production server (`startProdServer`) on port 3000:
+
+- one [`Fly.App`](/fly/compute/apps) (created if `app` is omitted)
+  and a [`Fly.Service`](/fly/compute/services) running Node on a
+  Machine
+- `dist/` baked into the image; `vinext` installed unbundled
+
+This is **not** OpenNext and **not** the Cloudflare Worker path.
+Server components and route handlers read `process.env`.
+
+## Install
+
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun">
+    <Code code={`bun add -d ${devDeps}`} lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code={`npm install -D ${devDeps}`} lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code={`pnpm add -D ${devDeps}`} lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code={`yarn add -D ${devDeps}`} lang="sh" />
+  </TabItem>
+</Tabs>
+
+Register `vinext()` in `vite.config.ts`. Do **not** add
+`@cloudflare/vite-plugin` or `@vinext/cloudflare` adapters.
+
+ISR / `"use cache"` persist in Redis — not Cloudflare KV. Pass
+`Fly.Redis` on the Website; Alchemy writes `REDIS_URL` as an App
+secret. Register `vinext({ ...alchemy() })` — the Node build bakes the Redis
+adapter. Missing URL (`alchemy dev`) falls back to memory.
+
+```typescript
+import { alchemy } from "@alchemy.run/frontend-frameworks/vinext/cache";
+import { defineConfig } from "vite";
+import vinext from "vinext";
+
+export default defineConfig({
+  plugins: [vinext({ prerender: true, ...alchemy() })],
+});
+```
+
+```typescript
+import * as Fly from "alchemy/Fly";
+
+const redis = yield* Fly.Redis("Cache", { eviction: true });
+export const Website = Fly.Website.Vinext("Website", {
+  redis,
+  env: {
+    GREETING: "Hello from vinext on Fly!",
+  },
+});
+```
+
+```typescript
+// app/api/hello/route.ts
+export function GET() {
+  return Response.json({ hello: "world" });
+}
+```
+
+`alchemy dev` runs `vinext dev`; no Fly resources are created.
+
+## Where next
+
+- [`Fly.Website.Vinext` reference](/providers/fly/website/vinext)
+- [vinext on Cloudflare](/cloudflare/frontend/vinext)

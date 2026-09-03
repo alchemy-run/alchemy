@@ -1,0 +1,40 @@
+{
+  "name": "cloudflare-website-vinext",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "alchemy dev",
+    "deploy": "alchemy deploy",
+    "destroy": "alchemy destroy",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "alchemy": "workspace:*",
+    "effect": "catalog:effect",
+    "react": "catalog:frontend",
+    "react-dom": "catalog:frontend",
+    "react-server-dom-webpack": "catalog:frontend",
+    "vinext": "^1.0.0-beta.8"
+  },
+  "devDependencies": {
+    "@alchemy.run/frontend-frameworks": "workspace:*",
+    "@cloudflare/workers-types": "catalog:cloudflare",
+    "@tailwindcss/vite": "catalog:frontend",
+    "@types/react": "catalog:frontend",
+    "@types/react-dom": "catalog:frontend",
+    "@vitejs/plugin-react": "catalog:frontend",
+    "@vitejs/plugin-rsc": "^0.5.34",
+    "tailwindcss": "catalog:frontend",
+    "typescript": "catalog:frontend",
+    "vite": "catalog:build"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alchemy-run/alchemy.git",
+    "directory": "examples/cloudflare-website-vinext"
+  }
+}

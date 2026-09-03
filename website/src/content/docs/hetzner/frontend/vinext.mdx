@@ -1,0 +1,85 @@
+---
+title: vinext
+description: "Deploy a vinext app to Hetzner with Hetzner.Website.Vinext — vinext build plus a Node startProdServer systemd unit, and vinext dev under alchemy dev."
+sidebar:
+  order: 9.6
+---
+
+import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
+
+export const devDeps = "@alchemy.run/frontend-frameworks";
+
+`Hetzner.Website.Vinext` deploys a [vinext](https://vinext.dev) app
+to a Hetzner Cloud Server. It runs `vinext build`, then a
+long-running `startProdServer` systemd unit on port 3000:
+
+- one [`Hetzner.Server`](/hetzner/compute/servers) (default `cpx12`
+  / `ubuntu-24.04` / `fsn1` when `server` is omitted) and a
+  [`Hetzner.Service`](/hetzner/compute/services) as a systemd unit
+- live URL `http://{ipv4}:3000`
+- `dist/` packed into the unit archive; `vinext` installed on the
+  unit with `npm install`
+
+This is **not** OpenNext and **not** the Cloudflare Worker path.
+Server components and route handlers read `process.env`.
+
+## Install
+
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun">
+    <Code code={`bun add -d ${devDeps}`} lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code={`npm install -D ${devDeps}`} lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code={`pnpm add -D ${devDeps}`} lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code={`yarn add -D ${devDeps}`} lang="sh" />
+  </TabItem>
+</Tabs>
+
+Register `vinext()` in `vite.config.ts`. Do **not** add
+`@cloudflare/vite-plugin` or `@vinext/cloudflare` adapters.
+
+ISR / `"use cache"` default to in-process memory. For a durable store,
+run Redis next to the server and set `REDIS_URL` on the Website.
+Register `vinext({ ...alchemy() })` — the Node build bakes the Redis
+adapter. Missing URL falls back to memory.
+
+```typescript
+import { alchemy } from "@alchemy.run/frontend-frameworks/vinext/cache";
+import { defineConfig } from "vite";
+import vinext from "vinext";
+
+export default defineConfig({
+  plugins: [vinext({ prerender: true, ...alchemy() })],
+});
+```
+
+```typescript
+import * as Hetzner from "alchemy/Hetzner";
+
+export const Website = Hetzner.Website.Vinext("Website", {
+  env: {
+    GREETING: "Hello from vinext on Hetzner!",
+    REDIS_URL: "redis://127.0.0.1:6379",
+  },
+});
+```
+
+```typescript
+// app/api/hello/route.ts
+export function GET() {
+  return Response.json({ hello: "world" });
+}
+```
+
+`alchemy dev` runs `vinext dev`; no Hetzner resources are created.
+`domain` requires an existing `Hetzner.Zone`.
+
+## Where next
+
+- [`Hetzner.Website.Vinext` reference](/providers/hetzner/website/vinext)
+- [vinext on Cloudflare](/cloudflare/frontend/vinext)

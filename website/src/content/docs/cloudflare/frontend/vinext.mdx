@@ -1,0 +1,79 @@
+---
+title: vinext
+description: Deploy a vinext App Router app to Cloudflare Workers with Cloudflare.Website.Vinext — Vite plus the Next.js API, KV-backed ISR, and no wrangler.jsonc.
+sidebar:
+  order: 9.6
+---
+
+`Cloudflare.Website.Vinext` deploys a [vinext](https://vinext.dev) app
+as a Cloudflare Worker. vinext reimplements the Next.js API surface on
+Vite. This is **not** `Cloudflare.Website.Nextjs`, which runs
+`next build` through OpenNext.
+
+Alchemy loads the project's `vite.config.ts` (it must register
+`vinext()`), injects the Cloudflare Vite plugin, deploys the RSC
+Worker plus client assets, prerenders routes, and seeds
+`VINEXT_KV_CACHE` for ISR / `"use cache"`. There is no
+`wrangler.jsonc` and no `@vinext/cloudflare deploy`.
+
+Install `vinext`, `@vitejs/plugin-rsc`, and `react-server-dom-webpack`
+in the app. Do **not** also register `@cloudflare/vite-plugin` —
+Alchemy injects its own (`vite-plugin-cloudflare:alchemy`; vinext
+matches the prefix) and no-ops the official plugin if it is still in
+the Vite config. ISR uses Alchemy's KV data-cache adapter, not
+`@vinext/cloudflare`.
+
+## Declare the Website
+
+```typescript
+// alchemy.run.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+
+export const Website = Cloudflare.Website.Vinext("Website", {
+  env: {
+    GREETING: "Hello from vinext on Cloudflare!",
+  },
+});
+
+export type WebsiteEnv = Cloudflare.InferEnv<typeof Website>;
+```
+
+Do not bind `VINEXT_KV_CACHE` or `CF_VERSION_METADATA` in `env`.
+`Website.Vinext` provisions the KV namespace (and seeds it after
+prerender), enables Workers Cache, and binds version metadata. There
+is no `wrangler.jsonc`.
+
+`Website.Vinext` provisions `VINEXT_KV_CACHE` and sets
+`ALCHEMY_VINEXT_CACHE=kv` during the Worker build. Spread `alchemy()`
+into `vinext()` so Alchemy's KV data-cache adapter is baked — do not
+put Redis or S3 adapters here. Deploy uploads prerender pairs into KV
+and logs the entry count. Missing binding (local prerender) falls
+back to memory.
+
+```typescript
+import { alchemy } from "@alchemy.run/frontend-frameworks/vinext/cache";
+import { defineConfig } from "vite";
+import vinext from "vinext";
+
+export default defineConfig({
+  plugins: [vinext({ prerender: true, ...alchemy() })],
+});
+```
+
+Bindings on the resource are available as
+`import { env } from "cloudflare:workers"` in server components,
+route handlers, and server actions.
+
+## Node and other platforms
+
+The `worker/index.ts` + `vinext/server/fetch-handler` template is
+Cloudflare-only. For a long-running Node process (Railway, Fly,
+Hetzner) or Lambda (AWS), use `Website.Vinext` on that platform —
+`vinext build` plus `startProdServer` / a Lambda fetch wrap, with
+`process.env` instead of `cloudflare:workers`. ISR on those platforms
+uses Redis or S3 (via `vinext({ ...alchemy() })`), not `VINEXT_KV_CACHE`.
+
+- [`AWS.Website.Vinext`](/aws/frontend/vinext)
+- [`Railway.Website.Vinext`](/railway/frontend/vinext)
+- [`Fly.Website.Vinext`](/fly/frontend/vinext)
+- [`Hetzner.Website.Vinext`](/hetzner/frontend/vinext)
