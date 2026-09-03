@@ -192,4 +192,27 @@ describe("registerOxc", () => {
     // reject: the loader neither transpiles nor rewrites it.
     expect(filtered).toBe("wsdep: ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING");
   });
+
+  it("unregisters one-shot imports after success and failure", () => {
+    const root = makeProject();
+    write(path.join(root, "src/broken.ts"), "export const = ;\n");
+    const result = runNode(
+      root,
+      `
+      const { tsImport } = await import(${JSON.stringify(registerUrl)});
+      if (process.sourceMapsEnabled) throw new Error("source maps unexpectedly enabled before import");
+      await tsImport("./src/sub.ts", import.meta.url);
+      const afterSuccess = process.sourceMapsEnabled;
+      try {
+        await tsImport("./src/broken.ts", import.meta.url);
+      } catch {}
+      console.log(JSON.stringify({ afterSuccess, afterFailure: process.sourceMapsEnabled }));
+      `,
+    );
+    expect(result.status, result.stderr).toBe(0);
+    expect(JSON.parse(result.stdout.trim())).toEqual({
+      afterSuccess: false,
+      afterFailure: false,
+    });
+  });
 });

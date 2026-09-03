@@ -73,7 +73,7 @@ describe("watchImport", () => {
         parentURL: pathToFileURL(directory + "/runner.mjs").href,
         debounceMs: 10,
         shouldInvalidate: url =>
-          url.startsWith("file:") && fileURLToPath(url).startsWith(directory + "/"),
+          url.startsWith("file:") && fileURLToPath(url).startsWith(process.argv[2] + "/"),
         transforms: [source => source.replaceAll("__VALUE__", "transformed")],
       });
       const first = await watcher.import();
@@ -82,10 +82,21 @@ describe("watchImport", () => {
       if (first.value.result.text !== "transformed") throw new Error("custom transform was not applied");
       if (!first.dependencies.has(directory + "/entry.ts")) throw new Error("entry was not tracked");
       if (!first.dependencies.has(dependency)) throw new Error("dependency was not tracked");
-      if (first.dependencies.has(external)) throw new Error("external module was tracked");
+      if (!first.dependencies.has(external)) throw new Error("sibling project module was not tracked");
+
+      let unchangedEvents = 0;
+      const unsubscribeUnchanged = watcher.subscribe(() => unchangedEvents++);
+      await new Promise(resolve => setTimeout(resolve, 100));
+      await writeFile(dependency, [
+        "const state = globalThis as typeof globalThis & { calls?: number };",
+        "export const count = state.calls = (state.calls ?? 0) + 1;",
+        'export const text: string = "__VALUE__";',
+      ].join("\\n"));
+      await new Promise(resolve => setTimeout(resolve, 100));
+      unsubscribeUnchanged();
+      if (unchangedEvents !== 0) throw new Error("unchanged contents triggered a reload");
 
       const changed = new Promise(resolve => watcher.subscribe(resolve));
-      await new Promise(resolve => setTimeout(resolve, 100));
       await writeFile(dependency, [
         "const state = globalThis as typeof globalThis & { calls?: number };",
         "export const count = state.calls = (state.calls ?? 0) + 1;",
@@ -103,7 +114,7 @@ describe("watchImport", () => {
 
       const second = await watcher.import();
       if (second.value.result.count !== 2) throw new Error("dependency graph was not cache busted");
-      if (second.value.result.externalCount !== 1) throw new Error("external module was cache busted");
+      if (second.value.result.externalCount !== 2) throw new Error("sibling project module was not cache busted");
       if (second.value.result.text !== "changed") throw new Error("changed module was not loaded");
       if (first.namespace === second.namespace) throw new Error("generation namespace was reused");
       await watcher.close();
@@ -111,7 +122,14 @@ describe("watchImport", () => {
 
     const result = spawnSync(
       "node",
-      ["--no-warnings", "--input-type=module", "-e", script, directory],
+      [
+        "--no-warnings",
+        "--input-type=module",
+        "-e",
+        script,
+        directory,
+        temporaryDirectory,
+      ],
       { encoding: "utf8", timeout: 10_000 },
     );
 

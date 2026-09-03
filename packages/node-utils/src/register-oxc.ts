@@ -319,12 +319,15 @@ export const registerOxc = (
  * a private namespace is registered for the call, so nothing is shared with
  * other imports of the same files. Mirrors tsx's `tsImport`.
  */
-export const tsImport = <T = unknown>(
+export const tsImport = async <T = unknown>(
   specifier: string,
   parentURL: string,
   options: Omit<ImportLoaderRegistrationOptions, "namespace"> = {},
-): Promise<T> =>
-  registerOxc({ ...options, namespace: randomUUID() }).import<T>(
-    specifier,
-    parentURL,
-  );
+): Promise<T> => {
+  const loader = registerOxc({ ...options, namespace: randomUUID() });
+  try {
+    return await loader.import<T>(specifier, parentURL);
+  } finally {
+    await loader.unregister();
+  }
+};

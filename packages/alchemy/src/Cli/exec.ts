@@ -144,9 +144,11 @@ const logReload = (paths: ReadonlySet<string>) =>
  */
 const runNodeDevWatcher = (options: DevOptions) => {
   // Node reports real paths for loaded files (symlinked checkouts, macOS
-  // `/tmp`), so the root the graph is scoped to must be a real path too.
+  // `/tmp`), so the project root the graph is scoped to must be real too.
+  // Scope to the invocation directory, not the entrypoint's directory: a
+  // config under `infra/` commonly imports application code from `src/`.
   const entrypoint = realpathSync.native(path.resolve(options.main));
-  const root = path.dirname(entrypoint);
+  const root = realpathSync.native(initialCwd);
   const nodeModules = `${path.sep}node_modules${path.sep}`;
   return Effect.acquireRelease(
     Effect.sync(() =>
@@ -159,7 +161,9 @@ const runNodeDevWatcher = (options: DevOptions) => {
           return (
             !file.includes(nodeModules) &&
             (relative === "" ||
-              (!relative.startsWith("..") && !path.isAbsolute(relative)))
+              (relative !== ".." &&
+                !relative.startsWith(`..${path.sep}`) &&
+                !path.isAbsolute(relative)))
           );
         },
       }),
@@ -193,7 +197,9 @@ const runNodeDevWatcher = (options: DevOptions) => {
 const runBunDevWatcher = (options: DevOptions) =>
   Effect.acquireRelease(
     Effect.sync(() =>
-      trackBunImports({ root: path.dirname(path.resolve(options.main)) }),
+      // Match Node's project-wide graph: the stack entrypoint may live in a
+      // subdirectory while importing sibling source trees.
+      trackBunImports({ root: initialCwd }),
     ),
     (tracker) => Effect.promise(() => tracker.close()),
   ).pipe(

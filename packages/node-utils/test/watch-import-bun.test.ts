@@ -44,7 +44,12 @@ describe("trackBunImports", () => {
       'export const externalText: string = "external";\n',
     );
 
-    const tracker = trackBunImports({ root: directory, debounceMs: 10 });
+    // The project root is wider than the entrypoint directory, as it is in a
+    // stack with `infra/alchemy.run.ts` importing from sibling `src/` trees.
+    const tracker = trackBunImports({
+      root: temporaryDirectory,
+      debounceMs: 10,
+    });
     try {
       const module = (await import(entry)) as {
         result: { text: string; externalText: string };
@@ -53,13 +58,24 @@ describe("trackBunImports", () => {
         text: "original",
         externalText: "external",
       });
-      expect(tracker.dependencies).toEqual(new Set([entry, dependency]));
+      expect(tracker.dependencies).toEqual(
+        new Set([entry, dependency, external]),
+      );
+
+      const unchanged: ReadonlySet<string>[] = [];
+      const unsubscribeUnchanged = tracker.subscribe(({ paths }) =>
+        unchanged.push(paths),
+      );
+      // Give chokidar a moment to arm the file watchers before writing.
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      writeFileSync(dependency, 'export const text: string = "original";\n');
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      unsubscribeUnchanged();
+      expect(unchanged).toEqual([]);
 
       const changed = new Promise<ReadonlySet<string>>((resolve) =>
         tracker.subscribe(({ paths }) => resolve(paths)),
       );
-      // Give chokidar a moment to arm the file watchers before writing.
-      await new Promise((resolve) => setTimeout(resolve, 200));
       writeFileSync(dependency, 'export const text: string = "changed";\n');
       const paths = await Promise.race([
         changed,
