@@ -30,17 +30,41 @@ const storage: AsyncLocalStorage<FileContext> = ((globalThis as any)[key] ??=
  * Collect one file: run `f` (the file's dynamic import + microtask flush)
  * with a fresh root as the ambient collector, and return the root.
  */
-export const collect = async (
+export const collect = (
+  file: string,
+  f: () => Promise<void>,
+): Promise<FileSuite> => {
+  const run = collectQueue.then(() => collectOne(file, f));
+  collectQueue = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
+};
+
+// Bun 1.4 does not carry the AsyncLocalStorage context into a dynamic
+// `import()`. Collections run one at a time, and `collecting` names the
+// collector of the file under import.
+let collectQueue: Promise<void> = Promise.resolve();
+let collecting: FileContext | undefined;
+
+const collectOne = async (
   file: string,
   f: () => Promise<void>,
 ): Promise<FileSuite> => {
   const root = makeFileSuite(file);
-  await storage.run({ current: root }, f);
+  const context: FileContext = { current: root };
+  collecting = context;
+  try {
+    await storage.run(context, f);
+  } finally {
+    collecting = undefined;
+  }
   return root;
 };
 
 const currentContext = (): FileContext => {
-  const context = storage.getStore();
+  const context = storage.getStore() ?? collecting;
   if (context === undefined) {
     throw new Error(
       "alchemy-test: describe/test/hook called outside of a test file collection. " +
