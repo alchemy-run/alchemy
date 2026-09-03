@@ -419,8 +419,11 @@ type DashboardProps = {
 function Dashboard({ store, initialSelected }: DashboardProps): JSX.Element {
   const state = useLiveStore(store);
   const keyGlyphs = useKeyGlyphs();
+  const glyphs = useGlyphs();
   const [selected, setSelected] = useState(initialSelected);
-  const [focusedProvider, setFocusedProvider] = useState(0);
+  // -1 is the profile-level slot: no provider is focused and profile actions
+  // are shown. Up/down cycles through this slot and every connected provider.
+  const [focusedProvider, setFocusedProvider] = useState(-1);
   const [mode, setMode] = useState<Mode>("normal");
   const [screen, setScreen] = useState<"overview" | "edit">("overview");
   const { entries, focus: requestedFocus, flow, busy, notice } = state;
@@ -430,19 +433,23 @@ function Dashboard({ store, initialSelected }: DashboardProps): JSX.Element {
       (entry) => entry.name === requestedFocus,
     );
     store.clearFocus();
-    if (focusIndex >= 0) setSelected(focusIndex);
+    if (focusIndex >= 0) {
+      setSelected(focusIndex);
+    }
   }, [entries, requestedFocus, store]);
   const index = Math.min(Math.max(selected, 0), entries.length - 1);
   const entry = entries[index];
   const details =
     entry === undefined ? undefined : store.detailsFor(entry.name);
   const providers = details?.state === "ready" ? details.providers : [];
-  const providerIndex = Math.min(
-    Math.max(focusedProvider, 0),
-    providers.length - 1,
-  );
-  const provider = providers[providerIndex];
-  useEffect(() => setFocusedProvider(0), [entry?.name]);
+  const provider = providers[focusedProvider];
+  const moveProviderFocus = (delta: -1 | 1) =>
+    setFocusedProvider((current) => {
+      const slotCount = providers.length + 1;
+      const position = current + 1;
+      return ((position + delta + slotCount) % slotCount) - 1;
+    });
+  useEffect(() => setFocusedProvider(-1), [entry?.name]);
 
   useTerminalInput((input, key) => {
     // flow prompts, the edit screen, and the inline TextField/InlineConfirm
@@ -453,26 +460,30 @@ function Dashboard({ store, initialSelected }: DashboardProps): JSX.Element {
       store.dispatch({ kind: "exit" });
     } else if (key.ctrl || key.meta) {
       return;
-    } else if (input === "n") {
-      setMode("create");
     } else if (entry === undefined) {
-      return;
-    } else if (key.shift && key.tab) {
+      if (input === "n") setMode("create");
+    } else if (key.left) {
       setSelected((s) => (s + entries.length - 1) % entries.length);
-    } else if (key.tab) {
+      setFocusedProvider(-1);
+    } else if (key.right) {
       setSelected((s) => (s + 1) % entries.length);
+      setFocusedProvider(-1);
     } else if (key.up && providers.length > 0) {
-      setFocusedProvider(
-        (current) => (current + providers.length - 1) % providers.length,
-      );
+      moveProviderFocus(-1);
     } else if (key.down && providers.length > 0) {
-      setFocusedProvider((current) => (current + 1) % providers.length);
-    } else if (input === "R" && !entry.isDefault) {
+      moveProviderFocus(1);
+    } else if (provider === undefined && input === "R" && !entry.isDefault) {
       setMode("rename");
-    } else if (input === "D" && !entry.isDefault) {
+    } else if (provider === undefined && input === "D" && !entry.isDefault) {
       setMode("delete");
-    } else if (input === "a" && details?.state === "ready") {
+    } else if (
+      provider === undefined &&
+      input === "a" &&
+      details?.state === "ready"
+    ) {
       setScreen("edit");
+    } else if (provider === undefined && input === "n") {
+      setMode("create");
     } else if (input === "e" && provider !== undefined) {
       store.dispatch({
         kind: "edit-apply",
@@ -562,25 +573,28 @@ function Dashboard({ store, initialSelected }: DashboardProps): JSX.Element {
           ["q", "quit"],
         ]
       : [
-          [keyGlyphs.tab, "switch profile"],
-          ...(provider === undefined
+          [keyGlyphs.leftRight, "switch profile"],
+          ...(providers.length === 0
             ? []
-            : ([
-                [keyGlyphs.upDown, "focus provider"],
+            : ([[keyGlyphs.upDown, "focus provider"]] as const)),
+          ...(provider !== undefined
+            ? ([
                 ["e", "reconfigure"],
                 ["r", "refresh"],
                 ["d", "remove"],
-              ] as const)),
-          ...(details?.state === "ready"
-            ? ([["a", "manage providers"]] as const)
-            : []),
-          ["n", "new"],
-          ...(entry.isDefault
-            ? []
+              ] as const)
             : ([
-                ["R", "rename"],
-                ["D", "delete profile"],
-              ] as const)),
+                ...(details?.state === "ready"
+                  ? ([["a", "manage providers"]] as const)
+                  : []),
+                ["n", "new"],
+                ...(entry.isDefault
+                  ? []
+                  : ([
+                      ["R", "rename"],
+                      ["D", "delete profile"],
+                    ] as const)),
+              ] as ReadonlyArray<readonly [string, string]>)),
           ["q", "quit"],
         ];
 
@@ -600,6 +614,9 @@ function Dashboard({ store, initialSelected }: DashboardProps): JSX.Element {
         ) : (
           <>
             <Text>
+              <Text tone="brand">
+                {provider === undefined ? glyphs.selected : " "}{" "}
+              </Text>
               <Text bold color={theme.color.accent}>
                 {entry.name}
               </Text>
