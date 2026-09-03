@@ -1904,7 +1904,7 @@ once per Worker — an IAM user, key and least-privilege assume-role Role,
 binds the key and role ARN onto the Worker, and signs each invoke with
 credentials assumed through a single-flight, expiry-aware resolver: the
 cross-cloud scaffolding the MicroVM bindings introduced, now shared by
-every function-scoped Lambda `*Http` binding (`WorkerAwsAccess.ts`).
+every function-scoped Lambda `*Http` binding (`BindingHttp.ts`).
 
 The invoke payload is JSON, so a chunk travels base64: chunks are 4 MiB
 (≈5.6 MB encoded, under the 6 MB limit) — the pump reads chunks of the

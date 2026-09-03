@@ -1,36 +1,17 @@
-import type {
-  AwsCredentialProviderError,
-  ResolvedCredentials,
-} from "@distilled.cloud/aws/Credentials";
-import * as Endpoint from "@distilled.cloud/aws/Endpoint";
-import { Region } from "@distilled.cloud/aws/Region";
 import * as Effect from "effect/Effect";
-import * as HashMap from "effect/HashMap";
 import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
-import * as Redacted from "effect/Redacted";
-import * as Ref from "effect/Ref";
-import * as Scope from "effect/Scope";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import { AlchemyContext } from "../../AlchemyContext.ts";
 import * as Binding from "../../Binding.ts";
 import type { Input } from "../../Input.ts";
 import * as Output from "../../Output.ts";
-import type { ResourceLike } from "../../Resource.ts";
-import { DEFAULT_LOCAL_ENDPOINT } from "../AuthProvider.ts";
-import { Credentials, makeAssumeRoleResolver } from "../Credentials.ts";
-import { AccessKey } from "../IAM/AccessKey.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
-import { Role } from "../IAM/Role.ts";
-import { User } from "../IAM/User.ts";
-import { isBindingHost } from "./Function.ts";
 import {
-  ensureWorkerAwsAccess,
   isWorkerHost,
   regionFromArn,
   withRuntimeCredentials,
+  workerAwsAccess,
   type WorkerAwsAccess,
-} from "./WorkerAwsAccess.ts";
+} from "./BindingHttp.ts";
+import { isBindingHost } from "./Function.ts";
 import type { MicrovmImage } from "./MicrovmImage.ts";
 
 // Shared scaffolding for the MicroVM runtime bindings. Every `*Http` impl is
@@ -183,7 +164,7 @@ export const makeImageBinding = <Req, Res, Err, Self>(
             yield* host.bind`${label}`({ policyStatements: statements });
           }
         } else if (host !== undefined && isWorkerHost(host)) {
-          access = yield* ensureWorkerAwsAccess(host);
+          access = yield* workerAwsAccess(host);
           if (!globalThis.__ALCHEMY_RUNTIME__) {
             yield* access.role.bind`${label}`({ policyStatements: statements });
           }
@@ -241,7 +222,7 @@ export const makeAccountBinding = <Req, Res, Err, Self>(
             yield* host.bind`${label}`({ policyStatements: statements });
           }
         } else if (host !== undefined && isWorkerHost(host)) {
-          access = yield* ensureWorkerAwsAccess(host);
+          access = yield* workerAwsAccess(host);
           if (!globalThis.__ALCHEMY_RUNTIME__) {
             yield* access.role.bind`${label}`({ policyStatements: statements });
           }

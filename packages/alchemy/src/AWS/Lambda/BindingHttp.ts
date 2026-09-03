@@ -1,15 +1,26 @@
+import type {
+  AwsCredentialProviderError,
+  ResolvedCredentials,
+} from "@distilled.cloud/aws/Credentials";
+import * as Endpoint from "@distilled.cloud/aws/Endpoint";
+import { Region } from "@distilled.cloud/aws/Region";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Redacted from "effect/Redacted";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import { AlchemyContext } from "../../AlchemyContext.ts";
 import * as Binding from "../../Binding.ts";
+import type { Input } from "../../Input.ts";
 import type { Output as OutputType } from "../../Output.ts";
+import type { ResourceLike } from "../../Resource.ts";
+import { DEFAULT_LOCAL_ENDPOINT } from "../AuthProvider.ts";
+import { Credentials, makeAssumeRoleResolver } from "../Credentials.ts";
+import { AccessKey } from "../IAM/AccessKey.ts";
+import { Role } from "../IAM/Role.ts";
+import { User } from "../IAM/User.ts";
 import type { Function } from "./Function.ts";
 import { isBindingHost } from "./Function.ts";
-import {
-  ensureWorkerAwsAccess,
-  isWorkerHost,
-  regionFromArn,
-  withRuntimeCredentials,
-  type WorkerAwsAccess,
-} from "./WorkerAwsAccess.ts";
 
 /**
  * Shared scaffolding for AWS Lambda control/data-plane HTTP bindings.
@@ -17,10 +28,163 @@ import {
  * NOT exported from `index.ts` — every near-identical `{Op}Http.ts` in this
  * service is a thin `Layer.effect(Cap, make…HttpBinding({ … }))` over one of
  * the builders below. Everything except the operation, the IAM action list,
- * and the granted ARNs is boilerplate. Genuinely-different bindings (the
- * MicroVM family with its cross-cloud credential scaffolding in
- * `MicrovmBinding.ts`) stay bespoke.
+ * and the granted ARNs is boilerplate. The MicroVM family
+ * (`MicrovmBinding.ts`) shares only the cross-cloud host handling.
  */
+
+// ---------------------------------------------------------------------------
+// Cross-cloud host: a Cloudflare Worker reaching AWS.
+//
+// A Lambda host grants on its execution role and its credentials are ambient.
+// A Worker has neither, so a binding on a Worker declares an IAM User +
+// AccessKey + a least-privilege Role (the engine de-dupes these by logical id,
+// so every binding on the host shares one identity), binds the key and role
+// ARN onto the Worker, and assumes the role at runtime through the
+// single-flight, expiry-aware resolver from `Credentials.ts`.
+// ---------------------------------------------------------------------------
+
+// The Worker is recognised structurally by its Type id so this module never
+// imports the Cloudflare module graph.
+const WORKER_TYPE_ID = "Cloudflare.Worker";
+export type WorkerHost = ResourceLike & {
+  bind: (
+    template: TemplateStringsArray,
+    ...args: unknown[]
+  ) => (binding: Input<{ bindings?: unknown[] }>) => Effect.Effect<void>;
+};
+export const isWorkerHost = (host: ResourceLike): host is WorkerHost =>
+  (host as { Type?: string }).Type === WORKER_TYPE_ID;
+
+/** Region segment of an AWS ARN (`arn:partition:service:<region>:...`). */
+export const regionFromArn = (arn: string): string =>
+  arn.split(":")[3] ?? "us-east-1";
+
+export interface WorkerAwsAccess {
+  /** The least-privilege Role each binding contributes statements to. */
+  readonly role: Role;
+  /** Assumed-role credentials, cached and refreshed near expiry. */
+  readonly credentials: Effect.Effect<
+    ResolvedCredentials,
+    AwsCredentialProviderError
+  >;
+}
+
+/**
+ * The IAM identity a Cloudflare Worker uses to reach AWS. The logical ids keep
+ * their original `microvm` names: renaming them would replace deployed
+ * identities. Yielding the key and role attributes registers them on the
+ * Worker at deploy and reads them from its env at runtime.
+ */
+export const workerAwsAccess = Effect.fn(function* (host: WorkerHost) {
+  const id = host.LogicalId;
+  // Yielding a resource class gives a constructor whose providers are the
+  // host stack's (the same way the Cloudflare `*Http` bindings mint tokens).
+  const IamUser = yield* User;
+  const IamAccessKey = yield* AccessKey;
+  const IamRole = yield* Role;
+
+  // The user may assume any role that trusts it; the role's trust policy is
+  // what restricts assumption to this user, which avoids a User↔Role ARN
+  // dependency cycle.
+  const user = yield* IamUser(`${id}-microvm-user`, {
+    inlinePolicies: {
+      "assume-microvm-role": {
+        Version: "2012-10-17",
+        Statement: [
+          { Effect: "Allow", Action: ["sts:AssumeRole"], Resource: ["*"] },
+        ],
+      },
+    },
+  });
+  const accessKey = yield* IamAccessKey(`${id}-microvm-key`, {
+    userName: user.userName,
+  });
+  const role = yield* IamRole(`${id}-microvm-role`, {
+    assumeRolePolicyDocument: {
+      Version: "2012-10-17",
+      Statement: [
+        {
+          Effect: "Allow",
+          Principal: { AWS: user.userArn },
+          Action: ["sts:AssumeRole"],
+        },
+      ],
+    },
+  });
+
+  // Local dev: STS and the bound operations run on the emulator, reached via
+  // the same `AWS_ENDPOINT_URL` the emulator injects into Lambda containers
+  // (read at runtime by `Endpoint.fromEnv()` below).
+  if (!globalThis.__ALCHEMY_RUNTIME__) {
+    const context = yield* Effect.serviceOption(AlchemyContext);
+    if (Option.isSome(context) && context.value.dev) {
+      yield* host.bind`${id}-microvm-endpoint`({
+        bindings: [
+          {
+            type: "plain_text",
+            name: "AWS_ENDPOINT_URL",
+            text: DEFAULT_LOCAL_ENDPOINT,
+          },
+        ],
+      });
+    }
+  }
+
+  const accessKeyId = yield* accessKey.accessKeyId;
+  const secretAccessKey = yield* accessKey.secretAccessKey;
+  const roleArn = yield* role.roleArn;
+
+  // The long-lived user credentials that sign `AssumeRole`, read from the
+  // Worker env on each refresh (not captured: at deploy the env is empty).
+  const base = Layer.succeed(
+    Credentials,
+    Effect.gen(function* () {
+      const id = yield* accessKeyId;
+      const secret = yield* secretAccessKey;
+      return {
+        accessKeyId: Redacted.make(id),
+        secretAccessKey: secret
+          ? Redacted.isRedacted(secret)
+            ? secret
+            : Redacted.make(secret)
+          : Redacted.make(""),
+        sessionToken: undefined,
+        // STS is global; operations provide their own Region per call.
+        region: "us-east-1",
+      } satisfies ResolvedCredentials;
+    }),
+  );
+  const credentials = yield* makeAssumeRoleResolver({
+    roleArn,
+    base,
+    region: "us-east-1",
+  });
+  return { role, credentials } satisfies WorkerAwsAccess;
+});
+
+/**
+ * Run an operation with host-appropriate AWS credentials: on a Lambda host
+ * they are ambient (`access` undefined); on a Worker host provide the assumed
+ * role, the operation's `Region`, the env endpoint override and an HttpClient.
+ */
+export const withRuntimeCredentials = <A, E>(
+  access: WorkerAwsAccess | undefined,
+  region: Effect.Effect<string>,
+  eff: Effect.Effect<A, E, any>,
+): Effect.Effect<A, E, any> =>
+  access
+    ? Effect.flatMap(region, (reg) =>
+        eff.pipe(
+          Effect.provide(
+            Layer.succeed(Credentials, access.credentials).pipe(
+              Layer.provideMerge(Layer.succeed(Region, Effect.succeed(reg))),
+              Layer.provideMerge(Endpoint.fromEnv()),
+              Layer.provideMerge(FetchHttpClient.layer),
+            ),
+          ),
+        ),
+      )
+    : eff;
 
 /**
  * Build the impl Effect for a function-scoped operation (`Invoke`,
@@ -36,18 +200,18 @@ export const makeFunctionHttpBinding = <
 >(options: {
   /** Fully-qualified binding tag, e.g. `AWS.Lambda.GetFunction`. */
   tag: string;
-  /** The distilled operation; `FunctionName` is injected from the function. */
-  operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
+  /**
+   * The distilled operation, called per request; `FunctionName` is injected
+   * from the function. Its requirements (`Credentials`, `HttpClient`) are
+   * ambient on a Lambda host and provided around each call on a Worker host.
+   */
+  operation: (input: I) => Effect.Effect<A, E, R>;
   /** IAM actions granted on `resources`. */
   actions: readonly string[];
   /** ARNs the actions are granted on. @default the function ARN */
   resources?: (func: Function) => (string | OutputType<string>)[];
 }) =>
   Effect.gen(function* () {
-    // The operation is acquired per call, not at layer build: a Cloudflare
-    // Worker host provides its credentials and HTTP client around each
-    // call (WorkerAwsAccess.ts) and a Lambda host has them ambient, so
-    // the layer itself requires nothing.
     return Effect.fn(function* (func: Function) {
       const FunctionArn = yield* func.functionArn;
       const host = yield* Binding.Host;
@@ -58,26 +222,16 @@ export const makeFunctionHttpBinding = <
           Resource: options.resources?.(func) ?? [func.functionArn],
         },
       ];
-      // A Lambda host grants on its execution role. A Cloudflare Worker
-      // host (cross-cloud) gets a dedicated assume-role identity whose
-      // credentials are bound onto the Worker — see WorkerAwsAccess.ts.
+      const label = `Allow(${host?.LogicalId}, ${options.tag}(${func.LogicalId}))`;
       let access: WorkerAwsAccess | undefined;
       if (isBindingHost(host)) {
         if (!globalThis.__ALCHEMY_RUNTIME__) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${func}))`({
-            policyStatements: statements,
-          });
+          yield* host.bind`${label}`({ policyStatements: statements });
         }
       } else if (host !== undefined && isWorkerHost(host)) {
-        // The identity's own provisioning errors surface at deploy as
-        // resource failures; the binding's typed surface stays the op's.
-        access = yield* ensureWorkerAwsAccess(
-          host,
-        ) as Effect.Effect<WorkerAwsAccess>;
+        access = yield* workerAwsAccess(host);
         if (!globalThis.__ALCHEMY_RUNTIME__) {
-          yield* access.role.bind`Allow(${host}, ${options.tag}(${func}))`({
-            policyStatements: statements,
-          }) as Effect.Effect<void>;
+          yield* access.role.bind`${label}`({ policyStatements: statements });
         }
       }
       const region = Effect.map(FunctionArn, regionFromArn);
@@ -88,9 +242,7 @@ export const makeFunctionHttpBinding = <
         return yield* withRuntimeCredentials(
           access,
           region,
-          Effect.flatMap(options.operation, (op) =>
-            op({ ...request, FunctionName } as I),
-          ),
+          options.operation({ ...request, FunctionName } as I),
         ) as Effect.Effect<A, E>;
       });
     });
