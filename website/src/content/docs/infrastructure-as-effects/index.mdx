@@ -89,9 +89,11 @@ Cloudflare.Worker(
 );
 ```
 
-`main: import.meta.url` says the code is this file. Most Runtimes need
-no other configuration, because everything else comes in through
-bindings.
+`main: import.meta.url` tells Alchemy where the code lives. At deploy
+time Alchemy bundles this file's default export, which by convention is
+the Worker itself, and uploads that bundle as the Worker's script. Most
+Runtimes need no other configuration, because everything else comes in
+through bindings.
 
 The third argument is the code, an Effect:
 

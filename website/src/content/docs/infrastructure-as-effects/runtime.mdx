@@ -33,9 +33,11 @@ export default Cloudflare.Worker(
 );
 ```
 
-One deploy ships both. `main: import.meta.url` says the code is this
-file. Most Runtimes need no other props, because everything else they
-depend on comes in through bindings.
+One deploy ships both. `main: import.meta.url` tells Alchemy where the
+code lives. At deploy time Alchemy bundles this file's default export,
+which by convention is the Worker itself, and uploads that bundle as
+the Worker's script. Most Runtimes need no other props, because
+everything else they depend on comes in through bindings.
 
 In traditional IaC a Runtime is defined twice, once as a resource
 with its configuration and once as a handler file the resource points
