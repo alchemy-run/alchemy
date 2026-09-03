@@ -5939,6 +5939,13 @@ importers:
         version: 1.0.0-beta.7(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(react-dom@19.2.8(react@19.2.8))(react-server-dom-webpack@19.2.8(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(webpack@5.109.2(cssnano@8.0.5(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26)))(react@19.2.8)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)
 
   packages/node-utils:
+    dependencies:
+      chokidar:
+        specifier: ^5.0.0
+        version: 5.0.0
+      rolldown:
+        specifier: 1.2.5
+        version: 1.2.5
     devDependencies:
       '@types/bun':
         specifier: catalog:tooling

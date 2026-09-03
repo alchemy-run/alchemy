@@ -96,9 +96,7 @@ export const handleCancellation = <A, E, R>(self: Effect.Effect<A, E, R>) =>
       interruptMessagesSuppressed
         ? Effect.void
         : Console.log(
-            colorsEnabled()
-              ? `\n${ANSI_DIM}Interrupted.${ANSI_RESET}`
-              : "\nInterrupted.",
+            colorsEnabled() ? `\n${ANSI_DIM}Exited.${ANSI_RESET}` : "\nExited.",
           ),
     ),
   );
