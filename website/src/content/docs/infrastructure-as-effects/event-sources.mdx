@@ -30,7 +30,8 @@ export default AWS.Lambda.Function(
 );
 ```
 
-Consume it. Each batch arrives as a `Stream` of records:
+Consume the queue. Each batch arrives as `records`, a `Stream` of
+messages with a `body`:
 
 ```diff lang="typescript"
  export default AWS.Lambda.Function(
@@ -48,7 +49,7 @@ Consume it. Each batch arrives as a `Stream` of records:
  );
 ```
 
-Provide the Layer that implements it:
+Provide `AWS.Lambda.QueueEventSource` to implement it:
 
 ```diff lang="typescript"
    Effect.gen(function* () {
@@ -80,9 +81,8 @@ is one Layer that satisfies it. This is the same split every binding has
 
 ## The same shape on Cloudflare
 
-`Cloudflare.Queues.consumeQueueMessages` mirrors the AWS call. At deploy
-time it creates the queue consumer so Cloudflare dispatches batches to
-this Worker. At runtime it registers the `queue` listener:
+Consume a Cloudflare queue the same way. The consumer settings go on
+the call, and the handler receives a `Stream` of typed messages:
 
 ```typescript
 import * as Cloudflare from "alchemy/Cloudflare";
@@ -112,13 +112,12 @@ export default Cloudflare.Worker(
 );
 ```
 
-The consumer settings travel with the call. One declaration captures the
-runtime handler and the deploy-time consumer configuration.
+At deploy time this creates the queue consumer that dispatches batches
+to this Worker. At runtime it registers the `queue` listener.
 
 ## Batching and retries
 
-Batching is configured on the `consume*` call and forwarded to the
-platform. On AWS, `batchSize` and `maximumBatchingWindow` shape each
+Set `batchSize` and `maximumBatchingWindow` on the call to shape each
 invocation's batch:
 
 ```typescript
@@ -129,9 +128,9 @@ yield* AWS.SQS.consumeQueueMessages(
 );
 ```
 
-If your handler fails, the invocation fails and the queue redelivers the
-batch. Stream sources like Kinesis and DynamoDB add settings that bound
-a poison record's blast radius:
+If your handler fails, the queue redelivers the batch. Stream sources
+like Kinesis and DynamoDB add settings that bound a poison record's
+blast radius:
 
 ```typescript
 yield* AWS.DynamoDB.consumeTableChanges(
@@ -146,9 +145,9 @@ yield* AWS.DynamoDB.consumeTableChanges(
 );
 ```
 
-On Cloudflare, a batch is acked when your handler succeeds and retried
-when it fails. Cloudflare applies `maxRetries` and `retryDelay`, then
-dead-letters to `deadLetterQueue`:
+On Cloudflare, set the retry policy on the call. A batch is acked when
+your handler succeeds, retried `maxRetries` times when it fails, then
+dead-lettered:
 
 ```typescript
 yield* Cloudflare.Queues.consumeQueueMessages<{ text: string }>(
@@ -158,13 +157,13 @@ yield* Cloudflare.Queues.consumeQueueMessages<{ text: string }>(
 );
 ```
 
-Per-message control is still there. Call `msg.ack()` or `msg.retry()`
-on individual messages inside the handler.
+Call `msg.ack()` or `msg.retry()` inside the handler to decide per
+message.
 
 ## Not every source is a Stream
 
 A source that delivers one event at a time hands your handler the event
-directly. A cron trigger fires once per schedule:
+directly. A cron trigger passes one `controller` per fire:
 
 ```typescript
 export default Cloudflare.Worker(
@@ -193,8 +192,8 @@ signature before calling your handler.
 ## It's a real Effect Stream
 
 The `Stream` your handler receives is the same `Stream` from any Effect
-program, so every combinator composes. Reshape table changes and run
-them straight into a queue:
+program, so every combinator composes. Map table changes to JSON and
+run them straight into a queue:
 
 ```typescript
 const sink = yield* AWS.SQS.QueueSink(Outbound);
@@ -215,10 +214,9 @@ yield* AWS.DynamoDB.consumeTableChanges(
 );
 ```
 
-`Effect.retry`, `Stream.throttle`, and `Stream.groupedWithin` drop in
-anywhere along the chain. That `sink` is a
-[Sink](/infrastructure-as-effects/sinks), the write-side dual of an
-event source. Source, transform, and sink become one expression.
+`Stream.throttle` or `Stream.groupedWithin` drop in anywhere along the
+chain. That `sink` is a [Sink](/infrastructure-as-effects/sinks), the
+write-side dual of an event source.
 
 ## Every event source
 
