@@ -1,6 +1,7 @@
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
+import * as Option from "effect/Option";
 import type { PlatformError } from "effect/PlatformError";
 import * as Redacted from "effect/Redacted";
 import { OwnedBySomeoneElse, Unowned } from "../AdoptPolicy.ts";
@@ -44,9 +45,9 @@ export interface ContainerProps {
    */
   stopTimeout?: Duration.Input;
   /**
-   * Networks the container joins. The first is set at create time, so the
-   * container never touches the default bridge; the rest are connected
-   * before start. Unset means the default bridge.
+   * Networks the container joins. The first network is set at create time,
+   * so the container does not join the default bridge. The other networks
+   * are connected before start. Unset means the default bridge.
    */
   networks?: Container.NetworkMapping[];
   /** Remove the container when it exits. @default false */
@@ -55,16 +56,9 @@ export interface ContainerProps {
   start?: boolean;
   /** Docker healthcheck configuration. */
   healthcheck?: Container.Healthcheck;
-  /**
-   * Memory limit in Docker's byte-suffix format (`"512m"`, `"2g"`).
-   * The kernel OOM-kills the container rather than the host when exceeded.
-   */
+  /** Memory limit in Docker byte-suffix format ("512m", "2g"). */
   memory?: string;
-  /**
-   * Memory-plus-swap limit, same format. Docker's default is 2x `memory`,
-   * which lets a container thrash in swap instead of OOM-killing cleanly;
-   * set equal to `memory` to disable swap for the container.
-   */
+  /** Memory-plus-swap limit, same format. Set equal to memory to disable swap. */
   memorySwap?: string;
   /**
    * Set `no-new-privileges`, preventing processes in the container from
@@ -162,6 +156,16 @@ export interface Container extends Resource<
  * manages Cloudflare's container platform; use pushed image references to bridge
  * Docker-built images into cloud container runtimes.
  *
+ * Container config is immutable. A changed create-time prop recreates the
+ * container. When Alchemy adopts an existing container, it compares the
+ * desired props with the observed container: `image`, `environment`,
+ * `command`, `ports`, `volumes`, `memory`, `memorySwap`, `readOnly`,
+ * `noNewPrivileges`, `restart`, `stopTimeout`, `removeOnExit`, `labels`, and
+ * `healthcheck`. A mismatch recreates the container. Docker merges the image
+ * environment and labels into the container, so a removed `environment`
+ * entry or `label` is not detected on adoption. An unset `command` or
+ * `healthcheck` inherits from the image and is not compared on adoption.
+ *
  * @resource
  *
  * @section Running Containers
@@ -253,41 +257,70 @@ export const inspectContainer = (
     ),
   );
 
+type CreateArgs = Parameters<Docker["Service"]["container"]["create"]>[0];
+
 export const ContainerProvider = () =>
   Provider.effect(
     Container,
     Effect.gen(function* () {
       const docker = yield* Docker;
 
+      const inspectOrUndefined = (nameOrId: string, context?: string) =>
+        docker.container
+          .inspect(nameOrId, context)
+          .pipe(
+            Effect.catchReason(
+              "PlatformError",
+              "NotFound",
+              () => Effect.undefined,
+            ),
+          );
+
+      const stopAndRemove = (nameOrId: string, context?: string) =>
+        docker.container.stop(nameOrId, context).pipe(
+          Effect.andThen(docker.container.remove(nameOrId, true, context)),
+          Effect.catchReason("PlatformError", "NotFound", () => Effect.void),
+        );
+
       const reconcileNetworks = Effect.fn(function* (
         live: Docker.Container,
         news: ContainerProps,
+        olds: ContainerProps | undefined,
       ) {
         const context = dockerContextName(news.context);
-        const connect = new Map<string, Container.NetworkMapping>();
-        const disconnect = new Set<string>();
-        const noop = new Set<string>();
-        for (const network of news.networks ?? []) {
-          const entry = live.NetworkSettings.Networks?.[network.name];
+        const liveNetworks = live.NetworkSettings.Networks ?? {};
+        const shortId = live.Id.slice(0, 12);
+        const desired = new Map(
+          (news.networks ?? []).map((network) => [network.name, network]),
+        );
+        const declared = new Set(
+          [...(olds?.networks ?? []), ...(news.networks ?? [])].map(
+            (network) => network.name,
+          ),
+        );
+        const connect: Container.NetworkMapping[] = [];
+        const disconnect: string[] = [];
+        for (const network of desired.values()) {
+          const entry = liveNetworks[network.name];
           if (!entry) {
-            connect.set(network.name, network);
-          } else if (
-            !Equal.equals(entry.Aliases ?? [], network.aliases ?? [])
-          ) {
-            connect.set(network.name, network);
-            disconnect.add(network.name);
-          } else {
-            noop.add(network.name);
+            connect.push(network);
+            continue;
+          }
+          const liveAliases = (entry.Aliases ?? []).filter(
+            (alias) => alias !== shortId,
+          );
+          if (!isSameSet(liveAliases, network.aliases ?? [])) {
+            disconnect.push(network.name);
+            connect.push(network);
           }
         }
-        for (const key of Object.keys(live.NetworkSettings.Networks ?? {})) {
-          if (!noop.has(key)) {
-            disconnect.add(key);
+        for (const name of Object.keys(liveNetworks)) {
+          if (declared.has(name) && !desired.has(name)) {
+            disconnect.push(name);
           }
         }
-        // The attach set can shift under a restarting container between the
-        // inspect above and these calls, so "already attached" / "not
-        // attached" describe the desired state, not a failure.
+        // A restarting container can change its networks between inspect and
+        // connect. Treat AlreadyExists and NotFound as success.
         yield* Effect.forEach(
           disconnect,
           (network) =>
@@ -303,7 +336,7 @@ export const ContainerProvider = () =>
           { concurrency: "unbounded" },
         );
         yield* Effect.forEach(
-          connect.values(),
+          connect,
           (network) =>
             docker.network
               .connect({
@@ -323,24 +356,79 @@ export const ContainerProvider = () =>
         );
       });
 
+      const matchesDesiredArgs = Effect.fn(function* (
+        id: string,
+        instanceId: string,
+        live: Docker.Container,
+        args: CreateArgs,
+        olds: ContainerProps | undefined,
+      ) {
+        if (olds !== undefined && olds.image !== undefined) {
+          const oldArgs = yield* makeCreateArgs(id, olds, instanceId);
+          return Equal.equals(oldArgs, args);
+        }
+        return findObservedDrift(live, args).length === 0;
+      });
+
+      const keepOrRemoveLiveContainer = Effect.fn(function* (input: {
+        id: string;
+        instanceId: string;
+        live: Docker.Container;
+        args: CreateArgs;
+        news: ContainerProps;
+        olds: ContainerProps | undefined;
+        output: Container["Attributes"] | undefined;
+      }) {
+        const { id, instanceId, live, args, news, olds, output } = input;
+        const context = dockerContextName(news.context);
+        const matches = yield* matchesDesiredArgs(
+          id,
+          instanceId,
+          live,
+          args,
+          olds,
+        );
+        if (matches) {
+          yield* reconcileNetworks(live, news, olds);
+          if (news.start && live.State.Status !== "running") {
+            yield* docker.container.start(live.Id, context);
+          } else if (!news.start && live.State.Status === "running") {
+            yield* docker.container.stop(live.Id, context);
+          }
+          const info = yield* docker.container.inspect(live.Id, context);
+          return Option.some(toContainerAttributes(info, args.image));
+        }
+        // Container config is immutable. Changed create-args can reach
+        // reconcile without a replace plan. Recreate the container to apply
+        // them.
+        const owned =
+          output?.id === live.Id ||
+          (yield* hasAlchemyTags(id, live.Config.Labels ?? undefined));
+        if (!owned) {
+          return yield* new OwnedBySomeoneElse({
+            message:
+              `Container '${args.name}' (${live.Id}) already exists and ` +
+              "is not managed by this stack/stage/logical-id, so it " +
+              "cannot be replaced. Pick a different `name`, or re-run " +
+              "with `--adopt` (or `adopt(true)`) to take it over.",
+            resourceType: Container.Type,
+            logicalId: id,
+            physicalName: args.name,
+          });
+        }
+        yield* stopAndRemove(live.Id, context);
+        return Option.none();
+      });
+
       return Container.Provider.of({
         list: () => Effect.succeed([]),
         read: Effect.fn(function* ({ id, instanceId, olds, output }) {
           const context = dockerContextName(olds.context);
           const name = yield* dockerPhysicalName(id, olds, instanceId);
-          const info = yield* docker.container
-            .inspect(name, context)
-            .pipe(
-              Effect.catchReason(
-                "PlatformError",
-                "NotFound",
-                () => Effect.undefined,
-              ),
-            );
+          const info = yield* inspectOrUndefined(name, context);
           if (!info) return undefined;
-          // `olds.image` may be `undefined` when a `creating` row was
-          // persisted before upstream Outputs resolved — fall back to the
-          // live container's actual image.
+          // A `creating` row can lose an Output-valued `image`. Use the live
+          // image then.
           const attrs = toContainerAttributes(
             info,
             olds.image !== undefined
@@ -348,8 +436,6 @@ export const ContainerProvider = () =>
               : info.Config.Image,
           );
           if (output) return attrs;
-          // Without prior state, only adopt a container that carries our
-          // branding; anything else is foreign and gated behind `--adopt`.
           const owned = yield* hasAlchemyTags(
             id,
             info.Config.Labels ?? undefined,
@@ -358,9 +444,8 @@ export const ContainerProvider = () =>
         }),
         diff: Effect.fn(function* ({ id, instanceId, news, olds }) {
           if (!isResolved(news)) return undefined;
-          // An Output-valued `image` doesn't survive a `creating`-state
-          // round-trip (it deserializes as `undefined`) — without comparable
-          // prior create args, let the engine apply its default update logic.
+          // A `creating` row can lose an Output-valued `image`. Let the engine
+          // apply its default update logic then.
           if (olds.image === undefined) return undefined;
           if (
             dockerContextName(olds.context) !== dockerContextName(news.context)
@@ -388,80 +473,31 @@ export const ContainerProvider = () =>
         }) {
           const context = dockerContextName(news.context);
           const args = yield* makeCreateArgs(id, news, instanceId);
-          const live = yield* docker.container
-            .inspect(args.name, context)
-            .pipe(
-              Effect.catchReason(
-                "PlatformError",
-                "NotFound",
-                () => Effect.undefined,
-              ),
-            );
 
-          if (live) {
-            // In-place only when the desired create-args still match the
-            // ones this container was created from. A container's config is
-            // immutable, and changed args reach reconcile without a `replace`
-            // plan: the converge pass hands late-resolved Outputs (a rebuilt
-            // image id, changed env) straight here without re-running diff.
-            // Recreating is the only way to apply them.
-            const oldArgs =
-              olds !== undefined && olds.image !== undefined
-                ? yield* makeCreateArgs(id, olds, instanceId)
-                : undefined;
-            const wantsThisContainer =
-              oldArgs !== undefined
-                ? Equal.equals(oldArgs, args)
-                : // Prior args unknowable (a `creating` row that lost its
-                  // Output-valued image, #736): keep the container only if
-                  // it already runs the desired image — identical desired
-                  // config must not churn it.
-                  live.Config.Image === args.image;
-            if (wantsThisContainer) {
-              yield* reconcileNetworks(live, news);
-              if (news.start && live.State.Status !== "running") {
-                yield* docker.container.start(live.Id, context);
-              } else if (!news.start && live.State.Status === "running") {
-                yield* docker.container.stop(live.Id, context);
-              }
-              return yield* docker.container
-                .inspect(live.Id, context)
-                .pipe(
-                  Effect.map((info) => toContainerAttributes(info, args.image)),
-                );
-            }
-            // Recreating destroys the live container, so refuse unless it is
-            // ours: either state points at this exact container (created or
-            // adopted by us) or it carries our labels.
-            const owned =
-              output?.id === live.Id ||
-              (yield* hasAlchemyTags(id, live.Config.Labels ?? undefined));
-            if (!owned) {
-              return yield* new OwnedBySomeoneElse({
-                message:
-                  `Container '${args.name}' (${live.Id}) already exists and ` +
-                  "is not managed by this stack/stage/logical-id, so it " +
-                  "cannot be replaced. Pick a different `name`, or re-run " +
-                  "with `--adopt` (or `adopt(true)`) to take it over.",
-                resourceType: Container.Type,
-                logicalId: id,
-                physicalName: args.name,
-              });
-            }
-            // Same teardown as `delete`: a graceful stop (honoring the
-            // container's configured stop-timeout) before removal, never a
-            // bare SIGKILL.
-            if (live.State.Status === "running") {
-              yield* docker.container.stop(live.Id, context);
-            }
-            yield* docker.container.remove(live.Id, true, context);
+          // A rename can reach reconcile without a replace plan. State points
+          // at the old container by id, so it is ours. Remove it so two
+          // containers do not run.
+          if (output !== undefined && output.name !== args.name) {
+            yield* stopAndRemove(output.id, context);
+          }
+
+          const live = yield* inspectOrUndefined(args.name, context);
+          if (live !== undefined) {
+            const kept = yield* keepOrRemoveLiveContainer({
+              id,
+              instanceId,
+              live,
+              args,
+              news,
+              olds,
+              output,
+            });
+            if (Option.isSome(kept)) return kept.value;
           }
 
           const internalTags = yield* createInternalTags(id);
-          // The first declared network is set at create time, so the
-          // container is never attached to the default bridge. A process that
-          // reads its address from eth0 at boot would otherwise advertise a
-          // bridge address that a later reconcile removes.
+          // Set the first network at create time. This keeps the container
+          // off the default bridge.
           const [firstNetwork, ...otherNetworks] = news.networks ?? [];
           const { stdout: containerId } = yield* docker.container.create({
             ...args,
@@ -488,22 +524,7 @@ export const ContainerProvider = () =>
           return toContainerAttributes(info, args.image);
         }),
         delete: Effect.fn(({ olds, output }) =>
-          docker.container
-            .stop(output.name, dockerContextName(olds.context))
-            .pipe(
-              Effect.andThen(
-                docker.container.remove(
-                  output.name,
-                  true,
-                  dockerContextName(olds.context),
-                ),
-              ),
-              Effect.catchReason(
-                "PlatformError",
-                "NotFound",
-                () => Effect.void,
-              ),
-            ),
+          stopAndRemove(output.name, dockerContextName(olds.context)),
         ),
       });
     }),
@@ -515,7 +536,7 @@ const normalizeImageRef = (image: Container.Image): string =>
 const makeCreateArgs = (id: string, news: ContainerProps, instanceId: string) =>
   dockerPhysicalName(id, news, instanceId).pipe(
     Effect.map(
-      (name): Parameters<Docker["Service"]["container"]["create"]>[0] => ({
+      (name): CreateArgs => ({
         name,
         image: normalizeImageRef(news.image),
         command: news.command,
@@ -564,6 +585,135 @@ const makeCreateArgs = (id: string, news: ContainerProps, instanceId: string) =>
     ),
   );
 
+/**
+ * Names of the create-args that differ from the observed container. An empty
+ * list means the container matches.
+ */
+const findObservedDrift = (
+  live: Docker.Container,
+  args: CreateArgs,
+): string[] => {
+  const memory = parseByteSize(args.memory) ?? 0;
+  const memorySwap = parseByteSize(args["memory-swap"]) ?? memory * 2;
+  const checks: Array<[string, boolean]> = [
+    ["image", live.Config.Image === args.image],
+    [
+      "environment",
+      includesAll(live.Config.Env ?? [], formatKeyValues(args.env)),
+    ],
+    [
+      "command",
+      args.command === undefined ||
+        isSameList(live.Config.Cmd ?? [], args.command),
+    ],
+    [
+      "ports",
+      isSameSet(formatPortBindings(live.HostConfig.PortBindings), args.p ?? []),
+    ],
+    ["volumes", isSameSet(live.HostConfig.Binds ?? [], args.volume ?? [])],
+    ["memory", live.HostConfig.Memory === memory],
+    ["memorySwap", live.HostConfig.MemorySwap === memorySwap],
+    [
+      "readOnly",
+      live.HostConfig.ReadonlyRootfs === (args["read-only"] ?? false),
+    ],
+    [
+      "noNewPrivileges",
+      isSameSet(live.HostConfig.SecurityOpt ?? [], args["security-opt"] ?? []),
+    ],
+    ["restart", (live.HostConfig.RestartPolicy.Name || "no") === args.restart],
+    [
+      "stopTimeout",
+      live.Config.StopTimeout === parseInteger(args["stop-timeout"]),
+    ],
+    ["removeOnExit", live.HostConfig.AutoRemove === args.rm],
+    [
+      "labels",
+      includesAll(
+        formatKeyValues(live.Config.Labels ?? undefined),
+        formatKeyValues(args.label),
+      ),
+    ],
+    ["healthcheck", matchesHealthcheck(live.Config.Healthcheck, args)],
+  ];
+  return checks.filter(([, matches]) => !matches).map(([name]) => name);
+};
+
+const matchesHealthcheck = (
+  live: Docker.Container["Config"]["Healthcheck"],
+  args: CreateArgs,
+): boolean => {
+  if (args["health-cmd"] === undefined) return true;
+  if (!live) return false;
+  return (
+    isSameList(live.Test ?? [], ["CMD-SHELL", args["health-cmd"]]) &&
+    (live.Interval ?? 0) === parseNanos(args["health-interval"]) &&
+    (live.Timeout ?? 0) === parseNanos(args["health-timeout"]) &&
+    (live.Retries ?? 0) === (args["health-retries"] ?? 0) &&
+    (live.StartPeriod ?? 0) === parseNanos(args["health-start-period"]) &&
+    (live.StartInterval ?? 0) === parseNanos(args["health-start-interval"])
+  );
+};
+
+const formatKeyValues = (
+  record: Record<string, string> | undefined,
+): string[] =>
+  Object.entries(record ?? {}).map(([key, value]) => `${key}=${value}`);
+
+/** Formats observed port bindings in the `-p` syntax (`8080:80/tcp`). */
+const formatPortBindings = (
+  bindings: Docker.Container["HostConfig"]["PortBindings"],
+): string[] =>
+  Object.entries(bindings ?? {}).flatMap(([internal, hosts]) =>
+    (hosts ?? []).map((host) =>
+      host.HostIp
+        ? `${host.HostIp}:${host.HostPort}:${internal}`
+        : `${host.HostPort}:${internal}`,
+    ),
+  );
+
+/** Parses a Docker byte-suffix size (`512m`, `2g`, `1.5gb`) into bytes. */
+const parseByteSize = (size: string | undefined): number | undefined => {
+  if (size === undefined) return undefined;
+  if (size === "-1") return -1;
+  const match = /^(\d+(?:\.\d+)?)\s*([bkmgtp]?)(?:i?b)?$/i.exec(size.trim());
+  if (!match) return undefined;
+  const scale = "bkmgtp".indexOf(match[2]!.toLowerCase() || "b");
+  return Math.floor(Number(match[1]) * 1024 ** scale);
+};
+
+const parseInteger = (value: string | undefined): number | undefined =>
+  value === undefined ? undefined : Number.parseInt(value, 10);
+
+const parseNanos = (duration: string | undefined): number =>
+  duration === undefined ? 0 : Number.parseInt(duration, 10);
+
+const includesAll = (
+  haystack: ReadonlyArray<string>,
+  needles: ReadonlyArray<string>,
+): boolean => {
+  const set = new Set(haystack);
+  return needles.every((needle) => set.has(needle));
+};
+
+const isSameSet = (
+  left: ReadonlyArray<string>,
+  right: ReadonlyArray<string>,
+): boolean => {
+  const leftSet = new Set(left);
+  const rightSet = new Set(right);
+  return (
+    leftSet.size === rightSet.size &&
+    [...leftSet].every((item) => rightSet.has(item))
+  );
+};
+
+const isSameList = (
+  left: ReadonlyArray<string>,
+  right: ReadonlyArray<string>,
+): boolean =>
+  left.length === right.length && left.every((item, i) => item === right[i]);
+
 const toContainerAttributes = (
   info: Docker.Container,
   imageRef: string,
@@ -599,8 +749,7 @@ const normalizeDuration = (
 ): string | undefined => {
   if (!input) return undefined;
   const duration = Duration.fromInputUnsafe(input);
-  // Docker parses `--health-*` durations with Go's `time.ParseDuration`, which
-  // requires a unit suffix — a bare nanosecond count is rejected with "missing
-  // unit in duration". `ns` is the lossless Go-duration rendering of the nanos.
+  // Docker parses `--health-*` durations with Go `time.ParseDuration`. It
+  // requires a unit suffix. `ns` is lossless.
   return `${Duration.toNanosUnsafe(duration).toString()}ns`;
 };

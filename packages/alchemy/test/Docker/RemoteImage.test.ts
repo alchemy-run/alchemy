@@ -5,9 +5,16 @@ import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import { fileURLToPath } from "node:url";
 import { findAvailablePort } from "./Runtime.ts";
+
+// Generated with `htpasswd -Bbn alchemy registry-secret`.
+const registryHtpasswd = fileURLToPath(
+  new URL("./fixtures/registry.htpasswd", import.meta.url),
+);
 
 const { test } = Test.make({
   providers: Docker.providers(),
@@ -127,6 +134,86 @@ describe("Docker.RemoteImage", { concurrent: false }, () => {
 
       const inspected = yield* docker.image.inspect(targetRef);
       expect(inspected.Id.length).toBeGreaterThan(0);
+    }),
+  );
+
+  test.provider("pulls a private image with inline credentials", (stack) =>
+    Effect.gen(function* () {
+      const docker = yield* Docker.Docker;
+      const client = yield* HttpClient.HttpClient;
+      const port = yield* findAvailablePort();
+      const registryName = "alchemy-test-auth-registry";
+      const host = `localhost:${port}`;
+      const targetName = `${host}/alchemy-private-hello`;
+      const targetTag = "v1";
+      const targetRef = `${targetName}:${targetTag}`;
+      const credentials = {
+        server: host,
+        username: "alchemy",
+        password: Redacted.make("registry-secret"),
+      };
+
+      yield* Effect.addFinalizer(() =>
+        Effect.all([
+          docker.run(["rm", "-f", registryName]),
+          docker.image.remove(targetRef, true),
+        ]).pipe(Effect.ignore),
+      );
+
+      yield* docker.run([
+        "run",
+        "-d",
+        "--name",
+        registryName,
+        "-p",
+        `${port}:5000`,
+        "-e",
+        "REGISTRY_AUTH=htpasswd",
+        "-e",
+        "REGISTRY_AUTH_HTPASSWD_REALM=alchemy",
+        "-e",
+        "REGISTRY_AUTH_HTPASSWD_PATH=/auth/htpasswd",
+        "-v",
+        `${registryHtpasswd}:/auth/htpasswd:ro`,
+        "registry:2",
+      ]);
+
+      // Wait for the registry HTTP API to start serving before pushing.
+      yield* client.get(`http://${host}/v2/`).pipe(
+        Effect.retry({
+          schedule: Schedule.exponential("250 millis"),
+          times: 20,
+        }),
+      );
+
+      const pushed = yield* stack.deploy(
+        Docker.RemoteImage("private-hello-push", {
+          name: "hello-world",
+          tag: "latest",
+          targetName,
+          targetTag,
+          registry: credentials,
+        }),
+      );
+      expect(pushed.imageRef).toBe(targetRef);
+      expect(pushed.repoDigest).toContain(`${targetName}@sha256:`);
+
+      yield* docker.image.remove(targetRef, true);
+
+      const anonymous = yield* Effect.result(
+        docker.image.pull(targetRef, undefined, undefined, undefined),
+      );
+      expect(Result.isFailure(anonymous)).toBe(true);
+
+      const pulled = yield* stack.deploy(
+        Docker.RemoteImage("private-hello-pull", {
+          name: targetName,
+          tag: targetTag,
+          auth: credentials,
+        }),
+      );
+      expect(pulled.imageRef).toBe(targetRef);
+      expect(pulled.imageId).toBe(pushed.imageId);
     }),
   );
 

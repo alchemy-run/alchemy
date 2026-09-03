@@ -109,6 +109,19 @@ export const ContextProvider = () =>
             ),
           );
 
+      const create = (desired: {
+        name: string;
+        description: string;
+        docker: string | undefined;
+      }) =>
+        docker.context.create({
+          name: desired.name,
+          ...(desired.docker ? { docker: desired.docker } : {}),
+          ...(desired.description.length > 0
+            ? { description: desired.description }
+            : {}),
+        });
+
       return Context.Provider.of({
         list: () => Effect.succeed([]),
         read: Effect.fn(function* ({ id, instanceId, olds, output }) {
@@ -161,15 +174,17 @@ export const ContextProvider = () =>
           }
 
           const existing = yield* inspect(desired.name);
+          // `docker context update` cannot clear the endpoint. Remove and
+          // recreate the context to clear it.
+          const clearsEndpoint =
+            desired.docker === undefined &&
+            normalizeDocker(olds?.docker) !== undefined;
 
-          if (!existing) {
-            yield* docker.context.create({
-              name: desired.name,
-              ...(desired.docker ? { docker: desired.docker } : {}),
-              ...(desired.description.length > 0
-                ? { description: desired.description }
-                : {}),
-            });
+          if (existing === undefined) {
+            yield* create(desired);
+          } else if (clearsEndpoint) {
+            yield* docker.context.remove(desired.name, true);
+            yield* create(desired);
           } else {
             const current = toContextAttributes(existing);
             if (
@@ -184,9 +199,8 @@ export const ContextProvider = () =>
             }
           }
 
-          // A rename reaches reconcile when the converge pass re-evaluates
-          // late-resolved props (diff never sees them). Both names may
-          // coexist, so retire the old one only once the new one exists.
+          // Both context names can exist at the same time. Remove the old
+          // name after the new one exists.
           if (output && output.id !== desired.name) {
             yield* docker.context
               .remove(output.id, true)

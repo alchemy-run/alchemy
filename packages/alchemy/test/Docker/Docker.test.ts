@@ -1,10 +1,12 @@
 import { Docker, DockerLive } from "@/Docker";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, layer } from "alchemy-test";
+import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import * as Redacted from "effect/Redacted";
 
 const describe = layer(Layer.provideMerge(DockerLive, NodeServices.layer));
 
@@ -151,6 +153,54 @@ describe("Docker.image", (it) => {
       yield* docker.image.build({ tag, context: ctx, target: "secondary" });
       const out = yield* docker.run(["run", "--rm", tag, "cat", "/stage.txt"]);
       expect(out.stdout.trim()).toBe("secondary");
+    }),
+  );
+});
+
+describe("Docker.image.pull", (it) => {
+  it.effect("links the global contexts into the credential config", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const docker = yield* Docker;
+      const configDir = yield* fs.makeTempDirectoryScoped({
+        prefix: "alchemy-docker-config-",
+      });
+      const contextName = "alchemy-test-linked-context";
+      const current = yield* docker.run(["context", "show"]);
+      const endpoint = yield* docker.run([
+        "context",
+        "inspect",
+        "--format",
+        '{{(index .Endpoints "docker").Host}}',
+        current.stdout,
+      ]);
+      // The context exists only inside the temp `DOCKER_CONFIG`.
+      yield* docker.run([
+        "--config",
+        configDir,
+        "context",
+        "create",
+        contextName,
+        "--docker",
+        `host=${endpoint.stdout}`,
+      ]);
+
+      // The credentials target an unrelated server. The pull only succeeds
+      // when the credential config resolves the context.
+      const result = yield* docker.image
+        .pull("hello-world:latest", undefined, contextName, {
+          server: "localhost:1",
+          username: "nobody",
+          password: Redacted.make("nothing"),
+        })
+        .pipe(
+          Effect.provide(
+            ConfigProvider.layer(
+              ConfigProvider.fromUnknown({ DOCKER_CONFIG: configDir }),
+            ),
+          ),
+        );
+      expect(result.exitCode).toBe(0);
     }),
   );
 });
