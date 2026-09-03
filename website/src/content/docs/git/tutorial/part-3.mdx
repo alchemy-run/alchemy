@@ -53,49 +53,83 @@ export class Auth extends Context.Service<Auth, AuthInstance>()("app/Auth") {}
 export const AuthLive = Layer.effect(Auth, BetterAuth(authOptions));
 ```
 
-## Who is calling, once
+## Who is calling
 
-`Git.Authenticated.make` takes an `init` that runs when the layer is
-built and returns the per-request resolver. An API key in the password
-field of the remote names a user. Otherwise the session cookie does.
-Otherwise the request is anonymous:
+`Git.Authenticated.make` takes an Effect that produces the handler.
+Resources, bindings, and the services the handler needs are declared
+in that Effect; the handler runs once per request and answers with a
+principal, or `undefined` for anonymous:
 
 ```typescript
 import * as Git from "alchemy/Git";
 import * as Effect from "effect/Effect";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 
 export const AuthenticatedLive = Git.Authenticated.make(
   Effect.gen(function* () {
     const auth = yield* Auth;
     return Effect.fn(function* (request) {
-      const key = Git.parseSecret(request.headers);
-      if (key !== undefined && key !== "") {
-        const verified = yield* auth.api
-          .verifyApiKey({ body: { key } })
-          .pipe(
-            Effect.catchTag("BetterAuthApiError", () =>
-              Effect.succeed({ valid: false as const, key: null }),
-            ),
-          );
-        return verified.valid && verified.key
-          ? { id: verified.key.referenceId }
-          : undefined;
-      }
-      const session = yield* auth.getSession().pipe(
-        Effect.catchTag("BetterAuthApiError", () => Effect.succeed(null)),
-        Effect.provideService(HttpServerRequest, request),
-      );
-      return session
-        ? { id: session.user.id, name: session.user.name }
-        : undefined;
+      return undefined;
     });
   }),
 );
 ```
 
-`Git.parseSecret` reads a bearer token or the Basic password, which is
-what `git` sends and what `gh api` sends.
+Every request is anonymous so far. Better Auth fills in the two ways
+a request names a user.
+
+## API keys for git clients
+
+A `git` client sends HTTP Basic with the key in the password field,
+and `gh` sends it as a bearer token. `Git.parseSecret` reads either,
+and `verifyApiKey` says whose it is:
+
+```diff lang="typescript"
+    return Effect.fn(function* (request) {
++      const key = Git.parseSecret(request.headers);
++      if (key !== undefined && key !== "") {
++        const verified = yield* auth.api
++          .verifyApiKey({ body: { key } })
++          .pipe(
++            Effect.catchTag("BetterAuthApiError", () =>
++              Effect.succeed({ valid: false as const, key: null }),
++            ),
++          );
++        return verified.valid && verified.key
++          ? { id: verified.key.referenceId }
++          : undefined;
++      }
+      return undefined;
+    });
+```
+
+An invalid key is anonymous, not an error. The policy decides what
+anonymous may do.
+
+## Sessions for browsers
+
+A request without a key carries the session cookie, or nothing:
+
+```diff lang="typescript"
++import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+
+    return Effect.fn(function* (request) {
+      const key = Git.parseSecret(request.headers);
+      if (key !== undefined && key !== "") {
+        // …
+      }
+-      return undefined;
++      const session = yield* auth.getSession().pipe(
++        Effect.catchTag("BetterAuthApiError", () => Effect.succeed(null)),
++        Effect.provideService(HttpServerRequest, request),
++      );
++      return session
++        ? { id: session.user.id, name: session.user.name }
++        : undefined;
+    });
+```
+
+One handler now serves every git route: the REST plane, the wire,
+the raw reads, and the GitHub facade.
 
 ## A route of your own
 
