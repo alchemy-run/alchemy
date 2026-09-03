@@ -19,7 +19,8 @@ import * as Layer from "effect/Layer";
 const GitLive = Git.ServerLive.pipe(
   Layer.provide(Git.ReposDurableObject),
   Layer.provide(Git.RegistryDurableObject),
-  Layer.provide(Git.BlobStoreS3({ bucket: "git-objects", region: "us-east-1" })),
+  Layer.provide(Git.BlobStoreS3()),
+  // or: Git.BlobStoreS3({ bucket: AWS.S3.Bucket("GitObjects", { bucketName: "git-objects" }) })
   Layer.provide(GitHasher.HasherLambda(GitHasher.HasherFunction)),
   Layer.provide(AWS.Lambda.InvokeFunctionHttp),
   Layer.provide(Git.PolicyOwners),
@@ -59,8 +60,6 @@ export default Alchemy.Stack(
 ```
 
 ```sh
-export AWS_ACCESS_KEY_ID=...        # a key scoped to the bucket
-export AWS_SECRET_ACCESS_KEY=...
 bun alchemy deploy
 ```
 
@@ -71,16 +70,16 @@ On Cloudflare, the same Worker and Durable Object namespaces as
 
 On AWS:
 
+- `GitObjects`, an S3 bucket with an engine-generated name in the
+  deploying profile's region.
 - `HasherFunction`, a 3 GB Lambda whose only handler answers hash
   events, with its execution role.
-- An IAM user, an access key, and a least-privilege role the Worker
-  assumes. `InvokeFunctionHttp` binds the key and the role's ARN onto
-  the Worker and signs each invoke with credentials assumed at runtime.
-  The role is granted `lambda:InvokeFunction` on that one function.
-
-The S3 bucket is yours. The Layer never creates it, and the access key
-you export at deploy time is bound to the Worker as a secret and used
-for every read and write.
+- One IAM user, one access key, and one least-privilege role the Worker
+  assumes. `BlobStoreS3` and `InvokeFunctionHttp` share that identity:
+  the key and the role's ARN are bound onto the Worker, each request is
+  signed with credentials assumed at runtime, and the role is granted
+  the S3 actions on that one bucket and `lambda:InvokeFunction` on that
+  one function.
 
 ## What crosses the internet
 

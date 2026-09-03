@@ -2,16 +2,13 @@
  * `Git.BlobStoreS3` — AWS S3 implementation of {@link BlobStore}.
  *
  * Runs the git service's bulk bytes (packs, clone bundles, oversize
- * objects, push spill) on an S3 bucket while compute stays on Cloudflare:
- * distilled's S3 client is SigV4 over Effect's HttpClient, so it works
- * identically in the Worker and inside the Repo DO — one provision serves
- * both runtime contexts, exactly like {@link BlobStoreR2}.
- *
- * Credentials are static access keys resolved via `Config` — at deploy
- * time from the deployer's environment (bound onto the Worker as
- * secrets), at runtime from the Worker env. Scope the IAM user to this
- * bucket (`s3:GetObject`, `s3:PutObject`, `s3:DeleteObject`,
- * `s3:ListBucket`, `s3:AbortMultipartUpload` on the bucket + objects).
+ * objects, push spill) on an S3 bucket while compute stays on Cloudflare.
+ * It is built over the S3 bindings (`AWS.S3.GetObject`, `PutObject`, …),
+ * so one provision serves the Worker and the Repo DO alike, exactly like
+ * {@link BlobStoreR2}: the bucket is an `AWS.S3.Bucket` resource, the
+ * Worker gets a least-privilege IAM identity minted for it, and every
+ * request is signed with credentials assumed at runtime, in the bucket's
+ * region.
  *
  * Latency note: every blob operation crosses the internet to S3 (no
  * Cloudflare-internal path), so serving-path reads are slower than R2.
@@ -25,22 +22,34 @@
  * const GitLive = Git.ServerLive.pipe(
  *   Layer.provide(Git.ReposDurableObject),
  *   Layer.provide(Git.RegistryDurableObject),
- *   Layer.provide(
- *     Git.BlobStoreS3({ bucket: "my-git-objects", region: "us-east-1" }),
- *   ),
+ *   Layer.provide(Git.BlobStoreS3()),
+ *   // or: Git.BlobStoreS3({ bucket: AWS.S3.Bucket("GitObjects", { bucketName: "git-objects" }) })
  * );
  * ```
  */
-import { fromCredentials } from "../AWS/Credentials.ts";
-import * as S3 from "@distilled.cloud/aws/s3";
-import * as AwsRegion from "@distilled.cloud/aws/Region";
-import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import { AbortMultipartUpload } from "../AWS/S3/AbortMultipartUpload.ts";
+import { AbortMultipartUploadHttp } from "../AWS/S3/AbortMultipartUploadHttp.ts";
+import { Bucket } from "../AWS/S3/Bucket.ts";
+import { CompleteMultipartUpload } from "../AWS/S3/CompleteMultipartUpload.ts";
+import { CompleteMultipartUploadHttp } from "../AWS/S3/CompleteMultipartUploadHttp.ts";
+import { CreateMultipartUpload } from "../AWS/S3/CreateMultipartUpload.ts";
+import { CreateMultipartUploadHttp } from "../AWS/S3/CreateMultipartUploadHttp.ts";
+import { DeleteObjects } from "../AWS/S3/DeleteObjects.ts";
+import { DeleteObjectsHttp } from "../AWS/S3/DeleteObjectsHttp.ts";
+import { GetObject } from "../AWS/S3/GetObject.ts";
+import { GetObjectHttp } from "../AWS/S3/GetObjectHttp.ts";
+import { HeadObject } from "../AWS/S3/HeadObject.ts";
+import { HeadObjectHttp } from "../AWS/S3/HeadObjectHttp.ts";
+import { ListObjectsV2 } from "../AWS/S3/ListObjectsV2.ts";
+import { ListObjectsV2Http } from "../AWS/S3/ListObjectsV2Http.ts";
+import { PutObject } from "../AWS/S3/PutObject.ts";
+import { PutObjectHttp } from "../AWS/S3/PutObjectHttp.ts";
+import { UploadPart } from "../AWS/S3/UploadPart.ts";
+import { UploadPartHttp } from "../AWS/S3/UploadPartHttp.ts";
 import {
   BlobStore,
   BlobStoreError,
@@ -51,19 +60,16 @@ import {
   type BlobStoreShape,
 } from "./BlobStore.ts";
 
+/** The id of the `AWS.S3.Bucket` {@link BlobStoreS3} declares when none is passed. */
+export const S3_BUCKET_ID = "GitObjects" as const;
+
 export interface BlobStoreS3Options {
-  /** Bucket name (must already exist; the layer never creates it). */
-  readonly bucket: string;
-  /** Bucket region, e.g. `us-east-1`. */
-  readonly region: string;
   /**
-   * `Config` keys the access keys are read from.
-   * @default AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY
+   * The `AWS.S3.Bucket` holding the bytes. Declared for you as
+   * {@link S3_BUCKET_ID}, with an engine-generated name in the deploying
+   * profile's region, when omitted.
    */
-  readonly credentials?: {
-    readonly accessKeyId?: string;
-    readonly secretAccessKey?: string;
-  };
+  readonly bucket?: Effect.Effect<Bucket, never, any> | undefined;
 }
 
 const s3Error =
@@ -94,65 +100,39 @@ const collectBytes = (
   );
 
 /**
- * S3-backed {@link BlobStore}. See the module doc for credentials and
+ * S3-backed {@link BlobStore}. See the module doc for identity and
  * latency semantics.
  *
  * @layer
  * @provides Git.BlobStore
  */
 export const BlobStoreS3 = (
-  options: BlobStoreS3Options,
+  options?: BlobStoreS3Options,
 ): Layer.Layer<BlobStore> =>
   Layer.effect(
     BlobStore,
     Effect.gen(function* () {
-      const Bucket = options.bucket;
-      const accessKeyId = yield* Config.string(
-        options.credentials?.accessKeyId ?? "AWS_ACCESS_KEY_ID",
-      );
-      const secretAccessKey = yield* Config.redacted(
-        options.credentials?.secretAccessKey ?? "AWS_SECRET_ACCESS_KEY",
-      );
+      // Yielding the resource class gives a constructor whose providers are
+      // the host stack's, so declaring the bucket here needs nothing from
+      // the caller. A user-declared bucket is the same resource, yielded.
+      const bucket =
+        options?.bucket === undefined
+          ? yield* (yield* Bucket)(S3_BUCKET_ID)
+          : yield* options.bucket as Effect.Effect<Bucket>;
 
-      // The distilled client context: static credentials + region + fetch.
-      // Constructed once at layer build (cheap, no I/O) — the per-context
-      // rules of RFC §2 hold on both the Worker and DO sides.
-      const context = Layer.mergeAll(
-        fromCredentials(
-          {
-            accessKeyId,
-            secretAccessKey: Redacted.value(secretAccessKey),
-          },
-          options.region,
-        ),
-        AwsRegion.of(options.region as AwsRegion.RegionName),
-        FetchHttpClient.layer,
-      );
-
-      const getObject = yield* S3.getObject.pipe(Effect.provide(context));
-      const putObject = yield* S3.putObject.pipe(Effect.provide(context));
-      const headObject = yield* S3.headObject.pipe(Effect.provide(context));
-      const deleteObjects = yield* S3.deleteObjects.pipe(
-        Effect.provide(context),
-      );
-      const listObjectsV2 = yield* S3.listObjectsV2.pipe(
-        Effect.provide(context),
-      );
-      const createMultipart = yield* S3.createMultipartUpload.pipe(
-        Effect.provide(context),
-      );
-      const uploadPart = yield* S3.uploadPart.pipe(Effect.provide(context));
-      const completeMultipart = yield* S3.completeMultipartUpload.pipe(
-        Effect.provide(context),
-      );
-      const abortMultipart = yield* S3.abortMultipartUpload.pipe(
-        Effect.provide(context),
-      );
+      const getObject = yield* GetObject(bucket);
+      const putObject = yield* PutObject(bucket);
+      const headObject = yield* HeadObject(bucket);
+      const deleteObjects = yield* DeleteObjects(bucket);
+      const listObjectsV2 = yield* ListObjectsV2(bucket);
+      const createMultipart = yield* CreateMultipartUpload(bucket);
+      const uploadPart = yield* UploadPart(bucket);
+      const completeMultipart = yield* CompleteMultipartUpload(bucket);
+      const abortMultipart = yield* AbortMultipartUpload(bucket);
 
       return {
         get: (key, range) =>
           getObject({
-            Bucket,
             Key: key,
             Range:
               range === undefined
@@ -177,15 +157,14 @@ export const BlobStoreS3 = (
 
         put: (key, body, opts) =>
           putObject({
-            Bucket,
             Key: key,
-            Body: body instanceof Uint8Array ? body : body,
+            Body: body,
             ContentLength:
               body instanceof Uint8Array ? body.length : opts?.contentLength,
           }).pipe(Effect.mapError(s3Error(`put ${key}`)), Effect.asVoid),
 
         head: (key) =>
-          headObject({ Bucket, Key: key }).pipe(
+          headObject({ Key: key }).pipe(
             Effect.map((output): BlobMeta => ({
               key,
               size: output.ContentLength ?? 0,
@@ -195,7 +174,7 @@ export const BlobStoreS3 = (
           ),
 
         multipart: (key) =>
-          createMultipart({ Bucket, Key: key }).pipe(
+          createMultipart({ Key: key }).pipe(
             Effect.mapError(s3Error(`multipart ${key}`)),
             Effect.map((created): BlobMultipart => {
               const UploadId = created.UploadId ?? "";
@@ -203,7 +182,6 @@ export const BlobStoreS3 = (
                 uploadId: UploadId,
                 uploadPart: (partNumber, part) =>
                   uploadPart({
-                    Bucket,
                     Key: key,
                     UploadId,
                     PartNumber: partNumber,
@@ -218,7 +196,6 @@ export const BlobStoreS3 = (
                   ),
                 complete: (parts) =>
                   completeMultipart({
-                    Bucket,
                     Key: key,
                     UploadId,
                     MultipartUpload: {
@@ -231,7 +208,7 @@ export const BlobStoreS3 = (
                     Effect.mapError(s3Error(`complete ${key}`)),
                     Effect.asVoid,
                   ),
-                abort: abortMultipart({ Bucket, Key: key, UploadId }).pipe(
+                abort: abortMultipart({ Key: key, UploadId }).pipe(
                   Effect.mapError(s3Error(`abort ${key}`)),
                   Effect.asVoid,
                 ),
@@ -240,7 +217,6 @@ export const BlobStoreS3 = (
           ),
         uploadPart: (key, uploadId, partNumber, part) =>
           uploadPart({
-            Bucket,
             Key: key,
             UploadId: uploadId,
             PartNumber: partNumber,
@@ -257,7 +233,6 @@ export const BlobStoreS3 = (
           const list = typeof keys === "string" ? [keys] : [...keys];
           if (list.length === 0) return Effect.void;
           return deleteObjects({
-            Bucket,
             Delete: {
               Objects: list.map((Key) => ({ Key })),
               Quiet: true,
@@ -270,7 +245,6 @@ export const BlobStoreS3 = (
             undefined as string | undefined,
             (ContinuationToken) =>
               listObjectsV2({
-                Bucket,
                 Prefix: prefix,
                 ContinuationToken,
                 MaxKeys: 1000,
@@ -294,4 +268,16 @@ export const BlobStoreS3 = (
           ),
       } satisfies BlobStoreShape;
     }),
+  ).pipe(
+    Layer.provide([
+      GetObjectHttp,
+      PutObjectHttp,
+      HeadObjectHttp,
+      DeleteObjectsHttp,
+      ListObjectsV2Http,
+      CreateMultipartUploadHttp,
+      UploadPartHttp,
+      CompleteMultipartUploadHttp,
+      AbortMultipartUploadHttp,
+    ]),
   ) as never;

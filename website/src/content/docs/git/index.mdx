@@ -44,7 +44,7 @@ const GitLive = Git.ServerLive.pipe(
   Layer.provide(Git.ReposDurableObject),
   Layer.provide(Git.RegistryDurableObject),
 -  Layer.provide(Git.BlobStoreR2(GitObjects)),
-+  Layer.provide(Git.BlobStoreS3({ bucket: "git-objects", region: "us-east-1" })),
++  Layer.provide(Git.BlobStoreS3()),
   Layer.provide(Git.HasherInline),
 -  Layer.provide(Git.PolicyOwners),
 +  Layer.provide(ProtectedMain),

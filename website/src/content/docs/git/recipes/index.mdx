@@ -21,7 +21,7 @@ const GitLive = Git.ServerLive.pipe(
 | --- | --- | --- |
 | Everything on one Cloudflare account | nothing | [All on Cloudflare](/git/recipes/cloudflare) |
 | Large pushes verified fast, still on one cloud | `HasherWorkerLoader()` | [Scaling](/git/recipes/scaling) |
-| Bytes stored in AWS | `BlobStoreS3({ bucket, region })` | [Bytes in S3, hashing on Lambda](/git/recipes/cloudflare-aws) |
+| Bytes stored in AWS | `BlobStoreS3()` | [Bytes in S3, hashing on Lambda](/git/recipes/cloudflare-aws) |
 | The widest push parallelism | `HasherLambda(HasherFunction)` | [Bytes in S3, hashing on Lambda](/git/recipes/cloudflare-aws) |
 | Bytes somewhere that is neither R2 nor S3 | your own `BlobStore` | [Bring your own store](/git/recipes/your-own-store) |
 | Registry reads near users everywhere, SQL over the index | `RegistryD1(RepoIndex)` | [Registry](/git/blocks/registry) |
