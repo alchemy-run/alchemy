@@ -25,15 +25,17 @@ export interface CertRequestProps {
    */
   privateKey: Redacted.Redacted<string> | string;
   /**
-   * Subject common name (`CN=`). Omitted, the CSR carries an empty
-   * subject — fine for CAs that take identities out-of-band (e.g.
+   * Subject common name (`CN=`). Omitted or empty, the CSR carries an
+   * empty subject — fine for CAs that take identities out-of-band (e.g.
    * Cloudflare Origin CA reads hostnames from the API request, not the
    * CSR).
    */
   commonName?: string;
   /**
-   * DNS names for a `subjectAltName` extension request. Standard CAs
-   * issue for these names; omit for CAs that ignore CSR names.
+   * DNS names for a `subjectAltName` extension request. Each must be an
+   * RFC 1123 hostname (ASCII; punycode-encode IDNs), optionally with a
+   * leading `*.` wildcard label. Standard CAs issue for these names; omit
+   * for CAs that ignore CSR names.
    */
   dnsNames?: string[];
 }
@@ -89,8 +91,6 @@ export type CertRequest = Resource<
  */
 export const CertRequest = Resource<CertRequest>("Alchemy.CertRequest");
 
-// ── PKCS#10 construction (DER, node:crypto only) ───────────────────────────
-
 const concatBytes = (...parts: Array<Uint8Array | number[]>): Uint8Array => {
   const total = parts.reduce((n, p) => n + p.length, 0);
   const out = new Uint8Array(total);
@@ -132,16 +132,16 @@ const oid = (dotted: string): Uint8Array => {
 
 const utf8 = (value: string): Uint8Array => new TextEncoder().encode(value);
 
-/** IA5String bytes; ASCII-ness is checked by {@link nonAsciiDnsName}. */
+/** IA5String bytes. {@link validateDnsNames} rejects non-ASCII names. */
 const ia5 = (name: string): Uint8Array => utf8(name);
 
 /** Subject: `CN=<commonName>`, or the empty DN when no name is given. */
-const subjectDn = (commonName: string | undefined): Uint8Array =>
-  commonName === undefined
-    ? sequence()
-    : sequence(
-        tlv(0x31, sequence(oid("2.5.4.3"), tlv(0x0c, utf8(commonName)))),
-      );
+const subjectDn = (commonName: string | undefined): Uint8Array => {
+  if (commonName === undefined) return sequence();
+  return sequence(
+    tlv(0x31, sequence(oid("2.5.4.3"), tlv(0x0c, utf8(commonName)))),
+  );
+};
 
 /**
  * `[0] IMPLICIT` CSR attributes: a PKCS#9 `extensionRequest` carrying a
@@ -167,12 +167,13 @@ const isSupportedKeyType = (
   keyType === "ec" || keyType === "rsa" || keyType === "ed25519";
 
 /** ecdsa-with-SHA256 and Ed25519 forbid parameters; RSA requires NULL. */
-const signatureAlgorithm = (keyType: SupportedKeyType): Uint8Array =>
-  keyType === "ec"
-    ? sequence(oid("1.2.840.10045.4.3.2"))
-    : keyType === "rsa"
-      ? sequence(oid("1.2.840.113549.1.1.11"), tlv(0x05, []))
-      : sequence(oid("1.3.101.112"));
+const signatureAlgorithm = (keyType: SupportedKeyType): Uint8Array => {
+  if (keyType === "ec") return sequence(oid("1.2.840.10045.4.3.2"));
+  if (keyType === "rsa") {
+    return sequence(oid("1.2.840.113549.1.1.11"), tlv(0x05, []));
+  }
+  return sequence(oid("1.3.101.112"));
+};
 
 const pemWrap = (der: Uint8Array): string => {
   const lines = Encoding.encodeBase64(der).match(/.{1,64}/g) ?? [];
@@ -219,23 +220,56 @@ const computeKeyFingerprint = (key: NodeCrypto.KeyObject): string =>
     )
     .digest("hex");
 
-/** IA5String admits only ASCII — IDNs must arrive punycode-encoded. */
-const nonAsciiDnsName = (dnsNames: readonly string[]): string | undefined =>
-  dnsNames.find((name) => !/^[\x00-\x7f]*$/.test(name));
+const HOSTNAME_LABEL = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/i;
+const MAX_HOSTNAME_LENGTH = 253;
 
-const sameNames = (a: readonly string[], b: readonly string[]): boolean =>
-  a.length === b.length && a.every((name, i) => name === b[i]);
+/** RFC 1123 hostname, optionally with a leading wildcard label. */
+const isHostname = (name: string): boolean => {
+  if (name.length === 0 || name.length > MAX_HOSTNAME_LENGTH) return false;
+  const labels = name.startsWith("*.")
+    ? name.slice(2).split(".")
+    : name.split(".");
+  return labels.every((label) => HOSTNAME_LABEL.test(label));
+};
+
+const describeInvalidDnsName = (name: string): string => {
+  if (!/^[\x00-\x7f]*$/.test(name)) {
+    return `dnsNames must be ASCII hostnames (punycode-encode IDNs): "${name}"`;
+  }
+  if (name.trim().length === 0) {
+    return "dnsNames must not contain empty names";
+  }
+  return `dnsNames must be valid hostnames: "${name}"`;
+};
+
+const validateDnsNames = (
+  dnsNames: readonly string[],
+): Effect.Effect<void, CertRequestError> => {
+  const invalid = dnsNames.find((name) => !isHostname(name));
+  if (invalid === undefined) return Effect.void;
+  return new CertRequestError({ message: describeInvalidDnsName(invalid) });
+};
+
+const sameNames = (a: readonly string[], b: readonly string[]): boolean => {
+  if (a.length !== b.length) return false;
+  const sortedA = [...a].sort();
+  const sortedB = [...b].sort();
+  return sortedA.every((name, i) => name === sortedB[i]);
+};
+
+const normalizeCommonName = (
+  commonName: string | undefined,
+): string | undefined => {
+  if (commonName === undefined || commonName === "") return undefined;
+  return commonName;
+};
 
 export const CertRequestProvider = () =>
   Provider.succeed(CertRequest, {
     reconcile: Effect.fn(function* ({ news, output }) {
       const dnsNames = news.dnsNames ?? [];
-      const nonAscii = nonAsciiDnsName(dnsNames);
-      if (nonAscii !== undefined) {
-        return yield* new CertRequestError({
-          message: `dnsNames must be ASCII (punycode-encode IDNs): "${nonAscii}"`,
-        });
-      }
+      const commonName = normalizeCommonName(news.commonName);
+      yield* validateDnsNames(dnsNames);
       const key = yield* Effect.try({
         try: () =>
           NodeCrypto.createPrivateKey(
@@ -249,44 +283,52 @@ export const CertRequestProvider = () =>
             cause,
           }),
       });
-      const keyType = key.asymmetricKeyType;
+      const keyType = yield* Effect.try({
+        try: () => key.asymmetricKeyType,
+        catch: (cause) =>
+          new CertRequestError({
+            message: "privateKey type could not be determined",
+            cause,
+          }),
+      });
       if (!isSupportedKeyType(keyType)) {
         return yield* new CertRequestError({
           message: `CertRequest supports ec, rsa, and ed25519 keys; got "${keyType ?? "unknown"}"`,
         });
       }
+      const fingerprint = yield* Effect.try({
+        try: () => computeKeyFingerprint(key),
+        catch: (cause) =>
+          new CertRequestError({
+            message: "privateKey public half could not be exported",
+            cause,
+          }),
+      });
 
-      // Observe — there is no remote state; the persisted CSR is
-      // authoritative as long as it was generated for the same key and
-      // names (signatures are randomized, so regeneration is never
-      // byte-stable and would churn downstream certificates).
-      const fingerprint = computeKeyFingerprint(key);
+      // Signatures are randomized. Keep the persisted CSR while the key and
+      // names are unchanged so downstream certificates do not churn.
       if (
         output !== undefined &&
         output.keyFingerprint === fingerprint &&
-        output.commonName === news.commonName &&
+        output.commonName === commonName &&
         sameNames(output.dnsNames, dnsNames)
       ) {
         return output;
       }
 
-      // Ensure — key or names changed (or first reconcile): mint a fresh
-      // CSR.
       const csr = yield* Effect.try({
-        try: () => buildCsr(key, keyType, news.commonName, dnsNames),
+        try: () => buildCsr(key, keyType, commonName, dnsNames),
         catch: (cause) =>
           new CertRequestError({ message: "CSR generation failed", cause }),
       });
       return {
         csr,
         keyFingerprint: fingerprint,
-        commonName: news.commonName,
+        commonName,
         dnsNames,
       };
     }),
-    // Nothing to delete — the CSR only ever existed in state.
     delete: () => Effect.void,
     read: ({ output }) => Effect.succeed(output),
-    // Non-listable — no remote service to enumerate.
     list: () => Effect.succeed([]),
   });

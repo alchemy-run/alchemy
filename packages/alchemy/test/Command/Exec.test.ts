@@ -1,7 +1,11 @@
+import { DestroyError } from "@/Apply";
 import * as Command from "@/Command";
 import * as Provider from "@/Provider";
+import { Stack } from "@/Stack";
+import { State } from "@/State";
 import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as pathe from "pathe";
@@ -19,6 +23,29 @@ const makeTemporaryFixture = Effect.fn(function* () {
   yield* fs.copy(FIXTURE_DIR, tempDir);
   return { cwd: tempDir };
 });
+
+const countLines = Effect.fn(function* (file: string) {
+  const fs = yield* FileSystem.FileSystem;
+  if (!(yield* fs.exists(file))) return 0;
+  const content = yield* fs.readFileString(file);
+  return content.split("\n").filter((line) => line.length > 0).length;
+});
+
+const readStateRow = Effect.fn(function* (fqn: string) {
+  const state = yield* yield* State;
+  const stk = yield* Stack;
+  return yield* state.get({ stack: stk.name, stage: stk.stage, fqn });
+});
+
+const deleteFailedWith = (error: unknown, tag: string): boolean =>
+  error instanceof DestroyError &&
+  error.failures.some((failure) =>
+    failure.cause.reasons.some(
+      (r) =>
+        Cause.isFailReason(r) &&
+        (r.error as { _tag?: string } | undefined)?._tag === tag,
+    ),
+  );
 
 test.provider(
   "list returns [] for non-listable Command.Exec",
@@ -146,4 +173,76 @@ test.provider(
       expect(yield* fs.readFileString(marker)).toBe("final");
     }),
   { timeout: 30000 },
+);
+
+for (const memo of [true, false]) {
+  test.provider(
+    `a destroyCommand-only edit persists without re-running command (memo: ${memo})`,
+    (stack) =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+
+        yield* stack.destroy();
+
+        const fixture = yield* makeTemporaryFixture();
+        const runsLog = pathe.join(fixture.cwd, "runs.log");
+        const destroyLog = pathe.join(fixture.cwd, "destroy.log");
+
+        const deploy = (destroyCommand: string) =>
+          stack.deploy(
+            Command.Exec("destroy-edit", {
+              command: "bash run.sh",
+              destroyCommand,
+              shell: true,
+              cwd: fixture.cwd,
+              memo: memo ? { include: ["src/**"] } : false,
+            }),
+          );
+
+        const exec1 = yield* deploy("echo A >> destroy.log");
+        expect(yield* countLines(runsLog)).toBe(1);
+
+        const exec2 = yield* deploy("echo B >> destroy.log");
+        expect(yield* countLines(runsLog)).toBe(1);
+        expect(exec2.hash.input).toBe(exec1.hash.input);
+
+        yield* stack.destroy();
+        expect(yield* fs.readFileString(destroyLog)).toBe("B\n");
+      }),
+    { timeout: 60000 },
+  );
+}
+
+test.provider(
+  "a failing destroyCommand fails destroy and keeps the state row",
+  (stack) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+
+      yield* stack.destroy();
+
+      const tempDir = yield* fs.makeTempDirectoryScoped();
+
+      const deploy = (destroyCommand: string) =>
+        stack.deploy(
+          Command.Exec("failing-destroy", {
+            command: "true",
+            destroyCommand,
+            shell: true,
+            cwd: tempDir,
+            memo: false,
+          }),
+        );
+
+      yield* deploy("exit 3");
+
+      const error = yield* Effect.flip(stack.destroy());
+      expect(deleteFailedWith(error, "CommandError")).toBe(true);
+      expect(yield* readStateRow("failing-destroy")).toBeDefined();
+
+      yield* deploy("true");
+      yield* stack.destroy();
+      expect(yield* readStateRow("failing-destroy")).toBeUndefined();
+    }),
+  { timeout: 60000 },
 );

@@ -108,6 +108,18 @@ const withoutDestroyCommand = ({
   ...props
 }: ExecProps): Omit<ExecProps, "destroyCommand"> => props;
 
+const onlyDestroyCommandChanged = (
+  olds: ExecProps | undefined,
+  news: ExecProps,
+): boolean => {
+  if (olds === undefined) return false;
+  if (olds.destroyCommand === news.destroyCommand) return false;
+  return !havePropsChanged(
+    withoutDestroyCommand(olds),
+    withoutDestroyCommand(news),
+  );
+};
+
 export const ExecProvider = () =>
   Provider.effect(
     Exec,
@@ -139,22 +151,14 @@ export const ExecProvider = () =>
             news.memo === false
               ? undefined
               : { cwd: news.cwd, memo: news.memo === true ? {} : news.memo };
-          // `destroyCommand` only ever runs on delete, so editing it must not
-          // re-run `command`. The edit still has to reach reconcile — a `noop`
-          // never persists props, and `delete` reads the command out of state
-          // — so the teardown-only case is caught here instead of in `diff`.
-          if (
-            memo !== undefined &&
-            olds !== undefined &&
-            output?.hash.input !== undefined &&
-            olds.destroyCommand !== news.destroyCommand &&
-            !havePropsChanged(
-              withoutDestroyCommand(olds),
-              withoutDestroyCommand(news),
-            )
-          ) {
-            const hash = yield* hashDirectory(memo);
-            if (hash === output.hash.input) return { hash: { input: hash } };
+          // A noop does not persist props. delete reads destroyCommand from
+          // state. Persist the new value without re-running command.
+          if (onlyDestroyCommandChanged(olds, news)) {
+            if (memo === undefined) return { hash: { input: undefined } };
+            if (output?.hash.input !== undefined) {
+              const hash = yield* hashDirectory(memo);
+              if (hash === output.hash.input) return { hash: { input: hash } };
+            }
           }
           yield* run(news, session);
           return {
