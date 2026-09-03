@@ -511,6 +511,7 @@ export default defineConfig({
                   label: "Bindings",
                   link: "/infrastructure-as-effects/binding",
                 },
+                { label: "Layers", link: "/infrastructure-as-effects/layers" },
                 {
                   label: "Event Sources",
                   link: "/infrastructure-as-effects/event-sources",
@@ -520,7 +521,6 @@ export default defineConfig({
                   link: "/infrastructure-as-effects/sinks",
                 },
                 { label: "Phases", link: "/infrastructure-as-effects/phases" },
-                { label: "Layers", link: "/infrastructure-as-effects/layers" },
                 {
                   label: "Circular Bindings",
                   link: "/infrastructure-as-effects/circular-bindings",
