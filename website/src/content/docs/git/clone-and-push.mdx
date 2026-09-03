@@ -49,8 +49,8 @@ Protocol v0 only. Clients that prefer v2 negotiate down on their own.
 Push size is not capped. The body streams through the Worker and into
 the blob store as it arrives, and the repository's Durable Object
 receives rows rather than the pack. Peak memory is a fixed window,
-whatever the push size. [Pushes](/git/scale/pushes) has the path and
-the numbers.
+whatever the push size. [Hasher](/git/blocks/hasher) has the path and
+[Scaling](/git/recipes/scaling) the numbers.
 
 ## Troubleshooting
 

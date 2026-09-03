@@ -1,5 +1,5 @@
 ---
-title: Cloudflare + AWS
+title: Bytes in S3, hashing on Lambda
 description: Compute on Cloudflare, bytes in S3, and large pushes hashed one Lambda per chunk. One stack carries both provider sets, and Alchemy mints the cross-cloud identity.
 ---
 
@@ -66,8 +66,8 @@ bun alchemy deploy
 
 ## What gets created
 
-On Cloudflare, the same Worker and Durable Object namespaces as the
-[Cloudflare assembly](/git/assemblies/cloudflare), minus the bucket.
+On Cloudflare, the same Worker and Durable Object namespaces as
+[All on Cloudflare](/git/recipes/cloudflare), minus the bucket.
 
 On AWS:
 
@@ -88,11 +88,11 @@ A push's chunks go to Lambda and their scan results come back. Pack
 reads for a fetch, bundle streams for a clone, and pack writes from
 compaction all go to S3. Reads are coalesced into few large ranges,
 and the Worker streams bundle bytes straight through, but every one of
-those is a hop the R2 assembly does not make.
+those is a hop the R2 stack does not make.
 
 ## When it is worth it
 
-Take this assembly when the bytes have to be in AWS. Take the Lambda
+Take this stack when the bytes have to be in AWS. Take the Lambda
 hasher on its own when pushes are regularly wider than four chunks.
 Lambda hashes every chunk at once. The loaded Workers hash four at a
 time:

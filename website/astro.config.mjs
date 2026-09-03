@@ -1409,35 +1409,24 @@ export default defineConfig({
             { label: "Overview", link: "/git" },
             { label: "Setup", link: "/git/setup" },
             {
-              label: "Blocks",
+              label: "Tutorial",
               items: [
-                { label: "The layer graph", link: "/git/blocks" },
-                { label: "Server", link: "/git/blocks/server" },
-                { label: "Repositories", link: "/git/blocks/repositories" },
-                { label: "Registry", link: "/git/blocks/registry" },
-                { label: "Blob store", link: "/git/blocks/blob-store" },
-                { label: "Hasher", link: "/git/blocks/hasher" },
-                { label: "Auth", link: "/git/blocks/auth" },
-              ],
-            },
-            {
-              label: "Assemblies",
-              items: [
-                { label: "Choosing an assembly", link: "/git/assemblies" },
-                { label: "Cloudflare", link: "/git/assemblies/cloudflare" },
                 {
-                  label: "Cloudflare + AWS",
-                  link: "/git/assemblies/cloudflare-aws",
+                  label: "Part 1: A git server in one file",
+                  link: "/git/tutorial/part-1",
                 },
-                { label: "One origin", link: "/git/assemblies/one-origin" },
-              ],
-            },
-            {
-              label: "Scale",
-              items: [
-                { label: "Scaling model", link: "/git/scale" },
-                { label: "Pushes", link: "/git/scale/pushes" },
-                { label: "Clones", link: "/git/scale/clones" },
+                {
+                  label: "Part 2: Repositories and tokens",
+                  link: "/git/tutorial/part-2",
+                },
+                {
+                  label: "Part 3: Your own rules",
+                  link: "/git/tutorial/part-3",
+                },
+                {
+                  label: "Part 4: Your app on the same domain",
+                  link: "/git/tutorial/part-4",
+                },
               ],
             },
             {
@@ -1452,7 +1441,34 @@ export default defineConfig({
                 },
               ],
             },
-            { label: "Build on it", link: "/git/build" },
+            {
+              label: "Building blocks",
+              items: [
+                { label: "Overview", link: "/git/blocks" },
+                { label: "Server", link: "/git/blocks/server" },
+                { label: "Repositories", link: "/git/blocks/repositories" },
+                { label: "Registry", link: "/git/blocks/registry" },
+                { label: "Blob store", link: "/git/blocks/blob-store" },
+                { label: "Hasher", link: "/git/blocks/hasher" },
+                { label: "Auth", link: "/git/blocks/auth" },
+              ],
+            },
+            {
+              label: "Recipes",
+              items: [
+                { label: "Overview", link: "/git/recipes" },
+                { label: "Scaling", link: "/git/recipes/scaling" },
+                { label: "All on Cloudflare", link: "/git/recipes/cloudflare" },
+                {
+                  label: "Bytes in S3, hashing on Lambda",
+                  link: "/git/recipes/cloudflare-aws",
+                },
+                {
+                  label: "Bring your own store",
+                  link: "/git/recipes/your-own-store",
+                },
+              ],
+            },
           ],
         },
         {

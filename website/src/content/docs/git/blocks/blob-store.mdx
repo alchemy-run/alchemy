@@ -61,12 +61,13 @@ Scope the key's policy to the bucket: `GetObject`, `PutObject`,
 
 Every read crosses the public internet, so expect higher serving
 latency than R2. Reads are coalesced into few large ranges, but the hop
-is real. [Cloudflare + AWS](/git/assemblies/cloudflare-aws) is the full
-assembly.
+is real. [Bytes in S3, hashing on Lambda](/git/recipes/cloudflare-aws) is the
+full stack.
 
 ## Your own
 
-Implement the five operations and any object store works:
+Implement the five operations and any object store works.
+[Bring your own store](/git/recipes/your-own-store) walks through it:
 
 ```typescript
 const BlobStoreMine: Layer.Layer<Git.BlobStore> = Layer.effect(

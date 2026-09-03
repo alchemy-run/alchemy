@@ -1,0 +1,115 @@
+---
+title: "Part 2: Repositories and tokens"
+description: Create a repository on your host, push to it, mint tokens for CI, and make it public. The REST plane and the token model, used before anything depends on them.
+---
+
+You have a deployed host and its URL, called `$HOST` below, and the
+admin secret you exported when you deployed. By the end of this part
+you have pushed, cloned, and handed out access, and you know what each
+credential can do.
+
+## Create a repository
+
+The admin secret creates repositories:
+
+```sh
+curl -X POST "$HOST/api/v1/repos" \
+  -H "Authorization: Bearer $GIT_SERVICE_ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"owner":"acme","name":"web"}'
+```
+
+The response carries the repository, its clone URL, and a `write`
+token prefixed `gs_`. The token is shown once. Only its hash is stored.
+
+## Push
+
+A token goes in the password field of the remote. The username is
+ignored:
+
+```sh
+git remote add origin "https://x:gs_YOUR_TOKEN@$HOST/acme/web.git"
+git push -u origin main
+```
+
+Every object in the push was hashed and checked against the repository
+before `main` moved. Push again with one more commit and it takes a
+fraction of a second.
+
+## Mint a token for CI
+
+Tokens are scoped `read`, `write`, or `admin`, and can expire. A
+read-only token that lasts thirty days:
+
+```sh
+curl -X POST "$HOST/api/v1/repos/acme/web/tokens" \
+  -H "Authorization: Bearer $GIT_SERVICE_ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"ci","scope":"read","ttlSeconds":2592000}'
+```
+
+List them and revoke one by id:
+
+```sh
+curl "$HOST/api/v1/repos/acme/web/tokens" \
+  -H "Authorization: Bearer $GIT_SERVICE_ADMIN_TOKEN"
+
+curl -X DELETE "$HOST/api/v1/repos/acme/web/tokens/$TOKEN_ID" \
+  -H "Authorization: Bearer $GIT_SERVICE_ADMIN_TOKEN"
+```
+
+A `write` token pushes and reads. An `admin` token also manages the
+repository's tokens and settings. None of them creates repositories.
+That stays with the admin secret.
+
+## Make it public
+
+```sh
+curl -X PATCH "$HOST/api/v1/repos/acme/web" \
+  -H "Authorization: Bearer $GIT_SERVICE_ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"public":true}'
+```
+
+Anyone can clone it now, with no credentials:
+
+```sh
+git clone "https://$HOST/acme/web.git" verify
+git -C verify fsck --strict
+```
+
+Writes still need a token. A private repository answers an anonymous
+request with `401` and `WWW-Authenticate`, so git prompts.
+
+## The same from code
+
+The REST plane is an Effect `HttpApi`, so the operations above are
+typed calls from any Effect program:
+
+```typescript
+import { GitApi } from "alchemy/Git";
+import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+
+const client = yield* HttpApiClient.make(GitApi, {
+  baseUrl: host,
+  transformClient: HttpClient.mapRequest(
+    HttpClientRequest.bearerToken(adminToken),
+  ),
+});
+
+const created = yield* client.repos.create({
+  payload: { owner: "acme", name: "api", public: false },
+});
+```
+
+A duplicate name is a typed `RepoAlreadyExists`, not a string to
+parse.
+
+## Where next
+
+Tokens say what a credential may do to one repository. They cannot say
+"Dana may push but not to `main`". [Part 3](/git/tutorial/part-3) adds
+that rule. [Repositories](/git/repositories) is the reference for
+everything the REST plane does with a repository.

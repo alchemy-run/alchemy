@@ -152,5 +152,6 @@ const AuthSessions: Layer.Layer<Git.Auth> = Layer.effect(
 A `git` client can only send HTTP Basic, so `git push` keeps using
 tokens. Your `authorize` decides who may `ManageTokens`, so a
 signed-in user mints their own over the REST plane and pastes it into
-their remote. [Build on it](/git/build) puts this in front of an
-application.
+their remote. [Part 3 of the tutorial](/git/tutorial/part-3) walks both
+changes through, and [Part 4](/git/tutorial/part-4) puts an
+application in front.

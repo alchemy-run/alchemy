@@ -1,12 +1,21 @@
 ---
 title: Git
-description: Git hosting you assemble from Effect Layers and deploy as Infrastructure as Effects. Choose where bytes live, what verifies a push, and who may write, then build your own product on top.
+description: Build your own git server. The hard parts of hosting git ship as blocks you assemble in one file, deploy to your own cloud, use like any remote, and reshape one block at a time.
 ---
 
-`alchemy/Git` is git hosting you run yourself. `git clone` and
-`git push` over smart HTTP, a typed REST plane, pull requests, and a
-GitHub-compatible API, on your own Cloudflare account. It ships as a
-set of Layers, and you assemble them into a Worker you own:
+You want a git remote you control. Code that stays in your cloud.
+Pushes gated by your rules, not a hosted service's roles. A product
+built on repositories, where git is the storage and your app is the
+face.
+
+What exists is appliances. A binary you run on a box, or a service you
+rent, configured through whatever knobs it exposes. And the parts of
+hosting git that are hard, packs and deltas, ref updates that must not
+race, connectivity checks, pushes larger than memory, are exactly the
+parts you don't want to write.
+
+`alchemy/Git` ships those parts as blocks. You assemble them in one
+file, and the shape is yours:
 
 ```typescript
 import * as Cloudflare from "alchemy/Cloudflare";
@@ -34,14 +43,10 @@ export default Cloudflare.Worker(
 );
 ```
 
-That is the whole deployment. `bun alchemy deploy` creates the bucket,
-two Durable Object namespaces, and the Worker, then prints a URL you
-can push to. [Setup](/git/setup) walks it end to end.
-
-A git host is usually an appliance. You run the binary or rent the
-service and configure it through the knobs it exposes. Here each
-decision is a line in the graph above. Bytes in S3 while compute stays
-on Cloudflare is one line:
+`bun alchemy deploy` and you have a host that speaks git's smart HTTP
+to any client, a typed REST plane, pull requests, and a
+GitHub-compatible API, on your Cloudflare account. Each line of the
+graph is a decision. Change the line and the decision changes:
 
 ```diff lang="typescript"
 const GitLive = Git.ServerLive.pipe(
@@ -50,53 +55,35 @@ const GitLive = Git.ServerLive.pipe(
 -  Layer.provide(Git.BlobStoreR2(GitObjects)),
 +  Layer.provide(Git.BlobStoreS3({ bucket: "git-objects", region: "us-east-1" })),
   Layer.provide(Git.HasherInline),
-  Layer.provide(Git.AuthTokens),
+-  Layer.provide(Git.AuthTokens),
++  Layer.provide(ProtectedMain),
 );
 ```
 
-Protecting `main` is a page of code around the auth Layer. Hashing
-large pushes on Lambda is a hasher that runs there. Nothing else
-changes, and a missing Layer is a type error, not a 500 on your first
-clone.
+Bytes now live in S3 and pushes to `main` need an admin. Nothing else
+changed, and leaving a line out is a type error, not a 500 on your
+first clone.
 
-## Blocks
+[git.alchemy.run](https://git.alchemy.run) is this file grown up. The
+alchemy monorepo, 44,051 objects in a 67 MiB pack, is hosted on it, and
+it clones back byte-identical under `git fsck --strict`.
 
-Six services. Each has implementations you pick from or write:
+## Build one
 
-| Block | Decides | Ships with |
-| --- | --- | --- |
-| [Server](/git/blocks/server) | the HTTP surface: wire, REST, GitHub facade | `ServerLive` |
-| [Repositories](/git/blocks/repositories) | where refs and objects live, and the jobs that keep a repo small | `ReposDurableObject` |
-| [Registry](/git/blocks/registry) | how `owner/name` resolves | `RegistryDurableObject`, `RegistryD1` |
-| [Blob store](/git/blocks/blob-store) | where packs, bundles, and large pushes go | `BlobStoreR2`, `BlobStoreS3` |
-| [Hasher](/git/blocks/hasher) | what verifies a push, and on which compute | `HasherInline`, `HasherWorkerLoader`, `HasherLambda` |
-| [Auth](/git/blocks/auth) | who may do what | `AuthTokens` |
+[Setup](/git/setup) deploys the file above and pushes to it in ten
+minutes. The tutorial then builds it from an empty file, one decision
+per part:
 
-[The layer graph](/git/blocks) shows how they fit together and how the
-one graph you write serves both the Worker and the Durable Objects.
+1. [A git server in one file](/git/tutorial/part-1) — each block,
+   named as you type it.
+2. [Repositories and tokens](/git/tutorial/part-2) — create, push,
+   mint, make public.
+3. [Your own rules](/git/tutorial/part-3) — protect `main`, then make
+   your users the actors.
+4. [Your app on the same domain](/git/tutorial/part-4) — a front door,
+   a service binding, clone URLs on your domain.
 
-## Assemblies
-
-Requirements pick layers. [Choosing an assembly](/git/assemblies) maps
-them, and three are written out in full:
-
-- [Cloudflare](/git/assemblies/cloudflare) — one account, one
-  bucket, dynamic Workers hashing large pushes.
-- [Cloudflare + AWS](/git/assemblies/cloudflare-aws) — bytes in S3,
-  pushes hashed on Lambda, compute on Cloudflare.
-- [One origin](/git/assemblies/one-origin) — your app and your git
-  host on the same domain.
-
-## Scale
-
-Reads scale like a CDN and writes scale like git. Every repository is
-its own Durable Object. Clones stream from immutable bundles that never
-pass through it. A push is bounded by your storage, not by isolate
-memory. [Scaling model](/git/scale) gives the shape,
-[Pushes](/git/scale/pushes) and [Clones](/git/scale/clones) the
-measurements.
-
-## Using your host
+## Use it
 
 - [Cloning & pushing](/git/clone-and-push) — standard clients, what
   the wire supports, credentials.
@@ -107,20 +94,13 @@ measurements.
 - [GitHub API compatibility](/git/github-api) — `gh api` and Octokit
   against your host.
 
-## Build on it
+## Shape it
 
-The service has no users, no UI, and no opinion about either. Your
-Worker owns the HTTP surface, your auth Layer decides who a caller is,
-and the typed client gives your code every operation the REST plane
-has. [Build on it](/git/build) puts a product in front of the host.
-
-## Proven on itself
-
-The alchemy monorepo hosts on it: full history, 44,051 objects, a
-67 MiB thin pack, cloned back byte-identical under `git fsck --strict`.
-A 40 MiB delta-heavy push lands in 5.9 s against GitHub's 3.3 s on the
-same client, a 44 MiB push of whole blobs in 4.8 s against 4.6 s, and
-incremental pushes in 0.2–0.4 s against 1.2 s.
+[Building blocks](/git/blocks) is the reference for each line of the
+graph: the contract, what ships, how to write your own.
+[Recipes](/git/recipes) maps requirements to lines, with
+[Scaling](/git/recipes/scaling) as the why behind the table and complete
+stack files to copy.
 
 ## Not a GitHub replacement
 

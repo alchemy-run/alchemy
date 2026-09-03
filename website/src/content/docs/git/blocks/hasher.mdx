@@ -11,9 +11,38 @@ already has. `Git.Hasher` is where that work runs:
 Layer.provide(Git.HasherInline)
 ```
 
-The Worker receiving the push cuts the body into 4 MiB chunks as it
-streams in and hands each chunk to the hasher. Where a chunk goes is
-the only thing the Layers below disagree on.
+The Worker receiving the push never holds it whole:
+
+1. The first 1 MiB is read for the ref commands, and
+   [Auth](/git/blocks/auth) rules on them before any pack byte is
+   inspected.
+2. The body streams through in 8 MiB parts. Each part is cut into
+   4 MiB chunks for the hasher as it lands and is parked in the
+   [blob store](/git/blocks/blob-store) as a multipart upload.
+3. Hashed objects reach the repository's Durable Object as batches of
+   rows over RPC: coordinates into the parked pack for large objects,
+   inline bytes for small ones.
+4. The Durable Object checks connectivity over the staged rows,
+   updates the commit graph, moves the refs in one transaction, and
+   schedules compaction.
+
+The pack never enters the Durable Object. Its memory, CPU, and egress
+are untouched by push size, and its share of a push is SQL.
+
+The Worker retains a 16 MiB window of the body for objects that span
+parts, so peak memory is that window plus the parts in flight,
+whatever the push size. Pushes share a 64 MiB budget per isolate, and
+one that does not fit waits for an earlier one to drain.
+
+An object that straddles two chunks is hashed from its own header the
+moment its first chunk settles, so a 10 MB blob spanning three parts
+does not wait for the last one. Deltas whose base is in another chunk
+are resolved as a second round of hasher jobs, and the resolved blobs
+are written out as a pack of their own so a fetch never re-resolves
+them.
+
+Where a chunk is hashed is the only thing the Layers below disagree
+on.
 
 ## In the Worker
 
@@ -79,8 +108,8 @@ GitHub. The choice only matters for pushes of tens of megabytes.
 Start with `HasherInline`. Move to `HasherWorkerLoader` when large
 pushes matter and you want to stay on one cloud. Reach for
 `HasherLambda` when a push is wider than four chunks and you already
-run AWS. [Pushes](/git/scale/pushes) has the full path and the numbers
-behind this table.
+run AWS. [Scaling](/git/recipes/scaling) walks a large push through
+the swap.
 
 ## Your own
 

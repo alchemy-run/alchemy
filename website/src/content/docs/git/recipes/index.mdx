@@ -1,10 +1,10 @@
 ---
-title: Choosing an assembly
-description: Requirements pick layers. One table from what you need to the lines that change, and the stack shape for one cloud or two.
+title: Overview
+description: Requirements pick lines. One table from what you need to the line that changes, the stack shape for one cloud or two, and complete files to copy.
 ---
 
-Start from the default graph and change the lines your requirements
-touch:
+Start from the graph the tutorial built and change the lines your
+requirements touch:
 
 ```typescript
 const GitLive = Git.ServerLive.pipe(
@@ -16,19 +16,21 @@ const GitLive = Git.ServerLive.pipe(
 );
 ```
 
-| You need | Change | Assembly |
+| You need | Change | Where |
 | --- | --- | --- |
-| Everything on one Cloudflare account | nothing | [Cloudflare](/git/assemblies/cloudflare) |
-| Large pushes verified fast, still on one cloud | `HasherWorkerLoader()` | [Cloudflare](/git/assemblies/cloudflare) |
-| Bytes stored in AWS | `BlobStoreS3({ bucket, region })` | [Cloudflare + AWS](/git/assemblies/cloudflare-aws) |
-| The widest push parallelism | `HasherLambda(HasherFunction)` | [Cloudflare + AWS](/git/assemblies/cloudflare-aws) |
+| Everything on one Cloudflare account | nothing | [All on Cloudflare](/git/recipes/cloudflare) |
+| Large pushes verified fast, still on one cloud | `HasherWorkerLoader()` | [Scaling](/git/recipes/scaling) |
+| Bytes stored in AWS | `BlobStoreS3({ bucket, region })` | [Bytes in S3, hashing on Lambda](/git/recipes/cloudflare-aws) |
+| The widest push parallelism | `HasherLambda(HasherFunction)` | [Bytes in S3, hashing on Lambda](/git/recipes/cloudflare-aws) |
+| Bytes somewhere that is neither R2 nor S3 | your own `BlobStore` | [Bring your own store](/git/recipes/your-own-store) |
 | Registry reads near users everywhere, SQL over the index | `RegistryD1(RepoIndex)` | [Registry](/git/blocks/registry) |
-| Branch rules, your own users | wrap or replace `AuthTokens` | [Auth](/git/blocks/auth) |
-| Your web app and git on one domain | a front-door Worker | [One origin](/git/assemblies/one-origin) |
+| Branch rules, your own users | wrap or replace `AuthTokens` | [Tutorial Part 3](/git/tutorial/part-3) |
+| Your web app and git on one domain | a front-door Worker | [Tutorial Part 4](/git/tutorial/part-4) |
 
 Every row is independent. Bytes in S3 with the loader hasher and a D1
 registry is three changed lines, and the type checker confirms the
-graph is whole.
+graph is whole. [Scaling](/git/recipes/scaling) is the why behind the
+first four rows.
 
 ## One cloud or two
 

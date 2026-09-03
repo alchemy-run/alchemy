@@ -1,0 +1,168 @@
+---
+title: "Part 1: A git server in one file"
+description: Build the git host from an empty file. Each line you add is one decision, and by the end you have deployed it.
+---
+
+You have a Cloudflare account connected to alchemy and an empty
+project. By the end of this part a git server is deployed, and you
+know what each line of it decides. [Setup](/git/setup) deploys the
+finished file directly if you would rather start there.
+
+## Install
+
+```sh
+bun add alchemy
+```
+
+## A Worker that serves git
+
+`Git.Server` is the HTTP surface: the git wire protocol, a REST plane,
+and a GitHub-compatible facade behind one `fetch`. It is a service, not
+a Worker, so the Worker is yours:
+
+```typescript
+// src/git.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Git from "alchemy/Git";
+import * as Effect from "effect/Effect";
+
+export default class GitHost extends Cloudflare.Worker<GitHost>()(
+  "Git",
+  { main: import.meta.url, ...Git.GIT_WORKER_OPTIONS },
+  Effect.gen(function* () {
+    const git = yield* Git.Server;
+    return { fetch: git.fetch };
+  }),
+) {}
+```
+
+`GIT_WORKER_OPTIONS` sets `nodejs_compat` and a CPU limit large enough
+to verify a push. This does not compile yet. `Git.Server` needs five
+services, and the compiler lists them.
+
+## Where refs and objects live
+
+`Git.ReposDurableObject` gives every repository its own Durable Object.
+Refs, the object index, tokens, the commit graph, and pull requests
+live in its SQLite, and a push's ref update is one transaction:
+
+```diff lang="typescript"
+import * as Effect from "effect/Effect";
++import * as Layer from "effect/Layer";
+
++const GitLive = Git.ServerLive.pipe(
++  Layer.provide(Git.ReposDurableObject),
++);
++
+export default class GitHost extends Cloudflare.Worker<GitHost>()(
+  "Git",
+  { main: import.meta.url, ...Git.GIT_WORKER_OPTIONS },
+  Effect.gen(function* () {
+    const git = yield* Git.Server;
+    return { fetch: git.fetch };
+-  }),
++  }).pipe(Effect.provide(GitLive)),
+) {}
+```
+
+## How names resolve
+
+`acme/web` has to become a repository id. `Git.RegistryDurableObject`
+is one object that owns that mapping, enforces uniqueness, and answers
+listings:
+
+```diff lang="typescript"
+const GitLive = Git.ServerLive.pipe(
+  Layer.provide(Git.ReposDurableObject),
++  Layer.provide(Git.RegistryDurableObject),
+);
+```
+
+## Where bytes go
+
+Packs, clone bundles, and the bodies of large pushes are bulk bytes.
+Declare a bucket and hand it to `Git.BlobStoreR2`. The one Layer
+serves the Worker streaming a clone and the Durable Object writing a
+pack:
+
+```diff lang="typescript"
++export const GitObjects = Cloudflare.R2.Bucket("GitObjects");
++
+const GitLive = Git.ServerLive.pipe(
+  Layer.provide(Git.ReposDurableObject),
+  Layer.provide(Git.RegistryDurableObject),
++  Layer.provide(Git.BlobStoreR2(GitObjects)),
+);
+```
+
+## What verifies a push
+
+Every object a push sends is inflated and hashed before a ref moves.
+`Git.HasherInline` does that on the Worker that received the push,
+which is right until pushes are tens of megabytes:
+
+```diff lang="typescript"
+const GitLive = Git.ServerLive.pipe(
+  Layer.provide(Git.ReposDurableObject),
+  Layer.provide(Git.RegistryDurableObject),
+  Layer.provide(Git.BlobStoreR2(GitObjects)),
++  Layer.provide(Git.HasherInline),
+);
+```
+
+## Who may do what
+
+`Git.AuthTokens` is the smallest thing that secures a fresh host: a
+deployer admin secret and per-repository tokens:
+
+```diff lang="typescript"
+const GitLive = Git.ServerLive.pipe(
+  Layer.provide(Git.ReposDurableObject),
+  Layer.provide(Git.RegistryDurableObject),
+  Layer.provide(Git.BlobStoreR2(GitObjects)),
+  Layer.provide(Git.HasherInline),
++  Layer.provide(Git.AuthTokens),
+);
+```
+
+The file compiles. Five lines, five decisions, and each one is a Layer
+you can replace later without touching the others.
+
+## Add it to a stack
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+import GitHost from "./src/git.ts";
+
+export default Alchemy.Stack(
+  "GitService",
+  { providers: Cloudflare.providers(), state: Cloudflare.state() },
+  Effect.gen(function* () {
+    const git = yield* GitHost;
+    return { url: git.url.as<string>() };
+  }),
+);
+```
+
+## Deploy
+
+The admin secret is read from your environment at deploy time and
+bound to the Worker as a secret:
+
+```sh
+export GIT_SERVICE_ADMIN_TOKEN="$(openssl rand -base64 32)"
+bun alchemy deploy
+```
+
+The stack prints the Worker's URL. It created a bucket, two Durable
+Object namespaces, and one Worker, and nothing runs until a request
+arrives.
+
+## Where next
+
+[Part 2](/git/tutorial/part-2) creates a repository on it, pushes, and
+mints tokens. The reference for each line you wrote is under
+[Building blocks](/git/blocks).

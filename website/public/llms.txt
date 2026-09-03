@@ -419,29 +419,30 @@ Repos, secrets, variables, and repository event sources as Stack resources; the 
 
 ## Git
 
-Self-hosted git as a layer graph you assemble and deploy: blocks with swappable implementations (blob store, hasher, registry, auth), assemblies by requirement and cloud, the scaling model with measurements, the REST and GitHub-compatible planes, and building a product on top.
+A git server you build in one file, use like any remote, and reshape one block at a time: setup, a four-part tutorial (build it, repositories and tokens, your own rules, your app on the same domain), the REST and GitHub-compatible planes, the building blocks with their implementations, and recipes with the scaling model and measurements.
 
-- [Git](https://alchemy.run/git) — Git hosting you assemble from Effect Layers and deploy as Infrastructure as Effects. Choose where bytes live, what verifies a push, and who may write, then build your own product on top.
+- [Git](https://alchemy.run/git) — Build your own git server. The hard parts of hosting git ship as blocks you assemble in one file, deploy to your own cloud, use like any remote, and reshape one block at a time.
 - [Setup](https://alchemy.run/git/setup) — Deploy a git host to Cloudflare and push your first repository.
-- [The layer graph](https://alchemy.run/git/blocks) — One layer graph, provided once, builds the Worker and every Durable Object behind it. Each line is a decision with implementations you choose or write.
+- [Part 1: A git server in one file](https://alchemy.run/git/tutorial/part-1) — Build the git host from an empty file. Each line you add is one decision, and by the end you have deployed it.
+- [Part 2: Repositories and tokens](https://alchemy.run/git/tutorial/part-2) — Create a repository on your host, push to it, mint tokens for CI, and make it public. The REST plane and the token model, used before anything depends on them.
+- [Part 3: Your own rules](https://alchemy.run/git/tutorial/part-3) — Pushes to main should need an admin. Wrap the auth block with a page of code, then make your own users the actors.
+- [Part 4: Your app on the same domain](https://alchemy.run/git/tutorial/part-4) — A front-door Worker serves your application and forwards the git paths to the host over a service binding. Clone URLs land on your domain, and your app calls the host without leaving Cloudflare.
+- [Cloning & pushing](https://alchemy.run/git/clone-and-push) — Standard git clients over smart HTTP. What the wire supports, where credentials go, and what to do when something hangs.
+- [Repositories](https://alchemy.run/git/repositories) — Create, fork, import, and manage repositories over the typed REST plane.
+- [Pull requests](https://alchemy.run/git/pull-requests) — Server-side merge base, tree diffs, and fast-forward or three-way merges, computed inside the repository.
+- [GitHub API compatibility](https://alchemy.run/git/github-api) — Point the gh CLI and Octokit at your host with the /api/v3 facade.
+- [Overview](https://alchemy.run/git/blocks) — One layer graph, provided once, builds the Worker and every Durable Object behind it. Each line is a decision with implementations you choose or write.
 - [Server](https://alchemy.run/git/blocks/server) — Git.Server is the HTTP surface, three planes behind one fetch. You own the Worker it runs in and the routes it sits behind.
 - [Repositories](https://alchemy.run/git/blocks/repositories) — One Durable Object per repository owns refs, the object index, tokens, the commit graph, and pull requests. Objects move between it and the blob store on their own.
 - [Registry](https://alchemy.run/git/blocks/registry) — The registry resolves owner/name to a repository and serves listings. Keep it in a Durable Object or move it to a D1 database.
 - [Blob store](https://alchemy.run/git/blocks/blob-store) — Bulk, immutable, content-addressed bytes. R2 by default, S3 when data has to live in AWS, or any store that can do ranged reads and multipart writes.
 - [Hasher](https://alchemy.run/git/blocks/hasher) — Every object a push sends is inflated and hashed before a ref moves. That is CPU, and where it runs is a Layer, in the Worker, in dynamically loaded Workers, or on Lambda.
 - [Auth](https://alchemy.run/git/blocks/auth) — Auth answers two questions, who is calling and may they do this. The bundled tokens secure a fresh host in one line. Your own rules wrap or replace them.
-- [Choosing an assembly](https://alchemy.run/git/assemblies) — Requirements pick layers. One table from what you need to the lines that change, and the stack shape for one cloud or two.
-- [Cloudflare](https://alchemy.run/git/assemblies/cloudflare) — A git host on one Cloudflare account. One Worker, one bucket, two Durable Object namespaces, and dynamically loaded Workers hashing large pushes.
-- [Cloudflare + AWS](https://alchemy.run/git/assemblies/cloudflare-aws) — Compute on Cloudflare, bytes in S3, and large pushes hashed one Lambda per chunk. One stack carries both provider sets, and Alchemy mints the cross-cloud identity.
-- [One origin](https://alchemy.run/git/assemblies/one-origin) — Your application and your git host on the same domain. A front-door Worker serves your app and forwards the git and API paths to the host over a service binding.
-- [Scaling model](https://alchemy.run/git/scale) — Reads scale like a CDN and writes scale like git. Every repository is its own Durable Object, clones never pass through it, and a push is bounded by storage rather than memory.
-- [Pushes](https://alchemy.run/git/scale/pushes) — A push streams through the Worker in 8 MiB parts, is hashed in parallel, and reaches the Durable Object as rows. Push size is bounded by your storage, and the numbers against GitHub.
-- [Clones](https://alchemy.run/git/scale/clones) — A full clone streams a precomputed bundle that never passes through the Durable Object. Compaction makes it fast, and the measured throughput.
-- [Cloning & pushing](https://alchemy.run/git/clone-and-push) — Standard git clients over smart HTTP. What the wire supports, where credentials go, and what to do when something hangs.
-- [Repositories](https://alchemy.run/git/repositories) — Create, fork, import, and manage repositories over the typed REST plane.
-- [Pull requests](https://alchemy.run/git/pull-requests) — Server-side merge base, tree diffs, and fast-forward or three-way merges, computed inside the repository.
-- [GitHub API compatibility](https://alchemy.run/git/github-api) — Point the gh CLI and Octokit at your host with the /api/v3 facade.
-- [Build on it](https://alchemy.run/git/build) — The host has no users, no UI, and no opinion about either. Your Worker owns the surface, your Auth Layer decides who a caller is, and the typed client gives your code every operation.
+- [Overview](https://alchemy.run/git/recipes) — Requirements pick lines. One table from what you need to the line that changes, the stack shape for one cloud or two, and complete files to copy.
+- [Scaling](https://alchemy.run/git/recipes/scaling) — Reads scale like a CDN and writes scale like git. The shape, the per-repository limits, the measured numbers, and a worked example of pushing something large and swapping the hasher.
+- [All on Cloudflare](https://alchemy.run/git/recipes/cloudflare) — A git host on one Cloudflare account. One Worker, one bucket, two Durable Object namespaces, and dynamically loaded Workers hashing large pushes.
+- [Bytes in S3, hashing on Lambda](https://alchemy.run/git/recipes/cloudflare-aws) — Compute on Cloudflare, bytes in S3, and large pushes hashed one Lambda per chunk. One stack carries both provider sets, and Alchemy mints the cross-cloud identity.
+- [Bring your own store](https://alchemy.run/git/recipes/your-own-store) — Bytes have to live somewhere that is neither R2 nor S3. Implement the five operations of Git.BlobStore and provide it in place of the shipped Layers.
 
 ## Docker
 
@@ -477,4 +478,4 @@ Cloud-agnostic local process primitives — memoized builds, one-off commands, a
 
 Per-resource API reference, generated from JSDoc on the source `.ts` files via `bun generate:api-reference`. Each page documents the resource's input properties (with types, defaults, and constraints), output attributes, and Quick Reference / Examples sections derived from `@section` / `@example` JSDoc tags.
 
-The per-resource pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per resource. Warning: it is large (~915 KB) — only fetch it when you need to locate a specific resource's reference page.
+The per-resource pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per resource. Warning: it is large (~916 KB) — only fetch it when you need to locate a specific resource's reference page.

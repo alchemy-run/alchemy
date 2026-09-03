@@ -34,6 +34,26 @@ reads over the network.
 of the refs. The Worker streams them from the blob store, and no pack
 byte passes through the Durable Object.
 
+## How a clone is served
+
+A full clone of a repository whose refs have not moved is one object
+in the blob store. The Durable Object checks the request against the
+current refs and answers with the key of the bundle cut for them. The
+Worker opens that object and pipes it to the client. The bundle is
+stored already framed for git's side-band protocol, so the Worker
+moves bytes and nothing else.
+
+When refs moved since the last bundle was cut, the clone is assembled
+from the repository's objects and a fresh bundle is scheduled.
+Incremental fetches always take this path. The commit graph in SQLite
+finds what the client lacks, commits and trees come from rows, and
+blobs come from packs in the blob store as a few large ranged reads.
+
+Compaction is what keeps the dynamic path fast. On a real repository
+of 13,699 objects, cloning back took 19.5 s before compaction and
+3.4 s after. [Scaling](/git/recipes/scaling) has the throughput
+numbers.
+
 Objects are stored deflated, so serving a pack is concatenation plus a
 checksum rather than a recompression pass.
 
@@ -78,4 +98,4 @@ repositories does not wake a thousand Durable Objects.
 ## One implementation
 
 This block ships one implementation. What the Durable Object bounds,
-and what it does not, is in the [Scaling model](/git/scale).
+and what it does not, is in [Scaling](/git/recipes/scaling).
