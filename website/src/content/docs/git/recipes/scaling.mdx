@@ -54,7 +54,7 @@ read the timing the repository reports:
 
 ```sh
 curl "$HOST/api/v1/repos/acme/big" \
-  -H "Authorization: Bearer $GIT_SERVICE_ADMIN_TOKEN" | jq .lastPush
+  -H "Authorization: Bearer $GIT_SERVICE_SECRET" | jq .lastPush
 ```
 
 Ingest dominates. Every object was inflated and hashed on the one
@@ -69,7 +69,8 @@ const GitLive = Git.ServerLive.pipe(
   Layer.provide(Git.BlobStoreR2(GitObjects)),
 -  Layer.provide(Git.HasherInline),
 +  Layer.provide(GitHasher.HasherWorkerLoader()),
-  Layer.provide(Git.AuthTokens),
+  Layer.provide(Git.PolicyOwners),
+  Layer.provide(Git.AuthenticateSecret({ principal: { id: "acme" } })),
 );
 ```
 

@@ -1,134 +1,141 @@
 ---
-title: "Part 4: Your app on the same domain"
-description: A front-door Worker serves your application and forwards the git paths to the host over a service binding. Clone URLs land on your domain, and your app calls the host without leaving Cloudflare.
+title: "Part 4: Your own rules"
+description: A policy is a page of code over git's own facts. Protect main, decide who reads what, and let a team share a repository. It never sees a credential.
 ---
 
-You have a git host with your rules and users who need somewhere to
-sign in. By the end of this part your application and the host share
-one domain, the host is unreachable except through your app, and your
-code calls it like a function.
+You have users signing in and pushing to their own repositories. Now
+the rules: pushes to `main` should only come from the owner, and a
+teammate should be able to push everywhere else. By the end of this
+part the rules are one file, and the authentication from Part 3 is
+untouched.
 
-## The front door
+## What the engine asks
 
-A second Worker owns the domain. It forwards the git paths and the API
-to the host and serves your app for everything else:
+`Git.Policy` is one function. It receives three things and answers yes
+or no: the principal your middleware resolved (`undefined` for
+anonymous), the repository, and an action in git's own vocabulary:
 
 ```typescript
-// src/worker.ts
-interface Env {
-  GIT: { fetch(request: Request): Promise<Response> };
-  ASSETS: { fetch(request: Request): Promise<Response> };
+interface PolicyShape {
+  authorize(input: {
+    principal: Principal | undefined;
+    repo: RepoContext | null;
+    action: GitAction;
+  }): Effect<boolean>;
 }
-
-const API = /^\/api\/v[13]\//;
-const WIRE = /^\/[^/]+\/[^/]+\/(?:info\/refs$|git-upload-pack$|git-receive-pack$)/;
-
-export default {
-  fetch(request: Request, env: Env): Promise<Response> {
-    const { pathname } = new URL(request.url);
-    if (API.test(pathname) || WIRE.test(pathname)) {
-      return env.GIT.fetch(request);
-    }
-    return env.ASSETS.fetch(request);
-  },
-};
 ```
 
-Forward the git paths verbatim. A proxy that buffers request bodies
-breaks streaming pushes, and one that rewrites `Host` makes the host
-print clone URLs for the wrong domain.
+The actions are facts the engine parsed, not roles: `Fetch`, `Push`
+with the refs it wants to move, `ReadRepo`, `UpdateRepo`, `DeleteRepo`,
+`CreateRepo` with the owner, `ListRepos`, `Maintain`, `CreatePull`,
+`UpdatePull`, `MergePull`. It runs where the facts are: a push is judged
+inside the repository's Durable Object, after the ref commands are
+parsed.
 
-## Bind the host
+`Git.PolicyOwners` is what you have been running: anonymous reads
+public, a principal may create and list, and owns what it owns.
+
+## Protect main
+
+```typescript
+// src/policy.ts
+import * as Git from "alchemy/Git";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+
+export const AppPolicy: Layer.Layer<Git.Policy> = Layer.succeed(Git.Policy, {
+  authorize: ({ principal, repo, action }) =>
+    Effect.succeed(
+      principal === undefined
+        ? repo !== null && repo.public && Git.isReadAction(action)
+        : repo === null
+          ? true
+          : action._tag === "Push"
+            ? action.updates.every((u) =>
+                u.ref === "refs/heads/main" ? Git.owns(principal, repo) : true,
+              )
+            : Git.owns(principal, repo) ||
+              (repo.public && Git.isReadAction(action)),
+    ),
+});
+```
+
+`Git.owns` compares the repository's owner with the principal's id,
+lowercased, since owner names are. `Push` carries its `updates` twice:
+empty at the ref advertisement, when the question is whether this
+caller may push at all, and exact at commit, which is when the rule
+above sees `refs/heads/main`.
 
 ```diff lang="typescript"
-// alchemy.run.ts
-export default Alchemy.Stack(
-  "GitService",
-  { providers: Cloudflare.providers(), state: Cloudflare.state() },
-  Effect.gen(function* () {
-    const git = yield* GitHost;
--    return { url: git.url.as<string>() };
-+
-+    const web = yield* Cloudflare.Website.Vite("Web", {
-+      main: "src/worker.ts",
-+      domain: "git.example.com",
-+      assets: {
-+        notFoundHandling: "single-page-application",
-+        runWorkerFirst: true,
-+      },
-+      env: { GIT: GitHost },
-+    });
-+
-+    return { url: git.url.as<string>(), webUrl: web.url };
-  }),
+// src/git.ts
++import { AppPolicy } from "./policy.ts";
+
+const GitLive = Git.ReposDurableObject.pipe(
+  Layer.provideMerge(Git.RegistryDurableObject),
+  Layer.provideMerge(Git.HasherInline),
+  Layer.provideMerge(Git.BlobStoreR2(GitObjects)),
+-  Layer.provideMerge(Git.PolicyOwners),
++  Layer.provideMerge(AppPolicy),
 );
 ```
-
-`env: { GIT: GitHost }` is a service binding. A request crosses to the
-host inside Cloudflare with its `Host` header intact, so the host
-derives clone URLs on your domain and push bodies stream through
-untouched.
 
 ```sh
 bun alchemy deploy
 ```
 
+## Try it
+
+Push a branch with a teammate's key, then push `main`:
+
 ```sh
-git clone https://git.example.com/acme/web.git
+git push origin HEAD:feature
+git push origin main
 ```
 
-## Call the host from your app
+The branch lands. The push to `main` is refused in-band with the ref
+named, the way git reports any rejected ref. The owner's key moves it.
 
-Your app's server code binds the host the same way and calls it
-without a network hop:
+## A team
+
+Your data decides who is on a team. Read it in the policy:
 
 ```typescript
-import * as Cloudflare from "alchemy/Cloudflare";
-import * as Effect from "effect/Effect";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import GitHost from "./git.ts";
-
-export default Cloudflare.Worker(
-  "App",
-  { main: import.meta.url },
+export const AppPolicy = Layer.effect(
+  Git.Policy,
   Effect.gen(function* () {
-    const git = yield* Cloudflare.Workers.Fetch(GitHost);
+    const teams = yield* Teams; // yours: who may write to which owner
 
     return {
-      fetch: Effect.gen(function* () {
-        const res = yield* git(
-          HttpClientRequest.get("https://git/api/v1/repos").pipe(
-            HttpClientRequest.setUrlParam("owner", "acme"),
-          ),
-        );
-        return HttpServerResponse.json(yield* res.json);
-      }),
+      authorize: ({ principal, repo, action }) =>
+        Effect.gen(function* () {
+          if (principal === undefined) {
+            return repo !== null && repo.public && Git.isReadAction(action);
+          }
+          if (repo === null) return true;
+          const member = yield* teams.isMember(principal.id, repo.owner);
+          if (action._tag === "Push") {
+            return action.updates.every((u) =>
+              u.ref === "refs/heads/main" ? Git.owns(principal, repo) : member,
+            );
+          }
+          return member || (repo.public && Git.isReadAction(action));
+        }),
     };
-  }).pipe(Effect.provide(Cloudflare.Workers.FetchBinding)),
+  }),
 );
 ```
 
-For typed calls, `GitApi` is the REST contract and
-`HttpApiClient.make(GitApi, …)` gives you every operation with its
-tagged errors, as [Repositories](/git/repositories) shows.
-
-## The host stays private
-
-`GitHost` needs no route of its own. Leave it on its `workers.dev`
-address or disable that too, and the service binding is the only way
-in. Sessions, the UI, rate limits, and everything else the host does
-not have live in your front door, and the host keeps the repositories
-correct.
+The host asks `MergePull` and `Push` with the refs that move. It never
+asks what a team is.
 
 ## Where you are
 
-A git server you built in one file, with your rules, behind your app,
-on your domain. From here:
+A git server you built in one file, inside your own API, with your
+users and your rules, on your domain. From here:
 
 - [Using your host](/git/clone-and-push) — what git clients, the REST
   plane, and the GitHub facade do day to day.
 - [Building blocks](/git/blocks) — the reference for each line of the
-  graph.
+  graph, [Auth](/git/blocks/auth) included.
 - [Recipes](/git/recipes) — which lines change for which requirements,
   and how the host scales.

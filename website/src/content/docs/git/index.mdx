@@ -30,7 +30,8 @@ const GitLive = Git.ServerLive.pipe(
   Layer.provide(Git.RegistryDurableObject), // owner/name → repo
   Layer.provide(Git.BlobStoreR2(GitObjects)), // packs, bundles, large pushes
   Layer.provide(Git.HasherInline), // push verification
-  Layer.provide(Git.AuthTokens), // who may read and write
+  Layer.provide(Git.PolicyOwners), // owners write, anyone reads public
+  Layer.provide(Git.AuthenticateSecret({ principal: { id: "acme" } })), // one secret, one principal
 );
 
 export default Cloudflare.Worker(
@@ -55,15 +56,20 @@ const GitLive = Git.ServerLive.pipe(
 -  Layer.provide(Git.BlobStoreR2(GitObjects)),
 +  Layer.provide(Git.BlobStoreS3({ bucket: "git-objects", region: "us-east-1" })),
   Layer.provide(Git.HasherInline),
--  Layer.provide(Git.AuthTokens),
+-  Layer.provide(Git.PolicyOwners),
 +  Layer.provide(ProtectedMain),
+  Layer.provide(Git.AuthenticateSecret({ principal: { id: "acme" } })),
 );
 ```
 
-Bytes now live in S3 and pushes to `main` need an admin. Nothing else
+Bytes now live in S3 and `main` only moves for its owner. Nothing else
 changed, and leaving a line out is a type error, not a 500 on your
 first clone.
 
+The engine holds no users and no credentials. Who is calling is
+decided in the HTTP layer you own, with the `HttpApi` middleware you
+already write, so the same host runs behind a shared secret, behind
+Better Auth, or behind whatever your product uses.
 [git.alchemy.run](https://git.alchemy.run) is this file grown up. The
 alchemy monorepo, 44,051 objects in a 67 MiB pack, is hosted on it, and
 it clones back byte-identical under `git fsck --strict`.
@@ -76,12 +82,13 @@ per part:
 
 1. [A git server in one file](/git/tutorial/part-1) — each block,
    named as you type it.
-2. [Repositories and tokens](/git/tutorial/part-2) — create, push,
-   mint, make public.
-3. [Your own rules](/git/tutorial/part-3) — protect `main`, then make
-   your users the actors.
-4. [Your app on the same domain](/git/tutorial/part-4) — a front door,
-   a service binding, clone URLs on your domain.
+2. [Repositories](/git/tutorial/part-2) — create, push, make public,
+   clone anonymously.
+3. [Your own API](/git/tutorial/part-3) — the git groups inside your
+   `HttpApi`, behind your session middleware, with API keys for git
+   clients.
+4. [Your own rules](/git/tutorial/part-4) — a policy over git's own
+   facts: protect `main`, decide who reads what.
 
 ## Use it
 

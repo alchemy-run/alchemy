@@ -28,7 +28,8 @@ const GitLive = Git.ServerLive.pipe(
   Layer.provide(Git.RegistryDurableObject),
   Layer.provide(Git.BlobStoreR2(GitObjects)),
   Layer.provide(Git.HasherInline),
-  Layer.provide(Git.AuthTokens),
+  Layer.provide(Git.PolicyOwners),
+  Layer.provide(Git.AuthenticateSecret({ principal: { id: "acme" } })),
 );
 
 export default class GitHost extends Cloudflare.Worker<GitHost>()(
@@ -42,7 +43,9 @@ export default class GitHost extends Cloudflare.Worker<GitHost>()(
 ```
 
 `GIT_WORKER_OPTIONS` sets the compatibility flags and the CPU limit a
-push needs.
+push needs. `AuthenticateSecret` is the smallest thing that secures a
+fresh host: one shared secret, and whoever presents it is the principal
+`acme`, who owns the repositories it creates.
 
 Add it to your stack:
 
@@ -63,14 +66,13 @@ export default Alchemy.Stack(
 );
 ```
 
-## Set the admin secret
+## Set the secret
 
-`Git.AuthTokens` reads `GIT_SERVICE_ADMIN_TOKEN` at deploy time and
-binds it to the Worker as a secret. It creates and deletes
-repositories, so treat it as a root credential:
+`AuthenticateSecret` reads `GIT_SERVICE_SECRET` at deploy time and
+binds it to the Worker as a secret:
 
 ```sh
-export GIT_SERVICE_ADMIN_TOKEN="$(openssl rand -base64 32)"
+export GIT_SERVICE_SECRET="$(openssl rand -base64 32)"
 ```
 
 ## Deploy
@@ -86,21 +88,18 @@ The stack prints the Worker's URL. The rest of this page calls it
 
 ```sh
 curl -X POST "$HOST/api/v1/repos" \
-  -H "Authorization: Bearer $GIT_SERVICE_ADMIN_TOKEN" \
+  -H "Authorization: Bearer $GIT_SERVICE_SECRET" \
   -H "Content-Type: application/json" \
   -d '{"owner":"acme","name":"web","public":true}'
 ```
 
-The response carries a `write` token, returned exactly once. Only its
-hash is stored.
-
 ## Push
 
-The token goes in the password field of the remote URL. The username
+The secret goes in the password field of the remote URL. The username
 is ignored:
 
 ```sh
-git remote add origin "https://x:gs_YOUR_TOKEN@$HOST/acme/web.git"
+git remote add origin "https://x:$GIT_SERVICE_SECRET@$HOST/acme/web.git"
 git push -u origin main
 ```
 
@@ -115,7 +114,8 @@ git -C verify fsck --strict
 ## Where next
 
 - [Tutorial](/git/tutorial/part-1) — build this file from empty, one
-  decision per part, then add your rules and your app.
+  decision per part, then put it behind your own API and your own
+  rules.
 - [Building blocks](/git/blocks) — what each line of `GitLive` decides.
 - [Recipes](/git/recipes) — S3 bytes, Lambda hashing, and how the host
   scales.

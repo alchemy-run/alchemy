@@ -15,7 +15,7 @@ REST to `https://<host>/api/v3/...`:
 
 ```sh
 export GH_HOST="git.example.com"
-export GH_ENTERPRISE_TOKEN="gs_YOUR_TOKEN"
+export GH_ENTERPRISE_TOKEN="YOUR_CREDENTIAL"
 
 gh api "repos/acme/web"
 gh api "repos/acme/web/commits"
@@ -45,7 +45,9 @@ file contents, the authenticated-user probe at `/user`, and pull
 requests: list, create, get, update, merge, and changed files.
 
 Authentication accepts GitHub's `Authorization: token <t>` alongside
-`Bearer` and Basic, because that is what `gh` and Octokit send.
+`Bearer` and Basic, because that is what `gh` and Octokit send. The
+credential is whatever your `Authenticate` Layer verifies, and `/user`
+answers with the principal it resolved.
 
 Pagination uses `Link` headers with `rel="next"`. The next URL carries
 an opaque cursor, which `gh api --paginate` and Octokit's paginator

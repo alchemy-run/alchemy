@@ -3,10 +3,11 @@ title: Overview
 description: One layer graph, provided once, builds the Worker and every Durable Object behind it. Each line is a decision with implementations you choose or write.
 ---
 
-A git host is six decisions: what serves HTTP, where refs and objects
-live, how names resolve, where bulk bytes go, what verifies a push, and
-who may do what. Each is a [Layer](/infrastructure-as-effects/layers),
-and you make all six in one graph:
+A git host is seven decisions: what serves HTTP, where refs and objects
+live, how names resolve, where bulk bytes go, what verifies a push, who
+is calling, and what they may do. Each is a
+[Layer](/infrastructure-as-effects/layers), and you make them in one
+graph:
 
 ```typescript
 const GitLive = Git.ServerLive.pipe(
@@ -14,7 +15,8 @@ const GitLive = Git.ServerLive.pipe(
   Layer.provide(Git.RegistryDurableObject),
   Layer.provide(Git.BlobStoreR2(GitObjects)),
   Layer.provide(Git.HasherInline),
-  Layer.provide(Git.AuthTokens),
+  Layer.provide(Git.PolicyOwners),
+  Layer.provide(Git.AuthenticateSecret({ principal: { id: "acme" } })),
 );
 ```
 
@@ -40,7 +42,7 @@ own on its first request:
 
 `Git.BlobStoreR2(GitObjects)` appears once and serves both sides: the
 Worker streaming a clone bundle and the Durable Object writing a pack.
-`Auth` is the same. `authenticate` runs at the Worker, and `authorize`
+`Policy` is the same. `Authenticate` runs at the Worker, and the policy
 runs wherever the facts it needs live.
 
 ## The blocks
@@ -52,7 +54,7 @@ runs wherever the facts it needs live.
 | [Registry](/git/blocks/registry) | how `owner/name` resolves, and listings | `RegistryDurableObject`, `RegistryD1` |
 | [Blob store](/git/blocks/blob-store) | where packs, bundles, and large pushes go | `BlobStoreR2`, `BlobStoreS3` |
 | [Hasher](/git/blocks/hasher) | what verifies a push, and on which compute | `HasherInline`, `HasherWorkerLoader`, `HasherLambda` |
-| [Auth](/git/blocks/auth) | who may do what | `AuthTokens` |
+| [Auth](/git/blocks/auth) | who is calling, and what they may do | `PolicyOwners`, `AuthenticateSecret`, `Authenticated` |
 
 ## Replacing a block
 
@@ -66,7 +68,8 @@ const GitLive = Git.ServerLive.pipe(
 +  Layer.provide(Git.RegistryD1(RepoIndex)),
   Layer.provide(Git.BlobStoreR2(GitObjects)),
   Layer.provide(Git.HasherInline),
-  Layer.provide(Git.AuthTokens),
+  Layer.provide(Git.PolicyOwners),
+  Layer.provide(Git.AuthenticateSecret({ principal: { id: "acme" } })),
 );
 ```
 
@@ -78,7 +81,8 @@ const GitLive = Git.ServerLive.pipe(
   Layer.provide(Git.ReposDurableObject),
   Layer.provide(Git.RegistryDurableObject),
   Layer.provide(Git.HasherInline),
-  Layer.provide(Git.AuthTokens),
+  Layer.provide(Git.PolicyOwners),
+  Layer.provide(Git.AuthenticateSecret({ principal: { id: "acme" } })),
 );
 // Layer<Server, never, BlobStore>
 //                      ^ still required; providing it to the Worker is a type error

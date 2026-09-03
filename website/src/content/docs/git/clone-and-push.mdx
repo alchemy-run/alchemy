@@ -12,18 +12,20 @@ git clone "https://$HOST/acme/web.git"
 
 ## Credentials
 
-A token goes in the password field of the remote URL. The username is
-ignored:
+The credential goes in the password field of the remote URL. The
+username is ignored. Which credential depends on the `Authenticate`
+Layer your host runs: the shared secret of the starter, an API key when
+you run Better Auth, whatever yours verifies:
 
 ```sh
-git remote add origin "https://x:gs_YOUR_TOKEN@$HOST/acme/web.git"
+git remote add origin "https://x:YOUR_CREDENTIAL@$HOST/acme/web.git"
 ```
 
 Reads of a public repository need no credentials. To keep the secret
 out of `.git/config`, use a credential helper and let git prompt. An
 anonymous request to a private repository answers `401` with
 `WWW-Authenticate`, so git prompts.
-[Auth](/git/blocks/auth) covers minting tokens.
+[Auth](/git/blocks/auth) covers how a credential becomes a principal.
 
 ## What is supported
 

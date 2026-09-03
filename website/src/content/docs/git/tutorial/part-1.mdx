@@ -37,14 +37,14 @@ export default class GitHost extends Cloudflare.Worker<GitHost>()(
 ```
 
 `GIT_WORKER_OPTIONS` sets `nodejs_compat` and a CPU limit large enough
-to verify a push. This does not compile yet. `Git.Server` needs five
+to verify a push. This does not compile yet. `Git.Server` needs six
 services, and the compiler lists them.
 
 ## Where refs and objects live
 
 `Git.ReposDurableObject` gives every repository its own Durable Object.
-Refs, the object index, tokens, the commit graph, and pull requests
-live in its SQLite, and a push's ref update is one transaction:
+Refs, the object index, the commit graph, and pull requests live in its
+SQLite, and a push's ref update is one transaction:
 
 ```diff lang="typescript"
 import * as Effect from "effect/Effect";
@@ -112,8 +112,10 @@ const GitLive = Git.ServerLive.pipe(
 
 ## Who may do what
 
-`Git.AuthTokens` is the smallest thing that secures a fresh host: a
-deployer admin secret and per-repository tokens:
+The engine keeps no users and no credentials. It asks two things of
+you. `Git.Policy` answers yes or no for a principal, a repository, and
+an action, and `Git.PolicyOwners` is the default: owners write, anyone
+reads public repositories:
 
 ```diff lang="typescript"
 const GitLive = Git.ServerLive.pipe(
@@ -121,12 +123,31 @@ const GitLive = Git.ServerLive.pipe(
   Layer.provide(Git.RegistryDurableObject),
   Layer.provide(Git.BlobStoreR2(GitObjects)),
   Layer.provide(Git.HasherInline),
-+  Layer.provide(Git.AuthTokens),
++  Layer.provide(Git.PolicyOwners),
 );
 ```
 
-The file compiles. Five lines, five decisions, and each one is a Layer
-you can replace later without touching the others.
+## Who is calling
+
+`Git.Authenticate` turns a request into a principal, or anonymous. The
+smallest thing that secures a fresh host is one shared secret: whoever
+presents it is `acme`, and repositories `acme` creates are `acme`'s:
+
+```diff lang="typescript"
+const GitLive = Git.ServerLive.pipe(
+  Layer.provide(Git.ReposDurableObject),
+  Layer.provide(Git.RegistryDurableObject),
+  Layer.provide(Git.BlobStoreR2(GitObjects)),
+  Layer.provide(Git.HasherInline),
+  Layer.provide(Git.PolicyOwners),
++  Layer.provide(Git.AuthenticateSecret({ principal: { id: "acme" } })),
+);
+```
+
+The file compiles. Six lines, six decisions, and each one is a Layer
+you can replace later without touching the others. Part 3 replaces the
+last one with Better Auth, and Part 4 the one above it with your own
+rules.
 
 ## Add it to a stack
 
@@ -149,11 +170,11 @@ export default Alchemy.Stack(
 
 ## Deploy
 
-The admin secret is read from your environment at deploy time and
-bound to the Worker as a secret:
+The secret is read from your environment at deploy time and bound to
+the Worker as a secret:
 
 ```sh
-export GIT_SERVICE_ADMIN_TOKEN="$(openssl rand -base64 32)"
+export GIT_SERVICE_SECRET="$(openssl rand -base64 32)"
 bun alchemy deploy
 ```
 
@@ -164,5 +185,5 @@ arrives.
 ## Where next
 
 [Part 2](/git/tutorial/part-2) creates a repository on it, pushes, and
-mints tokens. The reference for each line you wrote is under
-[Building blocks](/git/blocks).
+clones it back anonymously. The reference for each line you wrote is
+under [Building blocks](/git/blocks).

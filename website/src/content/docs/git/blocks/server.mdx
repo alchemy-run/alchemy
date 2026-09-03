@@ -1,10 +1,10 @@
 ---
 title: Server
-description: Git.Server is the HTTP surface, three planes behind one fetch. You own the Worker it runs in and the routes it sits behind.
+description: The HTTP planes as pieces. Git.Api and Git.handlers for the REST groups, WireRoutes, RawRoutes, and GithubRoutes for the rest, and ServerLive as the one-line composition.
 ---
 
-`Git.Server` is a `Context.Service` whose `fetch` answers everything a
-git host answers:
+`Git.Server` is the composed HTTP surface behind one `fetch`, and
+`ServerLive` is its default composition:
 
 ```typescript
 export default Cloudflare.Worker(
@@ -18,7 +18,9 @@ export default Cloudflare.Worker(
 ```
 
 It is not a Worker. You write the Worker, so you choose its name, its
-domain, its compatibility date, and what else runs beside it.
+domain, its compatibility date, and what else runs beside it. And
+`ServerLive` is not the only way in: every plane it composes is
+exported on its own.
 
 ## Three planes
 
@@ -28,10 +30,57 @@ domain, its compatibility date, and what else runs beside it.
 | `/api/v1/**` | REST, an Effect `HttpApi` | your code, `curl`, the typed client |
 | `/api/v3/**` | GitHub REST v3 facade | `gh api`, Octokit |
 
-A `git` client can only send HTTP Basic, so the wire plane takes the
-token in the password field. The other two also accept `Bearer` and
-GitHub's `token` scheme. All three hand the headers to
-[Auth](/git/blocks/auth).
+## The pieces
+
+**`Git.Api`** is the REST plane as an `HttpApi`: the `repos`, `refs`,
+`objects`, and `pulls` groups under `/api/v1`, with no middleware of
+their own. Derive your API from it and apply yours:
+
+```typescript
+export const AppApi = Git.Api.add(Me).middleware(Session);
+```
+
+**`Git.handlers(api)`** implements the git groups of an API derived
+from `Git.Api`. Its requirements are the middleware you applied, so
+the compiler asks for `Session`'s implementation:
+
+```typescript
+Layer.provide(Git.handlers(AppApi).pipe(Layer.provide(SessionLive)))
+```
+
+**`Git.WireRoutes`** is the git wire protocol plus the push pipeline's
+internal hash route, **`Git.RawRoutes`** the streaming blob and file
+reads under `/api/v1`, and **`Git.GithubRoutes`** the facade under
+`/api/v3`. They are `HttpRouter` Layers merged beside the API, and
+they resolve the caller through `Git.Authenticate` because a `git`
+client can only send HTTP Basic:
+
+```typescript
+const api = yield* HttpApiBuilder.layer(AppApi).pipe(
+  Layer.provide(Git.handlers(AppApi).pipe(Layer.provide(SessionLive))),
+  Layer.provide(MeLive.pipe(Layer.provide(SessionLive))),
+  Layer.merge(Git.WireRoutes),
+  Layer.merge(Git.RawRoutes),
+  Layer.merge(Git.GithubRoutes),
+  Layer.provide(AuthenticateLive),
+  Layer.provide([Etag.layer, HttpPlatformStub, Path.layer]),
+  HttpRouter.toHttpEffect,
+);
+```
+
+`HttpPlatformStub` is the same stand-in the
+[Effect HTTP API](/cloudflare/apis/effect-http-api) guide uses, since
+Workers have no filesystem. [Part 3 of the tutorial](/git/tutorial/part-3)
+builds this composition from the ground up.
+
+**`Git.ServerLive`** is the composition above with the default
+middleware, `Git.Authenticated`, which bridges `Authenticate` into
+`Caller` so one implementation serves every plane. Provide it and
+`Authenticate`, and `git.fetch` is the whole host.
+
+All of the pieces share one core per Worker: the registry cache, the
+Durable Object stubs, and the push admission gate are built once
+however many of them you merge.
 
 ## Worker options
 
@@ -46,35 +95,27 @@ the hasher. Spread it first and put your own options after it.
 ## Under your own routes
 
 `git.fetch` is an Effect that reads the request from context and
-returns a response, so it composes with anything else you serve. Take
-the paths you want and hand the rest to git:
+returns a response, so it composes with anything else you serve:
 
 ```typescript
-import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+Effect.gen(function* () {
+  const git = yield* Git.Server;
 
-export default Cloudflare.Worker(
-  "Git",
-  { main: import.meta.url, ...Git.GIT_WORKER_OPTIONS },
-  Effect.gen(function* () {
-    const git = yield* Git.Server;
-
-    return {
-      fetch: Effect.gen(function* () {
-        const request = yield* HttpServerRequest.HttpServerRequest;
-        if (request.url === "/healthz") {
-          return HttpServerResponse.text("ok");
-        }
-        return yield* git.fetch;
-      }),
-    };
-  }).pipe(Effect.provide(GitLive)),
-);
+  return {
+    fetch: Effect.gen(function* () {
+      const request = yield* HttpServerRequest.HttpServerRequest;
+      if (request.url === "/healthz") {
+        return HttpServerResponse.text("ok");
+      }
+      return yield* git.fetch;
+    }),
+  };
+});
 ```
 
 To put a whole application on the same domain, keep the git host as
 its own Worker and forward the git paths to it over a service binding.
-[Part 4 of the tutorial](/git/tutorial/part-4) shows the front door.
+[Part 3 of the tutorial](/git/tutorial/part-3) shows the front door.
 
 ## The typed client
 

@@ -35,9 +35,10 @@ yield* client.repos.create({
 });
 ```
 
-The response carries the repository, its clone URL, and a `write`
-token returned once. A duplicate `owner/name` is a typed
-`RepoAlreadyExists`.
+The response carries the repository and its clone URL. A duplicate
+`owner/name` is a typed `RepoAlreadyExists`. Who may create under an
+owner is the policy's call. The default lets any principal create, and
+a repository belongs to the principal whose id matches `owner`.
 
 `owner/name` is the public identity. The repository's id is stable, so
 renaming never moves data.
@@ -45,9 +46,9 @@ renaming never moves data.
 ## Visibility
 
 `public: true` serves anonymous reads: REST reads, raw files, the ref
-advertisement, and `upload-pack`. Writes always need a token. A private
-repository answers `401` with `WWW-Authenticate` to anonymous callers,
-so git prompts.
+advertisement, and `upload-pack`. Writes always need a principal. A
+private repository answers `401` with `WWW-Authenticate` to anyone the
+policy does not admit, so git prompts.
 
 Listings are filtered by what the caller may see.
 

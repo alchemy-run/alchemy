@@ -1,6 +1,6 @@
 ---
 title: Repositories
-description: One Durable Object per repository owns refs, the object index, tokens, the commit graph, and pull requests. Objects move between it and the blob store on their own.
+description: One Durable Object per repository owns refs, the object index, the commit graph, and pull requests. Objects move between it and the blob store on their own.
 ---
 
 `Git.ReposDurableObject` hosts one Durable Object per repository, keyed
@@ -11,7 +11,7 @@ Layer.provide(Git.ReposDurableObject)
 ```
 
 Everything that has to be consistent lives in its SQLite: refs, the
-object index, hot object bytes, tokens, the commit graph, and pull
+object index, hot object bytes, the commit graph, and pull
 requests. A push is a compare-and-swap on a ref, and one Durable Object
 serializes that without a lock service. Renaming a repository never
 moves data, because the object is keyed by id and `owner/name` belongs
@@ -70,11 +70,11 @@ itself:
 
 Every job is idempotent and resumable. An interrupted run picks up
 where it stopped on the next alarm. Compaction can also be triggered by
-hand with the admin secret:
+hand by a principal the policy allows `Maintain`:
 
 ```sh
 curl -X POST "$HOST/api/v1/repos/acme/web/compact" \
-  -H "Authorization: Bearer $GIT_SERVICE_ADMIN_TOKEN"
+  -H "Authorization: Bearer $GIT_SERVICE_SECRET"
 ```
 
 ## What a repository reports

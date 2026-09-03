@@ -1416,15 +1416,15 @@ export default defineConfig({
                   link: "/git/tutorial/part-1",
                 },
                 {
-                  label: "Part 2: Repositories and tokens",
+                  label: "Part 2: Repositories",
                   link: "/git/tutorial/part-2",
                 },
                 {
-                  label: "Part 3: Your own rules",
+                  label: "Part 3: Your own API",
                   link: "/git/tutorial/part-3",
                 },
                 {
-                  label: "Part 4: Your app on the same domain",
+                  label: "Part 4: Your own rules",
                   link: "/git/tutorial/part-4",
                 },
               ],

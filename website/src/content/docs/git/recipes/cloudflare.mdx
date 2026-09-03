@@ -21,7 +21,8 @@ const GitLive = Git.ServerLive.pipe(
   Layer.provide(Git.RegistryDurableObject),
   Layer.provide(Git.BlobStoreR2(GitObjects)),
   Layer.provide(GitHasher.HasherWorkerLoader()),
-  Layer.provide(Git.AuthTokens),
+  Layer.provide(Git.PolicyOwners),
+  Layer.provide(Git.AuthenticateSecret({ principal: { id: "acme" } })),
 );
 
 export default class GitHost extends Cloudflare.Worker<GitHost>()(
@@ -52,7 +53,7 @@ export default Alchemy.Stack(
 ```
 
 ```sh
-export GIT_SERVICE_ADMIN_TOKEN="$(openssl rand -base64 32)"
+export GIT_SERVICE_SECRET="$(openssl rand -base64 32)"
 bun alchemy deploy
 ```
 
@@ -60,7 +61,7 @@ bun alchemy deploy
 
 - An R2 bucket for packs, clone bundles, and spilled push bodies.
 - A Worker with `nodejs_compat`, a 300 s CPU limit, a `worker_loader`
-  binding for the hasher, and the admin secret bound as a secret.
+  binding for the hasher, and the shared secret bound as a secret.
 - Two Durable Object namespaces on that Worker, one per repository and
   one for the registry, each with SQLite storage.
 
@@ -78,7 +79,8 @@ const GitLive = Git.ServerLive.pipe(
   Layer.provide(Git.BlobStoreR2(GitObjects)),
 -  Layer.provide(GitHasher.HasherWorkerLoader()),
 +  Layer.provide(Git.HasherInline),
-  Layer.provide(Git.AuthTokens),
+  Layer.provide(Git.PolicyOwners),
+  Layer.provide(Git.AuthenticateSecret({ principal: { id: "acme" } })),
 );
 ```
 
@@ -94,7 +96,8 @@ const GitLive = Git.ServerLive.pipe(
 +  Layer.provide(Git.RegistryD1(RepoIndex)),
   Layer.provide(Git.BlobStoreR2(GitObjects)),
   Layer.provide(GitHasher.HasherWorkerLoader()),
-  Layer.provide(Git.AuthTokens),
+  Layer.provide(Git.PolicyOwners),
+  Layer.provide(Git.AuthenticateSecret({ principal: { id: "acme" } })),
 );
 ```
 
