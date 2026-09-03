@@ -465,10 +465,6 @@ export default defineConfig({
                   label: "Resources",
                   link: "/infrastructure-as-code/resource",
                 },
-                {
-                  label: "Renaming Resources",
-                  link: "/infrastructure-as-code/renaming",
-                },
                 { label: "Actions", link: "/infrastructure-as-code/action" },
                 {
                   label: "Inputs & Outputs",
@@ -479,8 +475,12 @@ export default defineConfig({
                   link: "/infrastructure-as-code/references",
                 },
                 {
-                  label: "Resource lifecycle",
+                  label: "Resource Lifecycle",
                   link: "/infrastructure-as-code/resource-lifecycle",
+                },
+                {
+                  label: "Renaming Resources",
+                  link: "/infrastructure-as-code/renaming",
                 },
                 {
                   label: "Providers",
@@ -491,7 +491,7 @@ export default defineConfig({
                   link: "/infrastructure-as-code/custom-provider",
                 },
                 {
-                  label: "Local Providers",
+                  label: "Local Provider",
                   link: "/infrastructure-as-code/local-provider",
                 },
               ],
@@ -504,13 +504,14 @@ export default defineConfig({
                   link: "/infrastructure-as-effects",
                 },
                 {
-                  label: "Functions & Servers",
-                  link: "/infrastructure-as-effects/functions-and-servers",
+                  label: "Runtime",
+                  link: "/infrastructure-as-effects/runtime",
                 },
                 {
                   label: "Bindings",
                   link: "/infrastructure-as-effects/binding",
                 },
+                { label: "Layers", link: "/infrastructure-as-effects/layers" },
                 {
                   label: "Event Sources",
                   link: "/infrastructure-as-effects/event-sources",
@@ -520,7 +521,6 @@ export default defineConfig({
                   link: "/infrastructure-as-effects/sinks",
                 },
                 { label: "Phases", link: "/infrastructure-as-effects/phases" },
-                { label: "Layers", link: "/infrastructure-as-effects/layers" },
                 {
                   label: "Circular Bindings",
                   link: "/infrastructure-as-effects/circular-bindings",

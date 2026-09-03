@@ -1473,7 +1473,7 @@ export const isSelf = (value: unknown): value is Self =>
  * ```
  *
  * There are three ways to define a Worker, from simplest to most
- * flexible. See the [Functions & Servers](/infrastructure-as-effects/functions-and-servers)
+ * flexible. See the [Runtime](/infrastructure-as-effects/runtime)
  * page for the full explanation.
  *
  * - **Async** — plain `async fetch` handler, no Effect runtime in the bundle.
