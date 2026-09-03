@@ -99,11 +99,11 @@ const SECTIONS: Section[] = [
   {
     heading: "Infrastructure as Effects",
     intro:
-      "How app code and infrastructure compose: Functions & Servers, Bindings, the init/runtime Phases, and Layers.",
+      "How app code and infrastructure compose: Runtime, Bindings, the Construction and Runtime Phases, and Layers.",
     pages: {
       slugs: [
         "infrastructure-as-effects/index",
-        "infrastructure-as-effects/functions-and-servers",
+        "infrastructure-as-effects/runtime",
         "infrastructure-as-effects/binding",
         "infrastructure-as-effects/event-sources",
         "infrastructure-as-effects/sinks",
