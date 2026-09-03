@@ -1,5 +1,9 @@
 // Loader hook for published installs under Node.
 //
+// Beyond transpiling, the hook resolves the way tsx does: tsconfig `paths`,
+// `.js` imports that mean `.ts` source, extensionless and directory imports,
+// JSON without import attributes, and `require()` of TypeScript from `.cts`.
+//
 // Every alchemy Node process — the `alchemy` CLI, the dev exec child, the
 // local-provider sidecar, dev-server runners — is started with `--import`
 // of this file. Alchemy itself and all of its dependencies run their built

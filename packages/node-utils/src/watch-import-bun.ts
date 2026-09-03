@@ -1,3 +1,4 @@
+import { realpathSync } from "node:fs";
 import path from "node:path";
 import {
   DependencyWatcher,
@@ -49,7 +50,9 @@ export class BunImportTracker {
       );
     }
     this.#watcher = new DependencyWatcher(options);
-    const root = path.resolve(options.root) + path.sep;
+    // Bun reports real paths (`/private/tmp/...` for `/tmp/...` on macOS);
+    // match them against the root's real path too.
+    const root = realpathSync.native(path.resolve(options.root)) + path.sep;
     const nodeModules = `${path.sep}node_modules${path.sep}`;
     const filter = new RegExp(
       `^${escapeRegExp(root)}(?!.*${escapeRegExp(nodeModules)}).*\\.[cm]?[jt]sx?$`,

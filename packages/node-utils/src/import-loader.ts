@@ -17,10 +17,19 @@ export type SourceTransform = (
 ) => string | SourceTransformResult | undefined;
 
 export interface ImportLoaderOptions {
-  /** Oxc transform configuration. */
+  /**
+   * Oxc transform configuration, layered over the nearest `tsconfig.json`
+   * of each transformed file (`jsx`, decorators, …).
+   */
   readonly transform?: TransformOptions | undefined;
   /** Additional synchronous source transforms, applied after Oxc. */
   readonly transforms?: ReadonlyArray<SourceTransform> | undefined;
+  /**
+   * Honour `tsconfig.json` discovered upward from each file: compiler
+   * options for the transform, `paths`/`baseUrl` aliases for resolution.
+   * @default true
+   */
+  readonly tsconfig?: boolean | undefined;
   /** Controls which file URLs belong to the fresh import graph. */
   readonly shouldInvalidate?:
     | ((url: string, parentURL: string | undefined) => boolean)

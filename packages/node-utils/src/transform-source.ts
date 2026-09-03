@@ -1,36 +1,48 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import {
+  parseSync,
   transformSync,
   TsconfigCache,
   type TransformOptions,
 } from "rolldown/utils";
 import type { ImportLoaderOptions, TransformContext } from "./import-loader.ts";
 
-export const transformExtensions = new Set([".ts", ".tsx", ".mts", ".cts"]);
+/** Extensions Oxc transpiles; everything else is JavaScript Node can run. */
+export const transformExtensions = new Set([
+  ".ts",
+  ".tsx",
+  ".mts",
+  ".cts",
+  ".jsx",
+]);
 
-export const typeScriptSpecifier = (specifier: string): string | undefined => {
-  const metadataIndex = specifier.search(/[?#]/);
-  const path =
-    metadataIndex === -1 ? specifier : specifier.slice(0, metadataIndex);
-  const metadata = metadataIndex === -1 ? "" : specifier.slice(metadataIndex);
-  if (path.endsWith(".js")) return `${path.slice(0, -3)}.ts${metadata}`;
-  if (path.endsWith(".jsx")) return `${path.slice(0, -4)}.tsx${metadata}`;
-  if (path.endsWith(".mjs")) return `${path.slice(0, -4)}.mts${metadata}`;
-  if (path.endsWith(".cjs")) return `${path.slice(0, -4)}.cts${metadata}`;
-  return undefined;
+export type ModuleFormat = "module" | "commonjs";
+
+/**
+ * Module format from Node's `load` hook context. Node derives these from the
+ * extension and the nearest `package.json#type`; `*-typescript` variants are
+ * its TypeScript-aware spellings and mean the same thing.
+ */
+const nodeFormat = (
+  format: string | null | undefined,
+): ModuleFormat | undefined => {
+  switch (format) {
+    case "module":
+    case "module-typescript":
+      return "module";
+    case "commonjs":
+    case "commonjs-typescript":
+      return "commonjs";
+    default:
+      return undefined;
+  }
 };
 
-const moduleFormat = (filePath: string): "module" | "commonjs" => {
+/** Fallback for older Nodes that pass no format: extension, then package type. */
+const inferFormat = (filePath: string): ModuleFormat => {
   const extension = path.extname(filePath);
-  if (
-    extension === ".ts" ||
-    extension === ".tsx" ||
-    extension === ".mts" ||
-    extension === ".mjs"
-  ) {
-    return "module";
-  }
+  if (extension === ".mts" || extension === ".mjs") return "module";
   if (extension === ".cts" || extension === ".cjs") return "commonjs";
   let directory = path.dirname(filePath);
   while (true) {
@@ -70,6 +82,11 @@ const sourceMapComment = (map: string | object) => {
   return `\n//# sourceMappingURL=data:application/json;base64,${Buffer.from(json).toString("base64")}`;
 };
 
+export interface TransformedSource {
+  readonly format: ModuleFormat;
+  readonly source: string;
+}
+
 export class SourceTransformer {
   readonly #options: ImportLoaderOptions;
   readonly #tsconfigCache = new TsconfigCache();
@@ -78,42 +95,65 @@ export class SourceTransformer {
     this.#options = options;
   }
 
+  /**
+   * Transpiles `filePath` for Node, or returns `undefined` when the file is
+   * JavaScript that needs no work. `format` is what Node's `load` hook was
+   * told; it decides `sourceType` and the format handed back.
+   */
   transform(
     filePath: string,
     url: string,
-  ):
-    | { readonly format: "module" | "commonjs"; readonly source: string }
-    | undefined {
+    format: string | null | undefined,
+  ): TransformedSource | undefined {
     const extension = path.extname(filePath);
-    if (
-      !transformExtensions.has(extension) &&
-      this.#options.transforms === undefined
-    ) {
-      return undefined;
-    }
+    const transpile = transformExtensions.has(extension);
+    if (!transpile && this.#options.transforms === undefined) return undefined;
 
-    const format = moduleFormat(filePath);
+    let moduleFormat = nodeFormat(format) ?? inferFormat(filePath);
     let source = readFileSync(filePath, "utf8");
     let map: string | object | undefined;
-    if (transformExtensions.has(extension)) {
+    if (transpile) {
+      const lang = this.#options.transform?.lang ?? language(filePath);
+      // A `.ts` file in a CommonJS package that uses `import`/`export` runs
+      // as ESM — the same call Node's own module-syntax detection makes for
+      // `.js`. Explicit `.cts` stays CommonJS regardless.
+      if (
+        moduleFormat === "commonjs" &&
+        extension !== ".cts" &&
+        parseSync(filePath, source, { lang, sourceType: "unambiguous" }).module
+          .hasModuleSyntax
+      ) {
+        moduleFormat = "module";
+      }
       const transformed = transformSync(
         filePath,
         source,
         {
-          tsconfig: true,
+          tsconfig: this.#options.tsconfig ?? true,
           sourcemap: true,
           ...this.#options.transform,
-          lang: this.#options.transform?.lang ?? language(filePath),
-          sourceType: this.#options.transform?.sourceType ?? format,
+          lang,
+          sourceType: this.#options.transform?.sourceType ?? moduleFormat,
         },
         this.#tsconfigCache,
       );
-      if (transformed.errors.length > 0) throw transformed.errors[0];
+      if (transformed.errors.length > 0) {
+        const [error] = transformed.errors;
+        throw error instanceof Error
+          ? error
+          : new SyntaxError(
+              `${filePath}: ${(error as { message?: string }).message ?? String(error)}`,
+            );
+      }
       source = transformed.code;
       map = transformed.map;
     }
 
-    const context: TransformContext = { url, path: filePath, format };
+    const context: TransformContext = {
+      url,
+      path: filePath,
+      format: moduleFormat,
+    };
     for (const transform of this.#options.transforms ?? []) {
       const result = transform(source, context);
       if (typeof result === "string") {
@@ -125,6 +165,6 @@ export class SourceTransformer {
       }
     }
     if (map !== undefined) source += sourceMapComment(map);
-    return { format, source };
+    return { format: moduleFormat, source };
   }
 }

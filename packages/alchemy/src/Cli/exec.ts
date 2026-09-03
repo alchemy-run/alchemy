@@ -9,6 +9,7 @@ import * as Schema from "effect/Schema";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import { watchImport } from "@alchemy.run/node-utils/watch-import";
 import { trackBunImports } from "@alchemy.run/node-utils/watch-import-bun";
+import { realpathSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -140,7 +141,9 @@ const logReload = (paths: ReadonlySet<string>) =>
  * loop imports the next generation.
  */
 const runNodeDevWatcher = (options: DevOptions) => {
-  const entrypoint = path.resolve(options.main);
+  // Node reports real paths for loaded files (symlinked checkouts, macOS
+  // `/tmp`), so the root the graph is scoped to must be a real path too.
+  const entrypoint = realpathSync.native(path.resolve(options.main));
   const root = path.dirname(entrypoint);
   const nodeModules = `${path.sep}node_modules${path.sep}`;
   return Effect.acquireRelease(

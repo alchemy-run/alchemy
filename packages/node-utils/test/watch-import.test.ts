@@ -111,14 +111,7 @@ describe("watchImport", () => {
 
     const result = spawnSync(
       "node",
-      [
-        "--experimental-transform-types",
-        "--no-warnings=ExperimentalWarning",
-        "--input-type=module",
-        "-e",
-        script,
-        directory,
-      ],
+      ["--no-warnings", "--input-type=module", "-e", script, directory],
       { encoding: "utf8", timeout: 10_000 },
     );
 
