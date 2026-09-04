@@ -64,6 +64,16 @@ test(
 );
 
 test(
+  "effect worker reaches a named dynamic worker via loader.get",
+  Effect.gen(function* () {
+    const { effectWorkerUrl } = yield* stack;
+    const body = yield* readJson(`${effectWorkerUrl}/get`);
+    expect(body).toMatchObject({ mode: "get", ok: true });
+  }),
+  { timeout: 180_000 },
+);
+
+test(
   "effect worker get() fetch proxies to a cached dynamic worker",
   Effect.gen(function* () {
     const { getWorkerUrl } = yield* stack;

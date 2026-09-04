@@ -1404,6 +1404,74 @@ export default defineConfig({
           ],
         },
         {
+          label: "Git",
+          items: [
+            { label: "Overview", link: "/git" },
+            { label: "Getting Started", link: "/git/getting-started" },
+            {
+              label: "Tutorial",
+              items: [
+                {
+                  label: "Part 1: A git server in one file",
+                  link: "/git/tutorial/part-1",
+                },
+                {
+                  label: "Part 2: Repositories",
+                  link: "/git/tutorial/part-2",
+                },
+                {
+                  label: "Part 3: Your own API",
+                  link: "/git/tutorial/part-3",
+                },
+                {
+                  label: "Part 4: Your own rules",
+                  link: "/git/tutorial/part-4",
+                },
+              ],
+            },
+            {
+              label: "Using your host",
+              items: [
+                { label: "Cloning & pushing", link: "/git/clone-and-push" },
+                { label: "Repositories", link: "/git/repositories" },
+                { label: "Pull requests", link: "/git/pull-requests" },
+                {
+                  label: "GitHub API compatibility",
+                  link: "/git/github-api",
+                },
+              ],
+            },
+            {
+              label: "Building blocks",
+              items: [
+                { label: "Overview", link: "/git/blocks" },
+                { label: "Server", link: "/git/blocks/server" },
+                { label: "Repository", link: "/git/blocks/repositories" },
+                { label: "Registry", link: "/git/blocks/registry" },
+                { label: "Blob Store", link: "/git/blocks/blob-store" },
+                { label: "Hasher", link: "/git/blocks/hasher" },
+                { label: "Auth", link: "/git/blocks/auth" },
+              ],
+            },
+            {
+              label: "Recipes",
+              items: [
+                { label: "Overview", link: "/git/recipes" },
+                { label: "Scaling", link: "/git/recipes/scaling" },
+                { label: "All on Cloudflare", link: "/git/recipes/cloudflare" },
+                {
+                  label: "Bytes in S3, hashing on Lambda",
+                  link: "/git/recipes/cloudflare-aws",
+                },
+                {
+                  label: "Bring your own store",
+                  link: "/git/recipes/your-own-store",
+                },
+              ],
+            },
+          ],
+        },
+        {
           label: "Docker",
           items: [
             { label: "Overview", link: "/docker" },

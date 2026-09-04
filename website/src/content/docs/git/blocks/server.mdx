@@ -1,0 +1,189 @@
+---
+title: Server
+description: Every plane as one HttpApi of route classes. Groups you can pick, Handlers you can replace one at a time, Server.layer to serve it behind your middleware, and ServerLive as the open default.
+---
+
+`Git.Server` is the composed HTTP surface behind one `fetch`.
+`Git.Server.layer(api)` serves an API derived from `Git.Api`, yours,
+with your middleware in front of every route; `ServerLive` is the open
+default, `Git.Api` with nothing in front:
+
+```typescript
+export default Cloudflare.Worker(
+  "Git",
+  { main: import.meta.url, ...Git.GIT_WORKER_OPTIONS },
+  Effect.gen(function* () {
+    const git = yield* Git.Server;
+    return { fetch: git.fetch };
+  }).pipe(Effect.provide(GitLive)),
+);
+```
+
+It is not a Worker. You write the Worker, so you choose its name, its
+domain, its compatibility date, and what else runs beside it. And
+`Server.layer` is not the only way in: everything it composes is an
+ordinary Effect `HttpApi`, exported piece by piece.
+
+## Three planes, one API
+
+| Group | Path | Client |
+| --- | --- | --- |
+| `Git.Protocol` | `/:owner/:repo.git/info/refs`, `git-upload-pack`, `git-receive-pack` | `git` |
+| `Git.Repos`, `Git.Refs`, `Git.Objects`, `Git.Pulls` | `/api/v1/**` | your code, `curl`, the typed client |
+| `Git.GitHub` | `/api/v3/**` | `gh api`, Octokit |
+
+`Git.Api` is all six groups. Derive yours from it, with your
+middleware in front and your routes beside, or build one from a
+subset:
+
+```typescript
+export class AppApi extends Git.Api.add(AppRoutes).middleware(Authenticated) {}
+
+// or: no pull requests, no GitHub facade
+export class SmallApi extends HttpApi.make("git")
+  .add(Git.Repos).add(Git.Refs).add(Git.Objects).add(Git.Protocol)
+  .middleware(Authenticated) {}
+```
+
+No git route carries middleware of its own, and none decides who may
+call it: that is the middleware of the API that mounts it, and
+[Auth](/git/blocks/auth) is the pattern.
+
+## Routes
+
+Every endpoint is an `alchemy/Http` route class: an `HttpApiEndpoint`
+that also names the tag of its implementation. It goes in a group like
+any endpoint, and the client, OpenAPI, and middleware come from Effect
+unchanged.
+
+```typescript
+export class GetRepo extends Http.get<GetRepo>()("get", "/repos/:owner/:repo", {
+  params: RepoPath,
+  success: Repo,
+  error: [RepoNotFound],
+}) {}
+```
+
+A route of your own may declare `middleware`, the middleware it relies
+on, so its handler can read what that middleware provides.
+
+`Route.make(init)` is an implementation as a Layer. `init` runs once
+when the layer is built and returns the per-request handler:
+
+```typescript
+export const GetRepoLive = GetRepo.make(
+  Effect.gen(function* () {
+    const repos = yield* Git.RepoStore;              // build time
+    return Effect.fn(function* ({ params }) {       // request time
+      return yield* repos.get(params.owner, params.repo);
+    });
+  }),
+);
+```
+
+The handler receives the decoded request, `params`, `query`,
+`payload`, `headers`, and the raw `request`, and returns the declared
+success or a raw `HttpServerResponse`. The wire routes stream: they
+declare no payload, read `request.stream`, and answer with the
+response they build.
+
+## Handlers
+
+`Git.Handlers` is the default implementation of every route, one
+`*Live` Layer each, `Git.GetRepoLive` through `Git.ReceivePackLive`.
+`Git.Server.layer(api)` requires an implementation of every route the
+API has, and the middleware it declares. Replace any one by providing
+another Layer for the same route nearer than `Git.Handlers`:
+
+```typescript
+Git.Server.layer(AppApi).pipe(
+  Layer.provide([MeLive, GitHubUserLive]),       // yours, and one override
+  Layer.provide(Git.Handlers),                   // the engine's for the rest
+  Layer.provide(AuthenticatedLive),              // the middleware
+)
+```
+
+Leave a route unimplemented and the compiler names it, not the group.
+Every route shares one core per Worker: the registry cache, the
+Durable Object stubs, and the push admission gate are built once
+however many routes you mount.
+
+Under `Server.layer` is `Http.handlers(api)`, which builds the ordinary
+`HttpApiBuilder.group` for every group of the API whose endpoints are
+all routes, under that API's middleware. To own the router, build it
+by hand:
+
+```typescript
+HttpApiBuilder.layer(AppApi).pipe(
+  Layer.provide(Http.handlers(AppApi)),          // mounts every route group
+  Layer.provide([MeLive, GitHubUserLive]),
+  Layer.provide(Git.Handlers),
+  Layer.provide(AuthenticatedLive),
+  Layer.provide(Http.Platform),                  // no filesystem on Workers
+  HttpRouter.toHttpEffect,
+)
+```
+
+A group with a plain endpoint is yours to implement with
+`HttpApiBuilder.group` as usual. A host built by hand that uses a
+fan-out [Hasher](/git/blocks/hasher) mounts `Git.InternalApi` too, the
+engine's own hash route, which `Server.layer` mounts for you outside
+your middleware.
+
+**`Git.ServerLive`** is `Server.layer(Git.Api)` with `Git.Handlers`:
+every route, nothing in front. Provide it and `git.fetch` is an open
+host.
+
+## Worker options
+
+```typescript
+{ main: import.meta.url, ...Git.GIT_WORKER_OPTIONS }
+```
+
+`nodejs_compat` for zlib and crypto, a 300 s CPU ceiling so a large
+push can be verified, and a service binding to the Worker itself for
+the hasher. Spread it first and put your own options after it.
+
+## Under your own routes
+
+`git.fetch` is an Effect that reads the request from context and
+returns a response, so it composes with anything else you serve:
+
+```typescript
+Effect.gen(function* () {
+  const git = yield* Git.Server;
+
+  return {
+    fetch: Effect.gen(function* () {
+      const request = yield* HttpServerRequest.HttpServerRequest;
+      if (request.url === "/healthz") {
+        return HttpServerResponse.text("ok");
+      }
+      return yield* git.fetch;
+    }),
+  };
+});
+```
+
+To put a whole application on the same domain, keep the git host as
+its own Worker and forward the git paths to it over a service binding.
+[Part 3 of the tutorial](/git/tutorial/part-3) shows the front door.
+
+## The typed client
+
+The API is a value, so the same schema types the server, the client,
+and your tests:
+
+```typescript
+import { GitApi } from "alchemy/Git";
+import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
+
+const client = yield* HttpApiClient.make(GitApi, { baseUrl: host });
+
+const repo = yield* client.repos.get({
+  params: { owner: "acme", repo: "web" },
+});
+```
+
+[Repositories](/git/repositories) and [Pull requests](/git/pull-requests)
+use it throughout.

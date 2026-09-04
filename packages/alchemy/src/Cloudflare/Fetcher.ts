@@ -24,6 +24,31 @@ export type SocketAddress = cf.SocketAddress;
 
 export type SocketOptions = cf.SocketOptions;
 
+/**
+ * Whether a native Web `Headers` and an Effect headers record carry the
+ * same entries. Lets {@link makeFetcher} keep forwarding the platform's
+ * own request object when `request.modify` left the headers unchanged,
+ * and rebuild only when they genuinely differ. Effect header keys are
+ * already lowercased and `Headers.get` is case-insensitive, so the
+ * comparison needs no normalization.
+ */
+const sameHeaders = (
+  web: Headers,
+  eff: Readonly<Record<string, string>>,
+): boolean => {
+  const keys = Object.keys(eff);
+  let webCount = 0;
+  for (const _ of web.keys()) {
+    webCount++;
+    if (webCount > keys.length) return false;
+  }
+  if (webCount !== keys.length) return false;
+  for (const key of keys) {
+    if (web.get(key) !== eff[key]) return false;
+  }
+  return true;
+};
+
 export interface Fetcher {
   raw: cf.Fetcher;
   fetch(
@@ -147,6 +172,25 @@ export const fromCloudflareFetcher = (
           )
         : pipe(
             HttpServerRequest.toWeb(request),
+            // `toWeb` hands back the raw native request untouched whenever
+            // there is one (always, on workerd) — the fast path we WANT:
+            // it forwards the platform's own edge request instead of
+            // cloning it. The catch is that it also ignores header
+            // overrides from `request.modify({ headers })`, so a caller
+            // that strips or mints an internal header before forwarding
+            // (e.g. a Worker sanitizing a trust header for its Durable
+            // Object) would be silently dropped. Rebuild ONLY when the
+            // effect request's headers actually differ from the native
+            // request's; an unmodified forward (or a modify that was a
+            // no-op) stays on the metal. `new Request(req, init)`
+            // preserves the method and un-consumed streaming body.
+            Effect.map((webRequest) =>
+              sameHeaders(webRequest.headers, request.headers)
+                ? webRequest
+                : new Request(webRequest, {
+                    headers: request.headers as Record<string, string>,
+                  }),
+            ),
             Effect.flatMap(fetch),
             Effect.map((response) => {
               if ((response as any).status === 101) {

@@ -387,6 +387,37 @@ const SECTIONS: Section[] = [
     },
   },
   {
+    heading: "Git",
+    intro:
+      "A git server you build in one file, use like any remote, and reshape one block at a time: setup, a four-part tutorial (build it, repositories and tokens, your own rules, your app on the same domain), the REST and GitHub-compatible planes, the building blocks with their implementations, and recipes with the scaling model and measurements.",
+    pages: {
+      slugs: [
+        "git/index",
+        "git/getting-started",
+        "git/tutorial/part-1",
+        "git/tutorial/part-2",
+        "git/tutorial/part-3",
+        "git/tutorial/part-4",
+        "git/clone-and-push",
+        "git/repositories",
+        "git/pull-requests",
+        "git/github-api",
+        "git/blocks/index",
+        "git/blocks/server",
+        "git/blocks/repositories",
+        "git/blocks/registry",
+        "git/blocks/blob-store",
+        "git/blocks/hasher",
+        "git/blocks/auth",
+        "git/recipes/index",
+        "git/recipes/scaling",
+        "git/recipes/cloudflare",
+        "git/recipes/cloudflare-aws",
+        "git/recipes/your-own-store",
+      ],
+    },
+  },
+  {
     heading: "Docker",
     intro:
       "Local and CI Docker as Stack resources — images, containers, networks, and volumes driven through the active Docker CLI context; cloud container runtimes (Cloudflare Containers, ECS) consume the pushed image refs from their own hubs.",

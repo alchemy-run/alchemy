@@ -77,3 +77,4 @@ examples/cloudflare-worker/src/scratch.ts
 .ai-workspace/
 /processes/
 .probe
+!packages/alchemy/src/Cloudflare/Workers/worker-module.d.ts

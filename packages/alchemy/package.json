@@ -132,6 +132,24 @@
       "worker": "./src/Docker/index.ts",
       "import": "./lib/Docker/index.js"
     },
+    "./Git": {
+      "types": "./lib/Git/index.d.ts",
+      "bun": "./src/Git/index.ts",
+      "worker": "./src/Git/index.ts",
+      "import": "./lib/Git/index.js"
+    },
+    "./Git/Hasher": {
+      "types": "./lib/Git/Hasher/index.d.ts",
+      "bun": "./src/Git/Hasher/index.ts",
+      "worker": "./src/Git/Hasher/index.ts",
+      "import": "./lib/Git/Hasher/index.js"
+    },
+    "./Http": {
+      "types": "./lib/Http/index.d.ts",
+      "bun": "./src/Http/index.ts",
+      "worker": "./src/Http/index.ts",
+      "import": "./lib/Http/index.js"
+    },
     "./Kubernetes": {
       "types": "./lib/Kubernetes/index.d.ts",
       "bun": "./src/Kubernetes/index.ts",

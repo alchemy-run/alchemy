@@ -20,7 +20,7 @@ import {
   DurableObjectState,
   fromDurableObjectState,
 } from "./DurableObjectState.ts";
-import { makeRpcStub } from "./Rpc.ts";
+import { makeRpcStub, type RpcErrorClass } from "./Rpc.ts";
 import { type WebSocket } from "./WebSocket.ts";
 import {
   isWorker,
@@ -120,6 +120,7 @@ export interface DurableObjectShape {
 export type DurableObjectServices =
   | DurableObject
   | DurableObjectState
+  | DurableObjectScope
   | WorkerServices
   | WorkerEnvironment
   | PlatformServices;
@@ -253,6 +254,24 @@ export interface DurableObjectProps {
     | DurableObjectTransferSource
     | DurableObjectTransferSource[]
     | undefined;
+  /**
+   * Tagged-error classes this Durable Object's RPC methods can fail with.
+   *
+   * Effect failures crossing the Worker↔DO RPC boundary are serialized to
+   * plain `{ _tag, ...fields }` objects; declaring the classes here lets
+   * the calling side reconstruct real instances (both sides import this
+   * same class declaration, so the schema is shared by construction) —
+   * `Effect.catchTag`, `instanceof`, and schema encoders (e.g. HttpApi
+   * error responses) then all see the class the DO actually failed with.
+   *
+   * ```typescript
+   * export class Repo extends Cloudflare.DurableObject<Repo, RepoShape>()(
+   *   "Repo",
+   *   { errors: [RepoNotFound, StoreError] },
+   * ) {}
+   * ```
+   */
+  errors?: ReadonlyArray<RpcErrorClass> | undefined;
   // environment?: string | undefined;
   // sqlite?: boolean | undefined;
   // namespaceId?: string | undefined;
@@ -266,7 +285,7 @@ export interface DurableObjectClass extends Effect.Effect<
   <Self, Shape>(): {
     <Name extends string>(
       name: Name,
-      props?: Pick<DurableObjectProps, "transferredFrom">,
+      props?: Pick<DurableObjectProps, "transferredFrom" | "errors">,
     ): Effect.Effect<DurableObject<Self>, never, Worker | Self> & {
       new (_: never): Shape & {
         /** @internal */
@@ -288,9 +307,13 @@ export interface DurableObjectClass extends Effect.Effect<
             RuntimeContext | DurableObjectState | Scope
           >,
           never,
-          DurableObjectServices | Req
+          Req
         >,
-      ): Layer.Layer<Self, never, Worker | Req>;
+        // `Exclude` (rather than `DurableObjectServices | Req` inference)
+        // so ambient DO services resolved in the outer init effect never
+        // leak into the host Worker's requirements — mirrors Worker.make's
+        // `Exclude<InitReq, Self | WorkerServices>`.
+      ): Layer.Layer<Self, never, Worker | Exclude<Req, DurableObjectServices>>;
     };
   };
   <Self>(): {
@@ -1175,6 +1198,7 @@ export const DurableObject: DurableObjectClass = taggedFunction(
       transferredFrom?:
         | DurableObjectTransferSource
         | DurableObjectTransferSource[],
+      errors?: ReadonlyArray<RpcErrorClass>,
     ) =>
       Effect.gen(function* () {
         const worker = yield* Worker;
@@ -1229,7 +1253,7 @@ export const DurableObject: DurableObjectClass = taggedFunction(
           getByName: (
             name: string,
             options?: DurableObjectGetDurableObjectOptions,
-          ) => makeRpcStub(binding.getByName(name, options)),
+          ) => makeRpcStub(binding.getByName(name, options), { errors }),
           // newUniqueId: () => use((ns) => ns.newUniqueId()),
           // idFromName: (name: string) => use((ns) => ns.idFromName(name)),
           // idFromString: (id: string) => use((ns) => ns.idFromString(id)),
@@ -1248,7 +1272,7 @@ export const DurableObject: DurableObjectClass = taggedFunction(
     const classProps =
       isClassForm && !Effect.isEffect(propsOrImpl)
         ? (propsOrImpl as
-            | Pick<DurableObjectProps, "transferredFrom">
+            | Pick<DurableObjectProps, "transferredFrom" | "errors">
             | undefined)
         : undefined;
 
@@ -1264,7 +1288,11 @@ export const DurableObject: DurableObjectClass = taggedFunction(
       // `DurableObjectScope` to the user's constructor effect
       // and also return it so a `Layer.effect(tag, make(impl))` Layer
       // resolves the tag to a concrete namespace value.
-      const self = yield* binding(undefined, classProps?.transferredFrom);
+      const self = yield* binding(
+        undefined,
+        classProps?.transferredFrom,
+        classProps?.errors,
+      );
       const phase = yield* ALCHEMY_PHASE;
       const constructor = impl.pipe(
         Effect.provide(Layer.succeed(DurableObjectScope, self as any)),
@@ -1356,7 +1384,11 @@ export const DurableObject: DurableObjectClass = taggedFunction(
 
           return resolved.pipe(
             Effect.flatMap((w) =>
-              binding(typeof w === "string" ? w : w.workerName),
+              binding(
+                typeof w === "string" ? w : w.workerName,
+                undefined,
+                classProps?.errors,
+              ),
             ),
           );
         };
