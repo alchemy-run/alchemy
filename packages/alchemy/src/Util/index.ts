@@ -1,4 +1,5 @@
 export * from "./base32.ts";
+export * from "./bytes.ts";
 export * from "./camel.ts";
 export * from "./data.ts";
 export * from "./dedent.ts";

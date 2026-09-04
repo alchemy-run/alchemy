@@ -13,6 +13,7 @@ import {
 } from "effect/unstable/ai";
 import * as Sse from "effect/unstable/encoding/Sse";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
+import { toBase64 } from "../../Util/bytes.ts";
 
 /**
  * The slice of an AI client the LanguageModel adapter needs: the raw Workers
@@ -182,23 +183,13 @@ interface WorkersAiInputs {
 // Prompt → Workers AI messages (pure, no .push mutation)
 // ---------------------------------------------------------------------------
 
-const uint8ArrayToBase64 = (bytes: Uint8Array): string => {
-  let binary = "";
-  const chunkSize = 8192;
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    const chunk = bytes.subarray(i, Math.min(i + chunkSize, bytes.length));
-    binary += String.fromCharCode(...chunk);
-  }
-  return btoa(binary);
-};
-
 const fileToImageUrl = (
   data: string | Uint8Array | URL,
   mediaType: string,
 ): string => {
   if (data instanceof URL) return data.toString();
   if (data instanceof Uint8Array) {
-    return `data:${mediaType};base64,${uint8ArrayToBase64(data)}`;
+    return `data:${mediaType};base64,${toBase64(data)}`;
   }
   if (data.startsWith("data:") || data.startsWith("http")) return data;
   return `data:${mediaType};base64,${data}`;

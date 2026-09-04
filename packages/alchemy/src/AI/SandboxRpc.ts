@@ -1,5 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
+import { concatBytes, fromBase64 } from "../Util/bytes.ts";
 import type {
   Sandbox,
   SandboxEntry,
@@ -115,7 +116,10 @@ export const sandboxOverRpc = (
             Effect.map((result) =>
               result.done
                 ? undefined
-                : ([joinChunks(result.b64), result.nextSeq] as const),
+                : ([
+                    concatBytes(result.b64.map(fromBase64)),
+                    result.nextSeq,
+                  ] as const),
             ),
             Effect.mapError(errorText),
           ),
@@ -126,24 +130,4 @@ export const sandboxOverRpc = (
       close: (id) => withPty(id, (stub, id) => stub.ptyClose(id)),
     },
   };
-};
-
-const fromBase64 = (b64: string): Uint8Array => {
-  const binary = atob(b64);
-  const out = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
-  return out;
-};
-
-/** Concatenate one poll's chunks into a single write. */
-const joinChunks = (b64: ReadonlyArray<string>): Uint8Array => {
-  const parts = b64.map(fromBase64);
-  const total = parts.reduce((n, p) => n + p.byteLength, 0);
-  const out = new Uint8Array(total);
-  let offset = 0;
-  for (const part of parts) {
-    out.set(part, offset);
-    offset += part.byteLength;
-  }
-  return out;
 };

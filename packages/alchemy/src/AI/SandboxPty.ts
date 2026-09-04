@@ -1,4 +1,5 @@
 import * as Effect from "effect/Effect";
+import { toBase64 } from "../Util/bytes.ts";
 import { Workspace } from "../Workspace/Workspace.ts";
 // build-stamp: pty long-poll v2
 
@@ -124,12 +125,6 @@ const RING_CAP_BYTES = 64 * 1024;
 const MAX_WAIT_MS = 8_000;
 
 const encoder = new TextEncoder();
-
-const toBase64 = (bytes: Uint8Array): string => {
-  let binary = "";
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary);
-};
 
 /** The user's own login shell when the host declares one (the dev
  *  sandbox IS the developer's machine — their zsh/fish, their rc

@@ -19,21 +19,8 @@ import { SessionIndexD1 } from "./SessionIndexD1.ts";
  *                  emit from their own DOs; the board lists from any
  *                  Worker instance)
  */
-export const DriverCloudflare = Layer.mergeAll(
-  Cloudflare.AI.DriverCloudflare.pipe(
-    Layer.provide(Model),
-    // the driver's `Sessions.list` delegates to the index
-    Layer.provide(SessionIndexD1),
-    // every session's own machine — HARDCODED to the AWS MicroVM (see
-    // Worker.ts), so NO container attaches to the session DO. For the
-    // Cloudflare Container machine, the DO must bind the image to its
-    // namespace at PLAN time (the attachment is undiscoverable from
-    // call-time layers) — swap `undefined` for
-    // `Cloudflare.AI.SandboxContainerImage`.
-    Layer.provide(
-      Layer.succeed(Cloudflare.AI.SessionContainerImage, undefined),
-    ),
-  ),
-  // provideMERGE: the HTTP surface reads the index the stream writes
-  AI.SessionIndexStream.pipe(Layer.provideMerge(SessionIndexD1)),
+export const DriverCloudflare = Cloudflare.AI.DriverCloudflare.pipe(
+  Layer.provideMerge(AI.SessionIndexStream),
+  Layer.provideMerge(SessionIndexD1),
+  Layer.provide(Model),
 );
