@@ -3292,16 +3292,23 @@ export const LiveWorkerProvider = () =>
         const oldTags = Array.from(new Set(oldSettings?.tags ?? []));
         const oldBindings = oldSettings?.bindings ?? [];
 
-        // Parse the DO logical-id→class mapping from script tags (packed
-        // `alchemy:dos:` and legacy per-DO `alchemy:do:` formats)
-        const oldDoClassNameByLogicalId = getDurableObjectTagMap(oldTags);
+        // The class-identity plan, pure and unit-tested: a logical id that
+        // keeps its class name needs no migration, a changed class name is a
+        // rename, a logical id with no previous class is created or
+        // transferred below, and a vanished logical id is a delete candidate
+        // validated against observed namespace ownership below.
         const currentDoBindings = getDurableObjectBindings(bindings, name);
-        const currentDoClassNameByLogicalId = Object.fromEntries(
-          currentDoBindings.map((binding) => [
-            binding.logicalId,
-            binding.className,
-          ]),
-        );
+        const identity = planDurableObjectClassIdentity({
+          workerName: name,
+          oldTags,
+          oldBindings,
+          current: currentDoBindings,
+        });
+        const {
+          oldDoClassNameByLogicalId,
+          currentDoClassNameByLogicalId,
+          deletedClassCandidates,
+        } = identity;
 
         // Parse alchemy:migration-tag:{version}
         const oldMigrationTag = oldTags.flatMap((tag) =>
@@ -3310,41 +3317,6 @@ export const LiveWorkerProvider = () =>
             : [],
         )[0];
         const newMigrationTag = bumpMigrationTagVersion(oldMigrationTag);
-
-        // Compute delete-class candidates. Candidates are validated against
-        // observed namespace ownership below — a class may already have been
-        // transferred to another script by its new host's deploy.
-        const deletedClassCandidates: string[] = [];
-        for (const [logicalId, className] of Object.entries(
-          oldDoClassNameByLogicalId,
-        )) {
-          if (!currentDoClassNameByLogicalId[logicalId]) {
-            deletedClassCandidates.push(className);
-          }
-        }
-
-        // Backward compatibility for old workers that have DO bindings but no
-        // alchemy:do tags yet. Cross-script bindings (`scriptName` set to
-        // anything other than this worker) are NEVER candidates for
-        // delete-class migrations — the class lives on the foreign script
-        // and we don't own its lifecycle.
-        if (Object.keys(oldDoClassNameByLogicalId).length === 0) {
-          for (const oldBinding of oldBindings) {
-            const ownedLocally =
-              !("scriptName" in oldBinding) || oldBinding.scriptName === name;
-            if (
-              oldBinding.type === "durable_object_namespace" &&
-              "className" in oldBinding &&
-              oldBinding.className &&
-              ownedLocally &&
-              !currentDoBindings.some(
-                (binding) => binding.bindingName === oldBinding.name,
-              )
-            ) {
-              deletedClassCandidates.push(oldBinding.className);
-            }
-          }
-        }
 
         // Class names the current deploy references *cross-script* (mapped to
         // the foreign script). A class that both leaves the "hosted here" set
@@ -3452,88 +3424,49 @@ export const LiveWorkerProvider = () =>
         // Compute new, renamed, and transferred classes
         const newClasses: string[] = [];
         const newSqliteClasses: string[] = [];
-        const renamedClasses: { from: string; to: string }[] = [];
+        const renamedClasses = identity.renamedClasses;
         const transferredClasses: {
           from: string;
           fromScript: string;
           to: string;
         }[] = [];
-        for (const binding of currentDoBindings) {
-          let previousClassName: string | undefined =
-            oldDoClassNameByLogicalId[binding.logicalId];
-          if (!previousClassName) {
-            // No DO metadata tag maps this logical id to a class — the
-            // worker was created outside Alchemy (raw API / Wrangler) or
-            // before these tags existed. Fall back to matching the observed
-            // cloud binding by binding name so adoption reuses the existing
-            // class instead of asking Cloudflare to create one that already
-            // exists (which fails the migration). This is the "first deploy
-            // must match the existing class name" path; once we write the
-            // `alchemy:dos:` tag, subsequent renames are driven by logical id.
-            const observed = oldBindings.find(
-              (old) =>
-                old.type === "durable_object_namespace" &&
-                "className" in old &&
-                old.className &&
-                // Only a *locally-owned* binding proves the class exists on
-                // this script. A cross-script binding under the same name —
-                // e.g. this worker previously referenced another host's
-                // class and now hosts its own — points at a foreign
-                // namespace and must not suppress the create migration
-                // (Cloudflare rejects a local binding for a class the
-                // script isn't configured to implement).
-                (!("scriptName" in old) ||
-                  old.scriptName === undefined ||
-                  old.scriptName === name) &&
-                old.name === binding.bindingName,
-            );
-            if (observed && "className" in observed && observed.className) {
-              previousClassName = observed.className;
-            }
-          }
-          if (!previousClassName) {
-            // A class new to this script is a host move when the declaration
-            // says so: `transferredFrom` lists the former host(s) — moves
-            // are always declared, never inferred, because a class deleted
-            // on one worker and created on another is otherwise ambiguous
-            // between "move the data" and "delete + fresh namespace". The
-            // declared source must be observed to still host the namespace;
-            // otherwise (fresh stage, transfer already completed) fall
-            // through to a plain create.
-            const fromScript = dispatchNamespace
-              ? undefined
-              : yield* resolveTransferSource({
-                  accountId,
-                  selfScriptName: name,
-                  logicalId: binding.logicalId,
-                  className: binding.className,
-                  sources: normalizeTransferSources(
-                    binding.transferredFrom,
-                    name,
-                  ),
-                  observedNamespaces,
-                });
-            if (fromScript !== undefined) {
-              // Data-preserving move: ship Cloudflare's
-              // `transferred_classes` migration instead of creating a
-              // fresh class.
-              transferredClasses.push({
-                from: binding.className,
-                fromScript,
-                to: binding.className,
+        for (const binding of identity.unresolved) {
+          // A class new to this script is a host move when the declaration
+          // says so: `transferredFrom` lists the former host(s) — moves
+          // are always declared, never inferred, because a class deleted
+          // on one worker and created on another is otherwise ambiguous
+          // between "move the data" and "delete + fresh namespace". The
+          // declared source must be observed to still host the namespace;
+          // otherwise (fresh stage, transfer already completed) fall
+          // through to a plain create.
+          const fromScript = dispatchNamespace
+            ? undefined
+            : yield* resolveTransferSource({
+                accountId,
+                selfScriptName: name,
+                logicalId: binding.logicalId,
+                className: binding.className,
+                sources: normalizeTransferSources(
+                  binding.transferredFrom,
+                  name,
+                ),
+                observedNamespaces,
               });
-              continue;
-            }
-            // Default all new Durable Object classes to SQLite. Cloudflare
-            // recommends SQLite for new namespaces, and container-backed
-            // Durable Objects require it.
-            newSqliteClasses.push(binding.className);
-          } else if (previousClassName !== binding.className) {
-            renamedClasses.push({
-              from: previousClassName,
+          if (fromScript !== undefined) {
+            // Data-preserving move: ship Cloudflare's
+            // `transferred_classes` migration instead of creating a
+            // fresh class.
+            transferredClasses.push({
+              from: binding.className,
+              fromScript,
               to: binding.className,
             });
+            continue;
           }
+          // Default all new Durable Object classes to SQLite. Cloudflare
+          // recommends SQLite for new namespaces, and container-backed
+          // Durable Objects require it.
+          newSqliteClasses.push(binding.className);
         }
 
         yield* Effect.logInfo(
@@ -4627,9 +4560,12 @@ export const LiveWorkerProvider = () =>
           // cycle — which resolves `worker.durableObjectNamespaces[className]`
           // against the precreate stub rather than the final reconcile output —
           // fails because the namespace id it needs never surfaced.
+          // Exports are keyed by physical class name. A class-form object's
+          // logical id is its binding's (the `env` key), and the binding-derived
+          // entry wins the merge below, so the placeholder's tags key off it.
           const exportDerived = Object.keys(exportMap)
-            .filter((logicalId) => isDurableObjectExport(exportMap[logicalId]))
-            .map((logicalId) => ({ logicalId, className: logicalId }));
+            .filter((className) => isDurableObjectExport(exportMap[className]))
+            .map((className) => ({ logicalId: className, className }));
           // Transfer-destination classes are excluded from the placeholder
           // entirely (class list, bindings, tags): Cloudflare forbids
           // creating the destination class of a `transferred_classes`
@@ -5470,6 +5406,127 @@ function mergeDurableObjectClasses(
       ),
     ).values(),
   );
+}
+
+/**
+ * The class-identity half of a Worker's Durable Object migration plan,
+ * derived from the previous upload's `alchemy:dos:` tags (or, for a Worker
+ * deployed before those tags existed, its observed locally-owned bindings)
+ * against the classes the current deploy hosts. Pure, so the identity
+ * contract is unit-testable:
+ *
+ * - `kept`: the logical id already maps to the same class name — no
+ *   migration;
+ * - `renamedClasses`: the logical id's class name changed — a
+ *   `renamed_classes` migration;
+ * - `unresolved`: the logical id has no previous class — the caller decides
+ *   between a declared transfer and a fresh class, which needs the account's
+ *   namespace listing;
+ * - `deletedClassCandidates`: a previous logical id absent from the current
+ *   deploy — the caller validates it against observed namespace ownership.
+ *
+ * @internal exported for unit testing.
+ */
+export function planDurableObjectClassIdentity<
+  B extends { logicalId: string; bindingName: string; className: string },
+>(params: {
+  workerName: string;
+  oldTags: ReadonlyArray<string>;
+  oldBindings: ReadonlyArray<WorkerSettingsBinding>;
+  current: ReadonlyArray<B>;
+}) {
+  const { workerName, oldBindings, current } = params;
+  const oldDoClassNameByLogicalId = getDurableObjectTagMap(params.oldTags);
+  const currentDoClassNameByLogicalId = Object.fromEntries(
+    current.map((binding) => [binding.logicalId, binding.className]),
+  );
+
+  // Delete candidates: validated against observed namespace ownership by the
+  // caller — a class may already have been transferred to another script by
+  // its new host's deploy.
+  const deletedClassCandidates: string[] = [];
+  for (const [logicalId, className] of Object.entries(
+    oldDoClassNameByLogicalId,
+  )) {
+    if (!currentDoClassNameByLogicalId[logicalId]) {
+      deletedClassCandidates.push(className);
+    }
+  }
+
+  // Backward compatibility for old workers that have DO bindings but no
+  // alchemy:do tags yet. Cross-script bindings (`scriptName` set to
+  // anything other than this worker) are NEVER candidates for
+  // delete-class migrations — the class lives on the foreign script
+  // and we don't own its lifecycle.
+  if (Object.keys(oldDoClassNameByLogicalId).length === 0) {
+    for (const oldBinding of oldBindings) {
+      const ownedLocally =
+        !("scriptName" in oldBinding) || oldBinding.scriptName === workerName;
+      if (
+        oldBinding.type === "durable_object_namespace" &&
+        "className" in oldBinding &&
+        oldBinding.className &&
+        ownedLocally &&
+        !current.some((binding) => binding.bindingName === oldBinding.name)
+      ) {
+        deletedClassCandidates.push(oldBinding.className);
+      }
+    }
+  }
+
+  const kept: B[] = [];
+  const renamedClasses: { from: string; to: string }[] = [];
+  const unresolved: B[] = [];
+  for (const binding of current) {
+    let previousClassName: string | undefined =
+      oldDoClassNameByLogicalId[binding.logicalId];
+    if (!previousClassName) {
+      // No DO metadata tag maps this logical id to a class — the
+      // worker was created outside Alchemy (raw API / Wrangler) or
+      // before these tags existed. Fall back to matching the observed
+      // cloud binding by binding name so adoption reuses the existing
+      // class instead of asking Cloudflare to create one that already
+      // exists (which fails the migration). This is the "first deploy
+      // must match the existing class name" path; once we write the
+      // `alchemy:dos:` tag, subsequent renames are driven by logical id.
+      const observed = oldBindings.find(
+        (old) =>
+          old.type === "durable_object_namespace" &&
+          "className" in old &&
+          old.className &&
+          // Only a *locally-owned* binding proves the class exists on
+          // this script. A cross-script binding under the same name —
+          // e.g. this worker previously referenced another host's
+          // class and now hosts its own — points at a foreign
+          // namespace and must not suppress the create migration
+          // (Cloudflare rejects a local binding for a class the
+          // script isn't configured to implement).
+          (!("scriptName" in old) ||
+            old.scriptName === undefined ||
+            old.scriptName === workerName) &&
+          old.name === binding.bindingName,
+      );
+      if (observed && "className" in observed && observed.className) {
+        previousClassName = observed.className;
+      }
+    }
+    if (!previousClassName) {
+      unresolved.push(binding);
+    } else if (previousClassName !== binding.className) {
+      renamedClasses.push({ from: previousClassName, to: binding.className });
+    } else {
+      kept.push(binding);
+    }
+  }
+
+  return {
+    oldDoClassNameByLogicalId,
+    currentDoClassNameByLogicalId,
+    deletedClassCandidates,
+    kept,
+    renamedClasses,
+    unresolved,
+  };
 }
 
 function getDurableObjectBindings(
