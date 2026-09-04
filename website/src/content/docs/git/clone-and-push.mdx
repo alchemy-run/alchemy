@@ -56,7 +56,8 @@ it is:
 export const AuthenticatedLive = Git.Authenticated.make(
   Effect.gen(function* () {
     const auth = yield* Auth;
-    return Effect.fn(function* (request) {
+    return Effect.gen(function* () {
+      const request = yield* HttpServerRequest;
       const key = Git.parseSecret(request.headers);
       if (key === undefined) return undefined;
       const verified = yield* auth.api.verifyApiKey({ body: { key } });

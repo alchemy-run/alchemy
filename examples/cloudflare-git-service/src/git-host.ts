@@ -57,7 +57,8 @@ export const AuthLive = Layer.effect(Auth, BetterAuth(authOptions));
 export const AuthenticatedLive = Git.Authenticated.make(
   Effect.gen(function* () {
     const auth = yield* Auth;
-    return Effect.fn(function* (request) {
+    return Effect.gen(function* () {
+      const request = yield* HttpServerRequest;
       const key = Git.parseSecret(request.headers);
       if (key !== undefined && key !== "") {
         const verified = yield* auth.api
@@ -71,10 +72,9 @@ export const AuthenticatedLive = Git.Authenticated.make(
           ? { id: verified.key.referenceId }
           : undefined;
       }
-      const session = yield* auth.getSession().pipe(
-        Effect.catchTag("BetterAuthApiError", () => Effect.succeed(null)),
-        Effect.provideService(HttpServerRequest, request),
-      );
+      const session = yield* auth
+        .getSession()
+        .pipe(Effect.catchTag("BetterAuthApiError", () => Effect.succeed(null)));
       return session
         ? { id: session.user.id, name: session.user.name }
         : undefined;

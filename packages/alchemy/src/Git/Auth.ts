@@ -67,26 +67,31 @@ export class Caller extends Context.Service<
 export type Headers = Readonly<Record<string, string | undefined>>;
 
 /**
- * Resolves the caller of a request. Runs at the Worker, once per request,
- * before every git route: the REST plane, the git wire (a `git` client
- * sends HTTP Basic with the credential in the password field), the raw
- * reads, and the GitHub facade. `undefined` is anonymous, never a failure.
+ * Resolves the caller of the current request, read from
+ * `HttpServerRequest`. Runs at the Worker, once per request, before every
+ * git route: the REST plane, the git wire (a `git` client sends HTTP Basic
+ * with the credential in the password field), the raw reads, and the
+ * GitHub facade. `undefined` is anonymous, never a failure.
  */
-export type Resolve = (
-  request: HttpServerRequest.HttpServerRequest,
-) => Effect.Effect<Principal | undefined, never, RuntimeContext>;
+export type Resolve = Effect.Effect<
+  Principal | undefined,
+  never,
+  HttpServerRequest.HttpServerRequest | RuntimeContext
+>;
 
 /**
  * The middleware contract every git route declares: it provides
- * {@link Caller}. Implement it with `Authenticated.make`, whose `init`
- * runs once at build time and returns the per-request {@link Resolve}.
+ * {@link Caller}. Implement it with `Authenticated.make`, which takes an
+ * Effect that produces the per-request {@link Resolve}: declare the
+ * resources, bindings, and services the resolver needs there.
  *
  * **Example:** Better Auth sessions for browsers, API keys for `git`
  * ```typescript
  * const AuthenticatedLive = Git.Authenticated.make(
  *   Effect.gen(function* () {
  *     const auth = yield* Auth;
- *     return Effect.fn(function* (request) {
+ *     return Effect.gen(function* () {
+ *       const request = yield* HttpServerRequest;
  *       const key = Git.parseSecret(request.headers);
  *       if (key !== undefined) {
  *         const verified = yield* auth.api.verifyApiKey({ body: { key } });
@@ -107,7 +112,7 @@ export class Authenticated extends HttpApiMiddleware.Service<
 >()("alchemy/Git/Authenticated", { error: Unauthorized }) {
   /**
    * An implementation of the middleware as a Layer. `init` runs once, when
-   * the layer is built, and returns the per-request {@link Resolve}.
+   * the layer is built, and produces the per-request {@link Resolve}.
    */
   static readonly make = <E, R>(
     init: Effect.Effect<Resolve, E, R>,
@@ -118,8 +123,7 @@ export class Authenticated extends HttpApiMiddleware.Service<
         init,
         (resolve) => (httpEffect) =>
           Effect.gen(function* () {
-            const request = yield* HttpServerRequest.HttpServerRequest;
-            const principal = yield* resolve(request).pipe(
+            const principal = yield* resolve.pipe(
               Effect.provide(RuntimeContext.phantom),
             );
             return yield* Effect.provideService(httpEffect, Caller, {
@@ -391,7 +395,8 @@ export const AuthenticatedSecret = (options: {
       // Yielded at build time, the attribute is a runtime accessor over the
       // value bound onto the Worker.
       const secret = yield* resource.text;
-      return Effect.fn(function* (request) {
+      return Effect.gen(function* () {
+        const request = yield* HttpServerRequest.HttpServerRequest;
         const presented = parseSecret(request.headers);
         if (presented === undefined || presented === "") return undefined;
         const matches = yield* timingSafeEqual(

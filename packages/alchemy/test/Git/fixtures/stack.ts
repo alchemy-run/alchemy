@@ -20,6 +20,7 @@ import * as Alchemy from "@/index.ts";
 import * as Cloudflare from "@/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import {
   Authenticated,
   BlobStoreR2,
@@ -54,8 +55,9 @@ process.env.GIT_SERVICE_SECRET ??= TEST_SECRET;
  * wire, the raw reads, and the GitHub facade.
  */
 export const AuthenticatedTest: Layer.Layer<Authenticated> = Authenticated.make(
-  Effect.succeed((request) =>
-    Effect.sync(() => {
+  Effect.succeed(
+    Effect.gen(function* () {
+      const request = yield* HttpServerRequest.HttpServerRequest;
       const presented = parseSecret(request.headers);
       if (presented === TEST_SECRET) return TEST_PRINCIPAL;
       if (presented === TEST_SECRET_DEV) return TEST_PRINCIPAL_DEV;

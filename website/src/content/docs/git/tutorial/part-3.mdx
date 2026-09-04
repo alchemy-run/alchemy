@@ -70,19 +70,22 @@ export const AuthLive = Layer.effect(Auth, BetterAuth(authOptions));
 
 ## Who is calling
 
-`Git.Authenticated.make` takes an Effect that produces the handler.
-Resources, bindings, and the services the handler needs are declared
-in that Effect; the handler runs once per request and answers with a
-principal, or `undefined` for anonymous:
+`Git.Authenticated.make` takes an Effect that produces the resolver.
+Resources, bindings, and the services the resolver needs are declared
+in that Effect. The resolver is an Effect that runs once per request,
+reads `HttpServerRequest`, and answers with a principal, or
+`undefined` for anonymous:
 
 ```typescript
 import * as Git from "alchemy/Git";
 import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 
 export const AuthenticatedLive = Git.Authenticated.make(
   Effect.gen(function* () {
     const auth = yield* Auth;
-    return Effect.fn(function* (request) {
+    return Effect.gen(function* () {
+      const request = yield* HttpServerRequest;
       return undefined;
     });
   }),
@@ -102,7 +105,8 @@ and `verifyApiKey` says whose it is:
 export const AuthenticatedLive = Git.Authenticated.make(
   Effect.gen(function* () {
     const auth = yield* Auth;
-    return Effect.fn(function* (request) {
+    return Effect.gen(function* () {
+      const request = yield* HttpServerRequest;
 +      const key = Git.parseSecret(request.headers);
 +      if (key !== undefined && key !== "") {
 +        const verified = yield* auth.api
@@ -127,24 +131,23 @@ anonymous may do.
 
 ## Sessions for browsers
 
-A request without a key carries the session cookie, or nothing:
+A request without a key carries the session cookie, or nothing.
+`getSession` reads the same `HttpServerRequest`:
 
 ```diff lang="typescript"
-+import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-
 export const AuthenticatedLive = Git.Authenticated.make(
   Effect.gen(function* () {
     const auth = yield* Auth;
-    return Effect.fn(function* (request) {
+    return Effect.gen(function* () {
+      const request = yield* HttpServerRequest;
       const key = Git.parseSecret(request.headers);
       if (key !== undefined && key !== "") {
         // …
       }
 -      return undefined;
-+      const session = yield* auth.getSession().pipe(
-+        Effect.catchTag("BetterAuthApiError", () => Effect.succeed(null)),
-+        Effect.provideService(HttpServerRequest, request),
-+      );
++      const session = yield* auth
++        .getSession()
++        .pipe(Effect.catchTag("BetterAuthApiError", () => Effect.succeed(null)));
 +      return session
 +        ? { id: session.user.id, name: session.user.name }
 +        : undefined;

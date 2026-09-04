@@ -46,19 +46,22 @@ class Authenticated extends HttpApiMiddleware.Service<
   static make<E, R>(init: Effect<Resolve, E, R>): Layer<Authenticated, E, R>;
 }
 
-type Resolve = (request: HttpServerRequest) => Effect<Principal | undefined>;
+type Resolve = Effect<Principal | undefined, never, HttpServerRequest>;
 ```
 
-`make` takes an `init` that runs once when the layer is built and
-returns the per-request resolver. `undefined` is anonymous, never a
-failure. `Git.parseBasic`, `Git.parseBearer`, and `Git.parseSecret`
-read the header for you. An API key verified by Better Auth:
+`make` takes an Effect that produces the resolver; declare the
+resources, bindings, and services the resolver needs there. The
+resolver runs once per request and reads `HttpServerRequest`.
+`undefined` is anonymous, never a failure. `Git.parseBasic`,
+`Git.parseBearer`, and `Git.parseSecret` read the header for you. An
+API key verified by Better Auth:
 
 ```typescript
 const AuthenticatedLive = Git.Authenticated.make(
   Effect.gen(function* () {
     const auth = yield* Auth;
-    return Effect.fn(function* (request) {
+    return Effect.gen(function* () {
+      const request = yield* HttpServerRequest;
       const key = Git.parseSecret(request.headers);
       if (key === undefined) return undefined;
       const verified = yield* auth.api.verifyApiKey({ body: { key } });
