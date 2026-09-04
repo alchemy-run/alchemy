@@ -19,7 +19,9 @@
     ],
     "types": [
       "vite/client"
-    ]
+    ],
+    "declaration": false,
+    "declarationMap": false
   },
   "references": [
     {

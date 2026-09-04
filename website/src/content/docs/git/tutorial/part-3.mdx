@@ -24,7 +24,7 @@ behind it, so you implement it once, with whatever your application
 uses to know who is calling. Anonymous is an answer, not an error: the
 policy decides what anonymous may do.
 
-## Better Auth as a service
+## Better Auth
 
 <Tabs syncKey="pkgManager">
   <TabItem label="bun" icon="bun">
@@ -41,31 +41,19 @@ policy decides what anonymous may do.
   </TabItem>
 </Tabs>
 
-Better Auth is built once per Worker, so make it a service the rest of
-the file can ask for:
+Declare Better Auth once. It is yielded wherever it is needed, like
+any other resource, and the engine de-dupes the declaration:
 
 ```typescript
 // src/git.ts
-import { BetterAuth, type BetterAuthInstance } from "@alchemy.run/better-auth";
+import { BetterAuth } from "@alchemy.run/better-auth";
 import { apiKey } from "@better-auth/api-key";
-import * as Context from "effect/Context";
-import * as Layer from "effect/Layer";
 
-export const authOptions: {
-  readonly basePath: string;
-  readonly emailAndPassword: { readonly enabled: boolean };
-  readonly plugins: [ReturnType<typeof apiKey>];
-} = {
+export const Auth = BetterAuth({
   basePath: "/api/auth",
   emailAndPassword: { enabled: true },
   plugins: [apiKey()],
-};
-
-export type AuthInstance = BetterAuthInstance<typeof authOptions>;
-
-export class Auth extends Context.Service<Auth, AuthInstance>()("app/Auth") {}
-
-export const AuthLive = Layer.effect(Auth, BetterAuth(authOptions));
+});
 ```
 
 ## Who is calling
@@ -251,11 +239,7 @@ export const AppLive = Layer.effect(
       }),
     };
   }),
-).pipe(
-  Layer.provide(AuthLive),
-  Layer.provide(GitLive),
-  Layer.provide(CloudflareD1(AuthDb)),
-);
+).pipe(Layer.provide(GitLive), Layer.provide(CloudflareD1(AuthDb)));
 ```
 
 `Http.handlers(AppApi)` mounts every route group of the API under the

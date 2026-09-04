@@ -8,7 +8,7 @@
  * and the GitHub facade. `Git.PolicyOwners` decides what a principal may
  * do to a repository.
  */
-import { BetterAuth, type BetterAuthInstance } from "@alchemy.run/better-auth";
+import { BetterAuth } from "@alchemy.run/better-auth";
 import { CloudflareD1 } from "@alchemy.run/better-auth/CloudflareD1";
 import { apiKey } from "@better-auth/api-key";
 import * as Cloudflare from "alchemy/Cloudflare";
@@ -33,22 +33,12 @@ export const GitObjects = Cloudflare.R2.Bucket("GitObjects", {
 /** Better Auth's users, sessions, and API keys. */
 export const AuthDb = Cloudflare.D1.Database("AuthDb");
 
-/** Better Auth, built once per Worker: users, sessions, and API keys. */
-export const authOptions: {
-  readonly basePath: string;
-  readonly emailAndPassword: { readonly enabled: boolean };
-  readonly plugins: [ReturnType<typeof apiKey>];
-} = {
+/** Better Auth: users, sessions, and API keys. Yielded wherever it is needed. */
+export const Auth = BetterAuth({
   basePath: "/api/auth",
   emailAndPassword: { enabled: true },
   plugins: [apiKey()],
-};
-
-export type AuthInstance = BetterAuthInstance<typeof authOptions>;
-
-export class Auth extends Context.Service<Auth, AuthInstance>()("app/Auth") {}
-
-export const AuthLive = Layer.effect(Auth, BetterAuth(authOptions));
+});
 
 /**
  * Who is calling. An API key in the password field of the remote names a
@@ -144,11 +134,7 @@ export const AppLive = Layer.effect(
       }),
     };
   }),
-).pipe(
-  Layer.provide(AuthLive),
-  Layer.provide(GitLive),
-  Layer.provide(CloudflareD1(AuthDb)),
-);
+).pipe(Layer.provide(GitLive), Layer.provide(CloudflareD1(AuthDb)));
 
 export default class GitHost extends Cloudflare.Worker<GitHost>()(
   "GitHost",
