@@ -31,6 +31,7 @@ import {
 import { tabsWindow } from "@/Cli/components/ui/Layout.tsx";
 import { makeRuntime } from "@/Cli/components/view/Runtime.tsx";
 import { sigilCli } from "@/Cli/components/view/SigilCli.tsx";
+import { Cli } from "@/Report.ts";
 import { renderApply } from "@/Cli/commands/render.ts";
 import { isInProgress } from "@/Cli/components/view/statusStyle.ts";
 import { spinnerFramesFor } from "@/Util/Theme.ts";
@@ -411,14 +412,62 @@ it("keeps apply totals on top and destroy progress on the last row", () => {
   );
 });
 
-it("includes binding work in apply totals and failures", () => {
+it("binding rows mirror their host resource and stay out of totals", () => {
   const { service } = makeStatic();
   const worker = {
-    ...noopNode({}, "Worker"),
+    ...updateNode({ a: 1 }, { a: 2 }, "Worker"),
     bindings: [
       { sid: "BUCKET", action: "update" as const, data: {} },
+      { sid: "OLD", action: "delete" as const, data: {} },
       { sid: "STABLE", action: "noop" as const, data: {} },
     ],
+  };
+  const tree = new PlanTree(planWith([worker]), {
+    mode: "apply",
+    label: "Deploying stack",
+    busy: true,
+  });
+  const render = () =>
+    service.output.format(<Plan tree={tree} />, { columns: 80 });
+
+  // Three bindings never inflate the total: only the host is work.
+  expect(tree.progress()).toEqual({ completed: 0, failures: 0, total: 1 });
+  let output = render();
+  expect(output).toContain("Deploying stack (0/1)");
+  expect(output).toContain("unbind");
+  expect(output).toContain("no change");
+
+  tree.emit({
+    _tag: "apply.resource.status",
+    fqn: "Worker",
+    id: "Worker",
+    type: "Test.Resource",
+    status: "updating",
+  });
+  output = render();
+  expect(output).toContain("unbinding");
+  expect(output).toContain("Deploying stack (0/1)");
+
+  tree.emit({
+    _tag: "apply.resource.status",
+    fqn: "Worker",
+    id: "Worker",
+    type: "Test.Resource",
+    status: "updated",
+  });
+  expect(tree.progress()).toEqual({ completed: 1, failures: 0, total: 1 });
+  output = render();
+  expect(output).toContain("Deploying stack (1/1)");
+  expect(output).toContain("unbound");
+  expect(output).toContain("1 updated");
+  expect(output).not.toContain("pending");
+});
+
+it("binding rows follow a failed host", () => {
+  const { service } = makeStatic();
+  const worker = {
+    ...updateNode({ a: 1 }, { a: 2 }, "Worker"),
+    bindings: [{ sid: "BUCKET", action: "update" as const, data: {} }],
   };
   const tree = new PlanTree(planWith([worker]), {
     mode: "apply",
@@ -430,17 +479,16 @@ it("includes binding work in apply totals and failures", () => {
     fqn: "Worker",
     id: "Worker",
     type: "Test.Resource",
-    bindingId: "BUCKET",
     status: "fail",
-    message: "binding failed",
+    message: "worker failed",
   });
 
   const output = service.output.format(<Plan tree={tree} />, { columns: 80 });
+  expect(tree.progress()).toEqual({ completed: 1, failures: 1, total: 1 });
   expect(output).toContain("1 fail");
-  expect(output).toContain("1 no change");
-  expect(output).not.toContain("2 no change");
   expect(output).toContain("Deploying stack (1/1)");
-  expect(output).toContain("binding failed");
+  expect(output).toContain("worker failed");
+  expect(output).not.toContain("pending");
 });
 
 it.effect("keeps native progress active until the apply outcome settles", () =>
@@ -542,6 +590,39 @@ it.effect("removes the dev apply widget when its generation scope closes", () =>
     // Nothing else is live once the generation is gone, so the renderer
     // unmounts and restores the cursor.
     expect(stdout.output.slice(settledAt)).toContain("[?25h");
+  }),
+);
+
+// `p` hides the dev widget; a hot reload opens a fresh session and must not
+// bring it back — the user's choice outlives the generation that made it.
+it.effect("keeps the dev plan widget hidden across hot reloads", () =>
+  Effect.gen(function* () {
+    const stdin = new InputStream();
+    const { service, stdout } = yield* makeLive({ stdin });
+    const plan = {
+      ...planWith([updateNode({ version: 1 }, { version: 2 })]),
+      defaultMode: "local" as const,
+    };
+    const cli = sigilCli().pipe(Layer.provide(Layer.succeed(CliKit, service)));
+    yield* Effect.gen(function* () {
+      const { startApplySession } = yield* Cli;
+      const first = yield* startApplySession(plan, { dev: true });
+      yield* first.done("success");
+      yield* Effect.promise(() => stdout.waitFor("p hide widget"));
+      yield* Effect.promise(() => stdin.ready);
+      yield* Effect.sync(() => stdin.write("p"));
+      yield* Effect.promise(() => stdout.waitFor("p show plan/output"));
+      yield* first.close!;
+
+      const reloadedAt = stdout.output.length;
+      const second = yield* startApplySession(plan, { dev: true });
+      yield* second.done("success");
+      yield* Effect.promise(() => stdout.waitFor("Dev stack ready"));
+      const reloaded = stdout.output.slice(reloadedAt);
+      expect(reloaded).toContain("p show plan/output");
+      expect(reloaded).not.toContain("p hide widget");
+      yield* second.close!;
+    }).pipe(Effect.provide(cli));
   }),
 );
 

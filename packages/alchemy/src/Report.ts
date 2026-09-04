@@ -60,7 +60,6 @@ export interface ResourceStatusChanged {
   type: string; // resource type (e.g. "AWS::Lambda::Function", "Cloudflare::Worker")
   status: ApplyStatus;
   message?: string; // optional details
-  bindingId?: string; // if this event is for a binding
   /**
    * The {@link ProviderMode} this node's provider was resolved for.
    * `undefined` for mode-agnostic providers (a single implementation serves

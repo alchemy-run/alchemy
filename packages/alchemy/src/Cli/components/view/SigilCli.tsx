@@ -12,19 +12,29 @@ import { formatElapsed } from "../../Format.ts";
 import { approvePlanScreen } from "./ApprovePlan.tsx";
 import { Plan as PlanComponent, PlanTree } from "./PlanView.tsx";
 
+/**
+ * UI choices that outlive a single apply session. `alchemy dev` opens a new
+ * session (and a new plan widget) on every hot reload; without this the
+ * widget would reappear after the user hid it with `p`.
+ */
+interface SessionPreferences {
+  planExpanded: boolean;
+}
+
 export const sigilCli = () =>
   Layer.effect(
     Cli,
-    Effect.map(CliKit, (cli) =>
-      Cli.of({
+    Effect.map(CliKit, (cli) => {
+      const preferences: SessionPreferences = { planExpanded: true };
+      return Cli.of({
         startPlanningSession: (label, detail, title) =>
           startPlanningSession(cli, label, detail, title),
         approvePlan: (plan, options) => approvePlan(cli, plan, options),
         displayPlan: (plan, options) => displayPlan(cli, plan, options),
         startApplySession: (plan, options) =>
-          startApplySession(cli, plan, options),
-      }),
-    ),
+          startApplySession(cli, plan, options, preferences),
+      });
+    }),
   );
 
 const approvePlan = Effect.fn(function* <P extends Plan>(
@@ -107,7 +117,8 @@ const startPlanningSession = Effect.fn(function* (
 const startApplySession = Effect.fn(function* <P extends Plan>(
   cli: CliKit["Service"],
   plan: P,
-  options?: import("../../../Report.ts").PlanDisplayOptions,
+  options: import("../../../Report.ts").PlanDisplayOptions | undefined,
+  preferences: SessionPreferences,
 ) {
   // Detailed applies render their YAML diffs inline in the progress tree.
   // One-shot operations persist the final render; dev keeps its live block
@@ -135,6 +146,12 @@ const startApplySession = Effect.fn(function* <P extends Plan>(
     label: labels.active,
     titleDetail: options?.stage,
     busy: true,
+    expanded: preferences.planExpanded,
+  });
+  // Remember the collapse toggle as it happens, so the next hot-reload
+  // generation opens the way the user left this one.
+  progress.subscribe(() => {
+    preferences.planExpanded = progress.snapshot().expanded;
   });
   // The session outlives this effect — the caller settles it via `done` on
   // every exit path (Apply.ts's onExit). live.open is Scope-bound, so give
