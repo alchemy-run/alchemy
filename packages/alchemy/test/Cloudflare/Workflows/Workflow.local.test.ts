@@ -1,4 +1,3 @@
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment.ts";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Alchemy from "@/index.ts";
 import * as State from "@/State/State";
@@ -7,9 +6,13 @@ import * as workflows from "@distilled.cloud/cloudflare/workflows";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import ExplicitNameWorkflowWorker, {
+  EXPLICIT_WORKFLOW_NAME,
+} from "./fixtures/explicit-name-worker.ts";
 import WorkflowLocalWorker from "./fixtures/workflow-worker.ts";
 
 // `dev: true` runs local providers behind the RPC sidecar proxy by default,
@@ -130,6 +133,42 @@ const readWorkflowRow = (stack: Test.ScratchStack) =>
     return undefined;
   }).pipe(Effect.provide(stack.state));
 
+const readWorkerWorkflowBinding = (stack: Test.ScratchStack) =>
+  Effect.gen(function* () {
+    const state = yield* yield* State.State;
+    const fqns = yield* state.list({ stack: stack.name, stage: "test" });
+    for (const fqn of fqns) {
+      const row = yield* state.get({ stack: stack.name, stage: "test", fqn });
+      if (
+        row &&
+        (row as { resourceType?: string }).resourceType === "Cloudflare.Worker"
+      ) {
+        const contributions = (
+          row as {
+            bindings?: Array<{
+              data?: {
+                bindings?: Array<{
+                  type: string;
+                  workflowName?: string;
+                }>;
+              };
+            }>;
+          }
+        ).bindings;
+        const binding = contributions
+          ?.flatMap((contribution) => contribution.data?.bindings ?? [])
+          .find((binding) => binding.type === "workflow");
+        if (binding) return binding;
+      }
+    }
+    return undefined;
+  }).pipe(Effect.provide(stack.state));
+
+const asyncWorkflowMain = Effect.gen(function* () {
+  const path = yield* Path.Path;
+  return path.resolve(import.meta.dirname, "fixtures/async-workflow-worker.ts");
+});
+
 /**
  * Under `alchemy dev` the Workflow resource is emulated by the local provider
  * (a `dev:` id, no cloud API calls) and the host worker's `workflow` binding
@@ -160,6 +199,8 @@ test.provider(
       expect(row).toBeDefined();
       expect(row!.attr?.workflowId).toMatch(/^dev:/);
       expect(row!.providerMode).toBe("local");
+      const binding = yield* readWorkerWorkflowBinding(stack);
+      expect(binding?.workflowName).toBe(row!.attr?.workflowName);
 
       // Drive the workflow through the binding against local workerd.
       const url = deployed.worker.url!;
@@ -169,6 +210,92 @@ test.provider(
       expect(status.status).toBe("complete");
       expect(status.output?.greeting).toBe("Hello, world!");
       expect(status.output?.instanceId).toBe(instanceId);
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+/**
+ * An explicit name must flow through both the local Workflow provider and the
+ * Worker's serialized binding metadata. This stays entirely in local mode, so
+ * it proves the exact-name wiring without creating a Cloudflare Workflow.
+ */
+test.provider(
+  "async Worker binding preserves an explicit physical Workflow name",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const workflowName = "existing-workflow-physical-name";
+      const main = yield* asyncWorkflowMain;
+      yield* stack.deploy(
+        Cloudflare.Worker("ExplicitWorkflowWorker", {
+          main,
+          env: {
+            EXISTING_WORKFLOW: Cloudflare.Workflow("ExistingWorkflow", {
+              workflowName,
+            }),
+          },
+        }),
+      );
+
+      const workflowRow = yield* readWorkflowRow(stack);
+      expect(workflowRow?.providerMode).toBe("local");
+      expect(workflowRow?.attr?.workflowName).toBe(workflowName);
+
+      const binding = yield* readWorkerWorkflowBinding(stack);
+      expect(binding?.workflowName).toBe(workflowName);
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+test.provider(
+  "cross-script binding serializes the host's explicit Workflow name",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const workflowName = "existing-cross-script-workflow";
+      const main = yield* asyncWorkflowMain;
+      yield* stack.deploy(
+        Cloudflare.Worker("ExplicitWorkflowConsumer", {
+          main,
+          env: {
+            EXISTING_WORKFLOW: Cloudflare.Workflow("ExistingWorkflow", {
+              scriptName: "existing-workflow-host",
+              workflowName,
+            }),
+          },
+        }),
+      );
+
+      // Cross-script references are binding-only: the consumer must serialize
+      // the host's exact physical name without registering another Workflow.
+      expect(yield* readWorkflowRow(stack)).toBeUndefined();
+      const binding = yield* readWorkerWorkflowBinding(stack);
+      expect(binding?.workflowName).toBe(workflowName);
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+test.provider(
+  "Effect-native Worker binding preserves an explicit physical Workflow name",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      yield* stack.deploy(ExplicitNameWorkflowWorker);
+
+      const workflowRow = yield* readWorkflowRow(stack);
+      expect(workflowRow?.providerMode).toBe("local");
+      expect(workflowRow?.attr?.workflowName).toBe(EXPLICIT_WORKFLOW_NAME);
+
+      const binding = yield* readWorkerWorkflowBinding(stack);
+      expect(binding?.workflowName).toBe(EXPLICIT_WORKFLOW_NAME);
 
       yield* stack.destroy();
     }).pipe(logLevel),

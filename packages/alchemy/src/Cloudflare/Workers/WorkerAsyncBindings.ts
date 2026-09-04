@@ -199,7 +199,8 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
         if (isWorkflowLike(binding)) {
           const className = binding.className ?? binding.name;
           const scriptName = binding.scriptName ?? resource.workerName;
-          const workflowName = makeWorkflowName(scriptName, className);
+          const workflowName =
+            binding.workflowName ?? makeWorkflowName(scriptName, className);
           resolvedBindingMeta = {
             ...resolvedBindingMeta,
             workflowName,
@@ -207,15 +208,20 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
 
           // A locally-hosted Workflow (no `scriptName`) must be registered
           // with Cloudflare via `putWorkflow` once the host Worker exists.
-          // Cross-script references are binding-only; both sides derive the
-          // same physical workflow name from the host script and class.
+          // Cross-script references are binding-only; both sides use the
+          // explicit physical name when supplied, or derive the same default
+          // from the host script and class.
           if (!binding.scriptName) {
-            yield* WorkflowResource(binding.name, {
-              workflowName,
+            const workflow = yield* WorkflowResource(binding.name, {
+              workflowName: binding.workflowName,
               className,
               scriptName: resource.workerName,
               limits: binding.limits,
             });
+            resolvedBindingMeta = {
+              ...resolvedBindingMeta,
+              workflowName: workflow.workflowName,
+            };
           }
         }
 

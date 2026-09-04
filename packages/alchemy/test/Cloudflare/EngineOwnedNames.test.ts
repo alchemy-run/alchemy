@@ -15,6 +15,11 @@ import {
   type Index,
   IndexProvider,
 } from "@/Cloudflare/Vectorize/VectorizeIndex.ts";
+import {
+  ProviderLive as WorkflowProviderLive,
+  ProviderLocal as WorkflowProviderLocal,
+  type WorkflowResource,
+} from "@/Cloudflare/Workflows/Workflow.ts";
 import { AlchemyContext } from "@/AlchemyContext.ts";
 import { ArtifactStore, createArtifactStore } from "@/Artifacts.ts";
 import { LocalRuntimeState } from "@/Cloudflare/LocalRuntime.ts";
@@ -32,6 +37,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as MutableHashMap from "effect/MutableHashMap";
 import * as Redacted from "effect/Redacted";
+import * as Output from "@/Output.ts";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 
 // Regression tests for the "engine-owned names" invariant: a provider's
@@ -277,5 +283,129 @@ describe("engine-owned names: generator drift never replaces", () => {
         );
         expect(result?.action).not.toBe("replace");
       }).pipe(Effect.provide(ConnectionProvider()), Effect.provide(env)),
+  );
+
+  it.effect("Workflow: drifted auto-generated name does not replace", () =>
+    Effect.gen(function* () {
+      const provider = yield* Provider<WorkflowResource>("Cloudflare.Workflow");
+      const result = yield* provider.diff!(
+        diffInput(
+          "Workflow",
+          {
+            // Legacy state persisted the generated name in props.
+            workflowName: DRIFTED,
+            className: "MyWorkflow",
+            scriptName: "worker",
+          },
+          {
+            className: "MyWorkflow",
+            scriptName: "worker",
+          },
+          {
+            workflowId: "11111111-2222-3333-4444-555555555555",
+            workflowName: DRIFTED,
+            className: "MyWorkflow",
+            scriptName: "worker",
+            accountId: TEST_ACCOUNT,
+          },
+        ),
+      );
+      expect(result?.action).not.toBe("replace");
+    }).pipe(Effect.provide(WorkflowProviderLive()), Effect.provide(env)),
+  );
+
+  it.effect("Workflow: generated-name drift preserves the deployed name", () =>
+    Effect.gen(function* () {
+      const provider = yield* Provider<WorkflowResource>("Cloudflare.Workflow");
+      const output = {
+        workflowId: "dev:11111111-2222-3333-4444-555555555555",
+        workflowName: DRIFTED,
+        className: "MyWorkflow",
+        scriptName: "worker",
+        accountId: TEST_ACCOUNT,
+      };
+      const result = yield* provider.reconcile({
+        ...diffInput(
+          "Workflow",
+          {
+            workflowName: DRIFTED,
+            className: "MyWorkflow",
+            scriptName: "worker",
+          },
+          {
+            className: "MyWorkflow",
+            scriptName: "worker",
+          },
+          output,
+        ),
+        news: {
+          className: "MyWorkflow",
+          scriptName: "worker",
+        },
+        bindings: [],
+        session: {} as never,
+      });
+      expect(result.workflowName).toBe(DRIFTED);
+    }).pipe(Effect.provide(WorkflowProviderLocal()), Effect.provide(env)),
+  );
+
+  it.effect(
+    "Workflow: explicit name change replaces with another prop unresolved",
+    () =>
+      Effect.gen(function* () {
+        const provider = yield* Provider<WorkflowResource>(
+          "Cloudflare.Workflow",
+        );
+        const result = yield* provider.diff!(
+          diffInput(
+            "Workflow",
+            {
+              workflowName: "existing-workflow",
+              className: "MyWorkflow",
+              scriptName: "worker",
+            },
+            {
+              workflowName: "renamed-workflow",
+              className: "MyWorkflow",
+              scriptName: Output.asOutput("worker"),
+            },
+            {
+              workflowId: "11111111-2222-3333-4444-555555555555",
+              workflowName: "existing-workflow",
+              className: "MyWorkflow",
+              scriptName: "worker",
+              accountId: TEST_ACCOUNT,
+            },
+          ),
+        );
+        expect(result).toEqual({ action: "replace" });
+      }).pipe(Effect.provide(WorkflowProviderLive()), Effect.provide(env)),
+  );
+
+  it.effect("Workflow: changing accounts replaces", () =>
+    Effect.gen(function* () {
+      const provider = yield* Provider<WorkflowResource>("Cloudflare.Workflow");
+      const result = yield* provider.diff!(
+        diffInput(
+          "Workflow",
+          {
+            className: "MyWorkflow",
+            scriptName: "worker",
+          },
+          {
+            className: "MyWorkflow",
+            scriptName: "worker",
+          },
+          {
+            workflowId: "11111111-2222-3333-4444-555555555555",
+            workflowName: DRIFTED,
+            className: "MyWorkflow",
+            scriptName: "worker",
+            accountId: "previous-account-id",
+          },
+        ),
+      );
+      expect(result).toEqual({ action: "replace" });
+    }).pipe(Effect.provide(WorkflowProviderLive()), Effect.provide(env)),
   );
 });
