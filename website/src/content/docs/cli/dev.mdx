@@ -28,6 +28,8 @@ A failed apply keeps dev alive so healthy resources keep serving — fix the err
 | `--config, -c <file>`            | Stack file to run (defaults to `alchemy.run.ts`)                   |
 | `--domain <domain>` | Domain local resources are served under as `<name>.<domain>` (defaults to `localhost`) |
 | `--port <port>`     | Port of the shared dev ingress every `<name>.<domain>` host is served on (defaults to `1337`) |
+| `--relay <url>`     | Expose local resources through a dev relay (one connection, stable `https://<name>.<namespace>.<relay>` URLs); token from `$ALCHEMY_DEV_RELAY_TOKEN` |
+| `--relay-namespace <name>` | Namespace to claim on the relay (defaults to the stage, kebab-cased) |
 
 `alchemy deploy` defaults to `live_$USER`. Using a different default
 here means a bare `alchemy dev` will not replace a stage you deployed.
@@ -61,6 +63,24 @@ See [hosts](/cli/hosts).
 
 Binding port 80 needs privileges too. `alchemy dev --port 80` falls back to `1337` when it cannot bind, then checks whether the OS forwards `:80` to the ingress; if not, it prints the one-time forwarding command for your platform (`pfctl` on macOS, `iptables` on Linux). Once forwarded, URLs are advertised without a port: `http://api.myapp.test`.
 
+## Relay
+
+```sh
+alchemy dev --relay https://alchemy.town
+```
+
+```
+Connected to the dev relay: https://<name>.dev-sam.alchemy.town
+[Api] → https://api.dev-sam.alchemy.town
+[Web] → https://web.dev-sam.alchemy.town
+```
+
+Alchemy hosts one at `alchemy.town`, a domain that carries only dev traffic — nothing on it is ours, and nothing of ours is on it. A relay is a small service on a domain the relay operator owns. `alchemy dev` opens **one** WebSocket to it and keeps it open for the session; the relay routes every `https://<name>.<namespace>.<domain>` request down that socket by `Host`, and the local ingress answers it. Real subdomains, stable names across restarts, no extra process per resource. The namespace is yours for the session (the stage name by default) and each resource keeps its ingress name under it, so cookies scoped to `<namespace>.<domain>` work across your resources like they will in production.
+
+The first time a namespace connects, the relay issues a `*.<namespace>.<domain>` certificate for it (about a minute — `alchemy dev` says when it is uploaded; Fly's edges pick it up over the next few minutes) and renews it in the background.
+
+Anyone can host a relay with Alchemy itself — `yield* DevRelay` (from `alchemy/Local/Relay/Relay`) deploys the Fly service, its App, IPs, session directory, apex certificate and DNS records onto a Cloudflare zone, configured by `DEV_RELAY_ZONE`, `DEV_RELAY_DOMAIN`, `DEV_RELAY_TOKEN` and `ZERO_SSL_KEY` (see `stacks/dev-relay.ts`). Connectors present the relay's bearer token from `$ALCHEMY_DEV_RELAY_TOKEN`. WebSocket passthrough (HMR sockets through the relay) is not supported yet; the local URLs keep working for that.
+
 ## Examples
 
 ```sh
@@ -72,6 +92,9 @@ alchemy dev --stage prod
 
 # Serve resources as http://<name>.myapp.test (after `sudo alchemy hosts add …`)
 alchemy dev --domain myapp.test
+
+# Expose every local resource through a dev relay at stable subdomains
+ALCHEMY_DEV_RELAY_TOKEN=… alchemy dev --relay https://alchemy.town
 ```
 
 ## Where next

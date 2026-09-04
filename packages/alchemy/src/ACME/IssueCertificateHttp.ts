@@ -1,5 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
 import type { Account } from "./Account.ts";
 import {
   accountLayer,
@@ -44,7 +45,7 @@ export const IssueCertificateHttp = Layer.succeed(
     }).pipe(
       Effect.map((bound): AccountCredentials => ({
         ca: { directoryUrl: bound.directoryUrl },
-        accountKey: bound.privateKey,
+        accountKey: normalizeKey(bound.privateKey),
         accountUrl: bound.accountUrl,
       })),
     );
@@ -65,3 +66,14 @@ export const IssueCertificateHttp = Layer.succeed(
     return client;
   }),
 );
+
+/**
+ * The bound account key as `Redacted<string>` whatever the host's env
+ * round-trip made of it: a `Redacted`, the JWK JSON text, or (a host that
+ * unwrapped and re-parsed the JSON) the JWK object itself.
+ */
+const normalizeKey = (value: unknown): Redacted.Redacted<string> => {
+  if (Redacted.isRedacted(value)) return normalizeKey(Redacted.value(value));
+  if (typeof value === "string") return Redacted.make(value);
+  return Redacted.make(JSON.stringify(value));
+};

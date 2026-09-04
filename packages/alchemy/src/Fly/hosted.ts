@@ -123,27 +123,19 @@ const { ${handler}: entrypoint } = await import(${JSON.stringify(importPath)});
 await bootstrap(entrypoint);
 `;
 
-/** Flatten a binding/env leaf into a machine env string. Unwraps Redacted. */
+/**
+ * Flatten a binding/env leaf into a machine env string. A `Redacted`
+ * instance is unwrapped (the Machine sees the plain value). A value the
+ * runtime context already marker-packed (`packEnvValue`, for an Output a
+ * host bound with `yield*`) is kept verbatim: the runtime's
+ * `unpackEnvValue` turns it back into the `Redacted` the accessor
+ * promised — unwrapping it here handed accessors a bare string, and
+ * `Redacted.value` on a string throws.
+ */
 export const plainEnvValue = (value: unknown): string | undefined => {
   if (value === undefined || value === null) return undefined;
   if (Redacted.isRedacted(value)) return plainEnvValue(Redacted.value(value));
   if (typeof value === "string") {
-    if (value.startsWith("{")) {
-      try {
-        const parsed: unknown = JSON.parse(value);
-        if (
-          typeof parsed === "object" &&
-          parsed !== null &&
-          (parsed as { _tag?: unknown })._tag === "Redacted" &&
-          typeof (parsed as { value?: unknown }).value === "string"
-        ) {
-          const inner = (parsed as { value: string }).value;
-          return inner.length > 0 ? inner : undefined;
-        }
-      } catch {
-        // plain string that happens to start with `{`
-      }
-    }
     return value.length > 0 ? value : undefined;
   }
   if (typeof value === "number" || typeof value === "boolean") {
