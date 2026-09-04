@@ -86,6 +86,7 @@ export const AuthenticatedLive = Git.Authenticated.make(
     const auth = yield* Auth;
     return Effect.gen(function* () {
       const request = yield* HttpServerRequest;
+      // TODO: resolve a principal from the request
       return undefined;
     });
   }),
