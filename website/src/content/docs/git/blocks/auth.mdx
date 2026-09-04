@@ -51,19 +51,22 @@ type Resolve = Effect<Principal | undefined, never, HttpServerRequest>;
 
 `make` takes an Effect that produces the resolver; declare the
 resources, bindings, and services the resolver needs there. The
-resolver runs once per request and reads `HttpServerRequest`.
-`undefined` is anonymous, never a failure. `Git.parseBasic`,
-`Git.parseBearer`, and `Git.parseSecret` read the header for you. An
-API key verified by Better Auth:
+resolver runs once per request with `HttpServerRequest` in context.
+`undefined` is anonymous, never a failure. A `git` client sends HTTP
+Basic with the credential in the password field, which
+`HttpApiBuilder.securityDecode(HttpApiSecurity.basic)` reads. An API
+key verified by Better Auth:
 
 ```typescript
 const AuthenticatedLive = Git.Authenticated.make(
   Effect.gen(function* () {
     const auth = yield* Auth;
     return Effect.gen(function* () {
-      const request = yield* HttpServerRequest;
-      const key = Git.parseSecret(request.headers);
-      if (key === undefined) return undefined;
+      const { password } = yield* HttpApiBuilder.securityDecode(
+        HttpApiSecurity.basic,
+      );
+      const key = Redacted.value(password);
+      if (key === "") return undefined;
       const verified = yield* auth.api.verifyApiKey({ body: { key } });
       return verified.valid && verified.key
         ? { id: verified.key.referenceId }

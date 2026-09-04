@@ -48,18 +48,19 @@ The example app has a settings page that does the same.
 ### Your own
 
 The token is whatever your `Authenticated` resolver accepts. The one
-[Part 3](/git/tutorial/part-3) put in front of the host reads the
-Basic password with `Git.parseSecret` and asks Better Auth whose key
-it is:
+[Part 3](/git/tutorial/part-3) put in front of the host decodes the
+Basic password and asks Better Auth whose key it is:
 
 ```typescript
 export const AuthenticatedLive = Git.Authenticated.make(
   Effect.gen(function* () {
     const auth = yield* Auth;
     return Effect.gen(function* () {
-      const request = yield* HttpServerRequest;
-      const key = Git.parseSecret(request.headers);
-      if (key === undefined) return undefined;
+      const { password } = yield* HttpApiBuilder.securityDecode(
+        HttpApiSecurity.basic,
+      );
+      const key = Redacted.value(password);
+      if (key === "") return undefined;
       const verified = yield* auth.api.verifyApiKey({ body: { key } });
       return verified.valid && verified.key
         ? { id: verified.key.referenceId }

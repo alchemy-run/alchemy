@@ -27,6 +27,7 @@ import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as HttpApiMiddleware from "effect/unstable/httpapi/HttpApiMiddleware";
+import type * as HttpRouter from "effect/unstable/http/HttpRouter";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import crypto from "node:crypto";
 import { Unauthorized } from "./Api/Schema.ts";
@@ -68,15 +69,16 @@ export type Headers = Readonly<Record<string, string | undefined>>;
 
 /**
  * Resolves the caller of the current request, read from
- * `HttpServerRequest`. Runs at the Worker, once per request, before every
- * git route: the REST plane, the git wire (a `git` client sends HTTP Basic
- * with the credential in the password field), the raw reads, and the
- * GitHub facade. `undefined` is anonymous, never a failure.
+ * `HttpServerRequest` (or decoded with `HttpApiBuilder.securityDecode`).
+ * Runs at the Worker, once per request, before every git route: the REST
+ * plane, the git wire (a `git` client sends HTTP Basic with the credential
+ * in the password field), the raw reads, and the GitHub facade.
+ * `undefined` is anonymous, never a failure.
  */
 export type Resolve = Effect.Effect<
   Principal | undefined,
   never,
-  HttpServerRequest.HttpServerRequest | RuntimeContext
+  HttpRouter.Provided | RuntimeContext
 >;
 
 /**
@@ -91,9 +93,9 @@ export type Resolve = Effect.Effect<
  *   Effect.gen(function* () {
  *     const auth = yield* Auth;
  *     return Effect.gen(function* () {
- *       const request = yield* HttpServerRequest;
- *       const key = Git.parseSecret(request.headers);
- *       if (key !== undefined) {
+ *       const { password } = yield* HttpApiBuilder.securityDecode(HttpApiSecurity.basic);
+ *       const key = Redacted.value(password);
+ *       if (key !== "") {
  *         const verified = yield* auth.api.verifyApiKey({ body: { key } });
  *         return verified.valid && verified.key ? { id: verified.key.referenceId } : undefined;
  *       }

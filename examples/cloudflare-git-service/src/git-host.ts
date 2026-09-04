@@ -17,9 +17,11 @@ import * as Http from "alchemy/Http";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
 import * as HttpRouter from "effect/unstable/http/HttpRouter";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
+import * as HttpApiSecurity from "effect/unstable/httpapi/HttpApiSecurity";
 import * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup";
 
 /** Packs, clone bundles, and spilled pushes. */
@@ -49,18 +51,20 @@ export class Auth extends Context.Service<Auth, AuthInstance>()("app/Auth") {}
 export const AuthLive = Layer.effect(Auth, BetterAuth(authOptions));
 
 /**
- * Who is calling. An API key in the password field of the remote (or a
- * bearer token, for `gh api`) names a user; otherwise the session cookie
- * does; otherwise the request is anonymous, which the policy confines to
- * public reads. The same resolver serves every git route.
+ * Who is calling. An API key in the password field of the remote names a
+ * user; otherwise the session cookie does; otherwise the request is
+ * anonymous, which the policy confines to public reads. The same resolver
+ * serves every git route.
  */
 export const AuthenticatedLive = Git.Authenticated.make(
   Effect.gen(function* () {
     const auth = yield* Auth;
     return Effect.gen(function* () {
-      const request = yield* HttpServerRequest;
-      const key = Git.parseSecret(request.headers);
-      if (key !== undefined && key !== "") {
+      const { password } = yield* HttpApiBuilder.securityDecode(
+        HttpApiSecurity.basic,
+      );
+      const key = Redacted.value(password);
+      if (key !== "") {
         const verified = yield* auth.api
           .verifyApiKey({ body: { key } })
           .pipe(

@@ -25,7 +25,6 @@ import {
   Authenticated,
   BlobStoreR2,
   isReadAction,
-  parseSecret,
   Policy,
   GIT_WORKER_OPTIONS,
   HasherInline,
@@ -34,6 +33,7 @@ import {
   Server,
   ServerLive,
 } from "@/Git/index.ts";
+import { parseSecret } from "@/Git/Auth.ts";
 
 /**
  * The secret every suite authenticates with. Honors a caller-provided

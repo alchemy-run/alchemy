@@ -72,20 +72,18 @@ export const AuthLive = Layer.effect(Auth, BetterAuth(authOptions));
 
 `Git.Authenticated.make` takes an Effect that produces the resolver.
 Resources, bindings, and the services the resolver needs are declared
-in that Effect. The resolver is an Effect that runs once per request,
-reads `HttpServerRequest`, and answers with a principal, or
+in that Effect. The resolver is an Effect that runs once per request
+with `HttpServerRequest` in context, and answers with a principal, or
 `undefined` for anonymous:
 
 ```typescript
 import * as Git from "alchemy/Git";
 import * as Effect from "effect/Effect";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 
 export const AuthenticatedLive = Git.Authenticated.make(
   Effect.gen(function* () {
     const auth = yield* Auth;
     return Effect.gen(function* () {
-      const request = yield* HttpServerRequest;
       // TODO: resolve a principal from the request
       return undefined;
     });
@@ -98,18 +96,24 @@ a request names a user.
 
 ## API keys for git clients
 
-A `git` client sends HTTP Basic with the key in the password field,
-and `gh` sends it as a bearer token. `Git.parseSecret` reads either,
-and `verifyApiKey` says whose it is:
+A `git` client sends HTTP Basic with the key in the password field.
+`HttpApiBuilder.securityDecode` reads it from the request, and
+`verifyApiKey` says whose it is:
 
 ```diff lang="typescript"
++import * as Redacted from "effect/Redacted";
++import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
++import * as HttpApiSecurity from "effect/unstable/httpapi/HttpApiSecurity";
+
 export const AuthenticatedLive = Git.Authenticated.make(
   Effect.gen(function* () {
     const auth = yield* Auth;
     return Effect.gen(function* () {
-      const request = yield* HttpServerRequest;
-+      const key = Git.parseSecret(request.headers);
-+      if (key !== undefined && key !== "") {
++      const { password } = yield* HttpApiBuilder.securityDecode(
++        HttpApiSecurity.basic,
++      );
++      const key = Redacted.value(password);
++      if (key !== "") {
 +        const verified = yield* auth.api
 +          .verifyApiKey({ body: { key } })
 +          .pipe(
@@ -133,16 +137,18 @@ anonymous may do.
 ## Sessions for browsers
 
 A request without a key carries the session cookie, or nothing.
-`getSession` reads the same `HttpServerRequest`:
+`getSession` reads the same request:
 
 ```diff lang="typescript"
 export const AuthenticatedLive = Git.Authenticated.make(
   Effect.gen(function* () {
     const auth = yield* Auth;
     return Effect.gen(function* () {
-      const request = yield* HttpServerRequest;
-      const key = Git.parseSecret(request.headers);
-      if (key !== undefined && key !== "") {
+      const { password } = yield* HttpApiBuilder.securityDecode(
+        HttpApiSecurity.basic,
+      );
+      const key = Redacted.value(password);
+      if (key !== "") {
         // …
       }
 -      return undefined;
