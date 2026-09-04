@@ -1,9 +1,6 @@
 {
   "$schema": "https://turbo.build/schema.json",
   "cacheDir": ".turbo/cache",
-  "globalPassThroughEnv": [
-    "pnpm_config_pm_on_fail"
-  ],
   "globalDependencies": [
     "bun.lock",
     "tsconfig.base.json",
