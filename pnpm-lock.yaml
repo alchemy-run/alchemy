@@ -393,10 +393,10 @@ importers:
         version: 1.3.0(supports-color@10.2.2)
       '@distilled.cloud/aws':
         specifier: workspace:*
-        version: link:distilled/packages/aws
+        version: link:submodules/distilled/packages/aws
       '@distilled.cloud/cloudflare':
         specifier: workspace:*
-        version: link:distilled/packages/cloudflare
+        version: link:submodules/distilled/packages/cloudflare
       '@effect/language-service':
         specifier: ^0.87.2
         version: 0.87.2
@@ -468,7 +468,7 @@ importers:
     dependencies:
       '@distilled.cloud/aws':
         specifier: workspace:*
-        version: link:../../distilled/packages/aws
+        version: link:../../submodules/distilled/packages/aws
       '@effect/platform-bun':
         specifier: catalog:effect
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)
@@ -492,7 +492,7 @@ importers:
         specifier: catalog:tooling
         version: 1.3.14
 
-  distilled/packages/aws:
+  submodules/distilled/packages/aws:
     dependencies:
       '@aws-crypto/crc32':
         specifier: catalog:aws
@@ -544,7 +544,7 @@ importers:
         specifier: catalog:tooling
         version: 2.0.3
 
-  distilled/packages/axiom:
+  submodules/distilled/packages/axiom:
     dependencies:
       '@distilled.cloud/core':
         specifier: workspace:*
@@ -563,7 +563,7 @@ importers:
         specifier: catalog:tooling
         version: 26.2.0
 
-  distilled/packages/azure:
+  submodules/distilled/packages/azure:
     dependencies:
       '@distilled.cloud/core':
         specifier: workspace:*
@@ -582,7 +582,7 @@ importers:
         specifier: catalog:tooling
         version: 26.2.0
 
-  distilled/packages/cloudflare:
+  submodules/distilled/packages/cloudflare:
     dependencies:
       '@distilled.cloud/core':
         specifier: workspace:*
@@ -601,7 +601,7 @@ importers:
         specifier: catalog:tooling
         version: 26.2.0
 
-  distilled/packages/coinbase:
+  submodules/distilled/packages/coinbase:
     dependencies:
       '@distilled.cloud/core':
         specifier: workspace:*
@@ -620,7 +620,7 @@ importers:
         specifier: catalog:tooling
         version: 26.2.0
 
-  distilled/packages/core:
+  submodules/distilled/packages/core:
     devDependencies:
       '@effect/platform-bun':
         specifier: catalog:effect
@@ -635,7 +635,7 @@ importers:
         specifier: 4.0.0-rc.112
         version: 4.0.0-rc.112
 
-  distilled/packages/discord:
+  submodules/distilled/packages/discord:
     dependencies:
       '@distilled.cloud/core':
         specifier: workspace:*
@@ -654,7 +654,7 @@ importers:
         specifier: catalog:tooling
         version: 26.2.0
 
-  distilled/packages/expo-eas:
+  submodules/distilled/packages/expo-eas:
     dependencies:
       '@distilled.cloud/core':
         specifier: workspace:*
@@ -673,7 +673,7 @@ importers:
         specifier: catalog:tooling
         version: 26.2.0
 
-  distilled/packages/fly-io:
+  submodules/distilled/packages/fly-io:
     dependencies:
       '@distilled.cloud/core':
         specifier: workspace:*
@@ -692,7 +692,7 @@ importers:
         specifier: catalog:tooling
         version: 26.2.0
 
-  distilled/packages/gcp:
+  submodules/distilled/packages/gcp:
     dependencies:
       '@distilled.cloud/core':
         specifier: workspace:*
@@ -711,7 +711,7 @@ importers:
         specifier: catalog:tooling
         version: 26.2.0
 
-  distilled/packages/github:
+  submodules/distilled/packages/github:
     dependencies:
       '@distilled.cloud/core':
         specifier: workspace:*
@@ -730,7 +730,7 @@ importers:
         specifier: catalog:tooling
         version: 26.2.0
 
-  distilled/packages/hetzner:
+  submodules/distilled/packages/hetzner:
     dependencies:
       '@distilled.cloud/core':
         specifier: workspace:*
@@ -749,7 +749,7 @@ importers:
         specifier: catalog:tooling
         version: 26.2.0
 
-  distilled/packages/huggingface:
+  submodules/distilled/packages/huggingface:
     dependencies:
       '@distilled.cloud/core':
         specifier: workspace:*
@@ -768,7 +768,7 @@ importers:
         specifier: catalog:tooling
         version: 26.2.0
 
-  distilled/packages/kubernetes:
+  submodules/distilled/packages/kubernetes:
     dependencies:
       '@distilled.cloud/core':
         specifier: workspace:*
@@ -787,7 +787,7 @@ importers:
         specifier: catalog:tooling
         version: 26.2.0
 
-  distilled/packages/mongodb-atlas:
+  submodules/distilled/packages/mongodb-atlas:
     dependencies:
       '@distilled.cloud/core':
         specifier: workspace:*
@@ -806,7 +806,7 @@ importers:
         specifier: catalog:tooling
         version: 26.2.0
 
-  distilled/packages/neon:
+  submodules/distilled/packages/neon:
     dependencies:
       '@distilled.cloud/core':
         specifier: workspace:*
@@ -825,7 +825,7 @@ importers:
         specifier: catalog:tooling
         version: 26.2.0
 
-  distilled/packages/planetscale:
+  submodules/distilled/packages/planetscale:
     dependencies:
       '@distilled.cloud/core':
         specifier: workspace:*
@@ -844,7 +844,7 @@ importers:
         specifier: catalog:tooling
         version: 26.2.0
 
-  distilled/packages/posthog:
+  submodules/distilled/packages/posthog:
     dependencies:
       '@distilled.cloud/core':
         specifier: workspace:*
@@ -863,7 +863,7 @@ importers:
         specifier: catalog:tooling
         version: 26.2.0
 
-  distilled/packages/prisma-postgres:
+  submodules/distilled/packages/prisma-postgres:
     dependencies:
       '@distilled.cloud/core':
         specifier: workspace:*
@@ -882,7 +882,7 @@ importers:
         specifier: catalog:tooling
         version: 26.2.0
 
-  distilled/packages/railway:
+  submodules/distilled/packages/railway:
     dependencies:
       '@distilled.cloud/core':
         specifier: workspace:*
@@ -901,7 +901,7 @@ importers:
         specifier: catalog:tooling
         version: 26.2.0
 
-  distilled/packages/stripe:
+  submodules/distilled/packages/stripe:
     dependencies:
       '@distilled.cloud/core':
         specifier: workspace:*
@@ -920,7 +920,7 @@ importers:
         specifier: catalog:tooling
         version: 26.2.0
 
-  distilled/packages/supabase:
+  submodules/distilled/packages/supabase:
     dependencies:
       '@distilled.cloud/core':
         specifier: workspace:*
@@ -939,7 +939,7 @@ importers:
         specifier: catalog:tooling
         version: 26.2.0
 
-  distilled/packages/turso:
+  submodules/distilled/packages/turso:
     dependencies:
       '@distilled.cloud/core':
         specifier: workspace:*
@@ -958,7 +958,7 @@ importers:
         specifier: catalog:tooling
         version: 26.2.0
 
-  distilled/packages/typesense:
+  submodules/distilled/packages/typesense:
     dependencies:
       '@distilled.cloud/core':
         specifier: workspace:*
@@ -977,7 +977,7 @@ importers:
         specifier: catalog:tooling
         version: 26.2.0
 
-  distilled/packages/vercel:
+  submodules/distilled/packages/vercel:
     dependencies:
       '@distilled.cloud/core':
         specifier: workspace:*
@@ -996,7 +996,7 @@ importers:
         specifier: catalog:tooling
         version: 26.2.0
 
-  distilled/packages/workos:
+  submodules/distilled/packages/workos:
     dependencies:
       '@distilled.cloud/core':
         specifier: workspace:*
@@ -1019,7 +1019,7 @@ importers:
     dependencies:
       '@distilled.cloud/aws':
         specifier: workspace:*
-        version: link:../../distilled/packages/aws
+        version: link:../../submodules/distilled/packages/aws
       '@effect/platform-node':
         specifier: catalog:effect
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
@@ -1050,7 +1050,7 @@ importers:
     dependencies:
       '@distilled.cloud/aws':
         specifier: workspace:*
-        version: link:../../distilled/packages/aws
+        version: link:../../submodules/distilled/packages/aws
       '@effect/platform-node':
         specifier: catalog:effect
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
@@ -1065,7 +1065,7 @@ importers:
     dependencies:
       '@distilled.cloud/aws':
         specifier: workspace:*
-        version: link:../../distilled/packages/aws
+        version: link:../../submodules/distilled/packages/aws
       '@effect/platform-node':
         specifier: catalog:effect
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
@@ -1084,7 +1084,7 @@ importers:
     dependencies:
       '@distilled.cloud/aws':
         specifier: workspace:*
-        version: link:../../distilled/packages/aws
+        version: link:../../submodules/distilled/packages/aws
       '@effect/platform-node':
         specifier: catalog:effect
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
@@ -1099,7 +1099,7 @@ importers:
     dependencies:
       '@distilled.cloud/aws':
         specifier: workspace:*
-        version: link:../../distilled/packages/aws
+        version: link:../../submodules/distilled/packages/aws
       '@effect/platform-node':
         specifier: catalog:effect
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
@@ -1114,7 +1114,7 @@ importers:
     dependencies:
       '@distilled.cloud/aws':
         specifier: workspace:*
-        version: link:../../distilled/packages/aws
+        version: link:../../submodules/distilled/packages/aws
       '@effect/platform-node':
         specifier: catalog:effect
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
@@ -1133,7 +1133,7 @@ importers:
     dependencies:
       '@distilled.cloud/aws':
         specifier: workspace:*
-        version: link:../../distilled/packages/aws
+        version: link:../../submodules/distilled/packages/aws
       '@effect/platform-node':
         specifier: catalog:effect
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
@@ -1148,7 +1148,7 @@ importers:
     dependencies:
       '@distilled.cloud/aws':
         specifier: workspace:*
-        version: link:../../distilled/packages/aws
+        version: link:../../submodules/distilled/packages/aws
       '@effect/platform-node':
         specifier: catalog:effect
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
@@ -1163,7 +1163,7 @@ importers:
     dependencies:
       '@distilled.cloud/aws':
         specifier: workspace:*
-        version: link:../../distilled/packages/aws
+        version: link:../../submodules/distilled/packages/aws
       '@effect/platform-node':
         specifier: catalog:effect
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
@@ -1184,7 +1184,7 @@ importers:
     dependencies:
       '@distilled.cloud/aws':
         specifier: workspace:*
-        version: link:../../distilled/packages/aws
+        version: link:../../submodules/distilled/packages/aws
       alchemy:
         specifier: workspace:*
         version: link:../../packages/alchemy
@@ -1199,7 +1199,7 @@ importers:
         version: link:../../packages/frontend-frameworks
       '@distilled.cloud/aws':
         specifier: workspace:*
-        version: link:../../distilled/packages/aws
+        version: link:../../submodules/distilled/packages/aws
       '@effect/platform-node':
         specifier: catalog:effect
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
@@ -1242,7 +1242,7 @@ importers:
     dependencies:
       '@distilled.cloud/aws':
         specifier: workspace:*
-        version: link:../../distilled/packages/aws
+        version: link:../../submodules/distilled/packages/aws
       '@effect/platform-node':
         specifier: catalog:effect
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
@@ -1264,7 +1264,7 @@ importers:
         version: link:../../packages/frontend-frameworks
       '@distilled.cloud/aws':
         specifier: workspace:*
-        version: link:../../distilled/packages/aws
+        version: link:../../submodules/distilled/packages/aws
       '@effect/platform-node':
         specifier: catalog:effect
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
@@ -1301,7 +1301,7 @@ importers:
         version: link:../../packages/frontend-frameworks
       '@distilled.cloud/aws':
         specifier: workspace:*
-        version: link:../../distilled/packages/aws
+        version: link:../../submodules/distilled/packages/aws
       '@effect/platform-node':
         specifier: catalog:effect
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
@@ -1341,7 +1341,7 @@ importers:
         version: link:../../packages/frontend-frameworks
       '@distilled.cloud/aws':
         specifier: workspace:*
-        version: link:../../distilled/packages/aws
+        version: link:../../submodules/distilled/packages/aws
       '@effect/platform-node':
         specifier: catalog:effect
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
@@ -1387,7 +1387,7 @@ importers:
         version: link:../../packages/frontend-frameworks
       '@distilled.cloud/aws':
         specifier: workspace:*
-        version: link:../../distilled/packages/aws
+        version: link:../../submodules/distilled/packages/aws
       '@effect/platform-node':
         specifier: catalog:effect
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
@@ -1436,7 +1436,7 @@ importers:
         version: link:../../packages/frontend-frameworks
       '@distilled.cloud/aws':
         specifier: workspace:*
-        version: link:../../distilled/packages/aws
+        version: link:../../submodules/distilled/packages/aws
       '@effect/platform-node':
         specifier: catalog:effect
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
@@ -1485,7 +1485,7 @@ importers:
         version: link:../../packages/frontend-frameworks
       '@distilled.cloud/aws':
         specifier: workspace:*
-        version: link:../../distilled/packages/aws
+        version: link:../../submodules/distilled/packages/aws
       '@effect/platform-node':
         specifier: catalog:effect
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
@@ -1522,7 +1522,7 @@ importers:
         version: link:../../packages/frontend-frameworks
       '@distilled.cloud/aws':
         specifier: workspace:*
-        version: link:../../distilled/packages/aws
+        version: link:../../submodules/distilled/packages/aws
       '@effect/platform-node':
         specifier: catalog:effect
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
@@ -1574,7 +1574,7 @@ importers:
         version: link:../../packages/frontend-frameworks
       '@distilled.cloud/aws':
         specifier: workspace:*
-        version: link:../../distilled/packages/aws
+        version: link:../../submodules/distilled/packages/aws
       '@effect/platform-node':
         specifier: catalog:effect
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
@@ -1620,7 +1620,7 @@ importers:
         version: link:../../packages/frontend-frameworks
       '@distilled.cloud/aws':
         specifier: workspace:*
-        version: link:../../distilled/packages/aws
+        version: link:../../submodules/distilled/packages/aws
       '@effect/platform-node':
         specifier: catalog:effect
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
@@ -1681,7 +1681,7 @@ importers:
         version: link:../../packages/frontend-frameworks
       '@distilled.cloud/aws':
         specifier: workspace:*
-        version: link:../../distilled/packages/aws
+        version: link:../../submodules/distilled/packages/aws
       '@effect/platform-node':
         specifier: catalog:effect
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
@@ -1886,7 +1886,7 @@ importers:
     dependencies:
       '@distilled.cloud/aws':
         specifier: workspace:*
-        version: link:../../distilled/packages/aws
+        version: link:../../submodules/distilled/packages/aws
       '@effect/platform-node':
         specifier: catalog:effect
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
@@ -2108,7 +2108,7 @@ importers:
     dependencies:
       '@distilled.cloud/cloudflare':
         specifier: workspace:*
-        version: link:../../distilled/packages/cloudflare
+        version: link:../../submodules/distilled/packages/cloudflare
       '@effect/platform-node':
         specifier: catalog:effect
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
@@ -2768,7 +2768,7 @@ importers:
     dependencies:
       '@distilled.cloud/fly-io':
         specifier: workspace:*
-        version: link:../../distilled/packages/fly-io
+        version: link:../../submodules/distilled/packages/fly-io
       '@effect/platform-node':
         specifier: catalog:effect
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
@@ -2783,7 +2783,7 @@ importers:
     dependencies:
       '@distilled.cloud/fly-io':
         specifier: workspace:*
-        version: link:../../distilled/packages/fly-io
+        version: link:../../submodules/distilled/packages/fly-io
       '@effect/platform-node':
         specifier: catalog:effect
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
@@ -2798,7 +2798,7 @@ importers:
     dependencies:
       '@distilled.cloud/fly-io':
         specifier: workspace:*
-        version: link:../../distilled/packages/fly-io
+        version: link:../../submodules/distilled/packages/fly-io
       '@effect/platform-node':
         specifier: catalog:effect
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
@@ -2829,7 +2829,7 @@ importers:
     dependencies:
       '@distilled.cloud/fly-io':
         specifier: workspace:*
-        version: link:../../distilled/packages/fly-io
+        version: link:../../submodules/distilled/packages/fly-io
       '@effect/platform-node':
         specifier: catalog:effect
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
@@ -2844,7 +2844,7 @@ importers:
     dependencies:
       '@distilled.cloud/fly-io':
         specifier: workspace:*
-        version: link:../../distilled/packages/fly-io
+        version: link:../../submodules/distilled/packages/fly-io
       '@effect/platform-node':
         specifier: catalog:effect
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
@@ -2859,7 +2859,7 @@ importers:
     dependencies:
       '@distilled.cloud/fly-io':
         specifier: workspace:*
-        version: link:../../distilled/packages/fly-io
+        version: link:../../submodules/distilled/packages/fly-io
       '@effect/platform-node':
         specifier: catalog:effect
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
@@ -2881,7 +2881,7 @@ importers:
         version: link:../../packages/frontend-frameworks
       '@distilled.cloud/fly-io':
         specifier: workspace:*
-        version: link:../../distilled/packages/fly-io
+        version: link:../../submodules/distilled/packages/fly-io
       '@effect/platform-node':
         specifier: catalog:effect
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
@@ -2915,7 +2915,7 @@ importers:
         version: link:../../packages/frontend-frameworks
       '@distilled.cloud/fly-io':
         specifier: workspace:*
-        version: link:../../distilled/packages/fly-io
+        version: link:../../submodules/distilled/packages/fly-io
       '@effect/platform-node':
         specifier: catalog:effect
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
@@ -2955,7 +2955,7 @@ importers:
         version: link:../../packages/frontend-frameworks
       '@distilled.cloud/fly-io':
         specifier: workspace:*
-        version: link:../../distilled/packages/fly-io
+        version: link:../../submodules/distilled/packages/fly-io
       '@effect/platform-node':
         specifier: catalog:effect
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
@@ -2995,7 +2995,7 @@ importers:
         version: link:../../packages/frontend-frameworks
       '@distilled.cloud/fly-io':
         specifier: workspace:*
-        version: link:../../distilled/packages/fly-io
+        version: link:../../submodules/distilled/packages/fly-io
       '@effect/platform-node':
         specifier: catalog:effect
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
@@ -3047,7 +3047,7 @@ importers:
         version: link:../../packages/frontend-frameworks
       '@distilled.cloud/fly-io':
         specifier: workspace:*
-        version: link:../../distilled/packages/fly-io
+        version: link:../../submodules/distilled/packages/fly-io
       '@effect/platform-node':
         specifier: catalog:effect
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
@@ -3096,7 +3096,7 @@ importers:
         version: link:../../packages/frontend-frameworks
       '@distilled.cloud/fly-io':
         specifier: workspace:*
-        version: link:../../distilled/packages/fly-io
+        version: link:../../submodules/distilled/packages/fly-io
       '@effect/platform-node':
         specifier: catalog:effect
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
@@ -3127,7 +3127,7 @@ importers:
         version: link:../../packages/frontend-frameworks
       '@distilled.cloud/fly-io':
         specifier: workspace:*
-        version: link:../../distilled/packages/fly-io
+        version: link:../../submodules/distilled/packages/fly-io
       '@effect/platform-node':
         specifier: catalog:effect
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
@@ -3182,7 +3182,7 @@ importers:
         version: link:../../packages/frontend-frameworks
       '@distilled.cloud/fly-io':
         specifier: workspace:*
-        version: link:../../distilled/packages/fly-io
+        version: link:../../submodules/distilled/packages/fly-io
       '@effect/platform-node':
         specifier: catalog:effect
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
@@ -3215,7 +3215,7 @@ importers:
         version: link:../../packages/frontend-frameworks
       '@distilled.cloud/fly-io':
         specifier: workspace:*
-        version: link:../../distilled/packages/fly-io
+        version: link:../../submodules/distilled/packages/fly-io
       '@effect/platform-node':
         specifier: catalog:effect
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
@@ -3295,7 +3295,7 @@ importers:
         version: link:../../packages/frontend-frameworks
       '@distilled.cloud/fly-io':
         specifier: workspace:*
-        version: link:../../distilled/packages/fly-io
+        version: link:../../submodules/distilled/packages/fly-io
       '@effect/platform-node':
         specifier: catalog:effect
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
@@ -3350,7 +3350,7 @@ importers:
         version: link:../../packages/frontend-frameworks
       '@distilled.cloud/fly-io':
         specifier: workspace:*
-        version: link:../../distilled/packages/fly-io
+        version: link:../../submodules/distilled/packages/fly-io
       '@effect/platform-node':
         specifier: catalog:effect
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
@@ -3380,7 +3380,7 @@ importers:
     dependencies:
       '@distilled.cloud/hetzner':
         specifier: workspace:*
-        version: link:../../distilled/packages/hetzner
+        version: link:../../submodules/distilled/packages/hetzner
       '@effect/platform-node':
         specifier: catalog:effect
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
@@ -3395,7 +3395,7 @@ importers:
     dependencies:
       '@distilled.cloud/hetzner':
         specifier: workspace:*
-        version: link:../../distilled/packages/hetzner
+        version: link:../../submodules/distilled/packages/hetzner
       '@effect/platform-node':
         specifier: catalog:effect
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
@@ -3417,7 +3417,7 @@ importers:
         version: link:../../packages/frontend-frameworks
       '@distilled.cloud/hetzner':
         specifier: workspace:*
-        version: link:../../distilled/packages/hetzner
+        version: link:../../submodules/distilled/packages/hetzner
       '@effect/platform-node':
         specifier: catalog:effect
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
@@ -3451,7 +3451,7 @@ importers:
         version: link:../../packages/frontend-frameworks
       '@distilled.cloud/hetzner':
         specifier: workspace:*
-        version: link:../../distilled/packages/hetzner
+        version: link:../../submodules/distilled/packages/hetzner
       '@effect/platform-node':
         specifier: catalog:effect
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
@@ -3491,7 +3491,7 @@ importers:
         version: link:../../packages/frontend-frameworks
       '@distilled.cloud/hetzner':
         specifier: workspace:*
-        version: link:../../distilled/packages/hetzner
+        version: link:../../submodules/distilled/packages/hetzner
       '@effect/platform-node':
         specifier: catalog:effect
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
@@ -3531,7 +3531,7 @@ importers:
         version: link:../../packages/frontend-frameworks
       '@distilled.cloud/hetzner':
         specifier: workspace:*
-        version: link:../../distilled/packages/hetzner
+        version: link:../../submodules/distilled/packages/hetzner
       '@effect/platform-node':
         specifier: catalog:effect
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
@@ -3577,7 +3577,7 @@ importers:
         version: link:../../packages/frontend-frameworks
       '@distilled.cloud/hetzner':
         specifier: workspace:*
-        version: link:../../distilled/packages/hetzner
+        version: link:../../submodules/distilled/packages/hetzner
       '@effect/platform-node':
         specifier: catalog:effect
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
@@ -3626,7 +3626,7 @@ importers:
         version: link:../../packages/frontend-frameworks
       '@distilled.cloud/hetzner':
         specifier: workspace:*
-        version: link:../../distilled/packages/hetzner
+        version: link:../../submodules/distilled/packages/hetzner
       '@effect/platform-node':
         specifier: catalog:effect
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
@@ -3663,7 +3663,7 @@ importers:
         version: link:../../packages/frontend-frameworks
       '@distilled.cloud/hetzner':
         specifier: workspace:*
-        version: link:../../distilled/packages/hetzner
+        version: link:../../submodules/distilled/packages/hetzner
       '@effect/platform-node':
         specifier: catalog:effect
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
@@ -3712,7 +3712,7 @@ importers:
         version: link:../../packages/frontend-frameworks
       '@distilled.cloud/hetzner':
         specifier: workspace:*
-        version: link:../../distilled/packages/hetzner
+        version: link:../../submodules/distilled/packages/hetzner
       '@effect/platform-node':
         specifier: catalog:effect
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
@@ -3751,7 +3751,7 @@ importers:
         version: link:../../packages/frontend-frameworks
       '@distilled.cloud/hetzner':
         specifier: workspace:*
-        version: link:../../distilled/packages/hetzner
+        version: link:../../submodules/distilled/packages/hetzner
       '@effect/platform-node':
         specifier: catalog:effect
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
@@ -3831,7 +3831,7 @@ importers:
         version: link:../../packages/frontend-frameworks
       '@distilled.cloud/hetzner':
         specifier: workspace:*
-        version: link:../../distilled/packages/hetzner
+        version: link:../../submodules/distilled/packages/hetzner
       '@effect/platform-node':
         specifier: catalog:effect
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
@@ -3886,7 +3886,7 @@ importers:
         version: link:../../packages/frontend-frameworks
       '@distilled.cloud/hetzner':
         specifier: workspace:*
-        version: link:../../distilled/packages/hetzner
+        version: link:../../submodules/distilled/packages/hetzner
       '@effect/platform-node':
         specifier: catalog:effect
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
@@ -4092,7 +4092,7 @@ importers:
     dependencies:
       '@distilled.cloud/railway':
         specifier: workspace:*
-        version: link:../../distilled/packages/railway
+        version: link:../../submodules/distilled/packages/railway
       '@effect/platform-node':
         specifier: catalog:effect
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
@@ -4107,7 +4107,7 @@ importers:
     dependencies:
       '@distilled.cloud/railway':
         specifier: workspace:*
-        version: link:../../distilled/packages/railway
+        version: link:../../submodules/distilled/packages/railway
       '@effect/platform-node':
         specifier: catalog:effect
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
@@ -4142,7 +4142,7 @@ importers:
         version: link:../../packages/frontend-frameworks
       '@distilled.cloud/railway':
         specifier: workspace:*
-        version: link:../../distilled/packages/railway
+        version: link:../../submodules/distilled/packages/railway
       '@effect/platform-node':
         specifier: catalog:effect
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
@@ -4176,7 +4176,7 @@ importers:
         version: link:../../packages/frontend-frameworks
       '@distilled.cloud/railway':
         specifier: workspace:*
-        version: link:../../distilled/packages/railway
+        version: link:../../submodules/distilled/packages/railway
       '@effect/platform-node':
         specifier: catalog:effect
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
@@ -4216,7 +4216,7 @@ importers:
         version: link:../../packages/frontend-frameworks
       '@distilled.cloud/railway':
         specifier: workspace:*
-        version: link:../../distilled/packages/railway
+        version: link:../../submodules/distilled/packages/railway
       '@effect/platform-node':
         specifier: catalog:effect
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
@@ -4256,7 +4256,7 @@ importers:
         version: link:../../packages/frontend-frameworks
       '@distilled.cloud/railway':
         specifier: workspace:*
-        version: link:../../distilled/packages/railway
+        version: link:../../submodules/distilled/packages/railway
       '@effect/platform-node':
         specifier: catalog:effect
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
@@ -4308,7 +4308,7 @@ importers:
         version: link:../../packages/frontend-frameworks
       '@distilled.cloud/railway':
         specifier: workspace:*
-        version: link:../../distilled/packages/railway
+        version: link:../../submodules/distilled/packages/railway
       '@effect/platform-node':
         specifier: catalog:effect
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
@@ -4357,7 +4357,7 @@ importers:
         version: link:../../packages/frontend-frameworks
       '@distilled.cloud/railway':
         specifier: workspace:*
-        version: link:../../distilled/packages/railway
+        version: link:../../submodules/distilled/packages/railway
       '@effect/platform-node':
         specifier: catalog:effect
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
@@ -4388,7 +4388,7 @@ importers:
         version: link:../../packages/frontend-frameworks
       '@distilled.cloud/railway':
         specifier: workspace:*
-        version: link:../../distilled/packages/railway
+        version: link:../../submodules/distilled/packages/railway
       '@effect/platform-node':
         specifier: catalog:effect
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
@@ -4443,7 +4443,7 @@ importers:
         version: link:../../packages/frontend-frameworks
       '@distilled.cloud/railway':
         specifier: workspace:*
-        version: link:../../distilled/packages/railway
+        version: link:../../submodules/distilled/packages/railway
       '@effect/platform-node':
         specifier: catalog:effect
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
@@ -4476,7 +4476,7 @@ importers:
         version: link:../../packages/frontend-frameworks
       '@distilled.cloud/railway':
         specifier: workspace:*
-        version: link:../../distilled/packages/railway
+        version: link:../../submodules/distilled/packages/railway
       '@effect/platform-node':
         specifier: catalog:effect
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
@@ -4556,7 +4556,7 @@ importers:
         version: link:../../packages/frontend-frameworks
       '@distilled.cloud/railway':
         specifier: workspace:*
-        version: link:../../distilled/packages/railway
+        version: link:../../submodules/distilled/packages/railway
       '@effect/platform-node':
         specifier: catalog:effect
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
@@ -4611,7 +4611,7 @@ importers:
         version: link:../../packages/frontend-frameworks
       '@distilled.cloud/railway':
         specifier: workspace:*
-        version: link:../../distilled/packages/railway
+        version: link:../../submodules/distilled/packages/railway
       '@effect/platform-node':
         specifier: catalog:effect
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
@@ -5349,31 +5349,31 @@ importers:
         version: 3.1095.0
       '@distilled.cloud/aws':
         specifier: workspace:*
-        version: link:../../distilled/packages/aws
+        version: link:../../submodules/distilled/packages/aws
       '@distilled.cloud/axiom':
         specifier: workspace:*
-        version: link:../../distilled/packages/axiom
+        version: link:../../submodules/distilled/packages/axiom
       '@distilled.cloud/cloudflare':
         specifier: workspace:*
-        version: link:../../distilled/packages/cloudflare
+        version: link:../../submodules/distilled/packages/cloudflare
       '@distilled.cloud/core':
         specifier: workspace:*
-        version: link:../../distilled/packages/core
+        version: link:../../submodules/distilled/packages/core
       '@distilled.cloud/fly-io':
         specifier: workspace:*
-        version: link:../../distilled/packages/fly-io
+        version: link:../../submodules/distilled/packages/fly-io
       '@distilled.cloud/hetzner':
         specifier: workspace:*
-        version: link:../../distilled/packages/hetzner
+        version: link:../../submodules/distilled/packages/hetzner
       '@distilled.cloud/neon':
         specifier: workspace:*
-        version: link:../../distilled/packages/neon
+        version: link:../../submodules/distilled/packages/neon
       '@distilled.cloud/planetscale':
         specifier: workspace:*
-        version: link:../../distilled/packages/planetscale
+        version: link:../../submodules/distilled/packages/planetscale
       '@distilled.cloud/railway':
         specifier: workspace:*
-        version: link:../../distilled/packages/railway
+        version: link:../../submodules/distilled/packages/railway
       '@effect/sql-d1':
         specifier: catalog:effect
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)
@@ -5684,10 +5684,10 @@ importers:
         version: 5.20260901.1
       '@distilled.cloud/aws':
         specifier: workspace:*
-        version: link:../../distilled/packages/aws
+        version: link:../../submodules/distilled/packages/aws
       '@distilled.cloud/cloudflare':
         specifier: workspace:*
-        version: link:../../distilled/packages/cloudflare
+        version: link:../../submodules/distilled/packages/cloudflare
       '@effect/platform-bun':
         specifier: catalog:effect
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)
@@ -5732,7 +5732,7 @@ importers:
         version: 2.16.1(unenv@2.0.0-rc.24)(workerd@1.20260901.1)
       '@distilled.cloud/cloudflare':
         specifier: workspace:*
-        version: link:../../distilled/packages/cloudflare
+        version: link:../../submodules/distilled/packages/cloudflare
       '@puppeteer/browsers':
         specifier: catalog:cloudflare-runtime
         version: 3.2.1(yauzl@3.4.0)
@@ -5869,7 +5869,7 @@ importers:
         version: link:../cloudflare-runtime
       '@distilled.cloud/cloudflare':
         specifier: workspace:*
-        version: link:../../distilled/packages/cloudflare
+        version: link:../../submodules/distilled/packages/cloudflare
       '@effect/platform-node':
         specifier: catalog:effect
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
