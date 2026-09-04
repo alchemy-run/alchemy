@@ -64,5 +64,12 @@ export const EncryptionKey = Effect.gen(function* () {
     name: EncryptionKeySecretName,
     store,
     value: random.text,
+    // The key that encrypts every entry in the store must never rotate: a
+    // rotation makes all persisted state unreadable (2.0.0-beta.45). The
+    // value above is only used to CREATE the secret. If the secret already
+    // exists — the stack is adopted, the bootstrap resumes from a stale
+    // local state, or {@link EncryptionKeyValue}'s state row is missing or
+    // unreadable and a fresh random is minted — the existing value wins.
+    preserveExistingValue: true,
   });
 });
