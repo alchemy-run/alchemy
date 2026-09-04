@@ -1407,7 +1407,7 @@ export default defineConfig({
           label: "Git",
           items: [
             { label: "Overview", link: "/git" },
-            { label: "Setup", link: "/git/setup" },
+            { label: "Getting Started", link: "/git/getting-started" },
             {
               label: "Tutorial",
               items: [
