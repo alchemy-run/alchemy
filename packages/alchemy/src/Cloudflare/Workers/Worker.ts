@@ -788,6 +788,17 @@ export interface WorkerProps<
    */
   main?: string;
   /**
+   * Named export to load from {@link main}.
+   *
+   * `main: import.meta.url` on a file that also default-exports a Stack
+   * bundles the default export. Set this to the Worker export's name
+   * (`handler: "api"` for `export const api = Cloudflare.Worker(...)`)
+   * so the bundler plucks that binding and tree-shakes the Stack.
+   *
+   * @default "default"
+   */
+  handler?: string;
+  /**
    * Raw module source for the Worker. When provided, bundling is bypassed
    * entirely and this string is uploaded as a single ESM module
    * (`main.js`). Useful for tiny inline workers (tests, fixtures,
