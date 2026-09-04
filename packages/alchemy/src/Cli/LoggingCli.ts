@@ -315,9 +315,7 @@ export const LoggingCli = Layer.effect(
                         `${tag(event.fqn)} ${blue(event.message)}`,
                       );
                     }
-                    const id = event.bindingId
-                      ? `${event.fqn}/${event.bindingId}`
-                      : event.fqn;
+                    const id = event.fqn;
                     const mode = modeSuffix({
                       mode: event.providerMode,
                       priorMode: event.fromProviderMode,

@@ -1,4 +1,3 @@
-import * as Predicate from "effect/Predicate";
 import type { ActionApply, ActionDelete, CRUD, Plan } from "../../../Plan.ts";
 import type {
   ApplyEvent,
@@ -43,6 +42,12 @@ export type PlanRow =
       id: string;
       depth: number;
       action: "create" | "update" | "delete" | "noop";
+      /**
+       * Row key of the resource that carries this binding. Bindings have no
+       * lifecycle of their own — the host provider reconciles them — so the
+       * row mirrors the host's apply status instead of tracking its own.
+       */
+      hostKey: string;
     }
   | {
       key: string;
@@ -54,11 +59,13 @@ export type PlanRow =
 
 export type ResourceRow = Extract<PlanRow, { type: "resource" }>;
 
-const isProgressRow = Predicate.not(
-  (row: PlanRow) =>
-    row.type === "namespace" ||
-    (row.type === "binding" && row.action === "noop"),
-);
+/**
+ * Only resources and actions receive apply events and settle. Namespaces are
+ * grouping only, and bindings are reconciled by their host resource, so
+ * counting them would leave the progress total unreachable.
+ */
+const isProgressRow = (row: PlanRow) =>
+  row.type === "resource" || row.type === "task";
 
 export interface RowState extends Required<
   Pick<ResourceStatusChanged, "id" | "status">
@@ -97,6 +104,12 @@ export interface PlanTreeOptions {
   readonly titleDetail?: string;
   readonly viewport?: PlanViewport;
   readonly busy?: boolean;
+  /**
+   * Initial collapse state of a collapsible tree. Dev passes the user's
+   * last choice so a hot reload doesn't bring back a widget they hid.
+   * @default true
+   */
+  readonly expanded?: boolean;
 }
 
 const getRowKey = (item: FlattenedItem) => item.path.join("/");
@@ -138,6 +151,7 @@ const buildRows = (plan: Plan, detailed: boolean): PlanRow[] => {
         id: item.bindingSid ?? item.id,
         depth: item.depth,
         action: item.action as "create" | "update" | "delete" | "noop",
+        hostKey: item.path.slice(0, -1).join("/"),
       };
     }
     if (item.type === "action") {
@@ -182,18 +196,6 @@ const buildInitialTasks = (rows: readonly PlanRow[]) =>
     rows.flatMap((row): Array<[string, RowState]> => {
       if (row.type === "resource")
         return [[row.key, initialResourceState(row)]];
-      if (row.type === "binding") {
-        return [
-          [
-            row.key,
-            {
-              key: row.key,
-              id: row.id,
-              status: row.action === "noop" ? "created" : "pending",
-            },
-          ],
-        ];
-      }
       if (row.type === "task") {
         return [
           [
@@ -233,7 +235,7 @@ export class PlanTree {
     this.state = {
       tasks: buildInitialTasks(this.rows),
       label: options.label ?? "Plan",
-      expanded: true,
+      expanded: options.expanded ?? true,
       viewport: options.viewport ?? "virtual",
       busy: options.busy ?? false,
       outcome: undefined,
@@ -315,12 +317,11 @@ export class PlanTree {
     };
 
     if (event._tag === "apply.resource.status") {
-      const rowKey = event.bindingId ? `${key}/${event.bindingId}` : key;
-      const current = tasks.get(rowKey);
+      const current = tasks.get(key);
       if (current) {
-        tasks.set(rowKey, {
-          key: rowKey,
-          id: event.bindingId ?? event.id,
+        tasks.set(key, {
+          key,
+          id: event.id,
           status: event.status,
           message: event.message ?? current.message,
           ...timing(current, event.status),
