@@ -12,12 +12,16 @@
     "build": "tsc -b",
     "deploy": "alchemy deploy",
     "dev": "alchemy dev",
-    "destroy": "alchemy destroy"
+    "destroy": "alchemy destroy",
+    "test": "bun test"
   },
   "dependencies": {
     "@distilled.cloud/aws": "workspace:*",
     "@effect/platform-node": "catalog:effect",
     "alchemy": "workspace:*",
     "effect": "catalog:effect"
+  },
+  "devDependencies": {
+    "alchemy-test": "workspace:*"
   }
 }

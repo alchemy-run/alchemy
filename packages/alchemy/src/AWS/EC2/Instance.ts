@@ -80,6 +80,8 @@ export interface InstanceProps extends PlatformProps {
   instanceProfileName?: string;
   /**
    * User data script to provide at launch time.
+   * Changes force replacement — EC2 does not re-run user data on an
+   * in-place update.
    */
   userData?: string;
   /**
@@ -192,6 +194,19 @@ export interface Instance extends Resource<
      * The public DNS name, if assigned.
      */
     publicDnsName?: string;
+    /**
+     * HTTP URL of the hosted process
+     * (`http://{publicDnsName|publicIpAddress}:{port}`).
+     *
+     * Set when the instance is hosted (`main` / `port`). Under
+     * `alchemy dev` the emulator's public address is
+     * `{instanceId}.localhost.floci.io`, which resolves to 127.0.0.1
+     * and is served by a per-port host-routing mux — reading `url`
+     * instead of interpolating `publicIpAddress` is what makes the
+     * instance reachable from the host. On AWS this is the public
+     * IP/DNS and the process port.
+     */
+    url?: string;
     /**
      * The key pair name used for SSH access.
      */
@@ -415,7 +430,34 @@ export const InstanceProvider = () =>
             .map((tag) => [tag.Key, tag.Value]),
         );
 
-      const toAttributes = Effect.fn(function* (instance: ec2.Instance) {
+      const publicHost = (instance: ec2.Instance) =>
+        instance.PublicDnsName || instance.PublicIpAddress;
+
+      const hostedListenPort = (props: { main?: unknown; port?: number }) =>
+        props.main !== undefined || props.port !== undefined
+          ? (props.port ?? 3000)
+          : undefined;
+
+      const instanceUrl = (instance: ec2.Instance, port?: number) => {
+        const host = publicHost(instance);
+        if (!host || port === undefined) return undefined;
+        return `http://${host}:${port}`;
+      };
+
+      const portFromUrl = (url?: string) => {
+        if (!url) return undefined;
+        try {
+          const parsed = new URL(url);
+          return parsed.port ? Number(parsed.port) : undefined;
+        } catch {
+          return undefined;
+        }
+      };
+
+      const toAttributes = Effect.fn(function* (
+        instance: ec2.Instance,
+        port?: number,
+      ) {
         return {
           instanceId: instance.InstanceId as InstanceId,
           instanceArn: yield* toInstanceArn(instance.InstanceId as InstanceId),
@@ -432,6 +474,7 @@ export const InstanceProvider = () =>
           publicIpAddress: instance.PublicIpAddress,
           privateDnsName: instance.PrivateDnsName,
           publicDnsName: instance.PublicDnsName,
+          url: instanceUrl(instance, port),
           keyName: instance.KeyName,
           instanceProfileArn: instance.IamInstanceProfile?.Arn,
           instanceProfileId: instance.IamInstanceProfile?.Id,
@@ -639,6 +682,37 @@ export const InstanceProvider = () =>
             );
           }),
         diff: Effect.fn(function* ({ id, news, olds, output }) {
+          const raw = news as unknown as Record<string, unknown>;
+          // Launch-time properties cannot be mutated in place. Check them
+          // even when OTHER props are still unresolved Outputs (e.g.
+          // `userData` interpolating an ECR Image URI that's being rebuilt):
+          // bailing on `isResolved(news)` lets the engine default the change
+          // to `update`, which keeps the same instance ID and never re-runs
+          // user data. An unresolved replace-trigger is itself a replacement
+          // — the upstream's new value is unknown at plan time, so we can't
+          // prove the launch config didn't change.
+          const launchConfigChanged = (next: unknown, prev: unknown) =>
+            !isResolved(next) || prev !== next;
+          const hostModeChanged = Boolean(olds.main) !== Boolean(raw.main);
+          if (
+            hostModeChanged ||
+            launchConfigChanged(raw.imageId, olds.imageId) ||
+            launchConfigChanged(raw.subnetId, olds.subnetId) ||
+            launchConfigChanged(raw.keyName, olds.keyName) ||
+            launchConfigChanged(
+              raw.instanceProfileName,
+              olds.instanceProfileName,
+            ) ||
+            launchConfigChanged(raw.userData, olds.userData) ||
+            launchConfigChanged(
+              raw.associatePublicIpAddress,
+              olds.associatePublicIpAddress,
+            ) ||
+            launchConfigChanged(raw.privateIpAddress, olds.privateIpAddress) ||
+            launchConfigChanged(raw.availabilityZone, olds.availabilityZone)
+          ) {
+            return { action: "replace" } as const;
+          }
           // The hosted bundle hash must participate in planning even while
           // OTHER props are unresolved Outputs (an `imageId` AMI lookup, a
           // subnet reference): a content-only edit changes no prop at all,
@@ -646,7 +720,6 @@ export const InstanceProvider = () =>
           // content inputs are plain — gate on THEM, not on the whole bag
           // (the same isResolved-defeats-content-diff bug the MicroVM image
           // diff had).
-          const raw = news as unknown as Record<string, unknown>;
           const contentInputs = {
             main: raw.main,
             handler: raw.handler,
@@ -675,20 +748,6 @@ export const InstanceProvider = () =>
             }
           }
           if (!isResolved(news)) return;
-          const hostModeChanged = Boolean(olds.main) !== Boolean(news.main);
-          if (
-            hostModeChanged ||
-            olds.imageId !== news.imageId ||
-            olds.subnetId !== news.subnetId ||
-            olds.keyName !== news.keyName ||
-            olds.instanceProfileName !== news.instanceProfileName ||
-            olds.userData !== news.userData ||
-            olds.associatePublicIpAddress !== news.associatePublicIpAddress ||
-            olds.privateIpAddress !== news.privateIpAddress ||
-            olds.availabilityZone !== news.availabilityZone
-          ) {
-            return { action: "replace" } as const;
-          }
 
           if (
             olds.instanceType !== news.instanceType ||
@@ -730,7 +789,7 @@ export const InstanceProvider = () =>
             : yield* findInstanceByTags(id, instanceId);
           return instance
             ? {
-                ...(yield* toAttributes(instance)),
+                ...(yield* toAttributes(instance, portFromUrl(output?.url))),
                 instanceProfileName: output?.instanceProfileName,
                 roleArn: output?.roleArn,
                 roleName: output?.roleName,
@@ -923,7 +982,7 @@ export const InstanceProvider = () =>
           // Re-read final state so attributes reflect the post-sync cloud.
           const final = yield* describeInstance(instanceId);
           return {
-            ...(yield* toAttributes(final)),
+            ...(yield* toAttributes(final, hostedListenPort(news))),
             instanceProfileName:
               runtime.instanceProfileName ?? output?.instanceProfileName,
             roleArn: runtime.roleArn ?? output?.roleArn,
