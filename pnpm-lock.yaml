@@ -388,6 +388,8 @@ overrides:
   drizzle-orm: 1.0.0-rc.5-ab785fc
   rolldown: 1.2.5
 
+pnpmfileChecksum: sha256-18MkOs6uL8cr3DyLGHm4Ngu6BqVdTBLyETqu37V/w4I=
+
 patchedDependencies:
   '@astrojs/starlight@0.41.7': 7ab76e506900e9b0f934039b4b3f797fdf6ea76e9668891402a75ef46dd79b8c
   starlight-blog@0.28.0: 7b6e57367fab3517e0cfd5e4d0da3459ac1430bf4b6036cf03002c978602c23b
