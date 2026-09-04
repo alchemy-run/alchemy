@@ -47,11 +47,12 @@ export default Stack(
     ) as any,
     secrets: Layer.succeed(SecretManager, {
       name: "Fixture",
-      resolve: ({ stage, fallback }) =>
+      resolve: ({ stack, stage, fallback }) =>
         Effect.succeed(
           ConfigProvider.orElse(
             ConfigProvider.fromUnknown({
               ALCHEMY_PROFILE: "manager-profile",
+              FIXTURE_STACK: stack,
               FIXTURE_SECRET: `secret-${stage ?? "native"}`,
               NEON_API_KEY: `neon-${stage ?? "native"}`,
             }),
@@ -60,5 +61,8 @@ export default Stack(
         ),
     }),
   },
-  Config.string("FIXTURE_SECRET"),
+  Config.all({
+    secret: Config.string("FIXTURE_SECRET"),
+    stack: Config.string("FIXTURE_STACK"),
+  }),
 );

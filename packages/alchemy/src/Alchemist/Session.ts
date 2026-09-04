@@ -140,6 +140,7 @@ interface SessionServicesOptions {
   readonly envFile: Option.Option<string>;
   readonly profile?: string;
   readonly secrets?: SecretManagerLayer;
+  readonly stack: string;
   readonly stage?: string;
   readonly logger?: Layer.Layer<never, never, never>;
   readonly extra?: Layer.Layer<never, never, never>;
@@ -153,6 +154,7 @@ const sessionServices = Effect.fn("sessionServices")(function* (
   const configProvider = withProfileOverride(
     yield* resolveSecretManagerConfig({
       secrets: options.secrets,
+      stack: options.stack,
       stage: options.stage,
       fallback,
     }),
@@ -307,6 +309,7 @@ const openUncached = Effect.fn("openStackSessionUncached")(function* (
     envFile: Option.fromNullishOr(target.envFile),
     profile: target.profile,
     secrets: stackEffect.secrets,
+    stack: stackEffect.stackName,
     stage: target.stage,
   });
   const services = Layer.mergeAll(
@@ -401,6 +404,7 @@ export const buildStackProviders = Effect.fn("buildStackProviders")(function* (
   const shared = yield* sessionServices({
     ...options,
     secrets: stackEffect.secrets,
+    stack: stackEffect.stackName,
   });
   const context = yield* buildStackProviderContext(
     stackEffect,
@@ -458,6 +462,7 @@ const collectAuthProvidersUncached = Effect.fn("collectAuthProvidersUncached")(
       envFile: options.envFile,
       profile: options.profile,
       secrets: stackEffect?.secrets,
+      stack: stackEffect?.stackName ?? options.main,
       stage: options.stage,
     });
     yield* Layer.build(

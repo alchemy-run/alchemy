@@ -20,23 +20,28 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const fallback = ConfigProvider.fromUnknown({ VALUE: "fallback" });
-      const resolved = yield* resolveSecretManagerConfig({ fallback });
+      const resolved = yield* resolveSecretManagerConfig({
+        stack: "test-stack",
+        fallback,
+      });
       expect(resolved).toBe(fallback);
       expect(yield* read(resolved, "VALUE")).toBe("fallback");
     }),
 );
 
-it.effect("passes stage and fallback to a generic secret manager", () =>
+it.effect("passes stack, stage, and fallback to a generic secret manager", () =>
   Effect.gen(function* () {
     const fallback = ConfigProvider.fromUnknown({
       FALLBACK_ONLY: "fallback",
       SHARED: "fallback",
     });
+    let receivedStack: string | undefined;
     let receivedStage: string | undefined;
     const secrets = Layer.succeed(SecretManager, {
       name: "Test",
-      resolve: ({ stage, fallback }) =>
+      resolve: ({ stack, stage, fallback }) =>
         Effect.sync(() => {
+          receivedStack = stack;
           receivedStage = stage;
           return ConfigProvider.orElse(
             ConfigProvider.fromUnknown({ SHARED: "manager" }),
@@ -47,10 +52,12 @@ it.effect("passes stage and fallback to a generic secret manager", () =>
 
     const resolved = yield* resolveSecretManagerConfig({
       secrets,
+      stack: "test-stack",
       stage: "preview-42",
       fallback,
     });
 
+    expect(receivedStack).toBe("test-stack");
     expect(receivedStage).toBe("preview-42");
     expect(yield* read(resolved, "SHARED")).toBe("manager");
     expect(yield* read(resolved, "FALLBACK_ONLY")).toBe("fallback");
@@ -69,6 +76,7 @@ it.effect("surfaces typed secret-manager failures", () => {
 
   return resolveSecretManagerConfig({
     secrets,
+    stack: "test-stack",
     fallback: ConfigProvider.fromUnknown({}),
   }).pipe(
     Effect.flip,
@@ -95,6 +103,7 @@ it.effect("keeps an explicit profile override at highest precedence", () =>
     });
     const resolved = yield* resolveSecretManagerConfig({
       secrets,
+      stack: "test-stack",
       fallback: ConfigProvider.fromUnknown({ ALCHEMY_PROFILE: "fallback" }),
     });
 

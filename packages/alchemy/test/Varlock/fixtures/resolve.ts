@@ -35,6 +35,7 @@ const program = Effect.gen(function* () {
     const stage = rawStage.length > 0 ? rawStage : undefined;
     const provider = yield* resolveSecretManagerConfig({
       secrets: Varlock.SecretManager(),
+      stack: "varlock-fixture",
       stage,
       fallback,
     });

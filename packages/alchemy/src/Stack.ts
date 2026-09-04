@@ -340,6 +340,7 @@ const alchemy = (overrides?: { dev?: boolean }) =>
 export const evalStack = <A, B, StackErr, Err, Req>(
   effect: StackEffect<CompiledStack<A>, StackErr, Stage | AlchemyContext> & {
     readonly secrets?: SecretManagerLayer;
+    readonly stackName?: string;
   },
   fn: (stack: CompiledStack<A>) => Effect.Effect<B, Err, Req>,
   options: {
@@ -358,11 +359,23 @@ export const evalStack = <A, B, StackErr, Err, Req>(
 ) => {
   const body = Effect.gen(function* () {
     const fallback = yield* loadConfigProvider(Option.none());
-    const configProvider = yield* resolveSecretManagerConfig({
-      secrets: effect.secrets,
-      stage: options.stage,
-      fallback,
-    });
+    let configProvider = fallback;
+    if (effect.secrets !== undefined) {
+      const stack = effect.stackName;
+      if (stack === undefined) {
+        return yield* Effect.die(
+          new Error(
+            "A stack using a secret manager is missing its stack name.",
+          ),
+        );
+      }
+      configProvider = yield* resolveSecretManagerConfig({
+        secrets: effect.secrets,
+        stack,
+        stage: options.stage,
+        fallback,
+      });
+    }
     const stack = yield* effect.pipe(
       Effect.provideService(ConfigProvider, configProvider),
     );

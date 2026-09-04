@@ -7,6 +7,7 @@ import {
   SecretManager as SecretManagerService,
   SecretManagerError,
   type SecretManagerLayer,
+  type SecretManagerResolveOptions,
 } from "../SecretManager.ts";
 
 const managerName = "Varlock";
@@ -205,10 +206,7 @@ export const loadVarlockEnvironment = (
 const resolve = Effect.fn("Varlock.SecretManager.resolve")(function* ({
   stage,
   fallback,
-}: {
-  readonly stage?: string;
-  readonly fallback: ConfigProvider.ConfigProvider;
-}) {
+}: SecretManagerResolveOptions) {
   return yield* Semaphore.withPermits(
     loadMutex,
     1,

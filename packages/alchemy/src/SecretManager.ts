@@ -7,6 +7,8 @@ import { UserFacingError } from "./UserFacingError.ts";
 
 /** Input passed to a stack's configured secret manager. */
 export interface SecretManagerResolveOptions {
+  /** Name of the Alchemy stack being resolved. */
+  readonly stack: string;
   /** Concrete Alchemy stage, when the command addresses a stack instance. */
   readonly stage?: string;
   /** Existing Alchemy config source used for values the manager does not resolve. */
@@ -46,12 +48,14 @@ export const resolveSecretManagerConfig = Effect.fn(
   "SecretManager.resolveConfig",
 )(function* (options: {
   readonly secrets?: SecretManagerLayer;
+  readonly stack: string;
   readonly stage?: string;
   readonly fallback: ConfigProvider.ConfigProvider;
 }) {
   if (options.secrets === undefined) return options.fallback;
   const context = yield* Layer.build(options.secrets);
   return yield* Context.get(context, SecretManager).resolve({
+    stack: options.stack,
     stage: options.stage,
     fallback: options.fallback,
   });

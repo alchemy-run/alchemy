@@ -88,7 +88,10 @@ describe("importStack", () => {
       { providers: TestLayers() },
     );
 
-    expect(session.stack.output).toBe("secret-preview-42");
+    expect(session.stack.output).toEqual({
+      secret: "secret-preview-42",
+      stack: "secret-manager-fixture",
+    });
   });
 
   test("resolves stack secrets before provider and state layers", async () => {
