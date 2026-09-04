@@ -12,6 +12,7 @@
 	url = https://github.com/alchemy-run/floci.git
 	shallow = true
 	update = none
+	ignore = all
 
 # Reference-only checkouts of upstream repos — skipped by
 # `git submodule update --init` (CI included). Fetch explicitly with
