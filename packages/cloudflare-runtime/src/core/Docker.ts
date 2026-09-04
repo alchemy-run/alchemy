@@ -42,6 +42,18 @@ export class Docker extends Context.Service<
       tag: string,
       env: Record<string, string>,
     ) => Effect.Effect<string, never, Scope.Scope>;
+    /**
+     * Register a transform applied to every intercepted
+     * `POST /containers/create` body (after image-alias/env rewriting,
+     * before it reaches the Docker daemon). Services layered above
+     * Docker use this to contribute create-time configuration — e.g.
+     * the dev S3 gateway grants FUSE-marked containers the FUSE device
+     * + capability and injects its own URL. Transforms run in
+     * registration order; a rejected transform fails the create (502).
+     */
+    readonly registerContainerCreateTransform: (
+      transform: ContainerCreateTransform,
+    ) => Effect.Effect<void, never, Scope.Scope>;
     readonly build: (
       tag: string,
       image: ContainerImage.Build,
@@ -56,6 +68,21 @@ export class Docker extends Context.Service<
   }
 >()("cloudflare-runtime/Docker") {}
 
+/**
+ * The subset of Docker's `ContainerCreateRequest` the create
+ * interceptor works with. Unknown fields pass through untouched.
+ */
+export interface ContainerCreateBody {
+  Image: string;
+  Env?: Array<string>;
+  HostConfig?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export type ContainerCreateTransform = (
+  body: ContainerCreateBody,
+) => ContainerCreateBody | Promise<ContainerCreateBody>;
+
 export type ContainerImage =
   | ContainerImage.Build
   | ContainerImage.Pull
@@ -69,6 +96,12 @@ export declare namespace ContainerImage {
     readonly dockerfile: string;
     readonly context?: string;
     readonly buildArgs?: Record<string, string>;
+    /**
+     * Docker platform for the build (`"linux/arm64"` for a native dev
+     * image on Apple Silicon). Defaults to `linux/amd64` — production
+     * parity with Cloudflare's container platform.
+     */
+    readonly platform?: string;
   }
   export interface Pull extends Base {
     readonly imageUri: string;
@@ -203,6 +236,7 @@ export const DockerLive = Layer.effect(
       string,
       { tag: string; env: Record<string, string> }
     >();
+    const createTransforms = new Set<ContainerCreateTransform>();
 
     const registeredLoopbackPorts = () => {
       const ports = new Set<number>();
@@ -267,11 +301,29 @@ export const DockerLive = Layer.effect(
             Env: Array<string>;
           }>(req);
           const image = registeredImages.get(original.Image);
-          const transformed = JSON.stringify({
+          let body: ContainerCreateBody = {
             ...original,
             Image: image?.tag ?? original.Image,
             Env: mergeContainerCreateEnv(original.Env, image?.env),
-          });
+          };
+          try {
+            for (const transform of createTransforms) {
+              body = await transform(body);
+            }
+          } catch (error) {
+            // eslint-disable-next-line no-console -- workerd swallows the
+            // 502 body; without this the failure is undebuggable
+            console.error(
+              `[docker-proxy] container create transform failed:`,
+              error,
+            );
+            res.writeHead(502, { "content-type": "text/plain" });
+            res.end(
+              `Container create transform failed: ${(error as Error)?.message ?? error}`,
+            );
+            return;
+          }
+          const transformed = JSON.stringify(body);
           const proxy = sendProxyRequest({
             socketPath,
             path: req.url,
@@ -281,6 +333,12 @@ export const DockerLive = Layer.effect(
               "content-length": Buffer.byteLength(transformed).toString(),
             },
             res,
+            // a daemon rejection (400 on a bad HostConfig etc.) is
+            // otherwise only visible inside workerd — surface it here
+            onErrorResponse: (status, responseBody) =>
+              console.error(
+                `[docker-proxy] container create rejected (${status}): ${responseBody}`,
+              ),
           });
           proxy.end(transformed);
         } else if (isSidecarCreateRequest) {
@@ -518,6 +576,11 @@ export const DockerLive = Layer.effect(
           () => Effect.sync(() => registeredImages.delete(alias)),
         ).pipe(Effect.as(alias));
       },
+      registerContainerCreateTransform: (transform) =>
+        Effect.acquireRelease(
+          Effect.sync(() => createTransforms.add(transform)),
+          () => Effect.sync(() => createTransforms.delete(transform)),
+        ).pipe(Effect.asVoid),
       generateImageTag,
       build: (tag, image) =>
         Effect.suspend(() => {
@@ -527,7 +590,7 @@ export const DockerLive = Layer.effect(
             "-t",
             tag,
             "--platform",
-            "linux/amd64",
+            image.platform ?? "linux/amd64",
             "--provenance=false",
             ...Object.entries(image.buildArgs ?? {}).map(
               ([name, value]) => `--build-arg ${name}=${value}`,
@@ -667,6 +730,8 @@ const sendProxyRequest = (input: {
   method: string | undefined;
   headers: NodeHttp.OutgoingHttpHeaders;
   res: NodeHttp.ServerResponse;
+  /** Observe a >=400 daemon response (status, collected body). */
+  onErrorResponse?: (status: number, body: string) => void;
   afterSuccess?: () => Promise<void>;
 }) => {
   // `transfer-encoding` is a hop-by-hop header and must not be forwarded
@@ -688,10 +753,20 @@ const sendProxyRequest = (input: {
     },
     (res) => {
       delete res.headers["transfer-encoding"];
-      const succeed =
-        (res.statusCode ?? 500) < 300 && input.afterSuccess !== undefined;
+      const status = res.statusCode ?? 500;
+      const succeed = status < 300 && input.afterSuccess !== undefined;
       if (!succeed) {
         input.res.writeHead(res.statusCode || 500, res.headers);
+        if (input.onErrorResponse && status >= 400) {
+          const chunks: Array<Buffer> = [];
+          res.on("data", (chunk: Buffer) => chunks.push(chunk));
+          res.on("end", () =>
+            input.onErrorResponse!(
+              status,
+              Buffer.concat(chunks).toString("utf8"),
+            ),
+          );
+        }
         res.pipe(input.res, { end: true });
         return;
       }
@@ -699,9 +774,9 @@ const sendProxyRequest = (input: {
       res.on("data", (chunk) => chunks.push(chunk));
       res.on("end", () => {
         void input.afterSuccess!().finally(() => {
-          const status = res.statusCode || 500;
-          input.res.writeHead(status, res.headers);
-          if (status === 204 || chunks.length === 0) input.res.end();
+          const finalStatus = res.statusCode || 500;
+          input.res.writeHead(finalStatus, res.headers);
+          if (finalStatus === 204 || chunks.length === 0) input.res.end();
           else input.res.end(Buffer.concat(chunks));
         });
       });

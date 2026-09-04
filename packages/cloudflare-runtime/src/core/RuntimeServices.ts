@@ -35,6 +35,7 @@ import {
   RemoteWorker,
 } from "./remote-bindings/index.ts";
 import * as Runtime from "./Runtime.ts";
+import * as S3Gateway from "./S3Gateway.ts";
 import * as Workerd from "./workerd/Workerd.ts";
 
 export interface RuntimeConfig {
@@ -119,16 +120,28 @@ export const layerRegistry = () =>
   RegistryProxy.RegistryProxyLive.pipe(Layer.provide(Registry.RegistryLive));
 
 export const layerRuntime = (config: RuntimeConfig) =>
-  Runtime.RuntimeLive.pipe(
-    Layer.provideMerge(layerLocalBindings()),
-    Layer.provideMerge(layerRemoteBindings(config.api)),
-    Layer.provideMerge(WorkerProxy.WorkerProxyLive),
-    Layer.provide(Globals.GlobalsLive),
-    Layer.provideMerge(layerLoopback()),
-    Layer.provide(layerStorage(config.storage)),
-    Layer.provide(Internet.InternetLive),
-    Layer.provideMerge(layerRegistry()),
-    Layer.provide(Paths.PathsLive),
+  // The S3 gateway layers ON TOP of the runtime (it hosts per-bucket
+  // platform proxies through `Runtime`) and registers a container-create
+  // transform with `Docker` below. Its build is inert — the HTTP server
+  // starts on the first FUSE-marked container create — so per-operation
+  // `layerRuntime` boots (local action gateways) pay nothing for it.
+  // `Docker.DockerLive` is the same layer reference as the one provided
+  // to `RuntimeLive`, so the build MemoMap dedupes them to one instance.
+  S3Gateway.S3GatewayLive.pipe(
     Layer.provide(Docker.DockerLive),
-    Layer.provide(Workerd.WorkerdLive),
+    Layer.provideMerge(
+      Runtime.RuntimeLive.pipe(
+        Layer.provideMerge(layerLocalBindings()),
+        Layer.provideMerge(layerRemoteBindings(config.api)),
+        Layer.provideMerge(WorkerProxy.WorkerProxyLive),
+        Layer.provide(Globals.GlobalsLive),
+        Layer.provideMerge(layerLoopback()),
+        Layer.provide(layerStorage(config.storage)),
+        Layer.provide(Internet.InternetLive),
+        Layer.provideMerge(layerRegistry()),
+        Layer.provide(Paths.PathsLive),
+        Layer.provide(Docker.DockerLive),
+        Layer.provide(Workerd.WorkerdLive),
+      ),
+    ),
   );

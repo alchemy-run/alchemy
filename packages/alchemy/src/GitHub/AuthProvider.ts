@@ -219,7 +219,11 @@ export const makeGitHubAuth = (authOptions?: GitHubAuthOptions) =>
           const token = stdout.trim();
           if (!token) {
             return yield* Effect.fail(
-              new GhCliError("gh auth token returned empty output"),
+              new GhCliError(
+                `gh auth token returned empty output (exit ${exitCode}${
+                  stderr.trim() ? `, stderr: ${stderr.trim()}` : ", no stderr"
+                })`,
+              ),
             );
           }
           return token;

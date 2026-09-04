@@ -1,9 +1,10 @@
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as zlib from "node:zlib";
 import type * as rolldown from "rolldown";
 import * as Bundle from "../../Bundle/Bundle.ts";
-import { findCwdForBundle } from "../../Bundle/TempRoot.ts";
+import { findCwdForBundle, resolveMainPath } from "../../Bundle/TempRoot.ts";
 import { Stack } from "../../Stack.ts";
 
 /**
@@ -26,6 +27,13 @@ export const buildMicrovmDockerfile = (
   userDockerfile: string | undefined,
   runtime: "bun" | "node",
   port: number,
+  /**
+   * Binding-contributed Dockerfile statements (`Docker.Host`), already
+   * rendered for the image's single target architecture. Spliced after
+   * the runtime install and before the bundled program so their layers
+   * cache across code changes.
+   */
+  statements: ReadonlyArray<string> = [],
 ): string => {
   const base = userDockerfile?.trim() ?? `FROM ${MICROVM_BASE_DOCKER_IMAGE}`;
   const installRuntime =
@@ -39,6 +47,7 @@ export const buildMicrovmDockerfile = (
     base,
     "",
     installRuntime,
+    ...statements.flatMap((statement) => ["", statement.trim()]),
     "WORKDIR /app",
     // The entry (`index.mjs`) and every rolldown chunk are emitted with a
     // `.mjs` extension, which Node always treats as ESM — so the entry's named
@@ -78,11 +87,10 @@ export const bundleMicrovmProgram = Effect.fn(function* ({
   port: number;
   build?: Bundle.BundleConfig;
 }) {
-  const fs = yield* FileSystem.FileSystem;
   const stack = yield* Stack;
   const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
 
-  const realMain = yield* fs.realPath(main);
+  const realMain = yield* resolveMainPath(main);
   const cwd = yield* findCwdForBundle(realMain);
 
   const buildBundle = Effect.fn(function* (
@@ -162,26 +170,96 @@ export interface ArtifactFile {
   content: string | Uint8Array;
 }
 
+// Fixed DOS timestamp (1980-01-01T00:00:00) so identical inputs always
+// produce identical archive bytes.
+const DOS_TIME = 0;
+const DOS_DATE = (1 << 5) | 1;
+const textEncoder = new TextEncoder();
+
 /**
  * Zip a flat list of files into a deterministic (fixed mtime) archive. Used to
  * package the MicroVM code artifact (Dockerfile + bundled program, or a build
  * context) before uploading it to S3.
+ *
+ * Hand-rolled ZIP writer over node's native zlib: build contexts baked into
+ * the artifact can be ~1GB, and jszip's pure-JS DEFLATE takes minutes on that
+ * where native deflate takes seconds. Compression level 1 — the artifact is
+ * decompressed once by the image builder, so speed beats ratio.
  */
 export const zipFiles = Effect.fn(function* (
   files: ReadonlyArray<ArtifactFile>,
 ) {
-  const zip = new (yield* Effect.promise(() => import("jszip"))).default();
-  const date = new Date("1980-01-01T00:00:00.000Z");
-  for (const file of files) {
-    zip.file(file.path, file.content, { date });
+  if (files.length > 0xffff) {
+    return yield* Effect.die(
+      `MicroVM artifact has ${files.length} entries, above the non-zip64 limit of 65535`,
+    );
   }
-  return yield* Effect.promise(() =>
-    zip.generateAsync({
-      type: "nodebuffer",
-      compression: "DEFLATE",
-      platform: "UNIX",
-    }),
-  );
+  const locals: Buffer[] = [];
+  const central: Buffer[] = [];
+  let offset = 0;
+  for (const file of files) {
+    // One file per Effect step so a multi-hundred-MB archive doesn't starve
+    // the event loop for its whole duration.
+    const entry = yield* Effect.sync(() => {
+      const name = Buffer.from(file.path, "utf8");
+      const data =
+        typeof file.content === "string"
+          ? textEncoder.encode(file.content)
+          : file.content;
+      const crc = zlib.crc32(data);
+      const deflated = zlib.deflateRawSync(data, { level: 1 });
+      const stored = deflated.length < data.byteLength;
+      const body = stored ? deflated : Buffer.from(data);
+      const method = stored ? 8 : 0;
+
+      const local = Buffer.alloc(30);
+      local.writeUInt32LE(0x04034b50, 0); // local file header signature
+      local.writeUInt16LE(20, 4); // version needed to extract
+      local.writeUInt16LE(0, 6); // general purpose flags
+      local.writeUInt16LE(method, 8);
+      local.writeUInt16LE(DOS_TIME, 10);
+      local.writeUInt16LE(DOS_DATE, 12);
+      local.writeUInt32LE(crc >>> 0, 14);
+      local.writeUInt32LE(body.length, 18);
+      local.writeUInt32LE(data.byteLength, 22);
+      local.writeUInt16LE(name.length, 26);
+      local.writeUInt16LE(0, 28); // extra field length
+
+      const cen = Buffer.alloc(46);
+      cen.writeUInt32LE(0x02014b50, 0); // central directory signature
+      cen.writeUInt16LE(0x031e, 4); // made by UNIX, spec 3.0
+      cen.writeUInt16LE(20, 6); // version needed to extract
+      cen.writeUInt16LE(0, 8); // flags
+      cen.writeUInt16LE(method, 10);
+      cen.writeUInt16LE(DOS_TIME, 12);
+      cen.writeUInt16LE(DOS_DATE, 14);
+      cen.writeUInt32LE(crc >>> 0, 16);
+      cen.writeUInt32LE(body.length, 20);
+      cen.writeUInt32LE(data.byteLength, 24);
+      cen.writeUInt16LE(name.length, 28);
+      // extra(30), comment(32), disk(34), internal attrs(36) all zero
+      cen.writeUInt32LE((0o100644 << 16) >>> 0, 38); // external attrs: -rw-r--r--
+      cen.writeUInt32LE(offset, 42);
+
+      return { local, name, body, cen };
+    });
+    locals.push(entry.local, entry.name, entry.body);
+    central.push(entry.cen, entry.name);
+    offset += entry.local.length + entry.name.length + entry.body.length;
+    if (offset >= 0xffffffff) {
+      return yield* Effect.die(
+        "MicroVM artifact exceeds the non-zip64 limit of 4GB",
+      );
+    }
+  }
+  const cdSize = central.reduce((n, b) => n + b.length, 0);
+  const eocd = Buffer.alloc(22);
+  eocd.writeUInt32LE(0x06054b50, 0); // end of central directory signature
+  eocd.writeUInt16LE(files.length, 8); // entries on this disk
+  eocd.writeUInt16LE(files.length, 10); // total entries
+  eocd.writeUInt32LE(cdSize, 12);
+  eocd.writeUInt32LE(offset, 16);
+  return Buffer.concat([...locals, ...central, eocd]);
 });
 
 /**
@@ -194,24 +272,44 @@ export const readContextDirectory = Effect.fn(function* (dir: string) {
   const path = yield* Path.Path;
   const root = yield* fs.realPath(dir);
 
-  const walk = (
-    current: string,
-  ): Effect.Effect<{ path: string; content: Uint8Array }[], any, never> =>
+  // Enumerate first, then read contents with bounded concurrency — a baked
+  // context can hold tens of thousands of files, and reading them one
+  // sequential Effect step at a time dominates packaging time.
+  const collect = (current: string): Effect.Effect<string[], any, never> =>
     Effect.gen(function* () {
       const entries = yield* fs.readDirectory(current);
-      const out: { path: string; content: Uint8Array }[] = [];
-      for (const entry of entries) {
-        const abs = path.join(current, entry);
-        const info = yield* fs.stat(abs);
-        if (info.type === "Directory") {
-          out.push(...(yield* walk(abs)));
-        } else {
-          const content = yield* fs.readFile(abs);
-          out.push({ path: path.relative(root, abs), content });
-        }
-      }
-      return out;
+      const nested = yield* Effect.forEach(
+        entries,
+        (entry) =>
+          Effect.gen(function* () {
+            const abs = path.join(current, entry);
+            // stat follows symlinks; a DANGLING one (vendored test
+            // fixtures love `vendor -> ../../vendor`) is NotFound. It has
+            // no bytes to ship, so skip it rather than fail the deploy.
+            const info = yield* fs.stat(abs).pipe(
+              Effect.catchIf(
+                (error) =>
+                  error._tag === "PlatformError" &&
+                  error.reason._tag === "NotFound",
+                () => Effect.succeed(undefined),
+              ),
+            );
+            if (info === undefined) return [];
+            return info.type === "Directory" ? yield* collect(abs) : [abs];
+          }),
+        { concurrency: 16 },
+      );
+      return nested.flat();
     });
 
-  return yield* walk(root);
+  const paths = (yield* collect(root)).sort();
+  return yield* Effect.forEach(
+    paths,
+    (abs) =>
+      Effect.map(fs.readFile(abs), (content) => ({
+        path: path.relative(root, abs),
+        content,
+      })),
+    { concurrency: 16 },
+  );
 });

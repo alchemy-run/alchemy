@@ -1,5 +1,5 @@
-import * as NodeHttp from "node:http";
 import type { IncomingMessage } from "node:http";
+import * as NodeNet from "node:net";
 import type { Duplex } from "node:stream";
 import type * as vite from "vite";
 import { resolveForwardedHost } from "./forwarded-host.ts";
@@ -7,6 +7,15 @@ import { resolveForwardedHost } from "./forwarded-host.ts";
 /**
  * Handles 'upgrade' requests on the Vite HTTP server and forwards the
  * WebSocket handshake to the local workerd address as a raw HTTP upgrade.
+ *
+ * The upstream half is a RAW TCP relay (`node:net`), not an
+ * `http.request`: Node's http client surfaces a 101 as an `upgrade`
+ * event with the hijacked socket, but Bun's `node:http` shim delivers
+ * it as a plain `response` and never releases the socket — under Bun
+ * an http-client relay silently kills every proxied WebSocket. The
+ * upstream is always local workerd over plain HTTP, so writing the
+ * handshake bytes ourselves and splicing the sockets is both simpler
+ * and runtime-agnostic.
  *
  * Returns a cleanup function that removes the listener (used on server restart).
  */
@@ -53,70 +62,65 @@ export function handleWebSocket(
     }
 
     const target = new URL(url.pathname + url.search, upstreamBase);
-    const upstream = NodeHttp.request({
-      hostname: target.hostname,
-      port: target.port,
-      path: target.pathname + target.search,
-      method: request.method,
-      // Forward the client-facing host so the worker sees the URL the client
-      // requested rather than the local workerd address.
-      headers: { ...request.headers, host: url.host },
+    const upstream = NodeNet.connect({
+      host: target.hostname,
+      port: Number(target.port || 80),
     });
 
     const cleanup = () => {
       upstream.destroy();
       socket.destroy();
     };
-
     upstream.on("error", cleanup);
     socket.on("close", () => upstream.destroy());
+    upstream.on("close", () => socket.destroy());
 
-    upstream.on("response", (response) => {
-      // Worker did not accept the upgrade.
-      if (!socket.destroyed) {
-        socket.destroy();
+    upstream.on("connect", () => {
+      // Relay the client's handshake verbatim (`rawHeaders` preserves
+      // casing and duplicates), rewriting only `Host` so the worker sees
+      // the URL the client requested rather than the local workerd address.
+      const lines = [
+        `${request.method ?? "GET"} ${target.pathname}${target.search} HTTP/1.1`,
+        `Host: ${url.host}`,
+      ];
+      for (let i = 0; i < request.rawHeaders.length; i += 2) {
+        if (request.rawHeaders[i]!.toLowerCase() === "host") continue;
+        lines.push(`${request.rawHeaders[i]}: ${request.rawHeaders[i + 1]}`);
       }
-      response.resume();
+      upstream.write(`${lines.join("\r\n")}\r\n\r\n`);
+      if (head.length > 0) {
+        upstream.write(head);
+      }
     });
 
-    upstream.on("upgrade", (upstreamRes, upstreamSocket, upstreamHead) => {
-      upstreamSocket.on("error", () => upstreamSocket.destroy());
-
-      if (socket.destroyed) {
-        upstreamSocket.destroy();
+    // Accumulate the upstream response head; on 101, forward it and splice
+    // the sockets. Any other status means the worker declined the upgrade.
+    let buffered = Buffer.alloc(0);
+    const onData = (chunk: Buffer) => {
+      buffered = Buffer.concat([buffered, chunk]);
+      const headEnd = buffered.indexOf("\r\n\r\n");
+      if (headEnd === -1) {
+        // A response head larger than this is not a WebSocket handshake.
+        if (buffered.length > 64 * 1024) cleanup();
         return;
       }
-
+      upstream.off("data", onData);
+      const statusLine = buffered.subarray(0, buffered.indexOf("\r\n"));
+      const status = Number(
+        /^HTTP\/1\.[01] (\d{3})/.exec(String(statusLine))?.[1],
+      );
+      if (status !== 101 || socket.destroyed) {
+        cleanup();
+        return;
+      }
       track(socket);
-      track(upstreamSocket);
-
-      const statusLine = `HTTP/1.1 ${upstreamRes.statusCode ?? 101} ${
-        upstreamRes.statusMessage ?? "Switching Protocols"
-      }`;
-      const headerLines: Array<string> = [statusLine];
-      for (let i = 0; i < upstreamRes.rawHeaders.length; i += 2) {
-        headerLines.push(
-          `${upstreamRes.rawHeaders[i]}: ${upstreamRes.rawHeaders[i + 1]}`,
-        );
-      }
-      socket.write(`${headerLines.join("\r\n")}\r\n\r\n`);
-
-      if (upstreamHead.length > 0) {
-        socket.write(upstreamHead);
-      }
-      if (head.length > 0) {
-        upstreamSocket.write(head);
-      }
-
-      socket.pipe(upstreamSocket).pipe(socket);
-    });
-
-    // WebSocket upgrade requests carry no body, and any early client bytes are
-    // forwarded above via `upstreamSocket.write(head)`. Ending the request
-    // directly flushes the upstream handshake deterministically, rather than
-    // relying on the incoming `request` stream to emit `end` (which can be
-    // delayed by TCP timing) and avoids a second consumer of the client socket.
-    upstream.end();
+      track(upstream);
+      // The head (and any WebSocket frames the worker already sent) go to
+      // the client verbatim; from here on it's a byte pipe both ways.
+      socket.write(buffered);
+      socket.pipe(upstream).pipe(socket);
+    };
+    upstream.on("data", onData);
   };
 
   httpServer.on("upgrade", onUpgrade);

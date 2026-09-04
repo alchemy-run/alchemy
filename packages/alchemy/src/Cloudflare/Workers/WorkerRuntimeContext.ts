@@ -113,6 +113,16 @@ export const makeWorkerRuntimeContext = (id: string): WorkerRuntimeContext => {
             return [effects[0], services];
           }
           if (effects.length > 1) {
+            // Fetch listeners that return an Effect claim the request —
+            // first registration wins. Event-source paths
+            // (`GitHubRepositoryEventSource`, …) register before the
+            // catch-all `serve` handler, so a claimed delivery path must
+            // not also run the Worker's own router (which would 404/die
+            // and, with `Effect.all` + discard, throw away the Response).
+            // Non-fetch events still fan out to every listener.
+            if (type === "fetch") {
+              return [effects[0], services];
+            }
             return [
               Effect.all(effects, {
                 concurrency: "unbounded",

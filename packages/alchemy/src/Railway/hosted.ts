@@ -24,7 +24,7 @@ import { Self } from "../Self.ts";
 import {
   createContainerRuntimeContext,
   type HostRuntimeContext,
-} from "../Server/Process.ts";
+} from "../Local/Process.ts";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import {
@@ -90,6 +90,9 @@ export const createRailwayFunctionRuntimeContext =
         })) as HostRuntimeContext["serve"],
       exports: Effect.sync(() => ({
         program: Effect.void,
+        // The canvas wrapper `Bun.serve`s the registered fetch handler
+        // itself — nothing serves through the ambient HTTP layer.
+        serves: false,
       })),
     } as HostRuntimeContext;
   };

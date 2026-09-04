@@ -1,0 +1,4 @@
+- button /#\d+ Add sumToN helper 1 1/:
+  - link /#\d+/:
+    - /url: https://github.com/alchemy-run/test-alchemy/issues/148
+  - text: ""

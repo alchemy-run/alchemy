@@ -24,16 +24,37 @@ export const resolveCapabilities = (
   };
 };
 
+type RuntimeModule = {
+  readonly makeRuntime: (
+    options: CliKitOptions,
+    capabilities: CliKitCapabilities,
+  ) => {
+    readonly service: CliKit["Service"];
+    readonly dispose: () => Promise<void>;
+  };
+};
+
+// Node's type-stripper (`--experimental-transform-types`) loads `.ts` but
+// rejects `.tsx` — JSX is a transform, not an erasure. The Vite child is
+// spawned under Node even when the engine is bun (WebSocket upgrades on
+// bun's `node:http` shim are broken), so a source checkout that dynamic-
+// imported `Runtime.tsx` died with `Unknown file extension ".tsx"` before
+// Vite became ready. Bun can load TSX; compiled `layer.js` rewrites the
+// import to `Runtime.js`. Only the Node-from-source path needs the
+// TypeScript-only fallback.
+const canLoadJsx =
+  typeof globalThis.Bun !== "undefined" || !import.meta.url.endsWith(".ts");
+
 // One shared import promise per process. Concurrent dynamic imports of the
 // same module (e.g. two test files building this layer at once) can race in
 // bun and hand one caller a partially-evaluated namespace, which throws a
 // TDZ ReferenceError on `makeRuntime`; funneling every build through a
 // single import() sidesteps the race.
-let sigilRuntime:
-  | Promise<typeof import("../components/view/Runtime.tsx")>
-  | undefined;
-const loadSigilRuntime = () =>
-  (sigilRuntime ??= import("../components/view/Runtime.tsx"));
+let sigilRuntime: Promise<RuntimeModule> | undefined;
+const loadSigilRuntime = (): Promise<RuntimeModule> =>
+  (sigilRuntime ??= canLoadJsx
+    ? import("../components/view/Runtime.tsx")
+    : import("./headless.ts"));
 
 /** Provides one terminal runtime for the enclosing scope. */
 export const layer = (options: CliKitOptions = {}) =>

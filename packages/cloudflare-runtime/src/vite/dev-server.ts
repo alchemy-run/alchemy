@@ -5,6 +5,7 @@ import { EXPORT_TYPES_MODULE_ID } from "../rolldown/export-types.ts";
 import { MODULE_REFERENCE_REGEX } from "../rolldown/plugins/index.ts";
 import type { BindingHooks, Module } from "../core/index.ts";
 import * as Runtime from "../core/Runtime.ts";
+import type * as RuntimeWorker from "../core/RuntimeWorker.ts";
 import * as RuntimeServices from "../core/RuntimeServices.ts";
 import * as DurableObjectNamespace from "../core/bindings/DurableObjectNamespace.ts";
 import * as Json from "../core/bindings/Json.ts";
@@ -40,7 +41,10 @@ const WrapperWorker = {
 import * as ViteAssets from "./assets/ViteAssets.ts";
 import { renderExportWrappers } from "./export-types.ts";
 import type { EntryEnvironment } from "./module-runner/constants.shared.ts";
-import { ENVIRONMENT_NAME_HEADER } from "./module-runner/constants.shared.ts";
+import {
+  ENVIRONMENT_NAME_HEADER,
+  INIT_PATH,
+} from "./module-runner/constants.shared.ts";
 import type { CloudflareVitePluginOptions } from "./plugin.ts";
 
 export type ServerHandle = Awaited<ReturnType<typeof startServer>>;
@@ -190,6 +194,24 @@ const makeModuleFallbackService = Effect.gen(function* () {
   return `127.0.0.1:${address.port}`;
 });
 
+/**
+ * The module runner's control channel (`INIT_PATH` — the WebSocket the
+ * vite server opens into workerd) must always reach the wrapper worker.
+ * With `runWorkerFirst` in its LIST form, every unlisted path is routed
+ * assets-first — including the init upgrade, which an SPA fallback then
+ * answers with 200 `index.html` ("Expected 101 status code") and the
+ * dev server never becomes ready. Prepending the init path keeps the
+ * user's routing for user paths. The other forms are untouched: `true`
+ * is all-worker-first already, and the default/`false` modes only
+ * rewrite HTML-accepting requests, which a WebSocket upgrade is not.
+ */
+const withModuleRunnerBypass = (
+  assets: RuntimeWorker.Assets | undefined,
+): RuntimeWorker.Assets | undefined =>
+  assets === undefined || !Array.isArray(assets.runWorkerFirst)
+    ? assets
+    : { ...assets, runWorkerFirst: [INIT_PATH, ...assets.runWorkerFirst] };
+
 const serve = Effect.fn(function* <B extends BindingHooks = BindingHooks>(
   options: CloudflareVitePluginOptions<B>,
   entryEnvironment: Omit<EntryEnvironment, "exportTypesId">,
@@ -249,7 +271,7 @@ const serve = Effect.fn(function* <B extends BindingHooks = BindingHooks>(
     // proxy instead of a local broker — and that accepts-and-drops every
     // message, with `send()` never settling.
     queueConsumers: options.worker?.queueConsumers,
-    assets: options.worker?.assets,
+    assets: withModuleRunnerBypass(options.worker?.assets),
     unsafe: {
       moduleFallback,
       ...(options.worker?.unsafe ?? {}),

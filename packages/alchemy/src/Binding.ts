@@ -5,8 +5,13 @@ import * as Option from "effect/Option";
 import type { Input } from "./Input.ts";
 import * as Output from "./Output.ts";
 import { describeDataPlane, type DataPlaneResolution } from "./Provider.ts";
-import { isResource, type ResourceLike } from "./Resource.ts";
+import {
+  deferredResourceMeta,
+  isResource,
+  type ResourceLike,
+} from "./Resource.ts";
 import { Self } from "./Self.ts";
+import { Stack } from "./Stack.ts";
 import { taggedFunction } from "./Util/effect.ts";
 
 export interface ServiceLike {
@@ -19,6 +24,19 @@ export interface ServiceShape<
 >
   extends Context.ServiceClass.Shape<Identifier, Shape>, ServiceLike {}
 
+// A parameter that ALREADY admits Effects (e.g. GitHub's
+// `RepositoryLike = Repository | Effect<Repository, any, any>`)
+// is passed exactly as declared — re-wrapping it in
+// `Effect<T, never, Req>` would make TS infer the argument's
+// own R into Req and leak it onto the caller (a deferred resource
+// constructor's Stack/provider requirements, which the impl never
+// incurs when it resolves identity statically).
+type BindParameter<T, Req> = [
+  Extract<T, Effect.Effect<any, any, any>>,
+] extends [never]
+  ? Input<T> | Effect.Effect<T, never, Req>
+  : T;
+
 type BindParameters<
   Parameters extends any[],
   Req = never,
@@ -30,30 +48,16 @@ type BindParameters<
     // which recurses forever (TS2589).
     number extends Parameters["length"]
     ? Parameters extends [infer First, ...infer Rest]
-      ? [
-          Input<First> | Effect.Effect<First, never, Req>,
-          ...Array<
-            Input<Rest[number]> | Effect.Effect<Rest[number], never, Req>
-          >,
-        ]
-      : Array<
-          | Input<Parameters[number]>
-          | Effect.Effect<Parameters[number], never, Req>
-        >
+      ? [BindParameter<First, Req>, ...Array<BindParameter<Rest[number], Req>>]
+      : Array<BindParameter<Parameters[number], Req>>
     : Parameters extends [infer First, ...infer Rest]
-      ? [
-          Input<First> | Effect.Effect<First, never, Req>,
-          ...BindParameters<Rest, Req>,
-        ]
+      ? [BindParameter<First, Req>, ...BindParameters<Rest, Req>]
       : // Optional head (e.g. `(bus?: EventBus)`) — `[infer F, ...R]` does
         // not match a tuple with an optional first element, which used to
         // collapse the whole parameter list to `[]` (`PutEvents(bus)` failed
         // with "Expected 0 arguments").
         Parameters extends [(infer First)?, ...infer Rest]
-        ? [
-            (Input<First> | Effect.Effect<First, never, Req>)?,
-            ...BindParameters<Rest, Req>,
-          ]
+        ? [BindParameter<First, Req>?, ...BindParameters<Rest, Req>]
         : [];
 
 /**
@@ -121,12 +125,27 @@ export const Service = <
   id: Self["key"],
 ): Self => {
   const tag = Context.Service<Self, (...args: any[]) => Effect.Effect<any>>(id);
+  // Effect args are resolved before the impl sees them. ONE exception:
+  // an un-yielded resource constructor (the deferred form) only resolves
+  // under a Stack — when no Stack is ambient (e.g. a local factory
+  // process binding `GitHub.ListIssues(repo)` off the exported const) it
+  // passes through as-is, and the impl reads its static identity via
+  // deferredResourceMeta instead.
+  const resolveArg = (arg: any): Effect.Effect<any> =>
+    !Effect.isEffect(arg)
+      ? Effect.succeed(arg)
+      : deferredResourceMeta(arg) === undefined
+        ? (arg as Effect.Effect<any>)
+        : Effect.serviceOption(Stack).pipe(
+            Effect.flatMap((stack) =>
+              Option.isSome(stack)
+                ? (arg as Effect.Effect<any>)
+                : Effect.succeed(arg),
+            ),
+          );
   const callable = (...args: any[]) =>
     tag.use((f: (...a: any[]) => Effect.Effect<any>) =>
-      Effect.all(
-        args.map((arg) => (Effect.isEffect(arg) ? arg : Effect.succeed(arg))),
-        { concurrency: "unbounded" },
-      ).pipe(
+      Effect.all(args.map(resolveArg), { concurrency: "unbounded" }).pipe(
         Effect.flatMap((resolved) =>
           f(...resolved).pipe(
             // Deploy-time data-plane routing: the client's calls must target

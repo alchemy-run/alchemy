@@ -20,7 +20,7 @@ const { test } = Test.make({ providers: AWS.providers() });
 // inline Effect program, build + push the container image to the managed ECR
 // repository (Docker build, linux/amd64), provision the instance/access IAM
 // roles, and deploy the App Runner service — then prove over HTTPS that (a)
-// the `{ fetch }` handler is served and (b) the `ServerHost.run` background
+// the `{ fetch }` handler is served and (b) the `Host.run` background
 // loop is actually executing inside the deployed container (`/ticks` climbs).
 //
 // It is heavy (Docker build + ECR push + 3-5 min App Runner provisioning,

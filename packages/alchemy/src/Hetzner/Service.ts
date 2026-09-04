@@ -8,7 +8,7 @@ import { createPhysicalName } from "../PhysicalName.ts";
 import { Platform, type Main, type PlatformProps } from "../Platform.ts";
 import * as Provider from "../Provider.ts";
 import { Resource, type ResourceBinding } from "../Resource.ts";
-import type { ServerHost } from "../Server/Process.ts";
+import type { Host } from "../Local/Process.ts";
 import { Stack } from "../Stack.ts";
 import type { ServiceBinding } from "./MountVolume.ts";
 import type { Providers } from "./Providers.ts";
@@ -103,7 +103,7 @@ export const isService = (value: unknown): value is Service =>
   value !== null &&
   (value as { Type?: string }).Type === "Hetzner.Service";
 
-export type ServiceServices = ServerHost;
+export type ServiceServices = Host;
 
 export type ServiceShape = Main<ServiceServices>;
 

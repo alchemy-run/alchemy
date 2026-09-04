@@ -28,8 +28,8 @@ import { LoggingCli } from "../Cli/LoggingCli.ts";
 import { deploy as _deploy } from "../Deploy.ts";
 import { destroy as _destroy } from "../Destroy.ts";
 import type { Input } from "../Input.ts";
-import * as RpcProviderProxy from "../Local/RpcProviderProxy.ts";
-import * as RpcSpawner from "../Local/RpcSpawner.ts";
+import * as RpcProviderProxy from "../Dev/RpcProviderProxy.ts";
+import * as RpcSpawner from "../Dev/RpcSpawner.ts";
 import { ALCHEMY_DEV } from "../Phase.ts";
 import * as Plan from "../Plan.ts";
 import {

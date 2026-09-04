@@ -1,0 +1,122 @@
+---
+title: Delegation
+description: Dispatch, spawn, and doors — how agents hand work to each other, how sessions make workers resumable, and how supervision ties lifetimes together.
+---
+
+Agents delegate in three ways, ordered by how much the delegator is
+trusted with:
+
+| mechanism | who chooses what | for |
+|---|---|---|
+| `spawn` | the model, freely | anonymous one-shot workers |
+| bare `${Agent}` mention | the model: task *and* session | trusted supervisors |
+| door (`AI.Dispatch`) | model: task; **code: everything else** | hops that carry invariants |
+
+## Spawn: anonymous labor
+
+Every agent holds a `spawn` intrinsic: it launches a one-shot worker
+that inherits *from the spawner's own stance* — instructions, plus
+any of the spawner's tools and skills it chooses to hand over,
+pre-activated. The worker runs as a leaf, returns prose, and
+disappears.
+
+A spawn can never hold a power its spawner lacks, which is exactly
+what makes it safe to leave to the model's judgment — and exactly why
+it cannot implement separation of duties. Doors are excluded from
+what spawn can grant: workers are leaves, and delegation is never
+handed onward.
+
+## Dispatch: calling a named agent
+
+Splicing another agent grants the `dispatch` intrinsic for it:
+
+```typescript
+return AI.prose`
+  ...a ready issue goes to ${Engineer}; hand the diff to ${Reviewer}
+  for a verdict...`;
+```
+
+A named agent has its **own charter Layer** — tools, skills, physics
+the dispatcher does not hold. Dispatch is capability *amplification*
+with containment: the engineer can edit code the desk cannot touch,
+and the audit stays static (grep the charters). The dispatched task
+is all the worker sees — context flows through messages, never
+ambiently.
+
+The call/reply semantics — waiting, typed answers via `AI.reply`,
+parking — are covered in [Runs & threads](/agents/concepts/runs).
+
+## Sessions: the same worker again
+
+`dispatch` takes an optional session, from which the kernel derives a
+deterministic child key namespaced under the calling run —
+`{parent.key}/{agent}/{session}`. Re-dispatching the same agent and
+session **continues the same worker run**: same conversation, same
+init closure, same [workspace](/agents/concepts/workspaces). The
+factory's whole review loop is one session:
+
+1. desk dispatches Engineer — it builds, answers with the PR
+2. review comes back with changes
+3. desk dispatches the same session — the *same engineer*, context
+   and checkout intact, fixes its own work on the same branch
+
+Omitting the session mints a fresh run: one-off labor. Sessions alter
+memory, never authority.
+
+## Doors: policy-constrained delegation
+
+When a hop carries an invariant — *one engineer per issue*, *reviews
+always resume the same reviewer* — the session must not be the
+model's to choose. `AI.Dispatch` builds a **door**: the delegation
+presented as your own tool, its policy in code:
+
+```typescript
+// services/alchemy-org/src/agents/IssueOwner.ts
+const HandToEngineer = AI.Dispatch(Engineer, "hand_to_engineer")`
+  Hand one round of issue work to the engineer, with ${task} standing
+  alone: the issue reference and the acceptance criteria verbatim on
+  the first round; review feedback restated as WORK on later rounds.
+  It is the same engineer each time, its checkout and context intact;
+  it answers with the pull request reference.`(
+  (p: { task: string }, thread) => ({
+    task: p.task,
+    key: thread.key,        // ← the invariant, in code
+  }),
+);
+
+// in the charter's init:  const handToEngineer = yield* HandToEngineer;
+// in its prose:           ...a ready issue goes through ${handToEngineer}...
+```
+
+The split: **you own the presentation and policy** — the tool's name,
+its prose, its parameter schema, and the function deriving
+`{ task, key }`. The invariant is enforced by *absence*: no session
+parameter exists on the wire for the model to misuse. **The kernel
+owns the mechanism** — it executes the dispatch, stamps parentage,
+registers the child for supervision, and emits the observation that
+lets a UI link the call to the worker's thread.
+
+A policy may be an Effect returning the function, so a door defined
+at module scope can pull its own dependencies (a ledger, config)
+through the Layer graph. A policy failure is a model-visible tool
+result — "that handoff is not allowed right now" — never a loop
+crash.
+
+## Supervision
+
+The kernel remembers each run's **session workers** (children it
+dispatched with a key). When a run settles — or crashes — its
+children settle with it: a parked engineer never outlives the issue
+conversation that hired it. Anonymous (sessionless) dispatches are
+not linked; they complete on their own terms.
+
+## Communication doctrine
+
+Workers speak **prose or a typed artifact to their supervisor, never
+to each other**. The supervising agent is the message bus: it relays
+one worker's answer into another's next task with judgment applied at
+every hop — the factory's owner turns the reviewer's verdict into the
+engineer's next round as *restated work*, not a raw forward. Fan-out
+is a sampling shape, not a primitive: several dispatch calls in one
+sampling run their workers concurrently, and every answer lands in
+the same context.

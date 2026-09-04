@@ -798,7 +798,7 @@ If `Effect.catchTag("SomeTag", ...)` fails to typecheck, that is the signal that
 
 # Provider Modes & Local Providers (doctrine)
 
-Some resource types have TWO implementations: a **live** provider (converges real cloud state, `alchemy deploy`) and a **local** provider (emulates the resource on the developer's machine, `alchemy dev`). Provider mode is a first-class engine concept — see [ProviderMode.ts](./packages/alchemy/src/ProviderMode.ts), [Local/ProviderLayer.ts](./packages/alchemy/src/Local/ProviderLayer.ts), [Local/LocalProvider.ts](./packages/alchemy/src/Local/LocalProvider.ts), and the user-facing guide at [website/src/content/docs/infrastructure-as-code/local-provider.mdx](./website/src/content/docs/infrastructure-as-code/local-provider.mdx).
+Some resource types have TWO implementations: a **live** provider (converges real cloud state, `alchemy deploy`) and a **local** provider (emulates the resource on the developer's machine, `alchemy dev`). Provider mode is a first-class engine concept — see [ProviderMode.ts](./packages/alchemy/src/ProviderMode.ts), [Dev/ProviderLayer.ts](./packages/alchemy/src/Dev/ProviderLayer.ts), [Dev/LocalProvider.ts](./packages/alchemy/src/Dev/LocalProvider.ts), and the user-facing guide at [website/src/content/docs/infrastructure-as-code/local-provider.mdx](./website/src/content/docs/infrastructure-as-code/local-provider.mdx).
 
 Engine semantics (never re-implement these per provider):
 
@@ -829,7 +829,7 @@ The suite must cover, minimum:
 1. **The local roundtrip** — deploy the resource + a worker binding it (file-based fixture `main`, never inline `script` — unsupported in dev) and drive the binding over HTTP against the local simulator. Assert the resource's identity carries the `dev:` marker (proof no cloud call ran; for the Worker itself the marker is a `http://localhost:<port>` `url`).
 2. **The `Alchemy.remote()` opt-out** — the same shape with the resource piped through `Alchemy.remote()`: assert a real (non-`dev:`) identity, round-trip through the remote-proxied binding, verify out-of-band via distilled that the write landed in the real cloud resource, and after `stack.destroy()` verify the cloud resource is gone (pins the stamped-mode delete path).
 
-Reference: [KV Namespace.local.test.ts](./packages/alchemy/test/Cloudflare/KV/Namespace.local.test.ts) (includes the mixed local + live stack), [R2 Bucket.local.test.ts](./packages/alchemy/test/Cloudflare/R2/Bucket.local.test.ts), [D1 Database.local.test.ts](./packages/alchemy/test/Cloudflare/D1/Database.local.test.ts) (includes local migrations and the #1007 regression), [Queues Queue.local.test.ts](./packages/alchemy/test/Cloudflare/Queues/Queue.local.test.ts) (produce→consume through RPC-backed providers). The harness contract itself is pinned by [TestSidecar.test.ts](./packages/alchemy/test/Local/TestSidecar.test.ts).
+Reference: [KV Namespace.local.test.ts](./packages/alchemy/test/Cloudflare/KV/Namespace.local.test.ts) (includes the mixed local + live stack), [R2 Bucket.local.test.ts](./packages/alchemy/test/Cloudflare/R2/Bucket.local.test.ts), [D1 Database.local.test.ts](./packages/alchemy/test/Cloudflare/D1/Database.local.test.ts) (includes local migrations and the #1007 regression), [Queues Queue.local.test.ts](./packages/alchemy/test/Cloudflare/Queues/Queue.local.test.ts) (produce→consume through RPC-backed providers). The harness contract itself is pinned by [TestSidecar.test.ts](./packages/alchemy/test/Dev/TestSidecar.test.ts).
 
 # Test Fixtures for Effect-Native Workers / Functions
 

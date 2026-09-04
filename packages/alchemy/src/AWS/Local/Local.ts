@@ -8,7 +8,7 @@
  */
 import * as Layer from "effect/Layer";
 import { DockerLive } from "../../Docker/Docker.ts";
-import * as RpcServer from "../../Local/RpcServer.ts";
+import * as RpcServer from "../../Dev/RpcServer.ts";
 import { FlociServiceProvider } from "../ECS/FlociServiceProvider.ts";
 import { FlociTaskProvider } from "../ECS/FlociTaskProvider.ts";
 import { FlociFunctionProvider } from "../Lambda/FlociFunctionProvider.ts";

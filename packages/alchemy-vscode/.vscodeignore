@@ -1,0 +1,6 @@
+.vscodeignore
+fixtures/**
+node_modules/**
+scripts/**
+test/**
+*.vsix

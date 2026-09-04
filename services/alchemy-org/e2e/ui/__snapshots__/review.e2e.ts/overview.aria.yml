@@ -1,0 +1,67 @@
+- main:
+  - link /#\d+/:
+    - /url: https://github.com/alchemy-run/test-alchemy/issues/148
+  - text: Add sumToN helper
+  - tablist "Session tabs":
+    - tab "Pull request" [selected]
+    - button "+"
+    - text: one machine · 0 threads
+  - 'heading /Add sumToN helper #\d+/ [level=1]':
+    - text: ""
+    - link /#\d+/:
+      - /url: https://github.com/alchemy-run/test-alchemy/pull/148
+  - link "open on GitHub ↗":
+    - /url: https://github.com/alchemy-run/test-alchemy/pull/148
+  - text: Open
+  - img "sam-goodwin"
+  - text: sam-goodwin wants to merge 1 commit into main from flow-test-deploy +8 −0 1 file machine not touched yet — a thread or terminal checks out flow-test-deploy on it first.
+  - button "pull"
+  - button "thread"
+  - button "terminal"
+  - button "request review"
+  - img "sam-goodwin"
+  - text: sam-goodwin opened this pull request
+  - link "2d ago":
+    - /url: https://github.com/alchemy-run/test-alchemy/pull/148
+  - paragraph:
+    - text: Adds a small helper that sums the first
+    - code: "n"
+    - text: positive integers.
+  - paragraph:
+    - text: Closes
+    - link /#\d+/:
+      - /url: https://github.com/alchemy-run/test-alchemy/issues/12
+    - text: .
+  - img "alchemy-review-bot"
+  - text: alchemy-review-bot requested changes
+  - link "2d ago":
+    - /url: https://github.com/alchemy-run/test-alchemy/pull/148#pullrequestreview-4970310543
+  - paragraph:
+    - text: The loop excludes
+    - code: "n"
+    - text: itself, so
+    - code: sumToN(5)
+    - text: /returns \d+ instead of \d+\./
+  - button "flow-test/sum.ts:4 ▸ diff"
+  - img "alchemy-review-bot"
+  - text: alchemy-review-bot
+  - link "2d ago":
+    - /url: https://github.com/alchemy-run/test-alchemy/pull/148#discussion_r3811506339
+  - paragraph:
+    - text: The loop condition
+    - code: i < n
+    - text: should be
+    - code: i <= n
+    - text: to include n itself. Currently this sums integers from 1 to n-1, not 1 to n. For example,
+    - code: sumToN(5)
+    - text: /would return \d+ \(1\+2\+3\+4\) instead of \d+ \(1\+2\+3\+4\+5\)\./
+  - img "sam-goodwin"
+  - text: sam-goodwin commented
+  - link "2d ago":
+    - /url: https://github.com/alchemy-run/test-alchemy/pull/148#issuecomment-1001
+  - paragraph: Pushed a fix for the off-by-one — PTAL @alchemy-review-bot.
+  - img "sam-goodwin"
+  - text: sam-goodwin approved these changes
+  - link "yesterday":
+    - /url: https://github.com/alchemy-run/test-alchemy/pull/148#pullrequestreview-4990832765
+  - paragraph: Fixed in 7d7584e — thanks.

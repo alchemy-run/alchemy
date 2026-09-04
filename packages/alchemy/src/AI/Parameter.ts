@@ -1,5 +1,13 @@
 import * as S from "effect/Schema";
 
+/**
+ * A `Parameter` term is a **capability term** (with `Tool` — design §1
+ * taxonomy): pure vocabulary, never interpreted. Interpolated into a
+ * `Tool`'s template it becomes one field of that tool's parameters
+ * schema; its
+ * own template is the field's description. Description and schema are
+ * one artifact.
+ */
 export type Parameter<
   Name extends string = string,
   Schema extends S.Top = S.Top,
@@ -55,3 +63,8 @@ const makeParameter = (
     template,
     refs,
   }) as any;
+
+export const isParameter = (value: unknown): value is Parameter =>
+  (typeof value === "object" || typeof value === "function") &&
+  value !== null &&
+  (value as Record<string, unknown>)["~alchemy/Kind"] === "Param";

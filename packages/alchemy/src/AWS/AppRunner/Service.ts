@@ -28,8 +28,8 @@ import { Resource, type ResourceBinding } from "../../Resource.ts";
 import {
   createHostRuntimeContext,
   type HostRuntimeContext,
-  type ServerHost,
-} from "../../Server/Process.ts";
+  type Host,
+} from "../../Local/Process.ts";
 import { Stack } from "../../Stack.ts";
 import {
   createInternalTags,
@@ -386,11 +386,7 @@ export interface Service extends Resource<
   Providers
 > {}
 
-export type ServiceServices =
-  | Credentials
-  | Region
-  | ServerHost
-  | AWSEnvironment;
+export type ServiceServices = Credentials | Region | Host | AWSEnvironment;
 
 export type ServiceShape = Main<ServiceServices>;
 

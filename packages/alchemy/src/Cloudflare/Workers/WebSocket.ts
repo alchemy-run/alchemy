@@ -26,13 +26,16 @@ export const fromWebSocket = (ws: RawWebSocket): WebSocket => ({
 //   const WebSocketPair: new () => [cf.WebSocket, cf.WebSocket];
 // }
 
-export const upgrade = Effect.fn(function* () {
+export const upgrade = Effect.fn(function* (options?: {
+  /** Hibernation-surviving tags for `state.getWebSockets(tag)`. */
+  readonly tags?: string[];
+}) {
   const _Response = Response as any as typeof cf.Response;
   const ctx = yield* DurableObjectState;
   // @ts-expect-error
   const [client, server] = new WebSocketPair();
   const serverSocket = fromWebSocket(server);
-  yield* ctx.acceptWebSocket(serverSocket);
+  yield* ctx.acceptWebSocket(serverSocket, options?.tags);
   const rawResponse = new _Response(null, {
     status: 101,
     webSocket: client,

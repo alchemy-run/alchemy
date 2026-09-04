@@ -15,7 +15,7 @@ import { isResolved } from "../Diff.ts";
 import { Platform, type Main, type PlatformProps } from "../Platform.ts";
 import * as Provider from "../Provider.ts";
 import type { Resource, ResourceBinding } from "../Resource.ts";
-import type { ServerHost } from "../Server/Process.ts";
+import type { Host } from "../Local/Process.ts";
 import { Stack } from "../Stack.ts";
 import { createInternalTags } from "../Tags.ts";
 import {
@@ -130,7 +130,7 @@ export const isSprite = (value: unknown): value is Sprite =>
   value !== null &&
   (value as { Type?: string }).Type === "Fly.Sprite";
 
-export type SpriteServices = ServerHost;
+export type SpriteServices = Host;
 
 export type SpriteShape = Main<SpriteServices>;
 

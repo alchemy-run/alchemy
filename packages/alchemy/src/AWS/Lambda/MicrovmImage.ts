@@ -4,10 +4,11 @@ import type * as microvms from "@distilled.cloud/aws/lambda-microvms";
 
 import * as Effect from "effect/Effect";
 import type * as Bundle from "../../Bundle/Bundle.ts";
+import type { Host } from "../../Docker/Host.ts";
 import { Platform } from "../../Platform.ts";
 import type { Main } from "../../Platform.ts";
 import type { Resource } from "../../Resource.ts";
-import type * as Server from "../../Server/index.ts";
+import type * as Local from "../../Local/index.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import type { Role } from "../IAM/Role.ts";
 import type { Providers } from "../Providers.ts";
@@ -34,7 +35,14 @@ const buildRolePolicyStatements: PolicyStatement[] = [
       "logs:CreateLogStream",
       "logs:PutLogEvents",
     ],
-    Resource: ["arn:aws:logs:*:*:log-group:/aws/lambda/microvms/*"],
+    // The default build/runtime group is `/aws/lambda-microvms/<image>`
+    // (monitoring docs + troubleshooting guide); the images page spells
+    // it `/aws/lambda/microvms/<image>`. Grant both — a build role that
+    // cannot create the group makes every CONTAINER_BUILD_FAILED opaque.
+    Resource: [
+      "arn:aws:logs:*:*:log-group:/aws/lambda-microvms/*",
+      "arn:aws:logs:*:*:log-group:/aws/lambda/microvms/*",
+    ],
   },
 ];
 
@@ -69,6 +77,22 @@ export interface MicrovmImageProps {
    * it is a path relative to {@link context} (defaults to `<context>/Dockerfile`).
    */
   dockerfile?: string;
+
+  /**
+   * **Effectful mode.** Extra directories copied VERBATIM into the
+   * generated build context, each mounted under its `to` prefix
+   * alongside the Dockerfile and bundled program — reference them from
+   * {@link dockerfile} with `COPY <to>/ ...`. `fingerprint` is an
+   * opaque content identity for the directory (e.g. a git commit): it
+   * participates in the props diff and the artifact hash, so a changed
+   * fingerprint rebuilds the image without the planner having to hash
+   * the directory's contents on every plan.
+   */
+  contextInclude?: Array<{
+    from: string;
+    to: string;
+    fingerprint?: string;
+  }>;
 
   /**
    * The port the in-VM HTTP server listens on (effectful mode).
@@ -121,6 +145,16 @@ export interface MicrovmImageProps {
    * as-is, instead of bundling (`main`) or building a context (`context`).
    */
   codeArtifact?: microvms.CodeArtifact;
+
+  /**
+   * Terminate the image's RUNNING MicroVMs whenever an update produces a
+   * new image version, so no machine keeps serving stale code. Callers
+   * whose sessions relaunch machines on demand (e.g. the AI sandbox
+   * session, whose `RunMicrovm` is clientToken-idempotent and which
+   * relaunches when its cached machine is gone) should opt in.
+   * @default false
+   */
+  recycleMicrovmsOnUpdate?: boolean;
 
   /**
    * A description of the image version.
@@ -180,6 +214,17 @@ export interface MicrovmImageProps {
    * @internal Platform-managed: signals a non-Effect-native (external) image.
    */
   isExternal?: boolean;
+
+  /**
+   * @internal Per-architecture Dockerfile statements contributed by
+   * bindings during init via `Docker.Host` — populated by the MicroVM
+   * platform, never written by hand. Participates in the artifact hash,
+   * so a changed contribution rebuilds the image. Requires a
+   * single-architecture {@link cpuConfigurations} (an image version
+   * builds once per architecture from ONE Dockerfile, so per-arch
+   * statements cannot fan out).
+   */
+  imageStatements?: Host.Statements;
 }
 
 export interface MicrovmImage extends Resource<
@@ -583,7 +628,7 @@ export const MicrovmImage: Platform<
   MicrovmImage,
   MicrovmImageServices,
   MicrovmImageShape,
-  Server.ProcessContext
+  Local.ProcessContext
 > = Platform(MicrovmImageTypeId, {
   createRuntimeContext: makeMicrovmRuntimeContext,
   // When `buildRole` is a Role instance, grant it the build permissions via a

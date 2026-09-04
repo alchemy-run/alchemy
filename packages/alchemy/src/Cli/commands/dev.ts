@@ -6,8 +6,8 @@ import * as Schema from "effect/Schema";
 import * as Command from "effect/unstable/cli/Command";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import { fileURLToPath } from "node:url";
-import { SPAWNER_URL_ENV_KEY } from "../../Local/RpcProviderProxy.ts";
-import * as RpcSpawner from "../../Local/RpcSpawner.ts";
+import { SPAWNER_URL_ENV_KEY } from "../../Dev/RpcProviderProxy.ts";
+import * as RpcSpawner from "../../Dev/RpcSpawner.ts";
 import { nodeLoaderArgs } from "../../Util/Node.ts";
 import { DEV_RELOAD_EXIT_CODE, DevOptions } from "../DevOptions.ts";
 import {

@@ -21,6 +21,7 @@ packages:
   - benchmark/*
   - distilled/packages/*
   - fixtures/*
+  - services/*
 catalogs:
   auth:
     better-auth: ^1.6.2
@@ -89,6 +90,7 @@ catalogs:
     mongodb: ^6.10.0
     pg: ^8.22.0
   effect:
+    "@effect/ai-anthropic": ">=4.0.0-rc.110 || >=4.0.0"
     "@effect/atom-react": ">=4.0.0-rc.112 || >=4.0.0"
     "@effect/platform-bun": ">=4.0.0-rc.112 || >=4.0.0"
     "@effect/platform-node": ">=4.0.0-rc.112 || >=4.0.0"
@@ -147,6 +149,7 @@ catalogs:
     waku: 1.0.0-beta.7
   shared:
     "@opentui/core": latest
+    ai: ^6.0.62
     fast-xml-parser: ^5.3.4
     uuid: ^14.0.0
     ws: ^8.20.0
@@ -164,6 +167,11 @@ catalogs:
     pathe: ^2.0.3
     tsx: ^4.20.6
 overrides:
+  # ONE @types/node for the whole graph: the `ai` / `@ai-sdk/react`
+  # packages pin their own @types/node@20 (non-generic Buffer), which
+  # otherwise enters programs beside v26's generic Buffer and breaks
+  # `Buffer.toString(encoding)` resolution under tsgo
+  "@types/node": 26.2.0
   "@cloudflare/workers-types": 5.20260901.1
   workerd: 1.20260901.1
   effect: 4.0.0-rc.112

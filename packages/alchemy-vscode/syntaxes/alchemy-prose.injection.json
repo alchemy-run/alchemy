@@ -1,0 +1,683 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "scopeName": "inline.alchemy-prose",
+  "injectionSelector": "L:source.ts -comment -string -meta.embedded.block.alchemy-prose, L:source.tsx -comment -string -meta.embedded.block.alchemy-prose, L:source.js -comment -string -meta.embedded.block.alchemy-prose, L:source.jsx -comment -string -meta.embedded.block.alchemy-prose, L:source.js.jsx -comment -string -meta.embedded.block.alchemy-prose",
+  "patterns": [
+    {
+      "include": "#typescript-template"
+    },
+    {
+      "include": "#markdown-template"
+    },
+    {
+      "include": "#prose-template"
+    },
+    {
+      "include": "#prose-call-template"
+    },
+    {
+      "include": "#prose-multiline-call-template"
+    }
+  ],
+  "repository": {
+    "typescript-template": {
+      "comment": "typescript`…` (alchemy/Code) — a block of generated code written inline, so the body is highlighted as TypeScript rather than as a string. Listed before the prose rules: a bare `typescript` tag would otherwise never be reached. Like them it begins at the tag rather than at the backtick, so the host grammar's own tagged-template rule cannot match first and win.",
+      "begin": "(?<![_$[:alnum:]])((?:[_$[:alpha:]][_$[:alnum:]]*\\s*\\??\\.\\s*)*)(typescript)\\s*(`)",
+      "beginCaptures": {
+        "1": {
+          "patterns": [
+            {
+              "include": "source.ts"
+            }
+          ]
+        },
+        "2": {
+          "name": "entity.name.function.tagged-template.alchemy"
+        },
+        "3": {
+          "name": "punctuation.definition.string.template.begin.alchemy"
+        }
+      },
+      "end": "(`)",
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.definition.string.template.end.alchemy"
+        }
+      },
+      "contentName": "meta.embedded.block.typescript",
+      "patterns": [
+        {
+          "include": "#splice"
+        },
+        {
+          "include": "#escape"
+        },
+        {
+          "include": "#code-line-ts"
+        }
+      ]
+    },
+    "markdown-template": {
+      "comment": "markdown`…` (alchemy/Code) — a document written inline, given the same Markdown treatment as charter prose.",
+      "begin": "(?<![_$[:alnum:]])((?:[_$[:alpha:]][_$[:alnum:]]*\\s*\\??\\.\\s*)*)(markdown)\\s*(`)",
+      "beginCaptures": {
+        "1": {
+          "patterns": [
+            {
+              "include": "source.ts"
+            }
+          ]
+        },
+        "2": {
+          "name": "entity.name.function.tagged-template.alchemy"
+        },
+        "3": {
+          "name": "punctuation.definition.string.template.begin.alchemy"
+        }
+      },
+      "end": "(`)",
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.definition.string.template.end.alchemy"
+        }
+      },
+      "contentName": "meta.embedded.block.alchemy-prose",
+      "patterns": [
+        {
+          "include": "#prose-body"
+        }
+      ]
+    },
+    "prose-template": {
+      "comment": "A tagged template whose tag is a member access ending in .make / .prose / .say / .fragment — the body is prose, so it is highlighted as Markdown rather than as a string. The begin pattern swallows the whole receiver chain because an injection only outranks the host grammar's own tagged-template rule when both start at the same offset; beginning at the dot would let the host match first and win.",
+      "begin": "((?:[_$[:alpha:]][_$[:alnum:]]*\\s*\\??\\.\\s*)+)(make|prose|say|fragment)\\s*(`)",
+      "beginCaptures": {
+        "1": {
+          "patterns": [
+            {
+              "include": "source.ts"
+            }
+          ]
+        },
+        "2": {
+          "name": "entity.name.function.tagged-template.alchemy"
+        },
+        "3": {
+          "name": "punctuation.definition.string.template.begin.alchemy"
+        }
+      },
+      "end": "(`)",
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.definition.string.template.end.alchemy"
+        }
+      },
+      "contentName": "meta.embedded.block.alchemy-prose",
+      "patterns": [
+        {
+          "include": "#prose-body"
+        }
+      ]
+    },
+    "prose-call-template": {
+      "comment": "A tagged template whose tag is a call — AI.Tool(\"bash\")`…`, AI.Dispatch(Engineer, \"hand_to_engineer\")`…`, Event(\"IssueOpened\", {…})`…`. In this codebase a call in tag position is always prose, so the call itself is the whole heuristic; the arguments are handed back to the host grammar to color. Like #prose-template it must begin at the callee rather than at the backtick, and for a second reason: the host closes its own function-call rule with a zero-width match on the far side of the paren, exactly where a backtick-anchored injection would start. Winning that race leaves the call rule open for the rest of the file. Beginning at the callee means the host never opens one. The price is that the call has to fit on one line — a begin pattern never sees more.",
+      "begin": "(?<![_$[:alnum:]])(?!(?:if|for|while|switch|catch|return|typeof|await|yield|void|delete|new)\\s*\\()((?:[_$[:alpha:]][_$[:alnum:]]*\\s*\\??\\.\\s*)*[_$[:alpha:]][_$[:alnum:]]*(?:\\s*<(?:[^<>`]|<[^<>`]*>)*>)?(?:\\s*\\((?:[^()`'\"]|'[^']*'|\"[^\"]*\"|\\((?:[^()`]|\\([^()`]*\\))*\\))*\\))+)\\s*(`)",
+      "beginCaptures": {
+        "1": {
+          "patterns": [
+            {
+              "include": "source.ts"
+            }
+          ]
+        },
+        "2": {
+          "name": "punctuation.definition.string.template.begin.alchemy"
+        }
+      },
+      "end": "(`)",
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.definition.string.template.end.alchemy"
+        }
+      },
+      "contentName": "meta.embedded.block.alchemy-prose",
+      "patterns": [
+        {
+          "include": "#prose-body"
+        }
+      ]
+    },
+    "prose-multiline-call-template": {
+      "comment": "The same call tag with its arguments spread over several lines — AI.Event(\"Wake\", {…})`…`, AI.Parameter(\"timeout\", S.optionalKey(…))`…`, AI.Tool<T>()(\"name\")`…`. Anchoring on the closing paren is not an option (see #prose-call-template), so this claims the call from its opening paren and holds it across the argument list, handing the arguments to source.ts#expression. Claiming a call before there is a template to prove it is prose is why the callee is a fixed list rather than a shape: the host grammar colors a call by its context, and a rule that takes the call over has to reproduce that coloring, which is only safe for names whose context is known. Everything the AI module tags is here; a new prose constructor goes in the list. Three ways out, in the order they are reached: the prose closed (zero-width, right after its backtick); the call closed with no template behind it; or a line began at the margin with something that cannot be an argument, meaning the arguments were never going to close and the claim was wrong.",
+      "begin": "(?<![_$[:alnum:]])((?:[_$[:alpha:]][_$[:alnum:]]*\\s*\\??\\.\\s*)*)(Agent|Dispatch|Event|Kernel|Parameter|Prose|Skill|Thread|Tool)(?![_$[:alnum:]])((?:\\s*<(?:[^<>`]|<[^<>`]*>)*>)?)((?:\\s*\\((?:[^()`'\"]|'[^']*'|\"[^\"]*\")*\\))*)\\s*(\\()(?=(?:[^()`'\"]|'[^']*'|\"[^\"]*\"|\\((?:[^()`'\"]|'[^']*'|\"[^\"]*\")*\\)){0,400}$)",
+      "beginCaptures": {
+        "1": {
+          "patterns": [
+            {
+              "include": "source.ts"
+            }
+          ]
+        },
+        "2": {
+          "name": "entity.name.function.tagged-template.alchemy"
+        },
+        "3": {
+          "patterns": [
+            {
+              "include": "source.ts#type-arguments"
+            }
+          ]
+        },
+        "4": {
+          "patterns": [
+            {
+              "include": "source.ts"
+            }
+          ]
+        },
+        "5": {
+          "name": "meta.brace.round.ts"
+        }
+      },
+      "end": "(?<=`)|[\\}\\]]*\\)(?!\\s*`)|^(?=[^\\s\\}\\]\\)])",
+      "endCaptures": {
+        "0": {
+          "name": "meta.brace.round.ts"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#prose-after-args"
+        },
+        {
+          "include": "source.ts#expression"
+        }
+      ]
+    },
+    "prose-after-args": {
+      "comment": "The closing paren of a multi-line call, with the template opening on the same line. Consuming the paren here is safe precisely because #prose-multiline-call-template took the opening one — the host grammar has no argument list waiting on it. Nothing anchors to the start of the line: a multi-line argument (the object literal in AI.Event(\"Wake\", {…})) is closed by the host's own rule, which hands control back mid-line, past any ^ this could have used.",
+      "begin": "([\\}\\]]*\\))\\s*(`)",
+      "beginCaptures": {
+        "1": {
+          "name": "meta.brace.round.ts"
+        },
+        "2": {
+          "name": "punctuation.definition.string.template.begin.alchemy"
+        }
+      },
+      "end": "(`)",
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.definition.string.template.end.alchemy"
+        }
+      },
+      "contentName": "meta.embedded.block.alchemy-prose",
+      "patterns": [
+        {
+          "include": "#prose-body"
+        }
+      ]
+    },
+    "prose-body": {
+      "patterns": [
+        {
+          "include": "#splice"
+        },
+        {
+          "include": "#fenced-code-block-ts"
+        },
+        {
+          "include": "#fenced-code-block-js"
+        },
+        {
+          "include": "#fenced-code-block-json"
+        },
+        {
+          "include": "#fenced-code-block-shell"
+        },
+        {
+          "include": "#fenced-code-block"
+        },
+        {
+          "include": "#code-span"
+        },
+        {
+          "include": "#escape"
+        },
+        {
+          "include": "#heading"
+        },
+        {
+          "include": "#separator"
+        },
+        {
+          "include": "#blockquote"
+        },
+        {
+          "include": "#list-unnumbered"
+        },
+        {
+          "include": "#list-numbered"
+        },
+        {
+          "include": "#table-row"
+        },
+        {
+          "include": "#inline-run"
+        },
+        {
+          "include": "#grammar-dependencies"
+        }
+      ]
+    },
+    "splice": {
+      "comment": "${…} — a term spliced into the prose; highlighted as TypeScript. Prose nested in a splice is matched here rather than by the injection, which the selector switches off for everything under a prose body — otherwise a paragraph ending in a parenthesis would see its own closing backtick as the start of a call-tagged template.",
+      "name": "meta.template.expression.alchemy",
+      "contentName": "meta.embedded.line.alchemy-splice",
+      "begin": "\\$\\{",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.definition.template-expression.begin.alchemy"
+        }
+      },
+      "end": "\\}",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.template-expression.end.alchemy"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#prose-template"
+        },
+        {
+          "include": "#prose-call-template"
+        },
+        {
+          "include": "source.ts#expression"
+        }
+      ]
+    },
+    "fenced-code-block-ts": {
+      "name": "markup.fenced_code.block.markdown",
+      "begin": "^[ \\t]*((?:\\\\`){3,}|~{3,})[ \\t]*(?i:(typescript|tsx|ts|mts|cts))([^`\\n]*)",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.markdown"
+        },
+        "2": {
+          "name": "fenced_code.block.language.markdown"
+        },
+        "3": {
+          "name": "fenced_code.block.language.attributes.markdown"
+        }
+      },
+      "end": "^[ \\t]*((?:\\\\`){3,}|~{3,})|(?=`)",
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.definition.markdown"
+        }
+      },
+      "contentName": "meta.embedded.block.typescript",
+      "patterns": [
+        {
+          "include": "#splice"
+        },
+        {
+          "include": "#escape"
+        },
+        {
+          "include": "#code-line-ts"
+        }
+      ]
+    },
+    "fenced-code-block-js": {
+      "name": "markup.fenced_code.block.markdown",
+      "begin": "^[ \\t]*((?:\\\\`){3,}|~{3,})[ \\t]*(?i:(javascript|jsx|js|mjs|cjs))([^`\\n]*)",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.markdown"
+        },
+        "2": {
+          "name": "fenced_code.block.language.markdown"
+        },
+        "3": {
+          "name": "fenced_code.block.language.attributes.markdown"
+        }
+      },
+      "end": "^[ \\t]*((?:\\\\`){3,}|~{3,})|(?=`)",
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.definition.markdown"
+        }
+      },
+      "contentName": "meta.embedded.block.javascript",
+      "patterns": [
+        {
+          "include": "#splice"
+        },
+        {
+          "include": "#escape"
+        },
+        {
+          "include": "#code-line-js"
+        }
+      ]
+    },
+    "fenced-code-block-json": {
+      "name": "markup.fenced_code.block.markdown",
+      "begin": "^[ \\t]*((?:\\\\`){3,}|~{3,})[ \\t]*(?i:(jsonc|json5|json))([^`\\n]*)",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.markdown"
+        },
+        "2": {
+          "name": "fenced_code.block.language.markdown"
+        },
+        "3": {
+          "name": "fenced_code.block.language.attributes.markdown"
+        }
+      },
+      "end": "^[ \\t]*((?:\\\\`){3,}|~{3,})|(?=`)",
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.definition.markdown"
+        }
+      },
+      "contentName": "meta.embedded.block.json",
+      "patterns": [
+        {
+          "include": "#splice"
+        },
+        {
+          "include": "#escape"
+        },
+        {
+          "include": "#code-line-json"
+        }
+      ]
+    },
+    "fenced-code-block-shell": {
+      "name": "markup.fenced_code.block.markdown",
+      "begin": "^[ \\t]*((?:\\\\`){3,}|~{3,})[ \\t]*(?i:(shell|bash|zsh|console|sh))([^`\\n]*)",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.markdown"
+        },
+        "2": {
+          "name": "fenced_code.block.language.markdown"
+        },
+        "3": {
+          "name": "fenced_code.block.language.attributes.markdown"
+        }
+      },
+      "end": "^[ \\t]*((?:\\\\`){3,}|~{3,})|(?=`)",
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.definition.markdown"
+        }
+      },
+      "contentName": "meta.embedded.block.shellscript",
+      "patterns": [
+        {
+          "include": "#splice"
+        },
+        {
+          "include": "#escape"
+        },
+        {
+          "include": "#code-line-shell"
+        }
+      ]
+    },
+    "fenced-code-block": {
+      "comment": "A fence with no language, or one this grammar does not embed. Listed after the language-specific fences, which it would otherwise shadow.",
+      "name": "markup.fenced_code.block.markdown",
+      "begin": "^[ \\t]*((?:\\\\`){3,}|~{3,})[ \\t]*([^`\\n]*)",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.markdown"
+        },
+        "2": {
+          "name": "fenced_code.block.language.markdown"
+        }
+      },
+      "end": "^[ \\t]*((?:\\\\`){3,}|~{3,})|(?=`)",
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.definition.markdown"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#splice"
+        },
+        {
+          "include": "#escape"
+        }
+      ]
+    },
+    "code-line-ts": {
+      "match": "(?:[^`$\\\\\\n]|\\$(?!\\{))+",
+      "captures": {
+        "0": {
+          "patterns": [
+            {
+              "include": "source.ts"
+            }
+          ]
+        }
+      }
+    },
+    "code-line-js": {
+      "match": "(?:[^`$\\\\\\n]|\\$(?!\\{))+",
+      "captures": {
+        "0": {
+          "patterns": [
+            {
+              "include": "source.js"
+            }
+          ]
+        }
+      }
+    },
+    "code-line-json": {
+      "match": "(?:[^`$\\\\\\n]|\\$(?!\\{))+",
+      "captures": {
+        "0": {
+          "patterns": [
+            {
+              "include": "source.json"
+            }
+          ]
+        }
+      }
+    },
+    "code-line-shell": {
+      "match": "(?:[^`$\\\\\\n]|\\$(?!\\{))+",
+      "captures": {
+        "0": {
+          "patterns": [
+            {
+              "include": "source.shell"
+            }
+          ]
+        }
+      }
+    },
+    "table-row": {
+      "comment": "A pipe table row. Markdown's own table rule needs to see the header and its delimiter row together, which line-bounded tokenization cannot.",
+      "name": "markup.table.markdown",
+      "begin": "^[ \\t]*(?=\\|)",
+      "end": "$",
+      "patterns": [
+        {
+          "match": "\\|",
+          "name": "punctuation.definition.table.markdown"
+        },
+        {
+          "match": "(?<=\\|)[ \\t]*(:?-+:?)[ \\t]*(?=\\|)",
+          "captures": {
+            "1": {
+              "name": "punctuation.separator.table.markdown"
+            }
+          }
+        },
+        {
+          "include": "#splice"
+        },
+        {
+          "include": "#code-span"
+        },
+        {
+          "include": "#escape"
+        },
+        {
+          "include": "#table-cell"
+        }
+      ]
+    },
+    "table-cell": {
+      "comment": "Cell text. Unlike #inline-run this stops at a pipe, which would otherwise be swallowed by the run that starts earlier in the row.",
+      "match": "(?:[^`$\\\\|\\n]|\\$(?!\\{))+",
+      "captures": {
+        "0": {
+          "patterns": [
+            {
+              "include": "#inline"
+            }
+          ]
+        }
+      }
+    },
+    "code-span": {
+      "comment": "An inline code span written with escaped backticks — the only way to spell one inside a template literal.",
+      "name": "markup.inline.raw.string.markdown",
+      "match": "(\\\\`)((?:[^\\\\`\\n])*)(\\\\`)",
+      "captures": {
+        "1": {
+          "name": "punctuation.definition.raw.markdown"
+        },
+        "3": {
+          "name": "punctuation.definition.raw.markdown"
+        }
+      }
+    },
+    "escape": {
+      "name": "constant.character.escape.alchemy",
+      "match": "\\\\."
+    },
+    "heading": {
+      "name": "markup.heading.markdown",
+      "match": "^[ \\t]*(#{1,6})[ \\t]+((?:[^`$\\\\\\n]|\\$(?!\\{))*)",
+      "captures": {
+        "1": {
+          "name": "punctuation.definition.heading.markdown"
+        },
+        "2": {
+          "name": "entity.name.section.markdown",
+          "patterns": [
+            {
+              "include": "#inline"
+            }
+          ]
+        }
+      }
+    },
+    "separator": {
+      "name": "meta.separator.markdown",
+      "match": "^[ \\t]*([-*_])(?:[ ]{0,2}\\1){2,}[ \\t]*$"
+    },
+    "blockquote": {
+      "name": "markup.quote.markdown",
+      "match": "^[ \\t]*(>)[ \\t]?((?:[^`$\\\\\\n]|\\$(?!\\{))*)",
+      "captures": {
+        "1": {
+          "name": "punctuation.definition.quote.begin.markdown"
+        },
+        "2": {
+          "patterns": [
+            {
+              "include": "#inline"
+            }
+          ]
+        }
+      }
+    },
+    "list-unnumbered": {
+      "name": "markup.list.unnumbered.markdown",
+      "match": "^[ \\t]*([-*+])[ \\t]+((?:[^`$\\\\\\n]|\\$(?!\\{))*)",
+      "captures": {
+        "1": {
+          "name": "punctuation.definition.list.begin.markdown"
+        },
+        "2": {
+          "patterns": [
+            {
+              "include": "#inline"
+            }
+          ]
+        }
+      }
+    },
+    "list-numbered": {
+      "name": "markup.list.numbered.markdown",
+      "match": "^[ \\t]*([0-9]+[.)])[ \\t]+((?:[^`$\\\\\\n]|\\$(?!\\{))*)",
+      "captures": {
+        "1": {
+          "name": "punctuation.definition.list.begin.markdown"
+        },
+        "2": {
+          "patterns": [
+            {
+              "include": "#inline"
+            }
+          ]
+        }
+      }
+    },
+    "inline-run": {
+      "comment": "Prose that is not part of a block construct — paragraph text, and the tail of any block line.",
+      "match": "(?:[^`$\\\\\\n]|\\$(?!\\{))+",
+      "captures": {
+        "0": {
+          "patterns": [
+            {
+              "include": "#inline"
+            }
+          ]
+        }
+      }
+    },
+    "inline": {
+      "comment": "Markdown's own inline markup — bold, italic, strikethrough, links, images. Only the inline rules are borrowed: every block rule in that grammar is anchored to `^` with at most three spaces of indent, so a charter written inside an Effect.gen (indented four or more) would match none of them, and Markdown would read the whole body as an indented code block. The block constructs above are re-implemented indentation-tolerantly instead, mirroring the margin the runtime's dedentTemplate strips.",
+      "patterns": [
+        {
+          "include": "text.html.markdown#inline"
+        }
+      ]
+    },
+    "grammar-dependencies": {
+      "comment": "Never matches. The registry only pre-loads external grammars it finds under `patterns`, and every reference above sits inside a capture — which the dependency walker does not visit. Without this declaration those includes silently resolve to nothing: prose falls back to plain text and fenced code to unstyled text.",
+      "begin": "(?!x)x",
+      "end": "(?!x)x",
+      "patterns": [
+        {
+          "include": "text.html.markdown"
+        },
+        {
+          "include": "source.ts"
+        },
+        {
+          "include": "source.js"
+        },
+        {
+          "include": "source.json"
+        },
+        {
+          "include": "source.shell"
+        }
+      ]
+    }
+  }
+}

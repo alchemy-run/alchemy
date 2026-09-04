@@ -1,0 +1,174 @@
+---
+title: "Part 1: Your First Agent"
+description: Define an agent as a tag, give it a charter in prose, and run it against a real model from a plain script.
+sidebar:
+  order: 1
+---
+
+In this first part you'll define an agent, write its charter, wire it
+to the in-memory kernel and an Anthropic model, and talk to it from a
+plain script.
+
+## Prerequisites
+
+- [Bun](https://bun.sh) (recommended) or Node.js 22+
+- An [Anthropic API key](https://console.anthropic.com/) in
+  `ANTHROPIC_API_KEY`
+
+## Install dependencies
+
+Start from an empty directory:
+
+```sh
+mkdir support-desk && cd support-desk && bun init -y
+bun add "alchemy@next" effect @effect/ai-anthropic
+```
+
+## Declare the agent
+
+Create `src/Assistant.ts` with just a class:
+
+```typescript
+// src/Assistant.ts
+import * as AI from "alchemy/AI";
+
+export class Assistant extends AI.Agent<Assistant>()("Assistant") {}
+```
+
+`Assistant` is a **tag** — a typed identifier with no behavior. Like a
+[Worker class in IaE](/infrastructure-as-effects/binding), the
+declaration is cheap and importable from anywhere; what the agent
+*does* is a separate, swappable implementation.
+
+## Write the charter
+
+Add the implementation — a tagged template on `make`:
+
+```diff lang="typescript"
+// src/Assistant.ts
+import * as AI from "alchemy/AI";
+
+export class Assistant extends AI.Agent<Assistant>()("Assistant") {}
++
++export const AssistantLive = Assistant.make`
++  You are the support desk of Acme Teas, a small online tea shop.
++  Answer customers plainly and warmly, in two or three sentences.
++  You never invent order details you do not have.`;
+```
+
+This is a **charter**: the agent's standing situation, delivered as
+the system prompt on every sampling. `AssistantLive` is an Effect
+`Layer` — the same mechanism that implements Workers and bindings
+everywhere else in alchemy — so providing a different charter later is
+composition, not surgery.
+
+## Choose a model
+
+Create `src/main.ts` and build the model layer:
+
+```typescript
+// src/main.ts
+import { AnthropicClient, AnthropicLanguageModel } from "@effect/ai-anthropic";
+import * as Config from "effect/Config";
+import * as Layer from "effect/Layer";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+
+const Model = AnthropicLanguageModel.layer({
+  model: "claude-haiku-4-5",
+}).pipe(
+  Layer.provide(
+    AnthropicClient.layerConfig({
+      apiKey: Config.redacted("ANTHROPIC_API_KEY"),
+    }),
+  ),
+  Layer.provide(FetchHttpClient.layer),
+);
+```
+
+The model is a Layer too — the charter never names it. Which model
+(and which provider) interprets a given agent is decided here, at the
+composition site.
+
+## Add the kernel
+
+The **kernel** is the loop that interprets charters — it assembles the
+prompt, calls the model, runs tools, and manages each run's lifecycle:
+
+```diff lang="typescript"
+// src/main.ts
+import { AnthropicClient, AnthropicLanguageModel } from "@effect/ai-anthropic";
++import * as AI from "alchemy/AI";
+import * as Config from "effect/Config";
+import * as Layer from "effect/Layer";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+
+  // ... Model layer ...
++
++const Kernel = AI.KernelMemory.pipe(Layer.provide(Model));
+```
+
+`KernelMemory` keeps every conversation in process memory — perfect
+for scripts, tests, and servers that can restart cheaply. It has one
+requirement, the model, and everything else about it is pluggable.
+
+## Compose the environment
+
+Stack the layers into one environment:
+
+```diff lang="typescript"
+// src/main.ts
++import { RuntimeContext } from "alchemy/RuntimeContext";
++import { Assistant, AssistantLive } from "./Assistant.ts";
+
+  // ... Model and Kernel layers ...
++
++const Env = Layer.mergeAll(
++  AssistantLive.pipe(Layer.provide(Kernel)),
++  RuntimeContext.phantom,
++);
+```
+
+Reading bottom-up: the charter needs a kernel, the kernel needs a
+model, and `RuntimeContext.phantom` marks this script as the running
+host (agent verbs only make sense inside a live process).
+
+## Talk to it
+
+Resolve the tag and dispatch a task:
+
+```diff lang="typescript"
+// src/main.ts
++import * as Effect from "effect/Effect";
+
+  // ... layers ...
++
++const main = Effect.gen(function* () {
++  const assistant = yield* Assistant;
++  const answer = yield* assistant.dispatch(
++    "Hi! Do you ship your jasmine green tea to Canada?",
++  );
++  console.log(answer);
++});
++
++Effect.runPromise(main.pipe(Effect.provide(Env)));
+```
+
+`dispatch` sends one task and waits for the answer — the agent samples
+the model as many times as it needs, then goes quiet, and its final
+text resolves the call. Run it:
+
+```sh
+bun src/main.ts
+```
+
+You should see a short, warm answer about shipping to Canada.
+
+## What just happened
+
+The kernel admitted a **run** for your dispatch, rendered the charter
+as the system prompt, delivered your message, and sampled until the
+model stopped asking for tools (it has none — yet). The run is still
+alive after answering: dispatching again with the same key would
+continue the same conversation. Parts [2](/agents/tutorial/part-2)
+and [3](/agents/tutorial/part-3) give the assistant hands; part
+[4](/agents/tutorial/part-4) grows it into an org.

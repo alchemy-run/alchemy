@@ -1,78 +1,331 @@
-import type * as Context from "effect/Context";
-import * as Effect from "effect/Effect";
+import * as Context from "effect/Context";
+import type * as Effect from "effect/Effect";
+import type * as Layer from "effect/Layer";
 import type { RuntimeContext } from "../RuntimeContext.ts";
-import { effectClass } from "../Util/effect.ts";
-import type { ToolImpl } from "./Tool.ts";
+import {
+  layer,
+  type Charter,
+  type CharterServices,
+  type Driver,
+  type TurnServices,
+} from "./Driver.ts";
+import { fragment, type Services } from "./Fragment.ts";
+import { makeSource, type Source } from "./Source.ts";
+import type { Tool, ToolParameters } from "./Tool.ts";
 
-export type Services<Refs extends any[]> = Refs[number] extends infer A
-  ? A extends
-      | ToolImpl<infer _T, infer _Err, infer Req>
-      | Context.Service<infer Req, infer _Shape>
-    ? Req
-    : never
-  : never;
+// ─────────────────────────── the Actor ────────────────────────────
 
-export interface Agent<
-  Name extends string = string,
-  Refs extends any[] = any[],
-  Service = AgentService,
-  Req = never,
-> {
-  [Symbol.iterator](): Effect.EffectIterator<
-    Effect.Effect<Service, never, Req>
-  >;
-  "~alchemy/Kind": "Agent";
-  name: Name;
-  refs: Refs;
-  req: Services<Refs>;
-  new (): AgentService;
+/** A reference to a driver session: which term, which key. */
+export interface SessionRef {
+  readonly term: string;
+  readonly key: string;
 }
 
-export interface AgentService {
-  send(request: {
-    input: any;
-    session?: string;
-  }): Effect.Effect<void, never, RuntimeContext>;
+/**
+ * The Actor — what resolving an {@link Agent} tag yields, and what the
+ * driver returns when it interprets any term's charter: a mailbox with
+ * a serial session loop, spoken to only in the actor verbs. Hand it
+ * work (`dispatch`/`send`), talk to a session mid-flight (`steer`),
+ * resolve a session from the outside (`settle`).
+ *
+ * Who may hold the Actor is a Layer decision. A PUBLIC {@link Agent}'s
+ * tag IS its Actor — agents exist to be called. A sealed domain
+ * surface (a business process) is a plain `Context.Service` whose
+ * Layer interprets a PRIVATE agent and exposes only its declared
+ * Shape — the Actor never leaves the closure.
+ *
+ * `In` is the term's input alphabet, DERIVED FROM ITS PROSE: the
+ * union of the `AI.Event` payloads its charter splices, plus `string`
+ * (always allowed). A charter that declares no events leaves `In` at
+ * `unknown`. `settle` deliberately stays `unknown` — the outcome
+ * belongs to the world, not to the charter's declarations.
+ *
+ * Sessions are keyed at admission; `steer`/`settle` address them by
+ * that key.
+ */
+export interface Actor<In = unknown> {
+  /**
+   * Admit one work item and await its session's resolution (admit +
+   * join). `options.key` names the session (see {@link Actor.send}).
+   */
+  dispatch(
+    item: In,
+    options?: {
+      readonly key?: string;
+      readonly parent?: SessionRef;
+    },
+  ): Effect.Effect<unknown, never, RuntimeContext>;
+  /**
+   * Admit one work item, fire-and-forget (the admission half alone).
+   *
+   * `options.key` is the session's CALLER-CHOSEN name — the world
+   * identity to correlate by (`owner/repo#7`). Naming the session is
+   * what makes `steer(key, …)` and `settle(key, …)` addressable from
+   * code that never saw a driver-minted session.
+   *
+   * `options.parent` records WHICH SESSION caused this admission — the
+   * driver's own `dispatch` intrinsic stamps it automatically, so
+   * observability can reconstruct the delegation tree (issue desk →
+   * engineer → …). Purely observational: it never affects routing.
+   */
+  send(
+    item: In,
+    options?: {
+      readonly key?: string;
+      readonly parent?: SessionRef;
+      /**
+       * `wake: false` delivers WITHOUT waking: the input lands in the
+       * session's thread durably, but a parked session stays parked —
+       * the accumulated inputs are read on its next wake (an operator
+       * message, a reminder, a waking send), and a BUSY session picks
+       * them up at its next sampling boundary as usual. The
+       * level-triggered delivery mode: events as CONTEXT, not
+       * triggers. Default `true` (a send wakes a parked session).
+       */
+      readonly wake?: boolean;
+    },
+  ): Effect.Effect<void, never, RuntimeContext>;
+  /**
+   * Session-key–addressed input: deliver a message to a SPECIFIC
+   * session, promoted at the session's next boundary (wakes a parked
+   * session for another work round).
+   */
+  steer(
+    sessionKey: string,
+    input: In,
+  ): Effect.Effect<void, never, RuntimeContext>;
+  /** Mid-session input to the active session, promoted at the next
+   *  boundary. */
+  steer(input: In): Effect.Effect<void, never, RuntimeContext>;
+  /**
+   * End a SPECIFIC session from the outside: the session resolves with
+   * `event` as its outcome. The caller that consumed the wire owns
+   * session endings — the driver just runs the loop. Settling a key
+   * with no live session is an idempotent no-op (the session may have
+   * settled already — the world outranks the org's beliefs).
+   */
+  settle(
+    sessionKey: string,
+    event: unknown,
+  ): Effect.Effect<void, never, RuntimeContext>;
+  /** Scope authority: settle in-flight work as interrupted. */
+  interrupt(): Effect.Effect<void, never, RuntimeContext>;
+}
+
+/**
+ * An `Agent` term is a callable persona — a NAME, declared as a
+ * `Context.Service` tag and nothing else. The agent's behavior (its
+ * prose, tools, skills, delegates) lives in a CHARTER supplied where
+ * the agent is implemented — `Engineer.make(charter)` — never on
+ * the declaration. Decoupling the two is deliberate: one contract can
+ * carry many charters (a strict Engineer in prod, a chatty one in
+ * dev), and a charter can be dynamic (re-evaluated at every sampling
+ * boundary) without the declaration knowing.
+ *
+ * Every agent's tag resolves to the SAME interface — the
+ * {@link Actor} verbs — because agents exist to be called: an owner
+ * hands the Engineer a ready issue (`dispatch`) and awaits the pull
+ * request. A domain-specific, deterministic surface (a business
+ * process) is not a term: declare a plain `Context.Service` Shape,
+ * declare a PRIVATE (un-exported) agent beside it with its own `make`
+ * Layer, and have the Shape's Layer resolve the agent's tag — the
+ * verbs stay sealed inside the Layer, and the world drives them.
+ *
+ * ```ts
+ * export class Engineer extends AI.Agent<Engineer>()("Engineer") {}
+ *
+ * export const EngineerLive = Engineer.make`
+ * You receive exactly one ${issue}. ${Coding} is your craft; when
+ * green, ${OpenPullRequest} citing the issue.`;
+ * ```
+ *
+ * Capability lives entirely in the charter's fragments: interpolating
+ * `${Engineer}` in ANOTHER charter's prose contributes the tag
+ * `Engineer` to that charter's requirements — not the agent's tools.
+ * Transitivity lives in Layer composition: each agent gets its own
+ * capability provisioning
+ * (`Engineer.make(c1).pipe(Layer.provide(BashDevBox))` vs
+ * `Judge.make(c2).pipe(Layer.provide(BashReadOnly))` — one
+ * contract, different physics, side by side in one runtime).
+ *
+ * Capability denial by omission: a charter that never interpolates
+ * `${Approve}` has no `Approve` anywhere in its Layer graph's
+ * requirements; no Layer can grant it merge authority. Constitutional
+ * constraints are enforced by the type system, not by prose.
+ */
+export interface Agent<Name extends string = string, Self = unknown> {
+  "~alchemy/Kind": "Agent";
+  "~alchemy/Name": Name;
+  /** Phantom carrier for the tag identifier (`Self` in the `<Self>()` form). */
+  "~alchemy/Self": Self;
+  /**
+   * The file this agent is defined in — present when the term was
+   * declared as `AI.Agent<Self>(import.meta)(name)`. Splice
+   * `${Engineer.source}` to mention the file (a path) without
+   * delegating to the agent (see Source.ts).
+   */
+  readonly source?: Source;
+  /**
+   * The driver-default implementation Layer: interpret the CHARTER
+   * (init → turn), publish the resulting actor verbs as this tag's
+   * service.
+   *
+   * A persona whose stance never changes writes its charter as a
+   * TAGGED TEMPLATE directly on `make` — the static shorthand:
+   *
+   * ```ts
+   * export const ReviewerLive = Reviewer.make`
+   *   You review each ${pr} against its originating ${issue}.
+   *   Verdict via ${Approve} or changes via ${Comment}.`;
+   * ```
+   *
+   * A dynamic persona passes the full init → turn charter:
+   *
+   * ```ts
+   * export const EngineerLive = Engineer.make(Effect.gen(function* () {
+   *   const done = yield* Ref.make(false);        // init: Refs, bindings for tools
+   *   return Effect.gen(function* () {            // turn: every sampling
+   *     const { count } = yield* AI.Tick;         // runtime facts live here
+   *     return yield* AI.fragment`…`;
+   *   });
+   * }));
+   * ```
+   */
+  readonly make: {
+    /**
+     * Static charter shorthand. Splices are still evaluated at render
+     * time, every tick — an `Effect` splice may read `AI.Thread`/
+     * `AI.Tick` — so their requirements are charged as TURN
+     * requirements.
+     */
+    <const Refs extends any[]>(
+      template: TemplateStringsArray,
+      ...refs: Refs
+    ): Layer.Layer<Self, never, Driver | Exclude<Services<Refs>, TurnServices>>;
+    <C extends Charter>(
+      charter: C,
+    ): Layer.Layer<Self, never, Driver | CharterServices<C>>;
+  };
+  /**
+   * Instances are branded with the agent's name so distinct agents
+   * remain distinct types (and therefore distinct tags). The instance
+   * shape is always the one agent interface: the actor verbs.
+   */
+  new (_: never): Actor & { readonly "~alchemy/Name": Name };
 }
 
 export const Agent: {
-  <Self>(): {
+  /**
+   * `AI.Agent<Self>()(name)` declares the tag; `AI.Agent<Self>(import.meta)(name)`
+   * additionally records the defining file as `source` (see Source.ts).
+   */
+  <Self>(meta?: ImportMeta): {
     <Name extends string>(
-      id: Name,
-    ): {
-      <const Refs extends any[]>(
-        template: TemplateStringsArray,
-        ...refs: Refs
-      ): Agent<Name, Refs, Self, Services<Refs>>;
-    };
+      name: Name,
+    ): Agent<Name, Self> & Context.Service<Self, Actor>;
   };
-  <Name extends string>(
-    id: Name,
-  ): {
-    <Refs extends any[]>(
-      template: TemplateStringsArray,
-      ...refs: Refs
-    ): Agent<Name, Refs, AgentService, Services<Refs>>;
-  };
-} = ((name?: string) =>
-  name
-    ? (template: TemplateStringsArray, ...refs: any[]) =>
-        makeAgent(name, template, refs)
-    : (name: string) =>
-        (template: TemplateStringsArray, ...refs: any[]) =>
-          makeAgent(name, template, refs)) as any;
+} = ((meta?: ImportMeta) => (name: string) =>
+  makeTerm("Agent", name, undefined, undefined, meta)) as any;
 
-const makeAgent = (name: string, template: TemplateStringsArray, refs: any[]) =>
-  Object.assign(
-    effectClass(
-      Effect.gen(function* () {
-        // TODO(sam): implement the agent
-      }),
-    ),
-    {
-      "~alchemy/Kind": "Agent",
-      "~alchemy/Name": name,
-      refs,
-      template,
-    },
-  ) as any;
+/** Shared constructor for the tag-bearing terms (Agent, Skill). */
+export const makeTerm = (
+  kind: "Agent" | "Skill",
+  name: string,
+  template?: TemplateStringsArray,
+  refs?: any[],
+  meta?: ImportMeta,
+) => {
+  const cls = class extends (Context.Service<any, any>()(
+    `alchemy/AI/${kind}/${name}`,
+  ) as any) {};
+  return Object.assign(cls, {
+    "~alchemy/Kind": kind,
+    "~alchemy/Name": name,
+    ...(meta !== undefined ? { source: makeSource(meta, kind, name) } : {}),
+    ...(template !== undefined ? { template, refs } : {}),
+    // the implementation Layer: `Engineer.make(charter)`, the static
+    // tagged-template shorthand `Reviewer.make`…``, or a skill's
+    // teaching `Coding.make`…`` — for a Skill the template IS the
+    // service payload (prose + granted tools); for an Agent a
+    // template lifts to a constant charter
+    make: (charterOrTemplate?: any, ...refs: any[]) =>
+      kind === "Skill"
+        ? layer(cls as any, charterOrTemplate, ...refs)
+        : layer(
+            cls as any,
+            isTemplateStringsArray(charterOrTemplate)
+              ? fragment(charterOrTemplate, ...refs)
+              : charterOrTemplate,
+          ),
+  }) as any;
+};
+
+const isTemplateStringsArray = (
+  value: unknown,
+): value is TemplateStringsArray => Array.isArray(value) && "raw" in value;
+
+export const isAgent = (value: unknown): value is Agent<any, any> =>
+  (typeof value === "object" || typeof value === "function") &&
+  value !== null &&
+  (value as Record<string, unknown>)["~alchemy/Kind"] === "Agent";
+
+// ──────────────── the agent's type-level tool surface ─────────────
+
+/**
+ * One tool call that can appear on an agent's transcript, as a type.
+ * Mention-is-presence is a runtime law — a charter's toolkit is
+ * exactly what its prose splices — and because every `Tool<Self>`
+ * class splice rides the Layer's REQUIREMENT channel (its physics
+ * must be provided), the same law holds in the type system: a `make`
+ * Layer's `RIn` names every class tool the teaching can mention, and
+ * {@link ToolNames} / {@link ToolInput} read it LAZILY — nothing is
+ * computed or branded at layer construction.
+ *
+ * Type against the `make` result (the un-provided teaching):
+ * `Layer.provide` consumes the requirements the surface is read from,
+ * exactly as it consumes them for service coverage.
+ *
+ * Inline tools (`yield* AI.Tool("x")`…`(impl)`) and dispatch doors
+ * carry no tag, so they are RUNTIME-ONLY: invisible to this surface.
+ * A tool that wants compiler-checked renderer coverage is a
+ * `Tool<Self>` class.
+ *
+ * ```ts
+ * // ui — type-only import (erased at build); the app owns its
+ * // registry type:
+ * import type { GeneralEngineer } from "../src/Engineer.ts";
+ *
+ * type Renderers<L> = {
+ *   [Name in AI.ToolNames<L> & string]: (
+ *     input: AI.ToolInput<L, Name>,
+ *   ) => ToolCallView;
+ * };
+ * // forget one -> compile error naming the missing tool
+ * ```
+ */
+export interface WireTool<Name extends string = string, Input = any> {
+  readonly name: Name;
+  readonly input: Input;
+}
+
+/**
+ * The wire-tool union of an agent/skill `make` Layer, derived from its
+ * requirement channel: each `Tool<Self>` tag in `RIn` is an instance
+ * type extending `Tool<Name, Refs>`, which carries everything the
+ * surface needs.
+ */
+export type WireToolsOf<L> =
+  L extends Layer.Layer<any, any, infer RIn>
+    ? RIn extends Tool<infer Name extends string, infer Refs>
+      ? WireTool<Name, ToolParameters<Refs[number]>>
+      : never
+    : never;
+
+/** The tool NAMES on an agent layer's wire — a union of literals. */
+export type ToolNames<L> = WireToolsOf<L>["name"];
+
+/** The typed input of one named tool on an agent layer's wire. */
+export type ToolInput<L, Name extends ToolNames<L>> = Extract<
+  WireToolsOf<L>,
+  WireTool<Name & string, any>
+>["input"];

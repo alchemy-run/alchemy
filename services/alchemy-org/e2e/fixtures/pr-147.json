@@ -1,0 +1,71 @@
+{
+  "repo": "alchemy-run/test-alchemy",
+  "number": 147,
+  "title": "Add array helpers: chunk and unique",
+  "body": "Adds `src/arrays.ts` with two helpers:\n\n- `chunk(values, size)` — split an array into consecutive chunks of `size`; every element ends up in exactly one chunk, with the final chunk holding the remainder. Throws on a non-positive size.\n- `unique(values)` — dedupe preserving first-seen order.\n\nCovered by `test/arrays.test.ts` — all tests pass.\n\nMade with [Cursor](https://cursor.com)",
+  "state": "open",
+  "author": {
+    "login": "sam-goodwin",
+    "avatarUrl": "https://avatars.githubusercontent.com/u/38672686?v=4"
+  },
+  "htmlUrl": "https://github.com/alchemy-run/test-alchemy/pull/147",
+  "createdAt": "2026-08-05T08:19:41Z",
+  "updatedAt": "2026-08-27T23:14:30Z",
+  "head": {
+    "ref": "feat/array-helpers-2",
+    "sha": "c9b24034aefa1ec443ac1b980f55001df3e14e09",
+    "repo": "alchemy-run/test-alchemy"
+  },
+  "base": {
+    "ref": "main",
+    "repo": "alchemy-run/test-alchemy"
+  },
+  "checkoutRef": "feat/array-helpers-2",
+  "additions": 37,
+  "deletions": 0,
+  "changedFiles": 2,
+  "commits": 1,
+  "mergeable": true,
+  "timeline": [
+    {
+      "kind": "review",
+      "id": 4862467443,
+      "author": {
+        "login": "sam-goodwin",
+        "avatarUrl": "https://avatars.githubusercontent.com/u/38672686?u=d36641c4837e4354fb2a12445fa4d002792c42e0&v=4"
+      },
+      "state": "COMMENTED",
+      "body": "**REQUEST CHANGES**\n\nThe `chunk` function has a critical bug that contradicts its own specification.\n\n**The Problem**: The loop condition `index + size <= values.length` stops before processing the final partial chunk. For instance:\n- `chunk([1, 2, 3, 4, 5], 2)` returns `[[1, 2], [3, 4]]` but should return `[[1, 2], [3, 4], [5]]`\n- `chunk([1, 2, 3, 4, 5], 3)` returns `[[1, 2, 3]]` but should return `[[1, 2, 3], [4, 5]]`\n\nThis violates the PR's stated specification: *\"every element ends up in exactly one chunk, with the final chunk holding the remainder.\"*\n\n**Why Tests Didn't Catch It**: The test suite only covers cases where the array divides evenly, so the bug remains hidden.\n\n**What Needs to Change**:\n1. Fix the loop condition from `index + size <= values.length` to `index < values.length`\n2. Add test coverage for arrays with remainders to catch regressions\n\nThe `unique` function is correct and works as expected.\n\n<!-- review-bot -->",
+      "createdAt": "2026-08-05T08:20:40Z",
+      "htmlUrl": "https://github.com/alchemy-run/test-alchemy/pull/147#pullrequestreview-4862467443",
+      "comments": [
+        {
+          "id": 3719045276,
+          "author": {
+            "login": "sam-goodwin",
+            "avatarUrl": "https://avatars.githubusercontent.com/u/38672686?v=4"
+          },
+          "path": "src/arrays.ts",
+          "line": 6,
+          "body": "**Critical Bug**: The loop condition `index + size <= values.length` causes the remainder to be dropped. For example, `chunk([1, 2, 3, 4, 5], 2)` returns `[[1, 2], [3, 4]]` instead of `[[1, 2], [3, 4], [5]]`.\n\nThis violates the PR's own specification: \"every element ends up in exactly one chunk, with the final chunk holding the remainder.\"\n\nThe condition should be `index < values.length` to include all remaining elements:\n\n```typescript\nfor (let index = 0; index < values.length; index += size) {\n```\n\nThe test suite doesn't catch this because all test cases use arrays that divide evenly by the chunk size.",
+          "diffHunk": "@@ -0,0 +1,14 @@\n+export function chunk<T>(values: T[], size: number): T[][] {\n+  if (!Number.isInteger(size) || size < 1) {\n+    throw new Error(\"chunk size must be a positive integer\");\n+  }\n+  const chunks: T[][] = [];\n+  for (let index = 0; index + size <= values.length; index += size) {",
+          "createdAt": "2026-08-05T08:20:40Z",
+          "htmlUrl": "https://github.com/alchemy-run/test-alchemy/pull/147#discussion_r3719045276"
+        },
+        {
+          "id": 3719045282,
+          "author": {
+            "login": "sam-goodwin",
+            "avatarUrl": "https://avatars.githubusercontent.com/u/38672686?v=4"
+          },
+          "path": "test/arrays.test.ts",
+          "line": 14,
+          "body": "The test suite for `chunk` has incomplete coverage. It tests cases where the array divides evenly:\n- `chunk([1, 2, 3, 4], 2)` — divides exactly\n- `chunk([1, 2, 3], 1)` — trivial case\n\nBut there's no test covering arrays with remainders, which is precisely what the spec promises to handle. For example, add:\n```typescript\nit(\"should handle remainder in final chunk\", () => {\n  expect(chunk([1, 2, 3, 4, 5], 2)).toEqual([\n    [1, 2],\n    [3, 4],\n    [5],\n  ]);\n});\n```\n\nThis would have caught the bug in the implementation.",
+          "diffHunk": "@@ -0,0 +1,23 @@\n+import { describe, it, expect } from \"bun:test\";\n+import { chunk, unique } from \"../src/arrays\";\n+\n+describe(\"arrays\", () => {\n+  it(\"should chunk an array into equal parts\", () => {\n+    expect(chunk([1, 2, 3, 4], 2)).toEqual([\n+      [1, 2],\n+      [3, 4],\n+    ]);\n+  });\n+\n+  it(\"should chunk into single-element parts\", () => {\n+    expect(chunk([1, 2, 3], 1)).toEqual([[1], [2], [3]]);\n+  });",
+          "createdAt": "2026-08-05T08:20:40Z",
+          "htmlUrl": "https://github.com/alchemy-run/test-alchemy/pull/147#discussion_r3719045282"
+        }
+      ]
+    }
+  ]
+}

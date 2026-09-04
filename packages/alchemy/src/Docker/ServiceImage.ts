@@ -9,6 +9,7 @@ import {
 } from "../Bundle/TempRoot.ts";
 import { sha256Object } from "../Util/sha256.ts";
 import { Docker } from "./Docker.ts";
+import { hostArchitecture, hostStatementsFor, type Host } from "./Host.ts";
 
 /**
  * INTERNAL — image machinery for the effectful `Docker.Service` platform.
@@ -37,6 +38,13 @@ export interface BundledServiceSource {
    * `pure.packages`, or disable with `pure: false`.
    */
   build?: Bundle.BundleConfig;
+  /**
+   * @internal Per-architecture Dockerfile statements contributed by
+   * bindings during init via `Docker.Host` — populated by the platform,
+   * never written by hand. Participates in the code hash, so a changed
+   * contribution rebuilds the image.
+   */
+  imageStatements?: Host.Statements;
 }
 
 /** The resolved (built) local image. */
@@ -145,6 +153,12 @@ export const makeServiceImage = Effect.gen(function* () {
   const generateDockerfile = (source: BundledServiceSource) => {
     const lines = [
       `FROM ${source.image ?? "oven/bun:1"}`,
+      // binding-contributed statements (Docker.Host). The service builds
+      // for the target engine's native platform (no --platform flag), so
+      // render for the build machine's architecture.
+      ...hostStatementsFor(source, hostArchitecture()).map((statement) =>
+        statement.trim(),
+      ),
       `WORKDIR /app`,
       `COPY index.mjs /app/index.mjs`,
       // Copy any additional rolldown chunks (`chunk-XXX.js`, …). Non-trivial

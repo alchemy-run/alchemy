@@ -16,7 +16,7 @@ import { DockerLive, Docker } from "../Docker/Docker.ts";
 import { Platform, type Main, type PlatformProps } from "../Platform.ts";
 import * as Provider from "../Provider.ts";
 import type { Resource } from "../Resource.ts";
-import type { ServerHost } from "../Server/Process.ts";
+import type { Host } from "../Local/Process.ts";
 import { Stack } from "../Stack.ts";
 import { App } from "./App.ts";
 import type {
@@ -212,7 +212,7 @@ export const isService = (value: unknown): value is Service =>
   value !== null &&
   (value as { Type?: string }).Type === "Fly.Service";
 
-export type ServiceServices = ServerHost;
+export type ServiceServices = Host;
 
 export type ServiceShape = Main<ServiceServices>;
 
@@ -602,18 +602,18 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * ```
  *
  * ### Background services
- * Omit `port` and `fetch`. Pass `services: []`. Use `ServerHost.run`
+ * Omit `port` and `fetch`. Pass `services: []`. Use `Host.run`
  * for a long-running loop. If the process exits, Fly restarts it.
  *
- * **Example:** ServerHost.run
+ * **Example:** Host.run
  * ```typescript
- * import { ServerHost } from "alchemy/Server";
+ * import { Host } from "alchemy/Local";
  *
  * export default class Worker extends Fly.Service<Worker>()(
  *   "Worker",
  *   { app: Site, main: import.meta.url, region: "iad", services: [] },
  *   Effect.gen(function* () {
- *     const host = yield* ServerHost;
+ *     const host = yield* Host;
  *
  *     yield* host.run(
  *       Effect.gen(function* () {

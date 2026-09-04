@@ -1,0 +1,98 @@
+---
+title: The kernel
+description: The interpreter behind every agent — one contract, an in-memory implementation, a codemode wire seam, and a pluggable future.
+---
+
+The **kernel** is the interpreter of charters: it turns a term plus
+its behavior into a live actor. Its whole contract is one method —
+everything else about running agents is Layers around it.
+
+```typescript
+interface KernelService {
+  readonly interpret: (term, charter) => Effect<Actor, KernelError, Scope>;
+}
+```
+
+You rarely call this yourself — `Agent.make(charter)` packages it, so
+providing an agent's Layer *is* interpreting it. But the seam is the
+point: what "running an agent" means (where threads live, how runs
+survive restarts) is an implementation choice behind a stable
+contract.
+
+## `KernelMemory`
+
+The shipping implementation keeps every run in process memory:
+
+```typescript
+const Kernel = AI.KernelMemory.pipe(Layer.provide(Model));
+```
+
+One requirement — a `LanguageModel` (any `@effect/ai` provider) — and
+deliberately nothing else. Per run it: renders the stance into the
+system prompt, compiles mentioned terms into the toolkit (plus the
+intrinsics: `spawn`, `skill`, `dispatch` where granted), streams the
+sampling, executes tool calls, applies compaction at boundaries, and
+manages park/wake/settle. Failures retry with capped backoff; a typed
+`AI.Refused` propagates to callers.
+
+What the kernel deliberately is **not**: it authors no messages
+(every thread entry traces to your code or the world), owns no
+policy (budgets, exits, and compaction policy are userland), and has
+no vocabulary for memory, RAG, or planning — those are charters,
+tools, and skills.
+
+## The observability seam
+
+`KernelMemory` emits a structured observation for everything it does
+— run admitted, input delivered, assistant streamed, tool called,
+parked, settled. Attach a listener by providing `KernelObserver`;
+the built-in [Chats projection](/agents/concepts/observability) turns
+the feed into a live UI protocol:
+
+```typescript
+const Kernel = Layer.mergeAll(
+  AI.KernelMemory.pipe(Layer.provide(Model)),
+  AI.ChatsObserver.pipe(Layer.provide(OrgChats)),
+);
+```
+
+## Codemode: the wire seam
+
+How capabilities are *presented* to the model is a separate, optional
+Layer. With a `WireMode` provided, the kernel collapses the tick's
+grants into a single `eval` tool with generated type signatures — the
+model writes a program against your tools instead of calling them one
+round trip at a time:
+
+```typescript
+Layer.provide(AI.CodeModeEffect()),   // the model writes Effect code
+Layer.provide(AI.CodeModeAsync()),    // ...or async/await code
+```
+
+Mention-is-presence is unchanged — only granted tools exist in the
+generated signatures — and a broken program comes back as the eval
+result, model-visible. Tools can declare a `returns` schema
+(`AI.Tool("readDiff", S.String)`) so the generated signatures carry
+real return types.
+
+## Swapping kernels
+
+Because agents depend on the `Kernel` tag, not on `KernelMemory`, a
+different implementation is a Layer swap at the entrypoint — every
+charter, tool, skill, and door is untouched. That is the roadmap
+seam:
+
+:::note[Roadmap]
+A **durable kernel** on Cloudflare Durable Objects — threads
+persisted, runs surviving eviction, `remind` as alarms — is in active
+development, along with `AI.Workflow` (deterministic orchestrations
+that dispatch agents with typed signatures). Neither is shipped;
+everything else on this page is.
+:::
+
+## Testing kernels
+
+The same seam makes tests deterministic: provide `KernelMemory` with
+a **scripted model** instead of a provider layer and the whole loop —
+stances, toolkits, tool physics, sessions — runs offline. See
+[Testing agents](/agents/guides/testing).

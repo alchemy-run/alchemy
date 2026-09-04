@@ -1,0 +1,100 @@
+---
+title: Writing prose
+description: The context-engineering doctrine — state situations instead of legislating rules, let the type system say "cannot", and put each teaching in its one right place.
+---
+
+Charters, skills, and tool descriptions are programs written in
+natural language, and they rot the same way code does: rules accrete,
+directives conflict, and every tick pays the tax. This guide is the
+discipline that keeps prose lean — assuming frontier-model judgment
+and structural enforcement doing most of the work.
+
+## Situation over rules
+
+State the situation that motivates a behavior and let the model
+derive it. The factory's reviewer doesn't say *"never ask questions;
+one pass, ALWAYS"* — it says:
+
+```text
+Your situation: there is no author to talk to, and your words are
+relayed once. So the verdict must be complete in a single round.
+```
+
+Rules accrete during debugging as workarounds for a weaker model's
+judgment; each is a standing tax (the model reconciles overlapping
+directives every tick) and a wrong answer for some input. Audit
+charters by deleting every directive the situation already implies.
+
+## Never restate the type system
+
+Capability-by-omission is a type-level fact — prose like *"you must
+not merge"* in a charter with no merge tool restates what the tool
+surface already makes impossible. Say where authority lives when it
+helps orientation ("review and merge are someone else's job"), never
+what the agent "must not" do.
+
+## One teaching site per fact
+
+Repetition between charter, skill, and tool description is the
+conflict-generating pattern:
+
+- **The tool template** owns tool usage — what it does, constraints,
+  edge behavior. Parameter schemas (enums, bounds, optional keys) are
+  behavior hints stronger than prose.
+- **The skill** owns cross-tool discipline no single description can
+  carry (read-before-edit, verify-after-edit) and org-specific taste.
+  Load-bearing procedure is legitimate; style dressed as procedure is
+  not.
+- **The charter** owns mission — what a round of work is, what done
+  means, where the work goes when it's finished.
+
+If the charter is narrating how to use a tool, the sentence belongs
+on the tool. If a tool description wants sections, the discipline
+belongs in a skill.
+
+## Documents for pages, labels for tools
+
+Charters and skills are delivered whole — write them as documents,
+with markdown headings and lists marking what the model should be
+able to find again:
+
+```typescript
+export const IssueEngineer = Engineer.make(...)  // stance ends with:
+  // ## Rounds
+  // - A first ${issue} carries the acceptance criteria — your entire
+  //   specification.
+  // ## Craft
+  // ${Coding} is your craft; done means the criteria are met and the
+  // tests are green. Then ${openPullRequest}.
+```
+
+Tool descriptions ride the wire next to a schema and a dozen
+siblings — keep them tight paragraphs, first sentence the selection
+cue. Document furniture there is token tax multiplied by every
+sampling.
+
+## Progressive disclosure is the architecture
+
+A teaching needed every tick belongs in the charter; needed sometimes,
+in a [skill](/agents/concepts/skills) (the model pulls it in at
+activation); needed rarely, in a workspace file the agent reads.
+Front-loading everything into the charter is the anti-pattern the
+skill graph exists to prevent.
+
+## Rich references beat prose specs
+
+The strongest context is material the model reads natively: splice
+the issue, the diff, the failing test — don't summarize them. The
+factory's engineer receives acceptance criteria *verbatim* as its
+specification; its reviewer reads the actual diff and runs the actual
+tests. Examples anchor exploration to the example's shape; prefer
+expressive interfaces (schemas, typed artifacts) over exemplars.
+
+## Prose is a per-model dial
+
+These lessons assume frontier judgment. A charter is a Layer, so a
+term bound to a small model may legitimately carry tighter rules than
+the same term bound to a frontier one — rule density is a property of
+the [binding](/agents/concepts/roles-and-missions), not the contract.
+Write the clean version first; add rules only where a specific model
+demonstrably needs them, in that model's binding.

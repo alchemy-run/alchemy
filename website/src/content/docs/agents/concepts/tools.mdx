@@ -1,0 +1,148 @@
+---
+title: Tools & parameters
+description: Typed verbs with swappable physics — parameters as schema-plus-prose, tool contracts as tags, implementations as Layers, and typed replies from handlers.
+---
+
+A **tool** is a typed verb: a description the model reads, a schema
+it fills in, and a handler your code runs. In alchemy all three are
+one declaration, and the handler is a Layer — so what a tool *does*
+is decided at composition, not in the charter.
+
+## Parameters
+
+A `Parameter` fuses name, schema, and documentation:
+
+```typescript
+export const issue = AI.Parameter("issue", IssueRef)`
+A reference to a GitHub issue in the repository. A "ready" issue's
+acceptance criteria are a complete specification of the work.`;
+```
+
+The schema is the wire contract (JSON schema on the request); the
+template is what the model reads about the field. Optional fields use
+`S.optionalKey`:
+
+```typescript
+const glob = AI.Parameter("glob", S.optionalKey(S.String))`
+Glob filter for files, e.g. "*.ts". Omit to search everything.`;
+```
+
+Schemas are stronger behavior hints than prose — an enum, a bounded
+int, or an optional key steers the model more reliably than a
+sentence asking nicely. Prefer expressive parameter design over
+longer descriptions.
+
+## Tool contracts
+
+A shared tool is a class whose template splices its parameters:
+
+```typescript
+export class Grep extends AI.Tool<Grep>()("grep")`
+Fast content search across the whole workspace. Searches file
+contents with ${pattern} — full regex syntax. Scope with ${glob};
+bound the result with ${limit}. Always search before reading files.` {}
+```
+
+The template is the tool's **single teaching site**: what it does
+(first sentence — the model's selection cue), then constraints and
+edge behavior. Keep it a tight paragraph; a tool description that
+wants sections is usually a smell that cross-tool discipline belongs
+in a [skill](/agents/concepts/skills) instead.
+
+## Physics as Layers
+
+The tool's service **is its handler** — a function from the typed
+input to an Effect:
+
+```typescript
+export const GrepLocal = Layer.effect(
+  Grep,
+  Effect.gen(function* () {
+    const workspace = yield* Workspace;
+    return (input) => runRipgrep(workspace, input);
+  }),
+);
+```
+
+`yield* Grep` anywhere gives you that callable directly. Because
+physics is a Layer, the same contract runs against local shell tools,
+a test double, or a container — chosen where Layers are provided,
+per agent, per environment. The alchemy-org factory groups its local
+physics by access level so skills can compose least privilege:
+
+```typescript
+// services/alchemy-org/src/tools/LocalToolbox.ts
+export const ReadToolsLocal  = Layer.mergeAll(GrepLocal, GlobLocal, ListDirectoryLocal, ReadFileLocal).pipe(...);
+export const RunToolsLocal   = Layer.mergeAll(BashLocal, ReadOutputLocal).pipe(...);
+export const WriteToolsLocal = Layer.mergeAll(EditFileLocal, ApplyPatchLocal, WriteFileLocal).pipe(...);
+```
+
+Its reviewer gets read + run and simply never receives the write
+group — "can't edit" is the absence of a Layer, not a rule.
+
+## Inline tools
+
+A verb private to one agent, closing over its run's state, is defined
+in the charter's init:
+
+```typescript
+const park = yield* AI.Tool("park")`
+  Park this issue on its author. ${Comment} your questions first.`(
+  () => Ref.set(phase, "awaiting").pipe(Effect.as("parked")),
+);
+// ...spliced into the stance: `...${park} when blocked...`
+```
+
+Same term machinery, but the handler travels with the splice — no
+class, no Layer. Use inline tools for run-local affordances; use
+classes for contracts more than one charter shares or whose physics
+varies by environment.
+
+## Failures are model-visible
+
+A handler's typed failure becomes the tool result the model reads —
+"that didn't work, here's why" — never a crash of the loop:
+
+```typescript
+(input) =>
+  Effect.gen(function* () {
+    if (invalid(input)) {
+      return yield* Effect.fail(
+        `'${input.delay}' is not a duration — use e.g. "4 hours"`,
+      );
+    }
+    // ...
+  })
+```
+
+Design refusals as *facts the agent can act on*. The factory's merge
+tool refuses without a recorded approval, and its message tells the
+agent exactly what state the world is in — which is how
+[human-in-the-loop](/agents/concepts/human-in-the-loop) works without
+any framework support.
+
+## Answering with evidence: `AI.reply`
+
+A tool handler is often where the *real* answer to a dispatch comes
+into existence — the pull request that now provably exists, the
+refund that was just issued. `AI.reply` resolves the callers waiting
+on this run, right there:
+
+```typescript
+// services/alchemy-org — the Engineer's PR tool
+const openPullRequest = yield* AI.Tool("open_pull_request")`...`(
+  Effect.fn(function* (params) {
+    const created = yield* open(params);
+    yield* AI.reply(created.pr);          // caller gets the TYPED artifact
+    return created;                        // model sees the tool result
+  }),
+);
+```
+
+The caller's `dispatch` resolves with `created.pr` — a typed
+reference, not prose claiming success — while the model keeps working
+(wrap up, comment) and then parks. A round that never calls
+`AI.reply` answers with its final text, which is the right default
+for conversational answers and declines. See
+[Runs & threads](/agents/concepts/runs) for the full call/reply
+model.

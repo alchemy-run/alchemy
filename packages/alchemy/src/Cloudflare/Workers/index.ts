@@ -19,6 +19,7 @@ export * from "./HttpServer.ts";
 export * from "./InferEnv.ts";
 export * from "./LocalWorkerProvider.ts";
 export * from "./ObservabilityDestination.ts";
+export * from "./PersistentRefStore.ts";
 export * from "./RateLimit.ts";
 export * from "./RateLimitBinding.ts";
 export * from "./Request.ts";

@@ -9,7 +9,7 @@ import {
   devId,
   devProvider,
 } from "./Internal/DevStub.ts";
-import * as ProviderLayer from "../Local/ProviderLayer.ts";
+import * as ProviderLayer from "../Dev/ProviderLayer.ts";
 import { Resource } from "../Resource.ts";
 import type { Bucket } from "./Bucket.ts";
 import {

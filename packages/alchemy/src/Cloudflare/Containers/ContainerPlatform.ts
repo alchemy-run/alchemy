@@ -1,5 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import { makeHostCollector } from "../../Docker/Host.ts";
 import { HttpServer, type HttpEffect } from "../../Http.ts";
 import * as Output from "../../Output.ts";
 import { Platform } from "../../Platform.ts";
@@ -8,7 +9,7 @@ import {
   packEnvValueKeepRedacted,
   unpackEnvValue,
 } from "../../RuntimeContext.ts";
-import * as Server from "../../Server/index.ts";
+import * as Local from "../../Local/index.ts";
 import type { Fetcher } from "../Fetcher.ts";
 import { fromCloudflareFetcher, toCloudflareFetcher } from "../Fetcher.ts";
 import { DurableObject } from "../Workers/DurableObject.ts";
@@ -53,14 +54,18 @@ export const ContainerPlatform: Platform<
   ContainerApplication,
   ContainerServices,
   ContainerShape,
-  Server.ProcessContext,
+  Local.ProcessContext,
   Container
 > = Platform(
   "Cloudflare.Container",
   {
-    createRuntimeContext: (id: string): Server.ProcessContext => {
+    createRuntimeContext: (id: string): Local.ProcessContext => {
       const runners: Effect.Effect<void, never, any>[] = [];
       const env: Record<string, any> = {};
+      // the Docker.Host seam: bindings contribute Dockerfile fragments
+      // during (plan-time) init; rendered per-arch onto
+      // `props.imageStatements` via planProps
+      const hostImage = makeHostCollector();
 
       const serve = <Req = never>(
         handler: HttpEffect<Req>,
@@ -113,10 +118,14 @@ export const ContainerPlatform: Platform<
           // Read straight from `process.env` — see `unpackEnvValue` for why
           // this must never resolve through `Config.string`.
           Effect.sync(() => unpackEnvValue<T>(process.env[key]) as T),
+        // plan-phase only: binding impls contribute Dockerfile fragments
+        // inside their `!__ALCHEMY_RUNTIME__` guard (see Docker.Host)
+        planServices: hostImage.planServices,
+        planProps: hostImage.planProps,
         run: ((effect: Effect.Effect<void, never, any>) =>
           Effect.sync(() => {
             runners.push(effect);
-          })) as unknown as Server.ProcessContext["run"],
+          })) as unknown as Local.ProcessContext["run"],
         serve,
         exports: Effect.sync(() => ({
           default: Effect.all(
@@ -136,7 +145,7 @@ export const ContainerPlatform: Platform<
             },
           ),
         })),
-      } as Server.ProcessContext;
+      } as Local.ProcessContext;
     },
   },
   {

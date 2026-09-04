@@ -3,6 +3,17 @@ export * from "./Dataset.ts";
 export * from "./DurableObjectChatPersistence.ts";
 export * from "./Evaluation.ts";
 export * from "./Gateway.ts";
+export * from "./DriverCloudflare.ts";
+export * from "./EvalWorkerLoader.ts";
+export * from "./EvalWorkerLoaderEffect.ts";
+export * from "./SandboxContainer.ts";
+export * from "./SessionContainer.ts";
+// The guest .make() rides the barrel because it is pure effect modules
+// (no node SDKs, no top-level process work) — Worker bundles carry only
+// inert weight. Container runtimes with real host dependencies must
+// stay OFF barrels (the Container Layer pattern's bundle rule).
+export { SandboxContainerRuntime } from "./SandboxContainerRuntime.ts";
+export * from "./ThreadStorageDurableObject.ts";
 export * from "./GatewayDynamicRouting.ts";
 export * from "./GatewayProvider.ts";
 export * from "./LanguageModel.ts";

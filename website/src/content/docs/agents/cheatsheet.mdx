@@ -1,0 +1,153 @@
+---
+title: Cheatsheet
+description: The whole loop-facing surface on one page — terms, charters, actor verbs, and the run-scoped services.
+---
+
+Everything a charter author touches. One import:
+
+```typescript
+import * as AI from "alchemy/AI";
+```
+
+## Terms (declare, then implement on a Layer)
+
+```typescript
+// AGENT — a persona with a loop
+export class Engineer extends AI.Agent<Engineer>()("Engineer") {}
+export const EngineerLive = Engineer.make`...prose...`;
+
+// TOOL — a typed verb (template = description, splices = schema)
+export class Grep extends AI.Tool<Grep>()("grep")`Search with ${pattern}.` {}
+export const GrepLocal = Layer.succeed(Grep, (input) => Effect.succeed("..."));
+// optional returns schema (codemode signatures): AI.Tool<Self>()("name", S.String)
+
+// PARAMETER — name + schema + doc, one term
+export const pattern = AI.Parameter("pattern", S.String)`A regex.`;
+const glob = AI.Parameter("glob", S.optionalKey(S.String))`Optional filter.`;
+
+// SKILL — a craft, dormant until activated; teaching lives on the Layer
+export class Coding extends AI.Skill<Coding>()("Coding") {}
+export const CodingLive = Coding.make`# Craft doc ... ${Grep} ... ${DeeperSkill}`;
+
+// EVENT — typed message vocabulary
+export class Wake extends AI.Event("Wake", { stamp: S.String })`A cron fire.` {}
+
+// DOOR — policy-constrained dispatch (yield in init, splice in prose)
+const HandToEngineer = AI.Dispatch(Engineer, "hand_to_engineer")`
+  Hand one round of work with ${task}.`(
+  (p, thread) => ({ task: p.task, key: thread.key }),
+);
+```
+
+## Charters — three tiers
+
+```typescript
+// 1. static prose
+Engineer.make`You are ...${Grep}...`;
+
+// 2. closure: init (once per run) → constant stance
+Engineer.make(Effect.gen(function* () {
+  const state = yield* Ref.make(0);
+  const park = yield* AI.Tool("park")`Park this.`(() => Ref.set(state, 1));
+  return AI.prose`...${park}...`;
+}));
+
+// 3. guard: a function of the tick, for budgets and laws
+Engineer.make(Effect.gen(function* () {
+  const stance = AI.prose`...`;
+  return Effect.fn(function* (tick: AI.TickEvent) {
+    // tick.count — samplings so far; tick.inputs — this tick's messages
+    if (tick.count >= 60) return yield* Effect.fail(new AI.Refused({ ... }));
+    return yield* stance;
+  });
+}));
+```
+
+## Splice semantics (mention is presence)
+
+| splice | grants this tick |
+|---|---|
+| `${tool}` / inline tool | the tool |
+| `${Skill}` | access; teaching + its tools on activation |
+| `${Agent}` | free-form `dispatch` to it |
+| `${door}` | the door's tool (policy in code) |
+| `${parameter}` / `${Event}` | nothing — identity in prose |
+| `${Effect<Fragment>}` | evaluated per tick; whatever it mentions |
+
+## Inside the loop
+
+```typescript
+// one-shot note into the thread (guard it — it appends every call)
+yield* AI.say`30 of 40 samplings spent — converge.`;
+
+// answer the current dispatch round with a TYPED value (run keeps going)
+yield* AI.reply(created.pr);
+
+// the run's handle — init, turns, and tool handlers
+const thread = yield* AI.Thread;
+thread.key;                                   // world identity
+yield* thread.tokens;                         // est. thread size
+yield* thread.entries;                        // read-only transcript
+yield* thread.compact({ reset: { summary } }); // or { drop: (entry, i) => bool }
+yield* thread.remind("4 hours", "check back"); // kernel clock → future input
+
+// this sampling — turns and tool handlers only (never init)
+const { count } = yield* AI.Tick;
+
+// give up, typed (error channel; callers can catch)
+yield* Effect.fail(new AI.Refused({ loop, reason, observed }));
+```
+
+## Actor verbs (resolve the tag)
+
+```typescript
+const engineer = yield* Engineer;
+
+yield* engineer.send(event, { key });              // deliver; admit if new
+const answer = yield* engineer.dispatch(task, {    // deliver + await answer
+  key,                                             // same key = same run
+  session: "build",                                // or derive child key
+});
+yield* engineer.steer(key, "note mid-flight");
+yield* engineer.settle(key, outcome);              // end; cascade to workers
+```
+
+## Composition
+
+```typescript
+const Model = AnthropicLanguageModel.layer({ model: "claude-haiku-4-5" }).pipe(
+  Layer.provide(AnthropicClient.layerConfig({ apiKey: Config.redacted("ANTHROPIC_API_KEY") })),
+  Layer.provide(FetchHttpClient.layer),
+);
+
+const Kernel = Layer.mergeAll(
+  AI.KernelMemory.pipe(Layer.provide(Model)),          // the loop
+  AI.ChatsObserver.pipe(Layer.provide(AI.ChatsMemory())), // observability (optional)
+);
+
+const Env = Layer.mergeAll(
+  EngineerLive.pipe(
+    Layer.provide(Kernel),
+    Layer.provide(GrepLocal),                          // tool physics
+    Layer.provide(CodingLive.pipe(Layer.provide(GrepLocal))), // skills
+  ),
+  RuntimeContext.phantom,                              // this process is the host
+);
+
+// optional: codemode — grants presented as one typed `eval` tool
+// Layer.provide(AI.CodeModeEffect())  |  AI.CodeModeAsync()
+
+// workspaces for coding agents
+// Layer.provide(Workspace.perRun({ remote: GitHub.remote(repo) })),
+// Layer.provide(Git.WorkspacesWorktree({ root: ".alchemy/workspaces" })),
+```
+
+## Observability
+
+```typescript
+const chats = yield* AI.Chats;
+yield* chats.list();                       // every run: status, ticks, parent
+const snap = yield* chats.snapshot(id);    // log + in-flight sampling
+AI.toUIMessages(snap.log, snap.streaming); // → AI SDK UIMessage[]
+AI.makeChunkTranslator();                  // → UIMessageChunk SSE stream
+```

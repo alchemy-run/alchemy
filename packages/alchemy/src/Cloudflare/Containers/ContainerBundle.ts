@@ -11,6 +11,7 @@ import {
 } from "../../Bundle/TempRoot.ts";
 import { Docker } from "../../Docker/Docker.ts";
 import { isInlineDockerfile } from "../../Docker/Dockerfile.ts";
+import { hostStatementsFor } from "../../Docker/Host.ts";
 import * as Output from "../../Output.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Stack } from "../../Stack.ts";
@@ -111,11 +112,24 @@ export const createContainerApplicationName = (
 export const validateContainerImageProps = (
   props: Pick<
     AnyContainerApplicationProps,
-    "main" | "image" | "dockerfile" | "context"
+    "main" | "image" | "dockerfile" | "context" | "imageStatements"
   >,
 ): Effect.Effect<void> => {
   const df = props.dockerfile;
   const hasInline = df !== undefined && isInlineDockerfile(df);
+  const contributed =
+    (props.imageStatements?.amd64.length ?? 0) > 0 ||
+    (props.imageStatements?.arm64.length ?? 0) > 0;
+  if (contributed && !props.main) {
+    // bindings contributed Dockerfile fragments (Docker.Host install),
+    // but this container ships an image Alchemy doesn't generate — the
+    // contribution would be silently dropped, so fail loud instead
+    return Effect.die(
+      new Error(
+        "A binding contributed Dockerfile statements (via Docker.Host.install), but this container does not generate its image — only `main` (Effect-native) containers accept contributions. Install the binding's system dependencies in your own image, or switch to `main`.",
+      ),
+    );
+  }
   if (props.main) {
     if (props.image !== undefined && df !== undefined) {
       return Effect.die(
@@ -211,14 +225,18 @@ export const containerEnvPreamble = (
  * Build the final Dockerfile used for a generated (Effect-native) container
  * image. Starts from the environment preamble (see
  * {@link containerEnvPreamble}) — or a runtime-appropriate default base —
- * then appends the statements that copy the bundled program and set the
- * entrypoint.
+ * splices in any binding-contributed statements (already rendered for
+ * the target architecture — see `ContainerImage`), then appends the
+ * statements that copy the bundled program and set the entrypoint.
+ * Contributed statements sit BEFORE the app bundle so their layers
+ * cache across code changes.
  */
 export const buildFinalDockerfile = (
   envPreamble: string | undefined,
   runtime: "bun" | "node",
   external: string[] = [],
   autoInstallExternals = true,
+  statements: ReadonlyArray<string> = [],
 ): string => {
   const base =
     envPreamble ??
@@ -232,6 +250,7 @@ export const buildFinalDockerfile = (
   return [
     base,
     "",
+    ...statements.flatMap((statement) => [statement.trim(), ""]),
     "WORKDIR /app",
     ...(installStep ? [installStep, ""] : []),
     "COPY index.mjs /app/index.mjs",
@@ -397,6 +416,13 @@ await bootstrap(entrypoint, ${JSON.stringify({
 export const prepareContainerBuildContext = Effect.fn(function* (
   id: string,
   news: AnyContainerApplicationProps,
+  /**
+   * Target architecture for the rendered Dockerfile — selects the
+   * matching binding-contributed statements. The live deploy always
+   * builds `amd64` (Cloudflare's container platform); the local dev
+   * build passes the platform it resolved from `dev.platform`.
+   */
+  arch: "amd64" | "arm64" = "amd64",
 ) {
   const { dotAlchemy } = yield* AlchemyContext;
   const docker = yield* Docker;
@@ -420,6 +446,7 @@ export const prepareContainerBuildContext = Effect.fn(function* (
     runtime,
     news.external,
     news.autoInstallExternals,
+    hostStatementsFor(news, arch),
   );
   const [bundle] = yield* Effect.all(
     [

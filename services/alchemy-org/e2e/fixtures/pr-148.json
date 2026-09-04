@@ -1,0 +1,82 @@
+{
+  "repo": "alchemy-run/test-alchemy",
+  "number": 148,
+  "title": "Add sumToN helper",
+  "body": "Adds a small helper that sums the first `n` positive integers.\n\nCloses #12.",
+  "state": "open",
+  "author": {
+    "login": "sam-goodwin",
+    "avatarUrl": "https://avatars.githubusercontent.com/u/38672686?v=4"
+  },
+  "htmlUrl": "https://github.com/alchemy-run/test-alchemy/pull/148",
+  "createdAt": "2026-08-19T08:54:48Z",
+  "updatedAt": "2026-08-27T23:14:05Z",
+  "head": {
+    "ref": "flow-test-deploy",
+    "sha": "7d7584e079210b63600b45f0a27e480e3c5b3064",
+    "repo": "alchemy-run/test-alchemy"
+  },
+  "base": {
+    "ref": "main",
+    "repo": "alchemy-run/test-alchemy"
+  },
+  "checkoutRef": "flow-test-deploy",
+  "additions": 8,
+  "deletions": 0,
+  "changedFiles": 1,
+  "commits": 1,
+  "mergeable": true,
+  "timeline": [
+    {
+      "kind": "review",
+      "id": 2001,
+      "author": {
+        "login": "alchemy-review-bot",
+        "avatarUrl": ""
+      },
+      "state": "CHANGES_REQUESTED",
+      "body": "The loop excludes `n` itself, so `sumToN(5)` returns 10 instead of 15.",
+      "createdAt": "2026-08-19T08:55:07Z",
+      "htmlUrl": "https://github.com/alchemy-run/test-alchemy/pull/148#pullrequestreview-4970310543",
+      "comments": [
+        {
+          "id": 3001,
+          "author": {
+            "login": "alchemy-review-bot",
+            "avatarUrl": ""
+          },
+          "path": "flow-test/sum.ts",
+          "line": 4,
+          "body": "The loop condition `i < n` should be `i <= n` to include n itself. Currently this sums integers from 1 to n-1, not 1 to n. For example, `sumToN(5)` would return 10 (1+2+3+4) instead of 15 (1+2+3+4+5).",
+          "diffHunk": "@@ -0,0 +1,8 @@\n+/** Sums the first n positive integers. */\n+export function sumToN(n: number): number {\n+  let total = 0;\n+  for (let i = 1; i < n; i++) {",
+          "createdAt": "2026-08-19T08:55:07Z",
+          "htmlUrl": "https://github.com/alchemy-run/test-alchemy/pull/148#discussion_r3811506339"
+        }
+      ]
+    },
+    {
+      "kind": "comment",
+      "id": 1001,
+      "author": {
+        "login": "sam-goodwin",
+        "avatarUrl": "https://avatars.githubusercontent.com/u/38672686?v=4"
+      },
+      "body": "Pushed a fix for the off-by-one — PTAL @alchemy-review-bot.",
+      "createdAt": "2026-08-19T09:10:00Z",
+      "htmlUrl": "https://github.com/alchemy-run/test-alchemy/pull/148#issuecomment-1001"
+    },
+    {
+      "kind": "review",
+      "id": 2002,
+      "author": {
+        "login": "sam-goodwin",
+        "avatarUrl": "https://avatars.githubusercontent.com/u/38672686?v=4"
+      },
+      "state": "APPROVED",
+      "body": "Fixed in 7d7584e — thanks.",
+      "createdAt": "2026-08-20T10:00:00Z",
+      "htmlUrl": "https://github.com/alchemy-run/test-alchemy/pull/148#pullrequestreview-4990832765",
+      "comments": []
+    }
+  ]
+}

@@ -1,3 +1,4 @@
+.turbo
 node_modules/
 dist/
 /lib/
@@ -54,6 +55,7 @@ packages/cloudflare-runtime/src/rolldown/out/
 .turbo
 coverage
 test-results
+playwright-report
 .external
 .bundle-benchmark
 packages/alchemy/docs
@@ -79,3 +81,8 @@ examples/cloudflare-worker/src/scratch.ts
 .ai-workspace/
 /processes/
 .probe
+
+# research clones (analyzed, never committed)
+/vendor/
+
+.tool-output/

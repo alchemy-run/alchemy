@@ -1,0 +1,117 @@
+---
+title: Testing agents
+description: Script the model, run the real kernel and real tools offline, and assert whole multi-step flows deterministically.
+---
+
+The kernel's one requirement is a `LanguageModel` Layer — so a test
+provides a **scripted model** instead of a provider, and everything
+else runs for real: the actual kernel loop, actual charters, actual
+tool physics. No mocks of your own code, no network, milliseconds per
+test.
+
+## A scripted model
+
+A script is a list of responses, one per sampling. Each entry can be
+text (quiescence — the run answers and parks) or tool calls (the loop
+continues):
+
+```typescript
+const model = Model.make([
+  () => [
+    Model.toolCall("skill", { action: "activate", skill: "Coding" }),
+    Model.finish("tool-calls"),
+  ],
+  () => [
+    Model.toolCall("grep", { pattern: "one = 1", glob: "*.ts" }),
+    Model.finish("tool-calls"),
+  ],
+  () => [Model.text("implemented and verified"), Model.finish()],
+]);
+```
+
+The fixture also records every request it received (`model.calls`),
+so you can assert what the model *saw*: which tools were offered,
+what the system prompt contained, what a worker's task said.
+
+Alchemy doesn't ship the fixture yet (roadmap) — copy
+`services/alchemy-org/test/fixtures/ScriptedModel.ts` (~150 lines,
+streams script entries through the same wire a provider would).
+
+## Composing the test environment
+
+Identical to production, with the model swapped:
+
+```typescript
+const Kernel = AI.KernelMemory.pipe(Layer.provide(model.layer));
+
+const AgentLayer = CodingAgent.make(charter).pipe(
+  Layer.provide(Layer.mergeAll(Kernel, LocalCoding)),
+);
+
+const Environment = Layer.mergeAll(AgentLayer, RuntimeContext.phantom).pipe(
+  Layer.provide(BunServices.layer),
+);
+
+const answer = yield* Effect.gen(function* () {
+  const agent = yield* CodingAgent;
+  return yield* agent.dispatch("Change one from 1 to 10 and verify it.");
+}).pipe(Effect.provide(Environment));
+```
+
+## Assert behavior, world, and wire
+
+A good agent test checks three surfaces:
+
+```typescript
+// 1. the ANSWER the caller received
+expect(answer).toBe("implemented and verified");
+
+// 2. the WORLD the tools actually changed (real physics ran)
+expect(yield* fs.readFileString(file)).toContain("one = 10");
+
+// 3. the WIRE the model saw — mention-is-presence, activation, tasks
+expect(model.calls[0]!.tools.map((t) => t.name)).toEqual(["spawn", "skill"]);
+expect(model.calls[1]!.tools.map((t) => t.name)).toContain("editFile");
+expect(Model.promptText(model.calls[2]!)).toContain("SHA-256:");
+```
+
+The wire assertions are the ones unique to this architecture: before
+the skill activates, `editFile` must not exist; after it does, it
+must. Capability-by-omission is testable.
+
+## Script functions see the request
+
+A script entry receives the request, so steps can react to earlier
+results — here, extracting the digest a previous `readFile` returned:
+
+```typescript
+(options) => {
+  const digest = /SHA-256: ([a-f0-9]{64})/.exec(Model.promptText(options))![1]!;
+  return [
+    Model.toolCall("editFile", {
+      path: "src/one.ts",
+      expectedDigest: digest,
+      edits: [{ oldString: "one = 1", newString: "one = 10" }],
+    }),
+    Model.finish("tool-calls"),
+  ];
+},
+```
+
+## Faking whole agents
+
+Unit-testing a supervisor doesn't need its workers to think — an
+agent's tag can be satisfied by a stub Layer:
+
+```typescript
+const FakeEngineer = Layer.succeed(Engineer, Engineer.of({
+  dispatch: () => Effect.succeed({ pr: ".../pull/1" }),
+  send: () => Effect.void, steer: () => Effect.void,
+  settle: () => Effect.void, interrupt: () => Effect.void,
+}));
+```
+
+Scripted model for the agent under test, stubs for its delegates:
+each layer of the org tests in isolation. For live-model smoke tests,
+the same composition with a real provider layer and generous timeouts
+— see [Testing](/testing) for the repo-wide conventions.

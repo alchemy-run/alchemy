@@ -672,6 +672,55 @@ export default defineConfig({
           ],
         },
         {
+          label: "Agents",
+          items: [
+            { label: "Overview", link: "/agents" },
+            {
+              label: "Tutorial",
+              items: [{ autogenerate: { directory: "agents/tutorial" } }],
+            },
+            {
+              label: "Concepts",
+              items: [
+                { label: "Agents & charters", link: "/agents/concepts/agents" },
+                { label: "Tools & parameters", link: "/agents/concepts/tools" },
+                { label: "Skills", link: "/agents/concepts/skills" },
+                { label: "Delegation", link: "/agents/concepts/delegation" },
+                { label: "Runs & threads", link: "/agents/concepts/runs" },
+                { label: "Workspaces", link: "/agents/concepts/workspaces" },
+                { label: "The kernel", link: "/agents/concepts/kernel" },
+                {
+                  label: "Observability",
+                  link: "/agents/concepts/observability",
+                },
+                {
+                  label: "Roles & missions",
+                  link: "/agents/concepts/roles-and-missions",
+                },
+                {
+                  label: "Human in the loop",
+                  link: "/agents/concepts/human-in-the-loop",
+                },
+              ],
+            },
+            {
+              label: "Guides",
+              items: [
+                { label: "Testing agents", link: "/agents/guides/testing" },
+                {
+                  label: "Writing prose",
+                  link: "/agents/guides/writing-prose",
+                },
+                {
+                  label: "GitHub events",
+                  link: "/agents/guides/github-events",
+                },
+              ],
+            },
+            { label: "Cheatsheet", link: "/agents/cheatsheet" },
+          ],
+        },
+        {
           label: "Cloudflare",
           items: [
             { label: "Overview", link: "/cloudflare" },

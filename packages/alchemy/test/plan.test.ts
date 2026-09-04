@@ -2632,6 +2632,54 @@ describe("whole-resource refs resolve to the upstream's stable attributes", () =
   );
 });
 
+describe("a replacement without attributes exposes nothing stable", () => {
+  // Regression: a deploy that dies mid-replacement (e.g. credentials
+  // expiring during the create) leaves the row at `replacing` with NO
+  // attr snapshot. `withStables` used to fabricate a stables bag from
+  // the declared keys anyway (`{ stableString: undefined, … }`) — and
+  // the Output proxy serves any key PRESENT in the bag as a KNOWN
+  // value, so a downstream `Output.map` lambda executed against
+  // `undefined` and crashed the whole next plan with a TypeError
+  // (`imageArn.replace` on undefined, from a MicroVM IAM binding).
+  // Nothing is stable when nothing was captured: downstream references
+  // must stay unresolved expressions for Apply to re-evaluate.
+  test(
+    "a downstream Output.map over the missing attr stays unresolved instead of running on undefined",
+    Effect.gen(function* () {
+      yield* seed({
+        A: createReplacingState({
+          logicalId: "A",
+          props: { string: "A" },
+          // the failed create never captured attributes
+          attr: {},
+          old: createTestResourceState({
+            logicalId: "A",
+            status: "created",
+            props: { string: "A" },
+            attr: { string: "A", stableString: "A", stableArray: ["A"] },
+          }),
+        }),
+      });
+
+      const plan = yield* Effect.gen(function* () {
+        // `string` changed -> A's diff answers update + declared stables,
+        // the exact path that used to fabricate the undefined-stables bag
+        const A = yield* TestResource("A", { string: "B" });
+        yield* TestResource("B", {
+          // ran on `undefined` (and threw) when the planner served the
+          // missing attr as a known value
+          string: A.stableString.pipe(Output.map((s) => s.toUpperCase())),
+        });
+      }).pipe(makePlan);
+
+      expect(plan.resources.A!.action).toBe("replace");
+      expect(plan.resources.B!.action).toBe("create");
+      // the reference is still evaluable for Apply — not a poisoned value
+      expect(Output.isExpr((plan.resources.B as any).props.string)).toBe(true);
+    }),
+  );
+});
+
 describe("diff.stables overrides provider.stables", () => {
   // `A` is an OverrideStablesResource: provider `stables` is
   // ["providerStable", "sharedStable"], but its `diff` returns

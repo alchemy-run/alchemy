@@ -1,0 +1,59 @@
+{
+  "name": "alchemy-vscode",
+  "displayName": "Alchemy Prose",
+  "description": "Markdown syntax highlighting inside alchemy prose templates — .make`…`, .prose`…`, .say`…`, .fragment`…`",
+  "version": "0.0.1",
+  "private": true,
+  "license": "Apache-2.0",
+  "publisher": "alchemy-run",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alchemy-run/alchemy.git",
+    "directory": "packages/alchemy-vscode"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "keywords": [
+    "alchemy",
+    "markdown",
+    "template literal",
+    "syntax highlighting"
+  ],
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "scripts": {
+    "build": "echo \"alchemy-vscode: grammar-only extension, nothing to build\"",
+    "inspect": "bun scripts/inspect.ts",
+    "check": "bun scripts/inspect.ts --check",
+    "link": "bash ./scripts/link.sh",
+    "package": "bunx --bun @vscode/vsce package --no-dependencies --out alchemy-vscode.vsix"
+  },
+  "contributes": {
+    "grammars": [
+      {
+        "scopeName": "inline.alchemy-prose",
+        "path": "./syntaxes/alchemy-prose.injection.json",
+        "injectTo": [
+          "source.ts",
+          "source.tsx",
+          "source.js",
+          "source.js.jsx"
+        ],
+        "embeddedLanguages": {
+          "meta.embedded.block.alchemy-prose": "markdown",
+          "meta.embedded.line.alchemy-splice": "typescript",
+          "meta.embedded.block.typescript": "typescript",
+          "meta.embedded.block.javascript": "javascript",
+          "meta.embedded.block.json": "json",
+          "meta.embedded.block.shellscript": "shellscript"
+        }
+      }
+    ]
+  },
+  "devDependencies": {
+    "vscode-oniguruma": "^2.0.1",
+    "vscode-textmate": "^9.3.2"
+  }
+}

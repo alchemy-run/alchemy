@@ -726,6 +726,18 @@
       "worker": "./src/core/RuntimeWorker.ts",
       "import": "./dist/core/node/RuntimeWorker.mjs"
     },
+    "./core/S3Gateway": {
+      "types": "./dist/core/node/S3Gateway.d.mts",
+      "bun": "./src/core/S3Gateway.ts",
+      "worker": "./src/core/S3Gateway.ts",
+      "import": "./dist/core/node/S3Gateway.mjs"
+    },
+    "./core/S3GatewayProtocol": {
+      "types": "./dist/core/node/S3GatewayProtocol.shared.d.mts",
+      "bun": "./src/core/S3GatewayProtocol.shared.ts",
+      "worker": "./src/core/S3GatewayProtocol.shared.ts",
+      "import": "./dist/core/node/S3GatewayProtocol.shared.mjs"
+    },
     "./core/workerd": {
       "types": "./dist/core/node/workerd/index.d.mts",
       "bun": "./src/core/workerd/index.ts",

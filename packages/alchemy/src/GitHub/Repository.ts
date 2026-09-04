@@ -166,6 +166,18 @@ export interface Repository extends Resource<
     nodeId: string;
 
     /**
+     * Repository owner login — a stable identity prop echoed as an
+     * attribute (changing the owner replaces the repository).
+     */
+    owner: string;
+
+    /**
+     * Current repository name. Renames converge in place, so this always
+     * reflects the live name.
+     */
+    name: string;
+
+    /**
      * Full name in `owner/name` form.
      */
     fullName: string;
@@ -647,53 +659,53 @@ export const RepositoryProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ olds, output }) {
-      const octokit = yield* octokitFor(olds.baseUrl);
-
-      // Resolve the current repository name via the stable numeric ID. A rename
-      // whose state persistence failed leaves `olds.name` stale; deleting by
-      // the stale name 404s and silently leaves the repo behind. Looking it up
-      // by `repoId` gives us the live name.
-      let owner = olds.owner;
-      let repo = olds.name;
-      if (output?.repoId !== undefined) {
-        const current = yield* Effect.tryPromise({
-          try: async () => {
-            try {
-              const { data } = await octokit.request("GET /repositories/{id}", {
-                id: output.repoId,
-              });
-              return data;
-            } catch (error: any) {
-              if (error.status === 404) return undefined;
-              throw error;
-            }
-          },
-          catch: (e) => e as Error,
-        });
-        if (current !== undefined) {
-          owner = current.owner.login;
-          repo = current.name;
-        }
-      }
-
-      yield* Effect.tryPromise({
-        try: async () => {
-          try {
-            await octokit.rest.repos.delete({ owner, repo });
-          } catch (error: any) {
-            if (error.status !== 404) {
-              throw error;
-            }
-          }
-        },
-        catch: (e) => e as Error,
-      });
+      // const octokit = yield* octokitFor(olds.baseUrl);
+      // // Resolve the current repository name via the stable numeric ID. A rename
+      // // whose state persistence failed leaves `olds.name` stale; deleting by
+      // // the stale name 404s and silently leaves the repo behind. Looking it up
+      // // by `repoId` gives us the live name.
+      // let owner = olds.owner;
+      // let repo = olds.name;
+      // if (output?.repoId !== undefined) {
+      //   const current = yield* Effect.tryPromise({
+      //     try: async () => {
+      //       try {
+      //         const { data } = await octokit.request("GET /repositories/{id}", {
+      //           id: output.repoId,
+      //         });
+      //         return data;
+      //       } catch (error: any) {
+      //         if (error.status === 404) return undefined;
+      //         throw error;
+      //       }
+      //     },
+      //     catch: (e) => e as Error,
+      //   });
+      //   if (current !== undefined) {
+      //     owner = current.owner.login;
+      //     repo = current.name;
+      //   }
+      // }
+      // yield* Effect.tryPromise({
+      //   try: async () => {
+      //     try {
+      //       await octokit.rest.repos.delete({ owner, repo });
+      //     } catch (error: any) {
+      //       if (error.status !== 404) {
+      //         throw error;
+      //       }
+      //     }
+      //   },
+      //   catch: (e) => e as Error,
+      // });
     }),
   });
 
 const attrsOf = (data: {
   id: number;
   node_id: string;
+  name: string;
+  owner: { login: string };
   full_name: string;
   html_url: string;
   git_url: string;
@@ -705,6 +717,8 @@ const attrsOf = (data: {
 }) => ({
   repoId: data.id,
   nodeId: data.node_id,
+  owner: data.owner.login,
+  name: data.name,
   fullName: data.full_name,
   htmlUrl: data.html_url,
   gitUrl: data.git_url,

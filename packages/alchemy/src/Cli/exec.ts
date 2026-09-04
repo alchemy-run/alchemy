@@ -18,9 +18,10 @@ import { StackModuleLoader } from "../Alchemist/Session.ts";
 import { ArtifactStore, createArtifactStore } from "../Artifacts.ts";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
 import { ProfileStoreLive } from "../Auth/Profile.ts";
+import * as RpcProviderProxy from "../Dev/RpcProviderProxy.ts";
+import * as LowFdReserve from "../Dev/LowFdReserve.ts";
+import { forwardSidecarLogs } from "../Dev/RpcSpawner.ts";
 import { makeDevLogOpener } from "../Local/DevLog.ts";
-import * as RpcProviderProxy from "../Local/RpcProviderProxy.ts";
-import { forwardSidecarLogs } from "../Local/RpcSpawner.ts";
 import { TelemetryLive } from "../Telemetry/Layer.ts";
 import { initialCwd } from "../Util/Node.ts";
 import { PlatformServices } from "../Util/PlatformServices.ts";
@@ -56,7 +57,9 @@ const services = Layer.mergeAll(
   ),
   Layer.provideMerge(
     Layer.mergeAll(
-      PlatformServices,
+      // Every spawn from this `bun --watch` process goes through the low-fd
+      // guard; see Dev/LowFdReserve.ts.
+      Layer.provideMerge(LowFdReserve.layer, PlatformServices),
       FetchHttpClient.layer,
       ConfigProvider.layer(ConfigProvider.fromEnv()),
     ),

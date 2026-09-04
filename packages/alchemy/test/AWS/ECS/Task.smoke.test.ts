@@ -45,7 +45,7 @@ const collectorWorker = () =>
 
 // Full end-to-end: build + push the bundled Task image, run it on Fargate
 // behind an Alchemy-managed public ALB, and prove over HTTP that (a) the
-// `{ fetch }` handler is served and (b) the `ServerHost.run` background loop is
+// `{ fetch }` handler is served and (b) the `Host.run` background loop is
 // actually executing inside the deployed container (`/ticks` keeps climbing).
 //
 // This is the real-deploy regression for #706. Docker/ECR + Fargate placement
@@ -214,7 +214,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
       expect(health.status).toBe(200);
       expect(yield* health.json).toEqual({ ok: true });
 
-      // Prove the ServerHost.run background loop is executing in-container:
+      // Prove the Host.run background loop is executing in-container:
       // the tick counter climbs between two reads.
       const readTicks = HttpClient.get(`${url}/ticks`).pipe(
         Effect.flatMap((res) => res.json),
