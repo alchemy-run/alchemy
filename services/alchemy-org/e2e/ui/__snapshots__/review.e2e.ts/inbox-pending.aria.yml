@@ -1,7 +1,6 @@
-- text: review proposed awaiting you
-- button /Reviewer:alchemy-run\/test-alchemy#\d+/
-- text: "/request changes on #\\d+ \\(1 inline comment\\)/"
-- button "show details"
-- button "post review"
-- button "ask for changes"
-- button "decline"
+- dialog "proposals":
+  - text: 1 awaiting you
+  - 'link /request changes on #\d+ \(1 inline comment\)/':
+    - /url: /alchemy-run/test-alchemy/pull/148/proposals
+  - text: awaiting you
+  - button "details"

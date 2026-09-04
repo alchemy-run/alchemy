@@ -5,6 +5,7 @@ import {
   GetIssueHttp,
   GetPullRequestHttp,
   ListIssueCommentsHttp,
+  ListPullRequestFilesHttp,
   ListPullRequestReviewCommentsHttp,
   ListPullRequestReviewsHttp,
   ListPullRequestsHttp,
@@ -29,8 +30,11 @@ export const GitHubWorker = Layer.mergeAll(
   GetIssueHttp,
   GetPullRequestHttp,
   // the pull-request SURFACE (Routes.ts): conversation, verdicts, and
-  // inline comments, read for the operator's review page
+  // inline comments, read for the operator's review page — and the
+  // files, paged, for its diff (and the Reviewer's, when GitHub refuses
+  // to serve a big PR's diff whole)
   ListIssueCommentsHttp,
+  ListPullRequestFilesHttp,
   ListPullRequestReviewCommentsHttp,
   ListPullRequestReviewsHttp,
   ListPullRequestsHttp,

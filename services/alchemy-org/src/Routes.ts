@@ -7,8 +7,11 @@ import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpRouter from "effect/unstable/http/HttpRouter";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
@@ -16,18 +19,22 @@ import { Engineer } from "./coding/Engineer.ts";
 import { buildBoard } from "./github/Board.ts";
 import { makeProposalExecutor } from "./github/ProposalActions.ts";
 import {
+  Proposals,
+  type Proposal,
+  type ProposalStatus,
+} from "./github/Proposals.ts";
+import { PublishToken } from "./github/PublishToken.ts";
+import {
+  buildPullRequestFilesPage,
   buildPullRequestView,
+  PULL_FILES_PAGE_SIZE,
   pullRequestRef,
   pullSessionKey,
+  type PullRequestFilesPage,
   type PullRequestView,
 } from "./github/PullRequest.ts";
 import { connected, primary, publishTargets } from "./github/Repos.ts";
 import { Reviewer } from "./review/Reviewer.ts";
-import {
-  type Proposal,
-  Proposals,
-  type ProposalStatus,
-} from "./github/Proposals.ts";
 
 /** `${term}:${key}` → the session it names (the key may contain `:`). */
 const parseSessionId = (id: string): { term: string; key: string } => {
@@ -106,6 +113,10 @@ export const routes = Effect.gen(function* () {
   // router build.
   const bot = yield* Effect.serviceOption(Reviewer);
   const engineer = yield* Effect.serviceOption(Engineer);
+  // OPTIONAL: the operator's GitHub identity (the avatar in the header)
+  // rides the same token the publish pair authenticates with; a
+  // placement without one answers `null` and the UI shows a plain mark
+  const publishToken = yield* Effect.serviceOption(PublishToken);
   const proposals = yield* Proposals;
   // the executor performs ACCEPTED proposals — the one place agent
   // intent becomes a GitHub write, and it runs on the operator's click
@@ -116,6 +127,7 @@ export const routes = Effect.gen(function* () {
   const listReviews = yield* GitHub.ListPullRequestReviews(primary);
   const listReviewComments =
     yield* GitHub.ListPullRequestReviewComments(primary);
+  const listPullFiles = yield* GitHub.ListPullRequestFiles(primary);
 
   // the CONNECTED repositories — static code (Repos.ts), reflected
   // read-only; identities resolve without provisioning
@@ -544,6 +556,72 @@ export const routes = Effect.gen(function* () {
   );
 
   /**
+   * The PULL REQUEST's FILES, one page at a time (`?page=k`, 100 per
+   * page, `next: null` on the last) for the "Files changed" view — each
+   * file with its own hunks, which the UI renders with `@pierre/diffs`
+   * as the pages land. Paged through `pulls.listFiles` rather than
+   * fetched whole as GitHub's unified diff: `pulls.get` as
+   * `application/vnd.github.diff` refuses any PR over 20 000 lines or
+   * 300 files (`too_large`), and a review of a large PR is exactly when
+   * the operator needs the view. Cached like the page (one operator,
+   * one PR, polling) — a head push shows within the TTL.
+   */
+  const pullFilesCache = new Map<
+    string,
+    { at: number; value: PullRequestFilesPage }
+  >();
+  const pullRequestFiles = HttpRouter.add(
+    "GET",
+    "/api/prs/:number/files",
+    Effect.gen(function* () {
+      const number = yield* pullNumber;
+      if (number === undefined) {
+        return yield* HttpServerResponse.json(
+          { error: "bad pull request number" },
+          { status: 400 },
+        );
+      }
+      const request = yield* HttpServerRequest;
+      const pageRaw = Number(
+        new URL(request.url, "http://org").searchParams.get("page") ?? "1",
+      );
+      const page =
+        Number.isInteger(pageRaw) && pageRaw >= 1 ? pageRaw : undefined;
+      if (page === undefined) {
+        return yield* HttpServerResponse.json(
+          { error: "bad page" },
+          { status: 400 },
+        );
+      }
+      const key = `${number}:${page}`;
+      const now = Date.now();
+      const cached = pullFilesCache.get(key);
+      const result =
+        cached !== undefined && now - cached.at < 15_000
+          ? cached.value
+          : yield* listPullFiles({
+              pull_number: number,
+              per_page: PULL_FILES_PAGE_SIZE,
+              page,
+            }).pipe(
+              Effect.map((files) => buildPullRequestFilesPage(files, page)),
+              Effect.tap((value) =>
+                Effect.sync(() => pullFilesCache.set(key, { at: now, value })),
+              ),
+              Effect.catch((error) =>
+                Effect.succeed({
+                  error: `${error.operation}: ${error.message}`,
+                }),
+              ),
+            );
+      if ("error" in result) {
+        return yield* HttpServerResponse.json(result, { status: 404 });
+      }
+      return yield* HttpServerResponse.json(result);
+    }),
+  );
+
+  /**
    * The PR machine's CHECKOUT door: converge the tree on the machine
    * every session of this PR shares (`owner/repo#N` — the machine key)
    * onto the PR's head as it is NOW. `fresh: true` re-fetches, so this
@@ -787,6 +865,59 @@ export const routes = Effect.gen(function* () {
     }),
   );
 
+  /** Who the org acts as on GitHub — the token's user, for the header's
+   *  avatar. Cached isolate-wide (plain data, see the PR-list cache
+   *  above for why not `cachedWithTTL`); `null` when there is no token
+   *  or GitHub is unreachable — the UI degrades to a generic mark. */
+  type Operator = {
+    login: string;
+    name: string | null;
+    avatarUrl: string;
+    url: string;
+  } | null;
+  let operatorCache: { at: number; value: Operator } | undefined;
+  const whoami = HttpRouter.add(
+    "GET",
+    "/api/me",
+    Effect.gen(function* () {
+      if (Option.isNone(publishToken)) {
+        return yield* HttpServerResponse.json(null);
+      }
+      const now = Date.now();
+      if (operatorCache !== undefined && now - operatorCache.at < 600_000) {
+        return yield* HttpServerResponse.json(operatorCache.value);
+      }
+      const token = yield* publishToken.value;
+      const value: Operator = yield* Effect.gen(function* () {
+        const client = yield* HttpClient.HttpClient;
+        const response = yield* client.get("https://api.github.com/user", {
+          headers: {
+            accept: "application/vnd.github+json",
+            authorization: `Bearer ${Redacted.value(token)}`,
+            "user-agent": "alchemy-org",
+          },
+        });
+        const user = (yield* response.json) as {
+          login: string;
+          name: string | null;
+          avatar_url: string;
+          html_url: string;
+        };
+        return {
+          login: user.login,
+          name: user.name,
+          avatarUrl: user.avatar_url,
+          url: user.html_url,
+        };
+      }).pipe(
+        Effect.provide(FetchHttpClient.layer),
+        Effect.catch(() => Effect.succeed(null)),
+      );
+      operatorCache = { at: now, value };
+      return yield* HttpServerResponse.json(value);
+    }),
+  );
+
   const status = HttpRouter.add(
     "GET",
     "/api/status",
@@ -821,11 +952,13 @@ export const routes = Effect.gen(function* () {
     removeSession,
     requestReview,
     pullRequest,
+    pullRequestFiles,
     pullRequestCheckout,
     listProposals,
     acceptProposal,
     rejectProposal,
     reviseProposal,
+    whoami,
     status,
   );
 });

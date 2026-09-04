@@ -1,4 +1,4 @@
-- text: proposed by agents review proposed awaiting you
+- text: 1 awaiting you Review proposed awaiting you
 - button /Reviewer:alchemy-run\/test-alchemy#\d+/
 - text: "/request changes on #\\d+ \\(1 inline comment\\) REQUEST CHANGES/"
 - paragraph:

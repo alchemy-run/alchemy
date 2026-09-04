@@ -50,8 +50,11 @@ export interface Source {
   readonly "~alchemy/Kind": "Source";
   /** `Kind/Name` of the owning term — the stable key the path is bound under. */
   readonly "~alchemy/Name": string;
-  /** `import.meta.url` as seen by the process that constructed the term. */
-  readonly url: string;
+  /**
+   * `import.meta.url` as seen by the process that constructed the term.
+   * `undefined` inside runtimes that do not populate it (workerd).
+   */
+  readonly url: string | undefined;
   /**
    * The path rendered into prose — set by {@link resolveSources} (plan,
    * over the FileSystem) or {@link bindSource} (runtime, from the env).
@@ -86,7 +89,8 @@ export const renderSource = (source: Source): string =>
  * Resolve a source's path from its `file:` URL: relative to the nearest
  * enclosing `package.json` directory. Idempotent — a source already
  * resolved (or bound) is left alone. Not a `file:` URL (a bundle's
- * `import.meta.url`) resolves to nothing.
+ * `import.meta.url`, or `undefined` where the runtime leaves it unset)
+ * resolves to nothing.
  */
 export const resolveSource = (
   source: Source,
@@ -97,7 +101,9 @@ export const resolveSource = (
 > =>
   Effect.gen(function* () {
     if (source.path !== undefined) return source.path;
-    if (!source.url.startsWith("file:")) return undefined;
+    if (typeof source.url !== "string" || !source.url.startsWith("file:")) {
+      return undefined;
+    }
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const file = yield* path

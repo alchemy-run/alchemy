@@ -1,9 +1,27 @@
-import { File, PatchDiff, type BaseCodeOptions } from "@pierre/diffs/react";
-import { Component, memo, useMemo, type ReactNode } from "react";
+import { CODE_THEME, ensureCodeTheme } from "@/lib/code-theme";
+import type { DiffLineAnnotation, FileDiffMetadata } from "@pierre/diffs";
+import {
+  File,
+  FileDiff,
+  PatchDiff,
+  type BaseCodeOptions,
+} from "@pierre/diffs/react";
+import { cn } from "@/lib/utils";
+import { Check, Copy } from "lucide-react";
+import {
+  Component,
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 
 /**
  * Code + diff rendering on @pierre/diffs — Shiki-highlighted, shadow
- * DOM–scoped, space-efficient. Two cards:
+ * DOM–scoped, space-efficient. Three cards:
  *
  * - {@link CodeCard}: a highlighted code snippet (markdown fenced
  *   blocks, tool bodies). No header, no line numbers, wrapped — the
@@ -11,8 +29,18 @@ import { Component, memo, useMemo, type ReactNode } from "react";
  * - {@link DiffCard}: a unified diff rendered from a patch string
  *   (ReadDiff tool output) — line numbers, word-level inline
  *   highlights, compact hunk separators.
+ * - {@link FileDiffCard}: ONE parsed file of a PR's diff, with the
+ *   review's inline comments drawn on their lines — the "Files
+ *   changed" page.
  *
- Markdown language tag → file extension (Shiki detects by name). */
+ * Every card is the docs' walnut code surface, in light mode and dark
+ * alike (`lib/code-theme.ts`) — the renderer lives in a shadow root
+ * where the page's tokens can't reach, so it is told the theme
+ * outright, and the chrome around it (`code-surface`) is painted to
+ * match.
+ */
+
+/** Markdown language tag → file extension (Shiki detects by name). */
 const EXTENSION: Record<string, string> = {
   typescript: "ts",
   ts: "ts",
@@ -47,35 +75,92 @@ const EXTENSION: Record<string, string> = {
   rb: "rb",
 };
 
-const BASE: BaseCodeOptions = {
-  theme: "pierre-dark",
+ensureCodeTheme();
+
+/** The renderer's base options — one theme, whatever the page shows. */
+const BASE_OPTIONS: BaseCodeOptions = {
+  theme: CODE_THEME,
   themeType: "dark",
 };
+const useBaseOptions = (): BaseCodeOptions => BASE_OPTIONS;
 
-/** A highlighted snippet — fenced markdown blocks, inline tool code.
- */
+/** The frame every card shares: the walnut surface, its hairline. */
+const CARD = "code-surface overflow-hidden rounded-md border text-[13px]";
+
+/** Copy `text` to the clipboard — GitHub's snippet button: it shows
+ *  on hover (always, once focused), and turns into a check for a
+ *  moment after copying. */
+export const CopyButton = ({
+  text,
+  className,
+  label = "Copy code",
+}: {
+  text: string;
+  className?: string;
+  label?: string;
+}) => {
+  const [copied, setCopied] = useState(false);
+  const timer = useRef<number>(0);
+  useEffect(() => () => window.clearTimeout(timer.current), []);
+  const copy = useCallback(() => {
+    if (!navigator.clipboard?.writeText) return;
+    navigator.clipboard.writeText(text).then(
+      () => {
+        setCopied(true);
+        window.clearTimeout(timer.current);
+        timer.current = window.setTimeout(() => setCopied(false), 1_500);
+      },
+      () => {},
+    );
+  }, [text]);
+  const Icon = copied ? Check : Copy;
+  return (
+    <button
+      type="button"
+      aria-label={copied ? "Copied" : label}
+      title={copied ? "Copied" : label}
+      data-copied={copied || undefined}
+      onClick={copy}
+      className={cn(
+        // on the walnut surface, whatever the page's mode
+        "flex size-6 items-center justify-center rounded-md border border-code-border bg-code/90 text-code-muted shadow-xs backdrop-blur-sm hover:bg-code-border hover:text-code-foreground",
+        copied && "text-code-addition hover:text-code-addition",
+        className,
+      )}
+    >
+      <Icon className="size-3.5" />
+    </button>
+  );
+};
+
 export const CodeCard = memo(
   ({ code, language }: { code: string; language: string | undefined }) => {
+    const base = useBaseOptions();
+    const contents = code.replace(/\n$/, "");
     const file = useMemo(
       () => ({
         name: `snippet.${EXTENSION[language ?? ""] ?? language ?? "txt"}`,
-        contents: code.replace(/\n$/, ""),
+        contents,
       }),
-      [code, language],
+      [contents, language],
     );
     const options = useMemo(
       () => ({
-        ...BASE,
+        ...base,
         disableFileHeader: true,
         disableLineNumbers: true,
         overflow: "wrap" as const,
       }),
-      [],
+      [base],
     );
     return (
       <CodeBoundary fallback={code}>
-        <div className="my-2 overflow-hidden rounded-md border border-border text-[13px]">
+        <div className={cn(CARD, "group/code relative my-2")}>
           <File file={file} options={options} />
+          <CopyButton
+            text={contents}
+            className="absolute top-1.5 right-1.5 opacity-0 transition-opacity group-hover/code:opacity-100 focus-visible:opacity-100 data-[copied]:opacity-100"
+          />
         </div>
       </CodeBoundary>
     );
@@ -106,7 +191,7 @@ class CodeBoundary extends Component<
 
 /** A git-format patch can carry several files; `PatchDiff` renders
  *  exactly one — split on the `diff --git` boundaries. */
-const splitPatchFiles = (patch: string): string[] => {
+export const splitPatchFiles = (patch: string): string[] => {
   const starts = [...patch.matchAll(/^diff --git /gm)].map(
     (match) => match.index,
   );
@@ -118,23 +203,21 @@ const splitPatchFiles = (patch: string): string[] => {
 
 /** A unified diff from a patch string (git format), one file per card. */
 export const DiffCard = memo(({ patch }: { patch: string }) => {
+  const base = useBaseOptions();
   const files = useMemo(() => splitPatchFiles(patch), [patch]);
   const options = useMemo(
     () => ({
-      ...BASE,
+      ...base,
       diffStyle: "unified" as const,
       hunkSeparators: "metadata" as const,
       overflow: "scroll" as const,
     }),
-    [],
+    [base],
   );
   return (
     <CodeBoundary fallback={patch}>
       {files.map((file, index) => (
-        <div
-          key={index}
-          className="my-1 overflow-hidden rounded-md border border-border text-[13px]"
-        >
+        <div key={index} className={cn(CARD, "my-1")}>
           <PatchDiff patch={file} options={options} />
         </div>
       ))}
@@ -142,6 +225,48 @@ export const DiffCard = memo(({ patch }: { patch: string }) => {
   );
 });
 DiffCard.displayName = "DiffCard";
+
+/**
+ * One file of a pull request's diff (already parsed — see
+ * `parsePatchFiles`), unified, with the review's inline comments drawn
+ * under the lines they were left on. The renderer's own file header
+ * (name, change kind, +/−) is kept.
+ */
+export const FileDiffCard = <A,>({
+  file,
+  annotations,
+  renderAnnotation,
+  fallback,
+}: {
+  file: FileDiffMetadata;
+  annotations?: DiffLineAnnotation<A>[];
+  renderAnnotation?: (annotation: DiffLineAnnotation<A>) => ReactNode;
+  /** The raw text of this file's diff, shown if rendering throws. */
+  fallback: string;
+}) => {
+  const base = useBaseOptions();
+  const options = useMemo(
+    () => ({
+      ...base,
+      diffStyle: "unified" as const,
+      hunkSeparators: "line-info" as const,
+      overflow: "scroll" as const,
+    }),
+    [base],
+  );
+  return (
+    <CodeBoundary fallback={fallback}>
+      <div className={CARD}>
+        <FileDiff
+          fileDiff={file}
+          options={options}
+          lineAnnotations={annotations}
+          renderAnnotation={renderAnnotation}
+        />
+      </div>
+    </CodeBoundary>
+  );
+};
 
 /**
  * The ReadDiff tool prefixes the patch with a PR header; the diff

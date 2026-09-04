@@ -22,7 +22,13 @@ import {
   ToolInput,
   ToolOutput,
 } from "@/components/ai-elements/tool";
-import { ProposalCard, type Proposal } from "@/components/proposals";
+import { AppHeader } from "@/components/app-header";
+import {
+  ProposalCard,
+  ProposalRow,
+  type Proposal,
+  type ProposalTarget,
+} from "@/components/proposals";
 import {
   PullRequestOverview,
   type MachineState,
@@ -61,12 +67,26 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useAnchoredToggle } from "@/lib/anchor";
+import {
+  isPullSession,
+  isPullsLocation,
+  navigate,
+  overviewId,
+  pathOf,
+  PULLS_PATH,
+  pullNumberOf,
+  sessionOfId,
+  splitThreadKey,
+  viewFromLocation,
+  withTab,
+} from "@/lib/routes";
 import { cn } from "@/lib/utils";
 import { Ansi } from "@/lib/ansi";
 import type { UIMessage } from "ai";
 import { useAgent, useChat } from "alchemy/AI/React";
 import {
   AlarmClock,
+  ChevronDown,
   CircleDot,
   GitMerge,
   GitPullRequestArrow,
@@ -74,6 +94,7 @@ import {
   MessageSquareText,
   Pencil,
   Play,
+  Plus,
   RefreshCw,
   Square,
   SquareTerminal,
@@ -144,55 +165,13 @@ interface RepoInfo {
  *
  * VIEW IDS are chat ids (`Engineer:…`, `Reviewer:…`) plus one
  * synthetic kind, `pr:<owner>/<repo>#<n>` — the PR's overview page.
+ * URLs are GitHub-shaped paths over those ids (lib/routes.ts).
  */
-const splitThreadKey = (
-  key: string,
-): { session: string; thread: string | undefined } => {
-  const at = key.indexOf("::");
-  return at < 0
-    ? { session: key, thread: undefined }
-    : { session: key.slice(0, at), thread: key.slice(at + 2) };
-};
-
-/** A pull-request session key (`owner/repo#N`)? */
-const isPullSession = (session: string): boolean => /#\d+$/.test(session);
-
-/** `owner/repo#N` → N. */
-const pullNumberOf = (session: string): number =>
-  Number(session.match(/#(\d+)$/)?.[1]);
-
-/** The overview view id of a PR session. */
-const overviewId = (session: string): string => `pr:${session}`;
-
-const sessionOfId = (id: string | undefined): string | undefined => {
-  if (id === undefined) return undefined;
-  if (id.startsWith("Engineer:")) {
-    return splitThreadKey(id.slice("Engineer:".length)).session;
-  }
-  if (id.startsWith("Reviewer:")) {
-    return splitThreadKey(id.slice("Reviewer:".length)).session;
-  }
-  if (id.startsWith("pr:")) return id.slice("pr:".length);
-  return undefined;
-};
 
 /** A view id that belongs to the REVIEW activity (a PR session). */
 const isReviewId = (id: string | undefined): boolean => {
   const session = sessionOfId(id);
   return session !== undefined && isPullSession(session);
-};
-
-/** The hash names a view, or nothing — there is NO default session:
- *  merely mounting a chat view attaches a socket, which ADMITS the
- *  session server-side, so a default here would resurrect itself on
- *  every load (and after every delete). */
-const threadFromHash = (): string | undefined => {
-  const raw = decodeURIComponent(window.location.hash.slice(1));
-  return raw.startsWith("Engineer:") ||
-    raw.startsWith("Reviewer:") ||
-    raw.startsWith("pr:")
-    ? raw
-    : undefined;
 };
 
 const ISSUE_STATE: Record<BoardPullRequest["state"], string> = {
@@ -230,12 +209,59 @@ const IssueBadge = ({
         target="_blank"
         rel="noreferrer"
         onClick={(event) => event.stopPropagation()}
+        // no inline line box — the badge alone sets the row height
+        className="flex shrink-0"
       >
         {badge}
       </a>
     </RefHoverCard>
   ) : (
     badge
+  );
+};
+
+/**
+ * Single-line text that ellipsizes and — only when it actually got clipped —
+ * reveals the full string in a tooltip on hover. Untruncated text never
+ * shows a tooltip, so short rows stay quiet.
+ */
+const TruncatedText = ({
+  text,
+  className,
+}: {
+  text: string;
+  className?: string;
+}) => {
+  const ref = useRef<HTMLSpanElement>(null);
+  const [clipped, setClipped] = useState(false);
+  const [open, setOpen] = useState(false);
+  const measure = () => {
+    const el = ref.current;
+    if (el) setClipped(el.scrollWidth > el.clientWidth);
+  };
+  return (
+    <TooltipProvider delayDuration={400}>
+      <Tooltip open={open && clipped} onOpenChange={setOpen}>
+        <TooltipTrigger asChild>
+          <span
+            ref={ref}
+            onPointerEnter={measure}
+            onFocus={measure}
+            className={cn("block min-w-0 truncate", className)}
+          >
+            {text}
+          </span>
+        </TooltipTrigger>
+        <TooltipContent
+          side="top"
+          align="start"
+          sideOffset={2}
+          className="max-w-[28rem] text-left text-wrap"
+        >
+          {text}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 };
 
@@ -362,11 +388,13 @@ export const App = () => {
   const [threads, setThreads] = useState<BoardThread[]>([]);
   const [board, setBoard] = useState<Board>({ repo: "", prs: [] });
   const [repos, setRepos] = useState<RepoInfo[]>([]);
-  const [activeId, setActiveId] = useState<string | undefined>(threadFromHash);
+  const [activeId, setActiveId] = useState<string | undefined>(
+    viewFromLocation,
+  );
   // visited threads stay MOUNTED (visibility-hidden) so switching
   // back preserves scroll position and the streaming tail
   const [visited, setVisited] = useState<string[]>(() => {
-    const id = threadFromHash();
+    const id = viewFromLocation();
     return id === undefined ? [] : [id];
   });
   // PRs whose review the user requested — auto-select when the
@@ -375,15 +403,15 @@ export const App = () => {
   // the two ACTIVITIES (Code | Review) each remember their last
   // selection, so flipping tabs restores where you were
   const [activity, setActivity] = useState<"code" | "review">(() =>
-    isReviewId(threadFromHash()) ? "review" : "code",
+    isReviewId(viewFromLocation()) || isPullsLocation() ? "review" : "code",
   );
   const [codeId, setCodeId] = useState<string | undefined>(() => {
-    const id = threadFromHash();
+    const id = viewFromLocation();
     return id?.startsWith("Engineer:") && !isReviewId(id) ? id : undefined;
   });
   /** The selected PULL REQUEST session (`owner/repo#N`) in Review. */
   const [reviewSession, setReviewSession] = useState<string | undefined>(() => {
-    const id = threadFromHash();
+    const id = viewFromLocation();
     return isReviewId(id) ? sessionOfId(id) : undefined;
   });
   /** Per PR session, the selected non-terminal tab: `"overview"` or a
@@ -415,6 +443,13 @@ export const App = () => {
   const [lastThread, setLastThread] = usePersistedState<Record<string, string>>(
     "alchemy-org:layout:last-thread",
     {},
+  );
+  /** The notifications popover (the header's bell) — the proposals
+   *  awaiting the operator, one line each. */
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  /** The proposals whose card is open under their line (this page load). */
+  const [openProposals, setOpenProposals] = useState<ReadonlySet<string>>(
+    new Set(),
   );
   /** Per terminal tab (`session\u001f${ptyId}`): kills the guest shell —
    *  registered by each mounted GhosttyTerminal, called by the tab's ×. */
@@ -458,22 +493,22 @@ export const App = () => {
     }
   };
 
-  const open = (id: string) => {
-    window.location.hash = encodeURIComponent(id);
+  const open = (id: string, path: string = pathOf(id)) => {
+    navigate(path);
     apply(id);
   };
 
   // a hash that names a PR view on load must also land its tab — the
   // persisted tab memory would otherwise win over the URL
   useEffect(() => {
-    const id = threadFromHash();
+    const id = viewFromLocation();
     if (id !== undefined && isReviewId(id)) apply(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   /** Open a THREAD's chat view — the explicit act that deselects the
    *  session's terminal tab. */
-  const openThread = (id: string) => {
+  const openThread = (id: string, path?: string) => {
     const session = sessionOfId(id);
     if (session !== undefined) {
       setTerminalSel((current) =>
@@ -482,7 +517,7 @@ export const App = () => {
           : current,
       );
     }
-    open(id);
+    open(id, path);
   };
 
   /** Open a PR's OVERVIEW page (its description and conversation). */
@@ -552,7 +587,7 @@ export const App = () => {
 
   /** Clear the code selection (after deleting the current session). */
   const closeCode = () => {
-    window.location.hash = "";
+    navigate("/");
     apply(undefined);
   };
 
@@ -578,9 +613,13 @@ export const App = () => {
 
   // back/forward navigation drives the same path
   useEffect(() => {
-    const onHash = () => apply(threadFromHash());
-    window.addEventListener("hashchange", onHash);
-    return () => window.removeEventListener("hashchange", onHash);
+    const onPop = () => {
+      const id = viewFromLocation();
+      apply(id);
+      if (id === undefined) setActivity(isPullsLocation() ? "review" : "code");
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
   }, []);
 
   // the CONNECTED repositories — static code, fetched once
@@ -740,6 +779,28 @@ export const App = () => {
           return next;
         }),
       );
+  };
+  /** Where an inbox card's link goes: the pull request page's
+   *  Proposals tab (the proposal shows there in full, with the same
+   *  buttons), or the proposing session for a pull request not yet
+   *  opened. */
+  const proposalTarget = (proposal: Proposal): ProposalTarget => {
+    const id =
+      proposal.number === undefined
+        ? `${proposal.session.term}:${proposal.session.key}`
+        : overviewId(`${proposal.repo}#${proposal.number}`);
+    const href =
+      proposal.number === undefined
+        ? pathOf(id)
+        : withTab(pathOf(id), "proposals");
+    return {
+      href,
+      label:
+        proposal.number === undefined
+          ? "open the session"
+          : `open ${proposal.repo}#${proposal.number}`,
+      onOpen: () => openThread(id, href),
+    };
   };
 
   const randomSuffix = () =>
@@ -1189,14 +1250,15 @@ export const App = () => {
     return known ? tab : overviewId(reviewSession);
   })();
 
-  // the inbox skips proposals whose pull request page is the one on
-  // screen — that page shows them in place, with the same buttons
-  const pendingProposals = proposals.filter(
-    (proposal) =>
-      proposal.status === "pending" &&
-      (proposal.number === undefined ||
-        activeView !== `pr:${proposal.repo}#${proposal.number}`),
-  );
+  // the inbox: every pending proposal, a STACK by last activity — a
+  // revision lifts a proposal back to the top; nothing on screen hides
+  // one (jumping to its pull request must not shuffle the list under
+  // the click)
+  const lastActivity = (proposal: Proposal) =>
+    Math.max(proposal.at, proposal.revisedAt ?? 0);
+  const pendingProposals = proposals
+    .filter((proposal) => proposal.status === "pending")
+    .sort((a, b) => lastActivity(b) - lastActivity(a));
 
   // The layout store follows the directory: a session deleted here or
   // anywhere else takes its remembered tabs with it. Only once the
@@ -1330,10 +1392,10 @@ export const App = () => {
     };
     const tabClass = (isSelected: boolean, mono = false) =>
       cn(
-        "group/tab flex items-center gap-1.5 border-b-2 px-3 py-2 text-xs",
-        mono && "font-mono",
+        "group/tab flex items-center gap-1.5 border-b-2 px-3 py-2.5 text-[13px]",
+        mono && "font-mono text-xs",
         isSelected
-          ? "border-foreground text-foreground"
+          ? "border-primary font-medium text-foreground"
           : "border-transparent text-muted-foreground hover:text-foreground",
       );
     const tabProps = (isSelected: boolean, mono = false) => ({
@@ -1345,7 +1407,7 @@ export const App = () => {
       <div
         role="tablist"
         aria-label="Session tabs"
-        className="flex items-center gap-0.5 border-b border-border px-2"
+        className="flex items-center gap-0.5 border-b border-border bg-sidebar px-2"
       >
         {strip.map((tab, index) => {
           const right = rightOf(index);
@@ -1369,6 +1431,7 @@ export const App = () => {
                     <button
                       type="button"
                       onClick={tab.onSelect}
+                      title={`${tab.label} — the session's overview. Right-click any tab for more.`}
                       {...tabProps(selected === tab.id)}
                     >
                       {tab.status !== undefined && (
@@ -1385,6 +1448,7 @@ export const App = () => {
                     <button
                       type="button"
                       onClick={() => openThread(tab.thread.id)}
+                      title={`${tabTitle(tab.thread)} — an agent thread on this session's machine (${tab.thread.status}). Right-click to rename or delete.`}
                       {...tabProps(selected === tab.thread.id)}
                     >
                       <span
@@ -1401,7 +1465,7 @@ export const App = () => {
                       </span>
                       <span
                         role="button"
-                        title="Delete thread"
+                        title="Delete thread — the agent stops and its transcript is removed (asks first)."
                         onClick={(event) => {
                           event.stopPropagation();
                           setConfirmKillThread(tab.thread);
@@ -1415,6 +1479,7 @@ export const App = () => {
                     <button
                       type="button"
                       onClick={() => openTerminal(session, tab.ptyId)}
+                      title={`Terminal ${tab.nth + 1} — a shell on this session's machine; it keeps running while you look elsewhere. Right-click to rename or close.`}
                       {...tabProps(
                         selected === `pty:${session}\u001f${tab.ptyId}`,
                         true,
@@ -1427,7 +1492,7 @@ export const App = () => {
                       )}
                       <span
                         role="button"
-                        title="Close terminal (the shell dies)"
+                        title="Close terminal — the shell and anything running in it are killed."
                         onClick={(event) => {
                           event.stopPropagation();
                           killTerminal(session, tab.ptyId);
@@ -1518,10 +1583,11 @@ export const App = () => {
           <DropdownMenuTrigger asChild>
             <button
               type="button"
-              title="New thread or terminal"
-              className="px-2 py-2 font-mono text-sm text-muted-foreground hover:text-foreground"
+              title="New — open another agent thread or terminal on this session's machine, as a tab here."
+              className="ml-1 flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
             >
-              +
+              <Plus className="size-4" />
+              <span className="sr-only">+</span>
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent
@@ -1538,870 +1604,950 @@ export const App = () => {
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-        <span className="ml-auto pr-2 font-mono text-[10px] text-muted-foreground">
+        <span className="ml-auto pr-2 text-[11px] text-muted-foreground">
           {summary}
         </span>
       </div>
     );
   };
 
+  const toggleProposal = (id: string) =>
+    setOpenProposals((current) => {
+      const next = new Set(current);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+
+  /** A jump out of the bell's popover closes it on the way. */
+  const jumpTarget = (proposal: Proposal): ProposalTarget => {
+    const target = proposalTarget(proposal);
+    return {
+      ...target,
+      onOpen: () => {
+        setNotificationsOpen(false);
+        target.onOpen();
+      },
+    };
+  };
+
+  /** The bell's popover: the pending proposals, one LINE each — the
+   *  summary jumps to the proposal, the chevron opens its card here. */
+  const notifications =
+    pendingProposals.length === 0 ? (
+      <div className="px-4 py-6 text-center text-sm text-muted-foreground">
+        Nothing awaiting you.
+      </div>
+    ) : (
+      <>
+        <div className="flex items-center gap-2 border-b border-border px-3 py-2 text-xs text-muted-foreground">
+          {pendingProposals.length} awaiting you
+        </div>
+        <div className="flex min-h-0 flex-col overflow-y-auto">
+          {pendingProposals.map((proposal) => {
+            const open = openProposals.has(proposal.id);
+            return (
+              <div
+                key={proposal.id}
+                className="border-b border-border/60 last:border-b-0"
+              >
+                <ProposalRow
+                  proposal={proposal}
+                  target={jumpTarget(proposal)}
+                  open={open}
+                  onToggle={() => toggleProposal(proposal.id)}
+                />
+                {open && (
+                  <div className="px-2 pb-2">
+                    <ProposalCard
+                      proposal={proposal}
+                      Markdown={MarkdownText}
+                      embedded
+                      busy={proposalBusy.has(proposal.id)}
+                      onAccept={() => settleProposal(proposal.id, "accept")}
+                      onReject={(reason) =>
+                        settleProposal(proposal.id, "reject", reason)
+                      }
+                      onRevise={(message) =>
+                        settleProposal(proposal.id, "revise", message)
+                      }
+                      onOpenSession={() => {
+                        setNotificationsOpen(false);
+                        openThread(
+                          `${proposal.session.term}:${proposal.session.key}`,
+                        );
+                      }}
+                      target={jumpTarget(proposal)}
+                    />
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </>
+    );
+
+  /** Flip activities — the URL follows to where that activity was
+   *  left (its selected view), or to its empty state (`/`, `/pulls`). */
+  const openActivity = (name: "code" | "review") => {
+    setActivity(name);
+    if (name === "code") {
+      navigate(pathOf(codeId));
+      return;
+    }
+    const tab =
+      reviewSession === undefined ? undefined : reviewTab[reviewSession];
+    navigate(
+      reviewSession === undefined
+        ? PULLS_PATH
+        : pathOf(
+            tab === undefined || tab === "overview"
+              ? overviewId(reviewSession)
+              : tab,
+          ),
+    );
+  };
+
   return (
-    <div className="flex h-screen bg-background text-foreground">
-      {/* NEW SESSION — a generated name, pre-selected: type to replace,
+    <div className="flex h-screen flex-col bg-background text-foreground">
+      <AppHeader
+        activity={activity}
+        onActivity={openActivity}
+        openPullRequests={openPrCount}
+        pending={pendingProposals.length}
+        notifications={notifications}
+        notificationsOpen={notificationsOpen}
+        onNotificationsOpen={setNotificationsOpen}
+      />
+      <div className="flex min-h-0 flex-1">
+        {/* NEW SESSION — a generated name, pre-selected: type to replace,
           Enter to take it. The commonest action gets the fastest path. */}
-      <Dialog
-        open={newSessionPrompt !== undefined}
-        onOpenChange={(isOpen) => {
-          if (!isOpen) setNewSessionPrompt(undefined);
-        }}
-      >
-        <DialogContent showCloseButton={false} className="max-w-sm">
-          <form
-            className="flex flex-col gap-4"
-            onSubmit={(event) => {
+        <Dialog
+          open={newSessionPrompt !== undefined}
+          onOpenChange={(isOpen) => {
+            if (!isOpen) setNewSessionPrompt(undefined);
+          }}
+        >
+          <DialogContent showCloseButton={false} className="max-w-sm">
+            <form
+              className="flex flex-col gap-4"
+              onSubmit={(event) => {
+                event.preventDefault();
+                commitNewSession();
+              }}
+            >
+              <DialogHeader>
+                <DialogTitle>New session</DialogTitle>
+                <DialogDescription>
+                  {newSessionPrompt?.repo !== undefined ? (
+                    <>
+                      A machine of its own under{" "}
+                      <span className="font-mono">{newSessionPrompt.repo}</span>{" "}
+                      — threads and terminal share it.
+                    </>
+                  ) : (
+                    "A machine of its own — threads and terminal share it."
+                  )}
+                </DialogDescription>
+              </DialogHeader>
+              <Input
+                autoFocus
+                value={newSessionPrompt?.name ?? ""}
+                onChange={(event) =>
+                  setNewSessionPrompt((current) =>
+                    current === undefined
+                      ? current
+                      : { ...current, name: event.target.value },
+                  )
+                }
+                onFocus={(event) => event.currentTarget.select()}
+                spellCheck={false}
+                autoComplete="off"
+                className="font-mono text-sm"
+                aria-label="Session name"
+              />
+              <DialogFooter showCloseButton={false}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setNewSessionPrompt(undefined)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  size="sm"
+                  disabled={(newSessionPrompt?.name.trim() ?? "") === ""}
+                >
+                  Create session
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+        {/* RENAME — a display-name override only; the underlying
+          session/thread/pty key is identity and never changes.
+          Clearing the field restores the default label. */}
+        <Dialog
+          open={renamePrompt !== undefined}
+          onOpenChange={(isOpen) => {
+            if (!isOpen) setRenamePrompt(undefined);
+          }}
+        >
+          <DialogContent showCloseButton={false} className="max-w-sm">
+            <form
+              className="flex flex-col gap-4"
+              onSubmit={(event) => {
+                event.preventDefault();
+                commitRename();
+              }}
+            >
+              <DialogHeader>
+                <DialogTitle>Rename {renamePrompt?.what}</DialogTitle>
+                <DialogDescription>
+                  Display name only — clear it to restore{" "}
+                  <span className="font-mono">{renamePrompt?.fallback}</span>.
+                </DialogDescription>
+              </DialogHeader>
+              <Input
+                autoFocus
+                value={renamePrompt?.value ?? ""}
+                onChange={(event) =>
+                  setRenamePrompt((current) =>
+                    current === undefined
+                      ? current
+                      : { ...current, value: event.target.value },
+                  )
+                }
+                onFocus={(event) => event.currentTarget.select()}
+                spellCheck={false}
+                autoComplete="off"
+                className="font-mono text-sm"
+                aria-label="Display name"
+              />
+              <DialogFooter showCloseButton={false}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setRenamePrompt(undefined)}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" size="sm">
+                  Rename
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+        {/* KILL-THREAD CONFIRMATION — deleting a thread purges its
+          transcript. The shared machine survives unless this is the
+          session's last thread — then the machine dies with it. */}
+        <Dialog
+          open={confirmKillThread !== undefined}
+          onOpenChange={(isOpen) => {
+            if (!isOpen) setConfirmKillThread(undefined);
+          }}
+        >
+          <DialogContent
+            showCloseButton={false}
+            className="max-w-sm"
+            // confirm is the DEFAULT: Enter deletes, Escape cancels
+            onOpenAutoFocus={(event) => {
               event.preventDefault();
-              commitNewSession();
+              killThreadConfirmRef.current?.focus();
             }}
           >
             <DialogHeader>
-              <DialogTitle>New session</DialogTitle>
+              <DialogTitle>Delete thread</DialogTitle>
               <DialogDescription>
-                {newSessionPrompt?.repo !== undefined ? (
+                {confirmKillThread !== undefined && (
                   <>
-                    A machine of its own under{" "}
-                    <span className="font-mono">{newSessionPrompt.repo}</span> —
-                    threads and terminal share it.
+                    <span className="font-mono text-foreground">
+                      {threadTitle(confirmKillThread)}
+                    </span>{" "}
+                    — its transcript will be permanently deleted.{" "}
+                    {threads.some(
+                      (row) =>
+                        row.id !== confirmKillThread.id &&
+                        sessionOfId(row.id) ===
+                          sessionOfId(confirmKillThread.id),
+                    )
+                      ? "The session and its machine stay."
+                      : "It is the session's last thread — the session and its machine go with it."}
                   </>
-                ) : (
-                  "A machine of its own — threads and terminal share it."
                 )}
               </DialogDescription>
             </DialogHeader>
-            <Input
-              autoFocus
-              value={newSessionPrompt?.name ?? ""}
-              onChange={(event) =>
-                setNewSessionPrompt((current) =>
-                  current === undefined
-                    ? current
-                    : { ...current, name: event.target.value },
-                )
-              }
-              onFocus={(event) => event.currentTarget.select()}
-              spellCheck={false}
-              autoComplete="off"
-              className="font-mono text-sm"
-              aria-label="Session name"
-            />
             <DialogFooter showCloseButton={false}>
               <Button
-                type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => setNewSessionPrompt(undefined)}
+                onClick={() => setConfirmKillThread(undefined)}
               >
                 Cancel
               </Button>
               <Button
-                type="submit"
+                ref={killThreadConfirmRef}
+                variant="destructive"
                 size="sm"
-                disabled={(newSessionPrompt?.name.trim() ?? "") === ""}
+                onClick={() => {
+                  if (confirmKillThread !== undefined) {
+                    killThread(confirmKillThread);
+                  }
+                }}
               >
-                Create session
+                <Trash2 /> Delete thread
               </Button>
             </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-      {/* RENAME — a display-name override only; the underlying
-          session/thread/pty key is identity and never changes.
-          Clearing the field restores the default label. */}
-      <Dialog
-        open={renamePrompt !== undefined}
-        onOpenChange={(isOpen) => {
-          if (!isOpen) setRenamePrompt(undefined);
-        }}
-      >
-        <DialogContent showCloseButton={false} className="max-w-sm">
-          <form
-            className="flex flex-col gap-4"
-            onSubmit={(event) => {
+          </DialogContent>
+        </Dialog>
+        {/* BULK-CLOSE CONFIRMATION — "close all" / "close all to the
+          right" that includes threads: their transcripts are destroyed
+          (terminal-only closes never ask). */}
+        <Dialog
+          open={confirmCloseTabs !== undefined}
+          onOpenChange={(isOpen) => {
+            if (!isOpen) setConfirmCloseTabs(undefined);
+          }}
+        >
+          <DialogContent
+            showCloseButton={false}
+            className="max-w-sm"
+            // confirm is the DEFAULT: Enter closes, Escape cancels
+            onOpenAutoFocus={(event) => {
               event.preventDefault();
-              commitRename();
+              closeTabsConfirmRef.current?.focus();
             }}
           >
             <DialogHeader>
-              <DialogTitle>Rename {renamePrompt?.what}</DialogTitle>
+              <DialogTitle>Close tabs</DialogTitle>
               <DialogDescription>
-                Display name only — clear it to restore{" "}
-                <span className="font-mono">{renamePrompt?.fallback}</span>.
+                {confirmCloseTabs !== undefined && (
+                  <>
+                    {confirmCloseTabs.threads.length} thread
+                    {confirmCloseTabs.threads.length === 1 ? "" : "s"} will be
+                    permanently deleted (transcripts included)
+                    {confirmCloseTabs.terminals.length > 0 && (
+                      <>
+                        {" "}
+                        and {confirmCloseTabs.terminals.length} terminal
+                        {confirmCloseTabs.terminals.length === 1
+                          ? ""
+                          : "s"}{" "}
+                        killed
+                      </>
+                    )}
+                    . The session and its machine stay.
+                  </>
+                )}
               </DialogDescription>
             </DialogHeader>
-            <Input
-              autoFocus
-              value={renamePrompt?.value ?? ""}
-              onChange={(event) =>
-                setRenamePrompt((current) =>
-                  current === undefined
-                    ? current
-                    : { ...current, value: event.target.value },
-                )
-              }
-              onFocus={(event) => event.currentTarget.select()}
-              spellCheck={false}
-              autoComplete="off"
-              className="font-mono text-sm"
-              aria-label="Display name"
-            />
             <DialogFooter showCloseButton={false}>
               <Button
-                type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => setRenamePrompt(undefined)}
+                onClick={() => setConfirmCloseTabs(undefined)}
               >
                 Cancel
               </Button>
-              <Button type="submit" size="sm">
-                Rename
+              <Button
+                ref={closeTabsConfirmRef}
+                variant="destructive"
+                size="sm"
+                onClick={() => {
+                  if (confirmCloseTabs !== undefined) {
+                    closeTabs(confirmCloseTabs);
+                  }
+                }}
+              >
+                <Trash2 /> Close tabs
               </Button>
             </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-      {/* KILL-THREAD CONFIRMATION — deleting a thread purges its
-          transcript. The shared machine survives unless this is the
-          session's last thread — then the machine dies with it. */}
-      <Dialog
-        open={confirmKillThread !== undefined}
-        onOpenChange={(isOpen) => {
-          if (!isOpen) setConfirmKillThread(undefined);
-        }}
-      >
-        <DialogContent
-          showCloseButton={false}
-          className="max-w-sm"
-          // confirm is the DEFAULT: Enter deletes, Escape cancels
-          onOpenAutoFocus={(event) => {
-            event.preventDefault();
-            killThreadConfirmRef.current?.focus();
-          }}
-        >
-          <DialogHeader>
-            <DialogTitle>Delete thread</DialogTitle>
-            <DialogDescription>
-              {confirmKillThread !== undefined && (
-                <>
-                  <span className="font-mono text-foreground">
-                    {threadTitle(confirmKillThread)}
-                  </span>{" "}
-                  — its transcript will be permanently deleted.{" "}
-                  {threads.some(
-                    (row) =>
-                      row.id !== confirmKillThread.id &&
-                      sessionOfId(row.id) === sessionOfId(confirmKillThread.id),
-                  )
-                    ? "The session and its machine stay."
-                    : "It is the session's last thread — the session and its machine go with it."}
-                </>
-              )}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter showCloseButton={false}>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setConfirmKillThread(undefined)}
-            >
-              Cancel
-            </Button>
-            <Button
-              ref={killThreadConfirmRef}
-              variant="destructive"
-              size="sm"
-              onClick={() => {
-                if (confirmKillThread !== undefined) {
-                  killThread(confirmKillThread);
-                }
-              }}
-            >
-              <Trash2 /> Delete thread
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-      {/* BULK-CLOSE CONFIRMATION — "close all" / "close all to the
-          right" that includes threads: their transcripts are destroyed
-          (terminal-only closes never ask). */}
-      <Dialog
-        open={confirmCloseTabs !== undefined}
-        onOpenChange={(isOpen) => {
-          if (!isOpen) setConfirmCloseTabs(undefined);
-        }}
-      >
-        <DialogContent
-          showCloseButton={false}
-          className="max-w-sm"
-          // confirm is the DEFAULT: Enter closes, Escape cancels
-          onOpenAutoFocus={(event) => {
-            event.preventDefault();
-            closeTabsConfirmRef.current?.focus();
-          }}
-        >
-          <DialogHeader>
-            <DialogTitle>Close tabs</DialogTitle>
-            <DialogDescription>
-              {confirmCloseTabs !== undefined && (
-                <>
-                  {confirmCloseTabs.threads.length} thread
-                  {confirmCloseTabs.threads.length === 1 ? "" : "s"} will be
-                  permanently deleted (transcripts included)
-                  {confirmCloseTabs.terminals.length > 0 && (
-                    <>
-                      {" "}
-                      and {confirmCloseTabs.terminals.length} terminal
-                      {confirmCloseTabs.terminals.length === 1 ? "" : "s"}{" "}
-                      killed
-                    </>
-                  )}
-                  . The session and its machine stay.
-                </>
-              )}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter showCloseButton={false}>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setConfirmCloseTabs(undefined)}
-            >
-              Cancel
-            </Button>
-            <Button
-              ref={closeTabsConfirmRef}
-              variant="destructive"
-              size="sm"
-              onClick={() => {
-                if (confirmCloseTabs !== undefined) {
-                  closeTabs(confirmCloseTabs);
-                }
-              }}
-            >
-              <Trash2 /> Close tabs
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-      {/* DELETE CONFIRMATION — the eraser is irreversible (transcripts +
+          </DialogContent>
+        </Dialog>
+        {/* DELETE CONFIRMATION — the eraser is irreversible (transcripts +
           machine), so it asks first; the row then spins until the server
           confirms. */}
-      <Dialog
-        open={confirmDelete !== undefined}
-        onOpenChange={(isOpen) => {
-          if (!isOpen) setConfirmDelete(undefined);
-        }}
-      >
-        <DialogContent
-          showCloseButton={false}
-          className="max-w-sm"
-          // confirm is the DEFAULT: Enter deletes, Escape cancels
-          onOpenAutoFocus={(event) => {
-            event.preventDefault();
-            deleteSessionConfirmRef.current?.focus();
+        <Dialog
+          open={confirmDelete !== undefined}
+          onOpenChange={(isOpen) => {
+            if (!isOpen) setConfirmDelete(undefined);
           }}
         >
-          <DialogHeader>
-            <DialogTitle>Delete session</DialogTitle>
-            <DialogDescription>
-              {confirmDelete !== undefined && (
-                <>
-                  <span className="font-mono text-foreground">
-                    {confirmDelete.label}
-                  </span>{" "}
-                  — {confirmDelete.threads.length} thread
-                  {confirmDelete.threads.length === 1 ? "" : "s"}, its
-                  transcripts, and its machine will be permanently deleted.
-                </>
-              )}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter showCloseButton={false}>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setConfirmDelete(undefined)}
-            >
-              Cancel
-            </Button>
-            <Button
-              ref={deleteSessionConfirmRef}
-              variant="destructive"
-              size="sm"
-              onClick={() => {
-                if (confirmDelete !== undefined)
-                  void deleteSession(confirmDelete);
-              }}
-            >
-              <Trash2 /> Delete session
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-      <aside className="flex w-72 shrink-0 flex-col border-r border-border">
-        {/* THE ACTIVITIES: Code (sessions) | Review (pull requests) */}
-        <div className="flex border-b border-border">
-          {(["code", "review"] as const).map((name) => (
-            <button
-              key={name}
-              type="button"
-              onClick={() => setActivity(name)}
-              className={cn(
-                "flex-1 border-b-2 px-3 py-2 font-mono text-xs",
-                activity === name
-                  ? "border-foreground text-foreground"
-                  : "border-transparent text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {name === "code"
-                ? "Code"
-                : `Review${openPrCount > 0 ? ` (${openPrCount})` : ""}`}
-            </button>
-          ))}
-        </div>
-        {activity === "code" ? (
-          /* SESSIONS grouped under their CONNECTED repo (static code) */
-          <div className="min-h-0 flex-1 overflow-y-auto">
-            {repoBuckets.map((bucket) => (
-              <div key={bucket.repo ?? "~unscoped"}>
-                <div className="flex items-center justify-between border-b border-border px-3 py-2">
-                  {bucket.repo !== undefined ? (
-                    <a
-                      href={`https://github.com/${bucket.repo}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="truncate font-mono text-[10px] text-muted-foreground hover:text-foreground"
+          <DialogContent
+            showCloseButton={false}
+            className="max-w-sm"
+            // confirm is the DEFAULT: Enter deletes, Escape cancels
+            onOpenAutoFocus={(event) => {
+              event.preventDefault();
+              deleteSessionConfirmRef.current?.focus();
+            }}
+          >
+            <DialogHeader>
+              <DialogTitle>Delete session</DialogTitle>
+              <DialogDescription>
+                {confirmDelete !== undefined && (
+                  <>
+                    <span className="font-mono text-foreground">
+                      {confirmDelete.label}
+                    </span>{" "}
+                    — {confirmDelete.threads.length} thread
+                    {confirmDelete.threads.length === 1 ? "" : "s"}, its
+                    transcripts, and its machine will be permanently deleted.
+                  </>
+                )}
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter showCloseButton={false}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setConfirmDelete(undefined)}
+              >
+                Cancel
+              </Button>
+              <Button
+                ref={deleteSessionConfirmRef}
+                variant="destructive"
+                size="sm"
+                onClick={() => {
+                  if (confirmDelete !== undefined)
+                    void deleteSession(confirmDelete);
+                }}
+              >
+                <Trash2 /> Delete session
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+        <aside className="flex w-72 shrink-0 flex-col border-r border-border bg-sidebar">
+          {activity === "code" ? (
+            /* SESSIONS grouped under their CONNECTED repo (static code) */
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              {repoBuckets.map((bucket) => (
+                <div key={bucket.repo ?? "~unscoped"}>
+                  <div className="flex items-center justify-between px-3 pb-1 pt-3">
+                    {bucket.repo !== undefined ? (
+                      <a
+                        href={`https://github.com/${bucket.repo}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="truncate text-[11px] font-medium text-muted-foreground hover:text-foreground"
+                      >
+                        {bucket.repo}
+                      </a>
+                    ) : (
+                      <span className="text-[11px] font-medium text-muted-foreground">
+                        unscoped
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => newSession(bucket.repo)}
+                      className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground"
                     >
-                      {bucket.repo}
-                    </a>
-                  ) : (
-                    <span className="font-mono text-[10px] text-muted-foreground">
-                      unscoped
-                    </span>
+                      <Plus className="size-3" /> session
+                    </button>
+                  </div>
+                  {bucket.groups.map((group) => (
+                    <ContextMenu key={group.session}>
+                      <ContextMenuTrigger asChild>
+                        <div
+                          onClick={() => {
+                            // a session mid-delete is not navigable
+                            if (deleting.has(group.session)) return;
+                            openSession(group);
+                          }}
+                          className={cn(
+                            "group mx-2 flex cursor-pointer flex-col gap-1 rounded-md px-2 py-1.5 text-left hover:bg-accent/70",
+                            group.session === currentSession &&
+                              "bg-accent shadow-xs ring-1 ring-border",
+                          )}
+                        >
+                          <span className="flex items-center gap-1.5">
+                            {deleting.has(group.session) ? (
+                              <Spinner className="size-3 shrink-0 text-muted-foreground" />
+                            ) : (
+                              <span
+                                className={cn(
+                                  "inline-block size-1.5 shrink-0 rounded-full",
+                                  statusDot[group.status] ?? statusDot.idle,
+                                )}
+                              />
+                            )}
+                            <span className="min-w-0 flex-1 truncate text-[13px] leading-tight">
+                              {displayName(
+                                `session:${group.session}`,
+                                group.label,
+                              )}
+                            </span>
+                            {!deleting.has(group.session) && (
+                              <>
+                                {(group.status === "running" ||
+                                  group.status === "idle") && (
+                                  <button
+                                    type="button"
+                                    title="Stop session"
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      stopSession(group);
+                                    }}
+                                    className="hidden shrink-0 rounded p-0.5 text-muted-foreground hover:bg-border hover:text-foreground group-hover:block"
+                                  >
+                                    <Square className="size-3" />
+                                  </button>
+                                )}
+                                {group.status === "settled" && (
+                                  <button
+                                    type="button"
+                                    title="Resume session"
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      resumeSession(group);
+                                    }}
+                                    className="hidden shrink-0 rounded p-0.5 text-muted-foreground hover:bg-border hover:text-foreground group-hover:block"
+                                  >
+                                    <Play className="size-3" />
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  title="Delete session"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    setConfirmDelete(group);
+                                  }}
+                                  className="hidden shrink-0 rounded p-0.5 text-muted-foreground hover:bg-border hover:text-terracotta group-hover:block"
+                                >
+                                  <Trash2 className="size-3" />
+                                </button>
+                              </>
+                            )}
+                          </span>
+                          <span className="flex items-center gap-1.5 pl-3 text-[11px] text-muted-foreground">
+                            {group.threads.length} thread
+                            {group.threads.length === 1 ? "" : "s"} ·{" "}
+                            {deleting.has(group.session)
+                              ? "deleting…"
+                              : group.status}
+                            <span className="ml-auto">
+                              <AtTooltip at={group.updatedAt}>
+                                <span className="cursor-default">
+                                  {timeAgo(group.updatedAt)}
+                                </span>
+                              </AtTooltip>
+                            </span>
+                          </span>
+                        </div>
+                      </ContextMenuTrigger>
+                      <ContextMenuContent
+                        onCloseAutoFocus={(event) => event.preventDefault()}
+                      >
+                        <ContextMenuItem
+                          onSelect={() => newThread(group.session)}
+                        >
+                          <MessageSquare /> New thread
+                        </ContextMenuItem>
+                        <ContextMenuItem
+                          onSelect={() => {
+                            openSession(group);
+                            newTerminal(group.session);
+                          }}
+                        >
+                          <SquareTerminal /> New terminal
+                        </ContextMenuItem>
+                        <ContextMenuSeparator />
+                        <ContextMenuItem
+                          onSelect={() =>
+                            startRename(
+                              "session",
+                              `session:${group.session}`,
+                              group.label,
+                            )
+                          }
+                        >
+                          <Pencil /> Rename session…
+                        </ContextMenuItem>
+                        <ContextMenuSeparator />
+                        {(group.status === "running" ||
+                          group.status === "idle") && (
+                          <ContextMenuItem onSelect={() => stopSession(group)}>
+                            <Square /> Stop session
+                          </ContextMenuItem>
+                        )}
+                        {group.status === "settled" && (
+                          <ContextMenuItem
+                            onSelect={() => resumeSession(group)}
+                          >
+                            <Play /> Resume session
+                          </ContextMenuItem>
+                        )}
+                        <ContextMenuSeparator />
+                        <ContextMenuItem
+                          variant="destructive"
+                          onSelect={() => setConfirmDelete(group)}
+                        >
+                          <Trash2 /> Delete session…
+                        </ContextMenuItem>
+                      </ContextMenuContent>
+                    </ContextMenu>
+                  ))}
+                  {bucket.groups.length === 0 && (
+                    <div className="px-3 py-3 text-xs text-muted-foreground">
+                      No sessions yet.
+                    </div>
                   )}
-                  <button
-                    type="button"
-                    onClick={() => newSession(bucket.repo)}
-                    className="rounded border border-border px-2 py-0.5 font-mono text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
-                  >
-                    + session
-                  </button>
                 </div>
-                {bucket.groups.map((group) => (
-                  <ContextMenu key={group.session}>
+              ))}
+            </div>
+          ) : (
+            /* THE PULL REQUESTS — one review session each */
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              {board.repo && (
+                <div className="flex items-center justify-between px-3 pb-1 pt-3">
+                  <a
+                    href={`https://github.com/${board.repo}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="truncate text-[11px] font-medium text-muted-foreground hover:text-foreground"
+                  >
+                    {board.repo}
+                  </a>
+                </div>
+              )}
+              {board.prs.map((pull) => {
+                const repo = board.repo || pull.session?.key.split("#")[0];
+                const session = `${repo}#${pull.number}`;
+                const group = groups.find((entry) => entry.session === session);
+                const threadCount =
+                  (group?.threads.length ?? 0) + (pull.session ? 1 : 0);
+                const terminalCount = terminals[session]?.length ?? 0;
+                const working =
+                  pull.session?.status === "running" ||
+                  group?.status === "running";
+                return (
+                  <ContextMenu key={pull.number}>
                     <ContextMenuTrigger asChild>
-                      <div
-                        onClick={() => {
-                          // a session mid-delete is not navigable
-                          if (deleting.has(group.session)) return;
-                          openSession(group);
-                        }}
+                      <button
+                        type="button"
+                        onClick={() => openPullSession(session)}
+                        title={
+                          pull.session === undefined
+                            ? undefined
+                            : `review ${pull.session.status}`
+                        }
                         className={cn(
-                          "group flex w-full cursor-pointer flex-col gap-1 border-b border-border/50 px-3 py-2 text-left hover:bg-accent/50",
-                          group.session === currentSession && "bg-accent",
+                          // grid + minmax(0,1fr) is what makes the title
+                          // ellipsize inside a <button> in every engine
+                          // (flex min-width:auto leaks in WebKit)
+                          "grid w-full min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 overflow-hidden border-b border-border/60 px-3 py-1.5 text-left hover:bg-accent/70",
+                          session === reviewSession &&
+                            "bg-accent shadow-[inset_2px_0_0_0_var(--primary)]",
                         )}
                       >
-                        <span className="flex items-center gap-1.5">
-                          {deleting.has(group.session) ? (
-                            <Spinner className="size-3 shrink-0 text-muted-foreground" />
-                          ) : (
+                        <IssueBadge
+                          number={pull.number}
+                          state={pull.state}
+                          repo={repo}
+                        />
+                        <TruncatedText
+                          text={pull.title}
+                          className="text-[13px] leading-5"
+                        />
+                        <span className="flex items-center gap-2 text-[11px] leading-none text-muted-foreground tabular-nums">
+                          {threadCount > 0 && (
+                            <span className="flex items-center gap-0.5">
+                              <MessageSquare className="size-3" />
+                              {threadCount}
+                            </span>
+                          )}
+                          {terminalCount > 0 && (
+                            <span className="flex items-center gap-0.5">
+                              <SquareTerminal className="size-3" />
+                              {terminalCount}
+                            </span>
+                          )}
+                          {pull.session !== undefined && (
                             <span
+                              aria-label={`review ${pull.session.status}`}
                               className={cn(
-                                "inline-block size-1.5 shrink-0 rounded-full",
-                                statusDot[group.status] ?? statusDot.idle,
+                                "size-1.5 rounded-full",
+                                working
+                                  ? "animate-pulse bg-moss"
+                                  : (statusDot[pull.session.status] ??
+                                      statusDot.idle),
                               )}
                             />
                           )}
-                          <span className="min-w-0 flex-1 truncate text-[13px] leading-tight">
-                            {displayName(
-                              `session:${group.session}`,
-                              group.label,
-                            )}
-                          </span>
-                          {!deleting.has(group.session) && (
-                            <>
-                              {(group.status === "running" ||
-                                group.status === "idle") && (
-                                <button
-                                  type="button"
-                                  title="Stop session"
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    stopSession(group);
-                                  }}
-                                  className="hidden shrink-0 rounded p-0.5 text-muted-foreground hover:bg-border hover:text-foreground group-hover:block"
-                                >
-                                  <Square className="size-3" />
-                                </button>
-                              )}
-                              {group.status === "settled" && (
-                                <button
-                                  type="button"
-                                  title="Resume session"
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    resumeSession(group);
-                                  }}
-                                  className="hidden shrink-0 rounded p-0.5 text-muted-foreground hover:bg-border hover:text-foreground group-hover:block"
-                                >
-                                  <Play className="size-3" />
-                                </button>
-                              )}
-                              <button
-                                type="button"
-                                title="Delete session"
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  setConfirmDelete(group);
-                                }}
-                                className="hidden shrink-0 rounded p-0.5 text-muted-foreground hover:bg-border hover:text-terracotta group-hover:block"
-                              >
-                                <Trash2 className="size-3" />
-                              </button>
-                            </>
-                          )}
                         </span>
-                        <span className="flex items-center gap-1.5 pl-3 font-mono text-[10px] text-muted-foreground">
-                          {group.threads.length} thread
-                          {group.threads.length === 1 ? "" : "s"} ·{" "}
-                          {deleting.has(group.session)
-                            ? "deleting…"
-                            : group.status}
-                          <span className="ml-auto">
-                            <AtTooltip at={group.updatedAt}>
-                              <span className="cursor-default">
-                                {timeAgo(group.updatedAt)}
-                              </span>
-                            </AtTooltip>
-                          </span>
-                        </span>
-                      </div>
+                      </button>
                     </ContextMenuTrigger>
                     <ContextMenuContent
                       onCloseAutoFocus={(event) => event.preventDefault()}
                     >
                       <ContextMenuItem
-                        onSelect={() => newThread(group.session)}
+                        onSelect={() => {
+                          openPullSession(session);
+                          newThread(session);
+                        }}
                       >
                         <MessageSquare /> New thread
                       </ContextMenuItem>
                       <ContextMenuItem
                         onSelect={() => {
-                          openSession(group);
-                          newTerminal(group.session);
+                          openPullSession(session);
+                          newTerminal(session);
                         }}
                       >
                         <SquareTerminal /> New terminal
                       </ContextMenuItem>
                       <ContextMenuSeparator />
                       <ContextMenuItem
-                        onSelect={() =>
-                          startRename(
-                            "session",
-                            `session:${group.session}`,
-                            group.label,
-                          )
+                        disabled={
+                          pull.session !== undefined ||
+                          requested.has(pull.number) ||
+                          reviewUnavailable
                         }
+                        onSelect={() => requestReview(pull.number)}
                       >
-                        <Pencil /> Rename session…
+                        <MessageSquareText /> Request review
                       </ContextMenuItem>
-                      <ContextMenuSeparator />
-                      {(group.status === "running" ||
-                        group.status === "idle") && (
-                        <ContextMenuItem onSelect={() => stopSession(group)}>
-                          <Square /> Stop session
-                        </ContextMenuItem>
-                      )}
-                      {group.status === "settled" && (
-                        <ContextMenuItem onSelect={() => resumeSession(group)}>
-                          <Play /> Resume session
-                        </ContextMenuItem>
-                      )}
-                      <ContextMenuSeparator />
                       <ContextMenuItem
-                        variant="destructive"
-                        onSelect={() => setConfirmDelete(group)}
+                        disabled={machines[session]?.phase === "checking-out"}
+                        onSelect={() => checkoutPull(session)}
                       >
-                        <Trash2 /> Delete session…
+                        <RefreshCw /> Pull PR head onto machine
                       </ContextMenuItem>
                     </ContextMenuContent>
                   </ContextMenu>
-                ))}
-                {bucket.groups.length === 0 && (
-                  <div className="px-3 py-3 text-xs text-muted-foreground">
-                    No sessions yet.
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        ) : (
-          /* THE PULL REQUESTS — one review session each */
-          <div className="min-h-0 flex-1 overflow-y-auto">
-            {board.repo && (
-              <div className="flex items-center justify-between border-b border-border px-3 py-2">
-                <a
-                  href={`https://github.com/${board.repo}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="truncate font-mono text-[10px] text-muted-foreground hover:text-foreground"
-                >
-                  {board.repo}
-                </a>
-              </div>
-            )}
-            {board.prs.map((pull) => {
-              const repo = board.repo || pull.session?.key.split("#")[0];
-              const session = `${repo}#${pull.number}`;
-              const group = groups.find((entry) => entry.session === session);
-              const threadCount =
-                (group?.threads.length ?? 0) + (pull.session ? 1 : 0);
-              const terminalCount = terminals[session]?.length ?? 0;
-              const working =
-                pull.session?.status === "running" ||
-                group?.status === "running";
-              return (
-                <ContextMenu key={pull.number}>
-                  <ContextMenuTrigger asChild>
-                    <button
-                      type="button"
-                      onClick={() => openPullSession(session)}
-                      className={cn(
-                        "flex w-full flex-col gap-1 border-b border-border/50 px-3 py-2 text-left hover:bg-accent/50",
-                        session === reviewSession && "bg-accent",
-                      )}
-                    >
-                      <span className="flex w-full items-center gap-2">
-                        <IssueBadge
-                          number={pull.number}
-                          state={pull.state}
-                          repo={repo}
-                        />
-                        <span className="min-w-0 flex-1 truncate text-[13px] font-medium">
-                          {pull.title}
-                        </span>
-                        {working && (
-                          <span className="size-2 shrink-0 animate-pulse rounded-full bg-moss" />
-                        )}
-                      </span>
-                      {(threadCount > 0 || terminalCount > 0) && (
-                        <span className="flex items-center gap-2 pl-1 font-mono text-[10px] text-muted-foreground">
-                          {threadCount > 0 && (
-                            <span className="flex items-center gap-1">
-                              <MessageSquare className="size-3" />
-                              {threadCount}
-                            </span>
-                          )}
-                          {terminalCount > 0 && (
-                            <span className="flex items-center gap-1">
-                              <SquareTerminal className="size-3" />
-                              {terminalCount}
-                            </span>
-                          )}
-                          {pull.session !== undefined && (
-                            <span className="ml-auto">
-                              review · {pull.session.status}
-                            </span>
-                          )}
-                        </span>
-                      )}
-                    </button>
-                  </ContextMenuTrigger>
-                  <ContextMenuContent
-                    onCloseAutoFocus={(event) => event.preventDefault()}
-                  >
-                    <ContextMenuItem
-                      onSelect={() => {
-                        openPullSession(session);
-                        newThread(session);
-                      }}
-                    >
-                      <MessageSquare /> New thread
-                    </ContextMenuItem>
-                    <ContextMenuItem
-                      onSelect={() => {
-                        openPullSession(session);
-                        newTerminal(session);
-                      }}
-                    >
-                      <SquareTerminal /> New terminal
-                    </ContextMenuItem>
-                    <ContextMenuSeparator />
-                    <ContextMenuItem
-                      disabled={
-                        pull.session !== undefined ||
-                        requested.has(pull.number) ||
-                        reviewUnavailable
-                      }
-                      onSelect={() => requestReview(pull.number)}
-                    >
-                      <MessageSquareText /> Request review
-                    </ContextMenuItem>
-                    <ContextMenuItem
-                      disabled={machines[session]?.phase === "checking-out"}
-                      onSelect={() => checkoutPull(session)}
-                    >
-                      <RefreshCw /> Pull PR head onto machine
-                    </ContextMenuItem>
-                  </ContextMenuContent>
-                </ContextMenu>
-              );
-            })}
-            {board.prs.length === 0 && (
-              <div className="px-3 py-4 text-xs text-muted-foreground">
-                No pull requests yet — open one on the repository and the bot
-                reviews it.
-              </div>
-            )}
-          </div>
-        )}
-      </aside>
-      <main className="relative flex min-w-0 flex-1 flex-col">
-        {/* ── the SESSION CHROME — one tab strip for both activities:
+                );
+              })}
+              {board.prs.length === 0 && (
+                <div className="px-3 py-4 text-xs text-muted-foreground">
+                  No pull requests yet — open one on the repository and the bot
+                  reviews it.
+                </div>
+              )}
+            </div>
+          )}
+        </aside>
+        <main className="relative flex min-w-0 flex-1 flex-col">
+          {/* ── the SESSION CHROME — one tab strip for both activities:
             a coding session's threads + terminals; a pull request's
             overview + the bot's review + threads + terminals ── */}
-        {activity === "code" &&
-          currentGroup !== undefined &&
-          tabStrip({
-            session: currentGroup.session,
-            leading: [],
-            threads: currentGroup.threads,
-            selected: activeView,
-            summary: `one machine · ${currentGroup.threads.length} thread${
-              currentGroup.threads.length === 1 ? "" : "s"
-            }`,
-          })}
-        {activity === "review" && reviewSession !== undefined && (
-          <>
-            <div className="flex items-center gap-2 border-b border-border px-3 py-1.5 font-mono text-[11px] text-muted-foreground">
-              <IssueBadge
-                number={pullNumberOf(reviewSession)}
-                state={reviewPull?.state ?? "unknown"}
-                repo={board.repo || undefined}
-              />
-              <span className="min-w-0 truncate text-foreground">
-                {reviewPull?.title ?? reviewSession}
-              </span>
-              <span className="ml-auto flex shrink-0 items-center gap-1.5">
-                {machines[reviewSession]?.phase === "checking-out" && (
-                  <>
-                    <Spinner className="size-3" /> pulling…
-                  </>
-                )}
-                {machines[reviewSession]?.phase === "ready" && (
-                  <>
-                    on {(machines[reviewSession] as { branch: string }).branch}
-                  </>
-                )}
-                {machines[reviewSession]?.phase === "error" && (
-                  <span className="text-brick">machine error</span>
-                )}
-              </span>
-            </div>
-            {tabStrip({
-              session: reviewSession,
-              leading: [
-                {
-                  kind: "lead",
-                  id: overviewId(reviewSession),
-                  label: (
-                    <>
-                      <GitPullRequestArrow className="size-3.5" /> Pull request
-                    </>
-                  ),
-                  status: undefined,
-                  onSelect: () => openOverview(reviewSession),
-                },
-                ...(reviewBotId !== undefined && reviewPull?.session
-                  ? [
-                      {
-                        kind: "lead" as const,
-                        id: reviewBotId,
-                        label: "Review",
-                        status: reviewPull.session.status,
-                        onSelect: () => openThread(reviewBotId),
-                      },
-                    ]
-                  : []),
-              ],
-              threads: reviewThreads,
+          {activity === "code" &&
+            currentGroup !== undefined &&
+            tabStrip({
+              session: currentGroup.session,
+              leading: [],
+              threads: currentGroup.threads,
               selected: activeView,
-              summary: `one machine · ${reviewThreads.length} thread${
-                reviewThreads.length === 1 ? "" : "s"
+              summary: `one machine · ${currentGroup.threads.length} thread${
+                currentGroup.threads.length === 1 ? "" : "s"
               }`,
             })}
-          </>
-        )}
-        {/* ── the VIEWS: every visited one stays mounted (visibility
+          {activity === "review" && reviewSession !== undefined && (
+            <>
+              <div className="flex items-center gap-2 border-b border-border bg-sidebar px-3 py-2 text-xs text-muted-foreground">
+                <IssueBadge
+                  number={pullNumberOf(reviewSession)}
+                  state={reviewPull?.state ?? "unknown"}
+                  repo={board.repo || undefined}
+                />
+                <span className="min-w-0 truncate text-foreground">
+                  {reviewPull?.title ?? reviewSession}
+                </span>
+                <span className="ml-auto flex shrink-0 items-center gap-1.5">
+                  {machines[reviewSession]?.phase === "checking-out" && (
+                    <>
+                      <Spinner className="size-3" /> pulling…
+                    </>
+                  )}
+                  {machines[reviewSession]?.phase === "ready" && (
+                    <>
+                      on{" "}
+                      {(machines[reviewSession] as { branch: string }).branch}
+                    </>
+                  )}
+                  {machines[reviewSession]?.phase === "error" && (
+                    <span className="text-brick">machine error</span>
+                  )}
+                </span>
+              </div>
+              {tabStrip({
+                session: reviewSession,
+                leading: [
+                  {
+                    kind: "lead",
+                    id: overviewId(reviewSession),
+                    label: (
+                      <>
+                        <GitPullRequestArrow className="size-3.5" /> Pull
+                        request
+                      </>
+                    ),
+                    status: undefined,
+                    onSelect: () => openOverview(reviewSession),
+                  },
+                  ...(reviewBotId !== undefined && reviewPull?.session
+                    ? [
+                        {
+                          kind: "lead" as const,
+                          id: reviewBotId,
+                          label: "Review",
+                          status: reviewPull.session.status,
+                          onSelect: () => openThread(reviewBotId),
+                        },
+                      ]
+                    : []),
+                ],
+                threads: reviewThreads,
+                selected: activeView,
+                summary: `one machine · ${reviewThreads.length} thread${
+                  reviewThreads.length === 1 ? "" : "s"
+                }`,
+              })}
+            </>
+          )}
+          {/* ── the VIEWS: every visited one stays mounted (visibility
             flips — scroll position, sockets, and shells survive) ── */}
-        <div className="relative min-h-0 flex-1">
-          {activity === "code" && codeId === undefined && !terminalActive && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
-              <span className="font-mono text-xs text-muted-foreground">
-                no session selected
-              </span>
-              <button
-                type="button"
-                onClick={() =>
-                  newSession(repos.find((repo) => repo.sessions)?.name)
-                }
-                className="rounded border border-border px-3 py-1 font-mono text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
-              >
-                + new session
-              </button>
-            </div>
-          )}
-          {activity === "review" && reviewSession === undefined && (
-            <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-              Select a pull request.
-            </div>
-          )}
-          {visited
-            .filter(
-              (id) => id.startsWith("Engineer:") || id.startsWith("Reviewer:"),
-            )
-            .map((id) => {
-              const shown = activeView === id;
-              return (
-                <div
-                  key={id}
-                  className={cn(
-                    "absolute inset-0 flex flex-col",
-                    shown ? "visible" : "pointer-events-none invisible",
-                  )}
+          <div className="relative min-h-0 flex-1">
+            {activity === "code" && codeId === undefined && !terminalActive && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
+                <span className="text-sm text-muted-foreground">
+                  No session selected
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    newSession(repos.find((repo) => repo.sessions)?.name)
+                  }
                 >
-                  <ChatView
-                    id={id}
-                    active={shown}
-                    agents={[]}
-                    breadcrumb={undefined}
-                    onOpenThread={openThread}
-                  />
-                </div>
-              );
-            })}
-          {visited
-            .filter((id) => id.startsWith("pr:"))
-            .map((id) => {
-              const session = id.slice("pr:".length);
-              const number = pullNumberOf(session);
-              const pull = board.prs.find((entry) => entry.number === number);
-              const shown = activeView === id;
-              return (
-                <div
-                  key={id}
-                  className={cn(
-                    "absolute inset-0 flex flex-col",
-                    shown ? "visible" : "pointer-events-none invisible",
-                  )}
-                >
-                  <PullRequestOverview
-                    repo={session.slice(0, session.lastIndexOf("#"))}
-                    number={number}
-                    active={shown}
-                    Markdown={MarkdownText}
-                    machine={machines[session] ?? { phase: "idle" }}
-                    onCheckout={() => checkoutPull(session)}
-                    onNewThread={() => newThread(session)}
-                    onNewTerminal={() => newTerminal(session)}
-                    review={
-                      pull?.session !== undefined
-                        ? {
-                            status: "session",
-                            running: pull.session.status === "running",
-                          }
-                        : {
-                            status: "none",
-                            requested: requested.has(number),
-                            unavailable: reviewUnavailable,
-                          }
-                    }
-                    onRequestReview={() => requestReview(number)}
-                    proposals={proposals.filter(
-                      (proposal) =>
-                        proposal.number === number &&
-                        proposal.repo ===
-                          session.slice(0, session.lastIndexOf("#")),
-                    )}
-                    proposalBusy={proposalBusy}
-                    onAcceptProposal={(id) => settleProposal(id, "accept")}
-                    onRejectProposal={(id, reason) =>
-                      settleProposal(id, "reject", reason)
-                    }
-                    onReviseProposal={(id, message) =>
-                      settleProposal(id, "revise", message)
-                    }
-                    onOpenSession={(id) => openThread(id)}
-                  />
-                </div>
-              );
-            })}
-          {Object.entries(terminals)
-            .filter(([session]) => visitedSessions.has(session))
-            .flatMap(([session, ptyIds]) =>
-              ptyIds.map((ptyId) => {
-                const shown = activeView === `pty:${session}\u001f${ptyId}`;
+                  <Plus className="size-3.5" /> new session
+                </Button>
+              </div>
+            )}
+            {activity === "review" && reviewSession === undefined && (
+              <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                Select a pull request.
+              </div>
+            )}
+            {visited
+              .filter(
+                (id) =>
+                  id.startsWith("Engineer:") || id.startsWith("Reviewer:"),
+              )
+              .map((id) => {
+                const shown = activeView === id;
                 return (
                   <div
-                    key={`${session}\u001f${ptyId}`}
+                    key={id}
                     className={cn(
                       "absolute inset-0 flex flex-col",
                       shown ? "visible" : "pointer-events-none invisible",
                     )}
                   >
-                    <GhosttyTerminal
-                      sessionId={`Engineer:${session}`}
-                      ptyId={ptyId}
+                    <ChatView
+                      id={id}
                       active={shown}
-                      registerKill={(kill) =>
-                        terminalKillers.current.set(
-                          `${session}\u001f${ptyId}`,
-                          kill,
-                        )
-                      }
+                      agents={[]}
+                      breadcrumb={undefined}
+                      onOpenThread={openThread}
                     />
                   </div>
                 );
-              }),
-            )}
-        </div>
-        {/* the inbox — one card per pending proposal, anywhere in the app */}
-        {pendingProposals.length > 0 && (
-          <div
-            aria-label="proposals"
-            className="absolute bottom-4 right-4 z-20 flex max-h-[70vh] w-[26rem] flex-col gap-2 overflow-y-auto"
-          >
-            {pendingProposals.map((proposal) => (
-              <ProposalCard
-                key={proposal.id}
-                proposal={proposal}
-                Markdown={MarkdownText}
-                compact
-                busy={proposalBusy.has(proposal.id)}
-                onAccept={() => settleProposal(proposal.id, "accept")}
-                onReject={(reason) =>
-                  settleProposal(proposal.id, "reject", reason)
-                }
-                onRevise={(message) =>
-                  settleProposal(proposal.id, "revise", message)
-                }
-                onOpenSession={() =>
-                  openThread(`${proposal.session.term}:${proposal.session.key}`)
-                }
-              />
-            ))}
+              })}
+            {visited
+              .filter((id) => id.startsWith("pr:"))
+              .map((id) => {
+                const session = id.slice("pr:".length);
+                const number = pullNumberOf(session);
+                const pull = board.prs.find((entry) => entry.number === number);
+                const shown = activeView === id;
+                return (
+                  <div
+                    key={id}
+                    className={cn(
+                      "absolute inset-0 flex flex-col",
+                      shown ? "visible" : "pointer-events-none invisible",
+                    )}
+                  >
+                    <PullRequestOverview
+                      repo={session.slice(0, session.lastIndexOf("#"))}
+                      number={number}
+                      active={shown}
+                      Markdown={MarkdownText}
+                      machine={machines[session] ?? { phase: "idle" }}
+                      onCheckout={() => checkoutPull(session)}
+                      onNewThread={() => newThread(session)}
+                      onNewTerminal={() => newTerminal(session)}
+                      review={
+                        pull?.session !== undefined
+                          ? {
+                              status: "session",
+                              running: pull.session.status === "running",
+                            }
+                          : {
+                              status: "none",
+                              requested: requested.has(number),
+                              unavailable: reviewUnavailable,
+                            }
+                      }
+                      onRequestReview={() => requestReview(number)}
+                      proposals={proposals.filter(
+                        (proposal) =>
+                          proposal.number === number &&
+                          proposal.repo ===
+                            session.slice(0, session.lastIndexOf("#")),
+                      )}
+                      proposalBusy={proposalBusy}
+                      onAcceptProposal={(id) => settleProposal(id, "accept")}
+                      onRejectProposal={(id, reason) =>
+                        settleProposal(id, "reject", reason)
+                      }
+                      onReviseProposal={(id, message) =>
+                        settleProposal(id, "revise", message)
+                      }
+                      onOpenSession={(id) => openThread(id)}
+                    />
+                  </div>
+                );
+              })}
+            {Object.entries(terminals)
+              .filter(([session]) => visitedSessions.has(session))
+              .flatMap(([session, ptyIds]) =>
+                ptyIds.map((ptyId) => {
+                  const shown = activeView === `pty:${session}\u001f${ptyId}`;
+                  return (
+                    <div
+                      key={`${session}\u001f${ptyId}`}
+                      className={cn(
+                        "absolute inset-0 flex flex-col",
+                        shown ? "visible" : "pointer-events-none invisible",
+                      )}
+                    >
+                      <GhosttyTerminal
+                        sessionId={`Engineer:${session}`}
+                        ptyId={ptyId}
+                        active={shown}
+                        registerKill={(kill) =>
+                          terminalKillers.current.set(
+                            `${session}\u001f${ptyId}`,
+                            kill,
+                          )
+                        }
+                      />
+                    </div>
+                  );
+                }),
+              )}
           </div>
-        )}
-      </main>
+        </main>
+      </div>
     </div>
   );
 };
@@ -2483,7 +2629,7 @@ const AtTooltip = ({ at, children }: { at: number; children: ReactNode }) => (
   <TooltipProvider>
     <Tooltip>
       <TooltipTrigger asChild>{children}</TooltipTrigger>
-      <TooltipContent side="top" className="font-mono text-xs">
+      <TooltipContent side="top" className="text-xs">
         {formatFull(at)}
       </TooltipContent>
     </Tooltip>
@@ -2770,13 +2916,16 @@ const EventCard = ({ event, raw }: { event: WorldEvent; raw: string }) => {
             #{event.number}
           </span>
         )}
-        <span className="shrink-0 font-mono text-[10px] text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100">
-          {open ? "▾" : "▸"}
-        </span>
+        <ChevronDown
+          className={cn(
+            "size-3.5 shrink-0 text-muted-foreground opacity-0 transition-all group-hover:opacity-100",
+            !open && "-rotate-90",
+          )}
+        />
       </button>
       {open && (
         <div className="ml-[7px] border-l border-border/60 py-1 pl-4">
-          <div className="flex flex-wrap items-center gap-x-3 font-mono text-xs text-muted-foreground">
+          <div className="flex flex-wrap items-center gap-x-3 text-xs text-muted-foreground">
             {event.repo &&
               (event.url ? (
                 <a
@@ -2799,9 +2948,9 @@ const EventCard = ({ event, raw }: { event: WorldEvent; raw: string }) => {
               onClick={(click) =>
                 anchored(click.currentTarget, () => setShowRaw(!showRaw))
               }
-              className="ml-auto cursor-pointer font-mono text-[10px] hover:text-foreground"
+              className="ml-auto cursor-pointer text-[11px] hover:text-foreground"
             >
-              {showRaw ? "▾ raw" : "▸ raw"}
+              {showRaw ? "hide raw" : "show raw"}
             </button>
           </div>
           {event.body && !showRaw && (
@@ -2841,7 +2990,9 @@ const ReasoningTrace = ({
         onClick={(event) => anchored(event.currentTarget, onToggle)}
         className="flex w-full cursor-pointer items-center gap-1.5 text-left font-medium"
       >
-        <span className="font-mono">{open ? "▾" : "▸"}</span>
+        <ChevronDown
+          className={cn("size-3.5 transition-transform", !open && "-rotate-90")}
+        />
         {streaming ? (
           <span className="animate-pulse">Thinking…</span>
         ) : (
@@ -2975,7 +3126,7 @@ const Chat = ({
 
   return (
     <>
-      <div className="flex items-center gap-3 border-b border-border px-4 py-2 font-mono text-xs text-muted-foreground">
+      <div className="flex items-center gap-3 border-b border-border bg-sidebar px-4 py-2 text-xs text-muted-foreground">
         {breadcrumb && (
           <button
             type="button"
@@ -3025,7 +3176,7 @@ const Chat = ({
                   <div className="flex items-center gap-3 py-1">
                     <div className="h-px flex-1 bg-border" />
                     <AtTooltip at={meta.at}>
-                      <span className="shrink-0 cursor-default font-mono text-[11px] text-muted-foreground hover:text-foreground">
+                      <span className="shrink-0 cursor-default text-[11px] text-muted-foreground hover:text-foreground">
                         {formatDay(meta.at)}
                       </span>
                     </AtTooltip>

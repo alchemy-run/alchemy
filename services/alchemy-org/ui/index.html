@@ -1,9 +1,25 @@
 <!doctype html>
-<html lang="en" class="dark">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>alchemy-org</title>
+    <link rel="icon" type="image/svg+xml" href="/alchemy.svg" />
+    <!-- the remembered theme, BEFORE first paint (ui/lib/theme.ts owns
+         the key and the rule; this only mirrors them so a dark page
+         never flashes light) -->
+    <script>
+      (function () {
+        try {
+          var pick = localStorage.getItem("alchemy-org:theme");
+          var dark =
+            pick === "dark" ||
+            (pick !== "light" &&
+              window.matchMedia("(prefers-color-scheme: dark)").matches);
+          if (dark) document.documentElement.classList.add("dark");
+        } catch (_) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

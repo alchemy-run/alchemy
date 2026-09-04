@@ -151,7 +151,14 @@ const ReviewerWorker = ReviewerEvents.pipe(
  *  so the ROUTES see `AI.Sandbox` too (the terminal door) — the same
  *  layer reference the charters consume, deduped by the build MemoMap,
  *  so the terminal lands on the same machine registry the tools use. */
-const Org = Layer.mergeAll(EngineerWorker, ReviewerWorker, SandboxSession).pipe(
+const Org = Layer.mergeAll(
+  EngineerWorker,
+  ReviewerWorker,
+  SandboxSession,
+  // the routes read the operator's identity off the same host token
+  // the publish pair uses (`GET /api/me`) — one FQN-memoized resource
+  PublishTokenLive,
+).pipe(
   Layer.provideMerge(DriverCloudflare),
   Layer.provideMerge(GitHubWorker),
   // one Durable Object per pull request — the store scales with the

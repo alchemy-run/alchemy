@@ -1,6 +1,59 @@
 import { expect, test as base, type Page, type Route } from "@playwright/test";
+import { readFileSync } from "node:fs";
 import pr147 from "../fixtures/pr-147.json" with { type: "json" };
 import pr148 from "../fixtures/pr-148.json" with { type: "json" };
+import type { ChangedFile } from "../../ui/lib/diff.ts";
+import { pathOf } from "../../ui/lib/routes.ts";
+
+/** The PRs' unified diffs, beside their views — served the way the
+ *  Worker pages `pulls.listFiles` (`GET /api/prs/:n/files?page=k`). */
+const diffOf = (number: number): string =>
+  readFileSync(
+    new URL(`../fixtures/pr-${number}.diff`, import.meta.url),
+    "utf8",
+  );
+
+/** Split a fixture's unified diff into GitHub's per-file records:
+ *  the header lines give the names and status, the hunks the patch. */
+export const filesOf = (number: number): ChangedFile[] =>
+  diffOf(number)
+    .split(/^(?=diff --git )/m)
+    .filter((block) => block.startsWith("diff --git "))
+    .map((block) => {
+      const lines = block.split("\n");
+      const hunk = lines.findIndex((line) => line.startsWith("@@"));
+      const header = hunk === -1 ? lines : lines.slice(0, hunk);
+      const patch = hunk === -1 ? undefined : lines.slice(hunk).join("\n");
+      const names = /^diff --git a\/(.+) b\/(.+)$/.exec(header[0]!)!;
+      const renamed = header.some((line) => line.startsWith("rename to "));
+      const status: ChangedFile["status"] = header.some((line) =>
+        line.startsWith("new file"),
+      )
+        ? "added"
+        : header.some((line) => line.startsWith("deleted file"))
+          ? "removed"
+          : renamed
+            ? "renamed"
+            : "modified";
+      const count = (sign: string) =>
+        patch === undefined
+          ? 0
+          : patch
+              .split("\n")
+              .filter(
+                (line) =>
+                  line.startsWith(sign) && !line.startsWith(sign.repeat(3)),
+              ).length;
+      return {
+        filename: names[2]!,
+        previousFilename: renamed ? names[1] : undefined,
+        status,
+        additions: count("+"),
+        deletions: count("-"),
+        patch,
+        blobUrl: `https://github.com/${REPO}/blob/head/${names[2]}`,
+      };
+    });
 
 export { expect };
 
@@ -25,7 +78,9 @@ export interface Proposal {
         comments: Array<{
           path: string;
           line: number;
+          side?: "LEFT" | "RIGHT";
           start_line?: number;
+          start_side?: "LEFT" | "RIGHT";
           body: string;
         }>;
       }
@@ -91,6 +146,15 @@ export class FakeApi {
   reviewBotOnline = false;
   /** Every `POST /api/prs/:n/checkout`, in order. */
   checkouts: number[] = [];
+  /** Every `GET /api/prs/:n/files?page=k`, in order — the fake pages
+   *  ONE file per page so any PR exercises the progressive load. */
+  filePages: Array<{ number: number; page: number }> = [];
+  /** Files the fake serves WITHOUT a patch — GitHub's binaries and
+   *  too-large files (`pulls.listFiles` omits `patch` for them). */
+  unrenderable = new Set<string>();
+  /** Files the fake reports as HUGE (+1 200 lines) — the UI collapses a
+   *  file over LARGE_FILE_LINES behind "Load diff". */
+  large = new Set<string>();
   /** Every `POST /api/chats/:id` (session/thread opened), in order. */
   opened: string[] = [];
   /** Every `DELETE /api/chats/:id`, in order. */
@@ -182,7 +246,9 @@ export class FakeApi {
       if (frame.type !== "subscribe") return;
       const rows = this.transcripts[id] ?? [];
       for (const observation of rows) {
-        ws.send(JSON.stringify({ type: "observation", durable: true, observation }));
+        ws.send(
+          JSON.stringify({ type: "observation", durable: true, observation }),
+        );
       }
       ws.send(JSON.stringify({ type: "live", seq: rows.length }));
     });
@@ -227,7 +293,9 @@ export class FakeApi {
         tick: 0,
         ms: 800,
         text: "",
-        toolCalls: [{ id: callId, name: "bash", input: { command: turn.command } }],
+        toolCalls: [
+          { id: callId, name: "bash", input: { command: turn.command } },
+        ],
       },
       {
         ...envelope(seq + 2),
@@ -237,7 +305,14 @@ export class FakeApi {
         output,
         isFailure: false,
       },
-      { ...envelope(seq + 3), type: "assistant", tick: 1, ms: 600, text: turn.reply, toolCalls: [] },
+      {
+        ...envelope(seq + 3),
+        type: "assistant",
+        tick: 1,
+        ms: 600,
+        text: turn.reply,
+        toolCalls: [],
+      },
     ];
   }
 
@@ -255,6 +330,15 @@ export class FakeApi {
     const method = request.method();
     const path = url.pathname;
 
+    if (path === "/api/me") {
+      return this.json(route, {
+        login: "sam-goodwin",
+        name: "Sam Goodwin",
+        // the ui project aborts everything off-host — the fallback shows
+        avatarUrl: "https://avatars.githubusercontent.com/u/0?v=4",
+        url: "https://github.com/sam-goodwin",
+      });
+    }
     if (path === "/api/repos") {
       return this.json(route, [{ name: REPO, sessions: true, reviews: true }]);
     }
@@ -304,7 +388,11 @@ export class FakeApi {
         );
         return this.json(route, row);
       }
-      this.resolved.push({ id, verb, ...(body.reason ? { reason: body.reason } : {}) });
+      this.resolved.push({
+        id,
+        verb,
+        ...(body.reason ? { reason: body.reason } : {}),
+      });
       const next: Proposal =
         verb === "accept"
           ? {
@@ -313,7 +401,12 @@ export class FakeApi {
               resolvedAt: NOW.getTime(),
               result: `https://github.com/${row.repo}/pull/${row.number ?? 149}`,
             }
-          : { ...row, status: "rejected", resolvedAt: NOW.getTime(), reason: body.reason };
+          : {
+              ...row,
+              status: "rejected",
+              resolvedAt: NOW.getTime(),
+              reason: body.reason,
+            };
       this.proposals = this.proposals.map((entry) =>
         entry.id === id ? next : entry,
       );
@@ -352,7 +445,7 @@ export class FakeApi {
       }
     }
 
-    const pull = path.match(/^\/api\/prs\/(\d+)(\/(checkout|review))?$/);
+    const pull = path.match(/^\/api\/prs\/(\d+)(\/(checkout|review|files))?$/);
     if (pull !== null) {
       const number = Number(pull[1]);
       const view = this.prs[number];
@@ -360,6 +453,20 @@ export class FakeApi {
         return this.json(route, { error: `no pull request #${number}` }, 404);
       }
       if (pull[3] === undefined) return this.json(route, view);
+      if (pull[3] === "files") {
+        const page = Number(url.searchParams.get("page") ?? "1");
+        this.filePages.push({ number, page });
+        const all = filesOf(number).map((file) => ({
+          ...file,
+          patch: this.unrenderable.has(file.filename) ? undefined : file.patch,
+          additions: this.large.has(file.filename) ? 1_200 : file.additions,
+        }));
+        const file = all[page - 1];
+        return this.json(route, {
+          files: file === undefined ? [] : [file],
+          next: page < all.length ? page + 1 : null,
+        });
+      }
       if (pull[3] === "checkout") {
         this.checkouts.push(number);
         return this.json(route, {
@@ -404,11 +511,25 @@ export class FakeTerminal {
   opened: string[] = [];
   /** Keystrokes received, decoded, per pty id. */
   typed: Record<string, string> = {};
+  /** Set to make `open` FAIL the way the DO bridge reports a machine
+   *  that could not start: an `error` frame with this message, then
+   *  every further frame is refused with "no pty". */
+  failOpen: string | undefined;
+  /** With `failOpen`: also close the socket after the error, so the
+   *  viewer's reconnect path (a repaint from scratch) is exercised. */
+  dropAfterError = false;
 
   attach(url: string, ws: WebSocketRoute) {
     const ptyId = new URL(url).searchParams.get("id") ?? "?";
     const encoder = new TextEncoder();
     const decoder = new TextDecoder();
+    const refuse = () =>
+      ws.send(
+        JSON.stringify({
+          t: "error",
+          message: `no pty '${ptyId}' — open it first`,
+        }),
+      );
     ws.onMessage((message) => {
       if (typeof message === "string") {
         const frame = JSON.parse(message) as { t: string };
@@ -417,8 +538,22 @@ export class FakeTerminal {
           ws.send(
             JSON.stringify({ t: "status", message: "resuming the machine" }),
           );
+          if (this.failOpen !== undefined) {
+            ws.send(JSON.stringify({ t: "error", message: this.failOpen }));
+            refuse();
+            // …and the socket drops, as when the DO gives up on the
+            // machine — the viewer reconnects and reads the same again
+            if (this.dropAfterError) setTimeout(() => ws.close(), 50);
+            return;
+          }
           ws.send(Buffer.from(encoder.encode("fake-machine:~$ ")));
+        } else if (this.failOpen !== undefined) {
+          refuse();
         }
+        return;
+      }
+      if (this.failOpen !== undefined) {
+        refuse();
         return;
       }
       const text = decoder.decode(message);
@@ -442,10 +577,10 @@ export const test = base.extend<{ api: FakeApi }>({
 });
 
 /** Load the app fresh — empty layout memory, `hash` as the route. */
-export const openApp = async (page: Page, hash = "") => {
-  await page.goto(`/${hash}`);
+export const openApp = async (page: Page, path = "/") => {
+  await page.goto(path);
   await page.evaluate(() => localStorage.clear());
-  await page.goto(`/${hash}`, { waitUntil: "networkidle" });
+  await page.goto(path, { waitUntil: "networkidle" });
 };
 
 export const sidebar = (page: Page) => page.getByRole("complementary");
@@ -458,8 +593,10 @@ export const tabStrip = (page: Page) =>
 export const tab = (page: Page, name: string | RegExp) =>
   tabStrip(page).getByRole("tab", { name });
 
-export const encodeHash = (id: string) => `#${encodeURIComponent(id)}`;
+/** The app's URL path for a view id — the SAME translation the UI
+ *  uses (GitHub-shaped: `/owner/repo/pull/7`, `/owner/repo/sessions/x`). */
+export { pathOf };
 
-/** Matches a page URL whose hash routes to `id`. */
+/** Matches a page URL whose path routes to `id`. */
 export const routedTo = (id: string) =>
-  new RegExp(`${encodeHash(id).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`);
+  new RegExp(`${pathOf(id).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`);

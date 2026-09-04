@@ -118,9 +118,7 @@ export const GhosttyTerminal = ({
       const focused = document.activeElement;
       if (focused === null || focused === document.body) return true;
       if (container.contains(focused)) return true;
-      return (
-        focused instanceof HTMLElement && focused.tagName === "BUTTON"
-      );
+      return focused instanceof HTMLElement && focused.tagName === "BUTTON";
     };
     const takeFocus = () => {
       if (disposed || killed || !activeRef.current) return;
@@ -163,10 +161,17 @@ export const GhosttyTerminal = ({
         reconnectDelay = 1_000;
         // a reconnect repaints from the guest's retained tail — start
         // from a clean screen so the replay doesn't append to stale
-        // output
-        terminal.reset();
+        // output. RIS + erase-scrollback, NOT `terminal.reset()`:
+        // ghostty-web's reset frees the wasm terminal and allocates a
+        // new one, but its selection manager keeps the freed handle —
+        // selections then read garbage and copy nothing
+        terminal.write("\x1bc\x1b[3J");
         ws.send(
-          JSON.stringify({ t: "open", cols: terminal.cols, rows: terminal.rows }),
+          JSON.stringify({
+            t: "open",
+            cols: terminal.cols,
+            rows: terminal.rows,
+          }),
         );
       };
 
@@ -370,6 +375,23 @@ export const GhosttyTerminal = ({
         // to the application while tracking is on
         event.stopPropagation();
       };
+      // ── COPY ── ghostty-web copies on select and swallows ⌘C without
+      // acting on it, so the chord everyone reaches for did nothing.
+      // ⌘C (mac) / Ctrl+Shift+C (the terminal convention elsewhere)
+      // copy the selection; a plain Ctrl+C stays the interrupt.
+      const onKeyDown = (event: KeyboardEvent) => {
+        if (event.code !== "KeyC") return;
+        const chord =
+          (event.metaKey && !event.ctrlKey) ||
+          (event.ctrlKey && event.shiftKey);
+        if (!chord) return;
+        const selection = term.getSelection();
+        if (selection === "") return;
+        event.preventDefault();
+        event.stopPropagation();
+        navigator.clipboard?.writeText(selection).catch(() => {});
+      };
+      container.addEventListener("keydown", onKeyDown, true);
       // capture phase: ancestors run first, so these beat ghostty's own
       // canvas handlers (its wheel listener is capture on the canvas)
       container.addEventListener("mousedown", onMouseDown, true);
@@ -381,6 +403,7 @@ export const GhosttyTerminal = ({
       });
       container.addEventListener("contextmenu", onContextMenu, true);
       removeMouseBridge = () => {
+        container.removeEventListener("keydown", onKeyDown, true);
         container.removeEventListener("mousedown", onMouseDown, true);
         container.removeEventListener("mouseup", onMouseUp, true);
         container.removeEventListener("mousemove", onMouseMove, true);
@@ -422,8 +445,7 @@ export const GhosttyTerminal = ({
             </span>
             {slow && (
               <span className="max-w-72 text-center font-mono text-[10px] text-[#8a8a93]">
-                a cold machine boots its image first — this can take a
-                minute
+                a cold machine boots its image first — this can take a minute
               </span>
             )}
           </div>

@@ -1,11 +1,26 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 
-/** One inline review comment, in GitHub's createReview shape. */
+/** Which version of the file a diff line is numbered against: `RIGHT`
+ *  is the pull request's HEAD (additions and context), `LEFT` its base
+ *  (deletions). */
+export type DiffSide = "LEFT" | "RIGHT";
+
+/**
+ * One inline review comment, in GitHub's createReview shape. A RANGE
+ * is `start_line..line` — GitHub requires `start_side` alongside
+ * `start_line` (without it a range fails with a misleading "start_line
+ * must precede the end line"), so a range carries both sides; absent
+ * sides mean `RIGHT`, the HEAD version the reviewer reads.
+ */
 export interface ProposedReviewComment {
   readonly path: string;
+  /** The anchor — the LAST line of a range. */
   readonly line: number;
+  readonly side?: DiffSide;
+  /** The FIRST line of a range; strictly before `line`. */
   readonly start_line?: number;
+  readonly start_side?: DiffSide;
   readonly body: string;
 }
 

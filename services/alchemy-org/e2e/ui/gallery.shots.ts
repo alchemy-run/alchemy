@@ -4,15 +4,7 @@
  * SEES the UX; enforced with `toHaveScreenshot` so it can't drift
  * unnoticed. Re-bless after a deliberate change: `pnpm test:e2e:update`.
  */
-import {
-  REPO,
-  encodeHash,
-  expect,
-  main,
-  openApp,
-  tab,
-  test,
-} from "./harness.ts";
+import { REPO, pathOf, expect, main, openApp, tab, test } from "./harness.ts";
 
 const PR = `${REPO}#148`;
 
@@ -22,13 +14,13 @@ const shell = (page: Parameters<typeof openApp>[0]) =>
 test.describe("code", () => {
   test("01 empty directory", async ({ page }) => {
     await openApp(page);
-    await expect(main(page)).toContainText("no session selected");
+    await expect(main(page)).toContainText("No session selected");
     await expect(page).toHaveScreenshot("code-01-empty.png");
   });
 
   test("02 new session dialog", async ({ page }) => {
     await openApp(page);
-    await page.getByRole("button", { name: "+ new session" }).click();
+    await page.getByRole("button", { name: "new session" }).click();
     await expect(page.getByRole("dialog")).toBeVisible();
     // the generated name has a random tail — pin it for the picture
     await page.getByRole("textbox", { name: "Session name" }).fill("s-gallery");
@@ -42,7 +34,7 @@ test.describe("code", () => {
     api.seedChat(`Engineer:${REPO}/s-alpha`, "running");
     api.seedChat(`Engineer:${REPO}/s-alpha::t-review-notes`);
     api.seedChat(`Engineer:${REPO}/s-beta`, "settled");
-    await openApp(page, encodeHash(`Engineer:${REPO}/s-alpha`));
+    await openApp(page, pathOf(`Engineer:${REPO}/s-alpha`));
     await main(page).getByRole("button", { name: "+" }).click();
     await page.getByRole("menuitem", { name: "New terminal" }).click();
     await shell(page);
@@ -67,9 +59,11 @@ test.describe("code", () => {
       ].join("\n"),
       reply: "Built clean — one unused-export warning in `legacyBinding`.",
     });
-    await openApp(page, encodeHash(`Engineer:${REPO}/s-alpha`));
+    await openApp(page, pathOf(`Engineer:${REPO}/s-alpha`));
     // expand the bash card
-    await main(page).getByRole("button", { name: /pnpm --filter/ }).click();
+    await main(page)
+      .getByRole("button", { name: /pnpm --filter/ })
+      .click();
     await expect(main(page)).toContainText("built in");
     await expect(page).toHaveScreenshot("code-06-ansi-output.png");
   });
@@ -77,7 +71,7 @@ test.describe("code", () => {
   test("04 tab context menu", async ({ page, api }) => {
     api.seedChat(`Engineer:${REPO}/s-alpha`);
     api.seedChat(`Engineer:${REPO}/s-alpha::t-review-notes`);
-    await openApp(page, encodeHash(`Engineer:${REPO}/s-alpha`));
+    await openApp(page, pathOf(`Engineer:${REPO}/s-alpha`));
     await tab(page, "main").click({ button: "right" });
     await expect(page.getByRole("menu")).toBeVisible();
     await expect(page).toHaveScreenshot("code-04-tab-menu.png");
@@ -86,7 +80,7 @@ test.describe("code", () => {
   test("05 delete thread confirmation", async ({ page, api }) => {
     api.seedChat(`Engineer:${REPO}/s-alpha`);
     api.seedChat(`Engineer:${REPO}/s-alpha::t-review-notes`);
-    await openApp(page, encodeHash(`Engineer:${REPO}/s-alpha::t-review-notes`));
+    await openApp(page, pathOf(`Engineer:${REPO}/s-alpha::t-review-notes`));
     await tab(page, /review-notes/).click({ button: "right" });
     await page.getByRole("menuitem", { name: "Delete thread" }).click();
     await expect(page.getByRole("dialog")).toBeVisible();
@@ -104,13 +98,13 @@ test.describe("review", () => {
   });
 
   test("02 pull request overview", async ({ page }) => {
-    await openApp(page, encodeHash(`pr:${PR}`));
+    await openApp(page, pathOf(`pr:${PR}`));
     await expect(main(page)).toContainText("approved these changes");
     await expect(page).toHaveScreenshot("review-02-overview.png");
   });
 
   test("03 inline review comment expanded", async ({ page }) => {
-    await openApp(page, encodeHash(`pr:${PR}`));
+    await openApp(page, pathOf(`pr:${PR}`));
     await main(page)
       .getByRole("button", { name: /flow-test\/sum\.ts:4/ })
       .click();
@@ -119,7 +113,7 @@ test.describe("review", () => {
   });
 
   test("04 machine pulled onto the PR head", async ({ page }) => {
-    await openApp(page, encodeHash(`pr:${PR}`));
+    await openApp(page, pathOf(`pr:${PR}`));
     await main(page).getByRole("button", { name: "pull" }).click();
     await expect(main(page)).toContainText("on flow-test-deploy @ 7d7584e");
     await expect(page).toHaveScreenshot("review-04-machine-ready.png");
@@ -132,7 +126,7 @@ test.describe("review", () => {
     api.seedChat(`Reviewer:${PR}`, "running");
     api.board.prs[0]!.session = { id: `Reviewer:${PR}`, status: "running" };
     api.seedChat(`Engineer:${PR}`);
-    await openApp(page, encodeHash(`pr:${PR}`));
+    await openApp(page, pathOf(`pr:${PR}`));
     await expect(tab(page, "Review")).toBeVisible();
     await expect(tab(page, "main")).toBeVisible();
     await expect(page).toHaveScreenshot("review-05-review-and-thread-tabs.png");
@@ -161,14 +155,91 @@ test.describe("review", () => {
       },
       "request changes on #148 (1 inline comment)",
     );
-    await openApp(page, encodeHash(`pr:${PR}`));
-    await expect(main(page)).toContainText("proposed by agents");
+    await openApp(page, `${pathOf(`pr:${PR}`)}/proposals`);
+    await expect(main(page)).toContainText("1 awaiting you");
     await expect(page).toHaveScreenshot("review-08-proposal.png");
+  });
+
+  test("09 the inbox: one line per proposal, one opened", async ({
+    page,
+    api,
+  }) => {
+    api.seedProposal(
+      148,
+      { kind: "comment", number: 148, body: "Looks right; one nit inline." },
+      "comment on #148",
+    );
+    api.seedProposal(
+      148,
+      {
+        kind: "review",
+        number: 148,
+        verdict: "request_changes",
+        body: "The retry loop never backs off.",
+        comments: [],
+      },
+      "request changes on #148: retry loop never backs off",
+    );
+    await openApp(page);
+    await page
+      .getByRole("banner")
+      .getByRole("button", { name: "notifications, 2 awaiting you" })
+      .click();
+    const inbox = page.getByRole("dialog", { name: "proposals" });
+    await expect(inbox).toContainText("2 awaiting you");
+    await inbox.getByRole("button", { name: "details" }).last().click();
+    await expect(
+      inbox.getByRole("button", { name: "post comment" }),
+    ).toBeVisible();
+    await expect(page).toHaveScreenshot("review-09-inbox.png");
+  });
+
+  test("10 the pull request overview, in light", async ({ page }) => {
+    await page.emulateMedia({ colorScheme: "light" });
+    await openApp(page, pathOf(`pr:${PR}`));
+    await expect(main(page)).toContainText("approved these changes");
+    await expect(page).toHaveScreenshot("review-10-overview-light.png");
+  });
+
+  test("11 the account menu", async ({ page }) => {
+    await openApp(page);
+    await page
+      .getByRole("banner")
+      .getByRole("button", { name: "account, sam-goodwin" })
+      .click();
+    await expect(page.getByRole("menu")).toContainText("@sam-goodwin");
+    await expect(page).toHaveScreenshot("review-11-account-menu.png");
+  });
+
+  test("12 files changed — the diff with the review's comment on its line", async ({
+    page,
+  }) => {
+    await openApp(page, `${pathOf(`pr:${PR}`)}/files`);
+    const files = main(page).getByLabel("files changed");
+    await expect(files).toContainText("1 file changed");
+    await expect(
+      files.locator("[data-changed-file]").getByText("return total"),
+    ).toBeVisible();
+    await expect(files).toContainText("The loop condition");
+    await expect(page).toHaveScreenshot("review-12-files-changed.png");
+  });
+
+  test("13 files changed, in light — the same walnut diff as the docs", async ({
+    page,
+  }) => {
+    await page.emulateMedia({ colorScheme: "light" });
+    await openApp(page, `${pathOf(`pr:${PR}`)}/files`);
+    const files = main(page).getByLabel("files changed");
+    await expect(
+      files.locator("[data-changed-file]").getByText("return total"),
+    ).toBeVisible();
+    await expect(files).toContainText("The loop condition");
+    await expect(page).toHaveScreenshot("review-13-files-changed-light.png");
   });
 
   test("06 a terminal on the PR's machine", async ({ page, api }) => {
     api.seedChat(`Engineer:${PR}`);
-    await openApp(page, encodeHash(`pr:${PR}`));
+    await openApp(page, pathOf(`pr:${PR}`));
     await main(page).getByRole("button", { name: "terminal" }).click();
     await shell(page);
     await page.keyboard.type("git log --oneline -1");

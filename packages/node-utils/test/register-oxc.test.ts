@@ -193,6 +193,42 @@ describe("registerOxc", () => {
     expect(filtered).toBe("wsdep: ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING");
   });
 
+  it("keeps require.cache/require.extensions in CommonJS imported from ESM", () => {
+    // With a load hook registered, Node routes ESM-imported CommonJS through
+    // its ESM-side translator, whose `require` lacks `.cache` — the failure
+    // mode behind `@tailwindcss/node`'s `delete require.cache[dep]` blowing
+    // up under alchemy's loader. The shim must restore both without
+    // disturbing the shebang, the strict-mode directive, or line numbers.
+    const root = makeProject();
+    write(
+      path.join(root, "cjs/legacy.cjs"),
+      [
+        "#!/usr/bin/env node",
+        '"use strict";',
+        "const strict = (function () { return this === undefined; })();",
+        "const line = Number(new Error().stack.split('\\n')[1].match(/:(\\d+):\\d+\\)?$/)[1]);",
+        "delete require.cache[__filename];",
+        "module.exports = { strict, line, cache: typeof require.cache, extensions: typeof require.extensions };",
+      ].join("\n"),
+    );
+    const result = runNode(
+      root,
+      `
+      const { registerOxc } = await import(${JSON.stringify(registerUrl)});
+      registerOxc();
+      const legacy = await import("./cjs/legacy.cjs");
+      console.log(JSON.stringify(legacy.default));
+      `,
+    );
+    expect(result.status, result.stderr).toBe(0);
+    expect(JSON.parse(result.stdout.trim())).toEqual({
+      strict: true,
+      line: 4,
+      cache: "object",
+      extensions: "object",
+    });
+  });
+
   it("unregisters one-shot imports after success and failure", () => {
     const root = makeProject();
     write(path.join(root, "src/broken.ts"), "export const = ;\n");

@@ -28,7 +28,10 @@ export interface RefInfo {
 
 const cache = new Map<string, Promise<RefInfo | undefined>>();
 
-const fetchRef = (repo: string, number: number): Promise<RefInfo | undefined> => {
+const fetchRef = (
+  repo: string,
+  number: number,
+): Promise<RefInfo | undefined> => {
   const key = `${repo}#${number}`;
   const cached = cache.get(key);
   if (cached !== undefined) return cached;
@@ -58,7 +61,11 @@ const fetchRef = (repo: string, number: number): Promise<RefInfo | undefined> =>
       { headers: { accept: "application/vnd.github+json" } },
     );
     if (!pull.ok) {
-      return { ...base, kind: "pr", state: data.state === "open" ? "open" : "closed" };
+      return {
+        ...base,
+        kind: "pr",
+        state: data.state === "open" ? "open" : "closed",
+      };
     }
     const pr = (await pull.json()) as any;
     return {
@@ -96,7 +103,10 @@ const relativeTime = (iso: string): string => {
 
 const STATE_PILL: Record<
   RefInfo["kind"],
-  Record<RefInfo["state"], { icon: typeof CircleDot; label: string; className: string }>
+  Record<
+    RefInfo["state"],
+    { icon: typeof CircleDot; label: string; className: string }
+  >
 > = {
   issue: {
     open: { icon: CircleDot, label: "Open", className: "bg-moss/15 text-moss" },
@@ -222,8 +232,12 @@ const CardBody = ({
         {info.kind === "pr" && info.additions !== undefined && (
           <span className="ml-auto flex items-center gap-1.5">
             <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px]">
-              <span className="text-moss">+{info.additions.toLocaleString()}</span>{" "}
-              <span className="text-brick">−{info.deletions?.toLocaleString()}</span>
+              <span className="text-moss">
+                +{info.additions.toLocaleString()}
+              </span>{" "}
+              <span className="text-brick">
+                −{info.deletions?.toLocaleString()}
+              </span>
             </span>
             <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">
               {info.changedFiles} files

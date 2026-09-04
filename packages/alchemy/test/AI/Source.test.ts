@@ -86,4 +86,25 @@ describe("AI.Source", () => {
       expect(renderSource(source)).toBe("`src/coding/Engineer.ts`");
     }),
   );
+
+  it.effect(
+    "runtime: a FileSystem beside an unset import.meta.url — the stored path wins",
+    () =>
+      Effect.gen(function* () {
+        const { layer } = stubRuntime({
+          alchemy_source_Skill_Probe: "src/coding/Engineer.ts",
+        });
+        // workerd leaves `import.meta.url` undefined, while the Worker
+        // bridge still provides NodeServices (FileSystem + Path) to the
+        // isolate build — resolving must skip, not throw
+        const source = makeSource(
+          { url: undefined } as unknown as ImportMeta,
+          "Skill",
+          "Probe",
+        );
+        yield* bindSource(source).pipe(Effect.provide(layer));
+        expect(source.path).toBe("src/coding/Engineer.ts");
+        expect(renderSource(source)).toBe("`src/coding/Engineer.ts`");
+      }).pipe(Effect.provide(BunServices.layer)),
+  );
 });

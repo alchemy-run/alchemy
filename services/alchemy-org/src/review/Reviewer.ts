@@ -12,7 +12,7 @@ import { ProviderEngineering } from "../process/ProviderEngineering.ts";
 import { PullRequests } from "../process/PullRequests.ts";
 import { Verification } from "../process/Verification.ts";
 import { path } from "../coding/ReadFile.ts";
-import { Proposals } from "../github/Proposals.ts";
+import { Proposals, type ProposedReviewComment } from "../github/Proposals.ts";
 import { primary } from "../github/Repos.ts";
 import { OrgGuidance } from "../OrgGuidance.ts";
 import { SessionRepo } from "../github/SessionRepo.ts";
@@ -50,15 +50,22 @@ The full markdown text. It must stand alone — the reader has no access
 to the conversation that produced it.`;
 
 const line = AI.Parameter("line", S.Int)`
-The line in the pull request's HEAD version of the file that the
-comment is anchored to — the LAST line when commenting a range. It
-must be a line the diff shows (added or context); GitHub rejects
-anchors outside the diff.
+The line the comment is anchored to — the LAST line when commenting a
+range — numbered in the file version named by side (HEAD by default).
+It must be a line the diff shows (added, deleted, or context); GitHub
+rejects anchors outside the diff.
 `;
 
 const startLine = AI.Parameter("startLine", S.optionalKey(S.Int))`
 For a multi-line comment: the FIRST line of the range (strictly less
-than the anchor line). Omit for a single-line comment.`;
+than the anchor line), numbered on the same side as line. Omit for a
+single-line comment.`;
+
+const side = AI.Parameter("side", S.optionalKey(S.Literals(["LEFT", "RIGHT"])))`
+Which version of the file line and startLine are numbered against:
+"RIGHT" (the default) is the pull request's HEAD — added and context
+lines; "LEFT" is its base — for commenting on DELETED lines, which
+exist only there.`;
 
 const verdict = AI.Parameter(
   "verdict",
@@ -98,12 +105,7 @@ class CommentFailed extends Data.TaggedError("CommentFailed")<{
 }> {}
 
 /** One buffered inline comment, in GitHub's createReview shape. */
-interface PendingComment {
-  readonly path: string;
-  readonly line: number;
-  readonly start_line?: number;
-  readonly body: string;
-}
+type PendingComment = ProposedReviewComment;
 
 export const ReviewerLive = Reviewer.make(
   Effect.gen(function* () {
@@ -159,17 +161,18 @@ export const ReviewerLive = Reviewer.make(
     );
 
     const addComment = yield* AI.Tool("add_comment")`
-      Pin ${message} to ${path} at ${line} (optionally from
-      ${startLine}) — one concrete problem, anchored to the exact
-      lines that prove it. Comments buffer until submit_review files
-      them with the verdict; nothing is visible to anyone before
-      that. Fails with ${InvalidRange} when startLine is not
-      strictly before line.`(
+      Pin ${message} to ${path} at ${line} — or to the RANGE from
+      ${startLine} to line — on the diff's ${side}: one concrete
+      problem, anchored to the exact lines that prove it. Comments
+      buffer until submit_review files them with the verdict; nothing
+      is visible to anyone before that. Fails with ${InvalidRange}
+      when startLine is not strictly before line.`(
       Effect.fn(function* (p: {
         message: string;
         path: string;
         line: number;
         startLine?: number;
+        side?: "LEFT" | "RIGHT";
       }) {
         if (p.startLine !== undefined && p.startLine >= p.line) {
           return yield* Effect.fail(
@@ -178,19 +181,32 @@ export const ReviewerLive = Reviewer.make(
             }),
           );
         }
+        const side = p.side ?? "RIGHT";
         const count = yield* Ref.modify(pending, (buffered) => {
-          const next = [
+          const next: PendingComment[] = [
             ...buffered,
             {
               path: p.path,
               line: p.line,
-              ...(p.startLine !== undefined && { start_line: p.startLine }),
+              side,
+              // a range names both sides — GitHub rejects a start_line
+              // without its start_side (github/ProposalActions.ts)
+              ...(p.startLine !== undefined && {
+                start_line: p.startLine,
+                start_side: side,
+              }),
               body: p.message,
             },
           ];
           return [next.length, next];
         });
-        return `buffered comment ${count} on ${p.path}:${p.line}`;
+        const where =
+          p.startLine !== undefined
+            ? `${p.path}:${p.startLine}-${p.line}`
+            : `${p.path}:${p.line}`;
+        return `buffered comment ${count} on ${where}${
+          side === "LEFT" ? " (deleted lines)" : ""
+        }`;
       }),
     );
 

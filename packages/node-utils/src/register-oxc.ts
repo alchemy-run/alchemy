@@ -195,6 +195,47 @@ const withJsonAttribute = (url: string, context: LoadHookContext) => {
 };
 
 /**
+ * Restores `require.cache` / `require.extensions` inside a CommonJS module.
+ *
+ * Once ANY `load` hook is registered, Node loads every CommonJS module that
+ * ESM imports through its ESM-side CJS translator instead of the classic
+ * loader — and the `require` that translator hands the module only carries
+ * `.resolve` and `.main`. Tooling that clears `require.cache` (Vite plugins
+ * such as `@tailwindcss/node`) then dies with "Cannot convert undefined or
+ * null to object" in any alchemy-launched Node process. Both properties
+ * are aliases of the classic loader's own tables, which that translator
+ * still populates, so pointing at them restores the classic semantics.
+ */
+const REQUIRE_SHIM =
+  'if(typeof require==="function"&&require.cache===void 0){const m=process.getBuiltinModule("node:module");require.cache=m._cache;require.extensions=m._extensions;}';
+
+/** Shebang line, then an optional `"use strict"` directive — the shim must
+ *  follow both (a directive only counts when nothing precedes it). */
+const PROLOGUE = /^(?:#![^\n]*\n)?(?:\s*(?:"use strict"|'use strict')\s*;?)?/;
+
+const textOf = (source: string | ArrayBuffer | ArrayBufferView): string =>
+  typeof source === "string"
+    ? source
+    : Buffer.from(
+        ArrayBuffer.isView(source) ? source.buffer : source,
+        ArrayBuffer.isView(source) ? source.byteOffset : 0,
+        ArrayBuffer.isView(source) ? source.byteLength : undefined,
+      ).toString("utf8");
+
+/** The shim goes right after the prologue on the SAME line: no line is
+ *  added, so line numbers and inline source maps stay correct. */
+const withRequireShim = (result: LoadFnOutput): LoadFnOutput => {
+  if (result.format !== "commonjs" || result.source == null) return result;
+  const text = textOf(result.source);
+  const source = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
+  const at = PROLOGUE.exec(source)?.[0].length ?? 0;
+  return {
+    ...result,
+    source: source.slice(0, at) + REQUIRE_SHIM + source.slice(at),
+  };
+};
+
+/**
  * Registers synchronous Node module hooks that transpile TypeScript with
  * Rolldown's Oxc transformer and resolve it the way TypeScript (and tsx)
  * does. A namespaced registration also provides a scoped import whose
@@ -264,7 +305,7 @@ export const registerOxc = (
     load(url, context, nextLoad): LoadFnOutput {
       const namespace = namespaceOf(url);
       if (options.namespace !== undefined && namespace !== options.namespace) {
-        return nextLoad(url, context);
+        return withRequireShim(nextLoad(url, context));
       }
 
       const cleanUrl = withoutNamespace(url);
@@ -273,7 +314,9 @@ export const registerOxc = (
       options.onImport?.(cleanUrl);
 
       if (options.filter !== undefined && !options.filter(filePath)) {
-        return nextLoad(cleanUrl, withJsonAttribute(cleanUrl, context));
+        return withRequireShim(
+          nextLoad(cleanUrl, withJsonAttribute(cleanUrl, context)),
+        );
       }
       const transformed = transformer.transform(
         filePath,
@@ -281,9 +324,11 @@ export const registerOxc = (
         context.format,
       );
       if (transformed === undefined) {
-        return nextLoad(cleanUrl, withJsonAttribute(cleanUrl, context));
+        return withRequireShim(
+          nextLoad(cleanUrl, withJsonAttribute(cleanUrl, context)),
+        );
       }
-      return { ...transformed, shortCircuit: true };
+      return withRequireShim({ ...transformed, shortCircuit: true });
     },
   });
 

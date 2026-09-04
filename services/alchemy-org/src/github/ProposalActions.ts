@@ -1,11 +1,44 @@
 import * as GitHub from "alchemy/GitHub";
 import * as Effect from "effect/Effect";
-import type { Proposal } from "./Proposals.ts";
+import type { DiffSide, Proposal, ProposedReviewComment } from "./Proposals.ts";
 
 /** Every comment the org posts carries this invisible marker — the
  *  review router (when enabled) skips comment events carrying it, so
  *  the bot never wakes on its own words. */
 export const SIGNATURE = "<!-- review-bot -->";
+
+/** A `createReview` inline comment as GitHub accepts it. */
+export interface GitHubReviewComment {
+  readonly path: string;
+  readonly body: string;
+  readonly line: number;
+  readonly side: DiffSide;
+  readonly start_line?: number;
+  readonly start_side?: DiffSide;
+}
+
+/**
+ * The comment as GitHub must receive it: `side` always stated (`RIGHT`
+ * unless the proposal says otherwise), and a RANGE carrying its
+ * `start_side` too — GitHub rejects a `start_line` without one, with
+ * a 422 that blames the line numbers. A proposal filed before sides
+ * were recorded still posts correctly.
+ */
+export const toGitHubReviewComment = (
+  comment: ProposedReviewComment,
+): GitHubReviewComment => {
+  const side = comment.side ?? "RIGHT";
+  return {
+    path: comment.path,
+    body: comment.body,
+    line: comment.line,
+    side,
+    ...(comment.start_line !== undefined && {
+      start_line: comment.start_line,
+      start_side: comment.start_side ?? side,
+    }),
+  };
+};
 
 /**
  * The EXECUTOR: perform an accepted proposal's payload against GitHub,
@@ -50,6 +83,7 @@ export const makeProposalExecutor = (
                 : payload.verdict === "request_changes"
                   ? "**REQUEST CHANGES**"
                   : undefined;
+            const comments = payload.comments.map(toGitHubReviewComment);
             const review = yield* writer
               .createReview({
                 pull_number: payload.number,
@@ -60,7 +94,7 @@ export const makeProposalExecutor = (
                       ? "REQUEST_CHANGES"
                       : "COMMENT",
                 body: `${payload.body}\n\n${SIGNATURE}`,
-                comments: [...payload.comments],
+                comments,
               })
               .pipe(
                 // GitHub forbids verdict reviews on the author's own pull
@@ -73,7 +107,7 @@ export const makeProposalExecutor = (
                       pull_number: payload.number,
                       event: "COMMENT",
                       body: `${banner ?? ""}\n\n${payload.body}\n\n${SIGNATURE}`,
-                      comments: [...payload.comments],
+                      comments,
                     }),
                 ),
                 Effect.mapError(describe),

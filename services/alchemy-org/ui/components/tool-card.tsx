@@ -9,6 +9,7 @@ import {
   FolderSearch,
   FolderTree,
   GitFork,
+  ChevronDown,
   GitPullRequestArrow,
   MessageSquare,
   MessageSquarePlus,
@@ -80,7 +81,13 @@ const diffStat = (text: string): { added: number; removed: number } => {
   return { added, removed };
 };
 
-const DiffStatBadge = ({ added, removed }: { added: number; removed: number }) =>
+const DiffStatBadge = ({
+  added,
+  removed,
+}: {
+  added: number;
+  removed: number;
+}) =>
   added === 0 && removed === 0 ? null : (
     <span className="shrink-0 font-mono text-[11px]">
       {added > 0 && <span className="text-moss">+{added}</span>}
@@ -119,7 +126,11 @@ const Mono = ({ children }: { children: ReactNode }) => (
 );
 
 /** Head+tail window (the Codex convention) for long plain output. */
-const WindowedText = ({ text, head = 8, tail = 12 }: {
+const WindowedText = ({
+  text,
+  head = 8,
+  tail = 12,
+}: {
   text: string;
   head?: number;
   tail?: number;
@@ -193,7 +204,6 @@ type Renderers<L> = {
     running: boolean,
   ) => ToolCallView;
 };
-
 
 /** `#N` as a link into GitHub — issues and PRs share the /issues/N
  *  door (GitHub redirects PR numbers), and PullRequestRefs carry an
@@ -284,7 +294,9 @@ const REVIEWER: Renderers<typeof ReviewerLive> & {
       body:
         split === undefined ? undefined : (
           <div>
-            {split.header.length > 0 && <Mono>{clamp(split.header, 1200)}</Mono>}
+            {split.header.length > 0 && (
+              <Mono>{clamp(split.header, 1200)}</Mono>
+            )}
             {split.patch !== undefined ? (
               <DiffCard patch={split.patch} />
             ) : (
@@ -386,7 +398,9 @@ const CODER: Renderers<typeof GeneralEngineer> = {
     return {
       icon: Terminal,
       title: (
-        <span className="font-mono">{clamp(firstLine(String(input.command ?? "")), 100)}</span>
+        <span className="font-mono">
+          {clamp(firstLine(String(input.command ?? "")), 100)}
+        </span>
       ),
       badge:
         parsed?.exit === undefined ? undefined : (
@@ -415,7 +429,7 @@ const CODER: Renderers<typeof GeneralEngineer> = {
             )}
             {parsed && parsed.stderr.length > 0 && (
               <div className="border-t border-border/50">
-                <div className="px-2 pt-1 font-mono text-[10px] uppercase text-muted-foreground">
+                <div className="px-2 pt-1 text-[11px] font-medium text-muted-foreground">
                   stderr
                 </div>
                 <WindowedText text={parsed.stderr} />
@@ -496,7 +510,9 @@ const CODER: Renderers<typeof GeneralEngineer> = {
     title: (
       <>
         Read output{" "}
-        <span className="font-mono text-muted-foreground">{input.outputId}</span>
+        <span className="font-mono text-muted-foreground">
+          {input.outputId}
+        </span>
       </>
     ),
     body: output === undefined ? undefined : <WindowedText text={output} />,
@@ -510,7 +526,10 @@ const CODER: Renderers<typeof GeneralEngineer> = {
       </>
     ),
     badge: (
-      <DiffStatBadge added={countLines(String(input.content ?? ""))} removed={0} />
+      <DiffStatBadge
+        added={countLines(String(input.content ?? ""))}
+        removed={0}
+      />
     ),
     body:
       input.content === undefined ? (
@@ -526,11 +545,8 @@ const CODER: Renderers<typeof GeneralEngineer> = {
   }),
 
   editFile: (input) => {
-    const edits: Array<{ oldString: string; newString: string }> = Array.isArray(
-      input.edits,
-    )
-      ? input.edits
-      : [];
+    const edits: Array<{ oldString: string; newString: string }> =
+      Array.isArray(input.edits) ? input.edits : [];
     const removed = edits.reduce(
       (n, e) => n + countLines(e.oldString ?? ""),
       0,
@@ -542,7 +558,10 @@ const CODER: Renderers<typeof GeneralEngineer> = {
         <>
           Edit <span className="font-mono text-mist">{input.path}</span>
           {edits.length > 1 && (
-            <span className="text-muted-foreground"> ({edits.length} edits)</span>
+            <span className="text-muted-foreground">
+              {" "}
+              ({edits.length} edits)
+            </span>
           )}
         </>
       ),
@@ -571,8 +590,7 @@ const CODER: Renderers<typeof GeneralEngineer> = {
     icon: Upload,
     title: (
       <>
-        Push branch{" "}
-        <span className="font-mono text-mist">{input.branch}</span>
+        Push branch <span className="font-mono text-mist">{input.branch}</span>
       </>
     ),
     summary: running || output === undefined ? undefined : lastLine(output),
@@ -619,7 +637,10 @@ const EXTRAS: Record<string, Renderer> = {
         <span className="font-medium">{String(input.skill ?? "")}</span>
       </>
     ),
-    body: output === undefined ? undefined : <WindowedText text={output} head={12} tail={0} />,
+    body:
+      output === undefined ? undefined : (
+        <WindowedText text={output} head={12} tail={0} />
+      ),
   }),
 
   remind_me: (input) => ({
@@ -643,8 +664,7 @@ const RENDERERS: Record<string, Renderer> = {
 };
 
 /** Whether a compact per-tool card exists for this tool name. */
-export const hasToolCard = (toolName: string): boolean =>
-  toolName in RENDERERS;
+export const hasToolCard = (toolName: string): boolean => toolName in RENDERERS;
 
 /* ── the card ────────────────────────────────────────────────── */
 
@@ -687,20 +707,14 @@ export const ToolCard = ({
   return (
     <div
       className={cn(
-        "overflow-hidden rounded-md border text-sm",
-        failed
-          ? "border-brick/40"
-          : running
-            ? "border-honey/40"
-            : "border-border/60",
+        "callout overflow-hidden text-sm",
+        failed ? "callout-danger" : running && "border-primary/40",
       )}
     >
       <button
         type="button"
         disabled={!expandable}
-        onClick={(event) =>
-          anchored(event.currentTarget, () => setOpen(!open))
-        }
+        onClick={(event) => anchored(event.currentTarget, () => setOpen(!open))}
         className={cn(
           "flex w-full items-center gap-2 px-2.5 py-1.5 text-left",
           expandable && "cursor-pointer hover:bg-accent/50",
@@ -712,21 +726,24 @@ export const ToolCard = ({
             failed
               ? "text-brick"
               : running
-                ? "animate-pulse text-honey"
+                ? "animate-pulse text-primary"
                 : "text-muted-foreground",
           )}
         />
         <span className="min-w-0 flex-1 truncate">{view.title}</span>
         {running && (
-          <span className="shrink-0 animate-pulse text-[11px] text-honey">
+          <span className="shrink-0 animate-pulse text-[11px] text-primary">
             running…
           </span>
         )}
         {view.badge}
         {expandable && (
-          <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
-            {open ? "▾" : "▸"}
-          </span>
+          <ChevronDown
+            className={cn(
+              "size-3.5 shrink-0 text-muted-foreground transition-transform",
+              !open && "-rotate-90",
+            )}
+          />
         )}
       </button>
       {!open && !running && !failed && view.summary !== undefined && (
@@ -736,7 +753,7 @@ export const ToolCard = ({
         </div>
       )}
       {open && failed && errorText !== undefined && (
-        <div className="border-t border-brick/40 bg-brick/10 px-2.5 py-1.5">
+        <div className="border-t border-inherit px-2.5 py-1.5">
           <pre className="whitespace-pre-wrap font-mono text-[11px] text-brick">
             <Ansi text={errorText} />
           </pre>

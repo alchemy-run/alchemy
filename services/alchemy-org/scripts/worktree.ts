@@ -31,17 +31,38 @@
  * process running to completion.
  */
 import { $ } from "bun";
-import { existsSync, mkdirSync, rmdirSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { resolve } from "node:path";
 
 const WORKTREES = ".alchemy/worktrees";
 const BOOTSTRAP_DISTILLED = "scripts/bootstrap-distilled-worktree.ts";
 const LOCK_WAIT_MS = 5 * 60_000;
+/** A lock whose owner has not written its pid by now is a crashed
+ *  mkdir — the pid file follows the mkdir within the same tick. */
+const LOCK_UNCLAIMED_MS = 5_000;
 
+/** A failure UNWINDS (so a held lock is released on the way out) and
+ *  is reported at the top level — never `process.exit` mid-flight,
+ *  which skips every `finally`. */
+class Failure extends Error {}
 const fail = (message: string): never => {
-  process.stderr.write(`${message}\n`);
-  process.exit(1);
+  throw new Failure(message);
 };
+// bun reports a rejected top-level await here (verified): the reason
+// alone on stderr — the Worker shows it to the operator verbatim
+process.on("uncaughtException", (error) => {
+  process.stderr.write(
+    `${error instanceof Failure ? error.message : String(error)}\n`,
+  );
+  process.exit(1);
+});
 
 const slug = (value: string): string =>
   value.replaceAll(/[^a-zA-Z0-9._-]+/g, "-").replaceAll(/^-+|-+$/g, "");
@@ -114,8 +135,38 @@ async function branchFor(ref: string | undefined): Promise<string> {
   return (await heldElsewhere(ref)) ? synthetic : ref;
 }
 
+/** Whether a process with `pid` is alive (signal 0 probes without
+ *  sending; EPERM means alive-but-not-ours). */
+const alive = (pid: number): boolean => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === "EPERM";
+  }
+};
+
+/** A lock nobody holds any more: its owner's pid is dead, or it never
+ *  got as far as claiming it. A dev server restart, a killed `bun`, a
+ *  crash between mkdir and finally — none may wedge every session
+ *  after it behind a five-minute wait. */
+const stale = (lock: string): boolean => {
+  try {
+    const pid = Number(readFileSync(resolve(lock, "pid"), "utf8").trim());
+    return Number.isInteger(pid) && pid > 0 && !alive(pid);
+  } catch {
+    // no pid file yet: fresh (its owner is about to write it) or crashed
+    try {
+      return Date.now() - statSync(lock).mtimeMs > LOCK_UNCLAIMED_MS;
+    } catch {
+      return false; // gone between our looks — the next mkdir tells
+    }
+  }
+};
+
 /** One mutator at a time across every Worker request and session:
- *  `mkdir` is atomic, so the directory IS the lock. */
+ *  `mkdir` is atomic, so the directory IS the lock; the pid inside
+ *  says who holds it, so a dead holder's lock can be broken. */
 async function locked<A>(work: () => Promise<A>): Promise<A> {
   const lock = resolve(root, WORKTREES, ".lock");
   mkdirSync(resolve(root, WORKTREES), { recursive: true });
@@ -123,8 +174,13 @@ async function locked<A>(work: () => Promise<A>): Promise<A> {
   for (;;) {
     try {
       mkdirSync(lock);
+      writeFileSync(resolve(lock, "pid"), `${process.pid}\n`);
       break;
     } catch {
+      if (stale(lock)) {
+        rmSync(lock, { recursive: true, force: true });
+        continue;
+      }
       if (Date.now() > deadline) {
         fail(`another worktree operation has held ${lock} for over 5 minutes`);
       }
@@ -134,7 +190,7 @@ async function locked<A>(work: () => Promise<A>): Promise<A> {
   try {
     return await work();
   } finally {
-    rmdirSync(lock);
+    rmSync(lock, { recursive: true, force: true });
   }
 }
 

@@ -78,6 +78,12 @@ export interface PullRequestInlineComment {
   readonly path: string;
   readonly line: number | undefined;
   readonly startLine: number | undefined;
+  /** Which side of the diff the comment sits on — `RIGHT` is the
+   *  head (additions/context), `LEFT` the base (deletions). */
+  readonly side: "LEFT" | "RIGHT";
+  /** The commented lines are no longer in the current diff — the
+   *  position is the ORIGINAL one and cannot be drawn on today's head. */
+  readonly outdated: boolean;
   readonly body: string;
   readonly diffHunk: string;
   readonly createdAt: string;
@@ -148,6 +154,8 @@ export const buildPullRequestView = (
       path: comment.path,
       line: comment.line ?? comment.original_line ?? undefined,
       startLine: comment.start_line ?? comment.original_start_line ?? undefined,
+      side: comment.side === "LEFT" ? "LEFT" : "RIGHT",
+      outdated: comment.line === null || comment.line === undefined,
       body: comment.body,
       diffHunk: comment.diff_hunk,
       createdAt: comment.created_at,
@@ -240,3 +248,114 @@ export const buildPullRequestView = (
     timeline,
   };
 };
+
+/* ── files changed ─────────────────────────────────────────────────── */
+
+export type PullRequestFileStatus =
+  | "added"
+  | "removed"
+  | "modified"
+  | "renamed"
+  | "copied"
+  | "changed"
+  | "unchanged";
+
+/** ONE file the PR changes, as `pulls.listFiles` reports it. */
+export interface PullRequestChangedFile {
+  readonly filename: string;
+  /** Set on a rename/copy — where the file came from. */
+  readonly previousFilename: string | undefined;
+  readonly status: PullRequestFileStatus;
+  readonly additions: number;
+  readonly deletions: number;
+  /** The file's unified hunks (`@@ … @@` onward, no `diff --git`
+   *  header). `undefined` when GitHub withholds it — binaries, and
+   *  files whose own diff is too large — in which case only the
+   *  counts and the link are known. */
+  readonly patch: string | undefined;
+  /** The file at the PR's head, on GitHub. */
+  readonly blobUrl: string;
+}
+
+/**
+ * ONE page of a PR's files. The page size is the client's business; a
+ * `next` of `null` marks the last page. GitHub's whole-PR diff
+ * (`pulls.get` as `application/vnd.github.diff`) refuses changes over
+ * 20 000 lines / 300 files, so the files view pages through
+ * `pulls.listFiles` instead — every size renders, progressively.
+ */
+export interface PullRequestFilesPage {
+  readonly files: ReadonlyArray<PullRequestChangedFile>;
+  readonly next: number | null;
+}
+
+export const PULL_FILES_PAGE_SIZE = 100;
+
+export const buildPullRequestFilesPage = (
+  files: GitHub.ListPullRequestFilesResponse,
+  page: number,
+  pageSize: number = PULL_FILES_PAGE_SIZE,
+): PullRequestFilesPage => ({
+  files: files.map((file) => ({
+    filename: file.filename,
+    previousFilename: file.previous_filename,
+    status: file.status,
+    additions: file.additions,
+    deletions: file.deletions,
+    patch: file.patch,
+    blobUrl: file.blob_url,
+  })),
+  // a short page is the last one; a full page MAY be followed by an
+  // empty one, which the client reads as the end
+  next: files.length < pageSize ? null : page + 1,
+});
+
+/**
+ * Re-dress a file's bare hunks as the `diff --git` block a unified-diff
+ * parser expects — the header `pulls.listFiles` strips. A pure rename
+ * (no hunks) still yields its header block; any other file without a
+ * patch yields `undefined` — there is nothing to render.
+ */
+export const toGitDiff = (file: PullRequestChangedFile): string | undefined => {
+  const from = file.previousFilename ?? file.filename;
+  const to = file.filename;
+  const verb = file.status === "copied" ? "copy" : "rename";
+  const lines = [`diff --git a/${from} b/${to}`];
+  if (file.status === "added") lines.push("new file mode 100644");
+  else if (file.status === "removed") lines.push("deleted file mode 100644");
+  else if (file.previousFilename !== undefined) {
+    lines.push(`${verb} from ${from}`, `${verb} to ${to}`);
+  }
+  if (file.patch === undefined) {
+    return file.previousFilename !== undefined &&
+      file.additions + file.deletions === 0
+      ? `${lines.join("\n")}\n`
+      : undefined;
+  }
+  lines.push(
+    `--- ${file.status === "added" ? "/dev/null" : `a/${from}`}`,
+    `+++ ${file.status === "removed" ? "/dev/null" : `b/${to}`}`,
+    file.patch.endsWith("\n") ? file.patch.slice(0, -1) : file.patch,
+  );
+  return `${lines.join("\n")}\n`;
+};
+
+/**
+ * The whole PR as ONE unified diff, assembled from its files — what
+ * `pulls.get` as `application/vnd.github.diff` would return, had it
+ * not refused (`too_large`). A file GitHub sent without hunks becomes
+ * a header-only block noting so, in place, so the reader sees every
+ * path even where the change itself is unavailable.
+ */
+export const toUnifiedDiff = (
+  files: ReadonlyArray<PullRequestChangedFile>,
+): string =>
+  files
+    .map(
+      (file) =>
+        toGitDiff(file) ??
+        `diff --git a/${file.previousFilename ?? file.filename} b/${file.filename}\n` +
+          `# ${file.status}, +${file.additions} −${file.deletions}: ` +
+          `${file.additions + file.deletions === 0 ? "no diff from GitHub (binary, or not diffed)" : "diff too large for GitHub to serve"} — ${file.blobUrl}\n`,
+    )
+    .join("");

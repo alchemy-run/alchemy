@@ -8,41 +8,61 @@
 @custom-variant dark (&:is(.dark *));
 
 /* ============================================================
-   Alchemy design system (website/src/styles/tokens.css), mapped
-   onto the shadcn token names the components consume.
-   Light = parchment / sunny forest; dark = night forest walnut.
+   Alchemy brand — the SAME palette as the docs
+   (website/src/styles/tokens.css), on the shadcn token names the
+   components consume. Light is the sunny forest: warm parchment,
+   walnut text, moss as the one accent. Dark is the night forest:
+   the page joins the walnut code surface, cream becomes the text
+   scale, moss and terracotta lift a step. The earthy semantics
+   (moss / honey / brick / slate) are for STATUS and callouts — the
+   docs' tip / caution / danger / note — never for chrome.
    ============================================================ */
 
 :root {
-  --background: #f5efe3; /* parchment */
+  color-scheme: light;
+  --background: #f5efe3; /* page — parchment */
   --foreground: #2a2620; /* walnut */
-  --card: #fbf6ea;
+  --card: #fbf6ea; /* cards, panels — lifted paper */
   --card-foreground: #2a2620;
   --popover: #fffaf0;
   --popover-foreground: #2a2620;
   --primary: #5c7a3e; /* moss */
   --primary-foreground: #fbf6ea;
-  --secondary: #ebe3d0;
+  --secondary: #f1ead8; /* walnut-100 */
   --secondary-foreground: #4e402c;
-  --muted: #efe7d6;
+  --muted: #ebe3d0; /* insets */
   --muted-foreground: #85714f; /* mushroom */
-  --accent: #ebe3d0;
+  --accent: #ebe3d0; /* hover / selected rows */
   --accent-foreground: #2a2620;
   --destructive: #b3462e; /* brick */
-  --border: rgba(42, 38, 32, 0.12);
-  --input: rgba(42, 38, 32, 0.14);
-  --ring: color-mix(in srgb, #5c7a3e 35%, transparent);
+  --border: #e2d7bc; /* walnut-200 */
+  --input: #c7b795; /* walnut-300 */
+  --ring: color-mix(in srgb, #5c7a3e 40%, transparent);
+  --sidebar: #efe7d6; /* nav — a touch deeper */
+  --sidebar-foreground: #2a2620;
   --radius: 0.5rem;
 
-  /* status + accent palette (semantic, earthy) */
-  --moss: #5c7a3e;
-  --honey: #d49a2a;
-  --brick: #b3462e;
-  --mist: #4a7a8a; /* slate teal */
+  /* status / callout palette — the docs' semantic tokens */
+  --moss: #5c7a3e; /* tip, success */
+  --moss-deep: #3f5a2a; /* tip text */
+  --honey: #d49a2a; /* caution, update */
+  --brick: #b3462e; /* danger, destroy */
+  --mist: #4a7a8a; /* note — slate teal */
   --terracotta: #c56e3c;
 
-  /* the 16 terminal colors (ui/lib/ansi.tsx) — the earthy palette
-     tuned for readability on parchment */
+  /* the CODE surface — the docs' walnut code block, the same in both
+     modes (tokens.css `--alc-bg-code`): it sinks into the parchment
+     page and lifts off the night one. Code review is drawn on it, so
+     a diff looks the same whichever mode the page is in. Syntax
+     colors live in ui/lib/code-theme.ts; these paint the chrome. */
+  --code: #2a2620;
+  --code-foreground: #faf5e3;
+  --code-muted: #85714f;
+  --code-border: #4e402c;
+  --code-addition: #8fb15e;
+  --code-deletion: #e07a5f;
+
+  /* the 16 terminal colors (ui/lib/ansi.tsx) — tuned for parchment */
   --ansi-black: #2a2620;
   --ansi-red: #b3462e;
   --ansi-green: #5c7a3e;
@@ -51,10 +71,10 @@
   --ansi-magenta: #8a4f8c;
   --ansi-cyan: #3a7a8a;
   --ansi-white: #85714f;
-  --ansi-bright-black: #6b5f4d;
+  --ansi-bright-black: #68573c;
   --ansi-bright-red: #c56e3c;
   --ansi-bright-green: #6f9448;
-  --ansi-bright-yellow: #d49a2a;
+  --ansi-bright-yellow: #c99a2e;
   --ansi-bright-blue: #4a7fb5;
   --ansi-bright-magenta: #a666a8;
   --ansi-bright-cyan: #4a9aac;
@@ -62,44 +82,47 @@
 }
 
 .dark {
-  --background: #14110d; /* night forest page */
+  color-scheme: dark;
+  --background: #14110d; /* page — night walnut */
   --foreground: #faf6ec; /* parchment */
-  --card: #1a1613;
+  --card: #221e18; /* elev-1 */
   --card-foreground: #faf6ec;
-  --popover: #221e18;
+  --popover: #2a2620; /* elev-2 */
   --popover-foreground: #faf6ec;
-  --primary: #8fb15e; /* lifted moss */
+  --primary: #a3c473; /* lifted moss */
   --primary-foreground: #14110d;
   --secondary: #2a2620;
   --secondary-foreground: #e2d7bc;
   --muted: #221e18;
-  --muted-foreground: #a89572;
+  --muted-foreground: #a89572; /* walnut-400 still reads */
   --accent: #2a2620;
   --accent-foreground: #faf6ec;
   --destructive: #d76a4e;
-  --border: rgba(250, 246, 236, 0.08);
-  --input: rgba(250, 246, 236, 0.12);
-  /* focus ring stays quiet — a hint of moss, not a highlighter */
-  --ring: color-mix(in srgb, #7a9a5e 35%, transparent);
+  --border: rgba(250, 246, 236, 0.1); /* cream hairline */
+  --input: rgba(250, 246, 236, 0.18);
+  --ring: color-mix(in srgb, #a3c473 40%, transparent);
+  --sidebar: #1a1613; /* nav */
+  --sidebar-foreground: #faf6ec;
 
   --moss: #8fb15e;
+  --moss-deep: #a3c473;
   --honey: #e8b04a;
   --brick: #d76a4e;
   --mist: #6da4b4;
   --terracotta: #d8835a;
 
-  --ansi-black: #4a4238;
+  --ansi-black: #3a342c;
   --ansi-red: #d76a4e;
   --ansi-green: #8fb15e;
   --ansi-yellow: #e8b04a;
   --ansi-blue: #6f9fd4;
   --ansi-magenta: #c58ac4;
   --ansi-cyan: #6da4b4;
-  --ansi-white: #d4c9b0;
-  --ansi-bright-black: #7a6e5c;
+  --ansi-white: #e2d7bc;
+  --ansi-bright-black: #85714f;
   --ansi-bright-red: #e88a6e;
   --ansi-bright-green: #a9c97a;
-  --ansi-bright-yellow: #f2c56a;
+  --ansi-bright-yellow: #f0c56a;
   --ansi-bright-blue: #8fb8e8;
   --ansi-bright-magenta: #d9a6d8;
   --ansi-bright-cyan: #8fc4d2;
@@ -125,19 +148,27 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
   --color-moss: var(--moss);
+  --color-moss-deep: var(--moss-deep);
   --color-honey: var(--honey);
   --color-brick: var(--brick);
   --color-mist: var(--mist);
   --color-terracotta: var(--terracotta);
+  --color-code: var(--code);
+  --color-code-foreground: var(--code-foreground);
+  --color-code-muted: var(--code-muted);
+  --color-code-border: var(--code-border);
+  --color-code-addition: var(--code-addition);
+  --color-code-deletion: var(--code-deletion);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
   --font-sans:
     "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-mono:
-    "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 @layer base {
@@ -150,6 +181,65 @@
   ::selection {
     background: color-mix(in srgb, var(--moss) 25%, transparent);
   }
+}
+
+/* ============================================================
+   Callouts — the docs' asides (custom.css `.starlight-aside--*`):
+   a 14% tint of the semantic color, a 45% border, the color itself
+   for the title. `callout` is the frame; the variant picks the hue.
+   Anything that is a "note on the page" — a proposal awaiting you,
+   a review comment, a failed tool, a machine error — wears one.
+   ============================================================ */
+@utility callout {
+  border-width: 1px;
+  border-style: solid;
+  border-radius: var(--radius);
+  background: var(--callout-tint, var(--card));
+  border-color: var(--callout-border, var(--border));
+}
+@utility callout-title {
+  color: var(--callout-accent, var(--foreground));
+  font-weight: 600;
+}
+@utility callout-tip {
+  --callout-accent: var(--moss-deep);
+  --callout-tint: color-mix(in srgb, var(--moss) 14%, transparent);
+  --callout-border: color-mix(in srgb, var(--moss) 45%, transparent);
+}
+@utility callout-note {
+  --callout-accent: var(--mist);
+  --callout-tint: color-mix(in srgb, var(--mist) 14%, transparent);
+  --callout-border: color-mix(in srgb, var(--mist) 45%, transparent);
+}
+@utility callout-caution {
+  --callout-accent: color-mix(in srgb, var(--honey) 75%, var(--foreground));
+  --callout-tint: color-mix(in srgb, var(--honey) 16%, transparent);
+  --callout-border: color-mix(in srgb, var(--honey) 50%, transparent);
+}
+@utility callout-danger {
+  --callout-accent: var(--brick);
+  --callout-tint: color-mix(in srgb, var(--brick) 14%, transparent);
+  --callout-border: color-mix(in srgb, var(--brick) 45%, transparent);
+}
+
+/* ============================================================
+   The code surface — the frame around every @pierre/diffs card and
+   the stand-ins drawn in its place (a file not yet rendered). The
+   renderer's own colors are derived from its theme inside a shadow
+   root; the `--diffs-*-override` properties inherit through it, so
+   the +/− tints, line numbers and fonts are the brand's, not the
+   library's stock red/green.
+   ============================================================ */
+@utility code-surface {
+  background: var(--code);
+  color: var(--code-foreground);
+  border-color: var(--code-border);
+  --diffs-addition-color-override: var(--code-addition);
+  --diffs-deletion-color-override: var(--code-deletion);
+  --diffs-modified-color-override: #7ddfff;
+  --diffs-fg-number-override: var(--code-muted);
+  --diffs-font-family: var(--font-mono);
+  --diffs-header-font-family: var(--font-sans);
 }
 
 /* The terminal's block cursor IS the caret — suppress the browser's
