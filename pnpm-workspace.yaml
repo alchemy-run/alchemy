@@ -1,6 +1,6 @@
 # Distilled pins pnpm@11.21.0. Nested `pnpm run` from turbo would otherwise
 # download that version and exec a broken @pnpm/exe shim (`This: not found`).
-# Root commands honor this; turbo tasks also set pnpm_config_pm_on_fail=ignore.
+# Root commands honor this; `scripts/run-turbo.ts` sets pnpm_config_pm_on_fail.
 pmOnFail: ignore
 onlyBuiltDependencies:
   - "@parcel/watcher"
