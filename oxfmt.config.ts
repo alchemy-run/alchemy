@@ -1,15 +1,15 @@
-{
-  "semi": true,
-  "singleQuote": false,
-  "tabWidth": 2,
-  "useTabs": false,
-  "printWidth": 80,
-  "endOfLine": "lf",
-  "ternaries": true,
-  "experimental_sort_imports": {
-    "order": "asc"
-  },
-  "ignorePatterns": [
+import { defineConfig } from "oxfmt";
+
+export default defineConfig({
+  semi: true,
+  singleQuote: false,
+  tabWidth: 2,
+  useTabs: false,
+  printWidth: 80,
+  endOfLine: "lf",
+  ternaries: true,
+  sortImports: false,
+  ignorePatterns: [
     "dist/**",
     "*.min.js",
     "**/lib/**",
@@ -20,11 +20,10 @@
     "**/.svelte-kit/**",
     "**/routeTree.gen.ts",
     "**/test-results/**",
-    "**/.vendor/**",
     "examples/prisma-tanstack-start/src/prisma/contract.d.ts",
     "examples/prisma-tanstack-start/src/prisma/contract.json",
     "**/package.json",
     "./submodules",
-    "**/fixtures/chart/templates/**"
-  ]
-}
+    "**/fixtures/chart/templates/**",
+  ],
+});

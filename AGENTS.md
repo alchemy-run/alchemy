@@ -53,8 +53,6 @@ First-class sibling repositories we maintain live in `submodules/`:
 - `submodules/distilled` — generated Effect SDKs (workspace packages). Initialized by `git submodule update --init`.
 - `submodules/floci` — our fork of the local AWS emulator. Skipped by default; fetch with `git submodule update --init --checkout -- submodules/floci`.
 
-Reference-only upstream checkouts stay in `.vendor/` and are skipped by `git submodule update --init`.
-
 Each Service's Resources follow the same pattern. Resource contract and provider are co-located in the same file. Each Capability lives in its own file(s) named after the capability and access level (`Binding.Service` contract + the `*Binding` / `*Http` implementations).
 
 ```sh
