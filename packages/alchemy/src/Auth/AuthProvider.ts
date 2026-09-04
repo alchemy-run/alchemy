@@ -1,7 +1,9 @@
+import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 
@@ -130,26 +132,33 @@ export const describeEnvironment = (
     .join(", ");
 
 /**
- * The variable names a provider's environment resolution would consume from
- * `env`, or `undefined` when the declared contract is not fully satisfied
- * (some required variable has no non-empty value). Used outside CI to decide
- * whether explicitly exported variables should take precedence over an
- * implicitly selected profile — and to tell the user exactly which keys won.
+ * The variable names a provider's environment resolution would consume, or
+ * `undefined` when the declared contract is not fully satisfied (some
+ * required variable has no non-empty value). Reads through the ambient
+ * `ConfigProvider` — the process environment plus `.env` / `--env-file` —
+ * so it sees exactly what `readEnvironment` will. Environment credentials
+ * take precedence over any profile, CI or not; the returned names tell the
+ * user exactly which keys won.
  */
 export const presentEnvironment = (
   environment: ReadonlyArray<EnvironmentVariable>,
-  env: Record<string, string | undefined>,
-): ReadonlyArray<string> | undefined => {
-  const used: string[] = [];
-  for (const variable of environment) {
-    const found = [variable.name, ...(variable.alternatives ?? [])].find(
-      (name) => (env[name] ?? "") !== "",
-    );
-    if (found !== undefined) used.push(found);
-    else if (variable.required) return undefined;
-  }
-  return used.length > 0 ? used : undefined;
-};
+) =>
+  Effect.gen(function* () {
+    const used: string[] = [];
+    for (const variable of environment) {
+      let found: string | undefined;
+      for (const name of [variable.name, ...(variable.alternatives ?? [])]) {
+        const value = yield* Config.option(Config.string(name));
+        if (Option.isSome(value) && value.value !== "") {
+          found = name;
+          break;
+        }
+      }
+      if (found !== undefined) used.push(found);
+      else if (variable.required) return undefined;
+    }
+    return used.length > 0 ? used : undefined;
+  });
 
 /**
  * One rendered line of a provider's credential details: `key: value`.
@@ -199,7 +208,11 @@ export interface ConfigureField {
  * appear here.
  */
 export interface ConfigureMethod {
-  /** `--method` value, e.g. `"api-token"`. */
+  /**
+   * `--method` value. Always the same literal the provider persists as the
+   * config's `method` (`"stored"`, `"sso"`, `"local"`, `"env"`), so the
+   * flag and the credentials file speak one vocabulary.
+   */
   readonly method: string;
   readonly fields: ReadonlyArray<ConfigureField>;
 }

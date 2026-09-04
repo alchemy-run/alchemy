@@ -59,7 +59,7 @@ export class AWSEnvironment extends Context.Service<
 >()("AWS::Environment") {
   static current = AWSEnvironment.use((env) => env);
   /**
-   * Whether this environment is the floci / `{ method: "local" }` emulator
+   * Whether this environment is the floci emulator
    * (dummy account {@link LOCAL_ACCOUNT_ID}). A set `endpoint` is not
    * enough: `AWS_ENDPOINT_URL` and explicit endpoint overrides also
    * populate it on real-account credentials.
@@ -77,11 +77,21 @@ export const isLocalEmulator = AWSEnvironment.isLocalEmulator;
 export const Default = Layer.effect(
   AWSEnvironment,
   Effect.gen(function* () {
-    const { resolve } = yield* resolveProviderConfig<
+    // Provider layers are built on every run — before any profile may be
+    // configured — so nothing may resolve at construction. A dev run with
+    // zero AWS credentials builds this layer too (the ambient environment
+    // is the emulator; only `Alchemy.remote()` rows ever need it), so the
+    // profile/CI precedence is captured here and evaluated on first use,
+    // exactly once.
+    const resolve = resolveProviderConfig<
       AwsAuthConfig,
       AwsResolvedCredentials
-    >(AWS_AUTH_PROVIDER_NAME);
-
-    return yield* resolve.pipe(Effect.orDie, Effect.cached);
+    >(AWS_AUTH_PROVIDER_NAME).pipe(Effect.flatMap(({ resolve }) => resolve));
+    const context = yield* Effect.context<Effect.Services<typeof resolve>>();
+    return yield* resolve.pipe(
+      Effect.provideContext(context),
+      Effect.orDie,
+      Effect.cached,
+    );
   }),
 ).pipe(Layer.orDie);

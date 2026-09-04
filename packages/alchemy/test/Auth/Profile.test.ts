@@ -123,21 +123,6 @@ const withTempHome = <A, E, R>(
     return yield* effect.pipe(Effect.provide(makeTestLayer(config)));
   }).pipe(Effect.scoped, Effect.provide(NodeServices.layer));
 
-/** Set a process env var for the duration of the surrounding scope. */
-const withProcessEnv = (name: string, value: string) =>
-  Effect.acquireRelease(
-    Effect.sync(() => {
-      const previous = process.env[name];
-      process.env[name] = value;
-      return previous;
-    }),
-    (previous) =>
-      Effect.sync(() => {
-        if (previous === undefined) delete process.env[name];
-        else process.env[name] = previous;
-      }),
-  );
-
 it.live(
   "loadProviderConfig requires profiles to be explicitly created",
   () =>
@@ -535,35 +520,58 @@ it.effect("resolves the profile from env files and --profile overrides", () =>
 );
 
 it.live(
-  "explicitly exported provider variables work without a profile",
+  "provider variables present in config resolve without a profile",
   () =>
     withTempHome(
       Effect.gen(function* () {
-        yield* withProcessEnv("FAKE_ENV_TOKEN", "from-env");
         const resolved = yield* resolveProviderConfig(ENV_PROVIDER);
         expect(resolved.source).toBe("environment");
         expect(yield* resolved.resolve).toBe("environment-credentials");
       }),
+      // Environment credentials are read through the config provider —
+      // the process environment, `.env`, and `--env-file` alike.
+      { FAKE_ENV_TOKEN: "from-env" },
     ),
   { exclusive: true },
 );
 
 it.live(
-  "an explicit profile selection ignores provider environment variables",
+  "provider environment variables take precedence over a selected profile",
   () =>
     withTempHome(
       Effect.gen(function* () {
-        yield* withProcessEnv("FAKE_ENV_TOKEN", "from-env");
-        // ALCHEMY_PROFILE (the --profile mechanism) selects the profile
-        // explicitly, so the exported variable must NOT short-circuit —
-        // the unconfigured provider fails with the connect hint instead.
-        const error = yield* resolveProviderConfig(ENV_PROVIDER).pipe(
-          Effect.flip,
-        );
-        expect(error).toBeInstanceOf(AuthError);
-        expect((error as AuthError).message).toContain("--add");
+        // ALCHEMY_PROFILE (the --profile mechanism) selects a profile, but
+        // a fully present environment contract still wins — the profile
+        // is never consulted, so its unconfigured provider cannot fail.
+        const resolved = yield* resolveProviderConfig(ENV_PROVIDER);
+        expect(resolved.source).toBe("environment");
+        expect(resolved.profileName).toBeUndefined();
+        expect(yield* resolved.resolve).toBe("environment-credentials");
       }),
-      { ALCHEMY_PROFILE: "default" },
+      { ALCHEMY_PROFILE: "default", FAKE_ENV_TOKEN: "from-env" },
+    ),
+  { exclusive: true },
+);
+
+it.live(
+  "providers mix: one from environment variables, the rest from the profile",
+  () =>
+    withTempHome(
+      Effect.gen(function* () {
+        const profile = yield* ProfileStore;
+        yield* profile.setProviderConfig("default", FAKE_PROVIDER, {
+          method: "stored",
+        });
+        // Precedence is decided per provider, not per run: the provider
+        // whose contract is present resolves from the environment while a
+        // provider without those variables still comes from the profile.
+        const fromEnv = yield* resolveProviderConfig(ENV_PROVIDER);
+        expect(fromEnv.source).toBe("environment");
+        const fromProfile = yield* resolveProviderConfig(FAKE_PROVIDER);
+        expect(fromProfile.source).toBe("profile");
+        expect(fromProfile.profileName).toBe("default");
+      }),
+      { FAKE_ENV_TOKEN: "from-env" },
     ),
   { exclusive: true },
 );
