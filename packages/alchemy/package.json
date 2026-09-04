@@ -246,6 +246,18 @@
       "worker": "./src/Fly/*.ts",
       "import": "./lib/Fly/*.js"
     },
+    "./ACME": {
+      "types": "./lib/ACME/index.d.ts",
+      "bun": "./src/ACME/index.ts",
+      "worker": "./src/ACME/index.ts",
+      "import": "./lib/ACME/index.js"
+    },
+    "./ACME/*": {
+      "types": "./lib/ACME/*.d.ts",
+      "bun": "./src/ACME/*.ts",
+      "worker": "./src/ACME/*.ts",
+      "import": "./lib/ACME/*.js"
+    },
     "./Railway": {
       "types": "./lib/Railway/index.d.ts",
       "bun": "./src/Railway/index.ts",
@@ -429,6 +441,8 @@
     "@distilled.cloud/axiom": "workspace:*",
     "@distilled.cloud/cloudflare": "workspace:*",
     "@distilled.cloud/core": "workspace:*",
+    "@distilled.cloud/acme": "workspace:*",
+    "@distilled.cloud/zerossl": "workspace:*",
     "@distilled.cloud/fly-io": "workspace:*",
     "@distilled.cloud/hetzner": "workspace:*",
     "@distilled.cloud/neon": "workspace:*",

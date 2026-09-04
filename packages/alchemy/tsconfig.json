@@ -60,6 +60,12 @@
       "path": "../../distilled/packages/fly-io/tsconfig.json"
     },
     {
+      "path": "../../distilled/packages/acme/tsconfig.json"
+    },
+    {
+      "path": "../../distilled/packages/zerossl/tsconfig.json"
+    },
+    {
       "path": "../../distilled/packages/railway/tsconfig.json"
     },
     {
