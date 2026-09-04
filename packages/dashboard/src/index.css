@@ -1,0 +1,168 @@
+/*
+ * Dashboard global styles — everything derives from the --alc-* design
+ * tokens (src/styles/tokens.css, mirrored from the website). Both themes
+ * work "by construction": tokens flip via [data-theme] on <html>, so no
+ * component ever branches on the theme in JS (React Flow's colorMode is
+ * the single exception).
+ *
+ * Tailwind convention (project decision): color/surface/border utilities
+ * always use arbitrary values over the tokens — e.g. bg-[var(--alc-bg-elev-1)],
+ * text-[var(--alc-fg-2)], border-[var(--alc-hairline)]. Never raw palette
+ * utilities (zinc/gray/indigo). Fonts are the one @theme registration:
+ * `font-sans` / `font-serif` / `font-mono` map onto the token font stacks.
+ */
+@import "./styles/tokens.css";
+@import "tailwindcss";
+@import "@xyflow/react/dist/style.css";
+
+@theme inline {
+  --font-sans: var(--alc-font-sans);
+  --font-serif: var(--alc-font-serif);
+  --font-mono: var(--alc-font-mono);
+}
+
+:root {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  background: var(--alc-bg);
+  color: var(--alc-fg-2);
+  font-family: var(--alc-font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::selection {
+  background: var(--alc-accent-soft);
+  color: var(--alc-fg-1);
+}
+
+/* Tailwind v4's preflight leaves buttons with `cursor: default` — every
+   interactive control should read as clickable. */
+button:not(:disabled),
+[role="button"],
+select,
+summary {
+  cursor: pointer;
+}
+
+/* Scrollbars — walnut hairlines on the page surface. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--alc-hairline-3) transparent;
+}
+
+/* ---------- React Flow (xyflow) theme bridge ---------- */
+/* The canvas reads tokens through xyflow's own CSS variables, so the
+   graph re-themes purely via [data-theme] — no per-node JS. */
+.react-flow {
+  --xy-background-color: var(--alc-bg);
+  --xy-edge-stroke-default: var(--alc-hairline-3);
+  --xy-edge-stroke-width-default: 1.5;
+  --xy-attribution-background-color-default: transparent;
+}
+
+.react-flow__attribution {
+  color: var(--alc-fg-4);
+}
+
+/* Nodes are clickable (open the Inspector) — pointer, not the pane's
+   grab hand; keep grabbing while actually dragging. Matches xyflow's own
+   `.react-flow__node.draggable` specificity so import order decides. */
+.react-flow__node,
+.react-flow__node.draggable {
+  cursor: pointer;
+}
+
+.react-flow__node.draggable.dragging {
+  cursor: grabbing;
+}
+
+.react-flow__controls {
+  border-radius: var(--alc-radius);
+  overflow: hidden;
+  box-shadow: var(--alc-shadow-sm);
+  border: 1px solid var(--alc-hairline-2);
+}
+
+.react-flow__controls-button {
+  background: var(--alc-bg-elev-1);
+  border-bottom: 1px solid var(--alc-hairline);
+  color: var(--alc-fg-3);
+  transition: color var(--alc-dur) var(--alc-ease);
+}
+
+.react-flow__controls-button:hover {
+  background: var(--alc-bg-elev-2);
+  color: var(--alc-fg-1);
+}
+
+.react-flow__controls-button svg {
+  fill: currentColor;
+}
+
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+
+.status-pulse {
+  animation: pulse-dot 1.2s ease-in-out infinite;
+}
+
+/* ---------- border beam (actively-working nodes) ---------- */
+/* A bright arc of the action color orbiting the card's border while a
+   lifecycle operation is running — the "doing" phase's signature. The
+   overlay draws ONLY the ring: two stacked masks XOR the content box away,
+   leaving the padding (= border thickness) visible. */
+@property --beam-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+@keyframes beam-orbit {
+  to {
+    --beam-angle: 360deg;
+  }
+}
+
+.node-beam {
+  position: absolute;
+  inset: -2px;
+  border-radius: var(--alc-radius-lg);
+  padding: 2.5px;
+  /* one generous arc with a bright head — visible without shouting */
+  background: conic-gradient(
+    from var(--beam-angle),
+    transparent 0%,
+    transparent 58%,
+    var(--beam-color) 78%,
+    color-mix(in srgb, var(--beam-color) 70%, white) 92%,
+    transparent 100%
+  );
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  filter: drop-shadow(0 0 3px var(--beam-color));
+  animation: beam-orbit 2s linear infinite;
+  pointer-events: none;
+}

@@ -84,6 +84,9 @@ jobs:
       - name: Run Node Utils tests
         run: pnpm -C packages/node-utils test
 
+      - name: Run Dashboard tests
+        run: pnpm -C packages/dashboard test
+
       - name: Run Typecheck
         run: pnpm tsc -b
 

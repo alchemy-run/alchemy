@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1678 168" font-family="monospace" font-size="13">
+  <!-- chain: 1630x120 aspect=13.58 -->
+  <rect width="100%" height="100%" fill="#f4efe4"/>
+  <line x1="254" y1="84" x2="374" y2="84" stroke="#8a7a5c" stroke-width="1.5"/>
+  <line x1="604" y1="84" x2="724" y2="84" stroke="#8a7a5c" stroke-width="1.5"/>
+  <line x1="954" y1="84" x2="1074" y2="84" stroke="#8a7a5c" stroke-width="1.5"/>
+  <line x1="1304" y1="84" x2="1424" y2="84" stroke="#8a7a5c" stroke-width="1.5"/>
+  <rect x="24" y="24" width="230" height="120" rx="10" fill="#fdfaf1" stroke="#b19d76"/>
+  <text x="38" y="52" fill="#3f3828">A</text>
+  <rect x="374" y="24" width="230" height="120" rx="10" fill="#fdfaf1" stroke="#b19d76"/>
+  <text x="388" y="52" fill="#3f3828">B</text>
+  <rect x="724" y="24" width="230" height="120" rx="10" fill="#fdfaf1" stroke="#b19d76"/>
+  <text x="738" y="52" fill="#3f3828">C</text>
+  <rect x="1074" y="24" width="230" height="120" rx="10" fill="#fdfaf1" stroke="#b19d76"/>
+  <text x="1088" y="52" fill="#3f3828">D</text>
+  <rect x="1424" y="24" width="230" height="120" rx="10" fill="#fdfaf1" stroke="#b19d76"/>
+  <text x="1438" y="52" fill="#3f3828">E</text>
+</svg>
