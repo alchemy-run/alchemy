@@ -132,6 +132,12 @@
       "worker": "./src/Docker/index.ts",
       "import": "./lib/Docker/index.js"
     },
+    "./Doppler": {
+      "types": "./lib/Doppler/index.d.ts",
+      "bun": "./src/Doppler/index.ts",
+      "worker": "./src/Doppler/index.ts",
+      "import": "./lib/Doppler/index.js"
+    },
     "./Varlock": {
       "types": "./lib/Varlock/index.d.ts",
       "bun": "./src/Varlock/index.ts",
