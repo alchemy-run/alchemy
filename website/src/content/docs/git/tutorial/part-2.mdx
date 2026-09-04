@@ -1,20 +1,21 @@
 ---
 title: "Part 2: Repositories"
-description: Create a repository on your host, push to it, make it public, and clone it anonymously. The REST plane and the shared secret, used before anything else depends on them.
+description: Create a repository on your host, push to it, then let anyone read a public one. The REST plane and the shared secret, used before anything else depends on them.
 ---
 
 You have a deployed host and its URL, called `$HOST` below, and the
 secret you exported when you deployed. By the end of this part you have
-pushed, cloned, and seen what the secret can and cannot express.
+pushed, cloned, taught the middleware what a public repository means,
+and seen what one secret cannot express.
 
 ## Create a repository
 
-The secret makes you the principal `acme`. `acme` may create
-repositories, and owns the ones it creates:
+Repositories are named `owner/name`. The owner is a name you choose;
+with one shared secret there are no users behind it. `curl -u` sends
+the secret the way `git` will, as the password of HTTP Basic:
 
 ```sh
-curl -X POST "$HOST/api/v1/repos" \
-  -H "Authorization: Bearer $GIT_SERVICE_SECRET" \
+curl -u "x:$GIT_SECRET" -X POST "$HOST/api/v1/repos" \
   -H "Content-Type: application/json" \
   -d '{"owner":"acme","name":"web"}'
 ```
@@ -27,7 +28,7 @@ The secret goes in the password field of the remote. The username is
 ignored:
 
 ```sh
-git remote add origin "https://x:$GIT_SERVICE_SECRET@$HOST/acme/web.git"
+git remote add origin "https://x:$GIT_SECRET@$HOST/acme/web.git"
 git push -u origin main
 ```
 
@@ -37,14 +38,62 @@ fraction of a second.
 
 ## Make it public
 
+`public` is a flag the engine stores and reports. What it grants is
+your middleware's decision, and so far the middleware refuses every
+request without the secret. Set the flag first:
+
 ```sh
-curl -X PATCH "$HOST/api/v1/repos/acme/web" \
-  -H "Authorization: Bearer $GIT_SERVICE_SECRET" \
+curl -u "x:$GIT_SECRET" -X PATCH "$HOST/api/v1/repos/acme/web" \
   -H "Content-Type: application/json" \
   -d '{"public":true}'
 ```
 
-Anyone can clone it now, with no credentials:
+## Let anyone read it
+
+The middleware asks the Registry, the block that resolves `owner/name`,
+whether the repository is public, and `Git.isRead` whether the request
+only reads: the REST and raw reads, the ref advertisement for a fetch,
+and `git-upload-pack`, which is what a clone is:
+
+```diff lang="typescript"
+// src/git.ts
++import * as HttpRouter from "effect/unstable/http/HttpRouter";
++import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
+
+export const AuthenticatedLive = Layer.effect(
+  Authenticated,
+  Effect.gen(function* () {
+    const secret = yield* (yield* GitSecret).text;
++    const registry = yield* Git.RegistryStore;
+-    return (httpEffect) =>
++    return (httpEffect, { endpoint }) =>
+      Effect.gen(function* () {
+        const { password } = yield* HttpApiBuilder.securityDecode(
+          HttpApiSecurity.basic,
+        );
+        if (Redacted.value(password) === Redacted.value(yield* secret)) {
+          return yield* httpEffect;
+        }
++        const request = yield* HttpServerRequest.HttpServerRequest;
++        const { owner = "", repo = "" } = yield* HttpRouter.params;
++        const entry = yield* registry
++          .resolve(owner.toLowerCase(), repo.toLowerCase().replace(/\.git$/, ""))
++          .pipe(Effect.catchTag("StoreError", () => Effect.succeed(undefined)));
++        if (Git.isRead(endpoint, request) && entry?.public) {
++          return yield* httpEffect;
++        }
+        return HttpServerResponse.empty({
+          status: 401,
+          headers: { "www-authenticate": 'Basic realm="git"' },
+        });
+      });
+  }),
+);
+```
+
+The middleware needs `Git.RegistryStore`, and `Git.RegistryDurableObject`
+is already in the graph, so nothing else changes. Deploy, and anyone
+can clone with no credentials:
 
 ```sh
 git clone "https://$HOST/acme/web.git" verify
@@ -68,7 +117,7 @@ import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 const client = yield* HttpApiClient.make(GitApi, {
   baseUrl: host,
   transformClient: HttpClient.mapRequest(
-    HttpClientRequest.bearerToken(secret),
+    HttpClientRequest.basicAuth("x", secret),
   ),
 });
 
@@ -82,8 +131,9 @@ parse.
 
 ## Where the secret stops
 
-One secret is one principal. It cannot say who Dana is, and it cannot
-give a teammate a credential of their own. Those are questions for your
+One secret is one key to everything. It cannot say who Dana is, it
+cannot give a teammate a credential of their own, and it cannot make a
+repository belong to anyone. Those are questions for your
 authentication. [Part 3](/git/tutorial/part-3) puts it in front of
 the host. [Repositories](/git/repositories) is the reference
 for everything the REST plane does with a repository.

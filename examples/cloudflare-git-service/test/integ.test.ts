@@ -147,10 +147,11 @@ test(
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
 
-    // The front door forwards /api/** to the host; wait for it to answer.
+    // The front door forwards /api/** to the host; wait for it to answer
+    // (anonymous listing is the middleware's 401).
     yield* call(url, "/api/v1/repos").pipe(
       Effect.filterOrFail(
-        (r) => r.status === 200,
+        (r) => r.status === 200 || r.status === 401,
         () => new Error("not ready"),
       ),
       Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 60 }),
@@ -255,8 +256,8 @@ test(
     });
     const hidden = yield* call(url, `/api/v1/repos/${owner.id}/${name}`);
     expect(hidden.status).toBe(401);
-    // A private repository answers 401 to anyone the policy does not
-    // admit, signed in or not, so its existence is not confirmed.
+    // A private repository answers 401 to anyone but its owner, signed
+    // in or not, so its existence is not confirmed.
     const strangerRead = yield* call(url, `/api/v1/repos/${owner.id}/${name}`, {
       cookie: stranger.cookie,
     });

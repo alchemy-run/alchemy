@@ -1,175 +1,186 @@
 ---
 title: Auth
-description: The engine holds no users and no credentials. One middleware you implement says who is calling, and Policy answers what they may do, inside the repository with git's own facts.
+description: The engine holds no users, no credentials, and no policy. The middleware of the API that mounts the routes decides who may call them, and Git.Hooks decides which refs may move.
 ---
 
-Authentication happens outside the engine, in the HTTP middleware you
-own. The engine asks one pure question per action. Three services carry
-that split:
+Authentication and authorization happen outside the engine, in the
+`HttpApi` middleware you own. The engine's routes declare no
+middleware and no auth errors; `Git.Api.middleware(Yours)` puts one in
+front of every git route, and the engine never sees a credential. The
+one decision a middleware cannot make, which refs a push may move, is
+git's pre-receive hook, and `Git.Hooks` is that hook as a service.
 
-| Service | Answers | Runs |
+| | Decides | Runs |
 | --- | --- | --- |
-| `Git.Authenticated` | who is calling | the middleware every git route declares, at the Worker, once per request |
-| `Git.Caller` | the answer, as every handler sees it | provided by `Authenticated` |
-| `Git.Policy` | may they do this | where the facts are, inside the repository's Durable Object |
+| your middleware | who may call which route | in front of the route, once per request |
+| `Git.Hooks` | which refs may move, and for whom | after the pack is parsed, before any ref moves |
 
-Shipped: `AuthenticatedSecret` and `PolicyOwners`.
+## The middleware
 
-## Principal
-
-The identity your authentication resolved:
+An `HttpApiMiddleware.Service`, declared and implemented by you, put
+on the API you derive from `Git.Api`:
 
 ```typescript
-interface Principal {
-  readonly id: string;
-  readonly name?: string;
-}
-```
-
-Repositories are owned by a principal's id. Owner names are lowercased,
-so `Git.owns(principal, repo)` compares `repo.owner` with
-`principal.id.toLowerCase()`.
-
-## Authenticated
-
-An `HttpApi` middleware that provides `Git.Caller`. Every git route
-declares it: the REST plane, the git wire, the raw reads, and the
-GitHub facade, so one implementation serves them all, and `git`
-clients, which can only send HTTP Basic with the credential in the
-password field, go through the same code as browsers.
-
-```typescript
-class Authenticated extends HttpApiMiddleware.Service<
+export class Authenticated extends HttpApiMiddleware.Service<
   Authenticated,
-  { provides: Caller }
->()("alchemy/Git/Authenticated", { error: Unauthorized }) {
-  static make<E, R>(init: Effect<Resolve, E, R>): Layer<Authenticated, E, R>;
-}
+  { provides: Session; requires: Alchemy.RuntimeContext }
+>()("app/Authenticated", { error: Unauthorized }) {}
 
-type Resolve = Effect<Principal | undefined, never, HttpServerRequest>;
+export class AppApi extends Git.Api.middleware(Authenticated) {}
 ```
 
-`make` takes an Effect that produces the resolver; declare the
-resources, bindings, and services the resolver needs there. The
-resolver runs once per request with `HttpServerRequest` in context.
-`undefined` is anonymous, never a failure. A `git` client sends HTTP
-Basic with the credential in the password field, which
-`HttpApiBuilder.securityDecode(HttpApiSecurity.basic)` reads. An API
-key verified by Better Auth:
+`provides` is what the middleware puts in context for the routes
+behind it, your own service. `requires: Alchemy.RuntimeContext` lets
+the middleware use the Worker's bindings and resources. `error` is
+what it may answer with, so the typed client sees a `401` as
+`Unauthorized`.
+
+The implementation is a Layer. It runs once, when the Worker starts,
+and that is where resources and services are yielded; what it returns
+runs once per request:
 
 ```typescript
-const AuthenticatedLive = Git.Authenticated.make(
+export const AuthenticatedLive = Layer.effect(
+  Authenticated,
   Effect.gen(function* () {
-    const auth = yield* Auth;
-    return Effect.gen(function* () {
-      const { password } = yield* HttpApiBuilder.securityDecode(
-        HttpApiSecurity.basic,
-      );
-      const key = Redacted.value(password);
-      if (key === "") return undefined;
-      const verified = yield* auth.api.verifyApiKey({ body: { key } });
-      return verified.valid && verified.key
-        ? { id: verified.key.referenceId }
-        : undefined;
-    });
+    const auth = yield* Auth; // Better Auth, or whatever knows your users
+    return (httpEffect, { endpoint }) =>
+      Effect.gen(function* () {
+        const user = yield* resolve; // a user, or undefined
+        if (user !== undefined) {
+          return yield* Effect.provideService(httpEffect, Session, { user });
+        }
+        return unauthorized;
+      });
   }),
 );
 ```
 
-`AuthenticatedSecret` is the shipped starter: one secret, an
-`Alchemy.Random` minted on the first deploy, and one principal, who a
-request presenting the secret is acting as. `"acme"` is the owner name
-of the repositories it creates. Declare the `Random` yourself to read
-the secret back from the stack:
+Every question about who may do what to a repository is answered
+here: the tutorial's middleware lets a signed-in user act under their
+own owner name (`HttpRouter.params` has `owner` on every repository
+route), a team member too, and refuses the rest. A `git` client sends
+HTTP Basic with the credential in the password field;
+`HttpApiBuilder.securityDecode(HttpApiSecurity.basic)` reads it. A refusal that carries `WWW-Authenticate` makes `git` ask for a
+password:
 
 ```typescript
-export const GitSecret = Alchemy.Random("GitSecret");
-
-Layer.provide(Git.AuthenticatedSecret({ principal: "acme", secret: GitSecret }))
-```
-
-## Caller
-
-What every handler behind `Authenticated` sees: a principal, or
-anonymous, which the policy confines to public reads.
-
-```typescript
-class Caller extends Context.Service<
-  Caller,
-  { readonly principal: Principal | undefined }
->()("alchemy/Git/Caller") {}
-```
-
-A route of your own asks for it the same way once it declares the
-middleware:
-
-```typescript
-export class Me extends Http.get<Me>()("me", "/api/v1/me", {
-  success: Git.PrincipalSchema,
-  error: Git.Unauthorized,
-  middleware: [Git.Authenticated],
-}) {}
-
-export const MeLive = Me.make(
-  Effect.succeed(() => Effect.map(Git.Caller, ({ principal }) => /* … */)),
+const unauthorized = HttpServerResponse.jsonUnsafe(
+  { _tag: "Unauthorized" },
+  { status: 401, headers: { "www-authenticate": 'Basic realm="git"' } },
 );
 ```
 
-## Policy
+[Getting Started](/git/getting-started) is the whole thing with one
+shared secret; [Part 3](/git/tutorial/part-3) builds it with Better
+Auth sessions and API keys.
+
+## Public repositories
+
+`public` is a flag the engine stores on a repository and reports. What
+it grants is the middleware's decision. `Git.isRead` says whether a
+request to one of the engine's routes only reads: the REST and raw
+reads, the GitHub facade's `GET`s, the ref advertisement for a fetch,
+and `git-upload-pack`. The Registry says whether the repository is
+public:
 
 ```typescript
-interface PolicyShape {
-  authorize(input: {
-    principal: Principal | undefined;
-    repo: RepoContext | null;
-    action: GitAction;
-  }): Effect<boolean>;
+const registry = yield* Git.RegistryStore; // in the Layer
+
+// per request
+const request = yield* HttpServerRequest;
+const { owner = "", repo = "" } = yield* HttpRouter.params;
+const entry = yield* registry
+  .resolve(owner.toLowerCase(), repo.toLowerCase().replace(/\.git$/, ""))
+  .pipe(Effect.catchTag("StoreError", () => Effect.succeed(undefined)));
+if (Git.isRead(endpoint, request) && (entry === undefined || entry.public)) {
+  return yield* Effect.provideService(httpEffect, Session, { user: null });
 }
 ```
 
-`repo` is `null` for registry-level actions. `action` is one of git's
-own facts, not a role: `Fetch`, `Push` with the parsed ref updates,
-`ReadRepo`, `UpdateRepo`, `DeleteRepo`, `CreateRepo` with its owner,
-`ListRepos`, `Maintain`, `CreatePull`, `UpdatePull`, `MergePull`.
+Letting an anonymous read of a repository that does not exist reach
+the route means its `404` confirms nothing about private ones, which
+answer `401`.
 
-A denial for anonymous is `401` with `WWW-Authenticate`, so git
-prompts. A denial for a principal is `403` naming the action, except
-on reads of a private repository, which answer `401` to anyone the
-policy does not admit so the repository's existence is not confirmed.
+## Your routes
 
-`Push` carries its `updates` twice. At the ref advertisement the list
-is empty and the question is whether this caller may push at all. At
-commit it is exact, so a rule can look at which refs move and to what:
+A route of your own declares the middleware it relies on, and its
+handler reads what the middleware provided:
 
 ```typescript
-export const ProtectedMain = Layer.succeed(Git.Policy, {
-  authorize: ({ principal, repo, action }) =>
-    Effect.succeed(
-      principal === undefined
-        ? repo !== null && repo.public && Git.isReadAction(action)
-        : repo === null
-          ? true
-          : action._tag === "Push"
-            ? action.updates.every((u) =>
-                u.ref === "refs/heads/main" ? Git.owns(principal, repo) : true,
-              )
-            : Git.owns(principal, repo) ||
-              (repo.public && Git.isReadAction(action)),
-    ),
+export class Me extends Http.get<Me>()("me", "/api/v1/me", {
+  success: User,
+  error: Unauthorized,
+  middleware: [Authenticated],
+}) {}
+
+export const MeLive = Me.make(
+  Effect.succeed(() =>
+    Effect.gen(function* () {
+      const { user } = yield* Session;
+      if (user === null) return yield* new Unauthorized();
+      return user;
+    }),
+  ),
+);
+```
+
+The engine's route classes do not declare your middleware. A handler
+that replaces one of them, or a hook, reads your service as an option:
+
+```typescript
+const session = yield* Effect.serviceOption(Session);
+const user = Option.isSome(session) ? session.value.user : null;
+```
+
+## Hooks
+
+```typescript
+interface HooksShape {
+  preReceive(input: {
+    repo: RepoMetaData;
+    updates: ReadonlyArray<{ ref: string; oldOid: string; newOid: string }>;
+  }): Effect<ReadonlyArray<{ ref: string; reason: string }>>;
+}
+```
+
+`preReceive` runs on `git push`, on the REST ref writes, and on a pull
+request merge, with the parsed updates: `oldOid` is all zeros for a
+create, `newOid` all zeros for a delete. It returns the refs to refuse
+with a reason; an empty array accepts. A push with any refused ref is
+rejected as a whole, and git reports the reason per ref. REST and a
+merge answer a typed `403`, `HookRejected`. It runs in the Worker,
+inside the request, so whatever your middleware provided is in
+context:
+
+```typescript
+export const ProtectedMain = Layer.succeed(Git.Hooks, {
+  preReceive: ({ repo, updates }) =>
+    Effect.gen(function* () {
+      const session = yield* Effect.serviceOption(Session);
+      const user = Option.isSome(session) ? session.value.user : null;
+      return updates.flatMap((update) =>
+        update.ref === "refs/heads/main" && user?.id !== repo.owner
+          ? [{ ref: update.ref, reason: "only the owner moves main" }]
+          : [],
+      );
+    }),
 });
 ```
 
-`Git.PolicyOwners` is the default: anonymous reads public, a principal
-may create and list, and owns what it owns. A policy may be a
-`Layer.effect` that reads your own data, as the team rule in
-[Part 4](/git/tutorial/part-4) does.
+`Git.Hooks` is optional; without it every update is accepted, and
+`Git.HooksNone` says so explicitly. A hook may be a `Layer.effect` that
+reads your own data. Who may write to a repository at all is the
+middleware's question, as the team rule in [Part 4](/git/tutorial/part-4)
+shows. A hook that must see the commit a merge writes, or react after a
+push, decorates `Git.RepoStore` instead; [Repository](/git/blocks/repositories)
+shows it.
 
 ## What the engine keeps
 
-The Worker resolves the principal once, strips any inbound
-`x-git-principal` header, and forwards the resolved one to the Durable
-Object, which trusts it because only the Worker can reach it. The push
-pipeline's internal hash route is the one route without the middleware;
-it authenticates with a deploy-time random secret no user holds. There
-is no tokens table and no admin key. Credentials are your
-authentication's, and only your authentication ever sees them.
+The push pipeline's internal hash route is not part of `Git.Api`. It
+is `Git.InternalApi`, which `Git.Server` mounts beside your API and
+outside your middleware, and it authenticates with a deploy-time
+random secret no user holds. There is no tokens table, no admin key,
+and no principal. Credentials are your authentication's, and only your
+authentication ever sees them.

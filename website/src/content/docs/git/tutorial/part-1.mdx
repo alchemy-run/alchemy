@@ -50,8 +50,8 @@ export default class GitHost extends Cloudflare.Worker<GitHost>()(
 ```
 
 `GIT_WORKER_OPTIONS` sets `nodejs_compat` and a CPU limit large enough
-to verify a push. This does not compile yet. `Git.Server` needs six
-services, and the compiler lists them.
+to verify a push. This does not compile yet. `Git.Server` needs the
+blocks it is made of, and the compiler lists them.
 
 ## Where refs and objects live
 
@@ -123,53 +123,86 @@ const GitLive = Git.ServerLive.pipe(
 );
 ```
 
-## Who may do what
-
-The engine keeps no users and no credentials. It asks two things of
-you. `Git.Policy` answers yes or no for a principal, a repository, and
-an action, and `Git.PolicyOwners` is the default: owners write, anyone
-reads public repositories:
-
-```diff lang="typescript"
-const GitLive = Git.ServerLive.pipe(
-  Layer.provide(Git.ReposDurableObject),
-  Layer.provide(Git.RegistryDurableObject),
-  Layer.provide(Git.BlobStoreR2(GitObjects)),
-  Layer.provide(Git.HasherInline),
-+  Layer.provide(Git.PolicyOwners),
-);
-```
-
 ## Who is calling
 
-`Git.Authenticated` is the middleware every git route declares. It
-turns a request into a principal, who the request is acting as, or
-anonymous. The smallest thing that secures a fresh host is one shared
-secret: a request that presents it is acting as `acme`, and `acme` is
-the owner name of the repositories it creates, as in `acme/web`. The
-secret is an `Alchemy.Random`, a resource minted on the first deploy
-and stable after it, declared here so the stack can read it back:
+The engine holds no users and no credentials. Who may call a route is
+decided by the middleware of the API that mounts it, before the engine
+sees a request. `Git.Api` is every git route: the REST plane, the git
+wire, the raw reads, and the GitHub facade. The smallest thing that
+secures a fresh host is one shared secret, sent the way `git` sends
+credentials: as the password of HTTP Basic. The secret is an
+`Alchemy.Random`, a resource minted on the first deploy and stable
+after it, declared here so the stack can read it back:
 
 ```diff lang="typescript"
 +import * as Alchemy from "alchemy";
++import * as Redacted from "effect/Redacted";
++import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
++import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
++import * as HttpApiMiddleware from "effect/unstable/httpapi/HttpApiMiddleware";
++import * as HttpApiSecurity from "effect/unstable/httpapi/HttpApiSecurity";
 
 export const GitObjects = Cloudflare.R2.Bucket("GitObjects");
 +export const GitSecret = Alchemy.Random("GitSecret");
++
++export class Authenticated extends HttpApiMiddleware.Service<
++  Authenticated,
++  { requires: Alchemy.RuntimeContext }
++>()("Authenticated") {}
++
++export const AuthenticatedLive = Layer.effect(
++  Authenticated,
++  Effect.gen(function* () {
++    const secret = yield* (yield* GitSecret).text;
++    return (httpEffect) =>
++      Effect.gen(function* () {
++        const { password } = yield* HttpApiBuilder.securityDecode(
++          HttpApiSecurity.basic,
++        );
++        if (Redacted.value(password) === Redacted.value(yield* secret)) {
++          return yield* httpEffect;
++        }
++        return HttpServerResponse.empty({
++          status: 401,
++          headers: { "www-authenticate": 'Basic realm="git"' },
++        });
++      });
++  }),
++);
+```
 
-const GitLive = Git.ServerLive.pipe(
+An `HttpApi` middleware wraps every route it is declared on. This one
+runs once per request: a matching secret runs the route, anything else
+answers `401` with `WWW-Authenticate`, so `git` asks for a password.
+Yielding the `Random` in the Layer gives the Worker its value at
+runtime; `requires: Alchemy.RuntimeContext` is what lets a middleware
+read it.
+
+## The API the host serves
+
+The middleware goes on the API, and the API is what `Git.Server`
+serves. `Git.Api.middleware(Authenticated)` puts it in front of every
+git route, and `Git.Handlers` is the engine's implementation of each:
+
+```diff lang="typescript"
++export class Api extends Git.Api.middleware(Authenticated) {}
++
+-const GitLive = Git.ServerLive.pipe(
++const GitLive = Git.Server.layer(Api).pipe(
++  Layer.provide(Git.Handlers),
++  Layer.provide(AuthenticatedLive),
   Layer.provide(Git.ReposDurableObject),
   Layer.provide(Git.RegistryDurableObject),
   Layer.provide(Git.BlobStoreR2(GitObjects)),
   Layer.provide(Git.HasherInline),
-  Layer.provide(Git.PolicyOwners),
-+  Layer.provide(Git.AuthenticatedSecret({ principal: "acme", secret: GitSecret })),
 );
 ```
 
-The file compiles. Six lines, six decisions, and each one is a Layer
-you can replace later without touching the others. Part 3 replaces the
-last one with Better Auth, and Part 4 the one above it with your own
-rules.
+The file compiles. Each line is a Layer you can replace later without
+touching the others. `Git.ServerLive`, the line you started with, is
+`Git.Api` with `Git.Handlers` and nothing in front. Part 3 replaces the
+secret with Better Auth, and Part 4 adds rules about which refs may
+move.
 
 ## Add it to a stack
 
@@ -219,7 +252,7 @@ export default Alchemy.Stack(
 The stack prints the Worker's URL and the secret. It created a bucket,
 two Durable Object namespaces, one random secret bound to one Worker,
 and nothing runs until a request arrives. Part 2 calls them `$HOST`
-and `$GIT_SERVICE_SECRET`.
+and `$GIT_SECRET`.
 
 ## Where next
 

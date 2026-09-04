@@ -12,16 +12,14 @@
  * export class GetRepo extends Http.get<GetRepo>()("get", "/repos/:owner/:repo", {
  *   params: RepoPath,
  *   success: Repo,
- *   error: [RepoNotFound, Unauthorized],
- *   middleware: [Authenticated],
+ *   error: [RepoNotFound],
  * }) {}
  *
  * export const GetRepoLive = GetRepo.make(
  *   Effect.gen(function* () {
  *     const repos = yield* Repos;                 // build time: bindings
  *     return Effect.fn(function* ({ params }) {  // request time
- *       const { principal } = yield* Caller;
- *       return yield* repos.get(principal, params.owner, params.repo);
+ *       return yield* repos.get(params.owner, params.repo);
  *     });
  *   }),
  * );
@@ -395,7 +393,7 @@ export const group = <
  *   Layer.provide(Http.handlers(AppApi)),
  *   Layer.provide([MeLive, GetUserBetterAuth]),
  *   Layer.provide(Git.Handlers),
- *   Layer.provide(AuthenticatedLive),
+ *   Layer.provide(SessionLive), // the middleware AppApi declares
  *   Layer.provide(Http.Platform),
  *   HttpRouter.toHttpEffect,
  * )

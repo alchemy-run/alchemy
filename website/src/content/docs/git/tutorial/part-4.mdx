@@ -1,85 +1,121 @@
 ---
 title: "Part 4: Your own rules"
-description: A policy is a page of code over git's own facts. Protect main, decide who reads what, and let a team share a repository. It never sees a credential.
+description: git's pre-receive hook as a service. Protect main, let a team share a repository, and answer from your own data. It never sees a credential.
 ---
 
 import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
 
 You have users signing in and pushing to their own repositories. Now
-the rules: pushes to `main` should only come from the owner, and a
-teammate should be able to push everywhere else. By the end of this
-part the rules are one file, and the authentication from Part 3 is
-untouched.
+the rules: a teammate should be able to push to a repository they do
+not own, and pushes to `main` should only come from its owner. By the
+end of this part the first rule is two lines in the middleware, and
+the second is a hook.
 
-## What the engine asks
+## A team
 
-`Git.Policy` is one function. It receives three things and answers yes
-or no: the principal your middleware resolved (`undefined` for
-anonymous), the repository, and an action in git's own vocabulary:
-
-```typescript
-interface PolicyShape {
-  authorize(input: {
-    principal: Principal | undefined;
-    repo: RepoContext | null;
-    action: GitAction;
-  }): Effect<boolean>;
-}
-```
-
-The actions are facts the engine parsed, not roles: `Fetch`, `Push`
-with the refs it wants to move, `ReadRepo`, `UpdateRepo`, `DeleteRepo`,
-`CreateRepo` with the owner, `ListRepos`, `Maintain`, `CreatePull`,
-`UpdatePull`, `MergePull`. It runs where the facts are: a push is judged
-inside the repository's Durable Object, after the ref commands are
-parsed.
-
-`Git.PolicyOwners` is what you have been running: anonymous reads
-public, a principal may create and list, and owns what it owns.
-
-## Protect main
-
-```typescript
-// src/policy.ts
-import * as Git from "alchemy/Git";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-
-export const AppPolicy: Layer.Layer<Git.Policy> = Layer.succeed(Git.Policy, {
-  authorize: ({ principal, repo, action }) =>
-    Effect.succeed(
-      principal === undefined
-        ? repo !== null && repo.public && Git.isReadAction(action)
-        : repo === null
-          ? true
-          : action._tag === "Push"
-            ? action.updates.every((u) =>
-                u.ref === "refs/heads/main" ? Git.owns(principal, repo) : true,
-              )
-            : Git.owns(principal, repo) ||
-              (repo.public && Git.isReadAction(action)),
-    ),
-});
-```
-
-`Git.owns` compares the repository's owner with the principal's id,
-lowercased, since owner names are. `Push` carries its `updates` twice:
-empty at the ref advertisement, when the question is whether this
-caller may push at all, and exact at commit, which is when the rule
-above sees `refs/heads/main`.
+Who may write to a repository is the middleware's decision, and your
+data decides who is on a team. Read it there:
 
 ```diff lang="typescript"
 // src/git.ts
-+import { AppPolicy } from "./policy.ts";
+export const AuthenticatedLive = Layer.effect(
+  Authenticated,
+  Effect.gen(function* () {
+    const auth = yield* Auth;
+    const registry = yield* Git.RegistryStore;
++    const teams = yield* Teams; // yours: who may write to which owner
 
-const GitLive = Git.ReposDurableObject.pipe(
-  Layer.provideMerge(Git.RegistryDurableObject),
-  Layer.provideMerge(Git.HasherInline),
-  Layer.provideMerge(Git.BlobStoreR2(GitObjects)),
--  Layer.provideMerge(Git.PolicyOwners),
-+  Layer.provideMerge(AppPolicy),
+    // …
+
+    return (httpEffect, { endpoint }) =>
+      Effect.gen(function* () {
+        const user = yield* resolve;
+        const { owner } = yield* HttpRouter.params;
+        const own =
+          owner === undefined || owner.toLowerCase() === user?.id.toLowerCase();
+-        if (user !== undefined && own) {
++        const member =
++          user !== undefined && owner !== undefined
++            ? yield* teams.isMember(user.id, owner.toLowerCase())
++            : false;
++        if (user !== undefined && (own || member)) {
+          return yield* Effect.provideService(httpEffect, Session, { user });
+        }
+        // …
+      });
+  }),
 );
 ```
+
+A teammate now pushes anywhere in the repository, `main` included.
+
+## What the middleware cannot decide
+
+The middleware sees a request. On a push, the request is a pack whose
+ref commands have not been parsed yet, so "may this user move `main`?"
+cannot be answered there. git's answer is the pre-receive hook, which
+runs after the pack is parsed and before any ref moves, and `Git.Hooks`
+is that hook as a service:
+
+```typescript
+interface HooksShape {
+  preReceive(input: {
+    repo: RepoMetaData;
+    updates: ReadonlyArray<{ ref: string; oldOid: string; newOid: string }>;
+  }): Effect<ReadonlyArray<{ ref: string; reason: string }>>;
+}
+```
+
+It returns the refs to refuse, each with a reason, and an empty array
+accepts. It runs in the Worker, inside the request, so whatever your
+middleware put in context is readable there. It runs on `git push`, on
+the REST ref writes, and on a pull request merge.
+
+## Protect main
+
+The `Session` from Part 3 says who is pushing, and the middleware
+already let them in. The engine's route classes do not declare your
+middleware, so the hook reads it as an option:
+
+```typescript
+// src/hooks.ts
+import * as Git from "alchemy/Git";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import { Session } from "./git.ts";
+
+export const ProtectedMain: Layer.Layer<Git.Hooks> = Layer.succeed(Git.Hooks, {
+  preReceive: ({ repo, updates }) =>
+    Effect.gen(function* () {
+      const session = yield* Effect.serviceOption(Session);
+      const user = Option.isSome(session) ? session.value.user : null;
+      return updates.flatMap((update) =>
+        update.ref === "refs/heads/main" && user?.id !== repo.owner
+          ? [{ ref: update.ref, reason: "only the owner moves main" }]
+          : [],
+      );
+    }),
+});
+```
+
+`repo.owner` is the owner name, lowercased, and so is the user's id
+when the repository was created under it in Part 3. A teammate moves
+every other ref; only the owner moves `main`.
+
+```diff lang="typescript"
+// src/git.ts
++import { ProtectedMain } from "./hooks.ts";
+
+const GitLive = Git.Server.layer(AppApi).pipe(
+  Layer.provide([MeLive, GitHubUserLive]),
+  Layer.provide(Git.Handlers),
+  Layer.provide(AuthenticatedLive),
++  Layer.provide(ProtectedMain),
+  Layer.provide(Git.ReposDurableObject),
+```
+
+`Git.Hooks` is optional. Without it, every ref update is accepted.
 
 <Tabs syncKey="pkgManager">
   <TabItem label="bun" icon="bun">
@@ -106,40 +142,11 @@ git push origin main
 ```
 
 The branch lands. The push to `main` is refused in-band with the ref
-named, the way git reports any rejected ref. The owner's key moves it.
-
-## A team
-
-Your data decides who is on a team. Read it in the policy:
-
-```typescript
-export const AppPolicy = Layer.effect(
-  Git.Policy,
-  Effect.gen(function* () {
-    const teams = yield* Teams; // yours: who may write to which owner
-
-    return {
-      authorize: ({ principal, repo, action }) =>
-        Effect.gen(function* () {
-          if (principal === undefined) {
-            return repo !== null && repo.public && Git.isReadAction(action);
-          }
-          if (repo === null) return true;
-          const member = yield* teams.isMember(principal.id, repo.owner);
-          if (action._tag === "Push") {
-            return action.updates.every((u) =>
-              u.ref === "refs/heads/main" ? Git.owns(principal, repo) : member,
-            );
-          }
-          return member || (repo.public && Git.isReadAction(action));
-        }),
-    };
-  }),
-);
-```
-
-The host asks `MergePull` and `Push` with the refs that move. It never
-asks what a team is.
+named and the reason you wrote, the way git reports any rejected ref.
+The owner's key moves it. The same rule answers the REST ref writes
+and a merge with a typed `403`, `HookRejected`, naming the ref and the
+reason. The host asked with the refs that move; it never asked what a
+team is.
 
 ## Where you are
 

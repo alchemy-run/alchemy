@@ -7,12 +7,13 @@ description: One Durable Object per repository, behind the Git.RepoStore service
 provides `Git.RepoStore`, the service every route reaches it through:
 
 ```typescript
-const GitLive = Git.ServerLive.pipe(
+const GitLive = Git.Server.layer(Api).pipe(
+  Layer.provide(Git.Handlers),
+  Layer.provide(AuthenticatedLive),
   Layer.provide(Git.ReposDurableObject),
   // ReposDurableObject requires:
   Layer.provide(Git.BlobStoreR2(GitObjects)), // packs, bundles, spilled pushes
   Layer.provide(Git.HasherInline),            // push verification
-  Layer.provide(Git.PolicyOwners),            // authorization, asked in the DO
   Layer.provide(Git.RegistryDurableObject),   // owner/name → repoId
 );
 ```
@@ -30,9 +31,8 @@ const repos = yield* Git.RepoStore;
 const repo = repos.getByName(repoId); // a typed RPC stub over the Durable Object
 ```
 
-The stub is `Git.GitRepoShape`. Methods that act on behalf of a caller
-take the principal first, `Principal | null`, and ask `Git.Policy`
-before doing anything:
+The stub is `Git.GitRepoShape`. It asks no questions about who is
+calling; that was decided in front of the route:
 
 ```typescript
 interface GitRepoShape {
@@ -40,43 +40,24 @@ interface GitRepoShape {
   initRepo(input): Effect<InitRepoResult, StoreError>;
   startImport(input): Effect<InitRepoResult, StoreError>;
   startFork(input): Effect<InitRepoResult, StoreError>;
-  startCompact(auth): Effect<void, RepoAuthError | StoreError>;
-  startPurge(auth): Effect<void, RepoAuthError | StoreError>;
+  startCompact(): Effect<void, RepoNotFound | StoreError>;
+  startPurge(): Effect<void, RepoNotFound | StoreError>;
 
   // metadata
-  getRepoMeta(auth): Effect<RepoMetaData, RepoAuthError | RepoNotFound>;
-  readMeta(): Effect<RepoMetaData | undefined>;
-  updateRepoMeta(auth, input): Effect<RepoMetaData, RepoAuthError | RefNotFound>;
+  getRepoMeta(): Effect<RepoMetaData, RepoNotFound | StoreError>;
+  readMeta(): Effect<RepoMetaData, RepoNotFound | StoreError>;
+  updateRepoMeta(input): Effect<RepoMetaData, RepoNotFound | RefNotFound | StoreError>;
 
   // refs
-  listRefs(auth, input): Effect<RefsPage, RepoAuthError>;
-  getRef(auth, input): Effect<RefData, RepoAuthError | RefNotFound>;
-  updateRef(auth, input): Effect<RefData, RepoAuthError | RefConflict | ObjectNotFound | ReadOnlyRepo>;
-  removeRef(auth, input): Effect<void, RepoAuthError | RefNotFound | RefConflict | ReadOnlyRepo>;
+  listRefs(input): Effect<RefsPage, RepoNotFound | StoreError>;
+  getRef(name): Effect<RefData, RepoNotFound | RefNotFound | StoreError>;
+  updateRef(input): Effect<RefData, RefConflict | ObjectNotFound | ReadOnlyRepo | …>;
+  removeRef(input): Effect<void, RefNotFound | RefConflict | ReadOnlyRepo | …>;
 
   // objects
-  readObject(auth, input): Effect<ObjectData, RepoAuthError | ObjectNotFound | WrongObjectType>;
-  readCommitLog(auth, input): Effect<CommitLogPage, RepoAuthError | RefNotFound>;
-  readCommitDiff(auth, input): Effect<CommitDiffData, RepoAuthError | ObjectNotFound>;
-  compareCommits(auth, input): Effect<CompareData, RepoAuthError | RefNotFound | NoMergeBase>;
-  readFileAtPath(auth, input): Effect<FileData, RepoAuthError | ObjectNotFound>;
-
-  // pull requests
-  createPull(auth, input): Effect<PullData, RepoAuthError | BranchMissing | PullExists>;
-  listPulls(auth, input): Effect<PullsPage, RepoAuthError>;
-  getPull(auth, number): Effect<PullDetailData, RepoAuthError | PullNotFound>;
-  updatePull(auth, input): Effect<PullData, RepoAuthError | PullNotFound | PullStateConflict>;
-  mergePull(auth, input): Effect<MergePullResult, RepoAuthError | MergeConflict | RefConflict | …>;
-
-  // the push pipeline: rows in, never pack bytes
-  beginPush(auth, input): Effect<BeginPushResult, RepoAuthError | ReadOnlyRepo>;
-  stagePush(input): Effect<void, StoreError>;
-  readPushBase(input): Effect<PushBase, StoreError>;
-  commitPush(input): Effect<CommitPushResult, RepoNotFound | StoreError>;
-
-  // the wire: info/refs and upload-pack run inside the object
-  fetch: HttpEffect;
-}
+  readObject(input): Effect<ObjectData, ObjectNotFound | WrongObjectType | …>;
+  readCommitLog(input): Effect<CommitLogPage, RefNotFound | …>;
+  readCommitDiff(input): Effect<CommitDiffData, ObjectNotFound | …>;
 ```
 
 Every error is a tagged class the stub reconstructs across the RPC
@@ -91,8 +72,7 @@ that answers the default branch's tip:
 export class Tip extends Http.get<Tip>()("tip", "/api/v1/repos/:owner/:repo/tip", {
   params: Git.RepoPath,
   success: Git.Ref,
-  error: [Git.RepoNotFound, Git.RefNotFound, Git.Forbidden, Git.Unauthorized],
-  middleware: [Git.Authenticated],
+  error: [Git.RepoNotFound, Git.RefNotFound],
 }) {}
 
 export const TipLive = Tip.make(
@@ -100,23 +80,25 @@ export const TipLive = Tip.make(
     const registry = yield* Git.RegistryStore;
     const repos = yield* Git.RepoStore;
     return Effect.fn(function* ({ params }) {
-      const { principal } = yield* Git.Caller;
       const entry = yield* registry
         .resolve(params.owner, params.repo)
         .pipe(Effect.catchTag("StoreError", (error) => Effect.die(error)));
       if (entry === undefined) return yield* new Git.RepoNotFound(params);
       const repo = repos.getByName(entry.repoId);
       const meta = yield* repo
-        .getRepoMeta(principal ?? null)
+        .getRepoMeta()
         .pipe(Effect.catchTag("StoreError", (error) => Effect.die(error)));
       const ref = yield* repo
-        .getRef(principal ?? null, `refs/heads/${meta.defaultBranch}`)
+        .getRef(`refs/heads/${meta.defaultBranch}`)
         .pipe(Effect.catchTag("StoreError", (error) => Effect.die(error)));
       return new Git.Ref({ name: ref.name, oid: ref.oid as Git.Oid });
     });
   }),
 );
 ```
+
+Mounted in an API derived from `Git.Api`, it runs behind that API's
+middleware like every other route.
 
 ## Wrap it
 
@@ -150,7 +132,9 @@ export const ReposWithHooks = Layer.effect(
 ```
 
 ```diff lang="typescript"
-const GitLive = Git.ServerLive.pipe(
+const GitLive = Git.Server.layer(Api).pipe(
+  Layer.provide(Git.Handlers),
+  Layer.provide(AuthenticatedLive),
 -  Layer.provide(Git.ReposDurableObject),
 +  Layer.provide(ReposWithHooks),
 ```
@@ -159,6 +143,9 @@ The wrapper runs in the Worker, where the routes call the object.
 `commitPush` carries the ref commands and what they resolved to;
 `updateRef` and `mergePull` are the other two ways a ref moves. A
 Queue producer or a Workflow trigger goes in `afterPush` the same way.
+To refuse a ref update before it happens, with a reason git reports,
+[Git.Hooks](/git/blocks/auth#hooks) is the pre-receive hook and needs
+no wrapping.
 
 ## Implement your own
 
@@ -174,8 +161,7 @@ export const ReposMine = Layer.effect(
 );
 ```
 
-The registry, the blob store, and the policy are the seams it can
-reuse. The wire protocol (`fetch`) and the push pipeline are the parts
+The registry and the blob store are the seams it can reuse. The wire protocol (`fetch`) and the push pipeline are the parts
 that assume the object's transactional storage, so a store without a
 per-repository serialization point starts there.
 
@@ -207,8 +193,7 @@ Every job is idempotent and resumable:
 | fork, import | `startFork`, `startImport` | copies from a sibling object or fetches from a remote |
 
 ```sh
-curl -X POST "$HOST/api/v1/repos/acme/web/compact" \
-  -H "Authorization: Bearer $GIT_SERVICE_SECRET"
+curl -u "x:$GIT_SECRET" -X POST "$HOST/api/v1/repos/acme/web/compact"
 ```
 
 ## What it reports

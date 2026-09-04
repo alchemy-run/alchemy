@@ -19,12 +19,13 @@ the remote URL and the username is ignored:
 git remote add origin "https://x:$TOKEN@$HOST/acme/web.git"
 ```
 
-What `$TOKEN` is depends on the `Authenticated` Layer the host runs.
+What `$TOKEN` is depends on the middleware the host runs.
 
 ### The starter secret
 
-`AuthenticatedSecret` accepts one secret, an `Alchemy.Random` the
-stack outputs. `alchemy deploy` prints it:
+The host from [Getting Started](/git/getting-started) accepts one
+secret, an `Alchemy.Random` the stack outputs. `alchemy deploy` prints
+it:
 
 ```sh
 bun alchemy deploy
@@ -47,38 +48,32 @@ The example app has a settings page that does the same.
 
 ### Your own
 
-The token is whatever your `Authenticated` resolver accepts. The one
+The token is whatever your middleware accepts. The one
 [Part 3](/git/tutorial/part-3) put in front of the host decodes the
 Basic password and asks Better Auth whose key it is:
 
 ```typescript
-export const AuthenticatedLive = Git.Authenticated.make(
-  Effect.gen(function* () {
-    const auth = yield* Auth;
-    return Effect.gen(function* () {
-      const { password } = yield* HttpApiBuilder.securityDecode(
-        HttpApiSecurity.basic,
-      );
-      const key = Redacted.value(password);
-      if (key === "") return undefined;
-      const verified = yield* auth.api.verifyApiKey({ body: { key } });
-      return verified.valid && verified.key
-        ? { id: verified.key.referenceId }
-        : undefined;
-    });
-  }),
+const { password } = yield* HttpApiBuilder.securityDecode(
+  HttpApiSecurity.basic,
 );
+const key = Redacted.value(password);
+if (key !== "") {
+  const verified = yield* auth.api.verifyApiKey({ body: { key } });
+  return verified.valid && verified.key
+    ? { id: verified.key.referenceId }
+    : undefined;
+}
 ```
 
 A token issued by anything else is verified the same way: read it
-from the request, answer with a principal or `undefined`.
-[Auth](/git/blocks/auth) has the contract.
+from the request, run the route or refuse. [Auth](/git/blocks/auth)
+has the pattern.
 
 ### Keeping it out of `.git/config`
 
 Leave the credential out of the URL and let a credential helper
-supply it. A private repository answers an anonymous request with
-`401` and `WWW-Authenticate`, so `git` prompts:
+supply it. A middleware that answers an anonymous request with `401`
+and `WWW-Authenticate` makes `git` prompt:
 
 ```sh
 git config credential.helper osxkeychain   # or store, or your manager
@@ -86,7 +81,8 @@ git clone "https://$HOST/acme/web.git"
 Password for 'https://x@…': <paste $TOKEN>
 ```
 
-Reads of a public repository need no credential at all.
+A middleware that honors `public` serves reads of a public repository
+with no credential at all; the tutorial's does.
 
 ## What is supported
 

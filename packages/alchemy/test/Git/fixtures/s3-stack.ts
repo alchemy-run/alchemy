@@ -12,26 +12,26 @@ import * as Layer from "effect/Layer";
 import {
   BlobStoreS3,
   GIT_WORKER_OPTIONS,
+  Handlers,
   HasherInline,
   ReposDurableObject,
   RegistryDurableObject,
   Server,
-  ServerLive,
 } from "@/Git/index.ts";
 
-import { AuthenticatedTest, PolicyTest, TEST_SECRET } from "./stack.ts";
+import { TEST_SECRET, TestApi, TestAuthLive } from "./stack.ts";
 export { TEST_SECRET };
 
 /** Declared here so the stack tears it down with the packs still inside. */
 export const GitObjects = AWS.S3.Bucket("GitS3Objects", { forceDestroy: true });
 
-const GitLive = ServerLive.pipe(
+const GitLive = Server.layer(TestApi).pipe(
+  Layer.provide(Handlers),
+  Layer.provide(TestAuthLive),
   Layer.provide(ReposDurableObject),
   Layer.provide(RegistryDurableObject),
   Layer.provide(HasherInline),
   Layer.provide(BlobStoreS3({ bucket: GitObjects })),
-  Layer.provide(AuthenticatedTest),
-  Layer.provide(PolicyTest),
 );
 
 export default class S3GitHost extends Cloudflare.Worker<S3GitHost>()(

@@ -8,9 +8,9 @@
  *   class, with the schemas and tagged errors.
  * - {@link Handlers}, the default implementation of every route, and the
  *   per-route `*Live` Layers it is made of.
- * - Auth: {@link Authenticated} (the middleware contract), {@link Caller},
- *   {@link Policy}, and the shipped {@link AuthenticatedSecret} and
- *   {@link PolicyOwners}.
+ * - {@link Hooks}, git's pre-receive hook as a service. There is no auth
+ *   in the engine: the middleware of the API that mounts the routes decides
+ *   who gets in.
  * - The deployable pieces: {@link Server} + {@link ServerLive}, the
  *   {@link GitRepo} / {@link Registry} Durable Objects, and the storage and
  *   hasher blocks.
@@ -23,25 +23,12 @@
 export * from "./Api.ts";
 export { GitApi as Api } from "./Api.ts";
 export {
-  Authenticated,
-  AuthenticatedSecret,
-  Caller,
-  currentCaller,
-  isReadAction,
-  owns,
-  Policy,
-  PolicyOwners,
-  PrincipalSchema,
-  SECRET_RESOURCE_ID,
-  timingSafeEqual,
-  type GitAction,
-  type Headers,
-  type PolicyShape,
-  type Principal,
+  Hooks,
+  HooksNone,
+  type HooksShape,
+  type RefRejection,
   type RefUpdate,
-  type RepoContext,
-  type Resolve,
-} from "./Auth.ts";
+} from "./Hooks.ts";
 export * from "./Server.ts";
 export {
   BlobStore,
@@ -58,7 +45,6 @@ export {
   GitRepo,
   GitRepoLive,
   MAX_PACK_BYTES,
-  type CallerAuth,
   type CommitPushInput,
   type CommitPushResult,
   type GitRepoShape,

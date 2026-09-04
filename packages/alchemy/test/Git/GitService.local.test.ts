@@ -34,7 +34,7 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
-import { GitApi, type Oid } from "@/Git/Api.ts";
+import type { Oid } from "@/Git/Api.ts";
 import {
   encodeCommit,
   hashObject,
@@ -44,7 +44,11 @@ import {
   utf8Encode,
 } from "@/Git/Protocol/ObjectCodec.ts";
 import ProtectedGitHost from "./fixtures/protected-stack.ts";
-import TestGitHost, { TEST_SECRET, TEST_SECRET_DEV } from "./fixtures/stack.ts";
+import TestGitHost, {
+  TEST_SECRET,
+  TEST_SECRET_DEV,
+  TestApi,
+} from "./fixtures/stack.ts";
 import { verifyPackResponse } from "./harness/pack.ts";
 
 // `dev: true` runs local providers behind the RPC sidecar proxy by default,
@@ -124,7 +128,7 @@ afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(LocalStack));
 // ── typed REST client ───────────────────────────────────────────────────────
 
 const makeClient = (url: string, token: string) =>
-  HttpApiClient.make(GitApi, {
+  HttpApiClient.make(TestApi, {
     baseUrl: url,
     transformClient: HttpClient.mapRequest((request) =>
       request.pipe(HttpClientRequest.bearerToken(token)),
@@ -133,7 +137,7 @@ const makeClient = (url: string, token: string) =>
 
 /** A client that sends NO Authorization header — the anonymous caller. */
 const makeAnonymousClient = (url: string) =>
-  HttpApiClient.make(GitApi, { baseUrl: url });
+  HttpApiClient.make(TestApi, { baseUrl: url });
 
 const asOid = (oid: string): Oid => oid as Oid;
 
@@ -317,26 +321,30 @@ test(
       "RepoNotFound",
     );
 
-    // no credentials → typed 401 from the security middleware
-    const anonymous = yield* HttpApiClient.make(GitApi, { baseUrl: url });
+    // no credentials → typed 401 from the fixture's middleware
+    const anonymous = yield* HttpApiClient.make(TestApi, { baseUrl: url });
     yield* expectTag(
       anonymous.repos.get({ params: { owner: "acme", repo: "rest-repos" } }),
       "Unauthorized",
     );
 
-    // garbage token → typed 401 (the Repo DO rejects it)
+    // garbage token → typed 401 (the middleware rejects it before any route)
     const garbage = yield* makeClient(url, "gs_garbage-token");
     yield* expectTag(
       garbage.repos.get({ params: { owner: "acme", repo: "rest-repos" } }),
       "Unauthorized",
     );
 
-    // repo tokens are not the admin key: create → 403; list succeeds but
-    // shows PUBLIC repos only, so this private repo is not in it.
-    // Anonymous callers see public repos only; the private one is hidden.
-    const anonymousListing = yield* anonymous.repos.list({ query: {} });
+    // Anonymous callers may read one public repository at a time;
+    // listing is not that, so it 401s like any other anonymous call.
+    yield* expectTag(anonymous.repos.list({ query: {} }), "Unauthorized");
+    // The engine lists everything the Registry holds; `public: true`
+    // narrows it, so a private repo is not in that view.
+    const publicListing = yield* admin.repos.list({
+      query: { public: true },
+    });
     expect(
-      anonymousListing.items.some(
+      publicListing.items.some(
         (row) => row.owner === "acme" && row.name === "rest-repos",
       ),
     ).toBe(false);
@@ -1133,13 +1141,15 @@ test(
       }),
     );
     expect(sideband.status).toBe(200);
-    expect(sideband.via).toBe("do-bundle:bundle+framed");
+    // Access was decided in front of the route, so a credentialed clone
+    // takes the same DO-less path as an anonymous one.
+    expect(sideband.via).toBe("head-snapshot:bundle+framed");
     const framed = verifyPackResponse(sideband.bytes, true);
     expect(framed.error).toBeUndefined();
     expect(framed.objects).toBeGreaterThan(20);
 
     const raw = yield* fetchPack("");
-    expect(raw.via).toBe("do-bundle:bundle");
+    expect(raw.via).toBe("head-snapshot:bundle");
     const plain = verifyPackResponse(raw.bytes, false);
     expect(plain.error).toBeUndefined();
     expect(plain.objects).toBe(framed.objects);
@@ -1282,8 +1292,8 @@ test(
     });
     expect(log.items.length).toBe(1);
 
-    // Anonymous listing shows the public repo (admin key not required).
-    const listing = yield* anonymous.repos.list({ query: {} });
+    // The public-only listing shows it.
+    const listing = yield* admin.repos.list({ query: { public: true } });
     expect(listing.items.some((row) => row.name === "town-square")).toBe(true);
 
     // Tokenless clone over the wire.
@@ -1328,7 +1338,9 @@ test(
       anonymous.repos.get({ params: { owner: "acme", repo: "town-square" } }),
       "Unauthorized",
     );
-    const privateListing = yield* anonymous.repos.list({ query: {} });
+    const privateListing = yield* admin.repos.list({
+      query: { public: true },
+    });
     expect(privateListing.items.some((row) => row.name === "town-square")).toBe(
       false,
     );
@@ -2130,14 +2142,14 @@ test(
     yield* mustGit(work, "commit", "-qm", "c2");
     yield* mustGit(work, "push", "-q", repo.remote, "main");
 
-    // /user: gh's probe — the suite's secret via the `token` scheme resolves
-    // to the suite principal; anonymous 401
+    // /user: gh's probe — the fixture overrides the engine's route to
+    // answer from the caller its middleware resolved (`token` scheme);
+    // anonymous is the middleware's 401.
     const user = yield* ghFetch(url, "/user", { token: TEST_SECRET });
     expect(user.status).toBe(200);
     expect(user.json.login).toBe("Suite");
     const anonUser = yield* ghFetch(url, "/user");
     expect(anonUser.status).toBe(401);
-    expect(anonUser.json.message).toBe("Requires authentication");
 
     // repo shape (anonymous — the repo is public)
     const repoJson = yield* ghFetch(url, "/repos/acme/gh-compat");
@@ -2308,15 +2320,15 @@ test(
 );
 
 // ═══════════════════════════════════════════════════════════════════════════
-// (c) the swappable Auth block
+// (c) the pre-receive hook
 // ═══════════════════════════════════════════════════════════════════════════
 
-// A SECOND assembly, identical except its Auth layer wraps `AuthTokens`
-// with one rule: direct pushes to `refs/heads/main` are admin-only (the
-// fixture's `ProtectedMainAuth` — the RFC §3.2 example, live). Its own
-// entry module: a Worker's generated entry serves its main module's
-// DEFAULT export, so one Worker class per entry module. Deployed inside
-// the test so the shared fixture stays one worker for the e2e suites.
+// A SECOND assembly, identical except for a `Git.Hooks` in its graph with
+// one rule: `refs/heads/main` moves only for the repository's owner (the
+// fixture's `ProtectedMain`). Its own entry module: a Worker's generated
+// entry serves its main module's DEFAULT export, so one Worker class per
+// entry module. Deployed inside the test so the shared fixture stays one
+// worker for the e2e suites.
 const ProtectedLocalStack = Alchemy.Stack(
   "GitServiceProtectedLocalStack",
   { providers: Cloudflare.providers(), state: Alchemy.localState() },
@@ -2328,7 +2340,7 @@ const ProtectedLocalStack = Alchemy.Stack(
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(ProtectedLocalStack));
 
 test(
-  "policy: a custom Policy protects main — per-branch rule over parsed Push updates",
+  "hooks: a pre-receive hook protects main — per-ref rule over the parsed updates",
   Effect.gen(function* () {
     const { url } = yield* deploy(ProtectedLocalStack);
     expect(url).toMatch(/^http:\/\/localhost:\d+$/);
@@ -2337,7 +2349,7 @@ test(
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const { created } = yield* createRepo(url, "e2e", "protected");
-    // A second principal, not the owner, does the pushing.
+    // A second user, not the owner, does the pushing.
     const token = TEST_SECRET_DEV;
     const remote = yield* authRemote(url, token, "e2e", "protected");
 
@@ -2348,13 +2360,12 @@ test(
     yield* mustGit(w, "add", "-A");
     yield* mustGit(w, "commit", "-m", "c1");
 
-    // The write token may push any OTHER branch — the policy defers to
-    // the wrapped AuthTokens there...
+    // The middleware lets the user push; the hook lets any OTHER branch
+    // through...
     yield* mustGit(w, "push", "origin", "HEAD:refs/heads/feature");
 
-    // ...but a direct push to main is denied PER-REF. This exercises the
-    // post-parse authorize with the real updates: the entry gate ("may
-    // this caller push at all?") passed — the same token just pushed.
+    // ...but a direct push to main is refused PER-REF, after the pack is
+    // parsed, with the reason the hook gave.
     const denied = yield* mustFailGit(
       w,
       "push",
@@ -2363,24 +2374,21 @@ test(
     );
     expect(denied.stderr).toContain("not permitted");
 
-    // The admin key passes the same policy.
+    // The owner passes the same hook.
     const adminRemote = yield* authRemote(url, TEST_SECRET, "e2e", "protected");
     yield* mustGit(w, "push", adminRemote, "HEAD:refs/heads/main");
 
-    // The trust header is Worker-minted only: a client-forged
-    // `x-git-service-admin: 1` must be stripped before the request
-    // reaches the DO — an anonymous forger gets the same 401 as any
-    // anonymous writer.
+    // The push advertisement is a write probe: anonymous gets the 401
+    // (with `WWW-Authenticate`) that makes git ask for credentials.
     const client = yield* HttpClient.HttpClient;
-    const forged = yield* client.get(
+    const probe = yield* client.get(
       `${url}/e2e/protected/info/refs?service=git-receive-pack`,
-      { headers: { "x-git-principal": "eyJpZCI6ImUyZSJ9" } },
     );
-    expect(forged.status).toBe(401);
+    expect(probe.status).toBe(401);
+    expect(probe.headers["www-authenticate"]).toContain("Basic");
 
-    // REST ref writes carry the same Push action: the token 403s on
-    // main but may create a feature branch; scope alone no longer
-    // decides.
+    // The REST ref writes run the same hook: the user is refused on main
+    // (a typed 403) and may still create a feature branch.
     const head = yield* revParse(w, "HEAD");
     const tokenClient = yield* makeClient(url, token);
     yield* expectTag(
@@ -2389,7 +2397,7 @@ test(
         query: { name: "refs/heads/main" },
         payload: { newOid: asOid(head) },
       }),
-      "Forbidden",
+      "HookRejected",
     );
     const moved = yield* tokenClient.refs.update({
       params: { owner: "e2e", repo: "protected" },

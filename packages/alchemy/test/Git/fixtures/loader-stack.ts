@@ -10,27 +10,27 @@ import * as Layer from "effect/Layer";
 import {
   BlobStoreR2,
   GIT_WORKER_OPTIONS,
+  Handlers,
   ReposDurableObject,
   RegistryDurableObject,
   Server,
-  ServerLive,
 } from "@/Git/index.ts";
 import { HasherWorkerLoader } from "@/Git/Hasher/index.ts";
 
-import { AuthenticatedTest, PolicyTest, TEST_SECRET } from "./stack.ts";
+import { TEST_SECRET, TestApi, TestAuthLive } from "./stack.ts";
 export { TEST_SECRET };
 
 const GitObjects = Cloudflare.R2.Bucket("GitLoaderObjects", {
   forceDestroy: true,
 });
 
-const GitLive = ServerLive.pipe(
+const GitLive = Server.layer(TestApi).pipe(
+  Layer.provide(Handlers),
+  Layer.provide(TestAuthLive),
   Layer.provide(ReposDurableObject),
   Layer.provide(RegistryDurableObject),
   Layer.provide(HasherWorkerLoader()),
   Layer.provide(BlobStoreR2(GitObjects)),
-  Layer.provide(AuthenticatedTest),
-  Layer.provide(PolicyTest),
 );
 
 export default class LoaderGitHost extends Cloudflare.Worker<LoaderGitHost>()(

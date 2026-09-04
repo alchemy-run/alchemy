@@ -42,7 +42,6 @@ import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import {
   BranchMissing,
-  Forbidden,
   MergeConflict,
   NoMergeBase,
   NothingToMerge,
@@ -54,18 +53,11 @@ import {
   RefConflict,
   RefNotFound,
   RepoNotFound,
-  Unauthorized,
   ValidationError,
   WrongObjectType,
   type Oid as ApiOid,
   type RepoStatus,
 } from "./Api.ts";
-import {
-  Policy,
-  type GitAction,
-  type Principal,
-  type RepoContext,
-} from "./Auth.ts";
 import { applyDelta } from "./Protocol/Delta.ts";
 import * as PackParser from "./Protocol/PackParser.ts";
 import type { RandomAccess } from "./Protocol/PackParser.ts";
@@ -331,35 +323,6 @@ export const BUNDLE_HASH_HEADER = "x-git-bundle" as const;
 export const BUNDLE_COUNT_HEADER = "x-git-bundle-count" as const;
 export const BUNDLE_SIDEBAND_HEADER = "x-git-bundle-sideband" as const;
 
-/**
- * Internal header the Worker sets (after resolving the principal through
- * `Authenticate` and stripping any inbound copy) so the DO knows who is
- * calling. Never trusted from outside — only the Worker can reach the DO.
- */
-export const PRINCIPAL_HEADER = "x-git-principal" as const;
-
-/** The principal on the internal wire header (base64url JSON). */
-export const encodePrincipal = (principal: Principal): string =>
-  Buffer.from(JSON.stringify(principal), "utf8").toString("base64url");
-export const decodePrincipal = (value: string): Principal | null => {
-  try {
-    const parsed: unknown = JSON.parse(
-      Buffer.from(value, "base64url").toString("utf8"),
-    );
-    if (
-      typeof parsed === "object" &&
-      parsed !== null &&
-      typeof (parsed as { id?: unknown }).id === "string"
-    ) {
-      const { id, name } = parsed as { id: string; name?: unknown };
-      return typeof name === "string" ? { id, name } : { id };
-    }
-    return null;
-  } catch {
-    return null;
-  }
-};
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Errors
 // ─────────────────────────────────────────────────────────────────────────────
@@ -388,13 +351,6 @@ export class WireProtocolError extends Schema.TaggedError<WireProtocolError>()(
 // RPC data shapes (plain serializable data — no Schema classes over RPC)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Who is calling an RPC or a wire request: the {@link Principal} the
- * Worker's `Authenticate` resolved, or `null` for anonymous. The DO trusts
- * this identity (it arrives over the internal channel) and asks `Policy`.
- */
-export type CallerAuth = Principal | null;
-
 /** Repo metadata as stored in the `config` table. */
 export interface RepoMetaData {
   readonly repoId: string;
@@ -418,13 +374,9 @@ export interface RepoMetaData {
 export interface BeginPushInput {
   readonly commands: ReadonlyArray<RefCommand>;
 }
-/**
- * `beginPush` outcome. `unauthorized` answers 401 (git prompts for
- * credentials); `denied` is reported per ref (`ng <ref> <reason>`).
- */
+/** `beginPush` outcome. `denied` is reported per ref (`ng <ref> <reason>`). */
 export type BeginPushResult =
   | { readonly _tag: "ok"; readonly pushId: string }
-  | { readonly _tag: "unauthorized" }
   | { readonly _tag: "denied"; readonly reason: string };
 /** One ref's outcome in a push report. */
 export interface PushRefResult {
@@ -733,11 +685,7 @@ export interface StartForkInput extends InitRepoInput {
 }
 
 /** The common auth+repo error union of most RPC methods. */
-export type RepoAuthError =
-  | Unauthorized
-  | Forbidden
-  | RepoNotFound
-  | StoreError;
+export type RepoAuthError = RepoNotFound | StoreError;
 
 /**
  * The Repo DO's typed RPC surface. All methods are `RuntimeContext`-colored
@@ -763,35 +711,33 @@ export interface GitRepoShape {
    * immutable R2 pack by the alarm (DESIGN.md §12.1). Normally armed
    * automatically by the post-push size check.
    */
-  readonly startCompact: (
-    auth: CallerAuth,
-  ) => Effect.Effect<void, RepoAuthError, RuntimeContext>;
-  readonly startPurge: (
-    auth: CallerAuth,
-  ) => Effect.Effect<void, RepoAuthError, RuntimeContext>;
-  readonly getRepoMeta: (
-    auth: CallerAuth,
-  ) => Effect.Effect<RepoMetaData, RepoAuthError, RuntimeContext>;
-  /** Repo metadata for the Worker's own bookkeeping (no policy check). */
+  readonly startCompact: () => Effect.Effect<
+    void,
+    RepoAuthError,
+    RuntimeContext
+  >;
+  readonly startPurge: () => Effect.Effect<void, RepoAuthError, RuntimeContext>;
+  readonly getRepoMeta: () => Effect.Effect<
+    RepoMetaData,
+    RepoAuthError,
+    RuntimeContext
+  >;
+  /** Repo metadata for the Worker's own bookkeeping. */
   readonly readMeta: () => Effect.Effect<
     RepoMetaData,
     RepoNotFound | StoreError,
     RuntimeContext
   >;
   readonly updateRepoMeta: (
-    auth: CallerAuth,
     patch: RepoMetaPatch,
   ) => Effect.Effect<RepoMetaData, RepoAuthError | RefNotFound, RuntimeContext>;
   readonly listRefs: (
-    auth: CallerAuth,
     prefix?: string | undefined,
   ) => Effect.Effect<RefsPage, RepoAuthError, RuntimeContext>;
   readonly getRef: (
-    auth: CallerAuth,
     name: string,
   ) => Effect.Effect<RefData, RepoAuthError | RefNotFound, RuntimeContext>;
   readonly updateRef: (
-    auth: CallerAuth,
     input: UpdateRefInput,
   ) => Effect.Effect<
     RefData,
@@ -799,7 +745,6 @@ export interface GitRepoShape {
     RuntimeContext
   >;
   readonly removeRef: (
-    auth: CallerAuth,
     input: RemoveRefInput,
   ) => Effect.Effect<
     void,
@@ -807,7 +752,6 @@ export interface GitRepoShape {
     RuntimeContext
   >;
   readonly readObject: (
-    auth: CallerAuth,
     input: ReadObjectInput,
   ) => Effect.Effect<
     ObjectData,
@@ -815,7 +759,6 @@ export interface GitRepoShape {
     RuntimeContext
   >;
   readonly readCommitLog: (
-    auth: CallerAuth,
     input: CommitLogInput,
   ) => Effect.Effect<
     CommitLogPage,
@@ -826,10 +769,9 @@ export interface GitRepoShape {
    * The changed-file list of a commit vs its FIRST parent (empty tree for
    * a root commit) — see the REST `diff` endpoint.
    */
-  readonly readCommitDiff: (
-    auth: CallerAuth,
-    input: { readonly oid: string },
-  ) => Effect.Effect<
+  readonly readCommitDiff: (input: {
+    readonly oid: string;
+  }) => Effect.Effect<
     CommitDiffData,
     RepoAuthError | ObjectNotFound | WrongObjectType,
     RuntimeContext
@@ -840,7 +782,6 @@ export interface GitRepoShape {
    * the REST `compare` endpoint.
    */
   readonly compareCommits: (
-    auth: CallerAuth,
     input: CompareInput,
   ) => Effect.Effect<
     CompareData,
@@ -852,7 +793,6 @@ export interface GitRepoShape {
     RuntimeContext
   >;
   readonly readFileAtPath: (
-    auth: CallerAuth,
     input: ReadFileInput,
   ) => Effect.Effect<
     FileData,
@@ -861,7 +801,6 @@ export interface GitRepoShape {
   >;
   /** Opens a pull request (same-repo branches, `write` scope). */
   readonly createPull: (
-    auth: CallerAuth,
     input: CreatePullInput,
   ) => Effect.Effect<
     PullData,
@@ -870,12 +809,10 @@ export interface GitRepoShape {
   >;
   /** Lists PRs newest-first with keyset pagination (`read` scope). */
   readonly listPulls: (
-    auth: CallerAuth,
     input: ListPullsInput,
   ) => Effect.Effect<PullsPage, RepoAuthError, RuntimeContext>;
   /** Reads one PR with live compare fields recomputed from current tips. */
   readonly getPull: (
-    auth: CallerAuth,
     number: number,
   ) => Effect.Effect<
     PullDetailData,
@@ -884,7 +821,6 @@ export interface GitRepoShape {
   >;
   /** Patches title/body, or closes/reopens via `state` (`write` scope). */
   readonly updatePull: (
-    auth: CallerAuth,
     input: UpdatePullInput,
   ) => Effect.Effect<
     PullData,
@@ -898,7 +834,6 @@ export interface GitRepoShape {
    * writes conflict markers.
    */
   readonly mergePull: (
-    auth: CallerAuth,
     input: MergePullInput,
   ) => Effect.Effect<
     MergePullResult,
@@ -924,7 +859,6 @@ export interface GitRepoShape {
    * fan-out and the spill, staging rows with `stagePush`.
    */
   readonly beginPush: (
-    auth: CallerAuth,
     input: BeginPushInput,
   ) => Effect.Effect<
     BeginPushResult,
@@ -3077,8 +3011,6 @@ export class GitRepo extends Cloudflare.DurableObject<GitRepo, GitRepoShape>()(
     // `DurableObjectProps.errors` doc), so catchTag/instanceof/HttpApi
     // encoding all see the classes the DO actually failed with.
     errors: [
-      Unauthorized,
-      Forbidden,
       ReadOnlyRepo,
       RepoNotFound,
       RefNotFound,
@@ -3143,9 +3075,6 @@ export const GitRepoLive = GitRepo.make(
     // The push pipeline's hasher (DESIGN §22.7): a self-binding fan-out in
     // production, in-process in tests without the binding.
     const hasher = yield* Hasher;
-    // The policy — same layer graph as the Worker: authorization runs
-    // here, where the actions' facts are parsed.
-    const policy = yield* Policy;
     const registry = yield* RegistryStore;
     const selfNamespace = yield* Cloudflare.DurableObjectScope;
 
@@ -3254,38 +3183,6 @@ export const GitRepoLive = GitRepo.make(
       /** The object store, keyed by the current repoId. */
       const storeFor = (repoId: string): ObjectStore =>
         makeObjectStore({ sql, blobs, repoId });
-
-      /** The policy view of this repo, as the Auth block sees it. */
-      const repoContextOf = (meta: RepoMetaData): RepoContext => ({
-        repoId: meta.repoId,
-        owner: meta.owner,
-        name: meta.name,
-        public: meta.public,
-        defaultBranch: meta.defaultBranch,
-        readOnly: meta.readOnly,
-      });
-
-      /**
-       * Enforces policy for one RPC. Denials: anonymous ⇒ 401
-       * (WWW-Authenticate prompts for credentials); identified callers ⇒
-       * 403 naming the action.
-       */
-      const authorize = Effect.fn(function* (
-        auth: CallerAuth,
-        action: GitAction,
-      ) {
-        const meta = yield* requireMeta;
-        const allowed = yield* policy.authorize({
-          principal: auth ?? undefined,
-          repo: repoContextOf(meta),
-          action,
-        });
-        if (!allowed) {
-          return yield* auth === null
-            ? new Unauthorized()
-            : new Forbidden({ action: action._tag });
-        }
-      });
 
       // ── refs ─────────────────────────────────────────────────────────────
       /** Peels a (possibly annotated-tag) oid to its final non-tag target. */
@@ -3883,39 +3780,10 @@ export const GitRepoLive = GitRepo.make(
         };
       };
 
-      const wire401 = HttpServerResponse.empty({
-        status: 401,
-        headers: { "www-authenticate": WWW_AUTHENTICATE },
-      });
       const wire503 = HttpServerResponse.empty({
         status: 503,
         headers: { "retry-after": "10" },
       });
-
-      /**
-       * Resolves the wire caller from the internal principal header the
-       * Worker set (any inbound copy was stripped there). `null` is
-       * anonymous; the policy decides what anonymous may do.
-       */
-      const wireActor = (
-        request: HttpServerRequest.HttpServerRequest,
-      ): Effect.Effect<CallerAuth> =>
-        Effect.sync(() => {
-          const header = request.headers[PRINCIPAL_HEADER];
-          return header === undefined ? null : decodePrincipal(header);
-        });
-
-      /** One wire authorization: actor × repo × action → allowed? */
-      const wireAllowed = (
-        actor: CallerAuth,
-        meta: RepoMetaData,
-        action: GitAction,
-      ) =>
-        policy.authorize({
-          principal: actor ?? undefined,
-          repo: repoContextOf(meta),
-          action,
-        });
 
       /** GET info/refs — the v0 advertisement. */
       const handleInfoRefs = (
@@ -3929,14 +3797,6 @@ export const GitRepoLive = GitRepo.make(
               "smart HTTP only (dumb protocol not supported)",
               { status: 400 },
             );
-          }
-          const actor = yield* wireActor(request);
-          const action: GitAction =
-            service === "git-receive-pack"
-              ? { _tag: "Push", updates: [] }
-              : { _tag: "Fetch" };
-          if (!(yield* wireAllowed(actor, meta, action))) {
-            return wire401;
           }
           const refs = yield* listAllRefs(meta.repoId);
           const body = buildAdvertisement({
@@ -3956,10 +3816,6 @@ export const GitRepoLive = GitRepo.make(
         meta: RepoMetaData,
       ) =>
         Effect.gen(function* () {
-          const actor = yield* wireActor(request);
-          if (!(yield* wireAllowed(actor, meta, { _tag: "Fetch" }))) {
-            return wire401;
-          }
           const rawBody = new Uint8Array(yield* request.arrayBuffer);
           const body = yield* gunzipIfNeeded(
             rawBody,
@@ -4569,16 +4425,14 @@ export const GitRepoLive = GitRepo.make(
           return result;
         }),
 
-        startCompact: Effect.fn(function* (auth: CallerAuth) {
+        startCompact: Effect.fn(function* () {
           yield* requireMeta;
-          yield* authorize(auth, { _tag: "Maintain" });
           yield* upsertJob("compact", null);
           yield* armAlarmAt(Date.now());
         }),
 
-        startPurge: Effect.fn(function* (auth: CallerAuth) {
+        startPurge: Effect.fn(function* () {
           const meta = yield* requireMeta;
-          yield* authorize(auth, { _tag: "DeleteRepo" });
           yield* setConfig("status", "deleting");
           // Kill the DO-less fast path NOW — the prefix drain gets the
           // rest, but anonymous reads must stop serving immediately.
@@ -4590,9 +4444,8 @@ export const GitRepoLive = GitRepo.make(
           yield* armAlarmAt(Date.now());
         }),
 
-        getRepoMeta: Effect.fn(function* (auth: CallerAuth) {
+        getRepoMeta: Effect.fn(function* () {
           const meta = yield* requireMetaStats;
-          yield* authorize(auth, { _tag: "ReadRepo" });
           return meta;
         }),
 
@@ -4600,12 +4453,8 @@ export const GitRepoLive = GitRepo.make(
           return yield* requireMetaStats;
         }),
 
-        updateRepoMeta: Effect.fn(function* (
-          auth: CallerAuth,
-          patch: RepoMetaPatch,
-        ) {
+        updateRepoMeta: Effect.fn(function* (patch: RepoMetaPatch) {
           const meta = yield* requireMeta;
-          yield* authorize(auth, { _tag: "UpdateRepo" });
           if (patch.defaultBranch !== undefined) {
             const ref = yield* sql.first<RefRow>(
               `SELECT name, oid FROM refs WHERE name = ?`,
@@ -4639,12 +4488,8 @@ export const GitRepoLive = GitRepo.make(
           return result;
         }),
 
-        listRefs: Effect.fn(function* (
-          auth: CallerAuth,
-          prefix?: string | undefined,
-        ) {
+        listRefs: Effect.fn(function* (prefix?: string | undefined) {
           const meta = yield* requireMeta;
-          yield* authorize(auth, { _tag: "ReadRepo" });
           const refs = yield* listAllRefs(meta.repoId, prefix);
           const headRef = `refs/heads/${meta.defaultBranch}`;
           const headExists = yield* sql.first<RefRow>(
@@ -4657,9 +4502,8 @@ export const GitRepoLive = GitRepo.make(
           } satisfies RefsPage;
         }),
 
-        getRef: Effect.fn(function* (auth: CallerAuth, name: string) {
+        getRef: Effect.fn(function* (name: string) {
           const meta = yield* requireMeta;
-          yield* authorize(auth, { _tag: "ReadRepo" });
           const row = yield* sql.first<RefRow>(
             `SELECT name, oid FROM refs WHERE name = ?`,
             name,
@@ -4675,21 +4519,8 @@ export const GitRepoLive = GitRepo.make(
             : ({ name: row.name, oid: row.oid, peeled } satisfies RefData);
         }),
 
-        updateRef: Effect.fn(function* (
-          auth: CallerAuth,
-          input: UpdateRefInput,
-        ) {
+        updateRef: Effect.fn(function* (input: UpdateRefInput) {
           const meta = yield* requireMeta;
-          yield* authorize(auth, {
-            _tag: "Push",
-            updates: [
-              {
-                ref: input.name,
-                oldOid: input.expectedOid ?? ZERO_OID,
-                newOid: input.newOid,
-              },
-            ],
-          });
           if (meta.readOnly) {
             return yield* new ReadOnlyRepo();
           }
@@ -4728,21 +4559,8 @@ export const GitRepoLive = GitRepo.make(
           return { name: input.name, oid: input.newOid } satisfies RefData;
         }),
 
-        removeRef: Effect.fn(function* (
-          auth: CallerAuth,
-          input: RemoveRefInput,
-        ) {
+        removeRef: Effect.fn(function* (input: RemoveRefInput) {
           const meta = yield* requireMeta;
-          yield* authorize(auth, {
-            _tag: "Push",
-            updates: [
-              {
-                ref: input.name,
-                oldOid: input.expectedOid ?? ZERO_OID,
-                newOid: ZERO_OID,
-              },
-            ],
-          });
           if (meta.readOnly) {
             return yield* new ReadOnlyRepo();
           }
@@ -4775,46 +4593,8 @@ export const GitRepoLive = GitRepo.make(
           yield* writeHeadSnapshot;
         }),
 
-        beginPush: Effect.fn(function* (
-          auth: CallerAuth,
-          input: BeginPushInput,
-        ) {
+        beginPush: Effect.fn(function* (input: BeginPushInput) {
           const meta = yield* requireMeta;
-          // May this caller push at all? Anything else is a 401 so git
-          // prompts for credentials (a bad token is not anonymous).
-          const entry = yield* authorize(auth, {
-            _tag: "Push",
-            updates: [],
-          }).pipe(Effect.result);
-          if (Result.isFailure(entry)) {
-            const failure = entry.failure;
-            if (
-              failure._tag === "Unauthorized" ||
-              failure._tag === "Forbidden"
-            ) {
-              return { _tag: "unauthorized" } as const;
-            }
-            return yield* Effect.fail(failure);
-          }
-          // Re-authorize with the PARSED ref updates — this is where
-          // per-branch policies (protected branches, tag rules) get their
-          // say; a denial is reported per ref, not a 401.
-          if (input.commands.length > 0) {
-            const policy = yield* authorize(auth, {
-              _tag: "Push",
-              updates: input.commands,
-            }).pipe(Effect.result);
-            if (Result.isFailure(policy)) {
-              const failure = policy.failure;
-              if (
-                failure._tag === "Unauthorized" ||
-                failure._tag === "Forbidden"
-              ) {
-                return { _tag: "denied", reason: "not permitted" } as const;
-              }
-              return yield* Effect.fail(failure);
-            }
-          }
           if (meta.readOnly) {
             return {
               _tag: "denied",
@@ -4935,12 +4715,8 @@ export const GitRepoLive = GitRepo.make(
           return { unpack: "ok", results } satisfies CommitPushResult;
         }),
 
-        readObject: Effect.fn(function* (
-          auth: CallerAuth,
-          input: ReadObjectInput,
-        ) {
+        readObject: Effect.fn(function* (input: ReadObjectInput) {
           const meta = yield* requireMeta;
-          yield* authorize(auth, { _tag: "ReadRepo" });
           const objects = storeFor(meta.repoId);
           const objectMeta = yield* objects.getMeta(input.oid);
           if (objectMeta === undefined) {
@@ -4963,12 +4739,8 @@ export const GitRepoLive = GitRepo.make(
           } satisfies ObjectData;
         }),
 
-        readCommitLog: Effect.fn(function* (
-          auth: CallerAuth,
-          input: CommitLogInput,
-        ) {
+        readCommitLog: Effect.fn(function* (input: CommitLogInput) {
           const meta = yield* requireMeta;
-          yield* authorize(auth, { _tag: "ReadRepo" });
           const objects = storeFor(meta.repoId);
           const limit = Math.max(1, Math.min(input.limit ?? 20, 100));
 
@@ -5063,12 +4835,8 @@ export const GitRepoLive = GitRepo.make(
           } satisfies CommitLogPage;
         }),
 
-        readCommitDiff: Effect.fn(function* (
-          auth: CallerAuth,
-          input: { readonly oid: string },
-        ) {
+        readCommitDiff: Effect.fn(function* (input: { readonly oid: string }) {
           const meta = yield* requireMeta;
-          yield* authorize(auth, { _tag: "ReadRepo" });
           const objects = storeFor(meta.repoId);
 
           const readCommitOrFail = Effect.fn(function* (oid: string) {
@@ -5108,12 +4876,8 @@ export const GitRepoLive = GitRepo.make(
           } satisfies CommitDiffData;
         }),
 
-        compareCommits: Effect.fn(function* (
-          auth: CallerAuth,
-          input: CompareInput,
-        ) {
+        compareCommits: Effect.fn(function* (input: CompareInput) {
           const meta = yield* requireMeta;
-          yield* authorize(auth, { _tag: "ReadRepo" });
           const objects = storeFor(meta.repoId);
 
           const baseOid = yield* resolveToCommit(
@@ -5279,12 +5043,8 @@ export const GitRepoLive = GitRepo.make(
           } satisfies CompareData;
         }),
 
-        readFileAtPath: Effect.fn(function* (
-          auth: CallerAuth,
-          input: ReadFileInput,
-        ) {
+        readFileAtPath: Effect.fn(function* (input: ReadFileInput) {
           const meta = yield* requireMeta;
-          yield* authorize(auth, { _tag: "ReadRepo" });
           const objects = storeFor(meta.repoId);
 
           const startOid = yield* resolveRevision(
@@ -5366,16 +5126,8 @@ export const GitRepoLive = GitRepo.make(
           return yield* new ObjectNotFound({ oid: input.path });
         }),
 
-        createPull: Effect.fn(function* (
-          auth: CallerAuth,
-          input: CreatePullInput,
-        ) {
+        createPull: Effect.fn(function* (input: CreatePullInput) {
           yield* requireMeta;
-          yield* authorize(auth, {
-            _tag: "CreatePull",
-            base: input.base,
-            head: input.head,
-          });
           const baseRef = yield* normalizeBranchRef(input.base);
           const headRef = yield* normalizeBranchRef(input.head);
           if (baseRef === headRef) {
@@ -5442,12 +5194,8 @@ export const GitRepoLive = GitRepo.make(
           } satisfies PullData;
         }),
 
-        listPulls: Effect.fn(function* (
-          auth: CallerAuth,
-          input: ListPullsInput,
-        ) {
+        listPulls: Effect.fn(function* (input: ListPullsInput) {
           yield* requireMeta;
-          yield* authorize(auth, { _tag: "ReadRepo" });
           const state = input.state ?? "open";
           const limit = Math.max(1, Math.min(input.limit ?? 20, 100));
           const cursor =
@@ -5480,9 +5228,8 @@ export const GitRepoLive = GitRepo.make(
           } satisfies PullsPage;
         }),
 
-        getPull: Effect.fn(function* (auth: CallerAuth, number: number) {
+        getPull: Effect.fn(function* (number: number) {
           const meta = yield* requireMeta;
-          yield* authorize(auth, { _tag: "ReadRepo" });
           const row = yield* loadPull(number);
           const pull = rowToPull(row);
           const empty = {
@@ -5590,12 +5337,8 @@ export const GitRepoLive = GitRepo.make(
           } satisfies PullDetailData;
         }),
 
-        updatePull: Effect.fn(function* (
-          auth: CallerAuth,
-          input: UpdatePullInput,
-        ) {
+        updatePull: Effect.fn(function* (input: UpdatePullInput) {
           yield* requireMeta;
-          yield* authorize(auth, { _tag: "UpdatePull", number: input.number });
           const row = yield* loadPull(input.number);
           const current = pullStateOf(row.state);
           if (input.state !== undefined && current === "merged") {
@@ -5618,12 +5361,8 @@ export const GitRepoLive = GitRepo.make(
           return rowToPull(yield* loadPull(input.number));
         }),
 
-        mergePull: Effect.fn(function* (
-          auth: CallerAuth,
-          input: MergePullInput,
-        ) {
+        mergePull: Effect.fn(function* (input: MergePullInput) {
           const meta = yield* requireMeta;
-          yield* authorize(auth, { _tag: "MergePull", number: input.number });
           if (meta.readOnly) {
             return yield* new ReadOnlyRepo();
           }
@@ -5713,6 +5452,9 @@ export const GitRepoLive = GitRepo.make(
                 return rowToPull(updated);
               },
             );
+            // The base moved: the head snapshot (which serves clones
+            // without waking this object) must say so.
+            yield* writeHeadSnapshot;
             return {
               method: "ff",
               oid: headTip,
@@ -5865,6 +5607,7 @@ export const GitRepoLive = GitRepo.make(
           // Post-merge compaction check deliberately skipped: the merge
           // adds at most a handful of small trees + one commit (the push
           // path's thresholds cover accumulation).
+          yield* writeHeadSnapshot;
           return {
             method: "merge-commit",
             oid: mergeOid,

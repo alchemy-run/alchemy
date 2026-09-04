@@ -5,9 +5,9 @@
  * `Refs.ts`, `Objects.ts`, `Pulls.ts`); the assembled `GitApi` lives in
  * `../Api.ts`.
  *
- * The groups carry no middleware of their own: the `HttpApi` you mount
- * them in decides who the caller is (`Git.Caller`), and `Git.Policy`
- * decides what they may do, inside the Repo DO where the facts are.
+ * The groups carry no middleware and no auth errors of their own: the
+ * `HttpApi` you mount them in decides who may call them, and `Git.Hooks`
+ * which refs may move.
  */
 import * as Schema from "effect/Schema";
 // Pulls in the `httpApiStatus` annotation augmentation used by the error
@@ -73,24 +73,17 @@ export type RepoStatus = typeof RepoStatus.Type;
 // Error taxonomy (tagged, status-annotated)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** 401 — missing or invalid credentials. */
-export class Unauthorized extends Schema.TaggedError<Unauthorized>()(
-  "Unauthorized",
-  {},
-  { httpApiStatus: 401 },
-) {}
-
-/** 403 — the policy denied this action for the identified caller. */
-export class Forbidden extends Schema.TaggedError<Forbidden>()(
-  "Forbidden",
-  { action: Schema.String },
-  { httpApiStatus: 403 },
-) {}
-
 /** 403 — the repo is flagged `readOnly`; writes are rejected. */
 export class ReadOnlyRepo extends Schema.TaggedError<ReadOnlyRepo>()(
   "ReadOnlyRepo",
   {},
+  { httpApiStatus: 403 },
+) {}
+
+/** 403 — a pre-receive hook refused the ref update. */
+export class HookRejected extends Schema.TaggedError<HookRejected>()(
+  "HookRejected",
+  { ref: Schema.String, reason: Schema.String },
   { httpApiStatus: 403 },
 ) {}
 

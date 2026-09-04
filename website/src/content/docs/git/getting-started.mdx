@@ -34,17 +34,51 @@ import * as Cloudflare from "alchemy/Cloudflare";
 import * as Git from "alchemy/Git";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
+import * as HttpApiMiddleware from "effect/unstable/httpapi/HttpApiMiddleware";
+import * as HttpApiSecurity from "effect/unstable/httpapi/HttpApiSecurity";
 
 export const GitObjects = Cloudflare.R2.Bucket("GitObjects");
 export const GitSecret = Alchemy.Random("GitSecret");
 
-const GitLive = Git.ServerLive.pipe(
+/** One shared secret, sent as the password of HTTP Basic. */
+export class Authenticated extends HttpApiMiddleware.Service<
+  Authenticated,
+  { requires: Alchemy.RuntimeContext }
+>()("Authenticated") {}
+
+export const AuthenticatedLive = Layer.effect(
+  Authenticated,
+  Effect.gen(function* () {
+    const secret = yield* (yield* GitSecret).text;
+    return (httpEffect) =>
+      Effect.gen(function* () {
+        const { password } = yield* HttpApiBuilder.securityDecode(
+          HttpApiSecurity.basic,
+        );
+        if (Redacted.value(password) === Redacted.value(yield* secret)) {
+          return yield* httpEffect;
+        }
+        return HttpServerResponse.empty({
+          status: 401,
+          headers: { "www-authenticate": 'Basic realm="git"' },
+        });
+      });
+  }),
+);
+
+/** The git API, every route behind the middleware. */
+export class Api extends Git.Api.middleware(Authenticated) {}
+
+const GitLive = Git.Server.layer(Api).pipe(
+  Layer.provide(Git.Handlers),
+  Layer.provide(AuthenticatedLive),
   Layer.provide(Git.ReposDurableObject),
   Layer.provide(Git.RegistryDurableObject),
   Layer.provide(Git.BlobStoreR2(GitObjects)),
   Layer.provide(Git.HasherInline),
-  Layer.provide(Git.PolicyOwners),
-  Layer.provide(Git.AuthenticatedSecret({ principal: "acme", secret: GitSecret })),
 );
 
 export default class GitHost extends Cloudflare.Worker<GitHost>()(
@@ -57,16 +91,18 @@ export default class GitHost extends Cloudflare.Worker<GitHost>()(
 ) {}
 ```
 
-`GIT_WORKER_OPTIONS` sets the compatibility flags and the CPU limit a
-push needs. `AuthenticatedSecret` is the smallest thing that secures a
-fresh host: one shared secret. A request that presents it is acting as
-the principal `acme`, and `acme` is the owner name of the repositories
-it creates, as in `acme/web`. Any other request is anonymous. The
-secret is an `Alchemy.Random`, minted on the first deploy and stable
-after it.
+The engine holds no users and no credentials. Who may call a route is
+decided by the middleware of the API that mounts it, and `Git.Api`
+mounts every git route: the REST plane, the git wire, the raw reads,
+and the GitHub facade. The smallest thing that secures a fresh host is
+one shared secret. A request that presents it may do anything; any
+other request is refused with a `401` that makes `git` ask for a
+password. The secret is an `Alchemy.Random`, minted on the first deploy
+and stable after it. `GIT_WORKER_OPTIONS` sets the compatibility flags
+and the CPU limit a push needs.
 
-Add both to your stack. The `Random` is a resource like any other, so
-the stack can output its value:
+Add the host to your stack. The `Random` is a resource like any other,
+so the stack can output its value:
 
 ```typescript
 // alchemy.run.ts
@@ -109,20 +145,22 @@ export default Alchemy.Stack(
 </Tabs>
 
 The stack prints the Worker's URL and the secret. The rest of this page
-calls them `$HOST` and `$GIT_SERVICE_SECRET`:
+calls them `$HOST` and `$GIT_SECRET`:
 
 ```sh
 export HOST=...
-export GIT_SERVICE_SECRET=...
+export GIT_SECRET=...
 ```
 
 ## Create a repository
 
+Repositories are named `owner/name`. The owner is a name you choose;
+with one shared secret there are no users behind it:
+
 ```sh
-curl -X POST "$HOST/api/v1/repos" \
-  -H "Authorization: Bearer $GIT_SERVICE_SECRET" \
+curl -u "x:$GIT_SECRET" -X POST "$HOST/api/v1/repos" \
   -H "Content-Type: application/json" \
-  -d '{"owner":"acme","name":"web","public":true}'
+  -d '{"owner":"acme","name":"web"}'
 ```
 
 ## Push
@@ -131,23 +169,22 @@ The secret goes in the password field of the remote URL. The username
 is ignored:
 
 ```sh
-git remote add origin "https://x:$GIT_SERVICE_SECRET@$HOST/acme/web.git"
+git remote add origin "https://x:$GIT_SECRET@$HOST/acme/web.git"
 git push -u origin main
 ```
 
-Clone it back to prove the round trip. The repository is public, so
-this needs no credentials:
+Clone it back to prove the round trip:
 
 ```sh
-git clone "https://$HOST/acme/web.git" verify
+git clone "https://x:$GIT_SECRET@$HOST/acme/web.git" verify
 git -C verify fsck --strict
 ```
 
 ## Continue with the tutorial
 
-The file above is six decisions. The tutorial builds it from empty,
-one decision per part, then puts it behind your own API and your own
-rules:
+The file above is a handful of decisions. The tutorial builds it from
+empty, one decision per part, then puts it behind your own API and
+your own rules:
 
 1. [A git server in one file](/git/tutorial/part-1) — each block,
    named as you type it.
@@ -156,8 +193,8 @@ rules:
 3. [Your own API](/git/tutorial/part-3) — the git routes inside your
    `HttpApi` behind Better Auth, a route of your own, and one of the
    engine's replaced.
-4. [Your own rules](/git/tutorial/part-4) — a policy over git's own
-   facts: protect `main`, decide who reads what.
+4. [Your own rules](/git/tutorial/part-4) — git's pre-receive hook as
+   a service: protect `main`, let a team share a repository.
 
 [Building blocks](/git/blocks) is the reference for each line of
 `GitLive`, and [Recipes](/git/recipes) covers S3 bytes, Lambda hashing,

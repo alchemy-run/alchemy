@@ -9,14 +9,14 @@ a store behind a private gateway. `Git.BlobStore` is a contract of five
 operations, and a Layer that implements them drops into the graph:
 
 ```diff lang="typescript"
-const GitLive = Git.ServerLive.pipe(
+const GitLive = Git.Server.layer(Api).pipe(
+  Layer.provide(Git.Handlers),
+  Layer.provide(AuthenticatedLive),
   Layer.provide(Git.ReposDurableObject),
   Layer.provide(Git.RegistryDurableObject),
 -  Layer.provide(Git.BlobStoreR2(GitObjects)),
 +  Layer.provide(BlobStoreMine),
   Layer.provide(Git.HasherInline),
-  Layer.provide(Git.PolicyOwners),
-  Layer.provide(Git.AuthenticatedSecret({ principal: "acme" })),
 );
 ```
 

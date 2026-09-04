@@ -11,14 +11,14 @@
  * import * as Git from "alchemy/Git";
  * import * as GitHasher from "alchemy/Git/Hasher";
  *
- * const GitLive = Git.ServerLive.pipe(
+ * const GitLive = Git.Server.layer(Api).pipe(
+ *   Layer.provide(Git.Handlers),
+ *   Layer.provide(AuthenticatedLive),
  *   Layer.provide(Git.ReposDurableObject),
  *   Layer.provide(Git.RegistryDurableObject),
  *   Layer.provide(GitHasher.HasherLambda(GitHasher.HasherFunction)),
  *   Layer.provide(AWS.Lambda.InvokeFunctionHttp),
  *   Layer.provide(Git.BlobStoreR2(GitObjects)),
- *   Layer.provide(Git.PolicyOwners),
- *   Layer.provide(Git.AuthenticatedSecret({ principal: "acme" })),
  * );
  * ```
  */

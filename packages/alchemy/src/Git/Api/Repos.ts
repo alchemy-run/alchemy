@@ -1,18 +1,13 @@
 /**
  * The `repos` group: repo CRUD, fork, import, and compaction
- * (DESIGN.md §5). Every route is an `alchemy/Http` route class behind the
- * {@link Authenticated} middleware; the policy decides what the caller may
- * do (registry-level actions here at the Worker, per-repo actions in the
- * Repo DO).
+ * (DESIGN.md §5). Every route is an `alchemy/Http` route class. Who may
+ * call it is decided by the middleware of the API that mounts it.
  */
 import * as Http from "../../Http/index.ts";
 import * as Schema from "effect/Schema";
 import * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup";
 import * as HttpApiSchema from "effect/unstable/httpapi/HttpApiSchema";
-import { Authenticated } from "../Auth.ts";
 import {
-  Unauthorized,
-  Forbidden,
   ImportFailed,
   OwnerName,
   Paginated,
@@ -27,7 +22,7 @@ import {
   ValidationError,
 } from "./Schema.ts";
 
-/** Creates a repo owned by `owner`; the caller must be allowed `CreateRepo` there. */
+/** Creates a repo owned by `owner`. */
 export class CreateRepo extends Http.post<CreateRepo>()("create", "/repos", {
   payload: Schema.Struct({
     owner: OwnerName,
@@ -44,16 +39,14 @@ export class CreateRepo extends Http.post<CreateRepo>()("create", "/repos", {
     readOnly: Schema.optional(Schema.Boolean),
   }),
   success: RepoCreated,
-  error: [RepoAlreadyExists, ValidationError, Forbidden, Unauthorized],
-  middleware: [Authenticated],
+  error: [RepoAlreadyExists, ValidationError],
 }) {}
 
 /** Reads one repo (poll `status` for async fork/import/delete progress). */
 export class GetRepo extends Http.get<GetRepo>()("get", "/repos/:owner/:repo", {
   params: RepoPath,
   success: Repo,
-  error: [RepoNotFound, Unauthorized],
-  middleware: [Authenticated],
+  error: [RepoNotFound],
 }) {}
 
 /** Patches description / default branch / readOnly / public. */
@@ -71,23 +64,25 @@ export class UpdateRepo extends Http.patch<UpdateRepo>()(
       public: Schema.optional(Schema.Boolean),
     }),
     success: Repo,
-    error: [RepoNotFound, RefNotFound, Forbidden, Unauthorized],
-    middleware: [Authenticated],
+    error: [RepoNotFound, RefNotFound],
   },
 ) {}
 
-/** Lists repos, optionally filtered by owner. Private repos need `ListRepos`. */
+/**
+ * Lists repos, optionally filtered by owner. Lists everything the
+ * Registry holds; `public: true` narrows it to public repositories.
+ */
 export class ListRepos extends Http.get<ListRepos>()("list", "/repos", {
   query: Schema.Struct({
     owner: Schema.optional(OwnerName),
+    /** Only public repositories when `true`. */
+    public: Schema.optional(Schema.Boolean),
     cursor: Schema.optional(Schema.String),
     limit: Schema.optional(
       Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 100 })),
     ),
   }),
   success: Paginated(Repo),
-  error: Unauthorized,
-  middleware: [Authenticated],
 }) {}
 
 /**
@@ -101,8 +96,7 @@ export class DeleteRepo extends Http.del<DeleteRepo>()(
   {
     params: RepoPath,
     success: HttpApiSchema.NoContent,
-    error: [RepoNotFound, Forbidden, Unauthorized],
-    middleware: [Authenticated],
+    error: [RepoNotFound],
   },
 ) {}
 
@@ -120,14 +114,7 @@ export class ForkRepo extends Http.post<ForkRepo>()(
       targetName: RepoName,
     }),
     success: RepoCreated,
-    error: [
-      RepoNotFound,
-      RepoAlreadyExists,
-      RepoNotReady,
-      Forbidden,
-      Unauthorized,
-    ],
-    middleware: [Authenticated],
+    error: [RepoNotFound, RepoAlreadyExists, RepoNotReady],
   },
 ) {}
 
@@ -152,8 +139,7 @@ export class ImportRepo extends Http.post<ImportRepo>()(
       }),
     }),
     success: RepoCreated,
-    error: [RepoAlreadyExists, ImportFailed, Forbidden, Unauthorized],
-    middleware: [Authenticated],
+    error: [RepoAlreadyExists, ImportFailed],
   },
 ) {}
 
@@ -169,8 +155,7 @@ export class CompactRepo extends Http.post<CompactRepo>()(
   {
     params: RepoPath,
     success: HttpApiSchema.NoContent,
-    error: [RepoNotFound, Forbidden, Unauthorized],
-    middleware: [Authenticated],
+    error: [RepoNotFound],
   },
 ) {}
 

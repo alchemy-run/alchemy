@@ -8,10 +8,7 @@ import * as Http from "../../Http/index.ts";
 import * as Schema from "effect/Schema";
 import * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup";
 import * as HttpApiSchema from "effect/unstable/httpapi/HttpApiSchema";
-import { Authenticated } from "../Auth.ts";
 import {
-  Unauthorized,
-  Forbidden,
   ObjectNotFound,
   Oid,
   ReadOnlyRepo,
@@ -21,6 +18,7 @@ import {
   RefNotFound,
   RepoNotFound,
   RepoPath,
+  HookRejected,
 } from "./Schema.ts";
 
 /** Lists refs, optionally filtered by prefix (e.g. `refs/heads/`). */
@@ -38,8 +36,7 @@ export class ListRefs extends Http.get<ListRefs>()(
       head: Schema.NullOr(Schema.String),
       refs: Schema.Array(Ref),
     }),
-    error: [RepoNotFound, Unauthorized],
-    middleware: [Authenticated],
+    error: [RepoNotFound],
   },
 ) {}
 
@@ -51,8 +48,7 @@ export class GetRef extends Http.get<GetRef>()(
     params: RepoPath,
     query: Schema.Struct({ name: RefName }),
     success: Ref,
-    error: [RepoNotFound, RefNotFound, Unauthorized],
-    middleware: [Authenticated],
+    error: [RepoNotFound, RefNotFound],
   },
 ) {}
 
@@ -73,14 +69,12 @@ export class UpdateRef extends Http.put<UpdateRef>()(
     }),
     success: Ref,
     error: [
+      HookRejected,
       RepoNotFound,
       RefConflict,
       ObjectNotFound,
       ReadOnlyRepo,
-      Forbidden,
-      Unauthorized,
     ],
-    middleware: [Authenticated],
   },
 ) {}
 
@@ -96,15 +90,7 @@ export class RemoveRef extends Http.del<RemoveRef>()(
       expectedOid: Schema.optional(Oid),
     }),
     success: HttpApiSchema.NoContent,
-    error: [
-      RepoNotFound,
-      RefNotFound,
-      RefConflict,
-      ReadOnlyRepo,
-      Forbidden,
-      Unauthorized,
-    ],
-    middleware: [Authenticated],
+    error: [HookRejected, RepoNotFound, RefNotFound, RefConflict, ReadOnlyRepo],
   },
 ) {}
 

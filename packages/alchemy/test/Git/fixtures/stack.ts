@@ -10,74 +10,35 @@
  * Every suite deploys under its own stack name so concurrently-running
  * suites never share (or race on) a deployment.
  *
- * The suites authenticate with two shared secrets (see `AuthenticatedTest`).
- * So that they work out of the box (local dev especially), a deterministic
- * default `GIT_SERVICE_SECRET` is installed into `process.env` at module
- * load — before any deploy plans run — unless the caller already exported
- * one.
+ * The suites authenticate with two shared secrets, resolved by the
+ * user-land middleware in `test-auth.ts`; the engine sees no credential.
  */
 import * as Alchemy from "@/index.ts";
 import * as Cloudflare from "@/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
+import * as Option from "effect/Option";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import {
-  Authenticated,
   BlobStoreR2,
-  isReadAction,
-  Policy,
   GIT_WORKER_OPTIONS,
+  GitHubUser,
+  Handlers,
   HasherInline,
   ReposDurableObject,
   RegistryDurableObject,
   Server,
-  ServerLive,
 } from "@/Git/index.ts";
-import { parseSecret } from "@/Git/Auth.ts";
+import { TestApi, TestAuthLive, TestCaller } from "./test-auth.ts";
 
-/**
- * The secret every suite authenticates with. Honors a caller-provided
- * `GIT_SERVICE_SECRET` (the deployed-cloud suites may point at a
- * standing deployment); otherwise a deterministic test-only value.
- */
-export const TEST_SECRET: string =
-  process.env.GIT_SERVICE_SECRET ?? "test-secret-git-service-suite";
-/** A second credential, resolved to a second principal (see `AuthenticateTest`). */
-export const TEST_SECRET_DEV = "test-secret-git-service-suite-dev";
-export const TEST_PRINCIPAL = { id: "e2e", name: "Suite" } as const;
-export const TEST_PRINCIPAL_DEV = { id: "dev", name: "Dev" } as const;
-process.env.GIT_SERVICE_SECRET ??= TEST_SECRET;
-
-/**
- * Two shared secrets, two principals: `TEST_SECRET` is the suite's owner
- * principal, `TEST_SECRET_DEV` a second user for policy tests. Anything
- * else is anonymous. One middleware serves every plane: REST, the git
- * wire, the raw reads, and the GitHub facade.
- */
-export const AuthenticatedTest: Layer.Layer<Authenticated> = Authenticated.make(
-  Effect.succeed(
-    Effect.gen(function* () {
-      const request = yield* HttpServerRequest.HttpServerRequest;
-      const presented = parseSecret(request.headers);
-      if (presented === TEST_SECRET) return TEST_PRINCIPAL;
-      if (presented === TEST_SECRET_DEV) return TEST_PRINCIPAL_DEV;
-      return undefined;
-    }),
-  ),
-);
-
-/**
- * The suite's policy: any principal may do anything (the suite creates
- * repos under several owners), anonymous callers read public repos.
- * `PolicyOwners` has its own unit test.
- */
-export const PolicyTest: Layer.Layer<Policy> = Layer.succeed(Policy, {
-  authorize: ({ principal, repo, action }) =>
-    Effect.succeed(
-      principal !== undefined ||
-        (repo !== null && repo.public && isReadAction(action)),
-    ),
-});
+export {
+  TEST_SECRET,
+  TEST_SECRET_DEV,
+  TEST_USER,
+  TEST_USER_DEV,
+  TestApi,
+  TestAuthLive,
+} from "./test-auth.ts";
 
 /** The suites' bucket — owned by the assembly, like any user's. */
 const GitObjects = Cloudflare.R2.Bucket("GitObjects", {
@@ -86,16 +47,41 @@ const GitObjects = Cloudflare.R2.Bucket("GitObjects", {
   forceDestroy: true,
 });
 
+/**
+ * One of the engine's routes replaced: `GET /api/v3/user`, the probe
+ * `gh` makes, answered from the caller the middleware resolved. Provided
+ * nearer than `Handlers`, so it wins.
+ */
+const GitHubUserTest = GitHubUser.make(
+  Effect.succeed(() =>
+    Effect.gen(function* () {
+      const caller = yield* Effect.serviceOption(TestCaller);
+      const user = Option.isSome(caller) ? caller.value.user : null;
+      return user === null
+        ? HttpServerResponse.jsonUnsafe(
+            { message: "Requires authentication" },
+            { status: 401 },
+          )
+        : HttpServerResponse.jsonUnsafe({
+            login: user.name,
+            id: 1,
+            type: "User",
+          });
+    }),
+  ),
+);
+
 /** One layer graph, one Effect.provide — the RFC assembly, verbatim. */
-const GitLive = ServerLive.pipe(
+const GitLive = Server.layer(TestApi).pipe(
+  Layer.provide(GitHubUserTest),
+  Layer.provide(Handlers),
+  Layer.provide(TestAuthLive),
   Layer.provide(ReposDurableObject),
   Layer.provide(RegistryDurableObject),
   // In-process hashing: service-binding fan-out runs on the caller's
   // thread on Workers (DESIGN §22.10), so the simpler layer is the reference.
   Layer.provide(HasherInline),
   Layer.provide(BlobStoreR2(GitObjects)),
-  Layer.provide(AuthenticatedTest),
-  Layer.provide(PolicyTest),
 );
 
 /** The suites' git host: the reference building-block assembly. */

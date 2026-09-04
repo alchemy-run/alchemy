@@ -18,15 +18,15 @@ import * as GitHasher from "alchemy/Git/Hasher";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
-const GitLive = Git.ServerLive.pipe(
+const GitLive = Git.Server.layer(Api).pipe(
+  Layer.provide(Git.Handlers),
+  Layer.provide(AuthenticatedLive),
   Layer.provide(Git.ReposDurableObject),
   Layer.provide(Git.RegistryDurableObject),
   Layer.provide(Git.BlobStoreS3()),
   // or: Git.BlobStoreS3({ bucket: AWS.S3.Bucket("GitObjects", { bucketName: "git-objects" }) })
   Layer.provide(GitHasher.HasherLambda(GitHasher.HasherFunction)),
   Layer.provide(AWS.Lambda.InvokeFunctionHttp),
-  Layer.provide(Git.PolicyOwners),
-  Layer.provide(Git.AuthenticatedSecret({ principal: "acme" })),
 );
 
 export default class GitHost extends Cloudflare.Worker<GitHost>()(
@@ -110,15 +110,15 @@ Lambda hashes every chunk at once. The loaded Workers hash four at a
 time:
 
 ```diff lang="typescript"
-const GitLive = Git.ServerLive.pipe(
+const GitLive = Git.Server.layer(Api).pipe(
+  Layer.provide(Git.Handlers),
+  Layer.provide(AuthenticatedLive),
   Layer.provide(Git.ReposDurableObject),
   Layer.provide(Git.RegistryDurableObject),
   Layer.provide(Git.BlobStoreR2(GitObjects)),
 -  Layer.provide(GitHasher.HasherWorkerLoader()),
 +  Layer.provide(GitHasher.HasherLambda(GitHasher.HasherFunction)),
 +  Layer.provide(AWS.Lambda.InvokeFunctionHttp),
-  Layer.provide(Git.PolicyOwners),
-  Layer.provide(Git.AuthenticatedSecret({ principal: "acme" })),
 );
 ```
 

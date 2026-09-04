@@ -11,11 +11,8 @@
 import * as Http from "../../Http/index.ts";
 import * as Schema from "effect/Schema";
 import * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup";
-import { Authenticated } from "../Auth.ts";
 import {
-  Unauthorized,
   BranchMissing,
-  Forbidden,
   MergeConflict,
   MergeResult,
   NothingToMerge,
@@ -33,6 +30,7 @@ import {
   RepoNotFound,
   RepoPath,
   ValidationError,
+  HookRejected,
 } from "./Schema.ts";
 
 /** `(owner, repo, number)` path segments for single-PR endpoints. */
@@ -61,15 +59,7 @@ export class CreatePull extends Http.post<CreatePull>()(
       head: Schema.String,
     }),
     success: Pull,
-    error: [
-      RepoNotFound,
-      BranchMissing,
-      PullExists,
-      ValidationError,
-      Forbidden,
-      Unauthorized,
-    ],
-    middleware: [Authenticated],
+    error: [RepoNotFound, BranchMissing, PullExists, ValidationError],
   },
 ) {}
 
@@ -90,8 +80,7 @@ export class ListPulls extends Http.get<ListPulls>()(
       ),
     }),
     success: Paginated(Pull),
-    error: [RepoNotFound, Unauthorized],
-    middleware: [Authenticated],
+    error: [RepoNotFound],
   },
 ) {}
 
@@ -102,8 +91,7 @@ export class GetPull extends Http.get<GetPull>()(
   {
     params: PullPath,
     success: PullDetail,
-    error: [RepoNotFound, PullNotFound, Unauthorized],
-    middleware: [Authenticated],
+    error: [RepoNotFound, PullNotFound],
   },
 ) {}
 
@@ -124,14 +112,7 @@ export class UpdatePull extends Http.patch<UpdatePull>()(
       state: Schema.optional(Schema.Literals(["open", "closed"])),
     }),
     success: Pull,
-    error: [
-      RepoNotFound,
-      PullNotFound,
-      PullStateConflict,
-      Forbidden,
-      Unauthorized,
-    ],
-    middleware: [Authenticated],
+    error: [RepoNotFound, PullNotFound, PullStateConflict],
   },
 ) {}
 
@@ -158,6 +139,7 @@ export class MergePull extends Http.post<MergePull>()(
     }),
     success: MergeResult,
     error: [
+      HookRejected,
       RepoNotFound,
       PullNotFound,
       PullStateConflict,
@@ -166,10 +148,7 @@ export class MergePull extends Http.post<MergePull>()(
       MergeConflict,
       RefConflict,
       ReadOnlyRepo,
-      Forbidden,
-      Unauthorized,
     ],
-    middleware: [Authenticated],
   },
 ) {}
 

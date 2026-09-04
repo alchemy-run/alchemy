@@ -44,10 +44,13 @@ Repository metadata, branches, commits and commit detail, comparison,
 file contents, the authenticated-user probe at `/user`, and pull
 requests: list, create, get, update, merge, and changed files.
 
-Authentication accepts GitHub's `Authorization: token <t>` alongside
-`Bearer` and Basic, because that is what `gh` and Octokit send. The
-credential is whatever your `Authenticated` middleware verifies, and `/user`
-answers with the principal it resolved.
+`gh` and Octokit send `Authorization: token <t>`, so the middleware in
+front of the facade should accept that scheme alongside Basic. The
+credential is whatever your middleware verifies. `/user` is the probe
+`gh` makes; the engine has no user to answer with, so provide your own
+Layer for `Git.GitHubUser`, nearer than `Git.Handlers`.
+[Part 3](/git/tutorial/part-3#replacing-one-of-the-engines-routes)
+does it from a Better Auth session.
 
 Pagination uses `Link` headers with `rel="next"`. The next URL carries
 an opaque cursor, which `gh api --paginate` and Octokit's paginator

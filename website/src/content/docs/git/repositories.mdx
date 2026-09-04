@@ -37,20 +37,23 @@ yield* client.repos.create({
 
 The response carries the repository and its clone URL. A duplicate
 `owner/name` is a typed `RepoAlreadyExists`. Who may create under an
-owner is the policy's call. The default lets any principal create, and
-a repository belongs to the principal whose id matches `owner`.
+owner is your middleware's call; the engine attaches no meaning to the
+owner name beyond uniqueness.
 
 `owner/name` is the public identity. The repository's id is stable, so
 renaming never moves data.
 
 ## Visibility
 
-`public: true` serves anonymous reads: REST reads, raw files, the ref
-advertisement, and `upload-pack`. Writes always need a principal. A
-private repository answers `401` with `WWW-Authenticate` to anyone the
-policy does not admit, so git prompts.
+`public` is a flag the engine stores and reports. What it grants is
+your middleware's decision; the tutorial's middleware serves anonymous
+reads of a public repository, REST reads, raw files, the ref
+advertisement, and `upload-pack`, and answers `401` with
+`WWW-Authenticate` otherwise, so git prompts. `Git.isRead` and
+`Git.RegistryStore` are what it asks.
 
-Listings are filtered by what the caller may see.
+Listings return everything the Registry holds; `public: true` in the
+query narrows them to public repositories.
 
 ## Read-only
 

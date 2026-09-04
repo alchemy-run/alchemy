@@ -7,13 +7,13 @@ Start from the graph the tutorial built and change the lines your
 requirements touch:
 
 ```typescript
-const GitLive = Git.ServerLive.pipe(
+const GitLive = Git.Server.layer(Api).pipe(
+  Layer.provide(Git.Handlers),
+  Layer.provide(AuthenticatedLive),
   Layer.provide(Git.ReposDurableObject),
   Layer.provide(Git.RegistryDurableObject),
   Layer.provide(Git.BlobStoreR2(GitObjects)),
   Layer.provide(Git.HasherInline),
-  Layer.provide(Git.PolicyOwners),
-  Layer.provide(Git.AuthenticatedSecret({ principal: "acme" })),
 );
 ```
 
@@ -25,8 +25,8 @@ const GitLive = Git.ServerLive.pipe(
 | The widest push parallelism | `HasherLambda(HasherFunction)` | [Bytes in S3, hashing on Lambda](/git/recipes/cloudflare-aws) |
 | Bytes somewhere that is neither R2 nor S3 | your own `BlobStore` | [Bring your own store](/git/recipes/your-own-store) |
 | Registry reads near users everywhere, SQL over the index | `RegistryD1(RepoIndex)` | [Registry](/git/blocks/registry) |
-| Your own users and credentials | your `Authenticated` middleware | [Tutorial Part 3](/git/tutorial/part-3) |
-| Branch rules, teams | your `Policy` | [Tutorial Part 4](/git/tutorial/part-4) |
+| Your own users and credentials | your `HttpApi` middleware | [Tutorial Part 3](/git/tutorial/part-3) |
+| Branch rules, teams | `Git.Hooks` | [Tutorial Part 4](/git/tutorial/part-4) |
 | Your web app and git on one domain | a front-door Worker | [Tutorial Part 3](/git/tutorial/part-3) |
 
 Every row is independent. Bytes in S3 with the loader hasher and a D1

@@ -18,8 +18,7 @@ export class Tip extends Http.get<Tip>()(
   {
     params: Git.RepoPath,
     success: Git.Ref,
-    error: [Git.RepoNotFound, Git.RefNotFound, Git.Forbidden, Git.Unauthorized],
-    middleware: [Git.Authenticated],
+    error: [Git.RepoNotFound, Git.RefNotFound],
   },
 ) {}
 
@@ -28,17 +27,16 @@ export const TipLive = Tip.make(
     const registry = yield* Git.RegistryStore;
     const repos = yield* Git.RepoStore;
     return Effect.fn(function* ({ params }) {
-      const { principal } = yield* Git.Caller;
       const entry = yield* registry
         .resolve(params.owner, params.repo)
         .pipe(Effect.catchTag("StoreError", (error) => Effect.die(error)));
       if (entry === undefined) return yield* new Git.RepoNotFound(params);
       const repo = repos.getByName(entry.repoId);
       const meta = yield* repo
-        .getRepoMeta(principal ?? null)
+        .getRepoMeta()
         .pipe(Effect.catchTag("StoreError", (error) => Effect.die(error)));
       const ref = yield* repo
-        .getRef(principal ?? null, `refs/heads/${meta.defaultBranch}`)
+        .getRef(`refs/heads/${meta.defaultBranch}`)
         .pipe(Effect.catchTag("StoreError", (error) => Effect.die(error)));
       return new Git.Ref({
         name: ref.name,

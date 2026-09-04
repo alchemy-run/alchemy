@@ -18,13 +18,13 @@ import * as Layer from "effect/Layer";
 
 export const GitObjects = Cloudflare.R2.Bucket("GitObjects");
 
-const GitLive = Git.ServerLive.pipe(
+const GitLive = Git.Server.layer(Api).pipe(
+  Layer.provide(Git.Handlers),
+  Layer.provide(AuthenticatedLive),
   Layer.provide(Git.ReposDurableObject),
   Layer.provide(Git.RegistryDurableObject),
   Layer.provide(Git.BlobStoreR2(GitObjects)),
   Layer.provide(GitHasher.HasherWorkerLoader()),
-  Layer.provide(Git.PolicyOwners),
-  Layer.provide(Git.AuthenticatedSecret({ principal: "acme" })),
 );
 
 export default class GitHost extends Cloudflare.Worker<GitHost>()(
@@ -85,14 +85,14 @@ no traffic costs its storage.
 `HasherInline` is enough until pushes of tens of megabytes matter:
 
 ```diff lang="typescript"
-const GitLive = Git.ServerLive.pipe(
+const GitLive = Git.Server.layer(Api).pipe(
+  Layer.provide(Git.Handlers),
+  Layer.provide(AuthenticatedLive),
   Layer.provide(Git.ReposDurableObject),
   Layer.provide(Git.RegistryDurableObject),
   Layer.provide(Git.BlobStoreR2(GitObjects)),
 -  Layer.provide(GitHasher.HasherWorkerLoader()),
 +  Layer.provide(Git.HasherInline),
-  Layer.provide(Git.PolicyOwners),
-  Layer.provide(Git.AuthenticatedSecret({ principal: "acme" })),
 );
 ```
 
@@ -102,14 +102,14 @@ one region:
 ```diff lang="typescript"
 +export const RepoIndex = Cloudflare.D1.Database("RepoIndex");
 +
-const GitLive = Git.ServerLive.pipe(
+const GitLive = Git.Server.layer(Api).pipe(
+  Layer.provide(Git.Handlers),
+  Layer.provide(AuthenticatedLive),
   Layer.provide(Git.ReposDurableObject),
 -  Layer.provide(Git.RegistryDurableObject),
 +  Layer.provide(Git.RegistryD1(RepoIndex)),
   Layer.provide(Git.BlobStoreR2(GitObjects)),
   Layer.provide(GitHasher.HasherWorkerLoader()),
-  Layer.provide(Git.PolicyOwners),
-  Layer.provide(Git.AuthenticatedSecret({ principal: "acme" })),
 );
 ```
 

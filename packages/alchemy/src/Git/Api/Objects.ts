@@ -7,9 +7,7 @@
 import * as Http from "../../Http/index.ts";
 import * as Schema from "effect/Schema";
 import * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup";
-import { Authenticated } from "../Auth.ts";
 import {
-  Unauthorized,
   CommitDiff,
   CommitInfo,
   Comparison,
@@ -33,8 +31,7 @@ export class GetCommit extends Http.get<GetCommit>()(
   {
     params: RepoOidPath,
     success: CommitInfo,
-    error: [RepoNotFound, ObjectNotFound, WrongObjectType, Unauthorized],
-    middleware: [Authenticated],
+    error: [RepoNotFound, ObjectNotFound, WrongObjectType],
   },
 ) {}
 
@@ -53,8 +50,7 @@ export class GetLog extends Http.get<GetLog>()(
       ),
     }),
     success: Paginated(CommitInfo),
-    error: [RepoNotFound, RefNotFound, Unauthorized],
-    middleware: [Authenticated],
+    error: [RepoNotFound, RefNotFound],
   },
 ) {}
 
@@ -68,8 +64,7 @@ export class GetTree extends Http.get<GetTree>()(
       oid: Oid,
       entries: Schema.Array(TreeEntry),
     }),
-    error: [RepoNotFound, ObjectNotFound, WrongObjectType, Unauthorized],
-    middleware: [Authenticated],
+    error: [RepoNotFound, ObjectNotFound, WrongObjectType],
   },
 ) {}
 
@@ -87,14 +82,7 @@ export class GetBlob extends Http.get<GetBlob>()(
       /** Base64 content — blobs ≤ 1 MiB only (422 otherwise; use /raw). */
       content: Schema.String,
     }),
-    error: [
-      RepoNotFound,
-      ObjectNotFound,
-      WrongObjectType,
-      ObjectTooLarge,
-      Unauthorized,
-    ],
-    middleware: [Authenticated],
+    error: [RepoNotFound, ObjectNotFound, WrongObjectType, ObjectTooLarge],
   },
 ) {}
 
@@ -111,8 +99,7 @@ export class GetDiff extends Http.get<GetDiff>()(
   {
     params: RepoOidPath,
     success: CommitDiff,
-    error: [RepoNotFound, ObjectNotFound, WrongObjectType, Unauthorized],
-    middleware: [Authenticated],
+    error: [RepoNotFound, ObjectNotFound, WrongObjectType],
   },
 ) {}
 
@@ -139,9 +126,7 @@ export class Compare extends Http.get<Compare>()(
       ObjectNotFound,
       WrongObjectType,
       NoMergeBase,
-      Unauthorized,
     ],
-    middleware: [Authenticated],
   },
 ) {}
 
@@ -152,7 +137,7 @@ export class Compare extends Http.get<Compare>()(
 export class GetBlobRaw extends Http.get<GetBlobRaw>()(
   "blobRaw",
   "/repos/:owner/:repo/blobs/:oid/raw",
-  { middleware: [Authenticated] },
+  {},
 ) {}
 
 /**
@@ -162,7 +147,7 @@ export class GetBlobRaw extends Http.get<GetBlobRaw>()(
 export class GetFile extends Http.get<GetFile>()(
   "file",
   "/repos/:owner/:repo/file",
-  { middleware: [Authenticated] },
+  {},
 ) {}
 
 /** The `objects` group, mounted at `/api/v1`. */

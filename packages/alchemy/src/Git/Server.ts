@@ -4,19 +4,18 @@
  * The Worker is the front door for both planes:
  *
  * - `/api/v1/**` — the typed REST management plane (`GitApi` from
- *   `Api.ts`), mounted via `HttpApiBuilder.layer` with the `GitAuth`
- *   credential-parsing middleware. Handlers resolve `owner/name → repoId`
- *   through the singleton Registry DO (with a 60 s in-isolate LRU cache)
- *   and call typed Repo-DO RPCs, which are the enforcement point.
+ *   `Api.ts`). Handlers resolve `owner/name → repoId` through the
+ *   singleton Registry DO (with a 60 s in-isolate LRU cache) and call
+ *   typed Repo-DO RPCs.
  * - `/:owner/:repo[.git]/**` — the git smart-HTTP wire endpoints
- *   (`info/refs`, `git-upload-pack`, `git-receive-pack`), registered as
- *   raw `HttpRouter` routes on the same router and proxied untouched to
- *   the Repo DO's `fetch` (the protocol runs inside the DO, §2.1).
+ *   (`info/refs`, `git-upload-pack`, `git-receive-pack`), routes on the
+ *   same API, proxied untouched to the Repo DO's `fetch` (the protocol
+ *   runs inside the DO, §2.1) or served from the head snapshot.
  *
- * The Worker holds no credentials. `Git.Authenticate` (yours) resolves a
- * principal from the request, and the wire proxy forwards it to the DO on
- * the internal {@link PRINCIPAL_HEADER} (any inbound copy of that header is
- * always stripped first). The DO asks `Git.Policy` with the parsed facts.
+ * The Worker holds no credentials and asks no auth questions: the
+ * middleware of the API that mounts the routes decided who may call them
+ * before the engine saw the request (DESIGN.md §8). `Git.Hooks`, when
+ * provided, runs before refs move.
  *
  * ### Deploying
  * **Example:** Compose the Worker into a Stack
@@ -50,6 +49,7 @@
  * ```
  */
 import * as Cloudflare from "../Cloudflare/index.ts";
+import crypto from "node:crypto";
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -58,20 +58,25 @@ import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
+import * as Scope from "effect/Scope";
 import * as Headers from "effect/unstable/http/Headers";
 import * as HttpRouter from "effect/unstable/http/HttpRouter";
+import type * as HttpServerError from "effect/unstable/http/HttpServerError";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import * as HttpMiddleware from "effect/unstable/http/HttpMiddleware";
 import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
+import type * as HttpApi from "effect/unstable/httpapi/HttpApi";
+import type * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup";
 import * as Http from "../Http/index.ts";
 import {
   CommitDiff,
   CommitInfo,
   Comparison,
   DiffEntry,
-  Forbidden,
   GitApi,
+  HookRejected,
+  InternalApi,
   // routes
   Compare,
   CompactRepo,
@@ -128,17 +133,9 @@ import {
   RepoNotFound,
   RepoNotReady,
   TreeEntry,
-  Unauthorized,
   type Oid,
 } from "./Api.ts";
-import {
-  currentCaller,
-  parseBearer,
-  parseSecret,
-  Policy,
-  timingSafeEqual,
-  type GitAction,
-} from "./Auth.ts";
+import { Hooks, type HooksShape, type RefUpdate } from "./Hooks.ts";
 import type * as HttpApiEndpoint from "effect/unstable/httpapi/HttpApiEndpoint";
 import { gitHubCompatRoutes } from "./GitHubCompat.ts";
 import { BlobStore, type BlobStoreError } from "./BlobStore.ts";
@@ -184,8 +181,6 @@ import { decodeDeltaBatch, encodeDeltaResults } from "./Hasher/Protocol.ts";
 import { hashBounds, resolveDeltas, scanPart } from "./Protocol/PartialScan.ts";
 import type { StoreError } from "./Protocol/Store.ts";
 import {
-  encodePrincipal,
-  PRINCIPAL_HEADER,
   buildAdvertisement,
   parseUploadPackRequest,
   BUNDLE_COUNT_HEADER,
@@ -205,15 +200,38 @@ import {
   pushPermitsFor,
   type IngestResult,
   type IngestStore,
-  type CallerAuth,
   type CommitData,
   type DiffEntryData,
   type PullData,
   type PullDetailData,
   type RefData,
   type RepoMetaData,
+  type RepoStub,
 } from "./RepoObject.ts";
 import { RegistryStore, type RegistryEntry } from "./RegistryObject.ts";
+
+/** A `Bearer` credential from the `Authorization` header (the hash route's internal secret). */
+const parseBearer = (
+  headers: Readonly<Record<string, string | undefined>>,
+): string | undefined => {
+  const authorization = headers.authorization;
+  if (authorization === undefined) return undefined;
+  const space = authorization.indexOf(" ");
+  if (space === -1) return undefined;
+  if (authorization.slice(0, space).toLowerCase() !== "bearer")
+    return undefined;
+  const credential = authorization.slice(space + 1).trim();
+  return credential === "" ? undefined : credential;
+};
+
+const sha256 = (input: string): Uint8Array => {
+  const digest = crypto.createHash("sha256").update(input).digest();
+  return new Uint8Array(digest.buffer, digest.byteOffset, digest.byteLength);
+};
+
+/** Timing-safe string equality over sha-256 digests. */
+const timingSafeEqual = (a: string, b: string): Effect.Effect<boolean> =>
+  Effect.sync(() => crypto.timingSafeEqual(sha256(a), sha256(b)));
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -402,10 +420,12 @@ const makeCore = Effect.gen(function* () {
   // The Worker-side view of the blob store (clone-bundle splice reads)
   // — the same BlobStore layer the Repo DO consumes.
   const workerBlobs = yield* BlobStore;
-  // The swappable auth block (§3.2): authentication runs here at the
-  // Worker, once per request; registry-level authorization too. Per-repo
-  // authorization runs in the Repo DO, which owns the actions' facts.
-  const policy = yield* Policy;
+  // git's pre-receive hook, if the graph provides one; accepts everything
+  // otherwise. Runs here in the Worker, inside the request.
+  const hooks: HooksShape = Option.getOrElse(
+    yield* Effect.serviceOption(Hooks),
+    () => ({ preReceive: () => Effect.succeed([]) }),
+  );
   const internalSecret = yield* InternalSecret;
   // The push pipeline's verifier (DESIGN §22.10): pack parts are inflated
   // and hashed by this service — fanned out across Worker invocations by
@@ -488,29 +508,29 @@ const makeCore = Effect.gen(function* () {
       ),
     );
 
-  // ── request → caller ───────────────────────────────────────────────────
   /**
-   * The REST caller, as the `HttpApi` middleware provided it: a principal,
-   * or `null` for anonymous. No middleware at all is anonymous too, which
-   * the policy confines to public reads.
+   * git's pre-receive hook over a REST ref write or a merge: the same
+   * question the push path asks, with the one update it would make.
    */
-  const restAuth = Effect.map(currentCaller, (principal) => principal ?? null);
-
-  /**
-   * Authorize-or-403 gate for the registry-level endpoints (create,
-   * fork, import, list-all) — `repo` is `null`: there is no repo
-   * context yet, only the action.
-   */
-  const requireRegistryAction = (action: GitAction) =>
+  const preReceive = (
+    stub: RepoStub,
+    params: { readonly owner: string; readonly repo: string },
+    updates: ReadonlyArray<RefUpdate>,
+  ) =>
     Effect.gen(function* () {
-      const principal = yield* currentCaller;
-      const allowed = yield* policy.authorize({
-        principal,
-        repo: null,
-        action,
-      });
-      if (!allowed) {
-        return yield* new Forbidden({ action: action._tag });
+      const meta = yield* stub.readMeta().pipe(
+        Effect.catchTag("StoreError", (error) => Effect.die(error)),
+        Effect.catchTag("RepoNotFound", () =>
+          Effect.fail(new RepoNotFound(params)),
+        ),
+      );
+      const rejections = yield* hooks.preReceive({ repo: meta, updates });
+      const first = rejections[0];
+      if (first !== undefined) {
+        return yield* new HookRejected({
+          ref: first.ref,
+          reason: first.reason,
+        });
       }
     });
 
@@ -582,10 +602,6 @@ const makeCore = Effect.gen(function* () {
   const reposRoutes = {
     create: impl(CreateRepo, ({ payload }) =>
       Effect.gen(function* () {
-        yield* requireRegistryAction({
-          _tag: "CreateRepo",
-          owner: payload.owner,
-        });
         const entry = yield* insertRepoRow({
           owner: payload.owner,
           name: payload.name,
@@ -634,18 +650,14 @@ const makeCore = Effect.gen(function* () {
           params.owner,
           params.repo,
         );
-        const auth = yield* restAuth;
         if (entry.deletedAt !== null) {
           return registryFallbackRepo(entry);
         }
         const meta = yield* repos
           .getByName(entry.repoId)
-          .getRepoMeta(auth)
+          .getRepoMeta()
           .pipe(
             Effect.catchTag("StoreError", (error) => Effect.die(error)),
-            // `get` declares only RepoNotFound — an insufficient scope
-            // is indistinguishable from a bad token here.
-            Effect.catchTag("Forbidden", () => Effect.fail(new Unauthorized())),
             Effect.catchTag("RepoNotFound", () =>
               Effect.fail(
                 new RepoNotFound({
@@ -661,10 +673,9 @@ const makeCore = Effect.gen(function* () {
     update: impl(UpdateRepo, ({ params, payload }) =>
       Effect.gen(function* () {
         const entry = yield* resolveOrNotFound(params.owner, params.repo);
-        const auth = yield* restAuth;
         const meta = yield* repos
           .getByName(entry.repoId)
-          .updateRepoMeta(auth, {
+          .updateRepoMeta({
             description: payload.description,
             defaultBranch: payload.defaultBranch,
             readOnly: payload.readOnly,
@@ -686,21 +697,14 @@ const makeCore = Effect.gen(function* () {
     ),
     list: impl(ListRepos, ({ query }) =>
       Effect.gen(function* () {
-        // Whoever the policy lets list everything sees all repos;
-        // everyone else (anonymous included) sees public repos only —
-        // GitHub's model.
-        const principal = yield* currentCaller;
-        const isAdmin = yield* policy.authorize({
-          principal,
-          repo: null,
-          action: { _tag: "ListRepos" },
-        });
+        // Everything the Registry holds; `public: true` narrows it. Who
+        // may list at all was decided in front of the route.
         const page = yield* registryStub()
           .list({
             owner: query.owner,
             cursor: query.cursor,
             limit: query.limit,
-            publicOnly: !isAdmin,
+            publicOnly: query.public === true,
           })
           .pipe(Effect.catchTag("StoreError", (error) => Effect.die(error)));
         // Rendered straight from the Registry's denormalised columns:
@@ -722,14 +726,13 @@ const makeCore = Effect.gen(function* () {
           params.owner,
           params.repo,
         );
-        const auth = yield* restAuth;
         // Always (re-)arm the purge — even when the row is already
         // soft-deleted. A second DELETE mid-drain is an idempotent 204,
         // and re-arming is what recovers a purge whose alarm was lost
         // (crash between markDeleted and the first alarm run).
         yield* repos
           .getByName(entry.repoId)
-          .startPurge(auth)
+          .startPurge()
           .pipe(
             Effect.catchTag("StoreError", (error) => Effect.die(error)),
             // The registry row exists but the DO holds no state — an
@@ -752,10 +755,6 @@ const makeCore = Effect.gen(function* () {
     ),
     fork: impl(ForkRepo, ({ params, payload }) =>
       Effect.gen(function* () {
-        yield* requireRegistryAction({
-          _tag: "CreateRepo",
-          owner: payload.targetOwner,
-        });
         const source = yield* resolveOrNotFound(params.owner, params.repo);
         const sourceMeta = yield* repos
           .getByName(source.repoId)
@@ -819,15 +818,11 @@ const makeCore = Effect.gen(function* () {
     compact: impl(CompactRepo, ({ params }) =>
       Effect.gen(function* () {
         const entry = yield* resolveOrNotFound(params.owner, params.repo);
-        const auth = yield* restAuth;
         yield* repos
           .getByName(entry.repoId)
-          .startCompact(auth)
+          .startCompact()
           .pipe(
             Effect.catchTag("StoreError", (error) => Effect.die(error)),
-            Effect.catchTag("Unauthorized", () =>
-              Effect.fail(new Forbidden({ action: "Maintain" })),
-            ),
             Effect.catchTag("RepoNotFound", () =>
               Effect.fail(
                 new RepoNotFound({
@@ -841,10 +836,6 @@ const makeCore = Effect.gen(function* () {
     ),
     import: impl(ImportRepo, ({ payload }) =>
       Effect.gen(function* () {
-        yield* requireRegistryAction({
-          _tag: "CreateRepo",
-          owner: payload.owner,
-        });
         const entry = yield* registryStub()
           .createRepo({
             owner: payload.owner,
@@ -889,13 +880,11 @@ const makeCore = Effect.gen(function* () {
     list: impl(ListRefs, ({ params, query }) =>
       Effect.gen(function* () {
         const entry = yield* resolveOrNotFound(params.owner, params.repo);
-        const auth = yield* restAuth;
         const page = yield* repos
           .getByName(entry.repoId)
-          .listRefs(auth, query.prefix)
+          .listRefs(query.prefix)
           .pipe(
             Effect.catchTag("StoreError", (error) => Effect.die(error)),
-            Effect.catchTag("Forbidden", () => Effect.fail(new Unauthorized())),
             Effect.catchTag("RepoNotFound", () =>
               Effect.fail(
                 new RepoNotFound({
@@ -911,13 +900,11 @@ const makeCore = Effect.gen(function* () {
     get: impl(GetRef, ({ params, query }) =>
       Effect.gen(function* () {
         const entry = yield* resolveOrNotFound(params.owner, params.repo);
-        const auth = yield* restAuth;
         const ref = yield* repos
           .getByName(entry.repoId)
-          .getRef(auth, query.name)
+          .getRef(query.name)
           .pipe(
             Effect.catchTag("StoreError", (error) => Effect.die(error)),
-            Effect.catchTag("Forbidden", () => Effect.fail(new Unauthorized())),
             Effect.catchTag("RepoNotFound", () =>
               Effect.fail(
                 new RepoNotFound({
@@ -933,10 +920,20 @@ const makeCore = Effect.gen(function* () {
     update: impl(UpdateRef, ({ params, query, payload }) =>
       Effect.gen(function* () {
         const entry = yield* resolveOrNotFound(params.owner, params.repo);
-        const auth = yield* restAuth;
-        const ref = yield* repos
-          .getByName(entry.repoId)
-          .updateRef(auth, {
+        const stub = repos.getByName(entry.repoId);
+        const current = yield* stub.getRef(query.name).pipe(
+          Effect.map((ref) => ref.oid),
+          Effect.catchTag("RefNotFound", () => Effect.succeed(ZERO_OID)),
+          Effect.catchTag("StoreError", (error) => Effect.die(error)),
+          Effect.catchTag("RepoNotFound", () =>
+            Effect.fail(new RepoNotFound(params)),
+          ),
+        );
+        yield* preReceive(stub, params, [
+          { ref: query.name, oldOid: current, newOid: payload.newOid },
+        ]);
+        const ref = yield* stub
+          .updateRef({
             name: query.name,
             newOid: payload.newOid,
             expectedOid: payload.expectedOid,
@@ -958,10 +955,19 @@ const makeCore = Effect.gen(function* () {
     remove: impl(RemoveRef, ({ params, query, payload }) =>
       Effect.gen(function* () {
         const entry = yield* resolveOrNotFound(params.owner, params.repo);
-        const auth = yield* restAuth;
-        yield* repos
-          .getByName(entry.repoId)
-          .removeRef(auth, {
+        const stub = repos.getByName(entry.repoId);
+        const current = yield* stub.getRef(query.name).pipe(
+          Effect.map((ref) => ref.oid),
+          Effect.catchTag("StoreError", (error) => Effect.die(error)),
+          Effect.catchTag("RepoNotFound", () =>
+            Effect.fail(new RepoNotFound(params)),
+          ),
+        );
+        yield* preReceive(stub, params, [
+          { ref: query.name, oldOid: current, newOid: ZERO_OID },
+        ]);
+        yield* stub
+          .removeRef({
             name: query.name,
             expectedOid: payload.expectedOid,
           })
@@ -984,13 +990,11 @@ const makeCore = Effect.gen(function* () {
     commit: impl(GetCommit, ({ params }) =>
       Effect.gen(function* () {
         const entry = yield* resolveOrNotFound(params.owner, params.repo);
-        const auth = yield* restAuth;
         const data = yield* repos
           .getByName(entry.repoId)
-          .readObject(auth, { oid: params.oid, expect: "commit" })
+          .readObject({ oid: params.oid, expect: "commit" })
           .pipe(
             Effect.catchTag("StoreError", (error) => Effect.die(error)),
-            Effect.catchTag("Forbidden", () => Effect.fail(new Unauthorized())),
             Effect.catchTag("RepoNotFound", () =>
               Effect.fail(
                 new RepoNotFound({
@@ -1025,17 +1029,15 @@ const makeCore = Effect.gen(function* () {
     log: impl(GetLog, ({ params, query }) =>
       Effect.gen(function* () {
         const entry = yield* resolveOrNotFound(params.owner, params.repo);
-        const auth = yield* restAuth;
         const page = yield* repos
           .getByName(entry.repoId)
-          .readCommitLog(auth, {
+          .readCommitLog({
             ref: query.ref,
             cursor: query.cursor,
             limit: query.limit,
           })
           .pipe(
             Effect.catchTag("StoreError", (error) => Effect.die(error)),
-            Effect.catchTag("Forbidden", () => Effect.fail(new Unauthorized())),
             Effect.catchTag("RepoNotFound", () =>
               Effect.fail(
                 new RepoNotFound({
@@ -1055,13 +1057,11 @@ const makeCore = Effect.gen(function* () {
     tree: impl(GetTree, ({ params }) =>
       Effect.gen(function* () {
         const entry = yield* resolveOrNotFound(params.owner, params.repo);
-        const auth = yield* restAuth;
         const data = yield* repos
           .getByName(entry.repoId)
-          .readObject(auth, { oid: params.oid, expect: "tree" })
+          .readObject({ oid: params.oid, expect: "tree" })
           .pipe(
             Effect.catchTag("StoreError", (error) => Effect.die(error)),
-            Effect.catchTag("Forbidden", () => Effect.fail(new Unauthorized())),
             Effect.catchTag("RepoNotFound", () =>
               Effect.fail(
                 new RepoNotFound({
@@ -1089,13 +1089,11 @@ const makeCore = Effect.gen(function* () {
     blob: impl(GetBlob, ({ params }) =>
       Effect.gen(function* () {
         const entry = yield* resolveOrNotFound(params.owner, params.repo);
-        const auth = yield* restAuth;
         const data = yield* repos
           .getByName(entry.repoId)
-          .readObject(auth, { oid: params.oid, expect: "blob" })
+          .readObject({ oid: params.oid, expect: "blob" })
           .pipe(
             Effect.catchTag("StoreError", (error) => Effect.die(error)),
-            Effect.catchTag("Forbidden", () => Effect.fail(new Unauthorized())),
             Effect.catchTag("RepoNotFound", () =>
               Effect.fail(
                 new RepoNotFound({
@@ -1122,13 +1120,11 @@ const makeCore = Effect.gen(function* () {
     diff: impl(GetDiff, ({ params }) =>
       Effect.gen(function* () {
         const entry = yield* resolveOrNotFound(params.owner, params.repo);
-        const auth = yield* restAuth;
         const data = yield* repos
           .getByName(entry.repoId)
-          .readCommitDiff(auth, { oid: params.oid })
+          .readCommitDiff({ oid: params.oid })
           .pipe(
             Effect.catchTag("StoreError", (error) => Effect.die(error)),
-            Effect.catchTag("Forbidden", () => Effect.fail(new Unauthorized())),
             Effect.catchTag("RepoNotFound", () =>
               Effect.fail(
                 new RepoNotFound({
@@ -1149,13 +1145,11 @@ const makeCore = Effect.gen(function* () {
     compare: impl(Compare, ({ params, query }) =>
       Effect.gen(function* () {
         const entry = yield* resolveOrNotFound(params.owner, params.repo);
-        const auth = yield* restAuth;
         const data = yield* repos
           .getByName(entry.repoId)
-          .compareCommits(auth, { base: query.base, head: query.head })
+          .compareCommits({ base: query.base, head: query.head })
           .pipe(
             Effect.catchTag("StoreError", (error) => Effect.die(error)),
-            Effect.catchTag("Forbidden", () => Effect.fail(new Unauthorized())),
             Effect.catchTag("RepoNotFound", () =>
               Effect.fail(
                 new RepoNotFound({
@@ -1184,10 +1178,9 @@ const makeCore = Effect.gen(function* () {
     create: impl(CreatePull, ({ params, payload }) =>
       Effect.gen(function* () {
         const entry = yield* resolveOrNotFound(params.owner, params.repo);
-        const auth = yield* restAuth;
         const pull = yield* repos
           .getByName(entry.repoId)
-          .createPull(auth, {
+          .createPull({
             title: payload.title,
             body: payload.body,
             base: payload.base,
@@ -1210,17 +1203,15 @@ const makeCore = Effect.gen(function* () {
     list: impl(ListPulls, ({ params, query }) =>
       Effect.gen(function* () {
         const entry = yield* resolveOrNotFound(params.owner, params.repo);
-        const auth = yield* restAuth;
         const page = yield* repos
           .getByName(entry.repoId)
-          .listPulls(auth, {
+          .listPulls({
             state: query.state,
             cursor: query.cursor,
             limit: query.limit,
           })
           .pipe(
             Effect.catchTag("StoreError", (error) => Effect.die(error)),
-            Effect.catchTag("Forbidden", () => Effect.fail(new Unauthorized())),
             Effect.catchTag("RepoNotFound", () =>
               Effect.fail(
                 new RepoNotFound({
@@ -1240,13 +1231,11 @@ const makeCore = Effect.gen(function* () {
     get: impl(GetPull, ({ params }) =>
       Effect.gen(function* () {
         const entry = yield* resolveOrNotFound(params.owner, params.repo);
-        const auth = yield* restAuth;
         const detail = yield* repos
           .getByName(entry.repoId)
-          .getPull(auth, params.number)
+          .getPull(params.number)
           .pipe(
             Effect.catchTag("StoreError", (error) => Effect.die(error)),
-            Effect.catchTag("Forbidden", () => Effect.fail(new Unauthorized())),
             Effect.catchTag("RepoNotFound", () =>
               Effect.fail(
                 new RepoNotFound({
@@ -1262,10 +1251,9 @@ const makeCore = Effect.gen(function* () {
     update: impl(UpdatePull, ({ params, payload }) =>
       Effect.gen(function* () {
         const entry = yield* resolveOrNotFound(params.owner, params.repo);
-        const auth = yield* restAuth;
         const pull = yield* repos
           .getByName(entry.repoId)
-          .updatePull(auth, {
+          .updatePull({
             number: params.number,
             title: payload.title,
             body: payload.body,
@@ -1288,10 +1276,25 @@ const makeCore = Effect.gen(function* () {
     merge: impl(MergePull, ({ params, payload }) =>
       Effect.gen(function* () {
         const entry = yield* resolveOrNotFound(params.owner, params.repo);
-        const auth = yield* restAuth;
-        const result = yield* repos
-          .getByName(entry.repoId)
-          .mergePull(auth, {
+        const stub = repos.getByName(entry.repoId);
+        // The hook sees the base branch moving to the head tip. A merge
+        // commit's oid does not exist until the merge is written, so a
+        // hook that must see it decorates `RepoStore` instead.
+        const pull = yield* stub.getPull(params.number).pipe(
+          Effect.catchTag("StoreError", (error) => Effect.die(error)),
+          Effect.catchTag("RepoNotFound", () =>
+            Effect.fail(new RepoNotFound(params)),
+          ),
+        );
+        yield* preReceive(stub, params, [
+          {
+            ref: pull.baseRef,
+            oldOid: pull.baseOid ?? ZERO_OID,
+            newOid: pull.headOid ?? ZERO_OID,
+          },
+        ]);
+        const result = yield* stub
+          .mergePull({
             number: params.number,
             message: payload.message,
             expectedHeadOid: payload.expectedHeadOid,
@@ -1327,14 +1330,6 @@ const makeCore = Effect.gen(function* () {
     status: 500,
   });
 
-  /**
-   * Shared git wire proxy (`info/refs`, `git-upload-pack`,
-   * `git-receive-pack`): parse Basic/Bearer, resolve through the cache,
-   * resolve the principal (setting {@link PRINCIPAL_HEADER} when there is one,
-   * always stripping any inbound copy), then forward the request
-   * untouched to the Repo DO — which re-verifies owner/name, enforces
-   * the token, and runs the protocol (DESIGN.md §2.3).
-   */
   /**
    * Streams a clone bundle out of the BlobStore as a complete
    * upload-pack result (NAK + optionally sideband-framed pack).
@@ -1447,19 +1442,18 @@ const makeCore = Effect.gen(function* () {
   });
 
   /**
-   * The DO-less anonymous read path (DESIGN.md §21): the upload-pack
+   * The DO-less read path (DESIGN.md §21): the upload-pack
    * advertisement and bundle-covered full clones served straight from
    * the repo's head snapshot in the BlobStore — the Repo DO never
-   * wakes, so anonymous public read throughput scales with Workers +
-   * blob storage instead of one single-threaded object.
+   * wakes, so read throughput scales with Workers + blob storage
+   * instead of one single-threaded object.
    *
-   * `undefined` = not eligible; the caller forwards to the DO. Only
-   * ever entered for requests with NO credential: a presented token
-   * must be verified (and possibly rejected) by the DO, and the Auth
-   * block still gets the decision on anonymous access — this changes
-   * WHERE the answer is computed, never what it is.
+   * `undefined` = not eligible; the caller forwards to the DO. Access
+   * was decided before the route ran, by the middleware of the API
+   * that mounts it — this changes WHERE the bytes come from, never who
+   * gets them.
    */
-  const anonymousFastPath = Effect.fn(function* (
+  const headSnapshotFastPath = Effect.fn(function* (
     request: HttpServerRequest.HttpServerRequest,
     repoId: string,
   ) {
@@ -1485,22 +1479,6 @@ const makeCore = Effect.gen(function* () {
     if (Result.isFailure(raw)) return undefined;
     const snapshot = decodeHeadSnapshot(utf8Decode(raw.success));
     if (snapshot === undefined) return undefined;
-
-    // The Auth block decides anonymous access — the same question the
-    // DO would ask, answered here from the snapshot's repo context.
-    const allowed = yield* policy.authorize({
-      principal: undefined,
-      repo: {
-        repoId: snapshot.repoId,
-        owner: snapshot.owner,
-        name: snapshot.name,
-        public: snapshot.public,
-        defaultBranch: snapshot.defaultBranch,
-        readOnly: snapshot.readOnly,
-      },
-      action: { _tag: "Fetch" },
-    });
-    if (!allowed) return undefined;
 
     if (isAdvertisement) {
       return HttpServerResponse.uint8Array(
@@ -1561,9 +1539,6 @@ const makeCore = Effect.gen(function* () {
     let repo = (params.repo ?? "").toLowerCase();
     if (repo.endsWith(".git")) repo = repo.slice(0, -4);
 
-    // Anonymous wire requests are forwarded to the DO, which asks the
-    // Auth block (read-only access on public repos) and answers 401 +
-    // WWW-Authenticate otherwise so git prompts for creds.
     const resolved = yield* Effect.result(resolveCached(owner, repo));
     if (Result.isFailure(resolved)) {
       return internalError;
@@ -1573,24 +1548,12 @@ const makeCore = Effect.gen(function* () {
       return notFound;
     }
 
-    if (parseSecret(request.headers) === undefined) {
-      const fast = yield* anonymousFastPath(request, entry.repoId);
-      if (fast !== undefined) return fast;
-    }
+    // Reads never wake the DO when the head snapshot covers them: the
+    // middleware in front of the route already decided who may read.
+    const fast = yield* headSnapshotFastPath(request, entry.repoId);
+    if (fast !== undefined) return fast;
 
-    const principal = yield* currentCaller;
-    // Never trust an inbound principal header — only the Worker sets it.
-    let headers = Headers.remove(request.headers, PRINCIPAL_HEADER);
-    if (principal !== undefined) {
-      headers = Headers.set(
-        headers,
-        PRINCIPAL_HEADER,
-        encodePrincipal(principal),
-      );
-    }
-    const response = yield* repos
-      .getByName(entry.repoId)
-      .fetch(request.modify({ headers }));
+    const response = yield* repos.getByName(entry.repoId).fetch(request);
 
     // Clone-bundle splice (DESIGN.md §11): the DO answered with a marker
     // naming an immutable R2 object rather than the pack itself. Stream
@@ -1633,7 +1596,6 @@ const makeCore = Effect.gen(function* () {
     if (Result.isFailure(resolved)) return internalError;
     const entry = resolved.success;
     if (entry === undefined) return notFound;
-    const auth: CallerAuth = (yield* currentCaller) ?? null;
     const stub = repos.getByName(entry.repoId);
     const resultType = "application/x-git-receive-pack-result";
     const noCache = { "cache-control": "no-cache" } as const;
@@ -1769,12 +1731,34 @@ const makeCore = Effect.gen(function* () {
       const allNg = (reason: string) =>
         parsed.commands.map((cmd) => ({ ref: cmd.ref, ok: false, reason }));
 
-      // Phase 1 in the DO: authorization (entry + per-ref policy),
-      // read-only, and the staging push row.
+      // The pre-receive hook, with the parsed ref updates: a refusal is
+      // reported per ref and nothing moves.
+      const meta = yield* stub.readMeta().pipe(
+        Effect.catchTag("StoreError", (error) => Effect.die(error)),
+        Effect.catchTag("RepoNotFound", () => Effect.succeed(undefined)),
+      );
+      if (meta === undefined) return notFound;
+      const rejections = yield* hooks.preReceive({
+        repo: meta,
+        updates: parsed.commands,
+      });
+      if (rejections.length > 0) {
+        return respond(
+          "ok",
+          parsed.commands.map((cmd) => ({
+            ref: cmd.ref,
+            ok: false,
+            reason:
+              rejections.find((r) => r.ref === cmd.ref)?.reason ??
+              "rejected by hook",
+          })),
+        );
+      }
+
+      // Phase 1 in the DO: read-only check and the staging push row.
       const routeStarted = Date.now();
-      const begun = yield* stub.beginPush(auth, { commands: parsed.commands });
+      const begun = yield* stub.beginPush({ commands: parsed.commands });
       const beginMs = Date.now() - routeStarted;
-      if (begun._tag === "unauthorized") return wire401;
       if (begun._tag === "denied") return respond("ok", allNg(begun.reason));
       const pushId = begun.pushId;
 
@@ -1969,10 +1953,7 @@ const makeCore = Effect.gen(function* () {
       if (resolved.success === undefined) {
         return { kind: "halt", response: notFound } as const;
       }
-      // Tokenless raw reads reach the DO as anonymous; the Auth block
-      // grants read on public repos and 401s the rest.
-      const auth: CallerAuth = (yield* currentCaller) ?? null;
-      return { kind: "ok", entry: resolved.success, auth } as const;
+      return { kind: "ok", entry: resolved.success } as const;
     });
 
   /**
@@ -1989,16 +1970,12 @@ const makeCore = Effect.gen(function* () {
     if (prelude.kind === "halt") return prelude.response;
     return yield* repos
       .getByName(prelude.entry.repoId)
-      .readObject(prelude.auth, { oid: params.oid ?? "", expect: "blob" })
+      .readObject({ oid: params.oid ?? "", expect: "blob" })
       .pipe(
         Effect.map((data) =>
           HttpServerResponse.uint8Array(data.content, {
             contentType: "application/octet-stream",
           }),
-        ),
-        Effect.catchTag("Unauthorized", () => Effect.succeed(wire401)),
-        Effect.catchTag("Forbidden", () =>
-          Effect.succeed(HttpServerResponse.text("forbidden", { status: 403 })),
         ),
         Effect.catchTag(["RepoNotFound", "ObjectNotFound"], () =>
           Effect.succeed(HttpServerResponse.text("not found", { status: 404 })),
@@ -2035,16 +2012,12 @@ const makeCore = Effect.gen(function* () {
     if (prelude.kind === "halt") return prelude.response;
     return yield* repos
       .getByName(prelude.entry.repoId)
-      .readFileAtPath(prelude.auth, { ref, path })
+      .readFileAtPath({ ref, path })
       .pipe(
         Effect.map((file) =>
           HttpServerResponse.uint8Array(file.content, {
             contentType: "application/octet-stream",
           }),
-        ),
-        Effect.catchTag("Unauthorized", () => Effect.succeed(wire401)),
-        Effect.catchTag("Forbidden", () =>
-          Effect.succeed(HttpServerResponse.text("forbidden", { status: 403 })),
         ),
         Effect.catchTag(["RepoNotFound", "RefNotFound", "ObjectNotFound"], () =>
           Effect.succeed(HttpServerResponse.text("not found", { status: 404 })),
@@ -2057,7 +2030,6 @@ const makeCore = Effect.gen(function* () {
   // same prelude + DO stubs; auth enforcement stays in the DO.
   const githubRoutes = gitHubCompatRoutes({
     prelude: rawRestPrelude,
-    caller: Effect.map(currentCaller, (principal) => principal ?? null),
     stub: (repoId) => repos.getByName(repoId),
   });
 
@@ -2303,17 +2275,15 @@ export const GitHubPullFilesLive = live(
 /**
  * The default implementation of every git route: provide it to
  * `Http.handlers(api)` for any API derived from {@link GitApi}. Requires
- * the storage and policy blocks; the {@link Authenticated} middleware is
- * required by the routes themselves, through `Http.handlers`.
+ * the storage blocks; the API's middleware is required by the routes
+ * themselves, through `Http.handlers`. A Layer provided nearer than
+ * `Handlers` overrides the route it implements.
  *
  * ```typescript
- * HttpApiBuilder.layer(AppApi).pipe(
- *   Layer.provide(Http.handlers(AppApi)),
+ * Git.Server.layer(AppApi).pipe(
  *   Layer.provide([MeLive, GitHubUserBetterAuth]), // yours, and one override
  *   Layer.provide(Git.Handlers),
- *   Layer.provide(AuthenticatedLive),
- *   Layer.provide(Http.Platform),
- *   HttpRouter.toHttpEffect,
+ *   Layer.provide(SessionLive), // the middleware AppApi declares
  * )
  * ```
  */
@@ -2361,10 +2331,24 @@ export const Handlers = Layer.mergeAll(
   GitHubPullFilesLive,
 );
 
-const makeServer = Effect.gen(function* () {
-  const fetch = yield* HttpApiBuilder.layer(GitApi).pipe(
-    Layer.provide(Http.handlers(GitApi)),
-    Layer.provide(Handlers),
+/** What {@link Server} exposes: the composed HTTP handler for every plane. */
+export interface ServerShape {
+  readonly fetch: Effect.Effect<
+    HttpServerResponse.HttpServerResponse,
+    HttpServerError.HttpServerError,
+    Scope.Scope | HttpServerRequest.HttpServerRequest | RuntimeContext
+  >;
+}
+
+const makeServer = <Id extends string, Groups extends HttpApiGroup.Constraint>(
+  api: HttpApi.HttpApi<Id, Groups>,
+) =>
+  Layer.mergeAll(
+    HttpApiBuilder.layer(api),
+    // The engine's own routes, outside whatever middleware `api` carries.
+    HttpApiBuilder.layer(InternalApi),
+  ).pipe(
+    Layer.provide([Http.handlers(api), Http.handlers(InternalApi)]),
     Layer.provide(Http.Platform),
     HttpRouter.toHttpEffect,
     // Browser clients (e.g. the example SPA) call the REST plane
@@ -2379,19 +2363,32 @@ const makeServer = Effect.gen(function* () {
         maxAge: 86_400,
       }),
     ),
+    // The route effects' request-scoped needs are all served by the
+    // Worker's request (a scope, the request, the runtime): the deferred
+    // exclusions above cannot say so for a generic `api`.
+    Effect.map((fetch): ServerShape => ({
+      fetch: fetch as ServerShape["fetch"],
+    })),
   );
-  return { fetch };
-});
 
 /**
  * `Git.Server` — the top-level building block (RFC "Git Building
  * Blocks" §4): a `Context.Service` exposing the composed HTTP handler
  * for all three planes (git smart-HTTP wire, `/api/v1` REST, `/api/v3`
  * GitHub compat). The package ships no Worker — construct your own and
- * wire `fetch` in:
+ * wire `fetch` in. `Server.layer(api)` serves an API derived from
+ * {@link GitApi}: yours, with your middleware in front of every route
+ * and your own routes beside them; {@link Handlers} implements the
+ * engine's routes, and a Layer provided nearer than it overrides one.
+ * {@link ServerLive} is the open default: `Git.Api`, `Handlers`, nothing
+ * in front.
  *
  * ```ts
- * const GitLive = Git.ServerLive.pipe(
+ * class AppApi extends Git.Api.middleware(Session) {}
+ *
+ * const GitLive = Git.Server.layer(AppApi).pipe(
+ *   Layer.provide(Git.Handlers),
+ *   Layer.provide(SessionLive),
  *   Layer.provide(Git.ReposDurableObject),
  *   Layer.provide(Git.RegistryDurableObject),
  * );
@@ -2406,21 +2403,32 @@ const makeServer = Effect.gen(function* () {
  * ) {}
  * ```
  */
-export class Server extends Context.Service<
-  Server,
-  Effect.Success<typeof makeServer>
->()("alchemy/Git/Server") {}
+export class Server extends Context.Service<Server, ServerShape>()(
+  "alchemy/Git/Server",
+) {
+  /**
+   * `Git.Server` over an API derived from {@link GitApi}. Requires an
+   * implementation of every route ({@link Handlers} for the engine's,
+   * yours for the rest), the API's middleware, and the storage blocks.
+   */
+  static readonly layer = <
+    Id extends string,
+    Groups extends HttpApiGroup.Constraint,
+  >(
+    api: HttpApi.HttpApi<Id, Groups>,
+  ) => Layer.effect(Server, makeServer(api));
+}
 
 /**
- * The default `Git.Server` assembly: all three planes over the Repo and
- * Registry Durable Objects. Provide {@link ReposDurableObject} and
- * {@link RegistryDurableObject} (or your own implementations of the
+ * The default `Git.Server` assembly: {@link GitApi} with {@link Handlers}
+ * and nothing in front of the routes. Provide {@link ReposDurableObject}
+ * and {@link RegistryDurableObject} (or your own implementations of the
  * underlying namespaces) in the same layer graph.
  *
  * @layer
  * @provides Git.Server
  */
-export const ServerLive = Layer.effect(Server, makeServer);
+export const ServerLive = Server.layer(GitApi).pipe(Layer.provide(Handlers));
 
 /**
  * Hosts the `GitRegistry` Durable Object (owner/name → repoId) and
@@ -2434,7 +2442,7 @@ export const ServerLive = Layer.effect(Server, makeServer);
  * protocol) and provides {@link RepoStore} over its namespace. Requires a
  * {@link BlobStore} — provide `Git.BlobStoreR2(yourBucket)` in the same
  * layer graph; one provision serves this DO and the Worker-side reads —
- * plus the {@link Hasher}, the {@link Policy}, and the registry.
+ * plus the {@link Hasher} and the registry.
  *
  * @layer
  * @provides Git.RepoStore

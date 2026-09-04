@@ -671,48 +671,43 @@ Codec inventory: pkt-line reader/writer (65516 payload cap, flush/delim/ERR), si
 
 ## 8. Auth model: nothing inside the engine
 
-The engine holds no credentials and no users. Authentication happens in
-the HTTP middleware the user owns, and the engine asks one pure question
-per action. Three services (`Auth.ts`):
-
-- **`Principal`** — the identity the user's authentication resolved
-  (`{ id, name? }`). Owner names are lowercased, so a repository is a
-  principal's when `repo.owner === principal.id.toLowerCase()`.
-- **`Authenticated`** — the `HttpApiMiddleware` contract every git route
-  declares (`middleware: [Authenticated]` on the route class). It
-  provides **`Caller`**, a principal or anonymous, to the REST plane, the
-  git wire (a `git` client can only send HTTP Basic, token in the
-  password field), the raw blob and file reads, and the GitHub facade
-  alike, so the user implements it once. `Authenticated.make(init)` is
-  an implementation as a Layer: `init` runs at build time and returns
-  the per-request `Resolve`, `(request) => Effect<Principal | undefined>`.
-- **`Policy`** — yes/no over `(principal | undefined, repo | null,
-  GitAction)`, asked inside the Repo DO with the parsed facts (a push
-  carries the refs it wants to move). `PolicyOwners` is the default:
-  anonymous reads public, a principal may create and list, and owns what
-  it owns.
+The engine holds no credentials, no users, and no policy. Who may call
+which route is decided by the `HttpApi` middleware the user puts in front
+of the routes, before the engine sees a request; the engine's routes
+declare no middleware and no auth errors.
 
 Every route is an `alchemy/Http` route class (`Api/*.ts`): an
 `HttpApiEndpoint` carrying the tag of its implementation, so any route
 can be replaced by providing another Layer for its tag nearer the API.
-`Http.handlers(api)` mounts every route group of an `HttpApi` under
-that API's middleware and requires the tags; `Git.Handlers` is the
-default implementation of every route (`Server.ts`, one `*Live` per
-route over the shared core). `ServerLive` is `Http.handlers(GitApi)` +
-`Handlers` + `Http.Platform` behind one `fetch`.
+The user derives an API from `Git.Api` — `Git.Api.middleware(Session)`,
+plus their own routes — and `Server.layer(api)` serves it:
+`Http.handlers(api)` mounts every route group under the API's
+middleware and requires the tags; `Git.Handlers` is the default
+implementation of every route (`Server.ts`, one `*Live` per route over
+the shared core), and a Layer provided nearer than it overrides one.
+`ServerLive` is `Server.layer(Git.Api)` with `Handlers`: the open default.
 
-The Worker resolves the principal once, strips any inbound
-`x-git-principal`, sets it for the DO, and the DO trusts it (only the
-Worker can reach the DO). The push pipeline's internal hash route is
-the one route without the middleware; it authenticates with
-`InternalSecret`, a deploy-time `Alchemy.Random` value no user holds.
+The one decision a middleware cannot make is about the refs a push wants
+to move, because the pack has not been parsed yet. That is git's own
+pre-receive hook, and **`Git.Hooks`** is that hook as an optional
+service: `preReceive({ repo, updates })` runs in the Worker, inside the
+request (so whatever the middleware put in context is readable with
+`Effect.serviceOption`), and returns the refs to refuse with a reason.
+It runs before `git push` moves anything, before the REST ref writes,
+and before a merge; the wire reports the reason per ref, REST answers a
+typed 403 (`HookRejected`).
 
-Shipped implementation: `AuthenticatedSecret({ principal })`, one shared
-secret for a fresh host (the tutorial's starter). Tokens are an
-implementation outside the engine: the example uses Better Auth API
-keys (`@better-auth/api-key`) as the git password and Better Auth
-sessions for browsers, both resolved in its one `Authenticated` layer.
-There is no tokens table and no admin key.
+The push pipeline's internal hash route is not part of `Git.Api`: it is
+`Git.InternalApi`, mounted by `Server.layer` beside the user's API and
+outside the user's middleware; it authenticates with `InternalSecret`, a
+deploy-time `Alchemy.Random` value no user holds.
+
+Tokens, users, and sessions are an implementation outside the engine:
+the example uses Better Auth API keys (`@better-auth/api-key`) as the
+git password and Better Auth sessions for browsers, both resolved in its
+one middleware; anonymous callers read public repositories (the
+middleware asks `Git.RegistryStore`). The test fixtures do the same with
+two shared secrets. There is no tokens table and no admin key.
 
 ---
 
