@@ -152,11 +152,15 @@ export interface DurableObjectStorage {
   deleteAll(
     options?: cf.DurableObjectPutOptions,
   ): Effect.Effect<void, never, RuntimeContext>;
-  transaction<T>(
-    closure: (
-      txn: DurableObjectTransaction,
-    ) => Effect.Effect<T, never, RuntimeContext>,
-  ): Effect.Effect<T, never, RuntimeContext>;
+  /**
+   * Run `closure` inside a storage transaction. The closure runs with the
+   * caller's full context (services, tracing), as `waitUntil` does, so a
+   * service provided to the calling fiber is visible inside the transaction.
+   * A defect in the closure rolls the transaction back.
+   */
+  transaction<T, R = never>(
+    closure: (txn: DurableObjectTransaction) => Effect.Effect<T, never, R>,
+  ): Effect.Effect<T, never, R | RuntimeContext>;
   getAlarm(
     options?: cf.DurableObjectGetAlarmOptions,
   ): Effect.Effect<number | null, never, RuntimeContext>;
@@ -249,14 +253,23 @@ export const fromDurableObjectStorage = (
     Effect.tryPromise(() => storage.delete(keyOrKeys as any, options))) as any,
   deleteAll: (options?: cf.DurableObjectPutOptions) =>
     Effect.tryPromise(() => storage.deleteAll(options)),
-  transaction: <T>(
-    closure: (txn: DurableObjectTransaction) => Effect.Effect<T>,
+  transaction: <T, R = never>(
+    closure: (txn: DurableObjectTransaction) => Effect.Effect<T, never, R>,
   ) =>
-    Effect.tryPromise(() =>
-      storage.transaction((txn) =>
-        Effect.runPromise(closure(fromDurableObjectTransaction(txn))),
-      ),
-    ),
+    Effect.gen(function* () {
+      const context = yield* Effect.context<R>();
+      // The failure is typed away as before: a rejected transaction has
+      // rolled back, and the rejection reaches the caller as a defect.
+      return yield* Effect.tryPromise<T, never>(() =>
+        storage.transaction((txn) =>
+          Effect.runPromise(
+            closure(fromDurableObjectTransaction(txn)).pipe(
+              Effect.provide(context),
+            ),
+          ),
+        ),
+      );
+    }),
   getAlarm: (options?: cf.DurableObjectGetAlarmOptions) =>
     Effect.tryPromise(() => storage.getAlarm(options)),
   setAlarm: (
