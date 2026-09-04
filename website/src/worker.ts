@@ -60,7 +60,7 @@ const REDIRECTS: Record<string, string> = {
   "/tutorial/cloudflare/rpc-durable-object":
     "/cloudflare/compute/durable-objects#schemaless-rpc",
   "/tutorial/cloudflare/rpc-worker":
-    "/cloudflare/compute/workers#schemaless-rpc",
+    "/cloudflare/compute/workers#call-another-worker",
   "/tutorial/cloudflare/ai-gateway": "/cloudflare/ai/ai-gateway",
   "/tutorial/cloudflare/ai-search": "/cloudflare/ai/ai-search",
   "/tutorial/cloudflare/artifacts": "/cloudflare/data/artifacts",
