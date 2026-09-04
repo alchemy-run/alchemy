@@ -1,0 +1,47 @@
+---
+title: hosts
+description: Maintain the hosts-file entries a custom `alchemy dev --domain` needs — run once with sudo, alchemy dev never touches the file itself.
+---
+
+```sh
+sudo alchemy hosts add <host...>
+sudo alchemy hosts remove <host...>
+alchemy hosts list
+```
+
+`alchemy dev` serves every local resource as `<name>.<domain>`. With the default domain, `localhost`, nothing needs configuring: `api.localhost` resolves on every OS and browser. A custom domain (`alchemy dev --domain myapp.test`) does not resolve on its own, and the system hosts file has no wildcards, so it needs one entry per host.
+
+That file is owned by root. `alchemy dev` never writes it and must not run under sudo — it detects the missing hosts and prints the exact command to run instead:
+
+```sh
+sudo alchemy hosts add api.myapp.test web.myapp.test
+```
+
+Entries live in a marked block alchemy owns, mapping each host to `127.0.0.1` and `::1`. The command is idempotent and never edits lines outside the block.
+
+## Subcommands
+
+| Command | Description |
+| ------- | ----------- |
+| `add <host...>` | Map hosts to the loopback (skips ones already mapped anywhere in the file) |
+| `remove <host...>` | Drop hosts from alchemy's block |
+| `list` | Print the hosts alchemy manages |
+
+## Flags
+
+| Option | Description |
+| ------ | ----------- |
+| `--file <path>` | Hosts file to edit (defaults to `/etc/hosts`, or the Windows equivalent) |
+
+## Without the CLI on root's PATH
+
+`sudo` may not see a project-local `alchemy` binary. The plain-shell equivalent appends the same mappings (without the idempotent block):
+
+```sh
+sudo sh -c 'printf "127.0.0.1 api.myapp.test\n::1 api.myapp.test\n" >> /etc/hosts'
+```
+
+## Where next
+
+- [dev](/cli/dev) — `--domain` and `--port`
+- [Local development](/environments/local-development)

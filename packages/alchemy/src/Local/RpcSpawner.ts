@@ -108,6 +108,8 @@ export const make = Effect.fn(function* ({
         : Console.log(line.line);
     });
 
+  // The spawner's own address, known once the HTTP server below is up.
+  let spawnerUrl: string | undefined;
   const spawn = Effect.fn(function* (serverEntryUrl: string) {
     const bin = typeof globalThis.Bun !== "undefined" ? "bun" : "node";
     const main = fileURLToPath(serverEntryUrl);
@@ -155,6 +157,14 @@ export const make = Effect.fn(function* ({
         // (workerd, emulators) instead of orphaning them.
         env: {
           [RPC_SERVER_ENVIRONMENT_KEY]: JSON.stringify(environment),
+          // Sidecars can reach each other through the spawner (e.g. the
+          // Command.Dev sidecar registering its dev server with the dev
+          // ingress hosted by the Cloudflare sidecar). Set only once the
+          // spawner's HTTP server is listening — which it always is by the
+          // time the first spawn request arrives.
+          ...(spawnerUrl !== undefined
+            ? { [SPAWNER_URL_ENV_KEY]: spawnerUrl }
+            : {}),
           ...pipedColorEnv(),
         },
         extendEnv: true,
@@ -285,9 +295,8 @@ export const make = Effect.fn(function* ({
     }),
   );
 
-  return RpcSpawner.of({
-    url: HttpServer.formatAddress(server.address),
-  });
+  spawnerUrl = HttpServer.formatAddress(server.address);
+  return RpcSpawner.of({ url: spawnerUrl });
 });
 
 export const layerServer = (

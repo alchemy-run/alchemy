@@ -18,7 +18,7 @@ alchemy dev
 <Terminal content={`[g]✓[/g] [b]Bucket[/b] [d](Cloudflare.R2.Bucket)[/d] [g]created[/g] [d](local)[/d]
 [g]✓[/g] [b]DB[/b] [d](Cloudflare.D1.Database)[/d] [g]created[/g] [d](local)[/d]
 [g]✓[/g] [b]Worker[/b] [d](Cloudflare.Worker)[/d] [g]created[/g] [d](local → workerd)[/d]
-[s2][d]• http://localhost:1337[/d]
+[s2][d]• http://worker.localhost:1337[/d]
 
 [d]Watching for changes ...[/d]`} />
 
@@ -47,7 +47,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
 ```
 
 In dev, `kv.put` lands in a local KV simulator and the Worker
-serves at `http://localhost:<port>`. Durable Objects run inside
+serves at `http://api.localhost:1337`. Durable Objects run inside
 the same workerd instance, cron triggers fire on their real
 schedule (and the miniflare-compatible
 `/cdn-cgi/handler/scheduled` route triggers them manually), and
@@ -56,6 +56,28 @@ set breakpoints, and profile.
 
 A local resource's id is `dev:`-prefixed, which doubles as proof
 that no cloud call ran.
+
+## One port, a subdomain per Worker
+
+Every local Worker is reachable through one shared ingress on port
+`1337` as `http://<name>.localhost:1337` — the name is the Worker's
+logical id in kebab-case (`Api` → `api.localhost`, `MyApi` →
+`my-api.localhost`), or whatever `dev: { subdomain }` says:
+
+```typescript
+export default class Api extends Cloudflare.Worker<Api>()(
+  "Api",
+  { main: import.meta.url, dev: { subdomain: "api" } },
+  // ...
+) {}
+```
+
+Each Worker keeps its own `http://localhost:<port>` too (it follows in
+`worker.urls`), and `http://localhost:1337` alone forwards to the only
+Worker or lists them all. Distinct origins make CORS behave like
+production; for cookies shared across subdomains use a real-looking
+domain with `alchemy dev --domain myapp.test` (see
+[dev](/cli/dev#subdomains) and [hosts](/cli/hosts)).
 
 ## Websites run their own dev servers
 
@@ -107,7 +129,7 @@ dev:
 
 | Resource                 | Local behavior                                                                    |
 | ------------------------ | --------------------------------------------------------------------------------- |
-| Workers                  | workerd, with hot reload and a `http://localhost:<port>` URL                       |
+| Workers                  | workerd, with hot reload, a `http://<name>.localhost:1337` URL |
 | Durable Objects          | run inside the local workerd, including SQLite storage                             |
 | KV Namespaces            | local simulator; Node-side capability clients hit the same store                   |
 | R2 Buckets               | local simulator                                                                    |

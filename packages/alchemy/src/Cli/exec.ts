@@ -82,6 +82,10 @@ const runDev = Effect.fn(function* (options: DevOptions) {
     force: options.force,
     updateStateStore: true,
     dev: true,
+    ingress: {
+      domain: options.domain,
+      port: options.port,
+    },
   }).pipe(renderPlanning({ operation: "Dev", stage: options.stage }));
   const once = yield* devOnce;
   const applyPlan = Stacks.apply(snapshot).pipe(

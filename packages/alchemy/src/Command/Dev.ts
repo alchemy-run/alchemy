@@ -1,9 +1,11 @@
 import * as ConsoleService from "effect/Console";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import { stripVTControlCharacters } from "node:util";
 import { makeResourceOutput } from "../Util/ResourceOutput.ts";
+import { DevIngressClient } from "../Local/DevIngressClient.ts";
 import { makeDevLogOpener } from "../Local/DevLog.ts";
 import { FQN_SEPARATOR } from "../FQN.ts";
 import * as LocalProvider from "../Local/LocalProvider.ts";
@@ -120,6 +122,9 @@ export const DevProviderLocal = () =>
       const stage = yield* Stage;
       const openDevLog = yield* makeDevLogOpener;
       const baseConsole = yield* ConsoleService.Console;
+      // Present in the dev sidecar; absent in in-process runs, where the
+      // dev server is simply not put on the ingress.
+      const devIngress = yield* Effect.serviceOption(DevIngressClient);
 
       return {
         // The dev process is spawned into the instance scope the helper
@@ -216,8 +221,29 @@ export const DevProviderLocal = () =>
             Effect.forkScoped,
           );
 
+          // Put the dev server on the shared ingress too (`<name>.<domain>`).
+          // `url` stays the server's own address:
+          // emulators in Docker (floci's CloudFront edge) dial it directly
+          // and cannot resolve `*.localhost` names.
+          if (url !== undefined && Option.isSome(devIngress)) {
+            const exposed = yield* devIngress.value.expose({
+              fqn,
+              type: "Command.Dev",
+              upstream: url,
+            });
+            if (exposed) {
+              yield* Effect.log(
+                `[${fqn}] ${exposed.urls.map((u) => `→ ${u}`).join("  ")}`,
+              );
+            }
+          }
+
           return { url };
         }),
+        stop: ({ fqn }) =>
+          Option.isSome(devIngress)
+            ? devIngress.value.unexpose(fqn)
+            : Effect.void,
       } satisfies LocalProvider.LocalProviderSpec<Dev>;
     }),
   );

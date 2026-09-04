@@ -1,7 +1,7 @@
 import type { ConfigError } from "effect/Config";
 import * as Effect from "effect/Effect";
 import type * as Scope from "effect/Scope";
-import { AlchemyContext } from "./AlchemyContext.ts";
+import { AlchemyContext, type DevIngressOptions } from "./AlchemyContext.ts";
 import * as Apply from "./Apply.ts";
 import type { Input } from "./Input.ts";
 import * as Plan from "./Plan.ts";
@@ -12,12 +12,15 @@ export const deploy = <A>({
   stack,
   stage,
   dev,
+  ingress,
   scope,
   force,
 }: {
   stack: StackEffect<CompiledStack<A>, ConfigError, Stage | AlchemyContext>;
   stage: string;
   dev?: boolean;
+  /** The `alchemy dev` ingress options (dev runs only). */
+  ingress?: DevIngressOptions;
   /** See {@link evalStack} — when set, scoped resources outlive `deploy`. */
   scope?: Scope.Scope;
   force?: boolean;
@@ -30,5 +33,5 @@ export const deploy = <A>({
         const output = yield* Apply.apply(plan);
         return output as Input.Resolve<A>;
       }),
-    { stage, dev, scope },
+    { stage, dev, ingress, scope },
   );

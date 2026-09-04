@@ -39,6 +39,7 @@ const commandMetadata = [
   ["profile", "Manage authentication profiles and accounts"],
   ["state", "Inspect and manage deployment state"],
   ["drift", "Detect infrastructure drift"],
+  ["hosts", "Manage hosts-file entries for `alchemy dev --domain`"],
   ["unsafe", "Unsafe maintenance commands"],
 ] as const;
 
@@ -70,6 +71,8 @@ const loadCommand = async (name: CommandName) => {
       return (await import("./commands/state.ts")).stateCommand;
     case "drift":
       return (await import("./commands/drift.ts")).driftCommand;
+    case "hosts":
+      return (await import("./commands/hosts.ts")).hostsCommand;
     case "unsafe":
       return (await import("./commands/nuke.ts")).unsafeCommand;
   }
