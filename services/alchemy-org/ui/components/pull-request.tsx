@@ -7,6 +7,7 @@ import {
   toGitDiff,
   type ChangedFile,
 } from "@/lib/diff";
+import { parseFileFilter } from "@/lib/glob";
 import {
   NAVIGATE_EVENT,
   overviewId,
@@ -22,9 +23,13 @@ import {
   type FileDiffMetadata,
 } from "@pierre/diffs";
 import {
+  ChevronDown,
+  ChevronsDownUp,
+  ChevronsUpDown,
   CircleCheck,
   CircleSlash,
   ExternalLink,
+  Filter,
   FileDiff as FileDiffIcon,
   GitBranch,
   GitMerge,
@@ -35,6 +40,7 @@ import {
   RefreshCw,
   Sparkles,
   SquareTerminal,
+  X,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -260,20 +266,21 @@ const Timestamp = ({ iso, href }: { iso: string; href: string }) => (
 type Markdown = ComponentType<{ text: string; repo?: string }>;
 
 /* ── the conversation's geometry (GitHub's) ──
-   A GUTTER on the left holds the connector line and, for comments, the
-   author's avatar; cards fill the width from the gutter's edge. The
-   line is drawn once, behind everything: cards are opaque, so it shows
-   only in the gaps between items and beside event rows (reviews),
-   whose icon badge sits centered on it. A comment is never flanked by
-   a line — the card's own border is its left edge. */
-const GUTTER = "pl-11"; // 44px: a 32px avatar + 12px of air
-const LINE_LEFT = "left-[59px]"; // 44px gutter + 16px = the badge's center
-const BADGE = "size-8"; // 32px, on the line: center = 44 + 16
+   One column: the description and every comment are cards of the same
+   width at the same edge, each author's avatar INSIDE its card's strip.
+   A trail — the timeline line — runs down behind the column through the
+   avatars' center; cards are opaque, so it shows only in the gaps
+   between them, connecting one to the next, and beside event rows
+   (reviews), whose icon badge sits centered on it. */
+// the avatar's center: a px-3 strip (12px) + half a size-5 avatar (10px)
+// = 22px; the 2px trail is drawn 1px to its left (literal classes —
+// Tailwind scans for them, so no arithmetic in the class name)
+const TRAIL_LEFT = "left-[21px]";
+const BADGE = "size-8 ml-1.5"; // 32px: its center at 6 + 16 = the trail
 
-/** A GitHub-style comment card: the author's avatar in the gutter
- *  (or, for the top-level description, in the strip itself), the verb
- *  strip, then the markdown body. Opaque, so it hides the timeline
- *  line behind it. */
+/** A GitHub-style comment card: the strip — the author's avatar, their
+ *  login, the verb, the time — then the markdown body. Opaque, so it
+ *  hides the trail behind it. */
 const CommentCard = ({
   author,
   createdAt,
@@ -282,7 +289,6 @@ const CommentCard = ({
   repo,
   Markdown,
   heading,
-  gutter = true,
 }: {
   author: Author;
   createdAt: string;
@@ -292,31 +298,21 @@ const CommentCard = ({
   Markdown: Markdown;
   /** Replaces the default "commented" verb line. */
   heading?: React.ReactNode;
-  /** `false` for a card that stands alone at full width — the avatar
-   *  moves into the strip, and nothing hangs in a gutter. */
-  gutter?: boolean;
 }) => (
-  <div className="relative">
-    {gutter && (
-      <div className="absolute top-0 -left-11">
-        <Avatar author={author} size={8} />
-      </div>
-    )}
-    <div className="rounded-lg border border-border bg-background">
-      <div className="flex items-center gap-2 rounded-t-lg border-b border-border bg-muted/30 px-3 py-1.5 text-xs">
-        {!gutter && <Avatar author={author} size={5} />}
-        <Login author={author} />
-        <span className="text-muted-foreground">{heading ?? "commented"}</span>
-        <span className="ml-auto" />
-        <Timestamp iso={createdAt} href={htmlUrl} />
-      </div>
-      <div className="px-3 py-2 text-[13px]">
-        {body.trim().length > 0 ? (
-          <Markdown text={body} repo={repo} />
-        ) : (
-          <span className="italic text-muted-foreground">No description.</span>
-        )}
-      </div>
+  <div className="rounded-lg border border-border bg-background">
+    <div className="flex items-center gap-2 rounded-t-lg border-b border-border bg-muted/30 px-3 py-1.5 text-xs">
+      <Avatar author={author} size={5} />
+      <Login author={author} />
+      <span className="text-muted-foreground">{heading ?? "commented"}</span>
+      <span className="ml-auto" />
+      <Timestamp iso={createdAt} href={htmlUrl} />
+    </div>
+    <div className="px-3 py-2 text-[13px]">
+      {body.trim().length > 0 ? (
+        <Markdown text={body} repo={repo} />
+      ) : (
+        <span className="italic text-muted-foreground">No description.</span>
+      )}
     </div>
   </div>
 );
@@ -412,7 +408,7 @@ const ReviewCard = ({
         <Timestamp iso={item.createdAt} href={item.htmlUrl} />
       </div>
       {(item.body.trim().length > 0 || item.comments.length > 0) && (
-        <div className="flex flex-col gap-2 pl-10">
+        <div className="flex flex-col gap-2">
           {item.body.trim().length > 0 && (
             <div className={cn("callout px-3 py-2 text-[13px]", state.callout)}>
               <Markdown text={item.body} repo={repo} />
@@ -594,17 +590,42 @@ const NearViewport = ({
   return <div ref={ref}>{near ? children : placeholder}</div>;
 };
 
-/** The header-only stand-in for a diff not (yet) rendered: the path,
- *  its +/−, and whatever `children` says about why. */
+/** A file's card: OUR header — a collapse chevron, the path, its +/− —
+ *  over whatever `children` is (the rendered diff, or a note on why
+ *  there is none). Collapsed, only the header stays; the body is kept
+ *  mounted so expanding it again costs nothing. */
 const FileShell = ({
   file,
+  collapsed,
+  onToggle,
   children,
 }: {
   file: ChangedFile;
-  children?: ReactNode;
+  collapsed: boolean;
+  onToggle: () => void;
+  children: ReactNode;
 }) => (
   <div className="code-surface overflow-hidden rounded-md border text-[13px]">
-    <div className="flex items-center gap-2 bg-code-foreground/5 px-3 py-1.5">
+    <div className="flex items-center gap-1.5 bg-code-foreground/5 py-1 pr-3 pl-1.5">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={!collapsed}
+        aria-label={`${collapsed ? "Expand" : "Collapse"} ${file.filename}`}
+        title={
+          collapsed
+            ? `Expand — show ${file.filename}'s diff again.`
+            : `Collapse — fold ${file.filename} down to this header; click again to reopen.`
+        }
+        className="flex size-6 shrink-0 items-center justify-center rounded-md text-code-muted hover:bg-code-foreground/10 hover:text-code-foreground"
+      >
+        <ChevronDown
+          className={cn(
+            "size-3.5 transition-transform",
+            collapsed && "-rotate-90",
+          )}
+        />
+      </button>
       <span className="truncate font-mono text-xs" title={file.filename}>
         {file.previousFilename !== undefined && (
           <span className="text-code-muted">{file.previousFilename} → </span>
@@ -618,13 +639,22 @@ const FileShell = ({
         onCode
       />
     </div>
-    {children !== undefined && (
-      <div className="flex items-center justify-center gap-3 border-t border-code-border px-3 py-6 text-xs text-code-muted">
-        {children}
-      </div>
-    )}
+    <div hidden={collapsed} className="border-t border-code-border">
+      {children}
+    </div>
   </div>
 );
+
+/** A line under a file's header saying why there is no diff to show. */
+const FileNote = ({ children }: { children: ReactNode }) => (
+  <div className="flex items-center justify-center gap-3 px-3 py-6 text-xs text-code-muted">
+    {children}
+  </div>
+);
+
+/** A small bordered button on the page surface (the file list's chrome). */
+const SMALL_BUTTON =
+  "flex items-center gap-1 rounded-md border border-border bg-background px-2 py-0.5 text-foreground shadow-xs hover:bg-accent";
 
 /** A button or link drawn on the code surface. */
 const ON_CODE_BUTTON =
@@ -634,58 +664,70 @@ const ChangedFileCard = ({
   entry,
   comments,
   renderAnnotation,
+  collapsed,
+  onToggle,
 }: {
   entry: RenderableFile;
   comments: InlineComment[];
   renderAnnotation: (
     annotation: DiffLineAnnotation<InlineComment[]>,
   ) => ReactNode;
+  collapsed: boolean;
+  onToggle: () => void;
 }) => {
   const { file, meta, raw } = entry;
   const large = file.additions + file.deletions > LARGE_FILE_LINES;
   const [shown, setShown] = useState(!large);
+  const shell = { file, collapsed, onToggle };
   if (meta === undefined || raw === undefined) {
     return (
-      <FileShell file={file}>
-        {file.additions + file.deletions === 0
-          ? "GitHub provided no diff for this file — a binary, or one it did not diff."
-          : "This file's diff is too large for GitHub to serve."}
-        <a
-          href={file.blobUrl}
-          target="_blank"
-          rel="noreferrer"
-          title={`Open ${file.filename} at the pull request's head on github.com.`}
-          className={ON_CODE_BUTTON}
-        >
-          View file <ExternalLink className="size-3" />
-        </a>
+      <FileShell {...shell}>
+        <FileNote>
+          {file.additions + file.deletions === 0
+            ? "GitHub provided no diff for this file — a binary, or one it did not diff."
+            : "This file's diff is too large for GitHub to serve."}
+          <a
+            href={file.blobUrl}
+            target="_blank"
+            rel="noreferrer"
+            title={`Open ${file.filename} at the pull request's head on github.com.`}
+            className={ON_CODE_BUTTON}
+          >
+            View file <ExternalLink className="size-3" />
+          </a>
+        </FileNote>
       </FileShell>
     );
   }
   if (!shown) {
     return (
-      <FileShell file={file}>
-        Large diff not rendered by default.
-        <button
-          type="button"
-          onClick={() => setShown(true)}
-          title={`Render this file's diff — ${(file.additions + file.deletions).toLocaleString()} changed lines, more than the ${LARGE_FILE_LINES.toLocaleString()} rendered without asking.`}
-          className={ON_CODE_BUTTON}
-        >
-          Load diff
-        </button>
+      <FileShell {...shell}>
+        <FileNote>
+          Large diff not rendered by default.
+          <button
+            type="button"
+            onClick={() => setShown(true)}
+            title={`Render this file's diff — ${(file.additions + file.deletions).toLocaleString()} changed lines, more than the ${LARGE_FILE_LINES.toLocaleString()} rendered without asking.`}
+            className={ON_CODE_BUTTON}
+          >
+            Load diff
+          </button>
+        </FileNote>
       </FileShell>
     );
   }
   return (
-    <NearViewport placeholder={<FileShell file={file} />}>
-      <FileDiffCard
-        file={meta}
-        fallback={raw}
-        annotations={annotationsFor(file.filename, comments)}
-        renderAnnotation={renderAnnotation}
-      />
-    </NearViewport>
+    <FileShell {...shell}>
+      <NearViewport placeholder={<div className="h-16" />}>
+        <FileDiffCard
+          bare
+          file={meta}
+          fallback={raw}
+          annotations={annotationsFor(file.filename, comments)}
+          renderAnnotation={renderAnnotation}
+        />
+      </NearViewport>
+    </FileShell>
   );
 };
 
@@ -765,9 +807,40 @@ const PullRequestFiles = ({
     </div>
   );
 
+  // which files are folded to their header — a Set of paths, so a
+  // reload of the same PR keeps the reader's folds
+  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const toggle = useCallback(
+    (name: string) =>
+      setCollapsed((prev) => {
+        const next = new Set(prev);
+        if (!next.delete(name)) next.add(name);
+        return next;
+      }),
+    [],
+  );
+
+  // the glob filter — see lib/glob.ts for the grammar
+  const [filterText, setFilterText] = useState("");
+  const filter = useMemo(() => parseFileFilter(filterText), [filterText]);
+  const shown = useMemo(
+    () => files.filter(({ file }) => filter.matches(file.filename)),
+    [files, filter],
+  );
+
   const cards = useRef(new Map<string, HTMLDivElement>());
-  const jumpTo = (name: string) =>
+  const jumpTo = (name: string) => {
+    // a fold hides the target; open it so there is somewhere to land
+    setCollapsed((prev) => {
+      if (!prev.has(name)) return prev;
+      const next = new Set(prev);
+      next.delete(name);
+      return next;
+    });
     cards.current.get(name)?.scrollIntoView({ block: "start" });
+  };
 
   const renderAnnotation = useCallback(
     (annotation: DiffLineAnnotation<InlineComment[]>) => (
@@ -801,22 +874,35 @@ const PullRequestFiles = ({
     );
   }
 
-  const total = files.reduce(
+  const total = shown.reduce(
     (sum, { file }) => ({
       additions: sum.additions + file.additions,
       deletions: sum.deletions + file.deletions,
     }),
     { additions: 0, deletions: 0 },
   );
+  const allFolded = shown.every(({ file }) => collapsed.has(file.filename));
+  const foldAll = (fold: boolean) =>
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      for (const { file } of shown) {
+        if (fold) next.add(file.filename);
+        else next.delete(file.filename);
+      }
+      return next;
+    });
 
   return (
     <div className="flex flex-col gap-4">
       {refreshBar}
-      {/* the file list — GitHub's summary: every path, its +/−, a jump */}
+      {/* the file list — GitHub's summary: every path, its +/−, a jump;
+          the filter and the fold-all controls live in its header */}
       <div className="rounded-lg border border-border bg-background">
         <div className="flex items-center gap-2 border-b border-border bg-muted/30 px-3 py-1.5 text-xs">
           <span className="font-medium">
-            {files.length} file{files.length === 1 ? "" : "s"} changed
+            {filter.active
+              ? `${shown.length} of ${files.length} file${files.length === 1 ? "" : "s"}`
+              : `${files.length} file${files.length === 1 ? "" : "s"} changed`}
           </span>
           {loading && (
             <span
@@ -831,17 +917,59 @@ const PullRequestFiles = ({
               diff incomplete: {error}
             </span>
           )}
-          <FileStat
-            additions={total.additions}
-            deletions={total.deletions}
-            className="ml-auto"
+          <span className="ml-auto flex items-center gap-1">
+            {allFolded ? (
+              <button
+                type="button"
+                onClick={() => foldAll(false)}
+                title="Expand all — reopen every file shown here."
+                className={SMALL_BUTTON}
+              >
+                <ChevronsUpDown className="size-3" /> Expand all
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => foldAll(true)}
+                title="Collapse all — fold every file shown here down to its header, to skim the list and open one at a time."
+                className={SMALL_BUTTON}
+              >
+                <ChevronsDownUp className="size-3" /> Collapse all
+              </button>
+            )}
+          </span>
+          <FileStat additions={total.additions} deletions={total.deletions} />
+        </div>
+        <div className="flex items-center gap-2 border-b border-border px-3 py-1 text-xs">
+          <Filter className="size-3 shrink-0 text-muted-foreground" />
+          <input
+            type="text"
+            value={filterText}
+            onChange={(event) => setFilterText(event.target.value)}
+            aria-label="filter files"
+            placeholder="Filter files — globs: src/**/*.ts  *.test.ts  !*.md"
+            spellCheck={false}
+            autoComplete="off"
+            title="Filter — globs separated by spaces or commas. `*.ts` matches by name at any depth, `src/**/*.ts` by path, `!` excludes, a bare word matches anywhere in the path."
+            className="min-w-0 flex-1 bg-transparent py-0.5 font-mono text-xs outline-none placeholder:font-sans placeholder:text-muted-foreground"
           />
+          {filterText !== "" && (
+            <button
+              type="button"
+              onClick={() => setFilterText("")}
+              aria-label="Clear filter"
+              title="Clear the filter — show every file again."
+              className="flex size-5 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+            >
+              <X className="size-3" />
+            </button>
+          )}
         </div>
         <ul
           aria-label="changed files"
           className="max-h-64 overflow-y-auto py-1 text-xs"
         >
-          {files.map(({ file }) => (
+          {shown.map(({ file }) => (
             <li key={file.filename}>
               <button
                 type="button"
@@ -864,9 +992,17 @@ const PullRequestFiles = ({
               </button>
             </li>
           ))}
+          {shown.length === 0 && (
+            <li className="px-3 py-3 text-center text-muted-foreground">
+              No file matches{" "}
+              <span className="font-mono">{filterText.trim()}</span>.
+            </li>
+          )}
         </ul>
       </div>
 
+      {/* filtered-out cards stay mounted (hidden) — clearing the filter
+          must not re-render a diff the reader had scrolled into */}
       {files.map((entry) => (
         <div
           key={entry.file.filename}
@@ -875,12 +1011,15 @@ const PullRequestFiles = ({
             else cards.current.delete(entry.file.filename);
           }}
           data-changed-file={entry.file.filename}
+          hidden={!filter.matches(entry.file.filename)}
           className="scroll-mt-2"
         >
           <ChangedFileCard
             entry={entry}
             comments={comments}
             renderAnnotation={renderAnnotation}
+            collapsed={collapsed.has(entry.file.filename)}
+            onToggle={() => toggle(entry.file.filename)}
           />
         </div>
       ))}
@@ -1387,14 +1526,26 @@ export const PullRequestOverview = ({
           ))}
         </div>
 
-        {/* ── the conversation: the description at full width, then
-            the timeline in GitHub's gutter geometry ── */}
+        {/* ── the conversation: the description, then the timeline —
+            one column of cards on one edge, the trail behind them ── */}
         <div
           role="tabpanel"
           aria-label="conversation"
           hidden={tab !== "conversation"}
-          className="flex flex-col gap-4"
+          // `isolate` makes this the stacking root, so the trail's
+          // negative z sits behind the cards but still over the page
+          className="relative isolate flex flex-col gap-4"
         >
+          {/* the trail, drawn once behind the whole column */}
+          {view.timeline.length > 0 && (
+            <div
+              aria-hidden
+              className={cn(
+                "absolute top-4 -z-10 bottom-4 w-0.5 bg-border",
+                TRAIL_LEFT,
+              )}
+            />
+          )}
           <CommentCard
             author={view.author}
             createdAt={view.createdAt}
@@ -1403,39 +1554,28 @@ export const PullRequestOverview = ({
             repo={view.repo}
             Markdown={Markdown}
             heading="opened this pull request"
-            gutter={false}
           />
           {view.timeline.length > 0 ? (
-            <div className={cn("relative flex flex-col gap-4", GUTTER)}>
-              {/* the connector, drawn once behind the whole column */}
-              <div
-                aria-hidden
-                className={cn(
-                  "absolute top-4 bottom-4 w-0.5 bg-border/60",
-                  LINE_LEFT,
-                )}
-              />
-              {view.timeline.map((item) =>
-                item.kind === "comment" ? (
-                  <CommentCard
-                    key={`c${item.id}`}
-                    author={item.author}
-                    createdAt={item.createdAt}
-                    htmlUrl={item.htmlUrl}
-                    body={item.body}
-                    repo={view.repo}
-                    Markdown={Markdown}
-                  />
-                ) : (
-                  <ReviewCard
-                    key={`r${item.id}`}
-                    item={item}
-                    repo={view.repo}
-                    Markdown={Markdown}
-                  />
-                ),
-              )}
-            </div>
+            view.timeline.map((item) =>
+              item.kind === "comment" ? (
+                <CommentCard
+                  key={`c${item.id}`}
+                  author={item.author}
+                  createdAt={item.createdAt}
+                  htmlUrl={item.htmlUrl}
+                  body={item.body}
+                  repo={view.repo}
+                  Markdown={Markdown}
+                />
+              ) : (
+                <ReviewCard
+                  key={`r${item.id}`}
+                  item={item}
+                  repo={view.repo}
+                  Markdown={Markdown}
+                />
+              ),
+            )
           ) : (
             <div className="py-2 text-center text-xs text-muted-foreground">
               No comments yet.

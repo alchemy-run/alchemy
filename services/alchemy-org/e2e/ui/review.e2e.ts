@@ -203,7 +203,7 @@ test.describe("files changed", () => {
       ),
     ).toBeAttached();
     await files(page)
-      .getByRole("button", { name: /test\/arrays\.test\.ts/ })
+      .getByRole("button", { name: /^test\/arrays\.test\.ts/ })
       .click();
     await expect(card(page, "test/arrays.test.ts")).toBeInViewport();
     await views(page)
@@ -228,7 +228,7 @@ test.describe("files changed", () => {
     const fetched = api.filePages.length;
     // scroll down to the second file and mark its rendered node
     await files(page)
-      .getByRole("button", { name: /test\/arrays\.test\.ts/ })
+      .getByRole("button", { name: /^test\/arrays\.test\.ts/ })
       .click();
     await expect(second).toBeInViewport();
     const scroller = main(page).locator(".overflow-y-auto").first();
@@ -333,6 +333,98 @@ test.describe("files changed", () => {
     await expect(
       large.getByText("should dedupe preserving order"),
     ).toBeAttached();
+  });
+
+  test("a file folds to its header, and back — singly or all at once", async ({
+    page,
+  }) => {
+    await openApp(page, `${pathOf(`pr:alchemy-run/test-alchemy#147`)}/files`);
+    const first = card(page, "src/arrays.ts");
+    const second = card(page, "test/arrays.test.ts");
+    const code = first.getByText("chunk size must be a positive integer");
+    await expect(code).toBeVisible();
+    // fold: the header (path, +/−) stays, the code is hidden — not gone
+    const fold = first.getByRole("button", {
+      name: /^(Collapse|Expand) src\/arrays\.ts$/,
+    });
+    await expect(fold).toHaveAttribute("aria-expanded", "true");
+    await fold.click();
+    await expect(fold).toHaveAttribute("aria-expanded", "false");
+    await expect(first).toContainText("src/arrays.ts");
+    await expect(first).toContainText("+14");
+    await expect(code).toBeHidden();
+    await expect(code).toBeAttached();
+    // the other file is untouched
+    await expect(
+      second.getByText("should dedupe preserving order"),
+    ).toBeVisible();
+    // and back
+    await fold.click();
+    await expect(code).toBeVisible();
+    // all at once — the button flips to its inverse
+    await files(page).getByRole("button", { name: "Collapse all" }).click();
+    await expect(code).toBeHidden();
+    await expect(
+      second.getByText("should dedupe preserving order"),
+    ).toBeHidden();
+    await expect(
+      files(page).getByRole("button", { name: "Collapse all" }),
+    ).toHaveCount(0);
+    // jumping to a folded file opens it
+    await files(page)
+      .getByRole("button", { name: /^src\/arrays\.ts/ })
+      .click();
+    await expect(code).toBeVisible();
+    // one open again → the button offers to fold, not to open
+    await files(page).getByRole("button", { name: "Collapse all" }).click();
+    await expect(code).toBeHidden();
+    await files(page).getByRole("button", { name: "Expand all" }).click();
+    await expect(code).toBeVisible();
+    await expect(
+      second.getByText("should dedupe preserving order"),
+    ).toBeVisible();
+  });
+
+  test("globs filter the files — list and cards — without dropping a rendered diff", async ({
+    page,
+  }) => {
+    await openApp(page, `${pathOf(`pr:alchemy-run/test-alchemy#147`)}/files`);
+    const second = card(page, "test/arrays.test.ts");
+    await expect(
+      second.getByText("should dedupe preserving order"),
+    ).toBeVisible();
+    await second.evaluate((node) => {
+      node.dataset.rendered = "once";
+    });
+    const list = files(page)
+      .getByRole("list", { name: "changed files" })
+      .getByRole("listitem");
+    const input = files(page).getByRole("textbox", { name: "filter files" });
+    // by name, at any depth
+    await input.fill("*.test.ts");
+    await expect(files(page)).toContainText("1 of 2 files");
+    await expect(list).toHaveText([/test\/arrays\.test\.ts/]);
+    await expect(card(page, "src/arrays.ts")).toBeHidden();
+    await expect(second).toBeVisible();
+    // an exclusion
+    await input.fill("!*.test.ts");
+    await expect(list).toHaveText([/src\/arrays\.ts/]);
+    await expect(second).toBeHidden();
+    await expect(card(page, "src/arrays.ts")).toBeVisible();
+    // by path
+    await input.fill("src/**/*.ts");
+    await expect(list).toHaveText([/src\/arrays\.ts/]);
+    // nothing
+    await input.fill("*.md");
+    await expect(files(page)).toContainText("0 of 2 files");
+    await expect(files(page)).toContainText("No file matches *.md");
+    // clear: everything back, the hidden diff was never re-rendered
+    await files(page).getByRole("button", { name: "Clear filter" }).click();
+    await expect(input).toHaveValue("");
+    await expect(files(page)).toContainText("2 files changed");
+    await expect(list).toHaveCount(2);
+    await expect(second).toBeVisible();
+    await expect(second).toHaveAttribute("data-rendered", "once");
   });
 
   test("the /files path lands on the tab — a reload keeps it", async ({

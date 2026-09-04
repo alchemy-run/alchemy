@@ -76,3 +76,27 @@ export const useTheme = (): {
 
   return { theme, resolved, setTheme, toggle };
 };
+
+const showing = (): "light" | "dark" =>
+  document.documentElement.classList.contains("dark") ? "dark" : "light";
+
+/**
+ * What the page is showing right now — read off the `dark` class on
+ * `<html>` (which `useTheme` and the pre-paint script both set) and
+ * kept current as it flips. For components that need the mode as a
+ * VALUE rather than a CSS variant: the code renderer draws inside a
+ * shadow root the page's tokens don't reach, so it is told outright.
+ */
+export const useResolvedTheme = (): "light" | "dark" => {
+  const [mode, setMode] = useState(showing);
+  useEffect(() => {
+    const observer = new MutationObserver(() => setMode(showing()));
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["class"],
+    });
+    setMode(showing());
+    return () => observer.disconnect();
+  }, []);
+  return mode;
+};

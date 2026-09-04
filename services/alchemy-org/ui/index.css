@@ -50,17 +50,19 @@
   --mist: #4a7a8a; /* note — slate teal */
   --terracotta: #c56e3c;
 
-  /* the CODE surface — the docs' walnut code block, the same in both
-     modes (tokens.css `--alc-bg-code`): it sinks into the parchment
-     page and lifts off the night one. Code review is drawn on it, so
-     a diff looks the same whichever mode the page is in. Syntax
-     colors live in ui/lib/code-theme.ts; these paint the chrome. */
-  --code: #2a2620;
-  --code-foreground: #faf5e3;
+  /* the CODE surface — the frame around every rendered snippet and
+     diff. Light: lifted paper (the card color) with the earthy +/−;
+     dark: the docs' walnut code block. The renderer inside is handed
+     the matching syntax theme (ui/lib/code-theme.ts — its PARCHMENT /
+     WALNUT palettes carry these same values; keep them in step);
+     these paint the chrome around it. */
+  --code: #fbf6ea;
+  --code-foreground: #2a2620;
   --code-muted: #85714f;
-  --code-border: #4e402c;
-  --code-addition: #8fb15e;
-  --code-deletion: #e07a5f;
+  --code-border: #e2d7bc;
+  --code-addition: #5c7a3e;
+  --code-deletion: #b3462e;
+  --code-modified: #3a7a8a;
 
   /* the 16 terminal colors (ui/lib/ansi.tsx) — tuned for parchment */
   --ansi-black: #2a2620;
@@ -110,6 +112,16 @@
   --brick: #d76a4e;
   --mist: #6da4b4;
   --terracotta: #d8835a;
+
+  /* the walnut code block — tokens.css `--alc-bg-code` — lifts a
+     step off the night page (code-theme.ts WALNUT) */
+  --code: #2a2620;
+  --code-foreground: #faf5e3;
+  --code-muted: #85714f;
+  --code-border: #4e402c;
+  --code-addition: #8fb15e;
+  --code-deletion: #e07a5f;
+  --code-modified: #7ddfff;
 
   --ansi-black: #3a342c;
   --ansi-red: #d76a4e;
@@ -194,7 +206,13 @@
   border-width: 1px;
   border-style: solid;
   border-radius: var(--radius);
-  background: var(--callout-tint, var(--card));
+  /* the tint is translucent — laid over the page color so the callout
+     is OPAQUE (the conversation's trail runs behind it) */
+  background: linear-gradient(
+      var(--callout-tint, var(--card)),
+      var(--callout-tint, var(--card))
+    )
+    var(--background);
   border-color: var(--callout-border, var(--border));
 }
 @utility callout-title {
@@ -236,7 +254,7 @@
   border-color: var(--code-border);
   --diffs-addition-color-override: var(--code-addition);
   --diffs-deletion-color-override: var(--code-deletion);
-  --diffs-modified-color-override: #7ddfff;
+  --diffs-modified-color-override: var(--code-modified);
   --diffs-fg-number-override: var(--code-muted);
   --diffs-font-family: var(--font-mono);
   --diffs-header-font-family: var(--font-sans);

@@ -1,19 +1,50 @@
 import { registerCustomTheme, type ThemeRegistration } from "@pierre/diffs";
 
 /**
- * The docs' code theme, for the app: "walnut sunrise" — the dark
- * walnut surface (#2a2620) and the bright sunrise syntax palette of
- * `website/src/styles/tokens.css` (`--alc-code-*`), which the website
- * paints in BOTH color modes. Code review follows: a diff is the same
- * walnut card on the parchment page and on the night page, so light
- * and dark are aligned and match alchemy.run. The token rules mirror
- * `website/plugins/alchemy-walnut-theme.mjs`; keep the two in step.
+ * The app's two code themes, one per color mode, both on the brand
+ * palette of `website/src/styles/tokens.css`:
+ *
+ * - **walnut sunrise** (dark) — the docs' code block: the walnut
+ *   surface (#2a2620) and its bright sunrise syntax colors. The token
+ *   rules mirror `website/plugins/alchemy-walnut-theme.mjs`; keep the
+ *   two in step.
+ * - **parchment** (light) — the same roles on lifted paper (#fbf6ea,
+ *   the page's card color): moss keywords, honey strings, terracotta
+ *   literals, slate types — the earthy semantics, deepened to read on
+ *   the light page.
+ *
+ * The renderer draws inside a shadow root the page's tokens can't
+ * reach, so it is handed both themes and told which is showing; the
+ * chrome around it (`code-surface` in `ui/index.css`, the `--code*`
+ * tokens) follows the page's mode the ordinary way. Keep the surface
+ * values here and there identical.
  */
-export const CODE_THEME = "alchemy-walnut";
+export const DARK_CODE_THEME = "alchemy-walnut";
+export const LIGHT_CODE_THEME = "alchemy-parchment";
 
-/** The surface and the colors the diff chrome draws with — the same
- *  values `ui/index.css` sets as `--code*`. */
-export const CODE_SURFACE = {
+/** Every color a theme needs — the surface and the chrome (`--code*`
+ *  in `ui/index.css`) plus the syntax roles. */
+interface CodePalette {
+  background: string;
+  foreground: string;
+  muted: string;
+  border: string;
+  addition: string;
+  deletion: string;
+  modified: string;
+  lineHighlight: string;
+  selection: string;
+  comment: string;
+  keyword: string;
+  operator: string;
+  string: string;
+  literal: string;
+  fn: string;
+  type: string;
+  tag: string;
+}
+
+export const WALNUT: CodePalette = {
   background: "#2a2620",
   foreground: "#faf5e3",
   muted: "#85714f",
@@ -21,26 +52,60 @@ export const CODE_SURFACE = {
   addition: "#8fb15e",
   deletion: "#e07a5f",
   modified: "#7ddfff",
-} as const;
+  lineHighlight: "#36302280",
+  selection: "#5c7a3e66",
+  comment: "#b3a27a",
+  keyword: "#d4f26a",
+  operator: "#c7b795",
+  string: "#ffe38a",
+  literal: "#ff9a6b",
+  fn: "#7ddfff",
+  type: "#7ddfff",
+  tag: "#ffb968",
+};
 
-const walnutSunrise: ThemeRegistration = {
-  name: CODE_THEME,
-  type: "dark",
+export const PARCHMENT: CodePalette = {
+  background: "#fbf6ea",
+  foreground: "#2a2620",
+  muted: "#85714f",
+  border: "#e2d7bc",
+  addition: "#5c7a3e",
+  deletion: "#b3462e",
+  modified: "#3a7a8a",
+  lineHighlight: "#ebe3d080",
+  selection: "#5c7a3e33",
+  comment: "#85714f",
+  keyword: "#3f5a2a",
+  operator: "#68573c",
+  string: "#a8781c",
+  literal: "#c56e3c",
+  fn: "#3d6a9a",
+  type: "#3a7a8a",
+  tag: "#b3462e",
+};
+
+const makeTheme = (
+  name: string,
+  type: "light" | "dark",
+  p: CodePalette,
+): ThemeRegistration => ({
+  name,
+  type,
   semanticHighlighting: true,
   colors: {
-    "editor.background": CODE_SURFACE.background,
-    "editor.foreground": CODE_SURFACE.foreground,
-    "editor.lineHighlightBackground": "#36302280",
-    "editor.selectionBackground": "#5c7a3e66",
-    "editorLineNumber.foreground": CODE_SURFACE.muted,
-    "editorLineNumber.activeForeground": CODE_SURFACE.foreground,
-    "diffEditor.insertedTextBackground": "#5c7a3e26",
-    "diffEditor.removedTextBackground": "#b3462e26",
+    "editor.background": p.background,
+    "editor.foreground": p.foreground,
+    "editor.lineHighlightBackground": p.lineHighlight,
+    "editor.selectionBackground": p.selection,
+    "editorLineNumber.foreground": p.muted,
+    "editorLineNumber.activeForeground": p.foreground,
+    "diffEditor.insertedTextBackground": `${p.addition}26`,
+    "diffEditor.removedTextBackground": `${p.deletion}26`,
   },
   tokenColors: [
     {
       scope: ["comment", "punctuation.definition.comment", "string.comment"],
-      settings: { foreground: "#b3a27a", fontStyle: "italic" },
+      settings: { foreground: p.comment, fontStyle: "italic" },
     },
     {
       scope: [
@@ -53,7 +118,7 @@ const walnutSunrise: ThemeRegistration = {
         "keyword.operator.expression",
         "keyword.other",
       ],
-      settings: { foreground: "#d4f26a" },
+      settings: { foreground: p.keyword },
     },
     {
       scope: [
@@ -61,19 +126,19 @@ const walnutSunrise: ThemeRegistration = {
         "punctuation.separator",
         "punctuation.terminator",
       ],
-      settings: { foreground: "#c7b795" },
+      settings: { foreground: p.operator },
     },
     {
       scope: ["string", "string.quoted", "punctuation.definition.string"],
-      settings: { foreground: "#ffe38a" },
+      settings: { foreground: p.string },
     },
     {
       scope: ["string.template", "punctuation.definition.template-expression"],
-      settings: { foreground: "#ffe38a" },
+      settings: { foreground: p.string },
     },
     {
       scope: ["constant.numeric", "constant.language", "constant.character"],
-      settings: { foreground: "#ff9a6b" },
+      settings: { foreground: p.literal },
     },
     {
       scope: [
@@ -81,7 +146,7 @@ const walnutSunrise: ThemeRegistration = {
         "constant.language.null",
         "constant.language.undefined",
       ],
-      settings: { foreground: "#ff9a6b" },
+      settings: { foreground: p.literal },
     },
     {
       scope: [
@@ -92,7 +157,7 @@ const walnutSunrise: ThemeRegistration = {
         "variable.function",
         "meta.definition.method entity.name.function",
       ],
-      settings: { foreground: "#7ddfff" },
+      settings: { foreground: p.fn },
     },
     {
       scope: [
@@ -106,7 +171,7 @@ const walnutSunrise: ThemeRegistration = {
         "support.module",
         "meta.type",
       ],
-      settings: { foreground: "#7ddfff" },
+      settings: { foreground: p.type },
     },
     {
       scope: [
@@ -116,15 +181,15 @@ const walnutSunrise: ThemeRegistration = {
         "meta.export variable.other.readwrite",
         "meta.object-literal.key support.type.object",
       ],
-      settings: { foreground: "#7ddfff" },
+      settings: { foreground: p.type },
     },
     {
       scope: ["entity.name.tag", "meta.tag entity.name.tag"],
-      settings: { foreground: "#ffb968" },
+      settings: { foreground: p.tag },
     },
     {
       scope: ["entity.other.attribute-name"],
-      settings: { foreground: "#d4f26a", fontStyle: "italic" },
+      settings: { foreground: p.keyword, fontStyle: "italic" },
     },
     {
       scope: [
@@ -133,58 +198,70 @@ const walnutSunrise: ThemeRegistration = {
         "variable.parameter",
         "meta.definition.variable variable.other",
       ],
-      settings: { foreground: CODE_SURFACE.foreground },
+      settings: { foreground: p.foreground },
     },
     {
       scope: ["variable.other.constant"],
-      settings: { foreground: "#7ddfff" },
+      settings: { foreground: p.type },
     },
     {
       scope: ["variable.other.enummember"],
-      settings: { foreground: "#ff9a6b" },
+      settings: { foreground: p.literal },
     },
     {
       scope: ["variable.other.property", "meta.object.member"],
-      settings: { foreground: CODE_SURFACE.foreground },
+      settings: { foreground: p.foreground },
     },
     {
       scope: ["support.variable", "support.constant"],
-      settings: { foreground: "#7ddfff" },
+      settings: { foreground: p.type },
     },
     {
       scope: ["punctuation.section.embedded", "meta.embedded"],
-      settings: { foreground: CODE_SURFACE.foreground },
+      settings: { foreground: p.foreground },
     },
     {
       scope: ["markup.heading", "markup.bold"],
-      settings: { foreground: CODE_SURFACE.foreground, fontStyle: "bold" },
+      settings: { foreground: p.foreground, fontStyle: "bold" },
     },
     {
       scope: ["markup.italic"],
-      settings: { foreground: CODE_SURFACE.foreground, fontStyle: "italic" },
+      settings: { foreground: p.foreground, fontStyle: "italic" },
     },
     {
       scope: ["markup.inserted", "markup.inserted.diff"],
-      settings: { foreground: CODE_SURFACE.addition },
+      settings: { foreground: p.addition },
     },
     {
       scope: ["markup.deleted", "markup.deleted.diff"],
-      settings: { foreground: CODE_SURFACE.deletion },
+      settings: { foreground: p.deletion },
     },
     {
       scope: ["invalid", "invalid.illegal"],
-      settings: { foreground: CODE_SURFACE.deletion },
+      settings: { foreground: p.deletion },
     },
   ],
-};
+});
+
+const walnutSunrise = makeTheme(DARK_CODE_THEME, "dark", WALNUT);
+const parchment = makeTheme(LIGHT_CODE_THEME, "light", PARCHMENT);
 
 const REGISTERED = Symbol.for("alchemy-org/code-theme");
 
-/** Register the theme with the renderer — once per page, however many
- *  times the module re-evaluates (Vite's HMR). */
+/** Register both themes with the renderer — each once per page, however
+ *  many times the module re-evaluates (Vite's HMR). Tracked BY NAME, so
+ *  a theme added in a later edit still registers on a page whose
+ *  earlier module already ran (a boolean "done" flag would skip it and
+ *  the renderer, asked for a name it never got, draws nothing). */
 export const ensureCodeTheme = (): void => {
-  const global = globalThis as { [REGISTERED]?: true };
-  if (global[REGISTERED]) return;
-  global[REGISTERED] = true;
-  registerCustomTheme(CODE_THEME, () => Promise.resolve(walnutSunrise));
+  const global = globalThis as { [REGISTERED]?: Set<string> };
+  const registered = (global[REGISTERED] ??= new Set());
+  for (const [name, theme] of [
+    [DARK_CODE_THEME, walnutSunrise],
+    [LIGHT_CODE_THEME, parchment],
+  ] as const) {
+    if (registered.has(name)) continue;
+    registered.add(name);
+    registerCustomTheme(name, () => Promise.resolve(theme));
+  }
 };

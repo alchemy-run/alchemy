@@ -1,4 +1,9 @@
-import { CODE_THEME, ensureCodeTheme } from "@/lib/code-theme";
+import {
+  DARK_CODE_THEME,
+  ensureCodeTheme,
+  LIGHT_CODE_THEME,
+} from "@/lib/code-theme";
+import { useResolvedTheme } from "@/lib/theme";
 import type { DiffLineAnnotation, FileDiffMetadata } from "@pierre/diffs";
 import {
   File,
@@ -33,11 +38,11 @@ import {
  *   review's inline comments drawn on their lines — the "Files
  *   changed" page.
  *
- * Every card is the docs' walnut code surface, in light mode and dark
- * alike (`lib/code-theme.ts`) — the renderer lives in a shadow root
- * where the page's tokens can't reach, so it is told the theme
- * outright, and the chrome around it (`code-surface`) is painted to
- * match.
+ * Every card follows the page's mode: the docs' walnut code surface in
+ * dark, lifted parchment in light (`lib/code-theme.ts`). The renderer
+ * lives in a shadow root where the page's tokens can't reach, so it is
+ * told which theme is showing outright; the chrome around it
+ * (`code-surface`, the `--code*` tokens) switches with the page.
  */
 
 /** Markdown language tag → file extension (Shiki detects by name). */
@@ -77,14 +82,21 @@ const EXTENSION: Record<string, string> = {
 
 ensureCodeTheme();
 
-/** The renderer's base options — one theme, whatever the page shows. */
-const BASE_OPTIONS: BaseCodeOptions = {
-  theme: CODE_THEME,
-  themeType: "dark",
+/** The renderer's base options: both brand themes, and which one the
+ *  page is showing — it lives in a shadow root, so it has to be told. */
+const OPTIONS: Record<"light" | "dark", BaseCodeOptions> = {
+  light: {
+    theme: { light: LIGHT_CODE_THEME, dark: DARK_CODE_THEME },
+    themeType: "light",
+  },
+  dark: {
+    theme: { light: LIGHT_CODE_THEME, dark: DARK_CODE_THEME },
+    themeType: "dark",
+  },
 };
-const useBaseOptions = (): BaseCodeOptions => BASE_OPTIONS;
+const useBaseOptions = (): BaseCodeOptions => OPTIONS[useResolvedTheme()];
 
-/** The frame every card shares: the walnut surface, its hairline. */
+/** The frame every card shares: the code surface, its hairline. */
 const CARD = "code-surface overflow-hidden rounded-md border text-[13px]";
 
 /** Copy `text` to the clipboard — GitHub's snippet button: it shows
@@ -237,12 +249,16 @@ export const FileDiffCard = <A,>({
   annotations,
   renderAnnotation,
   fallback,
+  bare = false,
 }: {
   file: FileDiffMetadata;
   annotations?: DiffLineAnnotation<A>[];
   renderAnnotation?: (annotation: DiffLineAnnotation<A>) => ReactNode;
   /** The raw text of this file's diff, shown if rendering throws. */
   fallback: string;
+  /** Hunks only — no card chrome and no renderer file header — for a
+   *  caller that draws its own header around the diff. */
+  bare?: boolean;
 }) => {
   const base = useBaseOptions();
   const options = useMemo(
@@ -251,12 +267,13 @@ export const FileDiffCard = <A,>({
       diffStyle: "unified" as const,
       hunkSeparators: "line-info" as const,
       overflow: "scroll" as const,
+      disableFileHeader: bare,
     }),
-    [base],
+    [base, bare],
   );
   return (
     <CodeBoundary fallback={fallback}>
-      <div className={CARD}>
+      <div className={bare ? undefined : CARD}>
         <FileDiff
           fileDiff={file}
           options={options}
