@@ -20,7 +20,6 @@ export default defineConfig({
     "**/.svelte-kit/**",
     "**/routeTree.gen.ts",
     "**/test-results/**",
-    "**/.vendor/**",
     "examples/prisma-tanstack-start/src/prisma/contract.d.ts",
     "examples/prisma-tanstack-start/src/prisma/contract.json",
     "**/package.json",

@@ -9,7 +9,6 @@
       "**/node_modules",
       "**/.git",
       "**/.claude",
-      "**/.vendor",
       "**/submodules",
       "**/.alchemy",
       "**/dist"
