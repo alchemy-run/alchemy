@@ -22,6 +22,23 @@ export default class DynamicLoaderEffectWorker extends Cloudflare.Worker<Dynamic
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
 
+        // `/get` pins #1382: native get() returns a WorkerStub whose
+        // fetcher is getEntrypoint(), so worker.fetch() must still work.
+        if (request.url.startsWith("/get")) {
+          const worker = yield* loader.get("cached-effect", () => ({
+            compatibilityDate: "2026-01-28",
+            mainModule: "worker.js",
+            modules: {
+              "worker.js": `export default {
+                async fetch() {
+                  return Response.json({ mode: "get", ok: true });
+                }
+              }`,
+            },
+          }));
+          return yield* worker.fetch(request).pipe(Effect.orDie);
+        }
+
         // Probe routes: the dynamic worker attempts an outbound fetch and
         // reports whether the runtime allowed it. `/outbound/sandboxed` loads
         // it with `globalOutbound: null` (network access must be blocked);
