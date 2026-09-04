@@ -109,7 +109,7 @@ export const ContextProvider = () =>
             ),
           );
 
-      const create = (desired: {
+      const createContext = (desired: {
         name: string;
         description: string;
         docker: string | undefined;
@@ -181,10 +181,10 @@ export const ContextProvider = () =>
             normalizeDocker(olds?.docker) !== undefined;
 
           if (existing === undefined) {
-            yield* create(desired);
+            yield* createContext(desired);
           } else if (clearsEndpoint) {
             yield* docker.context.remove(desired.name, true);
-            yield* create(desired);
+            yield* createContext(desired);
           } else {
             const current = toContextAttributes(existing);
             if (

@@ -210,12 +210,6 @@
       "worker": "./src/DigitalOcean/index.ts",
       "import": "./lib/DigitalOcean/index.js"
     },
-    "./DigitalOcean/*": {
-      "types": "./lib/DigitalOcean/*/index.d.ts",
-      "bun": "./src/DigitalOcean/*/index.ts",
-      "worker": "./src/DigitalOcean/*/index.ts",
-      "import": "./lib/DigitalOcean/*/index.js"
-    },
     "./Neon": {
       "types": "./lib/Neon/index.d.ts",
       "bun": "./src/Neon/index.ts",

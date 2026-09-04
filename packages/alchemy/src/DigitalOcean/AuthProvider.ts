@@ -14,6 +14,8 @@ import * as Clank from "../Util/Clank.ts";
 
 export const DIGITALOCEAN_AUTH_PROVIDER_NAME = "DigitalOcean";
 
+const STORED_CREDENTIALS_FILE = "digitalocean-stored";
+
 export type DigitalOceanAuthConfig = { method: "env" } | { method: "stored" };
 
 export type DigitalOceanStoredCredentials = {
@@ -27,8 +29,8 @@ export type DigitalOceanResolvedCredentials = {
   source: { type: DigitalOceanAuthConfig["method"]; details?: string };
 };
 
-// doctl reads DIGITALOCEAN_ACCESS_TOKEN; the terraform provider reads
-// DIGITALOCEAN_TOKEN. Accept both, preferring DIGITALOCEAN_TOKEN.
+// `doctl` reads `DIGITALOCEAN_ACCESS_TOKEN`. The Terraform provider reads
+// `DIGITALOCEAN_TOKEN`. The first name in the list wins.
 const ENV_VARS = ["DIGITALOCEAN_TOKEN", "DIGITALOCEAN_ACCESS_TOKEN"] as const;
 
 const getEnvToken = Effect.gen(function* () {
@@ -39,7 +41,7 @@ const getEnvToken = Effect.gen(function* () {
   return undefined;
 });
 
-const options: Array<{
+const authMethodOptions: Array<{
   value: DigitalOceanAuthConfig["method"];
   label: string;
   hint?: string;
@@ -69,15 +71,21 @@ export const DigitalOceanAuth = AuthProviderLayer<
     const profiles = yield* AlchemyProfile;
     const store = yield* CredentialsStore;
 
+    const readStored = (profileName: string) =>
+      store.read<DigitalOceanStoredCredentials>(
+        profileName,
+        STORED_CREDENTIALS_FILE,
+      );
+
     const loginStored = Effect.fn(function* (profileName: string) {
       const apiToken = yield* Clank.password({
         message: "DigitalOcean API Token",
-        validate: (v) => (v.length === 0 ? "Required" : undefined),
+        validate: (value) => (value.length === 0 ? "Required" : undefined),
       }).pipe(retryOnce);
 
       yield* store.write<DigitalOceanStoredCredentials>(
         profileName,
-        "digitalocean-stored",
+        STORED_CREDENTIALS_FILE,
         {
           type: "apiToken",
           apiToken,
@@ -90,7 +98,7 @@ export const DigitalOceanAuth = AuthProviderLayer<
     const configureInteractive = (profileName: string) =>
       Clank.select({
         message: "DigitalOcean authentication method",
-        options,
+        options: authMethodOptions,
       }).pipe(
         Effect.flatMap((method) =>
           Match.value(method).pipe(
@@ -101,16 +109,19 @@ export const DigitalOceanAuth = AuthProviderLayer<
         ),
       );
 
-    const configureCredentials = (profileName: string, ctx: ConfigureContext) =>
-      (ctx.ci
+    const configureCredentials = (
+      profileName: string,
+      context: ConfigureContext,
+    ) =>
+      (context.ci
         ? Effect.succeed({ method: "env" as const })
         : configureInteractive(profileName)
       ).pipe(
         Effect.mapError(
-          (e) =>
+          (cause) =>
             new AuthError({
-              message: "failed to configure credentials",
-              cause: e,
+              message: "DigitalOcean: cannot configure credentials.",
+              cause,
             }),
         ),
       );
@@ -137,27 +148,20 @@ export const DigitalOceanAuth = AuthProviderLayer<
           }),
         ),
         Match.when({ method: "stored" }, () =>
-          store
-            .read<DigitalOceanStoredCredentials>(
-              profileName,
-              "digitalocean-stored",
-            )
-            .pipe(
-              Effect.flatMap((creds) =>
-                creds == null
-                  ? Effect.fail(
-                      new AuthError({
-                        message:
-                          "DigitalOcean stored credentials not found. Run: alchemy login --configure",
-                      }),
-                    )
-                  : Effect.succeed({
-                      type: "apiToken" as const,
-                      apiToken: Redacted.make(creds.apiToken),
-                      source: { type: "stored" as const },
-                    }),
-              ),
-            ),
+          Effect.gen(function* () {
+            const credentials = yield* readStored(profileName);
+            if (credentials === undefined) {
+              return yield* new AuthError({
+                message:
+                  "DigitalOcean stored credentials not found. Run: alchemy login --configure",
+              });
+            }
+            return {
+              type: "apiToken" as const,
+              apiToken: Redacted.make(credentials.apiToken),
+              source: { type: "stored" as const },
+            };
+          }),
         ),
         Match.exhaustive,
       );
@@ -167,7 +171,7 @@ export const DigitalOceanAuth = AuthProviderLayer<
         Match.when({ method: "env" }, () => Effect.void),
         Match.when({ method: "stored" }, () =>
           store
-            .delete(profileName, "digitalocean-stored")
+            .delete(profileName, STORED_CREDENTIALS_FILE)
             .pipe(
               Effect.andThen(
                 Clank.success("DigitalOcean: stored credentials removed"),
@@ -177,59 +181,47 @@ export const DigitalOceanAuth = AuthProviderLayer<
         Match.exhaustive,
       );
 
+    // No env var is set. Open the picker so the user can switch to
+    // `stored`. Save the choice so the next login does not prompt again.
+    const promptWhenEnvMissing = Effect.fn(function* (profileName: string) {
+      const next = yield* configureInteractive(profileName);
+      const existing = yield* profiles.getProfile(profileName);
+      yield* profiles.setProfile(profileName, {
+        ...existing,
+        [DIGITALOCEAN_AUTH_PROVIDER_NAME]: next,
+      });
+    });
+
+    const loginWithEnv = Effect.fn(function* (profileName: string) {
+      const env = yield* getEnvToken;
+      if (env === undefined) yield* promptWhenEnvMissing(profileName);
+    });
+
+    const loginWithStored = Effect.fn(function* (profileName: string) {
+      const credentials = yield* readStored(profileName);
+      if (credentials === undefined) yield* loginStored(profileName);
+    });
+
     const login = (profileName: string, config: DigitalOceanAuthConfig) =>
-      Match.value(config)
-        .pipe(
-          Match.when({ method: "env" }, () =>
-            // If neither env var is set, fall through to the interactive
-            // picker so the user can switch to `stored` (or be told to set
-            // the env var) instead of silently failing later in `read`. The
-            // new selection is persisted to the profile so subsequent logins
-            // don't re-prompt.
-            getEnvToken.pipe(
-              Effect.flatMap((env) =>
-                env
-                  ? Effect.void
-                  : Effect.gen(function* () {
-                      const next = yield* configureInteractive(profileName);
-                      const existing = yield* profiles.getProfile(profileName);
-                      yield* profiles.setProfile(profileName, {
-                        ...existing,
-                        [DIGITALOCEAN_AUTH_PROVIDER_NAME]: next,
-                      });
-                    }),
-              ),
-            ),
-          ),
-          Match.when({ method: "stored" }, () =>
-            store
-              .read<DigitalOceanStoredCredentials>(
-                profileName,
-                "digitalocean-stored",
-              )
-              .pipe(
-                Effect.flatMap((creds) =>
-                  creds == null ? loginStored(profileName) : Effect.void,
-                ),
-              ),
-          ),
-          Match.exhaustive,
-        )
-        .pipe(
-          Effect.mapError(
-            (e) => new AuthError({ message: "login failed", cause: e }),
-          ),
-        );
+      Match.value(config).pipe(
+        Match.when({ method: "env" }, () => loginWithEnv(profileName)),
+        Match.when({ method: "stored" }, () => loginWithStored(profileName)),
+        Match.exhaustive,
+        Effect.mapError(
+          (cause) =>
+            new AuthError({ message: "DigitalOcean: login failed.", cause }),
+        ),
+      );
 
     const prettyPrint = (profileName: string, config: DigitalOceanAuthConfig) =>
       resolveCredentials(profileName, config).pipe(
-        Effect.tap((creds) => {
-          const sourceStr = creds.source.details
-            ? `${creds.source.type} - ${creds.source.details}`
-            : creds.source.type;
+        Effect.tap((credentials) => {
+          const sourceLabel = credentials.source.details
+            ? `${credentials.source.type} - ${credentials.source.details}`
+            : credentials.source.type;
           return Console.log(
-            `  apiToken: ${displayRedacted(creds.apiToken, 9)}`,
-          ).pipe(Effect.andThen(Console.log(`  source: ${sourceStr}`)));
+            `  apiToken: ${displayRedacted(credentials.apiToken, 9)}`,
+          ).pipe(Effect.andThen(Console.log(`  source: ${sourceLabel}`)));
         }),
       );
 

@@ -1,4 +1,8 @@
 import * as DigitalOcean from "@/DigitalOcean";
+import {
+  driftedReplacingProps,
+  ownershipTag,
+} from "@/DigitalOcean/Droplets/Droplet";
 import * as Provider from "@/Provider";
 import { State } from "@/State/State";
 import * as Test from "@/Test/Alchemy";
@@ -6,7 +10,7 @@ import {
   dropletsDestroy,
   dropletsGet,
 } from "@distilled.cloud/digitalocean/droplets";
-import { describe, expect, test as unit } from "alchemy-test";
+import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { logLevel, outOfBand, skipLive } from "../support.ts";
 
@@ -17,18 +21,15 @@ type DropletAttributes = DigitalOcean.Droplet["Attributes"];
 
 const DROPLET_NAME = "alchemy-test-droplet";
 const RENAMED_DROPLET_NAME = "alchemy-test-droplet-renamed";
-// Cheapest size/image that exists in every region — a live droplet bills by
-// the minute, so each suite creates exactly one and always destroys it.
+// The smallest size that exists in every region. A live droplet costs
+// money. The suite creates one droplet and always destroys it.
 const REGION = "sfo3";
 const SIZE = "s-1vcpu-512mb-10gb";
 const IMAGE = "ubuntu-24-04-x64";
-const LIVE_TIMEOUT = 240_000;
+// Twice the longest wait of the provider (DROPLET_POLL: 60 × 5 seconds).
+const LIVE_TIMEOUT = 600_000;
 
-const PROPS: DropletProps = {
-  region: "sfo3",
-  size: "s-1vcpu-1gb",
-  image: "ubuntu-24-04-x64",
-};
+const PROPS: DropletProps = { region: REGION, size: SIZE, image: IMAGE };
 
 const daysAgo = (days: number) =>
   new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
@@ -39,10 +40,10 @@ const observed = (
   dropletId: 1,
   name: "web",
   status: "active",
-  region: "sfo3",
-  sizeSlug: "s-1vcpu-1gb",
+  region: REGION,
+  sizeSlug: SIZE,
   imageId: 100,
-  imageSlug: "ubuntu-24-04-x64",
+  imageSlug: IMAGE,
   ipv4: "1.2.3.4",
   privateIpv4: undefined,
   ipv6: undefined,
@@ -111,7 +112,7 @@ describe("Droplet diff", () => {
     }),
   );
 
-  test.provider("replaceAfter does not fire without prior props", () =>
+  test.provider("replaceAfter does not apply without prior props", () =>
     Effect.gen(function* () {
       const props = { ...PROPS, replaceAfter: "30 days" as const };
       const result = yield* diff({
@@ -135,6 +136,17 @@ describe("Droplet diff", () => {
         });
         expect(result).toEqual(REPLACE);
       }),
+  );
+
+  test.provider("a copy of the prior props still sees observed drift", () =>
+    Effect.gen(function* () {
+      const result = yield* diff({
+        olds: { ...PROPS },
+        news: { ...PROPS },
+        output: observed({ sizeSlug: "s-2vcpu-4gb" }),
+      });
+      expect(result).toEqual(REPLACE);
+    }),
   );
 
   test.provider("adoption keeps a droplet that matches its props", () =>
@@ -190,7 +202,7 @@ describe("Droplet diff", () => {
   );
 });
 
-describe("driftedImmutableProps", () => {
+describe("driftedReplacingProps", () => {
   const cases: Array<{
     name: string;
     news: DropletProps;
@@ -258,35 +270,41 @@ describe("driftedImmutableProps", () => {
       expected: ["vpcUuid"],
     },
   ];
-  for (const c of cases) {
-    unit(c.name, () => {
-      expect(DigitalOcean.driftedImmutableProps(c.news, c.droplet)).toEqual(
-        c.expected,
+  for (const testCase of cases) {
+    it(testCase.name, () => {
+      expect(driftedReplacingProps(testCase.news, testCase.droplet)).toEqual(
+        testCase.expected,
       );
     });
   }
 });
 
 describe("ownershipTag", () => {
-  unit("is stable and fits DigitalOcean's tag rules", () => {
-    const tag = DigitalOcean.ownershipTag("stack", "stage", "id");
-    expect(tag).toEqual(DigitalOcean.ownershipTag("stack", "stage", "id"));
-    expect(tag.startsWith("alchemy:")).toBe(true);
-    expect(tag).toMatch(/^[a-zA-Z0-9:_-]+$/);
-    expect(tag.length).toBeLessThanOrEqual(255);
-  });
+  it.effect("is stable and fits DigitalOcean's tag rules", () =>
+    Effect.gen(function* () {
+      const tag = yield* ownershipTag("stack", "stage", "id");
+      expect(tag).toEqual(yield* ownershipTag("stack", "stage", "id"));
+      expect(tag.startsWith("alchemy:")).toBe(true);
+      expect(tag).toMatch(/^[a-zA-Z0-9:_-]+$/);
+      expect(tag.length).toBeLessThanOrEqual(255);
+    }),
+  );
 
-  unit("does not collide on names that differ only in punctuation", () => {
-    expect(DigitalOcean.ownershipTag("api.prod", "s", "id")).not.toEqual(
-      DigitalOcean.ownershipTag("api-prod", "s", "id"),
-    );
-  });
+  it.effect("does not collide on names that differ only in punctuation", () =>
+    Effect.gen(function* () {
+      expect(yield* ownershipTag("api.prod", "s", "id")).not.toEqual(
+        yield* ownershipTag("api-prod", "s", "id"),
+      );
+    }),
+  );
 
-  unit("does not collide when the tuple boundaries move", () => {
-    expect(DigitalOcean.ownershipTag("a:b", "c", "id")).not.toEqual(
-      DigitalOcean.ownershipTag("a", "b:c", "id"),
-    );
-  });
+  it.effect("does not collide when the tuple boundaries move", () =>
+    Effect.gen(function* () {
+      expect(yield* ownershipTag("a:b", "c", "id")).not.toEqual(
+        yield* ownershipTag("a", "b:c", "id"),
+      );
+    }),
+  );
 });
 
 const droplet = (name: string, tags: string[]) =>
@@ -323,7 +341,7 @@ test.provider.skipIf(skipLive)(
       expect([...remote.droplet.tags].sort()).toEqual(
         [
           "alchemy-test",
-          DigitalOcean.ownershipTag(stack.name, "test", "TestDroplet"),
+          yield* ownershipTag(stack.name, "test", "TestDroplet"),
         ].sort(),
       );
 
@@ -355,34 +373,29 @@ test.provider.skipIf(skipLive)(
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
-      let dropletId: number | undefined;
-      // A wiped state row hides the droplet from the harness teardown.
-      const destroyOutOfBand = Effect.suspend(() => {
-        if (dropletId === undefined) return Effect.void;
-        return dropletsDestroy({ droplet_id: dropletId }).pipe(
+
+      const created = yield* stack.deploy(droplet(DROPLET_NAME, []));
+      // A deleted state row hides the droplet from the harness teardown.
+      yield* Effect.addFinalizer(() =>
+        dropletsDestroy({ droplet_id: created.dropletId }).pipe(
           Effect.catchTag("NotFound", () => Effect.void),
           outOfBand,
           Effect.ignore,
-        );
+        ),
+      );
+
+      const state = yield* yield* State;
+      yield* state.delete({
+        stack: stack.name,
+        stage: "test",
+        fqn: "TestDroplet",
       });
 
-      yield* Effect.gen(function* () {
-        const created = yield* stack.deploy(droplet(DROPLET_NAME, []));
-        dropletId = created.dropletId;
+      const recovered = yield* stack.deploy(droplet(DROPLET_NAME, []));
+      expect(recovered.dropletId).toEqual(created.dropletId);
+      expect(recovered.ipv4).toEqual(created.ipv4);
 
-        const state = yield* yield* State;
-        yield* state.delete({
-          stack: stack.name,
-          stage: "test",
-          fqn: "TestDroplet",
-        });
-
-        const recovered = yield* stack.deploy(droplet(DROPLET_NAME, []));
-        expect(recovered.dropletId).toEqual(created.dropletId);
-        expect(recovered.ipv4).toEqual(created.ipv4);
-
-        yield* stack.destroy();
-      }).pipe(Effect.ensuring(destroyOutOfBand));
+      yield* stack.destroy();
     }).pipe(logLevel),
   { timeout: LIVE_TIMEOUT },
 );

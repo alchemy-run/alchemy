@@ -1,3 +1,4 @@
+import { OwnedBySomeoneElse } from "@/AdoptPolicy";
 import * as Docker from "@/Docker";
 import { inMemoryState } from "@/State";
 import * as Test from "@/Test/Alchemy";
@@ -39,9 +40,7 @@ describe("Docker.Container ownership", { concurrent: false }, () => {
         );
         expect(Result.isFailure(result)).toBe(true);
         if (Result.isFailure(result)) {
-          expect((result.failure as { _tag?: string })._tag).toBe(
-            "OwnedBySomeoneElse",
-          );
+          expect(result.failure).toBeInstanceOf(OwnedBySomeoneElse);
         }
 
         const info = yield* docker.container.inspect(name);

@@ -33,17 +33,21 @@ const countLines = Effect.fn(function* (file: string) {
 
 const readStateRow = Effect.fn(function* (fqn: string) {
   const state = yield* yield* State;
-  const stk = yield* Stack;
-  return yield* state.get({ stack: stk.name, stage: stk.stage, fqn });
+  const currentStack = yield* Stack;
+  return yield* state.get({
+    stack: currentStack.name,
+    stage: currentStack.stage,
+    fqn,
+  });
 });
 
-const deleteFailedWith = (error: unknown, tag: string): boolean =>
+const deleteFailedWithCommandError = (error: unknown): boolean =>
   error instanceof DestroyError &&
   error.failures.some((failure) =>
     failure.cause.reasons.some(
-      (r) =>
-        Cause.isFailReason(r) &&
-        (r.error as { _tag?: string } | undefined)?._tag === tag,
+      (reason) =>
+        Cause.isFailReason(reason) &&
+        reason.error instanceof Command.CommandError,
     ),
   );
 
@@ -165,7 +169,7 @@ test.provider(
         }),
       );
 
-      // The destroy command is destroy-only — deploying must not run it.
+      // Deploy must not run destroyCommand.
       expect(yield* fs.exists(marker)).toBe(false);
 
       // Destroy runs it once, in the deployed cwd, with the deployed env.
@@ -237,7 +241,7 @@ test.provider(
       yield* deploy("exit 3");
 
       const error = yield* Effect.flip(stack.destroy());
-      expect(deleteFailedWith(error, "CommandError")).toBe(true);
+      expect(deleteFailedWithCommandError(error)).toBe(true);
       expect(yield* readStateRow("failing-destroy")).toBeDefined();
 
       yield* deploy("true");

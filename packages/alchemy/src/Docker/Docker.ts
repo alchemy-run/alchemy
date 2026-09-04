@@ -485,11 +485,6 @@ export const DockerLive = Layer.effect(
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const bin = yield* DockerBin;
 
-    // Do not use `docker login`. Docker Desktop routes `docker login` through
-    // the system credential helper and ignores `DOCKER_CONFIG`. Write the
-    // `auths` entry directly. Docker also reads contexts from
-    // `DOCKER_CONFIG`. Link the global `contexts/` directory into the temp
-    // config.
     const globalDockerConfigDir = Config.string("DOCKER_CONFIG").pipe(
       Config.orElse(() =>
         Config.string("HOME").pipe(
@@ -499,26 +494,54 @@ export const DockerLive = Layer.effect(
       ),
       Effect.orElseSucceed(() => undefined),
     );
+
+    /** The `currentContext` of the global `config.json`, if it has one. */
+    const readGlobalCurrentContext = (globalConfigDir: string) =>
+      fs.readFileString(path.join(globalConfigDir, "config.json")).pipe(
+        Effect.flatMap((text) =>
+          Effect.try({
+            try: () => JSON.parse(text) as { currentContext?: unknown },
+            catch: (cause) => cause,
+          }),
+        ),
+        Effect.map((config) =>
+          typeof config.currentContext === "string"
+            ? config.currentContext
+            : undefined,
+        ),
+        Effect.orElseSucceed(() => undefined),
+      );
+
+    // Do not use `docker login`. Docker Desktop sends `docker login` to the
+    // system credential helper and ignores `DOCKER_CONFIG`. Write the
+    // `auths` entry directly. Docker reads contexts and `currentContext`
+    // from `DOCKER_CONFIG`. Link the global `contexts/` directory and copy
+    // `currentContext` into the temp config.
     const makeCredentialConfigDir = Effect.fn(function* (
       credentials: ImageRegistry,
     ) {
-      const dir = yield* fs.makeTempDirectoryScoped({
+      const configDir = yield* fs.makeTempDirectoryScoped({
         prefix: "alchemy-docker-",
       });
+      const globalConfigDir = yield* globalDockerConfigDir;
+      const currentContext =
+        globalConfigDir === undefined
+          ? undefined
+          : yield* readGlobalCurrentContext(globalConfigDir);
       const config = yield* Effect.sync(() => {
         const auth = Buffer.from(
           `${credentials.username}:${Redacted.value(credentials.password)}`,
         ).toString("base64");
         return JSON.stringify({
+          currentContext,
           auths: {
             [credentials.server]: { auth },
           },
         });
       });
-      yield* fs.writeFileString(path.join(dir, "config.json"), config);
-      const global = yield* globalDockerConfigDir;
-      if (global !== undefined) {
-        const contexts = path.join(global, "contexts");
+      yield* fs.writeFileString(path.join(configDir, "config.json"), config);
+      if (globalConfigDir !== undefined) {
+        const contexts = path.join(globalConfigDir, "contexts");
         const hasContexts = yield* fs
           .exists(contexts)
           .pipe(
@@ -527,10 +550,10 @@ export const DockerLive = Layer.effect(
             ),
           );
         if (hasContexts) {
-          yield* fs.symlink(contexts, path.join(dir, "contexts"));
+          yield* fs.symlink(contexts, path.join(configDir, "contexts"));
         }
       }
-      return dir;
+      return configDir;
     });
 
     const run = (
@@ -718,8 +741,8 @@ export const DockerLive = Layer.effect(
           if (credentials === undefined) {
             return yield* run(args);
           }
-          const dir = yield* makeCredentialConfigDir(credentials);
-          return yield* run(args, { DOCKER_CONFIG: dir });
+          const configDir = yield* makeCredentialConfigDir(credentials);
+          return yield* run(args, { DOCKER_CONFIG: configDir });
         }, Effect.scoped),
         inspect: (ref, context) =>
           runInspect<Docker.Image>([
@@ -739,15 +762,15 @@ export const DockerLive = Layer.effect(
         tag: (source, target, context) =>
           run([...formatArgs({ context }), "image", "tag", source, target]),
         push: Effect.fn(function* (ref, credentials, platform, context) {
-          const dir = yield* makeCredentialConfigDir(credentials);
+          const configDir = yield* makeCredentialConfigDir(credentials);
           if (platform === undefined) {
             return yield* run([...formatArgs({ context }), "push", ref], {
-              DOCKER_CONFIG: dir,
+              DOCKER_CONFIG: configDir,
             });
           }
           return yield* run(
             [...formatArgs({ context }), "push", "--platform", platform, ref],
-            { DOCKER_CONFIG: dir },
+            { DOCKER_CONFIG: configDir },
           ).pipe(
             // Engines without the containerd image store reject `--platform`
             // on push; their local tag is already narrowed to the requested
@@ -757,7 +780,7 @@ export const DockerLive = Layer.effect(
                 /--platform|unknown flag|containerd/i.test(String(error)),
               () =>
                 run([...formatArgs({ context }), "push", ref], {
-                  DOCKER_CONFIG: dir,
+                  DOCKER_CONFIG: configDir,
                 }),
             ),
           );

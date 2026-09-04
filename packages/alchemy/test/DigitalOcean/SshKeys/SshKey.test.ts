@@ -1,5 +1,6 @@
 import { OwnedBySomeoneElse } from "@/AdoptPolicy";
 import * as DigitalOcean from "@/DigitalOcean";
+import { SshKey } from "@/DigitalOcean/SshKeys/SshKey";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
 import { sshKeysGet } from "@distilled.cloud/digitalocean/sshKeys";
@@ -9,8 +10,8 @@ import { logLevel, outOfBand, skipLive } from "../support.ts";
 
 const { test } = Test.make({ providers: DigitalOcean.providers() });
 
-// Dedicated throwaway keypairs generated for this suite — the public halves
-// are data, not secrets. Deterministic so re-runs reconcile the same keys.
+// Test-only key pairs. The public halves are not secrets. Constant values
+// let a re-run find the same keys.
 const PUBLIC_KEY =
   "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEM4cCPMnwhTuD9GA2uL3sgFjD6DqMnJW+iKNkPEPfHJ alchemy-test-fixture";
 const PUBLIC_KEY_2 =
@@ -21,7 +22,7 @@ const OTHER_KEY_NAME = "alchemy-test-ssh-key-other";
 
 test.provider("diff ignores surrounding whitespace in publicKey", () =>
   Effect.gen(function* () {
-    const provider = yield* Provider.findProvider(DigitalOcean.SshKey);
+    const provider = yield* Provider.findProvider(SshKey);
     const diff = yield* provider.diff!({
       id: "TestKey",
       fqn: "TestKey",
@@ -56,7 +57,7 @@ test.provider.skipIf(skipLive)(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* DigitalOcean.SshKey("TestKey", {
+          return yield* SshKey("TestKey", {
             name: KEY_NAME,
             publicKey: PUBLIC_KEY,
           });
@@ -66,17 +67,14 @@ test.provider.skipIf(skipLive)(
       expect(created.publicKey).toEqual(PUBLIC_KEY);
       expect(created.fingerprint).toMatch(/^([0-9a-f]{2}:)+[0-9a-f]{2}$/);
 
-      // Out-of-band: the key exists in the real account.
       const remote = yield* sshKeysGet({
         ssh_key_identifier: String(created.sshKeyId),
       }).pipe(outOfBand);
       expect(remote.ssh_key.name).toEqual(KEY_NAME);
 
-      // Same logical id, new name — diff classifies `name` as an in-place
-      // update, so the physical key id must survive.
       const renamed = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* DigitalOcean.SshKey("TestKey", {
+          return yield* SshKey("TestKey", {
             name: RENAMED_KEY_NAME,
             publicKey: PUBLIC_KEY,
           });
@@ -85,23 +83,22 @@ test.provider.skipIf(skipLive)(
       expect(renamed.sshKeyId).toEqual(created.sshKeyId);
       expect(renamed.name).toEqual(RENAMED_KEY_NAME);
 
-      // list() hydrates the exact read/Attributes shape.
-      const provider = yield* Provider.findProvider(DigitalOcean.SshKey);
+      const provider = yield* Provider.findProvider(SshKey);
       const all = yield* provider.list();
-      expect(all.find((k) => k.sshKeyId === created.sshKeyId)?.name).toEqual(
-        RENAMED_KEY_NAME,
-      );
+      expect(
+        all.find((key) => key.sshKeyId === created.sshKeyId)?.name,
+      ).toEqual(RENAMED_KEY_NAME);
 
-      // A second resource with the same material under another name is a
-      // foreign registration: it must not be renamed or shared.
+      // The same key under another name belongs to someone else. The deploy
+      // must fail and must not rename the key.
       const error = yield* stack
         .deploy(
           Effect.gen(function* () {
-            yield* DigitalOcean.SshKey("TestKey", {
+            yield* SshKey("TestKey", {
               name: RENAMED_KEY_NAME,
               publicKey: PUBLIC_KEY,
             });
-            return yield* DigitalOcean.SshKey("OtherKey", {
+            return yield* SshKey("OtherKey", {
               name: OTHER_KEY_NAME,
               publicKey: PUBLIC_KEY,
             });
@@ -114,11 +111,9 @@ test.provider.skipIf(skipLive)(
       }).pipe(outOfBand);
       expect(untouched.ssh_key.name).toEqual(RENAMED_KEY_NAME);
 
-      // New key material replaces the resource: a new physical key, and
-      // the old one is deleted.
       const replaced = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* DigitalOcean.SshKey("TestKey", {
+          return yield* SshKey("TestKey", {
             name: RENAMED_KEY_NAME,
             publicKey: PUBLIC_KEY_2,
           });

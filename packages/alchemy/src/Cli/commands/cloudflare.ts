@@ -12,7 +12,7 @@ import * as Stream from "effect/Stream";
 import { Argument, Command, Flag } from "effect/unstable/cli";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 
-import { AuthProviders } from "../../Auth/AuthProvider.ts";
+import { AuthError, AuthProviders } from "../../Auth/AuthProvider.ts";
 import { withProfileOverride } from "../../Auth/Profile.ts";
 import * as CloudflareAccess from "../../Cloudflare/Access.ts";
 import { CloudflareAuth } from "../../Cloudflare/Auth/AuthProvider.ts";
@@ -38,6 +38,7 @@ import {
   instrumentCommand,
   parseSince,
   profile,
+  yes,
 } from "./_shared.ts";
 
 /**
@@ -291,11 +292,11 @@ const tokenAccountIdFlag = Flag.string("account-id").pipe(
 );
 
 /**
- * `alchemy cloudflare create-token` — mint a Cloudflare API token
+ * `alchemy cloudflare create-token` — create a Cloudflare API token
  * (`POST /user/tokens`).
  *
  * This command is **standalone**: it does not use an Alchemy auth profile.
- * Cloudflare only mints a token whose permissions the authenticating
+ * Cloudflare only creates a token whose permissions the authenticating
  * credential is allowed to grant — and OAuth/scoped tokens silently produce a
  * token with zero permissions — so it always authenticates with the account's
  * **Global API Key** (read from `CLOUDFLARE_API_KEY` / `CLOUDFLARE_EMAIL`,
@@ -479,9 +480,9 @@ const createTokenCommand = Command.make(
           0,
         );
 
-        // Verify the freshly minted token actually authenticates. The
-        // Cloudflare dashboard has a long-standing rendering bug where
-        // API-created tokens show a blank permission summary (and a disabled
+        // Verify that the new token authenticates. The Cloudflare
+        // dashboard has a long-standing rendering bug where API-created
+        // tokens show a blank permission summary (and a disabled
         // "View"), which makes a perfectly good token look empty. A live
         // `/user/tokens/verify` is the source of truth.
         const status = yield* http
@@ -638,13 +639,20 @@ const stateLogsCommand = Command.make(
 const secretsBackupFile = Argument.file("file").pipe(
   Argument.withDescription(
     "File to write the bearer token and encryption key to (mode 0600). " +
-      "Keep it in a password manager: a rotated encryption key makes every stack's state unreadable.",
+      "Store the file in a password manager. If the encryption key is lost, no stack state can be read.",
   ),
+);
+
+const secretsBackupOverwrite = Flag.boolean("force").pipe(
+  Flag.withDescription("Overwrite the file if it exists."),
+  Flag.withDefault(false),
 );
 
 const secretsRestoreFile = Argument.file("file", { mustExist: true }).pipe(
   Argument.withDescription("Backup file written by 'secrets backup'."),
 );
+
+const CI = Config.boolean("CI").pipe(Config.withDefault(false));
 
 const StateStoreSecretsBackup = Schema.fromJsonString(
   Schema.Struct({
@@ -658,16 +666,24 @@ const StateStoreSecretsBackup = Schema.fromJsonString(
 
 const secretsBackupCommand = Command.make(
   "backup",
-  { envFile, profile, file: secretsBackupFile },
+  { envFile, profile, file: secretsBackupFile, force: secretsBackupOverwrite },
   instrumentCommand(
     "cloudflare.state.secrets.backup",
-    (a: { profile: string }) => ({
+    (a: { profile: string; force: boolean }) => ({
       "alchemy.profile": a.profile,
+      "alchemy.force": a.force,
     }),
   )(
-    Effect.fn(function* ({ envFile, profile, file }) {
+    Effect.fn(function* ({ envFile, profile, file, force }) {
       const services = yield* cloudflareLayers(envFile, profile);
       const fs = yield* FileSystem.FileSystem;
+      if (!force && (yield* fs.exists(file))) {
+        return yield* Effect.fail(
+          new AuthError({
+            message: `${file} already exists. Pass --force to overwrite it.`,
+          }),
+        );
+      }
       yield* Effect.gen(function* () {
         const secrets = yield* readStateStoreSecrets();
         yield* fs.writeFileString(
@@ -693,27 +709,46 @@ const secretsBackupCommand = Command.make(
 
 const secretsRestoreCommand = Command.make(
   "restore",
-  { envFile, profile, file: secretsRestoreFile },
+  { envFile, profile, file: secretsRestoreFile, yes },
   instrumentCommand(
     "cloudflare.state.secrets.restore",
-    (a: { profile: string }) => ({
+    (a: { profile: string; yes: boolean }) => ({
       "alchemy.profile": a.profile,
+      "alchemy.yes": a.yes,
     }),
   )(
-    Effect.fn(function* ({ envFile, profile, file }) {
+    Effect.fn(function* ({ envFile, profile, file, yes }) {
       const services = yield* cloudflareLayers(envFile, profile);
       const fs = yield* FileSystem.FileSystem;
+      const isCI = yield* CI;
       yield* Effect.gen(function* () {
-        const raw = yield* fs.readFileString(file);
-        // A schema error prints the input. A fixed message keeps the
-        // secret values off the terminal.
+        const backupJson = yield* fs.readFileString(file);
+        // The schema error would print the secrets. Use a fixed message.
         const backup = yield* Schema.decodeEffect(StateStoreSecretsBackup)(
-          raw,
+          backupJson,
         ).pipe(
           Effect.mapError(
-            () => new Error(`${file} is not a state store secrets backup.`),
+            () =>
+              new AuthError({
+                message: `${file} is not a state store secrets backup.`,
+              }),
           ),
         );
+        const approved =
+          yes ||
+          isCI ||
+          (yield* Clank.confirm({
+            message:
+              `Overwrite the live bearer token and encryption key of Secrets ` +
+              `Store '${backup.storeId}' (${backup.url}) with the backup? ` +
+              "If the backup key is not the key that encrypted the current " +
+              "state, every stack's state becomes unreadable.",
+            initialValue: false,
+          }));
+        if (!approved) {
+          yield* Console.log("Cancelled.");
+          return;
+        }
         yield* restoreStateStoreSecrets(backup);
         yield* Clank.success("State store secrets restored.");
       }).pipe(Effect.provide(services));
@@ -725,10 +760,6 @@ const secretsRestoreCommand = Command.make(
   ),
 );
 
-/**
- * Backs up or restores the state store's bearer token and encryption
- * key. Values never go to stdout.
- */
 const stateSecretsCommand = Command.make("secrets", {}).pipe(
   Command.withDescription(
     "Back up or restore the state store's bearer token and encryption key.",

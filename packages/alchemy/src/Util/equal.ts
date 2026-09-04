@@ -42,15 +42,15 @@ export const arrayEqualsUnordered = <T extends string | number>(
  * Set equality for primitive elements: order and repeats do not matter,
  * and an omitted list equals an empty list.
  */
-export const sameElements = <T extends string | number>(
+export const setEquals = <T extends string | number>(
   a: ReadonlyArray<T> | undefined,
   b: ReadonlyArray<T> | undefined,
 ): boolean => {
-  const as = new Set(a ?? []);
-  const bs = new Set(b ?? []);
-  if (as.size !== bs.size) return false;
-  for (const x of as) {
-    if (!bs.has(x)) return false;
+  const setA = new Set(a ?? []);
+  const setB = new Set(b ?? []);
+  if (setA.size !== setB.size) return false;
+  for (const element of setA) {
+    if (!setB.has(element)) return false;
   }
   return true;
 };

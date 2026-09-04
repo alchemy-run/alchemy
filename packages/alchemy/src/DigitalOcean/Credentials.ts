@@ -21,9 +21,9 @@ export {
 } from "@distilled.cloud/digitalocean/Credentials";
 
 /**
- * Build a `Credentials` layer that resolves DigitalOcean credentials via the
- * Alchemy AuthProvider using the configured profile (defaults to "default",
- * overridable with the `ALCHEMY_PROFILE` env/config value).
+ * A `Credentials` layer. It reads the token for the active profile through
+ * the DigitalOcean auth provider. `ALCHEMY_PROFILE` selects the profile.
+ * The default is `default`.
  */
 export const fromAuthProvider = () =>
   Layer.effect(
@@ -35,24 +35,26 @@ export const fromAuthProvider = () =>
         DigitalOceanResolvedCredentials
       >(DIGITALOCEAN_AUTH_PROVIDER_NAME);
       const profileName = yield* ALCHEMY_PROFILE;
-      const ci = yield* Config.boolean("CI").pipe(Config.withDefault(false));
+      const isCI = yield* Config.boolean("CI").pipe(Config.withDefault(false));
 
-      return yield* profile.loadOrConfigure(auth, profileName, { ci }).pipe(
-        Effect.flatMap((config) =>
-          auth.read(profileName, config as DigitalOceanAuthConfig),
-        ),
-        Effect.map((creds) => ({
-          apiToken: creds.apiToken,
-          apiBaseUrl: DEFAULT_API_BASE_URL,
-        })),
-        Effect.mapError(
-          (e) =>
-            new ConfigError({
-              message: `Failed to resolve DigitalOcean credentials for profile '${profileName}': ${String(e)}`,
-            }),
-        ),
-        Effect.orDie,
-        Effect.cached,
-      );
+      return yield* profile
+        .loadOrConfigure(auth, profileName, { ci: isCI })
+        .pipe(
+          Effect.flatMap((config) =>
+            auth.read(profileName, config as DigitalOceanAuthConfig),
+          ),
+          Effect.map((credentials) => ({
+            apiToken: credentials.apiToken,
+            apiBaseUrl: DEFAULT_API_BASE_URL,
+          })),
+          Effect.mapError(
+            (cause) =>
+              new ConfigError({
+                message: `Failed to resolve DigitalOcean credentials for profile '${profileName}': ${String(cause)}`,
+              }),
+          ),
+          Effect.orDie,
+          Effect.cached,
+        );
     }),
   );

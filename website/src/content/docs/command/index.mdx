@@ -64,8 +64,8 @@ yield* Command.Exec("migrate", {
 
 It runs on delete with the last-deployed `cwd`, `env`, `shell`, and
 `timeout`, before the resources this `Exec` depends on are
-destroyed, and a non-zero exit fails the destroy — so make it
-tolerate an already-gone target if it shouldn't block teardown.
+destroyed. A non-zero exit fails the destroy. If the target can
+already be gone, make the command succeed in that case.
 
 `Dev` runs a long-lived process scoped to the stack instance:
 

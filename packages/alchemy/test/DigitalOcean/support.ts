@@ -1,4 +1,7 @@
+import { CredentialsStoreLive } from "@/Auth/Credentials";
+import { ProfileLive } from "@/Auth/Profile";
 import * as DigitalOcean from "@/DigitalOcean";
+import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { MinimumLogLevel } from "effect/References";
@@ -9,18 +12,33 @@ export const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-/** Live suites are skipIf-gated on a token in the environment. */
-export const hasDigitalOceanCreds = !!(
+export const hasDigitalOceanToken = !!(
   process.env.DIGITALOCEAN_TOKEN || process.env.DIGITALOCEAN_ACCESS_TOKEN
 );
 
-/** Live suites also skip under `FAST=1`. */
-export const skipLive = !hasDigitalOceanCreds || !!process.env.FAST;
+const isTestingProfile = process.env.ALCHEMY_PROFILE === "testing";
 
 /**
- * Out-of-band verification context: raw distilled calls with env
- * credentials, independent of the provider layer under test.
+ * Live tests run when a token is set or when the `testing` profile is
+ * active. The `testing` profile can hold stored credentials. They also skip
+ * under `FAST=1`.
+ */
+export const skipLive =
+  (!hasDigitalOceanToken && !isTestingProfile) || !!process.env.FAST;
+
+/** Credentials resolved the same way the provider resolves them. */
+const credentials = DigitalOcean.fromAuthProvider().pipe(
+  Layer.provide(DigitalOcean.DigitalOceanAuth),
+  Layer.provide(ProfileLive),
+  Layer.provide(CredentialsStoreLive),
+  Layer.provide(NodeServices.layer),
+  Layer.orDie,
+);
+
+/**
+ * Out-of-band verification context: raw distilled calls, independent of
+ * the provider layer under test.
  */
 export const outOfBand = Effect.provide(
-  Layer.mergeAll(DigitalOcean.CredentialsFromEnv, FetchHttpClient.layer),
+  Layer.mergeAll(credentials, FetchHttpClient.layer),
 );

@@ -213,16 +213,16 @@ describe("Alchemy.CertRequest", () => {
   test.provider("openssl verifies rsa and ed25519 CSRs", (stack) =>
     Effect.gen(function* () {
       if (!(yield* hasOpenssl)) return;
-      const rsa = yield* stack.deploy(
+      const rsaRequest = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* CertRequest("openssl-rsa", {
             privateKey: RSA_2048_KEY,
           });
         }),
       );
-      expect(yield* verifiesWithOpenssl(rsa.csr)).toBe(true);
+      expect(yield* verifiesWithOpenssl(rsaRequest.csr)).toBe(true);
 
-      const ed = yield* stack.deploy(
+      const ed25519Request = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* CertRequest("openssl-ed", {
             privateKey: ED25519_KEY,
@@ -230,7 +230,7 @@ describe("Alchemy.CertRequest", () => {
           });
         }),
       );
-      expect(yield* verifiesWithOpenssl(ed.csr)).toBe(true);
+      expect(yield* verifiesWithOpenssl(ed25519Request.csr)).toBe(true);
     }),
   );
 
@@ -356,7 +356,7 @@ describe("Alchemy.CertRequest", () => {
           }),
         ),
       );
-      expectCertRequestError(error, /not a parseable PEM/);
+      expectCertRequestError(error, /Cannot parse privateKey/);
     }),
   );
 

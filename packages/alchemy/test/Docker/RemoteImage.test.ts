@@ -181,8 +181,13 @@ describe("Docker.RemoteImage", { concurrent: false }, () => {
       // Wait for the registry HTTP API to start serving before pushing.
       yield* client.get(`http://${host}/v2/`).pipe(
         Effect.retry({
-          schedule: Schedule.exponential("250 millis"),
-          times: 20,
+          schedule: Schedule.max([
+            Schedule.min([
+              Schedule.exponential("250 millis"),
+              Schedule.spaced("2 seconds"),
+            ]),
+            Schedule.recurs(20),
+          ]),
         }),
       );
 
@@ -200,16 +205,16 @@ describe("Docker.RemoteImage", { concurrent: false }, () => {
 
       yield* docker.image.remove(targetRef, true);
 
-      const anonymous = yield* Effect.result(
+      const anonymousPull = yield* Effect.result(
         docker.image.pull(targetRef, undefined, undefined, undefined),
       );
-      expect(Result.isFailure(anonymous)).toBe(true);
+      expect(Result.isFailure(anonymousPull)).toBe(true);
 
       const pulled = yield* stack.deploy(
         Docker.RemoteImage("private-hello-pull", {
           name: targetName,
           tag: targetTag,
-          auth: credentials,
+          pullRegistry: credentials,
         }),
       );
       expect(pulled.imageRef).toBe(targetRef);
@@ -248,8 +253,13 @@ describe("Docker.RemoteImage", { concurrent: false }, () => {
       // Wait for the registry HTTP API to start serving before pushing.
       yield* client.get(`http://${host}/v2/`).pipe(
         Effect.retry({
-          schedule: Schedule.exponential("250 millis"),
-          times: 20,
+          schedule: Schedule.max([
+            Schedule.min([
+              Schedule.exponential("250 millis"),
+              Schedule.spaced("2 seconds"),
+            ]),
+            Schedule.recurs(20),
+          ]),
         }),
       );
 

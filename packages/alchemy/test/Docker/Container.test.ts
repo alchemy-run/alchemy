@@ -188,8 +188,8 @@ describe("Docker.Container", { concurrent: false }, () => {
     (stack) =>
       Effect.gen(function* () {
         const docker = yield* Docker.Docker;
-        // start: false — a read-only rootfs needs writable mounts nginx
-        // doesn't have here; this test only verifies the create args land.
+        // nginx cannot start on a read-only root filesystem without writable
+        // mounts. This test checks the create arguments only.
         const container = yield* stack.deploy(
           Docker.Container("hardened-container", {
             image: "nginx:alpine",
@@ -241,7 +241,7 @@ describe("Docker.Container", { concurrent: false }, () => {
   );
 
   test.provider(
-    "is born on the first declared network, never the default bridge",
+    "is created on the first declared network, not the default bridge",
     (stack) =>
       Effect.gen(function* () {
         const docker = yield* Docker.Docker;
@@ -293,62 +293,95 @@ describe("Docker.Container", { concurrent: false }, () => {
     }),
   );
 
-  test.provider("drift recreate stops gracefully", (stack) =>
-    Effect.gen(function* () {
-      const docker = yield* Docker.Docker;
-      const provider = yield* Provider.findProvider(Docker.Container);
-      const name = "alchemy-test-graceful-container";
-      const volume = "alchemy-test-graceful-volume";
-      yield* Effect.addFinalizer(() =>
-        docker.container
-          .remove(name, true)
-          .pipe(Effect.andThen(docker.volume.remove(volume)), Effect.ignore),
-      );
-      yield* docker.volume.create({ name: volume });
+  test.provider(
+    "returns to the default bridge when the last network is removed",
+    (stack) =>
+      Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
+        // The network stays deployed in both steps. Only the container's
+        // `networks` prop changes.
+        const deployOnNetwork = (joinNetwork: boolean) =>
+          stack.deploy(
+            Effect.gen(function* () {
+              const network = yield* Docker.Network("last-network");
+              const container = yield* Docker.Container("last-net-container", {
+                image: "nginx:alpine",
+                networks: joinNetwork ? [{ name: network.name }] : undefined,
+                start: true,
+              });
+              return { container, network };
+            }),
+          );
 
-      // The process writes a marker on SIGTERM. A bare SIGKILL leaves none.
-      const props: Docker.ContainerProps = {
-        name,
-        image: "alpine:3.19",
-        command: [
-          "sh",
-          "-c",
-          "trap 'echo stopped > /out/stopped; exit 0' TERM; while :; do sleep 1; done",
-        ],
-        volumes: [{ hostPath: volume, containerPath: "/out" }],
-        stopTimeout: "10 seconds",
-        start: true,
-      };
-      const first = yield* stack.deploy(
-        Docker.Container("graceful-container", props),
-      );
-      expect(first.status).toBe("running");
+        const joined = yield* deployOnNetwork(true);
+        const left = yield* deployOnNetwork(false);
+        expect(left.container.id).toBe(joined.container.id);
 
-      // A changed env reaches reconcile without a replace plan.
-      const second = yield* provider.reconcile!({
-        id: "graceful-container",
-        fqn: "graceful-container",
-        instanceId: "instance",
-        news: { ...props, environment: { DRIFT: "1" } },
-        olds: props,
-        output: first,
-        session: stubSession,
-        bindings: [],
-      });
-      expect(second.id).not.toBe(first.id);
-      expect(second.status).toBe("running");
+        const info = yield* docker.container.inspect(left.container.name);
+        expect(Object.keys(info.NetworkSettings.Networks ?? {})).toEqual([
+          "bridge",
+        ]);
+      }),
+  );
 
-      const marker = yield* docker.run([
-        "run",
-        "--rm",
-        "-v",
-        `${volume}:/out:ro`,
-        "alpine:3.19",
-        "cat",
-        "/out/stopped",
-      ]);
-      expect(marker.stdout).toBe("stopped");
-    }),
+  test.provider(
+    "recreate on drift stops the old container gracefully",
+    (stack) =>
+      Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
+        const provider = yield* Provider.findProvider(Docker.Container);
+        const name = "alchemy-test-graceful-container";
+        const volume = "alchemy-test-graceful-volume";
+        yield* Effect.addFinalizer(() =>
+          docker.container
+            .remove(name, true)
+            .pipe(Effect.andThen(docker.volume.remove(volume)), Effect.ignore),
+        );
+        yield* docker.volume.create({ name: volume });
+
+        // The process writes a marker on SIGTERM. A bare SIGKILL leaves none.
+        const props: Docker.ContainerProps = {
+          name,
+          image: "alpine:3.19",
+          command: [
+            "sh",
+            "-c",
+            "trap 'echo stopped > /out/stopped; exit 0' TERM; while :; do sleep 1; done",
+          ],
+          volumes: [{ hostPath: volume, containerPath: "/out" }],
+          stopTimeout: "10 seconds",
+          start: true,
+        };
+        const first = yield* stack.deploy(
+          Docker.Container("graceful-container", props),
+        );
+        expect(first.status).toBe("running");
+
+        // A changed env reaches reconcile without a replace plan.
+        const second = yield* provider.reconcile!({
+          id: "graceful-container",
+          fqn: "graceful-container",
+          instanceId: "instance",
+          news: { ...props, environment: { DRIFT: "1" } },
+          olds: props,
+          output: first,
+          session: stubSession,
+          bindings: [],
+        });
+        expect(second.id).not.toBe(first.id);
+        expect(second.status).toBe("running");
+
+        const marker = yield* docker.run([
+          "run",
+          "--rm",
+          "-v",
+          `${volume}:/out:ro`,
+          "alpine:3.19",
+          "cat",
+          "/out/stopped",
+        ]);
+        expect(marker.stdout).toBe("stopped");
+      }),
   );
 
   test.provider(

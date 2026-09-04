@@ -245,6 +245,11 @@ export interface ProviderService<
    * Properties that are always stable across any update.
    */
   stables?: Extract<keyof Res["Attributes"], string>[];
+  /**
+   * A `noop` result does not save the new props. To save a prop that does
+   * not change the cloud resource, return `update` and handle it in
+   * {@link reconcile}.
+   */
   diff?(input: {
     id: string;
     /**

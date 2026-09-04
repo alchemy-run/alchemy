@@ -1,5 +1,11 @@
 import { adopt, OwnedBySomeoneElse } from "@/AdoptPolicy";
 import * as DigitalOcean from "@/DigitalOcean";
+import {
+  Firewall,
+  sameRules,
+  type FirewallInboundRule,
+  type FirewallProps,
+} from "@/DigitalOcean/Firewalls/Firewall";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
 import { firewallsGet } from "@distilled.cloud/digitalocean/firewalls";
@@ -13,43 +19,41 @@ const FIREWALL_NAME = "alchemy-test-firewall";
 const SHARED_FIREWALL_NAME = "alchemy-test-firewall-shared";
 const NO_OUTBOUND_FIREWALL_NAME = "alchemy-test-firewall-no-outbound";
 
-const SSH_ONLY: DigitalOcean.FirewallInboundRule[] = [
+const SSH_ONLY: FirewallInboundRule[] = [
   { protocol: "tcp", ports: "22", addresses: ["0.0.0.0/0", "::/0"] },
 ];
 
-const WEB_RULES: DigitalOcean.FirewallInboundRule[] = [
+const WEB_RULES: FirewallInboundRule[] = [
   { protocol: "tcp", ports: "22", addresses: ["0.0.0.0/0", "::/0"] },
   { protocol: "tcp", ports: "80", addresses: ["0.0.0.0/0", "::/0"] },
   { protocol: "tcp", ports: "443", addresses: ["0.0.0.0/0", "::/0"] },
 ];
 
-unit("fingerprintRules ignores rule order", () => {
-  expect(DigitalOcean.sameRules(WEB_RULES, [...WEB_RULES].reverse())).toBe(
-    true,
-  );
+unit("sameRules ignores rule order", () => {
+  expect(sameRules(WEB_RULES, [...WEB_RULES].reverse())).toBe(true);
 });
 
-unit("fingerprintRules ignores address order", () => {
+unit("sameRules ignores address order", () => {
   expect(
-    DigitalOcean.sameRules(
+    sameRules(
       [{ protocol: "tcp", ports: "22", addresses: ["0.0.0.0/0", "::/0"] }],
       [{ protocol: "tcp", ports: "22", addresses: ["::/0", "0.0.0.0/0"] }],
     ),
   ).toBe(true);
 });
 
-unit("fingerprintRules collapses icmp ports to 0", () => {
+unit("sameRules collapses icmp ports to 0", () => {
   expect(
-    DigitalOcean.sameRules(
+    sameRules(
       [{ protocol: "icmp", ports: "22", addresses: ["0.0.0.0/0"] }],
       [{ protocol: "icmp", ports: "0", addresses: ["0.0.0.0/0"] }],
     ),
   ).toBe(true);
 });
 
-unit("fingerprintRules treats omitted member lists as empty", () => {
+unit("sameRules treats omitted member lists as empty", () => {
   expect(
-    DigitalOcean.sameRules(
+    sameRules(
       [{ protocol: "tcp", ports: "22", addresses: ["0.0.0.0/0"] }],
       [
         {
@@ -62,12 +66,12 @@ unit("fingerprintRules treats omitted member lists as empty", () => {
       ],
     ),
   ).toBe(true);
-  expect(DigitalOcean.sameRules(undefined, [])).toBe(true);
+  expect(sameRules(undefined, [])).toBe(true);
 });
 
-unit("fingerprintRules ignores repeated members and repeated rules", () => {
+unit("sameRules ignores repeated members and repeated rules", () => {
   expect(
-    DigitalOcean.sameRules(
+    sameRules(
       [
         {
           protocol: "tcp",
@@ -94,19 +98,16 @@ unit("fingerprintRules ignores repeated members and repeated rules", () => {
   ).toBe(true);
 });
 
-unit("fingerprintRules keeps a single port apart from a one-port range", () => {
+unit("sameRules keeps a single port apart from a one-port range", () => {
   expect(
-    DigitalOcean.sameRules(
+    sameRules(
       [{ protocol: "tcp", ports: "80", addresses: ["0.0.0.0/0"] }],
       [{ protocol: "tcp", ports: "80-80", addresses: ["0.0.0.0/0"] }],
     ),
   ).toBe(false);
 });
 
-const diffInput = (
-  olds: DigitalOcean.FirewallProps,
-  news: DigitalOcean.FirewallProps,
-) => ({
+const diffInput = (olds: FirewallProps, news: FirewallProps) => ({
   id: "TestFirewall",
   fqn: "TestFirewall",
   instanceId: "instance",
@@ -128,7 +129,7 @@ const diffInput = (
 
 test.provider("diff ignores rule order", () =>
   Effect.gen(function* () {
-    const provider = yield* Provider.findProvider(DigitalOcean.Firewall);
+    const provider = yield* Provider.findProvider(Firewall);
     const unchanged = yield* provider.diff!(
       diffInput(
         {
@@ -151,7 +152,7 @@ test.provider(
   "diff updates when outboundRules switches between [] and omitted",
   () =>
     Effect.gen(function* () {
-      const provider = yield* Provider.findProvider(DigitalOcean.Firewall);
+      const provider = yield* Provider.findProvider(Firewall);
       const dropped = yield* provider.diff!(
         diffInput(
           { name: FIREWALL_NAME, inboundRules: SSH_ONLY },
@@ -169,6 +170,13 @@ test.provider(
     }),
 );
 
+const isGone = (firewallId: string) =>
+  firewallsGet({ firewall_id: firewallId }).pipe(
+    Effect.map(() => false),
+    Effect.catchTag("NotFound", () => Effect.succeed(true)),
+    outOfBand,
+  );
+
 test.provider.skipIf(skipLive)(
   "firewall lifecycle: create, widen rules in place, destroy",
   (stack) =>
@@ -177,7 +185,7 @@ test.provider.skipIf(skipLive)(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* DigitalOcean.Firewall("TestFirewall", {
+          return yield* Firewall("TestFirewall", {
             name: FIREWALL_NAME,
             tags: ["alchemy-test"],
             inboundRules: SSH_ONLY,
@@ -187,21 +195,18 @@ test.provider.skipIf(skipLive)(
       expect(created.name).toEqual(FIREWALL_NAME);
       expect(created.status).toEqual("succeeded");
       expect(created.inboundRules).toHaveLength(1);
-      // Omitted outboundRules defaulted to allow-all (tcp, udp, icmp).
+      // omitted outboundRules = tcp, udp, icmp allow-all
       expect(created.outboundRules).toHaveLength(3);
 
-      // Out-of-band: the firewall exists in the real account.
       const remote = yield* firewallsGet({
         firewall_id: created.firewallId,
       }).pipe(outOfBand);
       expect(remote.firewall.name).toEqual(FIREWALL_NAME);
       expect(remote.firewall.inbound_rules ?? []).toHaveLength(1);
 
-      // Same logical id, wider rules — everything updates in place, so the
-      // physical firewall id must survive.
       const widened = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* DigitalOcean.Firewall("TestFirewall", {
+          return yield* Firewall("TestFirewall", {
             name: FIREWALL_NAME,
             tags: ["alchemy-test"],
             inboundRules: WEB_RULES,
@@ -210,30 +215,22 @@ test.provider.skipIf(skipLive)(
       );
       expect(widened.firewallId).toEqual(created.firewallId);
       expect(widened.inboundRules).toHaveLength(3);
-      expect(widened.inboundRules.map((r) => r.ports).sort()).toEqual([
+      expect(widened.inboundRules.map((rule) => rule.ports).sort()).toEqual([
         "22",
         "443",
         "80",
       ]);
 
-      // list() hydrates the exact read/Attributes shape.
-      const provider = yield* Provider.findProvider(DigitalOcean.Firewall);
+      const provider = yield* Provider.findProvider(Firewall);
       const all = yield* provider.list();
       expect(
-        all.find((f) => f.firewallId === created.firewallId)?.inboundRules,
+        all.find((firewall) => firewall.firewallId === created.firewallId)
+          ?.inboundRules,
       ).toHaveLength(3);
 
       yield* stack.destroy();
 
-      // Typed wait-until-gone: the firewall must actually be deleted.
-      const gone = yield* firewallsGet({
-        firewall_id: created.firewallId,
-      }).pipe(
-        Effect.map(() => false),
-        Effect.catchTag("NotFound", () => Effect.succeed(true)),
-        outOfBand,
-      );
-      expect(gone).toBe(true);
+      expect(yield* isGone(created.firewallId)).toBe(true);
     }).pipe(logLevel),
   { timeout: 300_000 },
 );
@@ -246,7 +243,7 @@ test.provider.skipIf(skipLive)(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* DigitalOcean.Firewall("NoOutbound", {
+          return yield* Firewall("NoOutbound", {
             name: NO_OUTBOUND_FIREWALL_NAME,
             tags: ["alchemy-test"],
             inboundRules: SSH_ONLY,
@@ -262,6 +259,8 @@ test.provider.skipIf(skipLive)(
       expect(remote.firewall.outbound_rules ?? []).toEqual([]);
 
       yield* stack.destroy();
+
+      expect(yield* isGone(created.firewallId)).toBe(true);
     }).pipe(logLevel),
   { timeout: 300_000 },
 );
@@ -274,7 +273,7 @@ test.provider.skipIf(skipLive)(
 
       const first = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* DigitalOcean.Firewall("First", {
+          return yield* Firewall("First", {
             name: SHARED_FIREWALL_NAME,
             tags: ["alchemy-test"],
             inboundRules: SSH_ONLY,
@@ -285,12 +284,12 @@ test.provider.skipIf(skipLive)(
       const error = yield* stack
         .deploy(
           Effect.gen(function* () {
-            yield* DigitalOcean.Firewall("First", {
+            yield* Firewall("First", {
               name: SHARED_FIREWALL_NAME,
               tags: ["alchemy-test"],
               inboundRules: SSH_ONLY,
             });
-            return yield* DigitalOcean.Firewall("Second", {
+            return yield* Firewall("Second", {
               name: SHARED_FIREWALL_NAME,
               tags: ["alchemy-test"],
               inboundRules: SSH_ONLY,
@@ -302,12 +301,12 @@ test.provider.skipIf(skipLive)(
 
       const second = yield* stack.deploy(
         Effect.gen(function* () {
-          yield* DigitalOcean.Firewall("First", {
+          yield* Firewall("First", {
             name: SHARED_FIREWALL_NAME,
             tags: ["alchemy-test"],
             inboundRules: SSH_ONLY,
           });
-          return yield* DigitalOcean.Firewall("Second", {
+          return yield* Firewall("Second", {
             name: SHARED_FIREWALL_NAME,
             tags: ["alchemy-test"],
             inboundRules: SSH_ONLY,
@@ -318,14 +317,7 @@ test.provider.skipIf(skipLive)(
 
       yield* stack.destroy();
 
-      const gone = yield* firewallsGet({
-        firewall_id: first.firewallId,
-      }).pipe(
-        Effect.map(() => false),
-        Effect.catchTag("NotFound", () => Effect.succeed(true)),
-        outOfBand,
-      );
-      expect(gone).toBe(true);
+      expect(yield* isGone(first.firewallId)).toBe(true);
     }).pipe(logLevel),
   { timeout: 300_000 },
 );

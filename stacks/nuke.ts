@@ -14,6 +14,8 @@ export default Alchemy.Stack(
     providers: Layer.mergeAll(
       Cloudflare.providers(),
       AWS.providers(),
+      // DigitalOcean firewalls and SSH keys have no ownership tag. The nuke
+      // deletes all of them. Point the testing token at a dedicated team.
       DigitalOcean.providers(),
       Neon.providers(),
       Planetscale.providers(),

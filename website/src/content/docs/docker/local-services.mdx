@@ -119,11 +119,12 @@ healthcheck intervals take Effect `Duration` strings like
 `"5 seconds"`, and `start: true` actually runs the container
 (the default creates it stopped).
 
-To bound and harden the container, add `memory: "512m"` (Docker's
-byte-suffix format — the kernel OOM-kills the container instead of
-the host), `noNewPrivileges: true` (no privilege escalation via
-setuid binaries), and `readOnly: true` (read-only root filesystem;
-every writable path then has to be an explicit volume).
+To limit and harden the container, set `memory`, `readOnly`, and
+`noNewPrivileges`. `memory` sets a memory limit (`"512m"`, `"2g"`).
+If the container uses more, the kernel stops the container, not the
+host. `readOnly: true` mounts the root filesystem read-only. Every
+writable path must then be an explicit volume. `noNewPrivileges: true`
+stops processes from gaining privileges through setuid binaries.
 
 ## Read the bound ports
 

@@ -6,14 +6,14 @@ description: Connect alchemy to DigitalOcean — account, credentials, and profi
 Sign up at [digitalocean.com](https://www.digitalocean.com) and
 create a personal access token with read and write scope in
 [API → Tokens](https://cloud.digitalocean.com/account/api/tokens).
-Full access is simplest.
+A full-access token is the simplest option.
 
 If you scope the token instead, alchemy needs read + write on
 **droplet**, **ssh_key**, **firewall**, and **tag**. The tag scope
-is not optional — every droplet is stamped with an ownership tag at
-create so a lost state store can re-find it.
+is required. Alchemy adds an ownership tag to each droplet. The tag
+lets alchemy find the droplet again if the state store is lost.
 
-Register the provider next to your cloud's:
+Add the provider to your stack:
 
 ```typescript
 // alchemy.run.ts
@@ -28,7 +28,7 @@ options:
 - **Environment Variable** — reads `DIGITALOCEAN_TOKEN` (the
   Terraform provider's name), falling back to
   `DIGITALOCEAN_ACCESS_TOKEN` (`doctl`'s name). Either works; if
-  both are set, `DIGITALOCEAN_TOKEN` wins. Good for CI.
+  both are set, `DIGITALOCEAN_TOKEN` wins. Use this in CI.
 - **API Token** — entered interactively, saved under
   `~/.alchemy/credentials/<profile>/digitalocean-stored.json`.
 
@@ -37,7 +37,7 @@ If you pick the environment variable method and neither var is set,
 token instead of failing later at deploy time.
 
 In CI (`CI=true`), the environment-variable method is selected
-automatically — no prompt, just set `DIGITALOCEAN_TOKEN`.
+automatically. There is no prompt. Set `DIGITALOCEAN_TOKEN`.
 
 See [Profiles](/environments/profiles) for how credentials are stored
 and switched.

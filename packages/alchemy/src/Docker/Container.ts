@@ -10,8 +10,18 @@ import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../Tags.ts";
 import { toSeconds } from "../Util/Duration.ts";
+import { arrayEquals, setEquals } from "../Util/equal.ts";
 import { Docker, dockerContextName, dockerPhysicalName } from "./Docker.ts";
 import type { Providers } from "./Providers.ts";
+
+/** The network a container joins when `networks` is not set. */
+const DEFAULT_NETWORK = "bridge";
+
+/** Docker adds the short container id as a network alias. Ignore it. */
+const SHORT_ID_LENGTH = 12;
+
+/** Docker sets `memory-swap` to twice `memory` when it is not given. */
+const DEFAULT_MEMORY_SWAP_RATIO = 2;
 
 export interface ContainerProps {
   /** Image reference or Docker image resource. */
@@ -61,8 +71,8 @@ export interface ContainerProps {
   /** Memory-plus-swap limit, same format. Set equal to memory to disable swap. */
   memorySwap?: string;
   /**
-   * Set `no-new-privileges`, preventing processes in the container from
-   * gaining privileges via setuid/setgid binaries.
+   * Set `no-new-privileges`. Processes in the container cannot gain
+   * privileges through setuid or setgid binaries.
    *
    * @default false
    */
@@ -156,15 +166,15 @@ export interface Container extends Resource<
  * manages Cloudflare's container platform; use pushed image references to bridge
  * Docker-built images into cloud container runtimes.
  *
- * Container config is immutable. A changed create-time prop recreates the
- * container. When Alchemy adopts an existing container, it compares the
- * desired props with the observed container: `image`, `environment`,
- * `command`, `ports`, `volumes`, `memory`, `memorySwap`, `readOnly`,
- * `noNewPrivileges`, `restart`, `stopTimeout`, `removeOnExit`, `labels`, and
- * `healthcheck`. A mismatch recreates the container. Docker merges the image
- * environment and labels into the container, so a removed `environment`
- * entry or `label` is not detected on adoption. An unset `command` or
- * `healthcheck` inherits from the image and is not compared on adoption.
+ * Container config is immutable. A changed create-time prop replaces the
+ * container. Alchemy also compares the desired props with the observed
+ * container: `image`, `environment`, `command`, `ports`, `volumes`,
+ * `memory`, `memorySwap`, `readOnly`, `noNewPrivileges`, `restart`,
+ * `stopTimeout`, `removeOnExit`, `labels`, and `healthcheck`. A mismatch
+ * plans a replace. Docker merges the image environment and labels into the
+ * container, so a removed `environment` entry or `label` is not detected by
+ * observation. An unset `command` or `healthcheck` inherits from the image
+ * and is not compared by observation.
  *
  * @resource
  *
@@ -289,7 +299,7 @@ export const ContainerProvider = () =>
       ) {
         const context = dockerContextName(news.context);
         const liveNetworks = live.NetworkSettings.Networks ?? {};
-        const shortId = live.Id.slice(0, 12);
+        const shortId = live.Id.slice(0, SHORT_ID_LENGTH);
         const desired = new Map(
           (news.networks ?? []).map((network) => [network.name, network]),
         );
@@ -298,27 +308,28 @@ export const ContainerProvider = () =>
             (network) => network.name,
           ),
         );
-        const connect: Container.NetworkMapping[] = [];
-        const disconnect: string[] = [];
-        for (const network of desired.values()) {
+        const isAttachedAsDesired = (network: Container.NetworkMapping) => {
           const entry = liveNetworks[network.name];
-          if (!entry) {
-            connect.push(network);
-            continue;
-          }
+          if (!entry) return false;
           const liveAliases = (entry.Aliases ?? []).filter(
             (alias) => alias !== shortId,
           );
-          if (!isSameSet(liveAliases, network.aliases ?? [])) {
-            disconnect.push(network.name);
-            connect.push(network);
-          }
-        }
-        for (const name of Object.keys(liveNetworks)) {
-          if (declared.has(name) && !desired.has(name)) {
-            disconnect.push(name);
-          }
-        }
+          return setEquals(liveAliases, network.aliases);
+        };
+        const wanted = [...desired.values()].filter(
+          (network) => !isAttachedAsDesired(network),
+        );
+        const disconnect = Object.keys(liveNetworks).filter(
+          (name) =>
+            (declared.has(name) && !desired.has(name)) ||
+            wanted.some((network) => network.name === name),
+        );
+        const noNetworkLeft =
+          Object.keys(liveNetworks).length === disconnect.length;
+        const connect =
+          desired.size === 0 && noNetworkLeft
+            ? [{ name: DEFAULT_NETWORK }]
+            : wanted;
         // A restarting container can change its networks between inspect and
         // connect. Treat AlreadyExists and NotFound as success.
         yield* Effect.forEach(
@@ -356,39 +367,17 @@ export const ContainerProvider = () =>
         );
       });
 
-      const matchesDesiredArgs = Effect.fn(function* (
-        id: string,
-        instanceId: string,
-        live: Docker.Container,
-        args: CreateArgs,
-        olds: ContainerProps | undefined,
-      ) {
-        if (olds !== undefined && olds.image !== undefined) {
-          const oldArgs = yield* makeCreateArgs(id, olds, instanceId);
-          return Equal.equals(oldArgs, args);
-        }
-        return findObservedDrift(live, args).length === 0;
-      });
-
       const keepOrRemoveLiveContainer = Effect.fn(function* (input: {
         id: string;
-        instanceId: string;
         live: Docker.Container;
         args: CreateArgs;
         news: ContainerProps;
         olds: ContainerProps | undefined;
         output: Container["Attributes"] | undefined;
       }) {
-        const { id, instanceId, live, args, news, olds, output } = input;
+        const { id, live, args, news, olds, output } = input;
         const context = dockerContextName(news.context);
-        const matches = yield* matchesDesiredArgs(
-          id,
-          instanceId,
-          live,
-          args,
-          olds,
-        );
-        if (matches) {
+        if (findObservedDrift(live, args).length === 0) {
           yield* reconcileNetworks(live, news, olds);
           if (news.start && live.State.Status !== "running") {
             yield* docker.container.start(live.Id, context);
@@ -407,10 +396,9 @@ export const ContainerProvider = () =>
         if (!owned) {
           return yield* new OwnedBySomeoneElse({
             message:
-              `Container '${args.name}' (${live.Id}) already exists and ` +
-              "is not managed by this stack/stage/logical-id, so it " +
-              "cannot be replaced. Pick a different `name`, or re-run " +
-              "with `--adopt` (or `adopt(true)`) to take it over.",
+              `Container '${args.name}' (${live.Id}) already exists. ` +
+              "Alchemy did not create it. Pick a different `name`, or " +
+              "re-run with `--adopt` (or `adopt(true)`) to take it over.",
             resourceType: Container.Type,
             logicalId: id,
             physicalName: args.name,
@@ -442,19 +430,30 @@ export const ContainerProvider = () =>
           );
           return owned ? attrs : Unowned(attrs);
         }),
-        diff: Effect.fn(function* ({ id, instanceId, news, olds }) {
+        diff: Effect.fn(function* ({ id, instanceId, news, olds, output }) {
           if (!isResolved(news)) return undefined;
           // A `creating` row can lose an Output-valued `image`. Let the engine
           // apply its default update logic then.
           if (olds.image === undefined) return undefined;
-          if (
-            dockerContextName(olds.context) !== dockerContextName(news.context)
-          ) {
+          const context = dockerContextName(news.context);
+          if (dockerContextName(olds.context) !== context) {
             return { action: "replace" as const, deleteFirst: true };
           }
           const oldArgs = yield* makeCreateArgs(id, olds, instanceId);
           const newArgs = yield* makeCreateArgs(id, news, instanceId);
           if (!Equal.equals(oldArgs, newArgs)) {
+            return { action: "replace" as const, deleteFirst: true };
+          }
+          // An adopted container arrives with `news` as its `olds`. Compare
+          // the desired args with the live container to plan drift honestly.
+          const live =
+            output === undefined
+              ? undefined
+              : yield* inspectOrUndefined(output.id, context);
+          if (
+            live !== undefined &&
+            findObservedDrift(live, newArgs).length > 0
+          ) {
             return { action: "replace" as const, deleteFirst: true };
           }
           if (
@@ -485,7 +484,6 @@ export const ContainerProvider = () =>
           if (live !== undefined) {
             const kept = yield* keepOrRemoveLiveContainer({
               id,
-              instanceId,
               live,
               args,
               news,
@@ -523,8 +521,9 @@ export const ContainerProvider = () =>
           const info = yield* docker.container.inspect(containerId, context);
           return toContainerAttributes(info, args.image);
         }),
+        // Resolve by id. A foreign container can own the name by now.
         delete: Effect.fn(({ olds, output }) =>
-          stopAndRemove(output.name, dockerContextName(olds.context)),
+          stopAndRemove(output.id, dockerContextName(olds.context)),
         ),
       });
     }),
@@ -594,8 +593,9 @@ const findObservedDrift = (
   args: CreateArgs,
 ): string[] => {
   const memory = parseByteSize(args.memory) ?? 0;
-  const memorySwap = parseByteSize(args["memory-swap"]) ?? memory * 2;
-  const checks: Array<[string, boolean]> = [
+  const memorySwap =
+    parseByteSize(args["memory-swap"]) ?? memory * DEFAULT_MEMORY_SWAP_RATIO;
+  const checks: Array<[prop: string, matches: boolean]> = [
     ["image", live.Config.Image === args.image],
     [
       "environment",
@@ -604,13 +604,13 @@ const findObservedDrift = (
     [
       "command",
       args.command === undefined ||
-        isSameList(live.Config.Cmd ?? [], args.command),
+        arrayEquals(live.Config.Cmd ?? [], args.command),
     ],
     [
       "ports",
-      isSameSet(formatPortBindings(live.HostConfig.PortBindings), args.p ?? []),
+      setEquals(formatPortBindings(live.HostConfig.PortBindings), args.p),
     ],
-    ["volumes", isSameSet(live.HostConfig.Binds ?? [], args.volume ?? [])],
+    ["volumes", setEquals(live.HostConfig.Binds ?? [], args.volume)],
     ["memory", live.HostConfig.Memory === memory],
     ["memorySwap", live.HostConfig.MemorySwap === memorySwap],
     [
@@ -619,7 +619,7 @@ const findObservedDrift = (
     ],
     [
       "noNewPrivileges",
-      isSameSet(live.HostConfig.SecurityOpt ?? [], args["security-opt"] ?? []),
+      setEquals(live.HostConfig.SecurityOpt ?? [], args["security-opt"]),
     ],
     ["restart", (live.HostConfig.RestartPolicy.Name || "no") === args.restart],
     [
@@ -636,7 +636,7 @@ const findObservedDrift = (
     ],
     ["healthcheck", matchesHealthcheck(live.Config.Healthcheck, args)],
   ];
-  return checks.filter(([, matches]) => !matches).map(([name]) => name);
+  return checks.filter(([, matches]) => !matches).map(([prop]) => prop);
 };
 
 const matchesHealthcheck = (
@@ -646,12 +646,13 @@ const matchesHealthcheck = (
   if (args["health-cmd"] === undefined) return true;
   if (!live) return false;
   return (
-    isSameList(live.Test ?? [], ["CMD-SHELL", args["health-cmd"]]) &&
-    (live.Interval ?? 0) === parseNanos(args["health-interval"]) &&
-    (live.Timeout ?? 0) === parseNanos(args["health-timeout"]) &&
+    arrayEquals(live.Test ?? [], ["CMD-SHELL", args["health-cmd"]]) &&
+    (live.Interval ?? 0) === parseNanoseconds(args["health-interval"]) &&
+    (live.Timeout ?? 0) === parseNanoseconds(args["health-timeout"]) &&
     (live.Retries ?? 0) === (args["health-retries"] ?? 0) &&
-    (live.StartPeriod ?? 0) === parseNanos(args["health-start-period"]) &&
-    (live.StartInterval ?? 0) === parseNanos(args["health-start-interval"])
+    (live.StartPeriod ?? 0) === parseNanoseconds(args["health-start-period"]) &&
+    (live.StartInterval ?? 0) ===
+      parseNanoseconds(args["health-start-interval"])
   );
 };
 
@@ -685,34 +686,16 @@ const parseByteSize = (size: string | undefined): number | undefined => {
 const parseInteger = (value: string | undefined): number | undefined =>
   value === undefined ? undefined : Number.parseInt(value, 10);
 
-const parseNanos = (duration: string | undefined): number =>
+const parseNanoseconds = (duration: string | undefined): number =>
   duration === undefined ? 0 : Number.parseInt(duration, 10);
 
 const includesAll = (
-  haystack: ReadonlyArray<string>,
-  needles: ReadonlyArray<string>,
+  list: ReadonlyArray<string>,
+  required: ReadonlyArray<string>,
 ): boolean => {
-  const set = new Set(haystack);
-  return needles.every((needle) => set.has(needle));
+  const set = new Set(list);
+  return required.every((item) => set.has(item));
 };
-
-const isSameSet = (
-  left: ReadonlyArray<string>,
-  right: ReadonlyArray<string>,
-): boolean => {
-  const leftSet = new Set(left);
-  const rightSet = new Set(right);
-  return (
-    leftSet.size === rightSet.size &&
-    [...leftSet].every((item) => rightSet.has(item))
-  );
-};
-
-const isSameList = (
-  left: ReadonlyArray<string>,
-  right: ReadonlyArray<string>,
-): boolean =>
-  left.length === right.length && left.every((item, i) => item === right[i]);
 
 const toContainerAttributes = (
   info: Docker.Container,

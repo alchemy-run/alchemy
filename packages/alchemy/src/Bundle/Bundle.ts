@@ -5,8 +5,8 @@ import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import assert from "node:assert";
 import type * as rolldown from "rolldown";
-// `rolldown/filter` is the pure-JS filter-expression builder — it pulls in no
-// native binding, so the lazy `loadRolldown` below still holds.
+// `rolldown/filter` is pure JavaScript. It does not load the native binding,
+// so `loadRolldown` stays lazy.
 import { id as idFilter, importerId, include, or } from "rolldown/filter";
 import { sha256, sha256Object } from "../Util/sha256.ts";
 import {
@@ -363,18 +363,16 @@ export const virtualEntryPlugin = Effect.gen(function* () {
         },
       },
       resolveId: {
-        // Native filter: the hook only crosses into JS for a virtual entry
-        // or for something a virtual entry imports.
+        // The filter runs in native code. The handler runs only for a
+        // virtual entry or for an import from one.
         filter: [include(or(idFilter(ENTRY_REGEX), importerId(ENTRY_REGEX)))],
         handler(source, importer) {
-          // The virtual entry id itself.
           if (ENTRY_REGEX.test(source)) {
             return entries.has(source) ? { id: source } : null;
           }
-          // An import *from* a virtual entry. The entry has no directory, so
-          // the default resolver falls back to the bundle cwd for bare
-          // specifiers — a node_modules that need not hold what the entry
-          // names. Resolve as if the entry sat beside the real main.
+          // A virtual entry has no directory. The default resolver reads its
+          // bare imports from the bundle cwd. Resolve them from the real main
+          // file instead.
           const main =
             importer === undefined ? undefined : entries.get(importer);
           if (main === undefined || path.isAbsolute(source)) return null;

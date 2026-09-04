@@ -4,7 +4,7 @@ import * as Effect from "effect/Effect";
 /** DigitalOcean's maximum `per_page`. */
 export const PAGE_SIZE = 200;
 
-/** A pager that never reports a last page fails instead of looping. */
+/** Stop after this many pages. A list that never ends fails instead of looping. */
 const MAX_PAGES = 500;
 
 export class DigitalOceanPageOverflow extends Data.TaggedError(
@@ -23,30 +23,21 @@ export interface PageQuery {
 /** The pagination envelope on every DigitalOcean list response. */
 export interface PageEnvelope {
   readonly links?: { readonly pages?: unknown } | undefined;
-  readonly meta?: { readonly total?: number | undefined } | undefined;
 }
 
+/** The SDK types `links.pages` as `unknown`. */
 const hasNextLink = (envelope: PageEnvelope): boolean => {
   const pages = envelope.links?.pages;
   if (typeof pages !== "object" || pages === null) return false;
   return typeof (pages as { next?: unknown }).next === "string";
 };
 
-const hasNextPage = (
-  envelope: PageEnvelope,
-  pageSize: number,
-  collected: number,
-): boolean => {
-  if (hasNextLink(envelope)) return true;
-  if (pageSize === 0) return false;
-  const total = envelope.meta?.total;
-  if (total === undefined) return false;
-  return collected < total;
-};
+const hasNextPage = (envelope: PageEnvelope, pageItemCount: number): boolean =>
+  pageItemCount > 0 && hasNextLink(envelope);
 
 /**
- * Walks a paginated DigitalOcean list to its end. A page is the last one
- * when it carries no `links.pages.next` and `meta.total` is reached.
+ * Reads every page of a DigitalOcean list. The last page has no
+ * `links.pages.next`.
  */
 export const listAllPages = <A, Response extends PageEnvelope, E, R>(
   fetchPage: (query: PageQuery) => Effect.Effect<Response, E, R>,
@@ -58,7 +49,7 @@ export const listAllPages = <A, Response extends PageEnvelope, E, R>(
       const response = yield* fetchPage({ page, per_page: PAGE_SIZE });
       const pageItems = selectItems(response);
       items.push(...pageItems);
-      if (!hasNextPage(response, pageItems.length, items.length)) return items;
+      if (!hasNextPage(response, pageItems.length)) return items;
     }
     return yield* new DigitalOceanPageOverflow({ pages: MAX_PAGES });
   });

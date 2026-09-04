@@ -1,5 +1,7 @@
 import * as Data from "effect/Data";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
 
@@ -45,3 +47,52 @@ export const poll = Effect.fn("poll")(
       }),
     ),
 );
+
+export interface PollOptions {
+  readonly every: Duration.Input;
+  readonly times: number;
+}
+
+/**
+ * Polls `observe` until `settled` holds. Fails with `notSettled(last)` when
+ * the tries run out. `last` is the last observed value.
+ */
+export const pollUntil = <A, E, E2>(
+  observe: Effect.Effect<Option.Option<A>, E>,
+  settled: (value: A) => boolean,
+  options: PollOptions & {
+    readonly notSettled: (last: Option.Option<A>) => E2;
+  },
+): Effect.Effect<A, E | E2> =>
+  observe.pipe(
+    Effect.repeat({
+      schedule: Schedule.spaced(options.every),
+      until: (value) => Option.exists(value, settled),
+      times: options.times,
+    }),
+    Effect.flatMap((last) =>
+      Option.match(last, {
+        onNone: () => Effect.fail(options.notSettled(last)),
+        onSome: (value) =>
+          settled(value)
+            ? Effect.succeed(value)
+            : Effect.fail(options.notSettled(last)),
+      }),
+    ),
+  );
+
+/** Polls `observe` until it sees nothing. Fails with `stillPresent()` when the tries run out. */
+export const pollUntilGone = <A, E, E2>(
+  observe: Effect.Effect<Option.Option<A>, E>,
+  options: PollOptions & { readonly stillPresent: () => E2 },
+): Effect.Effect<void, E | E2> =>
+  observe.pipe(
+    Effect.repeat({
+      schedule: Schedule.spaced(options.every),
+      until: Option.isNone,
+      times: options.times,
+    }),
+    Effect.flatMap((last) =>
+      Option.isNone(last) ? Effect.void : Effect.fail(options.stillPresent()),
+    ),
+  );

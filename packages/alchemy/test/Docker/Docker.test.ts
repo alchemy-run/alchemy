@@ -7,6 +7,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
+import * as Result from "effect/Result";
 
 const describe = layer(Layer.provideMerge(DockerLive, NodeServices.layer));
 
@@ -166,13 +167,13 @@ describe("Docker.image.pull", (it) => {
         prefix: "alchemy-docker-config-",
       });
       const contextName = "alchemy-test-linked-context";
-      const current = yield* docker.run(["context", "show"]);
+      const currentContext = yield* docker.run(["context", "show"]);
       const endpoint = yield* docker.run([
         "context",
         "inspect",
         "--format",
         '{{(index .Endpoints "docker").Host}}',
-        current.stdout,
+        currentContext.stdout,
       ]);
       // The context exists only inside the temp `DOCKER_CONFIG`.
       yield* docker.run([
@@ -201,6 +202,49 @@ describe("Docker.image.pull", (it) => {
           ),
         );
       expect(result.exitCode).toBe(0);
+    }),
+  );
+
+  it.effect("copies the global currentContext into the credential config", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const docker = yield* Docker;
+      const configDir = yield* fs.makeTempDirectoryScoped({
+        prefix: "alchemy-docker-config-",
+      });
+      const contextName = "alchemy-test-current-context";
+      // The context points at a closed port. Only a pull that resolves
+      // `currentContext` fails with this endpoint.
+      yield* docker.run([
+        "--config",
+        configDir,
+        "context",
+        "create",
+        contextName,
+        "--docker",
+        "host=tcp://127.0.0.1:1",
+      ]);
+      yield* docker.run(["--config", configDir, "context", "use", contextName]);
+
+      const result = yield* Effect.result(
+        docker.image
+          .pull("hello-world:latest", undefined, undefined, {
+            server: "localhost:1",
+            username: "nobody",
+            password: Redacted.make("nothing"),
+          })
+          .pipe(
+            Effect.provide(
+              ConfigProvider.layer(
+                ConfigProvider.fromUnknown({ DOCKER_CONFIG: configDir }),
+              ),
+            ),
+          ),
+      );
+      expect(Result.isFailure(result)).toBe(true);
+      if (Result.isFailure(result)) {
+        expect(String(result.failure)).toContain("127.0.0.1:1");
+      }
     }),
   );
 });

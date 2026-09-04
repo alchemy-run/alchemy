@@ -2,8 +2,8 @@
  * Deterministic test keys for CertRequest tests.
  *
  * Generated once with `node:crypto` (`generateKeyPairSync`, PKCS#8 PEM) and
- * checked in so every test run signs with identical keys. They are test-only
- * and carry no trust.
+ * checked in so every test run signs with identical keys. They are for tests
+ * only. Nothing trusts them.
  */
 
 export const RSA_2048_KEY = `-----BEGIN PRIVATE KEY-----

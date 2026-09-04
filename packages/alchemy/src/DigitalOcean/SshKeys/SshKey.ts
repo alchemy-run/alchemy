@@ -14,21 +14,20 @@ import { OwnedBySomeoneElse, Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
-import { ReplacementRequired } from "../../ReplacementRequired.ts";
 import { Resource } from "../../Resource.ts";
+import { pollUntil, pollUntilGone, type PollOptions } from "../../Util/poll.ts";
 import { listAllPages } from "../paginate.ts";
-import { pollUntil, pollUntilGone } from "../poll.ts";
 import type { Providers } from "../Providers.ts";
 
 export type SshKeyProps = {
   /**
-   * Display name for the key. Defaults to a generated physical name.
-   * Renames in place.
+   * Display name for the key. Defaults to a generated physical name. A
+   * change renames the key in place.
    */
   name?: string;
   /**
    * The public key in `authorized_keys` format (`ssh-ed25519 AAAA… note`).
-   * The key material is the identity — changing it replaces the resource.
+   * A change replaces the resource.
    */
   publicKey: string;
 };
@@ -37,12 +36,13 @@ export type SshKey = Resource<
   "DigitalOcean.SshKey",
   SshKeyProps,
   {
+    /** Numeric key id. */
     sshKeyId: number;
     /** Display name. */
     name: string;
-    /** MD5 fingerprint DigitalOcean derives from the key material. */
+    /** MD5 fingerprint that DigitalOcean derives from the public key. */
     fingerprint: string;
-    /** The registered public key, verbatim. */
+    /** The registered public key, as given. */
     publicKey: string;
   },
   never,
@@ -50,15 +50,14 @@ export type SshKey = Resource<
 >;
 
 /**
- * An SSH public key registered on the DigitalOcean team, embedded into the
- * root account of droplets created with it. DigitalOcean derives the
- * fingerprint from `publicKey` and rejects duplicates, so the key material
- * is the identity: changing `publicKey` replaces the resource while `name`
- * updates in place.
+ * An SSH public key registered on the DigitalOcean team. Droplets created
+ * with it accept the key for `root`. DigitalOcean derives `fingerprint`
+ * from `publicKey` and rejects duplicates. A change to `publicKey`
+ * replaces the resource. A change to `name` updates in place.
  *
- * Ownership: a key carries no ownership markers. A registration of the
- * same key material under a different name belongs to someone else and
- * surfaces as `Unowned`, so taking it over requires `--adopt`.
+ * A key has no ownership tag. If the same public key is registered under
+ * another name, it belongs to someone else. It is `Unowned` and needs
+ * `--adopt`.
  *
  * @resource
  * @product SSH Keys
@@ -66,7 +65,7 @@ export type SshKey = Resource<
  * @see https://docs.digitalocean.com/reference/api/digitalocean/#tag/SSH-Keys
  *
  * @section Creating an SshKey
- * @example Register a deploy key and boot a droplet with it
+ * @example Register a deploy key and create a droplet with it
  * ```typescript
  * const key = yield* DigitalOcean.SshKey("deploy-key", {
  *   publicKey: process.env.SSH_PUBLIC_KEY!,
@@ -98,11 +97,13 @@ class SshKeyStillPresent extends Data.TaggedError("SshKeyStillPresent")<{
   }
 }
 
-// DigitalOcean stores the key text verbatim, comment included. Only the
-// surrounding whitespace is noise.
+const SSH_KEY_POLL: PollOptions = { every: "1 second", times: 10 };
+
+// DigitalOcean stores the key text as given, comment included. Only
+// surrounding whitespace is ignored.
 const normalizeKey = (publicKey: string) => publicKey.trim();
 
-// A key has no field for an ownership mark. The name is the only tie
+// A key has no field for an ownership tag. The name is the only tie
 // between a registration and this resource.
 const isOurs = (key: ApiSshKey, publicKey: string, name: string) =>
   normalizeKey(key.public_key) === publicKey && key.name === name;
@@ -114,7 +115,7 @@ export const SshKeyProvider = () =>
       const create = yield* sshKeysCreate;
       const get = yield* sshKeysGet;
       const update = yield* sshKeysUpdate;
-      const del = yield* sshKeysDelete;
+      const deleteSshKey = yield* sshKeysDelete;
       const list = yield* sshKeysList;
 
       const toAttrs = (key: ApiSshKey) => ({
@@ -126,29 +127,29 @@ export const SshKeyProvider = () =>
 
       const observeById = (sshKeyId: number) =>
         get({ ssh_key_identifier: String(sshKeyId) }).pipe(
-          Effect.map((r) => Option.some(r.ssh_key)),
+          Effect.map((response) => Option.some(response.ssh_key)),
           Effect.catchTag("NotFound", () =>
             Effect.succeed(Option.none<ApiSshKey>()),
           ),
         );
 
-      const listAll = listAllPages(list, (r) => r.ssh_keys ?? []);
+      const listAll = listAllPages(list, (response) => response.ssh_keys ?? []);
 
-      const observeByContent = (publicKey: string) =>
+      const observeByPublicKey = (publicKey: string) =>
         listAll.pipe(
           Effect.map((keys) =>
             Arr.findFirst(
               keys,
-              (k) => normalizeKey(k.public_key) === publicKey,
+              (key) => normalizeKey(key.public_key) === publicKey,
             ),
           ),
         );
 
-      const foreignKey = (id: string, key: ApiSshKey) =>
+      const foreignRegistrationError = (id: string, key: ApiSshKey) =>
         new OwnedBySomeoneElse({
           message:
-            `SSH key '${key.name}' (${key.id}) already registers this key ` +
-            "material and cannot be proven ours. Re-run with `--adopt` " +
+            `SSH key '${key.name}' (${key.id}) already registers this ` +
+            "public key. Alchemy did not create it. Re-run with `--adopt` " +
             "(or `adopt(true)`) to take it over.",
           resourceType: SshKey.Type,
           logicalId: id,
@@ -161,12 +162,12 @@ export const SshKeyProvider = () =>
         publicKey: string,
         name: string,
       ) {
-        const existing = yield* observeByContent(publicKey);
+        const existing = yield* observeByPublicKey(publicKey);
         if (
           Option.isSome(existing) &&
           !isOurs(existing.value, publicKey, name)
         ) {
-          return yield* foreignKey(id, existing.value);
+          return yield* foreignRegistrationError(id, existing.value);
         }
         return existing;
       });
@@ -187,7 +188,7 @@ export const SshKeyProvider = () =>
           if (olds?.publicKey === undefined) return undefined;
           const publicKey = normalizeKey(olds.publicKey);
           const name = olds.name ?? (yield* physicalName(id));
-          const existing = yield* observeByContent(publicKey);
+          const existing = yield* observeByPublicKey(publicKey);
           if (Option.isNone(existing)) return undefined;
           if (isOurs(existing.value, publicKey, name)) {
             return toAttrs(existing.value);
@@ -208,33 +209,22 @@ export const SshKeyProvider = () =>
           const desiredName = news.name ?? (yield* physicalName(id));
           const publicKey = normalizeKey(news.publicKey);
 
-          const cached =
-            output === undefined
-              ? Option.none<ApiSshKey>()
-              : yield* observeById(output.sshKeyId);
-          // DigitalOcean cannot change the key material of an existing key.
-          if (
-            Option.isSome(cached) &&
-            normalizeKey(cached.value.public_key) !== publicKey
-          ) {
-            return yield* new ReplacementRequired({
-              resourceType: SshKey.Type,
-              physicalId: String(cached.value.id),
-              properties: ["publicKey"],
-            });
-          }
-
-          const observed = Option.isSome(cached)
-            ? cached
-            : yield* observeOurs(id, publicKey, desiredName);
+          const observeCurrent = Effect.gen(function* () {
+            if (output !== undefined) {
+              const existingById = yield* observeById(output.sshKeyId);
+              if (Option.isSome(existingById)) return existingById;
+            }
+            return yield* observeOurs(id, publicKey, desiredName);
+          });
+          const observed = yield* observeCurrent;
 
           if (Option.isNone(observed)) {
             const created = yield* create({
               name: desiredName,
               public_key: publicKey,
             }).pipe(
-              Effect.map((r) => r.ssh_key),
-              // DigitalOcean answers 422 when the key material is already
+              Effect.map((response) => response.ssh_key),
+              // DigitalOcean answers 422 when the public key is already
               // registered.
               Effect.catchTag("UnprocessableEntity", (error) =>
                 observeOurs(id, publicKey, desiredName).pipe(
@@ -261,9 +251,7 @@ export const SshKeyProvider = () =>
             observeById(key.id),
             (observed) => observed.name === desiredName,
             {
-              every: "1 second",
-              times: 10,
-              timeout: "30 seconds",
+              ...SSH_KEY_POLL,
               notSettled: () =>
                 new SshKeyNotRenamed({ sshKeyId: key.id, name: desiredName }),
             },
@@ -271,14 +259,12 @@ export const SshKeyProvider = () =>
           return toAttrs(renamed);
         }),
         delete: Effect.fn(function* ({ output }) {
-          yield* del({ ssh_key_identifier: String(output.sshKeyId) }).pipe(
-            Effect.catchTag("NotFound", () => Effect.void),
-          );
+          yield* deleteSshKey({
+            ssh_key_identifier: String(output.sshKeyId),
+          }).pipe(Effect.catchTag("NotFound", () => Effect.void));
           // GET can still return the key for a moment after DELETE.
           yield* pollUntilGone(observeById(output.sshKeyId), {
-            every: "1 second",
-            times: 10,
-            timeout: "30 seconds",
+            ...SSH_KEY_POLL,
             stillPresent: () =>
               new SshKeyStillPresent({ sshKeyId: output.sshKeyId }),
           });

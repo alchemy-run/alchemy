@@ -17,13 +17,11 @@ export interface ExecProps extends CommandRunProps {
    */
   memo?: MemoOptions | boolean;
   /**
-   * Command to run when the resource is **deleted** — a final backup, a
-   * deregistration call, or any teardown step that must happen before the
-   * resources this `Exec` depends on are destroyed. Runs with the same
-   * `cwd`, `env`, `shell`, and `timeout` as `command`, using the
-   * last-deployed props. A non-zero exit fails the deletion, so a destroy
-   * never silently skips teardown work — make the command tolerate an
-   * already-gone target if it should not block destroy.
+   * Command to run when the resource is deleted. Use it for a final backup
+   * or a deregistration call. It runs before the resources this `Exec`
+   * depends on are destroyed. It uses the `cwd`, `env`, `shell`, and
+   * `timeout` from the last deploy. A non-zero exit fails the delete. If
+   * the target can already be gone, make the command succeed in that case.
    */
   destroyCommand?: string;
 }
@@ -108,6 +106,11 @@ const withoutDestroyCommand = ({
   ...props
 }: ExecProps): Omit<ExecProps, "destroyCommand"> => props;
 
+const toHashInput = (news: Pick<ExecProps, "cwd" | "memo">) =>
+  news.memo === false
+    ? undefined
+    : { cwd: news.cwd, memo: news.memo === true ? {} : news.memo };
+
 const onlyDestroyCommandChanged = (
   olds: ExecProps | undefined,
   news: ExecProps,
@@ -131,42 +134,37 @@ export const ExecProvider = () =>
         diff: Effect.fn(function* ({ olds, news, output }) {
           if (!output || !isResolved(news)) return undefined;
 
+          const hashInput = toHashInput(news);
           // Always update if memoization is disabled or input hash is not available.
-          if (news.memo === false || !output.hash.input)
+          if (hashInput === undefined || !output.hash.input)
             return { action: "update" };
 
           // Optimization: short-circuit if props have changed to avoid unnecessary file system operations.
           if (havePropsChanged(olds, news)) return { action: "update" };
 
-          const newHash = yield* hashDirectory({
-            cwd: news.cwd,
-            memo: news.memo === true ? {} : news.memo,
-          });
+          const newHash = yield* hashDirectory(hashInput);
           return {
             action: newHash === output.hash.input ? "noop" : "update",
           };
         }),
         reconcile: Effect.fn(function* ({ news, olds, output, session }) {
-          const memo =
-            news.memo === false
+          const hashInput = toHashInput(news);
+          const hashInputFiles = Effect.fn(function* () {
+            return hashInput === undefined
               ? undefined
-              : { cwd: news.cwd, memo: news.memo === true ? {} : news.memo };
-          // A noop does not persist props. delete reads destroyCommand from
-          // state. Persist the new value without re-running command.
+              : yield* hashDirectory(hashInput);
+          });
+          // The engine does not save props on a noop. `delete` reads
+          // `destroyCommand` from state. Save the new value, but do not run
+          // `command` again. This also applies when `memo` is `false`.
           if (onlyDestroyCommandChanged(olds, news)) {
-            if (memo === undefined) return { hash: { input: undefined } };
-            if (output?.hash.input !== undefined) {
-              const hash = yield* hashDirectory(memo);
-              if (hash === output.hash.input) return { hash: { input: hash } };
+            const hash = yield* hashInputFiles();
+            if (hashInput === undefined || hash === output?.hash.input) {
+              return { hash: { input: hash } };
             }
           }
           yield* run(news, session);
-          return {
-            hash: {
-              input:
-                memo === undefined ? undefined : yield* hashDirectory(memo),
-            },
-          };
+          return { hash: { input: yield* hashInputFiles() } };
         }),
         delete: Effect.fn(function* ({ olds, session }) {
           if (olds.destroyCommand === undefined) return;
