@@ -10,12 +10,11 @@ import {
   AuthError,
   AuthProviderLayer,
   NeedsReauth,
-  refreshHint,
   type ConfigureField,
   type ConfigureMethod,
   type ProviderDetails,
 } from "../Auth/AuthProvider.ts";
-import { CredentialsStore, displayRedacted } from "../Auth/Credentials.ts";
+import { displayRedacted } from "../Auth/Credentials.ts";
 import {
   getEnv,
   getEnvRedacted,
@@ -38,28 +37,21 @@ export const RAILWAY_AUTH_PROVIDER_NAME = "Railway";
 export const RAILWAY_API_TOKEN_ENV = "RAILWAY_API_TOKEN";
 export const RAILWAY_API_URL_ENV = "RAILWAY_API_URL";
 
-const STORAGE_KEY = "railway-stored";
-const OAUTH_STORAGE_KEY = "railway-oauth";
-
-/** Manifest-entry schema for Railway authentication. */
+/** Typed values stored in a Railway provider profile document. */
 export const RailwayAuthConfigSchema = Schema.Union([
   Schema.Struct({ method: Schema.Literal("env") }),
-  Schema.Struct({ method: Schema.Literal("stored") }),
-  Schema.Struct({ method: Schema.Literal("oauth") }),
+  Schema.Struct({
+    method: Schema.Literal("stored"),
+    token: Schema.String,
+    apiBaseUrl: Schema.optional(Schema.String),
+  }),
+  Schema.Struct({
+    method: Schema.Literal("oauth"),
+    token: Schema.String,
+    apiBaseUrl: Schema.optional(Schema.String),
+  }),
 ]);
 export type RailwayAuthConfig = typeof RailwayAuthConfigSchema.Type;
-
-/**
- * Token credentials persisted to disk for `method: "stored"` and
- * `method: "oauth"`. The JSON shape (`token` as a plain string) is
- * unchanged from the pre-schema store, so existing credential files decode.
- */
-export const RailwayStoredCredentials = Schema.Struct({
-  type: Schema.Literal("token"),
-  token: Schema.RedactedFromValue(Schema.String),
-  apiBaseUrl: Schema.optional(Schema.String),
-});
-export type RailwayStoredCredentials = typeof RailwayStoredCredentials.Type;
 
 export type RailwayResolvedCredentials = {
   type: "token";
@@ -88,7 +80,7 @@ const options: Array<{
   {
     value: "stored",
     label: "API Token",
-    description: "enter interactively, stored in ~/.alchemy/credentials",
+    description: "enter interactively and store inline in the provider file",
   },
 ];
 
@@ -110,8 +102,7 @@ const resolveApiBaseUrl = (explicit?: string) =>
  * Supported methods:
  * - `env`: reads `RAILWAY_API_TOKEN` (account Bearer). Project tokens are
  *   not used — they cannot reach workspace-wide operations.
- * - `stored`: prompts for an API token and writes it to
- *   `~/.alchemy/credentials/<profile>/railway-stored.json`.
+ * - `stored`: prompts for an API token and stores it in the provider file.
  * - `oauth`: CLI login session (`loginSessionCreate` → open the pairing URL →
  *   poll `loginSessionVerify` / `loginSessionConsume` → store the token).
  *   Does not require a pre-existing token. An optional `RAILWAY_API_URL`
@@ -124,15 +115,13 @@ export const RailwayAuth = AuthProviderLayer<
   RAILWAY_AUTH_PROVIDER_NAME,
   Effect.gen(function* () {
     const interaction = Interaction.accessors;
-    const store = yield* CredentialsStore;
-
-    const loginStored = Effect.fn(function* (profileName: string) {
+    const loginStored = Effect.fn(function* (_profileName: string) {
       const token = yield* interaction.prompt
         .password({
           message: "Railway API Token",
           validate: (v) => (v.length === 0 ? "Required" : undefined),
         })
-        .pipe(mapPromptCancellation, Effect.map(Redacted.make));
+        .pipe(mapPromptCancellation);
 
       const envUrl = yield* getEnv(RAILWAY_API_URL_ENV);
       const urlPrompt = yield* interaction.prompt
@@ -148,16 +137,11 @@ export const RailwayAuth = AuthProviderLayer<
           ? trimmed
           : undefined;
 
-      yield* store.write(profileName, STORAGE_KEY, RailwayStoredCredentials, {
-        type: "token",
-        token,
-        apiBaseUrl,
-      });
       yield* interaction.output.success("Railway: credentials saved.");
-      return { method: "stored" as const };
+      return { method: "stored" as const, token, apiBaseUrl };
     });
 
-    const loginOAuth = Effect.fn(function* (profileName: string) {
+    const loginOAuth = Effect.fn(function* (_profileName: string) {
       const apiBaseUrl = yield* resolveApiBaseUrl();
       const hostname = yield* Effect.sync(() => {
         try {
@@ -235,19 +219,13 @@ export const RailwayAuth = AuthProviderLayer<
         });
       }
 
-      yield* store.write(
-        profileName,
-        OAUTH_STORAGE_KEY,
-        RailwayStoredCredentials,
-        {
-          type: "token",
-          token: Redacted.make(token),
-          apiBaseUrl:
-            apiBaseUrl === DEFAULT_API_BASE_URL ? undefined : apiBaseUrl,
-        },
-      );
       yield* interaction.output.success("Railway: OAuth credentials saved.");
-      return { method: "oauth" as const };
+      return {
+        method: "oauth" as const,
+        token,
+        apiBaseUrl:
+          apiBaseUrl === DEFAULT_API_BASE_URL ? undefined : apiBaseUrl,
+      };
     });
 
     const configureInteractive = (profileName: string) =>
@@ -289,7 +267,7 @@ export const RailwayAuth = AuthProviderLayer<
       );
 
     /**
-     * Flag-driven (`--method token --set ...` / `--method env`) fields,
+     * Flag-driven (`--method stored --set ...` / `--method env`) fields,
      * mirroring the interactive prompts. OAuth requires a browser and stays
      * interactive-only, so it is deliberately absent.
      */
@@ -304,69 +282,53 @@ export const RailwayAuth = AuthProviderLayer<
     ];
 
     const configureMethods: ReadonlyArray<ConfigureMethod> = [
-      { method: "token", fields: tokenFields },
+      { method: "stored", fields: tokenFields },
       { method: "env", fields: [] },
     ];
 
     const configureWith = (
-      profileName: string,
+      _profileName: string,
       input: {
         readonly method: string;
         readonly values: Record<string, string>;
       },
     ): Effect.Effect<RailwayAuthConfig, AuthError, Interaction.Interaction> =>
-      input.method === "token"
+      input.method === "stored"
         ? validateFieldValues(
             RAILWAY_AUTH_PROVIDER_NAME,
             tokenFields,
             input.values,
           ).pipe(
-            Effect.flatMap((values) =>
-              store.write(profileName, STORAGE_KEY, RailwayStoredCredentials, {
-                type: "token",
-                token: storedSecret(values.token) ?? Redacted.make(""),
-                apiBaseUrl: storedValueText(values.apiBaseUrl),
-              }),
-            ),
-            Effect.andThen(
+            Effect.map((values) => ({
+              method: "stored" as const,
+              token: Redacted.value(
+                storedSecret(values.token) ?? Redacted.make(""),
+              ),
+              apiBaseUrl: storedValueText(values.apiBaseUrl),
+            })),
+            Effect.tap(() =>
               interaction.output.success("Railway: credentials saved."),
             ),
-            Effect.as({ method: "stored" as const }),
           )
         : input.method === "env"
           ? Effect.succeed({ method: "env" as const })
           : Effect.fail(
               new AuthError({
-                message: `Railway: unknown method '${input.method}'. Only 'token' and 'env' are supported (OAuth is interactive-only).`,
+                message: `Railway: unknown method '${input.method}'. Valid methods: stored, env. (OAuth is interactive-only.)`,
               }),
             );
 
     const readStoredToken = (
-      profileName: string,
-      key: string,
-      sourceType: "stored" | "oauth",
-      missingMessage: string,
-    ): Effect.Effect<RailwayResolvedCredentials, AuthError | NeedsReauth> =>
+      config: Extract<RailwayAuthConfig, { method: "stored" | "oauth" }>,
+    ): Effect.Effect<RailwayResolvedCredentials, AuthError> =>
       Effect.gen(function* () {
-        const creds = yield* store.read(
-          profileName,
-          key,
-          RailwayStoredCredentials,
-        );
-        if (creds == null) {
-          return yield* new NeedsReauth({
-            provider: RAILWAY_AUTH_PROVIDER_NAME,
-            profile: profileName,
-            message: missingMessage,
-          });
-        }
-        const apiBaseUrl = yield* resolveApiBaseUrl(creds.apiBaseUrl);
+        const apiBaseUrl = yield* resolveApiBaseUrl(config.apiBaseUrl);
         return {
           type: "token" as const,
-          token: creds.token,
+          token: Redacted.make(config.token),
           tokenKind: "account" as const,
           apiBaseUrl,
-          source: { type: sourceType },
+          source: { type: config.method },
         };
       });
 
@@ -375,7 +337,6 @@ export const RailwayAuth = AuthProviderLayer<
       config: RailwayAuthConfig,
     ): Effect.Effect<RailwayResolvedCredentials, AuthError | NeedsReauth> =>
       Effect.gen(function* () {
-        const reauth = refreshHint(RAILWAY_AUTH_PROVIDER_NAME, profileName);
         return yield* Match.value(config).pipe(
           Match.when(
             { method: "env" },
@@ -399,53 +360,19 @@ export const RailwayAuth = AuthProviderLayer<
               } satisfies RailwayResolvedCredentials;
             }),
           ),
-          Match.when({ method: "stored" }, () =>
-            readStoredToken(
-              profileName,
-              STORAGE_KEY,
-              "stored",
-              `Railway stored credentials not found. ${reauth}`,
-            ),
-          ),
-          Match.when({ method: "oauth" }, () =>
-            readStoredToken(
-              profileName,
-              OAUTH_STORAGE_KEY,
-              "oauth",
-              `Railway OAuth credentials not found. ${reauth}`,
-            ),
-          ),
+          Match.when({ method: "stored" }, readStoredToken),
+          Match.when({ method: "oauth" }, readStoredToken),
           Match.exhaustive,
         );
       });
 
-    const logout = (profileName: string, config: RailwayAuthConfig) =>
+    const logout = (_profileName: string, config: RailwayAuthConfig) =>
       Match.value(config).pipe(
         Match.when({ method: "env" }, () => Effect.void),
-        Match.when({ method: "stored" }, () =>
-          store
-            .delete(profileName, STORAGE_KEY)
-            .pipe(
-              Effect.andThen(
-                interaction.output.success(
-                  "Railway: stored credentials removed",
-                ),
-              ),
-            ),
-        ),
+        Match.when({ method: "stored" }, () => Effect.void),
         // Railway account tokens have no revocation endpoint for CLI-session
         // tokens, so logout just drops the locally stored token.
-        Match.when({ method: "oauth" }, () =>
-          store
-            .delete(profileName, OAUTH_STORAGE_KEY)
-            .pipe(
-              Effect.andThen(
-                interaction.output.success(
-                  "Railway: OAuth credentials removed",
-                ),
-              ),
-            ),
-        ),
+        Match.when({ method: "oauth" }, () => Effect.void),
         Match.exhaustive,
       );
 
@@ -469,28 +396,8 @@ export const RailwayAuth = AuthProviderLayer<
           ),
           // Railway account tokens neither expire nor refresh, so login only
           // (re-)prompts when no credential is stored yet.
-          Match.when({ method: "stored" }, () =>
-            store
-              .read(profileName, STORAGE_KEY, RailwayStoredCredentials)
-              .pipe(
-                Effect.flatMap((creds) =>
-                  creds == null
-                    ? loginStored(profileName).pipe(Effect.asVoid)
-                    : Effect.void,
-                ),
-              ),
-          ),
-          Match.when({ method: "oauth" }, () =>
-            store
-              .read(profileName, OAUTH_STORAGE_KEY, RailwayStoredCredentials)
-              .pipe(
-                Effect.flatMap((creds) =>
-                  creds == null
-                    ? loginOAuth(profileName).pipe(Effect.asVoid)
-                    : Effect.void,
-                ),
-              ),
-          ),
+          Match.when({ method: "stored" }, (config) => Effect.succeed(config)),
+          Match.when({ method: "oauth" }, (config) => Effect.succeed(config)),
           Match.exhaustive,
         )
         .pipe(

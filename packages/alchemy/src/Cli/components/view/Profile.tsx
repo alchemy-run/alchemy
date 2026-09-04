@@ -14,7 +14,7 @@ import { theme } from "../../CliKit/index.ts";
 export interface ProfileProviderDisplay {
   readonly name: string;
   readonly method: string;
-  readonly status: "ready" | "configured" | "reauth" | "error";
+  readonly status: "ready" | "configured" | "reauth" | "reconfigure" | "error";
   readonly lines: ReadonlyArray<string>;
 }
 
@@ -43,6 +43,11 @@ export const providerStatusStyle = {
     color: theme.color.warning,
     glyph: "refresh",
     label: "needs re-login",
+  },
+  reconfigure: {
+    color: theme.color.warning,
+    glyph: "edit",
+    label: "needs setup",
   },
   error: {
     color: theme.color.danger,
@@ -167,12 +172,18 @@ export function ProfileDetailsBody({
   providers,
   reauthHint,
   refreshingProvider,
+  focusedProvider,
+  showFocusRail = false,
 }: {
   readonly providers: ReadonlyArray<ProfileProviderDisplay>;
   /** Muted hint appended to rows with `status: "reauth"`. */
   readonly reauthHint?: string;
   /** Provider whose detail rows are temporarily replaced by refresh status. */
   readonly refreshingProvider?: string;
+  /** Provider currently focused by an interactive parent view. */
+  readonly focusedProvider?: string;
+  /** Reserve a stable focus rail column for an interactive parent view. */
+  readonly showFocusRail?: boolean;
 }): JSX.Element {
   const glyphs = useGlyphs();
   const borderStyle = useBorderStyle();
@@ -187,17 +198,20 @@ export function ProfileDetailsBody({
       ) : (
         providers.map((provider, providerIndex) => {
           const status = providerStatusStyle[provider.status];
+          const focused = showFocusRail && provider.name === focusedProvider;
           return (
             <Box
               key={provider.name}
               flexDirection="column"
               paddingTop={providerIndex === 0 ? 0 : 1}
+              paddingLeft={showFocusRail ? (focused ? 0 : 1) : 0}
               borderStyle={borderStyle}
               borderTop={providerIndex > 0}
               borderBottom={false}
-              borderLeft={false}
+              borderLeft={focused}
               borderRight={false}
               borderColor={theme.color.muted}
+              borderLeftColor={theme.color.brand}
               borderDimColor
             >
               <Gutter>
@@ -213,7 +227,10 @@ export function ProfileDetailsBody({
                   <Text color={status.color}>
                     {glyphs[status.glyph]} {status.label}
                   </Text>
-                  {reauthHint !== undefined && provider.status === "reauth" ? (
+                  {reauthHint !== undefined &&
+                  provider.status === "reauth" &&
+                  (focusedProvider === undefined ||
+                    provider.name === focusedProvider) ? (
                     <Text tone="muted"> — {reauthHint}</Text>
                   ) : null}
                 </Box>

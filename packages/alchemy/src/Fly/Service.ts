@@ -51,6 +51,7 @@ import {
   observeReplicaSet,
   reconcileReplicas,
   resolveCount,
+  toFlyService,
   volumeIdsOf,
   type Replica,
   type ReplicaSet,
@@ -358,6 +359,49 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * `https://{appName}.fly.dev` lands on Fly's edge. Fly terminates
  * TLS on 443, picks one started Machine that published this service,
  * and forwards to `port` where `fetch` runs.
+ *
+ * ### Configure routing health checks
+ * The generated service includes a TCP check on `port`. To customize
+ * it, provide `services` and configure each service's `checks` property.
+ *
+ * **Example:** HTTP readiness check
+ * ```typescript
+ * export default class Api extends Fly.Service<Api>()(
+ *   "Api",
+ *   {
+ *     app: Site,
+ *     main: import.meta.url,
+ *     port: 3000,
+ *     services: [
+ *       {
+ *         protocol: "tcp",
+ *         internalPort: 3000,
+ *         ports: [
+ *           { port: 80, handlers: ["http"], forceHttps: true },
+ *           { port: 443, handlers: ["tls", "http"] },
+ *         ],
+ *         checks: [
+ *           {
+ *             type: "http",
+ *             port: 3000,
+ *             method: "GET",
+ *             path: "/health",
+ *             protocol: "http",
+ *             interval: "15s",
+ *             timeout: "2s",
+ *             gracePeriod: "30s",
+ *           },
+ *         ],
+ *       },
+ *     ],
+ *   },
+ *   Effect.gen(function* () {
+ *     return {
+ *       fetch: Effect.succeed(HttpServerResponse.text("hello")),
+ *     };
+ *   }),
+ * ) {}
+ * ```
  *
  * ### An address so it answers
  * `{app}.fly.dev` does not answer over IPv4 until the App has an
@@ -727,26 +771,6 @@ const toFlyGuest = (guest: MachineGuest | undefined): FlyMachineGuest => {
   if (guest?.gpus !== undefined) fly.gpus = guest.gpus;
   return fly;
 };
-
-const toFlyService = (service: MachineService): FlyMachineService => ({
-  protocol: service.protocol,
-  internal_port: service.internalPort,
-  autostart: service.autostart,
-  autostop:
-    typeof service.autostop === "boolean"
-      ? service.autostop
-        ? "stop"
-        : "off"
-      : service.autostop,
-  min_machines_running: service.minMachinesRunning,
-  ports: service.ports?.map((port) => ({
-    port: port.port,
-    handlers: port.handlers,
-    force_https: port.forceHttps,
-    start_port: port.startPort,
-    end_port: port.endPort,
-  })),
-});
 
 const desiredEnv = (
   props: ServiceProps,

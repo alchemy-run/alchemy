@@ -22,11 +22,13 @@ import { withProfileOverride } from "../Auth/Resolve.ts";
 import { AwsAuth } from "../AWS/AuthProvider.ts";
 import { AxiomAuth } from "../Axiom/AuthProvider.ts";
 import { CloudflareAuth } from "../Cloudflare/Auth/AuthProvider.ts";
+import { FlyAuth } from "../Fly/AuthProvider.ts";
 import { GitHubAuth } from "../GitHub/AuthProvider.ts";
 import { HetznerAuth } from "../Hetzner/AuthProvider.ts";
 import { NeonAuth } from "../Neon/AuthProvider.ts";
 import { PlanetscaleAuth } from "../Planetscale/AuthProvider.ts";
 import { PrismaAuth } from "../Prisma/AuthProvider.ts";
+import { RailwayAuth } from "../Railway/AuthProvider.ts";
 import * as Stack from "../Stack.ts";
 import { Stage } from "../Stage.ts";
 import { Progress } from "./Progress.ts";
@@ -55,6 +57,17 @@ export type StackModule = ReturnType<ReturnType<typeof Stack.make>> & {
   readonly state: Layer.Layer<never> | undefined;
 };
 
+export interface StackModuleLoader {
+  readonly import: (url: string) => Promise<{ readonly default?: unknown }>;
+}
+
+export const StackModuleLoader = Context.Reference<StackModuleLoader>(
+  "Alchemy/Alchemist/StackModuleLoader",
+  {
+    defaultValue: () => ({ import: (url) => import(url) }),
+  },
+);
+
 export const importStack = Effect.fn(function* (main: string) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
@@ -66,8 +79,9 @@ export const importStack = Effect.fn(function* (main: string) {
       }),
     );
   }
-  const module: { readonly default?: unknown } = yield* Effect.promise(
-    () => import(pathToFileURL(absolutePath).href),
+  const loader = yield* StackModuleLoader;
+  const module = yield* Effect.promise(() =>
+    loader.import(pathToFileURL(absolutePath).href),
   );
   if (
     !Effect.isEffect(module.default) ||
@@ -355,11 +369,13 @@ const builtinAuth = Layer.mergeAll(
   AwsAuth,
   AxiomAuth,
   CloudflareAuth,
+  FlyAuth,
   GitHubAuth,
   HetznerAuth,
   NeonAuth,
   PlanetscaleAuth,
   PrismaAuth,
+  RailwayAuth,
 );
 
 const buildBuiltinAuthProviders = Effect.fn("buildBuiltinAuthProviders")(

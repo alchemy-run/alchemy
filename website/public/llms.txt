@@ -131,7 +131,7 @@ A linear five-part walkthrough from zero to a tested, locally-developed, CI-depl
 - [Durable Objects](https://alchemy.run/cloudflare/compute/durable-objects) — Durable Objects are globally-unique stateful instances with transactional storage — define one as an Effect, persist state per key, expose typed RPC methods, and stream values back to the caller.
 - [Gradual deployments](https://alchemy.run/cloudflare/compute/gradual-deployments) — Roll out Worker deploys incrementally — upload preview versions, canary a percentage of live traffic, ramp to 100%, pin users to a version during the rollout, and verify which version served each request.
 - [Python Workers](https://alchemy.run/cloudflare/compute/python-workers) — Deploy Cloudflare Python Workers by pointing main at a .py file — alchemy uploads the modules, vendors pyproject.toml dependencies with uv, and serves them locally through workerd's built-in Pyodide.
-- [Workers](https://alchemy.run/cloudflare/compute/workers) — Cloudflare Workers are the compute runtime of every alchemy app — define infrastructure and runtime behavior in one Effect program, bind resources with full type safety, and call other Workers over schemaless RPC.
+- [Workers](https://alchemy.run/cloudflare/compute/workers) — Cloudflare Workers are the compute Runtime of every Alchemy app — declare the Worker and its handler in one file, bind resources with full type safety, and call other Workers over schemaless RPC.
 - [Workflows](https://alchemy.run/cloudflare/compute/workflows) — Cloudflare Workflows run durable multi-step jobs — define a typed workflow class, checkpoint steps with task and sleep, trigger instances from a Worker, and poll status until completion.
 
 ## Cloudflare — Frontend

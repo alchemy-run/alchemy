@@ -10,3 +10,10 @@ export const DevOptions = Schema.Struct({
 });
 
 export type DevOptions = typeof DevOptions.Type;
+
+/**
+ * Exit status the exec child uses to ask the supervisor for a fresh process.
+ * Bun cannot evict evaluated modules, so a stack-graph change under Bun tears
+ * the generation down and exits with this code instead of reloading in place.
+ */
+export const DEV_RELOAD_EXIT_CODE = 75;

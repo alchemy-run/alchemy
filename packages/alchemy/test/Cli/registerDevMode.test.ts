@@ -13,10 +13,10 @@ import { nodePath, nodeSupportsDevMode } from "../nodeProbe.ts";
 // process across two copies of the package — while leaving packages
 // without a `bun` condition (published sigil) on their built output, and
 // (2) transpile `.tsx` with ALCHEMY'S tsconfig (react-jsx) regardless of
-// the invoking project: the child's cwd is an example on purpose — tsx
-// resolves its tsconfig from the working directory, and an unpinned
-// lookup transpiled the CLI's React files with the example's JSX settings
-// ("ReferenceError: React is not defined" from classic-runtime output).
+// the invoking project: the child's cwd is an example on purpose. Oxc resolves
+// the nearest tsconfig per source file, so the CLI's React files cannot inherit
+// the example's JSX settings (which previously produced classic-runtime output
+// and "ReferenceError: React is not defined").
 it.live.skipIf(!nodeSupportsDevMode)(
   "dev-mode hooks resolve monorepo packages to src and transpile tsx",
   () =>
@@ -28,12 +28,16 @@ it.live.skipIf(!nodeSupportsDevMode)(
       const runtimeTsx = fileURLToPath(
         new URL("../../src/Cli/components/view/Runtime.tsx", import.meta.url),
       );
+      const resolutionProbe = fileURLToPath(
+        new URL("./fixtures/register-dev-mode-probe.ts", import.meta.url),
+      );
       // No explicit sigil probe: two-arg import.meta.resolve is flagged in
       // node, and Runtime.tsx importing sigil transitively already proves
       // the published package (no `bun` condition) loads from its dist.
       const script = `
-        console.log("alchemy=" + import.meta.resolve("alchemy"));
-        console.log("sub=" + import.meta.resolve("alchemy/Cloudflare"));
+        const probe = await import(${JSON.stringify(resolutionProbe)});
+        console.log("alchemy=" + probe.alchemyUrl);
+        console.log("sub=" + probe.subpathUrl);
         await import(${JSON.stringify(runtimeTsx)});
         console.log("tsx=ok");
       `;
@@ -77,6 +81,38 @@ it.live.skipIf(!nodeSupportsDevMode)(
       expect(stdout).toMatch(/alchemy=file:.*\/src\/index\.ts/);
       expect(stdout).toMatch(/sub=file:.*\/src\/Cloudflare\/index\.ts/);
       expect(stdout).toContain("tsx=ok");
+
+      const repoDir = fileURLToPath(new URL("../../../..", import.meta.url));
+      const pnpm = Bun.which("pnpm");
+      expect(pnpm).not.toBeNull();
+      const cli = yield* ChildProcess.make(pnpm!, ["alchemy", "--version"], {
+        cwd: repoDir,
+        env: { NO_COLOR: "1" },
+        extendEnv: true,
+        stdin: "ignore",
+        stdout: "pipe",
+        stderr: "pipe",
+        killSignal: "SIGKILL",
+      });
+      const [cliStdout, cliStderr, cliExitCode] = yield* Effect.all(
+        [
+          cli.stdout.pipe(
+            Stream.decodeText,
+            Stream.runCollect,
+            Effect.map((chunks) => chunks.join("")),
+          ),
+          cli.stderr.pipe(
+            Stream.decodeText,
+            Stream.runCollect,
+            Effect.map((chunks) => chunks.join("")),
+          ),
+          cli.exitCode,
+        ],
+        { concurrency: 3 },
+      );
+      expect(cliStderr).toBe("");
+      expect(cliExitCode).toBe(0);
+      expect(cliStdout).toMatch(/alchemy v.*\(node [^,]+, src\)/);
     }).pipe(Effect.scoped, Effect.provide(PlatformServices)),
   { timeout: 60_000 },
 );

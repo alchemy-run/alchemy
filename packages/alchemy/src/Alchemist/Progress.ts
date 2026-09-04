@@ -68,9 +68,6 @@ const spanEventOf = (
           ...(event.message === undefined
             ? {}
             : { "alchemy.apply.message": event.message }),
-          ...(event.bindingId === undefined
-            ? {}
-            : { "alchemy.binding.id": event.bindingId }),
         },
       };
     case "apply.resource.note":

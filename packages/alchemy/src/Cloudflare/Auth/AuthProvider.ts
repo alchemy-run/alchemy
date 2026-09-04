@@ -39,9 +39,6 @@ import * as OAuthClient from "./OAuthClient.ts";
 import {
   CLOUDFLARE_AUTH_PROVIDER_NAME,
   CloudflareAuthConfigSchema,
-  CloudflareStoredCredentials,
-  OAUTH_STORAGE_KEY,
-  STORED_STORAGE_KEY,
   validateAccountId,
   validateAccountIdField,
   type CloudflareAuthConfig,
@@ -179,16 +176,21 @@ const accountIdField: ConfigureField = {
   validate: validateAccountIdField,
 };
 
-/** `--set` fields for `--method api-token`. */
-const apiTokenFields: ReadonlyArray<ConfigureField> = [
-  { name: "apiToken", label: "Cloudflare API Token", secret: true },
-  accountIdField,
-];
-
-/** `--set` fields for `--method api-key`. */
-const apiKeyFields: ReadonlyArray<ConfigureField> = [
-  { name: "apiKey", label: "Cloudflare API Key", secret: true },
-  { name: "email", label: "Cloudflare Email" },
+/**
+ * `--set` fields for `--method stored`. The persisted `credentialType` is
+ * inferred from which secret is supplied: `apiToken` alone, or `apiKey`
+ * together with `email`.
+ */
+const storedFields: ReadonlyArray<ConfigureField> = [
+  {
+    name: "apiToken",
+    label: "Cloudflare API Token",
+    description: "Pass either apiToken, or apiKey together with email.",
+    secret: true,
+    optional: true,
+  },
+  { name: "apiKey", label: "Cloudflare API Key", secret: true, optional: true },
+  { name: "email", label: "Cloudflare Email", optional: true },
   accountIdField,
 ];
 
@@ -197,8 +199,7 @@ const apiKeyFields: ReadonlyArray<ConfigureField> = [
  * interactive-only (browser grant).
  */
 const configureMethods: ReadonlyArray<ConfigureMethod> = [
-  { method: "api-token", fields: apiTokenFields },
-  { method: "api-key", fields: apiKeyFields },
+  { method: "stored", fields: storedFields },
 ];
 
 const promptOAuthScopes = (currentConfig?: CloudflareAuthConfig) =>
@@ -207,16 +208,17 @@ const promptOAuthScopes = (currentConfig?: CloudflareAuthConfig) =>
     const mode = yield* interaction.prompt
       .select({
         message: "Cloudflare OAuth scopes",
+        initialValue: "all" as const,
         options: [
-          {
-            value: "basic" as const,
-            label: "Basic Scopes",
-            description: "recommended — covers typical Alchemy use cases",
-          },
           {
             value: "all" as const,
             label: "All Scopes",
             description: "authorize every available Cloudflare permission",
+          },
+          {
+            value: "basic" as const,
+            label: "Basic Scopes",
+            description: "covers typical Alchemy use cases",
           },
           {
             value: "custom" as const,
@@ -261,7 +263,7 @@ export const CloudflareAuth = AuthProviderLayer<
     const interaction = Interaction.accessors;
     const store = yield* CredentialsStore;
 
-    const oauthLogin = (profileName: string, scopes: string[]) =>
+    const oauthLogin = (_profileName: string, scopes: string[]) =>
       Effect.gen(function* () {
         const authorization = yield* OAuthClient.authorize([
           ...scopes,
@@ -275,12 +277,6 @@ export const CloudflareAuth = AuthProviderLayer<
           exchange: (input) =>
             OAuthClient.exchangeCallbackInput(input, authorization),
         });
-        yield* store.write(
-          profileName,
-          OAUTH_STORAGE_KEY,
-          OAuthClient.OAuthCredentials,
-          credentials,
-        );
         yield* interaction.output.success(
           "Connected to Cloudflare with OAuth.",
         );
@@ -313,16 +309,12 @@ export const CloudflareAuth = AuthProviderLayer<
               .pipe(mapPromptCancellation, Effect.map(Redacted.make));
             const accountId = yield* promptAccountId();
 
-            yield* store.write(
-              profileName,
-              STORED_STORAGE_KEY,
-              CloudflareStoredCredentials,
-              { type: "apiToken", apiToken, accountId },
-            );
             yield* interaction.output.success("Cloudflare: credentials saved.");
             return {
               method: "stored" as const,
               credentialType: "apiToken" as const,
+              apiToken: Redacted.value(apiToken),
+              accountId,
             };
           }),
         ),
@@ -343,16 +335,13 @@ export const CloudflareAuth = AuthProviderLayer<
               .pipe(mapPromptCancellation, Effect.map(Redacted.make));
             const accountId = yield* promptAccountId();
 
-            yield* store.write(
-              profileName,
-              STORED_STORAGE_KEY,
-              CloudflareStoredCredentials,
-              { type: "apiKey", apiKey, email, accountId },
-            );
             yield* interaction.output.success("Cloudflare: credentials saved.");
             return {
               method: "stored" as const,
               credentialType: "apiKey" as const,
+              apiKey: Redacted.value(apiKey),
+              email: Redacted.value(email),
+              accountId,
             };
           }),
         ),
@@ -387,6 +376,10 @@ export const CloudflareAuth = AuthProviderLayer<
         method: "oauth" as const,
         scopes: [...scopes],
         accountId,
+        clientId: oauthCreds.clientId,
+        access: Redacted.value(oauthCreds.access),
+        refresh: Redacted.value(oauthCreds.refresh),
+        expires: oauthCreds.expires,
       };
     });
 
@@ -443,75 +436,64 @@ export const CloudflareAuth = AuthProviderLayer<
     const resolveCredentials = (
       profileName: string,
       config: CloudflareAuthConfig,
+      updateConfig?: (
+        config: CloudflareAuthConfig,
+      ) => Effect.Effect<void, AuthError>,
     ) =>
       Effect.gen(function* () {
         const reauth = refreshHint(CLOUDFLARE_AUTH_PROVIDER_NAME, profileName);
         return yield* Match.value(config).pipe(
-          Match.when({ method: "stored" }, () =>
-            store
-              .read(
-                profileName,
-                STORED_STORAGE_KEY,
-                CloudflareStoredCredentials,
-              )
-              .pipe(
-                Effect.flatMap(
-                  Effect.fn(function* (creds) {
-                    if (creds == null) {
-                      return yield* Effect.fail(
-                        new NeedsReauth({
-                          provider: CLOUDFLARE_AUTH_PROVIDER_NAME,
-                          profile: profileName,
-                          message: `Cloudflare stored credentials not found. ${reauth}`,
-                        }),
-                      );
-                    }
-                    const accountId = yield* validateAccountId(
-                      creds.accountId,
-                      `stored for profile '${profileName}'`,
-                    );
-                    return Match.value(creds).pipe(
-                      Match.when({ type: "apiToken" }, (c) => ({
-                        type: "apiToken" as const,
-                        apiToken: c.apiToken,
-                        accountId,
-                        source: { type: "stored" as const },
-                      })),
-                      Match.when({ type: "apiKey" }, (c) => ({
-                        type: "apiKey" as const,
-                        apiKey: c.apiKey,
-                        email: c.email,
-                        accountId,
-                        source: { type: "stored" as const },
-                      })),
-                      Match.exhaustive,
-                    );
-                  }),
-                ),
-              ),
+          Match.when({ method: "stored", credentialType: "apiToken" }, (c) =>
+            validateAccountId(
+              c.accountId,
+              `stored for profile '${profileName}'`,
+            ).pipe(
+              Effect.map((accountId) => ({
+                type: "apiToken" as const,
+                apiToken: Redacted.make(c.apiToken),
+                accountId,
+                source: { type: "stored" as const },
+              })),
+            ),
+          ),
+          Match.when({ method: "stored", credentialType: "apiKey" }, (c) =>
+            validateAccountId(
+              c.accountId,
+              `stored for profile '${profileName}'`,
+            ).pipe(
+              Effect.map((accountId) => ({
+                type: "apiKey" as const,
+                apiKey: Redacted.make(c.apiKey),
+                email: Redacted.make(c.email),
+                accountId,
+                source: { type: "stored" as const },
+              })),
+            ),
           ),
           Match.when({ method: "oauth" }, (cfg) =>
             Effect.gen(function* () {
-              const accountId = yield* validateAccountId(
-                cfg.accountId,
-                `configured for profile '${profileName}'`,
-              );
-              const creds = yield* store.read(
-                profileName,
-                OAUTH_STORAGE_KEY,
-                OAuthClient.OAuthCredentials,
-              );
-              if (creds == null || creds.type !== "oauth") {
+              if (!("scopes" in cfg)) {
                 return yield* Effect.fail(
                   new NeedsReauth({
                     provider: CLOUDFLARE_AUTH_PROVIDER_NAME,
                     profile: profileName,
-                    message: `Cloudflare OAuth credentials not found. ${reauth}`,
+                    message: `Cloudflare OAuth scopes need to be selected. ${reauth}`,
                   }),
                 );
               }
+              const accountId = yield* validateAccountId(
+                cfg.accountId,
+                `configured for profile '${profileName}'`,
+              );
+              const creds: OAuthClient.OAuthCredentials = {
+                type: "oauth",
+                clientId: cfg.clientId,
+                access: Redacted.make(cfg.access),
+                refresh: Redacted.make(cfg.refresh),
+                expires: cfg.expires,
+                scopes: cfg.scopes,
+              };
               if (!OAuthClient.usesCurrentClient(creds)) {
-                yield* store.delete(profileName, OAUTH_STORAGE_KEY);
                 return yield* Effect.fail(
                   new NeedsReauth({
                     provider: CLOUDFLARE_AUTH_PROVIDER_NAME,
@@ -528,14 +510,6 @@ export const CloudflareAuth = AuthProviderLayer<
                 creds.expires > now + 10_000
                   ? creds
                   : yield* OAuthClient.refresh(creds).pipe(
-                      Effect.tap((refreshed) =>
-                        store.write(
-                          profileName,
-                          OAUTH_STORAGE_KEY,
-                          OAuthClient.OAuthCredentials,
-                          refreshed,
-                        ),
-                      ),
                       Effect.mapError(
                         (e) =>
                           new NeedsReauth({
@@ -546,6 +520,19 @@ export const CloudflareAuth = AuthProviderLayer<
                           }),
                       ),
                     );
+              if (fresh !== creds) {
+                yield* (
+                  updateConfig?.({
+                    method: "oauth",
+                    accountId,
+                    clientId: fresh.clientId,
+                    access: Redacted.value(fresh.access),
+                    refresh: Redacted.value(fresh.refresh),
+                    expires: fresh.expires,
+                    scopes: fresh.scopes,
+                  }) ?? Effect.void
+                );
+              }
               return {
                 type: "oauth" as const,
                 accessToken: fresh.access,
@@ -596,45 +583,27 @@ export const CloudflareAuth = AuthProviderLayer<
     const logout = (profileName: string, config: CloudflareAuthConfig) =>
       Match.value(config)
         .pipe(
-          Match.when({ method: "stored" }, () =>
-            store
-              .delete(profileName, STORED_STORAGE_KEY)
-              .pipe(
-                Effect.andThen(
-                  interaction.output.success(
-                    "Cloudflare: stored credentials removed",
+          Match.when({ method: "stored" }, () => Effect.void),
+          Match.when({ method: "oauth" }, (config) => {
+            if (!("scopes" in config)) return Effect.void;
+            const credentials: OAuthClient.OAuthCredentials = {
+              type: "oauth",
+              clientId: config.clientId,
+              access: Redacted.make(config.access),
+              refresh: Redacted.make(config.refresh),
+              expires: config.expires,
+              scopes: config.scopes,
+            };
+            return OAuthClient.usesCurrentClient(credentials)
+              ? OAuthClient.revoke(credentials).pipe(
+                  Effect.catchTag("OAuthError", (err) =>
+                    interaction.output.warning(
+                      `Cloudflare: could not revoke OAuth token: ${err.errorDescription}`,
+                    ),
                   ),
-                ),
-              ),
-          ),
-          Match.when({ method: "oauth" }, () =>
-            store
-              .read(
-                profileName,
-                OAUTH_STORAGE_KEY,
-                OAuthClient.OAuthCredentials,
-              )
-              .pipe(
-                Effect.tap((creds) =>
-                  creds?.type === "oauth" &&
-                  OAuthClient.usesCurrentClient(creds)
-                    ? OAuthClient.revoke(creds).pipe(
-                        Effect.catchTag("OAuthError", (err) =>
-                          interaction.output.warning(
-                            `Cloudflare: could not revoke OAuth token: ${err.errorDescription}`,
-                          ),
-                        ),
-                      )
-                    : Effect.void,
-                ),
-                Effect.andThen(store.delete(profileName, OAUTH_STORAGE_KEY)),
-                Effect.andThen(
-                  interaction.output.success(
-                    "Cloudflare: OAuth credentials removed.",
-                  ),
-                ),
-              ),
-          ),
+                )
+              : Effect.void;
+          }),
           Match.exhaustive,
         )
         // The cached state-store credentials are derived from the account we
@@ -647,107 +616,121 @@ export const CloudflareAuth = AuthProviderLayer<
           ),
         );
 
-    const login = (profileName: string, config: CloudflareAuthConfig) =>
+    const login = (
+      profileName: string,
+      config: CloudflareAuthConfig,
+      updateConfig?: (
+        config: CloudflareAuthConfig,
+      ) => Effect.Effect<void, AuthError>,
+    ) =>
       Match.value(config)
         .pipe(
-          Match.when({ method: "stored" }, () =>
-            store
-              .read(
-                profileName,
-                STORED_STORAGE_KEY,
-                CloudflareStoredCredentials,
-              )
-              .pipe(
-                Effect.flatMap((creds) =>
-                  creds == null ? loginStored(profileName) : Effect.void,
-                ),
-              ),
-          ),
+          Match.when({ method: "stored" }, (config) => Effect.succeed(config)),
           Match.when({ method: "oauth" }, (c) =>
-            Effect.gen(function* () {
-              const creds = yield* store.read(
-                profileName,
-                OAUTH_STORAGE_KEY,
-                OAuthClient.OAuthCredentials,
-              );
-              const reconfigure = reconfigureHint(
-                CLOUDFLARE_AUTH_PROVIDER_NAME,
-                profileName,
-              );
-              // Any path that falls back to a full browser login rebuilds the
-              // authorize URL from the profile's stored scopes. Those scopes
-              // may predate the current OAuth client (or a catalog change), and
-              // one unknown scope makes the whole authorize URL invalid — so
-              // sanitize before generating a URL, never after it fails.
-              const fullLogin = Effect.suspend(() => {
-                const { valid, dropped } = partitionOAuthScopes(c.scopes);
-                if (valid.length === 0) {
-                  return Effect.fail(
-                    new AuthError({
-                      message:
-                        `The OAuth scopes stored for profile '${profileName}' are no longer offered by Alchemy's Cloudflare OAuth client. ` +
-                        `Scopes must be picked again. ${reconfigure}`,
-                    }),
+            "scopes" in c
+              ? Effect.gen(function* () {
+                  const creds: OAuthClient.OAuthCredentials = {
+                    type: "oauth",
+                    clientId: c.clientId,
+                    access: Redacted.make(c.access),
+                    refresh: Redacted.make(c.refresh),
+                    expires: c.expires,
+                    scopes: c.scopes,
+                  };
+                  const reconfigure = reconfigureHint(
+                    CLOUDFLARE_AUTH_PROVIDER_NAME,
+                    profileName,
                   );
-                }
-                return (
-                  dropped.length === 0
-                    ? Effect.void
-                    : interaction.output.warning(
-                        `Cloudflare: dropping ${dropped.length} stored scope${dropped.length === 1 ? "" : "s"} no longer offered by the current OAuth client (${dropped.join(", ")}). ` +
-                          `Scopes must be picked again. ${reconfigure}`,
-                      )
-                ).pipe(Effect.andThen(oauthLogin(profileName, valid)));
-              });
+                  // Any path that falls back to a full browser login rebuilds the
+                  // authorize URL from the profile's stored scopes. Those scopes
+                  // may predate the current OAuth client (or a catalog change), and
+                  // one unknown scope makes the whole authorize URL invalid — so
+                  // sanitize before generating a URL, never after it fails.
+                  const fullLogin = Effect.gen(function* () {
+                    const { valid, dropped } = partitionOAuthScopes(c.scopes);
+                    if (valid.length === 0) {
+                      return yield* Effect.fail(
+                        new AuthError({
+                          message:
+                            `The OAuth scopes stored for profile '${profileName}' are no longer offered by Alchemy's Cloudflare OAuth client. ` +
+                            `Scopes must be picked again. ${reconfigure}`,
+                        }),
+                      );
+                    }
+                    const refreshed = yield* (
+                      dropped.length === 0
+                        ? Effect.void
+                        : interaction.output.warning(
+                            `Cloudflare: dropping ${dropped.length} stored scope${dropped.length === 1 ? "" : "s"} no longer offered by the current OAuth client (${dropped.join(", ")}). ` +
+                              `Scopes must be picked again. ${reconfigure}`,
+                          )
+                    ).pipe(Effect.andThen(oauthLogin(profileName, valid)));
+                    return {
+                      ...c,
+                      scopes: valid,
+                      clientId: refreshed.clientId,
+                      access: Redacted.value(refreshed.access),
+                      refresh: Redacted.value(refreshed.refresh),
+                      expires: refreshed.expires,
+                    };
+                  });
 
-              // The silent refresh rotates a single-use refresh token, so
-              // its read-refresh-persist section runs under the profile
-              // lock — a concurrent `read` refreshing the same token would
-              // double-spend it. The lock is held only for this API
-              // round-trip, never across the browser wait below.
-              const outcome =
-                creds?.type === "oauth" && OAuthClient.usesCurrentClient(creds)
-                  ? yield* withProfileCredentialsLock(
-                      profileName,
-                      interaction.output
-                        .info("Cloudflare: refreshing OAuth credentials...")
-                        .pipe(
-                          Effect.andThen(OAuthClient.refresh(creds)),
-                          Effect.flatMap((refreshed) =>
-                            store
-                              .write(
-                                profileName,
-                                OAUTH_STORAGE_KEY,
-                                OAuthClient.OAuthCredentials,
-                                refreshed,
-                              )
-                              .pipe(
-                                Effect.andThen(
-                                  interaction.output.success(
-                                    "Cloudflare: OAuth credentials refreshed.",
-                                  ),
+                  // The silent refresh rotates a single-use refresh token, so
+                  // its read-refresh-persist section runs under the profile
+                  // lock — a concurrent `read` refreshing the same token would
+                  // double-spend it. The lock is held only for this API
+                  // round-trip, never across the browser wait below.
+                  const outcome =
+                    creds.type === "oauth" &&
+                    OAuthClient.usesCurrentClient(creds)
+                      ? yield* withProfileCredentialsLock(
+                          profileName,
+                          interaction.output
+                            .info("Cloudflare: refreshing OAuth credentials...")
+                            .pipe(
+                              Effect.andThen(OAuthClient.refresh(creds)),
+                              Effect.flatMap((credentials) => {
+                                const config = {
+                                  ...c,
+                                  clientId: credentials.clientId,
+                                  access: Redacted.value(credentials.access),
+                                  refresh: Redacted.value(credentials.refresh),
+                                  expires: credentials.expires,
+                                  scopes: credentials.scopes,
+                                };
+                                return (
+                                  updateConfig?.(config) ?? Effect.void
+                                ).pipe(
+                                  Effect.as({
+                                    type: "refreshed" as const,
+                                    config,
+                                  }),
+                                );
+                              }),
+                              Effect.tap(() =>
+                                interaction.output.success(
+                                  "Cloudflare: OAuth credentials refreshed.",
                                 ),
                               ),
-                          ),
-                          Effect.as("refreshed" as const),
-                          Effect.catchTag("OAuthError", () =>
-                            Effect.succeed("browser" as const),
-                          ),
-                        ),
-                    )
-                  : yield* Effect.gen(function* () {
-                      if (creds?.type === "oauth") {
-                        yield* store.delete(profileName, OAUTH_STORAGE_KEY);
-                        yield* interaction.output.warning(
-                          "Cloudflare: removed OAuth credentials issued to the previous client.",
-                        );
-                      }
-                      return "browser" as const;
-                    });
-              if (outcome === "browser") {
-                yield* fullLogin;
-              }
-            }),
+                              Effect.catchTag("OAuthError", () =>
+                                Effect.succeed({ type: "browser" as const }),
+                              ),
+                            ),
+                        )
+                      : yield* Effect.gen(function* () {
+                          if (creds.type === "oauth") {
+                            yield* interaction.output.warning(
+                              "Cloudflare: removed OAuth credentials issued to the previous client.",
+                            );
+                          }
+                          return { type: "browser" as const };
+                        });
+                  if (outcome.type === "browser") {
+                    return yield* fullLogin;
+                  }
+                  return outcome.config;
+                })
+              : configureOAuth(profileName, c),
           ),
           Match.exhaustive,
         )
@@ -761,9 +744,15 @@ export const CloudflareAuth = AuthProviderLayer<
           ),
         );
 
-    const details = (profileName: string, config: CloudflareAuthConfig) =>
+    const details = (
+      profileName: string,
+      config: CloudflareAuthConfig,
+      updateConfig?: (
+        config: CloudflareAuthConfig,
+      ) => Effect.Effect<void, AuthError>,
+    ) =>
       Effect.all([
-        resolveCredentials(profileName, config),
+        resolveCredentials(profileName, config, updateConfig),
         Clock.currentTimeMillis,
       ]).pipe(
         Effect.map(([creds, now]) => {
@@ -808,10 +797,9 @@ export const CloudflareAuth = AuthProviderLayer<
       );
 
     /**
-     * Persist flag-provided stored credentials (`--method api-token` /
-     * `--method api-key`). Writes the same `cloudflare-stored` file the
-     * interactive stored path writes; OAuth is interactive-only and not
-     * accepted here.
+     * Persist flag-provided stored credentials (`--method stored`). Writes
+     * the same `cloudflare-stored` file the interactive stored path writes;
+     * OAuth is interactive-only and not accepted here.
      */
     const configureWith = (
       profileName: string,
@@ -820,77 +808,61 @@ export const CloudflareAuth = AuthProviderLayer<
         readonly values: Record<string, string>;
       },
     ): Effect.Effect<CloudflareAuthConfig, AuthError> => {
-      const persist = (
-        credentials: CloudflareStoredCredentials,
-        config: CloudflareAuthConfig,
-      ) =>
+      const persist = (config: CloudflareAuthConfig) =>
         store
-          .write(
-            profileName,
-            STORED_STORAGE_KEY,
-            CloudflareStoredCredentials,
-            credentials,
-          )
-          .pipe(
-            // Re-configuring may point this profile at a different
-            // Cloudflare account; the cached state-store credentials are
-            // minted per-account, so drop them (same as `configure`).
-            Effect.andThen(
-              store
-                .delete(profileName, STATE_STORE_CREDENTIALS_FILE)
-                .pipe(Effect.ignore),
-            ),
-            Effect.as(config),
-          );
-      return Match.value(input.method).pipe(
-        Match.when("api-token", () =>
-          validateFieldValues(
-            CLOUDFLARE_AUTH_PROVIDER_NAME,
-            apiTokenFields,
-            input.values,
-          ).pipe(
-            Effect.flatMap((values) =>
-              persist(
-                {
-                  type: "apiToken",
-                  apiToken: storedSecret(values.apiToken) ?? Redacted.make(""),
-                  accountId: (storedValueText(values.accountId) ?? "")
-                    .trim()
-                    .toLowerCase(),
-                },
-                { method: "stored", credentialType: "apiToken" },
-              ),
-            ),
-          ),
-        ),
-        Match.when("api-key", () =>
-          validateFieldValues(
-            CLOUDFLARE_AUTH_PROVIDER_NAME,
-            apiKeyFields,
-            input.values,
-          ).pipe(
-            Effect.flatMap((values) =>
-              persist(
-                {
-                  type: "apiKey",
-                  apiKey: storedSecret(values.apiKey) ?? Redacted.make(""),
-                  email: storedSecret(values.email) ?? Redacted.make(""),
-                  accountId: (storedValueText(values.accountId) ?? "")
-                    .trim()
-                    .toLowerCase(),
-                },
-                { method: "stored", credentialType: "apiKey" },
-              ),
-            ),
-          ),
-        ),
-        Match.orElse(() =>
-          Effect.fail(
+          .delete(profileName, STATE_STORE_CREDENTIALS_FILE)
+          .pipe(Effect.ignore, Effect.as(config));
+      if (input.method !== "stored") {
+        return Effect.fail(
+          new AuthError({
+            message: `Cloudflare: unknown method '${input.method}'. Valid methods: stored. (OAuth is interactive-only.)`,
+          }),
+        );
+      }
+      return validateFieldValues(
+        CLOUDFLARE_AUTH_PROVIDER_NAME,
+        storedFields,
+        input.values,
+      ).pipe(
+        Effect.flatMap((values) => {
+          const accountId = (storedValueText(values.accountId) ?? "")
+            .trim()
+            .toLowerCase();
+          const apiToken = storedSecret(values.apiToken);
+          const apiKey = storedSecret(values.apiKey);
+          const email = storedValueText(values.email);
+          if (
+            apiToken !== undefined &&
+            apiKey === undefined &&
+            email === undefined
+          ) {
+            return persist({
+              method: "stored",
+              credentialType: "apiToken",
+              apiToken: Redacted.value(apiToken),
+              accountId,
+            });
+          }
+          if (
+            apiToken === undefined &&
+            apiKey !== undefined &&
+            email !== undefined
+          ) {
+            return persist({
+              method: "stored",
+              credentialType: "apiKey",
+              apiKey: Redacted.value(apiKey),
+              email,
+              accountId,
+            });
+          }
+          return Effect.fail(
             new AuthError({
-              message: `Cloudflare: unknown method '${input.method}'. Valid methods: api-token, api-key. (OAuth is interactive-only.)`,
+              message:
+                "Cloudflare: pass either --set apiToken=<token>, or both --set apiKey=<key> and --set email=<email>.",
             }),
-          ),
-        ),
+          );
+        }),
       );
     };
 

@@ -136,16 +136,22 @@ This moves the profile's credential directory. It does not rewrite an
 
 ### Environment variables outside CI
 
-Complete provider credentials exported in the process environment override
-an implicitly selected profile:
+Provider credentials in the environment always win. When every required
+variable in a provider's contract is set — in the process environment, a
+`.env` file, or `--env-file` — alchemy resolves that provider from the
+variables and never consults the profile, whether or not `--profile` or
+`ALCHEMY_PROFILE` selected one. It logs which variables it used:
 
 ```text
-Cloudflare: using credentials from environment variables (CLOUDFLARE_API_TOKEN,
-CLOUDFLARE_ACCOUNT_ID) — the 'default' profile was not used.
+Cloudflare: using environment variables (CLOUDFLARE_API_TOKEN,
+CLOUDFLARE_ACCOUNT_ID) instead of the profile.
 ```
 
-Pass `--profile <name>` or set `ALCHEMY_PROFILE` to use the profile instead.
-Values supplied only through `--env-file` do not trigger this local override.
+The decision is per provider, so mixing is fine: a Cloudflare token in
+`.env` overrides only Cloudflare, while AWS, Neon, or any other provider in
+the same run still resolves from the profile. Unset the variables to use the
+profile's stored credentials for that provider too. A partial set (a required
+variable missing) is ignored and the profile applies.
 
 ### CI
 
@@ -171,6 +177,9 @@ directly from environment variables and nothing is read from or written to
 | PlanetScale | `PLANETSCALE_API_TOKEN_ID`, `PLANETSCALE_API_TOKEN`, `PLANETSCALE_ORGANIZATION` | `PLANETSCALE_API_BASE_URL` |
 | Prisma | `PRISMA_SERVICE_TOKEN` or `PRISMA_API_TOKEN` | `PRISMA_API_URL` or `PRISMA_MANAGEMENT_API_URL` |
 | Axiom | `AXIOM_TOKEN` or `AXIOM_API_KEY` | `AXIOM_ORG_ID` (required when the token is a personal access token), `AXIOM_URL` for self-hosted or regional deployments |
+| Fly | `FLY_API_TOKEN` | `FLY_API_HOSTNAME` overrides the Machines API root |
+| Hetzner | `HCLOUD_TOKEN` | `HCLOUD_ENDPOINT` overrides the API base URL |
+| Railway | `RAILWAY_API_TOKEN` (account or workspace token) | `RAILWAY_API_URL` overrides the GraphQL host |
 
 These variables are a CI credential source, not a profile authentication
 method. They are never persisted into `profiles.json` or the credentials

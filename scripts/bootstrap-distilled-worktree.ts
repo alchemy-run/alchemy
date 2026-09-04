@@ -36,9 +36,12 @@ if (gitDir === commonDir) {
   process.exit(0);
 }
 
-const desiredCommit = await git(["rev-parse", "HEAD:distilled"], root);
+const desiredCommit = await git(
+  ["rev-parse", "HEAD:submodules/distilled"],
+  root,
+);
 const sharedRepository = resolve(commonDir, "modules/distilled");
-const checkout = resolve(root, "distilled");
+const checkout = resolve(root, "submodules/distilled");
 
 // Mirror the parent worktree's branch onto the distilled worktree so it isn't
 // left on a dangling detached HEAD. A detached parent stays detached.
@@ -61,7 +64,7 @@ async function branchInUseElsewhere(): Promise<boolean> {
 if (!existsSync(sharedRepository)) {
   console.error(
     "Cannot bootstrap distilled: the primary checkout has not initialized the distilled submodule.\n" +
-      "Run `git submodule update --init -- distilled` in the primary checkout first.",
+      "Run `git submodule update --init -- submodules/distilled` in the primary checkout first.",
   );
   process.exit(1);
 }

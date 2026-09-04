@@ -22,7 +22,7 @@ import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
 import { fileURLToPath } from "node:url";
 import { pipedColorEnv } from "../Util/Terminal.ts";
-import { transformTypesFlags } from "../Util/Node.ts";
+import { nodeLoaderArgs } from "../Util/Node.ts";
 import { httpServer } from "../Util/PlatformServices.ts";
 import { SPAWNER_URL_ENV_KEY } from "./RpcProviderProxy.ts";
 import {
@@ -111,6 +111,11 @@ export const make = Effect.fn(function* ({
   const spawn = Effect.fn(function* (serverEntryUrl: string) {
     const bin = typeof globalThis.Bun !== "undefined" ? "bun" : "node";
     const main = fileURLToPath(serverEntryUrl);
+    // The sidecar runs on THIS process's runtime binary, not whatever PATH
+    // resolves: a `.ts` entry (checkout) needs the dev-mode loader hooks,
+    // which are gated on this node's version, and a published `.js` entry
+    // must not silently switch Node versions between supervisor and sidecar.
+    const program = bin === "bun" ? "bun" : process.execPath;
     // Stack-specific context is deliberately absent: sessions carry their
     // own SessionEnvironment, so one child serves every stack.
     const environment: RpcServerEnvironment = {
@@ -124,15 +129,14 @@ export const make = Effect.fn(function* ({
     // already decided (NO_COLOR / FORCE_COLOR). `extendEnv` propagates it
     // from the sidecar to its own children (dev servers, workerd).
     const command = ChildProcess.make(
-      bin,
+      program,
       {
         bun: ["run", main],
-        // Under Node, transparently strip TypeScript types so that `.ts`
-        // entry points work the same way they do under Bun. Mirrors what
-        // `dev.ts` already does for the outer process, so the dev experience
-        // is symmetric on both runtimes whether the entry came from `src/`
-        // (dev/tests) or `lib/` (published packages).
-        node: main.endsWith(".ts") ? [...transformTypesFlags(), main] : [main],
+        // Under Node the sidecar starts with alchemy's Oxc loader hooks, the
+        // same way `dev.ts` starts the exec child: a `.ts` entry (src/ in a
+        // checkout) also gets src-condition resolution, a `.js` entry (lib/
+        // in a published install) gets the loader alone.
+        node: [...nodeLoaderArgs(main), main],
       }[bin],
       {
         stdout: "pipe",
@@ -289,7 +293,14 @@ export const make = Effect.fn(function* ({
 export const layerServer = (
   environment: Pick<RpcServerEnvironment, "profile" | "envFile">,
 ) =>
-  Layer.effect(RpcSpawner, make(environment)).pipe(Layer.provide(httpServer()));
+  Layer.effect(RpcSpawner, make(environment)).pipe(
+    // `/logs` is deliberately long-lived. On shutdown the exec child still
+    // owns that response while this scope owns the exec child, so waiting for
+    // Node's default 20-second graceful HTTP drain creates a finalizer cycle.
+    // Stop accepting/serving immediately so the watcher finalizer can close
+    // the child; all actual sidecars still use their own bounded finalizers.
+    Layer.provide(httpServer(0, "127.0.0.1", { gracefulShutdownTimeout: 0 })),
+  );
 
 const RPC_ADDRESS_REGEX =
   /(<ALCHEMY_RPC_ADDRESS>)(.+)(<\/ALCHEMY_RPC_ADDRESS>)/;

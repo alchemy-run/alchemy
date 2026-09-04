@@ -132,7 +132,8 @@ been dedicated to the public domain. See <https://www.sqlite.org/copyright.html>
 - node-ignore: <https://github.com/kaelzhang/node-ignore>
 - SQLite: <https://github.com/sqlite/sqlite>
 
-The external `.vendor` Git submodules are separate works governed by the
+The first-class `submodules/` checkouts (distilled, floci) and the
+external `.vendor` Git submodules are separate works governed by the
 license files in their respective repositories. This notice covers code copied
 or adapted into the Alchemy repository; it does not replace the license
 documentation within those submodules.

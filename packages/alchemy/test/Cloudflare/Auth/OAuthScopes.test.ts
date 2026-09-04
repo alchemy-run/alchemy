@@ -1,4 +1,5 @@
 import {
+  ALL_SCOPE_IDS,
   ALL_SCOPES,
   BASIC_SCOPES,
   customOAuthScopeDefaults,
@@ -47,7 +48,7 @@ describe("Cloudflare public OAuth client", () => {
     expect(BASIC_SCOPES).toContain("zone.read");
   });
 
-  it("restores valid custom scopes when OAuth is reconfigured", () => {
+  it("defaults to all scopes and restores valid scopes when reconfigured", () => {
     expect(
       customOAuthScopeDefaults({
         method: "oauth",
@@ -61,7 +62,7 @@ describe("Cloudflare public OAuth client", () => {
         method: "stored",
         credentialType: "apiToken",
       }),
-    ).toEqual(BASIC_SCOPES);
+    ).toEqual(ALL_SCOPE_IDS);
   });
 
   it.effect(

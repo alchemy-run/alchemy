@@ -1,6 +1,5 @@
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
-import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import {
@@ -50,8 +49,11 @@ export const resolveProfileName = Effect.fn(function* (
 
 /**
  * The shared preamble of every per-cloud `fromAuthProvider` /
- * `fromEnvironment` layer. Precedence remains CI environment, explicitly
- * exported local environment credentials, then the selected profile.
+ * `fromEnvironment` layer. Precedence: environment credentials (process
+ * environment plus `.env` / `--env-file`) whenever the provider's declared
+ * contract is fully present — CI or not, selected profile or not — then, in
+ * CI, the provider's environment resolution alone (profiles do not exist
+ * there), otherwise the selected profile.
  */
 export const resolveProviderConfig = <
   C extends { method: string } = any,
@@ -61,6 +63,19 @@ export const resolveProviderConfig = <
 ) =>
   Effect.gen(function* () {
     const auth = yield* getAuthProvider<C, Credentials>(providerName);
+    if (auth.readEnvironment !== undefined) {
+      const used = yield* presentEnvironment(auth.environment);
+      if (used !== undefined) {
+        yield* logEnvironmentCredentials(providerName, used);
+        return {
+          auth,
+          profileName: undefined,
+          config: undefined,
+          resolve: auth.readEnvironment,
+          source: "environment" as const,
+        };
+      }
+    }
     const ci = yield* Config.boolean("CI").pipe(Config.withDefault(false));
     if (ci) {
       if (auth.readEnvironment === undefined) {
@@ -79,33 +94,6 @@ export const resolveProviderConfig = <
       };
     }
     const profile = yield* ProfileStore;
-    const configuredProfile = yield* Config.option(ALCHEMY_PROFILE).pipe(
-      Effect.mapError(
-        (cause) =>
-          new ProfileError({
-            message: "Could not resolve ALCHEMY_PROFILE.",
-            cause,
-          }),
-      ),
-    );
-    if (
-      Option.isNone(configuredProfile) &&
-      auth.readEnvironment !== undefined
-    ) {
-      const used = yield* Effect.sync(() =>
-        presentEnvironment(auth.environment, process.env),
-      );
-      if (used !== undefined) {
-        yield* warnEnvironmentCredentials(providerName, used);
-        return {
-          auth,
-          profileName: undefined,
-          config: undefined,
-          resolve: auth.readEnvironment,
-          source: "environment" as const,
-        };
-      }
-    }
     const selection = yield* profile.current;
     const profileName = selection.name;
     const config = yield* profile.loadProviderConfig(auth, profileName);
@@ -113,21 +101,34 @@ export const resolveProviderConfig = <
       auth,
       profileName,
       config,
-      resolve: auth.read(profileName, config),
+      resolve: auth.read(profileName, config, (updated) =>
+        profile.setProviderConfig(profileName, providerName, updated).pipe(
+          Effect.mapError(
+            (cause) =>
+              new AuthError({
+                message: `${providerName}: could not persist refreshed credentials for profile '${profileName}'.`,
+                cause,
+              }),
+          ),
+        ),
+      ),
       source: "profile" as const,
     };
   });
 
-const warnEnvironmentCredentials = (
+const logEnvironmentCredentials = (
   provider: string,
   used: ReadonlyArray<string>,
 ) =>
   Effect.gen(function* () {
+    // The profile hub inspects providers with this suppression on — it must
+    // stay quiet, the run's own resolution logs.
     if (yield* SuppressMissingProviderConfig) return;
-    yield* Console.warn(
-      `${provider}: using credentials from environment variables (${used.join(", ")}) — ` +
-        `the '${DEFAULT_PROFILE_NAME}' profile was not used. Pass --profile <name> (or unset ` +
-        "the variables) to use stored profile credentials.",
+    // Per provider: only this provider skips the profile. Others in the
+    // same run still resolve from it, so a Cloudflare token in `.env` can
+    // sit alongside a profile-stored AWS SSO session.
+    yield* Effect.logInfo(
+      `${provider}: using environment variables (${used.join(", ")}) instead of the profile.`,
     );
   });
 

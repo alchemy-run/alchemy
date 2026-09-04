@@ -200,6 +200,32 @@ export interface WorkerLoaderClass extends Context.Service<
  * );
  * ```
  *
+ * ### Caching a Worker
+ * Call `loader.get(id, getCode)` to address a dynamic Worker by
+ * name. If an isolate with that id is already warm it is reused;
+ * `getCode` runs only on a cold start. The returned stub is a
+ * `WorkerStub`: call `.fetch()` on it directly, or
+ * `.getEntrypoint()` for a named export.
+ *
+ * **Example:** Loading a cached dynamic Worker
+ * ```typescript
+ * const worker = yield* loader.get("eval", () => ({
+ *   compatibilityDate: "2026-08-31",
+ *   mainModule: "worker.js",
+ *   modules: {
+ *     "worker.js": `export default {
+ *       async fetch() {
+ *         return new Response("cached");
+ *       }
+ *     }`,
+ *   },
+ * }));
+ *
+ * const response = yield* worker.fetch(
+ *   HttpClientRequest.get("https://worker/"),
+ * );
+ * ```
+ *
  * ### Sandboxing
  * Set `globalOutbound` to `null` to block all outbound network
  * access from the dynamic Worker, or pass an RPC stub to intercept
@@ -273,15 +299,18 @@ export const WorkerLoader: WorkerLoaderClass = Object.assign(
               Effect.sync(() =>
                 wrapWorkerStub(loader.load(unwrapWorkerLoader(options))),
               ),
-            get: <Req = never, Err = never>(
-              name: string,
-              getCode: () => Effect.Effect<WorkerLoaderWorkerCode, Err, Req>,
+            get: <Err = never, Req = never>(
+              name: string | null,
+              getCode: () =>
+                | WorkerLoaderWorkerCode
+                | Effect.Effect<WorkerLoaderWorkerCode, Err, Req>,
             ) =>
               Effect.flatMap(Effect.context<Req>(), (context) =>
                 Effect.sync(() =>
-                  // `get` returns the same stub shape as `load`: the native
-                  // handle is a WorkerStub (`getEntrypoint()`), not an
-                  // entrypoint — wrapping it as one left `fetch` undefined.
+                  // Native get() returns a WorkerStub, not a Fetcher. The
+                  // stub's fetcher is getEntrypoint(); wrapping the stub
+                  // itself as a Fetcher makes worker.fetch throw
+                  // "fetcher.fetch is not a function" (#1382).
                   wrapWorkerStub(
                     loader.get(name, () =>
                       asEffect(getCode()).pipe(

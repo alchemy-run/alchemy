@@ -445,7 +445,7 @@ internet) and the client is typed by `TaskWorker`'s declared schema.
 A `Proxy` defers each call's underlying `RpcClient` construction so
 Cloudflare's "no cross-request I/O" rule is satisfied transparently.
 For internal Worker-to-Worker calls that don't need a schema at all,
-see [Schemaless RPC on Workers](/cloudflare/compute/workers#schemaless-rpc).
+see [Schemaless RPC on Workers](/cloudflare/compute/workers#call-another-worker).
 
 `RpcWorker` also supports a **modular form** that separates the
 class declaration from its runtime — useful when a consumer Worker

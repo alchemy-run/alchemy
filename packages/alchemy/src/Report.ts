@@ -60,7 +60,6 @@ export interface ResourceStatusChanged {
   type: string; // resource type (e.g. "AWS::Lambda::Function", "Cloudflare::Worker")
   status: ApplyStatus;
   message?: string; // optional details
-  bindingId?: string; // if this event is for a binding
   /**
    * The {@link ProviderMode} this node's provider was resolved for.
    * `undefined` for mode-agnostic providers (a single implementation serves
@@ -270,6 +269,14 @@ export const Progress = Context.Reference<ProgressReporter>(
 export interface PlanStatusSession {
   emit: (event: ApplyEvent) => Effect.Effect<void>;
   done: (outcome: "success" | "failure") => Effect.Effect<void>;
+  /** Replace the dev widget's stack output view without writing scrollback. */
+  setOutput?: (value: unknown) => Effect.Effect<void>;
+  /**
+   * Tear down the session's live presentation without settling it. Dev keeps
+   * its widget mounted after `done`; an interrupted generation (reload,
+   * Ctrl+C) must remove it so the next generation does not stack another.
+   */
+  close?: Effect.Effect<void>;
 }
 
 /** A session that drops everything — the default when no renderer is ambient. */
@@ -309,6 +316,8 @@ export interface PlanDisplayOptions {
   detailed?: boolean;
   /** Stage displayed in terminal lifecycle updates. */
   stage?: string;
+  /** Keep the dev plan mounted as a collapsible widget below static logs. */
+  dev?: boolean;
 }
 
 export interface CLIService {
