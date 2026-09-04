@@ -263,3 +263,115 @@ export const ensurePostgresProductionBranchClusterSize = Effect.fn(function* (
     change.id,
   );
 });
+
+/**
+ * Cluster configuration parameters, nested by namespace.
+ *
+ * Values are strings because that is what the parameters API returns and
+ * accepts, whatever a parameter's declared type is: `"40"`, `"on"`,
+ * `"1GB"`.
+ *
+ * @see https://planetscale.com/docs/postgres/cluster-configuration/parameters
+ *
+ * @example
+ * ```ts
+ * const parameters = {
+ *   pgconf: { max_connections: "50" },
+ *   // Cap the server connections PSBouncer opens across every user, so a
+ *   // fleet of poolers cannot oversubscribe `max_connections`.
+ *   pgbouncer: { max_db_connections: "40" },
+ * }
+ * ```
+ */
+export interface PostgresClusterParameters {
+  readonly patroni?: Readonly<Record<string, string>>;
+  readonly pgconf?: Readonly<Record<string, string>>;
+  readonly pgbouncer?: Readonly<Record<string, string>>;
+}
+
+/**
+ * Ensures a PostgreSQL branch carries the declared cluster parameters,
+ * queuing the change via the change-request API when any of them drifts.
+ *
+ * Only declared parameters are compared and sent. The API upserts, so a
+ * parameter left out of `parameters` keeps whatever value it has instead
+ * of falling back to its default — declaring one knob does not hand the
+ * whole configuration to the resource.
+ *
+ * A parameter whose change needs a restart (`restart: true` in the
+ * listing, e.g. `pgconf.max_connections`) restarts the branch's Postgres
+ * when it is applied. That is the API's behaviour, not this function's;
+ * the note names the parameters so a deploy log says why a branch bounced.
+ */
+export const ensurePostgresBranchParameters = Effect.fn(function* (
+  organization: string,
+  database: string,
+  branch: string,
+  parameters: PostgresClusterParameters,
+) {
+  const desired = Object.entries(parameters).flatMap(([namespace, values]) =>
+    Object.entries(values ?? {}).map(
+      ([name, value]) => [namespace, name, value] as const,
+    ),
+  );
+  if (desired.length === 0) {
+    return;
+  }
+
+  // A freshly-forked branch has no parameters to list yet, and a change
+  // request queued against it would sit pending until the poll budget
+  // runs out.
+  yield* waitForBranchReady(organization, database, branch);
+
+  const observed = yield* planetscale.listParameters({
+    organization,
+    database,
+    branch,
+  });
+  const observedValues = new Map(
+    observed.map((parameter) => [
+      `${parameter.namespace}.${parameter.name}`,
+      parameter,
+    ]),
+  );
+
+  const drifted = desired.filter(([namespace, name, value]) => {
+    const parameter = observedValues.get(`${namespace}.${name}`);
+    // An unknown parameter is sent as declared: the API is the authority
+    // on which names exist, and it rejects the ones that do not.
+    return parameter === undefined || parameter.value !== value;
+  });
+  if (drifted.length === 0) {
+    return;
+  }
+
+  const restarts = drifted.filter(
+    ([namespace, name]) =>
+      observedValues.get(`${namespace}.${name}`)?.restart === true,
+  );
+  if (restarts.length > 0) {
+    yield* Effect.logInfo(
+      `Applying parameters that restart Postgres on branch "${branch}": ` +
+        restarts.map(([ns, name]) => `${ns}.${name}`).join(", "),
+    );
+  }
+
+  const payload: Record<string, Record<string, string>> = {};
+  for (const [namespace, name, value] of drifted) {
+    (payload[namespace] ??= {})[name] = value;
+  }
+
+  yield* waitForPendingPostgresChanges(organization, database, branch);
+  const change = yield* planetscale.updateBranchChangeRequest({
+    organization,
+    database,
+    branch,
+    parameters: payload,
+  });
+  yield* waitForPendingPostgresChanges(
+    organization,
+    database,
+    branch,
+    change.id,
+  );
+});

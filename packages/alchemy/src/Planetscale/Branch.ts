@@ -12,6 +12,7 @@ import { hashImports, hashMigrations } from "../SQL/SqlFile.ts";
 import { recordsEqual } from "../Util/equal.ts";
 import { ensureMySQLProductionBranchClusterSize } from "./MySQL/MySQLClusterSize.ts";
 import {
+  ensurePostgresBranchParameters,
   ensurePostgresProductionBranchClusterSize,
   toPostgresClusterSku,
   waitForPendingPostgresChanges,
@@ -606,6 +607,18 @@ export const makeBranchProvider = <R extends ResourceLike>(opts: {
             news.clusterSize,
           );
         }
+      }
+
+      // Sync cluster parameters — Postgres only, and after the resize,
+      // which is the operation that can replace the cluster the
+      // parameters are written to.
+      if (current.kind === "postgresql" && news.parameters) {
+        yield* ensurePostgresBranchParameters(
+          organization,
+          databaseName,
+          branchName,
+          news.parameters,
+        );
       }
 
       // Re-read so the returned attributes reflect any mutation.
