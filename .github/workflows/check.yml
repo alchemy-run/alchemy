@@ -87,6 +87,9 @@ jobs:
       - name: Run pkg tests
         run: pnpm -C packages/pkg test
 
+      - name: Run Dashboard tests
+        run: pnpm -C packages/dashboard test
+
       - name: Run Typecheck
         run: pnpm tsc -b
 

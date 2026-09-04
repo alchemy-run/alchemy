@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1272 636" font-family="monospace" font-size="13">
+  <!-- cloudflare-worker-example: 1224x588 aspect=2.08 -->
+  <rect width="100%" height="100%" fill="#f4efe4"/>
+  <line x1="254" y1="84" x2="374" y2="240" stroke="#8a7a5c" stroke-width="1.5"/>
+  <line x1="254" y1="396" x2="374" y2="240" stroke="#8a7a5c" stroke-width="1.5"/>
+  <line x1="254" y1="552" x2="374" y2="240" stroke="#8a7a5c" stroke-width="1.5"/>
+  <line x1="254" y1="240" x2="374" y2="240" stroke="#8a7a5c" stroke-width="1.5"/>
+  <line x1="604" y1="240" x2="724" y2="240" stroke="#8a7a5c" stroke-width="1.5"/>
+  <line x1="604" y1="240" x2="724" y2="84" stroke="#8a7a5c" stroke-width="1.5"/>
+  <line x1="604" y1="84" x2="724" y2="84" stroke="#8a7a5c" stroke-width="1.5"/>
+  <line x1="254" y1="552" x2="724" y2="552" stroke="#8a7a5c" stroke-width="1.5"/>
+  <line x1="604" y1="240" x2="724" y2="552" stroke="#8a7a5c" stroke-width="1.5"/>
+  <line x1="254" y1="396" x2="724" y2="396" stroke="#8a7a5c" stroke-width="1.5"/>
+  <line x1="604" y1="240" x2="724" y2="396" stroke="#8a7a5c" stroke-width="1.5"/>
+  <rect x="374" y="180" width="230" height="120" rx="10" fill="#fdfaf1" stroke="#b19d76"/>
+  <text x="388" y="208" fill="#3f3828">Api</text>
+  <rect x="374" y="24" width="230" height="120" rx="10" fill="#fdfaf1" stroke="#b19d76"/>
+  <text x="388" y="52" fill="#3f3828">SecondaryApi</text>
+  <rect x="1018" y="24" width="230" height="120" rx="10" fill="#fdfaf1" stroke="#b19d76"/>
+  <text x="1032" y="52" fill="#3f3828">WorkerTag</text>
+  <rect x="24" y="24" width="230" height="120" rx="10" fill="#fdfaf1" stroke="#b19d76"/>
+  <text x="38" y="52" fill="#3f3828">KV</text>
+  <rect x="24" y="336" width="230" height="120" rx="10" fill="#fdfaf1" stroke="#b19d76"/>
+  <text x="38" y="364" fill="#3f3828">Bucket</text>
+  <rect x="24" y="492" width="230" height="120" rx="10" fill="#fdfaf1" stroke="#b19d76"/>
+  <text x="38" y="520" fill="#3f3828">Queue</text>
+  <rect x="24" y="180" width="230" height="120" rx="10" fill="#fdfaf1" stroke="#b19d76"/>
+  <text x="38" y="208" fill="#3f3828">Gateway</text>
+  <rect x="724" y="24" width="230" height="120" rx="10" fill="#fdfaf1" stroke="#b19d76"/>
+  <text x="738" y="52" fill="#3f3828">Sandbox</text>
+  <rect x="724" y="180" width="230" height="120" rx="10" fill="#fdfaf1" stroke="#b19d76"/>
+  <text x="738" y="208" fill="#3f3828">Notifier</text>
+  <rect x="724" y="492" width="230" height="120" rx="10" fill="#fdfaf1" stroke="#b19d76"/>
+  <text x="738" y="520" fill="#3f3828">QueueConsumer</text>
+  <rect x="724" y="336" width="230" height="120" rx="10" fill="#fdfaf1" stroke="#b19d76"/>
+  <text x="738" y="364" fill="#3f3828">AnnounceDeploy</text>
+</svg>

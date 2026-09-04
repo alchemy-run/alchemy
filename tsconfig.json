@@ -78,6 +78,9 @@
     {
       "path": "./packages/pkg/tsconfig.json"
     },
+    {
+      "path": "./packages/dashboard/tsconfig.json"
+    },
     // TODO(sam): fix by upgrading starlight to ^0.39.2
     // {
     //   "path": "./website/tsconfig.json"
