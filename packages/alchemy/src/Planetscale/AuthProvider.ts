@@ -303,7 +303,7 @@ export const PlanetscaleAuth = AuthProviderLayer<
       );
 
     /**
-     * Flag-driven (`--method service-token --set ...`) fields, mirroring the
+     * Flag-driven (`--method stored --set ...`) fields, mirroring the
      * interactive service-token prompts. OAuth requires a browser and stays
      * interactive-only, so it is deliberately absent from
      * {@link configureMethods}.
@@ -315,7 +315,7 @@ export const PlanetscaleAuth = AuthProviderLayer<
     ];
 
     const configureMethods: ReadonlyArray<ConfigureMethod> = [
-      { method: "service-token", fields: serviceTokenFields },
+      { method: "stored", fields: serviceTokenFields },
     ];
 
     const configureWith = (
@@ -329,7 +329,7 @@ export const PlanetscaleAuth = AuthProviderLayer<
       AuthError,
       Interaction.Interaction
     > =>
-      input.method === "service-token"
+      input.method === "stored"
         ? validateFieldValues(
             PLANETSCALE_AUTH_PROVIDER_NAME,
             serviceTokenFields,
@@ -351,7 +351,7 @@ export const PlanetscaleAuth = AuthProviderLayer<
           )
         : Effect.fail(
             new AuthError({
-              message: `Planetscale: unknown method '${input.method}'. Only 'service-token' is supported (OAuth is interactive-only).`,
+              message: `Planetscale: unknown method '${input.method}'. Valid methods: stored. (OAuth is interactive-only.)`,
             }),
           );
 
