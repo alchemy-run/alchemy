@@ -12,20 +12,57 @@ git clone "https://$HOST/acme/web.git"
 
 ## Credentials
 
-The credential goes in the password field of the remote URL. The
-username is ignored. Which credential depends on the `Authenticated`
-Layer your host runs: the shared secret of the starter, an API key when
-you run Better Auth, whatever yours verifies:
+`git` sends HTTP Basic. The credential goes in the password field of
+the remote URL and the username is ignored:
 
 ```sh
-git remote add origin "https://x:YOUR_CREDENTIAL@$HOST/acme/web.git"
+git remote add origin "https://x:$TOKEN@$HOST/acme/web.git"
 ```
 
-Reads of a public repository need no credentials. To keep the secret
-out of `.git/config`, use a credential helper and let git prompt. An
-anonymous request to a private repository answers `401` with
-`WWW-Authenticate`, so git prompts.
-[Auth](/git/blocks/auth) covers how a credential becomes a principal.
+What `$TOKEN` is depends on the `Authenticated` Layer the host runs.
+
+### The starter secret
+
+`AuthenticatedSecret` accepts one secret, an `Alchemy.Random` the
+stack outputs. `alchemy deploy` prints it:
+
+```sh
+bun alchemy deploy
+# { url: "https://…workers.dev", secret: "9f2c…" }
+export TOKEN=9f2c…
+```
+
+### A Better Auth API key
+
+The host from [Part 3](/git/tutorial/part-3) verifies API keys. A
+signed-in user mints one; it is shown once:
+
+```sh
+curl -s -b jar -X POST "$HOST/api/auth/api-key/create" \
+  -H "Origin: $HOST" -H "Content-Type: application/json" \
+  -d '{"name":"laptop"}' | jq -r .key
+```
+
+The example app has a settings page that does the same.
+
+### Your own
+
+Whatever your `Authenticated` resolver accepts in the Basic password
+field. [Auth](/git/blocks/auth) shows the resolver.
+
+### Keeping it out of `.git/config`
+
+Leave the credential out of the URL and let a credential helper
+supply it. A private repository answers an anonymous request with
+`401` and `WWW-Authenticate`, so `git` prompts:
+
+```sh
+git config credential.helper osxkeychain   # or store, or your manager
+git clone "https://$HOST/acme/web.git"
+Password for 'https://x@…': <paste $TOKEN>
+```
+
+Reads of a public repository need no credential at all.
 
 ## What is supported
 
