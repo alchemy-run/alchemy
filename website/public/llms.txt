@@ -421,8 +421,8 @@ Repos, secrets, variables, and repository event sources as Stack resources; the 
 
 A git server you build in one file, use like any remote, and reshape one block at a time: setup, a four-part tutorial (build it, repositories and tokens, your own rules, your app on the same domain), the REST and GitHub-compatible planes, the building blocks with their implementations, and recipes with the scaling model and measurements.
 
-- [Git](https://alchemy.run/git) — A pluggable, self-hostable git server on Cloudflare Workers, Durable Objects, and R2. Smart HTTP for any client, a typed REST plane with pull requests, and a GitHub-compatible API, assembled in one file.
-- [Setup](https://alchemy.run/git/setup) — Deploy a git host to Cloudflare and push your first repository.
+- [Git](https://alchemy.run/git) — A pluggable, embeddable, self-hostable git server on Cloudflare Workers, Durable Objects, and R2. Smart HTTP for any client, a typed REST plane with pull requests, and a GitHub-compatible API, assembled in one file.
+- [Getting Started](https://alchemy.run/git/getting-started) — Deploy a git host to Cloudflare and push your first repository, in one file. The tutorial then builds the same file from empty.
 - [Part 1: A git server in one file](https://alchemy.run/git/tutorial/part-1) — Build the git host from an empty file. Each line you add is one decision, and by the end you have deployed it.
 - [Part 2: Repositories](https://alchemy.run/git/tutorial/part-2) — Create a repository on your host, push to it, make it public, and clone it anonymously. The REST plane and the shared secret, used before anything else depends on them.
 - [Part 3: Your own API](https://alchemy.run/git/tutorial/part-3) — Git.Server is designed to be embedded. Build your own API around it with Better Auth, add a route of your own, replace one of the engine's, and serve your application from the same origin.
