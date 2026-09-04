@@ -47,8 +47,30 @@ The example app has a settings page that does the same.
 
 ### Your own
 
-Whatever your `Authenticated` resolver accepts in the Basic password
-field. [Auth](/git/blocks/auth) shows the resolver.
+The token is whatever your `Authenticated` resolver accepts. The one
+[Part 3](/git/tutorial/part-3) put in front of the host reads the
+Basic password with `Git.parseSecret` and asks Better Auth whose key
+it is:
+
+```typescript
+export const AuthenticatedLive = Git.Authenticated.make(
+  Effect.gen(function* () {
+    const auth = yield* Auth;
+    return Effect.fn(function* (request) {
+      const key = Git.parseSecret(request.headers);
+      if (key === undefined) return undefined;
+      const verified = yield* auth.api.verifyApiKey({ body: { key } });
+      return verified.valid && verified.key
+        ? { id: verified.key.referenceId }
+        : undefined;
+    });
+  }),
+);
+```
+
+A token issued by anything else is verified the same way: read it
+from the request, answer with a principal or `undefined`.
+[Auth](/git/blocks/auth) has the contract.
 
 ### Keeping it out of `.git/config`
 
