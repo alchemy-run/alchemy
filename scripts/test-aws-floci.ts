@@ -87,7 +87,16 @@ for (const root of requestedRoots) {
   }
   const glob = new Glob("**/*.test.ts");
   for await (const file of glob.scan(root)) {
-    if (file.endsWith(".local.test.ts")) continue;
+    // Dedicated `*.local.test.ts` files already set `dev: true` and some
+    // mix `Alchemy.remote()` (live out-of-band checks). Include the EC2
+    // hosted-instance fetch test: it is the emulator counterpart of the
+    // live smoke suite and is how we prove `instance.url` is reachable.
+    if (
+      file.endsWith(".local.test.ts") &&
+      !file.replaceAll("\\", "/").endsWith("EC2/Instance.local.test.ts")
+    ) {
+      continue;
+    }
     files.push(relative(alchemyRoot, join(root, file)));
   }
 }
@@ -100,10 +109,10 @@ process.env.ALCHEMY_TEST_DEV = "1";
 // release image; hard-defaulting to a missing image fails every suite's
 // `docker run` before a single test can run.
 if (!process.env.ALCHEMY_FLOCI_IMAGE) {
-  const devImage = Bun.spawnSync(
-    ["docker", "image", "inspect", "floci:dev"],
-    { stdout: "ignore", stderr: "ignore" },
-  );
+  const devImage = Bun.spawnSync(["docker", "image", "inspect", "floci:dev"], {
+    stdout: "ignore",
+    stderr: "ignore",
+  });
   if (devImage.exitCode === 0) {
     process.env.ALCHEMY_FLOCI_IMAGE = "floci:dev";
     console.log("test:aws:floci: using locally built floci:dev image");
@@ -140,8 +149,7 @@ if (!flags.includes("--concurrency") && !flags.includes("-c")) {
 // loop"). Set `ALCHEMY_FLOCI_NO_RESET=1` to keep state across runs while
 // iterating on a single suite.
 if (!process.env.ALCHEMY_FLOCI_NO_RESET) {
-  const endpoint =
-    process.env.AWS_ENDPOINT_URL ?? "http://localhost:4566";
+  const endpoint = process.env.AWS_ENDPOINT_URL ?? "http://localhost:4566";
   try {
     const res = await fetch(`${endpoint}/_floci/state/reset`, {
       method: "POST",

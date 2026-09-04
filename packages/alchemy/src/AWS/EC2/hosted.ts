@@ -280,34 +280,70 @@ cat >/usr/local/bin/${unitName}-setup.sh <<'SETUP_EOF'
 set -uo pipefail
 export HOME=/root
 
-# unzip (needed below) — install if missing.
-command -v unzip >/dev/null 2>&1 || {
-  (command -v dnf >/dev/null 2>&1 && dnf install -y unzip) \
-    || (command -v yum >/dev/null 2>&1 && yum install -y unzip) \
-    || (command -v apt-get >/dev/null 2>&1 && apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y unzip) || true
+# Never use dnf/yum/apt here. Floci's IMDS bootstrap holds the package-
+# manager lock for the life of a stuck transaction, and the hosted
+# process would never start. unzip via python, S3 via aws CLI or curl
+# against AWS_ENDPOINT_URL (the emulator injects it).
+
+extract_zip() {
+  local zip="\$1" dest="\$2"
+  if command -v unzip >/dev/null 2>&1; then
+    unzip -o "\$zip" -d "\$dest"
+    return
+  fi
+  python3 - "\$zip" "\$dest" <<'PY'
+import zipfile, sys
+zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])
+PY
 }
 
-# AWS CLI — preinstalled on Amazon Linux 2023; install v2 otherwise.
-command -v aws >/dev/null 2>&1 || {
-  curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip" -o /tmp/awscliv2.zip \
-    && (cd /tmp && unzip -q -o awscliv2.zip && ./aws/install) || true
+fetch_s3() {
+  local key="\$1" dest="\$2"
+  if command -v aws >/dev/null 2>&1; then
+    aws s3 cp "s3://${bucket}/\$key" "\$dest" --region "${region}"
+    return
+  fi
+  if [ -n "\${AWS_ENDPOINT_URL:-}" ]; then
+    curl -fsSL "\${AWS_ENDPOINT_URL}/${bucket}/\$key" -o "\$dest"
+    return
+  fi
+  # Live AMIs without awscli (Ubuntu): install AWS CLI v2 without the
+  # package manager. Extract the installer zip with python.
+  curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-\$(uname -m).zip" -o /tmp/awscliv2.zip
+  extract_zip /tmp/awscliv2.zip /tmp
+  /tmp/aws/install || true
+  aws s3 cp "s3://${bucket}/\$key" "\$dest" --region "${region}"
 }
 
-# bun — retry the network install a few times.
+# bun.sh/install requires unzip. Amazon Linux 2023 containers (floci)
+# and Ubuntu AMIs do not ship it, and we refuse to wait on dnf/apt. Fetch
+# the official zip and extract with python.
 if [ ! -x /root/.bun/bin/bun ]; then
-  for attempt in 1 2 3 4 5; do
-    curl -fsSL https://bun.sh/install | bash && break
-    sleep 5
-  done
+  case "\$(uname -m)" in
+    aarch64|arm64) bun_arch=aarch64 ;;
+    x86_64|amd64) bun_arch=x64 ;;
+    *) bun_arch="" ;;
+  esac
+  if [ -n "\$bun_arch" ]; then
+    for attempt in 1 2 3 4 5; do
+      rm -rf /tmp/bun.zip /tmp/bun-extract
+      curl -fsSL "https://github.com/oven-sh/bun/releases/latest/download/bun-linux-\${bun_arch}.zip" -o /tmp/bun.zip \
+        && extract_zip /tmp/bun.zip /tmp/bun-extract \
+        && mkdir -p /root/.bun/bin \
+        && mv /tmp/bun-extract/bun-linux-*/bun /root/.bun/bin/bun \
+        && chmod +x /root/.bun/bin/bun \
+        && break
+      sleep 5
+    done
+  fi
 fi
 
-# Sync the bundle + env from S3 (must succeed for the service to start).
 set -e
 mkdir -p "${appDir}"
-aws s3 cp "s3://${bucket}/${bundleKey}" "${appDir}/bundle.zip" --region "${region}"
-aws s3 cp "s3://${bucket}/${envKey}" "${appDir}/env" --region "${region}"
+fetch_s3 "${bundleKey}" "${appDir}/bundle.zip"
+fetch_s3 "${envKey}" "${appDir}/env"
 rm -f "${appDir}/index.mjs"
-unzip -o "${appDir}/bundle.zip" -d "${appDir}"
+extract_zip "${appDir}/bundle.zip" "${appDir}"
 SETUP_EOF
 chmod +x /usr/local/bin/${unitName}-setup.sh
 

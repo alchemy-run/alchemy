@@ -54,8 +54,8 @@ aws s3 cp s3://${Output.literal("my-bucket")}/app.tgz /tmp/
 `;
     const diff = yield* callDiff({
       ...baseProps,
-      userData,
-    } as InstanceProps);
+      userData: userData as never,
+    });
     expect(diff).toEqual({ action: "replace" });
   }),
 );

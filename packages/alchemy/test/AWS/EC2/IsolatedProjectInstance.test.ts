@@ -33,21 +33,21 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
       yield* stack.destroy();
 
       try {
-        const { instanceId, publicIpAddress } = yield* stack.deploy(
+        const { instanceId, url } = yield* stack.deploy(
           Effect.gen(function* () {
             const instance = yield* IsolatedProjectInstance;
             return {
               instanceId: instance.instanceId,
-              publicIpAddress: instance.publicIpAddress,
+              url: instance.url,
             };
           }),
         );
-        expect(publicIpAddress).toBeTruthy();
+        expect(url).toBeTruthy();
 
         // Poll until the instance boots, installs bun, syncs the bundle from
         // S3, and the systemd unit serves 200 on :3000. Connection errors
         // before the server binds are normalised to "not ready".
-        const base = `http://${publicIpAddress}:3000`;
+        const base = url!;
         const served = yield* HttpClient.get(`${base}/health`).pipe(
           Effect.map((res) => res.status === 200),
           Effect.catch(() => Effect.succeed(false)),

@@ -195,6 +195,19 @@ export interface Instance extends Resource<
      */
     publicDnsName?: string;
     /**
+     * HTTP URL of the hosted process
+     * (`http://{publicDnsName|publicIpAddress}:{port}`).
+     *
+     * Set when the instance is hosted (`main` / `port`). Under
+     * `alchemy dev` the emulator's public address is
+     * `{instanceId}.localhost.floci.io`, which resolves to 127.0.0.1
+     * and is served by a per-port host-routing mux — reading `url`
+     * instead of interpolating `publicIpAddress` is what makes the
+     * instance reachable from the host. On AWS this is the public
+     * IP/DNS and the process port.
+     */
+    url?: string;
+    /**
      * The key pair name used for SSH access.
      */
     keyName?: string;
@@ -417,7 +430,34 @@ export const InstanceProvider = () =>
             .map((tag) => [tag.Key, tag.Value]),
         );
 
-      const toAttributes = Effect.fn(function* (instance: ec2.Instance) {
+      const publicHost = (instance: ec2.Instance) =>
+        instance.PublicDnsName || instance.PublicIpAddress;
+
+      const hostedListenPort = (props: { main?: unknown; port?: number }) =>
+        props.main !== undefined || props.port !== undefined
+          ? (props.port ?? 3000)
+          : undefined;
+
+      const instanceUrl = (instance: ec2.Instance, port?: number) => {
+        const host = publicHost(instance);
+        if (!host || port === undefined) return undefined;
+        return `http://${host}:${port}`;
+      };
+
+      const portFromUrl = (url?: string) => {
+        if (!url) return undefined;
+        try {
+          const parsed = new URL(url);
+          return parsed.port ? Number(parsed.port) : undefined;
+        } catch {
+          return undefined;
+        }
+      };
+
+      const toAttributes = Effect.fn(function* (
+        instance: ec2.Instance,
+        port?: number,
+      ) {
         return {
           instanceId: instance.InstanceId as InstanceId,
           instanceArn: yield* toInstanceArn(instance.InstanceId as InstanceId),
@@ -434,6 +474,7 @@ export const InstanceProvider = () =>
           publicIpAddress: instance.PublicIpAddress,
           privateDnsName: instance.PrivateDnsName,
           publicDnsName: instance.PublicDnsName,
+          url: instanceUrl(instance, port),
           keyName: instance.KeyName,
           instanceProfileArn: instance.IamInstanceProfile?.Arn,
           instanceProfileId: instance.IamInstanceProfile?.Id,
@@ -748,7 +789,7 @@ export const InstanceProvider = () =>
             : yield* findInstanceByTags(id, instanceId);
           return instance
             ? {
-                ...(yield* toAttributes(instance)),
+                ...(yield* toAttributes(instance, portFromUrl(output?.url))),
                 instanceProfileName: output?.instanceProfileName,
                 roleArn: output?.roleArn,
                 roleName: output?.roleName,
@@ -941,7 +982,7 @@ export const InstanceProvider = () =>
           // Re-read final state so attributes reflect the post-sync cloud.
           const final = yield* describeInstance(instanceId);
           return {
-            ...(yield* toAttributes(final)),
+            ...(yield* toAttributes(final, hostedListenPort(news))),
             instanceProfileName:
               runtime.instanceProfileName ?? output?.instanceProfileName,
             roleArn: runtime.roleArn ?? output?.roleArn,
