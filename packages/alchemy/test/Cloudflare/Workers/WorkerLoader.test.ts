@@ -64,11 +64,33 @@ test(
 );
 
 test(
-  "effect worker get() returns a WorkerStub whose fetch works",
+  "effect worker get() fetch proxies to a cached dynamic worker",
   Effect.gen(function* () {
-    const { effectWorkerUrl } = yield* stack;
-    const body = yield* readJson(`${effectWorkerUrl}/get`);
-    expect(body).toMatchObject({ mode: "get", ok: true });
+    const { getWorkerUrl } = yield* stack;
+    const body = yield* readJson(`${getWorkerUrl}/?id=stub`);
+    expect(body).toMatchObject({ id: "stub", hits: 1 });
+  }),
+  { timeout: 180_000 },
+);
+
+test(
+  "effect worker get() reuses the isolate for the same id",
+  Effect.gen(function* () {
+    const { getWorkerUrl } = yield* stack;
+    const first = yield* readJson(`${getWorkerUrl}/?id=reuse`);
+    const second = yield* readJson(`${getWorkerUrl}/?id=reuse`);
+    expect(first).toMatchObject({ id: "reuse", hits: 1 });
+    expect(second).toMatchObject({ id: "reuse", hits: 2 });
+  }),
+  { timeout: 180_000 },
+);
+
+test(
+  "effect worker get() getEntrypoint() fetch works",
+  Effect.gen(function* () {
+    const { getWorkerUrl } = yield* stack;
+    const body = yield* readJson(`${getWorkerUrl}/?id=named&entrypoint=1`);
+    expect(body).toMatchObject({ id: "named", hits: 1 });
   }),
   { timeout: 180_000 },
 );
