@@ -22,24 +22,16 @@ export interface SelectorContext {
   readonly stage?: string;
 }
 
-export type Selector =
-  | string
-  | ((context: SelectorContext) => string | undefined);
-
-export interface SecretManagerOptions {
-  /**
-   * Doppler project name or a function that selects one from the Alchemy
-   * stack and stage. Omit when `DOPPLER_TOKEN` is a config-scoped service
-   * token.
-   */
-  readonly project?: Selector;
-  /**
-   * Doppler config name or a function that selects one from the Alchemy
-   * stack and stage. Omit when `DOPPLER_TOKEN` is a config-scoped service
-   * token.
-   */
-  readonly config?: Selector;
+/** A Doppler secret set selected for an Alchemy stack instance. */
+export interface SecretSet {
+  /** Doppler project name. Omit for a config-scoped service token. */
+  readonly project?: string;
+  /** Doppler config name. Omit for a config-scoped service token. */
+  readonly config?: string;
 }
+
+/** Map an Alchemy stack and stage to a Doppler secret set. */
+export type SecretsSelector = (context: SelectorContext) => SecretSet;
 
 type Fetch = (
   input: Parameters<typeof globalThis.fetch>[0],
@@ -53,39 +45,44 @@ const failure = (message: string, cause?: unknown) =>
     cause,
   });
 
-const select = (
-  selector: Selector | undefined,
-  context: SelectorContext,
-): string | undefined =>
-  typeof selector === "function" ? selector(context) : selector;
-
 const isSecretRecord = (value: unknown): value is Record<string, string> =>
   value !== null &&
   typeof value === "object" &&
   !Array.isArray(value) &&
   Object.values(value).every((item) => typeof item === "string");
 
-const makeResolve = (options: SecretManagerOptions, fetch: Fetch) =>
-  Effect.fn("Doppler.SecretManager.resolve")(function* ({
+const isSecretSet = (value: unknown): value is SecretSet =>
+  value !== null &&
+  typeof value === "object" &&
+  !Array.isArray(value) &&
+  (!("project" in value) ||
+    value.project === undefined ||
+    typeof value.project === "string") &&
+  (!("config" in value) ||
+    value.config === undefined ||
+    typeof value.config === "string");
+
+const makeResolve = (selector: SecretsSelector | undefined, fetch: Fetch) =>
+  Effect.fn("Doppler.secrets.resolve")(function* ({
     stack,
     stage,
-    fallback,
   }: SecretManagerResolveOptions) {
     const context = { stack, stage } satisfies SelectorContext;
     const selection = yield* Effect.try({
-      try: () => ({
-        project: select(options.project, context),
-        config: select(options.config, context),
-      }),
+      try: () => (selector === undefined ? {} : selector(context)),
       catch: (cause) =>
         failure(
           `Doppler could not select a project or config for stack '${stack}'.`,
           cause,
         ),
     });
+    if (!isSecretSet(selection)) {
+      return yield* Effect.fail(
+        failure(`Doppler selected an invalid secret set for stack '${stack}'.`),
+      );
+    }
 
     const token = yield* Config.redacted("DOPPLER_TOKEN").pipe(
-      Effect.provideService(ConfigProvider.ConfigProvider, fallback),
       Effect.mapError((cause) =>
         failure(
           "Doppler is configured for this stack but DOPPLER_TOKEN is not set.",
@@ -151,26 +148,26 @@ const makeResolve = (options: SecretManagerOptions, fetch: Fetch) =>
       );
     }
 
-    return ConfigProvider.orElse(ConfigProvider.fromUnknown(secrets), fallback);
+    return ConfigProvider.fromUnknown(secrets);
   });
 
 /** @internal */
 export const makeSecretManager = (
-  options: SecretManagerOptions = {},
+  selector: SecretsSelector | undefined = undefined,
   fetch: Fetch = globalThis.fetch,
 ): SecretManagerLayer =>
   Layer.succeed(SecretManagerService, {
     name: managerName,
-    resolve: makeResolve(options, fetch),
+    resolve: makeResolve(selector, fetch),
   });
 
 /**
  * Load an Alchemy stack's configuration from Doppler.
  *
- * The adapter reads `DOPPLER_TOKEN` from Alchemy's fallback configuration,
+ * The adapter reads `DOPPLER_TOKEN` from Alchemy's default configuration,
  * downloads the selected config as JSON, and exposes those values through
- * Effect `Config`. A config-scoped service token needs no project or config
- * options.
+ * Effect `Config`. Alchemy composes the downloaded values over its default
+ * provider. A config-scoped service token needs no project or config options.
  *
  * ### Configure a Stack
  * **Example:** Use a config-scoped Doppler service token
@@ -186,7 +183,7 @@ export const makeSecretManager = (
  *   {
  *     providers: Cloudflare.providers(),
  *     state: Cloudflare.state(),
- *     secrets: Doppler.SecretManager(),
+ *     secrets: Doppler.secrets(),
  *   },
  *   Effect.gen(function* () {
  *     const apiKey = yield* Config.redacted("API_KEY");
@@ -197,16 +194,15 @@ export const makeSecretManager = (
  *
  * **Example:** Map Alchemy stacks and stages to Doppler
  * ```typescript
- * secrets: Doppler.SecretManager({
- *   project: ({ stack }) => stack,
- *   config: ({ stage }) => stage ?? "dev",
- * });
+ * secrets: Doppler.secrets(({ stack, stage }) => ({
+ *   project: stack,
+ *   config: stage ?? "dev",
+ * }));
  * ```
  *
  * @layer
  * @provides SecretManager
  * @product Doppler
  */
-export const SecretManager = (
-  options: SecretManagerOptions = {},
-): SecretManagerLayer => makeSecretManager(options);
+export const secrets = (selector?: SecretsSelector): SecretManagerLayer =>
+  makeSecretManager(selector);

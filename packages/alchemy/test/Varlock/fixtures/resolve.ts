@@ -10,6 +10,7 @@ const stages = process.argv.slice(3);
 process.chdir(projectDirectory);
 
 const originalConsoleLog = console.log;
+const originalStack = process.env.ALCHEMY_STACK;
 const originalStage = process.env.ALCHEMY_STAGE;
 const originalPrivateBlob = process.env.__VARLOCK_ENV;
 const fallback = ConfigProvider.fromUnknown({
@@ -24,6 +25,7 @@ const read = (provider: ConfigProvider.ConfigProvider, name: string) =>
 
 const program = Effect.gen(function* () {
   const resolved: Array<{
+    stack: string;
     stage?: string;
     apiKey: string;
     fallback: string;
@@ -34,7 +36,7 @@ const program = Effect.gen(function* () {
   for (const rawStage of stages.length > 0 ? stages : [""]) {
     const stage = rawStage.length > 0 ? rawStage : undefined;
     const provider = yield* resolveSecretManagerConfig({
-      secrets: Varlock.SecretManager(),
+      secrets: Varlock.secrets(),
       stack: "varlock-fixture",
       stage,
       fallback,
@@ -61,6 +63,7 @@ const program = Effect.gen(function* () {
     ) as Effect.Effect<void>;
     secretBindings.push(bindingContributions[0]?.bindings[0]);
     resolved.push({
+      stack: yield* read(provider, "ALCHEMY_STACK"),
       stage,
       apiKey: yield* read(provider, "API_KEY"),
       fallback: yield* read(provider, "FALLBACK_ONLY"),
@@ -83,6 +86,7 @@ Effect.runPromise(Effect.scoped(program)).then(
         resolved,
         secretBindings,
         consolePatched: console.log !== originalConsoleLog,
+        stackRestored: process.env.ALCHEMY_STACK === originalStack,
         stageRestored: process.env.ALCHEMY_STAGE === originalStage,
         privateBlobRestored: process.env.__VARLOCK_ENV === originalPrivateBlob,
       }),
@@ -105,6 +109,7 @@ Effect.runPromise(Effect.scoped(program)).then(
               : "Unknown secret-manager error",
         },
         consolePatched: console.log !== originalConsoleLog,
+        stackRestored: process.env.ALCHEMY_STACK === originalStack,
         stageRestored: process.env.ALCHEMY_STAGE === originalStage,
         privateBlobRestored: process.env.__VARLOCK_ENV === originalPrivateBlob,
       }),

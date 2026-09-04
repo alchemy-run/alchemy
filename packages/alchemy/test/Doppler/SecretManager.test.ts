@@ -1,7 +1,7 @@
 import { SecretManager as SecretManagerService } from "@/SecretManager.ts";
 import {
   makeSecretManager,
-  type SecretManagerOptions,
+  type SecretsSelector,
 } from "@/Doppler/SecretManager.ts";
 import { expect, it } from "alchemy-test";
 import * as Config from "effect/Config";
@@ -18,27 +18,30 @@ const read = (provider: ConfigProvider.ConfigProvider, name: string) =>
   );
 
 const resolve = (
-  options: SecretManagerOptions,
+  selector: SecretsSelector | undefined,
   fetch: Fetch,
   fallback: ConfigProvider.ConfigProvider,
   stack = "payments",
   stage: string | undefined = "preview",
 ) =>
   Effect.gen(function* () {
-    const context = yield* Layer.build(makeSecretManager(options, fetch));
-    return yield* Context.get(context, SecretManagerService).resolve({
-      stack,
-      stage,
+    const context = yield* Layer.build(makeSecretManager(selector, fetch));
+    return yield* Effect.provideService(
+      Context.get(context, SecretManagerService).resolve({
+        stack,
+        stage,
+      }),
+      ConfigProvider.ConfigProvider,
       fallback,
-    });
+    );
   });
 
 it("exports the adapter from alchemy/Doppler", async () => {
   const adapter = await import("alchemy/Doppler");
-  expect(adapter.SecretManager).toBeTypeOf("function");
+  expect(adapter.secrets).toBeTypeOf("function");
 });
 
-it.effect("maps stack and stage to Doppler and preserves fallback values", () =>
+it.effect("maps stack and stage and returns only Doppler values", () =>
   Effect.gen(function* () {
     let requestUrl: URL | undefined;
     let authorization: string | null = null;
@@ -59,10 +62,10 @@ it.effect("maps stack and stage to Doppler and preserves fallback values", () =>
     });
 
     const provider = yield* resolve(
-      {
-        project: ({ stack }) => `alchemy-${stack}`,
-        config: ({ stage }) => `stage-${stage}`,
-      },
+      ({ stack, stage }) => ({
+        project: `alchemy-${stack}`,
+        config: `stage-${stage}`,
+      }),
       fetch,
       fallback,
     );
@@ -80,7 +83,10 @@ it.effect("maps stack and stage to Doppler and preserves fallback values", () =>
     expect(redirect).toBe("error");
     expect(yield* read(provider, "API_KEY")).toBe("doppler-secret");
     expect(yield* read(provider, "SHARED")).toBe("doppler");
-    expect(yield* read(provider, "FALLBACK_ONLY")).toBe("fallback");
+    const fallbackOnly = yield* Config.option(
+      Config.string("FALLBACK_ONLY"),
+    ).pipe(Effect.provideService(ConfigProvider.ConfigProvider, provider));
+    expect(fallbackOnly._tag).toBe("None");
   }),
 );
 
@@ -95,7 +101,7 @@ it.effect("omits project and config for a config-scoped service token", () =>
     };
 
     yield* resolve(
-      {},
+      undefined,
       fetch,
       ConfigProvider.fromUnknown({ DOPPLER_TOKEN: "dp.st.test-token" }),
     );
@@ -107,7 +113,7 @@ it.effect("omits project and config for a config-scoped service token", () =>
 
 it.effect("reports a missing Doppler token as a SecretManagerError", () =>
   resolve(
-    {},
+    undefined,
     async () => new Response("{}"),
     ConfigProvider.fromUnknown({}),
   ).pipe(
@@ -126,7 +132,7 @@ it.effect("reports download failures without exposing response bodies", () => {
   const responseBody = "do-not-expose-this-response";
   const token = "dp.st.do-not-expose-this-token";
   return resolve(
-    {},
+    undefined,
     async () => new Response(responseBody, { status: 401 }),
     ConfigProvider.fromUnknown({ DOPPLER_TOKEN: token }),
   ).pipe(
@@ -144,7 +150,7 @@ it.effect("reports download failures without exposing response bodies", () => {
 
 it.effect("reports invalid Doppler payloads as SecretManagerError", () =>
   resolve(
-    {},
+    undefined,
     async () =>
       new Response(JSON.stringify({ API_KEY: { raw: "not-a-string" } }), {
         status: 200,
@@ -163,10 +169,8 @@ it.effect("reports invalid Doppler payloads as SecretManagerError", () =>
 
 it.effect("maps selector failures to SecretManagerError", () =>
   resolve(
-    {
-      project: () => {
-        throw new Error("unsafe selector detail");
-      },
+    () => {
+      throw new Error("unsafe selector detail");
     },
     async () => new Response("{}"),
     ConfigProvider.fromUnknown({ DOPPLER_TOKEN: "dp.st.test-token" }),
@@ -177,6 +181,22 @@ it.effect("maps selector failures to SecretManagerError", () =>
         expect(error._tag).toBe("SecretManagerError");
         expect(error.message).toContain("could not select");
         expect(error.message).not.toContain("unsafe selector detail");
+      }),
+    ),
+  ),
+);
+
+it.effect("rejects invalid secret-set selections", () =>
+  resolve(
+    () => null as unknown as ReturnType<SecretsSelector>,
+    async () => new Response("{}"),
+    ConfigProvider.fromUnknown({ DOPPLER_TOKEN: "dp.st.test-token" }),
+  ).pipe(
+    Effect.flip,
+    Effect.tap((error) =>
+      Effect.sync(() => {
+        expect(error._tag).toBe("SecretManagerError");
+        expect(error.message).toContain("invalid secret set");
       }),
     ),
   ),

@@ -29,24 +29,26 @@ it.effect(
     }),
 );
 
-it.effect("passes stack, stage, and fallback to a generic secret manager", () =>
+it.effect("passes stack and stage and centrally composes the fallback", () =>
   Effect.gen(function* () {
     const fallback = ConfigProvider.fromUnknown({
+      BOOTSTRAP: "bootstrap",
       FALLBACK_ONLY: "fallback",
       SHARED: "fallback",
     });
     let receivedStack: string | undefined;
     let receivedStage: string | undefined;
+    let receivedBootstrap: string | undefined;
     const secrets = Layer.succeed(SecretManager, {
       name: "Test",
-      resolve: ({ stack, stage, fallback }) =>
-        Effect.sync(() => {
+      resolve: ({ stack, stage }) =>
+        Effect.gen(function* () {
           receivedStack = stack;
           receivedStage = stage;
-          return ConfigProvider.orElse(
-            ConfigProvider.fromUnknown({ SHARED: "manager" }),
-            fallback,
+          receivedBootstrap = yield* Config.string("BOOTSTRAP").pipe(
+            Effect.orDie,
           );
+          return ConfigProvider.fromUnknown({ SHARED: "manager" });
         }),
     });
 
@@ -59,8 +61,30 @@ it.effect("passes stack, stage, and fallback to a generic secret manager", () =>
 
     expect(receivedStack).toBe("test-stack");
     expect(receivedStage).toBe("preview-42");
+    expect(receivedBootstrap).toBe("bootstrap");
     expect(yield* read(resolved, "SHARED")).toBe("manager");
     expect(yield* read(resolved, "FALLBACK_ONLY")).toBe("fallback");
+  }),
+);
+
+it.effect("does not expose Varlock's private runtime binding", () =>
+  Effect.gen(function* () {
+    const secrets = Layer.succeed(SecretManager, {
+      name: "Test",
+      resolve: () => Effect.succeed(ConfigProvider.fromUnknown({})),
+    });
+    const resolved = yield* resolveSecretManagerConfig({
+      secrets,
+      stack: "test-stack",
+      fallback: ConfigProvider.fromUnknown({
+        __VARLOCK_ENV: "must-not-be-forwarded",
+      }),
+    });
+
+    const privateBinding = yield* Config.option(
+      Config.string("__VARLOCK_ENV"),
+    ).pipe(Effect.provideService(ConfigProvider.ConfigProvider, resolved));
+    expect(privateBinding._tag).toBe("None");
   }),
 );
 
@@ -93,12 +117,9 @@ it.effect("keeps an explicit profile override at highest precedence", () =>
   Effect.gen(function* () {
     const secrets = Layer.succeed(SecretManager, {
       name: "Test",
-      resolve: ({ fallback }) =>
+      resolve: () =>
         Effect.succeed(
-          ConfigProvider.orElse(
-            ConfigProvider.fromUnknown({ ALCHEMY_PROFILE: "manager" }),
-            fallback,
-          ),
+          ConfigProvider.fromUnknown({ ALCHEMY_PROFILE: "manager" }),
         ),
     });
     const resolved = yield* resolveSecretManagerConfig({

@@ -45,6 +45,7 @@ const runFixtureWithEnv = (
   expect(output, result.stderr).toBeDefined();
   return JSON.parse(output!) as {
     resolved?: Array<{
+      stack: string;
       stage?: string;
       apiKey: string;
       fallback: string;
@@ -57,6 +58,7 @@ const runFixtureWithEnv = (
       readonly text?: string;
     }>;
     consolePatched: boolean;
+    stackRestored: boolean;
     stageRestored: boolean;
     privateBlobRestored: boolean;
   };
@@ -67,7 +69,7 @@ const runFixture = (directory: string, ...stages: string[]) =>
 
 test("exports the adapter from alchemy/Varlock", async () => {
   const adapter = await import("alchemy/Varlock");
-  expect(adapter.SecretManager).toBeTypeOf("function");
+  expect(adapter.secrets).toBeTypeOf("function");
 });
 
 test("loads stage-specific values with fallback and restores process globals", () => {
@@ -75,12 +77,14 @@ test("loads stage-specific values with fallback and restores process globals", (
   expect(result.error).toBeUndefined();
   expect(result.resolved).toEqual([
     {
+      stack: "varlock-fixture",
       stage: "dev",
       apiKey: "dev-secret",
       fallback: "fallback",
       privateBindingForwarded: false,
     },
     {
+      stack: "varlock-fixture",
       stage: "production",
       apiKey: "production-secret",
       fallback: "fallback",
@@ -88,6 +92,7 @@ test("loads stage-specific values with fallback and restores process globals", (
     },
   ]);
   expect(result.consolePatched).toBe(false);
+  expect(result.stackRestored).toBe(true);
   expect(result.stageRestored).toBe(true);
   expect(result.privateBlobRestored).toBe(true);
 });
@@ -108,11 +113,13 @@ test("leaves stage-less environment selection to Varlock", () => {
   expect(result.error).toBeUndefined();
   expect(result.resolved).toEqual([
     {
+      stack: "varlock-fixture",
       apiKey: "native-secret",
       fallback: "fallback",
       privateBindingForwarded: false,
     },
   ]);
+  expect(result.stackRestored).toBe(true);
 });
 
 test("preserves ambient ALCHEMY_STAGE during stage-less selection", () => {
@@ -122,11 +129,13 @@ test("preserves ambient ALCHEMY_STAGE during stage-less selection", () => {
   expect(result.error).toBeUndefined();
   expect(result.resolved).toEqual([
     {
+      stack: "varlock-fixture",
       apiKey: "production-secret",
       fallback: "fallback",
       privateBindingForwarded: false,
     },
   ]);
+  expect(result.stackRestored).toBe(true);
   expect(result.stageRestored).toBe(true);
 });
 
@@ -172,7 +181,7 @@ test("reports a missing optional Varlock peer with installation guidance", () =>
 
 test("does not invoke Varlock console or response patch APIs", async () => {
   const env = await Effect.runPromise(
-    loadVarlockEnvironment(patchProbe, undefined),
+    loadVarlockEnvironment(patchProbe, "patch-probe", undefined),
   );
   expect(env.ALCHEMY_VARLOCK_PATCH_PROBE_LOADED).toBe("true");
   expect(env.ALCHEMY_VARLOCK_PATCH_PROBE_CALLS).toBeUndefined();

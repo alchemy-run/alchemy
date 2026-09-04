@@ -1,1 +1,1 @@
-export { SecretManager } from "./SecretManager.ts";
+export { secrets } from "./SecretManager.ts";

@@ -100,6 +100,7 @@ export const resolveVarlockEntry = (
 /** @internal */
 export const loadVarlockEnvironment = (
   entry: string,
+  stack: string,
   stage: string | undefined,
 ) =>
   Effect.tryPromise({
@@ -110,6 +111,7 @@ export const loadVarlockEnvironment = (
           __ALCHEMY_VARLOCK_ENTRY: entry,
         };
         delete env.__VARLOCK_ENV;
+        env.ALCHEMY_STACK = stack;
         if (stage !== undefined) env.ALCHEMY_STAGE = stage;
 
         const child = spawn(process.execPath, ["--eval", loaderSource], {
@@ -203,9 +205,9 @@ export const loadVarlockEnvironment = (
     catch: loadError,
   });
 
-const resolve = Effect.fn("Varlock.SecretManager.resolve")(function* ({
+const resolve = Effect.fn("Varlock.secrets.resolve")(function* ({
+  stack,
   stage,
-  fallback,
 }: SecretManagerResolveOptions) {
   return yield* Semaphore.withPermits(
     loadMutex,
@@ -213,16 +215,8 @@ const resolve = Effect.fn("Varlock.SecretManager.resolve")(function* ({
   )(
     Effect.gen(function* () {
       const entry = yield* resolveVarlockEntry();
-      const resolved = yield* loadVarlockEnvironment(entry, stage);
-      const safeFallback = ConfigProvider.make((path) =>
-        path.length === 1 && path[0] === "__VARLOCK_ENV"
-          ? Effect.succeed(undefined)
-          : fallback.load(path),
-      );
-      return ConfigProvider.orElse(
-        ConfigProvider.fromUnknown(resolved),
-        safeFallback,
-      );
+      const resolved = yield* loadVarlockEnvironment(entry, stack, stage);
+      return ConfigProvider.fromUnknown(resolved);
     }),
   );
 });
@@ -232,7 +226,8 @@ const resolve = Effect.fn("Varlock.SecretManager.resolve")(function* ({
  *
  * Values remain available through Effect `Config`, including
  * `Config.redacted` for secrets. For stage-aware commands, Alchemy exposes the
- * current stage as `ALCHEMY_STAGE` while Varlock resolves the environment.
+ * stack and current stage as `ALCHEMY_STACK` and `ALCHEMY_STAGE` while
+ * Varlock resolves the environment.
  *
  * ### Configure a Stack
  * **Example:** Use Varlock for stack configuration
@@ -248,7 +243,7 @@ const resolve = Effect.fn("Varlock.SecretManager.resolve")(function* ({
  *   {
  *     providers: Cloudflare.providers(),
  *     state: Cloudflare.state(),
- *     secrets: Varlock.SecretManager(),
+ *     secrets: Varlock.secrets(),
  *   },
  *   Effect.gen(function* () {
  *     const apiKey = yield* Config.redacted("API_KEY");
@@ -262,7 +257,7 @@ const resolve = Effect.fn("Varlock.SecretManager.resolve")(function* ({
  * @peer varlock
  * @product Varlock
  */
-export const SecretManager = (): SecretManagerLayer =>
+export const secrets = (): SecretManagerLayer =>
   Layer.succeed(SecretManagerService, {
     name: managerName,
     resolve,
