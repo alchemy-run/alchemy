@@ -67,6 +67,9 @@
       "path": "./packages/better-auth/tsconfig.json"
     },
     {
+      "path": "./packages/dashboard/tsconfig.json"
+    },
+    {
       "path": "./packages/pr-package/tsconfig.json"
     },
     // TODO(sam): fix by upgrading starlight to ^0.39.2
