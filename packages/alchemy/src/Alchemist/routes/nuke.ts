@@ -61,6 +61,7 @@ export const scan = Effect.fn("Alchemist.nuke.scan")(function* (
     main: input.entrypoint ?? DEFAULT_ENTRYPOINT,
     envFile: Option.fromNullishOr(input.envFile),
     profile: input.profile,
+    stage: input.stage,
     logger: debug ? Logger.layer([Logger.defaultLogger]) : undefined,
     extra: Layer.succeed(MinimumLogLevel, debug ? "Debug" : "Info"),
   });

@@ -33,6 +33,12 @@ export * from "./Ref.ts";
 export * as RemovalPolicy from "./RemovalPolicy.ts";
 export { renamedFrom } from "./Rename.ts";
 export * from "./Resource.ts";
+export {
+  SecretManager,
+  SecretManagerError,
+  type SecretManagerLayer,
+  type SecretManagerResolveOptions,
+} from "./SecretManager.ts";
 export * as Schema from "./Schema.ts";
 export * as Server from "./Server/index.ts";
 export * as Serverless from "./Serverless/index.ts";

@@ -17,7 +17,10 @@ import { AdoptPolicy } from "../AdoptPolicy.ts";
 import { AlchemyContext } from "../AlchemyContext.ts";
 import { ArtifactStore, createArtifactStore } from "../Artifacts.ts";
 import { AuthError, AuthProviders } from "../Auth/AuthProvider.ts";
-import { SuppressMissingProviderConfig } from "../Auth/Profile.ts";
+import {
+  ProfileStore,
+  SuppressMissingProviderConfig,
+} from "../Auth/Profile.ts";
 import { withProfileOverride } from "../Auth/Resolve.ts";
 import { AwsAuth } from "../AWS/AuthProvider.ts";
 import { AxiomAuth } from "../Axiom/AuthProvider.ts";
@@ -29,6 +32,10 @@ import { NeonAuth } from "../Neon/AuthProvider.ts";
 import { PlanetscaleAuth } from "../Planetscale/AuthProvider.ts";
 import { PrismaAuth } from "../Prisma/AuthProvider.ts";
 import { RailwayAuth } from "../Railway/AuthProvider.ts";
+import {
+  resolveSecretManagerConfig,
+  type SecretManagerLayer,
+} from "../SecretManager.ts";
 import * as Stack from "../Stack.ts";
 import { Stage } from "../Stage.ts";
 import { Progress } from "./Progress.ts";
@@ -55,6 +62,7 @@ export type StackModule = ReturnType<ReturnType<typeof Stack.make>> & {
   readonly stackName: string;
   readonly providers: Layer.Layer<never> | undefined;
   readonly state: Layer.Layer<never> | undefined;
+  readonly secrets: SecretManagerLayer | undefined;
 };
 
 export interface StackModuleLoader {
@@ -131,6 +139,8 @@ export interface OpenOptions {
 interface SessionServicesOptions {
   readonly envFile: Option.Option<string>;
   readonly profile?: string;
+  readonly secrets?: SecretManagerLayer;
+  readonly stage?: string;
   readonly logger?: Layer.Layer<never, never, never>;
   readonly extra?: Layer.Layer<never, never, never>;
 }
@@ -139,18 +149,32 @@ interface SessionServicesOptions {
 const sessionServices = Effect.fn("sessionServices")(function* (
   options: SessionServicesOptions,
 ) {
-  return Layer.mergeAll(
-    ConfigProvider.layer(
-      withProfileOverride(
-        yield* loadConfigProvider(options.envFile),
-        options.profile,
-      ),
-    ),
-    options.logger ??
-      Logger.layer([fileLogger("out")], { mergeWithExisting: true }),
-    options.extra ?? Layer.empty,
+  const fallback = yield* loadConfigProvider(options.envFile);
+  const configProvider = withProfileOverride(
+    yield* resolveSecretManagerConfig({
+      secrets: options.secrets,
+      stage: options.stage,
+      fallback,
+    }),
+    options.profile,
   );
+  return {
+    configProvider,
+    layer: Layer.mergeAll(
+      ConfigProvider.layer(configProvider),
+      options.logger ??
+        Logger.layer([fileLogger("out")], { mergeWithExisting: true }),
+      options.extra ?? Layer.empty,
+    ),
+  };
 });
+
+type SessionServices = Effect.Success<ReturnType<typeof sessionServices>>;
+
+export interface CollectedAuthProviders {
+  readonly authProviders: AuthProviders["Service"];
+  readonly configProvider: ConfigProvider.ConfigProvider;
+}
 
 interface RouteCacheService {
   readonly open: (
@@ -164,7 +188,7 @@ interface RouteCacheService {
   readonly authProviders: (
     options: CollectAuthProvidersOptions,
   ) => Effect.Effect<
-    AuthProviders["Service"],
+    CollectedAuthProviders,
     Effect.Error<ReturnType<typeof collectAuthProvidersUncached>>,
     Effect.Services<ReturnType<typeof collectAuthProvidersUncached>>
   >;
@@ -173,7 +197,8 @@ interface RouteCacheService {
 export interface CollectAuthProvidersOptions {
   readonly main: string;
   readonly envFile: Option.Option<string>;
-  readonly profile: string;
+  readonly profile?: string;
+  readonly stage?: string;
 }
 
 const RouteCache = Context.Reference<RouteCacheService>(
@@ -201,7 +226,8 @@ const authRegistryKey = (options: CollectAuthProvidersOptions) =>
   JSON.stringify([
     options.main,
     Option.getOrNull(options.envFile),
-    options.profile,
+    options.profile ?? null,
+    options.stage ?? null,
   ]);
 
 const cached = <A, E, R>(
@@ -280,6 +306,8 @@ const openUncached = Effect.fn("openStackSessionUncached")(function* (
   const shared = yield* sessionServices({
     envFile: Option.fromNullishOr(target.envFile),
     profile: target.profile,
+    secrets: stackEffect.secrets,
+    stage: target.stage,
   });
   const services = Layer.mergeAll(
     Layer.effect(
@@ -303,7 +331,7 @@ const openUncached = Effect.fn("openStackSessionUncached")(function* (
         Context.add(Stage, target.stage ?? PLACEHOLDER_STAGE),
       ),
     ),
-    shared,
+    shared.layer,
   );
   const sessionContext = yield* Layer.build(services);
   const stack = yield* Effect.provide(stackEffect, sessionContext);
@@ -339,30 +367,53 @@ export interface BuildStackProvidersOptions {
   readonly main: string;
   readonly envFile: Option.Option<string>;
   readonly profile?: string;
+  readonly stage?: string;
   readonly registry?: AuthProviders["Service"];
   readonly logger?: Layer.Layer<never, never, never>;
   readonly extra?: Layer.Layer<never, never, never>;
 }
+
+const buildStackProviderContext = (
+  stackEffect: StackModule,
+  authProviders: AuthProviders["Service"],
+  shared: SessionServices["layer"],
+  stage?: string,
+) => {
+  const valueServices = Layer.succeedContext(
+    Context.make(AuthProviders, authProviders).pipe(
+      Context.add(Stage, stage ?? PLACEHOLDER_STAGE),
+      Context.add(Stack.Stack, placeholderStack(stackEffect.stackName)),
+    ),
+  );
+  return Layer.build(
+    (stackEffect.providers ?? Layer.empty).pipe(
+      Layer.provideMerge(stackEffect.state ?? Layer.empty),
+      Layer.provideMerge(Layer.mergeAll(valueServices, shared)),
+    ),
+  );
+};
 
 export const buildStackProviders = Effect.fn("buildStackProviders")(function* (
   options: BuildStackProvidersOptions,
 ) {
   const authProviders = options.registry ?? {};
   const stackEffect = yield* importStack(options.main);
-  const shared = yield* sessionServices(options);
-  const valueServices = Layer.succeedContext(
-    Context.make(AuthProviders, authProviders).pipe(
-      Context.add(Stage, PLACEHOLDER_STAGE),
-      Context.add(Stack.Stack, placeholderStack(stackEffect.stackName)),
-    ),
+  const shared = yield* sessionServices({
+    ...options,
+    secrets: stackEffect.secrets,
+  });
+  const context = yield* buildStackProviderContext(
+    stackEffect,
+    authProviders,
+    shared.layer,
+    options.stage,
   );
-  const context = yield* Layer.build(
-    (stackEffect.providers ?? Layer.empty).pipe(
-      Layer.provideMerge(stackEffect.state ?? Layer.empty),
-      Layer.provideMerge(Layer.mergeAll(valueServices, shared)),
-    ),
-  );
-  return { authProviders, context, stackEffect };
+  return {
+    authProviders,
+    configProvider: shared.configProvider,
+    context,
+    stackEffect,
+  };
 });
 
 const builtinAuth = Layer.mergeAll(
@@ -378,24 +429,6 @@ const builtinAuth = Layer.mergeAll(
   RailwayAuth,
 );
 
-const buildBuiltinAuthProviders = Effect.fn("buildBuiltinAuthProviders")(
-  function* (options: {
-    readonly envFile: Option.Option<string>;
-    readonly profile: string;
-    readonly registry?: AuthProviders["Service"];
-  }) {
-    const authProviders = options.registry ?? {};
-    const shared = yield* sessionServices(options);
-    yield* Layer.build(
-      Layer.provide(
-        builtinAuth,
-        Layer.mergeAll(Layer.succeed(AuthProviders, authProviders), shared),
-      ),
-    );
-    return authProviders;
-  },
-);
-
 const isMissingProviderConfig = Schema.is(
   Schema.Struct({ _tag: Schema.Literals(["MissingProviderConfig"]) }),
 );
@@ -407,12 +440,6 @@ const isMissingProviderConfig = Schema.is(
 const collectAuthProvidersUncached = Effect.fn("collectAuthProvidersUncached")(
   function* (options: CollectAuthProvidersOptions) {
     const authProviders: AuthProviders["Service"] = {};
-    yield* buildBuiltinAuthProviders({
-      envFile: options.envFile,
-      profile: options.profile,
-      registry: authProviders,
-    });
-
     const fs = yield* FileSystem.FileSystem;
     const entrypointExists = yield* fs.exists(options.main);
     const missingDefault =
@@ -424,8 +451,32 @@ const collectAuthProvidersUncached = Effect.fn("collectAuthProvidersUncached")(
         }),
       );
     }
-    if (!missingDefault) {
-      yield* buildStackProviders({ ...options, registry: authProviders }).pipe(
+    const stackEffect = missingDefault
+      ? undefined
+      : yield* importStack(options.main);
+    const shared = yield* sessionServices({
+      envFile: options.envFile,
+      profile: options.profile,
+      secrets: stackEffect?.secrets,
+      stage: options.stage,
+    });
+    yield* Layer.build(
+      Layer.provide(
+        builtinAuth,
+        Layer.mergeAll(
+          Layer.succeed(AuthProviders, authProviders),
+          shared.layer,
+        ),
+      ),
+    );
+
+    if (stackEffect !== undefined) {
+      yield* buildStackProviderContext(
+        stackEffect,
+        authProviders,
+        shared.layer,
+        options.stage,
+      ).pipe(
         Effect.timeout(Duration.seconds(15)),
         Effect.catchTag("TimeoutError", () => Effect.void),
         Effect.catchCause((cause) => {
@@ -448,13 +499,34 @@ const collectAuthProvidersUncached = Effect.fn("collectAuthProvidersUncached")(
         }),
       );
     }
-    return authProviders;
+    return {
+      authProviders,
+      configProvider: shared.configProvider,
+    } satisfies CollectedAuthProviders;
   },
   Effect.provideService(SuppressMissingProviderConfig, true),
 );
 
 export const collectAuthProviders = Effect.fn("collectAuthProviders")(
   function* (options: CollectAuthProvidersOptions) {
-    return yield* (yield* RouteCache).authProviders(options);
+    return (yield* (yield* RouteCache).authProviders(options)).authProviders;
+  },
+);
+
+/** Registered auth providers and the effective stack-aware ConfigProvider. */
+export const collectAuthProviderContext = Effect.fn(
+  "collectAuthProviderContext",
+)(function* (options: CollectAuthProvidersOptions) {
+  return yield* (yield* RouteCache).authProviders(options);
+});
+
+/** Resolve the effective profile through a stack's secret-aware configuration. */
+export const resolveStackProfileName = Effect.fn("resolveStackProfileName")(
+  function* (options: CollectAuthProvidersOptions) {
+    const { configProvider } = yield* collectAuthProviderContext(options);
+    const profiles = yield* ProfileStore;
+    return (yield* profiles.current.pipe(
+      Effect.provideService(ConfigProvider.ConfigProvider, configProvider),
+    )).name;
   },
 );

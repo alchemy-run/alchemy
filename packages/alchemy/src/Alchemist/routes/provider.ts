@@ -3,11 +3,9 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import type { EnvironmentVariable } from "../../Auth/AuthProvider.ts";
 import { getEnv } from "../../Auth/Env.ts";
-import { resolveProfileName } from "../../Auth/Resolve.ts";
-import { loadConfigProvider } from "../../Util/ConfigProvider.ts";
 import { AlchemistInvalidInput } from "../Errors.ts";
 import {
-  collectAuthProviders,
+  collectAuthProviderContext,
   DEFAULT_ENTRYPOINT,
   type Target,
 } from "../Session.ts";
@@ -46,15 +44,13 @@ const satisfied = (variable: EnvironmentVariable) =>
 export const checkEnvironment = Effect.fn(
   "Alchemist.provider.checkEnvironment",
 )(function* (input: CheckEnvironmentInput) {
-  const profile = yield* resolveProfileName(
-    Option.fromNullishOr(input.envFile),
-    input.profile,
-  );
-  const registry = yield* collectAuthProviders({
-    main: input.entrypoint ?? DEFAULT_ENTRYPOINT,
-    envFile: Option.fromNullishOr(input.envFile),
-    profile,
-  });
+  const { authProviders: registry, configProvider } =
+    yield* collectAuthProviderContext({
+      main: input.entrypoint ?? DEFAULT_ENTRYPOINT,
+      envFile: Option.fromNullishOr(input.envFile),
+      profile: input.profile,
+      stage: input.stage,
+    });
   const known = Object.keys(registry).sort();
   const names = yield* input.providers?.length
     ? Effect.forEach(input.providers, (requested) => {
@@ -93,13 +89,7 @@ export const checkEnvironment = Effect.fn(
         missing,
       } satisfies EnvironmentCheck;
     }),
-  ).pipe(
-    Effect.provide(
-      ConfigProvider.layer(
-        yield* loadConfigProvider(Option.fromNullishOr(input.envFile)),
-      ),
-    ),
-  );
+  ).pipe(Effect.provide(ConfigProvider.layer(configProvider)));
   return {
     checks,
     satisfied: checks.every((check) => check.status !== "missing"),
