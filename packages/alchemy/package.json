@@ -307,6 +307,18 @@
       "worker": "./src/Planetscale/*/index.ts",
       "import": "./lib/Planetscale/*/index.js"
     },
+    "./Postgres": {
+      "types": "./lib/Postgres/index.d.ts",
+      "bun": "./src/Postgres/index.ts",
+      "worker": "./src/Postgres/index.ts",
+      "import": "./lib/Postgres/index.js"
+    },
+    "./Postgres/*": {
+      "types": "./lib/Postgres/*.d.ts",
+      "bun": "./src/Postgres/*.ts",
+      "worker": "./src/Postgres/*.ts",
+      "import": "./lib/Postgres/*.js"
+    },
     "./Runtime": {
       "types": "./lib/Runtime.d.ts",
       "bun": "./src/Runtime.ts",
