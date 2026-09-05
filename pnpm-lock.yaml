@@ -385,7 +385,7 @@ overrides:
   drizzle-orm: 1.0.0-rc.5-ab785fc
   rolldown: 1.2.5
 
-pnpmfileChecksum: sha256-18MkOs6uL8cr3DyLGHm4Ngu6BqVdTBLyETqu37V/w4I=
+pnpmfileChecksum: sha256-elTHWproOlNxhpfqxI523wQRI4DQEVcmXXl5vhr4xWU=
 
 patchedDependencies:
   '@astrojs/starlight@0.42.0': 3ea8686c3055e8d097b5afa93dcf9e16ebfbebbf006e7493ad5df38e6edbfd19

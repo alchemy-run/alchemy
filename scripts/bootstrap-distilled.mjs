@@ -28,9 +28,9 @@ function tryGit(args, cwd) {
 }
 
 export function bootstrap(root, previousHead) {
+  const checkout = resolve(root, "submodules/distilled");
   // Use the index, just like `git submodule update`, including a staged pin.
   const pin = git(["rev-parse", ":submodules/distilled"], root);
-  const checkout = resolve(root, "submodules/distilled");
   const commonDir = git(
     ["rev-parse", "--path-format=absolute", "--git-common-dir"],
     root,
@@ -42,7 +42,7 @@ export function bootstrap(root, previousHead) {
   const mainRoot = git(["worktree", "list", "--porcelain", "-z"], root)
     .split("\0")[0]
     .slice("worktree ".length);
-  isolateWorktreeConfig(mainRoot);
+  if (previousHead !== undefined) isolateWorktreeConfig(mainRoot);
 
   if (existsSync(resolve(checkout, ".git"))) {
     if (
@@ -60,7 +60,7 @@ export function bootstrap(root, previousHead) {
       ? tryGit(["rev-parse", `${previousHead}:submodules/distilled`], root)
       : undefined;
     // Only follow an Alchemy checkout when distilled is still at its old pin.
-    // Installs and intentional distilled development never move an existing HEAD.
+    // Intentional distilled development never moves an existing HEAD.
     if (
       current !== previousPin ||
       tryGit(["symbolic-ref", "--quiet", "HEAD"], checkout) !== undefined ||
@@ -94,13 +94,14 @@ export function bootstrap(root, previousHead) {
       ],
       root,
     );
-    isolateWorktreeConfig(mainRoot);
+    if (previousHead !== undefined) isolateWorktreeConfig(mainRoot);
     return;
   }
 
   // Initialize the primary checkout at its own pin first. Every linked checkout
   // then gets an independent detached HEAD backed by that same object database.
   bootstrap(mainRoot);
+  isolateWorktreeConfig(mainRoot);
   const mainCheckout = resolve(mainRoot, "submodules/distilled");
   ensureCommit(mainCheckout, pin);
   // The destination was checked above: it is missing or empty. One --force
@@ -117,9 +118,9 @@ function isolateWorktreeConfig(mainRoot) {
 
   // Resolve the gitfile without opening the repository: its core.worktree may
   // already point at a removed Alchemy worktree, preventing normal Git commands.
-  const commonDir = git(
-    ["rev-parse", "--resolve-git-dir", resolve(checkout, ".git")],
-    mainRoot,
+  const commonDir = resolve(
+    checkout,
+    git(["rev-parse", "--resolve-git-dir", ".git"], checkout),
   );
   if (existsSync(resolve(commonDir, "commondir"))) {
     throw new Error(
@@ -172,11 +173,11 @@ function ensureCommit(checkout, pin) {
   }
 }
 
-// The same dependency-free Node script runs before pnpm workspace discovery and
-// from post-checkout (whose arguments are old HEAD, new HEAD, branch checkout).
-if (import.meta.main && process.argv[4] !== "0") {
+// Run only for post-checkout branch/worktree checkouts, not file checkouts.
+// Hook arguments are old HEAD, new HEAD, and the branch-checkout flag.
+if (import.meta.main && process.argv[4] === "1") {
   bootstrap(
     resolve(import.meta.dirname, ".."),
-    process.argv[4] === "1" ? process.argv[2] : undefined,
+    process.argv[2],
   );
 }
