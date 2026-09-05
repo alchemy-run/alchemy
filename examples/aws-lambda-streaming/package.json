@@ -1,0 +1,5 @@
+{
+  "name": "aws-lambda-streaming-example",
+  "type": "module",
+  "private": true
+}

@@ -1016,7 +1016,11 @@ export const Function: Platform<
         Effect.sync(() => unpackEnvValue<T>(process.env[key])),
       serve: (handler: HttpEffect) =>
         // @ts-ignore
-        ctx.listen(makeFunctionHttpHandler(handler)),
+        ctx.listen(
+          makeFunctionHttpHandler(handler, {
+            streaming: process.env.ALCHEMY_LAMBDA_STREAMING === "true",
+          }),
+        ),
       listen: ((
         handler:
           | Serverless.FunctionListener
@@ -1042,7 +1046,7 @@ export const Function: Platform<
           const services = Context.omit(Layer.CurrentMemoMap)(
             yield* Effect.context<never>(),
           );
-          return async (event: any, context: lambda.Context): Promise<any> => {
+          const baseHandler = async (event: any, context: lambda.Context): Promise<any> => {
             for (const handler of handlers) {
               const eff = handler(event);
               if (Effect.isEffect(eff)) {
@@ -1099,6 +1103,15 @@ export const Function: Platform<
             }
             throw new Error("No event handler found");
           };
+          
+          // Apply streamifyResponse wrapper if streaming is enabled
+          const isStreaming = process.env.ALCHEMY_LAMBDA_STREAMING === "true";
+          if (isStreaming) {
+            return import("aws-lambda").then((awsLambda: any) => 
+              awsLambda.streamifyResponse(baseHandler)
+            );
+          }
+          return baseHandler;
         }),
       })),
     };
@@ -2439,6 +2452,11 @@ export const FunctionProvider = () =>
             session,
           });
 
+          // Detect if streaming is enabled based on the Function URL config
+          const normalizedUrl = normalizeFunctionUrl(news.functionUrl);
+          const isStreaming =
+            normalizedUrl?.invokeMode === "RESPONSE_STREAM" ? "true" : "false";
+
           yield* createOrUpdateFunction({
             id,
             news,
@@ -2447,6 +2465,7 @@ export const FunctionProvider = () =>
             env: {
               ...env,
               ...news.env,
+              ALCHEMY_LAMBDA_STREAMING: isStreaming,
             },
             functionName,
             vpc,

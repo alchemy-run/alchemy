@@ -45,13 +45,21 @@ export const isAlbEvent = (event: any): event is ALBEvent => {
   );
 };
 
-export const makeFunctionHttpHandler = <Req>(handler: Http.HttpEffect<Req>) => {
+export const makeFunctionHttpHandler = <Req>(
+  handler: Http.HttpEffect<Req>,
+  options?: { streaming?: boolean },
+) => {
   // `HttpMiddleware.tracer` creates the `http.server` root span per request
   // (continuing an incoming `traceparent`), matching the Worker bridge's
   // fetch path. With the default no-op tracer this is free; with a telemetry
   // exporter installed the span is exported when the invocation scope
   // flushes.
   const safeHandler = HttpMiddleware.tracer(Http.safeHttpEffect(handler));
+  // Note: streaming option is recognized but not used here — the actual
+  // streamifyResponse wrapper is applied to the Lambda handler at the
+  // Function level in Function.ts, not at the HTTP handler level.
+  void options;
+
   return (
     event: any,
   ):
