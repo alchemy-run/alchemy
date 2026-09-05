@@ -18,13 +18,6 @@ import {
 
 const managerName = "AWS Secrets Manager";
 
-export interface SelectorContext {
-  /** Name of the Alchemy stack being resolved. */
-  readonly stack: string;
-  /** Concrete Alchemy stage, when available. */
-  readonly stage?: string;
-}
-
 /** An AWS Secrets Manager secret selected for an Alchemy stack instance. */
 export interface SecretSet {
   /** Name or full ARN of the secret containing the configuration object. */
@@ -41,7 +34,9 @@ export interface SecretSet {
 }
 
 /** Map an Alchemy stack and stage to one AWS Secrets Manager secret. */
-export type SecretsSelector = (context: SelectorContext) => string | SecretSet;
+export type SecretsSelector = (
+  context: SecretManagerResolveOptions,
+) => string | SecretSet;
 
 type NormalizedSecretSet = Required<Pick<SecretSet, "secretId">> &
   Omit<SecretSet, "secretId">;
@@ -198,9 +193,8 @@ const makeResolve = (selector: SecretsSelector, loadSecret: LoadSecret) =>
     stack,
     stage,
   }: SecretManagerResolveOptions) {
-    const context = { stack, stage } satisfies SelectorContext;
     const selected = yield* Effect.try({
-      try: () => selector(context),
+      try: () => selector({ stack, stage }),
       catch: (cause) =>
         failure(
           `AWS Secrets Manager could not select a secret for stack '${stack}'.`,

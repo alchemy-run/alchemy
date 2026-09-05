@@ -38,6 +38,7 @@ export {
   SecretManagerError,
   type SecretManagerLayer,
   type SecretManagerResolveOptions,
+  type SecretManagerService,
 } from "./SecretManager.ts";
 export * as Schema from "./Schema.ts";
 export * as Server from "./Server/index.ts";

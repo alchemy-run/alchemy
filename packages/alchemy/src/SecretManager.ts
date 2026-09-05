@@ -13,6 +13,16 @@ export interface SecretManagerResolveOptions {
   readonly stage?: string;
 }
 
+/** Public service contract implemented by stack secret-manager layers. */
+export interface SecretManagerService {
+  /** Human-readable implementation name used in diagnostics. */
+  readonly name: string;
+  /** Resolve the manager-owned ConfigProvider for one stack session. */
+  readonly resolve: (
+    options: SecretManagerResolveOptions,
+  ) => Effect.Effect<ConfigProvider.ConfigProvider, SecretManagerError>;
+}
+
 /**
  * A deploy-time source of validated configuration for an Alchemy stack.
  * Alchemy's default ConfigProvider is available through Effect `Config` while
@@ -20,14 +30,7 @@ export interface SecretManagerResolveOptions {
  */
 export class SecretManager extends Context.Service<
   SecretManager,
-  {
-    /** Human-readable implementation name used in diagnostics. */
-    readonly name: string;
-    /** Resolve the manager-owned ConfigProvider for one stack session. */
-    readonly resolve: (
-      options: SecretManagerResolveOptions,
-    ) => Effect.Effect<ConfigProvider.ConfigProvider, SecretManagerError>;
-  }
+  SecretManagerService
 >()("SecretManager") {}
 
 /** A pluggable secret manager accepted by {@link StackProps.secrets}. */
@@ -45,15 +48,6 @@ export class SecretManagerError extends Schema.TaggedError<SecretManagerError>()
   readonly [UserFacingError] = true;
 }
 
-const withoutPrivateVarlockBinding = (
-  provider: ConfigProvider.ConfigProvider,
-) =>
-  ConfigProvider.make((path) =>
-    path.length === 1 && path[0] === "__VARLOCK_ENV"
-      ? Effect.succeed(undefined)
-      : provider.load(path),
-  );
-
 /** @internal Resolve an optional stack secret manager over the default provider. */
 export const resolveSecretManagerConfig = Effect.fn(
   "SecretManager.resolveConfig",
@@ -64,7 +58,6 @@ export const resolveSecretManagerConfig = Effect.fn(
   readonly fallback: ConfigProvider.ConfigProvider;
 }) {
   if (options.secrets === undefined) return options.fallback;
-  const fallback = withoutPrivateVarlockBinding(options.fallback);
   const context = yield* Layer.build(options.secrets);
   const managed = yield* Effect.provideService(
     Context.get(context, SecretManager).resolve({
@@ -72,7 +65,7 @@ export const resolveSecretManagerConfig = Effect.fn(
       stage: options.stage,
     }),
     ConfigProvider.ConfigProvider,
-    fallback,
+    options.fallback,
   );
-  return ConfigProvider.orElse(managed, fallback);
+  return ConfigProvider.orElse(managed, options.fallback);
 });

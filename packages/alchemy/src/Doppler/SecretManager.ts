@@ -1,6 +1,5 @@
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
-import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
@@ -15,13 +14,6 @@ const managerName = "Doppler";
 const downloadEndpoint =
   "https://api.doppler.com/v3/configs/config/secrets/download";
 
-export interface SelectorContext {
-  /** Name of the Alchemy stack being resolved. */
-  readonly stack: string;
-  /** Concrete Alchemy stage, when available. */
-  readonly stage?: string;
-}
-
 /** A Doppler secret set selected for an Alchemy stack instance. */
 export interface SecretSet {
   /** Doppler project name. Omit for a config-scoped service token. */
@@ -31,7 +23,9 @@ export interface SecretSet {
 }
 
 /** Map an Alchemy stack and stage to a Doppler secret set. */
-export type SecretsSelector = (context: SelectorContext) => SecretSet;
+export type SecretsSelector = (
+  context: SecretManagerResolveOptions,
+) => SecretSet;
 
 type Fetch = (
   input: Parameters<typeof globalThis.fetch>[0],
@@ -67,9 +61,8 @@ const makeResolve = (selector: SecretsSelector | undefined, fetch: Fetch) =>
     stack,
     stage,
   }: SecretManagerResolveOptions) {
-    const context = { stack, stage } satisfies SelectorContext;
     const selection = yield* Effect.try({
-      try: () => (selector === undefined ? {} : selector(context)),
+      try: () => (selector === undefined ? {} : selector({ stack, stage })),
       catch: (cause) =>
         failure(
           `Doppler could not select a project or config for stack '${stack}'.`,

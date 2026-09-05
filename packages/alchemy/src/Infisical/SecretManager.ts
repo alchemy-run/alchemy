@@ -14,13 +14,6 @@ import {
 const managerName = "Infisical";
 const defaultApiUrl = "https://app.infisical.com";
 
-export interface SelectorContext {
-  /** Name of the Alchemy stack being resolved. */
-  readonly stack: string;
-  /** Concrete Alchemy stage, when available. */
-  readonly stage?: string;
-}
-
 /** An Infisical secret set selected for an Alchemy stack instance. */
 export interface SecretSet {
   /** ID of the Infisical project containing the secrets. */
@@ -55,7 +48,9 @@ export interface SecretSet {
 }
 
 /** Map an Alchemy stack and stage to an Infisical secret set. */
-export type SecretsSelector = (context: SelectorContext) => SecretSet;
+export type SecretsSelector = (
+  context: SecretManagerResolveOptions,
+) => SecretSet;
 
 type Fetch = (
   input: Parameters<typeof globalThis.fetch>[0],
@@ -271,9 +266,8 @@ const makeResolve = (selector: SecretsSelector, fetch: Fetch) =>
     stack,
     stage,
   }: SecretManagerResolveOptions) {
-    const context = { stack, stage } satisfies SelectorContext;
     const selection = yield* Effect.try({
-      try: () => selector(context),
+      try: () => selector({ stack, stage }),
       catch: (cause) =>
         failure(
           `Infisical could not select a secret set for stack '${stack}'.`,

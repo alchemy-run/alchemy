@@ -15,6 +15,20 @@ const loadMutex = Semaphore.makeUnsafe(1);
 const outputMarker = "__ALCHEMY_VARLOCK_ENV__";
 const maxOutputBytes = 16 * 1024 * 1024;
 
+// A found container without a scalar value prevents the generic fallback
+// provider from exposing Varlock's private runtime payload while still making
+// Config.option(Config.string("__VARLOCK_ENV")) resolve to None. This policy
+// belongs to the Varlock adapter; the core SecretManager only composes generic
+// ConfigProviders.
+const withoutPrivateRuntimeBinding = (
+  provider: ConfigProvider.ConfigProvider,
+) =>
+  ConfigProvider.make((path) =>
+    path.length === 1 && path[0] === "__VARLOCK_ENV"
+      ? Effect.succeed(ConfigProvider.makeRecord(new Set()))
+      : provider.load(path),
+  );
+
 // Varlock keeps resolved environment state globally inside its runtime module.
 // Resolve in an isolated process so one Alchemy stage cannot poison another.
 // This calls the public programmatic API; it does not use auto-load, the CLI,
@@ -216,7 +230,7 @@ const resolve = Effect.fn("Varlock.secrets.resolve")(function* ({
     Effect.gen(function* () {
       const entry = yield* resolveVarlockEntry();
       const resolved = yield* loadVarlockEnvironment(entry, stack, stage);
-      return ConfigProvider.fromUnknown(resolved);
+      return withoutPrivateRuntimeBinding(ConfigProvider.fromUnknown(resolved));
     }),
   );
 });

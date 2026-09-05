@@ -9,6 +9,7 @@ import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import { externalSecrets } from "./fixtures/external-secret-manager.ts";
 
 const read = (provider: ConfigProvider.ConfigProvider, name: string) =>
   Config.string(name).pipe(
@@ -67,7 +68,7 @@ it.effect("passes stack and stage and centrally composes the fallback", () =>
   }),
 );
 
-it.effect("does not expose Varlock's private runtime binding", () =>
+it.effect("does not apply provider-specific filtering", () =>
   Effect.gen(function* () {
     const secrets = Layer.succeed(SecretManager, {
       name: "Test",
@@ -77,14 +78,28 @@ it.effect("does not expose Varlock's private runtime binding", () =>
       secrets,
       stack: "test-stack",
       fallback: ConfigProvider.fromUnknown({
-        __VARLOCK_ENV: "must-not-be-forwarded",
+        __PROVIDER_PRIVATE_STATE: "preserved-by-core",
       }),
     });
 
-    const privateBinding = yield* Config.option(
-      Config.string("__VARLOCK_ENV"),
-    ).pipe(Effect.provideService(ConfigProvider.ConfigProvider, resolved));
-    expect(privateBinding._tag).toBe("None");
+    expect(yield* read(resolved, "__PROVIDER_PRIVATE_STATE")).toBe(
+      "preserved-by-core",
+    );
+  }),
+);
+
+it.effect("supports integrations built only from the public contract", () =>
+  Effect.gen(function* () {
+    const resolved = yield* resolveSecretManagerConfig({
+      secrets: externalSecrets(),
+      stack: "external-stack",
+      stage: "preview",
+      fallback: ConfigProvider.fromUnknown({}),
+    });
+
+    expect(yield* read(resolved, "EXTERNAL_SECRET_SET")).toBe(
+      "external-stack/preview",
+    );
   }),
 );
 
