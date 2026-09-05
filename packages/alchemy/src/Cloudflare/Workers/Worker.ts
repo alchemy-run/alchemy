@@ -1029,6 +1029,13 @@ export interface WorkerProps<
            */
           identity?: WorkerAccessIdentity;
         };
+        /**
+         * Subdomain this Worker is served on under `alchemy dev`'s shared
+         * ingress (`<subdomain>.<domain>`, e.g. `api.localhost`). Defaults
+         * to the Worker's logical id in kebab-case, namespaced innermost
+         * first (`Site/Api` → `api.site`).
+         */
+        subdomain?: string;
       }
     | {
         /**
@@ -1040,6 +1047,11 @@ export interface WorkerProps<
          * This will be returned as the `url` attribute of the Worker resource.
          */
         url?: string;
+        /**
+         * Subdomain the external dev server is exposed on under `alchemy
+         * dev`'s shared ingress. Only used when {@link url} is set.
+         */
+        subdomain?: string;
       };
 }
 

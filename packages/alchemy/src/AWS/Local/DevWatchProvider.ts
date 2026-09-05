@@ -41,6 +41,10 @@ import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
 import { havePropsChanged, isResolved, stripEffects } from "../../Diff.ts";
 import { canonicalHash } from "../../Local/LocalProvider.ts";
+import {
+  withDevIngress,
+  type IngressExposure,
+} from "../../Local/DevIngressClient.ts";
 import * as RpcProvider from "../../Local/RpcProvider.ts";
 import type { Platform } from "../../Platform.ts";
 import type { ProviderService } from "../../Provider.ts";
@@ -105,6 +109,13 @@ export interface DevWatchSpec<Props, Attrs> {
    * the live arm's instance).
    */
   readonly services?: Layer.Layer<any, any, any>;
+  /**
+   * Expose the emulated resource's HTTP surface through the `alchemy dev`
+   * ingress (`<name>.<domain>`) after every
+   * successful reconcile — see {@link withDevIngress}. Attributes are left
+   * untouched.
+   */
+  readonly ingress?: IngressExposure<Attrs>;
   /**
    * The restart surface of the watch loop: everything that changes WHAT the
    * watcher builds or WHERE it publishes. Plain, canonically-hashable data
@@ -239,7 +250,12 @@ export const makeDevWatchProvider = <
         scope,
       ).pipe(Effect.orDie);
       const live = liveCtx.mapUnsafe.get(cls.Type) as ProviderService<R>;
-      const wrapped = withProviderContext(live, services);
+      const wrapped = withProviderContext(
+        spec.ingress
+          ? withDevIngress(live, spec.ingress as IngressExposure<any>)
+          : live,
+        services,
+      );
 
       // Sidecar-process watch registry, keyed by logical id. `instanceId`
       // guards a create-first replacement's old-generation delete against

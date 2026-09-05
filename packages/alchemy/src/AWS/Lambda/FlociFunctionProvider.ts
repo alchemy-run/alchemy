@@ -67,6 +67,12 @@ export const FlociFunctionProvider = () =>
       // against the emulator (auto-bootstrapped there) and can never share a
       // cache with the live arm's instance.
       services: AssetsLive,
+      // A Function URL is served by the emulator on a floci hostname; put it
+      // on `<name>.<domain>` like a Worker.
+      ingress: {
+        type: "AWS.Lambda.Function",
+        upstream: (attrs) => attrs.functionUrl,
+      },
       // The restart surface of the watch loop: everything that changes WHAT
       // the watcher builds or WHERE it uploads. `build` may carry plugin
       // closures, which degrade to stable placeholders under canonical

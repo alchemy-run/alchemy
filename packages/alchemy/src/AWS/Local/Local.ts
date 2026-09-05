@@ -8,6 +8,7 @@
  */
 import * as Layer from "effect/Layer";
 import { DockerLive } from "../../Docker/Docker.ts";
+import * as DevIngressClient from "../../Local/DevIngressClient.ts";
 import * as RpcServer from "../../Local/RpcServer.ts";
 import { FlociServiceProvider } from "../ECS/FlociServiceProvider.ts";
 import { FlociTaskProvider } from "../ECS/FlociTaskProvider.ts";
@@ -23,5 +24,8 @@ Layer.mergeAll(
   // The ECS image pipelines (docker build / mirror / push) run in the
   // sidecar and need the Docker CLI service.
   Layer.provide(DockerLive),
+  // Emulated HTTP surfaces (Function URLs) register with the `alchemy dev`
+  // ingress hosted by the Cloudflare sidecar, reached over RPC.
+  Layer.provide(DevIngressClient.layer),
   RpcServer.launch,
 );

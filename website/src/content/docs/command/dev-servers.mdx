@@ -44,6 +44,10 @@ ANSI escape sequences first so Vite- and Next-style colored output
 still matches. If nothing matches within the window, `url` is
 `undefined` and the process keeps running.
 
+## On the dev ingress
+
+Under `alchemy dev` the server is also reachable through the shared ingress as `http://<name>.localhost:1337` (`Dev("Web", …)` → `web.localhost`). `dev.url` stays the server's own address — emulators running in Docker dial it directly — so the ingress URL is printed when the server starts and listed at `http://localhost:1337`. See [dev](/cli/dev#subdomains).
+
 ## Lifecycle
 
 A `Dev` resource restarts its process when props change, keeps the

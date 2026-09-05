@@ -644,6 +644,12 @@
       "worker": "./src/core/proxy/index.ts",
       "import": "./dist/core/node/proxy/index.mjs"
     },
+    "./core/proxy/Ingress": {
+      "types": "./dist/core/node/proxy/Ingress.d.mts",
+      "bun": "./src/core/proxy/Ingress.ts",
+      "worker": "./src/core/proxy/Ingress.ts",
+      "import": "./dist/core/node/proxy/Ingress.mjs"
+    },
     "./core/proxy/WorkerProxy": {
       "types": "./dist/core/node/proxy/WorkerProxy.d.mts",
       "bun": "./src/core/proxy/WorkerProxy.ts",
