@@ -44,6 +44,7 @@
     "test:sveltekit": "vitest run src/sveltekit/test",
     "test:tanstack-start": "vitest run src/tanstack-start/test",
     "test:vite": "vitest run src/vite/test",
+    "test:vinext": "vitest run src/vinext/test",
     "test:waku": "vitest run src/waku/test",
     "test:vocs": "vitest run src/vocs/test",
     "typecheck": "tsc -b tsconfig.json && tsc --noEmit -p tsconfig.test.json"
@@ -384,6 +385,24 @@
       "bun": "./dist/tanstack-start/node.js",
       "worker": "./dist/tanstack-start/node.js",
       "import": "./dist/tanstack-start/node.js"
+    },
+    "./vinext": {
+      "types": "./dist/vinext/index.d.ts",
+      "bun": "./dist/vinext/index.js",
+      "worker": "./dist/vinext/index.js",
+      "import": "./dist/vinext/index.js"
+    },
+    "./vinext/cloudflare": {
+      "types": "./dist/vinext/cloudflare.d.ts",
+      "bun": "./dist/vinext/cloudflare.js",
+      "worker": "./dist/vinext/cloudflare.js",
+      "import": "./dist/vinext/cloudflare.js"
+    },
+    "./vinext/source": {
+      "types": "./dist/vinext/source.d.ts",
+      "bun": "./dist/vinext/source.js",
+      "worker": "./dist/vinext/source.js",
+      "import": "./dist/vinext/source.js"
     },
     "./vite": {
       "types": "./dist/vite/index.d.ts",

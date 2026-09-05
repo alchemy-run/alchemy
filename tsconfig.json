@@ -152,6 +152,9 @@
       "path": "./examples/cloudflare-website-nextjs/tsconfig.json"
     },
     {
+      "path": "./examples/cloudflare-website-vinext/tsconfig.json"
+    },
+    {
       "path": "./examples/cloudflare-website-nuxt/tsconfig.json"
     },
     {

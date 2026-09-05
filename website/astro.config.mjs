@@ -767,6 +767,7 @@ export default defineConfig({
                   link: "/cloudflare/frontend/tanstack-start",
                 },
                 { label: "Vite", link: "/cloudflare/frontend/vite" },
+                { label: "vinext", link: "/cloudflare/frontend/vinext" },
                 { label: "Vue", link: "/cloudflare/frontend/vue" },
                 { label: "Waku", link: "/cloudflare/frontend/waku" },
               ],
