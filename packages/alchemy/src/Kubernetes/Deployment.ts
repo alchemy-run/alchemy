@@ -33,7 +33,7 @@ import {
   deleteObjects,
   readObject,
   reconcileObjects,
-  KubernetesApiError,
+  isNotFound,
 } from "./internal/client.ts";
 import {
   toKubernetesObjectRef,
@@ -433,9 +433,6 @@ const retryUntilServiceReady = <A, E, R>(
     while: (error) => error instanceof ServiceNotReady,
     schedule: loadBalancerRetrySchedule,
   });
-
-const isNotFound = (error: unknown): error is KubernetesApiError =>
-  error instanceof KubernetesApiError && error.statusCode === 404;
 
 export const DeploymentProvider = () =>
   Provider.effect(

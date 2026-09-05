@@ -219,8 +219,9 @@ const nightly = yield* Kubernetes.Job("NightlyBackfill", {
 
 [`Kubernetes.Manifest`](/providers/kubernetes/manifest) applies any
 raw Kubernetes object — StatefulSets, Namespaces, CRDs — via server-side apply.
-The manifest is a literal object, exactly as you would write it in
-YAML:
+For Secrets, prefer [`Kubernetes.Secret`](/providers/kubernetes/secret), which
+keeps values `Redacted` in plans and state. The manifest is a literal object,
+exactly as you would write it in YAML:
 
 ```typescript
 const namespace = yield* Kubernetes.Manifest("DemoNamespace", {

@@ -2,8 +2,8 @@
  * Internal Kubernetes API client: transport-agnostic server-side apply and
  * kind discovery for arbitrary (CRD) manifests. Powers
  * `Kubernetes.Manifest`, `Kubernetes.Deployment`, `Kubernetes.Job`,
- * `Kubernetes.HelmChart`, and the `AWS.EKS.Cluster` kubernetes-object
- * binding channel. Not exported from the Kubernetes index.
+ * `Kubernetes.HelmChart`, `Kubernetes.Secret`, and the `AWS.EKS.Cluster`
+ * kubernetes-object binding channel. Not exported from the Kubernetes index.
  *
  * Authentication is delegated to the connection's {@link ClusterAdapter}:
  * every request mints headers through the resolved
@@ -44,6 +44,13 @@ export class KubernetesApiError extends Data.TaggedError("KubernetesApiError")<{
     }`;
   }
 }
+
+/**
+ * True when the API server answered 404: the object, or its whole kind, does
+ * not exist.
+ */
+export const isNotFound = (error: unknown): error is KubernetesApiError =>
+  error instanceof KubernetesApiError && error.statusCode === 404;
 
 const fieldManager = "alchemy";
 
