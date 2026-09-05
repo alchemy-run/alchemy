@@ -362,6 +362,7 @@ export class ClustersNodePoolOperationPending extends Data.TaggedError(
   "GCP.Container.ClustersNodePoolOperationPending",
 )<{
   operation: string;
+  message: string;
 }> {}
 
 export class ClustersNodePoolStillExists extends Data.TaggedError(
@@ -369,6 +370,16 @@ export class ClustersNodePoolStillExists extends Data.TaggedError(
 )<{
   name: string;
 }> {}
+
+// Wait budget: ~2 h at 10s spacing, matching Terraform's GKE node-pool
+// default. Pool operations can remain RUNNING for a long time during
+// provisioning and scale-down, so a short budget creates false terminal
+// failures. The interval MUST be flat, not exponential (see AWS EKS):
+// uncapped `Schedule.exponential` parks for 8.5/17/34 min between late attempts.
+const waitSchedule = Schedule.max([
+  Schedule.spaced("10 seconds"),
+  Schedule.recurs(720),
+]);
 
 const lastSegment = (value: string) => {
   const trimmed = value.replace(/\/+$/, "");
@@ -699,16 +710,17 @@ const waitForOperation = (
     return yield* resolved.pipe(
       Effect.filterOrFail(
         (current) => current.status === "DONE",
-        () => new ClustersNodePoolOperationPending({ operation: operationId }),
+        () =>
+          new ClustersNodePoolOperationPending({
+            operation: operationId,
+            message: `GKE node-pool operation ${operationId} is still running (wait budget: approximately 2 hours)`,
+          }),
       ),
       Effect.flatMap(failIfErrored),
       Effect.retry({
         while: (error) =>
           error._tag === "GCP.Container.ClustersNodePoolOperationPending",
-        // GKE control-plane and node-pool operations take several minutes;
-        // keep the interval flat (see AWS EKS) and budget ~15 min.
-        times: 90,
-        schedule: Schedule.spaced("10 seconds"),
+        schedule: waitSchedule,
       }),
     );
   });
@@ -774,10 +786,7 @@ const waitUntilReady = (
       while: (error) =>
         error._tag === "GCP.Container.ClustersNodePoolNotReady" ||
         error._tag === "GCP.Container.ClustersNodePoolNotResolved",
-      // GKE control-plane and node-pool operations take several minutes;
-      // keep the interval flat (see AWS EKS) and budget ~15 min.
-      times: 90,
-      schedule: Schedule.spaced("10 seconds"),
+      schedule: waitSchedule,
     }),
   );
 };
@@ -798,10 +807,7 @@ const waitUntilGone = (
     Effect.retry({
       while: (error) =>
         error._tag === "GCP.Container.ClustersNodePoolStillExists",
-      // GKE control-plane and node-pool operations take several minutes;
-      // keep the interval flat (see AWS EKS) and budget ~15 min.
-      times: 90,
-      schedule: Schedule.spaced("10 seconds"),
+      schedule: waitSchedule,
     }),
   );
 };
