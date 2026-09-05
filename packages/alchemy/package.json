@@ -138,6 +138,12 @@
       "worker": "./src/Doppler/index.ts",
       "import": "./lib/Doppler/index.js"
     },
+    "./Infisical": {
+      "types": "./lib/Infisical/index.d.ts",
+      "bun": "./src/Infisical/index.ts",
+      "worker": "./src/Infisical/index.ts",
+      "import": "./lib/Infisical/index.js"
+    },
     "./Varlock": {
       "types": "./lib/Varlock/index.d.ts",
       "bun": "./src/Varlock/index.ts",
