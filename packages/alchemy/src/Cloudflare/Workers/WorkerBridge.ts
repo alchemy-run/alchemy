@@ -1,5 +1,9 @@
 import type * as cf from "@cloudflare/workers-types";
-import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as NodeChildProcessSpawner from "@effect/platform-node/NodeChildProcessSpawner";
+import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
+import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
+import * as NodePath from "@effect/platform-node/NodePath";
+import * as NodeStdio from "@effect/platform-node/NodeStdio";
 import type { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
 import * as Cause from "effect/Cause";
 import * as ConfigProvider from "effect/ConfigProvider";
@@ -18,6 +22,7 @@ import {
   reifyBoundConfigProvider,
 } from "../../Runtime.ts";
 import { Self } from "../../Self.ts";
+import { Stage } from "../../Stage.ts";
 import { Stack } from "../../Stack.ts";
 import { buildEventTelemetry } from "../../Telemetry.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -261,8 +266,18 @@ const getSharedBuild = (
 
   const layer = makeEntrypointLayer(tag, entrypoint);
 
+  const platformServices = Layer.provideMerge(
+    NodeChildProcessSpawner.layer,
+    Layer.mergeAll(
+      NodeFileSystem.layer,
+      NodeCrypto.layer,
+      NodePath.layer,
+      NodeStdio.layer,
+    ),
+  );
+
   const platform = Layer.mergeAll(
-    NodeServices.layer,
+    platformServices,
     FetchHttpClient.layer,
     // TODO(sam): wire this up to telemetry more directly
     Logger.layer([Logger.consolePretty()]),
@@ -282,6 +297,7 @@ const getSharedBuild = (
     cloudflare_workers.pipe(
       Effect.map(({ env }) =>
         layer.pipe(
+          Layer.provideMerge(Layer.succeed(Stage, stack.stage)),
           Layer.provideMerge(
             Layer.succeed(Stack, {
               name: stack.name,
