@@ -1,5 +1,6 @@
 import { Action } from "@/Action";
 import * as GCP from "@/GCP";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
 import * as container from "@distilled.cloud/gcp/container_v1";
 import { expect } from "alchemy-test";
@@ -93,6 +94,93 @@ const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
+test.provider("replaces a zonal node pool for create-only VM settings", () =>
+  Effect.gen(function* () {
+    const provider = yield* Provider.findProvider(
+      GCP.Container.ClustersNodePool,
+    );
+    const olds: GCP.Container.ClustersNodePoolProps = {
+      cluster: "app",
+      zone: HOST_ZONE,
+      nodePoolId: "workers",
+      shieldedInstanceConfig: { enableSecureBoot: false },
+      advancedMachineFeatures: { enableNestedVirtualization: false },
+    };
+    const input = {
+      id: "Workers",
+      fqn: "Workers",
+      instanceId: "instance",
+      olds,
+      oldBindings: [],
+      newBindings: [],
+      output: {
+        nodePoolId: "workers",
+        clusterId: "app",
+        zone: HOST_ZONE,
+        shieldedInstanceConfig: olds.shieldedInstanceConfig,
+        advancedMachineFeatures: olds.advancedMachineFeatures,
+      },
+    } as const;
+
+    const changed = yield* provider.diff!({
+      ...input,
+      news: {
+        ...olds,
+        advancedMachineFeatures: { enableNestedVirtualization: true },
+      },
+    } as never);
+    expect(changed).toEqual({ action: "replace", deleteFirst: true });
+
+    // Adoption: olds is absent, and observed GKE-injected metadata /
+    // false-valued booleans must not be compared against user input that
+    // never mentioned those keys.
+    const adoptionInput = {
+      ...input,
+      olds: undefined,
+      output: {
+        ...input.output,
+        metadata: { "disable-legacy-endpoints": "true" },
+      },
+    } as const;
+
+    const adoptedNoMetadata = yield* provider.diff!({
+      ...adoptionInput,
+      news: { ...olds, metadata: {} },
+    } as never);
+    expect(adoptedNoMetadata).toBeUndefined();
+
+    const adoptedShielded = yield* provider.diff!({
+      ...adoptionInput,
+      output: { ...adoptionInput.output, shieldedInstanceConfig: undefined },
+      news: {
+        ...olds,
+        metadata: {},
+        shieldedInstanceConfig: { enableSecureBoot: false },
+      },
+    } as never);
+    expect(adoptedShielded).toBeUndefined();
+
+    // A row deployed before these props existed: olds never declared
+    // metadata, but the observed pool carries GKE's injected key. Spelling
+    // it out must not replace the pool.
+    const declaredObserved = yield* provider.diff!({
+      ...input,
+      output: {
+        ...input.output,
+        metadata: { "disable-legacy-endpoints": "true" },
+      },
+      olds: { cluster: "app", zone: HOST_ZONE, nodePoolId: "workers" },
+      news: {
+        cluster: "app",
+        zone: HOST_ZONE,
+        nodePoolId: "workers",
+        metadata: { "disable-legacy-endpoints": "true" },
+      },
+    } as never);
+    expect(declaredObserved).toBeUndefined();
+  }),
+);
+
 test.provider.skipIf(!hasGcpCreds)(
   "lists zonal clusters and treats a missing node pool as NotFound",
   (stack) =>
@@ -164,6 +252,9 @@ test.provider.skipIf(!runLifecycle)(
               cluster: {
                 name: HOST_CLUSTER_ID,
                 ipAllocationPolicy: { useIpAliases: true },
+                workloadIdentityConfig: {
+                  workloadPool: `${project}.svc.id.goog`,
+                },
                 nodePools: [
                   {
                     name: "default-pool",
@@ -195,6 +286,13 @@ test.provider.skipIf(!runLifecycle)(
             spot: true,
             management: { autoRepair: false, autoUpgrade: true },
             labels: { env: "test" },
+            metadata: { "disable-legacy-endpoints": "true" },
+            workloadMetadataConfig: { mode: "GKE_METADATA" },
+            shieldedInstanceConfig: {
+              enableIntegrityMonitoring: true,
+              enableSecureBoot: true,
+            },
+            advancedMachineFeatures: { enableNestedVirtualization: false },
           });
           const Probe = Action(
             "Probe",
@@ -217,6 +315,11 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.pool.labels).toMatchObject({ env: "test" });
       expect(created.pool.spot).toEqual(true);
       expect(created.pool.nodeCount).toEqual(1);
+      expect(created.pool.metadata["disable-legacy-endpoints"]).toEqual("true");
+      expect(created.pool.workloadMetadataConfig?.mode).toEqual("GKE_METADATA");
+      expect(created.pool.shieldedInstanceConfig?.enableSecureBoot).toEqual(
+        true,
+      );
       expect(["RUNNING", "RUNNING_WITH_ERROR"]).toContain(created.pool.status);
       expect(created.probe.name).toEqual(created.pool.nodePoolId);
 
@@ -229,6 +332,15 @@ test.provider.skipIf(!runLifecycle)(
       expect(fetched.name).toEqual(created.pool.nodePoolId);
       expect(fetched.config?.resourceLabels?.env).toEqual("test");
       expect(fetched.config?.spot).toEqual(true);
+      expect(fetched.config?.metadata?.["disable-legacy-endpoints"]).toEqual(
+        "true",
+      );
+      expect(fetched.config?.workloadMetadataConfig?.mode).toEqual(
+        "GKE_METADATA",
+      );
+      expect(fetched.config?.shieldedInstanceConfig?.enableSecureBoot).toEqual(
+        true,
+      );
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
@@ -242,6 +354,13 @@ test.provider.skipIf(!runLifecycle)(
             spot: true,
             management: { autoRepair: true, autoUpgrade: true },
             labels: { env: "prod", role: "workers" },
+            metadata: { "disable-legacy-endpoints": "true" },
+            workloadMetadataConfig: { mode: "GKE_METADATA" },
+            shieldedInstanceConfig: {
+              enableIntegrityMonitoring: true,
+              enableSecureBoot: true,
+            },
+            advancedMachineFeatures: { enableNestedVirtualization: false },
           });
         }),
       );
@@ -283,5 +402,7 @@ test.provider.skipIf(!runLifecycle)(
         }
       }
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  // Gated behind GCP_TEST_GKE: a cluster takes several minutes to provision
+  // and each control-plane update is its own multi-minute operation.
+  { timeout: 1_500_000 },
 );

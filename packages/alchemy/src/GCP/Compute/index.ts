@@ -75,6 +75,7 @@ export * from "./NetworkFirewallPolicy.ts";
 export * from "./NodeGroup.ts";
 export * from "./NodeTemplate.ts";
 export * from "./Router.ts";
+export * from "./RouterNat.ts";
 export * from "./Snapshot.ts";
 export * from "./RegionSnapshot.ts";
 export * from "./RegionInstantSnapshot.ts";

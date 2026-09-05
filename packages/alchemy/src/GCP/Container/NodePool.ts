@@ -17,6 +17,7 @@ import {
   toLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { matchesDesired } from "../Proto.ts";
 
 const DEFAULT_LOCATION = "us-central1-a";
 const DEFAULT_MACHINE_TYPE = "e2-medium";
@@ -145,6 +146,18 @@ export type NodePoolProps = {
    * Kubernetes labels applied to each node.
    */
   nodeLabels?: Record<string, string>;
+  /** Compute Engine instance metadata applied to every node. */
+  metadata?: Record<string, string>;
+  /** Workload Identity metadata exposure mode for every node. */
+  workloadMetadataConfig?: container.WorkloadMetadataConfig;
+  /** Shielded VM settings applied to every node. */
+  shieldedInstanceConfig?: container.ShieldedInstanceConfig;
+  /**
+   * Advanced Compute Engine VM features, including nested virtualization.
+   * Changing this configuration replaces the pool because GKE does not expose
+   * it through UpdateNodePoolRequest.
+   */
+  advancedMachineFeatures?: container.AdvancedMachineFeatures;
   /**
    * Network tags applied to each node.
    */
@@ -228,6 +241,14 @@ export type NodePool = Resource<
     labels: Record<string, string>;
     /** Kubernetes node labels. */
     nodeLabels: Record<string, string>;
+    /** Compute Engine instance metadata. */
+    metadata: Record<string, string>;
+    /** Workload Identity metadata exposure mode. */
+    workloadMetadataConfig: container.WorkloadMetadataConfig | undefined;
+    /** Shielded VM settings. */
+    shieldedInstanceConfig: container.ShieldedInstanceConfig | undefined;
+    /** Advanced Compute Engine VM features. */
+    advancedMachineFeatures: container.AdvancedMachineFeatures | undefined;
     /** Network tags. */
     tags: string[];
     /** Node locations. */
@@ -250,8 +271,9 @@ export type NodePool = Resource<
  *
  * Node pools belong to a {@link Cluster}. Changing `cluster`, `location`,
  * `nodePoolId`, `spot`, `preemptible`, `serviceAccount`, `oauthScopes`,
- * `localSsdCount`, `bootDiskKmsKey`, or `maxPodsPerNode` replaces the
- * pool. Size, labels, machine type, disk, image, version, management,
+ * `localSsdCount`, `bootDiskKmsKey`, `maxPodsPerNode`, metadata, Shielded VM
+ * settings, or advanced machine features replaces the pool. Size, labels,
+ * machine type, disk, image, version, workload metadata, management,
  * autoscaling, and upgrade settings update in place.
  *
  * Provisioning typically takes several minutes.
@@ -332,6 +354,7 @@ export class NodePoolOperationPending extends Data.TaggedError(
   "GCP.Container.NodePoolOperationPending",
 )<{
   operation: string;
+  message: string;
 }> {}
 
 export class NodePoolStillExists extends Data.TaggedError(
@@ -339,6 +362,16 @@ export class NodePoolStillExists extends Data.TaggedError(
 )<{
   name: string;
 }> {}
+
+// Wait budget: ~2 h at 10s spacing, matching Terraform's GKE node-pool
+// default. Pool operations can remain RUNNING for a long time during
+// provisioning and scale-down, so a short budget creates false terminal
+// failures. The interval MUST be flat, not exponential (see AWS EKS):
+// uncapped `Schedule.exponential` parks for 8.5/17/34 min between late attempts.
+const waitSchedule = Schedule.max([
+  Schedule.spaced("10 seconds"),
+  Schedule.recurs(720),
+]);
 
 const lastSegment = (value: string) => {
   const trimmed = value.replace(/\/+$/, "");
@@ -542,6 +575,10 @@ const toAttrs = (
     preemptible: config?.preemptible === true,
     labels: userLabels(config?.resourceLabels),
     nodeLabels: stringMap(config?.labels),
+    metadata: stringMap(config?.metadata),
+    workloadMetadataConfig: config?.workloadMetadataConfig,
+    shieldedInstanceConfig: config?.shieldedInstanceConfig,
+    advancedMachineFeatures: config?.advancedMachineFeatures,
     tags: [...(config?.tags ?? [])],
     nodeLocations: [...(pool.locations ?? [])],
     autoscaling: pool.autoscaling,
@@ -653,14 +690,17 @@ const waitForOperation = (
     return yield* resolved.pipe(
       Effect.filterOrFail(
         (current) => current.status === "DONE",
-        () => new NodePoolOperationPending({ operation: name }),
+        () =>
+          new NodePoolOperationPending({
+            operation: name,
+            message: `GKE node-pool operation ${name} is still running (wait budget: approximately 2 hours)`,
+          }),
       ),
       Effect.flatMap(failIfErrored),
       Effect.retry({
         while: (error) =>
           error._tag === "GCP.Container.NodePoolOperationPending",
-        times: 10,
-        schedule: Schedule.spaced("8 seconds"),
+        schedule: waitSchedule,
       }),
     );
   });
@@ -712,8 +752,7 @@ const waitUntilReady = (name: string) =>
       while: (error) =>
         error._tag === "GCP.Container.NodePoolNotReady" ||
         error._tag === "GCP.Container.NodePoolNotResolved",
-      times: 10,
-      schedule: Schedule.spaced("8 seconds"),
+      schedule: waitSchedule,
     }),
   );
 
@@ -726,8 +765,7 @@ const waitUntilGone = (name: string) =>
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Container.NodePoolStillExists",
-      times: 10,
-      schedule: Schedule.spaced("8 seconds"),
+      schedule: waitSchedule,
     }),
   );
 
@@ -746,6 +784,9 @@ const toCreatePool = (
   news: NodePoolProps,
   nodePoolId: string,
   desiredLabels: Record<string, string>,
+  // GKE rejects GKE_METADATA on clusters without Workload Identity, so the
+  // default follows the observed host cluster.
+  workloadIdentity: boolean,
 ): container.NodePool => ({
   name: nodePoolId,
   initialNodeCount: news.nodeCount ?? DEFAULT_NODE_COUNT,
@@ -758,13 +799,18 @@ const toCreatePool = (
     preemptible: news.preemptible === true,
     resourceLabels: desiredLabels,
     labels: news.nodeLabels,
+    metadata: news.metadata,
     tags: news.tags,
     taints: news.taints,
     oauthScopes: news.oauthScopes,
     serviceAccount: news.serviceAccount,
     localSsdCount: news.localSsdCount,
     bootDiskKmsKey: news.bootDiskKmsKey,
-    workloadMetadataConfig: { mode: "GKE_METADATA" },
+    workloadMetadataConfig:
+      news.workloadMetadataConfig ??
+      (workloadIdentity ? { mode: "GKE_METADATA" } : undefined),
+    shieldedInstanceConfig: news.shieldedInstanceConfig,
+    advancedMachineFeatures: news.advancedMachineFeatures,
   },
   autoscaling: news.autoscaling,
   management: news.management,
@@ -845,6 +891,14 @@ export const NodePoolProvider = () =>
       const nextPods = news.maxPodsPerNode ?? previousPods;
       const previousScopes = olds?.oauthScopes ?? [];
       const nextScopes = news.oauthScopes ?? previousScopes;
+      // Observed node config is the baseline: GKE injects metadata keys and
+      // Shielded VM defaults the user never declared, so a redeploy that
+      // spells them out must not replace the pool.
+      const previousMetadata = output?.metadata ?? olds?.metadata ?? {};
+      const previousShielded =
+        output?.shieldedInstanceConfig ?? olds?.shieldedInstanceConfig;
+      const previousAdvanced =
+        output?.advancedMachineFeatures ?? olds?.advancedMachineFeatures;
 
       const replace =
         (previousId !== undefined &&
@@ -863,7 +917,13 @@ export const NodePoolProvider = () =>
           nextPods !== undefined &&
           previousPods !== nextPods) ||
         (news.oauthScopes !== undefined &&
-          !sameStrings(previousScopes, nextScopes));
+          !sameStrings(previousScopes, nextScopes)) ||
+        (news.metadata !== undefined &&
+          !matchesDesired(previousMetadata, news.metadata)) ||
+        (news.shieldedInstanceConfig !== undefined &&
+          !matchesDesired(previousShielded, news.shieldedInstanceConfig)) ||
+        (news.advancedMachineFeatures !== undefined &&
+          !matchesDesired(previousAdvanced, news.advancedMachineFeatures));
 
       if (!replace) return undefined;
       return {
@@ -994,12 +1054,22 @@ export const NodePoolProvider = () =>
       let current = yield* getByName(output?.name ?? name);
 
       if (current === undefined) {
+        const host = yield* container
+          .getProjectsLocationsClusters({ name: parent })
+          .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        const workloadIdentity =
+          (host?.workloadIdentityConfig?.workloadPool ?? "").length > 0;
         const created = yield* retryConflict(
           container
             .createProjectsLocationsClustersNodePools({
               parent,
               body: {
-                nodePool: toCreatePool(news, nodePoolId, desiredLabels),
+                nodePool: toCreatePool(
+                  news,
+                  nodePoolId,
+                  desiredLabels,
+                  workloadIdentity,
+                ),
               },
             })
             .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined))),
@@ -1057,6 +1127,12 @@ export const NodePoolProvider = () =>
       const taintsChanged =
         news.taints !== undefined &&
         !sameTaints(live.config?.taints, news.taints);
+      const workloadMetadataChanged =
+        news.workloadMetadataConfig !== undefined &&
+        !matchesDesired(
+          live.config?.workloadMetadataConfig,
+          news.workloadMetadataConfig,
+        );
       const upgradeChanged =
         news.upgradeSettings !== undefined &&
         upgradeKey(live.upgradeSettings) !== upgradeKey(news.upgradeSettings);
@@ -1074,6 +1150,7 @@ export const NodePoolProvider = () =>
         nodeLabelsChanged ||
         tagsChanged ||
         taintsChanged ||
+        workloadMetadataChanged ||
         upgradeChanged;
 
       if (configChanged) {
@@ -1093,6 +1170,9 @@ export const NodePoolProvider = () =>
         }
         if (tagsChanged) body.tags = { tags: news.tags };
         if (taintsChanged) body.taints = { taints: news.taints };
+        if (workloadMetadataChanged) {
+          body.workloadMetadataConfig = news.workloadMetadataConfig;
+        }
         if (upgradeChanged) body.upgradeSettings = news.upgradeSettings;
         const updated = yield* retryConflict(
           container.updateProjectsLocationsClustersNodePools({

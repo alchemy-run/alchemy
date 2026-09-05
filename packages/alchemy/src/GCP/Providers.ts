@@ -199,6 +199,10 @@ import { GkeKubernetesAdapter } from "./Container/KubernetesAdapter.ts";
 import { GetNodePoolHttp } from "./Container/GetNodePoolHttp.ts";
 import { NodePool, NodePoolProvider } from "./Container/NodePool.ts";
 import {
+  ProjectService,
+  ProjectServiceProvider,
+} from "./ServiceUsage/ProjectService.ts";
+import {
   Note as ContaineranalysisNote,
   NoteProvider as ContaineranalysisNoteProvider,
 } from "./Containeranalysis/Note.ts";
@@ -429,6 +433,7 @@ import {
 import { NodeGroup, NodeGroupProvider } from "./Compute/NodeGroup.ts";
 import { NodeTemplate, NodeTemplateProvider } from "./Compute/NodeTemplate.ts";
 import { Router, RouterProvider } from "./Compute/Router.ts";
+import { RouterNat, RouterNatProvider } from "./Compute/RouterNat.ts";
 import { UrlMap, UrlMapProvider } from "./Compute/UrlMap.ts";
 import { RegionUrlMap, RegionUrlMapProvider } from "./Compute/RegionUrlMap.ts";
 import {
@@ -3786,6 +3791,26 @@ import {
   PolicyProvider as IamPolicyProvider,
 } from "./IAM/Policy.ts";
 import {
+  CryptoKeyIamMember,
+  CryptoKeyIamMemberProvider,
+} from "./IAM/CryptoKeyIamMember.ts";
+import {
+  ProjectIamMember,
+  ProjectIamMemberProvider,
+} from "./IAM/ProjectIamMember.ts";
+import {
+  SecretIamMember,
+  SecretIamMemberProvider,
+} from "./IAM/SecretIamMember.ts";
+import {
+  ServiceAccountIamMember,
+  ServiceAccountIamMemberProvider,
+} from "./IAM/ServiceAccountIamMember.ts";
+import {
+  ServiceAccount as IamServiceAccount,
+  ServiceAccountProvider as IamServiceAccountProvider,
+} from "./IAM/ServiceAccount.ts";
+import {
   SignedCustomersDeploymentsDevice as SasportalSignedCustomersDeploymentsDevice,
   SignedCustomersDeploymentsDeviceProvider as SasportalSignedCustomersDeploymentsDeviceProvider,
 } from "./Sasportal/SignedCustomersDeploymentsDevice.ts";
@@ -4109,6 +4134,7 @@ export const providers = () =>
           NodeGroup,
           NodeTemplate,
           Router,
+          RouterNat,
           Firewall,
         ]) as unknown as Effect.Effect<
           { providers: Record<string, any> },
@@ -4173,6 +4199,7 @@ export const providers = () =>
           ServiceDirectoryService,
           ServiceDirectoryEndpoint,
           ServicemanagementService,
+          ProjectService,
           TagKey,
           TagBinding,
           ResourceManagerFolder,
@@ -5000,6 +5027,11 @@ export const providers = () =>
           EnvironmentsApisRevisionsDebugsession,
           UserProfilesGuardianInvitation,
           IamPolicy,
+          IamServiceAccount,
+          ProjectIamMember,
+          ServiceAccountIamMember,
+          CryptoKeyIamMember,
+          SecretIamMember,
         ]) as unknown as Effect.Effect<
           { providers: Record<string, any> },
           never,
@@ -5152,6 +5184,7 @@ export const providers = () =>
           SecurityPolicyProvider(),
           ServiceAttachmentProvider(),
           RouterProvider(),
+          RouterNatProvider(),
           FirewallProvider(),
           FirewallPolicyProvider(),
           ForwardingRuleProvider(),
@@ -5239,6 +5272,11 @@ export const providers = () =>
           CertificateAuthorityProvider(),
           CertificateTemplateProvider(),
           PolicyProvider(),
+          IamServiceAccountProvider(),
+          ProjectIamMemberProvider(),
+          ServiceAccountIamMemberProvider(),
+          CryptoKeyIamMemberProvider(),
+          SecretIamMemberProvider(),
           HubProvider(),
           SpokeProvider(),
           InternalRangeProvider(),
@@ -5250,7 +5288,10 @@ export const providers = () =>
           BigtableInstanceProvider(),
           BigtableAppProfileProvider(),
         ),
-        Layer.mergeAll(ServicemanagementServiceProvider()),
+        Layer.mergeAll(
+          ServicemanagementServiceProvider(),
+          ProjectServiceProvider(),
+        ),
         Layer.mergeAll(
           EnvironmentsUserWorkloadsConfigMapProvider(),
           EnvironmentsUserWorkloadsSecretProvider(),
