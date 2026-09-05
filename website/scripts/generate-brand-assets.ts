@@ -9,7 +9,6 @@
  * (so they're picked up by the public/ asset pipeline).
  */
 
-import { Resvg } from "@resvg/resvg-js";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -28,14 +27,16 @@ import {
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const publicDir = path.resolve(here, "../public");
-/** Rasterize the geometric icon artwork; text cards use Takumi below. */
-function rasterize(svg: string, size: number): Uint8Array {
-  return new Resvg(svg, {
-    fitTo: { mode: "width", value: size },
-    background: "rgba(0, 0, 0, 0)",
-  })
-    .render()
-    .asPng();
+/** Rasterize the geometric icon artwork with Takumi. */
+function rasterize(svg: string, size: number): Promise<Uint8Array> {
+  return render(
+    {
+      type: "image",
+      src: `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`,
+      style: { width: size, height: size },
+    },
+    { width: size, height: size, format: "png" },
+  );
 }
 
 /** Favicons use exactly the same geometry and margins as the logo SVG. */
@@ -110,18 +111,18 @@ async function main() {
   for (const size of [16, 32] as const) {
     await writeFile(
       path.join(publicDir, `favicon-${size}.png`),
-      rasterize(favLight, size),
+      await rasterize(favLight, size),
     );
     await writeFile(
       path.join(publicDir, `favicon-${size}-dark.png`),
-      rasterize(favDark, size),
+      await rasterize(favDark, size),
     );
   }
 
   // 3. apple-touch-icon (180×180, padded, opaque).
   await writeFile(
     path.join(publicDir, "apple-touch-icon.png"),
-    rasterize(appleTouchSvg(), 180),
+    await rasterize(appleTouchSvg(), 180),
   );
 
   // 4. The brand mark at 512, per theme — emitted as a transparent standalone
@@ -132,11 +133,11 @@ async function main() {
     await writeFile(path.join(publicDir, `alchemy-logo-${theme}.svg`), mark);
     await writeFile(
       path.join(publicDir, `icon-512${theme === "dark" ? "-dark" : ""}.png`),
-      rasterize(mark, 512),
+      await rasterize(mark, 512),
     );
     await writeFile(
       path.join(publicDir, `alchemy-logo-${theme}-bg.png`),
-      rasterize(backgroundLogoSvg(theme, YANTRA_THEMES[theme].bg), 2048),
+      await rasterize(backgroundLogoSvg(theme, YANTRA_THEMES[theme].bg), 2048),
     );
   }
 
@@ -144,12 +145,15 @@ async function main() {
   //    the warmer theme background or composite the transparent asset.
   await writeFile(
     path.join(publicDir, "alchemy-logo-512-white-bg.png"),
-    rasterize(backgroundLogoSvg("light", "#ffffff"), 2048),
+    await rasterize(backgroundLogoSvg("light", "#ffffff"), 2048),
   );
 
   // 6. Backwards-compat: keep the old /favicon.png reference (used by
   //    some cached nav code) pointing to the 32px raster.
-  await writeFile(path.join(publicDir, "favicon.png"), rasterize(favLight, 32));
+  await writeFile(
+    path.join(publicDir, "favicon.png"),
+    await rasterize(favLight, 32),
+  );
 
   // 7. Fallback OG: Takumi emits both PNG and outlined SVG from one layout.
   const card = OgDefault();
