@@ -117,10 +117,10 @@ catalogs:
     "@tanstack/react-router": ^1.167.4
     "@tanstack/react-start": ^1.166.15
     "@types/react": ^19.2.17
-    "@types/react-dom": ^19.2.4
+    "@types/react-dom": ^19.2.7
     "@vitejs/plugin-react": ^6.0.2
     "@vitejs/plugin-rsc": ^0.5.27
-    astro: 7.2.0
+    astro: 7.3.1
     foldkit: ^0.148.2
     hono: ^4.12.14
     isbot: ^5.2.1
@@ -161,7 +161,6 @@ catalogs:
     oxlint: ^1.81.0
     pathe: ^2.0.3
     tsx: ^4.20.6
-    ts-morph: ^27.0.2
     "@effect/language-service": ^0.87.2
   node24:
     # Examples targeting Node 24 retain the matching Node type definitions.
@@ -179,8 +178,8 @@ overrides:
   drizzle-orm: 1.0.0-rc.5-ab785fc
   rolldown: 1.2.5
 patchedDependencies:
-  "@astrojs/starlight@0.41.7": patches/@astrojs%2Fstarlight@0.41.7.patch
-  starlight-blog@0.28.0: patches/starlight-blog@0.28.0.patch
+  "@astrojs/starlight@0.42.0": patches/@astrojs%2Fstarlight@0.42.0.patch
+  starlight-blog@0.29.0: patches/starlight-blog@0.29.0.patch
 minimumReleaseAgeExclude:
   - "@alchemy.run/sigil@0.0.0-alpha.8"
   - "@effect/atom-react@4.0.0-rc.112"
@@ -203,3 +202,11 @@ minimumReleaseAgeExclude:
   - "@cloudflare/workerd-linux-arm64@1.20260901.1"
   - "@cloudflare/workerd-windows-64@1.20260901.1"
   - workerd@1.20260901.1
+  - '@typescript/typescript-darwin-arm64@7.1.0-dev.20260905.1'
+  - '@typescript/typescript-darwin-x64@7.1.0-dev.20260905.1'
+  - '@typescript/typescript-linux-arm64@7.1.0-dev.20260905.1'
+  - '@typescript/typescript-linux-arm@7.1.0-dev.20260905.1'
+  - '@typescript/typescript-linux-x64@7.1.0-dev.20260905.1'
+  - '@typescript/typescript-win32-arm64@7.1.0-dev.20260905.1'
+  - '@typescript/typescript-win32-x64@7.1.0-dev.20260905.1'
+  - typescript@7.1.0-dev.20260905.1

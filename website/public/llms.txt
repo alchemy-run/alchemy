@@ -6,7 +6,7 @@ This file is a navigation index for the documentation site at https://alchemy.ru
 
 ## Start here
 
-- [What is Alchemy?](https://alchemy.run/what-is-alchemy) — Alchemy is an Infrastructure-as-Effects framework that combines cloud infrastructure and application logic into a single type-safe program powered by Effect.
+- [What is Alchemy?](https://alchemy.run/what-is-alchemy) — Alchemy is Infrastructure as Code built in pure Effect, with Infrastructure as Effects on top. Declare your cloud resources and the code that runs on them in one type-safe TypeScript program, and deploy it with one command.
 - [Getting started](https://alchemy.run/getting-started) — Install Alchemy and create your first Stack in under two minutes.
 - [Migrating from v1](https://alchemy.run/migrating-from-v1) — Migrate your Alchemy v1 (async/await) project to Alchemy v2.
 
@@ -47,7 +47,7 @@ The noun graph and its semantics: Stacks of Resources and Actions, data flow via
 How app code and infrastructure compose: Runtime, Bindings, the Construction and Runtime Phases, and Layers.
 
 - [Infrastructure as Effects](https://alchemy.run/infrastructure-as-effects) — One Effect program models both your runtime code and the infrastructure it runs on — Runtimes carry code, Bindings wire resources into them, Phases split deploy from runtime, Layers package it all behind typed services.
-- [Runtime](https://alchemy.run/infrastructure-as-effects/runtime) — A Runtime is a Resource that carries the code it runs — a Worker, Lambda Function, or Container declared with the Effectful Constructor pattern. Bind what you need, return what you expose.
+- [Runtime](https://alchemy.run/infrastructure-as-effects/runtime) — A Runtime is a Resource that carries the code it runs — a Worker, Lambda Function, Container, or Server declared with the Effectful Constructor pattern. Bind what you need, return what you expose.
 - [Bindings](https://alchemy.run/infrastructure-as-effects/binding) — A Binding connects a Resource to a Worker or Lambda. One line declares the capability and generates the permissions, the configuration, and a typed client.
 - [Layers](https://alchemy.run/infrastructure-as-effects/layers) — A Layer defines a service contract with swappable implementations. In Alchemy, a Layer can encapsulate Resources and Bindings, so shared services carry their own infrastructure and permissions.
 - [Event Sources](https://alchemy.run/infrastructure-as-effects/event-sources) — An event source is a binding that runs your Function when something happens on a resource — one call wires the event-source mapping, the permissions, and a typed handler.

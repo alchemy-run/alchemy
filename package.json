@@ -79,9 +79,9 @@
     "husky": "catalog:tooling",
     "oxfmt": "catalog:tooling",
     "oxlint": "catalog:tooling",
-    "ts-morph": "catalog:tooling",
     "turbo": "^2.9.16",
-    "typescript": "catalog:build"
+    "typescript": "catalog:build",
+    "typescript-api": "npm:typescript@7.1.0-dev.20260905.1"
   },
   "packageManager": "pnpm@11.25.0",
   "devEngines": {

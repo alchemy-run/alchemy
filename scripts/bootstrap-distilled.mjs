@@ -1,6 +1,6 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, readdirSync, realpathSync } from "node:fs";
-import { resolve } from "node:path";
+import { existsSync, readFileSync, readdirSync, realpathSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 
 // Git hooks export repository-specific variables. Do not pass those through to
 // commands operating on distilled or a different Alchemy worktree.
@@ -28,9 +28,9 @@ function tryGit(args, cwd) {
 }
 
 export function bootstrap(root, previousHead) {
+  const checkout = resolve(root, "submodules/distilled");
   // Use the index, just like `git submodule update`, including a staged pin.
   const pin = git(["rev-parse", ":submodules/distilled"], root);
-  const checkout = resolve(root, "submodules/distilled");
   const commonDir = git(
     ["rev-parse", "--path-format=absolute", "--git-common-dir"],
     root,
@@ -39,6 +39,10 @@ export function bootstrap(root, previousHead) {
     ["rev-parse", "--path-format=absolute", "--git-dir"],
     root,
   );
+  const mainRoot = git(["worktree", "list", "--porcelain", "-z"], root)
+    .split("\0")[0]
+    .slice("worktree ".length);
+  if (previousHead !== undefined) isolateWorktreeConfig(mainRoot);
 
   if (existsSync(resolve(checkout, ".git"))) {
     if (
@@ -56,7 +60,7 @@ export function bootstrap(root, previousHead) {
       ? tryGit(["rev-parse", `${previousHead}:submodules/distilled`], root)
       : undefined;
     // Only follow an Alchemy checkout when distilled is still at its old pin.
-    // Installs and intentional distilled development never move an existing HEAD.
+    // Intentional distilled development never moves an existing HEAD.
     if (
       current !== previousPin ||
       tryGit(["symbolic-ref", "--quiet", "HEAD"], checkout) !== undefined ||
@@ -90,22 +94,75 @@ export function bootstrap(root, previousHead) {
       ],
       root,
     );
+    if (previousHead !== undefined) isolateWorktreeConfig(mainRoot);
     return;
   }
 
   // Initialize the primary checkout at its own pin first. Every linked checkout
   // then gets an independent detached HEAD backed by that same object database.
-  const mainRoot = git(["worktree", "list", "--porcelain", "-z"], root)
-    .split("\0")[0]
-    .slice("worktree ".length);
   bootstrap(mainRoot);
+  isolateWorktreeConfig(mainRoot);
   const mainCheckout = resolve(mainRoot, "submodules/distilled");
   ensureCommit(mainCheckout, pin);
   // The destination was checked above: it is missing or empty. One --force
   // replaces only its stale registration; Git still refuses locked worktrees
   // (overriding a lock would require --force twice). Do not prune other entries.
   git(["worktree", "add", "--force", "--detach", checkout, pin], mainCheckout);
+  isolateWorktreeConfig(mainRoot);
   git(["submodule", "init", "--", "submodules/distilled"], root);
+}
+
+function isolateWorktreeConfig(mainRoot) {
+  const checkout = resolve(mainRoot, "submodules/distilled");
+  if (!existsSync(resolve(checkout, ".git"))) return;
+
+  // Resolve the gitfile without opening the repository: its core.worktree may
+  // already point at a removed Alchemy worktree, preventing normal Git commands.
+  const commonDir = resolve(
+    checkout,
+    git(["rev-parse", "--resolve-git-dir", ".git"], checkout),
+  );
+  if (existsSync(resolve(commonDir, "commondir"))) {
+    throw new Error(
+      "The primary distilled checkout must not be a linked worktree",
+    );
+  }
+  const configs = [[commonDir, checkout]];
+  const worktrees = resolve(commonDir, "worktrees");
+  if (existsSync(worktrees)) {
+    for (const entry of readdirSync(worktrees)) {
+      const admin = resolve(worktrees, entry);
+      const gitfile = readFileSync(resolve(admin, "gitdir"), "utf8").trim();
+      configs.push([admin, dirname(resolve(admin, gitfile))]);
+    }
+  }
+  // Protect every registered worktree, including temporarily missing/locked
+  // ones. Submodule sync/update can write core.worktree to the shared config;
+  // explicit per-worktree overrides prevent that from redirecting any checkout.
+  for (const [admin, path] of configs) {
+    git(
+      [
+        "config",
+        "--file",
+        resolve(admin, "config.worktree"),
+        "core.worktree",
+        path,
+      ],
+      mainRoot,
+    );
+  }
+  const config = resolve(commonDir, "config");
+  git(
+    ["config", "--file", config, "extensions.worktreeConfig", "true"],
+    mainRoot,
+  );
+  // New worktrees must not inherit a path before their override is installed.
+  if (
+    tryGit(["config", "--file", config, "--get", "core.worktree"], mainRoot) !==
+    undefined
+  ) {
+    git(["config", "--file", config, "--unset-all", "core.worktree"], mainRoot);
+  }
 }
 
 function ensureCommit(checkout, pin) {
@@ -116,11 +173,11 @@ function ensureCommit(checkout, pin) {
   }
 }
 
-// The same dependency-free Node script runs before pnpm workspace discovery and
-// from post-checkout (whose arguments are old HEAD, new HEAD, branch checkout).
-if (import.meta.main && process.argv[4] !== "0") {
+// Run only for post-checkout branch/worktree checkouts, not file checkouts.
+// Hook arguments are old HEAD, new HEAD, and the branch-checkout flag.
+if (import.meta.main && process.argv[4] === "1") {
   bootstrap(
     resolve(import.meta.dirname, ".."),
-    process.argv[4] === "1" ? process.argv[2] : undefined,
+    process.argv[2],
   );
 }

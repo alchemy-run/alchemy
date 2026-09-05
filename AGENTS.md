@@ -188,7 +188,7 @@ pnpm docs:gen   # -> website/src/content/docs/providers/{Cloud}/{Resource}.md
 This is the only doc generator that produces user-facing output. ([scripts/generate-api-reference.ts](./scripts/generate-api-reference.ts)) does the following:
 
 1. Discovers documented files across its configured source roots — `packages/alchemy/src/{Cloud}/{Service}/` plus flat single-provider packages like `packages/better-auth/src/` (mapped onto a synthetic provider directory, e.g. `BetterAuth/`)
-2. Parses TypeScript with `ts-morph`
+2. Parses TypeScript with the native TypeScript API (`typescript-api` tooling alias)
 3. Extracts the page-level summary plus Markdown section/example blocks from JSDoc on the export tagged `@resource`, `@binding`, or `@layer`
 4. Writes one markdown file per page at `website/src/content/docs/providers/{Provider}/{Name}.md`
 
