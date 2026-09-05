@@ -5,6 +5,7 @@ import { Deployment, DeploymentProvider } from "./Deployment.ts";
 import { HelmChart, HelmChartProvider } from "./HelmChart.ts";
 import { Job, JobProvider } from "./Job.ts";
 import { Manifest, ManifestProvider } from "./Manifest.ts";
+import { Secret, SecretProvider } from "./Secret.ts";
 
 export class Providers extends Provider.ProviderCollection<Providers>()(
   "Kubernetes",
@@ -12,7 +13,7 @@ export class Providers extends Provider.ProviderCollection<Providers>()(
 
 /**
  * The Kubernetes provider layer: the cluster-agnostic workload providers
- * (`Deployment`, `Job`, `Manifest`, `HelmChart`) plus the built-in
+ * (`Deployment`, `Job`, `Manifest`, `HelmChart`, `Secret`) plus the built-in
  * cluster adapters (`kubeconfig`, `token`, `client-cert`, `exec`).
  *
  * Managed-cloud clusters need their platform's adapter alongside — e.g.
@@ -29,7 +30,7 @@ export class Providers extends Provider.ProviderCollection<Providers>()(
 export const providers = () =>
   Layer.effect(
     Providers,
-    Provider.collection([Deployment, HelmChart, Job, Manifest]),
+    Provider.collection([Deployment, HelmChart, Job, Manifest, Secret]),
   ).pipe(
     Layer.provide(
       Layer.mergeAll(
@@ -37,6 +38,7 @@ export const providers = () =>
         HelmChartProvider(),
         JobProvider(),
         ManifestProvider(),
+        SecretProvider(),
       ),
     ),
     // The built-in adapters are provideMerged (not just provided) so the

@@ -38,7 +38,7 @@ import {
   deleteObjects,
   readObject,
   reconcileObjects,
-  KubernetesApiError,
+  isNotFound,
 } from "./internal/client.ts";
 import type {
   KubernetesObjectDefinition,
@@ -393,9 +393,6 @@ export const Job: Platform<Job, JobServices, JobShape, JobRuntimeContext> =
       return context;
     },
   });
-
-const isNotFound = (error: unknown): error is KubernetesApiError =>
-  error instanceof KubernetesApiError && error.statusCode === 404;
 
 export const JobProvider = () =>
   Provider.effect(

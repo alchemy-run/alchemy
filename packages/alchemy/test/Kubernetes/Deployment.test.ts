@@ -11,6 +11,7 @@ import * as dynamodb from "@distilled.cloud/aws/dynamodb";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import EksHostApi from "./fixtures/deployment.ts";
@@ -85,6 +86,19 @@ describe.skipIf(!process.env.AWS_TEST_SLOW)("Kubernetes Deployment E2E", () => {
   let baseUrl: string;
   let helmRelease: Kubernetes.HelmChart["Attributes"];
   let helmCluster: Cluster["Attributes"];
+  let e2eSecret: Kubernetes.Secret["Attributes"];
+  const clusterTransport = () =>
+    makeEksTransport({
+      clusterName: helmCluster.clusterName,
+      endpoint: helmCluster.endpoint!,
+      certificateAuthorityData: helmCluster.certificateAuthorityData!,
+    });
+  const E2E_SECRET_VALUE = "alchemy-e2e-value";
+  const E2E_SECRET_VALUE_B64 = Buffer.from(E2E_SECRET_VALUE).toString("base64");
+  // Non-UTF-8 bytes, supplied base64-encoded the way the API's `data` is.
+  const E2E_SECRET_BINARY_B64 = Buffer.from([0x00, 0xff, 0x10]).toString(
+    "base64",
+  );
 
   beforeAll(
     Effect.gen(function* () {
@@ -92,8 +106,9 @@ describe.skipIf(!process.env.AWS_TEST_SLOW)("Kubernetes Deployment E2E", () => {
       // Phase 1: cluster + network only.
       yield* sharedStack.deploy(infra);
       // Phase 2: same infra + the Deployment fixture (refs the cluster) +
-      // a HelmChart rendering the local fixture chart onto the cluster.
-      const { host, cluster, release } = yield* sharedStack.deploy(
+      // a HelmChart rendering the local fixture chart onto the cluster +
+      // a Secret with Redacted string data.
+      const { host, cluster, release, secret } = yield* sharedStack.deploy(
         Effect.gen(function* () {
           const { cluster } = yield* infra;
           const release = yield* Kubernetes.HelmChart("E2EHelmChart", {
@@ -101,12 +116,19 @@ describe.skipIf(!process.env.AWS_TEST_SLOW)("Kubernetes Deployment E2E", () => {
             chart: `${import.meta.dirname}/fixtures/chart`,
             values: { message: "helm-e2e", secondConfigMap: { enabled: true } },
           });
+          const secret = yield* Kubernetes.Secret("E2ESecret", {
+            cluster,
+            name: "alchemy-e2e-secret",
+            stringData: { token: Redacted.make(E2E_SECRET_VALUE) },
+            binaryData: { blob: Redacted.make(E2E_SECRET_BINARY_B64) },
+          });
           const host = yield* EksHostApi;
-          return { host, cluster, release };
+          return { host, cluster, release, secret };
         }),
       );
       helmRelease = release;
       helmCluster = cluster;
+      e2eSecret = secret;
       // `url` is a full URL (`http://<nlb-hostname>:<port>` — the NLB
       // listener is the Service port, not 80).
       expect(host.url).toBeTruthy();
@@ -178,17 +200,32 @@ describe.skipIf(!process.env.AWS_TEST_SLOW)("Kubernetes Deployment E2E", () => {
           object.name.endsWith("-config"),
         )!;
         expect(configRef).toBeDefined();
-        const transport = yield* makeEksTransport({
-          clusterName: helmCluster.clusterName,
-          endpoint: helmCluster.endpoint!,
-          certificateAuthorityData: helmCluster.certificateAuthorityData!,
-        });
+        const transport = yield* clusterTransport();
         const applied = (yield* readObject({
           transport,
           object: configRef,
         })) as { data?: Record<string, string> } | undefined;
         expect(applied?.data?.message).toBe("helm-e2e");
         expect(applied?.data?.release).toBe(helmRelease.releaseName);
+      }),
+    { timeout: 120_000 },
+  );
+
+  test.provider(
+    "Secret applies Redacted string data without exposing it in attributes",
+    () =>
+      Effect.gen(function* () {
+        // Attributes must not carry the plaintext or its base64 form.
+        const serialized = JSON.stringify(e2eSecret);
+        expect(serialized).not.toContain(E2E_SECRET_VALUE);
+        expect(serialized).not.toContain(E2E_SECRET_VALUE_B64);
+        const transport = yield* clusterTransport();
+        const applied = (yield* readObject({
+          transport,
+          object: e2eSecret.ref,
+        })) as { data?: Record<string, string> } | undefined;
+        expect(applied?.data?.token).toBe(E2E_SECRET_VALUE_B64);
+        expect(applied?.data?.blob).toBe(E2E_SECRET_BINARY_B64);
       }),
     { timeout: 120_000 },
   );
