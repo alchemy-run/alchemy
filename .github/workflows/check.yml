@@ -59,11 +59,11 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: website/node_modules/.astro
-          key: website-astro-${{ runner.os }}-${{ github.event.pull_request.number || 'main' }}-${{ github.sha }}-${{ github.workflow }}-${{ github.run_attempt }}
+          key: website-astro-check-${{ runner.os }}-${{ github.event.pull_request.number || 'main' }}-${{ github.sha }}-${{ github.workflow }}-${{ github.run_attempt }}
           restore-keys: |
-            website-astro-${{ runner.os }}-${{ github.event.pull_request.number || 'main' }}-${{ github.sha }}-
-            website-astro-${{ runner.os }}-${{ github.event.pull_request.number || 'main' }}-
-            website-astro-${{ runner.os }}-main-
+            website-astro-check-${{ runner.os }}-${{ github.event.pull_request.number || 'main' }}-${{ github.sha }}-
+            website-astro-check-${{ runner.os }}-${{ github.event.pull_request.number || 'main' }}-
+            website-astro-check-${{ runner.os }}-main-
 
       - name: Restore Turbo cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0

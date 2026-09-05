@@ -1,15 +1,15 @@
-// @ts-check
 import mdx from "@astrojs/mdx";
 import react from "@astrojs/react";
 import sitemap from "@astrojs/sitemap";
 import starlight from "@astrojs/starlight";
 import tailwindcss from "@tailwindcss/vite";
+import type { AstroIntegration } from "astro";
 import { defineConfig } from "astro/config";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import starlightBlog from "starlight-blog";
-import { pagefindIgnoreNoise } from "./plugins/pagefind-ignore-noise.mjs";
+import { buildOutputChecks, noindexPaths } from "./plugins/build-output.ts";
 import providersSidebar from "./src/generated/providers-sidebar.json" with { type: "json" };
 
 /**
@@ -50,8 +50,8 @@ function providersSidebarEntry() {
  *
  * @param {...string} providers Provider labels / directory names (e.g. "Cloudflare")
  */
-function providerResourcesEntry(...providers) {
-  const entryItems = (/** @type {string} */ provider) => {
+function providerResourcesEntry(...providers: string[]) {
+  const entryItems = (provider: string) => {
     const group = providersSidebar.find((p) => p.label === provider);
     if (group) return group.items;
     return [
@@ -76,10 +76,8 @@ function providerResourcesEntry(...providers) {
  * Copies `src/content/docs/**\/*.{md,mdx}` into the build output dir, preserving
  * the directory layout but normalizing extensions to `.md`. This lets the worker
  * serve raw markdown for clients (e.g. coding agents) that prefer it.
- *
- * @returns {import("astro").AstroIntegration}
  */
-function copyMarkdownSources() {
+function copyMarkdownSources(): AstroIntegration {
   return {
     name: "copy-markdown-sources",
     hooks: {
@@ -91,7 +89,11 @@ function copyMarkdownSources() {
          * @param {{ lowercase?: boolean }} [opts]
          * @param {string} [relTo]
          */
-        async function walk(srcDir, opts = {}, relTo = srcDir) {
+        async function walk(
+          srcDir: string,
+          opts: { lowercase?: boolean } = {},
+          relTo: string = srcDir,
+        ) {
           let entries;
           try {
             entries = await fs.readdir(srcDir, { withFileTypes: true });
@@ -136,264 +138,6 @@ function copyMarkdownSources() {
   };
 }
 
-/**
- * Pages that opt out of search indexing (`<meta name="robots" content="noindex…">`,
- * set per page via Starlight `head` frontmatter, `Auth.astro`, or the
- * reference generator) must not be advertised in the sitemap either — a
- * sitemap entry is an explicit "please index this". Instead of maintaining a
- * parallel path list in the sitemap filter, scan the rendered HTML once and
- * let the filter consult the result. Runs in `astro:build:done` before the
- * sitemap integration (Astro runs hooks in registration order), so it must
- * be listed ahead of `sitemap()` in `integrations`.
- */
-const noindexPaths = new Set();
-function collectNoindexPages() {
-  // Attribute order varies by emitter (Starlight `head`, hand-written
-  // layouts), so match either order.
-  const noindexRegex =
-    /<meta\b(?=[^>]*\bname="robots")(?=[^>]*\bcontent="[^"]*noindex)/i;
-  return {
-    name: "collect-noindex-pages",
-    hooks: {
-      "astro:build:done": async ({ dir, logger }) => {
-        const outDir = fileURLToPath(dir);
-        // Sequential on purpose: ~4.4k pages, and fanning the reads out
-        // holds every page's HTML in memory at once on top of an already
-        // heavy build heap.
-        /** @param {string} d */
-        async function walk(d) {
-          const entries = await fs.readdir(d, { withFileTypes: true });
-          for (const e of entries) {
-            const full = path.join(d, e.name);
-            if (e.isDirectory()) {
-              await walk(full);
-              continue;
-            }
-            if (!e.isFile() || !e.name.endsWith(".html")) continue;
-            const html = await fs.readFile(full, "utf8");
-            if (!noindexRegex.test(html)) continue;
-            // dist/foo/bar/index.html -> /foo/bar/ (sitemap URLs carry the
-            // trailing slash); dist/foo.html -> /foo.html
-            let rel =
-              "/" + path.relative(outDir, full).split(path.sep).join("/");
-            if (rel.endsWith("/index.html"))
-              rel = rel.slice(0, -"index.html".length);
-            noindexPaths.add(rel);
-          }
-        }
-        await walk(outDir);
-        logger.info(
-          `${noindexPaths.size} noindex page(s) excluded from the sitemap`,
-        );
-      },
-    },
-  };
-}
-
-/**
- * Build-output checks — one pass over every rendered HTML page:
- *
- * 1. Case-sensitive internal-link check: validates every internal
- *    `<a href>` / `<img src>` against a case-sensitive Set of output
- *    paths. Case-sensitivity matters: `fs.existsSync`-based checkers
- *    (e.g. astro-broken-links-checker, which this replaced) resolve
- *    `/foo/Bar` to `/foo/bar` on macOS but 404 on Linux CI.
- *
- * 2. Diff-block indent check: in every rendered ```diff code block,
- *    each line's indentation must be even (the docs use 2-space
- *    indents everywhere). An odd indent means a `+`/`-` marker line
- *    was authored in the wrong convention — expressive-code strips
- *    only the marker character, so markers must be written as an
- *    EXTRA column followed by the line's full indentation, with
- *    context lines flush. See git history: three different authoring
- *    conventions had accumulated and all rendered misaligned.
- *
- * 3. `og:image` check: every page's og:image URL must not contain
- *    "undefined"/"null" (a broken slug lookup — Starlight 0.39 renamed
- *    routeData `slug` to `id` and the old field silently reads as
- *    undefined), and when OG images were emitted (full builds; the
- *    DOCS_FAST target skips them) the URL's path must exist in the
- *    build output.
- *
- * @returns {import("astro").AstroIntegration}
- */
-function buildOutputChecks() {
-  return {
-    name: "build-output-checks",
-    hooks: {
-      "astro:build:done": async (
-        /** @type {{ dir: URL, logger: import("astro").AstroRuntimeLogger }} */ {
-          dir,
-          logger,
-        },
-      ) => {
-        const distPath = fileURLToPath(dir);
-
-        /** @type {Set<string>} */
-        const paths = new Set();
-        /** @type {Set<string>} */
-        const dirs = new Set();
-        /**
-         * @param {string} d
-         */
-        async function walk(d) {
-          const entries = await fs.readdir(d, { withFileTypes: true });
-          for (const entry of entries) {
-            const full = path.join(d, entry.name);
-            if (entry.isDirectory()) {
-              dirs.add("/" + path.relative(distPath, full));
-              await walk(full);
-            } else if (entry.isFile()) {
-              paths.add("/" + path.relative(distPath, full));
-            }
-          }
-        }
-        await walk(distPath);
-
-        /** @type {Map<string, Set<string>>} */
-        const broken = new Map();
-        /** @type {{ file: string, line: string }[]} */
-        const oddIndents = [];
-        /** @type {{ file: string, url: string }[]} */
-        const badOgImages = [];
-        const htmlFiles = [...paths].filter((p) => p.endsWith(".html"));
-        const hasOgImages = [...paths].some(
-          (p) => p.startsWith("/og/") && p.endsWith(".png"),
-        );
-
-        /** @param {string} htmlFile */
-        async function checkFile(htmlFile) {
-          const html = await fs.readFile(
-            path.join(distPath, htmlFile.slice(1)),
-            "utf8",
-          );
-          const links = [
-            ...html.matchAll(/<a\s+[^>]*href="([^"#?]+)/gi),
-            ...html.matchAll(/<img\s+[^>]*src="([^"#?]+)/gi),
-          ].map((m) => m[1]);
-
-          for (const link of links) {
-            if (!link.startsWith("/")) continue; // skip external, anchors, mailto, etc.
-            const clean = link.replace(/\/$/, "");
-            const fileCandidates = [
-              clean,
-              clean + "/index.html",
-              clean + ".html",
-            ];
-            const exists =
-              fileCandidates.some((c) => paths.has(c)) || dirs.has(clean);
-            if (!exists) {
-              if (!broken.has(link)) broken.set(link, new Set());
-              broken.get(link)?.add(htmlFile);
-            }
-          }
-
-          // og:image check (see integration docstring).
-          for (const m of html.matchAll(
-            /property="og:image"\s+content="([^"]+)"/g,
-          )) {
-            const url = m[1];
-            let pathname;
-            try {
-              pathname = new URL(url).pathname;
-            } catch {
-              badOgImages.push({ file: htmlFile, url });
-              continue;
-            }
-            if (
-              /\b(?:undefined|null)\b/.test(pathname) ||
-              (hasOgImages && !paths.has(pathname))
-            ) {
-              badOgImages.push({ file: htmlFile, url });
-            }
-          }
-
-          // Diff-block indent check (see integration docstring).
-          if (
-            html.includes("highlight ins") ||
-            html.includes("highlight del")
-          ) {
-            for (const fig of html.matchAll(
-              /<figure class="frame[^"]*">.*?<\/figure>/gs,
-            )) {
-              const block = fig[0];
-              if (
-                !block.includes("highlight ins") &&
-                !block.includes("highlight del")
-              )
-                continue;
-              for (const m of block.matchAll(
-                /<div class="ec-line[^"]*"><div class="code">(.*?)<\/div><\/div>/gs,
-              )) {
-                const text = m[1]
-                  .replace(/<[^>]+>/g, "")
-                  .replace(/&quot;/g, '"')
-                  .replace(/&#39;/g, "'")
-                  .replace(/&lt;/g, "<")
-                  .replace(/&gt;/g, ">")
-                  .replace(/&amp;/g, "&");
-                const trimmed = text.trim();
-                if (!trimmed) continue;
-                // JSDoc continuation lines legitimately indent by one.
-                if (trimmed.startsWith("*")) continue;
-                const indent = text.length - text.trimStart().length;
-                if (indent % 2 === 1) {
-                  oddIndents.push({ file: htmlFile, line: text.slice(0, 60) });
-                }
-              }
-            }
-          }
-        }
-
-        // Read/scan in bounded parallel batches — serial reads dominate
-        // the checker's runtime on 4k+ pages.
-        const BATCH = 64;
-        for (let i = 0; i < htmlFiles.length; i += BATCH) {
-          await Promise.all(htmlFiles.slice(i, i + BATCH).map(checkFile));
-        }
-
-        if (broken.size > 0) {
-          let msg = "Case-sensitive broken links detected:\n";
-          for (const [link, docs] of broken.entries()) {
-            msg += `\n  ${link}\n    Found in:\n`;
-            for (const doc of docs) msg += `      - ${doc}\n`;
-          }
-          logger.error(msg);
-          throw new Error(
-            `Case-sensitive broken links detected (${broken.size})`,
-          );
-        }
-        if (badOgImages.length > 0) {
-          let msg = "Broken og:image URLs detected:\n";
-          for (const { file, url } of badOgImages.slice(0, 20)) {
-            msg += `  ${file}: ${url}\n`;
-          }
-          logger.error(msg);
-          throw new Error(
-            `Broken og:image URLs detected (${badOgImages.length})`,
-          );
-        }
-        if (oddIndents.length > 0) {
-          let msg =
-            "Misindented diff-block lines detected (write markers as an " +
-            "extra column before the line's full indentation, context " +
-            "lines flush):\n";
-          for (const { file, line } of oddIndents.slice(0, 20)) {
-            msg += `  ${file}: ${JSON.stringify(line)}\n`;
-          }
-          logger.error(msg);
-          throw new Error(
-            `Misindented diff-block lines detected (${oddIndents.length})`,
-          );
-        }
-        logger.info(
-          `Build-output checks passed (${htmlFiles.length} pages: links + diff indents)`,
-        );
-      },
-    },
-  };
-}
-
 export default defineConfig({
   site: "https://alchemy.run",
   redirects: {
@@ -405,10 +149,8 @@ export default defineConfig({
   trailingSlash: "ignore",
   integrations: [
     react(),
-    pagefindIgnoreNoise(),
     copyMarkdownSources(),
     buildOutputChecks(),
-    collectNoindexPages(),
     sitemap({
       filter: (page) =>
         !page.endsWith(".html") &&
@@ -1472,7 +1214,7 @@ export default defineConfig({
       // chunks breaks that resolution under bun's isolated node_modules
       // layout, so keep it external — it resolves from website/node_modules
       // (declared as a direct dependency) instead.
-      external: ["satteri"],
+      external: ["satteri", "takumi-js"],
     },
   },
   experimental: {

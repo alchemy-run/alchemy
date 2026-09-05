@@ -1,6 +1,6 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, readdirSync, realpathSync } from "node:fs";
-import { resolve } from "node:path";
+import { existsSync, readFileSync, readdirSync, realpathSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 
 // Git hooks export repository-specific variables. Do not pass those through to
 // commands operating on distilled or a different Alchemy worktree.
@@ -39,6 +39,10 @@ export function bootstrap(root, previousHead) {
     ["rev-parse", "--path-format=absolute", "--git-dir"],
     root,
   );
+  const mainRoot = git(["worktree", "list", "--porcelain", "-z"], root)
+    .split("\0")[0]
+    .slice("worktree ".length);
+  isolateWorktreeConfig(mainRoot);
 
   if (existsSync(resolve(checkout, ".git"))) {
     if (
@@ -90,14 +94,12 @@ export function bootstrap(root, previousHead) {
       ],
       root,
     );
+    isolateWorktreeConfig(mainRoot);
     return;
   }
 
   // Initialize the primary checkout at its own pin first. Every linked checkout
   // then gets an independent detached HEAD backed by that same object database.
-  const mainRoot = git(["worktree", "list", "--porcelain", "-z"], root)
-    .split("\0")[0]
-    .slice("worktree ".length);
   bootstrap(mainRoot);
   const mainCheckout = resolve(mainRoot, "submodules/distilled");
   ensureCommit(mainCheckout, pin);
@@ -105,7 +107,61 @@ export function bootstrap(root, previousHead) {
   // replaces only its stale registration; Git still refuses locked worktrees
   // (overriding a lock would require --force twice). Do not prune other entries.
   git(["worktree", "add", "--force", "--detach", checkout, pin], mainCheckout);
+  isolateWorktreeConfig(mainRoot);
   git(["submodule", "init", "--", "submodules/distilled"], root);
+}
+
+function isolateWorktreeConfig(mainRoot) {
+  const checkout = resolve(mainRoot, "submodules/distilled");
+  if (!existsSync(resolve(checkout, ".git"))) return;
+
+  // Resolve the gitfile without opening the repository: its core.worktree may
+  // already point at a removed Alchemy worktree, preventing normal Git commands.
+  const commonDir = git(
+    ["rev-parse", "--resolve-git-dir", resolve(checkout, ".git")],
+    mainRoot,
+  );
+  if (existsSync(resolve(commonDir, "commondir"))) {
+    throw new Error(
+      "The primary distilled checkout must not be a linked worktree",
+    );
+  }
+  const configs = [[commonDir, checkout]];
+  const worktrees = resolve(commonDir, "worktrees");
+  if (existsSync(worktrees)) {
+    for (const entry of readdirSync(worktrees)) {
+      const admin = resolve(worktrees, entry);
+      const gitfile = readFileSync(resolve(admin, "gitdir"), "utf8").trim();
+      configs.push([admin, dirname(resolve(admin, gitfile))]);
+    }
+  }
+  // Protect every registered worktree, including temporarily missing/locked
+  // ones. Submodule sync/update can write core.worktree to the shared config;
+  // explicit per-worktree overrides prevent that from redirecting any checkout.
+  for (const [admin, path] of configs) {
+    git(
+      [
+        "config",
+        "--file",
+        resolve(admin, "config.worktree"),
+        "core.worktree",
+        path,
+      ],
+      mainRoot,
+    );
+  }
+  const config = resolve(commonDir, "config");
+  git(
+    ["config", "--file", config, "extensions.worktreeConfig", "true"],
+    mainRoot,
+  );
+  // New worktrees must not inherit a path before their override is installed.
+  if (
+    tryGit(["config", "--file", config, "--get", "core.worktree"], mainRoot) !==
+    undefined
+  ) {
+    git(["config", "--file", config, "--unset-all", "core.worktree"], mainRoot);
+  }
 }
 
 function ensureCommit(checkout, pin) {
