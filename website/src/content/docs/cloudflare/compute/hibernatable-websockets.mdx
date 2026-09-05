@@ -144,8 +144,21 @@ return {
 +    if (attachment) sessions.delete(attachment.id);
 +    yield* ws.close(code, reason);
 +  }),
++  webSocketError: Effect.fn(function* (
++    ws: Cloudflare.WebSocket,
++    error: unknown,
++  ) {
++    // Cloudflare closes an errored socket after this handler runs; only
++    // the session bookkeeping is ours to clean up.
++    const attachment = ws.deserializeAttachment<{ id: string }>();
++    if (attachment) sessions.delete(attachment.id);
++  }),
 };
 ```
+
+`webSocketError` fires when the connection fails instead of closing
+cleanly (a network reset, a protocol error). The runtime closes the
+socket afterwards, so the handler only has to drop the peer's state.
 
 ## Restore sessions after hibernation
 
