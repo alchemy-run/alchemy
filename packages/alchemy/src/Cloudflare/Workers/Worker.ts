@@ -1534,6 +1534,34 @@ export const isSelf = (value: unknown): value is Self =>
  * );
  * ```
  *
+ * ### Inheriting bindings
+ * Use `Cloudflare.Workers.Inherit()` to copy a named binding from this
+ * script's latest upload without supplying or reading its value. Alchemy
+ * emits `{ type: "inherit", version_id: "latest" }` and sends
+ * `bindings_inherit=strict`. Before the upload it refuses unless the latest
+ * listed upload is also the sole version at 100% traffic. That check is a
+ * best-effort preflight, not an atomic lock — a concurrent preview can still
+ * become `latest` between the check and the PUT. Treat Alchemy as the
+ * exclusive uploader of this script.
+ *
+ * Exact version IDs are rejected by the Cloudflare upload API
+ * (error 10057). Do not combine `Inherit` with {@link WorkerVersionOptions}
+ * or a dispatch `namespace`. Do not inherit `ALCHEMY_*` or `VITE_*`.
+ *
+ * `alchemy dev` cannot inherit from Cloudflare version history;
+ * local workerd start fails closed. `dev: { mode: "external" }` does
+ * not start workerd and does not materialize inherit.
+ *
+ * **Example:** Inherit a separately custodied secret from the live upload
+ * ```typescript
+ * yield* Cloudflare.Worker("Api", {
+ *   main: "./src/api.ts",
+ *   env: {
+ *     API_TOKEN: Cloudflare.Workers.Inherit(),
+ *   },
+ * });
+ * ```
+ *
  * ### Async Workers
  * You don't have to use Effect for your runtime code. If you create
  * a Worker resource with `main` pointing at a file but provide no
