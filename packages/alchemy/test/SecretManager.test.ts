@@ -9,7 +9,10 @@ import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { externalSecrets } from "./fixtures/external-secret-manager.ts";
+import {
+  externalSecrets,
+  externalBootstrapSecrets,
+} from "./fixtures/external-secret-manager.ts";
 
 const read = (provider: ConfigProvider.ConfigProvider, name: string) =>
   Config.string(name).pipe(
@@ -168,6 +171,29 @@ it.effect("surfaces typed secret-manager failures", () => {
     ),
   );
 });
+
+it.effect("surfaces typed setup failures from an external layer", () =>
+  Effect.gen(function* () {
+    const error = yield* resolveSecretManagerConfig({
+      secrets: externalBootstrapSecrets(),
+      stack: "external-stack",
+      fallback: ConfigProvider.fromUnknown({}),
+    }).pipe(Effect.flip);
+    expect(error).toBeInstanceOf(SecretManagerError);
+    expect(error.message).toBe("Missing external bootstrap token.");
+
+    const resolved = yield* resolveSecretManagerConfig({
+      secrets: externalBootstrapSecrets(),
+      stack: "external-stack",
+      fallback: ConfigProvider.fromUnknown({
+        EXTERNAL_BOOTSTRAP_TOKEN: "test-token",
+      }),
+    });
+    expect(yield* read(resolved, "EXTERNAL_SECRET_SET")).toBe(
+      "external-stack/default",
+    );
+  }),
+);
 
 it.effect("keeps an explicit profile override at highest precedence", () =>
   Effect.gen(function* () {

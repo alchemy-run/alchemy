@@ -34,7 +34,7 @@ export class SecretManager extends Context.Service<
 >()("SecretManager") {}
 
 /** A pluggable secret manager accepted by {@link StackProps.secrets}. */
-export type SecretManagerLayer = Layer.Layer<SecretManager>;
+export type SecretManagerLayer = Layer.Layer<SecretManager, SecretManagerError>;
 
 /** A secret manager could not load or validate the stack configuration. */
 export class SecretManagerError extends Schema.TaggedError<SecretManagerError>()(
