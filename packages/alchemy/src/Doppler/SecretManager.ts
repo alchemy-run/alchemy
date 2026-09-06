@@ -130,8 +130,9 @@ const makeResolve = (selector: SecretsSelector | undefined, fetch: Fetch) =>
 
     const secrets = yield* Effect.tryPromise({
       try: () => response.json(),
-      catch: (cause) =>
-        failure(`Doppler returned invalid JSON for stack '${stack}'.`, cause),
+      // JSON parser errors can contain plaintext excerpts of the response.
+      catch: () =>
+        failure(`Doppler returned invalid JSON for stack '${stack}'.`),
     });
     if (!isSecretRecord(secrets)) {
       return yield* Effect.fail(

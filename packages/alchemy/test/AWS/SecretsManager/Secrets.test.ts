@@ -6,6 +6,7 @@ import {
 } from "@/AWS/SecretsManager/Secrets.ts";
 import { SecretManager as SecretManagerService } from "@/SecretManager.ts";
 import { expect, it } from "alchemy-test";
+import * as Cause from "effect/Cause";
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
@@ -173,6 +174,9 @@ it.effect("rejects malformed JSON without exposing the secret", () => {
       Effect.sync(() => {
         expect(error.message).toContain("invalid JSON");
         expect(error.message).not.toContain(secret);
+        expect(error.cause).toBeUndefined();
+        expect(Cause.pretty(Cause.fail(error))).not.toContain(secret);
+        expect(JSON.stringify(error)).not.toContain(secret);
       }),
     ),
   );

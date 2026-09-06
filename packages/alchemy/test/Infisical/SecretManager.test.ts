@@ -4,6 +4,7 @@ import {
   type SecretsSelector,
 } from "@/Infisical/SecretManager.ts";
 import { expect, it } from "alchemy-test";
+import * as Cause from "effect/Cause";
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
@@ -11,6 +12,42 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
 type Fetch = NonNullable<Parameters<typeof makeSecretManager>[1]>;
+
+for (const phase of ["login", "download"] as const) {
+  it.effect(
+    `omits secret-bearing JSON parser diagnostics during ${phase}`,
+    () => {
+      const secret = "fake-infisical-parser-secret";
+      return resolve(
+        () => ({ projectId: "project-id", environment: "dev" }),
+        async () =>
+          Object.assign(new Response(), {
+            json: async () => {
+              throw new SyntaxError(`Invalid JSON: ${secret}`);
+            },
+          }),
+        ConfigProvider.fromUnknown(
+          phase === "login"
+            ? {
+                INFISICAL_UNIVERSAL_AUTH_CLIENT_ID: "client-id",
+                INFISICAL_UNIVERSAL_AUTH_CLIENT_SECRET: "client-secret",
+              }
+            : { INFISICAL_TOKEN: "test-token" },
+        ),
+      ).pipe(
+        Effect.flip,
+        Effect.tap((error) =>
+          Effect.sync(() => {
+            expect(error.message).toContain("invalid JSON");
+            expect(error.cause).toBeUndefined();
+            expect(Cause.pretty(Cause.fail(error))).not.toContain(secret);
+            expect(JSON.stringify(error)).not.toContain(secret);
+          }),
+        ),
+      );
+    },
+  );
+}
 
 const read = (provider: ConfigProvider.ConfigProvider, name: string) =>
   Config.string(name).pipe(

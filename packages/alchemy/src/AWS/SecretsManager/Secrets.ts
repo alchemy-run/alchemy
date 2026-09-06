@@ -231,10 +231,10 @@ const makeResolve = (selector: SecretsSelector, loadSecret: LoadSecret) =>
 
     const parsed = yield* Effect.try({
       try: () => JSON.parse(contents) as unknown,
-      catch: (cause) =>
+      // JSON parser errors can contain plaintext excerpts of the secret.
+      catch: () =>
         failure(
           `AWS Secrets Manager returned invalid JSON for stack '${stack}'.`,
-          cause,
         ),
     });
     if (!isSecretRecord(parsed)) {

@@ -244,8 +244,8 @@ const readAccessToken = Effect.fn("Infisical.readAccessToken")(function* (
 
   const payload = yield* Effect.tryPromise({
     try: () => response.json(),
-    catch: (cause) =>
-      failure("Infisical Universal Auth returned invalid JSON.", cause),
+    // JSON parser errors can contain plaintext excerpts of the access token.
+    catch: () => failure("Infisical Universal Auth returned invalid JSON."),
   });
   if (
     payload === null ||
@@ -327,8 +327,9 @@ const makeResolve = (selector: SecretsSelector, fetch: Fetch) =>
 
     const payload = yield* Effect.tryPromise({
       try: () => response.json(),
-      catch: (cause) =>
-        failure(`Infisical returned invalid JSON for stack '${stack}'.`, cause),
+      // JSON parser errors can contain plaintext excerpts of the secrets.
+      catch: () =>
+        failure(`Infisical returned invalid JSON for stack '${stack}'.`),
     });
     if (!isSecretsPayload(payload)) {
       return yield* Effect.fail(

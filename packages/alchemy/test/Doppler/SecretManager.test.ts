@@ -4,6 +4,7 @@ import {
   type SecretsSelector,
 } from "@/Doppler/SecretManager.ts";
 import { expect, it } from "alchemy-test";
+import * as Cause from "effect/Cause";
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
@@ -143,6 +144,30 @@ it.effect("reports download failures without exposing response bodies", () => {
         expect(error.message).toContain("HTTP 401");
         expect(error.message).not.toContain(responseBody);
         expect(error.message).not.toContain(token);
+      }),
+    ),
+  );
+});
+
+it.effect("omits secret-bearing JSON parser diagnostics", () => {
+  const secret = "fake-doppler-parser-secret";
+  return resolve(
+    undefined,
+    async () =>
+      Object.assign(new Response(), {
+        json: async () => {
+          throw new SyntaxError(`Invalid JSON: ${secret}`);
+        },
+      }),
+    ConfigProvider.fromUnknown({ DOPPLER_TOKEN: "dp.st.test-token" }),
+  ).pipe(
+    Effect.flip,
+    Effect.tap((error) =>
+      Effect.sync(() => {
+        expect(error.message).toContain("invalid JSON");
+        expect(error.cause).toBeUndefined();
+        expect(Cause.pretty(Cause.fail(error))).not.toContain(secret);
+        expect(JSON.stringify(error)).not.toContain(secret);
       }),
     ),
   );
