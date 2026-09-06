@@ -239,7 +239,7 @@ export const ProviderLive = () =>
           );
       }
       const name = yield* createConfigName(id, olds?.name);
-      const match = yield* findByName(name);
+      const match = yield* findConfigByName(name);
       if (match) {
         return {
           hyperdriveId: match.id,
@@ -286,7 +286,7 @@ export const ProviderLive = () =>
             .pipe(
               Effect.catchTag("InvalidHyperdriveConfig", (originalError) =>
                 Effect.gen(function* () {
-                  const match = yield* findByName(name);
+                  const match = yield* findConfigByName(name);
                   if (!match) {
                     return yield* Effect.fail(originalError);
                   }
@@ -372,7 +372,11 @@ const createConfigName = (id: string, name: string | undefined) =>
     return yield* createPhysicalName({ id, lowercase: true });
   });
 
-const findByName = (name: string) =>
+/**
+ * Look up an existing Hyperdrive config by name in the ambient account.
+ * Returns undefined when no config matches.
+ */
+export const findConfigByName = (name: string) =>
   Effect.gen(function* () {
     const { accountId } = yield* yield* CloudflareEnvironment;
     return yield* hyperdrive.listConfigs.items({ accountId }).pipe(

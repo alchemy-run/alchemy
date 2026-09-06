@@ -7,6 +7,7 @@ import { Worker, WorkerEnvironment } from "../Workers/Worker.ts";
 import { Connect, type ConnectClient } from "./Connect.ts";
 import type { Connection } from "./Connection.ts";
 import { defaultPort, type DevOrigin } from "./Connection.ts";
+import { isHyperdriveRef, type Ref } from "./Ref.ts";
 
 export const ConnectBinding = Layer.effect(
   Connect,
@@ -14,7 +15,7 @@ export const ConnectBinding = Layer.effect(
     const env = yield* WorkerEnvironment;
     const host = yield* Worker;
 
-    return Effect.fn(function* (connection: Connection) {
+    return Effect.fn(function* (connection: Connection | Ref) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* host.bind`${connection}`({
           bindings: [
@@ -24,7 +25,9 @@ export const ConnectBinding = Layer.effect(
               id: connection.hyperdriveId as unknown as string,
             },
           ],
-          hyperdrives: getHyperdriveDevOrigin(connection),
+          hyperdrives: isHyperdriveRef(connection)
+            ? getHyperdriveRefDevOrigin(connection)
+            : getHyperdriveDevOrigin(connection),
         });
       }
 
@@ -87,3 +90,29 @@ export const getHyperdriveDevOrigin = (connection: Connection) => {
     }),
   ) as unknown as Record<string, Required<DevOrigin>>;
 };
+
+/**
+ * Dev-origin record for a read-only {@link Ref}. The Cloudflare API never
+ * returns the origin credentials of an existing config, so the ref can only
+ * contribute a local passthrough origin when its `dev` override is set;
+ * without one it contributes no entry and the local worker provider rejects
+ * the binding with an actionable error in dev mode.
+ */
+export const getHyperdriveRefDevOrigin = (ref: Ref) =>
+  Output.map(
+    Output.all(ref.hyperdriveId, ref.dev),
+    ([id, dev]): Record<string, Required<DevOrigin>> =>
+      dev
+        ? {
+            [id]: {
+              scheme: dev.scheme,
+              host: dev.host,
+              port: dev.port ?? defaultPort(dev.scheme),
+              user: dev.user,
+              database: dev.database,
+              password: dev.password,
+              sslmode: dev.sslmode ?? "prefer",
+            },
+          }
+        : {},
+  ) as unknown as Record<string, Required<DevOrigin>>;
