@@ -68,6 +68,47 @@ it.effect("passes stack and stage and centrally composes the fallback", () =>
   }),
 );
 
+it.effect(
+  "provides fallback configuration during scoped layer construction",
+  () =>
+    Effect.gen(function* () {
+      let released = false;
+      const secrets = Layer.effect(
+        SecretManager,
+        Effect.gen(function* () {
+          const bootstrap = yield* Effect.acquireRelease(
+            Config.string("LAYER_BOOTSTRAP").pipe(Effect.orDie),
+            () =>
+              Effect.sync(() => {
+                released = true;
+              }),
+          );
+          return {
+            name: "Scoped test",
+            resolve: () =>
+              Effect.succeed(ConfigProvider.fromUnknown({ VALUE: bootstrap })),
+          };
+        }),
+      );
+
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          const resolved = yield* resolveSecretManagerConfig({
+            secrets,
+            stack: "test-stack",
+            fallback: ConfigProvider.fromUnknown({
+              LAYER_BOOTSTRAP: "bootstrap",
+              VALUE: "fallback",
+            }),
+          });
+          expect(yield* read(resolved, "VALUE")).toBe("bootstrap");
+          expect(released).toBe(false);
+        }),
+      );
+      expect(released).toBe(true);
+    }),
+);
+
 it.effect("does not apply provider-specific filtering", () =>
   Effect.gen(function* () {
     const secrets = Layer.succeed(SecretManager, {

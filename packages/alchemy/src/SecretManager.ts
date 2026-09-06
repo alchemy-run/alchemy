@@ -25,8 +25,8 @@ export interface SecretManagerService {
 
 /**
  * A deploy-time source of validated configuration for an Alchemy stack.
- * Alchemy's default ConfigProvider is available through Effect `Config` while
- * `resolve` runs and is composed beneath the returned provider afterward.
+ * Alchemy's default ConfigProvider is available through Effect `Config` during
+ * layer construction and `resolve`, and is composed beneath the returned provider.
  */
 export class SecretManager extends Context.Service<
   SecretManager,
@@ -58,7 +58,9 @@ export const resolveSecretManagerConfig = Effect.fn(
   readonly fallback: ConfigProvider.ConfigProvider;
 }) {
   if (options.secrets === undefined) return options.fallback;
-  const context = yield* Layer.build(options.secrets);
+  const context = yield* Layer.build(options.secrets).pipe(
+    Effect.provideService(ConfigProvider.ConfigProvider, options.fallback),
+  );
   const managed = yield* Effect.provideService(
     Context.get(context, SecretManager).resolve({
       stack: options.stack,
