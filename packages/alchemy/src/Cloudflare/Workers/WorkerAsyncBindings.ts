@@ -37,8 +37,15 @@ import { isIndex } from "../Vectorize/VectorizeIndex.ts";
 import { isVpcService } from "../VpcService/VpcService.ts";
 import type { VpcServiceLookup } from "../VpcService/VpcServiceLookup.ts";
 import { isDispatchNamespace } from "../WorkersForPlatforms/DispatchNamespace.ts";
-import { isWorkflowLike, WorkflowResource } from "../Workflows/Workflow.ts";
-import { makeWorkflowName } from "../Workflows/WorkflowName.ts";
+import {
+  isWorkflowLike,
+  WorkflowResource,
+  type WorkflowBinding,
+} from "../Workflows/Workflow.ts";
+import {
+  asScriptNameOutput,
+  makeWorkflowName,
+} from "../Workflows/WorkflowName.ts";
 import { isAI } from "./AI.ts";
 import { isAssets } from "./Assets.ts";
 import { isBinding as isWorkerOnlyBinding } from "./Binding.ts";
@@ -121,6 +128,10 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
       ],
     });
   }
+  // The declared `env` as exposed on the resource (`worker.env`): each entry
+  // is the resolved binding value, except Workflow bindings, which surface
+  // their identity as Outputs of this deploy (see `WorkflowBinding`).
+  const env: Record<string, unknown> = {};
   if (props.env) {
     for (const bindingName in props.env) {
       // @ts-expect-error
@@ -133,6 +144,7 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
       // resolution below — yielding the Container class would resolve its
       // *started instance* tag, which only exists inside a Durable Object.
       if (isContainerDecl(bindingEff)) {
+        env[bindingName] = bindingEff;
         yield* bindContainerClass(resource, bindingName, bindingEff);
         continue;
       }
@@ -146,6 +158,7 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
           ? yield* bindingEff as Effect.Effect<unknown>
           : bindingEff
       ) as WorkerBindingResource;
+      env[bindingName] = binding;
 
       // Queue producer bindings may need the dev-mode remote-producer shim
       // (a LOCAL worker binding a LIVE queue): `maybeQueueShim` registers
@@ -209,15 +222,30 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
           // with Cloudflare via `putWorkflow` once the host Worker exists.
           // Cross-script references are binding-only; both sides derive the
           // same physical workflow name from the host script and class.
-          if (!binding.scriptName) {
-            yield* WorkflowResource(binding.name, {
-              workflowName,
-              className,
-              scriptName: resource.workerName,
-              limits: binding.limits,
-              schedules: binding.schedules,
-            });
-          }
+          const workflow = binding.scriptName
+            ? undefined
+            : yield* WorkflowResource(binding.name, {
+                workflowName,
+                className,
+                scriptName: resource.workerName,
+                limits: binding.limits,
+                schedules: binding.schedules,
+              });
+
+          // Expose the binding's identity on `worker.env`. A locally-hosted
+          // Workflow resolves through the registered resource's attributes,
+          // so a consumer (e.g. a Queue subscription to this Workflow's
+          // events) deploys after `putWorkflow`; a cross-script reference
+          // has no local resource and derives from the declared host script.
+          env[bindingName] = {
+            kind: binding.kind,
+            name: binding.name,
+            className,
+            workflowName: workflow ? workflow.workflowName : workflowName,
+            scriptName: workflow
+              ? workflow.scriptName
+              : asScriptNameOutput(scriptName),
+          } satisfies WorkflowBinding;
         }
 
         yield* resource.bind`${bindingName}`({
@@ -244,6 +272,10 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
       }
     }
   }
+  // Assigned through the resource proxy's `set` trap onto the underlying
+  // target, so `worker.env` reads back this record rather than an attribute
+  // `Output` (the proxy's fallback for unknown properties).
+  (resource as { env: Record<string, unknown> }).env = env;
 });
 
 /**

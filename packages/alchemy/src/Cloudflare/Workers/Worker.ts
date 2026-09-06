@@ -35,7 +35,11 @@ import type { DevContainerImage } from "../Containers/ContainerApplication.ts";
 import type { DevOrigin } from "../Hyperdrive/Connection.ts";
 import type { Providers } from "../Providers.ts";
 import type { DispatchNamespace } from "../WorkersForPlatforms/DispatchNamespace.ts";
-import type { WorkflowExport } from "../Workflows/Workflow.ts";
+import type {
+  WorkflowBinding,
+  WorkflowExport,
+  WorkflowLike,
+} from "../Workflows/Workflow.ts";
 import type { Reference as ZoneReference } from "../Zone/lookup.ts";
 import { type Assets, type AssetsProps } from "./Assets.ts";
 import {
@@ -331,6 +335,19 @@ export type NormalizedBindings<
       : Unwrap<T>
     : Extract<Unwrap<Bindings[B]>, WorkerBindingResource>;
 } & (undefined extends AssetsConfig ? {} : { ASSETS: Assets });
+
+/**
+ * The Worker's declared `env` as exposed on the declared resource
+ * (`worker.env`): every entry is the binding value as declared (with
+ * Effect-valued entries resolved), except a Workflow binding, which surfaces
+ * as a {@link WorkflowBinding} carrying the Workflow's physical name as an
+ * `Output` of the current deploy.
+ */
+export type WorkerEnvBindings<Bindings> = {
+  readonly [B in keyof Bindings]: Bindings[B] extends WorkflowLike<infer Params>
+    ? WorkflowBinding<Params>
+    : Bindings[B];
+};
 
 export type WorkerAssetsConfig = string | AssetsProps | AssetsWithHash;
 
@@ -1336,7 +1353,23 @@ export type Worker<Bindings = any> = Resource<
     devRemote?: Record<string, boolean>;
   },
   Providers
->;
+> & {
+  /**
+   * The Worker's declared `env`, populated when the Worker is declared.
+   * A Workflow binding is exposed as a {@link WorkflowBinding} whose
+   * `workflowName` is an `Output` resolved in the same deploy, so a sibling
+   * resource (e.g. a Queue subscription to the Workflow's events) can
+   * consume the Workflow's physical name on its first deployment:
+   *
+   * ```typescript
+   * source: {
+   *   type: "workflows.workflow",
+   *   workflowName: worker.env.MY_WORKFLOW.workflowName,
+   * }
+   * ```
+   */
+  readonly env: WorkerEnvBindings<Bindings>;
+};
 
 /** The env key the resolved URL is injected under when `yield*`-ed. */
 const SELF_URL_BINDING_NAME = "WORKER_URL";

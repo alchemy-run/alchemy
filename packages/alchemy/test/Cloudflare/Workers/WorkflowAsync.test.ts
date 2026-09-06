@@ -1,6 +1,7 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Test from "@/Test/Alchemy";
+import * as queues from "@distilled.cloud/cloudflare/queues";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as workflows from "@distilled.cloud/cloudflare/workflows";
 import { expect } from "alchemy-test";
@@ -241,6 +242,75 @@ test.provider(
       yield* scratch.destroy();
     }).pipe(logLevel),
   { timeout: 120_000 },
+);
+
+// ---------------------------------------------------------------------------
+// Same-stack Queue subscription: the Workflow's physical name is exposed on
+// `worker.env.<binding>.workflowName` as an Output of the current deploy, so
+// a subscription to the Workflow's lifecycle events deploys in the same pass
+// as the Worker that first registers the Workflow — no `WorkflowResource.ref`
+// (persisted state) and no re-derivation of the name on the stack side.
+// ---------------------------------------------------------------------------
+
+test.provider(
+  "async worker workflow binding exposes workflowName for a same-stack queue subscription",
+  (scratch) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      const deployed = yield* scratch.deploy(
+        Effect.gen(function* () {
+          const worker = yield* Cloudflare.Worker(
+            "subscribed-workflow-worker",
+            {
+              script: hostWorkflowScript,
+              env: {
+                MY_WORKFLOW: Cloudflare.Workflow("MyWorkflow"),
+              },
+            },
+          );
+          const queue = yield* Cloudflare.Queues.Queue("WorkflowEventsQueue", {
+            name: "alchemy-test-workflow-events",
+          });
+          const subscription = yield* Cloudflare.Queues.Subscription(
+            "WorkflowEvents",
+            {
+              source: {
+                type: "workflows.workflow",
+                workflowName: worker.env.MY_WORKFLOW.workflowName,
+              },
+              events: ["instance.completed", "instance.errored"],
+              queueId: queue.queueId,
+            },
+          );
+          return { worker, subscription };
+        }),
+      );
+
+      // The subscription targets exactly the name the Worker's `workflow`
+      // binding was uploaded with ...
+      const boundName = yield* readWorkflowName(deployed.worker.workerName);
+      const { source } = deployed.subscription;
+      expect(source.type).toBe("workflows.workflow");
+      expect(
+        source.type === "workflows.workflow" ? source.workflowName : undefined,
+      ).toBe(boundName);
+
+      // ... and Cloudflare recorded it against the Workflow.
+      const observed = yield* queues.getSubscription({
+        accountId,
+        subscriptionId: deployed.subscription.subscriptionId,
+      });
+      expect(observed.source).toEqual(
+        expect.objectContaining({
+          type: "workflows.workflow",
+          workflowName: boundName,
+        }),
+      );
+
+      yield* scratch.destroy();
+    }).pipe(logLevel),
+  { timeout: 180_000 },
 );
 
 // ---------------------------------------------------------------------------
