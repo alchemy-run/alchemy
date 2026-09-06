@@ -90,6 +90,70 @@ describe("alchemy format", (it) => {
     }),
   );
 
+  // #1389: name-keyed skip used to ignore content hashes, then the
+  // resource persisted the new hashes as if the rewrite had applied.
+  it.effect("fails when an already-applied migration's contents changed", () =>
+    Effect.gen(function* () {
+      const db = new Database(":memory:");
+      const executor = makeSqliteExecutor(db);
+      const records = yield* readFlatRecords(fixture("flat"));
+      yield* applyAlchemyFormat({
+        executor,
+        table: "__alchemy_migrations",
+        records,
+      });
+      const rewritten = [
+        {
+          ...records[0],
+          hash: "a".repeat(64),
+          sql: "SELECT 1;",
+          statements: ["SELECT 1;"],
+        },
+        records[1],
+      ];
+      const result = yield* Effect.result(
+        applyAlchemyFormat({
+          executor,
+          table: "__alchemy_migrations",
+          records: rewritten,
+        }),
+      );
+      expect(Result.isFailure(result)).toBe(true);
+      if (Result.isFailure(result)) {
+        expect(result.failure._tag).toBe("RewrittenMigrationHistoryError");
+        expect(result.failure.message).toContain("0001_users.sql");
+      }
+      expect(migrationRows(db).map((r) => r.hash)).toEqual(
+        records.map((r) => r.hash),
+      );
+    }),
+  );
+
+  it.effect("fails when an already-applied migration file is removed", () =>
+    Effect.gen(function* () {
+      const db = new Database(":memory:");
+      const executor = makeSqliteExecutor(db);
+      const records = yield* readFlatRecords(fixture("flat"));
+      yield* applyAlchemyFormat({
+        executor,
+        table: "__alchemy_migrations",
+        records,
+      });
+      const result = yield* Effect.result(
+        applyAlchemyFormat({
+          executor,
+          table: "__alchemy_migrations",
+          records: records.slice(1),
+        }),
+      );
+      expect(Result.isFailure(result)).toBe(true);
+      if (Result.isFailure(result)) {
+        expect(result.failure._tag).toBe("RewrittenMigrationHistoryError");
+        expect(result.failure.message).toContain("0001_users.sql");
+      }
+    }),
+  );
+
   it.effect(
     "upgrades the legacy Alchemy 3-column table in place without replaying",
     () =>
