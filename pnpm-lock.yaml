@@ -5642,9 +5642,6 @@ importers:
       uuid:
         specifier: catalog:shared
         version: 14.0.1
-      varlock:
-        specifier: ^1.18.0
-        version: 1.18.0
       vitest:
         specifier: catalog:testing
         version: 4.1.10(@types/node@26.2.0)(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
@@ -11945,24 +11942,6 @@ packages:
       webpack:
         optional: true
 
-  '@varlock/native-helper-darwin@1.18.0':
-    resolution: {integrity: sha512-O/Wn7G97N9RhdHrMNmDJtqH86+1vCKTzkThW7ICghvBtJslWAY4tpfDb32/AIh8OHOkIoHHmQ90ak6uovbZ2rw==}
-    os: [darwin]
-
-  '@varlock/native-helper-linux-arm64@1.18.0':
-    resolution: {integrity: sha512-oPEh5bFtBoRQlsLS0uou7vmuT3OeO0u6rvaNRuQO6P76b0hUSv/ZiNOEpUtS/e+iyJKIhl/0O1MrPq28Rxo9BQ==}
-    cpu: [arm64]
-    os: [linux]
-
-  '@varlock/native-helper-linux-x64@1.18.0':
-    resolution: {integrity: sha512-eUz2vLIMAKwiTMXfJDbJxIgV1D/GAUH6oKHde7i0kr4F+JpbduRblwbI8Qe1XF3DeEB/OBEJrtvhu0gp6t5d/g==}
-    cpu: [x64]
-    os: [linux]
-
-  '@varlock/native-helper-win32-x64@1.18.0':
-    resolution: {integrity: sha512-L95F5rrZtA6Fn1zjR2iIGBCHg+mA8tIylQOSo5TBZfAx0FlWd38jgwewm6b/nfYKeGrx/R6pSlSMDDuj1WsUMg==}
-    os: [win32, linux]
-
   '@vercel/nft@1.10.2':
     resolution: {integrity: sha512-w+WyX5Ulmj4dtTZrxaulqrjaLZHSbnPzx75SJsTNYmotKsqn1JlLnDJa+lz5hn90HJofhl/2MAtw0mCrgM3qYw==}
     engines: {node: '>=20'}
@@ -18063,11 +18042,6 @@ packages:
   validate-npm-package-name@5.0.1:
     resolution: {integrity: sha512-OljLrQ9SQdOUqTaQxqL5dEfZWrXExyyWsozYlAWFawPVNuD83igl7uJD2RTkNMbniIYgt8l81eCJGIdQF7avLQ==}
     engines: {node: ^14.17.0 || ^16.13.0 || >=18.0.0}
-
-  varlock@1.18.0:
-    resolution: {integrity: sha512-wGf3OuFwPXL/yxEu1yhao0pNhof1ubbpo8guQML6w3n4Rp2DLGH2PZFGgmwVmNiqULRntat7+0MEJLK2V0zIXw==}
-    engines: {bun: '>=1.3.3', node: '>=22.3.0'}
-    hasBin: true
 
   vary@1.1.2:
     resolution: {integrity: sha512-BNGbWLfd0eUPabhkXUVm0j8uuvREyTh5ovRa/dyow/BqAbZJyC+5fU+IzQOzmAKzYqYRAISoRhdQr3eIZ/PXqg==}
@@ -26554,18 +26528,6 @@ snapshots:
       - rollup
       - unloader
 
-  '@varlock/native-helper-darwin@1.18.0':
-    optional: true
-
-  '@varlock/native-helper-linux-arm64@1.18.0':
-    optional: true
-
-  '@varlock/native-helper-linux-x64@1.18.0':
-    optional: true
-
-  '@varlock/native-helper-win32-x64@1.18.0':
-    optional: true
-
   '@vercel/nft@1.10.2(rollup@4.62.4)(supports-color@10.2.2)':
     dependencies:
       '@mapbox/node-pre-gyp': 2.0.3(supports-color@10.2.2)
@@ -34644,13 +34606,6 @@ snapshots:
       typescript: 7.0.2
 
   validate-npm-package-name@5.0.1: {}
-
-  varlock@1.18.0:
-    optionalDependencies:
-      '@varlock/native-helper-darwin': 1.18.0
-      '@varlock/native-helper-linux-arm64': 1.18.0
-      '@varlock/native-helper-linux-x64': 1.18.0
-      '@varlock/native-helper-win32-x64': 1.18.0
 
   vary@1.1.2: {}
 

@@ -6,8 +6,6 @@ dist/
 .test/
 .DS_Store
 .env
-# Synthetic configuration used by the Varlock native-environment test.
-!/packages/alchemy/test/Varlock/fixtures/native/.env
 *.tsbuildinfo
 .claude/
 .alchemy/

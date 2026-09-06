@@ -144,12 +144,6 @@
       "worker": "./src/Infisical/index.ts",
       "import": "./lib/Infisical/index.js"
     },
-    "./Varlock": {
-      "types": "./lib/Varlock/index.d.ts",
-      "bun": "./src/Varlock/index.ts",
-      "worker": "./src/Varlock/index.ts",
-      "import": "./lib/Varlock/index.js"
-    },
     "./Kubernetes": {
       "types": "./lib/Kubernetes/index.d.ts",
       "bun": "./src/Kubernetes/index.ts",
@@ -539,7 +533,6 @@
     "typescript": "catalog:build",
     "unenv": "catalog:cloudflare-runtime",
     "uuid": "catalog:shared",
-    "varlock": "^1.18.0",
     "vitest": "catalog:testing",
     "vocs": "catalog:frontend",
     "waku": "catalog:frontend",
@@ -560,7 +553,6 @@
     "mongodb": "catalog:database",
     "mysql2": "catalog:database",
     "pg": "catalog:database",
-    "varlock": "^1.18.0",
     "vite": "catalog:build",
     "ws": "catalog:shared"
   },
@@ -599,9 +591,6 @@
       "optional": true
     },
     "pg": {
-      "optional": true
-    },
-    "varlock": {
       "optional": true
     },
     "vite": {
