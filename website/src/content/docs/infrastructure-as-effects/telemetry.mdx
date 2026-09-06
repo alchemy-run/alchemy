@@ -137,7 +137,12 @@ flushed when that scope closes:
 - On Cloudflare, the flush is registered with `ctx.waitUntil`, so it
   happens after the response is sent and never adds latency.
 - On Lambda, the flush settles inline before the invocation returns —
-  the response isn't released until the invoke completes anyway.
+  the response isn't released until the invoke completes anyway. An
+  invocation still running 500 ms before its timeout (`timeoutMargin`
+  on the Function) gets an early flush: the root span is ended with a
+  timeout error and the exporters drained, so the trace arrives
+  instead of vanishing with the frozen sandbox. The handler itself is
+  left alone.
 
 This per-event lifecycle is what makes export work on workerd, where
 timers and fetches are pinned to the request that created them: a

@@ -60,6 +60,12 @@ import {
   makeFunctionImage,
 } from "./FunctionImage.ts";
 import { makeFunctionHttpHandler } from "./HttpServer.ts";
+import {
+  HandlerContext,
+  TIMEOUT_MARGIN_ENV,
+  toTimeoutMarginMillis,
+  withInvocationDeadline,
+} from "./InvocationDeadline.ts";
 
 export type { FunctionImageSource } from "./FunctionImage.ts";
 
@@ -74,11 +80,6 @@ class FunctionUpdateFailed extends Data.TaggedError("FunctionUpdateFailed")<{
   functionName: string;
   reason?: string;
 }> {}
-
-export class HandlerContext extends Context.Service<
-  HandlerContext,
-  lambda.Context
->()("AWS.Lambda.HandlerContext") {}
 
 export const isFunction = (value: any): value is Function => {
   return (
@@ -266,6 +267,26 @@ export interface FunctionCommonProps extends PlatformProps {
    * @default 3 seconds (AWS Lambda default)
    */
   timeout?: Duration.Duration;
+  /**
+   * How long before {@link timeout} telemetry is flushed for an invocation
+   * that is still running. A Lambda that hits its timeout is frozen
+   * mid-flight and its buffered spans and logs are lost; at
+   * `timeout - timeoutMargin` the runtime ends the invocation's root span
+   * with an `AWS.Lambda.InvocationTimeoutError`, logs a warning and drains
+   * the exporters, so the trace of the slow invocation is exported instead.
+   *
+   * The handler is never interrupted and the invocation's outcome is never
+   * changed. If it does finish inside the margin, its response goes out
+   * as normal and the span is re-exported with the real outcome; the
+   * earlier export (marked `aws.lambda.timeout.imminent`) is the accepted
+   * false positive.
+   *
+   * Size it for one export round-trip to your telemetry backend. Set to
+   * `Duration.zero` to disable.
+   *
+   * @default 500 millis
+   */
+  timeoutMargin?: Duration.Duration;
   /**
    * Maximum number of concurrent executions reserved for this function.
    * Omit to remove the function-level reserved concurrency limit.
@@ -992,119 +1013,138 @@ export const Function: Platform<
   {},
   FunctionZipProps
 > = Platform(FunctionTypeId, {
-  createRuntimeContext: (id: string): Serverless.FunctionContext => {
-    const listeners: Effect.Effect<Serverless.FunctionListener>[] = [];
-    const env: Record<string, any> = {};
-
-    const ctx = {
-      Type: FunctionTypeId,
-      id,
-      env,
-      set: (id: string, output: Output.Output) =>
-        Effect.sync(() => {
-          // Key is already canonical (see RuntimeContext.sanitizeKey); store it
-          // verbatim. `packEnvValue` marker-packs Redacted values so they
-          // survive the Output → Lambda env var round-trip.
-          const key = id;
-          env[key] = output.pipe(Output.map(packEnvValue));
-          return key;
-        }),
-      get: <T>(key: string) =>
-        // Key is already canonical (see RuntimeContext.sanitizeKey). Read
-        // straight from `process.env` — see `unpackEnvValue` for why this
-        // must never resolve through `Config.string`.
-        Effect.sync(() => unpackEnvValue<T>(process.env[key])),
-      serve: (handler: HttpEffect) =>
-        // @ts-ignore
-        ctx.listen(makeFunctionHttpHandler(handler)),
-      listen: ((
-        handler:
-          | Serverless.FunctionListener
-          | Effect.Effect<Serverless.FunctionListener>,
-      ) =>
-        Effect.sync(() =>
-          Effect.isEffect(handler)
-            ? listeners.push(handler)
-            : listeners.push(Effect.succeed(handler)),
-        )) as any as Serverless.FunctionContext["listen"],
-      exports: Effect.sync(() => ({
-        // construct an Effect that produces the Function's entrypoint
-        // Effect<(event, context) => Promise<any>>
-        handler: Effect.gen(function* () {
-          const handlers = yield* Effect.all(listeners, {
-            concurrency: "unbounded",
-          });
-          // Sandbox-lifetime services, captured so each invocation can
-          // build its telemetry exporters and run the handler effect
-          // against the same context the init phase saw (mirrors
-          // WorkerBridge). The build's memo map is stripped so a Layer the
-          // user `Effect.provide`s inside a handler builds per invocation.
-          const services = Context.omit(Layer.CurrentMemoMap)(
-            yield* Effect.context<never>(),
-          );
-          return async (event: any, context: lambda.Context): Promise<any> => {
-            for (const handler of handlers) {
-              const eff = handler(event);
-              if (Effect.isEffect(eff)) {
-                // Each invocation gets a fresh request scope, matching the
-                // Worker / Durable Object / Workflow bridges. The scope is
-                // settled inline before returning: a buffered Lambda
-                // response is not released to the caller until the Invoke
-                // phase completes, so deferring cleanup (e.g. via an
-                // INVOKE-subscribed extension window) shows up as response
-                // latency anyway — keep request finalizers fast. A failing
-                // finalizer is logged and ignored so it can't mask the
-                // invocation's outcome.
-                const scope = Scope.makeUnsafe();
-                const exit = await eff.pipe(
-                  Effect.provide(
-                    Layer.mergeAll(
-                      Layer.succeed(HandlerContext, context),
-                      Layer.succeed(Scope.Scope, scope),
-                      // The configured telemetry exporters, attached to the
-                      // invocation scope by `buildEventTelemetry` so
-                      // buffered spans/logs/metrics flush when it settles
-                      // below.
-                      Layer.effectContext(
-                        buildEventTelemetry(
-                          services,
-                          scope,
-                          (ctx as Serverless.FunctionContext).telemetry,
-                        ),
-                      ),
-                    ).pipe(Layer.provideMerge(Layer.succeedContext(services))),
-                  ),
-                  Effect.tap(Effect.logDebug),
-                  Effect.runPromiseExit,
-                );
-                if (!isScopeEjected(scope)) {
-                  // The HttpMiddleware tracer ends the request's root span
-                  // in a dispatcher task scheduled after the handler effect
-                  // resolves; yield one macrotask so it reaches the
-                  // telemetry exporter's buffer before the flush finalizer.
-                  await new Promise((resolve) => setTimeout(resolve, 0));
-                  await Scope.close(scope, exit).pipe(
-                    Effect.ignoreCause({
-                      log: "Warn",
-                      message: "Lambda invocation scope close failed",
-                    }),
-                    Effect.runPromise,
-                  );
-                }
-                if (Exit.isSuccess(exit)) {
-                  return exit.value;
-                }
-                throw Cause.squash(exit.cause);
-              }
-            }
-            throw new Error("No event handler found");
-          };
-        }),
-      })),
-    };
-    return ctx;
-  },
+  createRuntimeContext: (id) => createFunctionRuntimeContext(id),
 });
+
+/**
+ * The Lambda runtime context: collects the listeners registered during
+ * Construction and produces the sandbox's `handler` export — the per-
+ * invocation dispatcher. Exported so the dispatcher can be driven
+ * in-process by tests.
+ *
+ * @internal
+ */
+export const createFunctionRuntimeContext = (
+  id: string,
+): Serverless.FunctionContext => {
+  const listeners: Effect.Effect<Serverless.FunctionListener>[] = [];
+  const env: Record<string, any> = {};
+
+  const ctx = {
+    Type: FunctionTypeId,
+    id,
+    env,
+    set: (id: string, output: Output.Output) =>
+      Effect.sync(() => {
+        // Key is already canonical (see RuntimeContext.sanitizeKey); store it
+        // verbatim. `packEnvValue` marker-packs Redacted values so they
+        // survive the Output → Lambda env var round-trip.
+        const key = id;
+        env[key] = output.pipe(Output.map(packEnvValue));
+        return key;
+      }),
+    get: <T>(key: string) =>
+      // Key is already canonical (see RuntimeContext.sanitizeKey). Read
+      // straight from `process.env` — see `unpackEnvValue` for why this
+      // must never resolve through `Config.string`.
+      Effect.sync(() => unpackEnvValue<T>(process.env[key])),
+    serve: (handler: HttpEffect) =>
+      // @ts-ignore
+      ctx.listen(makeFunctionHttpHandler(handler)),
+    listen: ((
+      handler:
+        | Serverless.FunctionListener
+        | Effect.Effect<Serverless.FunctionListener>,
+    ) =>
+      Effect.sync(() =>
+        Effect.isEffect(handler)
+          ? listeners.push(handler)
+          : listeners.push(Effect.succeed(handler)),
+      )) as any as Serverless.FunctionContext["listen"],
+    exports: Effect.sync(() => ({
+      // construct an Effect that produces the Function's entrypoint
+      // Effect<(event, context) => Promise<any>>
+      handler: Effect.gen(function* () {
+        const handlers = yield* Effect.all(listeners, {
+          concurrency: "unbounded",
+        });
+        // Sandbox-lifetime services, captured so each invocation can
+        // build its telemetry exporters and run the handler effect
+        // against the same context the init phase saw (mirrors
+        // WorkerBridge). The build's memo map is stripped so a Layer the
+        // user `Effect.provide`s inside a handler builds per invocation.
+        const services = Context.omit(Layer.CurrentMemoMap)(
+          yield* Effect.context<never>(),
+        );
+        return async (event: any, context: lambda.Context): Promise<any> => {
+          for (const handler of handlers) {
+            const eff = handler(event);
+            if (Effect.isEffect(eff)) {
+              // Each invocation gets a fresh request scope, matching the
+              // Worker / Durable Object / Workflow bridges. The scope is
+              // settled inline before returning: a buffered Lambda
+              // response is not released to the caller until the Invoke
+              // phase completes, so deferring cleanup (e.g. via an
+              // INVOKE-subscribed extension window) shows up as response
+              // latency anyway — keep request finalizers fast. A failing
+              // finalizer is logged and ignored so it can't mask the
+              // invocation's outcome.
+              //
+              // The scope is ALSO what a timeout would take with it: Lambda
+              // freezes the sandbox mid-flight and the buffered telemetry
+              // never flushes. `withInvocationDeadline` flushes it
+              // `timeoutMargin` before that happens — without touching the
+              // handler or the invocation's outcome.
+              const scope = Scope.makeUnsafe();
+              const exit = await eff.pipe(
+                withInvocationDeadline,
+                Effect.provide(
+                  Layer.mergeAll(
+                    Layer.succeed(HandlerContext, context),
+                    Layer.succeed(Scope.Scope, scope),
+                    // The configured telemetry exporters, attached to the
+                    // invocation scope by `buildEventTelemetry` so
+                    // buffered spans/logs/metrics flush when it settles
+                    // below.
+                    Layer.effectContext(
+                      buildEventTelemetry(
+                        services,
+                        scope,
+                        (ctx as Serverless.FunctionContext).telemetry,
+                      ),
+                    ),
+                  ).pipe(Layer.provideMerge(Layer.succeedContext(services))),
+                ),
+                Effect.tap(Effect.logDebug),
+                Effect.runPromiseExit,
+              );
+              if (!isScopeEjected(scope)) {
+                // The HttpMiddleware tracer ends the request's root span
+                // in a dispatcher task scheduled after the handler effect
+                // resolves; yield one macrotask so it reaches the
+                // telemetry exporter's buffer before the flush finalizer.
+                await new Promise((resolve) => setTimeout(resolve, 0));
+                await Scope.close(scope, exit).pipe(
+                  Effect.ignoreCause({
+                    log: "Warn",
+                    message: "Lambda invocation scope close failed",
+                  }),
+                  Effect.runPromise,
+                );
+              }
+              if (Exit.isSuccess(exit)) {
+                return exit.value;
+              }
+              throw Cause.squash(exit.cause);
+            }
+          }
+          throw new Error("No event handler found");
+        };
+      }),
+    })),
+  };
+  return ctx;
+};
 
 export const FunctionProvider = () =>
   Provider.effect(
@@ -1369,6 +1409,16 @@ export const FunctionProvider = () =>
             ? `${current} --enable-source-maps`
             : "--enable-source-maps",
         };
+      };
+
+      // The runtime reads the invocation deadline margin per invocation
+      // (see `withInvocationDeadline`); only written when set so the
+      // runtime default applies otherwise.
+      const timeoutMarginEnv = (
+        margin: Duration.Duration | undefined,
+      ): Record<string, string> => {
+        const ms = toTimeoutMarginMillis(margin);
+        return ms === undefined ? {} : { [TIMEOUT_MARGIN_ENV]: String(ms) };
       };
 
       const retryFunctionMutation = Effect.retry({
@@ -1709,14 +1759,13 @@ export const FunctionProvider = () =>
           Layers: isFunctionImageProps(news)
             ? undefined
             : (news.layers ?? []).map(layerVersionArnOf),
-          Environment: runtimeEnv
-            ? {
-                Variables: {
-                  ...runtimeEnv,
-                  ...alchemyEnv,
-                },
-              }
-            : undefined,
+          Environment: {
+            Variables: {
+              ...runtimeEnv,
+              ...alchemyEnv,
+              ...timeoutMarginEnv(news.timeoutMargin),
+            },
+          },
           Tags: tags,
           Timeout: toTimeoutSeconds(news.timeout),
           // Always explicit so removing the `tracing` prop converges back to
@@ -2125,6 +2174,12 @@ export const FunctionProvider = () =>
           }
           if (
             toTimeoutSeconds(olds.timeout) !== toTimeoutSeconds(news.timeout)
+          ) {
+            return { action: "update" };
+          }
+          if (
+            toTimeoutMarginMillis(olds.timeoutMargin) !==
+            toTimeoutMarginMillis(news.timeoutMargin)
           ) {
             return { action: "update" };
           }

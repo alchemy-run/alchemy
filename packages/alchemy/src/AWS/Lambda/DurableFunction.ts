@@ -24,8 +24,8 @@ import {
   Function,
   type FunctionProps,
   type FunctionServices,
-  type HandlerContext,
 } from "./Function.ts";
+import type { HandlerContext } from "./InvocationDeadline.ts";
 
 type TypeId = "AWS.Lambda.DurableFunction";
 const TypeId = "AWS.Lambda.DurableFunction" as const;
