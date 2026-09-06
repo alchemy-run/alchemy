@@ -1,5 +1,7 @@
 import * as Containers from "@distilled.cloud/cloudflare/containers";
+import * as durableObjectsApi from "@distilled.cloud/cloudflare/durable-objects";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
@@ -989,11 +991,43 @@ export const LiveContainerProvider = () =>
         };
       });
 
+      // Binding-contributed namespace ids resolve from the *worker's*
+      // output, which can be empty when the worker has not reconciled yet in
+      // this session (e.g. adopted workers with stale or partial state). The
+      // account's namespace list is authoritative, so resolve by class name
+      // before concluding the application has no Durable Object attachment —
+      // an undefined attachment otherwise triggers a destructive
+      // delete/recreate that the Cloudflare API then rejects
+      // (durable_objects.* are required on create).
+      const resolveDurableObjectsByClass = Effect.fn(function* (
+        className: string | undefined,
+      ) {
+        if (!className) return undefined;
+        const { accountId } = yield* yield* CloudflareEnvironment;
+        const matches = yield* durableObjectsApi.listNamespaces
+          .items({ accountId })
+          .pipe(
+            Stream.runCollect,
+            Effect.map((namespaces) =>
+              Array.from(namespaces).flatMap((ns) =>
+                ns.class === className && ns.id ? [{ namespaceId: ns.id }] : [],
+              ),
+            ),
+          );
+        // Ambiguous (several scripts host the class) or absent: stay
+        // undefined and let the non-destructive paths handle it.
+        return matches.length === 1 ? matches[0] : undefined;
+      });
+
       const getDurableObjects = (
         bindings: ResourceBinding<ContainerApplication["Binding"]>[],
       ) => {
+        // An attachment whose namespace id has not surfaced (the bound
+        // worker's output is unresolved — see resolveDurableObjectsByClass
+        // above) is indistinguishable from "no attachment" here: treat it as
+        // unresolved rather than as a desired empty attachment.
         const dos = bindings.flatMap((b) =>
-          b.data.durableObjects ? [b.data.durableObjects] : [],
+          b.data.durableObjects?.namespaceId ? [b.data.durableObjects] : [],
         );
         // A single DO namespace may appear in multiple bindings (e.g. when
         // a Container is referenced by several resources). Dedupe by namespaceId.
@@ -1150,7 +1184,9 @@ export const LiveContainerProvider = () =>
           yield* Effect.logInfo(
             `Cloudflare Container reconcile: starting ${name}`,
           );
-          const durableObjects = yield* getDurableObjects(bindings);
+          const durableObjects =
+            (yield* getDurableObjects(bindings)) ??
+            (yield* resolveDurableObjectsByClass(news.className));
           const { accountId } = yield* yield* CloudflareEnvironment;
           const env = makeContainerEnv(news, accountId, bindings);
           const { build, imageRef, imageHash, dev } = yield* computeImage(
@@ -1197,7 +1233,14 @@ export const LiveContainerProvider = () =>
           // (or vice versa). The DO attachment is immutable, so we delete
           // and recreate. Adoption-by-namespace is preferred when an app
           // already owns the namespace.
-          if (existing && !deepEqual(existing.durableObjects, durableObjects)) {
+          // An unresolved (undefined) desired attachment must never trigger
+          // the delete/recreate below — the live attachment is authoritative
+          // until a real namespace id disagrees.
+          if (
+            existing &&
+            durableObjects &&
+            !deepEqual(existing.durableObjects, durableObjects)
+          ) {
             if (durableObjects) {
               const owner = yield* findApplicationByNamespace(
                 durableObjects.namespaceId,
@@ -1306,7 +1349,9 @@ export const LiveContainerProvider = () =>
               news,
               bindings,
               existing,
-              durableObjects,
+              // Keep the live attachment through the ghost-recreate fallback
+              // when the desired value is unresolved.
+              durableObjects: durableObjects ?? existing.durableObjects,
               session,
             });
           }
