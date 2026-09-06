@@ -5,6 +5,7 @@
     "test/Cli/fixtures/shutdown-feedback-fixture.ts",
     "test/Local/fixtures/rpc-server-entry.ts",
     "test/Local/fixtures/rpc-server-entry-b.ts",
+    "test/Local/fixtures/rpc-config-entry.ts",
     "test/Local/fixtures/rpc-server-logs.ts",
     "test/Local/fixtures/rpc-spawner-parent.ts",
     "test/Local/fixtures/rpc-spawner-devserver-parent.ts",
