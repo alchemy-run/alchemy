@@ -10,8 +10,7 @@ import {
   createArtifactStore,
   makeScopedArtifacts,
 } from "../../Artifacts.ts";
-import { CloudflareAuth } from "../Auth/AuthProvider.ts";
-import * as Credentials from "../Credentials.ts";
+import { credentialsLayer } from "./ViteChildCredentials.ts";
 import * as RpcServerEnvironment from "../../Local/RpcServerEnvironment.ts";
 import { PlatformServices, runMain } from "../../Util/PlatformServices.ts";
 import { materializeRuntimeBindings } from "./RuntimeBindings.ts";
@@ -42,9 +41,7 @@ const readConfig = Effect.gen(function* () {
 const program = Effect.scoped(
   Effect.gen(function* () {
     const config = yield* readConfig;
-    const credentials = Credentials.fromAuthProvider().pipe(
-      Layer.provide(CloudflareAuth),
-    );
+    const credentials = credentialsLayer(config.credentialConfig);
     const runtimeContext = yield* layerRuntime({
       api: { accountId: config.accountId },
       storage: { directory: config.storageDirectory },
