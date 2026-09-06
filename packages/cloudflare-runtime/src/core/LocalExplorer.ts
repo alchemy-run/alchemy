@@ -28,6 +28,7 @@ export const LOCAL_EXPLORER_FLAGS = [
 ];
 
 export const LOCAL_EXPLORER_SERVICE = "local-explorer:router";
+export const LOCAL_EXPLORER_PUBLIC_SERVICE = "local-explorer:public";
 
 // Alchemy carries the resource ID in service props; Miniflare sends it in
 // MF-Namespace. Reuse the exact resolved local service designator, including
@@ -152,6 +153,7 @@ export const prepareLocalExplorer = Effect.fn("LocalExplorer.prepare")(
     upstream: string,
     storage: Service,
     resolvedBindings: ReadonlyArray<Worker_Binding>,
+    explorerUrl: string,
     collector?: Effect.Success<ReturnType<typeof makeLocalExplorerCollector>>,
   ) {
     const loopback = yield* context.get(Loopback);
@@ -469,6 +471,41 @@ export const prepareLocalExplorer = Effect.fn("LocalExplorer.prepare")(
       services: [
         ...email.services,
         {
+          name: LOCAL_EXPLORER_PUBLIC_SERVICE,
+          worker: {
+            compatibilityDate: "2026-01-01",
+            modules: [
+              {
+                name: "public.js",
+                esModule: `
+export default {
+  fetch(request, env) {
+    const url = new URL(request.url);
+    // Keep API requests on the internal adapter. Redirecting multipart writes
+    // can cause clients to regenerate a body with the old boundary header.
+    if (url.pathname.startsWith("/cdn-cgi/local/explorer/api/")) return env.EXPLORER.fetch(request);
+    for (const prefix of ["/cdn-cgi/local/explorer", "/cdn-cgi/explorer"]) {
+      if (url.pathname === prefix || url.pathname.startsWith(prefix + "/")) {
+        const target = new URL(env.URL);
+        target.pathname = "/cdn-cgi/local/explorer" + url.pathname.slice(prefix.length);
+        target.search = url.search;
+        return Response.redirect(target, 307);
+      }
+    }
+    if (url.pathname === "/cdn-cgi/handler/email" || url.pathname === "/cdn-cgi/local/email") return env.EXPLORER.fetch(request);
+    return env.UPSTREAM.fetch(request);
+  }
+};`,
+              },
+            ],
+            bindings: [
+              { name: "URL", text: explorerUrl },
+              { name: "EXPLORER", service: { name: LOCAL_EXPLORER_SERVICE } },
+              { name: "UPSTREAM", service: { name: upstream } },
+            ],
+          },
+        },
+        {
           name: "local-explorer:loopback",
           worker: {
             compatibilityDate: "2026-01-01",
@@ -509,10 +546,11 @@ export const prepareLocalExplorer = Effect.fn("LocalExplorer.prepare")(
               {
                 name: "entry.js",
                 esModule:
-                  "export default { fetch(request, env) { return env.EXPLORER.fetch(request); } };",
+                  "export default { fetch(request, env) { if (new URL(request.url).pathname === '/_alchemy/explorer/health') return Response.json({ id: env.ID }); return env.EXPLORER.fetch(request); } };",
               },
             ],
             bindings: [
+              { name: "ID", text: instanceId },
               { name: "EXPLORER", service: { name: LOCAL_EXPLORER_SERVICE } },
             ],
           },

@@ -113,9 +113,10 @@ layer(localRuntimeLayer)("Local Explorer actions", (it) => {
         const form = new FormData();
         form.set("value", "from explorer");
         form.set("metadata", JSON.stringify({ source: "test" }));
-        expect(
-          (yield* peer.fetch(kvValue, { method: "PUT", body: form })).status,
-        ).toBe(200);
+        const write = yield* peer.fetch(kvValue, { method: "PUT", body: form });
+        expect(write.status, yield* Effect.promise(() => write.text())).toBe(
+          200,
+        );
         expect(
           yield* worker.fetchText(`/kv?key=${encodeURIComponent(key)}`),
         ).toBe("from explorer");

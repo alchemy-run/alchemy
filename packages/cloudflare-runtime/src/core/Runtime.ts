@@ -1,11 +1,13 @@
 import { makeLocalExplorerCollector } from "./LocalExplorerCollector.ts";
+import { makeLocalExplorerHost } from "./LocalExplorerHost.ts";
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import type * as Scope from "effect/Scope";
+import * as Scope from "effect/Scope";
+import * as Semaphore from "effect/Semaphore";
 import {
-  LOCAL_EXPLORER_SERVICE,
+  LOCAL_EXPLORER_PUBLIC_SERVICE,
   LOCAL_EXPLORER_COLLECTOR,
   LOCAL_EXPLORER_FLAGS,
   prepareLocalExplorer,
@@ -75,6 +77,19 @@ export const RuntimeLive = Layer.effect(
     );
     const workerd = yield* Workerd.Workerd;
     const storage = yield* Storage.Storage;
+    const lifetime = yield* Effect.scope;
+    const explorerHostLock = yield* Semaphore.make(1);
+    let explorerUrl: string | undefined;
+    const getExplorerUrl = (context: PluginContext.PluginContext["Service"]) =>
+      Effect.gen(function* () {
+        return (explorerUrl ??= yield* makeLocalExplorerHost(
+          storage,
+          context,
+        ).pipe(
+          Effect.provideService(Scope.Scope, lifetime),
+          Effect.provideService(Workerd.Workerd, workerd),
+        ));
+      }).pipe(explorerHostLock.withPermits(1));
     const collector = observabilityEnabled
       ? yield* makeLocalExplorerCollector(storage)
       : undefined;
@@ -251,6 +266,7 @@ export const RuntimeLive = Layer.effect(
                 config.entry ?? SERVICE_USER_WORKER,
                 storage,
                 bindings,
+                yield* getExplorerUrl(context),
                 collector,
               )
             : undefined;
@@ -262,7 +278,7 @@ export const RuntimeLive = Layer.effect(
                 address: "127.0.0.1:0",
                 service: {
                   name: explorer
-                    ? LOCAL_EXPLORER_SERVICE
+                    ? LOCAL_EXPLORER_PUBLIC_SERVICE
                     : (config.entry ?? SERVICE_USER_WORKER),
                 },
               },
@@ -355,11 +371,6 @@ export const RuntimeLive = Layer.effect(
         );
         yield* context.start(ports);
         const url = new URL(`http://127.0.0.1:${ports[SOCKET_USER_ENTRY]}`);
-        if (explorer) {
-          yield* Effect.logInfo(
-            `[${worker.name}] Local Explorer: ${new URL("/cdn-cgi/local/explorer/", url)}`,
-          );
-        }
         return url;
       }),
     });

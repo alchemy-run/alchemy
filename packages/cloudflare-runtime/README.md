@@ -17,8 +17,11 @@ CLOUDFLARE_RUNTIME_LOCAL_EXPLORER=true alchemy dev
 Open `/cdn-cgi/local/explorer/` on any local Worker. Direct runtime callers can
 set `RuntimeWorker.localExplorer: true`; `false` overrides the environment flag.
 The feature is disabled by default and has no effect on deployed Workers.
-Each enabled Worker logs its direct Local Explorer URL once its runtime starts.
-The URL uses the actual bound port; it is printed again when the runtime restarts.
+One shared Local Explorer URL is logged for each local storage directory.
+Browser visits to Worker Explorer routes redirect to that address; the dropdown
+selects any Worker. Resource API handlers remain available on each Worker.
+The host survives individual Worker restarts. If its owning runtime exits, another
+runtime takes over the same port (with a brief interruption during failover).
 
 - KV: namespaces, key pagination/prefixes, values, metadata, expiration, and create/update/delete.
 - SQLite Durable Objects: persisted instances, table browsing, and SQL queries.
