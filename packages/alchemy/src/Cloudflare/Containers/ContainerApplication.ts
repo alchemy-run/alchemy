@@ -53,6 +53,24 @@ export namespace ContainerApplication {
   >[number];
   export type Constraints = {
     tier?: number;
+    /**
+     * Limit container placement to specific geographic regions.
+     */
+    regions?: (
+      | "ENAM"
+      | "WNAM"
+      | "EEUR"
+      | "WEUR"
+      | "APAC"
+      | "SAM"
+      | "ME"
+      | "OC"
+      | "AFR"
+    )[];
+    /**
+     * Restrict container placement to a compliance/data-residency boundary.
+     */
+    jurisdiction?: "eu" | "fedramp";
   };
   export type Affinities = {
     colocation?: "datacenter";
@@ -624,9 +642,11 @@ export type ContainerShape = Main<ContainerServices>;
  * ```
  *
  * `schedulingPolicy` selects the control-plane placement strategy,
- * `constraints.tier` restricts which capacity tier instances may land on, and
- * `affinities.colocation` keeps related instances in the same datacenter to
- * reduce inter-instance latency.
+ * `constraints.tier` restricts which capacity tier instances may land on,
+ * `constraints.regions`/`constraints.jurisdiction` restrict placement to
+ * geographic regions or a compliance boundary (e.g. `jurisdiction: "eu"` for
+ * data residency), and `affinities.colocation` keeps related instances in the
+ * same datacenter to reduce inter-instance latency.
  *
  * ### Rollouts
  * When an update changes the configuration, `rollout` controls how the new
