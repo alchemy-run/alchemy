@@ -32,8 +32,9 @@ export default Alchemy.Stack(
 `Alchemy.Stack` takes three arguments:
 
 1. **Name** — identifies this stack in state storage
-2. **Options** — `providers` and `state`, both required (see
-   [State Store](/state-store) for the available state layers)
+2. **Options** — required `providers` and `state` layers, plus an optional
+   `secrets` layer (see [State Store](/state-store) and
+   [Secrets & Config](/environments/secrets))
 3. **Effect** — a generator that declares resources and returns outputs
 
 :::note[`alchemy.run.ts` is a convention]

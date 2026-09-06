@@ -1,4 +1,5 @@
 import * as Deferred from "effect/Deferred";
+import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
@@ -20,6 +21,7 @@ import {
 import { Stack } from "../../Stack.ts";
 import { unwrapRedacted } from "../../Util/index.ts";
 import { nodeLoaderArgs } from "../../Util/Node.ts";
+import { readCredentialConfig } from "./ViteChildCredentials.ts";
 import {
   type ViteBuildChildConfig,
   type ViteBuildChildResult,
@@ -47,7 +49,7 @@ const resolveRunner = (basename: string) =>
   );
 
 export const startViteChild = (
-  config: ViteChildConfig,
+  config: Omit<ViteChildConfig, "credentialConfig">,
   onOutput: (channel: "stdout" | "stderr", line: string) => Effect.Effect<void>,
 ) =>
   Effect.gen(function* () {
@@ -66,10 +68,14 @@ export const startViteChild = (
     // readable by real V8 (and vice versa), so a cross-runtime spawn
     // sends JSON instead; the runner sniffs the encoding (V8 payloads
     // start with 0xFF, JSON with `{`).
+    const childConfig = unwrapRedacted({
+      ...config,
+      credentialConfig: yield* readCredentialConfig,
+    });
     const serializedConfig =
       nodeExecPath !== undefined
-        ? Buffer.from(JSON.stringify(unwrapRedacted(config)))
-        : NodeV8.serialize(unwrapRedacted(config));
+        ? Buffer.from(JSON.stringify(childConfig))
+        : NodeV8.serialize(childConfig);
     // The Vite child boots the legacy single-stack environment
     // (RpcServerEnvironment.fromEnv). The sidecar's own process env no
     // longer carries a stack (one sidecar serves many stacks; sessions
@@ -80,6 +86,12 @@ export const startViteChild = (
     const alchemyContext = yield* Effect.serviceOption(AlchemyContext);
     const stack = yield* Effect.serviceOption(Stack);
     const base = yield* fromProcessEnv.pipe(
+      // Spawn metadata belongs to this sidecar process, not to the stack's
+      // managed ConfigProvider (which comes from a different process).
+      Effect.provideService(
+        ConfigProvider.ConfigProvider,
+        ConfigProvider.fromEnv(),
+      ),
       Effect.orElseSucceed((): RpcServerEnvironment => ({
         profile: process.env.ALCHEMY_PROFILE,
         envFile: undefined,

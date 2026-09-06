@@ -1,6 +1,7 @@
 import { newWebSocketRpcSession } from "capnweb";
 import * as Cache from "effect/Cache";
 import * as Config from "effect/Config";
+import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -17,6 +18,7 @@ import {
   SESSION_ENV_PARAM,
 } from "./RpcServerEnvironment.ts";
 import type { RpcSpawnPayload } from "./RpcSpawner.ts";
+import * as RpcConfigProvider from "./RpcConfigProvider.ts";
 
 export class RpcProviderProxy extends Context.Service<
   RpcProviderProxy,
@@ -114,6 +116,9 @@ const make = Effect.fn(function* (spawnerUrl: string) {
     get: Effect.fn(function* (mainUrl, providerName) {
       const alchemyContext = yield* AlchemyContext;
       const stack = yield* Stack;
+      const readConfig = RpcConfigProvider.reader(
+        yield* ConfigProvider.ConfigProvider,
+      );
       const sessionEnv = encodeSessionEnvironment({
         alchemyContext,
         stack: { name: stack.name, stage: stack.stage },
@@ -123,7 +128,7 @@ const make = Effect.fn(function* (spawnerUrl: string) {
         const session = yield* Cache.get(cache, key);
         return yield* Effect.tryPromise(
           () =>
-            session.getProvider(providerName) as ReturnType<
+            session.getProvider(providerName, readConfig) as ReturnType<
               RpcProxyApi["getProvider"]
             >,
         );

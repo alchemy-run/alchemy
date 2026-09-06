@@ -11,10 +11,12 @@ import { formatElapsed } from "../../Format.ts";
 
 import { Progress } from "../../../Alchemist/Progress.ts";
 import * as Profiles from "../../../Alchemist/routes/profile.ts";
+import {
+  collectAuthProviderContext,
+  resolveStackProfileName,
+} from "../../../Alchemist/Session.ts";
 import { getEnv } from "../../../Auth/Env.ts";
-import { loadConfigProvider } from "../../../Util/ConfigProvider.ts";
 import * as CliKit from "../../../Cli/CliKit/index.ts";
-import { resolveProfileName } from "../../../Auth/Resolve.ts";
 
 import { exitDeclined, failWithHelp, UserInputError } from "../errors.ts";
 import { config, envFile, profile, yes } from "../flags.ts";
@@ -51,7 +53,10 @@ const showCommand = Command.make(
     "alchemy.profile": a.profile ?? "",
   }))(
     Effect.fn(function* ({ profile, envFile, main }) {
-      const activeProfile = yield* resolveProfileName(envFile, undefined);
+      const activeProfile = yield* resolveStackProfileName({
+        main,
+        envFile,
+      });
       const profileName = profile ?? activeProfile;
       yield* showProfileFlow({
         profileName,
@@ -180,11 +185,10 @@ const setFlag = Flag.string("set").pipe(
  */
 const resolveSetValues = Effect.fn(function* (
   sets: ReadonlyArray<string>,
-  envFile: Option.Option<string>,
+  configProvider: ConfigProvider.ConfigProvider,
 ) {
   const values: Record<string, string> = {};
   let stdinUsed = false;
-  const configProvider = yield* loadConfigProvider(envFile);
   for (const entry of sets) {
     const separator = entry.indexOf("=");
     if (separator <= 0) {
@@ -283,7 +287,12 @@ const editCommand = Command.make(
       envFile,
       main,
     }) {
-      const selectedProfile = yield* resolveProfileName(envFile, profile);
+      const stackConfig = {
+        main,
+        envFile,
+        profile,
+      };
+      const selectedProfile = yield* resolveStackProfileName(stackConfig);
       let configureInput:
         | { method?: string; values: Record<string, string> }
         | undefined;
@@ -298,7 +307,10 @@ const editCommand = Command.make(
         }
         configureInput = {
           method,
-          values: yield* resolveSetValues(set, envFile),
+          values: yield* resolveSetValues(
+            set,
+            (yield* collectAuthProviderContext(stackConfig)).configProvider,
+          ),
         };
       }
       if (configureInput !== undefined) {
@@ -369,7 +381,11 @@ const refreshCommand = Command.make(
     }),
   )(
     Effect.fn(function* ({ profile, providers, envFile, main }) {
-      const selectedProfile = yield* resolveProfileName(envFile, profile);
+      const selectedProfile = yield* resolveStackProfileName({
+        main,
+        envFile,
+        profile,
+      });
       const refreshStarted = new Map<string, number>();
       yield* Profiles.refresh({
         profile: selectedProfile,

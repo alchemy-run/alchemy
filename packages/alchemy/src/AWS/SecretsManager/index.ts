@@ -17,5 +17,6 @@ export * from "./RotateSecretHttp.ts";
 export * from "./RotationEventSource.ts";
 export * from "./RotationSchedule.ts";
 export * from "./Secret.ts";
+export { secrets, type SecretSet, type SecretsSelector } from "./Secrets.ts";
 export * from "./UpdateSecretVersionStage.ts";
 export * from "./UpdateSecretVersionStageHttp.ts";

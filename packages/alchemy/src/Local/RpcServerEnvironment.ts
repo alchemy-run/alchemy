@@ -56,15 +56,17 @@ export type RpcEnvironmentServices = Layer.Success<ReturnType<typeof layer>>;
 export const layer = (
   environment: Pick<RpcServerEnvironment, "profile" | "envFile"> &
     SessionEnvironment,
+  configProvider?: ConfigProvider.ConfigProvider,
 ) =>
   Layer.mergeAll(
     ProfileStoreLive,
     CredentialsStoreLive,
     Layer.succeed(AuthProviders, {}),
     ConfigProvider.layer(
-      loadConfigProvider(Option.fromNullishOr(environment.envFile)).pipe(
-        Effect.map((base) => withProfileOverride(base, environment.profile)),
-      ),
+      configProvider ??
+        loadConfigProvider(Option.fromNullishOr(environment.envFile)).pipe(
+          Effect.map((base) => withProfileOverride(base, environment.profile)),
+        ),
     ),
     Layer.succeed(AlchemyContext, environment.alchemyContext),
     Layer.succeed(Stack, {
