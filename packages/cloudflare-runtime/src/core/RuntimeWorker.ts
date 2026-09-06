@@ -11,6 +11,14 @@ export interface RuntimeWorker<B extends BindingHooks = BindingHooks> {
   readonly compatibilityFlags: Array<string>;
   readonly bindings: B;
   readonly modules: ReadonlyArray<Module>;
+  /**
+   * Serve Cloudflare's Local Explorer at `/cdn-cgi/local/explorer`.
+   * Opt-in local inspection and management of KV, R2, D1, Workflows,
+   * SQLite Durable Objects, and email. Resource controls can modify local data.
+   * Inherits the
+   * `CLOUDFLARE_RUNTIME_LOCAL_EXPLORER` setting (default `false`).
+   */
+  readonly localExplorer?: boolean;
   readonly assets?: Assets;
   readonly hyperdrives?: Record<string, HyperdriveOrigin>;
   readonly durableObjectNamespaces?: ReadonlyArray<DurableObjectNamespace>;
