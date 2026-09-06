@@ -27,6 +27,7 @@ export class Registry extends Context.Service<
     /**
      * Reads the registry and returns the resolved targets for the given subscribers.
      */
+    readonly entries: Effect.Effect<ReadonlyArray<RegistryEntry>>;
     readonly read: (
       subscribers: ReadonlyArray<Subscriber>,
     ) => Effect.Effect<ResolvedTargetMap>;
@@ -135,6 +136,9 @@ export const RegistryLive = Layer.effect(
     ).pipe(Stream.runDrain, Effect.forkScoped);
 
     return Registry.of({
+      entries: SubscriptionRef.get(ref).pipe(
+        Effect.map((entries) => [...MutableHashMap.values(entries)]),
+      ),
       read: (subscribers) =>
         SubscriptionRef.get(ref).pipe(
           Effect.map(pickSubscriberServices(subscribers)),

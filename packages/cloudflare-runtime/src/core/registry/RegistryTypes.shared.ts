@@ -30,6 +30,10 @@ export declare namespace Subscriber {
 
 export interface RegistryEntry {
   readonly scriptName: string;
+  readonly localExplorer?: {
+    readonly storageScope: string;
+    readonly instanceId: string;
+  };
   readonly debugPortAddress: string;
   readonly services: [RegistryEntry.Worker, ...Array<RegistryEntry.Service>];
 }

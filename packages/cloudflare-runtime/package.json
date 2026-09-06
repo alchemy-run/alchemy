@@ -50,7 +50,9 @@
     "sharp": "catalog:cloudflare-runtime",
     "unenv": "catalog:cloudflare-runtime",
     "workerd": "catalog:cloudflare-runtime",
-    "yauzl": "catalog:cloudflare-runtime"
+    "yauzl": "catalog:cloudflare-runtime",
+    "miniflare": "5.20260903.0-alpha",
+    "proper-lockfile": "4.1.2"
   },
   "devDependencies": {
     "@cloudflare/vitest-plugin": "catalog:cloudflare-runtime",
@@ -75,7 +77,8 @@
     "typescript": "catalog:build",
     "vite": "catalog:build",
     "vitest": "catalog:testing",
-    "ws": "catalog:cloudflare-runtime"
+    "ws": "catalog:cloudflare-runtime",
+    "@types/proper-lockfile": "4.1.4"
   },
   "peerDependencies": {
     "@distilled.cloud/cloudflare": "workspace:*",

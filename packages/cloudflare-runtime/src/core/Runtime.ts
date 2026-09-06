@@ -1,7 +1,18 @@
+import { makeLocalExplorerCollector } from "./LocalExplorerCollector.ts";
+import { makeLocalExplorerHost } from "./LocalExplorerHost.ts";
+import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import type * as Scope from "effect/Scope";
+import * as Scope from "effect/Scope";
+import * as Semaphore from "effect/Semaphore";
+import {
+  LOCAL_EXPLORER_PUBLIC_SERVICE,
+  LOCAL_EXPLORER_COLLECTOR,
+  LOCAL_EXPLORER_FLAGS,
+  prepareLocalExplorer,
+} from "./LocalExplorer.ts";
+import { wrapDurableObjectModules } from "./LocalExplorerDurableObjects.ts";
 import * as Docker from "./Docker.ts";
 import type * as Globals from "./globals/Globals.ts";
 import * as Storage from "./globals/Storage.ts";
@@ -37,8 +48,51 @@ type BindingRequirements<B extends BindingHooks> =
 export const RuntimeLive = Layer.effect(
   Runtime,
   Effect.gen(function* () {
+    const localExplorerEnabled = yield* Config.boolean(
+      "CLOUDFLARE_RUNTIME_LOCAL_EXPLORER",
+    ).pipe(
+      Config.withDefault(false),
+      Effect.mapError(
+        (cause) =>
+          new SystemError({
+            subtag: "LocalExplorer",
+            message: "Invalid CLOUDFLARE_RUNTIME_LOCAL_EXPLORER setting.",
+            cause,
+          }),
+      ),
+    );
+    const observabilityEnabled = yield* Config.boolean(
+      "CLOUDFLARE_RUNTIME_LOCAL_EXPLORER_OBSERVABILITY",
+    ).pipe(
+      Config.withDefault(false),
+      Effect.mapError(
+        (cause) =>
+          new SystemError({
+            subtag: "LocalExplorer",
+            message:
+              "Invalid CLOUDFLARE_RUNTIME_LOCAL_EXPLORER_OBSERVABILITY setting.",
+            cause,
+          }),
+      ),
+    );
     const workerd = yield* Workerd.Workerd;
     const storage = yield* Storage.Storage;
+    const lifetime = yield* Effect.scope;
+    const explorerHostLock = yield* Semaphore.make(1);
+    let explorerUrl: string | undefined;
+    const getExplorerUrl = (context: PluginContext.PluginContext["Service"]) =>
+      Effect.gen(function* () {
+        return (explorerUrl ??= yield* makeLocalExplorerHost(
+          storage,
+          context,
+        ).pipe(
+          Effect.provideService(Scope.Scope, lifetime),
+          Effect.provideService(Workerd.Workerd, workerd),
+        ));
+      }).pipe(explorerHostLock.withPermits(1));
+    const collector = observabilityEnabled
+      ? yield* makeLocalExplorerCollector(storage)
+      : undefined;
     const docker = yield* Docker.Docker;
     const plugins =
       yield* PluginContext.pickPluginsFromContext<Globals.Globals>();
@@ -204,13 +258,29 @@ export const RuntimeLive = Layer.effect(
             concurrency: "unbounded",
           },
         );
+        const explorer =
+          (worker.localExplorer ?? localExplorerEnabled)
+            ? yield* prepareLocalExplorer(
+                worker,
+                context,
+                config.entry ?? SERVICE_USER_WORKER,
+                storage,
+                bindings,
+                yield* getExplorerUrl(context),
+                collector,
+              )
+            : undefined;
         const ports = yield* workerd.serve(
           {
             sockets: [
               {
                 name: SOCKET_USER_ENTRY,
                 address: "127.0.0.1:0",
-                service: { name: config.entry ?? SERVICE_USER_WORKER },
+                service: {
+                  name: explorer
+                    ? LOCAL_EXPLORER_PUBLIC_SERVICE
+                    : (config.entry ?? SERVICE_USER_WORKER),
+                },
               },
               ...config.sockets,
             ],
@@ -220,7 +290,7 @@ export const RuntimeLive = Layer.effect(
                 worker: {
                   compatibilityDate: worker.compatibilityDate,
                   compatibilityFlags: worker.compatibilityFlags,
-                  bindings,
+                  bindings: explorer?.bindings ?? bindings,
                   modules: worker.modules.map(moduleToWorkerd),
                   durableObjectNamespaces: worker.durableObjectNamespaces?.map(
                     (namespace) => {
@@ -247,11 +317,51 @@ export const RuntimeLive = Layer.effect(
                   streamingTails,
                   ...config.userWorker,
                   ...worker.unsafe,
+                  ...(explorer && collector
+                    ? {
+                        compatibilityFlags: [
+                          ...new Set([
+                            ...(worker.unsafe?.compatibilityFlags ??
+                              config.userWorker.compatibilityFlags ??
+                              worker.compatibilityFlags),
+                            ...LOCAL_EXPLORER_FLAGS,
+                          ]),
+                        ],
+                        streamingTails: [
+                          ...(worker.unsafe?.streamingTails ??
+                            config.userWorker.streamingTails ??
+                            streamingTails ??
+                            []),
+                          {
+                            name: LOCAL_EXPLORER_COLLECTOR,
+                            props: {
+                              json: JSON.stringify({ worker: worker.name }),
+                            },
+                          },
+                        ],
+                      }
+                    : {}),
+                  ...(explorer
+                    ? {
+                        modules: yield* wrapDurableObjectModules(
+                          (worker.unsafe && "modules" in worker.unsafe
+                            ? worker.unsafe.modules
+                            : undefined) ??
+                            ("modules" in config.userWorker
+                              ? config.userWorker.modules
+                              : undefined) ??
+                            worker.modules.map(moduleToWorkerd),
+                          worker.durableObjectNamespaces ?? [],
+                          explorer.durableObjectWrapper,
+                        ),
+                      }
+                    : {}),
                 },
               },
               ...config.services,
+              ...(explorer?.services ?? []),
             ],
-            extensions: config.extensions,
+            extensions: [...config.extensions, ...(explorer?.extensions ?? [])],
           },
           {
             "debug-port": "127.0.0.1:0",
@@ -260,7 +370,8 @@ export const RuntimeLive = Layer.effect(
           { onOutput: worker.logging?.onOutput },
         );
         yield* context.start(ports);
-        return new URL(`http://127.0.0.1:${ports[SOCKET_USER_ENTRY]}`);
+        const url = new URL(`http://127.0.0.1:${ports[SOCKET_USER_ENTRY]}`);
+        return url;
       }),
     });
   }),
