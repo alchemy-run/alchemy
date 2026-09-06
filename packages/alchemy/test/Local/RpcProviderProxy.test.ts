@@ -29,6 +29,7 @@ type Handlers = {
     inherited: string | null;
   }>;
   tree: () => Effect.Effect<{ values: string[] }>;
+  readUpper: (key: string) => Effect.Effect<string>;
   read: (key: string) => Effect.Effect<string>;
 };
 const get = (config: ConfigProvider.ConfigProvider, name = "first") =>
@@ -120,6 +121,25 @@ describe("Local.RpcProviderProxy configuration", () => {
         expect((yield* removed.captured()).token).toBe("absent");
         const restored = yield* get(config("restored-token"));
         expect((yield* restored.captured()).token).toBe("restored-token");
+      }).pipe(Effect.provide(services), Effect.scoped),
+    { timeout: 60_000 },
+  );
+  it.live(
+    "preserves parent nesting when the sidecar transforms paths and reloads",
+    () =>
+      Effect.gen(function* () {
+        const config = (token: string) =>
+          ConfigProvider.fromUnknown({ APP: { TOKEN: token } }).pipe(
+            ConfigProvider.nested("app"),
+          );
+        const first = yield* get(config("first"), "mapped");
+        expect(yield* first.readUpper("token")).toBe("first");
+        const before = yield* first.captured();
+        const same = yield* get(config("first"), "mapped");
+        expect((yield* same.captured()).build).toBe(before.build);
+        const changed = yield* get(config("second"), "mapped");
+        expect((yield* changed.captured()).build).not.toBe(before.build);
+        expect(yield* changed.readUpper("token")).toBe("second");
       }).pipe(Effect.provide(services), Effect.scoped),
     { timeout: 60_000 },
   );

@@ -38,6 +38,14 @@ launch(
             Schema.Struct({ values: Schema.Array(Schema.String) }),
             "TREE",
           ).pipe(Effect.provideService(ConfigProvider.ConfigProvider, config)),
+        readUpper: (key: string) =>
+          Config.string(key).pipe(
+            Config.withDefault("absent"),
+            Effect.provideService(
+              ConfigProvider.ConfigProvider,
+              ConfigProvider.constantCase(config),
+            ),
+          ),
         read: (key: string) =>
           Config.string(key).pipe(
             Config.withDefault("absent"),
