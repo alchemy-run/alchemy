@@ -2,6 +2,7 @@ import {
   encodeDurableObjectTags,
   getDurableObjectTagMap,
   normalizeStateDomains,
+  planDurableObjectClassIdentity,
   resolveWorkerDomain,
   resolveWorkerDomainZone,
   resolveWorkersDev,
@@ -449,6 +450,96 @@ describe("WorkerProvider", () => {
   // stampeded GET /accounts/{id}/workers/subdomain neighbors into 429/code 971
   // (#926). These helpers gate those observations on whether Alchemy manages
   // the surface.
+  describe("durable object class identity", () => {
+    // The identity tuple that drives class migrations is (logical id, class
+    // name): the logical id is the binding's `env` key, the class name the
+    // physical class. A class-form declaration with `className` keeps both
+    // of an async-form binding's, so converting a host yields no migration.
+    const lens = {
+      logicalId: "LENS_DO",
+      bindingName: "LENS_DO",
+      className: "OddlynewLensServer",
+    };
+    const deployedTags = ["alchemy:dos:LENS_DO=OddlynewLensServer"];
+
+    test("the same logical id and class name on the same worker yields no migration", () => {
+      const plan = planDurableObjectClassIdentity({
+        workerName: "host",
+        oldTags: deployedTags,
+        oldBindings: [],
+        current: [lens],
+      });
+      expect(plan.kept).toEqual([lens]);
+      expect(plan.renamedClasses).toEqual([]);
+      expect(plan.unresolved).toEqual([]);
+      expect(plan.deletedClassCandidates).toEqual([]);
+    });
+
+    test("the same logical id with a changed class name yields a rename", () => {
+      const plan = planDurableObjectClassIdentity({
+        workerName: "host",
+        oldTags: deployedTags,
+        oldBindings: [],
+        current: [{ ...lens, className: "LensServer" }],
+      });
+      expect(plan.renamedClasses).toEqual([
+        { from: "OddlynewLensServer", to: "LensServer" },
+      ]);
+      expect(plan.kept).toEqual([]);
+      expect(plan.unresolved).toEqual([]);
+      expect(plan.deletedClassCandidates).toEqual([]);
+    });
+
+    test("a fresh stage leaves the class unresolved for a single create", () => {
+      const plan = planDurableObjectClassIdentity({
+        workerName: "host",
+        oldTags: [],
+        oldBindings: [],
+        current: [lens],
+      });
+      expect(plan.unresolved).toEqual([lens]);
+      expect(plan.kept).toEqual([]);
+      expect(plan.renamedClasses).toEqual([]);
+      expect(plan.deletedClassCandidates).toEqual([]);
+    });
+
+    test("a logical id that left the deploy is a delete candidate", () => {
+      const plan = planDurableObjectClassIdentity({
+        workerName: "host",
+        oldTags: deployedTags,
+        oldBindings: [],
+        current: [],
+      });
+      expect(plan.deletedClassCandidates).toEqual(["OddlynewLensServer"]);
+    });
+
+    test("an untagged worker adopts the observed locally-owned class by binding name", () => {
+      const plan = planDurableObjectClassIdentity({
+        workerName: "host",
+        oldTags: [],
+        oldBindings: [
+          {
+            type: "durable_object_namespace",
+            name: "LENS_DO",
+            class_name: "OddlynewLensServer",
+            className: "OddlynewLensServer",
+          } as never,
+          {
+            type: "durable_object_namespace",
+            name: "FOREIGN_DO",
+            className: "ForeignClass",
+            scriptName: "other-host",
+          } as never,
+        ],
+        current: [lens],
+      });
+      expect(plan.kept).toEqual([lens]);
+      expect(plan.unresolved).toEqual([]);
+      // The foreign class is never a delete candidate.
+      expect(plan.deletedClassCandidates).toEqual([]);
+    });
+  });
+
   describe("shouldObserveWorkerDomains", () => {
     test("skips when neither props nor state manage custom domains", () => {
       expect(
