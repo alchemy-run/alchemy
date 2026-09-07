@@ -3,14 +3,6 @@
 E2E fixture for [vocs](https://vocs.dev) (the minimal React documentation
 framework) on Cloudflare Workers.
 
-> **Workspace patch**: `patches/vocs@2.6.0.patch` (registered in the root
-> `package.json` `patchedDependencies`) fixes an upstream infinite recursion
-> in `getMdxLayoutImport` that crashes every MDX build on Windows. Filed and
-> fixed upstream — [wevm/vocs#611](https://github.com/wevm/vocs/issues/611) /
-> [wevm/vocs#612](https://github.com/wevm/vocs/pull/612); drop the patch when
-> bumping to a vocs release containing the fix. The patch only affects this
-> workspace's install — users bring their own vocs.
-
 Vocs 2.x is built on **waku**: its `vocs()` vite plugin (public export
 `vocs/vite`) composes waku's own `waku/vite-plugins` (environments,
 adapter-alias, static-build, ...) with vocs's mdx/config/patch plugins, and it
@@ -20,12 +12,11 @@ request and there are dynamic API routes (`/api/search`, `/api/og`,
 `/api/mcp`, `/api/feedback`) — so it runs as a worker.
 
 Vocs does not use waku's `unstable_combinedPlugins`, so the
-`@alchemy.run/cloudflare-frameworks/waku` Framework layer can't drive it directly. Instead,
-`framework.ts` is a fixture-local `Framework` implementation that mirrors
-`packages/waku`'s orchestration with vocs's plugin stack swapped in, reusing
-the deploy-target halves from `@alchemy.run/cloudflare-frameworks/waku/cloudflare` (the
-wrangler-free adapter fork, selected through vocs's `unstable_adapter`
-passthrough, + the cloudflare vite plugin pinned to waku's rsc entry).
+`@alchemy.run/frontend-frameworks/waku` Framework layer can't drive it directly. Instead,
+`@alchemy.run/frontend-frameworks/vocs` provides a first-class Vocs framework
+integration and target contract. Its Cloudflare target composes the established
+Waku adapter and RSC environment primitives while owning Vocs-specific target
+selection, runtime requirements, config bridging, and public exports.
 
 There is no `vite.config.ts` and no `wrangler.jsonc`: `e2e.config.ts` carries
 the entire worker configuration in memory; `vocs.config.ts` is vocs's own
@@ -44,24 +35,22 @@ the entire worker configuration in memory; `vocs.config.ts` is vocs's own
 ## Workerd bridges (and why vocs is pinned exactly)
 
 Upstream vocs only ships node/vercel/netlify adapters — nothing targets a
-no-eval, no-fs runtime. Two seams needed fixture-side bridging, implemented as
-the `workerdConfigBridge` vite plugin in `framework.ts`:
+no-fs runtime. Runtime config resolution needs a small bridge, implemented as
+the `workerdConfigBridge` Vite plugin in the public Vocs integration:
 
 1. **Runtime config resolution** — vocs's server code calls
    `Config.resolve({ server: true })` per request; in production that branch
    dynamically imports an on-disk `dist/server/vocs.config.js` via
    `import.meta.dirname` (Node server layout), which crashes in workerd. The
-   bridge rewrites that branch to import a virtual module carrying the
-   config resolved once at build time in Node.
-2. **`new Function` in the config deserializer** — vocs serializes
-   config functions (`_vocs-fn_` markers; in this fixture only the default
-   search `boostDocument`s) and revives them with `new Function`, which
-   workerd forbids. The bridge makes revival fall back to `undefined` when
-   code generation is disallowed; browser/Node paths still revive normally.
+   bridge rewrites that branch to import a virtual module which re-exports
+   the project's original `vocs.config.*`. Vite therefore loads and bundles
+   the config itself, preserving its imports and functions; Alchemy does not
+   separately resolve or serialize it.
 
-Both transforms hard-fail with a descriptive error if the installed vocs no
+The transform hard-fails with a descriptive error if the installed vocs no
 longer matches the expected internals — which is why `vocs` is pinned to an
-exact version. On a bump, re-check the patterns in `framework.ts`.
+exact version. On a bump, re-check the guarded patterns in
+`packages/frontend-frameworks/src/vocs/Vocs.ts`.
 
 `nodejs_compat` (not just `nodejs_als`) is required: vocs's server bundle
 imports `node:fs` and friends (guarded with try/catch at runtime).

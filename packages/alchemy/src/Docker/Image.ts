@@ -94,10 +94,9 @@ export interface Image extends Resource<
  * `Image` always builds from a Dockerfile. To pull (and optionally re-tag and
  * push) an existing registry image, use `Docker.RemoteImage`.
  *
- * @resource
  *
- * @section Building Images
- * @example Build from a Dockerfile
+ * ### Building Images
+ * **Example:** Build from a Dockerfile
  * ```typescript
  * const image = yield* Docker.Image("app", {
  *   name: "my-app",
@@ -110,8 +109,8 @@ export interface Image extends Resource<
  * });
  * ```
  *
- * @section Registry Push
- * @example Push with Redacted credentials
+ * ### Registry Push
+ * **Example:** Push with Redacted credentials
  * ```typescript
  * const image = yield* Docker.Image("app", {
  *   name: "my-app",
@@ -124,8 +123,8 @@ export interface Image extends Resource<
  * });
  * ```
  *
- * @section Docker Context
- * @example Build in a named Docker context
+ * ### Docker Context
+ * **Example:** Build in a named Docker context
  * ```typescript
  * const image = yield* Docker.Image("app", {
  *   name: "my-app",
@@ -133,6 +132,8 @@ export interface Image extends Resource<
  *   build: { context: "./app" },
  * });
  * ```
+ *
+ * @resource
  */
 export const Image = Resource<Image>("Docker.Image");
 

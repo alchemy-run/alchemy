@@ -59,11 +59,8 @@ export type SigningKey = Resource<
  * attributes.
  *
  * Requires the Stream subscription to be enabled on the account.
- * @resource
- * @product Stream
- * @category Media
- * @section Creating a signing key
- * @example Signing key for signed playback URLs
+ * ### Creating a signing key
+ * **Example:** Signing key for signed playback URLs
  * ```typescript
  * const key = yield* Cloudflare.Stream.SigningKey("PlaybackKey", {});
  *
@@ -73,6 +70,10 @@ export type SigningKey = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/stream/viewing-videos/securing-your-stream/
+ *
+ * @resource
+ * @product Stream
+ * @category Media
  */
 export const SigningKey = Resource<SigningKey>(TypeId);
 

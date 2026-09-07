@@ -33,9 +33,8 @@ export interface ActiveReceiptRuleSet extends Resource<
  * receiving (clears the pointer) only when the account is still pointed at the
  * rule set this resource set; if something else has since become active, the
  * delete is a no-op.
- * @resource
- * @section Activating a Rule Set
- * @example Make a Rule Set Active
+ * ### Activating a Rule Set
+ * **Example:** Make a Rule Set Active
  * ```typescript
  * import * as SES from "alchemy/AWS/SES";
  *
@@ -44,6 +43,8 @@ export interface ActiveReceiptRuleSet extends Resource<
  *   ruleSetName: ruleSet.ruleSetName,
  * });
  * ```
+ *
+ * @resource
  */
 export const ActiveReceiptRuleSet = Resource<ActiveReceiptRuleSet>(
   "AWS.SES.ActiveReceiptRuleSet",

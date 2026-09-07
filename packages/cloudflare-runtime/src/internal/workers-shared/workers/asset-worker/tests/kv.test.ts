@@ -1,3 +1,5 @@
+// Alchemy modifications are licensed under Apache-2.0.
+// This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
 import { afterEach, assert, beforeEach, describe, it, vi } from "vitest";
 import { getAssetWithMetadataFromKV } from "../src/utils/kv.ts";
 import type { AssetMetadata } from "../src/utils/kv.ts";
@@ -53,7 +55,7 @@ describe("[Asset Worker] Fetching assets from KV", () => {
       ).rejects.toThrow("KV GET abcd failed.");
     });
 
-    it("should retry once by default if something went wrong while fetching the asset", async ({
+    it("should retry three times by default if something went wrong while fetching the asset", async ({
       expect,
     }) => {
       spy.mockReturnValue(Promise.reject("Oeps! Something went wrong"));
@@ -61,7 +63,7 @@ describe("[Asset Worker] Fetching assets from KV", () => {
       await expect(() =>
         getAssetWithMetadataFromKV(mockKVNamespace, "abcd"),
       ).rejects.toThrow("KV GET abcd failed.");
-      expect(spy).toHaveBeenCalledTimes(2);
+      expect(spy).toHaveBeenCalledTimes(4);
     });
 
     it("should support custom number of retries", async ({ expect }) => {
@@ -81,7 +83,7 @@ describe("[Asset Worker] Fetching assets from KV", () => {
       await expect(() =>
         getAssetWithMetadataFromKV(mockKVNamespace, "abcd"),
       ).rejects.toThrow("KV GET abcd failed: Oeps! Something went wrong");
-      expect(spy).toHaveBeenCalledTimes(2);
+      expect(spy).toHaveBeenCalledTimes(4);
     });
 
     it("should retry on 404 and cache with shorter ttl", async ({ expect }) => {

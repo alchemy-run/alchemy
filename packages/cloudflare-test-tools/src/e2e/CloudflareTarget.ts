@@ -2,7 +2,7 @@ import {
   makeDeployTarget,
   type DeployTarget,
   type DeployTargetServer,
-} from "@alchemy.run/cloudflare-frameworks/core";
+} from "@alchemy.run/frontend-frameworks/core";
 import * as Miniflare from "../miniflare/miniflare.ts";
 import {
   moduleTypeFromExtension,

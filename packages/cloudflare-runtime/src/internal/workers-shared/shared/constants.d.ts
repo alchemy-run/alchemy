@@ -1,3 +1,5 @@
+// Alchemy modifications are licensed under Apache-2.0.
+// This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
 /** Reserved header at the start of the whole manifest, NOT in each entry (currently unused)
  * manifest = [HEADER, [ entry = PATH_HASH, CONTENT_HASH, TAIL], [entry], ... , [entry] ]
  */

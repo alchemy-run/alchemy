@@ -92,9 +92,8 @@ export interface ReceiptRule extends Resource<
  *
  * Actions are passed as the raw distilled action shapes (no marshalling): the
  * caller supplies bucket names, topic ARNs, and function ARNs directly.
- * @resource
- * @section Creating Rules
- * @example Deliver Matching Mail to S3
+ * ### Creating Rules
+ * **Example:** Deliver Matching Mail to S3
  * ```typescript
  * import * as SES from "alchemy/AWS/SES";
  *
@@ -108,7 +107,7 @@ export interface ReceiptRule extends Resource<
  * });
  * ```
  *
- * @example Invoke a Lambda and Add a Header
+ * **Example:** Invoke a Lambda and Add a Header
  * ```typescript
  * const rule = yield* SES.ReceiptRule("Process", {
  *   ruleSetName: ruleSet.ruleSetName,
@@ -121,8 +120,8 @@ export interface ReceiptRule extends Resource<
  * });
  * ```
  *
- * @section Ordering Rules
- * @example Place a Rule After Another
+ * ### Ordering Rules
+ * **Example:** Place a Rule After Another
  * ```typescript
  * // A BounceAction's Sender must be a verified SES identity — SES rejects the
  * // rule with IdentityNotVerified at create/update time otherwise.
@@ -140,6 +139,8 @@ export interface ReceiptRule extends Resource<
  *   } }],
  * });
  * ```
+ *
+ * @resource
  */
 export const ReceiptRule = Resource<ReceiptRule>("AWS.SES.ReceiptRule");
 

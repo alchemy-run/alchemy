@@ -5,7 +5,7 @@ import { kCurrentWorker } from "miniflare";
 export default Options.make({
   // The Next.js (OpenNext-based) Framework implementation, resolved from this
   // fixture's own node_modules.
-  framework: "@alchemy.run/cloudflare-frameworks/nextjs",
+  framework: "@alchemy.run/frontend-frameworks/nextjs",
   vite: {
     compatibilityDate: "2026-05-12",
     compatibilityFlags: ["nodejs_compat", "global_fetch_strictly_public"],

@@ -1,3 +1,5 @@
+// Alchemy modifications are licensed under Apache-2.0.
+// This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
 /**
  * Adapted from Miniflare's KV plugin tests
  * (`workers-sdk/packages/miniflare/test/plugins/kv/index.spec.ts`).
@@ -15,8 +17,8 @@
  *   `setOptions`; restart persistence is covered by "persists on file-system".
  * - "migrates database to new location": migrates pre-Durable-Object Miniflare
  *   storage; this runtime has no legacy format.
- * - "sticky blobs never deleted": supports Miniflare's "stacked storage" for
- *   `vitest-pool-workers`, which this runtime doesn't implement.
+ * - "sticky blobs never deleted": supports Miniflare's "stacked storage",
+ *   which this runtime doesn't implement.
  */
 import assert from "node:assert";
 import { Blob } from "node:buffer";

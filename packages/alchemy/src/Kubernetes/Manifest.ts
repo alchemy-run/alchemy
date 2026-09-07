@@ -91,9 +91,8 @@ export interface Manifest extends Resource<
  * endpoint, so CRDs work without any registration. The target `cluster`
  * can be a managed cluster resource (e.g. `AWS.EKS.Cluster`) or any
  * cluster your kubeconfig can reach (`Kubernetes.KubeConfig(...)`).
- * @resource
- * @section Applying Manifests
- * @example StatefulSet
+ * ### Applying Manifests
+ * **Example:** StatefulSet
  * ```typescript
  * const sts = yield* Kubernetes.Manifest("Cache", {
  *   cluster,
@@ -114,7 +113,7 @@ export interface Manifest extends Resource<
  * });
  * ```
  *
- * @example Custom resource (CRD)
+ * **Example:** Custom resource (CRD)
  * ```typescript
  * const widget = yield* Kubernetes.Manifest("Widget", {
  *   cluster,
@@ -127,8 +126,8 @@ export interface Manifest extends Resource<
  * });
  * ```
  *
- * @section Namespaces
- * @example Create a Namespace
+ * ### Namespaces
+ * **Example:** Create a Namespace
  * ```typescript
  * const ns = yield* Kubernetes.Manifest("AppsNamespace", {
  *   cluster,
@@ -140,8 +139,8 @@ export interface Manifest extends Resource<
  * });
  * ```
  *
- * @section Any Cluster
- * @example Apply onto a kubeconfig context
+ * ### Any Cluster
+ * **Example:** Apply onto a kubeconfig context
  * ```typescript
  * const local = Kubernetes.KubeConfig({ context: "kind-dev" });
  *
@@ -155,6 +154,8 @@ export interface Manifest extends Resource<
  *   },
  * });
  * ```
+ *
+ * @resource
  */
 export const Manifest = Resource<Manifest>("Kubernetes.Manifest", {
   aliases: ["AWS.EKS.Manifest"],

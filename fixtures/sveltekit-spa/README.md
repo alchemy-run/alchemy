@@ -1,6 +1,6 @@
 # @fixtures/sveltekit-spa
 
-E2E fixture for `@alchemy.run/cloudflare-frameworks/sveltekit` exercising the **pure-SPA path**:
+E2E fixture for `@alchemy.run/frontend-frameworks/sveltekit` exercising the **pure-SPA path**:
 `ssr = false` in the root `+layout.ts`, the adapter's SPA fallback page, and —
 the nuance under test — `+server.ts` endpoints that **still run server-side**
 even though every page is client-rendered.

@@ -345,7 +345,7 @@ describe
                 "PostgresDatabaseMigrations",
                 {
                   clusterSize: "PS_10",
-                  migrationsDir: `${fixturesDir}/migrations`,
+                  migrations: `${fixturesDir}/migrations`,
                   importFiles: [importFile],
                 },
               );

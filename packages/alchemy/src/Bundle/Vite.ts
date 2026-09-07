@@ -225,13 +225,11 @@ export const viteBuildOutputPlugin = Effect.fn(function* ({
       .pipe(
         Effect.flatMap((content) =>
           sha256(content).pipe(
-            Effect.map(
-              (hash): BundleFile => ({
-                path: fileName(name, environment),
-                content,
-                hash,
-              }),
-            ),
+            Effect.map((hash): BundleFile => ({
+              path: fileName(name, environment),
+              content,
+              hash,
+            })),
           ),
         ),
         Effect.mapError(bundleErrorFromUnknown),
@@ -271,13 +269,11 @@ export const viteBuildOutputPlugin = Effect.fn(function* ({
     plugin,
     // Read lazily so callers observe the state collected during the build.
     // Only safe to await *after* `builder.buildApp()` has resolved.
-    output: Effect.sync(
-      (): ViteBuildOutput => ({
-        clientDirectory,
-        base,
-        serverBundle: makeServerBundle(),
-        externalWorkspaces: collectExternalWorkspaces(),
-      }),
-    ),
+    output: Effect.sync((): ViteBuildOutput => ({
+      clientDirectory,
+      base,
+      serverBundle: makeServerBundle(),
+      externalWorkspaces: collectExternalWorkspaces(),
+    })),
   };
 });

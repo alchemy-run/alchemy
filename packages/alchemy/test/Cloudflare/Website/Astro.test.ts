@@ -640,12 +640,12 @@ describe.concurrent("Astro", () => {
   // ─────────────────────────────────────────────────────────────────────
   // Assets-only deploys (seam: SourceBuildOutput.bundle === undefined)
   //
-  // A declared `astro: { output: "static" }` project prerenders every page,
+  // A declared `output: "static"` project prerenders every page,
   // so the astro source's build produces NO server modules — the source
   // path must flow `bundle: undefined` into the WorkerProvider's
   // assets-only mode: the script PUT carries no modules and no main_module,
   // and Cloudflare's asset layer answers every request (including the built
-  // 404.html via `notFoundHandling: "404-page"`). Session auto-provisioning
+  // 404.html via `errorPage: "404.html"`). Session auto-provisioning
   // is skipped — no Worker code could ever read the namespace.
   // ─────────────────────────────────────────────────────────────────────
 

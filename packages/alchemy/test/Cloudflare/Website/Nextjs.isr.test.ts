@@ -10,7 +10,7 @@ import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as pathe from "pathe";
 import { cloneFixture } from "../Utils/Fixture.ts";
 import { waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
-import { linkJsApiTypeScript } from "./TypeScriptCompat.ts";
+import { prepareNextjsFixture } from "./TypeScriptCompat.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -24,8 +24,6 @@ const fixtureDir = pathe.resolve(
   "fixtures",
   "nextjs-isr-app",
 );
-const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
-
 const stampOf = (body: string, prefix: string): string | undefined =>
   body.match(new RegExp(`${prefix}:(?:<!-- -->)?(\\d+)`))?.[1];
 
@@ -81,7 +79,6 @@ describe.concurrent("Nextjs ISR", () => {
 
         const rootDir = yield* cloneFixture(fixtureDir, {
           prefix: "alchemy-nextjs-isr-",
-          tempRoot,
           entries: [
             "package.json",
             "tsconfig.json",
@@ -91,7 +88,7 @@ describe.concurrent("Nextjs ISR", () => {
             "public",
           ],
         });
-        yield* linkJsApiTypeScript(rootDir);
+        yield* prepareNextjsFixture(rootDir);
 
         const deploy = () =>
           stack.deploy(

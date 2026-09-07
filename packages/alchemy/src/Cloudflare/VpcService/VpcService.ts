@@ -97,11 +97,8 @@ export type VpcService = Resource<
 /**
  * A Cloudflare VPC service that exposes a private host (IP or hostname)
  * reachable through a Cloudflare Tunnel for Workers VPC.
- * @resource
- * @product Workers VPC
- * @category Network
- * @section Creating a VPC Service
- * @example Hostname through a tunnel
+ * ### Creating a VPC Service
+ * **Example:** Hostname through a tunnel
  * ```typescript
  * const tunnel = yield* Cloudflare.Tunnel.Tunnel("MyTunnel");
  * const service = yield* Cloudflare.VpcService.VpcService("Internal", {
@@ -112,13 +109,17 @@ export type VpcService = Resource<
  * });
  * ```
  *
- * @example IPv4 with explicit ports
+ * **Example:** IPv4 with explicit ports
  * ```typescript
  * const service = yield* Cloudflare.VpcService.VpcService("DevServer", {
  *   httpPort: 5173,
  *   host: { ipv4: "192.168.1.100", network: { tunnelId: tunnel.tunnelId } },
  * });
  * ```
+ *
+ * @resource
+ * @product Workers VPC
+ * @category Network
  */
 export const VpcService = Resource<VpcService>(
   "Cloudflare.VpcService.VpcService",

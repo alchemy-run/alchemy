@@ -144,9 +144,6 @@ Stack) and describe the environment topology with `viteEnvironments`:
 import * as Cloudflare from "alchemy/Cloudflare";
 
 export const Website = Cloudflare.Website.Vite("Website", {
-  assets: {
-    runWorkerFirst: true,
-  },
   viteEnvironments: {
     entry: "rsc",
     children: ["ssr"],
@@ -156,12 +153,12 @@ export const Website = Cloudflare.Website.Vite("Website", {
 export type WebsiteEnv = Cloudflare.InferEnv<typeof Website>;
 ```
 
-These props come straight from the live-tested configuration:
-`assets: { runWorkerFirst: true }` routes requests through the Worker
-before static-asset serving so the RSC handler sees every request
-instead of only the ones that miss an asset. The server bundle's
-Node APIs are covered by the `nodejs_compat` compatibility flag,
-which is enabled by default for every Worker.
+No asset routing config is needed: the RSC build emits no
+`index.html` (HTML is server-rendered), so page requests match no
+static asset and fall through to the RSC handler, while the
+hydration bundles serve directly from the asset layer. The server
+bundle's Node APIs are covered by the `nodejs_compat` compatibility
+flag, which is enabled by default for every Worker.
 
 ## Add it to the Stack
 
@@ -202,9 +199,6 @@ export const Website = Cloudflare.Website.Vite("Website", {
 +    UPLOADS: Uploads,
 +    API_KEY: Config.redacted("API_KEY"),
 +  },
-  assets: {
-    runWorkerFirst: true,
-  },
   viteEnvironments: {
     entry: "rsc",
     children: ["ssr"],

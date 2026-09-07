@@ -89,9 +89,8 @@ export interface AccountSettings extends Resource<
  * account-global toggles with no single safe default, and resetting them (e.g.
  * disabling sending or clearing the suppression list) would affect live mail
  * beyond this stack. Change the props and re-deploy to adjust them.
- * @resource
- * @section Configuring the Account
- * @example Enable VDM with Engagement Tracking
+ * ### Configuring the Account
+ * **Example:** Enable VDM with Engagement Tracking
  * ```typescript
  * import * as SES from "alchemy/AWS/SES";
  *
@@ -103,14 +102,14 @@ export interface AccountSettings extends Resource<
  * });
  * ```
  *
- * @example Configure the Suppression List
+ * **Example:** Configure the Suppression List
  * ```typescript
  * const settings = yield* SES.AccountSettings("Account", {
  *   suppression: { reasons: ["BOUNCE", "COMPLAINT"] },
  * });
  * ```
  *
- * @example Enable Guardian Optimized Shared Delivery
+ * **Example:** Enable Guardian Optimized Shared Delivery
  * ```typescript
  * const settings = yield* SES.AccountSettings("Account", {
  *   vdm: {
@@ -120,8 +119,8 @@ export interface AccountSettings extends Resource<
  * });
  * ```
  *
- * @section Pausing Account-Wide Sending
- * @example Stop All Sending for the Account
+ * ### Pausing Account-Wide Sending
+ * **Example:** Stop All Sending for the Account
  * ```typescript
  * // WARNING: this halts every outbound email in the account, including mail
  * // sent by stacks and systems outside this one. Prefer a configuration
@@ -131,7 +130,7 @@ export interface AccountSettings extends Resource<
  * });
  * ```
  *
- * @example Manage Only VDM and Leave Sending Alone
+ * **Example:** Manage Only VDM and Leave Sending Alone
  * ```typescript
  * // Omitted aspects are never touched — this deploy will not read or write
  * // the account's sending status or suppression list.
@@ -139,6 +138,8 @@ export interface AccountSettings extends Resource<
  *   vdm: { enabled: "ENABLED" },
  * });
  * ```
+ *
+ * @resource
  */
 export const AccountSettings = Resource<AccountSettings>(
   "AWS.SES.AccountSettings",

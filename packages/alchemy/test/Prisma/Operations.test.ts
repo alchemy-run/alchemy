@@ -48,6 +48,13 @@ const expectedOperationHelpers = [
   "createBranch",
   "updateBranch",
   "deleteBranch",
+  "listBuckets",
+  "getBucket",
+  "createBucket",
+  "deleteBucket",
+  "listBucketKeys",
+  "createBucketKey",
+  "deleteBucketKey",
   "getCustomDomain",
   "deleteCustomDomain",
   "retryCustomDomain",
@@ -163,6 +170,14 @@ describe("Prisma operation helpers", () => {
       yield* Prisma.createBranch("project-1", { gitName: "main" });
       yield* Prisma.updateBranch("branch-1", { isDefault: true });
       yield* Prisma.deleteBranch("branch-1");
+
+      yield* Prisma.listBuckets({ projectId: "project-1" });
+      yield* Prisma.getBucket("bucket-1");
+      yield* Prisma.createBucket({ projectId: "project-1", name: "uploads" });
+      yield* Prisma.deleteBucket("bucket-1");
+      yield* Prisma.listBucketKeys("bucket-1", { limit: 1 });
+      yield* Prisma.createBucketKey("bucket-1", { role: "read_write" });
+      yield* Prisma.deleteBucketKey("bucket-1", "key-1");
 
       yield* Prisma.getCustomDomain("domain-1");
       yield* Prisma.deleteCustomDomain("domain-1");

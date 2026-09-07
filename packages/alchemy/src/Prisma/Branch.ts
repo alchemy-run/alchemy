@@ -3,6 +3,13 @@ import { Unowned } from "../AdoptPolicy.ts";
 import { isResolved } from "../Diff.ts";
 import { createPhysicalName } from "../PhysicalName.ts";
 import * as Provider from "../Provider.ts";
+import {
+  DEV_TIMESTAMP,
+  attrOrString,
+  devId,
+  devProvider,
+} from "./Internal/DevStub.ts";
+import * as ProviderLayer from "../Local/ProviderLayer.ts";
 import { Resource } from "../Resource.ts";
 import {
   PrismaClient,
@@ -91,9 +98,8 @@ export interface Branch extends Resource<
  * changes only the default branch; Alchemy restores the previous default
  * before deleting a promoted branch.
  *
- * @resource
- * @section Creating a Branch
- * @example Preview branch
+ * ### Creating a Branch
+ * **Example:** Preview branch
  * ```typescript
  * const branch = yield* Prisma.Branch("preview", {
  *   project: project.projectId,
@@ -104,8 +110,8 @@ export interface Branch extends Resource<
  * branch.isDefault; // false
  * ```
  *
- * @section Promoting a Branch
- * @example Make a preview branch the default
+ * ### Promoting a Branch
+ * **Example:** Make a preview branch the default
  * ```typescript
  * const release = yield* Prisma.Branch("release", {
  *   project,
@@ -116,6 +122,8 @@ export interface Branch extends Resource<
  * release.role;      // still "preview"
  * release.isDefault; // true
  * ```
+ *
+ * @resource
  */
 export const Branch = Resource<Branch>("Prisma.Branch");
 
@@ -167,7 +175,7 @@ const ensureBranchIdentity = (
         ),
       );
 
-export const BranchProvider = () =>
+const ProviderLive = () =>
   Provider.effect(
     Branch,
     Effect.gen(function* () {
@@ -415,3 +423,20 @@ export const BranchProvider = () =>
       };
     }),
   );
+
+const ProviderLocal = () =>
+  devProvider(Branch, ["branchId"], ({ id, news }) => ({
+    branchId: devId("branch", id),
+    gitName: news.gitName ?? id,
+    projectId: attrOrString(news.project, "projectId"),
+    isDefault: news.isDefault ?? false,
+    role: news.isDefault ? "production" : "preview",
+    createdAt: DEV_TIMESTAMP,
+    updatedAt: DEV_TIMESTAMP,
+  }));
+
+export const BranchProvider = () =>
+  ProviderLayer.dual(Branch, {
+    local: () => ProviderLocal(),
+    live: () => ProviderLive(),
+  });

@@ -75,11 +75,11 @@ test(
     const res = yield* getWhenReady(url);
     expect(res.status).toBe(200);
     const html = yield* res.text;
-    expect(html).toContain("Next.js on Cloudflare Workers");
+    expect(html).toContain("Next.js on Cloudflare");
     // The `GREETING` env value from alchemy.run.ts, read via
     // `getCloudflareContext` in the force-dynamic page — proves the Worker
     // rendered it at request time.
-    expect(html).toContain("Hello from Alchemy!");
+    expect(html).toContain("Hello from Next.js on Cloudflare!");
   }),
   { timeout: 180_000 },
 );
@@ -92,6 +92,29 @@ test(
     expect(res.status).toBe(200);
     const body = (yield* res.json) as { hello: string };
     expect(body.hello).toBe("world");
+  }),
+  { timeout: 180_000 },
+);
+
+test(
+  "compiles tailwind via postcss",
+  Effect.gen(function* () {
+    const url = yield* base;
+    // The page markup uses Tailwind utilities — proving the project's own
+    // postcss.config.mjs (@tailwindcss/postcss) ran inside `next build`.
+    const html = yield* getBodyWhenReady(url, "text-3xl");
+    expect(html).toContain("text-3xl");
+
+    // Next.js links the compiled stylesheet from under /_next/static/
+    // (chunks/*.css as of Next 16).
+    const match = html.match(/\/_next\/static\/[^"']+\.css/);
+    expect(match).not.toBeNull();
+
+    // The stylesheet must contain the compiled Tailwind rule, not just the
+    // class name in markup.
+    const css = yield* getBodyWhenReady(`${url}${match![0]}`, ".text-3xl");
+    expect(css).toContain(".text-3xl");
+    expect(css).toContain(".font-bold");
   }),
   { timeout: 180_000 },
 );

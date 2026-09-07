@@ -1,11 +1,13 @@
+import { Action } from "@/Action";
 import { adopt, Unowned } from "@/AdoptPolicy";
 import type { DestroyError } from "@/Apply";
-import { Cli } from "@/Cli/Cli";
+import { Cli } from "@/Report.ts";
 import * as Namespace from "@/Namespace.ts";
 import * as Output from "@/Output";
 import * as Provider from "@/Provider";
 import * as RemovalPolicy from "@/RemovalPolicy.ts";
 import { renamedFrom } from "@/Rename.ts";
+import { remote } from "@/ProviderMode.ts";
 import { Stack } from "@/Stack";
 import {
   type CreatingResourceState,
@@ -18,9 +20,11 @@ import * as Test from "@/Test/Alchemy";
 import { assert, describe, expect } from "alchemy-test";
 import { Data, Layer } from "effect";
 import * as Cause from "effect/Cause";
+import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
 import * as Redacted from "effect/Redacted";
 import {
   AliasedWidget,
@@ -40,6 +44,7 @@ import {
   modalCalls,
   type ModalResourceProps,
   PhasedTarget,
+  ProbeBinding,
   StaticStablesResource,
   TestLayers,
   TestResource,
@@ -58,11 +63,40 @@ const getState = Effect.fn(function* <S = ResourceState>(resourceId: string) {
     fqn: resourceId,
   })) as S;
 });
+/** The planned action for a logical id, or `undefined` if it isn't planned. */
+const actionOfPlan = (plan: any, logicalId: string) =>
+  (Object.values(plan.resources) as any[]).find(
+    (node: any) => node.resource.LogicalId === logicalId,
+  )?.action;
+
 const listState = Effect.fn(function* () {
   const state = yield* yield* State;
   const stk = yield* Stack;
   return yield* state.list({ stack: stk.name, stage: stk.stage });
 });
+
+const recordingCli = (events: Array<{ id: string; status: string }>) =>
+  Cli.of({
+    startPlanningSession: () =>
+      Effect.succeed({
+        update: () => Effect.void,
+        succeed: () => Effect.void,
+        fail: () => Effect.void,
+        close: Effect.void,
+      }),
+    approvePlan: () => Effect.succeed(true),
+    displayPlan: () => Effect.void,
+    startApplySession: () =>
+      Effect.succeed({
+        done: () => Effect.void,
+        emit: (event) =>
+          Effect.sync(() => {
+            if (event._tag === "apply.resource.status") {
+              events.push({ id: event.id, status: event.status });
+            }
+          }),
+      }),
+  });
 
 const expectConvergedStatus = (status: ResourceState["status"] | undefined) => {
   expect(["created", "updated"]).toContain(status);
@@ -1394,6 +1428,13 @@ describe("prop-flow convergence", () => {
       Effect.gen(function* () {
         const events: Array<{ id: string; status: string }> = [];
         const cli = Cli.of({
+          startPlanningSession: () =>
+            Effect.succeed({
+              update: () => Effect.void,
+              succeed: () => Effect.void,
+              fail: () => Effect.void,
+              close: Effect.void,
+            }),
           approvePlan: () => Effect.succeed(true),
           displayPlan: () => Effect.void,
           startApplySession: () =>
@@ -1401,7 +1442,7 @@ describe("prop-flow convergence", () => {
               done: () => Effect.void,
               emit: (event) =>
                 Effect.sync(() => {
-                  if (event.kind === "status-change") {
+                  if (event._tag === "apply.resource.status") {
                     events.push({
                       id: event.id,
                       status: event.status,
@@ -1448,6 +1489,39 @@ describe("prop-flow convergence", () => {
         expect(terminal("A")).toEqual(["updated"]);
         expect(terminal("B")).toEqual(["updated"]);
       }),
+  );
+
+  test.provider("apply sessions finalize after a resource failure", (stack) =>
+    Effect.gen(function* () {
+      let finalized = 0;
+      const cli = Cli.of({
+        startPlanningSession: () =>
+          Effect.succeed({
+            update: () => Effect.void,
+            succeed: () => Effect.void,
+            fail: () => Effect.void,
+            close: Effect.void,
+          }),
+        approvePlan: () => Effect.succeed(true),
+        displayPlan: () => Effect.void,
+        startApplySession: () =>
+          Effect.succeed({
+            done: () =>
+              Effect.sync(() => {
+                finalized += 1;
+              }),
+            emit: () => Effect.void,
+          }),
+      });
+
+      yield* TestResource("A", { string: "value" }).pipe(
+        stack.deploy,
+        hook(failOn("A", "create")),
+        Effect.provide(Layer.succeed(Cli, cli)),
+      );
+
+      expect(finalized).toBe(1);
+    }),
   );
 
   // Regression: a resource with `precreate` (e.g. Cloudflare Worker) resolves
@@ -2558,6 +2632,7 @@ describe("retain removal policy on replace", () => {
     (stack) =>
       Effect.gen(function* () {
         const deleted: string[] = [];
+        const events: Array<{ id: string; status: string }> = [];
 
         yield* Effect.gen(function* () {
           yield* TestResource("A", { string: "v1" }).pipe(
@@ -2566,8 +2641,58 @@ describe("retain removal policy on replace", () => {
         }).pipe(stack.deploy);
         expect((yield* getState("A"))?.status).toEqual("created");
 
-        // Destroy removes the resource from the stack (orphan delete). Retain
-        // (persisted in state) must skip provider.delete and just drop state.
+        const plan = yield* Effect.void.pipe(stack.plan);
+        expect(plan.deletions.A?.action).toBe("orphaned");
+
+        // Destroy removes the resource from the stack. The explicit orphaned
+        // action must skip provider.delete and just drop state.
+        yield* stack.destroy().pipe(
+          hook({
+            delete: (id) =>
+              Effect.sync(() => {
+                deleted.push(id);
+              }),
+          }),
+          Effect.provide(Layer.succeed(Cli, recordingCli(events))),
+        );
+
+        expect(deleted).not.toContain("A");
+        expect(yield* getState("A")).toBeUndefined();
+        expect(
+          events
+            .filter((event) => event.id === "A")
+            .map((event) => event.status),
+        ).toEqual(["orphaning", "orphaned"]);
+      }),
+  );
+
+  test.provider(
+    "retain added to an already-created resource is persisted by the noop deploy",
+    (stack) =>
+      Effect.gen(function* () {
+        // 1. Create with the default (destroy) policy.
+        yield* Effect.gen(function* () {
+          yield* TestResource("A", { string: "v1" });
+        }).pipe(stack.deploy);
+        expect((yield* getState("A"))?.removalPolicy).toEqual("destroy");
+
+        // 2. Add `retain` — props are otherwise identical, so the resource
+        //    plans as a noop. The policy is a declaration decoration, not a
+        //    prop, so nothing about it can produce a diff; the noop path is
+        //    the only pass that ever sees the change.
+        const declaration = Effect.gen(function* () {
+          yield* TestResource("A", { string: "v1" }).pipe(
+            RemovalPolicy.retain(true),
+          );
+        });
+        const plan = yield* declaration.pipe(stack.plan);
+        expect(actionOfPlan(plan, "A")).toEqual("noop");
+        yield* declaration.pipe(stack.deploy);
+        expect((yield* getState("A"))?.removalPolicy).toEqual("retain");
+
+        // 3. Remove the declaration — the orphan sweep reads the policy from
+        //    state, so the provider's delete must never fire.
+        const deleted: string[] = [];
         yield* stack.destroy().pipe(
           hook({
             delete: (id) =>
@@ -2576,8 +2701,39 @@ describe("retain removal policy on replace", () => {
               }),
           }),
         );
-
         expect(deleted).not.toContain("A");
+        expect(yield* getState("A")).toBeUndefined();
+      }),
+  );
+
+  test.provider(
+    "retain removed from an already-created resource is persisted by the noop deploy",
+    (stack) =>
+      Effect.gen(function* () {
+        // The inverse direction: a resource that was retained and is now
+        // declared `destroy` must actually be deleted by the orphan sweep.
+        yield* Effect.gen(function* () {
+          yield* TestResource("A", { string: "v1" }).pipe(
+            RemovalPolicy.retain(true),
+          );
+        }).pipe(stack.deploy);
+        expect((yield* getState("A"))?.removalPolicy).toEqual("retain");
+
+        yield* Effect.gen(function* () {
+          yield* TestResource("A", { string: "v1" });
+        }).pipe(stack.deploy);
+        expect((yield* getState("A"))?.removalPolicy).toEqual("destroy");
+
+        const deleted: string[] = [];
+        yield* stack.destroy().pipe(
+          hook({
+            delete: (id) =>
+              Effect.sync(() => {
+                deleted.push(id);
+              }),
+          }),
+        );
+        expect(deleted).toContain("A");
         expect(yield* getState("A")).toBeUndefined();
       }),
   );
@@ -2611,6 +2767,50 @@ describe("from deleting state", () => {
         }).pipe(stack.deploy);
         expect((yield* getState("A"))?.status).toEqual("created");
         expect(output).toEqual("test-string");
+      }),
+  );
+
+  // A destroy interrupted while `provider.delete` is still in flight (the
+  // shape of a live delete stuck in a long provisioning wait — e.g.
+  // CloudFront's disable→wait→delete — when the test runner's timeout fires
+  // and teardown is abandoned) must keep the resource's state row. Deletes
+  // are idempotent and resumable: the engine commits a `deleting` row BEFORE
+  // calling `provider.delete` and only drops it after success, so the next
+  // destroy sees the row and drains it. Losing the row here is an invisible
+  // orphan — the next destroy plans "no changes" and the cloud resource
+  // leaks forever.
+  test.provider(
+    "interrupting a destroy mid-delete keeps a resumable deleting row",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* Effect.gen(function* () {
+          yield* TestResource("A", { string: "v1" });
+        }).pipe(stack.deploy);
+        expect((yield* getState("A"))?.status).toEqual("created");
+
+        // Destroy with a delete that signals entry and then never resolves,
+        // then interrupt the destroy once the delete is in flight —
+        // simulating the runner's timeout + teardown abandonment.
+        const deleteStarted = yield* Deferred.make<void>();
+        const fiber = yield* stack.destroy().pipe(
+          hook({
+            delete: () =>
+              Deferred.succeed(deleteStarted, void 0).pipe(
+                Effect.andThen(Effect.never),
+              ),
+          }),
+          Effect.forkChild,
+        );
+        yield* Deferred.await(deleteStarted);
+        yield* Fiber.interrupt(fiber);
+
+        // The row survives the interruption, parked at `deleting`.
+        expect((yield* getState("A"))?.status).toEqual("deleting");
+
+        // The next destroy resumes the delete and drains the row.
+        yield* stack.destroy();
+        expect(yield* getState("A")).toBeUndefined();
+        expect(yield* listState()).toEqual([]);
       }),
   );
 
@@ -5488,24 +5688,28 @@ describe("engine-level adoption persists at apply, not plan (issue #793)", () =>
     redactedArray: undefined,
   };
 
-  const adoptHooks = Layer.succeed(TestResourceHooks, {
-    read: () => Effect.succeed(Unowned(ownedAttrs)),
-  });
-
   test.provider(
     "a dry-run plan writes nothing to the state store; applying persists",
     (stack) =>
       Effect.gen(function* () {
+        const events: Array<{ id: string; status: string }> = [];
+        let creates = 0;
+        let updates = 0;
+        const hooks = Layer.succeed(TestResourceHooks, {
+          read: () => Effect.succeed(Unowned(ownedAttrs)),
+          create: () => Effect.sync(() => creates++),
+          update: () => Effect.sync(() => updates++),
+        });
         // ── dry-run: build a plan that adopts the unowned cloud resource ──
         const plan = yield* TestResource("Adopted", { string: "hello" }).pipe(
           adopt(true),
           stack.plan,
-          Effect.provide(adoptHooks),
+          Effect.provide(hooks),
         );
 
-        // The adopted state rides on the plan node as a forced update (so the
+        // The adopted state rides on an explicit plan node (which still
         // provider re-syncs ownership tags / config) — it is not persisted.
-        expect(plan.resources.Adopted!.action).toBe("update");
+        expect(plan.resources.Adopted!.action).toBe("adopted");
         expect(plan.resources.Adopted!.state?.status).toBe("created");
 
         // The critical invariant of #793: planning persisted nothing, so a
@@ -5519,13 +5723,25 @@ describe("engine-level adoption persists at apply, not plan (issue #793)", () =>
         yield* TestResource("Adopted", { string: "hello" }).pipe(
           adopt(true),
           stack.deploy,
-          Effect.provide(adoptHooks),
+          Effect.provide(hooks),
+          Effect.provide(Layer.succeed(Cli, recordingCli(events))),
         );
 
         // Applying DOES persist the adopted state.
         const persisted = yield* getState("Adopted");
         expect(["created", "updated"]).toContain(persisted?.status);
         expect(yield* listState()).toEqual(["Adopted"]);
+        // Adoption is the reconciler's `output defined, olds undefined` path.
+        expect(creates).toBe(1);
+        expect(updates).toBe(0);
+        const statuses = events
+          .filter((event) => event.id === "Adopted")
+          .map((event) => event.status);
+        expect(statuses).toContain("adopting");
+        expect(statuses).toContain("adopted");
+        expect(statuses.indexOf("adopting")).toBeLessThan(
+          statuses.indexOf("adopted"),
+        );
       }),
   );
 });
@@ -6201,6 +6417,57 @@ describe("provider modes (local ⇄ live)", () => {
   );
 });
 
+describe("binding client data-plane routing (apply)", () => {
+  // Action bodies invoke Binding.Service clients at apply time. In a
+  // `dev` run the wrap must route local resources to the emulator plane
+  // and `Alchemy.remote()` resources to the live plane — the inverse of
+  // each other, and never ambient.
+
+  test.provider(
+    "dev Action on a local resource hits the emulator plane",
+    (stack) =>
+      Effect.gen(function* () {
+        const out = yield* inDev(
+          Effect.gen(function* () {
+            const resource = yield* ModalResource("A", { value: "v1" });
+            const Probe = Action(
+              "ProbeLocal",
+              Effect.gen(function* () {
+                const read = yield* ProbeBinding(resource);
+                return () => read();
+              }),
+            );
+            return yield* Probe({});
+          }).pipe(stack.deploy),
+        );
+        expect(out).toBe("local");
+      }),
+  );
+
+  test.provider(
+    "dev Action on a remote() resource hits the live plane",
+    (stack) =>
+      Effect.gen(function* () {
+        const out = yield* inDev(
+          Effect.gen(function* () {
+            const resource = yield* ModalResource("A", { value: "v1" }).pipe(
+              remote(),
+            );
+            const Probe = Action(
+              "ProbeRemote",
+              Effect.gen(function* () {
+                const read = yield* ProbeBinding(resource);
+                return () => read();
+              }),
+            );
+            return yield* Probe({});
+          }).pipe(stack.deploy),
+        );
+        expect(out).toBe("live");
+      }),
+  );
+});
+
 // Apply must honor dependency ORDER and resolve values for references at ANY
 // nesting depth of plain data — objects in arrays, arrays in objects, arrays
 // of arrays, whole-resource refs (#1082 hardened the walkers with a
@@ -6392,6 +6659,18 @@ describe("non-plain and cyclic props through deploy", () => {
         // The Date arrives in reconcile as a real Date, not `{}`.
         expect(seen[0]).toBeInstanceOf(Date);
         expect(seen[0]!.toISOString()).toBe("2027-01-01T00:00:00.000Z");
+
+        // And it ROUND-TRIPS: read back out of the (durable, on-disk)
+        // store, the persisted prop is a real Date again — the DATE_MARKER
+        // envelope in StateEncoding, not a bare ISO string. This is what
+        // provider diff/delete/read receive as `olds` on a later run.
+        const persisted = (yield* getState("A"))?.props as {
+          expires: Date;
+        };
+        expect(persisted.expires).toBeInstanceOf(Date);
+        expect(persisted.expires.toISOString()).toBe(
+          "2027-01-01T00:00:00.000Z",
+        );
 
         // Same date again — no phantom update from Date handling.
         yield* program("2027-01-01").pipe(stack.deploy, hook(hooks));

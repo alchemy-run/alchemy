@@ -12,9 +12,8 @@ import * as Binding from "../../Binding.ts";
  * sent within the retention window; an unknown message id fails with the
  * typed `NotFoundException`. Account-level operation. Provide the
  * implementation with `Effect.provide(AWS.SES.GetMessageInsightsHttp)`.
- * @binding
- * @section Deliverability Insights
- * @example Look Up a Message's Delivery Timeline
+ * ### Deliverability Insights
+ * **Example:** Look Up a Message's Delivery Timeline
  * ```typescript
  * // init — account-level binding, no resource argument
  * const getInsights = yield* SES.GetMessageInsights();
@@ -22,6 +21,8 @@ import * as Binding from "../../Binding.ts";
  * // runtime — MessageId returned by a prior SendEmail
  * const { Insights } = yield* getInsights({ MessageId: messageId });
  * ```
+ *
+ * @binding
  */
 export interface GetMessageInsights extends Binding.Service<
   GetMessageInsights,

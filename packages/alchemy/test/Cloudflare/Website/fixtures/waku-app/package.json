@@ -3,11 +3,11 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "hono": "^4.12.14",
+    "hono": "catalog:frontend",
     "react": "~19.2.6",
     "react-dom": "~19.2.6",
-    "react-server-dom-webpack": "~19.2.6",
-    "waku": "1.0.0-beta.7"
+    "react-server-dom-webpack": "catalog:frontend",
+    "waku": "catalog:frontend"
   },
   "devDependencies": {
     "@types/react": "^19.2.17",

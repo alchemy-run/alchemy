@@ -418,3 +418,143 @@ test.provider(
       yield* stack.destroy();
     }).pipe(logLevel),
 );
+
+/** Structural view of live application policies for inline-policy asserts. */
+interface LiveInlineApp {
+  policies?: ReadonlyArray<{
+    id?: string | null;
+    decision?: string | null;
+    name?: string | null;
+    reusable?: boolean | null;
+    sessionDuration?: string | null;
+    include?: ReadonlyArray<unknown> | null;
+    exclude?: ReadonlyArray<unknown> | null;
+    require?: ReadonlyArray<unknown> | null;
+  }> | null;
+}
+
+test.provider(
+  "inline policies: scalar shorthand, update in place, switch to reusable, no mixing",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      const domain = `alchemy-test-inline-policies.${zoneName}`;
+      const makeApp = (
+        policies: Cloudflare.Access.ApplicationProps["policies"],
+      ) =>
+        Effect.gen(function* () {
+          yield* Cloudflare.Zone.Zone("TestZone", { name: zoneName }).pipe(
+            AdoptPolicy.adopt(true),
+          );
+          return yield* Cloudflare.Access.Application("InlinePolicyApp", {
+            type: "self_hosted",
+            domain,
+            policies,
+          });
+        });
+
+      // v1 — one inline policy via scalar shorthand.
+      const first = yield* stack.deploy(
+        makeApp([
+          {
+            decision: "allow",
+            name: "primary",
+            include: [{ emailDomain: "example.com" }],
+          },
+        ]),
+      );
+      const live1 = (yield* zeroTrust.getAccessApplicationForAccount({
+        accountId,
+        appId: first.applicationId,
+      })) as unknown as LiveInlineApp;
+      expect(live1.policies?.length).toBe(1);
+      expect(live1.policies![0].reusable).toBe(false);
+      // Shorthand expanded to the wire shape on the way out.
+      expect(live1.policies![0].include).toEqual([
+        { emailDomain: { domain: "example.com" } },
+      ]);
+      const inlineId = live1.policies![0].id;
+      expect(inlineId).toBeDefined();
+
+      // v2 — mutate the same inline policy: more shorthand kinds, exclude,
+      // require, session duration. The policy must update IN PLACE (same
+      // id) — an id-less inline item in the update PUT would mint a fresh
+      // policy.
+      yield* stack.deploy(
+        makeApp([
+          {
+            decision: "allow",
+            name: "primary",
+            include: [{ emailDomain: "example.com" }, "everyone"],
+            exclude: [{ email: "intern@example.com" }],
+            require: [{ geo: "US" }],
+            sessionDuration: "12h",
+          },
+        ]),
+      );
+      const live2 = (yield* zeroTrust.getAccessApplicationForAccount({
+        accountId,
+        appId: first.applicationId,
+      })) as unknown as LiveInlineApp;
+      expect(live2.policies?.length).toBe(1);
+      expect(live2.policies![0].id).toBe(inlineId);
+      expect(live2.policies![0].include).toEqual([
+        { emailDomain: { domain: "example.com" } },
+        { everyone: {} },
+      ]);
+      expect(live2.policies![0].exclude).toEqual([
+        { email: { email: "intern@example.com" } },
+      ]);
+      expect(live2.policies![0].require).toEqual([
+        { geo: { countryCode: "US" } },
+      ]);
+      expect(live2.policies![0].sessionDuration).toBe("12h");
+
+      // v3 — switch the application from inline to a reusable Policy
+      // resource (passed directly).
+      const reusableProgram = Effect.gen(function* () {
+        yield* Cloudflare.Zone.Zone("TestZone", { name: zoneName }).pipe(
+          AdoptPolicy.adopt(true),
+        );
+        const reusable = yield* Cloudflare.Access.Policy("InlineSwapPolicy", {
+          name: "Reusable for inline-swap test",
+          decision: "allow",
+          include: [{ emailDomain: "example.com" }],
+        });
+        const app = yield* Cloudflare.Access.Application("InlinePolicyApp", {
+          type: "self_hosted",
+          domain,
+          policies: [reusable],
+        });
+        return { app, reusable };
+      });
+      const { reusable } = yield* stack.deploy(reusableProgram);
+      const live3 = (yield* zeroTrust.getAccessApplicationForAccount({
+        accountId,
+        appId: first.applicationId,
+      })) as unknown as LiveInlineApp;
+      expect(live3.policies?.length).toBe(1);
+      expect(live3.policies![0].id).toBe(reusable.policyId);
+      expect(live3.policies![0].reusable).toBe(true);
+
+      // Mixing inline and reusable forms on one application fails fast.
+      const mixed = yield* stack
+        .deploy(
+          makeApp([
+            reusable.policyId,
+            {
+              decision: "allow",
+              include: [{ emailDomain: "example.com" }],
+            },
+          ]),
+        )
+        .pipe(Effect.flip);
+      expect(String(mixed)).toMatch(/mix/i);
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 300_000 },
+);

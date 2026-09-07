@@ -15,16 +15,16 @@
   },
   "dependencies": {
     "@solidjs/router": "^0.15.1",
-    "solid-js": "^1.9.5"
+    "solid-js": "catalog:frontend"
   },
   "devDependencies": {
     "@alchemy.run/cloudflare-test-tools": "workspace:*",
-    "@playwright/test": "catalog:",
-    "@tailwindcss/postcss": "^4.1.13",
-    "postcss": "^8.4.49",
-    "solid-devtools": "^0.34.3",
-    "tailwindcss": "^4.1.13",
+    "@playwright/test": "catalog:testing",
+    "@tailwindcss/postcss": "catalog:frontend",
+    "postcss": "catalog:frontend",
+    "solid-devtools": "catalog:frontend",
+    "tailwindcss": "catalog:frontend",
     "vite": "^7.1.4",
-    "vite-plugin-solid": "^2.11.8"
+    "vite-plugin-solid": "catalog:frontend"
   }
 }

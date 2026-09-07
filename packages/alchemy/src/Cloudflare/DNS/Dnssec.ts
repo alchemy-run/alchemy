@@ -161,11 +161,8 @@ export type Dnssec = Resource<
  * Safety: when there is no prior state and DNSSEC is already enabled
  * on the zone, `read` reports it as `Unowned` and the engine refuses
  * to take it over unless `--adopt` (or `adopt(true)`) is set.
- * @resource
- * @product DNS
- * @category Domains & DNS
- * @section Enabling DNSSEC
- * @example Sign the zone
+ * ### Enabling DNSSEC
+ * **Example:** Sign the zone
  * ```typescript
  * const dnssec = yield* Cloudflare.DNS.Dnssec("ZoneDnssec", {
  *   zoneId: zone.zoneId,
@@ -173,7 +170,7 @@ export type Dnssec = Resource<
  * // Paste `dnssec.ds` at your registrar to complete activation.
  * ```
  *
- * @example Multi-signer DNSSEC
+ * **Example:** Multi-signer DNSSEC
  * ```typescript
  * yield* Cloudflare.DNS.Dnssec("ZoneDnssec", {
  *   zoneId: zone.zoneId,
@@ -181,14 +178,18 @@ export type Dnssec = Resource<
  * });
  * ```
  *
- * @section Disabling DNSSEC
- * @example Keep DNSSEC explicitly off
+ * ### Disabling DNSSEC
+ * **Example:** Keep DNSSEC explicitly off
  * ```typescript
  * yield* Cloudflare.DNS.Dnssec("ZoneDnssec", {
  *   zoneId: zone.zoneId,
  *   status: "disabled",
  * });
  * ```
+ *
+ * @resource
+ * @product DNS
+ * @category Domains & DNS
  */
 export const Dnssec = Resource<Dnssec>(TypeId, {
   aliases: ["Cloudflare.Dns.Dnssec"],

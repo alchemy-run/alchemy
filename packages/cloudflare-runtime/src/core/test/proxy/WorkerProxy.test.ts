@@ -1,8 +1,11 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, expect, layer } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
+import * as Scope from "effect/Scope";
+import * as NodeNet from "node:net";
 import * as Internet from "../../globals/Internet.ts";
 import * as WorkerProxy from "../../proxy/WorkerProxy.ts";
 import { ConfigError } from "../../RuntimeError.shared.ts";
@@ -253,6 +256,60 @@ layer(services, { excludeTestServices: true })((it) => {
   );
 
   it.effect(
+    "retries a GET that was in flight when the upstream moved, without waiting for another request",
+    () =>
+      Effect.gen(function* () {
+        const proxy = yield* WorkerProxy.WorkerProxy;
+        const instance = yield* proxy.serve();
+
+        // A "slow" first upstream: it answers only after a delay, so the
+        // proxied request is still in flight when the worker restarts.
+        const slowScope = yield* Scope.make();
+        const slow = yield* serveUpstream(
+          `export default {
+             async fetch() {
+               await new Promise((resolve) => setTimeout(resolve, 1500));
+               return new Response("slow");
+             },
+           };`,
+        ).pipe(Scope.provide(slowScope));
+        const fresh = yield* serveUpstream(
+          `export default { fetch: () => new Response("fresh") };`,
+        );
+
+        yield* instance.set(slow);
+        const pending = yield* Effect.forkChild(
+          Effect.promise(() =>
+            fetch(new URL("/", instance.url)).then((res) => res.text()),
+          ),
+          { startImmediately: true },
+        );
+        // Let the request reach the slow upstream…
+        yield* Effect.promise(
+          () => new Promise((resolve) => setTimeout(resolve, 300)),
+        );
+        // …then restart the worker the way the dev provider does: the new
+        // target is set BEFORE the old instance is torn down, so the
+        // in-flight fetch fails after the proxy already points elsewhere.
+        yield* instance.set(fresh);
+        yield* Scope.close(slowScope, Exit.void);
+
+        // The in-flight GET is retryable. It must be re-driven against the
+        // new target on its own — a client waiting on THIS response never
+        // sends another request to kick the queue, so parking it until the
+        // next PUT or request would hang the client forever (the runtime's
+        // hang detector then cancels the proxy call without a response).
+        const result = yield* Fiber.join(pending).pipe(
+          Effect.timeoutOrElse({
+            duration: "10 seconds",
+            orElse: () => Effect.succeed("TIMED OUT: parked in retry queue"),
+          }),
+        );
+        expect(result).toBe("fresh");
+      }),
+  );
+
+  it.effect(
     "returns immediately when the upstream fails with a non-retryable error",
     () =>
       Effect.gen(function* () {
@@ -362,6 +419,131 @@ layer(services, { excludeTestServices: true })((it) => {
           .pipe(Effect.flip);
         assert(error instanceof ConfigError);
         expect(Workerd.isAddressInUseError(error)).toBe(true);
+      }),
+  );
+
+  it.effect(
+    "owns its port on the IPv6 loopback so localhost cannot be shadowed",
+    () =>
+      Effect.gen(function* () {
+        const proxy = yield* WorkerProxy.WorkerProxy;
+        const upstream = yield* serveUpstream(HTTP_WORKER);
+        const instance = yield* proxy.serve();
+        yield* instance.set(upstream);
+        const port = Number(instance.url.port);
+
+        // `localhost` resolves to both 127.0.0.1 and ::1 (and browsers prefer
+        // ::1). A proxy holding only the IPv4 half leaves `[::1]:port` free
+        // for another dev server to claim, silently splitting the port's
+        // traffic between two apps. The proxy must answer on both halves...
+        const viaV6 = yield* Effect.promise(() =>
+          fetch(`http://[::1]:${port}/echo`, {
+            method: "POST",
+            body: "v6",
+          }).then((res) => res.text()),
+        );
+        expect(viaV6).toBe("echo:v6");
+
+        // ...and a squatter's bind on the IPv6 half must fail.
+        const squat = yield* Effect.callback<string>((resume) => {
+          const server = NodeNet.createServer();
+          server.once("error", (error) =>
+            resume(
+              Effect.succeed(
+                typeof error === "object" && error !== null && "code" in error
+                  ? String(error.code)
+                  : "error",
+              ),
+            ),
+          );
+          server.listen({ port, host: "::1", exclusive: true }, () =>
+            server.close(() => resume(Effect.succeed("BOUND"))),
+          );
+          return Effect.sync(() => server.close());
+        });
+        expect(squat).toBe("EADDRINUSE");
+      }),
+  );
+
+  it.effect(
+    "waits out a previous session's teardown instead of shifting configured ports",
+    () =>
+      Effect.gen(function* () {
+        const proxy = yield* WorkerProxy.WorkerProxy;
+
+        // Simulate a dev restart racing the old session's teardown: the old
+        // session still holds the middle configured port when the new
+        // session's proxies start. Without a grace window the middle worker
+        // silently drifts onto a neighbor's configured port — serving the
+        // wrong app on a port the user knows.
+        //
+        // The suite runs many port tests concurrently, so a freshly probed
+        // port's neighbors may already be taken — stage the trio by
+        // retrying until the "stale" listener actually binds base + 1 and
+        // base + 2 probes free.
+        const tryBind = (port: number) =>
+          Effect.callback<NodeNet.Server | undefined>((resume) => {
+            const server = NodeNet.createServer();
+            server.once("error", () => resume(Effect.succeed(undefined)));
+            server.listen({ port, exclusive: true }, () =>
+              resume(Effect.succeed(server)),
+            );
+            return Effect.sync(() => server.close());
+          });
+        let base!: number;
+        let stale!: NodeNet.Server;
+        for (let attempt = 0; ; attempt++) {
+          const candidate = yield* PortHelpers.find(0);
+          const staleCandidate = yield* tryBind(candidate + 1);
+          if (staleCandidate !== undefined) {
+            const neighbor = yield* tryBind(candidate + 2);
+            if (neighbor !== undefined) {
+              yield* Effect.callback<void>((resume) =>
+                neighbor.close(() => resume(Effect.void)),
+              );
+              base = candidate;
+              stale = staleCandidate;
+              break;
+            }
+            yield* Effect.callback<void>((resume) =>
+              staleCandidate.close(() => resume(Effect.void)),
+            );
+          }
+          if (attempt >= 9) {
+            return yield* Effect.die(
+              "could not stage a stale listener on a free port trio",
+            );
+          }
+        }
+        // The finalizer makes the close idempotent if the test fails early.
+        yield* Effect.addFinalizer(() =>
+          Effect.callback<void>((resume) =>
+            stale.close(() => resume(Effect.void)),
+          ),
+        );
+        // The "old session" releases the port mid-grace-window.
+        yield* Effect.forkChild(
+          Effect.sleep("750 millis").pipe(
+            Effect.andThen(
+              Effect.callback<void>((resume) =>
+                stale.close(() => resume(Effect.void)),
+              ),
+            ),
+          ),
+        );
+
+        const [a, b, c] = yield* Effect.all(
+          [
+            proxy.serve({ port: base }),
+            proxy.serve({ port: base + 1 }),
+            proxy.serve({ port: base + 2 }),
+          ],
+          { concurrency: "unbounded" },
+        );
+
+        expect(Number(a.url.port)).toBe(base);
+        expect(Number(b.url.port)).toBe(base + 1);
+        expect(Number(c.url.port)).toBe(base + 2);
       }),
   );
 

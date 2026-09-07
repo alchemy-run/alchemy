@@ -1,5 +1,5 @@
-import * as Astro from "@alchemy.run/cloudflare-frameworks/astro";
-import cloudflare from "@alchemy.run/cloudflare-frameworks/astro/cloudflare";
+import * as Astro from "@alchemy.run/frontend-frameworks/astro";
+import cloudflare from "@alchemy.run/frontend-frameworks/astro/cloudflare";
 import { Assets, Text } from "@alchemy.run/cloudflare-runtime/core/bindings";
 import * as Options from "@alchemy.run/cloudflare-test-tools/e2e/Options";
 
@@ -46,7 +46,7 @@ export default Options.make({
   // fixture's Astro configuration lives in its real `astro.config.mjs`,
   // which the integration must load and honor (the user-config principle).
   framework: (options) =>
-    Astro.make({
+    Astro.layer({
       target: cloudflare({ worker: Options.resolveCloudflareOptions(options).worker }),
     }),
 });

@@ -4,6 +4,15 @@ import * as Schedule from "effect/Schedule";
 import { Unowned } from "../AdoptPolicy.ts";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
+import {
+  DEV_TIMESTAMP,
+  attrOrNullableString,
+  attrOrRedactedString,
+  attrOrString,
+  devId,
+  devProvider,
+} from "./Internal/DevStub.ts";
+import * as ProviderLayer from "../Local/ProviderLayer.ts";
 import { Resource } from "../Resource.ts";
 import {
   PrismaClient,
@@ -17,7 +26,7 @@ import {
   deriveConnectionAttrs,
   hasCanonicalConnectionSecrets,
 } from "./Internal/DatabaseSecrets.ts";
-import { fnv1a64 } from "./Internal/EnvName.ts";
+import { physicalInstanceName } from "./Internal/EnvName.ts";
 import type { PostgresOrigin } from "./PostgresOrigin.ts";
 import type { Providers } from "./Providers.ts";
 import {
@@ -137,16 +146,16 @@ export interface Connection extends Resource<
  * database or name replaces the connection; changing `rotate` from `false` to
  * `true` keeps the connection ID and requests fresh credentials.
  *
- * @section Creating a Connection
- * @example Application connection
+ * ### Creating a Connection
+ * **Example:** Application connection
  * ```typescript
  * const connection = yield* Prisma.Connection("api", {
  *   database: database.databaseId,
  * });
  * ```
  *
- * @section Binding to Platforms
- * @example Pass database URLs to Compute env
+ * ### Binding to Platforms
+ * **Example:** Pass database URLs to Compute env
  * ```typescript
  * const connection = yield* Prisma.Connection("api", {
  *   database,
@@ -162,7 +171,7 @@ export interface Connection extends Resource<
  * });
  * ```
  *
- * @example Use a connection inside an Effect-native Compute app
+ * **Example:** Use a connection inside an Effect-native Compute app
  * ```typescript
  * export default Prisma.Compute(
  *   "api",
@@ -180,11 +189,11 @@ export interface Connection extends Resource<
  * );
  * ```
  *
- * @example Use a connection inside an Effect-native Lambda function
+ * **Example:** Use a connection inside an Effect-native Lambda function
  * ```typescript
  * export default AWS.Lambda.Function(
  *   "api",
- *   { main: import.meta.filename, url: true },
+ *   { main: import.meta.filename, functionUrl: true },
  *   Effect.gen(function* () {
  *     const db = yield* Prisma.Connect(connection);
  *     const sql = yield* SQL.Postgres({ url: db.databaseUrl });
@@ -198,7 +207,7 @@ export interface Connection extends Resource<
  * );
  * ```
  *
- * @example Use a connection inside an Effect-native Cloudflare Worker
+ * **Example:** Use a connection inside an Effect-native Cloudflare Worker
  * ```typescript
  * export default Cloudflare.Worker(
  *   "api",
@@ -216,8 +225,8 @@ export interface Connection extends Resource<
  * );
  * ```
  *
- * @section Rotating Credentials
- * @example Request one rotation
+ * ### Rotating Credentials
+ * **Example:** Request one rotation
  * ```typescript
  * const connection = yield* Prisma.Connection("api", {
  *   database,
@@ -225,8 +234,8 @@ export interface Connection extends Resource<
  * });
  * ```
  *
- * @section Connecting over Hyperdrive
- * @example Front Prisma Postgres with Cloudflare Hyperdrive
+ * ### Connecting over Hyperdrive
+ * **Example:** Front Prisma Postgres with Cloudflare Hyperdrive
  * ```typescript
  * const hyperdrive = yield* Cloudflare.Hyperdrive.Connection("api-hd", {
  *   origin: connection.origin.as<Prisma.PostgresOrigin>(),
@@ -344,16 +353,6 @@ const recoverGeneratedConnectionAfterConflict = (
 const physicalConnectionPrefix = (name: string) =>
   `${name.trim().slice(0, 52)}-`;
 
-const physicalConnectionName = (name: string, instanceId: string) => {
-  const instanceToken = instanceId.replaceAll(/[^a-zA-Z0-9]/g, "");
-  const effectiveSuffix =
-    instanceToken.length >= 12
-      ? instanceToken.slice(0, 12)
-      : fnv1a64(instanceId).slice(0, 12);
-  const maxPrefixLength = 65 - effectiveSuffix.length - 1;
-  return `${name.trim().slice(0, maxPrefixLength)}-${effectiveSuffix}`;
-};
-
 const isGeneratedPhysicalConnectionName = (
   physicalName: string,
   logicalName: string,
@@ -390,7 +389,7 @@ const attrsFrom = (
   ...deriveConnectionAttrs(secrets),
 });
 
-export const ConnectionProvider = () =>
+const ProviderLive = () =>
   Provider.effect(
     Connection,
     Effect.gen(function* () {
@@ -465,7 +464,7 @@ export const ConnectionProvider = () =>
           const databaseId = unresolvedDatabaseIdOf(olds.database);
           if (!databaseId) return undefined;
           const name = yield* validateConnectionName(olds.name ?? id);
-          const expectedName = physicalConnectionName(name, instanceId);
+          const expectedName = physicalInstanceName(name, instanceId);
           const owned = yield* uniqueConnection(
             client,
             databaseId,
@@ -514,7 +513,7 @@ export const ConnectionProvider = () =>
                 )
             : undefined;
 
-          const expectedName = physicalConnectionName(name, instanceId);
+          const expectedName = physicalInstanceName(name, instanceId);
           const physicalName =
             connectionId && output ? output.connectionName : expectedName;
           if (
@@ -641,3 +640,39 @@ export const ConnectionProvider = () =>
       };
     }),
   );
+
+const ProviderLocal = () =>
+  devProvider(Connection, ["connectionId"], ({ id, news }) => {
+    const secrets = {
+      directConnectionString: attrOrRedactedString(
+        news.database,
+        "directConnectionString",
+      ),
+      pooledConnectionString: attrOrRedactedString(
+        news.database,
+        "pooledConnectionString",
+      ),
+      accelerateConnectionString: attrOrRedactedString(
+        news.database,
+        "accelerateConnectionString",
+      ),
+    };
+    return {
+      connectionId: devId("connection", id),
+      connectionName: news.name ?? id,
+      databaseId: attrOrString(news.database, "databaseId"),
+      kind: "postgres",
+      createdAt: DEV_TIMESTAMP,
+      ...secrets,
+      host: attrOrNullableString(news.database, "host"),
+      user: attrOrNullableString(news.database, "user"),
+      password: attrOrRedactedString(news.database, "password"),
+      ...deriveConnectionAttrs(secrets),
+    };
+  });
+
+export const ConnectionProvider = () =>
+  ProviderLayer.dual(Connection, {
+    local: () => ProviderLocal(),
+    live: () => ProviderLive(),
+  });

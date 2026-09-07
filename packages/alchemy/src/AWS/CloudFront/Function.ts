@@ -82,9 +82,8 @@ export interface Function extends Resource<
  *
  * CloudFront Functions are lightweight JavaScript handlers that run at the
  * edge and can be attached to distribution cache behaviors.
- * @resource
- * @section Creating Functions
- * @example Viewer Request Function
+ * ### Creating Functions
+ * **Example:** Viewer Request Function
  * ```typescript
  * const fn = yield* Function("RouterRequestFunction", {
  *   code: `
@@ -97,6 +96,8 @@ export interface Function extends Resource<
  * `,
  * });
  * ```
+ *
+ * @resource
  */
 export const Function = Resource<Function>("AWS.CloudFront.Function");
 

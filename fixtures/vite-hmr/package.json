@@ -12,7 +12,7 @@
   },
   "devDependencies": {
     "@alchemy.run/cloudflare-test-tools": "workspace:*",
-    "@playwright/test": "catalog:",
-    "vite": "catalog:"
+    "@playwright/test": "catalog:testing",
+    "vite": "catalog:build"
   }
 }

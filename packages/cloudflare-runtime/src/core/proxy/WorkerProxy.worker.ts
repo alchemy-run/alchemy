@@ -70,6 +70,14 @@ export class WorkerProxy extends DurableObject<Env> {
           const error = ProxyError.from(cause);
           if (error.retryable) {
             this.retryRequestQueue.set(request, promise);
+            // A request is only retryable when the target moved while it
+            // was in flight (the worker restarted), so the NEW target is
+            // already set — drive the queue now. Waiting for the next PUT
+            // or the next incoming request parks this one indefinitely: a
+            // client that is itself waiting on it never sends another, the
+            // runtime's hang detector eventually cancels the stalled DO
+            // call, and the client gets no response at all.
+            this.processRequestQueue();
           } else {
             promise.resolve(error.toResponse());
           }

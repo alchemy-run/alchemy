@@ -10,21 +10,21 @@
     "pretest": "playwright install chromium && bun run build"
   },
   "dependencies": {
-    "hono": "catalog:frameworks",
-    "react": "~19.2.6",
-    "react-dom": "~19.2.6",
-    "react-server-dom-webpack": "~19.2.6",
-    "waku": "catalog:frameworks"
+    "hono": "catalog:frontend",
+    "react": "catalog:frontend-rsc",
+    "react-dom": "catalog:frontend-rsc",
+    "react-server-dom-webpack": "catalog:frontend",
+    "waku": "catalog:frontend"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "catalog:workers",
+    "@cloudflare/workers-types": "catalog:cloudflare-runtime",
     "@alchemy.run/cloudflare-runtime": "workspace:*",
     "@alchemy.run/cloudflare-test-tools": "workspace:*",
-    "@alchemy.run/cloudflare-frameworks": "workspace:*",
-    "@playwright/test": "catalog:",
-    "@types/node": "^24.12.0",
-    "@types/react": "^19.2.17",
-    "@types/react-dom": "^19.2.3",
-    "vite": "catalog:"
+    "@alchemy.run/frontend-frameworks": "workspace:*",
+    "@playwright/test": "catalog:testing",
+    "@types/node": "catalog:node24",
+    "@types/react": "catalog:frontend",
+    "@types/react-dom": "catalog:frontend",
+    "vite": "catalog:build"
   }
 }

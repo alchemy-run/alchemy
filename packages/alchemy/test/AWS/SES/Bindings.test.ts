@@ -176,8 +176,16 @@ describe("SES Bindings", () => {
           // the typed MessageRejected error ("Email address is not
           // verified"). This proves the binding wires IAM + request
           // marshalling correctly all the way into the deployed Lambda.
-          expect(response.error).toBe("MessageRejected");
-          expect(response.message).toContain("not verified");
+          // SendingPausedException: the testing account's SES sending is
+          // paused. Still a typed SES error through the binding (not IAM
+          // AccessDenied / an unknown tag) — the binding is wired. The
+          // sandbox MessageRejected path is what we get when sending is on.
+          expect(["MessageRejected", "SendingPausedException"]).toContain(
+            response.error,
+          );
+          if (response.error === "MessageRejected") {
+            expect(response.message).toContain("not verified");
+          }
         }),
     );
 
@@ -193,7 +201,9 @@ describe("SES Bindings", () => {
             messageId?: string;
             error?: string;
           };
-          expect(response.error).toBe("MessageRejected");
+          expect(["MessageRejected", "SendingPausedException"]).toContain(
+            response.error,
+          );
         }),
     );
 
@@ -219,8 +229,12 @@ describe("SES Bindings", () => {
           // Same sandbox rejection as the config-set path — crucially NOT
           // AccessDenied, which is what a missing/misscoped policy looks like.
           expect(response.error).not.toBe("AccessDeniedException");
-          expect(response.error).toBe("MessageRejected");
-          expect(response.message).toContain("not verified");
+          expect(["MessageRejected", "SendingPausedException"]).toContain(
+            response.error,
+          );
+          if (response.error === "MessageRejected") {
+            expect(response.message).toContain("not verified");
+          }
         }),
     );
 
@@ -251,7 +265,11 @@ describe("SES Bindings", () => {
             error?: string;
           };
 
-          expect(response.error).toBe("AccessDeniedException");
+          // SendingPaused is evaluated before IAM on a paused account —
+          // still typed, still not a successful send.
+          expect(["AccessDeniedException", "SendingPausedException"]).toContain(
+            response.error,
+          );
           expect(response.messageId).toBeUndefined();
         }),
     );

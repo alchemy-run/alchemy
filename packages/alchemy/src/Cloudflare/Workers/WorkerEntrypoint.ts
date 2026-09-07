@@ -50,17 +50,14 @@ export interface WorkerEntrypointBinding {
  * an entry module as an entrypoint — is bound with `WorkerEntrypoint`,
  * which selects the class by name and can deliver `ctx.props` to it.
  *
- * @resource
- * @product Workers
- * @category Workers & Compute
  *
- * @section Binding a Named Entrypoint
+ * ### Binding a Named Entrypoint
  * The target Worker exports a `WorkerEntrypoint` class alongside its
  * default handler; the consumer selects it by name. `InferEnv` types the
  * binding as a `Fetcher` service stub — RPC methods are called on it
  * directly.
  *
- * @example Bind and call a named entrypoint
+ * **Example:** Bind and call a named entrypoint
  * ```typescript
  * // target/src/worker.ts
  * import { WorkerEntrypoint } from "cloudflare:workers";
@@ -86,12 +83,12 @@ export interface WorkerEntrypointBinding {
  * });
  * ```
  *
- * @section Delivering ctx.props
+ * ### Delivering ctx.props
  * The options form attaches properties the target reads from
  * `this.ctx.props` — workerd's per-binding configuration channel. `Output`
  * values resolve at deploy time.
  *
- * @example Entrypoint binding with props
+ * **Example:** Entrypoint binding with props
  * ```typescript
  * env: {
  *   VENDOR: Cloudflare.WorkerEntrypoint(vendorWorker, {
@@ -100,6 +97,10 @@ export interface WorkerEntrypointBinding {
  *   }),
  * }
  * ```
+ *
+ * @resource
+ * @product Workers
+ * @category Workers & Compute
  */
 export const WorkerEntrypoint = (
   worker: Worker,

@@ -345,9 +345,8 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  * Only replicated services are supported. Configuration changes replace the
  * service (delete-then-create); swarm tasks are stateless, so replacement is
  * cheap and avoids partially-applied `service update` drift.
- * @resource
- * @section Creating Services
- * @example Replicated Nginx
+ * ### Creating Services
+ * **Example:** Replicated Nginx
  * ```typescript
  * const swarm = yield* Docker.Swarm("swarm");
  * const web = yield* Docker.Service("web", {
@@ -358,7 +357,7 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  * });
  * ```
  *
- * @example Run a Built Image
+ * **Example:** Run a Built Image
  * ```typescript
  * const image = yield* Docker.Image("app-image", {
  *   build: { context: "./app" },
@@ -370,8 +369,8 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  * });
  * ```
  *
- * @section Effectful Services
- * @example Inline Effect Server
+ * ### Effectful Services
+ * **Example:** Inline Effect Server
  * ```typescript
  * const swarm = yield* Docker.Swarm("swarm");
  * const api = yield* Docker.Service(
@@ -393,7 +392,7 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  * );
  * ```
  *
- * @example Background Loops with ServerHost
+ * **Example:** Background Loops with ServerHost
  * ```typescript
  * // Class props may be an Effect, so the service can yield the swarm it
  * // deploys into (declared once at module level).
@@ -417,17 +416,14 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  * ) {}
  * ```
  *
- * @section Bundling & Tree-shaking
- * `main` is bundled with rolldown at deploy time. Top-level calls in the
- * `effect`, `@effect/*`, `alchemy`, `@alchemy.run/*`, and
- * `@distilled.cloud/*` packages receive `#__PURE__` annotations by
- * default, so anything the service doesn't use from those packages is
- * tree-shaken out of the bundle. Any other package — including your own
- * app — is left untouched unless you list it explicitly.
+ * ### Bundling & Tree-shaking
+ * `main` is bundled with rolldown at deploy time. Unused code is
+ * tree-shaken. `effect`, alchemy, and `@distilled.cloud` are marked
+ * pure so unused parts prune more aggressively. Your app is not
+ * marked pure.
  *
- * @example Treat additional packages as pure
- * Pass package names (or picomatch globs) via `build.pure.packages` to
- * annotate them in addition to the defaults.
+ * **Example:** Mark additional packages as pure
+ * Only list packages with no top-level side effects.
  * ```typescript
  * {
  *   main: import.meta.url,
@@ -437,18 +433,7 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  * }
  * ```
  *
- * Listing a package annotates calls whose result is bound (variable
- * initializers, exports) — safe anywhere. If a listed package also
- * declares `"sideEffects": false` (or `[]`) in its `package.json`, that
- * combination opts it into full annotation: top-level calls whose result
- * is discarded (e.g. `router.on("/path", handler)` registrations) are
- * also marked pure and deleted under minification when unused. Only list
- * a `sideEffects: false` package if its modules really are free of
- * meaningful top-level side effects. The `effect`, `alchemy`, and
- * `@distilled.cloud` defaults declare exactly that, on purpose — their
- * modules are designed to be fully tree-shakeable.
- *
- * @example Disable pure annotations
+ * **Example:** Turn it off
  * ```typescript
  * {
  *   main: import.meta.url,
@@ -456,8 +441,8 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  * }
  * ```
  *
- * @section Docker Contexts
- * @example Deploy to a Remote Swarm over SSH
+ * ### Docker Contexts
+ * **Example:** Deploy to a Remote Swarm over SSH
  * ```typescript
  * const vps = yield* Docker.Context("vps", {
  *   docker: "host=ssh://deploy@example.com",
@@ -473,8 +458,8 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  * });
  * ```
  *
- * @section Networks & Volumes
- * @example Overlay Network with Aliases
+ * ### Networks & Volumes
+ * **Example:** Overlay Network with Aliases
  * ```typescript
  * const network = yield* Docker.Network("app-net", {
  *   context: swarm,
@@ -488,8 +473,8 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  * });
  * ```
  *
- * @section Rollouts & Placement
- * @example Rolling Update with Rollback
+ * ### Rollouts & Placement
+ * **Example:** Rolling Update with Rollback
  * ```typescript
  * const app = yield* Docker.Service("app", {
  *   image: "ghcr.io/acme/app:latest",
@@ -507,8 +492,8 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  * });
  * ```
  *
- * @section Secrets & Configs
- * @example Mount Swarm Secrets
+ * ### Secrets & Configs
+ * **Example:** Mount Swarm Secrets
  * ```typescript
  * const app = yield* Docker.Service("app", {
  *   image: "ghcr.io/acme/app:latest",
@@ -516,6 +501,8 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  *   configs: [{ source: "app-config", target: "/etc/app/config.yaml" }],
  * });
  * ```
+ *
+ * @resource
  */
 export const Service: Platform<
   Service,

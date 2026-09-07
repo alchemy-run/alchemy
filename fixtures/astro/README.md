@@ -1,13 +1,13 @@
 # @fixtures/astro
 
-E2e fixture for `@alchemy.run/cloudflare-frameworks/astro` — a wrangler-free Astro app on
+E2e fixture for `@alchemy.run/frontend-frameworks/astro` — a wrangler-free Astro app on
 Cloudflare Workers, driven through the e2e harness's `Framework` service
 (no `wrangler.json`). The project's own `astro.config.mjs` loads natively;
 the toolchain's config is an inline overlay astro merges over it.
 
 `e2e.config.ts` uses the target-scoped config carriage (`target.cloudflare`)
 and passes the Cloudflare deploy target as a typed _value_
-(`cloudflare({ worker })` from `@alchemy.run/cloudflare-frameworks/astro/cloudflare`) to
+(`cloudflare({ worker })` from `@alchemy.run/frontend-frameworks/astro/cloudflare`) to
 `Astro.make`.
 
 The app exercises:

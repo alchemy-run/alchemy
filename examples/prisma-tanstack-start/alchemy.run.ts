@@ -74,9 +74,8 @@ export default Alchemy.Stack(
       command: "bun run db:migrate",
       cwd: ".",
       env: {
-        DATABASE_URL: connection.directConnectionString.as<
-          Redacted.Redacted<string>
-        >(),
+        DATABASE_URL:
+          connection.directConnectionString.as<Redacted.Redacted<string>>(),
         // Bound server-side lock waits and statement execution independently
         // from the release-process deadline below.
         PGOPTIONS: "-c lock_timeout=30s -c statement_timeout=5min",

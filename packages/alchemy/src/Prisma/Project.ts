@@ -5,6 +5,8 @@ import * as Schedule from "effect/Schedule";
 import { Unowned } from "../AdoptPolicy.ts";
 import { createPhysicalName } from "../PhysicalName.ts";
 import * as Provider from "../Provider.ts";
+import { DEV_TIMESTAMP, devId, devProvider } from "./Internal/DevStub.ts";
+import * as ProviderLayer from "../Local/ProviderLayer.ts";
 import { Resource } from "../Resource.ts";
 import {
   PrismaClient,
@@ -132,9 +134,8 @@ export interface Project extends Resource<
  * contained data. Set `createDatabase: false` when you want standalone
  * `Prisma.Database` resources with independent lifecycles.
  *
- * @resource
- * @section Creating a Project
- * @example Project with a default database
+ * ### Creating a Project
+ * **Example:** Project with a default database
  * ```typescript
  * const project = yield* Prisma.Project("app", {
  *   name: "app",
@@ -142,12 +143,14 @@ export interface Project extends Resource<
  * });
  * ```
  *
- * @example Project only
+ * **Example:** Project only
  * ```typescript
  * const project = yield* Prisma.Project("control-plane", {
  *   createDatabase: false,
  * });
  * ```
+ *
+ * @resource
  */
 export const Project = Resource<Project>("Prisma.Project");
 
@@ -309,7 +312,7 @@ const attrsFrom = (
   password: secrets.password,
 });
 
-export const ProjectProvider = () =>
+const ProviderLive = () =>
   Provider.effect(
     Project,
     Effect.gen(function* () {
@@ -685,3 +688,31 @@ export const ProjectProvider = () =>
       };
     }),
   );
+
+const ProviderLocal = () =>
+  devProvider(Project, ["projectId"], ({ id, news }) => ({
+    projectId: devId("project", id),
+    projectName: news.name ?? id,
+    workspaceId: devId("workspace", "local"),
+    createdAt: DEV_TIMESTAMP,
+    defaultRegion:
+      news.createDatabase === false
+        ? (news.region ?? null)
+        : (news.region ?? "us-east-1"),
+    databaseId:
+      news.createDatabase === false ? undefined : devId("database", id),
+    defaultConnectionId:
+      news.createDatabase === false ? undefined : devId("connection", id),
+    directConnectionString: undefined,
+    pooledConnectionString: undefined,
+    accelerateConnectionString: undefined,
+    host: undefined,
+    user: undefined,
+    password: undefined,
+  }));
+
+export const ProjectProvider = () =>
+  ProviderLayer.dual(Project, {
+    local: () => ProviderLocal(),
+    live: () => ProviderLive(),
+  });

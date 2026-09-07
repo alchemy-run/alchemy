@@ -70,9 +70,8 @@ export interface CustomVerificationEmailTemplate extends Resource<
  * Creating, reading, updating, and deleting the template works on any account.
  * Actually *sending* a custom verification email requires the account to be
  * out of the SES sandbox (production access).
- * @resource
- * @section Creating Templates
- * @example Branded Verification Email
+ * ### Creating Templates
+ * **Example:** Branded Verification Email
  * ```typescript
  * import * as SES from "alchemy/AWS/SES";
  *
@@ -86,7 +85,7 @@ export interface CustomVerificationEmailTemplate extends Resource<
  * });
  * ```
  *
- * @example Explicit Template Name
+ * **Example:** Explicit Template Name
  * ```typescript
  * // Without templateName a deterministic name is derived from app/stage/id.
  * const template = yield* SES.CustomVerificationEmailTemplate("Verify", {
@@ -100,8 +99,8 @@ export interface CustomVerificationEmailTemplate extends Resource<
  * });
  * ```
  *
- * @section Sending the Verification Email
- * @example Verify a New Address from a Lambda Function
+ * ### Sending the Verification Email
+ * **Example:** Verify a New Address from a Lambda Function
  * ```typescript
  * // init — account-level binding, no resource argument
  * const sendVerification = yield* SES.SendCustomVerificationEmail();
@@ -113,6 +112,8 @@ export interface CustomVerificationEmailTemplate extends Resource<
  *   TemplateName: yield* template.templateName,
  * });
  * ```
+ *
+ * @resource
  */
 export const CustomVerificationEmailTemplate =
   Resource<CustomVerificationEmailTemplate>(

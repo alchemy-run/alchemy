@@ -4,9 +4,9 @@ export default function Root({ children }: { children: ReactNode }) {
   return (
     <html>
       <head>
-        <title>Waku on Cloudflare Workers</title>
+        <title>Waku on Cloudflare</title>
       </head>
-      <body>{children}</body>
+      <body className="bg-slate-50 p-8 text-slate-900">{children}</body>
     </html>
   );
 }
