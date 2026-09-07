@@ -5427,6 +5427,101 @@ importers:
         specifier: catalog:build
         version: 7.0.2
 
+  submodules/distilled/packages/adyen:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
+      effect:
+        specifier: 4.0.0-rc.112
+        version: 4.0.0-rc.112
+    devDependencies:
+      '@effect/platform-bun':
+        specifier: catalog:effect
+        version: 4.0.0-rc.112(effect@4.0.0-rc.112)
+      '@types/bun':
+        specifier: catalog:tooling
+        version: 1.3.14
+      '@types/node':
+        specifier: catalog:tooling
+        version: 26.2.0
+
+  submodules/distilled/packages/apache-superset:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
+      effect:
+        specifier: 4.0.0-rc.112
+        version: 4.0.0-rc.112
+    devDependencies:
+      '@effect/platform-bun':
+        specifier: catalog:effect
+        version: 4.0.0-rc.112(effect@4.0.0-rc.112)
+      '@types/bun':
+        specifier: catalog:tooling
+        version: 1.3.14
+      '@types/node':
+        specifier: catalog:tooling
+        version: 26.2.0
+
+  submodules/distilled/packages/archil:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
+      effect:
+        specifier: 4.0.0-rc.112
+        version: 4.0.0-rc.112
+    devDependencies:
+      '@effect/platform-bun':
+        specifier: catalog:effect
+        version: 4.0.0-rc.112(effect@4.0.0-rc.112)
+      '@types/bun':
+        specifier: catalog:tooling
+        version: 1.3.14
+      '@types/node':
+        specifier: catalog:tooling
+        version: 26.2.0
+
+  submodules/distilled/packages/argocd:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
+      effect:
+        specifier: 4.0.0-rc.112
+        version: 4.0.0-rc.112
+    devDependencies:
+      '@effect/platform-bun':
+        specifier: catalog:effect
+        version: 4.0.0-rc.112(effect@4.0.0-rc.112)
+      '@types/bun':
+        specifier: catalog:tooling
+        version: 1.3.14
+      '@types/node':
+        specifier: catalog:tooling
+        version: 26.2.0
+
+  submodules/distilled/packages/auth0:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
+      effect:
+        specifier: 4.0.0-rc.112
+        version: 4.0.0-rc.112
+    devDependencies:
+      '@effect/platform-bun':
+        specifier: catalog:effect
+        version: 4.0.0-rc.112(effect@4.0.0-rc.112)
+      '@types/bun':
+        specifier: catalog:tooling
+        version: 1.3.14
+      '@types/node':
+        specifier: catalog:tooling
+        version: 26.2.0
+
   submodules/distilled/packages/aws:
     dependencies:
       '@aws-crypto/crc32':
@@ -5517,6 +5612,44 @@ importers:
         specifier: catalog:tooling
         version: 26.2.0
 
+  submodules/distilled/packages/chronosphere:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
+      effect:
+        specifier: 4.0.0-rc.112
+        version: 4.0.0-rc.112
+    devDependencies:
+      '@effect/platform-bun':
+        specifier: catalog:effect
+        version: 4.0.0-rc.112(effect@4.0.0-rc.112)
+      '@types/bun':
+        specifier: catalog:tooling
+        version: 1.3.14
+      '@types/node':
+        specifier: catalog:tooling
+        version: 26.2.0
+
+  submodules/distilled/packages/clerk:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
+      effect:
+        specifier: 4.0.0-rc.112
+        version: 4.0.0-rc.112
+    devDependencies:
+      '@effect/platform-bun':
+        specifier: catalog:effect
+        version: 4.0.0-rc.112(effect@4.0.0-rc.112)
+      '@types/bun':
+        specifier: catalog:tooling
+        version: 1.3.14
+      '@types/node':
+        specifier: catalog:tooling
+        version: 26.2.0
+
   submodules/distilled/packages/cloudflare:
     dependencies:
       '@distilled.cloud/core':
@@ -5555,6 +5688,25 @@ importers:
         specifier: catalog:tooling
         version: 26.2.0
 
+  submodules/distilled/packages/coolify:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
+      effect:
+        specifier: 4.0.0-rc.112
+        version: 4.0.0-rc.112
+    devDependencies:
+      '@effect/platform-bun':
+        specifier: catalog:effect
+        version: 4.0.0-rc.112(effect@4.0.0-rc.112)
+      '@types/bun':
+        specifier: catalog:tooling
+        version: 1.3.14
+      '@types/node':
+        specifier: catalog:tooling
+        version: 26.2.0
+
   submodules/distilled/packages/core:
     devDependencies:
       '@effect/platform-bun':
@@ -5570,7 +5722,121 @@ importers:
         specifier: 4.0.0-rc.112
         version: 4.0.0-rc.112
 
+  submodules/distilled/packages/customerio:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
+      effect:
+        specifier: 4.0.0-rc.112
+        version: 4.0.0-rc.112
+    devDependencies:
+      '@effect/platform-bun':
+        specifier: catalog:effect
+        version: 4.0.0-rc.112(effect@4.0.0-rc.112)
+      '@types/bun':
+        specifier: catalog:tooling
+        version: 1.3.14
+      '@types/node':
+        specifier: catalog:tooling
+        version: 26.2.0
+
+  submodules/distilled/packages/datadog:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
+      effect:
+        specifier: 4.0.0-rc.112
+        version: 4.0.0-rc.112
+    devDependencies:
+      '@effect/platform-bun':
+        specifier: catalog:effect
+        version: 4.0.0-rc.112(effect@4.0.0-rc.112)
+      '@types/bun':
+        specifier: catalog:tooling
+        version: 1.3.14
+      '@types/node':
+        specifier: catalog:tooling
+        version: 26.2.0
+
+  submodules/distilled/packages/digitalocean:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
+      effect:
+        specifier: 4.0.0-rc.112
+        version: 4.0.0-rc.112
+    devDependencies:
+      '@effect/platform-bun':
+        specifier: catalog:effect
+        version: 4.0.0-rc.112(effect@4.0.0-rc.112)
+      '@types/bun':
+        specifier: catalog:tooling
+        version: 1.3.14
+      '@types/node':
+        specifier: catalog:tooling
+        version: 26.2.0
+
   submodules/distilled/packages/discord:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
+      effect:
+        specifier: 4.0.0-rc.112
+        version: 4.0.0-rc.112
+    devDependencies:
+      '@effect/platform-bun':
+        specifier: catalog:effect
+        version: 4.0.0-rc.112(effect@4.0.0-rc.112)
+      '@types/bun':
+        specifier: catalog:tooling
+        version: 1.3.14
+      '@types/node':
+        specifier: catalog:tooling
+        version: 26.2.0
+
+  submodules/distilled/packages/docker:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
+      effect:
+        specifier: 4.0.0-rc.112
+        version: 4.0.0-rc.112
+    devDependencies:
+      '@effect/platform-bun':
+        specifier: catalog:effect
+        version: 4.0.0-rc.112(effect@4.0.0-rc.112)
+      '@types/bun':
+        specifier: catalog:tooling
+        version: 1.3.14
+      '@types/node':
+        specifier: catalog:tooling
+        version: 26.2.0
+
+  submodules/distilled/packages/doppler:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
+      effect:
+        specifier: 4.0.0-rc.112
+        version: 4.0.0-rc.112
+    devDependencies:
+      '@effect/platform-bun':
+        specifier: catalog:effect
+        version: 4.0.0-rc.112(effect@4.0.0-rc.112)
+      '@types/bun':
+        specifier: catalog:tooling
+        version: 1.3.14
+      '@types/node':
+        specifier: catalog:tooling
+        version: 26.2.0
+
+  submodules/distilled/packages/elasticsearch:
     dependencies:
       '@distilled.cloud/core':
         specifier: workspace:*
@@ -5627,6 +5893,25 @@ importers:
         specifier: catalog:tooling
         version: 26.2.0
 
+  submodules/distilled/packages/forgejo:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
+      effect:
+        specifier: 4.0.0-rc.112
+        version: 4.0.0-rc.112
+    devDependencies:
+      '@effect/platform-bun':
+        specifier: catalog:effect
+        version: 4.0.0-rc.112(effect@4.0.0-rc.112)
+      '@types/bun':
+        specifier: catalog:tooling
+        version: 1.3.14
+      '@types/node':
+        specifier: catalog:tooling
+        version: 26.2.0
+
   submodules/distilled/packages/gcp:
     dependencies:
       '@distilled.cloud/core':
@@ -5665,7 +5950,102 @@ importers:
         specifier: catalog:tooling
         version: 26.2.0
 
+  submodules/distilled/packages/google-workspace:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
+      effect:
+        specifier: 4.0.0-rc.112
+        version: 4.0.0-rc.112
+    devDependencies:
+      '@effect/platform-bun':
+        specifier: catalog:effect
+        version: 4.0.0-rc.112(effect@4.0.0-rc.112)
+      '@types/bun':
+        specifier: catalog:tooling
+        version: 1.3.14
+      '@types/node':
+        specifier: catalog:tooling
+        version: 26.2.0
+
+  submodules/distilled/packages/grafana:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
+      effect:
+        specifier: 4.0.0-rc.112
+        version: 4.0.0-rc.112
+    devDependencies:
+      '@effect/platform-bun':
+        specifier: catalog:effect
+        version: 4.0.0-rc.112(effect@4.0.0-rc.112)
+      '@types/bun':
+        specifier: catalog:tooling
+        version: 1.3.14
+      '@types/node':
+        specifier: catalog:tooling
+        version: 26.2.0
+
+  submodules/distilled/packages/growthbook:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
+      effect:
+        specifier: 4.0.0-rc.112
+        version: 4.0.0-rc.112
+    devDependencies:
+      '@effect/platform-bun':
+        specifier: catalog:effect
+        version: 4.0.0-rc.112(effect@4.0.0-rc.112)
+      '@types/bun':
+        specifier: catalog:tooling
+        version: 1.3.14
+      '@types/node':
+        specifier: catalog:tooling
+        version: 26.2.0
+
+  submodules/distilled/packages/gusto:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
+      effect:
+        specifier: 4.0.0-rc.112
+        version: 4.0.0-rc.112
+    devDependencies:
+      '@effect/platform-bun':
+        specifier: catalog:effect
+        version: 4.0.0-rc.112(effect@4.0.0-rc.112)
+      '@types/bun':
+        specifier: catalog:tooling
+        version: 1.3.14
+      '@types/node':
+        specifier: catalog:tooling
+        version: 26.2.0
+
   submodules/distilled/packages/hetzner:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
+      effect:
+        specifier: 4.0.0-rc.112
+        version: 4.0.0-rc.112
+    devDependencies:
+      '@effect/platform-bun':
+        specifier: catalog:effect
+        version: 4.0.0-rc.112(effect@4.0.0-rc.112)
+      '@types/bun':
+        specifier: catalog:tooling
+        version: 1.3.14
+      '@types/node':
+        specifier: catalog:tooling
+        version: 26.2.0
+
+  submodules/distilled/packages/hostinger:
     dependencies:
       '@distilled.cloud/core':
         specifier: workspace:*
@@ -5703,7 +6083,178 @@ importers:
         specifier: catalog:tooling
         version: 26.2.0
 
+  submodules/distilled/packages/infisical:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
+      effect:
+        specifier: 4.0.0-rc.112
+        version: 4.0.0-rc.112
+    devDependencies:
+      '@effect/platform-bun':
+        specifier: catalog:effect
+        version: 4.0.0-rc.112(effect@4.0.0-rc.112)
+      '@types/bun':
+        specifier: catalog:tooling
+        version: 1.3.14
+      '@types/node':
+        specifier: catalog:tooling
+        version: 26.2.0
+
+  submodules/distilled/packages/inngest:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
+      effect:
+        specifier: 4.0.0-rc.112
+        version: 4.0.0-rc.112
+    devDependencies:
+      '@effect/platform-bun':
+        specifier: catalog:effect
+        version: 4.0.0-rc.112(effect@4.0.0-rc.112)
+      '@types/bun':
+        specifier: catalog:tooling
+        version: 1.3.14
+      '@types/node':
+        specifier: catalog:tooling
+        version: 26.2.0
+
+  submodules/distilled/packages/intercom:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
+      effect:
+        specifier: 4.0.0-rc.112
+        version: 4.0.0-rc.112
+    devDependencies:
+      '@effect/platform-bun':
+        specifier: catalog:effect
+        version: 4.0.0-rc.112(effect@4.0.0-rc.112)
+      '@types/bun':
+        specifier: catalog:tooling
+        version: 1.3.14
+      '@types/node':
+        specifier: catalog:tooling
+        version: 26.2.0
+
   submodules/distilled/packages/kubernetes:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
+      effect:
+        specifier: 4.0.0-rc.112
+        version: 4.0.0-rc.112
+    devDependencies:
+      '@effect/platform-bun':
+        specifier: catalog:effect
+        version: 4.0.0-rc.112(effect@4.0.0-rc.112)
+      '@types/bun':
+        specifier: catalog:tooling
+        version: 1.3.14
+      '@types/node':
+        specifier: catalog:tooling
+        version: 26.2.0
+
+  submodules/distilled/packages/launchdarkly:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
+      effect:
+        specifier: 4.0.0-rc.112
+        version: 4.0.0-rc.112
+    devDependencies:
+      '@effect/platform-bun':
+        specifier: catalog:effect
+        version: 4.0.0-rc.112(effect@4.0.0-rc.112)
+      '@types/bun':
+        specifier: catalog:tooling
+        version: 1.3.14
+      '@types/node':
+        specifier: catalog:tooling
+        version: 26.2.0
+
+  submodules/distilled/packages/meilisearch:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
+      effect:
+        specifier: 4.0.0-rc.112
+        version: 4.0.0-rc.112
+    devDependencies:
+      '@effect/platform-bun':
+        specifier: catalog:effect
+        version: 4.0.0-rc.112(effect@4.0.0-rc.112)
+      '@types/bun':
+        specifier: catalog:tooling
+        version: 1.3.14
+      '@types/node':
+        specifier: catalog:tooling
+        version: 26.2.0
+
+  submodules/distilled/packages/mercury:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
+      effect:
+        specifier: 4.0.0-rc.112
+        version: 4.0.0-rc.112
+    devDependencies:
+      '@effect/platform-bun':
+        specifier: catalog:effect
+        version: 4.0.0-rc.112(effect@4.0.0-rc.112)
+      '@types/bun':
+        specifier: catalog:tooling
+        version: 1.3.14
+      '@types/node':
+        specifier: catalog:tooling
+        version: 26.2.0
+
+  submodules/distilled/packages/metabase:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
+      effect:
+        specifier: 4.0.0-rc.112
+        version: 4.0.0-rc.112
+    devDependencies:
+      '@effect/platform-bun':
+        specifier: catalog:effect
+        version: 4.0.0-rc.112(effect@4.0.0-rc.112)
+      '@types/bun':
+        specifier: catalog:tooling
+        version: 1.3.14
+      '@types/node':
+        specifier: catalog:tooling
+        version: 26.2.0
+
+  submodules/distilled/packages/modal:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
+      effect:
+        specifier: 4.0.0-rc.112
+        version: 4.0.0-rc.112
+    devDependencies:
+      '@effect/platform-bun':
+        specifier: catalog:effect
+        version: 4.0.0-rc.112(effect@4.0.0-rc.112)
+      '@types/bun':
+        specifier: catalog:tooling
+        version: 1.3.14
+      '@types/node':
+        specifier: catalog:tooling
+        version: 26.2.0
+
+  submodules/distilled/packages/modrinth:
     dependencies:
       '@distilled.cloud/core':
         specifier: workspace:*
@@ -5760,7 +6311,159 @@ importers:
         specifier: catalog:tooling
         version: 26.2.0
 
+  submodules/distilled/packages/okta:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
+      effect:
+        specifier: 4.0.0-rc.112
+        version: 4.0.0-rc.112
+    devDependencies:
+      '@effect/platform-bun':
+        specifier: catalog:effect
+        version: 4.0.0-rc.112(effect@4.0.0-rc.112)
+      '@types/bun':
+        specifier: catalog:tooling
+        version: 1.3.14
+      '@types/node':
+        specifier: catalog:tooling
+        version: 26.2.0
+
+  submodules/distilled/packages/onepassword:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
+      effect:
+        specifier: 4.0.0-rc.112
+        version: 4.0.0-rc.112
+    devDependencies:
+      '@effect/platform-bun':
+        specifier: catalog:effect
+        version: 4.0.0-rc.112(effect@4.0.0-rc.112)
+      '@types/bun':
+        specifier: catalog:tooling
+        version: 1.3.14
+      '@types/node':
+        specifier: catalog:tooling
+        version: 26.2.0
+
+  submodules/distilled/packages/opencode:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
+      effect:
+        specifier: 4.0.0-rc.112
+        version: 4.0.0-rc.112
+    devDependencies:
+      '@effect/platform-bun':
+        specifier: catalog:effect
+        version: 4.0.0-rc.112(effect@4.0.0-rc.112)
+      '@types/bun':
+        specifier: catalog:tooling
+        version: 1.3.14
+      '@types/node':
+        specifier: catalog:tooling
+        version: 26.2.0
+
+  submodules/distilled/packages/ovh:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
+      effect:
+        specifier: 4.0.0-rc.112
+        version: 4.0.0-rc.112
+    devDependencies:
+      '@effect/platform-bun':
+        specifier: catalog:effect
+        version: 4.0.0-rc.112(effect@4.0.0-rc.112)
+      '@types/bun':
+        specifier: catalog:tooling
+        version: 1.3.14
+      '@types/node':
+        specifier: catalog:tooling
+        version: 26.2.0
+
+  submodules/distilled/packages/paypal:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
+      effect:
+        specifier: 4.0.0-rc.112
+        version: 4.0.0-rc.112
+    devDependencies:
+      '@effect/platform-bun':
+        specifier: catalog:effect
+        version: 4.0.0-rc.112(effect@4.0.0-rc.112)
+      '@types/bun':
+        specifier: catalog:tooling
+        version: 1.3.14
+      '@types/node':
+        specifier: catalog:tooling
+        version: 26.2.0
+
+  submodules/distilled/packages/plaid:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
+      effect:
+        specifier: 4.0.0-rc.112
+        version: 4.0.0-rc.112
+    devDependencies:
+      '@effect/platform-bun':
+        specifier: catalog:effect
+        version: 4.0.0-rc.112(effect@4.0.0-rc.112)
+      '@types/bun':
+        specifier: catalog:tooling
+        version: 1.3.14
+      '@types/node':
+        specifier: catalog:tooling
+        version: 26.2.0
+
   submodules/distilled/packages/planetscale:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
+      effect:
+        specifier: 4.0.0-rc.112
+        version: 4.0.0-rc.112
+    devDependencies:
+      '@effect/platform-bun':
+        specifier: catalog:effect
+        version: 4.0.0-rc.112(effect@4.0.0-rc.112)
+      '@types/bun':
+        specifier: catalog:tooling
+        version: 1.3.14
+      '@types/node':
+        specifier: catalog:tooling
+        version: 26.2.0
+
+  submodules/distilled/packages/polar:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
+      effect:
+        specifier: 4.0.0-rc.112
+        version: 4.0.0-rc.112
+    devDependencies:
+      '@effect/platform-bun':
+        specifier: catalog:effect
+        version: 4.0.0-rc.112(effect@4.0.0-rc.112)
+      '@types/bun':
+        specifier: catalog:tooling
+        version: 1.3.14
+      '@types/node':
+        specifier: catalog:tooling
+        version: 26.2.0
+
+  submodules/distilled/packages/porkbun:
     dependencies:
       '@distilled.cloud/core':
         specifier: workspace:*
@@ -5836,6 +6539,158 @@ importers:
         specifier: catalog:tooling
         version: 26.2.0
 
+  submodules/distilled/packages/redis-cloud:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
+      effect:
+        specifier: 4.0.0-rc.112
+        version: 4.0.0-rc.112
+    devDependencies:
+      '@effect/platform-bun':
+        specifier: catalog:effect
+        version: 4.0.0-rc.112(effect@4.0.0-rc.112)
+      '@types/bun':
+        specifier: catalog:tooling
+        version: 1.3.14
+      '@types/node':
+        specifier: catalog:tooling
+        version: 26.2.0
+
+  submodules/distilled/packages/remote:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
+      effect:
+        specifier: 4.0.0-rc.112
+        version: 4.0.0-rc.112
+    devDependencies:
+      '@effect/platform-bun':
+        specifier: catalog:effect
+        version: 4.0.0-rc.112(effect@4.0.0-rc.112)
+      '@types/bun':
+        specifier: catalog:tooling
+        version: 1.3.14
+      '@types/node':
+        specifier: catalog:tooling
+        version: 26.2.0
+
+  submodules/distilled/packages/render:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
+      effect:
+        specifier: 4.0.0-rc.112
+        version: 4.0.0-rc.112
+    devDependencies:
+      '@effect/platform-bun':
+        specifier: catalog:effect
+        version: 4.0.0-rc.112(effect@4.0.0-rc.112)
+      '@types/bun':
+        specifier: catalog:tooling
+        version: 1.3.14
+      '@types/node':
+        specifier: catalog:tooling
+        version: 26.2.0
+
+  submodules/distilled/packages/resend:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
+      effect:
+        specifier: 4.0.0-rc.112
+        version: 4.0.0-rc.112
+    devDependencies:
+      '@effect/platform-bun':
+        specifier: catalog:effect
+        version: 4.0.0-rc.112(effect@4.0.0-rc.112)
+      '@types/bun':
+        specifier: catalog:tooling
+        version: 1.3.14
+      '@types/node':
+        specifier: catalog:tooling
+        version: 26.2.0
+
+  submodules/distilled/packages/sentry:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
+      effect:
+        specifier: 4.0.0-rc.112
+        version: 4.0.0-rc.112
+    devDependencies:
+      '@effect/platform-bun':
+        specifier: catalog:effect
+        version: 4.0.0-rc.112(effect@4.0.0-rc.112)
+      '@types/bun':
+        specifier: catalog:tooling
+        version: 1.3.14
+      '@types/node':
+        specifier: catalog:tooling
+        version: 26.2.0
+
+  submodules/distilled/packages/slack:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
+      effect:
+        specifier: 4.0.0-rc.112
+        version: 4.0.0-rc.112
+    devDependencies:
+      '@effect/platform-bun':
+        specifier: catalog:effect
+        version: 4.0.0-rc.112(effect@4.0.0-rc.112)
+      '@types/bun':
+        specifier: catalog:tooling
+        version: 1.3.14
+      '@types/node':
+        specifier: catalog:tooling
+        version: 26.2.0
+
+  submodules/distilled/packages/spacetimedb:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
+      effect:
+        specifier: 4.0.0-rc.112
+        version: 4.0.0-rc.112
+    devDependencies:
+      '@effect/platform-bun':
+        specifier: catalog:effect
+        version: 4.0.0-rc.112(effect@4.0.0-rc.112)
+      '@types/bun':
+        specifier: catalog:tooling
+        version: 1.3.14
+      '@types/node':
+        specifier: catalog:tooling
+        version: 26.2.0
+
+  submodules/distilled/packages/squarespace:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
+      effect:
+        specifier: 4.0.0-rc.112
+        version: 4.0.0-rc.112
+    devDependencies:
+      '@effect/platform-bun':
+        specifier: catalog:effect
+        version: 4.0.0-rc.112(effect@4.0.0-rc.112)
+      '@types/bun':
+        specifier: catalog:tooling
+        version: 1.3.14
+      '@types/node':
+        specifier: catalog:tooling
+        version: 26.2.0
+
   submodules/distilled/packages/stripe:
     dependencies:
       '@distilled.cloud/core':
@@ -5856,6 +6711,82 @@ importers:
         version: 26.2.0
 
   submodules/distilled/packages/supabase:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
+      effect:
+        specifier: 4.0.0-rc.112
+        version: 4.0.0-rc.112
+    devDependencies:
+      '@effect/platform-bun':
+        specifier: catalog:effect
+        version: 4.0.0-rc.112(effect@4.0.0-rc.112)
+      '@types/bun':
+        specifier: catalog:tooling
+        version: 1.3.14
+      '@types/node':
+        specifier: catalog:tooling
+        version: 26.2.0
+
+  submodules/distilled/packages/surrealdb:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
+      effect:
+        specifier: 4.0.0-rc.112
+        version: 4.0.0-rc.112
+    devDependencies:
+      '@effect/platform-bun':
+        specifier: catalog:effect
+        version: 4.0.0-rc.112(effect@4.0.0-rc.112)
+      '@types/bun':
+        specifier: catalog:tooling
+        version: 1.3.14
+      '@types/node':
+        specifier: catalog:tooling
+        version: 26.2.0
+
+  submodules/distilled/packages/temporal:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
+      effect:
+        specifier: 4.0.0-rc.112
+        version: 4.0.0-rc.112
+    devDependencies:
+      '@effect/platform-bun':
+        specifier: catalog:effect
+        version: 4.0.0-rc.112(effect@4.0.0-rc.112)
+      '@types/bun':
+        specifier: catalog:tooling
+        version: 1.3.14
+      '@types/node':
+        specifier: catalog:tooling
+        version: 26.2.0
+
+  submodules/distilled/packages/trigger-dev:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
+      effect:
+        specifier: 4.0.0-rc.112
+        version: 4.0.0-rc.112
+    devDependencies:
+      '@effect/platform-bun':
+        specifier: catalog:effect
+        version: 4.0.0-rc.112(effect@4.0.0-rc.112)
+      '@types/bun':
+        specifier: catalog:tooling
+        version: 1.3.14
+      '@types/node':
+        specifier: catalog:tooling
+        version: 26.2.0
+
+  submodules/distilled/packages/turbopuffer:
     dependencies:
       '@distilled.cloud/core':
         specifier: workspace:*
@@ -5912,6 +6843,44 @@ importers:
         specifier: catalog:tooling
         version: 26.2.0
 
+  submodules/distilled/packages/unkey:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
+      effect:
+        specifier: 4.0.0-rc.112
+        version: 4.0.0-rc.112
+    devDependencies:
+      '@effect/platform-bun':
+        specifier: catalog:effect
+        version: 4.0.0-rc.112(effect@4.0.0-rc.112)
+      '@types/bun':
+        specifier: catalog:tooling
+        version: 1.3.14
+      '@types/node':
+        specifier: catalog:tooling
+        version: 26.2.0
+
+  submodules/distilled/packages/vanta:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
+      effect:
+        specifier: 4.0.0-rc.112
+        version: 4.0.0-rc.112
+    devDependencies:
+      '@effect/platform-bun':
+        specifier: catalog:effect
+        version: 4.0.0-rc.112(effect@4.0.0-rc.112)
+      '@types/bun':
+        specifier: catalog:tooling
+        version: 1.3.14
+      '@types/node':
+        specifier: catalog:tooling
+        version: 26.2.0
+
   submodules/distilled/packages/vercel:
     dependencies:
       '@distilled.cloud/core':
@@ -5931,7 +6900,64 @@ importers:
         specifier: catalog:tooling
         version: 26.2.0
 
+  submodules/distilled/packages/whop:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
+      effect:
+        specifier: 4.0.0-rc.112
+        version: 4.0.0-rc.112
+    devDependencies:
+      '@effect/platform-bun':
+        specifier: catalog:effect
+        version: 4.0.0-rc.112(effect@4.0.0-rc.112)
+      '@types/bun':
+        specifier: catalog:tooling
+        version: 1.3.14
+      '@types/node':
+        specifier: catalog:tooling
+        version: 26.2.0
+
   submodules/distilled/packages/workos:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
+      effect:
+        specifier: 4.0.0-rc.112
+        version: 4.0.0-rc.112
+    devDependencies:
+      '@effect/platform-bun':
+        specifier: catalog:effect
+        version: 4.0.0-rc.112(effect@4.0.0-rc.112)
+      '@types/bun':
+        specifier: catalog:tooling
+        version: 1.3.14
+      '@types/node':
+        specifier: catalog:tooling
+        version: 26.2.0
+
+  submodules/distilled/packages/xata:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
+      effect:
+        specifier: 4.0.0-rc.112
+        version: 4.0.0-rc.112
+    devDependencies:
+      '@effect/platform-bun':
+        specifier: catalog:effect
+        version: 4.0.0-rc.112(effect@4.0.0-rc.112)
+      '@types/bun':
+        specifier: catalog:tooling
+        version: 1.3.14
+      '@types/node':
+        specifier: catalog:tooling
+        version: 26.2.0
+
+  submodules/distilled/packages/zendesk:
     dependencies:
       '@distilled.cloud/core':
         specifier: workspace:*

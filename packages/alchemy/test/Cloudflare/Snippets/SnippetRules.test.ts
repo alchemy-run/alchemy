@@ -67,7 +67,7 @@ const forbiddenRetryPolicy = {
 } as const;
 
 const listLiveRules = (zoneId: string) =>
-  snippets.listRules({ zoneId }).pipe(
+  snippets.getRule({ zoneId }).pipe(
     Effect.map((result) =>
       Array.isArray(result) ? (result as WireRule[]) : [],
     ),
