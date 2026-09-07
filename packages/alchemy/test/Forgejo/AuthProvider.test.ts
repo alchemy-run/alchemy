@@ -34,7 +34,24 @@ const resolveAndCall = (
   const layer = fromAuthProvider().pipe(
     Layer.provideMerge(ForgejoAuth),
     Layer.provideMerge(Layer.succeed(AuthProviders, authProviders)),
-    Layer.provideMerge(Layer.succeed(ProfileStore, makeFakeProfileStore())),
+    Layer.provideMerge(
+      Layer.succeed(
+        ProfileStore,
+        makeFakeProfileStore(
+          stored === undefined
+            ? undefined
+            : {
+                // Stored field values live on the profile's provider config,
+                // which is what `read` maps to resolved credentials.
+                loadProviderConfig: <Config extends { method: string }>() =>
+                  Effect.succeed({
+                    method: "stored",
+                    ...stored,
+                  } as unknown as Config),
+              },
+        ),
+      ),
+    ),
     Layer.provideMerge(
       Layer.succeed(CredentialsStore, makeFakeCredentialsStore(stored)),
     ),
