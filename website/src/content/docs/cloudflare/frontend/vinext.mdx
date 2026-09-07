@@ -67,7 +67,13 @@ route handlers, and server actions.
 ## Node and other platforms
 
 The `worker/index.ts` + `vinext/server/fetch-handler` template is
-Cloudflare-only. Support for long-running Node (Railway, Fly, Hetzner)
-and Lambda (AWS) — same App Router app, `process.env` instead of
-`cloudflare:workers`, and Redis / S3 data-cache stores — is a follow-up
-to this Cloudflare path.
+Cloudflare-only. For a long-running Node process (Railway, Fly,
+Hetzner) or Lambda (AWS), use `Website.Vinext` on that platform —
+`vinext build` plus `startProdServer` / a Lambda fetch wrap, with
+`process.env` instead of `cloudflare:workers`. ISR on those platforms
+uses Redis or S3 (via `vinext({ ...alchemy() })`), not `VINEXT_KV_CACHE`.
+
+- [`AWS.Website.Vinext`](/aws/frontend/vinext)
+- [`Railway.Website.Vinext`](/railway/frontend/vinext)
+- [`Fly.Website.Vinext`](/fly/frontend/vinext)
+- [`Hetzner.Website.Vinext`](/hetzner/frontend/vinext)
