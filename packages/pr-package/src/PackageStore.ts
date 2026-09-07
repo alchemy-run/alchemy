@@ -1,50 +1,50 @@
 import * as Cloudflare from "alchemy/Cloudflare";
+import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import { Bucket } from "./Bucket.ts";
 import {
+  emptyState,
+  pullRequestBindings,
+  releasePullRequests,
+  tiePullRequest,
+  withoutTags,
+  type PackageState,
+} from "./PackageState.ts";
+import {
+  formatPullRequest,
+  isStillOpen,
   pullRequestState,
-  shouldRenewOnTtl,
   type PullRequestRef,
 } from "./PullRequest.ts";
 import { TagIndex } from "./TagIndex.ts";
 import { tarballId, tarballKey, tarballRef } from "./Tarball.ts";
-
-interface PackageState {
-  packageName: string;
-  hash: string;
-  tags: string[];
-  expiresAt: number;
-  downloads: Record<string, number>;
-  totalDownloads: number;
-  pullRequest?: PullRequestRef;
-  ttlMillis?: number;
-  prTags?: string[];
-}
 
 export interface InitOptions {
   ttlMillis?: number;
   pullRequest?: PullRequestRef;
 }
 
-const emptyState: PackageState = {
-  packageName: "",
-  hash: "",
-  tags: [],
-  expiresAt: 0,
-  downloads: {},
-  totalDownloads: 0,
-};
-
 const EXPIRATION_EVENT = "expire";
 const RETRY_DELAY_MS = 60_000;
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * Optional GitHub token for PR state lookups on TTL expiry. Bound as a
+ * Worker secret when `GITHUB_TOKEN` is set at deploy time.
+ */
+export const GitHubToken = Config.redacted("GITHUB_TOKEN").pipe(Config.option);
 
 export default class PackageStore extends Cloudflare.DurableObject<PackageStore>()(
   "PackageStore",
   Effect.gen(function* () {
     const r2 = yield* Cloudflare.R2.ReadWriteBucket(yield* Bucket);
     const kv = yield* Cloudflare.KV.ReadWriteNamespace(yield* TagIndex);
+    const githubToken = yield* GitHubToken.pipe(
+      Effect.map(Option.getOrUndefined),
+      Effect.orElseSucceed(() => undefined),
+    );
 
     return Effect.gen(function* () {
       const doState = yield* Cloudflare.DurableObjectState;
@@ -68,6 +68,11 @@ export default class PackageStore extends Cloudflare.DurableObject<PackageStore>
         Effect.provideService(Cloudflare.DurableObjectState, doState),
       );
 
+      /**
+       * Drop `tagsToRemove` from KV (only where they still point here) and
+       * from state. Deletes the blob when no tags remain; otherwise the
+       * tarball keeps its remaining tags and its existing expiry.
+       */
       const expireTags = (
         current: PackageState,
         tagsToRemove: Iterable<string>,
@@ -84,31 +89,15 @@ export default class PackageStore extends Cloudflare.DurableObject<PackageStore>
             }
           }
 
-          const remaining = current.tags.filter((tag) => !removing.has(tag));
-          if (remaining.length === 0) {
+          const next = withoutTags(current, removing);
+          if (next.tags.length === 0) {
             yield* r2.delete(tarballKey(ref)).pipe(Effect.orDie);
             yield* doState.storage.delete("state");
+            yield* cancelExpiration;
             return;
           }
-
-          yield* setState({
-            packageName: current.packageName,
-            hash: current.hash,
-            tags: remaining,
-            expiresAt: 0,
-            downloads: current.downloads,
-            totalDownloads: current.totalDownloads,
-          });
-          yield* cancelExpiration;
+          yield* setState(next);
         });
-
-      const tagsForPullRequest = (current: PackageState, number: number) => {
-        const tags = new Set<string>([`pr-${number}`]);
-        if (current.pullRequest?.number === number) {
-          for (const tag of current.prTags ?? []) tags.add(tag);
-        }
-        return tags;
-      };
 
       return {
         init: (
@@ -120,39 +109,44 @@ export default class PackageStore extends Cloudflare.DurableObject<PackageStore>
         ) =>
           Effect.gen(function* () {
             const current = yield* getState;
-            const merged = new Set([...current.tags, ...tags]);
-            const pullRequest = options?.pullRequest ?? current.pullRequest;
-            const prTags = options?.pullRequest
-              ? [...new Set([...(current.prTags ?? []), ...tags])]
-              : current.prTags;
-            const newState: PackageState = {
+            const next: PackageState = {
+              ...current,
               packageName,
               hash,
-              tags: [...merged],
+              tags: [...new Set([...current.tags, ...tags])],
               expiresAt,
-              downloads: current.downloads,
-              totalDownloads: current.totalDownloads,
             };
-            if (pullRequest) newState.pullRequest = pullRequest;
             const ttlMillis = options?.ttlMillis ?? current.ttlMillis;
-            if (ttlMillis) newState.ttlMillis = ttlMillis;
-            if (prTags && prTags.length > 0) newState.prTags = prTags;
-            yield* setState(newState);
+            if (ttlMillis) next.ttlMillis = ttlMillis;
+            if (options?.pullRequest) {
+              next.pullRequests = tiePullRequest(
+                current,
+                options.pullRequest,
+                tags,
+                Date.now(),
+              );
+            }
+            yield* setState(next);
             yield* scheduleExpiration(expiresAt);
           }),
 
         removeTag: (tag: string) =>
           Effect.gen(function* () {
             const current = yield* getState;
-            const tags = current.tags.filter((t) => t !== tag);
-            yield* setState({ ...current, tags });
-            return { orphaned: tags.length === 0 };
+            const next = withoutTags(current, [tag]);
+            yield* setState(next);
+            return { orphaned: next.tags.length === 0 };
           }),
 
+        /** Tear down one PR's tags; tags another tied PR still claims stay. */
         expirePullRequest: (number: number) =>
           Effect.gen(function* () {
             const current = yield* getState;
-            yield* expireTags(current, tagsForPullRequest(current, number));
+            const released = releasePullRequests(
+              current,
+              (binding) => binding.ref.number === number,
+            );
+            yield* expireTags(released.state, released.tags);
           }),
 
         recordDownload: (tag: string) =>
@@ -186,27 +180,64 @@ export default class PackageStore extends Cloudflare.DurableObject<PackageStore>
             yield* Effect.gen(function* () {
               const current = yield* getState;
               if (!current.packageName || !current.hash) return;
+              const now = Date.now();
 
-              if (current.pullRequest) {
-                const state = yield* pullRequestState(current.pullRequest);
-                if (shouldRenewOnTtl(true, state)) {
-                  const ttl =
-                    current.ttlMillis && current.ttlMillis > 0
-                      ? current.ttlMillis
-                      : WEEK_MS;
-                  const expiresAt = Date.now() + ttl;
-                  yield* setState({ ...current, expiresAt });
-                  yield* scheduleExpiration(expiresAt);
-                  return;
-                }
-                yield* expireTags(
-                  current,
-                  tagsForPullRequest(current, current.pullRequest.number),
-                );
+              const bindings = pullRequestBindings(current);
+              if (bindings.length === 0) {
+                yield* expireTags(current, current.tags);
                 return;
               }
 
-              yield* expireTags(current, current.tags);
+              const states = new Map(
+                yield* Effect.forEach(bindings, (binding) =>
+                  pullRequestState(binding.ref, githubToken).pipe(
+                    Effect.map(
+                      (state) =>
+                        [formatPullRequest(binding.ref), state] as const,
+                    ),
+                  ),
+                ),
+              );
+              const stateOf = (key: string) => states.get(key) ?? "unknown";
+
+              // Refresh `verifiedAt` for PRs GitHub confirmed open, then
+              // release every PR that is closed or unverified for too long.
+              const refreshed: PackageState = {
+                ...current,
+                pullRequests: Object.fromEntries(
+                  Object.entries(current.pullRequests ?? {}).map(
+                    ([key, binding]) => [
+                      key,
+                      stateOf(key) === "open"
+                        ? { ...binding, verifiedAt: now }
+                        : binding,
+                    ],
+                  ),
+                ),
+              };
+              const released = releasePullRequests(refreshed, (binding) => {
+                const key = formatPullRequest(binding.ref);
+                return !isStillOpen(
+                  { state: stateOf(key), verifiedAt: binding.verifiedAt },
+                  now,
+                );
+              });
+
+              if (!released.state.pullRequests) {
+                yield* expireTags(released.state, released.state.tags);
+                return;
+              }
+
+              yield* expireTags(released.state, released.tags);
+              const ttl =
+                current.ttlMillis && current.ttlMillis > 0
+                  ? current.ttlMillis
+                  : WEEK_MS;
+              const expiresAt = now + ttl;
+              const latest = yield* getState;
+              if (!latest.packageName) return;
+              yield* setState({ ...latest, expiresAt });
+              yield* scheduleExpiration(expiresAt);
             }).pipe(
               Effect.catchCause((cause) =>
                 scheduleExpiration(Date.now() + RETRY_DELAY_MS).pipe(

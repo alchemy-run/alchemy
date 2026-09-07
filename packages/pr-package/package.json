@@ -27,7 +27,8 @@
     "NOTICE"
   ],
   "scripts": {
-    "build": "tsc -b && bun ../../scripts/copy-package-files.ts pr-package"
+    "build": "tsc -b && bun ../../scripts/copy-package-files.ts pr-package",
+    "test": "bun test ./test"
   },
   "exports": {
     ".": {

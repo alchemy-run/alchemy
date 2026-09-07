@@ -124,9 +124,12 @@ If a tag already points elsewhere, it moves to the new tarball. A tarball is del
 Assigning tags schedules a named Durable Object expiration event. When it fires:
 
 - If the tarball is **not** tied to a pull request, every KV tag that still points at it is removed, the R2 blob is deleted, and state is cleared.
-- If it **is** tied to a pull request, the service checks GitHub. An open (or unreadable) PR renews the TTL. A closed PR drops only the tags that were assigned with that PR — other tags on the same content-addressed tarball, such as `main`, are left alone.
+- If it **is** tied to one or more pull requests, the service checks each on GitHub. While any tied PR is open the TTL renews. A closed PR releases only the tags that were assigned with that PR and that no other open PR also claims — other tags on the same content-addressed tarball, such as `main` or another PR's commit tag, are left alone. Once no tied PR remains open, the whole tarball expires.
+- A PR GitHub cannot confirm (rate limit, outage, private repo) keeps renewing for up to 28 days after it was last seen open, then is treated as closed.
 
 Reassigning the tarball before expiry reschedules the event.
+
+Set `GITHUB_TOKEN` in the deploy environment to bind a token for these lookups; unauthenticated GitHub requests share a 60/hour limit per egress IP, which is not enough for a busy registry.
 
 ### `GET /<alias-path>` — pretty install URL → 301
 
@@ -146,7 +149,7 @@ Auth required. If the tag was the tarball's last one, the backing blob is also d
 
 ### `DELETE /projects/:pkgName/pull-requests/:number` — tear down a PR preview
 
-Auth required. Looks up the `pr-<number>` tag and removes every tag that was assigned together with that pull request (commit, branch, and `pr-N` aliases). Tags that were pointed at the same tarball without the PR (for example `main`) are kept. If no tags remain, the backing blob is deleted.
+Auth required. Looks up the `pr-<number>` tag and removes every tag that was assigned together with that pull request (commit, branch, and `pr-N` aliases). Tags that were pointed at the same tarball without the PR (for example `main`) or that another open PR also claims are kept. If no tags remain, the backing blob is deleted.
 
 Use this from CI on `pull_request` closed so preview install URLs stop resolving immediately instead of waiting for the next TTL.
 

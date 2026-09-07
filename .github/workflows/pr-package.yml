@@ -84,7 +84,7 @@ jobs:
 
       - name: Publish packages
         id: publish
-        uses: alchemy-run/actions/actions/pr-package@098beeda4d3c2ce8850638c4466783893b8f0c23 # actions#11
+        uses: alchemy-run/actions/actions/pr-package@148b694161fe91bf90767385ad34667145593394 # actions#12
         with:
           rebuild-all-paths: submodules/distilled/**
           packages: >-
@@ -106,18 +106,6 @@ jobs:
             ]
           pr-package-token: ${{ secrets.PR_PACKAGE_TOKEN }}
 
-      - name: Tie preview packages to this PR
-        if: >-
-          github.event_name == 'pull_request' &&
-          fromJson(steps.publish.outputs.plan).packages[0] != null
-        env:
-          PLAN: ${{ steps.publish.outputs.plan }}
-          TOKEN: ${{ secrets.PR_PACKAGE_TOKEN }}
-          PR_PACKAGE_HOST: pkg.ing
-          PULL_REQUEST: ${{ github.repository }}#${{ github.event.pull_request.number }}
-          TTL: 1 week
-        run: bun scripts/bind-pr-packages.ts
-
       - name: Generate bot token
         if: >-
           github.event_name == 'pull_request' &&
@@ -132,7 +120,7 @@ jobs:
         if: >-
           github.event_name == 'pull_request' &&
           fromJson(steps.publish.outputs.plan).packages[0] != null
-        uses: alchemy-run/actions/actions/pr-package-comment@098beeda4d3c2ce8850638c4466783893b8f0c23 # actions#11
+        uses: alchemy-run/actions/actions/pr-package-comment@148b694161fe91bf90767385ad34667145593394 # actions#12
         with:
           plan: ${{ steps.publish.outputs.plan }}
           token: ${{ steps.bot-token.outputs.token }}
@@ -230,7 +218,8 @@ jobs:
                   "",
                   "Preview packages for this PR have been removed.",
                   "",
-                  "Install URLs from earlier comments no longer resolve.",
+                  "The install URLs from this comment no longer resolve. "
+                  "Older per-commit URLs expire with their TTL.",
                   "",
               ]
           )
