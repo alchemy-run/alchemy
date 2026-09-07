@@ -1,4 +1,3 @@
-import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
 import * as NodePath from "node:path";
 import { describe, expect, it } from "vitest";
@@ -13,8 +12,7 @@ const exampleRoot = NodePath.resolve(
   "../../../../../examples/cloudflare-website-vinext",
 );
 
-const run = <A, E>(effect: Effect.Effect<A, E>) =>
-  Effect.runPromise(effect.pipe(Effect.provide(NodeServices.layer)));
+const run = <A, E>(effect: Effect.Effect<A, E>) => Effect.runPromise(effect);
 
 describe("vinext PrerenderCache upstream delegate", () => {
   it("loads buildPrerenderKVPairs from the project's @vinext/cloudflare", async () => {

@@ -14,8 +14,11 @@
  */
 import * as Effect from "effect/Effect";
 import nodePath from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
-import { ModuleLoadError } from "../core/Loader.ts";
+import { pathToFileURL } from "node:url";
+import {
+  ModuleLoadError,
+  resolveProjectPackageDirectory,
+} from "../core/Loader.ts";
 
 export const VINEXT_KV_CACHE_BINDING = "VINEXT_KV_CACHE";
 export const VINEXT_CACHE_BINDING = "VINEXT_CACHE";
@@ -54,8 +57,8 @@ export const vinextCacheNamespaceFromEnv = (
 
 /**
  * Resolve `@vinext/cloudflare`'s `prerender-kv-populate` from `projectRoot`.
- * The function is not on the package `exports` map — load the sibling of
- * the exported `cache/kv-key` entry (same layout as the published dist).
+ * That file is not on the package `exports` map — load it from `dist/`
+ * next to the published `cache/*` entries.
  */
 const loadBuildPrerenderKVPairs = (
   projectRoot: string,
@@ -66,35 +69,31 @@ const loadBuildPrerenderKVPairs = (
   ) => { routeCount: number; pairs: UpstreamKVBulkPair[] },
   ModuleLoadError
 > =>
-  Effect.tryPromise({
-    try: async () => {
-      const from = pathToFileURL(
-        nodePath.join(projectRoot, "package.json"),
-      ).href;
-      const kvKeyPath = fileURLToPath(
-        import.meta.resolve("@vinext/cloudflare/cache/kv-key", from),
-      );
-      const populateHref = pathToFileURL(
-        nodePath.join(
-          nodePath.dirname(kvKeyPath),
-          "..",
-          "prerender-kv-populate.js",
-        ),
-      ).href;
-      const mod = (await import(populateHref)) as {
-        buildPrerenderKVPairs: (
-          serverDir: string,
-          options?: { appPrefix?: string; now?: number; ttlSeconds?: number },
-        ) => { routeCount: number; pairs: UpstreamKVBulkPair[] };
-      };
-      return mod.buildPrerenderKVPairs;
-    },
-    catch: (cause) =>
-      new ModuleLoadError({
-        specifier: "@vinext/cloudflare/prerender-kv-populate",
-        root: projectRoot,
-        cause,
-      }),
+  Effect.gen(function* () {
+    const pkg = yield* resolveProjectPackageDirectory(
+      projectRoot,
+      "@vinext/cloudflare",
+    );
+    const populateHref = pathToFileURL(
+      nodePath.join(pkg, "dist", "prerender-kv-populate.js"),
+    ).href;
+    return yield* Effect.tryPromise({
+      try: async () => {
+        const mod = (await import(populateHref)) as {
+          buildPrerenderKVPairs: (
+            serverDir: string,
+            options?: { appPrefix?: string; now?: number; ttlSeconds?: number },
+          ) => { routeCount: number; pairs: UpstreamKVBulkPair[] };
+        };
+        return mod.buildPrerenderKVPairs;
+      },
+      catch: (cause) =>
+        new ModuleLoadError({
+          specifier: "@vinext/cloudflare/prerender-kv-populate",
+          root: projectRoot,
+          cause,
+        }),
+    });
   });
 
 const toAlchemyPair = (pair: UpstreamKVBulkPair): VinextPrerenderKVPair => ({
