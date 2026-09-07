@@ -2,8 +2,11 @@ import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import { fileURLToPath, pathToFileURL } from "node:url";
-import { ModuleLoadError } from "../core/Loader.ts";
+import { pathToFileURL } from "node:url";
+import {
+  resolveProjectPackageDirectory,
+  type ModuleLoadError,
+} from "../core/Loader.ts";
 
 export type VinextPrerenderResult = {
   readonly ran: boolean;
@@ -144,69 +147,11 @@ export const runVinextPrerenderIfConfigured = Effect.fn(function* (
   } satisfies VinextPrerenderResult;
 });
 
-/**
- * Absolute path to the project's `vinext` package root.
- *
- * Prefer `import.meta.resolve("vinext")` over
- * `createRequire(...).resolve("vinext/package.json")` — that subpath is
- * not in vinext's `exports`, and CJS resolve misses the ESM `import`
- * condition under Node.
- */
+/** Absolute path to the project's `vinext` package root. */
 export const resolveVinextRoot = (
   root: string,
-): Effect.Effect<string, ModuleLoadError, FileSystem.FileSystem | Path.Path> =>
-  Effect.gen(function* () {
-    const path = yield* Path.Path;
-    const fs = yield* FileSystem.FileSystem;
-    const resolvedRoot = path.resolve(root);
-    const from = pathToFileURL(path.join(resolvedRoot, "package.json")).href;
-
-    const entry = yield* Effect.try({
-      try: () => fileURLToPath(import.meta.resolve("vinext", from)),
-      catch: (cause) =>
-        new ModuleLoadError({
-          specifier: "vinext",
-          root: resolvedRoot,
-          cause,
-        }),
-    });
-
-    let dir = path.dirname(entry);
-    for (;;) {
-      const pkgJson = path.join(dir, "package.json");
-      if (yield* exists(fs, pkgJson)) {
-        const name = yield* fs.readFileString(pkgJson).pipe(
-          Effect.map((raw) => {
-            try {
-              return (JSON.parse(raw) as { name?: unknown }).name;
-            } catch {
-              return undefined;
-            }
-          }),
-          Effect.mapError(
-            (cause) =>
-              new ModuleLoadError({
-                specifier: "vinext",
-                root: resolvedRoot,
-                cause,
-              }),
-          ),
-        );
-        if (name === "vinext") return dir;
-      }
-      const parent = path.dirname(dir);
-      if (parent === dir) {
-        return yield* new ModuleLoadError({
-          specifier: "vinext",
-          root: resolvedRoot,
-          cause: new Error(
-            `Resolved "${entry}" but no ancestor package.json has name "vinext"`,
-          ),
-        });
-      }
-      dir = parent;
-    }
-  });
+): Effect.Effect<string, ModuleLoadError> =>
+  resolveProjectPackageDirectory(root, "vinext");
 
 const injectPregeneratedConcretePaths = (root: string) =>
   Effect.gen(function* () {
