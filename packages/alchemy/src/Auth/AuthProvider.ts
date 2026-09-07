@@ -188,10 +188,6 @@ export interface ProviderDetails {
 export interface ConfigureField {
   /** `--set` key and, for stored-credential providers, the stored JSON property. */
   readonly name: string;
-  /** Log each environment contract once per built provider layer. */
-  readonly logEnvironmentCredentials: (
-    used: ReadonlyArray<string>,
-  ) => Effect.Effect<void>;
   /** Human prompt label, e.g. "Cloudflare API Token". */
   readonly label: string;
   /** Secondary guidance shown beneath the interactive input. */
@@ -318,6 +314,10 @@ export interface AuthProvider<
 > extends AuthProviderImpl<Config, Credentials> {
   readonly kind: "AuthProvider";
   readonly name: string;
+  /** Log each environment contract once per built provider layer. */
+  readonly logEnvironmentCredentials: (
+    used: ReadonlyArray<string>,
+  ) => Effect.Effect<void>;
   /**
    * The provider's declared CI environment contract. Empty when the
    * provider does not support environment credentials.
