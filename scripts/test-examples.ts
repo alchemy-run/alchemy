@@ -91,6 +91,7 @@ const examples = [
   // "./examples/fly-website-solidstart",
   // "./examples/fly-website-sveltekit",
   // "./examples/fly-website-tanstack-start",
+  // "./examples/fly-website-vinext",
   // "./examples/fly-website-waku",
   // "./examples/fly-website-vocs",
   // "./examples/hetzner-website-astro",

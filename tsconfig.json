@@ -212,6 +212,9 @@
       "path": "./examples/fly-website-nextjs/tsconfig.json"
     },
     {
+      "path": "./examples/fly-website-vinext/tsconfig.json"
+    },
+    {
       "path": "./examples/fly-website-nuxt/tsconfig.json"
     },
     {

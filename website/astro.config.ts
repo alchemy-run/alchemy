@@ -872,6 +872,7 @@ export default defineConfig({
                 { label: "Astro", link: "/fly/frontend/astro" },
                 { label: "Foldkit", link: "/fly/frontend/foldkit" },
                 { label: "Next.js", link: "/fly/frontend/nextjs" },
+                { label: "vinext", link: "/fly/frontend/vinext" },
                 { label: "Nuxt", link: "/fly/frontend/nuxt" },
                 { label: "Octane", link: "/fly/frontend/octane" },
                 {
