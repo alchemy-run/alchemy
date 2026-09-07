@@ -43,7 +43,6 @@ const validateBaseUrl = (value: string): string | undefined => {
 
 const forgejoAuth = makeStoredAuthProvider<ForgejoResolvedCredentials>({
   provider: FORGEJO_AUTH_PROVIDER_NAME,
-  storageKey: "forgejo-stored",
   fields: [
     {
       name: "baseUrl",
