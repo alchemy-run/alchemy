@@ -278,6 +278,9 @@
       "path": "./examples/railway-website-nextjs/tsconfig.json"
     },
     {
+      "path": "./examples/railway-website-vinext/tsconfig.json"
+    },
+    {
       "path": "./examples/railway-website-nuxt/tsconfig.json"
     },
     {

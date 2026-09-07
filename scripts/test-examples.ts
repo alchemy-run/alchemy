@@ -113,6 +113,7 @@ const examples = [
   // "./examples/railway-website-solidstart",
   // "./examples/railway-website-sveltekit",
   // "./examples/railway-website-tanstack-start",
+  // "./examples/railway-website-vinext",
   // "./examples/railway-website-waku",
   // "./examples/railway-website-vocs",
   "./examples/fly-sprite",

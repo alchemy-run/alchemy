@@ -947,6 +947,7 @@ export default defineConfig({
                 { label: "Astro", link: "/railway/frontend/astro" },
                 { label: "Foldkit", link: "/railway/frontend/foldkit" },
                 { label: "Next.js", link: "/railway/frontend/nextjs" },
+                { label: "vinext", link: "/railway/frontend/vinext" },
                 { label: "Nuxt", link: "/railway/frontend/nuxt" },
                 { label: "Octane", link: "/railway/frontend/octane" },
                 {
