@@ -154,15 +154,9 @@ const rootCommand = Command.make(
     // Environment knobs — set BEFORE any test module is imported (imports
     // happen inside `run` during collection), so `skipIf(process.env.FAST)`
     // gates and profile-dependent layers see the final values.
-    //
-    // CI=true: interactive-detection gates (`process.env.CI`, TTY probes)
-    // make tools take "inherit the terminal" paths — e.g. drizzle-kit is
-    // spawned with stdio: "inherit" when interactive — and raw child writes
-    // to our TTY corrupt the reporter/TUI. CI=true forces every such tool
-    // down its non-interactive path; anything they print through pipes or
-    // the Console service is still captured per test.
+    // Inherit CI from the caller: setting it here also disables local auth
+    // profiles, even when the caller explicitly selected one.
     yield* Effect.sync(() => {
-      process.env.CI ??= "true";
       if (Option.isSome(args.profile)) {
         process.env.ALCHEMY_PROFILE = args.profile.value;
       }
