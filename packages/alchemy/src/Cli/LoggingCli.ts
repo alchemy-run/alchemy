@@ -2,6 +2,7 @@ import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Prompt from "effect/unstable/cli/Prompt";
+import { inspect } from "node:util";
 import type { ActionApply, ActionDelete, CRUD, Plan } from "../Plan.ts";
 import { Cli, type PlanDisplayOptions } from "../Report.ts";
 import { canPromptOnStdin } from "../Util/interactive.ts";
@@ -294,6 +295,8 @@ export const LoggingCli = Layer.effect(
           const notes = new Map<string, string>();
           const statusNotes = new Map<string, string>();
           return {
+            setOutput: (value: unknown) =>
+              Effect.logInfo(inspect(value, { colors: false })),
             // Progress is an Effect log record, just like provider and build
             // diagnostics, so the append-only renderer gives every line the
             // same timestamp / level / fiber prefix.

@@ -152,6 +152,10 @@ export default class PackageStore extends Cloudflare.DurableObject<PackageStore>
         recordDownload: (tag: string) =>
           Effect.gen(function* () {
             const current = yield* getState;
+            // KV can still point here after a tag is removed. The Durable
+            // Object owns tag membership, even while the tarball survives
+            // under another tag.
+            if (!current.tags.includes(tag)) return false;
             const downloads = { ...current.downloads };
             downloads[tag] = (downloads[tag] ?? 0) + 1;
             yield* setState({
@@ -159,6 +163,7 @@ export default class PackageStore extends Cloudflare.DurableObject<PackageStore>
               downloads,
               totalDownloads: current.totalDownloads + 1,
             });
+            return true;
           }),
 
         getStats: () =>
