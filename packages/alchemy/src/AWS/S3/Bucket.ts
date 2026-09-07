@@ -14,6 +14,8 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
 import { diffTags } from "../../Tags.ts";
+import { sha256Object } from "../../Util/sha256.ts";
+import { stableStringify } from "../../Util/stable.ts";
 import type { Credentials } from "../Credentials.ts";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
 import { durationToDays } from "../IAM/common.ts";
@@ -743,6 +745,13 @@ export const BucketProvider = () =>
           })),
         );
 
+      // Reserved physical IDs let removal preserve notifications owned elsewhere.
+      const topicIdPrefix = "alchemy:sns:";
+      const canonicalTopics = (configs: readonly s3.TopicConfiguration[]) =>
+        configs
+          .map((c) => stableStringify({ ...c, Events: [...(c.Events ?? [])].sort() }))
+          .sort()
+          .join("\n");
       const syncBucketNotifications = Effect.fn(function* ({
         bucketName,
         bindings,
@@ -761,16 +770,34 @@ export const BucketProvider = () =>
               ?.LambdaFunctionConfigurations ?? [],
         );
 
-        // Nothing declared — leave any externally-managed config untouched.
-        if (Arr.isReadonlyArrayEmpty(desired)) return;
+        const desiredTopics = Arr.flatten(
+          yield* Effect.forEach(bindings, (binding) =>
+            Effect.forEach(
+              binding.data.notificationConfiguration?.TopicConfigurations ?? [],
+              (config, index) =>
+                sha256Object([binding.sid, config.Id ?? index]).pipe(
+                  Effect.map((id) => ({ ...config, Id: topicIdPrefix + id })),
+                ),
+            ),
+          ),
+        );
 
         const existing = yield* s3.getBucketNotificationConfiguration({
           Bucket: bucketName,
         });
+        const topics = [
+          ...(existing.TopicConfigurations ?? []).filter(
+            (c) => !c.Id?.startsWith(topicIdPrefix),
+          ),
+          ...desiredTopics,
+        ];
 
         if (
-          canonicalLambda(existing.LambdaFunctionConfigurations ?? []) ===
-          canonicalLambda(desired)
+          (desired.length === 0 ||
+            canonicalLambda(existing.LambdaFunctionConfigurations ?? []) ===
+              canonicalLambda(desired)) &&
+          canonicalTopics(existing.TopicConfigurations ?? []) ===
+            canonicalTopics(topics)
         ) {
           return;
         }
@@ -780,11 +807,13 @@ export const BucketProvider = () =>
         );
         yield* s3.putBucketNotificationConfiguration({
           Bucket: bucketName,
-          // Preserve any Topic/Queues/EventBridge config already on the bucket;
-          // only manage the Lambda targets declared through bindings.
+          // Preserve external SNS targets, queues, EventBridge, and unbound Lambdas.
           NotificationConfiguration: {
             ...existing,
-            LambdaFunctionConfigurations: desired,
+            ...(desired.length > 0
+              ? { LambdaFunctionConfigurations: desired }
+              : {}),
+            TopicConfigurations: topics,
           },
           // The Lambda invoke permission is created as a separate resource
           // that may be applied after this bucket reconcile. Skip S3's
