@@ -2021,9 +2021,8 @@ export default {
   // application, and then fail the recreate — the Cloudflare API requires
   // `durable_objects.*` on create (VALIDATE_INPUT) — leaving the application
   // destroyed with every retry failing identically. An unresolved attachment
-  // must never trigger the delete/recreate path, and creation must fall back
-  // to resolving the namespace by class name from the account's namespace
-  // list.
+  // must never trigger the delete/recreate path. If the application is gone,
+  // its recorded namespace supplies the exact attachment for recreation.
   test.provider(
     "container reconcile with an unresolved DO attachment preserves the live application",
     (stack) =>
@@ -2109,9 +2108,8 @@ export default {
         // application is gone (deleted out-of-band) while state still
         // points at it and the attachment still resolves without a
         // namespace id. Reconcile falls through to "no application exists"
-        // and the create must resolve the namespace by class name from the
-        // account's namespace list instead of creating without
-        // `durable_objects` (VALIDATE_INPUT).
+        // and the create must retain the namespace recorded in the application's
+        // attributes instead of creating without `durable_objects` (VALIDATE_INPUT).
         yield* Containers.deleteContainerApplication({
           accountId,
           applicationId,
