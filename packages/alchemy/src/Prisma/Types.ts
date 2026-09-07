@@ -34,7 +34,11 @@ export interface ResourceRef {
   name: string;
 }
 
-export type PrismaRegionId = (typeof KNOWN_REGION_IDS)[number];
+/**
+ * The Management API is the source of truth for regions; `KNOWN_REGION_IDS`
+ * only drives editor completion, so any string is accepted.
+ */
+export type PrismaRegionId = (typeof KNOWN_REGION_IDS)[number] | (string & {});
 
 export type PrismaDatabaseRegionId = PrismaRegionId | "inherit";
 
