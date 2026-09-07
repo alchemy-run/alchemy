@@ -2,6 +2,7 @@ import type * as cf from "@cloudflare/workers-types";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import type * as Schema from "effect/Schema";
 import type { Scope } from "effect/Scope";
 import type { HttpServerError } from "effect/unstable/http/HttpServerError";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
@@ -253,6 +254,29 @@ export interface DurableObjectProps {
     | DurableObjectTransferSource
     | DurableObjectTransferSource[]
     | undefined;
+  /**
+   * Schema of the tagged errors this object's RPC methods may fail with,
+   * typically a `Schema.Union` of `Schema.TaggedError` classes (or a single
+   * class). A failure crosses the stub as a plain tagged object; with this
+   * schema the stub decodes it back into the class instance the method's
+   * type promises, so `Effect.catchTag` and `Schema`-driven consumers such
+   * as `HttpApiBuilder` see a real error. Failures the schema does not
+   * describe are delivered as-is.
+   *
+   * @example
+   * ```typescript
+   * class NotFound extends Schema.TaggedError<NotFound>()("NotFound", {
+   *   id: Schema.String,
+   * }) {}
+   *
+   * export default class Rooms extends Cloudflare.DurableObject<Rooms>()(
+   *   "Rooms",
+   *   Effect.gen(function* () { ... }),
+   *   { errors: NotFound },
+   * ) {}
+   * ```
+   */
+  errors?: Schema.ConstraintDecoder<unknown> | undefined;
   // environment?: string | undefined;
   // sqlite?: boolean | undefined;
   // namespaceId?: string | undefined;
@@ -266,7 +290,7 @@ export interface DurableObjectClass extends Effect.Effect<
   <Self, Shape>(): {
     <Name extends string>(
       name: Name,
-      props?: Pick<DurableObjectProps, "transferredFrom">,
+      props?: Pick<DurableObjectProps, "transferredFrom" | "errors">,
     ): Effect.Effect<DurableObject<Self>, never, Worker | Self> & {
       new (_: never): Shape & {
         /** @internal */
@@ -308,6 +332,7 @@ export interface DurableObjectClass extends Effect.Effect<
         never,
         Req
       >,
+      props?: Pick<DurableObjectProps, "errors">,
     ): Effect.Effect<
       DurableObject<Self>,
       never,
@@ -1150,6 +1175,7 @@ export const DurableObject: DurableObjectClass = taggedFunction(
           props?: DurableObjectProps,
           // phantom argument
           isClassForm?: true,
+          implProps?: Pick<DurableObjectProps, "errors">,
         ]
       | [
           name: string,
@@ -1158,16 +1184,26 @@ export const DurableObject: DurableObjectClass = taggedFunction(
           >,
           // phantom argument
           isClassForm?: true,
+          implProps?: Pick<DurableObjectProps, "errors">,
         ]
   ) {
     if (args.length === 0) {
-      return (name: string, propsOrImpl?: any) =>
+      return (
+        name: string,
+        propsOrImpl?: any,
+        implProps?: Pick<DurableObjectProps, "errors">,
+      ) =>
         // @ts-expect-error
-        DurableObject(name, propsOrImpl, true);
+        DurableObject(name, propsOrImpl, true, implProps);
     }
     const namespace = args[0];
     const isClassForm = args[2] === true;
     const propsOrImpl = args[1];
+    // The inline form carries the error schema beside the impl; the class and
+    // reference forms carry it in their props.
+    const errors = Effect.isEffect(propsOrImpl)
+      ? args[3]?.errors
+      : (propsOrImpl as DurableObjectProps | undefined)?.errors;
     const tag = Context.Service(namespace);
 
     const binding = (
@@ -1229,7 +1265,7 @@ export const DurableObject: DurableObjectClass = taggedFunction(
           getByName: (
             name: string,
             options?: DurableObjectGetDurableObjectOptions,
-          ) => makeRpcStub(binding.getByName(name, options)),
+          ) => makeRpcStub(binding.getByName(name, options), { errors }),
           // newUniqueId: () => use((ns) => ns.newUniqueId()),
           // idFromName: (name: string) => use((ns) => ns.idFromName(name)),
           // idFromString: (id: string) => use((ns) => ns.idFromString(id)),
@@ -1248,7 +1284,7 @@ export const DurableObject: DurableObjectClass = taggedFunction(
     const classProps =
       isClassForm && !Effect.isEffect(propsOrImpl)
         ? (propsOrImpl as
-            | Pick<DurableObjectProps, "transferredFrom">
+            | Pick<DurableObjectProps, "transferredFrom" | "errors">
             | undefined)
         : undefined;
 

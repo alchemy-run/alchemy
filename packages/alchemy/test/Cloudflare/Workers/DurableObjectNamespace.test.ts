@@ -71,6 +71,31 @@ test(
   { timeout: 60_000 },
 );
 
+test(
+  "typed failures cross the stub as instances of their class",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const client = freshConn(yield* HttpClient.HttpClient);
+
+    const res = yield* client.get(`${url}/typed-error`).pipe(
+      Effect.flatMap((res) =>
+        res.status === 200
+          ? Effect.succeed(res)
+          : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
+      ),
+      Effect.retry({ schedule: readinessSchedule, times: readinessRetries }),
+    );
+
+    const body = (yield* res.json) as {
+      failed: boolean;
+      instance: boolean;
+      key?: string;
+    };
+    expect(body).toEqual({ failed: true, instance: true, key: "no-such-key" });
+  }).pipe(logLevel),
+  { timeout: 60_000 },
+);
+
 // Every name here is a fresh UUID, so each is CREATED by this test's request —
 // which is the only moment a `locationHint` has any say.
 const coloFor = (url: string, hint?: string) =>

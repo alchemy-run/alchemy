@@ -2,6 +2,7 @@ import type * as cf from "@cloudflare/workers-types";
 
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import type * as Schema from "effect/Schema";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import {
   RpcClient,
@@ -34,6 +35,10 @@ export * from "../../Rpc.ts";
  */
 export const makeRpcStub = <Shape>(
   stubSource: unknown | Effect.Effect<unknown, never, never>,
+  options?: {
+    /** Schema of the tagged errors the remote may fail with. See {@link decodeRpcResult}. */
+    readonly errors?: Schema.ConstraintDecoder<unknown>;
+  },
 ): Shape => {
   const isLazy = isYieldableEffect(stubSource);
   const eagerFetcher = isLazy
@@ -57,7 +62,11 @@ export const makeRpcStub = <Shape>(
               try: () => (stub as any)[prop](...args),
               catch: (cause) =>
                 new RpcCallError({ method: String(prop), cause }),
-            }).pipe(Effect.flatMap(decodeRpcResult));
+            }).pipe(
+              Effect.flatMap((value) =>
+                decodeRpcResult(value, options?.errors),
+              ),
+            );
           }),
         );
     },

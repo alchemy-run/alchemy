@@ -1,11 +1,17 @@
 import * as Cloudflare from "@/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 
 const KV = Cloudflare.KV.Namespace("DurableObjectWorkerEnvironmentKV", {
   title: "durable-object-worker-environment-kv",
 });
+
+/** A typed failure an RPC method raises; the stub must hand callers an instance. */
+export class MissingKey extends Schema.TaggedError<MissingKey>()("MissingKey", {
+  key: Schema.String,
+}) {}
 
 export class WorkerEnvironmentKVObject extends Cloudflare.DurableObject<WorkerEnvironmentKVObject>()(
   "WorkerEnvironmentKVObject",
@@ -16,6 +22,18 @@ export class WorkerEnvironmentKVObject extends Cloudflare.DurableObject<WorkerEn
       return {
         put: (key: string, value: string) => kv.put(key, value),
         get: (key: string) => kv.get(key),
+        // Fails with a Schema.TaggedError so the test can check that the stub
+        // decodes it back into an instance (see `errors` below).
+        require: (key: string) =>
+          kv
+            .get(key)
+            .pipe(
+              Effect.flatMap((value) =>
+                value === null || value === undefined
+                  ? Effect.fail(new MissingKey({ key }))
+                  : Effect.succeed(value),
+              ),
+            ),
         // The Cloudflare colo this instance is running in, as reported by a
         // subrequest it makes itself (a subrequest is served by the
         // datacenter the caller runs in, so the trace names *this* DO's
@@ -39,4 +57,5 @@ export class WorkerEnvironmentKVObject extends Cloudflare.DurableObject<WorkerEn
       };
     });
   }).pipe(Effect.provide(Cloudflare.KV.ReadWriteNamespaceBinding)),
+  { errors: MissingKey },
 ) {}

@@ -22,6 +22,7 @@ import * as Cause from "effect/Cause";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 
 class MyError extends Data.TaggedError("MyError")<{
@@ -663,5 +664,72 @@ describe("stream errors", () => {
           expect(reason!.error).toBeInstanceOf(RpcRemoteStreamError);
         }
       }),
+  );
+});
+
+// ---------------------------------------------------------------------------
+// decodeRpcResult with an error schema
+// ---------------------------------------------------------------------------
+
+class NotFound extends Schema.TaggedError<NotFound>()("NotFound", {
+  id: Schema.String,
+}) {}
+
+class Forbidden extends Schema.TaggedError<Forbidden>()("Forbidden", {}) {}
+
+describe("decodeRpcResult with an error schema", () => {
+  it.effect("decodes a tagged failure into its class instance", () =>
+    Effect.gen(function* () {
+      const envelope: RpcErrorEnvelope = {
+        _tag: ErrorTag,
+        error: encodeRpcError(new NotFound({ id: "42" })),
+      };
+      const exit = yield* Effect.exit(
+        decodeRpcResult(envelope, Schema.Union([NotFound, Forbidden])),
+      );
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isFailure(exit)) {
+        const failReason = exit.cause.reasons.find((r) => r._tag === "Fail");
+        const error = (failReason as any).error;
+        expect(error).toBeInstanceOf(NotFound);
+        expect(error.id).toBe("42");
+      }
+    }),
+  );
+
+  it.effect("delivers a failure the schema does not describe as-is", () =>
+    Effect.gen(function* () {
+      const envelope: RpcErrorEnvelope = {
+        _tag: ErrorTag,
+        error: { _tag: "MyError", message: "BOOF" },
+      };
+      const exit = yield* Effect.exit(decodeRpcResult(envelope, NotFound));
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isFailure(exit)) {
+        const failReason = exit.cause.reasons.find((r) => r._tag === "Fail");
+        const error = (failReason as any).error as Record<string, unknown>;
+        expect(error).not.toBeInstanceOf(NotFound);
+        expect(error._tag).toBe("MyError");
+        expect(error.message).toBe("BOOF");
+      }
+    }),
+  );
+
+  it.effect("makeRpcStub applies the schema to remote failures", () =>
+    Effect.gen(function* () {
+      const mockStub = {
+        find: async () => ({
+          _tag: ErrorTag,
+          error: encodeRpcError(new NotFound({ id: "7" })),
+        }),
+      };
+      const stub = makeRpcStub<{
+        find: () => Effect.Effect<never, NotFound>;
+      }>(mockStub, { errors: NotFound });
+
+      const error = yield* stub.find().pipe(Effect.flip);
+      expect(error).toBeInstanceOf(NotFound);
+      expect(error.id).toBe("7");
+    }),
   );
 });

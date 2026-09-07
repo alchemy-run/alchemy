@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import { WorkerEnvironmentKVObject } from "./object.ts";
+import { MissingKey, WorkerEnvironmentKVObject } from "./object.ts";
 
 /** The regions a DO can be hinted toward, as `/colo` accepts them. */
 const LOCATION_HINTS: readonly Cloudflare.DurableObjectLocationHint[] = [
@@ -37,6 +37,24 @@ export default class DurableObjectWorkerEnvironmentWorker extends Cloudflare.Wor
           yield* object.put(key, "ok").pipe(Effect.orDie);
           const value = yield* object.get(key).pipe(Effect.orDie);
           return yield* HttpServerResponse.json({ value });
+        }
+
+        // A typed failure raised inside the object must reach the caller as an
+        // instance of its class, not the plain object it crossed the stub as.
+        if (request.method === "GET" && url.pathname === "/typed-error") {
+          const object = objects.getByName("default");
+          const outcome = yield* object.require("no-such-key").pipe(
+            Effect.map(() => ({ failed: false, instance: false })),
+            Effect.catchTag("MissingKey", (error) =>
+              Effect.succeed({
+                failed: true,
+                instance: error instanceof MissingKey,
+                key: error.key,
+              }),
+            ),
+            Effect.orDie,
+          );
+          return yield* HttpServerResponse.json(outcome);
         }
 
         // Create a DO instance under a `locationHint` and report the colo it

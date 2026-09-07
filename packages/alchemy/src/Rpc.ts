@@ -3,6 +3,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
@@ -224,12 +225,28 @@ export const decodeRpcValue = (value: unknown) => {
 /**
  * Decode an RPC return value, lifting error envelopes into the Effect
  * error channel so that remote `Effect.fail(...)` values are recoverable.
+ *
+ * A failure crosses the wire as the plain object {@link encodeRpcError}
+ * produced, not as the class instance the method's type promises. When
+ * `errors` is given (a schema for the tagged errors the remote may fail
+ * with, typically a `Schema.Union` of `Schema.TaggedError` classes), the
+ * envelope is decoded through it so callers receive real instances —
+ * which is what `Schema`-driven consumers such as `HttpApiBuilder` need to
+ * encode them. A failure the schema does not describe is failed as-is.
  */
 export const decodeRpcResult = (
   value: unknown,
+  errors?: Schema.ConstraintDecoder<unknown>,
 ): Effect.Effect<unknown, unknown> => {
   if (isRpcErrorEnvelope(value)) {
-    return Effect.fail(value.error);
+    if (errors === undefined) {
+      return Effect.fail(value.error);
+    }
+    return Effect.flatMap(
+      Effect.result(Schema.decodeUnknownEffect(errors)(value.error)),
+      (decoded) =>
+        Effect.fail(Result.isSuccess(decoded) ? decoded.success : value.error),
+    );
   }
   return Effect.succeed(decodeRpcValue(value));
 };
@@ -441,6 +458,8 @@ export const makeFetchRpcStub = <Shape>(options: {
   readonly baseUrl?: string;
   /** Own properties that take precedence over remote-method dispatch. */
   readonly base?: Record<string, unknown>;
+  /** Schema of the tagged errors the remote may fail with. See {@link decodeRpcResult}. */
+  readonly errors?: Schema.ConstraintDecoder<unknown>;
 }): Shape => {
   const baseUrl = options.baseUrl ?? "http://alchemy-rpc";
   const target: Record<string, unknown> = options.base ?? {};
@@ -481,7 +500,7 @@ export const makeFetchRpcStub = <Shape>(options: {
                 (cause) => new RpcCallError({ method: prop, cause }),
               ),
             );
-            return yield* decodeRpcResult(value);
+            return yield* decodeRpcResult(value, options.errors);
           }),
         );
     },
