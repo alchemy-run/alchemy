@@ -116,6 +116,10 @@ export const resolveProviderConfig = <
     };
   });
 
+// Layer rebuilds and separate account/credential lookups share this notice.
+// Keep only provider/variable names here, never credential values or resolvers.
+const loggedEnvironmentCredentials = new Set<string>();
+
 const logEnvironmentCredentials = (
   provider: string,
   used: ReadonlyArray<string>,
@@ -124,6 +128,9 @@ const logEnvironmentCredentials = (
     // The profile hub inspects providers with this suppression on — it must
     // stay quiet, the run's own resolution logs.
     if (yield* SuppressMissingProviderConfig) return;
+    const key = JSON.stringify([provider, ...used.toSorted()]);
+    if (loggedEnvironmentCredentials.has(key)) return;
+    loggedEnvironmentCredentials.add(key);
     // Per provider: only this provider skips the profile. Others in the
     // same run still resolve from it, so a Cloudflare token in `.env` can
     // sit alongside a profile-stored AWS SSO session.

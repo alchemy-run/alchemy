@@ -13,6 +13,7 @@ import {
   ProfileError,
   ProfileStore,
   ProfileStoreLive,
+  SuppressMissingProviderConfig,
   validateProfileName,
 } from "@/Auth/Profile.ts";
 import { resolveProfileName, resolveProviderConfig } from "@/Auth/Resolve.ts";
@@ -22,6 +23,7 @@ import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import path from "pathe";
@@ -517,6 +519,56 @@ it.effect("resolves the profile from env files and --profile overrides", () =>
       "from-cli",
     );
   }).pipe(Effect.scoped, Effect.provide(makeTestLayer())),
+);
+
+it.live(
+  "environment notices are deduplicated across concurrent lookups without suppressing other providers",
+  () => {
+    const messages: unknown[] = [];
+    return withTempHome(
+      Effect.gen(function* () {
+        const auth = yield* getAuthProvider(ENV_PROVIDER);
+        const resolve = resolveProviderConfig("NoticeProvider");
+        yield* Effect.gen(function* () {
+          yield* resolve.pipe(
+            Effect.provideService(SuppressMissingProviderConfig, true),
+          );
+          expect(messages).toEqual([]);
+          const results = yield* Effect.all(
+            Array.from({ length: 10 }, () => resolve),
+            { concurrency: "unbounded" },
+          );
+          for (const result of results) {
+            expect(yield* result.resolve).toBe("environment-credentials");
+          }
+          yield* resolveProviderConfig("OtherNoticeProvider");
+          expect(messages).toEqual([
+            [
+              "NoticeProvider: using environment variables (FAKE_ENV_TOKEN) instead of the profile.",
+            ],
+            [
+              "OtherNoticeProvider: using environment variables (FAKE_ENV_TOKEN) instead of the profile.",
+            ],
+          ]);
+        }).pipe(
+          Effect.provideService(AuthProviders, {
+            NoticeProvider: auth,
+            OtherNoticeProvider: auth,
+          }),
+        );
+      }),
+      { FAKE_ENV_TOKEN: "from-env" },
+    ).pipe(
+      Effect.provide(
+        Logger.layer([
+          Logger.make<unknown, void>((options) => {
+            messages.push(options.message);
+          }),
+        ]),
+      ),
+    );
+  },
+  { exclusive: true },
 );
 
 it.live(
