@@ -123,6 +123,26 @@ const digestFromImageRef = (imageRef: string) => {
   return isRegistryDigest(digest) ? digest : undefined;
 };
 
+const validateCachedApplicationIdentity = Effect.fn(function* (
+  application: Containers.GetContainerApplicationResponse,
+  cached: Pick<
+    ContainerApplication["Attributes"],
+    "applicationId" | "applicationName" | "accountId"
+  >,
+) {
+  if (
+    application.id !== cached.applicationId ||
+    application.name !== cached.applicationName ||
+    application.accountId !== cached.accountId
+  ) {
+    return yield* Effect.fail(
+      new Error(
+        `Container application identity mismatch for cached id "${cached.applicationId}": expected "${cached.applicationName}" in account "${cached.accountId}", received id "${application.id}" named "${application.name}" in account "${application.accountId}".`,
+      ),
+    );
+  }
+});
+
 export const LiveContainerProvider = () =>
   Provider.effect(
     ContainerPlatform,
@@ -1152,6 +1172,17 @@ export const LiveContainerProvider = () =>
           );
           const durableObjects = yield* getDurableObjects(bindings);
           const { accountId } = yield* yield* CloudflareEnvironment;
+          if (
+            output?.applicationId &&
+            isLiveId(output.applicationId) &&
+            output.accountId !== accountId
+          ) {
+            return yield* Effect.fail(
+              new Error(
+                `Container application identity mismatch: cached account "${output.accountId}" differs from configured account "${accountId}".`,
+              ),
+            );
+          }
           const env = makeContainerEnv(news, accountId, bindings);
           const { build, imageRef, imageHash, dev } = yield* computeImage(
             id,
@@ -1173,6 +1204,9 @@ export const LiveContainerProvider = () =>
               accountId: output.accountId,
               applicationId: output.applicationId,
             }).pipe(
+              Effect.tap((app) =>
+                validateCachedApplicationIdentity(app, output),
+              ),
               Effect.map((app) => ({
                 ...toAttributes(app),
                 hash: output.hash,
@@ -1397,6 +1431,14 @@ export const LiveContainerProvider = () =>
             return yield* readByName(output.applicationName);
           }
           if (output?.applicationId) {
+            const { accountId } = yield* yield* CloudflareEnvironment;
+            if (output.accountId !== accountId) {
+              return yield* Effect.fail(
+                new Error(
+                  `Container application identity mismatch: cached account "${output.accountId}" differs from configured account "${accountId}".`,
+                ),
+              );
+            }
             yield* Effect.logInfo(
               `Cloudflare Container read: checking ${output.applicationName}`,
             );
@@ -1404,6 +1446,9 @@ export const LiveContainerProvider = () =>
               accountId: output.accountId,
               applicationId: output.applicationId,
             }).pipe(
+              Effect.tap((app) =>
+                validateCachedApplicationIdentity(app, output),
+              ),
               Effect.map((app) => ({
                 ...toAttributes(app),
                 hash: output.hash,
