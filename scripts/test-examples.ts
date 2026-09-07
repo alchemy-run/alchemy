@@ -1,9 +1,5 @@
 export {};
 
-// Example tests must only use credentials injected by the test environment.
-// Auth providers refuse to consult stored profiles while CI is enabled.
-process.env.CI = "true";
-
 const examples = [
   "./examples/cloudflare-dev",
   "./examples/cloudflare-worker",
