@@ -1,5 +1,6 @@
 import * as Containers from "@distilled.cloud/cloudflare/containers";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
@@ -519,15 +520,15 @@ export const LiveContainerProvider = () =>
         };
       });
 
-      const buildAndPushImage = Effect.fn("buildAndPushImage")(function* (
+      const publicationPlatform = "linux/amd64";
+      const publishImage = Effect.fn("publishImage")(function* (
         id: string,
         props: AnyContainerApplicationProps,
         build: ImageBuild,
         imageRef: string,
-        previousImageRef: string | undefined,
         session?: { note: (message: string) => Effect.Effect<void> },
       ) {
-        const platform = "linux/amd64";
+        const platform = publicationPlatform;
 
         if (build.kind === "prepushed") {
           // The reference already lives in the target registry — nothing to
@@ -535,15 +536,7 @@ export const LiveContainerProvider = () =>
           yield* Effect.logInfo(
             `Cloudflare Container image: using pre-pushed ${imageRef}`,
           );
-          const published = yield* resolvePublishedImageRef(props, imageRef);
-          return {
-            ...published,
-            previousDigest:
-              previousImageRef === undefined
-                ? undefined
-                : (yield* resolvePublishedImageRef(props, previousImageRef))
-                    .digest,
-          };
+          return yield* resolvePublishedImageRef(props, imageRef);
         }
 
         if (build.kind === "remote") {
@@ -660,10 +653,62 @@ export const LiveContainerProvider = () =>
         return {
           imageRef: `${repositoryFromImageRef(imageRef)}@${digest}`,
           digest,
+        };
+      });
+
+      // Applications with identical image inputs can share one immutable
+      // registry reference. Keep publication state within this provider run.
+      const publications = new Map<string, ReturnType<typeof publishImage>>();
+      const buildAndPushImage = Effect.fn("buildAndPushImage")(function* (
+        id: string,
+        props: AnyContainerApplicationProps,
+        build: ImageBuild,
+        imageRef: string,
+        imageHash: string,
+        previousImageRef: string | undefined,
+        session?: { note: (message: string) => Effect.Effect<void> },
+      ) {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+        const key = JSON.stringify([
+          accountId,
+          props.registryId ?? "registry.cloudflare.com",
+          publicationPlatform,
+          build.kind,
+          imageHash,
+        ]);
+        const candidate: ReturnType<typeof publishImage> = yield* Effect.cached(
+          publishImage(id, props, build, imageRef, session).pipe(
+            Effect.onExit((exit) =>
+              Exit.isFailure(exit)
+                ? Effect.sync(() => {
+                    // A failed or interrupted publisher must not poison a
+                    // later attempt, or remove an entry that replaced it.
+                    if (publications.get(key) === candidate) {
+                      publications.delete(key);
+                    }
+                  })
+                : Effect.void,
+            ),
+          ),
+        );
+        const publication = yield* Effect.sync(() => {
+          // Allocate atomically: concurrent callers execute only the winning
+          // candidate, sharing both its in-flight work and successful result.
+          const existing = publications.get(key);
+          if (existing) return existing;
+          publications.set(key, candidate);
+          return candidate;
+        });
+        const published = yield* publication;
+        return {
+          ...published,
+          // Previous image identity belongs to each application, not the
+          // shared image publication. Resolve it separately for every caller.
           previousDigest:
             previousImageRef === undefined
               ? undefined
-              : yield* resolveRegistryDigest(previousImageRef, credentials),
+              : (yield* resolvePublishedImageRef(props, previousImageRef))
+                  .digest,
         };
       });
 
@@ -883,6 +928,7 @@ export const LiveContainerProvider = () =>
             news,
             build,
             imageRef,
+            imageHash,
             existing.hash?.digest === undefined
               ? existing.configuration.image
               : undefined,
@@ -1091,6 +1137,7 @@ export const LiveContainerProvider = () =>
             news,
             build,
             imageRef,
+            imageHash,
             undefined,
             session,
           );
@@ -1233,6 +1280,7 @@ export const LiveContainerProvider = () =>
                 news,
                 build,
                 imageRef,
+                imageHash,
                 existing.hash?.digest === undefined
                   ? existing.configuration.image
                   : undefined,
@@ -1320,6 +1368,7 @@ export const LiveContainerProvider = () =>
             news,
             build,
             imageRef,
+            imageHash,
             undefined,
             session,
           );
