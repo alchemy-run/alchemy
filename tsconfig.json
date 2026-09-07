@@ -245,6 +245,9 @@
       "path": "./examples/hetzner-website-nextjs/tsconfig.json"
     },
     {
+      "path": "./examples/hetzner-website-vinext/tsconfig.json"
+    },
+    {
       "path": "./examples/hetzner-website-nuxt/tsconfig.json"
     },
     {

@@ -102,6 +102,7 @@ const examples = [
   // "./examples/hetzner-website-solidstart",
   // "./examples/hetzner-website-sveltekit",
   // "./examples/hetzner-website-tanstack-start",
+  // "./examples/hetzner-website-vinext",
   // "./examples/hetzner-website-waku",
   // "./examples/hetzner-website-vocs",
   // "./examples/railway-website-astro",

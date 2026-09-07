@@ -805,6 +805,7 @@ export default defineConfig({
                 { label: "Astro", link: "/hetzner/frontend/astro" },
                 { label: "Foldkit", link: "/hetzner/frontend/foldkit" },
                 { label: "Next.js", link: "/hetzner/frontend/nextjs" },
+                { label: "vinext", link: "/hetzner/frontend/vinext" },
                 { label: "Nuxt", link: "/hetzner/frontend/nuxt" },
                 { label: "Octane", link: "/hetzner/frontend/octane" },
                 {
