@@ -1,11 +1,11 @@
 import { createHash } from "node:crypto";
 import type {
   ProjectResponseServicesEdgesItemNode,
-  ServiceCreateResponse,
+  CreateServiceResponse,
   ServiceInstanceResponse,
   ServiceInstanceUpdateInput,
   ServiceResponse,
-  ServiceUpdateResponse,
+  UpdateServiceResponse,
 } from "@distilled.cloud/railway";
 import * as railway from "@distilled.cloud/railway";
 import * as Data from "effect/Data";
@@ -554,8 +554,8 @@ class FunctionDeployPending extends Data.TaggedError(
 
 type CloudService =
   | ServiceResponse
-  | ServiceCreateResponse
-  | ServiceUpdateResponse
+  | CreateServiceResponse
+  | UpdateServiceResponse
   | ProjectResponseServicesEdgesItemNode;
 
 const projectIdOf = (value: unknown): string | undefined => {
@@ -795,7 +795,7 @@ const upsertVariable = (input: {
   name: string;
   value: string;
 }) =>
-  railway.variableUpsert({
+  railway.upsertVariable({
     input: {
       projectId: input.projectId,
       environmentId: input.environmentId,
@@ -857,7 +857,7 @@ const syncMounts = Effect.fn(function* (input: {
   for (const mount of input.mounts) {
     if (mount.volumeId.length === 0) continue;
     yield* railway
-      .volumeInstanceUpdate({
+      .updateVolumeInstance({
         volumeId: mount.volumeId,
         environmentId: input.environmentId,
         input: {
@@ -1179,7 +1179,7 @@ export const FunctionProvider = () =>
 
           if (current === undefined) {
             const created = yield* railway
-              .serviceCreate({
+              .createService({
                 input: {
                   projectId,
                   environmentId,
@@ -1203,7 +1203,7 @@ export const FunctionProvider = () =>
           }
 
           if (current.name !== name) {
-            current = yield* railway.serviceUpdate({
+            current = yield* railway.updateService({
               id: current.id,
               input: { name },
             });
@@ -1231,7 +1231,7 @@ export const FunctionProvider = () =>
             props,
           });
           if (instanceDelta !== undefined) {
-            yield* railway.serviceInstanceUpdate({
+            yield* railway.updateServiceInstance({
               environmentId,
               serviceId: current.id,
               input: instanceDelta,
@@ -1316,7 +1316,7 @@ export const FunctionProvider = () =>
           const serviceId = output.serviceId;
           if (serviceId.length === 0) return;
           yield* railway
-            .serviceDelete({
+            .deleteService({
               id: serviceId,
               ...(output.environmentId.length > 0
                 ? { environmentId: output.environmentId }
