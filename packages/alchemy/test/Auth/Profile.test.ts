@@ -1,5 +1,6 @@
 import {
   AuthError,
+  AuthProvider,
   AuthProviderLayer,
   AuthProviders,
   getAuthProvider,
@@ -522,43 +523,42 @@ it.effect("resolves the profile from env files and --profile overrides", () =>
 );
 
 it.live(
-  "environment notices are deduplicated across concurrent lookups without suppressing other providers",
+  "environment notices share a provider cache and reset when its layer is rebuilt",
   () => {
     const messages: unknown[] = [];
-    return withTempHome(
+    const run = withTempHome(
       Effect.gen(function* () {
         const auth = yield* getAuthProvider(ENV_PROVIDER);
-        const resolve = resolveProviderConfig("NoticeProvider");
-        yield* Effect.gen(function* () {
-          yield* resolve.pipe(
-            Effect.provideService(SuppressMissingProviderConfig, true),
-          );
-          expect(messages).toEqual([]);
-          const results = yield* Effect.all(
-            Array.from({ length: 10 }, () => resolve),
-            { concurrency: "unbounded" },
-          );
-          for (const result of results) {
-            expect(yield* result.resolve).toBe("environment-credentials");
-          }
-          yield* resolveProviderConfig("OtherNoticeProvider");
-          expect(messages).toEqual([
-            [
-              "NoticeProvider: using environment variables (FAKE_ENV_TOKEN) instead of the profile.",
-            ],
-            [
-              "OtherNoticeProvider: using environment variables (FAKE_ENV_TOKEN) instead of the profile.",
-            ],
-          ]);
-        }).pipe(
-          Effect.provideService(AuthProviders, {
-            NoticeProvider: auth,
-            OtherNoticeProvider: auth,
-          }),
+        yield* AuthProvider()("OtherNoticeProvider", auth);
+        const resolve = resolveProviderConfig(ENV_PROVIDER);
+        yield* resolve.pipe(
+          Effect.provideService(SuppressMissingProviderConfig, true),
         );
+        expect(messages).toEqual([]);
+        const results = yield* Effect.all(
+          Array.from({ length: 10 }, () => resolve),
+          { concurrency: "unbounded" },
+        );
+        for (const result of results) {
+          expect(yield* result.resolve).toBe("environment-credentials");
+        }
+        yield* resolveProviderConfig("OtherNoticeProvider");
+        expect(messages).toEqual([
+          [
+            "FakeEnvAuthProvider: using environment variables (FAKE_ENV_TOKEN) instead of the profile.",
+          ],
+          [
+            "OtherNoticeProvider: using environment variables (FAKE_ENV_TOKEN) instead of the profile.",
+          ],
+        ]);
       }),
       { FAKE_ENV_TOKEN: "from-env" },
-    ).pipe(
+    );
+    return Effect.gen(function* () {
+      yield* run;
+      messages.length = 0;
+      yield* run;
+    }).pipe(
       Effect.provide(
         Logger.layer([
           Logger.make<unknown, void>((options) => {

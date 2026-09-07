@@ -1,3 +1,4 @@
+import { cachedFunction } from "../Util/cached-function.ts";
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -187,6 +188,10 @@ export interface ProviderDetails {
 export interface ConfigureField {
   /** `--set` key and, for stored-credential providers, the stored JSON property. */
   readonly name: string;
+  /** Log each environment contract once per built provider layer. */
+  readonly logEnvironmentCredentials: (
+    used: ReadonlyArray<string>,
+  ) => Effect.Effect<void>;
   /** Human prompt label, e.g. "Cloudflare API Token". */
   readonly label: string;
   /** Secondary guidance shown beneath the interactive input. */
@@ -391,6 +396,13 @@ export const AuthProvider =
       }
 
       const provider: AuthProvider<Config, Credentials> = {
+        logEnvironmentCredentials: yield* cachedFunction(
+          (used: ReadonlyArray<string>) =>
+            Effect.logInfo(
+              `${name}: using environment variables (${used.join(", ")}) instead of the profile.`,
+            ),
+          { key: ([used]) => JSON.stringify(used.toSorted()) },
+        ),
         kind: "AuthProvider",
         name,
         // configure/login can wait minutes on a browser grant, so they hold

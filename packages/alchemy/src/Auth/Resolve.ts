@@ -66,7 +66,9 @@ export const resolveProviderConfig = <
     if (auth.readEnvironment !== undefined) {
       const used = yield* presentEnvironment(auth.environment);
       if (used !== undefined) {
-        yield* logEnvironmentCredentials(providerName, used);
+        if (!(yield* SuppressMissingProviderConfig)) {
+          yield* auth.logEnvironmentCredentials(used);
+        }
         return {
           auth,
           profileName: undefined,
@@ -114,29 +116,6 @@ export const resolveProviderConfig = <
       ),
       source: "profile" as const,
     };
-  });
-
-// Layer rebuilds and separate account/credential lookups share this notice.
-// Keep only provider/variable names here, never credential values or resolvers.
-const loggedEnvironmentCredentials = new Set<string>();
-
-const logEnvironmentCredentials = (
-  provider: string,
-  used: ReadonlyArray<string>,
-) =>
-  Effect.gen(function* () {
-    // The profile hub inspects providers with this suppression on — it must
-    // stay quiet, the run's own resolution logs.
-    if (yield* SuppressMissingProviderConfig) return;
-    const key = JSON.stringify([provider, ...used.toSorted()]);
-    if (loggedEnvironmentCredentials.has(key)) return;
-    loggedEnvironmentCredentials.add(key);
-    // Per provider: only this provider skips the profile. Others in the
-    // same run still resolve from it, so a Cloudflare token in `.env` can
-    // sit alongside a profile-stored AWS SSO session.
-    yield* Effect.logInfo(
-      `${provider}: using environment variables (${used.join(", ")}) instead of the profile.`,
-    );
   });
 
 /** Let an explicit profile override configured selection without disturbing other keys. */
