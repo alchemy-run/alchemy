@@ -5,11 +5,10 @@
  *
  * `build()` runs Vite's `createBuilder` in a child process with
  * `@alchemy.run/cloudflare-runtime/vite` injected (the
- * `vite-plugin-cloudflare:alchemy` presence plugin), then vinext
- * prerender (local `dist/server` artifacts) and KV seed from those
- * files into `VINEXT_KV_CACHE`. `hash()` is a project-tree memo.
- * `dev()` is Vite's own server with the same plugin stack (no
- * production KV seed).
+ * `vite-plugin-cloudflare:alchemy` presence plugin), then vinext prerender
+ * and a platform-agnostic cache seed (`putText` into KV HTTP).
+ * `hash()` is a project-tree memo. `dev()` is Vite's own server with
+ * the same plugin stack.
  */
 import cloudflare from "@alchemy.run/cloudflare-runtime/vite";
 import type {
@@ -21,9 +20,7 @@ import type {
   QueueConsumer as RuntimeQueueConsumer,
   RuntimeServices,
 } from "@alchemy.run/cloudflare-runtime/core";
-import * as kv from "@distilled.cloud/cloudflare/kv";
 import type * as Context from "effect/Context";
-import * as Console from "effect/Console";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -45,12 +42,16 @@ import {
   makeVinextPluginOptions,
 } from "./cloudflare.ts";
 import {
-  buildVinextPrerenderKVPairs,
-  vinextCacheNamespaceFromEnv,
   VINEXT_CACHE_BINDING,
   VINEXT_KV_CACHE_BINDING,
 } from "./PrerenderCache.ts";
-import { runVinextPrerenderIfConfigured } from "./Prerender.ts";
+import {
+  resolveVinextRoot,
+  runVinextPrerenderIfConfigured,
+} from "./Prerender.ts";
+import { kvHttpNamespaceFromEnv, kvHttpSink } from "./cache/kv-http.ts";
+import { ALCHEMY_VINEXT_CACHE_ENV } from "./cache/plugin.ts";
+import { seedPrerenderTo } from "./cache/seed.ts";
 
 const PROVIDER = "@alchemy.run/frontend-frameworks/vinext/source";
 
@@ -730,6 +731,7 @@ export const buildInChild = (config: VinextBuildChildConfig) =>
     const path = yield* Path.Path;
     const root = path.resolve(config.rootDir);
     process.env[ALCHEMY_CLOUDFLARE_VITE_INJECTED] = "1";
+    process.env[ALCHEMY_VINEXT_CACHE_ENV] = "kv";
     const pluginOptions = makeVinextPluginOptions({
       root,
       main: config.main,
@@ -799,77 +801,32 @@ const resolveVinextCacheEnv = (env: Record<string, unknown>) =>
   });
 
 /**
- * After vinext prerender has written `dist/server` artifacts, upload the
- * derived cache pairs into `VINEXT_KV_CACHE` via the distilled KV HTTP
- * API. The Worker provider layer supplies that client. Requirements are
- * widened at the call boundary so the source contract stays
- * `SourceRequirements`; failures stay typed as `VinextSourceError`.
- *
- * This runs at the end of source `build()` (deploy path): local files
- * first, then remote seed — not during `alchemy dev`.
+ * Same `seedPrerenderTo(sink.putText)` as Redis / S3. The Worker provider
+ * layer supplies the distilled KV HTTP client. Closed as `Effect<void>`
+ * so the source contract stays `SourceRequirements`.
  */
 const seedVinextPrerenderCache = (
   rootDir: string,
   env: Record<string, unknown>,
-): Effect.Effect<void, VinextSourceError, SourceRequirements> =>
-  uploadVinextPrerenderCache(rootDir, env) as Effect.Effect<
-    void,
-    VinextSourceError,
-    SourceRequirements
-  >;
-
-const uploadVinextPrerenderCache = Effect.fn(function* (
-  rootDir: string,
-  env: Record<string, unknown>,
-) {
-  const namespace = vinextCacheNamespaceFromEnv(env);
-  if (!namespace) return;
-  const path = yield* Path.Path;
-  const fs = yield* FileSystem.FileSystem;
-  const root = path.resolve(rootDir);
-  const serverDir = path.join(root, "dist", "server");
-  const manifestPath = path.join(serverDir, "vinext-prerender.json");
-  if (
-    !(yield* fs.exists(manifestPath).pipe(Effect.orElseSucceed(() => false)))
-  ) {
-    return;
-  }
-  const { pairs, routeCount } = yield* buildVinextPrerenderKVPairs(
-    root,
-    serverDir,
-  );
-  if (pairs.length === 0) {
-    yield* Console.log(
-      "  KV cache: Skipping prerender upload (no App Router prerendered cache entries found).",
+): Effect.Effect<void> =>
+  Effect.gen(function* () {
+    const namespace = kvHttpNamespaceFromEnv(env);
+    if (namespace === undefined) return;
+    const path = yield* Path.Path;
+    yield* seedPrerenderTo(kvHttpSink(namespace), {
+      rootDir: path.resolve(rootDir),
+      label: "Cloudflare KV",
+    }).pipe(
+      Effect.mapError(
+        (cause) =>
+          new SourceProviderError({
+            provider: PROVIDER,
+            message: "Failed to seed the vinext prerender cache.",
+            cause,
+          }),
+      ),
     );
-    return;
-  }
-  const acct = namespace.accountId;
-  if (acct === undefined) {
-    yield* Console.warn(
-      "  KV cache: Skipping prerender upload (namespace is missing accountId).",
-    );
-    return;
-  }
-  yield* Effect.forEach(
-    pairs,
-    (pair) =>
-      kv.putNamespaceValue({
-        accountId: acct,
-        namespaceId: namespace.namespaceId,
-        keyName: pair.key,
-        value: pair.value,
-        expirationTtl: pair.expirationTtl,
-        metadata: pair.metadata,
-      }),
-    { concurrency: 8 },
-  );
-  yield* Console.log(
-    `  KV cache: Uploaded ${pairs.length} ${
-      pairs.length === 1 ? "entry" : "entries"
-    } for ${routeCount} prerendered route${routeCount === 1 ? "" : "s"}.`,
-  );
-});
+  }) as Effect.Effect<void>;
 
 export const makeVinextSourceProvider = (
   options: VinextSourceOptions,
@@ -971,6 +928,7 @@ export const makeVinextSourceProvider = (
       const path = yield* Path.Path;
       const rootDir = rootDirOf(path);
       process.env[ALCHEMY_CLOUDFLARE_VITE_INJECTED] = "1";
+      process.env[ALCHEMY_VINEXT_CACHE_ENV] = "kv";
       const vite = yield* Effect.promise(() => loadVite(rootDir));
       const port = yield* resolveViteDevPort(vite.version).pipe(
         Effect.mapError(

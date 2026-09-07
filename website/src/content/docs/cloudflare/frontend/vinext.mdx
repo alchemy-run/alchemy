@@ -12,16 +12,16 @@ Vite. This is **not** `Cloudflare.Website.Nextjs`, which runs
 
 Alchemy loads the project's `vite.config.ts` (it must register
 `vinext()`), injects the Cloudflare Vite plugin, deploys the RSC
-Worker plus client assets, runs vinext prerender into local
-`dist/server` artifacts, and seeds those pairs into
+Worker plus client assets, prerenders routes, and seeds
 `VINEXT_KV_CACHE` for ISR / `"use cache"`. There is no
 `wrangler.jsonc` and no `@vinext/cloudflare deploy`.
 
-Install `vinext`, `@vitejs/plugin-rsc`, `react-server-dom-webpack`,
-and `@vinext/cloudflare` in the app. Do **not** also register
-`@cloudflare/vite-plugin` — Alchemy injects its own
-(`vite-plugin-cloudflare:alchemy`; vinext matches the prefix) and
-no-ops the official plugin if it is still in the Vite config.
+Install `vinext`, `@vitejs/plugin-rsc`, and `react-server-dom-webpack`
+in the app. Do **not** also register `@cloudflare/vite-plugin` —
+Alchemy injects its own (`vite-plugin-cloudflare:alchemy`; vinext
+matches the prefix) and no-ops the official plugin if it is still in
+the Vite config. ISR uses Alchemy's KV data-cache adapter, not
+`@vinext/cloudflare`.
 
 ## Declare the Website
 
@@ -43,51 +43,26 @@ Do not bind `VINEXT_KV_CACHE` or `CF_VERSION_METADATA` in `env`.
 prerender), enables Workers Cache, and binds version metadata. There
 is no `wrangler.jsonc`.
 
-Register official `@vinext/cloudflare` adapters in `vite.config.ts`.
-Each call returns a serializable `{ adapter, options }` descriptor —
-nothing looks up bindings until the first request. If an adapter
-cannot initialize, vinext logs and uses the default handler.
-
-`kvDataAdapter()` reads `env.VINEXT_KV_CACHE` and can serve HIT/STALE
-itself. `cdnAdapter()` is optional: the origin renders, tags the
-response, and `revalidateTag()` / `revalidatePath()` purge the edge
-through `ctx.cache`. Alchemy does not run
-`vinext-cloudflare deploy --experimental-warm-cdn-cache`.
+`Website.Vinext` provisions `VINEXT_KV_CACHE` and sets
+`ALCHEMY_VINEXT_CACHE=kv` during the Worker build. Spread `alchemy()`
+into `vinext()` so Alchemy's KV data-cache adapter is baked — do not
+put Redis or S3 adapters here. Deploy uploads prerender pairs into KV
+and logs the entry count. Missing binding (local prerender) falls
+back to memory.
 
 ```typescript
-import { cdnAdapter } from "@vinext/cloudflare/cache/cdn-adapter";
-import { kvDataAdapter } from "@vinext/cloudflare/cache/kv-data-adapter";
+import { alchemy } from "@alchemy.run/frontend-frameworks/vinext/cache";
 import { defineConfig } from "vite";
 import vinext from "vinext";
 
 export default defineConfig({
-  plugins: [
-    vinext({
-      prerender: true,
-      cache: {
-        cdn: cdnAdapter(),
-        data: kvDataAdapter(),
-      },
-    }),
-  ],
+  plugins: [vinext({ prerender: true, ...alchemy() })],
 });
 ```
 
 Bindings on the resource are available as
 `import { env } from "cloudflare:workers"` in server components,
 route handlers, and server actions.
-
-## Notes
-
-- Deploy runs `vite build`, then vinext prerender (local `dist/server`
-  artifacts), then seeds those pairs into `VINEXT_KV_CACHE`.
-  `alchemy dev` does not seed the production data-cache store.
-- Do not set `appPrefix` on `kvDataAdapter` — seed keys omit it, so a
-  prefix would miss at runtime.
-- Prerender cache entry/key shape tracks `@vinext/cloudflare`
-  (`prerender-kv-populate.ts`, `cache/kv-key.ts`,
-  `cache/kv-data-adapter.runtime.ts`). Re-sync Alchemy's
-  `PrerenderCache` when those change.
 
 ## Node and other platforms
 
