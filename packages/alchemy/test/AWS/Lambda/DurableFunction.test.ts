@@ -79,7 +79,10 @@ describe("Lambda DurableFunction", () => {
         expect(functionName).toBeTruthy();
         expect(qualifier).toBe("live");
       }),
-      { timeout: 420_000 },
+      // ~35s in isolation, but the deploy bundles + npm-vendors the Durable
+      // Execution SDK in-process; under full-suite CPU saturation the
+      // reconcile alone has been observed to exceed 420s.
+      { timeout: 600_000 },
     );
 
     afterAll(sharedStack.destroy(), { timeout: 120_000 });

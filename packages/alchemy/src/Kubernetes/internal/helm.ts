@@ -55,10 +55,12 @@ export interface RenderHelmChartOptions {
 }
 
 /**
- * Render a chart with `helm template` and parse the multi-document YAML
- * output into object definitions. Every rendered object must carry
- * `apiVersion`, `kind`, and `metadata.name` (server-side apply needs a
- * name; `generateName`-only objects are rejected with a clear error).
+ * Render a chart with `helm template --no-hooks` and parse the
+ * multi-document YAML output into object definitions. Every rendered object
+ * must carry `apiVersion`, `kind`, and `metadata.name` (server-side apply
+ * needs a name; `generateName`-only objects are rejected with a clear
+ * error). Helm lifecycle hooks are excluded from the result (see
+ * {@link isHelmHook}).
  */
 export const renderHelmChart = Effect.fn(function* (
   options: RenderHelmChartOptions,
@@ -74,6 +76,11 @@ export const renderHelmChart = Effect.fn(function* (
     options.chart,
     "--namespace",
     options.namespace,
+    // Helm lifecycle hooks (`helm.sh/hook`) only make sense under Helm's own
+    // release events; HelmChart server-side applies the render and does not
+    // implement hook timing/weights/delete policies, so a hook (e.g. a
+    // pre-delete uninstall Job) must never enter the managed-object graph.
+    "--no-hooks",
   ];
   if (options.repo !== undefined) {
     args.push("--repo", options.repo);
@@ -135,7 +142,21 @@ export const renderHelmChart = Effect.fn(function* (
   return yield* parseRenderedManifests(options.chart, result.stdout);
 });
 
-/** Parse `helm template` output (multi-document YAML) into definitions. */
+/**
+ * Whether a rendered object is a Helm lifecycle hook (`helm.sh/hook`
+ * annotation). Hooks are executed by Helm at release events (pre-install,
+ * pre-delete, test, …); HelmChart has no release and no hook lifecycle, so
+ * they are filtered out rather than applied as ordinary objects.
+ */
+export const isHelmHook = (object: KubernetesObjectDefinition): boolean =>
+  typeof object.metadata.annotations?.["helm.sh/hook"] === "string";
+
+/**
+ * Parse `helm template` output (multi-document YAML) into definitions.
+ * Hook-annotated objects are dropped — `renderHelmChart` already passes
+ * `--no-hooks`, but the parser enforces the invariant independently of the
+ * helm CLI's behavior.
+ */
 export const parseRenderedManifests = (
   chart: string,
   rendered: string,
@@ -190,7 +211,9 @@ export const parseRenderedManifests = (
           }),
         );
       }
-      objects.push(object as KubernetesObjectDefinition);
+      const definition = object as KubernetesObjectDefinition;
+      if (isHelmHook(definition)) continue;
+      objects.push(definition);
     }
     return objects;
   });

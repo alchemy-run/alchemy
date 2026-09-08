@@ -430,5 +430,5 @@ const rawDataToString = (raw: RawData): string => {
   if (typeof raw === "string") return raw;
   if (raw instanceof ArrayBuffer) return new TextDecoder().decode(raw);
   if (Array.isArray(raw)) return raw.map(rawDataToString).join("");
-  return raw.toString("utf8");
+  return raw.toString();
 };

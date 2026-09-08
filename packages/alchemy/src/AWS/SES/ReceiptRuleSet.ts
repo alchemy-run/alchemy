@@ -37,30 +37,31 @@ export interface ReceiptRuleSet extends Resource<
  * and point the account at it with `SES.ActiveReceiptRuleSet` to start
  * processing mail. Email receiving is only available in a subset of regions
  * (e.g. `us-east-1`, `us-west-2`, `eu-west-1`).
- * @resource
- * @section Creating Rule Sets
- * @example Basic Rule Set
+ * ### Creating Rule Sets
+ * **Example:** Basic Rule Set
  * ```typescript
  * import * as SES from "alchemy/AWS/SES";
  *
  * const ruleSet = yield* SES.ReceiptRuleSet("Inbound", {});
  * ```
  *
- * @example Named Rule Set
+ * **Example:** Named Rule Set
  * ```typescript
  * const ruleSet = yield* SES.ReceiptRuleSet("Inbound", {
  *   ruleSetName: "my-inbound-rules",
  * });
  * ```
  *
- * @section Activating a Rule Set
- * @example Point the Account at a Rule Set
+ * ### Activating a Rule Set
+ * **Example:** Point the Account at a Rule Set
  * ```typescript
  * const ruleSet = yield* SES.ReceiptRuleSet("Inbound", {});
  * yield* SES.ActiveReceiptRuleSet("Active", {
  *   ruleSetName: ruleSet.ruleSetName,
  * });
  * ```
+ *
+ * @resource
  */
 export const ReceiptRuleSet = Resource<ReceiptRuleSet>(
   "AWS.SES.ReceiptRuleSet",

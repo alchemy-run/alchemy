@@ -83,7 +83,7 @@ test(
     expect(html).toContain("SvelteKit on AWS");
     // The `GREETING` env value from alchemy.run.ts, read via `process.env`
     // in the server `load` — proves the Lambda rendered it at request time.
-    expect(html).toContain("Hello from alchemy");
+    expect(html).toContain("Hello from SvelteKit on AWS!");
   }),
   { timeout: 180_000 },
 );

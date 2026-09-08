@@ -91,11 +91,8 @@ export type AccountEntrypoint = Resource<
  *
  * Account-level phases require an Enterprise plan; on lower plans deploys
  * fail with the typed `PhaseNotEntitled` error.
- * @resource
- * @product Rulesets
- * @category Rules & Configuration
- * @section Account WAF Deployment
- * @example Deploy a custom ruleset across all zones
+ * ### Account WAF Deployment
+ * **Example:** Deploy a custom ruleset across all zones
  * ```typescript
  * const ruleset = yield* Cloudflare.Ruleset.CustomRuleset("SharedWafRules", {
  *   phase: "http_request_firewall_custom",
@@ -122,6 +119,10 @@ export type AccountEntrypoint = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/waf/account/
+ *
+ * @resource
+ * @product Rulesets
+ * @category Rules & Configuration
  */
 export const AccountEntrypoint = Resource<AccountEntrypoint>(TypeId);
 

@@ -59,10 +59,20 @@ export default defineConfig({
 });
 ```
 
-Options set on the resource's `waku` prop (`srcDir`, `distDir`,
-`basePath`, ...) merge over the file, per key. The one key Alchemy
-owns is `unstable_adapter` — setting it fails the build with an
-actionable error.
+`waku.config.*` is the home for static configuration. For deploy-time
+values — anything that varies by stage — the `waku` prop merges
+overrides over the file, per key:
+
+```typescript
+export const Website = AWS.Website.Waku("Website", {
+  waku: {
+    basePath: "/docs/",
+  },
+});
+```
+
+The one key Alchemy owns is `unstable_adapter` — setting it fails the
+build with an actionable error.
 
 :::note
 Vite configuration must live in `waku.config.ts`'s `vite` field —
@@ -113,18 +123,15 @@ for the checked-in example.
 
 ## Add environment variables
 
-The server function's environment is configured under
-`server.environment` — plain values, or outputs from other resources
-in the Stack:
+The server function's environment is configured under `env` — plain
+values, or outputs from other resources in the Stack:
 
 ```diff lang="typescript"
 // alchemy.run.ts
 export const Website = AWS.Website.Waku("Website", {
-+  server: {
-+    environment: {
-+      GREETING: "Hello from alchemy",
-+      API_BASE: api.url,
-+    },
++  env: {
++    GREETING: "Hello from alchemy",
++    API_BASE: api.url,
 +  },
 });
 ```
@@ -167,9 +174,9 @@ infrastructure even during dev.
 
 ```typescript
 const site = yield* AWS.Website.Waku("Web", {
-  domain: {
-    name: "app.example.com",
-    hostedZoneId: zone.hostedZoneId,
-  },
+  domain: { name: "app.example.com" },
 });
 ```
+
+The hosted zone is inferred from the hostname. Pass `hostedZoneId` to
+pin it when several zones could match.

@@ -14,9 +14,15 @@ const { test } = Test.make({ providers: AWS.providers() });
 
 // Gated: CloudFront Distribution create blocks on Status === "Deployed"
 // (~5-15 min) and destroy requires disable -> wait -> delete (another
-// ~5-15 min). Run with ALCHEMY_RUN_LIVE_AWS_WEBSITE_TESTS=true (same gate
+// ~5-15 min). Skipped under --fast (FAST=1) (same gate
 // as the AWS.CloudFront suites).
-const runLive = process.env.ALCHEMY_RUN_LIVE_AWS_WEBSITE_TESTS === "true";
+const runLive = !process.env.FAST;
+
+// Under the floci runner the full pipeline (bucket + files + KVS +
+// distribution) deploys against the emulator, which serves the
+// distribution's edge on a local plain-HTTP port — so the whole test runs
+// in both modes; only the URL-shape assertions differ.
+const runEmulated = process.env.ALCHEMY_TEST_DEV === "1";
 
 const fixtureDir = fileURLToPath(
   new URL("./fixtures/static-site", import.meta.url),
@@ -47,14 +53,16 @@ describe.skipIf(!runLive)("AWS.Website.StaticSite", () => {
         );
 
         const url = spa.site.url! as string;
-        expect(url).toMatch(/^https:\/\//);
+        // `https://{id}.cloudfront.net` live; the emulator serves the
+        // distribution's edge on a local plain-HTTP port.
+        expect(url).toMatch(
+          runEmulated ? /^http:\/\/localhost:\d+/ : /^https:\/\//,
+        );
 
         // urls contract (cloudfront-default arm): a domain-less site
-        // serves only at its CloudFront default domain, and `url` is
+        // serves only at the distribution's own URL, and `url` is
         // always `urls[0]`.
-        expect(spa.site.urls).toEqual([
-          `https://${spa.site.distribution!.domainName}`,
-        ]);
+        expect(spa.site.urls).toEqual([spa.site.distribution!.url]);
         expect(url).toBe(spa.site.urls[0]);
 
         // Root serves the index page. Generous first-request budget: the

@@ -25,11 +25,8 @@ export class ImagesError extends Data.TaggedError("ImagesError")<{
  * it inside an Effect-native Worker to attach the binding and obtain the
  * {@link ImagesClient}.
  *
- * @binding
- * @product Images
- * @category Media
- * @section Effect-style Worker (recommended)
- * @example Read image format and dimensions from the request body
+ * ### Effect-style Worker (recommended)
+ * **Example:** Read image format and dimensions from the request body
  * ```typescript
  * import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
  *
@@ -47,8 +44,8 @@ export class ImagesError extends Data.TaggedError("ImagesError")<{
  * );
  * ```
  *
- * @section Binding to a Worker (declarative)
- * @example
+ * ### Binding to a Worker (declarative)
+ * **Example:** Example
  * ```typescript
  * export const Worker = Cloudflare.Worker("Worker", {
  *   main: "./src/worker.ts",
@@ -59,8 +56,8 @@ export class ImagesError extends Data.TaggedError("ImagesError")<{
  * //   { MEDIA: ImagesBinding }
  * ```
  *
- * @section Local development
- * @example Proxy to the real Images service in dev
+ * ### Local development
+ * **Example:** Proxy to the real Images service in dev
  * ```typescript
  * // Default: transforms run locally via Sharp under `alchemy dev` and
  * // hosted images are stored on disk. Alchemy.remote() opts the binding
@@ -72,6 +69,10 @@ export class ImagesError extends Data.TaggedError("ImagesError")<{
  * ```
  *
  * @see https://developers.cloudflare.com/images/transform-images/bindings/
+ *
+ * @binding
+ * @product Images
+ * @category Media
  */
 export interface Images extends Binding.Service<Images, TypeId, ImagesClient> {
   /**

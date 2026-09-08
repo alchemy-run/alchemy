@@ -73,7 +73,9 @@ describe.concurrent("TanStack Start", () => {
 
         const { site, bucket } = yield* stack.deploy(
           Effect.gen(function* () {
-            const bucket = yield* Cloudflare.R2.Bucket("TanStackLiveBucket");
+            const bucket = yield* Cloudflare.R2.Bucket("TanStackLiveBucket", {
+              forceDestroy: true,
+            });
             const site = yield* Cloudflare.Website.Vite("TanStackStartLive", {
               rootDir,
               workersDev: true,

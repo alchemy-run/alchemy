@@ -213,7 +213,7 @@ describe.concurrent("SvelteKit", () => {
   );
 
   // ─────────────────────────────────────────────────────────────────────
-  // SPA mode: `adapter.notFoundHandling: "single-page-application"`
+  // SPA mode: `assets.notFoundHandling: "single-page-application"`
   //
   // Pages are `ssr = false`, so deep links and unknown routes must serve
   // the generated app-shell `index.html` (identified by the fixture's
@@ -251,12 +251,12 @@ describe.concurrent("SvelteKit", () => {
               rootDir,
               workersDev: { enabled: true, previewsEnabled: true },
               memo: { include: ["src/**", "package.json"] },
-              // `assets.notFoundHandling` deliberately NOT set: the resource
-              // defaults the assets-layer knob from the adapter's, so this
-              // one prop configures both the app-shell fallback generation
+              // The single platform-native knob: `assets.notFoundHandling`
+              // drives both the build-time app-shell fallback generation
               // and the assets layer that serves it. This deploy pins that
-              // default — without it, unknown routes 404 with an empty body.
-              adapter: { notFoundHandling: "single-page-application" },
+              // coupling — without it, unknown routes 404 with an empty
+              // body.
+              assets: { notFoundHandling: "single-page-application" },
               env: {
                 TEST_BINDING: bindingMarker,
               },
@@ -306,12 +306,11 @@ describe.concurrent("SvelteKit", () => {
   );
 
   // ─────────────────────────────────────────────────────────────────────
-  // 404-page mode: `adapter.notFoundHandling: "404-page"`
+  // 404-page mode: `assets.notFoundHandling: "404-page"`
   //
-  // The adapter writes a `404.html` fallback asset — the rendered app
-  // shell with `fallback: "spa"`, a plain `Not Found` page with
-  // `fallback: "plaintext"` (the default) — and the resource defaults the
-  // assets-layer `notFoundHandling` knob from the adapter's.
+  // The build writes a `404.html` fallback asset that always renders the
+  // app shell (so kit's own error page shows), driven by the same
+  // platform-native knob that configures the assets layer serving it.
   //
   // Assets `404-page` semantics with a worker present: under the
   // `assets_navigation_prefers_asset_serving` compat flag (default-on for
@@ -323,9 +322,6 @@ describe.concurrent("SvelteKit", () => {
   // its own error page (the shim never defers in 404-page mode —
   // upstream-parity, see WorkerShim.ts).
   //
-  // Both tests share the `sveltekit-404-app` fixture: the fallback flavor
-  // is an adapter option on the resource, so each variant is its own
-  // deploy of the same source.
   // ─────────────────────────────────────────────────────────────────────
 
   const notFoundFixtureDir = pathe.resolve(
@@ -363,12 +359,10 @@ describe.concurrent("SvelteKit", () => {
               rootDir,
               workersDev: { enabled: true, previewsEnabled: true },
               memo: { include: ["src/**", "package.json"] },
-              // `404-page` writes `404.html`; `fallback: "spa"` renders the
-              // app shell into it (instead of the default plaintext page).
-              // `assets.notFoundHandling` deliberately NOT set — the
-              // resource defaults it from the adapter's, same as the SPA
-              // test above pins for "single-page-application".
-              adapter: { notFoundHandling: "404-page", fallback: "spa" },
+              // `404-page` writes `404.html` — the generated page always
+              // renders the app shell now, so kit's own error page shows
+              // on unmatched navigations.
+              assets: { notFoundHandling: "404-page" },
               env: {
                 TEST_BINDING: bindingMarker,
               },
@@ -424,74 +418,6 @@ describe.concurrent("SvelteKit", () => {
           },
         );
         expect(kitErrorBody).toContain("status:404");
-
-        yield* stack.destroy();
-        yield* waitForWorkerToBeDeleted(site.workerName, accountId);
-      }).pipe(logLevel),
-    { timeout: 360_000 },
-  );
-
-  test.provider(
-    "SvelteKit 404-page + plaintext fallback: unmatched navigations serve the plaintext 404.html from assets",
-    (stack) =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-
-        yield* stack.destroy();
-
-        const rootDir = yield* cloneFixture(notFoundFixtureDir, {
-          prefix: "alchemy-sveltekit-404-plain-",
-          tempRoot,
-          entries: ["package.json", "src"],
-        });
-
-        const bindingMarker = "sveltekit-404-plain-binding-marker";
-
-        const site = yield* stack.deploy(
-          Effect.gen(function* () {
-            return yield* Cloudflare.Website.SvelteKit(
-              "SvelteKit404PlainSite",
-              {
-                rootDir,
-                workersDev: { enabled: true, previewsEnabled: true },
-                memo: { include: ["src/**", "package.json"] },
-                // `fallback: "plaintext"` (also the default) writes a literal
-                // `Not Found` page instead of rendering the app shell.
-                adapter: {
-                  notFoundHandling: "404-page",
-                  fallback: "plaintext",
-                },
-                env: {
-                  TEST_BINDING: bindingMarker,
-                },
-              },
-            );
-          }),
-        );
-
-        expect(site.url).toBeDefined();
-        yield* expectWorkerExists(site.workerName, accountId);
-
-        // Matched route still SSRs with the binding.
-        yield* expectUrlContains(`${site.url!}/`, `binding:${bindingMarker}`, {
-          timeout: "120 seconds",
-          label: "404-page plaintext: SSR home",
-        });
-
-        // An unmatched navigation serves the plaintext `404.html` — the
-        // exact `Not Found` body, no app.html shell markup (the plaintext
-        // page never goes through kit's template).
-        const plainBody = yield* expectPageResponse(
-          `${site.url!}/definitely/not/a/route`,
-          {
-            label: "404-page plaintext: assets fallback (navigate)",
-            headers: { accept: "text/html", "sec-fetch-mode": "navigate" },
-            expected: `status 404 with exact plaintext body "Not Found"`,
-            check: (res) =>
-              res.status === 404 && res.body.trim() === "Not Found",
-          },
-        );
-        expect(plainBody).not.toContain(SHELL_404_MARKER);
 
         yield* stack.destroy();
         yield* waitForWorkerToBeDeleted(site.workerName, accountId);

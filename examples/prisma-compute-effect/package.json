@@ -13,15 +13,15 @@
     "build": "tsc -b",
     "deploy": "alchemy deploy",
     "destroy": "alchemy destroy",
-    "tail": "alchemy tail"
+    "tail": "alchemy logs --tail"
   },
   "dependencies": {
-    "@effect/platform-bun": "catalog:",
+    "@effect/platform-bun": "catalog:effect",
     "alchemy": "workspace:*",
-    "effect": "catalog:"
+    "effect": "catalog:effect"
   },
   "devDependencies": {
-    "@types/node": "catalog:",
-    "typescript": "catalog:"
+    "@types/node": "catalog:tooling",
+    "typescript": "catalog:build"
   }
 }

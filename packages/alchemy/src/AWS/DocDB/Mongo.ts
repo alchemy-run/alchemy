@@ -76,9 +76,8 @@ export interface MongoOptions {
  * and their built-in roles (`read`, `readWrite`, `dbAdmin`,
  * `clusterAdmin`, …) are managed *inside* the database with
  * `db.createUser(...)` — IAM only governs the management plane.
- * @binding
- * @section Connecting to a Cluster
- * @example Query a Collection inside a Function
+ * ### Connecting to a Cluster
+ * **Example:** Query a Collection inside a Function
  * ```typescript
  * // init — bind the cluster, then build the client
  * const connect = yield* AWS.DocDB.Connect(cluster, { database: "app" });
@@ -91,7 +90,7 @@ export interface MongoOptions {
  * );
  * ```
  *
- * @example Create a Database User (DB-plane auth)
+ * **Example:** Create a Database User (DB-plane auth)
  * ```typescript
  * const { use } = yield* db;
  * yield* use((db) =>
@@ -102,6 +101,8 @@ export interface MongoOptions {
  *   }),
  * );
  * ```
+ *
+ * @binding
  */
 export const mongo = <E, R>(
   connection: Effect.Effect<MongoConnectionInfo, E, R>,

@@ -156,6 +156,7 @@ export interface Platform<
   MainShape,
   RuntimeContext extends BaseRuntimeContext,
   BaseShape = {},
+  InlineProps extends Resource["Props"] = Resource["Props"],
 > extends Effect.Effect<Resource & RuntimeContext, never, Resource> {
   Type: Resource["Type"];
   Provider: Provider<Resource>;
@@ -171,9 +172,9 @@ export interface Platform<
       Named<Id> & {
         make<PropsReq = never, InitReq = never>(
           props:
-            | InputProps<Resource["Props"]>
+            | InputProps<InlineProps>
             | Effect.Effect<
-                InputProps<Resource["Props"]>,
+                InputProps<InlineProps>,
                 ConfigError.ConfigError,
                 PropsReq
               >,
@@ -199,9 +200,9 @@ export interface Platform<
     >(
       id: Id,
       props:
-        | InputProps<Resource["Props"]>
+        | InputProps<InlineProps>
         | Effect.Effect<
-            InputProps<Resource["Props"]>,
+            InputProps<InlineProps>,
             ConfigError.ConfigError,
             PropsReq
           >,
@@ -228,9 +229,9 @@ export interface Platform<
           InitReq extends Services | PlatformServices | Resource = never,
         >(
           props:
-            | InputProps<Resource["Props"]>
+            | InputProps<InlineProps>
             | Effect.Effect<
-                InputProps<Resource["Props"]>,
+                InputProps<InlineProps>,
                 ConfigError.ConfigError,
                 PropsReq
               >,
@@ -264,8 +265,8 @@ export interface Platform<
   >(
     id: Id,
     props:
-      | InputProps<Resource["Props"]>
-      | Effect.Effect<InputProps<Resource["Props"]>, never, PropsReq>,
+      | InputProps<InlineProps>
+      | Effect.Effect<InputProps<InlineProps>, never, PropsReq>,
     impl: Effect.Effect<Shape, ConfigError.ConfigError, InitReq>,
   ): Effect.Effect<
     Resource & Rpc<Shape> & Named<Id>,
@@ -319,10 +320,16 @@ export const Platform = <
   type Props = any;
   type Impl = Effect.Effect<any>;
 
-  const resource = Resource(
-    type,
-    hooks.aliases !== undefined ? { aliases: hooks.aliases } : undefined,
-  );
+  // Platform registrations must have resolved props by plan time: every
+  // legitimate construction (a `.make(props, impl)` Layer build, a tag
+  // declared with props, a plain call) produces them, so props still
+  // `undefined` at plan can only be a bare-tag forward reference whose
+  // `.make` Layer was never provided — `Plan.make` fails fast naming the
+  // class and its Layer (#1054).
+  const resource = Resource(type, {
+    aliases: hooks.aliases,
+    requiresImplementation: true,
+  });
   const PlatformContext = RuntimeContext;
 
   // Apply the optional `transformProps` hook to a (possibly Effect-valued)
@@ -393,6 +400,16 @@ export const Platform = <
                 // — same isExternal marking; without props, this is a bare
                 // tag whose props/impl arrive later via `.make`.
                 onNone: () =>
+                  // Without props this is a bare-tag FORWARD REFERENCE: its
+                  // `.make(props, impl)` Layer may build before or after
+                  // this yield (e.g. a worker tag bound in another worker's
+                  // `env` — the #874 circular-binding pattern — resolves
+                  // during that worker's async-binding pass, outside the
+                  // Layer's own context). Register with `undefined` props;
+                  // the Layer's build repairs them, and `Plan.make` fails
+                  // fast on any platform registration whose props are still
+                  // `undefined` after the whole program evaluated (see
+                  // `requiresImplementation` above).
                   resource(
                     id,
                     props === undefined

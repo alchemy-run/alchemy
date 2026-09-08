@@ -17,12 +17,9 @@ import type { Zone } from "../Zone/Zone.ts";
  * permission, scoped to the single zone passed to `bind`, and binds its value
  * into the Worker so runtime code can authenticate.
  *
- * @binding
- * @product DNS
- * @category Domains & DNS
  *
- * @section Reading DNS records at runtime
- * @example Read records from inside a Worker
+ * ### Reading DNS records at runtime
+ * **Example:** Read records from inside a Worker
  * Bind the client in the Worker's Init phase and provide {@link ReadDnsBinding}.
  * The zone is fixed by `ReadDnsBinding(zone)` — the provisioned token only grants
  * access to that zone, so calls take no `zoneId`. Pass the {@link Zone}
@@ -51,6 +48,10 @@ import type { Zone } from "../Zone/Zone.ts";
  *   }).pipe(Effect.provide(Cloudflare.DNS.ReadDnsBinding)),
  * ) {}
  * ```
+ *
+ * @binding
+ * @product DNS
+ * @category Domains & DNS
  */
 export interface ReadDns extends Binding.Service<
   ReadDns,

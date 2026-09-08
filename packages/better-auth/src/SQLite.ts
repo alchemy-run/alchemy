@@ -22,12 +22,9 @@ const open = (path: string): Effect.Effect<BunDatabase, never, Scope.Scope> =>
  * Data persists in the file across runs; migrations run against the same
  * file at deploy time.
  *
- * @layer
- * @provides BetterAuth.Database
- * @product SQLite
  *
- * @section Local development
- * @example File-backed auth for `alchemy dev`
+ * ### Local development
+ * **Example:** File-backed auth for `alchemy dev`
  * ```typescript
  * import { BetterAuth } from "@alchemy.run/better-auth";
  * import { SQLite } from "@alchemy.run/better-auth/SQLite";
@@ -40,6 +37,10 @@ const open = (path: string): Effect.Effect<BunDatabase, never, Scope.Scope> =>
  *
  * @param path SQLite file path (parent directory must exist).
  * @default ".alchemy/better-auth.sqlite"
+ *
+ * @layer
+ * @provides BetterAuth.Database
+ * @product SQLite
  */
 export const SQLite = (
   path = ".alchemy/better-auth.sqlite",

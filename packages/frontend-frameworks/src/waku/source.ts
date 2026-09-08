@@ -12,6 +12,7 @@ import type * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
 import type * as Scope from "effect/Scope";
@@ -125,7 +126,7 @@ export class SourceProviderError extends Data.TaggedError(
 
 export type WakuSourceError = SourceProviderError | PlatformError;
 
-type SourceRequirements = FileSystem.FileSystem | Path.Path;
+export type SourceRequirements = FileSystem.FileSystem | Path.Path;
 
 /** Mirror of alchemy `Cloudflare/Workers/Source.SourceProvider` (narrowed E/R). */
 export interface SourceProvider {
@@ -177,6 +178,14 @@ export interface WakuSourceOptions {
   /** Controls which files feed the rebuild-deciding `input` hash. */
   readonly memo?: WakuMemoOptions | undefined;
 }
+
+const wakuConfigFor = (options: WakuSourceOptions) => ({
+  ...(options.srcDir !== undefined ? { srcDir: options.srcDir } : undefined),
+  ...(options.distDir !== undefined ? { distDir: options.distDir } : undefined),
+  ...(options.basePath !== undefined
+    ? { basePath: options.basePath }
+    : undefined),
+});
 
 /**
  * Input-hash scoping, mirroring the semantics of alchemy's `MemoOptions`
@@ -599,6 +608,17 @@ const readClientAssets = Effect.fn(function* (
 
 const PROVIDER = "@alchemy.run/frontend-frameworks/waku/source";
 
+export interface WakuLikeSourceIntegration {
+  readonly provider: string;
+  readonly framework: string;
+  readonly displayName: string;
+  readonly buildModule: string;
+  readonly layer: (options: {
+    root: string;
+    target: ReturnType<typeof makeWakuCloudflareTarget>;
+  }) => Layer.Layer<FrameworkCore.Framework, never, SourceRequirements>;
+}
+
 /**
  * Waku assumes `process.cwd()` is the project root in several places (the
  * html-shell plugin's `index.html` input resolves against the cwd, and
@@ -668,9 +688,6 @@ export const buildInChild = (config: WakuBuildChildConfig) =>
     ),
   );
 
-const asProviderError = (message: string) => (cause: unknown) =>
-  new SourceProviderError({ provider: PROVIDER, message, cause });
-
 /** Routing config from the raw `props.assets` (directory/hash keys are
  * path-level concerns owned by alchemy; only the routing config passes through). */
 const assetsConfigOf = (
@@ -689,21 +706,21 @@ const assetsConfigOf = (
 
 export const makeWakuSourceProvider = (
   options: WakuSourceOptions,
+  integration: WakuLikeSourceIntegration = {
+    provider: PROVIDER,
+    framework: "waku",
+    displayName: "Waku",
+    buildModule: import.meta.url,
+    layer: ({ root, target }) =>
+      wakuFrameworkLayer({ root, waku: wakuConfigFor(options), target }),
+  },
 ): SourceProvider => {
   const rootDirOf = (path: Path.Path): string =>
     options.rootDir !== undefined
       ? path.resolve(options.rootDir)
       : process.cwd();
   const distDir = options.distDir ?? "dist";
-  const wakuConfig = {
-    ...(options.srcDir !== undefined ? { srcDir: options.srcDir } : undefined),
-    ...(options.distDir !== undefined
-      ? { distDir: options.distDir }
-      : undefined),
-    ...(options.basePath !== undefined
-      ? { basePath: options.basePath }
-      : undefined),
-  };
+  const wakuConfig = wakuConfigFor(options);
 
   return {
     // Waku's assets are a build product (`dist/public`), not a props-level
@@ -717,9 +734,9 @@ export const makeWakuSourceProvider = (
       // inputs relative to the cwd); `buildInChild` reconstructs the
       // framework + cloudflare target from this JSON config on the far side.
       const output = yield* runBuildChild({
-        module: import.meta.url,
+        module: integration.buildModule,
         rootDir,
-        framework: "waku",
+        framework: integration.framework,
         config: {
           rootDir,
           compatibilityDate: ctx.compatibility.date,
@@ -731,8 +748,13 @@ export const makeWakuSourceProvider = (
           waku: wakuConfig,
         } satisfies WakuBuildChildConfig,
       }).pipe(
-        Effect.mapError((error) =>
-          asProviderError("Waku build failed")(error.cause ?? error),
+        Effect.mapError(
+          (error) =>
+            new SourceProviderError({
+              provider: integration.provider,
+              message: `${integration.displayName} build failed`,
+              cause: error.cause ?? error,
+            }),
         ),
       );
 
@@ -741,7 +763,10 @@ export const makeWakuSourceProvider = (
         output.serverModules.length === 0
       ) {
         return yield* Effect.fail(
-          asProviderError("Waku build produced no server modules")(undefined),
+          new SourceProviderError({
+            provider: integration.provider,
+            message: `${integration.displayName} build produced no server modules`,
+          }),
         );
       }
       const [entry, ...rest] = output.serverModules;
@@ -813,9 +838,8 @@ export const makeWakuSourceProvider = (
       const path = yield* Path.Path;
       const rootDir = rootDirOf(path);
       const queueConsumers = yield* ctx.worker.queueConsumers;
-      const framework = wakuFrameworkLayer({
+      const framework = integration.layer({
         root: rootDir,
-        waku: wakuConfig,
         target: makeWakuCloudflareTarget({
           compatibilityDate: ctx.compatibility.date,
           compatibilityFlags: ctx.compatibility.flags,
@@ -844,7 +868,12 @@ export const makeWakuSourceProvider = (
         }).pipe(
           Effect.provide(framework),
           Effect.mapError(
-            asProviderError("Failed to start the waku dev server"),
+            (cause) =>
+              new SourceProviderError({
+                provider: integration.provider,
+                message: `Failed to start the ${integration.framework} dev server`,
+                cause,
+              }),
           ),
         ),
       );

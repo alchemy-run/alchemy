@@ -13,7 +13,7 @@ import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-test.provider.skipIf(process.env.ALCHEMY_RUN_LIVE_AWS_WEBSITE_TESTS !== "true")(
+test.provider.skipIf(!!process.env.FAST)(
   "create invalidation with explicit paths and wait for completion",
   (stack) =>
     Effect.gen(function* () {

@@ -65,23 +65,24 @@ export interface Network extends Resource<
  * Existing same-name networks are treated as foreign unless the engine is
  * explicitly allowed to adopt them with `--adopt` or `adopt(true)`.
  *
- * @resource
  *
- * @section Creating Networks
- * @example Basic bridge network
+ * ### Creating Networks
+ * **Example:** Basic bridge network
  * ```typescript
  * const network = yield* Docker.Network("app-network", {
  *   name: "app-network",
  * });
  * ```
  *
- * @section Adoption
- * @example Adopt a pre-existing network
+ * ### Adoption
+ * **Example:** Adopt a pre-existing network
  * ```typescript
  * const network = yield* Docker.Network("app-network", {
  *   name: "shared-app-network",
  * }).pipe(adopt(true));
  * ```
+ *
+ * @resource
  */
 export const Network = Resource<Network>("Docker.Network");
 

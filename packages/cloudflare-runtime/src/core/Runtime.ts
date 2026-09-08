@@ -1,4 +1,3 @@
-import { exitHook } from "@alchemy.run/node-utils/exit-hook";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -168,9 +167,6 @@ export const RuntimeLive = Layer.effect(
           return prepare.pipe(
             Effect.andThen(docker.validate(tag)),
             Effect.tap(() => {
-              const unregister = exitHook(() =>
-                docker.removeContainerSync(tag),
-              );
               // Each start cleans up ONLY its own image tag when its scope
               // closes. Do NOT prune other same-name tags as "stale" here: a
               // dev session starts the worker more than once (precreate stub
@@ -183,7 +179,6 @@ export const RuntimeLive = Layer.effect(
                   .removeContainer(tag)
                   .pipe(
                     Effect.andThen(docker.removeImageTag(tag)),
-                    Effect.andThen(Effect.sync(() => unregister())),
                     Effect.ignore,
                   ),
               );

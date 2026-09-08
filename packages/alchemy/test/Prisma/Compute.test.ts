@@ -317,6 +317,15 @@ const makeHealthLifecycleFixture = (options?: {
   };
 };
 
+const liveProviderContext = Layer.succeed(AlchemyContext, {
+  dotAlchemy: ".alchemy-test",
+  dev: false,
+  adopt: false,
+});
+
+const computeProviderLive = () =>
+  ComputeProvider().pipe(Layer.provide(liveProviderContext));
+
 describe("Prisma Compute", () => {
   it.live("accepts a streaming 200 response without consuming its body", () => {
     const body = new ReadableStream<Uint8Array>({
@@ -360,7 +369,11 @@ describe("Prisma Compute", () => {
         appName: "api",
         healthCheck: { path: "/api/health" },
         pollIntervalMs: 1,
-        urlReadinessTimeoutSeconds: 0.1,
+        // Wall-clock deadline (live clock). The mock succeeds on the second
+        // poll, so the pass path never waits this long — it only needs to
+        // not fire spuriously when a saturated event loop (full-suite run)
+        // delays the second poll beyond a tight budget.
+        urlReadinessTimeoutSeconds: 30,
       });
 
       expect(requests).toEqual([
@@ -603,7 +616,7 @@ describe("Prisma Compute", () => {
         "destroyOldDeployment cannot be combined with skipPromote",
       );
     }).pipe(
-      Effect.provide(ComputeProvider()),
+      Effect.provide(computeProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
     );
   });
@@ -634,7 +647,7 @@ describe("Prisma Compute", () => {
 
       expect((error as Error).message).toContain("healthCheck requires start");
     }).pipe(
-      Effect.provide(ComputeProvider()),
+      Effect.provide(computeProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, client)),
       Effect.provide(PlatformServices),
     );
@@ -667,7 +680,7 @@ describe("Prisma Compute", () => {
         "start: false requires skipPromote: true",
       );
     }).pipe(
-      Effect.provide(ComputeProvider()),
+      Effect.provide(computeProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
     );
   });
@@ -700,7 +713,7 @@ describe("Prisma Compute", () => {
         "branchId and branchGitName are mutually exclusive",
       );
     }).pipe(
-      Effect.provide(ComputeProvider()),
+      Effect.provide(computeProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
     );
   });
@@ -737,7 +750,7 @@ describe("Prisma Compute", () => {
         );
       }
     }).pipe(
-      Effect.provide(ComputeProvider()),
+      Effect.provide(computeProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
     );
   });
@@ -771,7 +784,7 @@ describe("Prisma Compute", () => {
         );
       }
     }).pipe(
-      Effect.provide(ComputeProvider()),
+      Effect.provide(computeProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
     );
   });
@@ -839,7 +852,7 @@ describe("Prisma Compute", () => {
       );
       expect(calls).toEqual([["getApp", "service-1"]]);
     }).pipe(
-      Effect.provide(ComputeProvider()),
+      Effect.provide(computeProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
     );
   });
@@ -871,7 +884,7 @@ describe("Prisma Compute", () => {
         "Effect-native Prisma Compute apps require `main`",
       );
     }).pipe(
-      Effect.provide(ComputeProvider()),
+      Effect.provide(computeProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
     );
   });
@@ -907,7 +920,7 @@ describe("Prisma Compute", () => {
         "Effect-native Prisma Compute apps cannot use build",
       );
     }).pipe(
-      Effect.provide(ComputeProvider()),
+      Effect.provide(computeProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
     );
   });
@@ -942,7 +955,7 @@ describe("Prisma Compute", () => {
           "handler must be `default` or a valid JavaScript export identifier",
         );
       }).pipe(
-        Effect.provide(ComputeProvider()),
+        Effect.provide(computeProviderLive()),
         Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
       );
     },
@@ -991,7 +1004,7 @@ describe("Prisma Compute", () => {
 
         expect(String(error)).toContain("cannot be changed atomically");
       }).pipe(
-        Effect.provide(ComputeProvider()),
+        Effect.provide(computeProviderLive()),
         Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
       );
     },
@@ -1040,7 +1053,7 @@ describe("Prisma Compute", () => {
 
         expect(diff).toEqual({ action: "replace" });
       }).pipe(
-        Effect.provide(ComputeProvider()),
+        Effect.provide(computeProviderLive()),
         Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
       );
     },
@@ -1093,7 +1106,7 @@ describe("Prisma Compute", () => {
 
         expect(diff).toEqual({ action: "update" });
       }).pipe(
-        Effect.provide(ComputeProvider()),
+        Effect.provide(computeProviderLive()),
         Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
       );
     },
@@ -1228,7 +1241,7 @@ describe("Prisma Compute", () => {
           ["getDeployment", "version-live"],
         ]);
       }).pipe(
-        Effect.provide(ComputeProvider()),
+        Effect.provide(computeProviderLive()),
         Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
         Effect.provide(FetchHttpClient.layer),
         Effect.provide(PlatformServices),
@@ -1293,7 +1306,7 @@ describe("Prisma Compute", () => {
         ["getDeployment", "version-live"],
       ]);
     }).pipe(
-      Effect.provide(ComputeProvider()),
+      Effect.provide(computeProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
       Effect.provide(FetchHttpClient.layer),
       Effect.provide(PlatformServices),
@@ -1383,7 +1396,7 @@ describe("Prisma Compute", () => {
           ["getDeployment", "version-old"],
         ]);
       }).pipe(
-        Effect.provide(ComputeProvider()),
+        Effect.provide(computeProviderLive()),
         Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
         Effect.provide(FetchHttpClient.layer),
         Effect.provide(PlatformServices),
@@ -1496,7 +1509,7 @@ describe("Prisma Compute", () => {
         ["getDeployment", "version-new"],
       ]);
     }).pipe(
-      Effect.provide(ComputeProvider()),
+      Effect.provide(computeProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
       Effect.provide(FetchHttpClient.layer),
       Effect.provide(PlatformServices),
@@ -1620,7 +1633,7 @@ describe("Prisma Compute", () => {
         expect(updateIndex).toBeGreaterThan(-1);
         expect(versionIndex).toBeGreaterThan(updateIndex);
       }).pipe(
-        Effect.provide(ComputeProvider()),
+        Effect.provide(computeProviderLive()),
         Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
         Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
         Effect.provide(PlatformServices),
@@ -1750,7 +1763,7 @@ describe("Prisma Compute", () => {
           calls.filter(([name]) => name === "createAppDeployment"),
         ).toHaveLength(2);
       }).pipe(
-        Effect.provide(ComputeProvider()),
+        Effect.provide(computeProviderLive()),
         Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
       );
     },
@@ -1810,7 +1823,7 @@ describe("Prisma Compute", () => {
         expect(error).toBeDefined();
         expect(calls).toEqual([]);
       }).pipe(
-        Effect.provide(ComputeProvider()),
+        Effect.provide(computeProviderLive()),
         Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
         Effect.provide(PlatformServices),
       );
@@ -1851,7 +1864,7 @@ describe("Prisma Compute", () => {
         "Build stdout exceeded the 8 byte output safety limit",
       );
     }).pipe(
-      Effect.provide(ComputeProvider()),
+      Effect.provide(computeProviderLive()),
       Effect.provide(
         Layer.succeed(
           PrismaClient,
@@ -1952,7 +1965,7 @@ describe("Prisma Compute", () => {
       );
       expect(calls).toContainEqual(["deleteDeployment", "version-1"]);
     }).pipe(
-      Effect.provide(ComputeProvider()),
+      Effect.provide(computeProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
       Effect.provide(PlatformServices),
     );
@@ -2024,7 +2037,7 @@ describe("Prisma Compute", () => {
         expect((error as Error).message).toContain("Refusing to patch");
         expect(calls).toEqual(["getApp"]);
       }).pipe(
-        Effect.provide(ComputeProvider()),
+        Effect.provide(computeProviderLive()),
         Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
         Effect.provide(FetchHttpClient.layer),
         Effect.provide(PlatformServices),
@@ -2122,7 +2135,7 @@ describe("Prisma Compute", () => {
         expect(calls).toContainEqual(["deleteDeployment", "version-1"]);
         expect(calls).toContainEqual(["deleteApp", "service-1"]);
       }).pipe(
-        Effect.provide(ComputeProvider()),
+        Effect.provide(computeProviderLive()),
         Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
         Effect.provide(PlatformServices),
       );
@@ -2223,7 +2236,7 @@ describe("Prisma Compute", () => {
       expect((error as Error).message).toContain("artifact upload failed");
       expect(calls).toContainEqual(["deleteDeployment", "version-1"]);
     }).pipe(
-      Effect.provide(ComputeProvider()),
+      Effect.provide(computeProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
       Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
       Effect.provide(PlatformServices),
@@ -2331,7 +2344,7 @@ describe("Prisma Compute", () => {
       expect((error as PrismaApiError).message).toBe("start failed");
       expect(calls).toContainEqual(["deleteDeployment", "version-1"]);
     }).pipe(
-      Effect.provide(ComputeProvider()),
+      Effect.provide(computeProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
       Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
       Effect.provide(PlatformServices),
@@ -2403,7 +2416,7 @@ describe("Prisma Compute", () => {
         expect(fixture.hasDeployment("version-old")).toBe(true);
         expect(fixture.latestDeploymentId()).toBe("version-old");
       }).pipe(
-        Effect.provide(ComputeProvider()),
+        Effect.provide(computeProviderLive()),
         Effect.provide(
           Layer.succeed(PrismaClient, withDefaultBranch(fixture.client)),
         ),
@@ -2496,7 +2509,7 @@ describe("Prisma Compute", () => {
         expect(fixture.hasDeployment("version-old")).toBe(true);
         expect(fixture.latestDeploymentId()).toBe("version-old");
       }).pipe(
-        Effect.provide(ComputeProvider()),
+        Effect.provide(computeProviderLive()),
         Effect.provide(
           Layer.succeed(PrismaClient, withDefaultBranch(fixture.client)),
         ),
@@ -2579,7 +2592,7 @@ describe("Prisma Compute", () => {
           ),
         ).toEqual([]);
       }).pipe(
-        Effect.provide(ComputeProvider()),
+        Effect.provide(computeProviderLive()),
         Effect.provide(
           Layer.succeed(PrismaClient, withDefaultBranch(fixture.client)),
         ),
@@ -2655,7 +2668,7 @@ describe("Prisma Compute", () => {
           ),
         ).toEqual([]);
       }).pipe(
-        Effect.provide(ComputeProvider()),
+        Effect.provide(computeProviderLive()),
         Effect.provide(
           Layer.succeed(PrismaClient, withDefaultBranch(fixture.client)),
         ),
@@ -2755,7 +2768,7 @@ describe("Prisma Compute", () => {
           ),
         ).toEqual([]);
       }).pipe(
-        Effect.provide(ComputeProvider()),
+        Effect.provide(computeProviderLive()),
         Effect.provide(
           Layer.succeed(PrismaClient, withDefaultBranch(fixture.client)),
         ),
@@ -2840,7 +2853,7 @@ describe("Prisma Compute", () => {
           ),
         ).toEqual([]);
       }).pipe(
-        Effect.provide(ComputeProvider()),
+        Effect.provide(computeProviderLive()),
         Effect.provide(
           Layer.succeed(PrismaClient, withDefaultBranch(fixture.client)),
         ),
@@ -2952,7 +2965,7 @@ describe("Prisma Compute", () => {
         expect(fixture.hasDeployment("version-old")).toBe(true);
         expect(fixture.hasDeployment("version-new")).toBe(true);
       }).pipe(
-        Effect.provide(ComputeProvider()),
+        Effect.provide(computeProviderLive()),
         Effect.provide(
           Layer.succeed(PrismaClient, withDefaultBranch(fixture.client)),
         ),
@@ -3070,7 +3083,7 @@ describe("Prisma Compute", () => {
         expect(fixture.hasDeployment("version-new")).toBe(true);
         expect(fixture.hasDeployment("version-new-2")).toBe(true);
       }).pipe(
-        Effect.provide(ComputeProvider()),
+        Effect.provide(computeProviderLive()),
         Effect.provide(
           Layer.succeed(PrismaClient, withDefaultBranch(fixture.client)),
         ),
@@ -3214,7 +3227,7 @@ describe("Prisma Compute", () => {
           ),
         ).toHaveLength(2);
       }).pipe(
-        Effect.provide(ComputeProvider()),
+        Effect.provide(computeProviderLive()),
         Effect.provide(
           Layer.succeed(PrismaClient, withDefaultBranch(fixture.client)),
         ),
@@ -3288,7 +3301,7 @@ describe("Prisma Compute", () => {
           ),
         ).toEqual([]);
       }).pipe(
-        Effect.provide(ComputeProvider()),
+        Effect.provide(computeProviderLive()),
         Effect.provide(
           Layer.succeed(PrismaClient, withDefaultBranch(fixture.client)),
         ),
@@ -3398,7 +3411,7 @@ describe("Prisma Compute", () => {
         "prebuilt-archive",
       );
     }).pipe(
-      Effect.provide(ComputeProvider()),
+      Effect.provide(computeProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
       Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
       Effect.provide(PlatformServices),
@@ -3529,9 +3542,17 @@ describe("Prisma Compute", () => {
         expect(JSON.parse(manifest)).toMatchObject({
           entrypoint: "bundle/index.js",
         });
-        expect(bundle).toContain("Prisma Compute bootstrap starting");
+        // The generated entry is a shim over alchemy/Runtime/Bootstrap/Prisma;
+        // its label and the shared "bootstrap starting" message are separate
+        // literals joined at runtime (see Runtime/Bootstrap/Process.ts).
+        expect(bundle).toContain("Prisma Compute");
+        expect(bundle).toContain("bootstrap starting");
         expect(bundle).toMatch(/hostname\s*:\s*["'`]0\.0\.0\.0["'`]/);
-        expect(bundle.match(/prisma-runtime-stage-sentinel/g)).toHaveLength(2);
+        // The deploy-time stack identity is baked into the artifact (the shim
+        // passes it to the bootstrap once; the module fans it out to `Stack`
+        // and `Stage`).
+        expect(bundle).toContain("prisma-runtime-stack-sentinel");
+        expect(bundle).toContain("prisma-runtime-stage-sentinel");
         expect(bundle).toContain("ALCHEMY_PHASE");
         expect(bundle).toContain("runtime");
         expect(bundle).toContain("effect-native-ok");
@@ -3553,7 +3574,7 @@ describe("Prisma Compute", () => {
           resources: {},
           actions: {},
         }),
-        Effect.provide(ComputeProvider()),
+        Effect.provide(computeProviderLive()),
         Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
         Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
         Effect.provide(PlatformServices),
@@ -3665,7 +3686,7 @@ describe("Prisma Compute", () => {
       expect(tarText).toContain("compute.manifest.json");
       expect(tarText).toContain("named-handler-ok");
     }).pipe(
-      Effect.provide(ComputeProvider()),
+      Effect.provide(computeProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
       Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
       Effect.provide(PlatformServices),
@@ -4037,7 +4058,7 @@ describe("Prisma Compute", () => {
           ],
         ]);
       }).pipe(
-        Effect.provide(ComputeProvider()),
+        Effect.provide(computeProviderLive()),
         Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
         Effect.provide(FetchHttpClient.layer),
         Effect.provide(PlatformServices),
@@ -4148,7 +4169,7 @@ describe("Prisma Compute", () => {
       );
       expect(calls).toEqual([]);
     }).pipe(
-      Effect.provide(ComputeProvider()),
+      Effect.provide(computeProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
       Effect.provide(PlatformServices),
     );
@@ -4286,7 +4307,7 @@ describe("Prisma Compute", () => {
         },
       ]);
     }).pipe(
-      Effect.provide(ComputeProvider()),
+      Effect.provide(computeProviderLive()),
       Effect.provide(
         Layer.succeed(PrismaClient, withDefaultBranch(client, "preview")),
       ),
@@ -4463,7 +4484,7 @@ describe("Prisma Compute", () => {
           },
         ]);
       }).pipe(
-        Effect.provide(ComputeProvider()),
+        Effect.provide(computeProviderLive()),
         Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
         Effect.provide(FetchHttpClient.layer),
         Effect.provide(PlatformServices),
@@ -4611,7 +4632,7 @@ describe("Prisma Compute", () => {
         "env-old-bound-flag",
       ]);
     }).pipe(
-      Effect.provide(ComputeProvider()),
+      Effect.provide(computeProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
       Effect.provide(FetchHttpClient.layer),
       Effect.provide(PlatformServices),
@@ -4708,7 +4729,7 @@ describe("Prisma Compute", () => {
           ["deleteApp", "service-1"],
         ]);
       }).pipe(
-        Effect.provide(ComputeProvider()),
+        Effect.provide(computeProviderLive()),
         Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
       );
     },
@@ -4827,7 +4848,7 @@ describe("Prisma Compute", () => {
         },
       ]);
     }).pipe(
-      Effect.provide(ComputeProvider()),
+      Effect.provide(computeProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
       Effect.provide(FetchHttpClient.layer),
       Effect.provide(PlatformServices),
@@ -4992,7 +5013,7 @@ describe("Prisma Compute", () => {
         },
       ]);
     }).pipe(
-      Effect.provide(ComputeProvider()),
+      Effect.provide(computeProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
       Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
       Effect.provide(PlatformServices),
@@ -5114,7 +5135,7 @@ describe("Prisma Compute", () => {
         },
       ]);
     }).pipe(
-      Effect.provide(ComputeProvider()),
+      Effect.provide(computeProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
       Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
       Effect.provide(PlatformServices),
@@ -5226,7 +5247,7 @@ describe("Prisma Compute", () => {
         },
       ]);
     }).pipe(
-      Effect.provide(ComputeProvider()),
+      Effect.provide(computeProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
       Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
       Effect.provide(PlatformServices),
@@ -5350,7 +5371,7 @@ describe("Prisma Compute", () => {
           false,
         );
       }).pipe(
-        Effect.provide(ComputeProvider()),
+        Effect.provide(computeProviderLive()),
         Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
         Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
         Effect.provide(PlatformServices),
@@ -5662,7 +5683,7 @@ describe("Prisma Compute", () => {
         ["deleteApp", "service-1"],
       ]);
     }).pipe(
-      Effect.provide(ComputeProvider()),
+      Effect.provide(computeProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
       Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
       Effect.provide(PlatformServices),
@@ -5812,7 +5833,7 @@ describe("Prisma Compute", () => {
           ["getDeployment", "version-new"],
         ]);
       }).pipe(
-        Effect.provide(ComputeProvider()),
+        Effect.provide(computeProviderLive()),
         Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
         Effect.provide(FetchHttpClient.layer),
         Effect.provide(PlatformServices),
@@ -5931,7 +5952,7 @@ describe("Prisma Compute", () => {
           calls.filter(([name]) => name === "createAppDeployment"),
         ).toHaveLength(1);
       }).pipe(
-        Effect.provide(ComputeProvider()),
+        Effect.provide(computeProviderLive()),
         Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
         Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
         Effect.provide(PlatformServices),
@@ -6084,7 +6105,7 @@ describe("Prisma Compute", () => {
         });
         expect(calls).toContainEqual(["deleteDeployment", "version-1"]);
       }).pipe(
-        Effect.provide(ComputeProvider()),
+        Effect.provide(computeProviderLive()),
         Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
         Effect.provideService(HttpClient.HttpClient, http),
         Effect.provide(PlatformServices),
@@ -6239,7 +6260,7 @@ describe("Prisma Compute", () => {
           ["getApp", "service-1"],
         ]);
       }).pipe(
-        Effect.provide(ComputeProvider()),
+        Effect.provide(computeProviderLive()),
         Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
         Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
         Effect.provide(PlatformServices),
@@ -6469,7 +6490,7 @@ describe("Prisma Compute", () => {
         ["getDeployment", "version-new"],
       ]);
     }).pipe(
-      Effect.provide(ComputeProvider()),
+      Effect.provide(computeProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
       Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
       Effect.provide(PlatformServices),
@@ -6509,7 +6530,7 @@ describe("Prisma Compute", () => {
 
       expect(chunks).toEqual([]);
     }).pipe(
-      Effect.provide(ComputeProvider()),
+      Effect.provide(computeProviderLive()),
       Effect.provide(
         Layer.succeed(PrismaClient, {} as unknown as PrismaManagementClient),
       ),
@@ -6603,7 +6624,7 @@ describe("Prisma Compute", () => {
         ["deleteApp", "service-1"],
       ]);
     }).pipe(
-      Effect.provide(ComputeProvider()),
+      Effect.provide(computeProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
       Effect.provide(FetchHttpClient.layer),
       Effect.provide(PlatformServices),
@@ -6728,7 +6749,7 @@ describe("Prisma Compute", () => {
         ["deleteApp", "service-1"],
       ]);
     }).pipe(
-      Effect.provide(ComputeProvider()),
+      Effect.provide(computeProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
       Effect.provide(FetchHttpClient.layer),
       Effect.provide(PlatformServices),
@@ -6818,7 +6839,7 @@ describe("Prisma Compute", () => {
         ["deleteApp", "service-1"],
       ]);
     }).pipe(
-      Effect.provide(ComputeProvider()),
+      Effect.provide(computeProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
       Effect.provide(FetchHttpClient.layer),
       Effect.provide(PlatformServices),
@@ -6899,7 +6920,7 @@ describe("Prisma Compute", () => {
           ["deleteApp", "service-1"],
         ]);
       }).pipe(
-        Effect.provide(ComputeProvider()),
+        Effect.provide(computeProviderLive()),
         Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
         Effect.provide(FetchHttpClient.layer),
         Effect.provide(PlatformServices),
@@ -6950,7 +6971,7 @@ describe("Prisma Compute", () => {
         } as unknown as PrismaManagementClient;
 
         const provider = yield* Compute.Provider.pipe(
-          Effect.provide(ComputeProvider()),
+          Effect.provide(computeProviderLive()),
           Effect.provide(
             Layer.succeed(PrismaClient, withDefaultBranch(client)),
           ),

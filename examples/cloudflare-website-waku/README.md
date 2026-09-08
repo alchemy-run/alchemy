@@ -10,7 +10,7 @@ const site = yield* Cloudflare.Website.Waku("WakuSite", {
     flags: ["nodejs_als"], // waku's server runtime needs AsyncLocalStorage
   },
   env: {
-    GREETING: "Hello from alchemy",
+    GREETING: "Hello from Waku on Cloudflare!",
   },
 });
 ```

@@ -27,6 +27,7 @@ export interface ViteChildConfig {
   source?: {
     descriptor: WorkerSourceDescriptor;
     id: string;
+    fqn: string;
     assets: WorkerAssetsConfig | undefined;
   };
   worker: {
@@ -38,6 +39,8 @@ export interface ViteChildConfig {
     bindingDescriptors: WorkerBinding[];
     /** Binding name → opt-out of local emulation (`Alchemy.remote()`). */
     devRemote: Record<string, boolean>;
+    /** Simulated Cloudflare Access config (`dev: { access: ... }`). */
+    devAccess?: { aud?: string; identity?: Record<string, unknown> };
     durableObjectNamespaces: (DurableObjectNamespace & {
       uniqueKey: string;
     })[];

@@ -131,9 +131,8 @@ export const withModelParameters =
  * `AccessDeniedException`. Many newer models are only invocable through a
  * cross-region inference profile id, not their bare foundation-model id.
  *
- * @binding
- * @section Effect AI on Bedrock
- * @example Generate Text
+ * ### Effect AI on Bedrock
+ * **Example:** Generate Text
  * ```typescript
  * import { LanguageModel } from "effect/unstable/ai";
  *
@@ -148,7 +147,7 @@ export const withModelParameters =
  * }).pipe(Effect.provide(model));
  * ```
  *
- * @example Stream Text
+ * **Example:** Stream Text
  * ```typescript
  * const parts = LanguageModel.streamText({ prompt }).pipe(
  *   Stream.provide(model),
@@ -156,8 +155,8 @@ export const withModelParameters =
  * // parts is a Stream of text-start / text-delta / ... / finish parts
  * ```
  *
- * @section Runtime Configuration
- * @example Override Parameters Per Call
+ * ### Runtime Configuration
+ * **Example:** Override Parameters Per Call
  * The binding's `parameters` are only defaults — scope overrides onto any
  * call with `withModelParameters`.
  * ```typescript
@@ -166,7 +165,7 @@ export const withModelParameters =
  * );
  * ```
  *
- * @example Bind Multiple Models and Pick Per Call
+ * **Example:** Bind Multiple Models and Pick Per Call
  * IAM access is fixed at deploy time (scoped to the bound list); which of
  * those models serves a given request is a runtime decision.
  * ```typescript
@@ -184,8 +183,8 @@ export const withModelParameters =
  * );
  * ```
  *
- * @section Tool Calling
- * @example Call Tools with a Toolkit
+ * ### Tool Calling
+ * **Example:** Call Tools with a Toolkit
  * ```typescript
  * import { Tool, Toolkit } from "effect/unstable/ai";
  * import * as Schema from "effect/Schema";
@@ -207,6 +206,8 @@ export const withModelParameters =
  *   Effect.provide(model),
  * );
  * ```
+ *
+ * @binding
  */
 export interface LanguageModel extends Binding.Service<
   LanguageModel,

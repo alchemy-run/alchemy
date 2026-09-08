@@ -72,7 +72,7 @@ test(
   "serves the index HTML",
   Effect.gen(function* () {
     const url = yield* base;
-    const html = yield* getBodyWhenReady(url, "<div id=\"root\">");
+    const html = yield* getBodyWhenReady(url, '<div id="root">');
     expect(html).toContain("Foldkit on Cloudflare");
   }),
   { timeout: 180_000 },

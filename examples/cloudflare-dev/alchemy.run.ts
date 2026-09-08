@@ -48,11 +48,13 @@ const AsyncWorker = (deps: {
 }) =>
   Effect.gen(function* () {
     const queue = yield* Cloudflare.Queues.Queue("AsyncWorkerQueue");
-    const bucket = yield* Cloudflare.R2.Bucket("AsyncWorkerBucket");
+    const bucket = yield* Cloudflare.R2.Bucket("AsyncWorkerBucket", {
+      forceDestroy: true,
+    });
     const db = yield* Cloudflare.D1.Database("AsyncWorkerDB", {
       // Applied on deploy — including local dev, where they run against the
       // local D1 simulator through an ephemeral workerd gateway.
-      migrationsDir: "./migrations",
+      migrations: "./migrations",
     });
     const worker = yield* Cloudflare.Worker("AsyncWorker", {
       main: "./src/AsyncWorker.ts",
@@ -120,7 +122,6 @@ const MediaWorker = Effect.gen(function* () {
   });
   const worker = yield* Cloudflare.Worker("MediaWorker", {
     main: "./src/MediaWorker.ts",
-    compatibility: { flags: ["nodejs_compat"] },
     env: {
       BROWSER: Cloudflare.Browser("BROWSER"),
       IMAGES: Cloudflare.Images.Images("IMAGES"),
@@ -166,9 +167,7 @@ export default Alchemy.Stack(
     const effectWorker = yield* EffectWorker;
     const media = yield* MediaWorker;
     const inboxWorker = yield* InboxWorker;
-    const hyperdrive = HYPERDRIVE_DEV_URL
-      ? yield* HyperdriveWorker
-      : undefined;
+    const hyperdrive = HYPERDRIVE_DEV_URL ? yield* HyperdriveWorker : undefined;
 
     return {
       asyncWorker: asyncWorker.url,

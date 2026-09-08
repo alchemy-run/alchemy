@@ -15,8 +15,20 @@ const server = Bun.serve({
     if (pathname === "/__dev-env") {
       return Response.json({ marker: process.env.DEV_MARKER ?? null });
     }
+    // Echoes exactly what the origin received, so a test can compare the
+    // request an emulated CloudFront edge forwarded against the request the
+    // TestFunction API says the same function produced.
+    if (pathname.endsWith("/__echo")) {
+      return Response.json({
+        marker: process.env.DEV_MARKER ?? null,
+        path: pathname,
+        headers: Object.fromEntries(request.headers),
+      });
+    }
+    // Directory-style paths resolve to their index page, so a site mounted
+    // under a Router path prefix (`/docs/`) serves like a real static host.
     const file = Bun.file(
-      `${process.cwd()}/site${pathname === "/" ? "/index.html" : pathname}`,
+      `${process.cwd()}/site${pathname.endsWith("/") ? `${pathname}index.html` : pathname}`,
     );
     return (await file.exists())
       ? new Response(file)

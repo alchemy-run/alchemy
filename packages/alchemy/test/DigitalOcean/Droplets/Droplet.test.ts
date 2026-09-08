@@ -6,10 +6,7 @@ import {
 import * as Provider from "@/Provider";
 import { State } from "@/State/State";
 import * as Test from "@/Test/Alchemy";
-import {
-  dropletsDestroy,
-  dropletsGet,
-} from "@distilled.cloud/digitalocean/droplets";
+import { dropletsDestroy, getDroplet } from "@distilled.cloud/digitalocean";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { logLevel, outOfBand, skipLive } from "../support.ts";
@@ -334,7 +331,7 @@ test.provider.skipIf(skipLive)(
       expect(created.ipv4).toMatch(/^\d+\.\d+\.\d+\.\d+$/);
       expect(created.tags).toEqual(["alchemy-test"]);
 
-      const remote = yield* dropletsGet({ droplet_id: created.dropletId }).pipe(
+      const remote = yield* getDroplet({ droplet_id: created.dropletId }).pipe(
         outOfBand,
       );
       expect(remote.droplet.name).toEqual(DROPLET_NAME);
@@ -358,7 +355,7 @@ test.provider.skipIf(skipLive)(
 
       yield* stack.destroy();
 
-      const gone = yield* dropletsGet({ droplet_id: created.dropletId }).pipe(
+      const gone = yield* getDroplet({ droplet_id: created.dropletId }).pipe(
         Effect.map(() => false),
         Effect.catchTag("NotFound", () => Effect.succeed(true)),
         outOfBand,

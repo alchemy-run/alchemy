@@ -111,18 +111,15 @@ for the checked-in example.
 
 ## Add environment variables
 
-The server function's environment is configured under
-`server.environment` — plain values, or outputs from other resources
-in the Stack:
+The server function's environment is configured under `env` — plain
+values, or outputs from other resources in the Stack:
 
 ```diff lang="typescript"
 // alchemy.run.ts
 export const Website = AWS.Website.Nextjs("Website", {
-+  server: {
-+    environment: {
-+      GREETING: "Hello from Alchemy!",
-+      API_BASE: api.url,
-+    },
++  env: {
++    GREETING: "Hello from Alchemy!",
++    API_BASE: api.url,
 +  },
 });
 ```
@@ -176,9 +173,9 @@ infrastructure even during dev.
 
 ```typescript
 const site = yield* AWS.Website.Nextjs("Web", {
-  domain: {
-    name: "app.example.com",
-    hostedZoneId: zone.hostedZoneId,
-  },
+  domain: { name: "app.example.com" },
 });
 ```
+
+The hosted zone is inferred from the hostname. Pass `hostedZoneId` to
+pin it when several zones could match.

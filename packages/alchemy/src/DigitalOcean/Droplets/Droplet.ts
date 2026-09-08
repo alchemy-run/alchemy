@@ -1,22 +1,10 @@
-import {
-  dropletActionsGet,
-  dropletActionsPost,
-  dropletsCreate,
-  dropletsDestroy,
-  dropletsGet,
-  dropletsList,
-  type Droplet as ApiDroplet,
-  type DropletActionRename,
-  type DropletSingleCreateInput,
-  type DropletStatus,
-} from "@distilled.cloud/digitalocean/droplets";
-import {
-  tagsAssignResources,
-  tagsCreate,
-  tagsDelete,
-  tagsGet,
-  tagsUnassignResources,
-} from "@distilled.cloud/digitalocean/tags";
+import * as DO from "@distilled.cloud/digitalocean";
+import type {
+  Droplet as ApiDroplet,
+  DropletActionRename,
+  DropletSingleCreateInput,
+  DropletStatus,
+} from "@distilled.cloud/digitalocean";
 import * as Arr from "effect/Array";
 import * as Clock from "effect/Clock";
 import * as Data from "effect/Data";
@@ -232,13 +220,10 @@ type DropletAttributes = Droplet["Attributes"];
  * is lost, alchemy finds the droplet again through that tag. A droplet with
  * the same name but no tag is `Unowned` and needs `--adopt`.
  *
- * @resource
- * @product Droplets
- * @category Compute
  * @see https://docs.digitalocean.com/reference/api/digitalocean/#tag/Droplets
  *
- * @section Creating a Droplet
- * @example Host reachable over SSH
+ * ### Creating a Droplet
+ * **Example:** Host reachable over SSH
  * ```typescript
  * const key = yield* DigitalOcean.SshKey("deploy-key", {
  *   publicKey: process.env.SSH_PUBLIC_KEY!,
@@ -253,7 +238,7 @@ type DropletAttributes = Droplet["Attributes"];
  * // host.ipv4 is the public address once the droplet is active.
  * ```
  *
- * @example Bootstrap via cloud-init
+ * **Example:** Bootstrap via cloud-init
  * ```typescript
  * const host = yield* DigitalOcean.Droplet("app", {
  *   region: "sfo3",
@@ -268,8 +253,8 @@ type DropletAttributes = Droplet["Attributes"];
  * });
  * ```
  *
- * @section Replacing on a schedule
- * @example Rebuild monthly on a fresh image
+ * ### Replacing on a schedule
+ * **Example:** Rebuild monthly on a fresh image
  * ```typescript
  * const host = yield* DigitalOcean.Droplet("app", {
  *   region: "sfo3",
@@ -281,8 +266,8 @@ type DropletAttributes = Droplet["Attributes"];
  * });
  * ```
  *
- * @section Tagging
- * @example Tag droplets so a firewall can target them by role
+ * ### Tagging
+ * **Example:** Tag droplets so a firewall can target them by role
  * ```typescript
  * const host = yield* DigitalOcean.Droplet("app", {
  *   region: "sfo3",
@@ -291,6 +276,10 @@ type DropletAttributes = Droplet["Attributes"];
  *   tags: ["web"], // updated in place
  * });
  * ```
+ *
+ * @resource
+ * @product Droplets
+ * @category Compute
  */
 export const Droplet = Resource<Droplet>("DigitalOcean.Droplet");
 
@@ -464,17 +453,17 @@ export const DropletProvider = () =>
   Provider.effect(
     Droplet,
     Effect.gen(function* () {
-      const create = yield* dropletsCreate;
-      const get = yield* dropletsGet;
-      const deleteDroplet = yield* dropletsDestroy;
-      const list = yield* dropletsList;
-      const postAction = yield* dropletActionsPost;
-      const getAction = yield* dropletActionsGet;
-      const getTag = yield* tagsGet;
-      const createTag = yield* tagsCreate;
-      const deleteTag = yield* tagsDelete;
-      const assignTag = yield* tagsAssignResources;
-      const unassignTag = yield* tagsUnassignResources;
+      const create = yield* DO.createDroplet;
+      const get = yield* DO.getDroplet;
+      const deleteDroplet = yield* DO.dropletsDestroy;
+      const list = yield* DO.listDroplets;
+      const postAction = yield* DO.postDropletAction;
+      const getAction = yield* DO.getDropletAction;
+      const getTag = yield* DO.getTag;
+      const createTag = yield* DO.createTag;
+      const deleteTag = yield* DO.deleteTag;
+      const assignTag = yield* DO.assignTagResources;
+      const unassignTag = yield* DO.unassignTagResources;
 
       const toAttrs = (droplet: ApiDroplet): DropletAttributes => ({
         dropletId: droplet.id,
@@ -586,9 +575,8 @@ export const DropletProvider = () =>
       ) {
         const status = yield* pollUntil(
           getAction({ droplet_id: dropletId, action_id: actionId }).pipe(
-            Effect.map(
-              (response): Option.Option<string> =>
-                Option.some(response.action.status),
+            Effect.map((response): Option.Option<string> =>
+              Option.some(response.action.status),
             ),
             Effect.catchTag("NotFound", () =>
               Effect.succeed(Option.some(ACTION_IN_PROGRESS)),

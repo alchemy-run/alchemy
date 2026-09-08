@@ -214,11 +214,8 @@ export type ZoneDnsSettings = Resource<
  * Some fields are plan-gated: `foundationDns` is a paid add-on,
  * `nameservers.type: "custom.*"` requires account custom nameservers,
  * `internalDns` and `secondaryOverrides` are Enterprise features.
- * @resource
- * @product DNS
- * @category Domains & DNS
- * @section Basic settings
- * @example Lower the NS record TTL
+ * ### Basic settings
+ * **Example:** Lower the NS record TTL
  * ```typescript
  * yield* Cloudflare.DNS.ZoneDnsSettings("DnsSettings", {
  *   zoneId: zone.zoneId,
@@ -226,7 +223,7 @@ export type ZoneDnsSettings = Resource<
  * });
  * ```
  *
- * @example Flatten every CNAME in the zone
+ * **Example:** Flatten every CNAME in the zone
  * ```typescript
  * yield* Cloudflare.DNS.ZoneDnsSettings("DnsSettings", {
  *   zoneId: zone.zoneId,
@@ -234,8 +231,8 @@ export type ZoneDnsSettings = Resource<
  * });
  * ```
  *
- * @section SOA tuning
- * @example Shorten the negative-caching TTL
+ * ### SOA tuning
+ * **Example:** Shorten the negative-caching TTL
  * ```typescript
  * yield* Cloudflare.DNS.ZoneDnsSettings("DnsSettings", {
  *   zoneId: zone.zoneId,
@@ -243,14 +240,18 @@ export type ZoneDnsSettings = Resource<
  * });
  * ```
  *
- * @section Multi-provider DNS
- * @example Serve the zone alongside another DNS provider
+ * ### Multi-provider DNS
+ * **Example:** Serve the zone alongside another DNS provider
  * ```typescript
  * yield* Cloudflare.DNS.ZoneDnsSettings("DnsSettings", {
  *   zoneId: zone.zoneId,
  *   multiProvider: true,
  * });
  * ```
+ *
+ * @resource
+ * @product DNS
+ * @category Domains & DNS
  */
 export const ZoneDnsSettings = Resource<ZoneDnsSettings>(TypeId, {
   aliases: ["Cloudflare.Dns.ZoneSettings"],

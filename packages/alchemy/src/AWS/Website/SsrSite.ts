@@ -168,9 +168,8 @@ const serverOriginOf = (server: SsrSiteServerOrigin): Input<string> =>
  *
  * `SsrSite` serves a dynamic origin behind CloudFront and can optionally split
  * immutable static assets into a private S3 bucket origin.
- * @resource
- * @section Creating SSR Sites
- * @example Lambda URL Origin
+ * ### Creating SSR Sites
+ * **Example:** Lambda URL Origin
  * ```typescript
  * const site = yield* SsrSite("App", {
  *   server: {
@@ -180,7 +179,7 @@ const serverOriginOf = (server: SsrSiteServerOrigin): Input<string> =>
  * });
  * ```
  *
- * @example SSR With Static Assets
+ * **Example:** SSR With Static Assets
  * ```typescript
  * const site = yield* SsrSite("App", {
  *   server: {
@@ -193,8 +192,8 @@ const serverOriginOf = (server: SsrSiteServerOrigin): Input<string> =>
  * });
  * ```
  *
- * @section Custom Domains
- * @example SSR Site With A Route 53 Domain
+ * ### Custom Domains
+ * **Example:** SSR Site With A Route 53 Domain
  * ```typescript
  * const site = yield* SsrSite("App", {
  *   server: {
@@ -208,8 +207,8 @@ const serverOriginOf = (server: SsrSiteServerOrigin): Input<string> =>
  * });
  * ```
  *
- * @section Router Composition
- * @example Route Through An Existing Router
+ * ### Router Composition
+ * **Example:** Route Through An Existing Router
  * ```typescript
  * // Skip the standalone distribution and register the returned
  * // routeTargets on an AWS.Website.Router instead.
@@ -227,6 +226,8 @@ const serverOriginOf = (server: SsrSiteServerOrigin): Input<string> =>
  *   },
  * });
  * ```
+ *
+ * @resource
  */
 export const SsrSite = (id: string, props: SsrSiteProps) =>
   Effect.gen(function* () {
@@ -404,7 +405,7 @@ export const SsrSite = (id: string, props: SsrSiteProps) =>
     }
 
     const records =
-      domain?.hostedZoneId && domain.dns !== false
+      domain && domain.dns !== false
         ? yield* Effect.forEach(
             [
               domain.name,
@@ -413,7 +414,9 @@ export const SsrSite = (id: string, props: SsrSiteProps) =>
             ],
             (name, index) =>
               Route53Record(`AliasRecord${index + 1}`, {
-                hostedZoneId: domain.hostedZoneId!,
+                // Optional — the Record provider infers the most specific
+                // public zone containing `name` when omitted.
+                hostedZoneId: domain.hostedZoneId,
                 name,
                 type: "A",
                 aliasTarget: {

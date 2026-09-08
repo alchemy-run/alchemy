@@ -7,6 +7,7 @@ const thirdPartyPackages: Array<string> = [
   "alchemy",
   "frontend-frameworks",
   "cloudflare-runtime",
+  "node-utils",
 ];
 const readmePackages: Array<string> = ["alchemy"];
 

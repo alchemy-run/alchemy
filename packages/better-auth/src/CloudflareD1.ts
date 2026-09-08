@@ -18,15 +18,12 @@ import type { BetterAuthMigrationError } from "./Errors.ts";
  * migrations run over the D1 HTTP query API — which also transparently
  * targets the local D1 simulator under `alchemy dev`.
  *
- * @layer
- * @provides BetterAuth.Database
- * @product D1
  *
- * @section Using D1 as the auth database
+ * ### Using D1 as the auth database
  * Provide the layer on the Worker impl effect that yields `BetterAuth`.
  * The database resource can be referenced from module scope — the layer
  * accepts the resource or its Effect.
- * @example Worker with a D1-backed BetterAuth
+ * **Example:** Worker with a D1-backed BetterAuth
  * ```typescript
  * import { BetterAuth } from "@alchemy.run/better-auth";
  * import { CloudflareD1 } from "@alchemy.run/better-auth/CloudflareD1";
@@ -56,17 +53,21 @@ import type { BetterAuthMigrationError } from "./Errors.ts";
  * ) {}
  * ```
  *
- * @section Migrations
+ * ### Migrations
  * The schema migration Action connects over the D1 HTTP API at deploy
  * time — the Worker's native binding is never used outside the deployed
  * runtime, and no migration code ships in the Worker bundle.
- * @example Opting out of automatic migrations
+ * **Example:** Opting out of automatic migrations
  * ```typescript
  * const auth = yield* BetterAuth({
  *   migrate: false, // manage the schema yourself
  *   emailAndPassword: { enabled: true },
  * });
  * ```
+ *
+ * @layer
+ * @provides BetterAuth.Database
+ * @product D1
  */
 export const CloudflareD1 = (
   database:

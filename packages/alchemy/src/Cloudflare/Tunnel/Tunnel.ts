@@ -104,17 +104,14 @@ export type Tunnel = Resource<
 /**
  * A Cloudflare Tunnel that establishes a secure connection from your origin to
  * Cloudflare's edge.
- * @resource
- * @product Tunnels
- * @category Cloudflare One (Zero Trust)
- * @section Creating a Tunnel
- * @example Basic tunnel
+ * ### Creating a Tunnel
+ * **Example:** Basic tunnel
  * ```typescript
  * const tunnel = yield* Cloudflare.Tunnel.Tunnel("MyTunnel");
  * // Run the connector with: cloudflared tunnel run --token <Redacted.value(tunnel.token)>
  * ```
  *
- * @example Tunnel with ingress rules
+ * **Example:** Tunnel with ingress rules
  * ```typescript
  * const tunnel = yield* Cloudflare.Tunnel.Tunnel("Web", {
  *   ingress: [
@@ -124,7 +121,7 @@ export type Tunnel = Resource<
  * });
  * ```
  *
- * @section Managing Tunnels at Runtime
+ * ### Managing Tunnels at Runtime
  * The `Tunnel` resource manages a single, statically-declared tunnel as part of
  * a stack. To create, read, update, or delete tunnels *on the fly* from inside
  * a deployed Worker, bind one of the runtime tunnel clients instead. Each
@@ -137,7 +134,7 @@ export type Tunnel = Resource<
  *   `putConfiguration`); scoped to `Cloudflare Tunnel Write`.
  * - {@link ReadWriteTunnel} — the full CRUD surface; scoped to both.
  *
- * @example Create a tunnel on demand from a Worker
+ * **Example:** Create a tunnel on demand from a Worker
  * ```typescript
  * // init
  * const tunnels = yield* Cloudflare.Tunnel.ReadWriteTunnel();
@@ -150,6 +147,10 @@ export type Tunnel = Resource<
  *   }),
  * };
  * ```
+ *
+ * @resource
+ * @product Tunnels
+ * @category Cloudflare One (Zero Trust)
  */
 export const Tunnel = Resource<Tunnel>("Cloudflare.Tunnel.Tunnel", {
   aliases: ["Cloudflare.Tunnel"],

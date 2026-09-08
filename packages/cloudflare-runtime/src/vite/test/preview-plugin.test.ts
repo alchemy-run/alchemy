@@ -116,9 +116,13 @@ describe("preview plugin", () => {
     try {
       expect(startedBuilds).toHaveLength(1);
       const build = startedBuilds[0]!;
-      expect(build.directory).toBe(NodePath.join(root, "dist", "ssr"));
+      expect(build.directory).toBe(
+        await NodeFs.realpath(NodePath.join(root, "dist", "ssr")),
+      );
       expect(build.entryModule).toBe("worker-entry.js");
-      expect(build.assetsDirectory).toBe(NodePath.join(root, "dist", "client"));
+      expect(build.assetsDirectory).toBe(
+        await NodeFs.realpath(NodePath.join(root, "dist", "client")),
+      );
     } finally {
       await server.close();
     }

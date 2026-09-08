@@ -3,7 +3,7 @@ import * as DigitalOcean from "@/DigitalOcean";
 import { SshKey } from "@/DigitalOcean/SshKeys/SshKey";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import { sshKeysGet } from "@distilled.cloud/digitalocean/sshKeys";
+import { getSshKey } from "@distilled.cloud/digitalocean";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { logLevel, outOfBand, skipLive } from "../support.ts";
@@ -43,7 +43,7 @@ test.provider("diff ignores surrounding whitespace in publicKey", () =>
 );
 
 const isGone = (sshKeyId: number) =>
-  sshKeysGet({ ssh_key_identifier: String(sshKeyId) }).pipe(
+  getSshKey({ ssh_key_identifier: String(sshKeyId) }).pipe(
     Effect.map(() => false),
     Effect.catchTag("NotFound", () => Effect.succeed(true)),
     outOfBand,
@@ -67,7 +67,7 @@ test.provider.skipIf(skipLive)(
       expect(created.publicKey).toEqual(PUBLIC_KEY);
       expect(created.fingerprint).toMatch(/^([0-9a-f]{2}:)+[0-9a-f]{2}$/);
 
-      const remote = yield* sshKeysGet({
+      const remote = yield* getSshKey({
         ssh_key_identifier: String(created.sshKeyId),
       }).pipe(outOfBand);
       expect(remote.ssh_key.name).toEqual(KEY_NAME);
@@ -106,7 +106,7 @@ test.provider.skipIf(skipLive)(
         )
         .pipe(Effect.flip);
       expect(error).toBeInstanceOf(OwnedBySomeoneElse);
-      const untouched = yield* sshKeysGet({
+      const untouched = yield* getSshKey({
         ssh_key_identifier: String(created.sshKeyId),
       }).pipe(outOfBand);
       expect(untouched.ssh_key.name).toEqual(RENAMED_KEY_NAME);

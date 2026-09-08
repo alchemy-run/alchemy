@@ -67,10 +67,9 @@ export type CertRequest = Resource<
  * one even for the same inputs. The CSR is built once and stored. It is
  * built again only when the key, the common name, or the DNS names change.
  *
- * @resource
  *
- * @section Generating a CSR
- * @example CSR for a Cloudflare Origin CA certificate
+ * ### Generating a CSR
+ * **Example:** CSR for a Cloudflare Origin CA certificate
  * ```typescript
  * const key = yield* KeyPair("origin-key", { algorithm: "ec" });
  * const csr = yield* CertRequest("origin-csr", {
@@ -83,6 +82,8 @@ export type CertRequest = Resource<
  *   { csr: csr.csr, hostnames: ["example.com"], requestType: "origin-ecc" },
  * );
  * ```
+ *
+ * @resource
  */
 export const CertRequest = Resource<CertRequest>("Alchemy.CertRequest");
 

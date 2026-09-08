@@ -8,7 +8,7 @@ import {
 } from "@/DigitalOcean/Firewalls/Firewall";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import { firewallsGet } from "@distilled.cloud/digitalocean/firewalls";
+import { getFirewall } from "@distilled.cloud/digitalocean";
 import { expect, test as unit } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { logLevel, outOfBand, skipLive } from "../support.ts";
@@ -171,7 +171,7 @@ test.provider(
 );
 
 const isGone = (firewallId: string) =>
-  firewallsGet({ firewall_id: firewallId }).pipe(
+  getFirewall({ firewall_id: firewallId }).pipe(
     Effect.map(() => false),
     Effect.catchTag("NotFound", () => Effect.succeed(true)),
     outOfBand,
@@ -198,7 +198,7 @@ test.provider.skipIf(skipLive)(
       // omitted outboundRules = tcp, udp, icmp allow-all
       expect(created.outboundRules).toHaveLength(3);
 
-      const remote = yield* firewallsGet({
+      const remote = yield* getFirewall({
         firewall_id: created.firewallId,
       }).pipe(outOfBand);
       expect(remote.firewall.name).toEqual(FIREWALL_NAME);
@@ -253,7 +253,7 @@ test.provider.skipIf(skipLive)(
       );
       expect(created.outboundRules).toEqual([]);
 
-      const remote = yield* firewallsGet({
+      const remote = yield* getFirewall({
         firewall_id: created.firewallId,
       }).pipe(outOfBand);
       expect(remote.firewall.outbound_rules ?? []).toEqual([]);

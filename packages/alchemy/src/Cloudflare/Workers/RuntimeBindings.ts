@@ -286,6 +286,12 @@ export const materializeRuntimeBindings = Effect.fn(function* (
     bindingDescriptors: WorkerBinding[];
     /** Binding name → opt-out of local emulation (`Alchemy.remote()`). */
     devRemote?: Record<string, boolean>;
+    /**
+     * Simulated Cloudflare Access config (`dev: { access: ... }`), lowered
+     * into the `ALCHEMY_DEV_ACCESS` env binding the worker bridge reads to
+     * serve `ctx.access` locally.
+     */
+    devAccess?: { aud?: string; identity?: Record<string, unknown> };
   },
   options: {
     accountId: string;
@@ -316,6 +322,9 @@ export const materializeRuntimeBindings = Effect.fn(function* (
           : Json.local(key, unredacted);
       }),
     ...(config.hasAssets ? [Assets.local("ASSETS")] : []),
+    ...(config.devAccess !== undefined
+      ? [Json.local("ALCHEMY_DEV_ACCESS", config.devAccess)]
+      : []),
   ];
   for (const descriptor of config.bindingDescriptors) {
     if (descriptor.type === "self_url") {

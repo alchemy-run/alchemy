@@ -182,18 +182,13 @@ const transientRetry = <A, E extends { _tag: string }, R>(
  * the cluster/secret ARNs. Requires the cluster to have the Data API
  * enabled (`AWS.RDS.Aurora` enables it by default).
  *
- * @layer
- * @provides BetterAuth.Database
- * @peer kysely
- * @peer @distilled.cloud/aws
- * @product Aurora
  *
- * @section Lambda with an Aurora-backed BetterAuth
+ * ### Lambda with an Aurora-backed BetterAuth
  * Pass the `AWS.RDS.Aurora` composite directly — the layer wires the
  * cluster, credentials secret, and the writer-instance dependency (so
  * deploy-time migrations wait for the cluster to be queryable) from one
  * value.
- * @example Function URL serving auth over the Data API
+ * **Example:** Function URL serving auth over the Data API
  * ```typescript
  * import { BetterAuth } from "@alchemy.run/better-auth";
  * import { AuroraDataApi } from "@alchemy.run/better-auth/AuroraDataApi";
@@ -210,14 +205,20 @@ const transientRetry = <A, E extends { _tag: string }, R>(
  * );
  * ```
  *
- * @section Serverless v2 scale-from-zero
+ * ### Serverless v2 scale-from-zero
  * A paused cluster answers `DatabaseResumingException` while waking; the
  * layer retries the transient window with bounded backoff at both deploy
  * and runtime.
- * @example Bare cluster + explicit secret
+ * **Example:** Bare cluster + explicit secret
  * ```typescript
  * AuroraDataApi(cluster, { secret, database: "auth" })
  * ```
+ *
+ * @layer
+ * @provides BetterAuth.Database
+ * @peer kysely
+ * @peer @distilled.cloud/aws
+ * @product Aurora
  */
 export const AuroraDataApi = (
   cluster:

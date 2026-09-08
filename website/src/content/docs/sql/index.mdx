@@ -16,6 +16,9 @@ everything else.
 - [Hyperdrive](/cloudflare/data/hyperdrive) — edge connection pooling
   for any Postgres or MySQL: [Neon](/neon),
   [PlanetScale](/planetscale), RDS, or a database you already run.
+- [Fly Postgres](/fly/data/postgres) — billed Managed Postgres.
+  Bind `ConnectPostgres` on a Service; `migrations` is the same
+  surface as Neon.
 - AWS-side connections — DSQL, RDS, and Redshift bindings in the
   [API reference](/providers).
 
@@ -77,6 +80,8 @@ explains why.
   queries, end to end.
 - [Add Drizzle ORM](/cloudflare/data/drizzle) — full Worker wiring on
   Postgres via Hyperdrive.
+- [Fly Postgres](/fly/data/postgres) — Managed Postgres on a Fly
+  Service with `ConnectPostgres`.
 - [Drizzle on D1](/cloudflare/data/d1-drizzle) — full Worker wiring
   on D1.
 - [API reference](/providers) — every SQL and Drizzle export.

@@ -628,13 +628,11 @@ export const makeNuxtSource = (options: NuxtSourceOptions): SourceProvider => {
           }),
         );
       }
-      const files = output.serverModules.map(
-        (module): SourceBundleFile => ({
-          path: module.name,
-          content: module.content,
-          hash: module.hash,
-        }),
-      ) as [SourceBundleFile, ...Array<SourceBundleFile>];
+      const files = output.serverModules.map((module): SourceBundleFile => ({
+        path: module.name,
+        content: module.content,
+        hash: module.hash,
+      })) as [SourceBundleFile, ...Array<SourceBundleFile>];
       const [bundleHash, assets, input] = yield* Effect.all(
         [
           sha256Stable(files.map((file) => `${file.path}:${file.hash}`)),

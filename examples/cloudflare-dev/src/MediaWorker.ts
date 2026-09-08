@@ -82,10 +82,13 @@ export default {
             input: ReadableStream | string,
             params?: cf.StreamUrlUploadParams,
           ) => Promise<cf.StreamVideo>;
-          const video = await upload(request.body as unknown as ReadableStream, {
-            meta: { title: "cloudflare-dev-example" },
-            creator: "alchemy",
-          });
+          const video = await upload(
+            request.body as unknown as ReadableStream,
+            {
+              meta: { title: "cloudflare-dev-example" },
+              creator: "alchemy",
+            },
+          );
           return Response.json(video);
         }
         case "/stream/details": {

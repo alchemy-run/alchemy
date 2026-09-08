@@ -29,11 +29,10 @@ export type View = Resource<
  *
  * The path identifier is `name`. Renaming a view triggers a replacement
  * (the old one is deleted, a new one is created).
- * @resource
  * @see https://axiom.co/docs/query-data/datasets — APL query reference
  *
- * @section Creating a View
- * @example Recent errors across one dataset
+ * ### Creating a View
+ * **Example:** Recent errors across one dataset
  * ```typescript
  * yield* Axiom.View("recent-errors", {
  *   name: "recent-errors",
@@ -48,7 +47,7 @@ export type View = Resource<
  * });
  * ```
  *
- * @example Cross-dataset join (logs + traces by trace_id)
+ * **Example:** Cross-dataset join (logs + traces by trace_id)
  * ```typescript
  * yield* Axiom.View("trace-with-logs", {
  *   name: "trace-with-logs",
@@ -60,6 +59,8 @@ export type View = Resource<
  *   `,
  * });
  * ```
+ *
+ * @resource
  */
 export const View = Resource<View>("Axiom.View");
 

@@ -1,11 +1,5 @@
-import {
-  sshKeysCreate,
-  sshKeysDelete,
-  sshKeysGet,
-  sshKeysList,
-  sshKeysUpdate,
-  type SshKeys as ApiSshKey,
-} from "@distilled.cloud/digitalocean/sshKeys";
+import * as DO from "@distilled.cloud/digitalocean";
+import type { SshKeys as ApiSshKey } from "@distilled.cloud/digitalocean";
 import * as Arr from "effect/Array";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -59,13 +53,10 @@ export type SshKey = Resource<
  * another name, it belongs to someone else. It is `Unowned` and needs
  * `--adopt`.
  *
- * @resource
- * @product SSH Keys
- * @category Compute
  * @see https://docs.digitalocean.com/reference/api/digitalocean/#tag/SSH-Keys
  *
- * @section Creating an SshKey
- * @example Register a deploy key and create a droplet with it
+ * ### Creating an SshKey
+ * **Example:** Register a deploy key and create a droplet with it
  * ```typescript
  * const key = yield* DigitalOcean.SshKey("deploy-key", {
  *   publicKey: process.env.SSH_PUBLIC_KEY!,
@@ -77,6 +68,10 @@ export type SshKey = Resource<
  *   sshKeys: [key.fingerprint],
  * });
  * ```
+ *
+ * @resource
+ * @product SSH Keys
+ * @category Compute
  */
 export const SshKey = Resource<SshKey>("DigitalOcean.SshKey");
 
@@ -112,11 +107,11 @@ export const SshKeyProvider = () =>
   Provider.effect(
     SshKey,
     Effect.gen(function* () {
-      const create = yield* sshKeysCreate;
-      const get = yield* sshKeysGet;
-      const update = yield* sshKeysUpdate;
-      const deleteSshKey = yield* sshKeysDelete;
-      const list = yield* sshKeysList;
+      const create = yield* DO.createSshKey;
+      const get = yield* DO.getSshKey;
+      const update = yield* DO.updateSshKey;
+      const deleteSshKey = yield* DO.deleteSshKey;
+      const list = yield* DO.listSshKeys;
 
       const toAttrs = (key: ApiSshKey) => ({
         sshKeyId: key.id,

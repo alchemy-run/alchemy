@@ -75,10 +75,10 @@ test(
     const res = yield* getWhenReady(url);
     expect(res.status).toBe(200);
     const html = yield* res.text;
-    expect(html).toContain("SvelteKit on Cloudflare Workers");
+    expect(html).toContain("SvelteKit on Cloudflare");
     // The `GREETING` env value from alchemy.run.ts, read via `platform.env`
     // in the server `load` — proves the Worker rendered it at request time.
-    expect(html).toContain("Hello from alchemy");
+    expect(html).toContain("Hello from SvelteKit on Cloudflare!");
   }),
   { timeout: 180_000 },
 );

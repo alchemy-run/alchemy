@@ -20,7 +20,7 @@ export default class JobFunction extends AWS.Lambda.Function<JobFunction>()(
   "JobFunction",
   Stack.useSync((stack) => ({
     main: import.meta.url,
-    memory: stack.stage === "prod" ? 1024 : 512,
+    memorySize: stack.stage === "prod" ? 1024 : 512,
     functionUrl: true,
   })),
   Effect.gen(function* () {

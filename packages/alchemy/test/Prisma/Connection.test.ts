@@ -14,6 +14,7 @@ import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
+import { AlchemyContext } from "@/AlchemyContext";
 
 const createdAt = "2026-01-01T00:00:00.000Z";
 const instanceId = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -55,8 +56,17 @@ const withSecrets = (
   },
 });
 
+const liveProviderContext = Layer.succeed(AlchemyContext, {
+  dotAlchemy: ".alchemy-test",
+  dev: false,
+  adopt: false,
+});
+
 const providerLayer = (client: PrismaManagementClient) =>
-  ConnectionProvider().pipe(Layer.provide(Layer.succeed(PrismaClient, client)));
+  ConnectionProvider().pipe(
+    Layer.provide(Layer.succeed(PrismaClient, client)),
+    Layer.provide(liveProviderContext),
+  );
 
 const connectionProps = { database: "database-1", name: "api" };
 

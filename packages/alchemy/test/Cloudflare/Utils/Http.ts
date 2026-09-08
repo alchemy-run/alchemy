@@ -40,6 +40,8 @@ export class HttpMarkerPresent extends Data.TaggedError("HttpMarkerPresent")<{
 }> {}
 
 export interface ExpectUrlContainsOptions {
+  /** Request headers, e.g. an explicit HTML Accept header for content negotiation. */
+  headers?: Record<string, string>;
   /** Maximum total time to retry before failing. Default 90s. */
   timeout?: Duration.Input;
   /** Initial backoff between attempts. Default 750ms. */
@@ -54,23 +56,60 @@ const looksLikeCloudflarePlaceholder = (body: string) =>
   // The blue 522 / 1xxx error page family.
   /Error\s+\d{3,4}/i.test(body);
 
-const fetchOnce = (url: string, marker: string) =>
+/**
+ * Hard settlement bound for a single attempt, applied at the PROMISE level
+ * (`Promise.race`), not via fiber interruption: bun's fetch can wedge on a
+ * pooled connection the server closed after an error response — the
+ * request's promise neither settles nor honors its abort signal, and any
+ * Effect timeout that interrupts `tryPromise` then awaits that settlement
+ * forever. The race settles regardless and simply abandons the wedged
+ * promise. Generous on purpose: a cold dev server's first SSR/MDX compile
+ * can legitimately take tens of seconds.
+ */
+const ATTEMPT_SETTLEMENT_CAP_MS = 60_000;
+
+const fetchOnce = (
+  url: string,
+  marker: string,
+  headers?: Record<string, string>,
+) =>
   Effect.tryPromise({
     try: async (signal) => {
       // Cache-busting query string defeats both edge caches and any
       // intermediate proxy that ignores `cache-control: no-cache`.
       const u = new URL(url);
       u.searchParams.set("__alchemy_cb", String(Date.now()));
-      const res = await fetch(u, {
-        signal,
-        cache: "no-store",
-        headers: {
-          "cache-control": "no-cache",
-          pragma: "no-cache",
-          accept: "*/*",
-        },
+      const attempt = async () => {
+        const res = await fetch(u, {
+          signal,
+          cache: "no-store",
+          headers: {
+            "cache-control": "no-cache",
+            pragma: "no-cache",
+            accept: "*/*",
+            // No keep-alive reuse: the wedge above starts with a reused
+            // connection the server already closed.
+            connection: "close",
+            ...headers,
+          },
+        });
+        return { res, body: await res.text() };
+      };
+      let capTimer: ReturnType<typeof setTimeout> | undefined;
+      const cap = new Promise<never>((_, reject) => {
+        capTimer = setTimeout(
+          () =>
+            reject(
+              new Error(
+                `attempt did not settle within ${ATTEMPT_SETTLEMENT_CAP_MS}ms — abandoned`,
+              ),
+            ),
+          ATTEMPT_SETTLEMENT_CAP_MS,
+        );
       });
-      const body = await res.text();
+      const { res, body } = await Promise.race([attempt(), cap]).finally(() =>
+        clearTimeout(capTimer),
+      );
       if (
         !res.ok ||
         looksLikeCloudflarePlaceholder(body) ||
@@ -123,7 +162,7 @@ export const expectUrlContains = (
   const initial = options.initialBackoff ?? "750 millis";
   const label = options.label ?? "url";
 
-  return fetchOnce(url, marker).pipe(
+  return fetchOnce(url, marker, options.headers).pipe(
     Effect.retry({
       // Cap individual sleeps at 8s so very long timeouts still
       // sample at a reasonable rate near the end of the budget.
@@ -155,6 +194,27 @@ export const expectUrlContains = (
   );
 };
 
+/**
+ * Bounded readiness probe: the server behind `url` answers HTTP at all
+ * (any 2xx). Used by the local/dev suites, where there is no CDN to
+ * propagate through — only a dev server that needs a moment to listen.
+ */
+export const expectUrlOk = (url: string) =>
+  Effect.tryPromise({
+    try: async (signal) => {
+      const response = await fetch(url, { signal, cache: "no-store" });
+      await response.arrayBuffer().catch(() => {});
+      if (!response.ok) {
+        throw new Error(`${url} responded ${response.status}`);
+      }
+      return response.status;
+    },
+    catch: (error) => new Error(String(error)),
+  }).pipe(
+    Effect.retry({ schedule: Schedule.spaced("1 second"), times: 30 }),
+    Effect.timeout("60 seconds"),
+  );
+
 export class HttpResponseMismatch extends Data.TaggedError(
   "HttpResponseMismatch",
 )<{
@@ -179,6 +239,11 @@ const fetchOnceResponse = (
           "cache-control": "no-cache",
           pragma: "no-cache",
           accept: "*/*",
+          // No keep-alive reuse: bun's fetch can wedge on a pooled
+          // connection the server closed after an error response — the
+          // reused request's promise neither settles nor honors its abort
+          // signal, pinning any timeout that awaits its interruption.
+          connection: "close",
         },
       });
       const mismatch = check(res);
@@ -352,6 +417,11 @@ const fetchOnceAbsent = (url: string, marker: string) =>
           "cache-control": "no-cache",
           pragma: "no-cache",
           accept: "*/*",
+          // No keep-alive reuse: bun's fetch can wedge on a pooled
+          // connection the server closed after an error response — the
+          // reused request's promise neither settles nor honors its abort
+          // signal, pinning any timeout that awaits its interruption.
+          connection: "close",
         },
       });
       const body = await res.text();

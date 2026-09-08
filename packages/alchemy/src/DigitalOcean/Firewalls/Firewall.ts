@@ -1,14 +1,10 @@
-import {
-  firewallsCreate,
-  firewallsDelete,
-  firewallsGet,
-  firewallsList,
-  firewallsUpdate,
-  type Firewall as ApiFirewall,
-  type FirewallInboundRulesItem,
-  type FirewallOutboundRulesItem,
-  type FirewallStatus,
-} from "@distilled.cloud/digitalocean/firewalls";
+import * as DO from "@distilled.cloud/digitalocean";
+import type {
+  Firewall as ApiFirewall,
+  FirewallInboundRulesItem,
+  FirewallOutboundRulesItem,
+  FirewallStatus,
+} from "@distilled.cloud/digitalocean";
 import * as Arr from "effect/Array";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -106,13 +102,10 @@ export type Firewall = Resource<
  * does not label the firewall. A firewall with the same name but no prior
  * state is `Unowned` and needs `--adopt`.
  *
- * @resource
- * @product Firewalls
- * @category Networking
  * @see https://docs.digitalocean.com/reference/api/digitalocean/#tag/Firewalls
  *
- * @section Creating a Firewall
- * @example Allow only SSH, HTTP, and HTTPS to a web host
+ * ### Creating a Firewall
+ * **Example:** Allow only SSH, HTTP, and HTTPS to a web host
  * ```typescript
  * const host = yield* DigitalOcean.Droplet("app", {
  *   region: "sfo3",
@@ -130,8 +123,8 @@ export type Firewall = Resource<
  * });
  * ```
  *
- * @section Selecting droplets by tag
- * @example Protect every droplet that has a tag
+ * ### Selecting droplets by tag
+ * **Example:** Protect every droplet that has a tag
  * ```typescript
  * yield* DigitalOcean.Firewall("web-tier", {
  *   tags: ["web"], // also applies to droplets created later
@@ -141,6 +134,10 @@ export type Firewall = Resource<
  *   outboundRules: [], // drop all outbound traffic
  * });
  * ```
+ *
+ * @resource
+ * @product Firewalls
+ * @category Networking
  */
 export const Firewall = Resource<Firewall>("DigitalOcean.Firewall");
 
@@ -273,11 +270,11 @@ export const FirewallProvider = () =>
   Provider.effect(
     Firewall,
     Effect.gen(function* () {
-      const create = yield* firewallsCreate;
-      const get = yield* firewallsGet;
-      const update = yield* firewallsUpdate;
-      const deleteFirewall = yield* firewallsDelete;
-      const list = yield* firewallsList;
+      const create = yield* DO.createFirewall;
+      const get = yield* DO.getFirewall;
+      const update = yield* DO.updateFirewall;
+      const deleteFirewall = yield* DO.deleteFirewall;
+      const list = yield* DO.listFirewalls;
 
       const toAttrs = (firewall: ApiFirewall) => ({
         firewallId: firewall.id,

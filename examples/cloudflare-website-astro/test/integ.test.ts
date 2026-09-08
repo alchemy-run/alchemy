@@ -78,7 +78,7 @@ test(
     // The `GREETING` env value from alchemy.run.ts, read via
     // `cloudflare:workers` in the page frontmatter — proves the Worker
     // rendered it at request time.
-    expect(html).toContain("Hello from Alchemy!");
+    expect(html).toContain("Hello from Astro on Cloudflare!");
     expect(html).toContain("server-rendered in a Cloudflare Worker");
   }),
   { timeout: 180_000 },

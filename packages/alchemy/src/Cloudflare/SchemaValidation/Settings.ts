@@ -79,11 +79,8 @@ export type Settings = Resource<
  *
  * The `log` action is plan-gated (API Shield entitlement) on some zones —
  * setting it there fails with the typed `UnentitledMitigationAction` error.
- * @resource
- * @product Schema Validation
- * @category Application Security
- * @section Managing the zone default
- * @example Block non-conforming requests
+ * ### Managing the zone default
+ * **Example:** Block non-conforming requests
  * ```typescript
  * yield* Cloudflare.SchemaValidation.Settings("Validation", {
  *   zoneId: zone.zoneId,
@@ -91,8 +88,8 @@ export type Settings = Resource<
  * });
  * ```
  *
- * @section Kill switch
- * @example Temporarily disable validation zone-wide
+ * ### Kill switch
+ * **Example:** Temporarily disable validation zone-wide
  * ```typescript
  * yield* Cloudflare.SchemaValidation.Settings("Validation", {
  *   zoneId: zone.zoneId,
@@ -103,6 +100,10 @@ export type Settings = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/api-shield/security/schema-validation/
+ *
+ * @resource
+ * @product Schema Validation
+ * @category Application Security
  */
 export const Settings = Resource<Settings>(TypeId);
 

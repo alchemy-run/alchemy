@@ -20,10 +20,16 @@
  *   content-addressed image pipeline pushes a new `<repositoryUri>:<hash>`
  *   tag, registers a new task definition revision, and `updateService`
  *   points the service at it. Floci swaps the service's task definition in
- *   place WITHOUT restarting running containers (probed), so the watcher
- *   then stops the old-revision tasks and the floci service scheduler
+ *   place WITHOUT restarting running containers (probed), so the
+ *   old-revision tasks are stopped and the floci service scheduler
  *   relaunches them on the new revision (~6s observed end-to-end for a
  *   container relaunch).
+ * - **Task roll** lives in the skeleton's `onReconciled` hook — NOT in the
+ *   watch loop — so it also fires for engine-driven reconciles. Prop-only
+ *   changes (an inline `dockerfile` edit, a new env var) never produce a
+ *   file event: before the hook, they registered a new revision and
+ *   `updateService`d onto it, but the running containers kept serving the
+ *   old one until the next source edit.
  */
 
 import * as Effect from "effect/Effect";
@@ -108,6 +114,39 @@ export const FlociServiceProvider = () =>
           }
           return undefined;
         }),
+      // Fires on every reconcile — watcher-triggered AND engine-driven
+      // (prop changes never produce a file event, so rolling only from the
+      // watch loop left the service's containers on the old revision).
+      onReconciled: ({ id, previous, attrs }) =>
+        Effect.gen(function* () {
+          if (
+            attrs.taskFamily === undefined ||
+            attrs.taskDefinitionArn === undefined ||
+            previous?.taskDefinitionArn === attrs.taskDefinitionArn
+          ) {
+            return;
+          }
+          const startedAt = Date.now();
+          // `updateService` (inside the reconcile) pointed the service at
+          // the new revision, but floci's in-place swap keeps the old
+          // containers running — stop them so the scheduler relaunches on
+          // the new revision.
+          const restarted = yield* restartFamilyTasks({
+            family: attrs.taskFamily,
+            nextTaskDefinitionArn: attrs.taskDefinitionArn,
+            serviceManaged: true,
+          });
+          yield* Effect.logInfo(
+            `[alchemy dev] ${attrs.serviceName}: task definition swapped (${restarted} service task(s) rolling) in ${Date.now() - startedAt}ms`,
+          );
+        }).pipe(
+          Effect.catchCause((cause) =>
+            Effect.logWarning(
+              `[alchemy dev] ${id}: service roll failed`,
+              cause,
+            ),
+          ),
+        ),
       startWatch: (ctx) =>
         Effect.gen(function* () {
           if (taskRefOf(ctx.news) !== undefined) {
@@ -121,31 +160,11 @@ export const FlociServiceProvider = () =>
             isExternal: ctx.news.isExternal,
           });
           yield* trigger.pipe(
+            // The reconcile registers the new revision and `updateService`s
+            // onto it; the `onReconciled` hook (shared with engine-driven
+            // updates) rolls the running tasks.
             Stream.runForEach(() =>
-              Effect.gen(function* () {
-                const startedAt = Date.now();
-                const previous = yield* ctx.currentAttrs;
-                const attrs = yield* ctx.rerunReconcile;
-                if (
-                  attrs.code?.hash === undefined ||
-                  attrs.code.hash === previous.code?.hash ||
-                  attrs.taskFamily === undefined
-                ) {
-                  return;
-                }
-                // `updateService` (inside the reconcile) pointed the service
-                // at the new revision, but floci's in-place swap keeps the
-                // old containers running — stop them so the scheduler
-                // relaunches on the new revision.
-                const restarted = yield* restartFamilyTasks({
-                  family: attrs.taskFamily,
-                  nextTaskDefinitionArn: attrs.taskDefinitionArn,
-                  serviceManaged: true,
-                });
-                yield* Effect.logInfo(
-                  `[alchemy dev] ${attrs.serviceName}: image swapped (${restarted} service task(s) rolling) in ${Date.now() - startedAt}ms`,
-                );
-              }).pipe(
+              ctx.rerunReconcile.pipe(
                 Effect.catchCause((cause) =>
                   Effect.logWarning(
                     `[alchemy dev] ${ctx.id}: image swap failed`,

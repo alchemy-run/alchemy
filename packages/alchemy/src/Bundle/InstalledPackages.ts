@@ -1,10 +1,11 @@
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import { builtinModules } from "node:module";
-import { parse as parseYaml } from "yaml";
 import { ChildProcess } from "effect/unstable/process";
 import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
+import { constants as fsConstants } from "node:fs";
+import { builtinModules } from "node:module";
+import { parse as parseYaml } from "yaml";
 import { exec } from "../Util/exec.ts";
 import { sha256, sha256Object } from "../Util/sha256.ts";
 import { BundleError } from "./Bundle.ts";
@@ -12,6 +13,8 @@ import { BundleError } from "./Bundle.ts";
 export interface InstalledPackageFile {
   readonly path: string;
   readonly content: Uint8Array<ArrayBufferLike>;
+  /** Complete Unix mode, including the file type bits. */
+  readonly mode?: number;
 }
 
 type JsonRecord = Record<string, unknown>;
@@ -90,6 +93,14 @@ interface CatalogSource {
 const builtins = new Set(
   builtinModules.flatMap((name) => [name, `node:${name}`]),
 );
+
+/**
+ * Unix mode for symlink entries in the ZIP archive. Effect's FileSystem
+ * exposes `readLink` but not `lstat`, so the symlink type bits must be
+ * synthesized after identifying a link. The permission bits are conventional
+ * for symlinks and are ignored by Unix filesystems.
+ */
+const symbolicLinkMode = fsConstants.S_IFLNK | 0o777;
 
 const incompatibleVersionPrefixes = [
   "workspace:",
@@ -1753,11 +1764,25 @@ const readArtifactFiles = (directory: string) =>
       a.localeCompare(b),
     )) {
       const absolutePath = path.join(directory, relativePath);
+      const linkTarget = yield* fs
+        .readLink(absolutePath)
+        .pipe(Effect.catch(() => Effect.succeed(undefined)));
+      if (linkTarget !== undefined) {
+        files.push({
+          path: relativePath.replaceAll("\\", "/"),
+          content: yield* Effect.sync(() =>
+            new TextEncoder().encode(linkTarget),
+          ),
+          mode: symbolicLinkMode,
+        });
+        continue;
+      }
       const stat = yield* fs.stat(absolutePath);
       if (stat.type !== "File") continue;
       files.push({
         path: relativePath.replaceAll("\\", "/"),
         content: yield* fs.readFile(absolutePath),
+        mode: stat.mode,
       });
     }
     return files;

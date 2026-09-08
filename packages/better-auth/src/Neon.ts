@@ -69,16 +69,12 @@ const openPool = (
  * For TCP access through Cloudflare Hyperdrive use `CloudflareHyperdrive`;
  * for a generic `pg` connection use `Postgres`.
  *
- * @layer
- * @provides BetterAuth.Database
- * @peer @neondatabase/serverless
- * @product Neon
  *
- * @section Connecting from a Worker or Lambda
+ * ### Connecting from a Worker or Lambda
  * The `connectionUri` Output binds into the host environment at deploy
  * and is read back at runtime; the same source drives the deploy-time
  * migration Action.
- * @example Worker (or Lambda) with a Neon-backed BetterAuth
+ * **Example:** Worker (or Lambda) with a Neon-backed BetterAuth
  * ```typescript
  * import { BetterAuth } from "@alchemy.run/better-auth";
  * import { Neon as NeonDatabase } from "@alchemy.run/better-auth/Neon";
@@ -96,15 +92,20 @@ const openPool = (
  * )
  * ```
  *
- * @section Branch-per-stage setups
+ * ### Branch-per-stage setups
  * Point the layer at a branch's connection string instead of the project's
  * to isolate auth data per stage.
- * @example Using a Neon branch
+ * **Example:** Using a Neon branch
  * ```typescript
  * const branch = yield* Neon.Branch("auth-db", { project });
  * // ...
  * Effect.provide(Layer.unwrap(Effect.map(branch, (b) => NeonDatabase(b.connectionUri))))
  * ```
+ *
+ * @layer
+ * @provides BetterAuth.Database
+ * @peer @neondatabase/serverless
+ * @product Neon
  */
 export const Neon = (
   url: ConnectionSource,

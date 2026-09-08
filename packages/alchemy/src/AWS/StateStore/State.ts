@@ -84,14 +84,13 @@ type S3Deps = Credentials | HttpClient | Region;
  * not already exist — nothing touches AWS credentials at layer
  * construction time.
  *
- * @resource
  *
- * @section Using the S3 State Store
+ * ### Using the S3 State Store
  * Pass `AWS.state()` as the `state` option of a Stack. By default the
  * state is stored in an account-regional bucket named
  * `alchemy-state-{accountId}-{region}-an`.
  *
- * @example Default bucket
+ * **Example:** Default bucket
  * ```typescript
  * import * as Alchemy from "alchemy";
  * import * as AWS from "alchemy/AWS";
@@ -105,7 +104,7 @@ type S3Deps = Credentials | HttpClient | Region;
  * );
  * ```
  *
- * @example Custom bucket and key prefix
+ * **Example:** Custom bucket and key prefix
  * ```typescript
  * const Stack = Alchemy.Stack(
  *   "my-stack",
@@ -125,6 +124,8 @@ type S3Deps = Credentials | HttpClient | Region;
  *   }),
  * );
  * ```
+ *
+ * @resource
  */
 export const state = (options: S3StateOptions = {}) =>
   Layer.effect(

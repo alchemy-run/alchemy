@@ -50,7 +50,9 @@ test.provider(
           const namespace = yield* Cloudflare.KV.Namespace("CycleKV").pipe(
             Alchemy.remote(liveKV),
           );
-          const bucket = yield* Cloudflare.R2.Bucket("CycleBucket");
+          const bucket = yield* Cloudflare.R2.Bucket("CycleBucket", {
+            forceDestroy: true,
+          });
           const database = yield* Cloudflare.D1.Database("CycleDB");
           return { namespace, bucket, database };
         });

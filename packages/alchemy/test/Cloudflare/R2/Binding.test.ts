@@ -187,6 +187,11 @@ const exercise = (
     yield* expectMissing(readBase, k1);
     expect((yield* headObject(readBase, k1)).exists).toBe(false);
 
+    // delete (missing key) — idempotent in BOTH implementations: the native
+    // binding resolves on a key that was never there, so the HTTP client must
+    // not surface R2's `NoSuchKey` either.
+    expect((yield* del(writeBase, `${prefix}never-written`)).status).toBe(200);
+
     // delete (batch) — write two, delete both in one call
     const k2 = `${prefix}k2`;
     const k3 = `${prefix}k3`;
@@ -233,7 +238,7 @@ const exercise = (
  * - round-trip a key through the ReadWrite worker by itself.
  *
  * The stack lives in `fixtures/stack.ts` so it can also be inspected
- * directly, e.g. `alchemy tail --stage test ./test/Cloudflare/R2/fixtures/stack.ts`.
+ * directly, e.g. `alchemy logs --tail --stage test --config ./test/Cloudflare/R2/fixtures/stack.ts`.
  */
 const stack = beforeAll(deploy(Stack), { timeout: HOOK_TIMEOUT });
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), {

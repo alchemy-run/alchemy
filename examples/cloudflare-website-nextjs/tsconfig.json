@@ -1,17 +1,9 @@
 {
   "compilerOptions": {
     "target": "ESNext",
-    "lib": [
-      "dom",
-      "dom.iterable",
-      "esnext"
-    ],
+    "lib": ["dom", "dom.iterable", "esnext"],
     "allowJs": true,
-    "types": [
-      "bun",
-      "react",
-      "react-dom"
-    ],
+    "types": ["bun", "react", "react-dom"],
     "skipLibCheck": true,
     "strict": true,
     "noEmit": true,
@@ -36,7 +28,5 @@
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts"
   ],
-  "exclude": [
-    "node_modules"
-  ]
+  "exclude": ["node_modules"]
 }

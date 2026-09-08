@@ -10,7 +10,7 @@ import * as Redacted from "effect/Redacted";
 import * as ProviderLayer from "../../Local/ProviderLayer.ts";
 import type { Platform } from "../../Platform.ts";
 import type { ResourceClassLike, ResourceLike } from "../../Resource.ts";
-import { DEFAULT_LOCAL_ENDPOINT } from "../AuthProvider.ts";
+import { DEFAULT_LOCAL_ENDPOINT, LOCAL_ACCOUNT_ID } from "../AuthProvider.ts";
 import * as Endpoint from "../Endpoint.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import * as Region from "../Region.ts";
@@ -21,7 +21,7 @@ import { provideProviderContext } from "./ProviderContext.ts";
  * computed from it (ARNs, queue URLs) double as proof that no real AWS
  * account was involved.
  */
-export const FLOCI_ACCOUNT_ID = "000000000000";
+export const FLOCI_ACCOUNT_ID = LOCAL_ACCOUNT_ID;
 
 /** Region every floci-emulated resource lives in. */
 export const FLOCI_REGION = "us-east-1";
@@ -102,4 +102,8 @@ export const flociDual = <
   ProviderLayer.dual(cls, {
     live,
     local: () => provideProviderContext(live(), flociServices()),
+    // Registered as the resource's local data plane so deploy-time binding
+    // clients (Action bodies, plan-time `execute`) route their API calls to
+    // the emulator whenever the bound resource resolves to local mode.
+    dataPlane: flociServices,
   });

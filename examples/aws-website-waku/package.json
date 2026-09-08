@@ -11,24 +11,25 @@
   },
   "dependencies": {
     "alchemy": "workspace:*",
-    "effect": "catalog:",
-    "hono": "catalog:frameworks",
-    "react": "~19.2.6",
-    "react-dom": "~19.2.6",
-    "react-server-dom-webpack": "~19.2.6",
-    "waku": "catalog:frameworks"
+    "effect": "catalog:effect",
+    "hono": "catalog:frontend",
+    "react": "catalog:frontend-rsc",
+    "react-dom": "catalog:frontend-rsc",
+    "react-server-dom-webpack": "catalog:frontend",
+    "waku": "catalog:frontend"
   },
   "devDependencies": {
     "@alchemy.run/frontend-frameworks": "workspace:*",
-    "@distilled.cloud/aws": "catalog:",
-    "@effect/platform-node": "catalog:",
-    "@tailwindcss/vite": "catalog:",
-    "@types/node": "^24.12.0",
-    "@types/react": "^19.2.17",
-    "@types/react-dom": "^19.2.3",
-    "tailwindcss": "catalog:",
-    "typescript": "catalog:",
-    "vite": "catalog:"
+    "@distilled.cloud/aws": "workspace:*",
+    "@effect/platform-node": "catalog:effect",
+    "@tailwindcss/vite": "catalog:frontend",
+    "@types/node": "catalog:node24",
+    "@types/react": "catalog:frontend",
+    "@types/react-dom": "catalog:frontend",
+    "alchemy-test": "workspace:*",
+    "tailwindcss": "catalog:frontend",
+    "typescript": "catalog:build",
+    "vite": "catalog:build"
   },
   "repository": {
     "type": "git",

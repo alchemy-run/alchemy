@@ -1,5 +1,5 @@
 import { CredentialsStoreLive } from "@/Auth/Credentials";
-import { ProfileLive } from "@/Auth/Profile";
+import { ProfileStoreLive } from "@/Auth/Profile";
 import * as DigitalOcean from "@/DigitalOcean";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
@@ -29,7 +29,7 @@ export const skipLive =
 /** Credentials resolved the same way the provider resolves them. */
 const credentials = DigitalOcean.fromAuthProvider().pipe(
   Layer.provide(DigitalOcean.DigitalOceanAuth),
-  Layer.provide(ProfileLive),
+  Layer.provide(ProfileStoreLive),
   Layer.provide(CredentialsStoreLive),
   Layer.provide(NodeServices.layer),
   Layer.orDie,

@@ -11,16 +11,16 @@
     "pretest": "playwright install chromium"
   },
   "dependencies": {
-    "astro": "catalog:frameworks"
+    "astro": "catalog:frontend"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "catalog:workers",
+    "@cloudflare/workers-types": "catalog:cloudflare-runtime",
     "@alchemy.run/frontend-frameworks": "workspace:*",
     "@alchemy.run/cloudflare-runtime": "workspace:*",
     "@alchemy.run/cloudflare-test-tools": "workspace:*",
     "@effect/platform-node": "catalog:effect",
-    "@playwright/test": "catalog:",
+    "@playwright/test": "catalog:testing",
     "effect": "catalog:effect",
-    "vite": "catalog:"
+    "vite": "catalog:build"
   }
 }
