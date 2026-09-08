@@ -100,6 +100,20 @@ export class Sessions extends Context.Service<
       key: string,
     ) => Effect.Effect<void, never, RuntimeContext>;
     /**
+     * REDACT rows from one session's transcript — the operator
+     * deleting messages from a chat. Observation seqs are minted by
+     * the session's durable cursor and never reused, so a seq names
+     * its row forever; unknown seqs are ignored. Projection-only:
+     * the thread messages (the model's working context) are
+     * untouched — the model may still remember what the operator no
+     * longer sees.
+     */
+    readonly redact: (
+      term: string,
+      key: string,
+      seqs: ReadonlyArray<number>,
+    ) => Effect.Effect<void, never, RuntimeContext>;
+    /**
      * DELETE one session — stop it, then erase it: the transcript
      * (its `ThreadStorage` rows), its clock, and its index row. After
      * `remove` the session no longer lists and its history is gone.

@@ -279,6 +279,17 @@ export const makeThreadStorageDurableObject = (
           seqOf(OBS, k) >= fromSeq ? [observation] : [],
         ),
       ),
+    // seqs are minted by the meta's `observed` cursor, never by row
+    // scans — a deleted seq is retired forever, so redaction cannot
+    // collide with future appends
+    deleteObservations: (seqs) =>
+      seqs.length === 0
+        ? Effect.void
+        : sealed(
+            storage
+              .delete(seqs.map((seq) => seqKey(OBS, seq)))
+              .pipe(Effect.orDie, Effect.asVoid),
+          ),
   };
 
   return { readMeta, writeMeta, listRows, appendThread, handle };

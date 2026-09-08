@@ -94,6 +94,15 @@ export interface ThreadHandle {
   readonly observations: (
     fromSeq: number,
   ) => Effect.Effect<ReadonlyArray<SessionObservation>>;
+  /**
+   * REDACT rows from the observation log — the operator deleting
+   * messages from a transcript. Projection-only: the thread messages
+   * (the model's working context) are untouched; compaction owns
+   * those. Unknown seqs are ignored.
+   */
+  readonly deleteObservations: (
+    seqs: ReadonlyArray<number>,
+  ) => Effect.Effect<void>;
 }
 
 export interface ThreadStorageService {

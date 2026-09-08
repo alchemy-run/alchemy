@@ -101,6 +101,13 @@ export const makeThreadStorageMemory = (): ThreadStorageService => {
               Effect.sync(() =>
                 session.log.filter((observation) => observation.seq >= fromSeq),
               ),
+            deleteObservations: (seqs) =>
+              Effect.sync(() => {
+                const drop = new Set(seqs);
+                session.log = session.log.filter(
+                  (observation) => !drop.has(observation.seq),
+                );
+              }),
           } satisfies ThreadHandle;
         }),
       // a fresh build has no keys (nothing survives the process), but a

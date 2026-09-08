@@ -247,6 +247,16 @@ export const ThreadStorageSqlite = (path: string): Layer.Layer<ThreadStorage> =>
                       (row) => JSON.parse(row.data) as SessionObservation,
                     ) as ReadonlyArray<SessionObservation>,
                 ),
+              deleteObservations: (seqs) =>
+                Effect.sync(() => {
+                  if (seqs.length === 0) return;
+                  const drop = db.query(
+                    "DELETE FROM session_observations WHERE term = ? AND key = ? AND seq = ?",
+                  );
+                  db.transaction(() => {
+                    for (const seq of seqs) drop.run(term, key, seq);
+                  })();
+                }),
             };
           }),
         keys: (term) =>

@@ -292,6 +292,12 @@ export const DriverLocal: Layer.Layer<
           Effect.flatMap(threadStorage.open(term, key), (handle) =>
             handle.observations(0),
           ),
+        // storage-only for the same reason as history — redacting a
+        // transcript must not boot its machine
+        redact: (term, key, seqs) =>
+          Effect.flatMap(threadStorage.open(term, key), (handle) =>
+            handle.deleteObservations(seqs),
+          ),
         // the operator's "new session": the durable admitted row, no
         // shell, no init — the first input builds it
         open: (term, key) => engines.get(term)?.admit(key) ?? Effect.void,

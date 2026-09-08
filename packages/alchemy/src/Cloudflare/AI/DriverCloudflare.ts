@@ -204,6 +204,11 @@ interface SessionRpc extends MainRpc<DurableObjectState> {
     unknown,
     RuntimeContext
   >;
+  /** Redact rows from the observation log (`Sessions.redact`) —
+   *  projection-only, the thread messages are untouched. */
+  readonly redact: (
+    seqs: ReadonlyArray<number>,
+  ) => Effect.Effect<void, unknown, RuntimeContext>;
   /** Admit this session durably without input (the operator's "new
    *  session") — it lists at once; init runs on the first input. */
   readonly open: () => Effect.Effect<void, unknown, RuntimeContext>;
@@ -879,6 +884,9 @@ export const DurableObjectHost: Layer.Layer<
           // transcript must not need the charter, build the shell, or
           // boot the machine. A never-seen key reads empty.
           history: () => store.handle.observations(0),
+          // storage-only, like history: redaction never wakes the
+          // engine or the machine
+          redact: (seqs) => store.handle.deleteObservations(seqs),
           open: (): Effect.Effect<void, never, RuntimeContext> =>
             Effect.gen(function* () {
               yield* (yield* engine).admit(me.key);
@@ -1054,6 +1062,11 @@ export const DurableObjectHost: Layer.Layer<
             .getByName(sessionName(term, key))
             .history()
             .pipe(Effect.orDie),
+        redact: (term, key, seqs) =>
+          sessions
+            .getByName(sessionName(term, key))
+            .redact(seqs)
+            .pipe(Effect.orDie, Effect.asVoid),
         open: (term, key) =>
           sessions
             .getByName(sessionName(term, key))

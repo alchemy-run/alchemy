@@ -200,6 +200,56 @@ export const toUIMessages = (
 };
 
 /**
+ * The observation seqs behind ONE UIMessage — the redaction span for
+ * `Sessions.redact`. Groups the log exactly as {@link toUIMessages}
+ * does, so deleting `a-<seq>` takes the whole burst (its `assistant`
+ * samplings, their `tool-call`/`tool-result` rows, and the
+ * `dispatched` markers that preceded it), `u-<seq>` takes the one
+ * input, `crash-<seq>` the one crash. `settled` rows are never part
+ * of a span — the session's end is not a message. Unknown ids answer
+ * empty.
+ */
+export const observationSpan = (
+  log: ReadonlyArray<SessionObservation>,
+  messageId: string,
+): Array<number> => {
+  const groups = new Map<string, Array<number>>();
+  let assistant: Array<number> | undefined;
+  // mid-sampling rows (dispatched, live tool-calls) that precede
+  // their burst's consolidated `assistant` — they belong to it
+  let pending: Array<number> = [];
+  for (const observation of log) {
+    switch (observation.type) {
+      case "input":
+        assistant = undefined;
+        pending = [];
+        groups.set(`u-${observation.seq}`, [observation.seq]);
+        break;
+      case "crashed":
+        assistant = undefined;
+        pending = [];
+        groups.set(`crash-${observation.seq}`, [observation.seq]);
+        break;
+      case "assistant":
+        if (assistant === undefined) {
+          assistant = [];
+          groups.set(`a-${observation.seq}`, assistant);
+        }
+        assistant.push(...pending, observation.seq);
+        pending = [];
+        break;
+      case "settled":
+        break;
+      default:
+        if (assistant !== undefined) assistant.push(observation.seq);
+        else pending.push(observation.seq);
+        break;
+    }
+  }
+  return groups.get(messageId) ?? [];
+};
+
+/**
  * A stateful translator from a session's live observations to AI SDK
  * UIMessageChunks: emits `start` once, wraps each sampling in
  * `start-step`/`finish-step`, and reports whether the response is

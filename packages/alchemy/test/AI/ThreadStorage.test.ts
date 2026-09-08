@@ -92,6 +92,13 @@ const contract = (
           const tail = yield* handle.observations(1);
           expect(tail.length).toBe(1);
           expect(tail[0]!.seq).toBe(1);
+
+          // redaction drops rows without touching the meta cursor —
+          // a deleted seq is retired, never re-minted
+          yield* handle.deleteObservations([0, 99]);
+          const rest = yield* handle.observations(0);
+          expect(rest.map((row) => row.seq)).toEqual([1]);
+          expect((yield* handle.meta)?.observed).toBe(2);
         }).pipe(Effect.provide(layer));
       }),
     );
