@@ -136,9 +136,7 @@ const toMessage = (row: MessageRow): ChannelMessage => ({
   ...(row.event === null ? {} : { event: row.event }),
   ...(row.thread === null ? {} : { thread: row.thread }),
   ...(row.placed === 0 ? {} : { placed: true }),
-  ...(row.card === null
-    ? {}
-    : { card: JSON.parse(row.card) as ChannelCard }),
+  ...(row.card === null ? {} : { card: JSON.parse(row.card) as ChannelCard }),
   ...(row.reply_to === null
     ? {}
     : { replyTo: JSON.parse(row.reply_to) as ReadonlyArray<string> }),
@@ -203,11 +201,7 @@ interface ChannelRpc extends MainRpc<Cloudflare.DurableObjectState> {
   readonly attachmentOf: (
     ref: string,
   ) => Effect.Effect<string | undefined, never, RuntimeContext>;
-  readonly claimBootstrap: () => Effect.Effect<
-    boolean,
-    never,
-    RuntimeContext
-  >;
+  readonly claimBootstrap: () => Effect.Effect<boolean, never, RuntimeContext>;
 }
 
 const ChannelDOLive = Cloudflare.DurableObject<ChannelRpc>()(
@@ -223,9 +217,7 @@ const ChannelDOLive = Cloudflare.DurableObject<ChannelRpc>()(
         yield* Effect.forEach(
           TABLES,
           (table) =>
-            sql
-              .exec(table.trim().replaceAll(/\s+/g, " "))
-              .pipe(Effect.asVoid),
+            sql.exec(table.trim().replaceAll(/\s+/g, " ")).pipe(Effect.asVoid),
           { discard: true },
         );
         const info = yield* sql.exec<
@@ -244,11 +236,11 @@ const ChannelDOLive = Cloudflare.DurableObject<ChannelRpc>()(
     // silently miss the new row). MAX(seq) is folded in only to
     // migrate logs written before the counter existed.
     const head = Effect.gen(function* () {
-      const cursor = yield* sql.exec<{
-        head: number;
-      } & Record<string, Cloudflare.SqlStorageValue>>(
-        "SELECT COALESCE(MAX(seq), 0) AS head FROM messages",
-      );
+      const cursor = yield* sql.exec<
+        {
+          head: number;
+        } & Record<string, Cloudflare.SqlStorageValue>
+      >("SELECT COALESCE(MAX(seq), 0) AS head FROM messages");
       const rows = yield* cursor.toArray();
       const maxSeq = rows[0]?.head ?? 0;
       const meta = yield* sql.exec<
@@ -381,14 +373,16 @@ const ChannelDOLive = Cloudflare.DurableObject<ChannelRpc>()(
           yield* send({ type: "live", seq: tail });
         }).pipe(
           Effect.catchDefect((defect) =>
-            Effect.logWarning(
-              `[channel-socket] bad frame: ${String(defect)}`,
-            ),
+            Effect.logWarning(`[channel-socket] bad frame: ${String(defect)}`),
           ),
           (effect) => inWorker(effect),
         ) as Effect.Effect<void>,
 
-      webSocketClose: (socket: Cloudflare.WebSocket, code: number, reason: string) =>
+      webSocketClose: (
+        socket: Cloudflare.WebSocket,
+        code: number,
+        reason: string,
+      ) =>
         Effect.gen(function* () {
           const echo = code === 1005 || code === 1006 || code === 1015;
           yield* Effect.ignore(
@@ -652,8 +646,7 @@ export const ChannelLive: Layer.Layer<Channel, never, Cloudflare.Worker> =
         deliver: (event) => inWorker(stub().deliver(event)),
         append: (input) => inWorker(stub().append(input)),
         update: (id, patch) => inWorker(stub().update(id, patch)),
-        tag: (ids, thread, placed) =>
-          inWorker(stub().tag(ids, thread, placed)),
+        tag: (ids, thread, placed) => inWorker(stub().tag(ids, thread, placed)),
         remove: (ids) => inWorker(stub().remove(ids)),
         page: (options) => inWorker(stub().page(options)),
         search: (filter) => inWorker(stub().search(filter)),
@@ -665,8 +658,7 @@ export const ChannelLive: Layer.Layer<Channel, never, Cloudflare.Worker> =
           inWorker(stub().attachmentsSet(ref, thread)),
         attachmentOf: (ref) => inWorker(stub().attachmentOf(ref)),
         claimBootstrap: () => inWorker(stub().claimBootstrap()),
-        socket: (request) =>
-          inWorker(stub().fetch(request).pipe(Effect.orDie)),
+        socket: (request) => inWorker(stub().fetch(request).pipe(Effect.orDie)),
       });
     }),
   );

@@ -164,28 +164,24 @@ const ThreadDOLive = Cloudflare.DurableObject<ThreadRpc>()(
       if (id === undefined) return undefined;
       const entities = (yield* (yield* sql.exec<EntityRow>(
         "SELECT * FROM entities ORDER BY ref ASC",
-      )).toArray()).map(
-        (row): ThreadEntity => ({
-          ref: row.ref,
-          kind: row.kind as ThreadEntity["kind"],
-          state: row.state,
-          title: row.title,
-          ...(row.worktree === null ? {} : { worktree: row.worktree }),
-        }),
-      );
+      )).toArray()).map((row): ThreadEntity => ({
+        ref: row.ref,
+        kind: row.kind as ThreadEntity["kind"],
+        state: row.state,
+        title: row.title,
+        ...(row.worktree === null ? {} : { worktree: row.worktree }),
+      }));
       const agents = (yield* (yield* sql.exec<AgentRow>(
         "SELECT * FROM agents ORDER BY started_at ASC",
-      )).toArray()).map(
-        (row): ThreadAgentRow => ({
-          key: row.key,
-          kind: row.kind as ThreadAgentRow["kind"],
-          brief: row.brief,
-          ...(row.cwd === null ? {} : { cwd: row.cwd }),
-          state: row.state as ThreadAgentRow["state"],
-          startedAt: row.started_at,
-          ...(row.settled_at === null ? {} : { settledAt: row.settled_at }),
-        }),
-      );
+      )).toArray()).map((row): ThreadAgentRow => ({
+        key: row.key,
+        kind: row.kind as ThreadAgentRow["kind"],
+        brief: row.brief,
+        ...(row.cwd === null ? {} : { cwd: row.cwd }),
+        state: row.state as ThreadAgentRow["state"],
+        startedAt: row.started_at,
+        ...(row.settled_at === null ? {} : { settledAt: row.settled_at }),
+      }));
       const members = (yield* (yield* sql.exec<
         { id: string } & Record<string, Cloudflare.SqlStorageValue>
       >("SELECT id FROM members ORDER BY at ASC")).toArray()).map(
@@ -232,10 +228,7 @@ const ThreadDOLive = Cloudflare.DurableObject<ThreadRpc>()(
 
     /** Every mutation ends here: bump, snapshot, push, return. */
     const commit = Effect.gen(function* () {
-      yield* metaSet(
-        "updated_at",
-        String(yield* Clock.currentTimeMillis),
-      );
+      yield* metaSet("updated_at", String(yield* Clock.currentTimeMillis));
       const snap = yield* snapshot;
       if (snap === undefined) {
         return yield* Effect.die("thread commit before init");
@@ -266,7 +259,11 @@ const ThreadDOLive = Cloudflare.DurableObject<ThreadRpc>()(
         RuntimeContext | Cloudflare.DurableObjectState
       >,
 
-      webSocketClose: (socket: Cloudflare.WebSocket, code: number, reason: string) =>
+      webSocketClose: (
+        socket: Cloudflare.WebSocket,
+        code: number,
+        reason: string,
+      ) =>
         Effect.gen(function* () {
           const echo = code === 1005 || code === 1006 || code === 1015;
           yield* Effect.ignore(

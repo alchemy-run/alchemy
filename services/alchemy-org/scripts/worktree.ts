@@ -42,7 +42,12 @@ import {
 import { resolve } from "node:path";
 
 const WORKTREES = ".alchemy/worktrees";
-const BOOTSTRAP_DISTILLED = "scripts/bootstrap-distilled-worktree.ts";
+/** The repo's own distilled bootstrap (the `post-checkout` hook's
+ *  script), run from the TREE's copy so it matches the tree's layout. */
+const BOOTSTRAP_DISTILLED = "scripts/bootstrap-distilled.mjs";
+/** Where the tree pins distilled — absent on a branch that predates
+ *  the submodule (nothing to bootstrap then). */
+const DISTILLED_PATH = "submodules/distilled";
 const LOCK_WAIT_MS = 5 * 60_000;
 /** A lock whose owner has not written its pid by now is a crashed
  *  mkdir — the pid file follows the mkdir within the same tick. */
@@ -198,6 +203,35 @@ async function locked<A>(work: () => Promise<A>): Promise<A> {
  *  gone — `worktree add` refuses the path until it is pruned. */
 const pruneDistilled = () => tryGit(["worktree", "prune"], distilledRepo);
 
+/** Give the tree its distilled checkout: a linked worktree of the
+ *  shared `.git/modules/distilled` at the commit the tree pins, via
+ *  the repo's own bootstrap script. A tree whose branch has no
+ *  `submodules/distilled` (or no script) predates the submodule and
+ *  is left as is — sessions there have no distilled, which is what
+ *  that commit had. */
+async function bootstrapDistilled(previous: string | undefined) {
+  const script = resolve(treeDir, BOOTSTRAP_DISTILLED);
+  const pinned = await tryGit(["rev-parse", `HEAD:${DISTILLED_PATH}`], treeDir);
+  if (pinned === undefined || !existsSync(script)) {
+    process.stderr.write(
+      `${treePath}: no ${DISTILLED_PATH} at HEAD — skipping the distilled bootstrap\n`,
+    );
+    return;
+  }
+  // the hook's contract: <old HEAD> <new HEAD> 1 (a branch checkout);
+  // the script roots itself at its own location, i.e. the tree
+  const head = await git(["rev-parse", "HEAD"], treeDir);
+  const bootstrap = await $`node ${script} ${previous ?? head} ${head} 1`
+    .cwd(treeDir)
+    .quiet()
+    .nothrow();
+  if (bootstrap.exitCode !== 0) {
+    fail(
+      `distilled bootstrap failed (${bootstrap.exitCode}): ${bootstrap.stderr.toString().trim() || bootstrap.stdout.toString().trim()}`,
+    );
+  }
+}
+
 switch (verb) {
   case "get": {
     console.log(JSON.stringify(present() ? await describe() : null));
@@ -222,6 +256,11 @@ switch (verb) {
       // -B (re)points the branch at the base; a remote-tracking base
       // sets the upstream, so `git push` needs no arguments
       const branch = await branchFor(ref);
+      // the HEAD the tree is leaving (none on a fresh tree) — the
+      // bootstrap follows distilled's pin from it to the new HEAD
+      const previous = present()
+        ? await tryGit(["rev-parse", "HEAD"], treeDir)
+        : undefined;
       if (present()) {
         // re-point onto the base: this is the session's own tree
         await git(["checkout", "--force", "-B", branch, base], treeDir);
@@ -230,15 +269,7 @@ switch (verb) {
         await git(["worktree", "add", "-B", branch, treePath, base], root);
       }
       await pruneDistilled();
-      const bootstrap = await $`bun ${resolve(root, BOOTSTRAP_DISTILLED)}`
-        .cwd(treeDir)
-        .quiet()
-        .nothrow();
-      if (bootstrap.exitCode !== 0) {
-        fail(
-          `distilled bootstrap failed (${bootstrap.exitCode}): ${bootstrap.stderr.toString().trim() || bootstrap.stdout.toString().trim()}`,
-        );
-      }
+      await bootstrapDistilled(previous);
       return describe();
     });
     console.log(JSON.stringify(result));

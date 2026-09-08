@@ -50,7 +50,7 @@ export const PullRequests = AI.fragment`
 
   4. **A new provider is two pull requests.** Alchemy's providers call
      the generated SDK in ${nameOf(distilled)} (a submodule pinned by
-     commit at \`distilled/\`). A pull request that adds or extends a
+     commit at \`submodules/distilled/\`). A pull request that adds or extends a
      provider — new resources, new operations, a typed error — ships a
      COMPANION pull request there (JSON patches under
      \`patches/{service}/\`, the regenerated service), opened from a

@@ -85,9 +85,7 @@ export const routes = Effect.gen(function* () {
   // the CONNECTED repositories — static code (Repos.ts)
   const repos = yield* Effect.forEach(connected, (entry) =>
     GitHub.resolveRepository(entry.repository).pipe(
-      Effect.map(
-        (identity) => `${identity.owner}/${identity.repository}`,
-      ),
+      Effect.map((identity) => `${identity.owner}/${identity.repository}`),
     ),
   );
   const identity = yield* GitHub.resolveRepository(primary);
@@ -277,30 +275,26 @@ export const routes = Effect.gen(function* () {
               )
               .join("\n\n")}\n\n${text}`;
       yield* exec.waitUntil(
-        channelAgent
-          .dispatch(prompt, { key: channelRunKey(message.seq) })
-          .pipe(
-            Effect.flatMap((outcome) =>
-              Effect.gen(function* () {
-                // The charter's `reply` tool is the intended door into
-                // the channel; when the model ends the run with plain
-                // text instead (dispatch resolves with the quiescent
-                // text), land that text so the operator never faces
-                // silence.
-                const since = yield* channel.page({ after: message.seq });
-                const replied = since.items.some(
-                  (row) => row.kind === "agent",
-                );
-                if (
-                  !replied &&
-                  typeof outcome === "string" &&
-                  outcome.trim().length > 0
-                ) {
-                  yield* channel.append({ kind: "agent", text: outcome });
-                }
-              }),
-            ),
+        channelAgent.dispatch(prompt, { key: channelRunKey(message.seq) }).pipe(
+          Effect.flatMap((outcome) =>
+            Effect.gen(function* () {
+              // The charter's `reply` tool is the intended door into
+              // the channel; when the model ends the run with plain
+              // text instead (dispatch resolves with the quiescent
+              // text), land that text so the operator never faces
+              // silence.
+              const since = yield* channel.page({ after: message.seq });
+              const replied = since.items.some((row) => row.kind === "agent");
+              if (
+                !replied &&
+                typeof outcome === "string" &&
+                outcome.trim().length > 0
+              ) {
+                yield* channel.append({ kind: "agent", text: outcome });
+              }
+            }),
           ),
+        ),
       );
       return yield* HttpServerResponse.json(message);
     }),
@@ -418,8 +412,7 @@ export const routes = Effect.gen(function* () {
       const engineerTerm = Engineer["~alchemy/Name"];
       yield* Effect.forEach(
         snap?.agents ?? [],
-        (agent) =>
-          sessions.remove(engineerTerm, agent.key, { machine: false }),
+        (agent) => sessions.remove(engineerTerm, agent.key, { machine: false }),
         { discard: true },
       ).pipe(Effect.provide(RuntimeContext.phantom));
       yield* sessions

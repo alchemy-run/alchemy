@@ -31,7 +31,7 @@ export const VerificationGeneral = Verification.make`
   say-so is not evidence. From the repository root:
 
   - \`pnpm exec tsc -b\` — the whole workspace type-checks (CI fails
-    otherwise). A change to \`distilled/\` alone needs no rebuild: tests
+    otherwise). A change to \`submodules/distilled/\` alone needs no rebuild: tests
     resolve it from source.
   - \`timeout 240 pnpm test test/{Cloud}/{Service}/{Resource}.test.ts
     --profile testing\` — one suite against the real cloud (paths are

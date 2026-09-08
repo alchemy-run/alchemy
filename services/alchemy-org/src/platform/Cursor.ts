@@ -45,7 +45,11 @@ export interface CursorPage<T extends Sequenced> {
 
 /** What the server sends over the socket. */
 export type CursorServerFrame<T extends Sequenced> =
-  | { readonly type: "batch"; readonly items: ReadonlyArray<T>; readonly head: number }
+  | {
+      readonly type: "batch";
+      readonly items: ReadonlyArray<T>;
+      readonly head: number;
+    }
   | { readonly type: "live"; readonly seq: number }
   | { readonly type: "item"; readonly item: T }
   | { readonly type: "update"; readonly item: T };

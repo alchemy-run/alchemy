@@ -34,7 +34,7 @@ interface Tree {
  * (idempotent by key).
  *
  * Submodules: `distilled` is bootstrapped through the repo's own
- * `scripts/bootstrap-distilled-worktree.ts` (the `post-checkout` hook's
+ * `scripts/bootstrap-distilled.mjs` (the `post-checkout` hook's
  * script) — a worktree of `.git/modules/distilled` at the commit the
  * parent records, sharing the primary checkout's objects. The vendor
  * submodules (`update = none`) stay absent, as in a fresh clone.

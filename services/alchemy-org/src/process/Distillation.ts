@@ -9,8 +9,8 @@ import { distilled, nameOf } from "../github/Repos.ts";
  * `alchemy-run/distilled` as a patch, regenerate, test again. The SDK
  * improves for every consumer; that is the loop's output, not the
  * resource alone. One unit across two repositories, pinned by the
- * submodule at `distilled/`. Activated when a change adds or extends a
- * provider, touches `distilled/`, handles an SDK error, or is a
+ * submodule at `submodules/distilled/`. Activated when a change adds or extends a
+ * provider, touches `submodules/distilled/`, handles an SDK error, or is a
  * companion pull request in distilled.
  */
 export class Distillation extends AI.Skill<Distillation>(import.meta)(
@@ -35,7 +35,7 @@ export const DistillationGeneral = Distillation.make`
   ## The loop
 
   1. Implement the resource or binding against the distilled service
-     module (\`distilled/packages/{cloud}/src/services/{service}.ts\`).
+     module (\`submodules/distilled/packages/{cloud}/src/services/{service}.ts\`).
   2. Run its live test. Read the failure for what the SDK got wrong:
      an \`Unknown*Error\`, an out-of-union status, a schema decode
      failure, a member the wire has that the type lacks.
@@ -56,7 +56,7 @@ export const DistillationGeneral = Distillation.make`
   compiles the patched model into an Effect SDK module at
   \`src/services/{service}.ts\`. That module is OUTPUT — regeneration
   overwrites it; never edit it. Patches live under
-  \`distilled/packages/{cloud}/patches/{service}/\` as files shaped
+  \`submodules/distilled/packages/{cloud}/patches/{service}/\` as files shaped
   \`{ "description", "patches": [ops] }\`, applied in filename order
   with \`*.manual.json\` last. Patches address the MODEL: shape IDs are
   \`com.{cloud}.{service}#Name\` and member names are wire names
@@ -89,7 +89,7 @@ export const DistillationGeneral = Distillation.make`
   submodule pin points at it — the companion's head commit until it
   merges, its merge commit after. Publish the companion first; in the
   alchemy pull request, name it and state the pin. Checking your own
-  work, \`git ls-tree HEAD distilled\` in the checkout shows the pinned
+  work, \`git ls-tree HEAD submodules/distilled\` in the checkout shows the pinned
   commit, and the companion is found by its branch name; a pin at some
   unrelated commit, or a companion the alchemy side never mentions, is
   a problem to name. Neither side is complete without the other.`;

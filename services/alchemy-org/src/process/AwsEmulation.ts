@@ -8,7 +8,7 @@ import { SandboxGuidance } from "../sandbox/SandboxGuidance.ts";
  * reconciler that runs against AWS runs on a laptop with no account. One
  * unit with the alchemy repository: an AWS resource is not done locally
  * until floci speaks its API. Activated when a change adds or alters an
- * AWS provider, touches `.vendor/floci`, or is a companion pull request
+ * AWS provider, touches `submodules/floci`, or is a companion pull request
  * in `alchemy-run/floci`. Cloudflare's local physics are a different
  * craft — `CloudflareEmulation.ts`, the in-tree workerd runtime.
  */
@@ -32,9 +32,9 @@ export const AwsEmulationGeneral = AwsEmulation.make`
   the local provider.
 
   In the alchemy tree floci is a reference-only vendor submodule at
-  \`.vendor/floci\` (\`update = none\`; fetch it explicitly with
-  \`git submodule update --init --checkout -- .vendor/floci\`). The
-  session image carries the host-built jar (\`.vendor/floci/target\`)
+  \`submodules/floci\` (\`update = none\`; fetch it explicitly with
+  \`git submodule update --init --checkout -- submodules/floci\`). The
+  session image carries the host-built jar (\`submodules/floci/target\`)
   but no JDK: a session that must RUN or BUILD it installs java first
   (\`dnf install -y java-25-amazon-corretto-headless\`, ~30s) — see
   ${SandboxGuidance.source} for what the machine ships.

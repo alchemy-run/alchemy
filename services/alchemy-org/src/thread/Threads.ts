@@ -150,4 +150,8 @@ export const THREAD_TERM = "Thread";
 
 /** Mint a thread id from its name (stable, readable, collision-safe). */
 export const mintThreadId = (name: string): string =>
-  `t-${name.toLowerCase().replaceAll(/[^a-z0-9]+/g, "-").replaceAll(/^-+|-+$/g, "").slice(0, 32)}-${crypto.randomUUID().slice(0, 8)}`;
+  `t-${name
+    .toLowerCase()
+    .replaceAll(/[^a-z0-9]+/g, "-")
+    .replaceAll(/^-+|-+$/g, "")
+    .slice(0, 32)}-${crypto.randomUUID().slice(0, 8)}`;

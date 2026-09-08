@@ -65,14 +65,13 @@ export const ChannelEvents = Layer.effectDiscard(
             // the owning thread: entity state first (facts), then the
             // agent hears it — a routing failure never costs the
             // channel its row (deliver already committed)
-            yield* threads.noteEvent(owner, event).pipe(
-              Effect.catchCause((cause) =>
-                Effect.logWarning(
-                  `thread ${owner}: noteEvent failed`,
-                  cause,
+            yield* threads
+              .noteEvent(owner, event)
+              .pipe(
+                Effect.catchCause((cause) =>
+                  Effect.logWarning(`thread ${owner}: noteEvent failed`, cause),
                 ),
-              ),
-            );
+              );
             yield* agent
               .send(event, { key: owner, wake: false })
               .pipe(

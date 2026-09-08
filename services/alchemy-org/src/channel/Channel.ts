@@ -164,9 +164,7 @@ export class Channel extends Context.Service<
     ) => Effect.Effect<ReadonlyArray<ChannelMessage>>;
     /** The rail's list — projections pushed by ThreadDOs. */
     readonly directory: () => Effect.Effect<ReadonlyArray<ThreadDirectoryRow>>;
-    readonly directoryUpsert: (
-      row: ThreadDirectoryRow,
-    ) => Effect.Effect<void>;
+    readonly directoryUpsert: (row: ThreadDirectoryRow) => Effect.Effect<void>;
     /** Drop a thread's row (a deleted thread) — the rail forgets it. */
     readonly directoryRemove: (id: string) => Effect.Effect<void>;
     /** `ref → thread` ownership, pushed by ThreadDOs on attach/detach. */
@@ -174,9 +172,7 @@ export class Channel extends Context.Service<
       ref: string,
       thread: string | null,
     ) => Effect.Effect<void>;
-    readonly attachmentOf: (
-      ref: string,
-    ) => Effect.Effect<string | undefined>;
+    readonly attachmentOf: (ref: string) => Effect.Effect<string | undefined>;
     /** Claim the one-time bootstrap; `true` exactly once. */
     readonly claimBootstrap: () => Effect.Effect<boolean>;
     /** Route the `/channel` WebSocket upgrade into the DO. */

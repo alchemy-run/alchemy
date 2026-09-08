@@ -60,19 +60,17 @@ export const makeEntityLookup = Effect.gen(function* () {
           message: `${full} is not a connected repository (${connectedNames})`,
         });
       }
-      const issue = yield* repo
-        .getIssue({ issue_number: parsed.number })
-        .pipe(
-          Effect.mapError(
-            (error) =>
-              new BadRef({
-                message:
-                  error._tag === "GitHub.IssueNotFound"
-                    ? `${repo.full}#${parsed.number} does not exist`
-                    : `could not read ${repo.full}#${parsed.number}: ${error.message}`,
-              }),
-          ),
-        );
+      const issue = yield* repo.getIssue({ issue_number: parsed.number }).pipe(
+        Effect.mapError(
+          (error) =>
+            new BadRef({
+              message:
+                error._tag === "GitHub.IssueNotFound"
+                  ? `${repo.full}#${parsed.number} does not exist`
+                  : `could not read ${repo.full}#${parsed.number}: ${error.message}`,
+            }),
+        ),
+      );
       const pull = issue.pull_request;
       return {
         ref: `${repo.full}#${issue.number}`,

@@ -12,7 +12,7 @@ import { fileURLToPath } from "node:url";
 export const ORG_REMOTE = "https://github.com/alchemy-run/alchemy.git";
 
 /** Bump when the staging layout changes — invalidates stale stages. */
-const STAGE_VERSION = "v7";
+const STAGE_VERSION = "v8";
 
 const MARKER = ".bake-fingerprint";
 
@@ -109,7 +109,9 @@ const computeFingerprint = (scratchDir: string) =>
     const root = REPO_ROOT;
 
     const head = yield* readHead(root);
-    const distilledHead = yield* readHead(path.join(root, "distilled"));
+    const distilledHead = yield* readHead(
+      path.join(root, "submodules", "distilled"),
+    );
 
     // dirty state: the porcelain listing names every changed/untracked
     // path; stat each so edits to already-dirty files also move the
@@ -138,7 +140,7 @@ const computeFingerprint = (scratchDir: string) =>
     // recompiled anything; the floci jar whenever it was repackaged
     const artifactsFile = path.join(scratchDir, ".artifacts");
     yield* sh(
-      `{ find . packages services distilled -maxdepth 4 -name '*.tsbuildinfo' 2>/dev/null; ls .vendor/floci/target/quarkus-app/quarkus-run.jar 2>/dev/null; } | ` +
+      `{ find . packages services submodules/distilled -maxdepth 4 -name '*.tsbuildinfo' 2>/dev/null; ls submodules/floci/target/quarkus-app/quarkus-run.jar 2>/dev/null; } | ` +
         `xargs stat -f '%N %m %z' 2>/dev/null | sort > ${q(artifactsFile)} || true`,
       root,
     );
@@ -169,9 +171,9 @@ const computeFingerprint = (scratchDir: string) =>
  *   (`.alchemy`, `.turbo`, `.wrangler`, `.claude`), every nested
  *   `.git` (submodule pointers are meaningless off-host), and
  *   compiled-output source maps (dead weight — see the exclude list);
- * - `.vendor/floci` WITH its locally-built `target/` — build it on
- *   the host (`./mvnw -DskipTests package`) and the VM runs the jar;
- *   the rest of `.vendor` (vendored framework repos) stays home;
+ * - `submodules/floci` (when checked out) WITH its locally-built
+ *   `target/` — build it on the host (`./mvnw -DskipTests package`)
+ *   and the VM runs the jar;
  * - a REAL `.git`, pruned to depth 1 WITHOUT touching the local repo:
  *   `git clone --depth 1 --no-checkout file://<root>` negotiates a
  *   single-commit pack from the local object store (HEAD's commit +
@@ -220,9 +222,6 @@ export const stageBake: Effect.Effect<
   // rsync --delete into the PERSISTENT staging dir: unchanged files
   // are untouched (delta copy), removals propagate, and
   // --delete-excluded evicts anything a NEW exclude rule now covers.
-  // Two passes keep the exclude logic trivial across rsync dialects
-  // (macOS ships openrsync): everything minus .vendor, then
-  // .vendor/floci alone.
   const rsync = (from: string, to: string, excludes: ReadonlyArray<string>) =>
     sh(
       `rsync -a --delete --delete-excluded ${excludes
@@ -232,7 +231,7 @@ export const stageBake: Effect.Effect<
   yield* rsync(root, dir, [
     ".git",
     "node_modules",
-    "/.vendor",
+    "/.vendor", // pre-`submodules/` vendored checkouts a host may still hold
     "/.external", // gitignored research checkouts (terraform-provider-aws…)
     "/.claude",
     ".alchemy",
@@ -242,21 +241,13 @@ export const stageBake: Effect.Effect<
     ".DS_Store",
     ".env*",
     // compiled-output source maps (~160MB across packages/*/{lib,dist}
-    // and distilled/*/lib — js/d.ts from tsc, mjs/d.mts from tsdown):
+    // and submodules/distilled/*/lib — js/d.ts from tsc, mjs/d.mts from tsdown):
     // `tsc -b` judges up-to-date-ness from tsbuildinfo, not from the
     // presence of every emitted file, so dropping them never triggers
     // an in-session rebuild. Nothing tracked ends in .map, so
     // `git status` stays clean.
     "*.map",
   ]);
-  yield* fs.makeDirectory(path.join(dir, ".vendor", "floci"), {
-    recursive: true,
-  });
-  yield* rsync(
-    path.join(root, ".vendor", "floci"),
-    path.join(dir, ".vendor", "floci"),
-    [".git", "node_modules", ".DS_Store"],
-  );
   // The blanket `node_modules` exclude also drops TRACKED files that
   // happen to live in a directory of that name (bundler test fixtures
   // ship fake packages under `test/fixtures/**/node_modules/`) — put
@@ -288,10 +279,14 @@ export const stageBake: Effect.Effect<
   yield* sh(`git remote set-url origin ${ORG_REMOTE}`, dir);
   // submodules ship as plain files here — silence their status noise
   yield* sh("git config submodule.distilled.ignore all", dir);
-  yield* sh(`git config submodule."vendor/floci".ignore all`, dir);
+  yield* sh("git config submodule.floci.ignore all", dir);
 
   // trust nothing implicit: the stage must LOOK like the repo
-  for (const probe of ["package.json", "distilled/package.json", ".git/HEAD"]) {
+  for (const probe of [
+    "package.json",
+    "submodules/distilled/package.json",
+    ".git/HEAD",
+  ]) {
     if (!(yield* fs.exists(path.join(dir, probe)))) {
       return yield* Effect.fail(
         new BakeError(`staging incomplete: missing ${probe} in ${dir}`),

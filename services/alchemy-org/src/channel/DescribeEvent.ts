@@ -7,11 +7,7 @@ const firstLine = (body: string | null | undefined, max = 140): string => {
   return line.length > max ? `${line.slice(0, max - 1)}…` : line;
 };
 
-const link = (
-  repo: string,
-  number: number,
-  url: string | undefined,
-): string =>
+const link = (repo: string, number: number, url: string | undefined): string =>
   url === undefined ? `${repo}#${number}` : `[#${number}](${url})`;
 
 /**

@@ -14,7 +14,7 @@ import { stageBake } from "./SandboxBake.ts";
  * thing that cannot ship: linux `node_modules`.
  *
  * Everything compiled comes from the host — `lib/`, `dist/`,
- * tsbuildinfo, and the floci jar (`.vendor/floci/target`, built
+ * tsbuildinfo, and the floci jar (`submodules/floci/target`, built
  * locally with `./mvnw -DskipTests package`). The bake is a snapshot
  * of the host workspace at deploy time, dirty state included; a
  * session that needs newer code fetches it (session claims land on
@@ -86,12 +86,13 @@ FROM base AS workspace
 # dependency store: lockfiles only, so the layer survives tree edits
 COPY alchemy/package.json alchemy/pnpm-workspace.yaml alchemy/pnpm-lock.yaml /workspace/alchemy/
 COPY alchemy/patches/ /workspace/alchemy/patches/
-COPY alchemy/distilled/package.json alchemy/distilled/pnpm-workspace.yaml alchemy/distilled/pnpm-lock.yaml /workspace/alchemy/distilled/
 
 WORKDIR /workspace/alchemy
 
-RUN pnpm fetch
-RUN cd distilled && pnpm fetch
+# --ignore-pnpmfile: the repo's pnpmfile bootstraps the distilled
+# submodule from git when its .git is missing — it ships here as plain
+# files (nested .git excluded), already a member of the root workspace.
+RUN pnpm fetch --ignore-pnpmfile
 
 # the host's tree, as-is
 COPY alchemy/ /workspace/alchemy/
@@ -116,7 +117,7 @@ COPY alchemy/ /workspace/alchemy/
 # refresh degrades right back to a full re-hash. The untracked cache
 # does the same for the untracked scan (directory mtimes).
 RUN git ls-files -s | grep ^100755 | cut -f2 | xargs -r -d '\\n' chmod +x \\
-  && chmod +x .vendor/floci/mvnw \\
+  && { [ ! -f submodules/floci/mvnw ] || chmod +x submodules/floci/mvnw; } \\
   && git config user.email "org@alchemy.run" \\
   && git config user.name "alchemy-org" \\
   && git config core.checkStat minimal \\
@@ -127,11 +128,10 @@ RUN git ls-files -s | grep ^100755 | cut -f2 | xargs -r -d '\\n' chmod +x \\
 # --ignore-scripts skips the prepare chain (its outputs shipped from
 # the host); effect-tsgo's tsc patch targets the FRESH node_modules,
 # so it re-runs — it is a patch, not a build.
-RUN pnpm install --frozen-lockfile --prefer-offline --ignore-scripts \\
-  && cd distilled && pnpm install --frozen-lockfile --prefer-offline --ignore-scripts
+RUN pnpm install --frozen-lockfile --prefer-offline --ignore-scripts --ignore-pnpmfile
 RUN pnpm exec effect-tsgo patch
 
-# Prune third-party source maps from BOTH node_modules trees before
+# Prune third-party source maps from the node_modules tree before
 # the final COPY: ~630MB, and every *.map under .pnpm is a sourcemap
 # (js/ts/cjs/mjs/css/wasm). Markdown is deliberately KEPT — packages
 # ship agent-facing docs in it (effect's ai-docs/, playwright's and
@@ -143,7 +143,7 @@ RUN pnpm exec effect-tsgo patch
 # fetch\` pulled that this platform never installs (darwin/win32
 # binaries). The index keeps their entries; pnpm treats a missing blob
 # as a cache miss and refetches only if a future install needs it.
-RUN find node_modules/.pnpm distilled/node_modules/.pnpm -type f -name '*.map' -delete \\
+RUN find node_modules/.pnpm -type f -name '*.map' -delete \\
   && find /workspace/.pnpm-store -path '*/files/*' -type f -links 1 -delete
 
 # LAST touch of the tree: write the refreshed index (see checkStat
