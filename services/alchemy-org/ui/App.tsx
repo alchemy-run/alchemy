@@ -36,9 +36,7 @@ const BELL_SEEN_KEY = "alchemy-org:bell-seen";
 const readTerminals = (): Record<string, string[]> => {
   try {
     const raw = localStorage.getItem(TERMINALS_KEY);
-    return raw === null
-      ? {}
-      : (JSON.parse(raw) as Record<string, string[]>);
+    return raw === null ? {} : (JSON.parse(raw) as Record<string, string[]>);
   } catch {
     return {};
   }
@@ -119,9 +117,8 @@ export const App = () => {
   }, [route]);
 
   // terminals per thread — the operator's ptys, remembered locally
-  const [terminals, setTerminals] = useState<Record<string, string[]>>(
-    readTerminals,
-  );
+  const [terminals, setTerminals] =
+    useState<Record<string, string[]>>(readTerminals);
   const rememberTerminals = (next: Record<string, string[]>) => {
     setTerminals(next);
     try {
@@ -192,8 +189,11 @@ export const App = () => {
     () =>
       messages
         .filter(
-          (message): message is ChannelMessage & { card: NonNullable<ChannelMessage["card"]> } =>
-            message.card !== undefined,
+          (
+            message,
+          ): message is ChannelMessage & {
+            card: NonNullable<ChannelMessage["card"]>;
+          } => message.card !== undefined,
         )
         .slice(-20)
         .reverse(),
@@ -313,8 +313,7 @@ export const App = () => {
           </div>
           {/* visited threads stay mounted */}
           {visited.map((id) => {
-            const activeThread =
-              route.kind === "thread" && route.id === id;
+            const activeThread = route.kind === "thread" && route.id === id;
             return (
               <div
                 key={id}

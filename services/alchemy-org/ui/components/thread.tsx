@@ -36,13 +36,7 @@ import {
 import type { ReactNode } from "react";
 import { ReviewView } from "@/components/review";
 
-const Hint = ({
-  label,
-  children,
-}: {
-  label: string;
-  children: ReactNode;
-}) => (
+const Hint = ({ label, children }: { label: string; children: ReactNode }) => (
   <TooltipProvider>
     <Tooltip>
       <TooltipTrigger asChild>{children}</TooltipTrigger>
@@ -66,7 +60,8 @@ const entityIcon = (kind: "issue" | "pull", state: string) => {
       />
     );
   }
-  if (state === "merged") return <GitMerge className="size-3.5 text-terracotta" />;
+  if (state === "merged")
+    return <GitMerge className="size-3.5 text-terracotta" />;
   if (state === "closed") {
     return <GitPullRequestClosed className="size-3.5 text-brick" />;
   }

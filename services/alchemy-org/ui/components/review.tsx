@@ -162,9 +162,7 @@ const FileCard = ({
         </span>
         <span className="shrink-0 font-mono text-[11px] tabular-nums">
           <span className="text-moss">+{file.additions.toLocaleString()}</span>{" "}
-          <span className="text-brick">
-            −{file.deletions.toLocaleString()}
-          </span>
+          <span className="text-brick">−{file.deletions.toLocaleString()}</span>
         </span>
       </button>
       {!collapsed &&
@@ -267,9 +265,12 @@ export const ReviewView = ({
     setLoading(true);
     setError(undefined);
     setFiles([]);
-    fetch(`/api/pulls/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${number}`, {
-      signal: controller.signal,
-    })
+    fetch(
+      `/api/pulls/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${number}`,
+      {
+        signal: controller.signal,
+      },
+    )
       .then(async (response) =>
         response.ok ? ((await response.json()) as PullHeader) : undefined,
       )
@@ -280,10 +281,7 @@ export const ReviewView = ({
       repo,
       number,
       (page) =>
-        setFiles((current) => [
-          ...current,
-          ...page.files.map(toRenderable),
-        ]),
+        setFiles((current) => [...current, ...page.files.map(toRenderable)]),
       controller.signal,
     )
       .then(() => setLoading(false))
@@ -324,20 +322,17 @@ export const ReviewView = ({
 
   /** A pill in the transcript clicked: scroll its file here, light
    *  its lines. */
-  const onAnchorAction = useCallback(
-    (href: string) => {
-      const anchor = parseAnchor(href);
-      if (anchor === undefined) return;
-      setFocus(anchor);
-      // scroll once the card exists (forceNear mounts it)
-      requestAnimationFrame(() => {
-        scrollRef.current
-          ?.querySelector(`[data-review-file="${CSS.escape(anchor.path)}"]`)
-          ?.scrollIntoView({ behavior: "smooth", block: "start" });
-      });
-    },
-    [],
-  );
+  const onAnchorAction = useCallback((href: string) => {
+    const anchor = parseAnchor(href);
+    if (anchor === undefined) return;
+    setFocus(anchor);
+    // scroll once the card exists (forceNear mounts it)
+    requestAnimationFrame(() => {
+      scrollRef.current
+        ?.querySelector(`[data-review-file="${CSS.escape(anchor.path)}"]`)
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }, []);
 
   /** Serialize the pills into the outgoing message. */
   const transformSubmit = useCallback(

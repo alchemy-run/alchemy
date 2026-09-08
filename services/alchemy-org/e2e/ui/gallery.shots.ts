@@ -87,9 +87,7 @@ test("channel: light mode", async ({ page, api }) => {
 test("channel: the bell's list", async ({ page, api }) => {
   seedWorld(api);
   await openApp(page);
-  await page
-    .getByRole("button", { name: /notifications, 1 new/ })
-    .click();
+  await page.getByRole("button", { name: /notifications, 1 new/ }).click();
   await shot(page, "channel-03-bell");
 });
 
@@ -139,10 +137,7 @@ test("review: the diff beside the chat", async ({ page, api }) => {
     "review the helper",
     "The loop bound is off by one — see the selection.",
   );
-  await openApp(
-    page,
-    `${threadPath("t-1")}/alchemy-run/test-alchemy/pull/148`,
-  );
+  await openApp(page, `${threadPath("t-1")}/alchemy-run/test-alchemy/pull/148`);
   await expect(page.getByRole("main")).toContainText("flow-test/sum.ts");
   await shot(page, "review-01-diff");
 });

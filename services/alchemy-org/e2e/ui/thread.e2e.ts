@@ -130,7 +130,9 @@ test("the stop button interrupts the round in flight; the turn ends", async ({
   // talk to
   await expect(main(page).locator("[data-aborted]")).toHaveText("Stopped");
   await expect(stop).toBeHidden();
-  await expect(main(page).getByRole("button", { name: "Submit" })).toBeVisible();
+  await expect(
+    main(page).getByRole("button", { name: "Submit" }),
+  ).toBeVisible();
 });
 
 test("the state pane shows entities, agents, and the worktree", async ({

@@ -263,17 +263,21 @@ test(
           const bash = yield* Bash;
           const sandbox = yield* AI.Sandbox;
           expect(
-            ((yield* (bash as any)({
-              command: "git switch -c agent/feature-a",
-            })) as { exitCode: number }).exitCode,
+            (
+              (yield* (bash as any)({
+                command: "git switch -c agent/feature-a",
+              })) as { exitCode: number }
+            ).exitCode,
           ).toBe(0);
           yield* sandbox
             .writeFile("feature.txt", "session A's work\n")
             .pipe(Effect.orDie);
           expect(
-            ((yield* (bash as any)({
-              command: `git add -A && git ${IDENT.join(" ")} commit -m "feat: session A"`,
-            })) as { exitCode: number }).exitCode,
+            (
+              (yield* (bash as any)({
+                command: `git add -A && git ${IDENT.join(" ")} commit -m "feat: session A"`,
+              })) as { exitCode: number }
+            ).exitCode,
           ).toBe(0);
         }).pipe(Effect.provide(sessionLayers(path.join(root, "tree-a"))));
 
@@ -386,9 +390,11 @@ test.skipIf(!LIVE_TOKEN)(
           const bash = yield* Bash;
           const sandbox = yield* AI.Sandbox;
           expect(
-            ((yield* (bash as any)({
-              command: `git switch -c ${BRANCH}`,
-            })) as { exitCode: number }).exitCode,
+            (
+              (yield* (bash as any)({
+                command: `git switch -c ${BRANCH}`,
+              })) as { exitCode: number }
+            ).exitCode,
           ).toBe(0);
           yield* sandbox
             .writeFile(
@@ -397,9 +403,11 @@ test.skipIf(!LIVE_TOKEN)(
             )
             .pipe(Effect.orDie);
           expect(
-            ((yield* (bash as any)({
-              command: `git add -A && git ${IDENT.join(" ")} commit -m "test: worktree publish"`,
-            })) as { exitCode: number }).exitCode,
+            (
+              (yield* (bash as any)({
+                command: `git add -A && git ${IDENT.join(" ")} commit -m "test: worktree publish"`,
+              })) as { exitCode: number }
+            ).exitCode,
           ).toBe(0);
 
           // the REAL pushBranch tool — token rides the push URL

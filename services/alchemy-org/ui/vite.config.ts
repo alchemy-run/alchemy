@@ -16,10 +16,7 @@ export default defineConfig({
       // workspace package — Vite must resolve the React-only entry
       // (not the AI barrel) so `react` stays out of the Worker bundle
       "alchemy/AI/React": fileURLToPath(
-        new URL(
-          "../../../packages/alchemy/src/AI/React.ts",
-          import.meta.url,
-        ),
+        new URL("../../../packages/alchemy/src/AI/React.ts", import.meta.url),
       ),
     },
   },

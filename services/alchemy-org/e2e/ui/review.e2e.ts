@@ -34,10 +34,7 @@ test("the header carries the pull's state, branches, and size", async ({
   await expect(main(page)).toContainText("→ main");
 });
 
-test("files page in one by one until the last page", async ({
-  page,
-  api,
-}) => {
+test("files page in one by one until the last page", async ({ page, api }) => {
   seed(api);
   await openApp(page, REVIEW_PATH);
 

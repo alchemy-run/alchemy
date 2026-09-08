@@ -2,7 +2,7 @@
   "extends": "../../tsconfig.base.json",
   "include": [
     "alchemy.run.ts",
-    
+
     "src/**/*.ts",
     "test/**/*.ts",
     "e2e/**/*.ts",
@@ -18,9 +18,7 @@
     "target": "ESNext",
     "jsx": "react-jsx",
     "paths": {
-      "@/*": [
-        "./ui/*"
-      ]
+      "@/*": ["./ui/*"]
     }
   },
   "references": [

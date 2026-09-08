@@ -195,9 +195,7 @@ export class FakeApi {
 
   pushDirectory(): void {
     for (const socket of this.channelSockets) {
-      socket.send(
-        JSON.stringify({ type: "directory", rows: this.directory }),
-      );
+      socket.send(JSON.stringify({ type: "directory", rows: this.directory }));
     }
   }
 
@@ -306,7 +304,9 @@ export class FakeApi {
         tick: 0,
         ms: 800,
         text: "",
-        toolCalls: [{ id: `call-${seq + 1}`, name: turn.name, input: turn.input }],
+        toolCalls: [
+          { id: `call-${seq + 1}`, name: turn.name, input: turn.input },
+        ],
       },
     ];
   }
@@ -319,7 +319,11 @@ export class FakeApi {
     this.transcripts[id] = [...rows, full];
     for (const ws of this.chatSockets[id] ?? []) {
       ws.send(
-        JSON.stringify({ type: "observation", durable: true, observation: full }),
+        JSON.stringify({
+          type: "observation",
+          durable: true,
+          observation: full,
+        }),
       );
     }
   }
@@ -462,9 +466,7 @@ export class FakeApi {
       if (frame.type !== "subscribe") return;
       const after = frame.after ?? 0;
       const items = this.messages.filter((message) => message.seq > after);
-      ws.send(
-        JSON.stringify({ type: "batch", items, head: this.nextSeq - 1 }),
-      );
+      ws.send(JSON.stringify({ type: "batch", items, head: this.nextSeq - 1 }));
       ws.send(JSON.stringify({ type: "live", seq: this.nextSeq - 1 }));
       ws.send(JSON.stringify({ type: "directory", rows: this.directory }));
     });
@@ -657,8 +659,7 @@ export class FakeApi {
         )?.seq;
         this.transcripts[id] = rows.filter((row) =>
           isBurst
-            ? row.seq < seq ||
-              (nextInput !== undefined && row.seq >= nextInput)
+            ? row.seq < seq || (nextInput !== undefined && row.seq >= nextInput)
             : row.seq !== seq,
         );
       }

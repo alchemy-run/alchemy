@@ -166,10 +166,7 @@ export const EVENT_FAMILY: Array<
   [RegExp, { icon: LucideIcon; className: string }]
 > = [
   [/^PullRequestMerged/, { icon: GitMerge, className: "text-terracotta" }],
-  [
-    /^PullRequest/,
-    { icon: GitPullRequestArrow, className: "text-terracotta" },
-  ],
+  [/^PullRequest/, { icon: GitPullRequestArrow, className: "text-terracotta" }],
   [/^IssueComment/, { icon: MessageSquare, className: "text-mist" }],
   [/^Issue/, { icon: CircleDot, className: "text-moss" }],
   [
@@ -738,216 +735,227 @@ const ChatTranscript = ({
             }}
           >
             <ContextMenuTrigger asChild>
-          <div
-            className="contents"
-            onContextMenuCapture={yieldLinkContextMenu}
-            onContextMenu={(event) => {
-              // off a row there is nothing to act on — no menu
-              if (
-                !(event.target instanceof Element) ||
-                event.target.closest("[data-message-id]") === null
-              ) {
-                event.preventDefault();
-              }
-            }}
-          >
-          {messages.map((message, messageIndex) => {
-            if (deleted.has(message.id)) return null;
-            // the reply: every text part after the message's last tool
-            // call (all of them when it called none)
-            const lastToolIndex =
-              message.id === finalReplyId
-                ? message.parts.findLastIndex(
-                    (part) => part.type === "dynamic-tool",
-                  )
-                : Number.POSITIVE_INFINITY;
-            const isReplyText = (index: number) => index > lastToolIndex;
-            // a message that is ONLY the reply vanishes entirely
-            if (
-              message.parts.every(
-                (part, index) =>
-                  part.type === "text" && isReplyText(index),
-              )
-            ) {
-              return null;
-            }
-            const meta = message.metadata as
-              | { kind?: "note" | "reminder"; at?: number; aborted?: boolean }
-              | undefined;
-            const kind = meta?.kind;
-            // DAY DIVIDER: a rule wherever the calendar day advances
-            const previousAt = (
-              messages[messageIndex - 1]?.metadata as
-                | { at?: number }
-                | undefined
-            )?.at;
-            const day = dayOf(meta?.at);
-            const newDay =
-              day !== undefined &&
-              (messageIndex === 0 || day !== dayOf(previousAt));
-            // world events and notes carry their own card chrome — the
-            // user-bubble around them reads as an ugly double border
-            const bare =
-              message.role === "user" &&
-              (kind !== undefined ||
-                message.parts.every(
-                  (part) =>
-                    part.type === "text" &&
-                    (parseWorldEvent(part.text) !== undefined ||
-                      part.text.trim().startsWith("<note>") ||
-                      part.text.trim().startsWith("[reminder]")),
-                ));
-            return (
-              <div key={message.id} className="contents">
-                {newDay && meta?.at !== undefined && (
-                  <div className="flex items-center gap-3 py-1">
-                    <div className="h-px flex-1 bg-border" />
-                    <AtTooltip at={meta.at}>
-                      <span className="shrink-0 cursor-default text-[11px] text-muted-foreground hover:text-foreground">
-                        {formatDay(meta.at)}
-                      </span>
-                    </AtTooltip>
-                    <div className="h-px flex-1 bg-border" />
-                  </div>
-                )}
-                <div
-                  data-message-id={message.id}
-                  data-selected={selection.has(message.id) ? "" : undefined}
-                  data-targeted={
-                    menuIds.includes(message.id) ? "" : undefined
+              <div
+                className="contents"
+                onContextMenuCapture={yieldLinkContextMenu}
+                onContextMenu={(event) => {
+                  // off a row there is nothing to act on — no menu
+                  if (
+                    !(event.target instanceof Element) ||
+                    event.target.closest("[data-message-id]") === null
+                  ) {
+                    event.preventDefault();
                   }
-                  onMouseDown={onRowMouseDown}
-                  onClick={(event: MouseEvent) => {
-                    if (!skipRowClick(event)) {
-                      selection.click(message.id, event);
-                    }
-                  }}
-                  onContextMenu={() =>
-                    setMenuIds(selection.target(message.id))
+                }}
+              >
+                {messages.map((message, messageIndex) => {
+                  if (deleted.has(message.id)) return null;
+                  // the reply: every text part after the message's last tool
+                  // call (all of them when it called none)
+                  const lastToolIndex =
+                    message.id === finalReplyId
+                      ? message.parts.findLastIndex(
+                          (part) => part.type === "dynamic-tool",
+                        )
+                      : Number.POSITIVE_INFINITY;
+                  const isReplyText = (index: number) => index > lastToolIndex;
+                  // a message that is ONLY the reply vanishes entirely
+                  if (
+                    message.parts.every(
+                      (part, index) =>
+                        part.type === "text" && isReplyText(index),
+                    )
+                  ) {
+                    return null;
                   }
-                  className={cn(
-                    "-mx-2 -my-1.5 flex items-start gap-2 rounded-md border-l-2 border-transparent px-1.5 py-1.5 transition-colors",
-                    // the row under the pointer lifts; a selected one stays lit
-                    selection.has(message.id) || menuIds.includes(message.id)
-                      ? "border-primary/60 bg-accent/60"
-                      : "hover:bg-accent/70",
-                  )}
-                >
-                  {/* wall-clock gutter — the observation's `at` */}
-                  <div className="w-12 shrink-0 select-none pt-1 text-right font-mono text-[10px] leading-4 text-muted-foreground/60">
-                    {meta?.at !== undefined ? (
-                      <AtTooltip at={meta.at}>
-                        <span className="cursor-default hover:text-foreground">
-                          {formatAt(meta.at)}
-                        </span>
-                      </AtTooltip>
-                    ) : null}
-                  </div>
-                  <Message
-                    from={message.role}
-                    className={cn("min-w-0 flex-1", bare && "max-w-full")}
-                  >
-                    <MessageContent
-                      className={cn(
-                        // cards must never flex-SHRINK vertically — a
-                        // height-squeezed `overflow-hidden` card
-                        // collapses into an empty border pill
-                        "*:shrink-0",
-                        bare &&
-                          "w-full max-w-full group-[.is-user]:bg-transparent group-[.is-user]:px-0 group-[.is-user]:py-0",
-                      )}
-                    >
-                      {message.parts.map((part, index) => {
-                        if (part.type === "reasoning") {
-                          const key = traceKey(part.text);
-                          return (
-                            <ReasoningTrace
-                              key={index}
-                              text={part.text}
-                              streaming={part.state === "streaming"}
-                              open={expandedTraces.has(key)}
-                              onToggle={() => toggleTrace(key)}
-                            />
-                          );
-                        }
-                        if (part.type === "text") {
-                          if (isReplyText(index)) return null;
-                          return (
-                            <TextPart
-                              key={index}
-                              text={part.text}
-                              repo={repo}
-                              kind={kind}
-                            />
-                          );
-                        }
-                        if (part.type === "dynamic-tool") {
-                          const tool = part;
-                          // orphan part (an output whose call this
-                          // client never saw) — nothing renderable
-                          if (!tool.toolName) return null;
-                          const card = (
-                            <ToolCard
-                              key={index}
-                              toolName={tool.toolName}
-                              state={tool.state}
-                              input={tool.input}
-                              output={tool.output}
-                              errorText={tool.errorText}
-                            />
-                          );
-                          // registry-rendered tools get the compact
-                          // card; unknown tools keep the generic
-                          // collapsible
-                          if (hasToolCard(tool.toolName)) return card;
-                          return (
-                            <Tool key={index}>
-                              <ToolHeader
-                                type={tool.type}
-                                state={tool.state}
-                                toolName={tool.toolName}
-                              />
-                              <ToolContent>
-                                <ToolInput input={tool.input} />
-                                <ToolOutput
-                                  output={
-                                    typeof tool.output === "string" ? (
-                                      <pre className="whitespace-pre-wrap p-3 text-xs">
-                                        <Ansi text={tool.output} />
-                                      </pre>
-                                    ) : tool.output !== undefined ? (
-                                      <pre className="whitespace-pre-wrap p-3 text-xs">
-                                        {JSON.stringify(tool.output, null, 2)}
-                                      </pre>
-                                    ) : undefined
-                                  }
-                                  errorText={tool.errorText}
-                                />
-                              </ToolContent>
-                            </Tool>
-                          );
-                        }
-                        return null;
-                      })}
-                      {/* the operator's stop — a quiet marker where the
-                          round was cut short (live: the turn's finish
-                          carried it; snapshot: the burst wears it) */}
-                      {meta?.aborted === true && (
-                        <div
-                          data-aborted
-                          className="flex items-center gap-1.5 py-0.5 text-xs text-muted-foreground"
-                        >
-                          <Square className="size-3 fill-current" />
-                          Stopped
+                  const meta = message.metadata as
+                    | {
+                        kind?: "note" | "reminder";
+                        at?: number;
+                        aborted?: boolean;
+                      }
+                    | undefined;
+                  const kind = meta?.kind;
+                  // DAY DIVIDER: a rule wherever the calendar day advances
+                  const previousAt = (
+                    messages[messageIndex - 1]?.metadata as
+                      | { at?: number }
+                      | undefined
+                  )?.at;
+                  const day = dayOf(meta?.at);
+                  const newDay =
+                    day !== undefined &&
+                    (messageIndex === 0 || day !== dayOf(previousAt));
+                  // world events and notes carry their own card chrome — the
+                  // user-bubble around them reads as an ugly double border
+                  const bare =
+                    message.role === "user" &&
+                    (kind !== undefined ||
+                      message.parts.every(
+                        (part) =>
+                          part.type === "text" &&
+                          (parseWorldEvent(part.text) !== undefined ||
+                            part.text.trim().startsWith("<note>") ||
+                            part.text.trim().startsWith("[reminder]")),
+                      ));
+                  return (
+                    <div key={message.id} className="contents">
+                      {newDay && meta?.at !== undefined && (
+                        <div className="flex items-center gap-3 py-1">
+                          <div className="h-px flex-1 bg-border" />
+                          <AtTooltip at={meta.at}>
+                            <span className="shrink-0 cursor-default text-[11px] text-muted-foreground hover:text-foreground">
+                              {formatDay(meta.at)}
+                            </span>
+                          </AtTooltip>
+                          <div className="h-px flex-1 bg-border" />
                         </div>
                       )}
-                    </MessageContent>
-                  </Message>
-                </div>
+                      <div
+                        data-message-id={message.id}
+                        data-selected={
+                          selection.has(message.id) ? "" : undefined
+                        }
+                        data-targeted={
+                          menuIds.includes(message.id) ? "" : undefined
+                        }
+                        onMouseDown={onRowMouseDown}
+                        onClick={(event: MouseEvent) => {
+                          if (!skipRowClick(event)) {
+                            selection.click(message.id, event);
+                          }
+                        }}
+                        onContextMenu={() =>
+                          setMenuIds(selection.target(message.id))
+                        }
+                        className={cn(
+                          "-mx-2 -my-1.5 flex items-start gap-2 rounded-md border-l-2 border-transparent px-1.5 py-1.5 transition-colors",
+                          // the row under the pointer lifts; a selected one stays lit
+                          selection.has(message.id) ||
+                            menuIds.includes(message.id)
+                            ? "border-primary/60 bg-accent/60"
+                            : "hover:bg-accent/70",
+                        )}
+                      >
+                        {/* wall-clock gutter — the observation's `at` */}
+                        <div className="w-12 shrink-0 select-none pt-1 text-right font-mono text-[10px] leading-4 text-muted-foreground/60">
+                          {meta?.at !== undefined ? (
+                            <AtTooltip at={meta.at}>
+                              <span className="cursor-default hover:text-foreground">
+                                {formatAt(meta.at)}
+                              </span>
+                            </AtTooltip>
+                          ) : null}
+                        </div>
+                        <Message
+                          from={message.role}
+                          className={cn("min-w-0 flex-1", bare && "max-w-full")}
+                        >
+                          <MessageContent
+                            className={cn(
+                              // cards must never flex-SHRINK vertically — a
+                              // height-squeezed `overflow-hidden` card
+                              // collapses into an empty border pill
+                              "*:shrink-0",
+                              bare &&
+                                "w-full max-w-full group-[.is-user]:bg-transparent group-[.is-user]:px-0 group-[.is-user]:py-0",
+                            )}
+                          >
+                            {message.parts.map((part, index) => {
+                              if (part.type === "reasoning") {
+                                const key = traceKey(part.text);
+                                return (
+                                  <ReasoningTrace
+                                    key={index}
+                                    text={part.text}
+                                    streaming={part.state === "streaming"}
+                                    open={expandedTraces.has(key)}
+                                    onToggle={() => toggleTrace(key)}
+                                  />
+                                );
+                              }
+                              if (part.type === "text") {
+                                if (isReplyText(index)) return null;
+                                return (
+                                  <TextPart
+                                    key={index}
+                                    text={part.text}
+                                    repo={repo}
+                                    kind={kind}
+                                  />
+                                );
+                              }
+                              if (part.type === "dynamic-tool") {
+                                const tool = part;
+                                // orphan part (an output whose call this
+                                // client never saw) — nothing renderable
+                                if (!tool.toolName) return null;
+                                const card = (
+                                  <ToolCard
+                                    key={index}
+                                    toolName={tool.toolName}
+                                    state={tool.state}
+                                    input={tool.input}
+                                    output={tool.output}
+                                    errorText={tool.errorText}
+                                  />
+                                );
+                                // registry-rendered tools get the compact
+                                // card; unknown tools keep the generic
+                                // collapsible
+                                if (hasToolCard(tool.toolName)) return card;
+                                return (
+                                  <Tool key={index}>
+                                    <ToolHeader
+                                      type={tool.type}
+                                      state={tool.state}
+                                      toolName={tool.toolName}
+                                    />
+                                    <ToolContent>
+                                      <ToolInput input={tool.input} />
+                                      <ToolOutput
+                                        output={
+                                          typeof tool.output === "string" ? (
+                                            <pre className="whitespace-pre-wrap p-3 text-xs">
+                                              <Ansi text={tool.output} />
+                                            </pre>
+                                          ) : tool.output !== undefined ? (
+                                            <pre className="whitespace-pre-wrap p-3 text-xs">
+                                              {JSON.stringify(
+                                                tool.output,
+                                                null,
+                                                2,
+                                              )}
+                                            </pre>
+                                          ) : undefined
+                                        }
+                                        errorText={tool.errorText}
+                                      />
+                                    </ToolContent>
+                                  </Tool>
+                                );
+                              }
+                              return null;
+                            })}
+                            {/* the operator's stop — a quiet marker where the
+                          round was cut short (live: the turn's finish
+                          carried it; snapshot: the burst wears it) */}
+                            {meta?.aborted === true && (
+                              <div
+                                data-aborted
+                                className="flex items-center gap-1.5 py-0.5 text-xs text-muted-foreground"
+                              >
+                                <Square className="size-3 fill-current" />
+                                Stopped
+                              </div>
+                            )}
+                          </MessageContent>
+                        </Message>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-            );
-          })}
-          </div>
             </ContextMenuTrigger>
             <ContextMenuContent>
               <ContextMenuItem
