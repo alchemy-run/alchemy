@@ -429,7 +429,6 @@ const charter = Effect.gen(function* () {
  * tick is one eval in a fresh isolate (`worker_loader`).
  */
 export const ChannelAgentLive = ChannelAgent.make(charter).pipe(
-  Layer.provide(
-    AI.CodeModeAsync().pipe(Layer.provide(Cloudflare.AI.EvalWorkerLoader())),
-  ),
+  Layer.provide(AI.CodeModeAsync()),
+  Layer.provide(Cloudflare.AI.EvalWorkerLoader()),
 );

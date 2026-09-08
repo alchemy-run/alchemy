@@ -45,26 +45,41 @@ test("the composer posts to the channel and the echo lands live", async ({
   await expect(main(page)).toContainText("hello channel");
 });
 
-test("the run pill works, unfolds the run, and settles on the reply", async ({
+test("the run pill opens the run rail; the eval card shows code and output", async ({
   page,
   api,
 }) => {
   const asked = api.seedUser("triage this please");
-  api.seedTurn(
-    `Channel:main@${asked.seq}`,
-    "triage this please",
-    "Looked at the stream — placing it on a thread.",
-  );
+  // the run's session: one codemode eval — the program, its result,
+  // and what it logged
+  api.seedTool(`Channel:main@${asked.seq}`, {
+    ask: "triage this please",
+    name: "eval",
+    input: {
+      code: 'const hits = await search_messages({ q: "reconcile" });\nexport default hits;',
+    },
+    output: '{ "total": 3 }\n\n--- logs ---\nsearching the stream…',
+    reply: "Looked at the stream — placing it on a thread.",
+  });
   await openApp(page);
 
   // in flight: no agent reply after the message yet
   const pill = main(page).getByRole("button", { name: /working/ });
   await expect(pill).toBeVisible();
 
-  // the pill unfolds the run's own session — the exploration lives
-  // there, not in the channel stream
+  // the pill opens the run's own session in the right-hand rail — the
+  // exploration lives there, not in the channel stream
   await pill.click();
-  await expect(main(page)).toContainText(
+  const rail = page.getByRole("complementary", { name: "Run" });
+
+  // the eval card: the program syntax-highlighted, the result, the logs
+  await expect(rail).toContainText("Run code");
+  await expect(rail).toContainText("search_messages");
+  await expect(rail).toContainText('"total": 3');
+  await expect(rail).toContainText("searching the stream…");
+
+  // the run's FINAL reply belongs to the channel, not the rail
+  await expect(rail).not.toContainText(
     "Looked at the stream — placing it on a thread.",
   );
 
@@ -73,6 +88,10 @@ test("the run pill works, unfolds the run, and settles on the reply", async ({
   await expect(
     main(page).getByRole("button", { name: /^ran$/ }),
   ).toBeVisible();
+
+  // the rail closes on demand
+  await rail.getByRole("button", { name: "Close the run pane" }).click();
+  await expect(rail).toBeHidden();
 });
 
 test("a live event pushed over the socket appears without a reload", async ({

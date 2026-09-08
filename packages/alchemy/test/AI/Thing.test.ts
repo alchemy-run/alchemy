@@ -9,7 +9,12 @@
  */
 import * as AI from "@/AI/index.ts";
 import { renderSignature } from "@/AI/CodeMode.ts";
-import { compileTool, getToolErrors, render } from "@/AI/DriverCore.ts";
+import {
+  compileTool,
+  getToolErrors,
+  isVoidToolSuccess,
+  render,
+} from "@/AI/DriverCore.ts";
 import { describe, expect, it } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -91,11 +96,13 @@ describe("AI.Thing directions", () => {
   it("no declared output means the tool returns void", () => {
     const term = AI.Tool("mark_done")`
       Record that ${q} is done.`;
-    // the wire: the success schema only admits undefined (S.Undefined,
-    // not S.Void — Void would swallow failure payloads in the
-    // failureMode:"return" result union)
-    expect(((compileTool(term) as any).successSchema.ast as any)._tag).toBe(
-      "Undefined",
+    // the wire: the success schema only admits undefined (never a
+    // failure payload) and ENCODES a successful void call to the
+    // literal "success" — the model reads "success", never null/""
+    const successSchema = (compileTool(term) as any).successSchema;
+    expect(isVoidToolSuccess(successSchema)).toBe(true);
+    expect(S.encodeUnknownSync(successSchema as any)(undefined)).toBe(
+      "success",
     );
     // the types: the tool's declared success IS void — a consumer
     // cannot read a value out of an undeclared output (TS's usual
@@ -119,10 +126,9 @@ describe("codemode signatures", () => {
       name: term["~alchemy/Name"],
       description: AiTool.getDescription(tool) ?? "",
       parameters: AiTool.getJsonSchema(tool),
-      returns:
-        (successSchema?.ast?._tag ?? "") === "Undefined"
-          ? { type: "void" }
-          : AiTool.getJsonSchemaFromSchema(successSchema),
+      returns: isVoidToolSuccess(successSchema)
+        ? { type: "void" }
+        : AiTool.getJsonSchemaFromSchema(successSchema),
       errors: getToolErrors(tool),
       tool,
       handler: () => Effect.void,

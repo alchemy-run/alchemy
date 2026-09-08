@@ -22,6 +22,7 @@ import {
   Send,
   Signpost,
   Sparkles,
+  SquareCode,
   StickyNote,
   Tag,
   Terminal,
@@ -34,6 +35,7 @@ import { useState, type ReactNode } from "react";
 import type { GeneralEngineer } from "../../src/coding/Engineer.ts";
 import { useAnchoredToggle } from "@/lib/anchor";
 import { Ansi, stripAnsi } from "@/lib/ansi";
+import { CodeCard } from "@/components/code";
 import { cn } from "@/lib/utils";
 
 /* ── helpers ─────────────────────────────────────────────────── */
@@ -162,6 +164,9 @@ export interface ToolCallView {
   readonly body?: ReactNode;
   /** Collapsed result line (`→ …`) — the outcome without expanding. */
   readonly summary?: string;
+  /** Open the body on first render — for cards whose detail IS the
+   *  story (eval's program), not an appendix. */
+  readonly defaultOpen?: boolean;
 }
 
 /** The last non-empty line — where a command's verdict usually is.
@@ -874,12 +879,77 @@ const CODER: Renderers<typeof GeneralEngineer> = {
   },
 };
 
+/** An eval result as CodeMode renders it: the program's output, then
+ *  an optional `--- logs ---` section of captured console output. */
+const EVAL_LOGS_MARKER = "\n\n--- logs ---\n";
+const splitEvalOutput = (
+  raw: string,
+): { result: string; logs: string | undefined } => {
+  const marker = raw.indexOf(EVAL_LOGS_MARKER);
+  return marker < 0
+    ? { result: raw, logs: undefined }
+    : {
+        result: raw.slice(0, marker),
+        logs: raw.slice(marker + EVAL_LOGS_MARKER.length),
+      };
+};
+
 /**
- * The remainder: driver intrinsics (`skill`, `remind_me` — their
- * schemas live in the driver, not on any agent's wire). Unknown names
- * fall back to the generic collapsible card.
+ * The remainder: driver intrinsics (`eval`, `skill`, `remind_me` —
+ * their schemas live in the driver, not on any agent's wire). Unknown
+ * names fall back to the generic collapsible card.
  */
 const EXTRAS: Record<string, Renderer> = {
+  /** CODEMODE's one tool — the model writes a whole module. The card
+   *  shows the program syntax-highlighted, then what it evaluated to
+   *  and anything it logged. */
+  eval: (input, output, running) => {
+    const code = String(input.code ?? "");
+    const parsed = output === undefined ? undefined : splitEvalOutput(output);
+    return {
+      icon: SquareCode,
+      title: (
+        <>
+          Run code{" "}
+          <span className="text-muted-foreground">
+            · {countLines(code)} line{countLines(code) === 1 ? "" : "s"}
+          </span>
+        </>
+      ),
+      summary:
+        parsed === undefined ? undefined : lastLine(parsed.result),
+      defaultOpen: true,
+      body: (
+        <div className="divide-y divide-border/50">
+          <div className="p-2 [&_.code-surface]:my-0">
+            <CodeCard code={code} language="typescript" />
+          </div>
+          {running && (
+            <div className="px-3 py-2 text-[11px] text-muted-foreground">
+              <span className="animate-pulse">evaluating…</span>
+            </div>
+          )}
+          {parsed !== undefined && parsed.result.length > 0 && (
+            <div>
+              <div className="px-2 pt-1.5 text-[11px] font-medium text-muted-foreground">
+                result
+              </div>
+              <WindowedText text={parsed.result} />
+            </div>
+          )}
+          {parsed?.logs !== undefined && parsed.logs.length > 0 && (
+            <div>
+              <div className="px-2 pt-1.5 text-[11px] font-medium text-muted-foreground">
+                logs
+              </div>
+              <WindowedText text={parsed.logs} />
+            </div>
+          )}
+        </div>
+      ),
+    };
+  },
+
   skill: (input, output) => ({
     icon: Sparkles,
     title: (
@@ -943,17 +1013,18 @@ export const ToolCard = ({
   const renderer = RENDERERS[toolName];
   const running = state === "input-available" || state === "input-streaming";
   const failed = state === "output-error";
-  // errors default open — the failure is the story
-  const [open, setOpen] = useState(failed);
-  const anchored = useAnchoredToggle();
-
-  if (renderer === undefined) return null;
-
-  const view = renderer(
+  const view = renderer?.(
     (input ?? {}) as Record<string, any>,
     failed ? undefined : outputText(output),
     running,
   );
+  // errors default open — the failure is the story; some cards open
+  // by design (eval — the program IS the story)
+  const [open, setOpen] = useState(failed || view?.defaultOpen === true);
+  const anchored = useAnchoredToggle();
+
+  if (renderer === undefined || view === undefined) return null;
+
   const expandable = view.body !== undefined || failed;
 
   return (

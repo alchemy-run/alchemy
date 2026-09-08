@@ -7,6 +7,7 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as S from "effect/Schema";
+import * as SchemaGetter from "effect/SchemaGetter";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import { isAiError, type AiError } from "effect/unstable/ai/AiError";
@@ -254,6 +255,34 @@ export const ToolErrorTags: Context.Reference<
   }> => [],
 });
 
+/**
+ * The success schema of a tool that declares no `${AI.out(…)}` splices.
+ *
+ * Its TYPE is `undefined` — the impl returns nothing, codemode renders
+ * `void` — but it ENCODES to the literal `"success"`, so the durable
+ * tool-result row (and therefore every provider's wire format) shows
+ * the model an unambiguous `"success"` instead of `undefined`/`null`/`""`.
+ *
+ * Why not plain `S.Void`/`S.Undefined`: with `failureMode: "return"` the
+ * toolkit encodes results through `Union([success, failure, AiError])`.
+ * `S.Void` accepts ANY value (swallowing failure payloads); a bare
+ * `S.Undefined` keeps failures intact but leaves a successful void call
+ * encoding to nothing — which providers render as `null` or an empty
+ * string, leaving the model unsure whether the call did anything. This
+ * transform only matches `undefined` (failures still fall through to the
+ * failure schema) and stamps the wire with `"success"`.
+ */
+export const VoidToolSuccess = S.Literal("success").pipe(
+  S.decodeTo(S.Undefined, {
+    decode: SchemaGetter.transform(() => undefined),
+    encode: SchemaGetter.transform(() => "success" as const),
+  }),
+);
+
+/** True when a compiled tool's success schema is the void marker. */
+export const isVoidToolSuccess = (schema: unknown): boolean =>
+  schema === VoidToolSuccess;
+
 /** The declared failures of a compiled tool, oldest mention first. */
 export const getToolErrors = (
   tool: AiTool.Any,
@@ -321,16 +350,12 @@ export const compileTool = (term: Tool<any, any>) => {
     // `${AI.out(…)}` splices, VOID when there are none (strict,
     // explicit typing: outputs live in the prose, and a tool that
     // declares none acts without answering). Codemode renders it into
-    // the generated signature the model programs against.
-    // `S.Undefined`, not `S.Void`: with `failureMode: "return"` the
-    // toolkit encodes results through `Union([success, failure, …])`,
-    // and Void accepts ANY value (encoding it to nothing) — it would
-    // swallow the failure payload. Undefined only matches undefined,
-    // so failures fall through to the failure schema intact.
+    // the generated signature the model programs against; on the wire
+    // a successful void call reads `"success"` (see VoidToolSuccess).
     success:
       Object.keys(outFields).length > 0
         ? (S.Struct(outFields) as unknown as S.Top)
-        : S.Undefined,
+        : VoidToolSuccess,
     // the declared failures, when they can describe themselves;
     // `failureMode: "return"` keeps a failure a MODEL-VISIBLE result
     failure:
@@ -1037,10 +1062,9 @@ export const compileTick = (
           // a VOID success flattens to `{"type":"null"}` in JSON schema —
           // hand codemode the honest marker so the generated signature
           // says `void`, not `null`
-          returns:
-            ((tool as any).successSchema?.ast?._tag ?? "") === "Undefined"
-              ? { type: "void" }
-              : AiTool.getJsonSchemaFromSchema((tool as any).successSchema),
+          returns: isVoidToolSuccess((tool as any).successSchema)
+            ? { type: "void" }
+            : AiTool.getJsonSchemaFromSchema((tool as any).successSchema),
           errors: getToolErrors(tool),
           tool,
           handler: capabilityHandlers[tool.name]!,

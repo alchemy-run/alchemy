@@ -18,6 +18,7 @@ import {
 } from "@/components/chat";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { Rail } from "@/components/rail";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import type { ChannelMessage, ThreadDirectoryRow } from "@/lib/channel";
@@ -29,6 +30,7 @@ import {
   FileDiff,
   MessageCircle,
   Terminal,
+  X,
 } from "lucide-react";
 import {
   memo,
@@ -120,13 +122,22 @@ const EventRow = memo(
 EventRow.displayName = "EventRow";
 
 /** The operator speaking — avatar, name, text, and the RUN it
- *  triggered, collapsed under a pill. While the agent is answering
- *  the pill pulses ("working"); either way clicking it unfolds the
- *  run's own session — the exploration happens THERE, never in the
- *  channel stream. */
+ *  triggered, behind a pill. While the agent is answering the pill
+ *  pulses ("working"); either way clicking it opens the run's own
+ *  session in the right-hand rail — the exploration happens THERE,
+ *  never in the channel stream. */
 const UserRow = memo(
-  ({ message, working }: { message: ChannelMessage; working: boolean }) => {
-    const [showRun, setShowRun] = useState(false);
+  ({
+    message,
+    working,
+    runOpen,
+    onToggleRun,
+  }: {
+    message: ChannelMessage;
+    working: boolean;
+    runOpen: boolean;
+    onToggleRun: () => void;
+  }) => {
     const login = message.author?.login;
     return (
       <div className="flex items-start gap-2 px-1 py-1.5">
@@ -146,12 +157,14 @@ const UserRow = memo(
             </span>
             <button
               type="button"
-              onClick={() => setShowRun((current) => !current)}
+              onClick={onToggleRun}
               className={cn(
                 "inline-flex cursor-pointer items-center gap-1 rounded-full border px-2 py-0 text-[11px]",
-                working
-                  ? "border-moss/40 bg-moss/10 text-foreground"
-                  : "border-border text-muted-foreground hover:bg-accent hover:text-foreground",
+                runOpen
+                  ? "border-primary/50 bg-accent text-foreground"
+                  : working
+                    ? "border-moss/40 bg-moss/10 text-foreground"
+                    : "border-border text-muted-foreground hover:bg-accent hover:text-foreground",
               )}
               title={
                 working
@@ -166,7 +179,7 @@ const UserRow = memo(
               <ChevronDown
                 className={cn(
                   "size-3 transition-transform",
-                  !showRun && "-rotate-90",
+                  !runOpen && "-rotate-90",
                 )}
               />
             </button>
@@ -174,15 +187,6 @@ const UserRow = memo(
           <div className="text-[13px]">
             <MarkdownText text={message.text} />
           </div>
-          {showRun && (
-            <div className="mt-1.5 flex h-80 flex-col overflow-hidden rounded-md border border-border bg-muted/20">
-              <ChatView
-                id={`Channel:main@${message.seq}`}
-                active={false}
-                readOnly
-              />
-            </div>
-          )}
         </div>
       </div>
     );
@@ -301,6 +305,8 @@ export const ChannelView = ({
 }) => {
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
+  // the run rail: the seq of the user message whose run is open
+  const [runSeq, setRunSeq] = useState<number | undefined>(undefined);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const stickRef = useRef(true);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -362,6 +368,12 @@ export const ChannelView = ({
               key={message.seq}
               message={message}
               working={live && message.seq > lastAnswered}
+              runOpen={runSeq === message.seq}
+              onToggleRun={() =>
+                setRunSeq((current) =>
+                  current === message.seq ? undefined : message.seq,
+                )
+              }
             />,
           );
           break;
@@ -382,7 +394,15 @@ export const ChannelView = ({
       }
     }
     return out;
-  }, [messages, directory, live, lastAnswered, onOpenThread, onOpenReview]);
+  }, [
+    messages,
+    directory,
+    live,
+    lastAnswered,
+    runSeq,
+    onOpenThread,
+    onOpenReview,
+  ]);
 
   const send = () => {
     const text = draft.trim();
@@ -396,66 +416,104 @@ export const ChannelView = ({
   };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div
-        ref={scrollRef}
-        onScroll={(event) => {
-          const target = event.currentTarget;
-          stickRef.current =
-            target.scrollHeight - target.scrollTop - target.clientHeight < 80;
-        }}
-        className="min-h-0 flex-1 overflow-y-auto"
-      >
-        <div className="mx-auto flex max-w-4xl flex-col px-4 py-4">
-          {rows.length === 0 && (
-            <div className="flex flex-col items-center gap-2 py-16 text-muted-foreground">
-              {live ? (
-                <>
-                  <AlchemyMark className="size-8 opacity-40" />
-                  <span className="text-sm">
-                    The channel is empty — events land here as they happen.
-                  </span>
-                </>
-              ) : (
-                <Spinner className="size-5" />
-              )}
-            </div>
-          )}
-          {rows}
-        </div>
-      </div>
-      <div className="mx-auto w-full max-w-4xl px-4 pb-4">
-        <div className="relative rounded-lg border border-border bg-card shadow-xs focus-within:ring-1 focus-within:ring-ring">
-          <Textarea
-            ref={textareaRef}
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" && !event.shiftKey) {
-                event.preventDefault();
-                send();
-              }
-            }}
-            placeholder="Message the channel — the agent routes, you decide…"
-            aria-label="Message the channel"
-            className="min-h-12 resize-none border-0 bg-transparent pr-12 shadow-none focus-visible:ring-0"
-          />
-          <Button
-            size="icon"
-            variant="ghost"
-            disabled={draft.trim().length === 0 || sending}
-            onClick={send}
-            aria-label="Send"
-            className="absolute right-2 bottom-2 size-7 text-muted-foreground"
-          >
-            {sending ? (
-              <Spinner className="size-4" />
-            ) : (
-              <ArrowUp className="size-4" />
+    <div className="flex min-h-0 flex-1">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <div
+          ref={scrollRef}
+          onScroll={(event) => {
+            const target = event.currentTarget;
+            stickRef.current =
+              target.scrollHeight - target.scrollTop - target.clientHeight <
+              80;
+          }}
+          className="min-h-0 flex-1 overflow-y-auto"
+        >
+          <div className="mx-auto flex max-w-4xl flex-col px-4 py-4">
+            {rows.length === 0 && (
+              <div className="flex flex-col items-center gap-2 py-16 text-muted-foreground">
+                {live ? (
+                  <>
+                    <AlchemyMark className="size-8 opacity-40" />
+                    <span className="text-sm">
+                      The channel is empty — events land here as they happen.
+                    </span>
+                  </>
+                ) : (
+                  <Spinner className="size-5" />
+                )}
+              </div>
             )}
-          </Button>
+            {rows}
+          </div>
+        </div>
+        <div className="mx-auto w-full max-w-4xl px-4 pb-4">
+          <div className="relative rounded-lg border border-border bg-card shadow-xs focus-within:ring-1 focus-within:ring-ring">
+            <Textarea
+              ref={textareaRef}
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && !event.shiftKey) {
+                  event.preventDefault();
+                  send();
+                }
+              }}
+              placeholder="Message the channel — the agent routes, you decide…"
+              aria-label="Message the channel"
+              className="min-h-12 resize-none border-0 bg-transparent pr-12 shadow-none focus-visible:ring-0"
+            />
+            <Button
+              size="icon"
+              variant="ghost"
+              disabled={draft.trim().length === 0 || sending}
+              onClick={send}
+              aria-label="Send"
+              className="absolute right-2 bottom-2 size-7 text-muted-foreground"
+            >
+              {sending ? (
+                <Spinner className="size-4" />
+              ) : (
+                <ArrowUp className="size-4" />
+              )}
+            </Button>
+          </div>
         </div>
       </div>
+      {/* the run rail — the agent's session on one message, beside the
+          stream (the exploration never streams into the channel) */}
+      {runSeq !== undefined && (
+        <Rail
+          label="Run"
+          side="right"
+          storageKey="run-rail-width"
+          defaultWidth={480}
+          minWidth={360}
+          className="bg-background"
+        >
+          <div className="flex items-center gap-2 border-b border-border px-3 py-2">
+            <span className="min-w-0 flex-1 truncate text-[13px] font-medium">
+              The agent's run
+            </span>
+            <button
+              type="button"
+              onClick={() => setRunSeq(undefined)}
+              aria-label="Close the run pane"
+              className="flex size-6 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+            >
+              <X className="size-4" />
+            </button>
+          </div>
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+            <ChatView
+              key={runSeq}
+              id={`Channel:main@${runSeq}`}
+              active={false}
+              readOnly
+              hideFinalReply
+            />
+          </div>
+        </Rail>
+      )}
     </div>
   );
 };

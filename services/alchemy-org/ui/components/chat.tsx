@@ -545,6 +545,10 @@ export interface ChatProps {
   placeholder?: string;
   /** Hide the composer (read-only transcript, e.g. a channel run). */
   readOnly?: boolean;
+  /** Hide the trailing assistant reply — for a channel RUN, the final
+   *  text is the channel's message (Routes lands it there); the rail
+   *  shows only the exploration that produced it. */
+  hideFinalReply?: boolean;
   /** Extra content pinned under the composer (the review's pill row
    *  is passed through `composerExtra`). */
   composerExtra?: ReactNode;
@@ -561,6 +565,7 @@ const ChatTranscript = ({
   repo,
   placeholder,
   readOnly,
+  hideFinalReply,
   composerExtra,
   transformSubmit,
 }: ChatProps & {
@@ -616,12 +621,43 @@ const ChatTranscript = ({
     void sendMessage({ text: transformSubmit?.(text) ?? text });
   };
 
+  // The final reply is the CHANNEL's message (Routes lands the run's
+  // quiescent text there) — the rail shows the exploration, not the
+  // answer. The reply is the text of the trailing assistant message
+  // AFTER its last tool call (the whole burst renders as one message);
+  // tool cards and reasoning stay visible.
+  const lastMessage = messages[messages.length - 1];
+  const finalReplyId =
+    hideFinalReply === true &&
+    lastMessage !== undefined &&
+    lastMessage.role === "assistant"
+      ? lastMessage.id
+      : undefined;
+
   return (
     <>
       {/* initial="instant": open AT the end, no scroll animation */}
       <Conversation className="min-h-0 flex-1" initial="instant">
         <ConversationContent className="mx-auto max-w-3xl">
           {messages.map((message, messageIndex) => {
+            // the reply: every text part after the message's last tool
+            // call (all of them when it called none)
+            const lastToolIndex =
+              message.id === finalReplyId
+                ? message.parts.findLastIndex(
+                    (part) => part.type === "dynamic-tool",
+                  )
+                : Number.POSITIVE_INFINITY;
+            const isReplyText = (index: number) => index > lastToolIndex;
+            // a message that is ONLY the reply vanishes entirely
+            if (
+              message.parts.every(
+                (part, index) =>
+                  part.type === "text" && isReplyText(index),
+              )
+            ) {
+              return null;
+            }
             const meta = message.metadata as
               | { kind?: "note" | "reminder"; at?: number }
               | undefined;
@@ -700,6 +736,7 @@ const ChatTranscript = ({
                           );
                         }
                         if (part.type === "text") {
+                          if (isReplyText(index)) return null;
                           return (
                             <TextPart
                               key={index}
