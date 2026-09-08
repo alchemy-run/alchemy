@@ -93,6 +93,29 @@ test("channel: the bell's list", async ({ page, api }) => {
   await shot(page, "channel-03-bell");
 });
 
+test("channel: a selection and its menu, one item under the pointer", async ({
+  page,
+  api,
+}) => {
+  seedWorld(api);
+  await openApp(page);
+  const main = page.getByRole("main");
+  // two rows selected (click, ⌘-click), the menu opened on one of them
+  await main.getByText("triage that issue and start on a fix").click();
+  await main
+    .getByText("Placed it on w-reconcile; the engineer is on it.")
+    .click({ modifiers: ["Meta"] });
+  await main
+    .locator("[data-seq]", { hasText: "triage that issue" })
+    .first()
+    .click({ button: "right" });
+  const item = page.getByRole("menuitem", { name: "Delete 2 messages" });
+  await item.hover();
+  // the highlighted item reads as such — the surface lifts off the menu
+  await expect(item).toHaveAttribute("data-highlighted", "");
+  await shot(page, "channel-04-selection-menu");
+});
+
 test("thread: the conversation and the state pane", async ({ page, api }) => {
   seedWorld(api);
   api.seedTool("Thread:t-1", {
