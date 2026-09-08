@@ -4,13 +4,23 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import { Command, Flag } from "effect/unstable/cli";
-import { Progress } from "../../Alchemist/Progress.ts";
 import * as Nuke from "../../Alchemist/routes/nuke.ts";
 import * as CliKit from "../../Cli/CliKit/index.ts";
 import { formatElapsed } from "../Format.ts";
-import { confirmOrDecline } from "./confirm.ts";
-import { UserInputError } from "./errors.ts";
-import { config, envFile, profile, yes } from "./flags.ts";
+import {
+  renderNukeScan,
+  renderNukeDelete,
+  reviewNuke,
+} from "../components/view/Nuke.tsx";
+import { exitDeclined, UserInputError } from "./errors.ts";
+import {
+  configPath,
+  envFile,
+  optionalConfig,
+  profile,
+  resolveConfig,
+  yes,
+} from "./flags.ts";
 import { instrumentCommand } from "./instrument.ts";
 
 const includeFlag = Flag.string("include").pipe(
@@ -26,10 +36,6 @@ const filterFlag = Flag.string("filter").pipe(
     "JavaScript expression evaluated with resource in scope; matching resources are excluded from deletion (repeatable)",
   ),
   Flag.atLeast(0),
-);
-const verboseFlag = Flag.boolean("verbose").pipe(
-  Flag.withDescription("List every individual resource"),
-  Flag.withDefault(false),
 );
 const concurrencyFlag = Flag.integer("concurrency").pipe(
   Flag.withDescription(
@@ -89,12 +95,12 @@ const compileFilter = (expression: string) =>
 const nukeCommand = Command.make(
   "nuke",
   {
-    main: config,
+    config: optionalConfig,
+    configPath,
     envFile,
     profile,
     yes,
     dryRun: dryRunFlag,
-    verbose: verboseFlag,
     concurrency: concurrencyFlag,
     timeout: timeoutFlag,
     independent: independentFlag,
@@ -104,121 +110,88 @@ const nukeCommand = Command.make(
     filter: filterFlag,
     local: localFlag,
   },
-  instrumentCommand(
-    "unsafe.nuke",
-    (args: { profile: string | undefined; main: string }) => ({
-      "alchemy.profile": args.profile ?? "",
-      "alchemy.main": args.main,
-    }),
-  )(
-    Effect.fn(function* (args) {
-      const scan = yield* Nuke.scan({
-        entrypoint: args.main,
-        profile: args.profile,
-        envFile: Option.getOrUndefined(args.envFile),
-        mode: args.local ? "local" : "live",
-        include: args.include,
-        exclude: args.exclude,
-        concurrency: args.concurrency,
-        providerTimeoutSeconds: Duration.toSeconds(args.timeout),
-      }).pipe(
-        // One line per provider as its listing settles — the scan fans out
-        // across every provider and is often the slowest part of a nuke.
-        Effect.provideService(Progress, (event) =>
-          event._tag === "nuke.scan.provider.completed"
-            ? Console.log(`scanned ${event.provider} (${event.resources})`)
-            : Effect.void,
-        ),
-      );
-      for (const item of scan.failures) {
-        yield* CliKit.accessors.output.warning(
-          `${item.provider}: ${item.message}`,
-        );
-      }
-
-      const predicates = yield* Effect.forEach(args.filter, compileFilter);
-      const targets: Array<(typeof scan.resources)[number]> = [];
-      for (const resource of scan.resources) {
-        const matches = yield* Effect.forEach(predicates, (predicate) =>
-          predicate({
-            ...resource.attributes,
-            Type: resource.providerId,
-            LogicalId: resource.displayName,
+  (args) =>
+    resolveConfig(args).pipe(
+      Effect.flatMap(
+        instrumentCommand(
+          "unsafe.nuke",
+          (args: { profile: string | undefined; main: string }) => ({
+            "alchemy.profile": args.profile ?? "",
+            "alchemy.main": args.main,
           }),
-        );
-        if (!matches.some(Boolean)) targets.push(resource);
-      }
-      const byProvider = new Map<string, typeof targets>();
-      for (const target of targets) {
-        byProvider.set(target.providerId, [
-          ...(byProvider.get(target.providerId) ?? []),
-          target,
-        ]);
-      }
-      yield* Console.log("");
-      for (const [providerId, resources] of [...byProvider.entries()].sort(
-        ([a], [b]) => a.localeCompare(b),
-      )) {
-        yield* Console.log(`${providerId}  ${resources.length} to delete`);
-        if (args.verbose) {
-          for (const resource of resources) {
-            yield* Console.log(`  - ${resource.displayName}`);
-          }
-        }
-      }
-      yield* Console.log("");
-      yield* Console.log(`${targets.length} resource(s) to delete.`);
-      if (targets.length === 0) {
-        yield* CliKit.accessors.output.info("Nothing to delete.");
-        return;
-      }
-      if (args.dryRun) {
-        yield* Console.log("Dry run complete: nothing was deleted.");
-        return;
-      }
-      yield* confirmOrDecline({
-        yes: args.yes,
-        message: `Permanently DELETE ${targets.length} ${args.local ? "locally emulated " : ""}resource(s)? This cannot be undone.`,
-        confirmLabel: "Delete",
-        cancelLabel: "Cancel",
-      });
-
-      const deleteStartedAt = yield* Clock.currentTimeMillis;
-      const result = yield* Nuke.execute({
-        scan,
-        resources: targets,
-        strategy: args.independent
-          ? { _tag: "independent", retries: args.retries }
-          : { _tag: "coordinated" },
-        concurrency: args.concurrency,
-        providerTimeoutSeconds: Duration.toSeconds(args.timeout),
-      }).pipe(
-        // One line per confirmed deletion — a long nuke was previously
-        // silent until the final summary in both renderers.
-        Effect.provideService(Progress, (event) =>
-          event._tag === "nuke.resource.deleted"
-            ? Console.log(`deleted ${event.resource}`)
-            : event._tag === "nuke.resource.failed"
-              ? Console.log(`failed ${event.resource}: ${event.message}`)
-              : Effect.void,
+        )(
+          Effect.fn(function* (args) {
+            const scan = yield* Nuke.scan({
+              entrypoint: args.main,
+              profile: args.profile,
+              envFile: Option.getOrUndefined(args.envFile),
+              mode: args.local ? "local" : "live",
+              include: args.include,
+              exclude: args.exclude,
+              concurrency: args.concurrency,
+              providerTimeoutSeconds: Duration.toSeconds(args.timeout),
+            }).pipe(renderNukeScan());
+            const predicates = yield* Effect.forEach(
+              args.filter,
+              compileFilter,
+            );
+            const targets: Array<(typeof scan.resources)[number]> = [];
+            for (const resource of scan.resources) {
+              const matches = yield* Effect.forEach(predicates, (predicate) =>
+                predicate({
+                  ...resource.attributes,
+                  Type: resource.providerId,
+                  LogicalId: resource.displayName,
+                }),
+              );
+              if (!matches.some(Boolean)) targets.push(resource);
+            }
+            if (targets.length === 0) {
+              yield* CliKit.accessors.output.info("Nothing to delete.");
+              return;
+            }
+            const approved = yield* reviewNuke(targets, {
+              mode: scan.mode,
+              yes: args.yes,
+              dryRun: args.dryRun,
+            });
+            if (!approved) {
+              yield* CliKit.accessors.output.info("Aborted.");
+              return yield* exitDeclined;
+            }
+            if (args.dryRun) {
+              yield* Console.log("Dry run complete: nothing was deleted.");
+              return;
+            }
+            const deleteStartedAt = yield* Clock.currentTimeMillis;
+            const result = yield* Nuke.execute({
+              scan,
+              resources: targets,
+              strategy: args.independent
+                ? { _tag: "independent", retries: args.retries }
+                : { _tag: "coordinated" },
+              concurrency: args.concurrency,
+              providerTimeoutSeconds: Duration.toSeconds(args.timeout),
+            }).pipe(renderNukeDelete(targets, scan.mode));
+            const deleteElapsed =
+              (yield* Clock.currentTimeMillis) - deleteStartedAt;
+            yield* CliKit.accessors.output.success(
+              `Deleted ${result.deleted.length} resource(s) over ${result.passes} pass(es) (${formatElapsed(deleteElapsed)}).`,
+            );
+            if (result.held.length > 0) {
+              yield* CliKit.accessors.output.warning(
+                `${result.held.length} resource(s) were held back.`,
+              );
+            }
+            if (result.failed.length > 0) {
+              yield* CliKit.accessors.output.error(
+                `${result.failed.length} resource(s) could not be deleted.`,
+              );
+            }
+          }),
         ),
-      );
-      const deleteElapsed = (yield* Clock.currentTimeMillis) - deleteStartedAt;
-      yield* CliKit.accessors.output.success(
-        `Deleted ${result.deleted.length} resource(s) over ${result.passes} pass(es) (${formatElapsed(deleteElapsed)}).`,
-      );
-      if (result.held.length > 0) {
-        yield* CliKit.accessors.output.warning(
-          `${result.held.length} resource(s) were held back.`,
-        );
-      }
-      if (result.failed.length > 0) {
-        yield* CliKit.accessors.output.error(
-          `${result.failed.length} resource(s) could not be deleted.`,
-        );
-      }
-    }),
-  ),
+      ),
+    ),
 ).pipe(
   Command.withDescription(
     "Enumerate resources across the stack providers and delete them",
