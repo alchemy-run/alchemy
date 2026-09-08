@@ -1,0 +1,120 @@
+---
+title: Actions secrets & variables
+description: Seed Forgejo Actions secrets and variables from a Stack — scoped to a repository, an organization, or the authenticated user.
+---
+
+`Forgejo.Secret` and `Forgejo.Variable` manage a single Actions
+secret or variable; `Forgejo.Secrets` and `Forgejo.Variables` declare
+several at once from a record. Values can be outputs of other
+resources, which is what makes "provision a credential and hand it to
+CI" a single deploy.
+
+New here? [Set up credentials](/forgejo/setup) first.
+
+## Bulk-seed a repository
+
+```typescript
+import * as Redacted from "effect/Redacted";
+
+yield* Forgejo.Variables({
+  owner: "acme",
+  repository: "api",
+  variables: {
+    DEPLOY_STAGE: "production",
+    REGION: "us-east-1",
+  },
+});
+
+yield* Forgejo.Secrets({
+  owner: "acme",
+  repository: "api",
+  secrets: {
+    DEPLOY_TOKEN: Redacted.make(process.env.DEPLOY_TOKEN!),
+    NPM_TOKEN: Redacted.make(process.env.NPM_TOKEN!),
+  },
+});
+```
+
+Each entry becomes its own resource named after its key, so adding or
+removing one key leaves the others untouched.
+
+## Scopes
+
+Forgejo stores Actions configuration at three levels. Pass `scope`
+explicitly to reach the organization or user level:
+
+```typescript
+// repository — the default shape
+yield* Forgejo.Secret("deploy-token", {
+  owner: "acme",
+  repository: "api",
+  name: "DEPLOY_TOKEN",
+  value: Redacted.make(process.env.DEPLOY_TOKEN!),
+});
+
+// organization — shared by every repo in the org
+yield* Forgejo.Variable("registry", {
+  scope: { kind: "organization", organization: "acme" },
+  name: "REGISTRY",
+  value: "registry.example.com",
+});
+
+// authenticated user
+yield* Forgejo.Secret("personal-token", {
+  scope: { kind: "user" },
+  name: "PERSONAL_TOKEN",
+  value: Redacted.make(process.env.PERSONAL_TOKEN!),
+});
+```
+
+Changing a secret's or variable's scope or name replaces it — the
+same name at a different scope is a different physical entry.
+
+## Secrets are write-only
+
+Forgejo accepts secret values as plaintext over authenticated TLS.
+Unlike GitHub there is no public-key encryption handshake, and the
+stored value can never be read back, so every deploy writes the
+declared value. That means a secret never shows as drifted and never
+needs a re-encrypt step — but it also means alchemy cannot tell you
+whether the live value already matched.
+
+Variables *are* readable, so they converge normally: a deploy that
+declares an unchanged value makes no API call.
+
+## Hand a minted credential to CI
+
+The canonical composition — mint a scoped Forgejo token and store it
+as an Actions secret in the same deploy, so the CI credential is
+itself provisioned as code:
+
+```typescript
+const token = yield* Forgejo.ApiToken("ci", {
+  username: "ci-bot",
+  name: "ci",
+  scopes: ["write:repository"],
+  repositories: [{ owner: "acme", name: "api" }],
+});
+
+yield* Forgejo.Secret("forgejo-token", {
+  owner: "acme",
+  repository: "api",
+  name: "FORGEJO_TOKEN",
+  value: token.token,
+});
+```
+
+`ApiToken` needs an admin credential, and Forgejo returns the token's
+plaintext only in the create response — it is exposed as a `Redacted`
+output and any change to the token's identity or scopes replaces it.
+
+The same shape works for any cloud credential your stack already
+provisions: an Axiom ingest token, an AWS access key, a Cloudflare
+scoped token. Store it here and CI picks it up as
+`${{ secrets.NAME }}`.
+
+## Next steps
+
+- [Repositories](/forgejo/repository) — the repo these settings attach to.
+- [Secret reference](/providers/forgejo/secret) ·
+  [Variable reference](/providers/forgejo/variable)
