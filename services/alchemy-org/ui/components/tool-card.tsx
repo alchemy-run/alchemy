@@ -227,6 +227,46 @@ const lastLine = (text: string): string | undefined => {
   return lines.length > 0 ? lines[lines.length - 1] : undefined;
 };
 
+/** One value of a structured answer, on one line. */
+const compactValue = (value: unknown): string =>
+  typeof value === "string"
+    ? value
+    : Array.isArray(value)
+      ? `${value.length} item${value.length === 1 ? "" : "s"}`
+      : value !== null && typeof value === "object"
+        ? `{${Object.keys(value).length} fields}`
+        : String(value);
+
+/**
+ * The collapsed `→ …` line for a tool's answer. Tools answer STRUCTURED
+ * data (every `AI.out` field, as JSON), and a renderer sees it
+ * pretty-printed — so "the last line" of an object is its closing
+ * brace. An object reads as its fields (`kind pull · title Fix…`), an
+ * array as its length, a string as its last non-empty line (where a
+ * command's verdict usually is).
+ */
+const summarize = (output: string): string | undefined => {
+  const trimmed = output.trim();
+  if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+    try {
+      const parsed: unknown = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) return compactValue(parsed);
+      if (parsed !== null && typeof parsed === "object") {
+        const fields = Object.entries(parsed).filter(
+          ([, value]) => value !== undefined && value !== null && value !== "",
+        );
+        if (fields.length === 0) return undefined;
+        return fields
+          .map(([key, value]) => `${key} ${compactValue(value)}`)
+          .join(" · ");
+      }
+    } catch {
+      // not JSON after all — a string that happens to open with a brace
+    }
+  }
+  return lastLine(output);
+};
+
 const outputText = (output: unknown): string | undefined =>
   // null/undefined both mean "answered nothing" — void tools land here
   output == null
@@ -335,7 +375,7 @@ const THREAD: {
         )}
       </>
     ),
-    summary: output === undefined ? undefined : lastLine(output),
+    summary: output === undefined ? undefined : summarize(output),
   }),
 
   detach: (input, output) => ({
@@ -345,7 +385,7 @@ const THREAD: {
         Detach <Ref value={input.ref} />
       </>
     ),
-    summary: output === undefined ? undefined : lastLine(output),
+    summary: output === undefined ? undefined : summarize(output),
   }),
 
   worktree: (input, output) => {
@@ -430,7 +470,7 @@ const THREAD: {
           Close <ThreadId id={input.thread} />
         </>
       ),
-    summary: output === undefined ? undefined : lastLine(output),
+    summary: output === undefined ? undefined : summarize(output),
     body: input.why === undefined ? undefined : <Why why={input.why} />,
   }),
 };
@@ -553,7 +593,7 @@ const CHANNEL: {
         )}
       </>
     ),
-    summary: output === undefined ? undefined : lastLine(output),
+    summary: output === undefined ? undefined : summarize(output),
   }),
 
   place_messages: (input, output) => ({
@@ -568,7 +608,7 @@ const CHANNEL: {
         <ThreadId id={input.thread} />
       </>
     ),
-    summary: output === undefined ? undefined : lastLine(output),
+    summary: output === undefined ? undefined : summarize(output),
   }),
 
   attach_entity: (input, output) => ({
@@ -580,7 +620,7 @@ const CHANNEL: {
         <ThreadId id={input.thread} />
       </>
     ),
-    summary: output === undefined ? undefined : lastLine(output),
+    summary: output === undefined ? undefined : summarize(output),
   }),
 
   detach_entity: (input, output) => ({
@@ -592,7 +632,7 @@ const CHANNEL: {
         <ThreadId id={input.thread} />
       </>
     ),
-    summary: output === undefined ? undefined : lastLine(output),
+    summary: output === undefined ? undefined : summarize(output),
   }),
 
   brief_thread: (input, output) => ({
@@ -604,7 +644,7 @@ const CHANNEL: {
         {clamp(firstLine(input.text ?? ""), 90)}
       </>
     ),
-    summary: output === undefined ? undefined : lastLine(output),
+    summary: output === undefined ? undefined : summarize(output),
     body:
       countLines(input.text ?? "") > 1 ? (
         <Prose>{input.text}</Prose>
