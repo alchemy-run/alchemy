@@ -117,7 +117,8 @@ export function dev(options: CloudflareVitePluginOptions): Array<vite.Plugin> {
       if (!optionsApi) {
         throw new Error("Cannot resolve the cloudflare-runtime:options plugin");
       }
-      const inputs = Object.values(optionsApi.input());
+      // Frameworks can register multiple names for the same Worker entry.
+      const inputs = [...new Set(Object.values(optionsApi.input()))];
       if (inputs.length > 1) {
         throw new Error(
           `Expected exactly one entry in the input, got ${inputs.length} entries: ${JSON.stringify(inputs)}`,

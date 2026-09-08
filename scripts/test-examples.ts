@@ -21,6 +21,7 @@ const examples = [
   "./examples/cloudflare-website-sveltekit",
   "./examples/cloudflare-website-vite",
   "./examples/cloudflare-website-waku",
+  "./examples/cloudflare-website-vocs",
   "./examples/aws-dev",
   // "./examples/aws-ecs",
   "./examples/aws-lambda",
