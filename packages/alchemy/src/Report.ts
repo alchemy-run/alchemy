@@ -189,16 +189,34 @@ export interface StateBootstrapCompleted {
 
 export type StateEvent = StateBootstrapStarted | StateBootstrapCompleted;
 
+export interface NukeScanStarted {
+  readonly _tag: "nuke.scan.started";
+  readonly total: number;
+}
+
+export interface NukeProviderScanStarted {
+  readonly _tag: "nuke.scan.provider.started";
+  readonly provider: string;
+}
+
+export interface NukePassStarted {
+  readonly _tag: "nuke.pass.started";
+  readonly pass: number;
+}
+
 /** Emitted as a nuke scan finishes enumerating one provider's resources. */
 export interface NukeProviderScanned {
   readonly _tag: "nuke.scan.provider.completed";
   readonly provider: string;
   /** Resources found for this provider (0 when the listing failed). */
   readonly resources: number;
+  /** Listing failure, reported immediately when this provider settles. */
+  readonly error?: string;
 }
 
 export interface NukeResourceDeleted {
   readonly _tag: "nuke.resource.deleted";
+  readonly provider: string;
   /** Display name of the deleted resource. */
   readonly resource: string;
 }
@@ -206,11 +224,15 @@ export interface NukeResourceDeleted {
 /** Emitted when a nuke deletion attempt fails (the run keeps going). */
 export interface NukeResourceFailed {
   readonly _tag: "nuke.resource.failed";
+  readonly provider: string;
   readonly resource: string;
   readonly message: string;
 }
 
 export type NukeEvent =
+  | NukeScanStarted
+  | NukeProviderScanStarted
+  | NukePassStarted
   | NukeProviderScanned
   | NukeResourceDeleted
   | NukeResourceFailed;

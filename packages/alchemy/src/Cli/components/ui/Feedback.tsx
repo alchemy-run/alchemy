@@ -202,50 +202,6 @@ export function Spinner({ label, detail }: SpinnerProps) {
   );
 }
 
-type ProgressBarProps = {
-  /** Completion ratio. Values outside 0..1 are clamped. */
-  readonly value: number;
-  readonly width?: number;
-  readonly showPercent?: boolean;
-  readonly label?: ReactNode;
-  readonly detail?: ReactNode;
-  readonly variant?: StatusVariant;
-};
-
-export function ProgressBar({
-  value,
-  width = 24,
-  showPercent = true,
-  label,
-  detail,
-  variant = "success",
-}: ProgressBarProps) {
-  const { unicode } = useCliEnvironment();
-  const ratio = Math.max(0, Math.min(1, value));
-  const cells = Math.max(1, Math.floor(width));
-  const filled = Math.round(cells * ratio);
-  return (
-    <Box
-      gap={1}
-      aria-role="progressbar"
-      aria-label={`${Math.round(ratio * 100)}%`}
-      aria-state={{ busy: ratio < 1 }}
-    >
-      <Text>
-        <Text color={statusPaint(variant)}>
-          {(unicode ? "█" : "#").repeat(filled)}
-        </Text>
-        <Text tone="muted">{(unicode ? "░" : ".").repeat(cells - filled)}</Text>
-      </Text>
-      {showPercent ? (
-        <Text tone="muted">{`${Math.round(ratio * 100)}%`.padStart(4)}</Text>
-      ) : null}
-      {label === undefined ? null : <Text>{label}</Text>}
-      {detail === undefined ? null : <Text tone="muted">{detail}</Text>}
-    </Box>
-  );
-}
-
 type TabsProps = {
   readonly tabs: ReadonlyArray<{
     readonly id: string;
