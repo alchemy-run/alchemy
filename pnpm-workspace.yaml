@@ -181,7 +181,7 @@ patchedDependencies:
   "@astrojs/starlight@0.42.0": patches/@astrojs%2Fstarlight@0.42.0.patch
   starlight-blog@0.29.0: patches/starlight-blog@0.29.0.patch
 minimumReleaseAgeExclude:
-  - "@alchemy.run/sigil@0.0.0-alpha.8"
+  - "@alchemy.run/sigil@0.0.0-alpha.9"
   - "@effect/atom-react@4.0.0-rc.112"
   - "@effect/platform-bun@4.0.0-rc.112"
   - "@effect/platform-node-shared@4.0.0-rc.112"

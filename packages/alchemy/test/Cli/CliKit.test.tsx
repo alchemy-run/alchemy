@@ -12,6 +12,7 @@ import {
 import {
   AnsweredPrompt,
   Alert,
+  Box,
   ChoiceGroup,
   DescriptionList,
   Heading,
@@ -51,7 +52,17 @@ import {
 import { stackOutputsView } from "@/Cli/components/view/StackOutputs.tsx";
 import { Plan, PlanTree } from "@/Cli/components/view/PlanView.tsx";
 import { ApprovePlan } from "@/Cli/components/view/ApprovePlan.tsx";
-import { ProfileDetailsBody } from "@/Cli/components/view/Profile.tsx";
+import {
+  ProfileDetailsBody,
+  providerBlockHeight,
+  providerPaneWidth,
+  type ProfileProviderDisplay,
+} from "@/Cli/components/view/Profile.tsx";
+import {
+  Dashboard,
+  DashStore,
+  runProfileDashboardSession,
+} from "@/Cli/components/view/ProfileDashboard.tsx";
 import {
   buildStageNodes,
   stateExplorerScreen,
@@ -720,6 +731,178 @@ it("replaces provider details with refresh progress in place", () => {
   expect(output).toContain("GitHub");
   expect(output).toContain("token: gho_cZ****");
 });
+
+// Eight providers of varying height: 49 rows in total, twice a 24-row terminal.
+const dashboardProviders: ReadonlyArray<ProfileProviderDisplay> = [
+  {
+    name: "AWS",
+    method: "sso",
+    status: "ready",
+    lines: [
+      "accessKeyId: ASIA****",
+      "secretAccessKey: I7hs****",
+      "sessionToken: IQoJ****",
+      "region: us-east-2",
+      "source: sso - default",
+    ],
+  },
+  {
+    name: "Cloudflare",
+    method: "stored",
+    status: "configured",
+    lines: [
+      "apiKey: cfk_****",
+      "email: blan****",
+      "accountId: 2b29****",
+      "source: stored",
+    ],
+  },
+  {
+    name: "Fly",
+    method: "stored",
+    status: "configured",
+    lines: ["apiKey: FlyV****"],
+  },
+  {
+    name: "GitHub",
+    method: "gh-cli",
+    status: "configured",
+    lines: ["token: gho_cZ****", "source: gh-cli"],
+  },
+  {
+    name: "Hetzner",
+    method: "stored",
+    status: "configured",
+    lines: ["token: 50Kt****"],
+  },
+  {
+    name: "Prisma",
+    method: "stored",
+    status: "configured",
+    lines: ["serviceToken: eyJr****"],
+  },
+  {
+    name: "Railway",
+    method: "oauth",
+    status: "configured",
+    lines: [
+      "token: rw_Fe2****",
+      "tokenKind: account",
+      "apiBaseUrl: https://backboard.railway.com",
+      "source: oauth",
+    ],
+  },
+  {
+    name: "Vercel",
+    method: "stored",
+    status: "reauth",
+    lines: ["token: vc_****"],
+  },
+];
+
+const dashboardEntries = [{ name: "default", isActive: true, isDefault: true }];
+
+// The dashboard windows providers by `providerBlockHeight`, so the number must
+// match what a block actually renders.
+it("sizes provider blocks by providerBlockHeight", () => {
+  const { service } = makeStatic();
+  const output = service.output.format(
+    <ProfileDetailsBody providers={dashboardProviders} showFocusRail />,
+    { columns: 80 },
+  );
+  const expected = dashboardProviders.reduce(
+    (rows, provider, index) =>
+      rows + providerBlockHeight(provider, index === 0),
+    0,
+  );
+  expect(output.split("\n").length).toBe(expected);
+});
+
+const separatorWidth = (output: string) =>
+  Math.max(
+    0,
+    ...output
+      .split("\n")
+      .filter((line) => /^─+$/.test(line))
+      .map((line) => line.length),
+  );
+
+// `profile show` sizes the table to its content: a row box shrink-wraps the
+// column of blocks. The dashboard's windowed pane cannot lay out every block,
+// so it sizes itself by `providerPaneWidth`, which must match that width.
+it("providerPaneWidth matches the intrinsic width of the provider table", () => {
+  const { service } = makeStatic();
+  const options = { showFocusRail: true, reauthHint: "press r to re-login" };
+  const output = service.output.format(
+    <Box>
+      <ProfileDetailsBody providers={dashboardProviders} {...options} />
+    </Box>,
+    { columns: 120 },
+  );
+  const width = providerPaneWidth(dashboardProviders, options);
+  expect(width).toBeLessThan(120);
+  expect(separatorWidth(output)).toBe(width);
+});
+
+it("windows the profile dashboard's providers to the terminal height", () => {
+  const { service, stdout } = makeStatic();
+  const store = new DashStore(dashboardEntries);
+  store.setDetails("default", {
+    state: "ready",
+    providers: dashboardProviders,
+    available: [],
+  });
+  const output = service.output.format(
+    <Dashboard store={store} initialSelected={0} />,
+    { columns: 80 },
+  );
+
+  expect(output.split("\n").length).toBeLessThanOrEqual(stdout.rows);
+  expect(output).toContain("AWS");
+  expect(output).toContain("Cloudflare");
+  expect(output).toContain("switch profile");
+  expect(output).not.toContain("Vercel");
+  // Separators span the table, not the terminal.
+  expect(separatorWidth(output)).toBe(
+    providerPaneWidth(dashboardProviders, {
+      showFocusRail: true,
+      reauthHint: "press r to re-login",
+    }),
+  );
+});
+
+// The session sleeps on a real clock (loader delay, notice auto-dismiss).
+it.live("scrolls the profile dashboard to the focused provider", () =>
+  Effect.gen(function* () {
+    const stdin = new InputStream();
+    const { service, stdout } = yield* makeLive({ stdin });
+    const session = yield* runProfileDashboardSession({
+      entries: dashboardEntries,
+      selected: "default",
+      loadDetails: () =>
+        Effect.succeed({ providers: dashboardProviders, available: [] }),
+      execute: () =>
+        Effect.succeed({ ok: true, message: "", entries: dashboardEntries }),
+      runFlow: () => Effect.succeed({ ok: true, message: "" }),
+      reloadEntries: Effect.succeed(dashboardEntries),
+    }).pipe(Effect.provideService(CliKit, service), Effect.forkChild);
+
+    // "focus provider" joins the key bar once the providers have resolved;
+    // arrow keys are ignored while the pane still shows the loading spinner.
+    yield* Effect.promise(() => stdout.waitFor("focus provider"));
+    yield* Effect.promise(() => stdin.ready);
+    expect(stdout.output).not.toContain("Vercel");
+
+    // Walk the focus cursor down to the last provider; the list follows it.
+    for (const _ of dashboardProviders) {
+      yield* Effect.sync(() => stdin.write("\x1b[B"));
+    }
+    yield* Effect.promise(() => stdout.waitFor("Vercel"));
+
+    yield* Effect.sync(() => stdin.write("q"));
+    yield* Fiber.join(session);
+  }),
+);
 
 it("renders input frames inline by default and keeps a stacked variant", () => {
   const { service } = makeStatic();

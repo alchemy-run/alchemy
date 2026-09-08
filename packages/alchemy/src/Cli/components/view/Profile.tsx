@@ -8,6 +8,7 @@ import {
   useBorderStyle,
   useGlyphs,
 } from "../ui/index.ts";
+import { stringWidth } from "@alchemy.run/sigil/ansi";
 import type { JSX } from "react";
 import { theme } from "../../CliKit/index.ts";
 
@@ -163,19 +164,8 @@ function ProfileList({
   );
 }
 
-/**
- * Provider table body shared by `profile show` and the dashboard's detail
- * pane, so the two render identically. The dashboard passes `reauthHint` to
- * advertise its `r` keybinding on rows that need a re-login.
- */
-export function ProfileDetailsBody({
-  providers,
-  reauthHint,
-  refreshingProvider,
-  focusedProvider,
-  showFocusRail = false,
-}: {
-  readonly providers: ReadonlyArray<ProfileProviderDisplay>;
+/** Options every provider block shares; the dashboard threads them through. */
+export interface ProviderBlockOptions {
   /** Muted hint appended to rows with `status: "reauth"`. */
   readonly reauthHint?: string;
   /** Provider whose detail rows are temporarily replaced by refresh status. */
@@ -184,11 +174,150 @@ export function ProfileDetailsBody({
   readonly focusedProvider?: string;
   /** Reserve a stable focus rail column for an interactive parent view. */
   readonly showFocusRail?: boolean;
+}
+
+/** Column widths computed over every provider so windowed blocks stay aligned. */
+export const providerColumnWidths = (
+  providers: ReadonlyArray<ProfileProviderDisplay>,
+): { readonly nameWidth: number; readonly methodWidth: number } => ({
+  nameWidth: columnWidth(providers.map((provider) => provider.name)),
+  methodWidth: columnWidth(providers.map((provider) => provider.method)),
+});
+
+/**
+ * Rows a `ProviderBlock` occupies: separator and padding above every block
+ * but the first, the header row, then a blank row and the detail rows (the
+ * refresh spinner fits inside that same reserved height). The dashboard
+ * windows providers by this number, so keep it in step with the layout.
+ */
+export const providerBlockHeight = (
+  provider: ProfileProviderDisplay,
+  first: boolean,
+): number => (first ? 0 : 2) + 1 + Math.max(provider.lines.length, 1) + 1;
+
+/**
+ * Columns the widest provider block needs. A windowed pane only lays out the
+ * blocks on screen, so it sizes itself by this instead, keeping the separators
+ * the width of the whole table rather than of the terminal.
+ */
+export const providerPaneWidth = (
+  providers: ReadonlyArray<ProfileProviderDisplay>,
+  { showFocusRail = false, reauthHint }: ProviderBlockOptions = {},
+): number => {
+  const { nameWidth, methodWidth } = providerColumnWidths(providers);
+  const indent = (showFocusRail ? 1 : 0) + theme.space.indent;
+  return Math.max(
+    0,
+    ...providers.flatMap((provider) => {
+      const status = providerStatusStyle[provider.status];
+      const hint =
+        reauthHint !== undefined && provider.status === "reauth"
+          ? stringWidth(` — ${reauthHint}`)
+          : 0;
+      // glyph, space, label
+      const header =
+        indent + nameWidth + methodWidth + 2 + stringWidth(status.label) + hint;
+      return [
+        header,
+        ...provider.lines.map((line) => indent + 2 + stringWidth(line)),
+      ];
+    }),
+  );
+};
+
+/** One provider's header and detail rows; `first` drops the separator above. */
+export function ProviderBlock({
+  provider,
+  first,
+  nameWidth,
+  methodWidth,
+  reauthHint,
+  refreshingProvider,
+  focusedProvider,
+  showFocusRail = false,
+}: ProviderBlockOptions & {
+  readonly provider: ProfileProviderDisplay;
+  readonly first: boolean;
+  readonly nameWidth: number;
+  readonly methodWidth: number;
 }): JSX.Element {
   const glyphs = useGlyphs();
   const borderStyle = useBorderStyle();
-  const nameWidth = columnWidth(providers.map((provider) => provider.name));
-  const methodWidth = columnWidth(providers.map((provider) => provider.method));
+  const status = providerStatusStyle[provider.status];
+  const focused = showFocusRail && provider.name === focusedProvider;
+  return (
+    <Box
+      flexDirection="column"
+      paddingTop={first ? 0 : 1}
+      paddingLeft={showFocusRail ? (focused ? 0 : 1) : 0}
+      borderStyle={borderStyle}
+      borderTop={!first}
+      borderBottom={false}
+      borderLeft={focused}
+      borderRight={false}
+      borderColor={theme.color.muted}
+      borderLeftColor={theme.color.brand}
+      borderDimColor
+    >
+      <Gutter>
+        <Box flexDirection="row">
+          <Box width={nameWidth} flexShrink={0}>
+            <Text bold color={theme.color.accent}>
+              {provider.name}
+            </Text>
+          </Box>
+          <Box width={methodWidth} flexShrink={0}>
+            <Text tone="muted">{provider.method}</Text>
+          </Box>
+          <Text color={status.color}>
+            {glyphs[status.glyph]} {status.label}
+          </Text>
+          {reauthHint !== undefined &&
+          provider.status === "reauth" &&
+          (focusedProvider === undefined ||
+            provider.name === focusedProvider) ? (
+            <Text tone="muted"> — {reauthHint}</Text>
+          ) : null}
+        </Box>
+      </Gutter>
+      <Box
+        flexDirection="column"
+        minHeight={Math.max(provider.lines.length, 1) + 1}
+      >
+        {provider.name === refreshingProvider ? (
+          <Gutter>
+            <Box paddingLeft={2} marginTop={1}>
+              <Spinner
+                label={`refreshing ${provider.method.toLowerCase() === "oauth" ? "OAuth" : provider.method} credentials…`}
+              />
+            </Box>
+          </Gutter>
+        ) : (
+          provider.lines.map((line, lineIndex) => (
+            <Gutter key={`${provider.name}-${lineIndex}`}>
+              <Box paddingLeft={2} marginTop={lineIndex === 0 ? 1 : 0}>
+                <Text>{line}</Text>
+              </Box>
+            </Gutter>
+          ))
+        )}
+      </Box>
+    </Box>
+  );
+}
+
+/**
+ * Provider table body shared by `profile show` and the dashboard's detail
+ * pane, so the two render identically. The dashboard passes `reauthHint` to
+ * advertise its `r` keybinding on rows that need a re-login.
+ */
+export function ProfileDetailsBody({
+  providers,
+  ...options
+}: ProviderBlockOptions & {
+  readonly providers: ReadonlyArray<ProfileProviderDisplay>;
+}): JSX.Element {
+  const { nameWidth, methodWidth } = providerColumnWidths(providers);
   return (
     <Box flexDirection="column">
       {providers.length === 0 ? (
@@ -196,70 +325,16 @@ export function ProfileDetailsBody({
           <Text tone="muted">No providers configured.</Text>
         </Gutter>
       ) : (
-        providers.map((provider, providerIndex) => {
-          const status = providerStatusStyle[provider.status];
-          const focused = showFocusRail && provider.name === focusedProvider;
-          return (
-            <Box
-              key={provider.name}
-              flexDirection="column"
-              paddingTop={providerIndex === 0 ? 0 : 1}
-              paddingLeft={showFocusRail ? (focused ? 0 : 1) : 0}
-              borderStyle={borderStyle}
-              borderTop={providerIndex > 0}
-              borderBottom={false}
-              borderLeft={focused}
-              borderRight={false}
-              borderColor={theme.color.muted}
-              borderLeftColor={theme.color.brand}
-              borderDimColor
-            >
-              <Gutter>
-                <Box flexDirection="row">
-                  <Box width={nameWidth} flexShrink={0}>
-                    <Text bold color={theme.color.accent}>
-                      {provider.name}
-                    </Text>
-                  </Box>
-                  <Box width={methodWidth} flexShrink={0}>
-                    <Text tone="muted">{provider.method}</Text>
-                  </Box>
-                  <Text color={status.color}>
-                    {glyphs[status.glyph]} {status.label}
-                  </Text>
-                  {reauthHint !== undefined &&
-                  provider.status === "reauth" &&
-                  (focusedProvider === undefined ||
-                    provider.name === focusedProvider) ? (
-                    <Text tone="muted"> — {reauthHint}</Text>
-                  ) : null}
-                </Box>
-              </Gutter>
-              <Box
-                flexDirection="column"
-                minHeight={Math.max(provider.lines.length, 1) + 1}
-              >
-                {provider.name === refreshingProvider ? (
-                  <Gutter>
-                    <Box paddingLeft={2} marginTop={1}>
-                      <Spinner
-                        label={`refreshing ${provider.method.toLowerCase() === "oauth" ? "OAuth" : provider.method} credentials…`}
-                      />
-                    </Box>
-                  </Gutter>
-                ) : (
-                  provider.lines.map((line, lineIndex) => (
-                    <Gutter key={`${provider.name}-${lineIndex}`}>
-                      <Box paddingLeft={2} marginTop={lineIndex === 0 ? 1 : 0}>
-                        <Text>{line}</Text>
-                      </Box>
-                    </Gutter>
-                  ))
-                )}
-              </Box>
-            </Box>
-          );
-        })
+        providers.map((provider, index) => (
+          <ProviderBlock
+            key={provider.name}
+            provider={provider}
+            first={index === 0}
+            nameWidth={nameWidth}
+            methodWidth={methodWidth}
+            {...options}
+          />
+        ))
       )}
     </Box>
   );
