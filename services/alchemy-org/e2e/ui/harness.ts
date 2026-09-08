@@ -318,26 +318,64 @@ export class FakeApi {
    * `name` — and nothing has come back yet. The transcript view sees
    * an open turn (the stop button shows) until an observation ends it.
    */
+  /**
+   * A round IN FLIGHT: the model called one tool and its handler is
+   * still running — the `tool-call` row is durable (a view that opens
+   * now sees the call), the sampling's `assistant` row has not landed.
+   * Returns the call's id so a test can land the rest of the round
+   * with {@link landOpenRound}.
+   */
   seedOpenRound(
     id: string,
     turn: { ask: string; name: string; input: unknown },
-  ): void {
+  ): string {
     const rows = this.transcripts[id] ?? [];
     const seq = rows.length;
+    const callId = `call-${seq + 1}`;
     this.transcripts[id] = [
       ...rows,
       { ...this.envelope(id, seq), type: "input", text: turn.ask },
       {
         ...this.envelope(id, seq + 1),
-        type: "assistant",
+        type: "tool-call",
         tick: 0,
-        ms: 800,
-        text: "",
-        toolCalls: [
-          { id: `call-${seq + 1}`, name: turn.name, input: turn.input },
-        ],
+        toolCallId: callId,
+        toolName: turn.name,
+        input: turn.input,
       },
     ];
+    return callId;
+  }
+
+  /** The rest of a {@link seedOpenRound} round, as the Worker writes it
+   *  once the handler returns: the `assistant` row restating the call,
+   *  then the call's result, then the quiescent reply. */
+  landOpenRound(
+    id: string,
+    callId: string,
+    turn: { name: string; input: unknown; output: unknown; reply: string },
+  ): void {
+    this.pushObservation(id, {
+      type: "assistant",
+      tick: 0,
+      ms: 800,
+      text: "",
+      toolCalls: [{ id: callId, name: turn.name, input: turn.input }],
+    });
+    this.pushObservation(id, {
+      type: "tool-result",
+      toolCallId: callId,
+      toolName: turn.name,
+      output: turn.output,
+      isFailure: false,
+    });
+    this.pushObservation(id, {
+      type: "assistant",
+      tick: 1,
+      ms: 400,
+      text: turn.reply,
+      toolCalls: [],
+    });
   }
 
   /** Append one durable observation to chat `id` and broadcast it to

@@ -718,6 +718,23 @@ const ChatTranscript = ({
       ? lastMessage.id
       : undefined;
 
+  // ONE card per tool call. An in-flight call is a durable row, so a
+  // snapshot taken while its handler runs already shows it; when the
+  // sampling lands, the live tail restates the call — into the same
+  // message when the snapshot's last message was that burst (the AI
+  // SDK continues it), else into a fresh one. The LAST message naming
+  // a call owns its card: it is the one the result will reach.
+  const toolOwner = new Map<string, string>();
+  for (const message of messages) {
+    for (const part of message.parts) {
+      if (part.type === "dynamic-tool")
+        toolOwner.set(part.toolCallId, message.id);
+    }
+  }
+  const superseded = (message: UIMessage, part: UIMessage["parts"][number]) =>
+    part.type === "dynamic-tool" &&
+    toolOwner.get(part.toolCallId) !== message.id;
+
   return (
     <>
       {/* initial="instant": open AT the end, no scroll animation */}
@@ -759,11 +776,14 @@ const ChatTranscript = ({
                         )
                       : Number.POSITIVE_INFINITY;
                   const isReplyText = (index: number) => index > lastToolIndex;
-                  // a message that is ONLY the reply vanishes entirely
+                  // a message that is ONLY the reply — or only cards a
+                  // later message took over — vanishes entirely
                   if (
                     message.parts.every(
                       (part, index) =>
-                        part.type === "text" && isReplyText(index),
+                        (part.type === "text" && isReplyText(index)) ||
+                        part.type === "step-start" ||
+                        superseded(message, part),
                     )
                   ) {
                     return null;
@@ -890,6 +910,9 @@ const ChatTranscript = ({
                                 // orphan part (an output whose call this
                                 // client never saw) — nothing renderable
                                 if (!tool.toolName) return null;
+                                // restated in a later message — that one
+                                // renders the card
+                                if (superseded(message, tool)) return null;
                                 const card = (
                                   <ToolCard
                                     key={index}

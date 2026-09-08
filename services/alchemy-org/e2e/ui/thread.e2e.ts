@@ -107,6 +107,100 @@ test("a tool call renders as its card", async ({ page, api }) => {
   await expect(main(page)).toContainText(`${REPO}#148`);
 });
 
+test("read_state renders the books: entities and agents, counted", async ({
+  page,
+  api,
+}) => {
+  seedThread(api);
+  api.seedTool("Thread:t-1", {
+    ask: "where do things stand?",
+    name: "read_state",
+    input: {},
+    output: {
+      state: {
+        id: "t-1",
+        name: "w-reconcile",
+        title: "Fix the reconcile bug",
+        status: "open",
+        turn: "agents",
+        entities: [
+          {
+            ref: `${REPO}#148`,
+            kind: "pull",
+            state: "open",
+            title: "Add sumToN helper",
+            worktree: "/workspace/trees/pr-148",
+          },
+          { ref: `${REPO}#12`, kind: "issue", state: "open", title: "Bug" },
+        ],
+        agents: [
+          {
+            key: "engineer-1",
+            kind: "engineer",
+            brief: "Fix it",
+            state: "running",
+          },
+          {
+            key: "engineer-2",
+            kind: "engineer",
+            brief: "Test it",
+            state: "done",
+          },
+        ],
+      },
+    },
+    reply: "One engineer is still working.",
+  });
+  await openApp(page, threadPath("t-1"));
+
+  const card = main(page).locator("[data-tool='read_state']");
+  await expect(card).toContainText("Read the thread's state");
+  await expect(card).toContainText("open · 2 entities · 2 agents (1 working)");
+  await card.getByRole("button").first().click();
+  await expect(card).toContainText("Entities · 2");
+  await expect(card).toContainText(`${REPO}#148`);
+  await expect(card).toContainText("pr-148");
+  await expect(card).toContainText("Agents · 2");
+  await expect(card).toContainText("Fix it");
+  await expect(card).toContainText("done");
+});
+
+test("a view opened mid-handler sees the in-flight call; the round lands into that one card", async ({
+  page,
+  api,
+}) => {
+  seedThread(api);
+  // the model called worktree; its handler is running — the page loads
+  // NOW, with nothing but the durable tool-call row to go on
+  const callId = api.seedOpenRound("Thread:t-1", {
+    ask: "get a worktree for the PR",
+    name: "worktree",
+    input: { ref: `${REPO}#148` },
+  });
+  await openApp(page, threadPath("t-1"));
+
+  const card = main(page).getByRole("button", { name: /^Worktree for/ });
+  await expect(card).toHaveCount(1);
+  await expect(card).toContainText("running…");
+  await expect(main(page).getByRole("button", { name: "Stop" })).toBeVisible();
+
+  // the handler returns: the sampling's `assistant` row restates the
+  // call, the result lands, the model replies — still ONE card, now
+  // complete, and the turn is over
+  api.landOpenRound("Thread:t-1", callId, {
+    name: "worktree",
+    input: { ref: `${REPO}#148` },
+    output: { path: "/workspace/trees/pr-148", branch: "pr-148" },
+    reply: "Worktree ready.",
+  });
+  await expect(main(page)).toContainText("Worktree ready.");
+  await expect(card).toHaveCount(1);
+  await expect(main(page)).toContainText("/workspace/trees/pr-148");
+  await expect(
+    main(page).getByRole("button", { name: "Submit" }),
+  ).toBeVisible();
+});
+
 test("the stop button interrupts the round in flight; the turn ends", async ({
   page,
   api,

@@ -170,3 +170,94 @@ describe("aborted", () => {
     expect(bare.chunks.map((chunk) => chunk.type)).toEqual(["start", "finish"]);
   });
 });
+
+/**
+ * An in-flight tool call is a DURABLE row: the sampling streamed the
+ * call, its handler is running (a spawned engineer, for minutes), and
+ * the `assistant` row that restates it has not landed. A snapshot
+ * taken in that window shows the call; the restatement joins it.
+ */
+describe("in-flight tool calls", () => {
+  const spawning: Array<SessionObservation> = [
+    { ...base, type: "input", seq: 0, text: "review the five PRs" },
+    {
+      ...base,
+      type: "tool-call",
+      seq: 1,
+      tick: 0,
+      toolCallId: "call-a",
+      toolName: "spawn",
+      input: { brief: "one" },
+    },
+    {
+      ...base,
+      type: "tool-call",
+      seq: 2,
+      tick: 0,
+      toolCallId: "call-b",
+      toolName: "spawn",
+      input: { brief: "two" },
+    },
+  ] as Array<SessionObservation>;
+  const landed: Array<SessionObservation> = [
+    ...spawning,
+    {
+      ...base,
+      type: "assistant",
+      seq: 3,
+      tick: 0,
+      ms: 1,
+      text: "Spawning two engineers.",
+      toolCalls: [
+        { id: "call-a", name: "spawn", input: { brief: "one" } },
+        { id: "call-b", name: "spawn", input: { brief: "two" } },
+      ],
+    },
+    {
+      ...base,
+      type: "tool-result",
+      seq: 4,
+      toolCallId: "call-a",
+      toolName: "spawn",
+      output: { agent: "e-1" },
+      isFailure: false,
+    },
+  ] as Array<SessionObservation>;
+
+  it("the snapshot shows every call whose handler is still running", () => {
+    const messages = toUIMessages(spawning);
+    expect(messages.map((message) => message.id)).toEqual(["u-0", "a-1"]);
+    const tools = messages[1]!.parts.filter(
+      (part) => part.type === "dynamic-tool",
+    );
+    expect(tools.map((part) => (part as any).toolCallId)).toEqual([
+      "call-a",
+      "call-b",
+    ]);
+    expect(
+      tools.every((part) => (part as any).state === "input-available"),
+    ).toBe(true);
+  });
+
+  it("the restatement joins the step — one part per call, prose first", () => {
+    const messages = toUIMessages(landed);
+    expect(messages.map((message) => message.id)).toEqual(["u-0", "a-1"]);
+    const parts = messages[1]!.parts;
+    expect(parts.map((part) => part.type)).toEqual([
+      "step-start",
+      "text",
+      "dynamic-tool",
+      "dynamic-tool",
+    ]);
+    expect((parts[2] as any).state).toBe("output-available");
+    expect((parts[3] as any).state).toBe("input-available");
+  });
+
+  it("spans name the burst by the row that opened it", () => {
+    expect(observationSpan(landed, "a-1")).toEqual([1, 2, 3, 4]);
+    expect(observationSpan(landed, "a-3")).toEqual([]);
+    for (const message of toUIMessages(landed)) {
+      expect(observationSpan(landed, message.id).length).toBeGreaterThan(0);
+    }
+  });
+});

@@ -84,6 +84,56 @@ export const toUIMessages = (
     agent: string;
     child: string | undefined;
   }> = [];
+  // the sampling whose step is open, and where in the parts it began:
+  // a `tool-call` row opens the step (the call streamed before the
+  // sampling completed) and its `assistant` restatement joins it —
+  // one step per sampling, with the text ahead of the calls as the
+  // model produced it
+  let stepTick: number | undefined;
+  let stepAt = 0;
+
+  const openAssistant = (observation: { seq: number; at: number }) => {
+    if (assistant === undefined) {
+      const parts: Array<UIMessagePart<any, any>> = [];
+      const message: UIMessage = {
+        id: `a-${observation.seq}`,
+        role: "assistant",
+        parts,
+        metadata: { at: observation.at },
+      };
+      assistant = { message, parts };
+      messages.push(message);
+    }
+    return assistant;
+  };
+  const openStep = (tick: number) => {
+    const current = assistant!;
+    if (stepTick !== tick) {
+      current.parts.push({ type: "step-start" });
+      stepTick = tick;
+      stepAt = current.parts.length;
+    }
+    return current;
+  };
+  /** A call's part — the one already announced by its `tool-call`
+   *  row, else a new one. */
+  const toolPart = (
+    current: { parts: Array<UIMessagePart<any, any>> },
+    call: { id: string; name: string; input: unknown },
+  ) => {
+    const known = toolParts.get(call.id);
+    if (known !== undefined) return known;
+    const part: any = {
+      type: "dynamic-tool" as const,
+      toolName: call.name,
+      toolCallId: call.id,
+      state: "input-available" as const,
+      input: call.input,
+    };
+    toolParts.set(call.id, part);
+    current.parts.push(part);
+    return part;
+  };
 
   for (const observation of log) {
     switch (observation.type) {
@@ -97,43 +147,45 @@ export const toUIMessages = (
       }
       case "input": {
         assistant = undefined;
+        stepTick = undefined;
         messages.push(inputToUIMessage(observation));
         break;
       }
+      // a call the sampling made before it completed — its handler is
+      // running (or the process died mid-handler); the viewer sees the
+      // call now, as a running tool part, restated when the row lands
+      case "tool-call": {
+        openAssistant(observation);
+        const current = openStep(observation.tick);
+        toolPart(current, {
+          id: observation.toolCallId,
+          name: observation.toolName,
+          input: observation.input,
+        });
+        break;
+      }
       case "assistant": {
-        if (assistant === undefined) {
-          const parts: Array<UIMessagePart<any, any>> = [];
-          const message: UIMessage = {
-            id: `a-${observation.seq}`,
-            role: "assistant",
-            parts,
-            metadata: { at: observation.at },
-          };
-          assistant = { message, parts };
-          messages.push(message);
-        }
-        assistant.parts.push({ type: "step-start" });
+        openAssistant(observation);
+        const current = openStep(observation.tick);
+        // the sampling's prose came BEFORE its calls — ahead of any
+        // part its `tool-call` rows already placed in this step
+        const prose: Array<UIMessagePart<any, any>> = [];
         if (
           observation.reasoning !== undefined &&
           observation.reasoning.length > 0
         ) {
-          assistant.parts.push({
+          prose.push({
             type: "reasoning",
             text: observation.reasoning,
             state: "done",
           });
         }
         if (observation.text.length > 0) {
-          assistant.parts.push({ type: "text", text: observation.text });
+          prose.push({ type: "text", text: observation.text });
         }
+        current.parts.splice(stepAt, 0, ...prose);
         for (const call of observation.toolCalls) {
-          const part: any = {
-            type: "dynamic-tool" as const,
-            toolName: call.name,
-            toolCallId: call.id,
-            state: "input-available" as const,
-            input: call.input,
-          };
+          const part = toolPart(current, call);
           // a delegation call carries its identity — the client links
           // the card straight to the worker thread, no heuristics
           const dispatched = pendingDispatches.findIndex(
@@ -143,8 +195,6 @@ export const toUIMessages = (
             const [match] = pendingDispatches.splice(dispatched, 1);
             part.dispatch = { agent: match!.agent, child: match!.child };
           }
-          toolParts.set(call.id, part);
-          assistant.parts.push(part);
         }
         break;
       }
@@ -166,6 +216,7 @@ export const toUIMessages = (
         // a crash must be VISIBLE to pollers — dropping it leaves the
         // client staring at recovery notes with no cause in sight
         assistant = undefined;
+        stepTick = undefined;
         messages.push({
           id: `crash-${observation.seq}`,
           role: "assistant",
@@ -198,6 +249,7 @@ export const toUIMessages = (
           });
         }
         assistant = undefined;
+        stepTick = undefined;
         break;
       }
       default:
@@ -278,6 +330,10 @@ export const observationSpan = (
         assistant = undefined;
         pending = [];
         break;
+      // the burst's message is named by whichever row OPENED it — a
+      // `tool-call` streamed before its sampling completed, else the
+      // `assistant` row (exactly as `toUIMessages` ids the message)
+      case "tool-call":
       case "assistant":
         if (assistant === undefined) {
           assistant = [];

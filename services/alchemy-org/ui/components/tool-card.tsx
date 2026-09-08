@@ -330,6 +330,162 @@ const Why = ({ why }: { why: string | undefined }) =>
     </div>
   ) : null;
 
+/** A thread's state as `read_state` / `read_thread` answer it — the
+ *  org's books for one thread, loosely typed off the wire. */
+interface ThreadStateAnswer {
+  readonly id?: string;
+  readonly name?: string;
+  readonly title?: string;
+  readonly status?: string;
+  readonly turn?: string;
+  readonly entities?: ReadonlyArray<{
+    readonly ref?: string;
+    readonly kind?: string;
+    readonly state?: string;
+    readonly title?: string;
+    readonly worktree?: string;
+  }>;
+  readonly agents?: ReadonlyArray<{
+    readonly key?: string;
+    readonly kind?: string;
+    readonly brief?: string;
+    readonly state?: string;
+  }>;
+}
+
+/** The answer's state, whether the tool wrapped it (`{ state }`) or not. */
+const parseThreadState = (
+  output: string | undefined,
+): ThreadStateAnswer | undefined => {
+  const record = parseRecord(output);
+  if (record === undefined) return undefined;
+  const state = record.state ?? record;
+  return typeof state === "object" &&
+    state !== null &&
+    ("entities" in state || "agents" in state || "status" in state)
+    ? (state as ThreadStateAnswer)
+    : undefined;
+};
+
+const AGENT_STATE_DOT: Record<string, string> = {
+  running: "bg-moss animate-pulse",
+  done: "bg-muted-foreground/50",
+  failed: "bg-destructive",
+  stopped: "bg-amber-500",
+};
+
+/** The books, laid out: what the thread governs and who is working. */
+const ThreadStateBody = ({ state }: { state: ThreadStateAnswer }) => {
+  const entities = state.entities ?? [];
+  const agents = state.agents ?? [];
+  return (
+    <div className="divide-y divide-border/50 text-[12px]">
+      <div className="flex flex-wrap items-baseline gap-x-2 px-3 py-1.5">
+        {state.name && <span className="font-medium">{state.name}</span>}
+        {state.title && (
+          <span className="text-muted-foreground">{state.title}</span>
+        )}
+        <span className="ml-auto flex shrink-0 gap-2 text-[11px] text-muted-foreground">
+          {state.status && <span>{state.status}</span>}
+          {state.turn && <span>turn: {state.turn}</span>}
+        </span>
+      </div>
+      <div className="px-3 py-1.5">
+        <div className="text-[11px] font-medium text-muted-foreground">
+          Entities · {entities.length}
+        </div>
+        {entities.length === 0 ? (
+          <div className="text-muted-foreground">none attached</div>
+        ) : (
+          <ul className="mt-0.5 flex flex-col gap-0.5">
+            {entities.map((entity, index) => (
+              <li
+                key={entity.ref ?? index}
+                className="flex min-w-0 items-baseline gap-2"
+              >
+                <span className="shrink-0 text-[10px] uppercase tracking-wide text-muted-foreground/70">
+                  {entity.kind ?? "?"}
+                </span>
+                <Ref value={entity.ref} />
+                {entity.state && (
+                  <span className="shrink-0 text-muted-foreground">
+                    {entity.state}
+                  </span>
+                )}
+                <span className="min-w-0 flex-1 truncate">
+                  {entity.title ?? ""}
+                </span>
+                {entity.worktree && (
+                  <span
+                    title={entity.worktree}
+                    className="shrink-0 font-mono text-[10px] text-muted-foreground"
+                  >
+                    {entity.worktree.split("/").pop()}
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+      <div className="px-3 py-1.5">
+        <div className="text-[11px] font-medium text-muted-foreground">
+          Agents · {agents.length}
+        </div>
+        {agents.length === 0 ? (
+          <div className="text-muted-foreground">none</div>
+        ) : (
+          <ul className="mt-0.5 flex flex-col gap-0.5">
+            {agents.map((agent, index) => (
+              <li
+                key={agent.key ?? index}
+                className="flex min-w-0 items-center gap-2"
+              >
+                <span
+                  className={cn(
+                    "size-2 shrink-0 rounded-full",
+                    AGENT_STATE_DOT[agent.state ?? ""] ??
+                      "bg-muted-foreground/40",
+                  )}
+                />
+                <span className="shrink-0 font-medium">
+                  {agent.kind ?? "agent"}
+                </span>
+                <span className="min-w-0 flex-1 truncate text-muted-foreground">
+                  {firstLine(agent.brief ?? "")}
+                </span>
+                {agent.state && (
+                  <span className="shrink-0 text-[11px] text-muted-foreground">
+                    {agent.state}
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+};
+
+/** The collapsed line for a thread's state: what it holds, in counts. */
+const summarizeThreadState = (state: ThreadStateAnswer): string => {
+  const entities = state.entities ?? [];
+  const agents = state.agents ?? [];
+  const running = agents.filter((agent) => agent.state === "running").length;
+  const count = (n: number, one: string, many: string) =>
+    `${n} ${n === 1 ? one : many}`;
+  return [
+    state.status,
+    count(entities.length, "entity", "entities"),
+    running > 0
+      ? `${count(agents.length, "agent", "agents")} (${running} working)`
+      : count(agents.length, "agent", "agents"),
+  ]
+    .filter((part) => part !== undefined && part.length > 0)
+    .join(" · ");
+};
+
 /**
  * Cards for the THREAD agent's wire (`src/thread/ThreadAgent.ts`).
  * All of its tools are inline `AI.Tool`s — runtime-only, no tag on
@@ -346,6 +502,7 @@ const THREAD: {
     input: { ref: string },
     output: string | undefined,
   ) => ToolCallView;
+  read_state: (input: unknown, output: string | undefined) => ToolCallView;
   /** Two tools share the name: the thread agent's `spawn` (an Engineer
    *  on a `brief`) and the driver's intrinsic `spawn` (an anonymous
    *  subagent given `instructions` + a `task`). */
@@ -399,6 +556,21 @@ const THREAD: {
       ),
       summary:
         record === undefined ? undefined : `${record.path} (${record.branch})`,
+    };
+  },
+
+  read_state: (_input, output) => {
+    const state = parseThreadState(output);
+    return {
+      icon: Waypoints,
+      title: <>Read the thread's state</>,
+      summary: state === undefined ? undefined : summarizeThreadState(state),
+      body:
+        state !== undefined ? (
+          <ThreadStateBody state={state} />
+        ) : output === undefined ? undefined : (
+          <WindowedText text={output} head={20} tail={5} />
+        ),
     };
   },
 
@@ -567,18 +739,24 @@ const CHANNEL: {
     body: output === undefined ? undefined : <WindowedText text={output} />,
   }),
 
-  read_thread: (input, output) => ({
-    icon: Waypoints,
-    title: (
-      <>
-        Show <ThreadId id={input.thread} />
-      </>
-    ),
-    body:
-      output === undefined ? undefined : (
-        <WindowedText text={output} head={20} tail={5} />
+  read_thread: (input, output) => {
+    const state = parseThreadState(output);
+    return {
+      icon: Waypoints,
+      title: (
+        <>
+          Show <ThreadId id={input.thread} />
+        </>
       ),
-  }),
+      summary: state === undefined ? undefined : summarizeThreadState(state),
+      body:
+        state !== undefined ? (
+          <ThreadStateBody state={state} />
+        ) : output === undefined ? undefined : (
+          <WindowedText text={output} head={20} tail={5} />
+        ),
+    };
+  },
 
   create_thread: (input, output) => ({
     icon: GitFork,
@@ -1142,6 +1320,7 @@ export const ToolCard = ({
 
   return (
     <div
+      data-tool={toolName}
       className={cn(
         "callout overflow-hidden text-sm",
         failed ? "callout-danger" : running && "border-primary/40",

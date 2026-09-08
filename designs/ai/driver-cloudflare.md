@@ -173,11 +173,14 @@ chunk-buffer machinery all compensate for the absence of a cursor:
   observation is written as a row — the watermark bump in the same
   atomic put — before being fanned out. The run IS its own
   projection; no Chats DO, no external store.
-- **Live observations** (`assistant-delta`, in-flight `tool-call`)
-  broadcast without a row and without advancing the cursor — a
-  reconnect misses them and the durable `assistant` restatement
-  covers the gap. `tool-result`s ARE durable (outputs are not
-  restated by `assistant`).
+- **Live observations** (`assistant-delta` only) broadcast without a
+  row and without advancing the cursor — a reconnect misses them and
+  the durable `assistant` restatement covers the gap. An in-flight
+  `tool-call` IS durable: its handler may run for minutes (a spawned
+  engineer) before the `assistant` row lands, and a view opened in
+  that window must show the call — projections dedupe the
+  restatement by `toolCallId`. `tool-result`s are durable too
+  (outputs are not restated by `assistant`).
 - **The protocol** (`AI/RunSocket.ts`, substrate-neutral):
   client → `subscribe {fromSeq}` (the ENTIRE resume story: replay
   rows ≥ cursor, then a `live` marker) and `submit {input}` (the

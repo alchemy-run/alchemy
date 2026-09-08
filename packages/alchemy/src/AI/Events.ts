@@ -113,11 +113,13 @@ export type SessionObservation = ObservationEnvelope &
       }
     | {
         /**
-         * A tool call the IN-FLIGHT sampling just made, surfaced the
+         * A tool call the IN-FLIGHT sampling just made, recorded the
          * moment it streams — its handler may run for minutes (a
          * dispatched subagent) before the sampling's final `assistant`
-         * observation restates it. Live-view fact, same caveats as
-         * `assistant-delta`.
+         * observation restates it. DURABLE, unlike `assistant-delta`:
+         * a snapshot or a reconnect taken while the handler runs still
+         * shows the call. Projections dedupe the restatement by
+         * `toolCallId`.
          */
         readonly type: "tool-call";
         readonly tick: number;
@@ -259,6 +261,9 @@ export class Events extends Context.Service<
 >()("alchemy/AI/Events") {}
 
 /** LIVE observation types — broadcast as they stream but never
- *  persisted, and the seq cursor does not advance for them. */
+ *  persisted, and the seq cursor does not advance for them. Only the
+ *  token deltas: a `tool-call` IS durable — its handler may run for
+ *  minutes before the sampling's `assistant` row lands, and a viewer
+ *  that reconnects in that window must still see the call. */
 export const isLiveObservation = (type: SessionObservation["type"]): boolean =>
-  type === "assistant-delta" || type === "tool-call";
+  type === "assistant-delta";

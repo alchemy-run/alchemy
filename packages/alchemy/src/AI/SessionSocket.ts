@@ -37,9 +37,10 @@ export type SessionSocketServerFrame =
       readonly type: "observation";
       /**
        * Durable observations are rows — replayable, and the client's
-       * cursor advances past them. Live observations (token deltas,
-       * in-flight tool calls) are view-only: a reconnect misses them
-       * and the durable `assistant` restatement covers the gap.
+       * cursor advances past them (an in-flight `tool-call` is one: a
+       * reconnect while its handler runs still sees the call). Live
+       * observations (token deltas) are view-only: a reconnect misses
+       * them and the durable `assistant` restatement covers the gap.
        */
       readonly durable: boolean;
       readonly observation: SessionObservation;
