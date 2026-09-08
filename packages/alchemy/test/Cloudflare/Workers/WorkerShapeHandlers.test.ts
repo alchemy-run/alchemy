@@ -43,8 +43,9 @@ test.skipIf(!!process.env.FAST)(
     );
     const resetAt = Date.now();
 
-    // Cloudflare cron granularity is one minute and there's some propagation
-    // delay after deploy, so we poll up to ~3 minutes for the first fire.
+    // Cloudflare's minimum cron is one minute. After `/reset` we wait for
+    // the *next* fire (the one during deploy is discarded), so this body
+    // is skipIf FAST and can take ~1–2 minutes — not a retry hang.
     const times = yield* Effect.gen(function* () {
       const res = yield* client.get(`${url}/times`);
       if (res.status !== 200) return [];
@@ -54,9 +55,9 @@ test.skipIf(!!process.env.FAST)(
     }).pipe(
       Effect.catch(() => Effect.succeed([])),
       Effect.repeat({
-        schedule: Schedule.spaced("5 seconds"),
+        schedule: Schedule.spaced("3 seconds"),
         until: (recent) => recent.length > 0,
-        times: 36,
+        times: 50,
       }),
     );
 
@@ -65,5 +66,5 @@ test.skipIf(!!process.env.FAST)(
       expect(t).toBeGreaterThanOrEqual(resetAt);
     }
   }).pipe(logLevel),
-  { timeout: 240_000 },
+  { timeout: 180_000 },
 );
