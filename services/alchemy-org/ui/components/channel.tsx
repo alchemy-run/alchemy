@@ -436,12 +436,34 @@ export const ChannelView = ({
       return alive.length === current.length ? current : alive;
     });
   }, [byId]);
-  const startReply = useCallback((ids: ReadonlyArray<string>) => {
-    setReplyTo(ids);
-    selection.clear();
-    // the next frame — the menu is still closing on this one
-    setTimeout(() => textareaRef.current?.focus(), 0);
-  }, [selection]);
+  // Reply on the menu ADDS to a reply already being typed (in display
+  // order); starting fresh, it is the reply
+  const startReply = useCallback(
+    (ids: ReadonlyArray<string>) => {
+      setReplyTo((current) => {
+        const wanted = new Set([...current, ...ids]);
+        return order.filter((id) => wanted.has(id));
+      });
+      selection.clear();
+      // the next frame — the menu is still closing on this one
+      setTimeout(() => textareaRef.current?.focus(), 0);
+    },
+    [selection, order],
+  );
+  // ⌘-click with the reply bar up: toggle the row in the reply, keep
+  // typing where you were
+  const toggleReplyTo = useCallback(
+    (id: string) => {
+      setReplyTo((current) => {
+        const wanted = new Set(current);
+        if (wanted.has(id)) wanted.delete(id);
+        else wanted.add(id);
+        return order.filter((entry) => wanted.has(entry));
+      });
+      textareaRef.current?.focus();
+    },
+    [order],
+  );
 
   // jump to a quoted message: scroll it into view and flash it
   const [flash, setFlash] = useState<number | undefined>(undefined);
@@ -512,7 +534,12 @@ export const ChannelView = ({
           data-replying={replying ? "" : undefined}
           onMouseDown={onRowMouseDown}
           onClick={(event: MouseEvent) => {
-            if (!skipRowClick(event)) selection.click(message.id, event);
+            if (skipRowClick(event)) return;
+            if (replyTo.length > 0 && (event.metaKey || event.ctrlKey)) {
+              toggleReplyTo(message.id);
+            } else {
+              selection.click(message.id, event);
+            }
           }}
           onContextMenu={() => setMenuIds(selection.target(message.id))}
           className={cn(
@@ -594,6 +621,7 @@ export const ChannelView = ({
     selection,
     menuIds,
     replyTo,
+    toggleReplyTo,
     byId,
     flash,
     jumpTo,
@@ -702,18 +730,47 @@ export const ChannelView = ({
             {replyTo.length > 0 && (
               <div
                 aria-label="Replying to"
-                className="flex flex-col gap-0.5 border-b border-border px-3 py-1.5"
+                className="flex flex-col gap-0.5 border-b border-border px-3 py-1.5 text-[11px] text-muted-foreground"
               >
+                {/* several originals: a header counts them (and drops
+                    them all); each then gets a compact row. One: a
+                    single line says who and what */}
+                {replyTo.length > 1 && (
+                  <div className="flex items-center gap-1.5">
+                    <CornerUpLeft className="size-3 shrink-0" />
+                    <span className="flex-1">
+                      Replying to{" "}
+                      <span className="font-medium text-foreground">
+                        {replyTo.length} messages
+                      </span>
+                      <span className="ml-1.5 text-muted-foreground/70">
+                        ⌘-click a message to add or remove it
+                      </span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setReplyTo([])}
+                      aria-label="Stop replying"
+                      className="flex size-5 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
+                    >
+                      <X className="size-3" />
+                    </button>
+                  </div>
+                )}
                 {replyTo.map((id) => {
                   const original = byId.get(id)!;
+                  const single = replyTo.length === 1;
                   return (
                     <div
                       key={id}
-                      className="flex items-center gap-1.5 text-[11px] text-muted-foreground"
+                      className={cn(
+                        "flex items-center gap-1.5",
+                        !single && "pl-[18px]",
+                      )}
                     >
-                      <CornerUpLeft className="size-3 shrink-0" />
+                      {single && <CornerUpLeft className="size-3 shrink-0" />}
                       <span className="shrink-0">
-                        Replying to{" "}
+                        {single && "Replying to "}
                         <span className="font-medium text-foreground">
                           {whoOf(original)}
                         </span>

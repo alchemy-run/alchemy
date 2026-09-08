@@ -272,6 +272,46 @@ test("Reply from the menu quotes the original; the post carries replyTo", async 
   ).toBeVisible();
 });
 
+test("⌘-click while replying adds to the reply; the bar counts them", async ({
+  page,
+  api,
+}) => {
+  const first = api.seedEvent("event one", { author: "octocat" });
+  api.seedEvent("event two", { author: "hubot" });
+  const third = api.seedEvent("event three", { author: "octocat" });
+  await openApp(page);
+
+  await rowOf(page, "event two").click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Reply" }).click();
+  const bar = main(page).getByLabel("Replying to", { exact: true });
+  await expect(bar).toContainText("Replying to hubot");
+
+  // ⌘-click adds (in display order), the header adapts, both rows lit
+  const replying = main(page).locator("[data-seq][data-replying]");
+  await rowOf(page, "event three").click({ modifiers: ["ControlOrMeta"] });
+  await expect(bar).toContainText("Replying to 2 messages");
+  await expect(replying).toHaveCount(2);
+  await rowOf(page, "event one").click({ modifiers: ["ControlOrMeta"] });
+  await expect(bar).toContainText("Replying to 3 messages");
+  await expect(replying).toHaveCount(3);
+  // ⌘-click again removes; so does the row's ✕
+  await rowOf(page, "event three").click({ modifiers: ["ControlOrMeta"] });
+  await expect(bar).toContainText("Replying to 2 messages");
+  await rowOf(page, "event three").click({ modifiers: ["ControlOrMeta"] });
+  await bar.getByRole("button", { name: "Stop replying to hubot" }).click();
+  await expect(bar).toContainText("Replying to 2 messages");
+  await expect(bar).not.toContainText("event two");
+
+  const composer = page.getByRole("textbox", { name: "Message the channel" });
+  await composer.fill("both of these");
+  await composer.press("Enter");
+  await expect
+    .poll(() => api.replies)
+    .toEqual([{ text: "both of these", replyTo: [first.id, third.id] }]);
+  await expect(bar).toBeHidden();
+  await expect(replying).toHaveCount(0);
+});
+
 test("a live event pushed over the socket appears without a reload", async ({
   page,
   api,
