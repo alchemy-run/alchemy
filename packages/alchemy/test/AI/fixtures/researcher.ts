@@ -12,11 +12,15 @@
 import * as AI from "@/AI/index.ts";
 import * as S from "effect/Schema";
 
-export const query = AI.Parameter("query", S.String)`
+export const query = AI.Thing("query", S.String)`
 The search query.`;
 
+export const results = AI.Thing("results", S.String)`
+The matching corpus entries, rendered.`;
+
 export class Search extends (AI.Tool<Search>()("search")`
-Search the corpus for ${query}. Cheap — search before you answer.`) {}
+Search the corpus for ${query} — answers ${AI.out(results)}. Cheap —
+search before you answer.`) {}
 
 export class Researcher extends AI.Agent<Researcher>()("Researcher") {}
 

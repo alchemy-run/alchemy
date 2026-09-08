@@ -2,7 +2,6 @@ import * as AI from "alchemy/AI";
 import { ProviderEngineering } from "./process/ProviderEngineering.ts";
 import { Bash } from "./coding/Bash.ts";
 import { ToolGuidance } from "./coding/ToolGuidance.ts";
-import { ProposalsGuidance } from "./github/ProposalsGuidance.ts";
 import { SandboxGuidance } from "./sandbox/SandboxGuidance.ts";
 
 /**
@@ -10,7 +9,7 @@ import { SandboxGuidance } from "./sandbox/SandboxGuidance.ts";
  * code here, and this is its grammar. Activated when a change touches
  * a charter, a teaching, or a shared fragment. Top-level, beside
  * `OrgGuidance.ts`, because charters live in every domain (`coding/`,
- * `review/`) — it belongs to none of them.
+ * `channel/`, `thread/`) — it belongs to none of them.
  *
  * Every file this teaching names is a REFERENCE (`${X.source}`), and
  * every reference points DOWN the import graph: the domain skills
@@ -39,15 +38,15 @@ export const CharterGuidanceGeneral = CharterGuidance.make`
   splices, and every splice charges the Layer's requirement channel,
   so capability is a type-level fact. Authority therefore lives in
   reference topology, not configuration — the editor is granted by
-  one Layer in \`coding/\` alone and the Reviewer's Layer graph never
-  includes it; no charter names a merge tool, because merging is the
-  operator's click. Never widen a stance to "make something work": if
-  a capability must be granted, grant it where the domain says so and
-  make the grant visible in the Layer graph.
+  one Layer in \`coding/\` alone; no charter names a merge tool,
+  because merging is the operator's act on GitHub. Never widen a
+  stance to "make something work": if a capability must be granted,
+  grant it where the domain says so and make the grant visible in the
+  Layer graph.
 
   Doctrine is PLUGGABLE. Guidance lives beside the code it governs, one
   small skill per domain (${ToolGuidance.source}, ${SandboxGuidance.source},
-  ${ProposalsGuidance.source}, ${ProviderEngineering.source}), and a stance
+  ${ProviderEngineering.source}), and a stance
   names the skills its work can touch; a skill that grows past one
   domain is two skills. A rule that spans every domain — this one,
   ${CharterGuidance.source}, and the org's entry skill that names it —

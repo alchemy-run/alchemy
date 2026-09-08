@@ -1,6 +1,6 @@
 /**
- * Type-level regression tests for the org's WIRE surfaces (Engineer +
- * Reviewer): a charter's Layer type carries every tool its prose can
+ * Type-level regression tests for the org's WIRE surface (the
+ * Engineer): a charter's Layer type carries every tool its prose can
  * mention, so renderer coverage is compiler-checked.
  *
  * This file never runs — it exists to fail `tsc` if the inference
@@ -12,7 +12,6 @@
  */
 import type * as AI from "alchemy/AI";
 import type { GeneralEngineer } from "../src/coding/Engineer.ts";
-import type { ReviewerLive } from "../src/review/Reviewer.ts";
 import type { VerificationGeneral } from "../src/process/Verification.ts";
 
 type Names = AI.ToolNames<typeof GeneralEngineer>;
@@ -34,7 +33,7 @@ const _names: Names[] = [
 // @ts-expect-error — not on the wire
 const _unknown: Names = "not_a_tool";
 
-// inputs are typed per tool, from the template's Parameter splices
+// inputs are typed per tool, from the template's Thing splices
 const _grep: AI.ToolInput<typeof GeneralEngineer, "grep"> = {
   pattern: "log.*Error",
 };
@@ -75,37 +74,6 @@ const _complete: Registry<typeof GeneralEngineer> = {
   readFile: (input) => (input.path satisfies string, 1),
   readOutput: (input) => (input.outputId satisfies string, 1),
   writeFile: (input) => (input.content satisfies string, 1),
-};
-
-/* ── the Reviewer's wire ─────────────────────────────────────── */
-
-type ReviewNames = AI.ToolNames<typeof ReviewerLive>;
-
-// the typed surface is the CLASS-TOOL splices (they ride the Layer's
-// requirement channel); inline tools (add_comment, submit_review,
-// comment, sync_checkout) carry no tag and are RUNTIME-ONLY
-const _reviewNames: ReviewNames[] = ["readDiff", "readIssue", "findCompanions"];
-
-// @ts-expect-error — not on the wire
-const _unknownReview: ReviewNames = "not_a_tool";
-
-// @ts-expect-error — inline tools do not surface on the type
-const _inlineInvisible: ReviewNames = "add_comment";
-
-const _readDiff: AI.ToolInput<typeof ReviewerLive, "readDiff"> = {
-  pr: { owner: "o", repository: "r", number: 1, url: "https://x" },
-};
-
-// @ts-expect-error — readIssue and findCompanions have no renderer
-const _incompleteReview: Registry<typeof ReviewerLive> = {
-  readDiff: () => 1,
-};
-
-const _completeReview: Registry<typeof ReviewerLive> = {
-  // input is the tool's ACTUAL parameter type, not Record<string, any>
-  readDiff: (input) => (input.pr.number satisfies number, 1),
-  readIssue: (input) => (input.issue.number satisfies number, 1),
-  findCompanions: (input) => (input.branch satisfies string, 1),
 };
 
 // a SKILL's teaching carries its own wire — its tools never surface on

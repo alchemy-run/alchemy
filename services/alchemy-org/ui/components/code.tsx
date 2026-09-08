@@ -4,7 +4,11 @@ import {
   LIGHT_CODE_THEME,
 } from "@/lib/code-theme";
 import { useResolvedTheme } from "@/lib/theme";
-import type { DiffLineAnnotation, FileDiffMetadata } from "@pierre/diffs";
+import type {
+  DiffLineAnnotation,
+  FileDiffMetadata,
+  SelectedLineRange,
+} from "@pierre/diffs";
 import {
   File,
   FileDiff,
@@ -250,6 +254,8 @@ export const FileDiffCard = <A,>({
   renderAnnotation,
   fallback,
   bare = false,
+  options: extraOptions,
+  selectedLines,
 }: {
   file: FileDiffMetadata;
   annotations?: DiffLineAnnotation<A>[];
@@ -259,6 +265,11 @@ export const FileDiffCard = <A,>({
   /** Hunks only — no card chrome and no renderer file header — for a
    *  caller that draws its own header around the diff. */
   bare?: boolean;
+  /** Extra renderer options merged over the card's defaults (line
+   *  selection, its callbacks). Must be referentially stable. */
+  options?: Record<string, unknown>;
+  /** Lines to highlight (controlled — the review's focused anchor). */
+  selectedLines?: SelectedLineRange | null;
 }) => {
   const base = useBaseOptions();
   const options = useMemo(
@@ -268,8 +279,9 @@ export const FileDiffCard = <A,>({
       hunkSeparators: "line-info" as const,
       overflow: "scroll" as const,
       disableFileHeader: bare,
+      ...extraOptions,
     }),
-    [base, bare],
+    [base, bare, extraOptions],
   );
   return (
     <CodeBoundary fallback={fallback}>
@@ -279,6 +291,7 @@ export const FileDiffCard = <A,>({
           options={options}
           lineAnnotations={annotations}
           renderAnnotation={renderAnnotation}
+          selectedLines={selectedLines}
         />
       </div>
     </CodeBoundary>

@@ -17,7 +17,7 @@ export const ToolGuidanceGeneral = ToolGuidance.make`
   ## Writing a tool
 
   One file, one tool. A tool's contract (the \`AI.Tool\` tag, its tagged
-  template, the \`AI.Parameter\`s it splices) and its \`*Live\` Layer
+  template, the \`AI.Thing\`s it splices) and its \`*Live\` Layer
   live in ONE file named after the tool — ${Bash.source} is the model.
   A parameter lives with its canonical tool and is imported from there
   (\`path\` from ${ReadFile.source}, \`content\` from ${WriteFile.source}),

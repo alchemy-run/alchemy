@@ -138,6 +138,8 @@ export const Commit: S.Schema<Commit> = S.Struct({
 
 export class IssueOpened extends (Event("IssueOpened", {
   repository: RepositoryInfo,
+  /** Who did it — GitHub's `sender` (absent when synthesized from REST). */
+  sender: S.optionalKey(S.NullOr(Actor)),
   issue: Issue,
 })`
 An issue was opened in the repository — number, title, body, labels,
@@ -145,6 +147,8 @@ and author, as the wire delivers them.`) {}
 
 export class IssueLabeled extends (Event("IssueLabeled", {
   repository: RepositoryInfo,
+  /** Who did it — GitHub's `sender` (absent when synthesized from REST). */
+  sender: S.optionalKey(S.NullOr(Actor)),
   issue: Issue,
   label: Label,
 })`
@@ -152,6 +156,8 @@ A label was added to an issue.`) {}
 
 export class IssueCommented extends (Event("IssueCommented", {
   repository: RepositoryInfo,
+  /** Who did it — GitHub's `sender` (absent when synthesized from REST). */
+  sender: S.optionalKey(S.NullOr(Actor)),
   issue: Issue,
   comment: IssueComment,
 })`
@@ -169,6 +175,8 @@ export const isPullRequestComment = (event: IssueCommented): boolean =>
 
 export class IssueClosed extends (Event("IssueClosed", {
   repository: RepositoryInfo,
+  /** Who did it — GitHub's `sender` (absent when synthesized from REST). */
+  sender: S.optionalKey(S.NullOr(Actor)),
   issue: Issue,
 })`
 An issue was closed, by whom and however — the world's word, not
@@ -176,12 +184,16 @@ this org's.`) {}
 
 export class PullRequestOpened extends (Event("PullRequestOpened", {
   repository: RepositoryInfo,
+  /** Who did it — GitHub's `sender` (absent when synthesized from REST). */
+  sender: S.optionalKey(S.NullOr(Actor)),
   pullRequest: PullRequest,
 })`
 A pull request was opened — number, title, body, branches, author.`) {}
 
 export class PullRequestSynchronized extends (Event("PullRequestSynchronized", {
   repository: RepositoryInfo,
+  /** Who did it — GitHub's `sender` (absent when synthesized from REST). */
+  sender: S.optionalKey(S.NullOr(Actor)),
   pullRequest: PullRequest,
   /** The head commit the pull request now points at. */
   after: S.String,
@@ -192,6 +204,8 @@ code that was reviewed.`) {}
 
 export class PullRequestMerged extends (Event("PullRequestMerged", {
   repository: RepositoryInfo,
+  /** Who did it — GitHub's `sender` (absent when synthesized from REST). */
+  sender: S.optionalKey(S.NullOr(Actor)),
   pullRequest: PullRequest,
 })`
 A pull request was merged.`) {}
@@ -199,6 +213,8 @@ A pull request was merged.`) {}
 /** A pull request closed WITHOUT merging (merges are {@link PullRequestMerged}). */
 export class PullRequestClosed extends (Event("PullRequestClosed", {
   repository: RepositoryInfo,
+  /** Who did it — GitHub's `sender` (absent when synthesized from REST). */
+  sender: S.optionalKey(S.NullOr(Actor)),
   pullRequest: PullRequest,
 })`
 A pull request was closed without merging.`) {}
@@ -269,6 +285,14 @@ const repositoryInfo = (
   owner: { login: repository.owner?.login ?? ref.owner },
 });
 
+/** The delivery's `sender` (who acted), when the wire carries one. */
+const senderOf = (payload: {
+  sender?: { login?: string } | null;
+}): { login: string } | undefined =>
+  payload.sender?.login === undefined
+    ? undefined
+    : { login: payload.sender.login };
+
 /**
  * Parse one webhook delivery into its typed {@link RepositoryEvent} —
  * TOTAL translation, no filtering: routing decisions belong to the
@@ -293,12 +317,14 @@ export const parseWebhookEvent = (
     case "issues": {
       const payload = event.payload;
       const repository = repositoryInfo(payload.repository, ref);
+      const sender = senderOf(payload);
       const issue = payload.issue as IssueOpened["issue"];
       switch (payload.action) {
         case "opened":
           return Option.some({
             _tag: "IssueOpened",
             repository,
+            sender,
             issue,
           } satisfies IssueOpened);
         case "labeled":
@@ -307,6 +333,7 @@ export const parseWebhookEvent = (
             : Option.some({
                 _tag: "IssueLabeled",
                 repository,
+                sender,
                 issue,
                 label: { name: payload.label.name },
               } satisfies IssueLabeled);
@@ -314,6 +341,7 @@ export const parseWebhookEvent = (
           return Option.some({
             _tag: "IssueClosed",
             repository,
+            sender,
             issue,
           } satisfies IssueClosed);
         default:
@@ -326,6 +354,7 @@ export const parseWebhookEvent = (
       return Option.some({
         _tag: "IssueCommented",
         repository: repositoryInfo(payload.repository, ref),
+        sender: senderOf(payload),
         issue: payload.issue as IssueCommented["issue"],
         comment: payload.comment as IssueCommented["comment"],
       } satisfies IssueCommented);
@@ -333,6 +362,7 @@ export const parseWebhookEvent = (
     case "pull_request": {
       const payload = event.payload;
       const repository = repositoryInfo(payload.repository, ref);
+      const sender = senderOf(payload);
       const pullRequest =
         payload.pull_request as PullRequestOpened["pullRequest"];
       switch (payload.action) {
@@ -340,12 +370,14 @@ export const parseWebhookEvent = (
           return Option.some({
             _tag: "PullRequestOpened",
             repository,
+            sender,
             pullRequest,
           } satisfies PullRequestOpened);
         case "synchronize":
           return Option.some({
             _tag: "PullRequestSynchronized",
             repository,
+            sender,
             pullRequest,
             after: payload.after,
           } satisfies PullRequestSynchronized);
@@ -357,11 +389,13 @@ export const parseWebhookEvent = (
               ? ({
                   _tag: "PullRequestMerged",
                   repository,
+                  sender,
                   pullRequest,
                 } satisfies PullRequestMerged)
               : ({
                   _tag: "PullRequestClosed",
                   repository,
+                  sender,
                   pullRequest,
                 } satisfies PullRequestClosed),
           );

@@ -14,7 +14,7 @@ export * from "./Events.ts";
 export * from "./SessionSocket.ts";
 export * from "./Sessions.ts";
 export * from "./Fragment.ts";
-export * from "./Parameter.ts";
+export * from "./Thing.ts";
 export * from "./Sandbox.ts";
 export * from "./SandboxHttp.ts";
 export * from "./SandboxLocal.ts";

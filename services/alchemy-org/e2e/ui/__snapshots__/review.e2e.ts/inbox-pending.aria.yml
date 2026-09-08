@@ -1,6 +1,0 @@
-- dialog "proposals":
-  - text: 1 awaiting you
-  - 'link /request changes on #\d+ \(1 inline comment\)/':
-    - /url: /alchemy-run/test-alchemy/pull/148/proposals
-  - text: awaiting you
-  - button "details"

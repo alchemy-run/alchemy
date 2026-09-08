@@ -312,6 +312,9 @@ export const backfillOpenPullRequests = (
             number: pull.number,
             title: pull.title,
             body: pull.body ?? null,
+            state: pull.state,
+            html_url: pull.html_url,
+            user: pull.user === null ? null : { login: pull.user.login },
             merged: false,
             head: { ref: pull.head.ref, sha: pull.head.sha },
             base: { ref: pull.base.ref },
@@ -345,9 +348,9 @@ export const pollRepositoryEvent = (
 
 /**
  * The synthesized payloads carry exactly the fields the wire parser
- * {@link parseWebhookEvent} reads (action, issue{number,title,body,state},
- * comment{user{login},body}, pull_request{number,title,merged},
- * repository{name,owner{login}}). A full Octokit webhook payload is not
+ * {@link parseWebhookEvent} reads (action, issue{number,title,body,state,
+ * user,labels}, comment{user{login},body}, pull_request{number,title,
+ * body,state,user,merged,head,base}, repository{name,owner{login}}). A full Octokit webhook payload is not
  * reproducible from REST, so this single synthesis site casts across
  * the boundary — same as the webhook runtime, where GitHub's headers
  * are the source of truth.
@@ -402,6 +405,14 @@ const pollIssues = (
           title: issue.title,
           body: issue.body ?? "",
           state: issue.state,
+          html_url: issue.html_url,
+          // the author — consumers name who opened it
+          user: issue.user === null ? null : { login: issue.user.login },
+          labels: issue.labels.map((label) =>
+            typeof label === "string"
+              ? { name: label }
+              : { name: label.name ?? "" },
+          ),
         },
         repository: repositoryPayload(props),
       };
@@ -532,6 +543,10 @@ const pollPullRequests = (
           // the body carries the ISSUE LINKAGE ("Closes #N") — consumers
           // correlate a PR to the issue it resolves from it
           body: pull.body ?? null,
+          state: pull.state,
+          html_url: pull.html_url,
+          // the author — consumers name who opened it
+          user: pull.user === null ? null : { login: pull.user.login },
           merged: pull.merged_at !== null,
           head: { ref: pull.head.ref, sha: pull.head.sha },
           base: { ref: pull.base.ref },

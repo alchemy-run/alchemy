@@ -104,15 +104,15 @@ test("ReadFile pages, numbers lines, rejects binary, and returns digest", () =>
         offset: 1,
         limit: 1,
       });
-      expect(page).toContain("1: export const one");
-      expect(page).toContain("Use offset=2");
-      expect(page).toMatch(/SHA-256: [a-f0-9]{64}/);
+      expect(page.content).toContain("1: export const one");
+      expect(page.content).toContain("Use offset=2");
+      expect(page.digest).toMatch(/^[a-f0-9]{64}$/);
       expect(
-        yield* (read as any)({
+        (yield* (read as any)({
           path: "src/one.ts",
           offset: -1,
           limit: 1,
-        }),
+        })).content,
       ).toContain("3: ");
 
       const fs = yield* FileSystem.FileSystem;
@@ -133,7 +133,7 @@ test("Grep, Glob, and ListDirectory use deterministic local physics", () =>
       const grep = yield* Grep;
       const glob = yield* Glob;
       const list = yield* ListDirectory;
-      const matches = yield* (grep as any)({
+      const { matches } = yield* (grep as any)({
         pattern: "shared",
         glob: "*.ts",
       });
@@ -144,10 +144,10 @@ test("Grep, Glob, and ListDirectory use deterministic local physics", () =>
         yield* (grep as any)({ pattern: "[" }).pipe(Effect.flip),
       ).toContain("grep failed");
 
-      const paths = yield* (glob as any)({ pattern: "**/*.ts" });
-      expect(paths.split("\n")).toEqual(["src/one.ts", "src/two.ts"]);
+      const { files } = yield* (glob as any)({ pattern: "**/*.ts" });
+      expect(files.split("\n")).toEqual(["src/one.ts", "src/two.ts"]);
 
-      const entries = yield* (list as any)({ path: "." });
+      const { entries } = yield* (list as any)({ path: "." });
       expect(entries).toContain(".gitignore");
       expect(entries).toContain("src/");
     }),
@@ -162,16 +162,16 @@ test("Bash truncates to a readable opaque full-output artifact", () =>
         command:
           "i=1; while [ $i -le 2105 ]; do echo line-$i; i=$((i+1)); done",
       });
-      expect(result).toContain("exit: 0");
-      expect(result).toContain("line-2105");
-      const id = /Full stdout: (output-[^\n]+)/.exec(result)![1]!;
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain("line-2105");
+      const id = /Full stdout: (output-[^\n]+)/.exec(result.stdout)![1]!;
       const beginning = yield* (readOutput as any)({
         outputId: id,
         offset: 1,
         limit: 2,
       });
-      expect(beginning).toContain("line-1");
-      expect(beginning).toContain("line-2");
+      expect(beginning.content).toContain("line-1");
+      expect(beginning.content).toContain("line-2");
     }),
   ));
 

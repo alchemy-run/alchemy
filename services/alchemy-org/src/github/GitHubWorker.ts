@@ -1,15 +1,13 @@
 import {
-  CreateIssueCommentHttp,
   CreatePullRequestHttp,
-  CreatePullRequestReviewHttp,
   GetIssueHttp,
   GetPullRequestHttp,
   ListIssueCommentsHttp,
+  ListIssuesHttp,
   ListPullRequestFilesHttp,
   ListPullRequestReviewCommentsHttp,
   ListPullRequestReviewsHttp,
   ListPullRequestsHttp,
-  MergePullRequestHttp,
 } from "alchemy/GitHub";
 import * as Layer from "effect/Layer";
 
@@ -21,19 +19,16 @@ import * as Layer from "effect/Layer";
  * Providers out of `alchemy/GitHub`.
  */
 export const GitHubWorker = Layer.mergeAll(
-  // the WRITES — reached only by the proposal executor (Routes.ts), on
-  // the operator's accept; no agent tool holds them
-  CreateIssueCommentHttp,
+  // the WRITE the engineers hold: openPullRequest lands on GitHub
+  // directly (coding/OpenPullRequest.ts)
   CreatePullRequestHttp,
-  CreatePullRequestReviewHttp,
-  MergePullRequestHttp,
   GetIssueHttp,
   GetPullRequestHttp,
   // the pull-request SURFACE (Routes.ts): conversation, verdicts, and
   // inline comments, read for the operator's review page — and the
-  // files, paged, for its diff (and the Reviewer's, when GitHub refuses
-  // to serve a big PR's diff whole)
+  // files, paged, for its diff
   ListIssueCommentsHttp,
+  ListIssuesHttp,
   ListPullRequestFilesHttp,
   ListPullRequestReviewCommentsHttp,
   ListPullRequestReviewsHttp,

@@ -1,6 +1,6 @@
 /* ── the PR's files, as the server pages them ─────────────────────────
    GitHub's whole-PR diff refuses changes over 20 000 lines or 300
-   files, so `GET /api/prs/:n/files?page=k` pages through
+   files, so `GET /api/pulls/:owner/:repo/:n/files?page=k` pages through
    `pulls.listFiles` — each file arriving with its own hunks, which the
    UI dresses back up as a `diff --git` block to render. The shapes and
    the re-dressing are the server's (src/github/PullRequest.ts) — that
@@ -23,19 +23,22 @@ export { toGitDiff };
  */
 export const LARGE_FILE_LINES = 1_000;
 
-/** Page through `/api/prs/:n/files`, handing over each page as it
- *  lands, until the last one (or `signal` aborts). Throws on the first
- *  failed page with the server's message. */
+/** Page through `/api/pulls/:owner/:repo/:n/files`, handing over each
+ *  page as it lands, until the last one (or `signal` aborts). Throws on
+ *  the first failed page with the server's message. */
 export const fetchChangedFiles = async (
+  owner: string,
+  repo: string,
   number: number,
   onPage: (page: ChangedFilesPage) => void,
   signal: AbortSignal,
 ): Promise<void> => {
   let page: number | null = 1;
   while (page !== null && !signal.aborted) {
-    const response = await fetch(`/api/prs/${number}/files?page=${page}`, {
-      signal,
-    });
+    const response = await fetch(
+      `/api/pulls/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${number}/files?page=${page}`,
+      { signal },
+    );
     if (!response.ok) {
       const data = (await response.json().catch(() => ({}))) as {
         error?: string;

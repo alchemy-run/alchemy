@@ -71,9 +71,9 @@ Layer.provide(AI.CodeModeAsync()),    // ...or async/await code
 
 Mention-is-presence is unchanged — only granted tools exist in the
 generated signatures — and a broken program comes back as the eval
-result, model-visible. Tools can declare a `returns` schema
-(`AI.Tool("readDiff", S.String)`) so the generated signatures carry
-real return types.
+result, model-visible. A tool's `${AI.out(…)}` splices are its return
+type, so the generated signatures carry real return types; a tool
+with no out-splices returns `void`.
 
 ## Swapping kernels
 

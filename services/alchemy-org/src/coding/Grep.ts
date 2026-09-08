@@ -2,51 +2,50 @@ import * as AI from "alchemy/AI";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as S from "effect/Schema";
-import { truncateHead } from "../artifacts/Output.ts";
 import { Artifacts } from "../artifacts/Artifacts.ts";
+import { truncateHead } from "../artifacts/Output.ts";
 
-const pattern = AI.Parameter("pattern", S.String)`
-A regular expression (full regex syntax, e.g. "log.*Error" or
-"function\\s+\\w+"). Pass the raw pattern with no surrounding
-slashes or quotes; escape literal ".", "(", "[" and friends.`;
+const pattern = AI.Thing("pattern", S.String)`
+  A regular expression (full regex syntax, e.g. "log.*Error" or
+  "function\\s+\\w+"). Pass the raw pattern with no surrounding
+  slashes or quotes; escape literal ".", "(", "[" and friends.`;
 
-const pathParam = AI.Parameter("path", S.optionalKey(S.String))`
-Workspace-relative file or directory to search (default: ".").`;
+const pathParam = AI.Thing("path", S.optionalKey(S.String))`
+  Workspace-relative file or directory to search (default: ".").`;
 
-const glob = AI.Parameter("glob", S.optionalKey(S.String))`
-Glob filter for files, e.g. "*.ts", "*.{ts,tsx}", or
-"src/**/*.spec.ts".
-Omit to search everything.`;
+const glob = AI.Thing("glob", S.optionalKey(S.String))`
+  Glob filter for files, e.g. "*.ts", "*.{ts,tsx}", or
+  "src/**/*.spec.ts".
+  Omit to search everything.`;
 
-const type = AI.Parameter("type", S.optionalKey(S.String))`
-Ripgrep file type filter such as "ts", "rust", or "py". Use only
-when sure of the registered type.`;
+const type = AI.Thing("type", S.optionalKey(S.String))`
+  Ripgrep file type filter such as "ts", "rust", or "py". Use only
+  when sure of the registered type.`;
 
-const ignoreCase = AI.Parameter("ignoreCase", S.optionalKey(S.Boolean))`
-Case-insensitive search (default false).`;
+const ignoreCase = AI.Thing("ignoreCase", S.optionalKey(S.Boolean))`
+  Case-insensitive search (default false).`;
 
-const literal = AI.Parameter("literal", S.optionalKey(S.Boolean))`
-Treat pattern as literal text instead of regex (default false).`;
+const literal = AI.Thing("literal", S.optionalKey(S.Boolean))`
+  Treat pattern as literal text instead of regex (default false).`;
 
-const context = AI.Parameter(
+const context = AI.Thing(
   "context",
   S.optionalKey(
     S.Int.pipe(S.check(S.isGreaterThanOrEqualTo(0), S.isLessThanOrEqualTo(20))),
   ),
-)`
-Lines of context before and after each match (0-20, default 0).`;
+)`Lines of context before and after each match (0-20, default 0).`;
 
-const multiline = AI.Parameter("multiline", S.optionalKey(S.Boolean))`
-Enable matches spanning multiple lines (default false; more expensive).`;
+const multiline = AI.Thing("multiline", S.optionalKey(S.Boolean))`
+  Enable matches spanning multiple lines (default false; more expensive).`;
 
-const outputMode = AI.Parameter(
+const outputMode = AI.Thing(
   "outputMode",
   S.optionalKey(S.Literals(["content", "files", "count"])),
 )`
-"content" returns matching lines, "files" returns matching paths,
-"count" returns match counts per file. Default "content".`;
+  "content" returns matching lines, "files" returns matching paths,
+  "count" returns match counts per file. Default "content".`;
 
-const limit = AI.Parameter(
+const limit = AI.Thing(
   "limit",
   S.optionalKey(
     S.Int.pipe(
@@ -54,19 +53,24 @@ const limit = AI.Parameter(
     ),
   ),
 )`
-Maximum output lines to show (1-2000; default 100 for content and
-500 for files/count). Complete truncated output is retained as an
-artifact ID readable with readOutput.`;
+  Maximum output lines to show (1-2000; default 100 for content and
+  500 for files/count). Complete truncated output is retained as an
+  artifact ID readable with readOutput.`;
+
+const matches = AI.Thing("matches", S.String)`
+  The matches in ripgrep's format for the chosen outputMode ("no
+  matches" when nothing matched). When truncated, a trailing note names
+  the artifact ID readOutput can page.`;
 
 export class Grep extends (AI.Tool<Grep>(import.meta)("grep")`
-Fast content search across the whole workspace, at any repo size.
-Searches file contents with ${pattern} — full regex syntax (e.g.
-"log.*Error", "function\\s+\\w+"), so escape literal ".", "(", "["
-etc. Scope with ${pathParam}, ${glob}, or ${type}; use ${literal},
-${ignoreCase}, ${context}, and ${multiline} only when useful.
-Choose ${outputMode} and bound the result with ${limit}. Respects
-.gitignore and skips binaries. Always search before reading files;
-use Glob for filename discovery.`) {}
+  Fast content search across the whole workspace, at any repo size —
+  answers ${AI.out(matches)}. Searches file contents with ${pattern} —
+  full regex syntax (e.g. "log.*Error", "function\\s+\\w+"), so escape
+  literal ".", "(", "[" etc. Scope with ${pathParam}, ${glob}, or
+  ${type}; use ${literal}, ${ignoreCase}, ${context}, and ${multiline}
+  only when useful. Choose ${outputMode} and bound the result with
+  ${limit}. Respects .gitignore and skips binaries. Always search
+  before reading files; use Glob for filename discovery.`) {}
 
 const MAX_BYTES = 50_000;
 
@@ -123,7 +127,7 @@ export const GrepLive = Layer.effect(
         });
 
         // rg exit 1 = no matches; 127 = rg missing; >1 = bad input.
-        if (result.exitCode === 1) return "no matches";
+        if (result.exitCode === 1) return { matches: "no matches" };
         if (result.exitCode === 127) {
           return yield* Effect.fail(
             "ripgrep (rg) is required for grep but was not found on PATH",
@@ -135,15 +139,17 @@ export const GrepLive = Layer.effect(
           );
         }
         const cleaned = result.stdout.replaceAll(/^\.\/+/gm, "").trim();
-        if (cleaned.length === 0) return "no matches";
+        if (cleaned.length === 0) return { matches: "no matches" };
         const preview = truncateHead(cleaned, {
           maxLines: max,
           maxBytes: MAX_BYTES,
         });
-        if (!preview.truncated) return preview.text;
+        if (!preview.truncated) return { matches: preview.text };
         const artifact = yield* artifacts.create("grep");
         yield* artifact.append(cleaned);
-        return `${preview.text}\n[Output truncated: ${preview.shownLines} of ${preview.totalLines} lines shown. Full output: ${artifact.id}]`;
+        return {
+          matches: `${preview.text}\n[Output truncated: ${preview.shownLines} of ${preview.totalLines} lines shown. Full output: ${artifact.id}]`,
+        };
       })) as never;
   }),
 );

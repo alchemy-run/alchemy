@@ -10,10 +10,10 @@ is decided at composition, not in the charter.
 
 ## Parameters
 
-A `Parameter` fuses name, schema, and documentation:
+A `Thing` fuses name, schema, and documentation:
 
 ```typescript
-export const issue = AI.Parameter("issue", IssueRef)`
+export const issue = AI.Thing("issue", IssueRef)`
 A reference to a GitHub issue in the repository. A "ready" issue's
 acceptance criteria are a complete specification of the work.`;
 ```
@@ -23,7 +23,7 @@ template is what the model reads about the field. Optional fields use
 `S.optionalKey`:
 
 ```typescript
-const glob = AI.Parameter("glob", S.optionalKey(S.String))`
+const glob = AI.Thing("glob", S.optionalKey(S.String))`
 Glob filter for files, e.g. "*.ts". Omit to search everything.`;
 ```
 

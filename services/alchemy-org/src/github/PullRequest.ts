@@ -2,12 +2,11 @@ import type * as GitHub from "alchemy/GitHub";
 
 /**
  * The PULL REQUEST as a session subject. A PR's session key is
- * `owner/repo#N` — the Reviewer's session (`Reviewer:owner/repo#N`),
- * the operator's engineer threads (`Engineer:owner/repo#N` and
- * `Engineer:owner/repo#N::<thread>`), and their terminals all share
- * the ONE machine that key names (`SandboxSession`'s `machineKey`
- * strips the `::<thread>` suffix), and that machine's tree is the PR's
- * head.
+ * `owner/repo#N` — the operator's engineer threads
+ * (`Engineer:owner/repo#N` and `Engineer:owner/repo#N::<thread>`) and
+ * their terminals all share the ONE machine that key names
+ * (`SandboxSession`'s `machineKey` strips the `::<thread>` suffix),
+ * and that machine's tree is the PR's head.
  */
 export const pullSessionKey = (repo: string, number: number): string =>
   `${repo}#${number}`;

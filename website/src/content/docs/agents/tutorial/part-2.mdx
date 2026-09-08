@@ -19,11 +19,11 @@ Create `src/tools.ts` and describe the tool's one input:
 import * as AI from "alchemy/AI";
 import * as S from "effect/Schema";
 
-export const orderId = AI.Parameter("orderId", S.String)`
+export const orderId = AI.Thing("orderId", S.String)`
 The customer's order id, e.g. "ACME-1042".`;
 ```
 
-A `Parameter` fuses a name, a schema, and a description into one
+A `Thing` fuses a name, a schema, and a description into one
 term. The schema becomes the tool's JSON schema on the wire; the
 template becomes the field's documentation — the model reads exactly
 what you wrote.
@@ -37,7 +37,7 @@ Add the tool contract below it:
 import * as AI from "alchemy/AI";
 import * as S from "effect/Schema";
 
-export const orderId = AI.Parameter("orderId", S.String)`
+export const orderId = AI.Thing("orderId", S.String)`
 The customer's order id, e.g. "ACME-1042".`;
 +
 +export class LookupOrder extends AI.Tool<LookupOrder>()("lookupOrder")`
@@ -149,7 +149,7 @@ import { LookupOrder } from "./tools.ts";
 
 export class Assistant extends AI.Agent<Assistant>()("Assistant") {}
 
-+const reason = AI.Parameter("reason", S.String)`
++const reason = AI.Thing("reason", S.String)`
 +Why this conversation needs a human.`;
 +
 -export const AssistantLive = Assistant.make`

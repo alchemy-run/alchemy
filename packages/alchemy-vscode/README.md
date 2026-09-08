@@ -34,7 +34,7 @@ Two tag shapes. A member access ending in `make`, `prose`, `say`, or `fragment`:
 
 ```ts
 AI.Tool("bash")`Run ${command} and return its exit code.`;
-AI.Parameter("task", S.String)`The work itself, standing alone.`;
+AI.Thing("task", S.String)`The work itself, standing alone.`;
 AI.Dispatch(Engineer, "hand_to_engineer")`Hand one round of work over.`;
 class IssueOpened extends Event("IssueOpened", { issue })`An issue was opened.` {}
 ```
@@ -56,10 +56,10 @@ A scheduled wake — one sync pass against upstream.` {}
 
 Here the backtick is too far away to be the proof, so the callee is checked
 against the prose constructors instead — `Agent`, `Dispatch`, `Event`,
-`Kernel`, `Parameter`, `Prose`, `Skill`, `Thread`, `Tool`, with any receiver.
+`Kernel`, `Thing`, `Prose`, `Skill`, `Thread`, `Tool`, with any receiver.
 A new prose constructor goes in that list, in `#prose-multiline-call-template`.
 A call that matches the list but has no template behind it — an SSM
-`Parameter("id", {…})` resource, say — is released with its arguments
+`Thing("id", {…})` resource, say — is released with its arguments
 untouched.
 
 Inside the body:

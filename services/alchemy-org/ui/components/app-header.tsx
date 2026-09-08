@@ -1,5 +1,4 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -14,8 +13,8 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { navigate } from "@/lib/routes";
 import { useTheme } from "@/lib/theme";
-import { cn } from "@/lib/utils";
 import { Bell, ExternalLink, Moon, Sun, User } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 
@@ -71,24 +70,17 @@ const useOperator = (): Operator | null | undefined => {
 };
 
 /**
- * The app bar: the mark and the two activities on the left; on the
- * right, the notification bell (the proposals awaiting the operator —
+ * The app bar: the mark on the left (home = the channel); on the
+ * right, the notification bell (the cards awaiting the operator —
  * `notifications` renders its contents), the theme, and the operator.
  */
 export const AppHeader = ({
-  activity,
-  onActivity,
-  openPullRequests,
   pending,
   notifications,
   notificationsOpen,
   onNotificationsOpen,
 }: {
-  activity: "code" | "review";
-  onActivity: (activity: "code" | "review") => void;
-  /** Open pull requests — the count on the Review activity. */
-  openPullRequests: number;
-  /** Proposals awaiting the operator — the count on the bell. */
+  /** Cards awaiting the operator — the count on the bell. */
   pending: number;
   notifications: ReactNode;
   notificationsOpen: boolean;
@@ -101,54 +93,17 @@ export const AppHeader = ({
   return (
     <header className="flex h-12 shrink-0 items-center gap-4 border-b border-border bg-sidebar px-3">
       <a
-        href="#"
+        href="/"
         onClick={(event) => {
           event.preventDefault();
-          onActivity("code");
+          navigate("/");
         }}
         className="flex items-center gap-2 text-foreground"
-        title="Alchemy"
+        title="Alchemy — the channel"
       >
         <AlchemyMark className="size-5" />
         <span className="text-sm font-semibold tracking-tight">Alchemy</span>
       </a>
-      <nav aria-label="Activities" className="flex items-center gap-1">
-        {(["code", "review"] as const).map((name) => {
-          const selected = activity === name;
-          return (
-            <button
-              key={name}
-              type="button"
-              aria-current={selected ? "page" : undefined}
-              title={
-                name === "code"
-                  ? "Code — sessions on your own directories: agent threads and terminals, no pull request needed."
-                  : `Review — the open pull requests${openPullRequests > 0 ? ` (${openPullRequests})` : ""}: read them, have the bot review them, work on their machines.`
-              }
-              onClick={() => onActivity(name)}
-              className={cn(
-                "flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-sm",
-                // the selected activity is a LIFTED segment — card on the
-                // nav surface with a hairline and a shadow — which reads
-                // in both modes (accent-on-sidebar vanishes on parchment)
-                selected
-                  ? "border-border bg-card font-medium text-foreground shadow-xs"
-                  : "border-transparent text-muted-foreground hover:bg-accent/60 hover:text-foreground",
-              )}
-            >
-              {name === "code" ? "Code" : "Review"}
-              {name === "review" && openPullRequests > 0 && (
-                <Badge
-                  variant="secondary"
-                  className="h-5 min-w-5 justify-center bg-muted px-1.5 font-mono text-[10px] tabular-nums text-muted-foreground"
-                >
-                  {openPullRequests}
-                </Badge>
-              )}
-            </button>
-          );
-        })}
-      </nav>
       <div className="ml-auto flex items-center gap-1">
         <Popover open={notificationsOpen} onOpenChange={onNotificationsOpen}>
           <PopoverTrigger asChild>
@@ -158,12 +113,12 @@ export const AppHeader = ({
               aria-label={
                 pending === 0
                   ? "notifications"
-                  : `notifications, ${pending} awaiting you`
+                  : `notifications, ${pending} new`
               }
               title={
                 pending === 0
-                  ? "Notifications — proposals from the agents land here; nothing awaits you."
-                  : `Notifications — ${pending} proposal${pending === 1 ? "" : "s"} awaiting your accept or decline.`
+                  ? "Notifications — cards from the threads land here."
+                  : `Notifications — ${pending} new card${pending === 1 ? "" : "s"} since you last looked.`
               }
               className="relative size-8 text-muted-foreground hover:text-foreground"
             >
@@ -181,7 +136,7 @@ export const AppHeader = ({
           <PopoverContent
             align="end"
             sideOffset={8}
-            aria-label="proposals"
+            aria-label="notifications"
             className="flex max-h-[70vh] w-[26rem] flex-col overflow-hidden p-0"
           >
             {notifications}

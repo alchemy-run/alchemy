@@ -34,7 +34,7 @@ refund tool in `src/tools.ts`:
 
   // ... orderId, LookupOrder, LookupOrderLocal ...
 +
-+export const amount = AI.Parameter("amount", S.Int)`
++export const amount = AI.Thing("amount", S.Int)`
 +Refund amount in cents. Never more than the order total.`;
 +
 +export class IssueRefund extends AI.Tool<IssueRefund>()("issueRefund")`

@@ -2,7 +2,7 @@ import * as S from "effect/Schema";
 
 /**
  * An `Event` term is a **capability term** (with `Tool` and
- * `Parameter`): pure vocabulary, never interpreted. It declares one
+ * `Thing`): pure vocabulary, never interpreted. It declares one
  * message shape the org speaks — schema and prose as ONE artifact,
  * and the class IS the payload type:
  *

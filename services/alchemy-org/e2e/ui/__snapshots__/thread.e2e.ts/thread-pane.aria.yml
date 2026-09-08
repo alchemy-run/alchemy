@@ -1,0 +1,11 @@
+- complementary "Thread state":
+  - separator "Resize the Thread state rail"
+  - text: Entities Bug in reconcile
+  - link /alchemy-run\/test-alchemy#\d+/:
+    - /url: https://github.com/alchemy-run/test-alchemy/issues/12
+  - text: open Add sumToN helper
+  - button /open review for alchemy-run\/test-alchemy#\d+/
+  - link /alchemy-run\/test-alchemy#\d+/:
+    - /url: https://github.com/alchemy-run/test-alchemy/issues/148
+  - text: /open trees\/pr-\d+ Agents engineer — Implement the fix in pr-\d+'s worktree [\d,.]+[bkmBKM]+/
+  - button "Close thread"

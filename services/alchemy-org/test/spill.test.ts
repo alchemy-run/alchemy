@@ -65,9 +65,9 @@ test("oversized output spills to an artifact; bounded output passes through", as
         outputId: id!,
         offset: 1,
         limit: 5,
-      })) as string;
-      expect(paged).toContain("x".repeat(100));
-      expect(paged).toContain("Use offset=6 to continue.");
+      })) as { content: string };
+      expect(paged.content).toContain("x".repeat(100));
+      expect(paged.content).toContain("Use offset=6 to continue.");
     }).pipe(
       Effect.provide(
         Layer.mergeAll(SpillingTools, Layer.empty).pipe(

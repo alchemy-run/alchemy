@@ -2,17 +2,17 @@ import * as AI from "alchemy/AI";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as S from "effect/Schema";
-import { truncateHead } from "../artifacts/Output.ts";
 import { Artifacts } from "../artifacts/Artifacts.ts";
+import { truncateHead } from "../artifacts/Output.ts";
 
-const pattern = AI.Parameter("pattern", S.String)`
-Glob pattern such as "*.ts", "**/*.json", or
-"src/**/*.spec.ts". Omit no segments: "**" means recursive.`;
+const pattern = AI.Thing("pattern", S.String)`
+  Glob pattern such as "*.ts", "**/*.json", or
+  "src/**/*.spec.ts". Omit no segments: "**" means recursive.`;
 
-const pathParam = AI.Parameter("path", S.optionalKey(S.String))`
-Workspace-relative directory to search (default: ".").`;
+const pathParam = AI.Thing("path", S.optionalKey(S.String))`
+  Workspace-relative directory to search (default: ".").`;
 
-const limit = AI.Parameter(
+const limit = AI.Thing(
   "limit",
   S.optionalKey(
     S.Int.pipe(
@@ -20,14 +20,19 @@ const limit = AI.Parameter(
     ),
   ),
 )`
-Maximum paths to show (1-5000, default 1000). Complete truncated
-output is retained as an artifact ID.`;
+  Maximum paths to show (1-5000, default 1000). Complete truncated
+  output is retained as an artifact ID.`;
+
+const files = AI.Thing("files", S.String)`
+  Sorted workspace-relative paths, one per line ("no files found" when
+  nothing matched). When truncated, a trailing note names the artifact
+  ID readOutput can page.`;
 
 export class Glob extends (AI.Tool<Glob>(import.meta)("glob")`
-Find files by ${pattern}, relative to ${pathParam}. Returns sorted
-workspace-relative paths, respects .gitignore, and excludes .git.
-Use for filename discovery; use grep for file contents. Bound output
-with ${limit}.`) {}
+  Find files by ${pattern}, relative to ${pathParam} — answers
+  ${AI.out(files)}. Respects .gitignore and excludes .git. Use for
+  filename discovery; use grep for file contents. Bound output with
+  ${limit}.`) {}
 
 const MAX_BYTES = 50_000;
 
@@ -66,15 +71,17 @@ export const GlobLive = Layer.effect(
           );
         }
         const cleaned = result.stdout.replaceAll(/^\.\/+/gm, "").trim();
-        if (cleaned.length === 0) return "no files found";
+        if (cleaned.length === 0) return { files: "no files found" };
         const preview = truncateHead(cleaned, {
           maxLines: max,
           maxBytes: MAX_BYTES,
         });
-        if (!preview.truncated) return preview.text;
+        if (!preview.truncated) return { files: preview.text };
         const artifact = yield* artifacts.create("glob");
         yield* artifact.append(cleaned);
-        return `${preview.text}\n[Output truncated: ${preview.shownLines} of ${preview.totalLines} paths shown. Full output: ${artifact.id}]`;
+        return {
+          files: `${preview.text}\n[Output truncated: ${preview.shownLines} of ${preview.totalLines} paths shown. Full output: ${artifact.id}]`,
+        };
       })) as never;
   }),
 );

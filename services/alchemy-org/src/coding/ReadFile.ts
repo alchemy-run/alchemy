@@ -4,18 +4,17 @@ import * as Layer from "effect/Layer";
 import * as S from "effect/Schema";
 import { sha256Hex } from "./Digest.ts";
 
-/** The one `path` parameter every file tool (read, edit, write, and
- *  the reviewer's inline comments) shares — one description, one
- *  schema. */
-export const path = AI.Parameter("path", S.String)`
-A workspace-relative path to a file within the repository checkout
-(e.g. "src/index.ts"). Never absolute, never escaping the workspace.`;
+/** The one `path` parameter every file tool (read, edit, write)
+ *  shares — one description, one schema. */
+export const path = AI.Thing("path", S.String)`
+  A workspace-relative path to a file within the repository checkout
+  (e.g. "src/index.ts"). Never absolute, never escaping the workspace.`;
 
-const offset = AI.Parameter("offset", S.optionalKey(S.Int))`
-1-indexed line to start reading from. Negative values count from the
-end (-1 is the final line). Zero is invalid.`;
+const offset = AI.Thing("offset", S.optionalKey(S.Int))`
+  1-indexed line to start reading from. Negative values count from the
+  end (-1 is the final line). Zero is invalid.`;
 
-const limit = AI.Parameter(
+const limit = AI.Thing(
   "limit",
   S.optionalKey(
     S.Int.pipe(
@@ -23,14 +22,21 @@ const limit = AI.Parameter(
     ),
   ),
 )`
-Maximum number of lines to return (default and cap: 2000).`;
+  Maximum number of lines to return (default and cap: 2000).`;
+
+const content = AI.Thing("content", S.String)`
+  The requested page, line-numbered ("N: content"), truncated to 2000
+  lines / 50KB — a trailing note names the next offset when there is
+  more.`;
+
+const digest = AI.Thing("digest", S.String)`
+  The whole file's SHA-256 — the proof editFile/writeFile require that
+  you are changing the version you actually read.`;
 
 export class ReadFile extends (AI.Tool<ReadFile>(import.meta)("readFile")`
-Read the file at ${path}. Output is line-numbered ("N: content") and
-truncated to 2000 lines / 50KB — page large files with ${offset} and
-${limit}. Read whole regions at once; avoid tiny slices. Every result
-includes the SHA-256 digest required by editFile/writeFile to prove
-you are changing the version you actually read.`) {}
+  Read the file at ${path} — answers ${AI.out(content, digest)}. Page
+  large files with ${offset} and ${limit}. Read whole regions at once;
+  avoid tiny slices.`) {}
 
 const DEFAULT_LIMIT = 2000;
 const MAX_BYTES = 50_000;
@@ -92,7 +98,7 @@ export const ReadFileLive = Layer.effect(
           end < lines.length
             ? `${body}\n[Showing lines ${start}-${end} of ${lines.length}. Use offset=${end + 1} to continue.]`
             : body;
-        return `${page}\n[SHA-256: ${digest}]`;
+        return { content: page, digest };
       })) as never;
   }),
 );

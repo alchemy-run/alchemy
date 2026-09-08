@@ -30,7 +30,7 @@ import {
   type EncodedCrash,
   type SessionObservation,
 } from "./Events.ts";
-import { isParameter } from "./Parameter.ts";
+import { isIn, isOut, isThing } from "./Thing.ts";
 import { dedentTemplate, isFragment, type Fragment } from "./Fragment.ts";
 import type {
   SessionSocketHost,
@@ -173,8 +173,13 @@ export const renderRef = (ref: unknown): string => {
   if (isToolImpl(ref)) {
     return `\`${ref.tool["~alchemy/Name"]}\``;
   }
-  if (isTool(ref) || isParameter(ref) || isEvent(ref) || isSkill(ref)) {
+  if (isTool(ref) || isThing(ref) || isEvent(ref) || isSkill(ref)) {
     return `\`${(ref as { "~alchemy/Name": string })["~alchemy/Name"]}\``;
+  }
+  if (isIn(ref) || isOut(ref)) {
+    return ref.things
+      .map((thing) => `\`${thing["~alchemy/Name"]}\``)
+      .join(", ");
   }
   if (isAgent(ref)) {
     return (ref as { "~alchemy/Name": string })["~alchemy/Name"];
@@ -220,7 +225,7 @@ export const render: {
 
 /**
  * Compile one `AI.Tool` term into an effect AI tool: the template is
- * the description, the spliced `Parameter`s are the schema.
+ * the description, the spliced `Thing`s are the schema.
  * `failureMode: "return"` is the org's failure discipline — a
  * handler's `Effect.fail(text)` is a MODEL-VISIBLE tool result the
  * agent reacts to, never a loop crash.
@@ -255,8 +260,14 @@ export const getToolErrors = (
 ): ReadonlyArray<{ readonly tag: string; readonly fields?: unknown }> =>
   Context.get(tool.annotations, ToolErrorTags);
 
-export const compileTool = (term: Tool<any, any[]>) => {
+// `Tool<any, any>` (not `any[]`): a concrete tool's `impl` is
+// contravariant in its inferred props record, so only `any` in the
+// refs position lets callers pass an un-erased term straight in
+export const compileTool = (term: Tool<any, any>) => {
   const fields: Record<string, S.Top> = {};
+  // OUTPUT mention-is-presence: `${AI.out(thing)}` splices are the
+  // fields of the tool's return record (see ToolReturns in Tool.ts)
+  const outFields: Record<string, S.Top> = {};
   // ERROR mention-is-presence: the error classes the template splices
   // ARE the tool's failure channel; everything else is a defect
   const errors: Array<{ tag: string; fields?: unknown }> = [];
@@ -279,15 +290,24 @@ export const compileTool = (term: Tool<any, any[]>) => {
       });
       continue;
     }
-    if (!isParameter(ref)) continue;
-    // the Parameter's template IS the field's description — annotate
-    // the schema so it reaches the provider's JSON schema (description
-    // and schema are one artifact, all the way to the wire)
-    const description = render(ref.template, ref.refs);
-    fields[ref["~alchemy/Name"]] =
-      description.length > 0
-        ? ((ref.schema as any).annotate({ description }) as S.Top)
-        : ref.schema;
+    const [things, sink] = isOut(ref)
+      ? [ref.things, outFields]
+      : isIn(ref)
+        ? [ref.things, fields]
+        : isThing(ref)
+          ? [[ref], fields]
+          : [undefined, undefined];
+    if (things === undefined || sink === undefined) continue;
+    for (const thing of things) {
+      // the Thing's template IS the field's description — annotate
+      // the schema so it reaches the provider's JSON schema (description
+      // and schema are one artifact, all the way to the wire)
+      const description = render(thing.template, thing.refs);
+      sink[thing["~alchemy/Name"]] =
+        description.length > 0
+          ? ((thing.schema as any).annotate({ description }) as S.Top)
+          : thing.schema;
+    }
   }
   return AiTool.make(term["~alchemy/Name"], {
     description: render(term.template, term.refs),
@@ -297,9 +317,20 @@ export const compileTool = (term: Tool<any, any[]>) => {
     ...(Object.keys(fields).length > 0
       ? { parameters: S.Struct(fields) as any }
       : {}),
-    // the declared RETURN schema (`AI.Tool("readDiff", S.String)`) —
-    // codemode renders it into the generated signature
-    success: (term.returns as S.Top | undefined) ?? S.Unknown,
+    // the declared RETURN schema — the record of the template's
+    // `${AI.out(…)}` splices, VOID when there are none (strict,
+    // explicit typing: outputs live in the prose, and a tool that
+    // declares none acts without answering). Codemode renders it into
+    // the generated signature the model programs against.
+    // `S.Undefined`, not `S.Void`: with `failureMode: "return"` the
+    // toolkit encodes results through `Union([success, failure, …])`,
+    // and Void accepts ANY value (encoding it to nothing) — it would
+    // swallow the failure payload. Undefined only matches undefined,
+    // so failures fall through to the failure schema intact.
+    success:
+      Object.keys(outFields).length > 0
+        ? (S.Struct(outFields) as unknown as S.Top)
+        : S.Undefined,
     // the declared failures, when they can describe themselves;
     // `failureMode: "return"` keeps a failure a MODEL-VISIBLE result
     failure:
@@ -793,8 +824,12 @@ export const renderStance = (
           } else if (isAgent(ref)) {
             delegates.set(ref["~alchemy/Name"], ref as Agent<any, any>);
             buffer += ref["~alchemy/Name"];
-          } else if (isEvent(ref) || isParameter(ref)) {
+          } else if (isEvent(ref) || isThing(ref)) {
             buffer += `\`${ref["~alchemy/Name"]}\``;
+          } else if (isIn(ref) || isOut(ref)) {
+            buffer += ref.things
+              .map((thing) => `\`${thing["~alchemy/Name"]}\``)
+              .join(", ");
           } else if (isFragment(ref)) {
             flush();
             yield* walk(ref);
@@ -999,7 +1034,13 @@ export const compileTick = (
           name: tool.name,
           description: AiTool.getDescription(tool) ?? "",
           parameters: AiTool.getJsonSchema(tool),
-          returns: AiTool.getJsonSchemaFromSchema((tool as any).successSchema),
+          // a VOID success flattens to `{"type":"null"}` in JSON schema —
+          // hand codemode the honest marker so the generated signature
+          // says `void`, not `null`
+          returns:
+            ((tool as any).successSchema?.ast?._tag ?? "") === "Undefined"
+              ? { type: "void" }
+              : AiTool.getJsonSchemaFromSchema((tool as any).successSchema),
           errors: getToolErrors(tool),
           tool,
           handler: capabilityHandlers[tool.name]!,

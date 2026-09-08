@@ -31,7 +31,8 @@ const codeModeEffect = AI.CodeModeEffect().pipe(Layer.provide(AI.EvalFunction));
 /** A tool's DECLARED failure — mentioned in its prose, so it lands in
  *  the generated signature's error channel. */
 class Missing extends Data.TaggedError("Missing")<{ path: string }> {}
-const path = AI.Parameter("path", S.String)`Absolute path to read.`;
+const path = AI.Thing("path", S.String)`Absolute path to read.`;
+const fileContent = AI.Thing("content", S.String)`The file's contents.`;
 import { RuntimeContext } from "@/RuntimeContext.ts";
 import { describe, expect, it } from "alchemy-test";
 import * as Deferred from "effect/Deferred";
@@ -67,7 +68,7 @@ const recordingSearch = () => {
   const layer = Layer.succeed(Search, ((input: { query: string }) =>
     Effect.sync(() => {
       queries.push(input.query);
-      return `results for ${input.query}: alchemy is IaE`;
+      return { results: `results for ${input.query}: alchemy is IaE` };
     })) as never);
   return { queries, layer };
 };
@@ -162,7 +163,7 @@ describe("DriverLocal (in-memory)", () => {
         Effect.gen(function* () {
           yield* Deferred.succeed(started, void 0);
           yield* Deferred.await(release);
-          return "raw results";
+          return { results: "raw results" };
         })) as never);
 
       const answer = yield* Effect.gen(function* () {
@@ -650,9 +651,7 @@ describe("DriverLocal (in-memory)", () => {
           // INIT — once per run: plain Ref state + an inline tool closing over it
           const sandboxed = yield* Ref.make(false);
           const enter = yield* AI.Tool("enter_sandbox")`
-Enter the sandbox.`(() =>
-            Ref.set(sandboxed, true).pipe(Effect.as("you are now sandboxed")),
-          );
+Enter the sandbox.`(() => Ref.set(sandboxed, true));
           // TURN — before every sampling: the stance follows the state
           return Effect.gen(function* () {
             return yield* (yield* Ref.get(sandboxed))
@@ -714,9 +713,7 @@ Enter the sandbox.`(() =>
         const charter = Effect.gen(function* () {
           const sandboxed = yield* Ref.make(false);
           const enter = yield* AI.Tool("enter_sandbox")`
-Enter the sandbox.`(() =>
-            Ref.set(sandboxed, true).pipe(Effect.as("you are now sandboxed")),
-          );
+Enter the sandbox.`(() => Ref.set(sandboxed, true));
           return Effect.gen(function* () {
             return yield* (yield* Ref.get(sandboxed))
               ? AI.fragment`You are IN the sandbox.`
@@ -779,11 +776,9 @@ You are working ${Effect.map(AI.Thread, (thread) => thread.key)}. Answer briefly
       ]);
       return Effect.gen(function* () {
         const charter = Effect.gen(function* () {
-          const result = AI.Parameter("result", S.Number)`The final result.`;
+          const result = AI.Thing("result", S.Number)`The final result.`;
           const markDone = yield* AI.Tool("mark_done")`
-Record the final ${result}.`((p) =>
-            AI.reply({ answer: p.result }).pipe(Effect.as("recorded")),
-          );
+Record the final ${result}.`((p) => AI.reply({ answer: p.result }));
           return AI.fragment`Compute the answer, then ${markDone}.`;
         });
         const researcher = yield* interpret(Researcher, charter);
@@ -925,7 +920,7 @@ Record the final ${result}.`((p) =>
     });
     const driver = InMemoryDriver.pipe(Layer.provide(model.layer));
     const doorCharter = Effect.gen(function* () {
-      const task = AI.Parameter("task", S.String)`The work, standing alone.`;
+      const task = AI.Thing("task", S.String)`The work, standing alone.`;
       const handToEngineer = yield* AI.Dispatch(Engineer, "hand_to_engineer")`
 Hand one round of work to the engineer with ${task}.`((p, thread) => ({
         task: p.task,
@@ -1014,7 +1009,7 @@ Route every request through ${handToEngineer}; report when done.`;
 Note something to your future self.`(() =>
           Effect.flatMap(AI.Thread, (thread) =>
             thread.remind("50 millis", "check the oven"),
-          ).pipe(Effect.as("noted")),
+          ),
         );
         return AI.fragment`Use ${remindMe} when asked to wait, then park.`;
       });
@@ -1080,7 +1075,7 @@ Note something to your future self.`(() =>
           initKeys.push(key);
           const count = yield* Ref.make(0);
           const bump = yield* AI.Tool("bump")`Increment the counter.`(() =>
-            Ref.update(count, (n) => n + 1).pipe(Effect.as("bumped")),
+            Ref.update(count, (n) => n + 1),
           );
           return Effect.gen(function* () {
             return yield* AI.fragment`
@@ -1130,7 +1125,7 @@ Counter: ${Ref.get(count)}. Use ${bump} when told.`;
       ]);
       return Effect.gen(function* () {
         const charter = Effect.gen(function* () {
-          const summary = AI.Parameter("summary", S.String)`
+          const summary = AI.Thing("summary", S.String)`
 Decisions made, open threads, blockers.`;
           // the run is a RUNTIME fact: the handler yields AI.Thread when
           // it fires — init never sees it
@@ -1140,7 +1135,6 @@ Summarize progress as ${summary}; your context restarts from it.`((p) =>
               Effect.flatMap((thread) =>
                 thread.compact({ reset: { summary: p.summary } }),
               ),
-              Effect.as("compacted"),
             ),
           );
           return Effect.gen(function* () {
@@ -1170,9 +1164,7 @@ Summarize progress as ${summary}; your context restarts from it.`((p) =>
     ]);
     return Effect.gen(function* () {
       const charter = Effect.gen(function* () {
-        const bump = yield* AI.Tool("bump")`Keep working.`(() =>
-          Effect.succeed("ok"),
-        );
+        const bump = yield* AI.Tool("bump")`Keep working.`(() => Effect.void);
         return Effect.gen(function* () {
           const { count } = yield* AI.Tick;
           // UNGUARDED: delivers every tick — no dedupe, no memory
@@ -1210,13 +1202,10 @@ Summarize progress as ${summary}; your context restarts from it.`((p) =>
       ]);
       return Effect.gen(function* () {
         const charter = Effect.gen(function* () {
-          const summary = AI.Parameter(
-            "summary",
-            S.String,
-          )`What happened so far.`;
+          const summary = AI.Thing("summary", S.String)`What happened so far.`;
           const parked = yield* Ref.make(false);
           const park = yield* AI.Tool("park")`Park on the author.`(() =>
-            Ref.set(parked, true).pipe(Effect.as("parked")),
+            Ref.set(parked, true),
           );
           const handoff = yield* AI.Tool("handoff")`
 Summarize as ${summary}; the thread restarts.`((p) =>
@@ -1224,7 +1213,6 @@ Summarize as ${summary}; the thread restarts.`((p) =>
               Effect.flatMap((thread) =>
                 thread.compact({ reset: { summary: p.summary } }),
               ),
-              Effect.as("compacted"),
             ),
           );
           return Effect.gen(function* () {
@@ -1392,7 +1380,7 @@ ${
             export default async function () {
               const first = await search({ query: "alchemy" });
               const second = await search({ query: "effect" });
-              return first + " // " + second;
+              return first.results + " // " + second.results;
             }`,
         }),
         Model.finish("tool-calls"),
@@ -1411,7 +1399,7 @@ ${
       // the eval tool's description carries the generated signature
       const evalTool = model.calls[0]!.tools[0]!;
       expect(evalTool.description).toContain(
-        "declare function search(input: { query: string }): Promise<unknown>",
+        "declare function search(input: { query: string }): Promise<{ results: string }>",
       );
 
       // BOTH calls ran in one round trip, in code
@@ -1437,7 +1425,7 @@ ${
             import { search } from "./tools.js";
             export default Effect.gen(function* () {
               const result = yield* search({ query: "alchemy" });
-              return "wrapped:" + result;
+              return "wrapped:" + result.results;
             });`,
         }),
         Model.finish("tool-calls"),
@@ -1453,7 +1441,7 @@ ${
       // the error channel is explicit: a tool that declares no errors
       // can only fail with a DEFECT, and the signature says so
       expect(evalTool.description).toContain(
-        "declare function search(input: { query: string }): Effect<unknown, never>",
+        "declare function search(input: { query: string }): Effect<{ results: string }, never>",
       );
       expect(search.queries).toEqual(["alchemy"]);
       expect(Model.promptText(model.calls[1]!)).toContain(
@@ -1486,8 +1474,9 @@ ${
       ]);
       return Effect.gen(function* () {
         const charter = Effect.gen(function* () {
-          const readFile = yield* AI.Tool("readFile", S.String)`
-Read the file at ${path}. Fails with ${Missing} when it does not exist.`(() =>
+          const readFile = yield* AI.Tool("readFile")`
+Read the file at ${path} — answers ${AI.out(fileContent)}. Fails with
+${Missing} when it does not exist.`(() =>
             Effect.fail(new Missing({ path: "/tmp/x" })),
           );
           return AI.fragment`Read things with ${readFile}.`;
@@ -1498,10 +1487,12 @@ Read the file at ${path}. Fails with ${Missing} when it does not exist.`(() =>
         const evalTool = model.calls[0]!.tools[0]!;
         // the MENTIONED error is the error channel — and it is
         // documented, so the model knows what it may catch
+        // a Data.TaggedError renders as its tagged shape (the tag is
+        // all it can describe; a Schema.TaggedError carries fields too)
         expect(evalTool.description).toContain(
-          "declare function readFile(input: { path: string }): Effect<string, Missing>",
+          'declare function readFile(input: { path: string }): Effect<{ content: string }, { _tag: "Missing" }>',
         );
-        expect(evalTool.description).toContain("@throws Missing");
+        expect(evalTool.description).toContain('@throws { _tag: "Missing" }');
         // the program caught it by tag: the CONCATENATED value can only
         // exist if the catch handler ran (the echoed program source
         // contains `"caught:" + e.path`, never the joined string)

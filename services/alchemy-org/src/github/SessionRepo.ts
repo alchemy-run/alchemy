@@ -69,7 +69,7 @@ export const SessionRepoLive = Layer.effect(
   SessionRepo,
   Effect.gen(function* () {
     const entries = yield* Effect.forEach(
-      connected.filter((entry) => entry.sessions || entry.reviews),
+      connected.filter((entry) => entry.sessions),
       (entry) =>
         Effect.gen(function* () {
           const identity = yield* GitHub.resolveRepository(entry.repository);

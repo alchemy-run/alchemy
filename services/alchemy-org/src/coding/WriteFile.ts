@@ -5,24 +5,31 @@ import * as S from "effect/Schema";
 import { sha256Hex } from "./Digest.ts";
 import { path } from "./ReadFile.ts";
 
-const content = AI.Parameter("content", S.String)`
-The COMPLETE new contents of the file — never a patch or a fragment,
-the whole file as it should be on disk.`;
+const content = AI.Thing("content", S.String)`
+  The COMPLETE new contents of the file — never a patch or a fragment,
+  the whole file as it should be on disk.`;
 
-const mode = AI.Parameter("mode", S.Literals(["create", "overwrite"]))`
-"create" requires the path not to exist. "overwrite" requires an
-existing file and its expectedDigest from readFile.`;
+const mode = AI.Thing("mode", S.Literals(["create", "overwrite"]))`
+  "create" requires the path not to exist. "overwrite" requires an
+  existing file and its expectedDigest from readFile.`;
 
-const expectedDigest = AI.Parameter("expectedDigest", S.optionalKey(S.String))`
-Required in overwrite mode: the SHA-256 digest returned by readFile
-for the exact version being replaced.`;
+const expectedDigest = AI.Thing("expectedDigest", S.optionalKey(S.String))`
+  Required in overwrite mode: the SHA-256 digest returned by readFile
+  for the exact version being replaced.`;
+
+const bytes = AI.Thing("bytes", S.Int)`
+  How many bytes were written.`;
+
+const digest = AI.Thing("digest", S.String)`
+  The written file's SHA-256 — pass it as expectedDigest on a later
+  overwrite or edit instead of re-reading.`;
 
 export class WriteFile extends (AI.Tool<WriteFile>(import.meta)("writeFile")`
-Write complete ${content} to ${path} using ${mode}, creating parent
-directories only after all preconditions pass. Existing files may
-only be replaced with ${expectedDigest}. Use create for new files
-and overwrite only for complete rewrites — prefer editFile for
-targeted changes.`) {}
+  Write complete ${content} to ${path} using ${mode}, creating parent
+  directories only after all preconditions pass — answers
+  ${AI.out(bytes, digest)}. Existing files may only be replaced with
+  ${expectedDigest}. Use create for new files and overwrite only for
+  complete rewrites — prefer editFile for targeted changes.`) {}
 
 /** Physics over the session {@link AI.Sandbox}. */
 export const WriteFileLive = Layer.effect(
@@ -64,7 +71,10 @@ export const WriteFileLive = Layer.effect(
         }
         yield* sandbox.writeFile(input.path, input.content);
         const digest = yield* sha256Hex(input.content);
-        return `wrote ${input.path} (${new TextEncoder().encode(input.content).byteLength} bytes)\n[SHA-256: ${digest}]`;
+        return {
+          bytes: new TextEncoder().encode(input.content).byteLength,
+          digest,
+        };
       })) as never;
   }),
 );

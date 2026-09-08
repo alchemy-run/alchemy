@@ -1,32 +1,37 @@
 import {
   AlarmClock,
+  BookmarkPlus,
+  ChevronDown,
   CircleCheck,
-  CircleX,
-  FileDiff,
+  CircleSlash,
+  Eraser,
   FilePen,
   FilePlus2,
   FileText,
   FolderSearch,
   FolderTree,
   GitFork,
-  ChevronDown,
   GitPullRequestArrow,
+  Hammer,
+  List,
   MessageSquare,
-  MessageSquarePlus,
-  RefreshCw,
+  Network,
+  Paperclip,
   ScrollText,
   Search,
+  Send,
+  Signpost,
   Sparkles,
+  StickyNote,
+  Tag,
   Terminal,
   Upload,
+  Waypoints,
   type LucideIcon,
 } from "lucide-react";
 import type * as AI from "alchemy/AI";
 import { useState, type ReactNode } from "react";
 import type { GeneralEngineer } from "../../src/coding/Engineer.ts";
-import type { ReviewerLive } from "../../src/review/Reviewer.ts";
-import { DiffCard, splitDiffOutput } from "@/components/code";
-import { RefHoverCard } from "@/components/ref-hover-card";
 import { useAnchoredToggle } from "@/lib/anchor";
 import { Ansi, stripAnsi } from "@/lib/ansi";
 import { cn } from "@/lib/utils";
@@ -50,25 +55,20 @@ const countLines = (text: string): number =>
  * (the pi/Codex pattern: `$ cmd`, `Read path`, `Edit path +3 −1`)
  * with expandable per-tool detail. Unknown tools fall back to the
  * generic collapsible card.
- *
- bash output: "exit: N\n--- stdout ---\n…\n--- stderr ---\n…" */
-const parseBashOutput = (
-  raw: string,
-): { exit: number | undefined; stdout: string; stderr: string } => {
-  const exit = raw.match(/^exit: (-?\d+)/);
-  const stdout =
-    raw.split("--- stdout ---\n")[1]?.split("\n--- stderr ---")[0] ?? "";
-  const stderr = raw.split("--- stderr ---\n")[1] ?? "";
-  return {
-    exit: exit ? Number(exit[1]) : undefined,
-    stdout: stdout.trim() === "(no output)" ? "" : stdout,
-    stderr: stderr.trim() === "(no output)" ? "" : stderr,
-  };
-};
+ */
 
-/** Strip the "[SHA-256: …]" provenance footer off file-tool outputs. */
-const stripDigest = (text: string): string =>
-  text.replace(/\n?\[SHA-256: [0-9a-f]+\]\s*$/, "");
+/** Tool outputs are the record of the tool's `AI.out(…)` splices —
+ *  the transcript hands renderers the JSON-stringified value, so a
+ *  structured renderer parses it back. */
+const parseRecord = (raw: string | undefined): Record<string, any> | undefined => {
+  if (raw === undefined) return undefined;
+  try {
+    const value = JSON.parse(raw);
+    return typeof value === "object" && value !== null ? value : undefined;
+  } catch {
+    return undefined;
+  }
+};
 
 /** +N −M across a patch/diff text (grammar: leading + / -). */
 const diffStat = (text: string): { added: number; removed: number } => {
@@ -174,7 +174,8 @@ const lastLine = (text: string): string | undefined => {
 };
 
 const outputText = (output: unknown): string | undefined =>
-  output === undefined
+  // null/undefined both mean "answered nothing" — void tools land here
+  output == null
     ? undefined
     : typeof output === "string"
       ? output
@@ -205,178 +206,385 @@ type Renderers<L> = {
   ) => ToolCallView;
 };
 
-/** `#N` as a link into GitHub — issues and PRs share the /issues/N
- *  door (GitHub redirects PR numbers), and PullRequestRefs carry an
- *  explicit `url`. */
-const RefLink = ({ refValue }: { refValue: any }) => {
-  if (
-    !refValue ||
-    typeof refValue !== "object" ||
-    typeof refValue.number !== "number"
-  ) {
-    return null;
-  }
-  const href =
-    typeof refValue.url === "string" && refValue.url.startsWith("http")
-      ? refValue.url
-      : typeof refValue.owner === "string" &&
-          typeof refValue.repository === "string"
-        ? `https://github.com/${refValue.owner}/${refValue.repository}/issues/${refValue.number}`
-        : undefined;
-  if (href === undefined) return <>#{refValue.number}</>;
-  const repo =
-    typeof refValue.owner === "string" &&
-    typeof refValue.repository === "string"
-      ? `${refValue.owner}/${refValue.repository}`
-      : href.match(/github\.com\/([\w.-]+\/[\w.-]+)\//)?.[1];
-  const anchor = (
-    <a
-      href={href}
-      target="_blank"
-      rel="noreferrer"
-      onClick={(event) => event.stopPropagation()}
-      className="underline decoration-border underline-offset-2 hover:text-foreground hover:decoration-foreground"
-    >
-      #{refValue.number}
-    </a>
-  );
-  return repo ? (
-    <RefHoverCard repo={repo} number={refValue.number}>
-      {anchor}
-    </RefHoverCard>
-  ) : (
-    anchor
-  );
-};
+/* ── the Thread's and Channel's wires ────────────────────────── */
+
+/** Readable text the agent wrote — a brief, a comment, a rule — as
+ *  prose rather than monospace. */
+const Prose = ({ children }: { children: string }) => (
+  <div className="max-h-80 overflow-auto whitespace-pre-wrap px-3 py-2 text-[13px] leading-5">
+    {children}
+  </div>
+);
+
+/** `#N` / `owner/repo#N` as the agent named it. */
+const Ref = ({ value }: { value: string | number | undefined }) => (
+  <span className="font-mono text-mist">
+    {typeof value === "number" ? `#${value}` : (value ?? "?")}
+  </span>
+);
+
+/** A thread id (`t-…`) as the transcript names it. */
+const ThreadId = ({ id }: { id: string | undefined }) => (
+  <span className="font-mono text-mist">{id ?? "?"}</span>
+);
+
+/** The "why" of a judgement or a decision, as its own paragraph. */
+const Why = ({ why }: { why: string | undefined }) =>
+  why ? (
+    <div className="px-3 py-2 text-[12px] leading-5 text-muted-foreground">
+      {why}
+    </div>
+  ) : null;
 
 /**
- * Cards for the Reviewer's wire. The compiler-checked half is the
- * CLASS-TOOL surface (`readDiff`, `readIssue`, `findCompanions` — the tags on
- * `ReviewerLive`'s requirement channel): forget one of those cards
- * and this object errors, naming the missing tool. The bot's INLINE
- * tools (`add_comment`, `submit_review`, `comment`, `sync_checkout`)
- * carry no tag — they are runtime-only, so their cards and input
- * shapes are declared by hand here and must be kept in step with the
- * charter. The import is type-only: erased at build, no server code
- * reaches the browser bundle.
+ * Cards for the THREAD agent's wire (`src/thread/ThreadAgent.ts`).
+ * All of its tools are inline `AI.Tool`s — runtime-only, no tag on
+ * any requirement channel — so their names and input shapes are
+ * declared by hand here and must be kept in step with the charter.
  */
-const REVIEWER: Renderers<typeof ReviewerLive> & {
-  add_comment: (input: {
-    path: string;
-    line: number;
-    startLine?: number;
-    message: string;
-  }) => ToolCallView;
-  submit_review: (
-    input: { verdict: "approve" | "request_changes"; message: string },
+const THREAD: {
+  attach: (
+    input: { ref: string; kind: string; title: string },
     output: string | undefined,
   ) => ToolCallView;
-  comment: (input: { message: string }) => ToolCallView;
-  sync_checkout: (
-    input: unknown,
+  detach: (
+    input: { ref: string },
+    output: string | undefined,
+  ) => ToolCallView;
+  worktree: (
+    input: { ref: string },
+    output: string | undefined,
+  ) => ToolCallView;
+  spawn: (
+    input: { brief: string },
     output: string | undefined,
     running: boolean,
   ) => ToolCallView;
+  post_card: (input: { title: string; text: string }) => ToolCallView;
+  /** Shared with the channel agent's bookkeeping close — the thread
+   *  agent's call carries `why`, the channel's carries `thread`. */
+  close_thread: (
+    input: { why?: string; thread?: string },
+    output: string | undefined,
+  ) => ToolCallView;
 } = {
-  readDiff: (input, output) => {
-    const stat = output === undefined ? undefined : diffStat(output);
-    const split = output === undefined ? undefined : splitDiffOutput(output);
-    return {
-      icon: FileDiff,
-      title: (
-        <>
-          Read diff of PR <RefLink refValue={input.pr} />
-        </>
-      ),
-      badge: stat && (
-        <DiffStatBadge added={stat.added} removed={stat.removed} />
-      ),
-      body:
-        split === undefined ? undefined : (
-          <div>
-            {split.header.length > 0 && (
-              <Mono>{clamp(split.header, 1200)}</Mono>
-            )}
-            {split.patch !== undefined ? (
-              <DiffCard patch={split.patch} />
-            ) : (
-              <DiffText text={output ?? ""} />
-            )}
-          </div>
-        ),
-    };
-  },
-
-  readIssue: (input, output) => ({
-    icon: FileText,
+  attach: (input, output) => ({
+    icon: Paperclip,
     title: (
       <>
-        Read issue <RefLink refValue={input.issue} />
-      </>
-    ),
-    body: output === undefined ? undefined : <WindowedText text={output} />,
-  }),
-
-  findCompanions: (input, output) => ({
-    icon: GitFork,
-    title: (
-      <>
-        Find companion PRs of{" "}
-        <span className="font-mono text-mist">{input.branch}</span>
-      </>
-    ),
-    body: output === undefined ? undefined : <WindowedText text={output} />,
-  }),
-
-  add_comment: (input) => ({
-    icon: MessageSquarePlus,
-    title: (
-      <>
-        Review comment on{" "}
-        <span className="font-mono text-mist">
-          {input.path}:
-          {input.startLine !== undefined ? `${input.startLine}–` : ""}
-          {input.line}
-        </span>
-      </>
-    ),
-    badge: (
-      <span className="shrink-0 text-[11px] text-muted-foreground">
-        buffered
-      </span>
-    ),
-    body: input.message ? <Mono>{input.message}</Mono> : undefined,
-  }),
-
-  submit_review: (input, output) => ({
-    icon: input.verdict === "approve" ? CircleCheck : CircleX,
-    title: (
-      <>
-        Submit review{" "}
-        <span
-          className={cn(
-            "font-medium",
-            input.verdict === "approve" ? "text-moss" : "text-brick",
-          )}
-        >
-          {input.verdict === "approve" ? "APPROVE" : "REQUEST CHANGES"}
-        </span>
+        Attach <Ref value={input.ref} />
+        {input.title && (
+          <>
+            <span className="text-muted-foreground"> · </span>
+            {clamp(input.title, 100)}
+          </>
+        )}
       </>
     ),
     summary: output === undefined ? undefined : lastLine(output),
-    body: input.message ? <Mono>{input.message}</Mono> : undefined,
   }),
 
-  comment: (input) => ({
+  detach: (input, output) => ({
+    icon: CircleSlash,
+    title: (
+      <>
+        Detach <Ref value={input.ref} />
+      </>
+    ),
+    summary: output === undefined ? undefined : lastLine(output),
+  }),
+
+  worktree: (input, output) => {
+    const record = parseRecord(output);
+    return {
+      icon: FolderTree,
+      title: (
+        <>
+          Worktree for <Ref value={input.ref} />
+        </>
+      ),
+      summary:
+        record === undefined
+          ? undefined
+          : `${record.path} (${record.branch})`,
+    };
+  },
+
+  spawn: (input, output, running) => {
+    const report = parseRecord(output)?.report as string | undefined;
+    return {
+      icon: Hammer,
+      title: (
+        <>
+          Engineer <span className="text-muted-foreground">·</span>{" "}
+          {clamp(firstLine(input.brief ?? ""), 110)}
+        </>
+      ),
+      badge: running ? (
+        <span className="shrink-0 animate-pulse text-[11px] text-moss">
+          working
+        </span>
+      ) : undefined,
+      body: (
+        <div className="divide-y divide-border/50">
+          {countLines(input.brief ?? "") > 1 && <Prose>{input.brief}</Prose>}
+          {report !== undefined && <WindowedText text={report} />}
+        </div>
+      ),
+    };
+  },
+
+  post_card: (input) => ({
+    icon: Send,
+    title: (
+      <>
+        Card <span className="text-muted-foreground">·</span>{" "}
+        {clamp(input.title ?? "", 110)}
+      </>
+    ),
+    body: input.text ? <Prose>{input.text}</Prose> : undefined,
+  }),
+
+  close_thread: (input, output) => ({
+    icon: CircleCheck,
+    title:
+      input.thread === undefined ? (
+        <>Close the thread</>
+      ) : (
+        <>
+          Close <ThreadId id={input.thread} />
+        </>
+      ),
+    summary: output === undefined ? undefined : lastLine(output),
+    body: input.why === undefined ? undefined : <Why why={input.why} />,
+  }),
+};
+
+/**
+ * Cards for the CHANNEL agent's wire (`src/channel/ChannelAgent.ts`)
+ * — inline tools, hand declared like the thread's. Its runs mostly
+ * read (search_messages, read_history, read_thread) and route
+ * (create_thread, place_messages, attach_entity); every card is one
+ * line with the detail a click away.
+ */
+const CHANNEL: {
+  search_messages: (
+    input: { q: string },
+    output: string | undefined,
+  ) => ToolCallView;
+  read_history: (input: unknown, output: string | undefined) => ToolCallView;
+  read_messages: (
+    input: { ids: ReadonlyArray<string> },
+    output: string | undefined,
+  ) => ToolCallView;
+  list_threads: (input: unknown, output: string | undefined) => ToolCallView;
+  read_thread: (
+    input: { thread: string },
+    output: string | undefined,
+  ) => ToolCallView;
+  create_thread: (
+    input: { name: string; title: string },
+    output: string | undefined,
+  ) => ToolCallView;
+  place_messages: (
+    input: { thread: string; ids: ReadonlyArray<string> },
+    output: string | undefined,
+  ) => ToolCallView;
+  attach_entity: (
+    input: { thread: string; ref: string; kind: string; title: string },
+    output: string | undefined,
+  ) => ToolCallView;
+  detach_entity: (
+    input: { thread: string; ref: string },
+    output: string | undefined,
+  ) => ToolCallView;
+  brief_thread: (
+    input: { thread: string; text: string },
+    output: string | undefined,
+  ) => ToolCallView;
+  rename_thread: (input: {
+    thread: string;
+    name?: string;
+    title?: string;
+  }) => ToolCallView;
+  read_issue: (
+    input: { repo: string; number: number },
+    output: string | undefined,
+  ) => ToolCallView;
+  read_pull: (
+    input: { repo: string; number: number },
+    output: string | undefined,
+  ) => ToolCallView;
+  send_reply: (input: { text: string }) => ToolCallView;
+} = {
+  search_messages: (input, output) => ({
+    icon: Search,
+    title: (
+      <>
+        Search <span className="font-mono">{clamp(input.q ?? "", 80)}</span>
+      </>
+    ),
+    body: output === undefined ? undefined : <WindowedText text={output} />,
+  }),
+
+  read_history: (_input, output) => ({
+    icon: ScrollText,
+    title: <>Page the channel</>,
+    body: output === undefined ? undefined : <WindowedText text={output} />,
+  }),
+
+  read_messages: (input, output) => ({
+    icon: FileText,
+    title: (
+      <>
+        Read{" "}
+        <span className="font-mono text-mist">
+          {input.ids?.length ?? 0} message{input.ids?.length === 1 ? "" : "s"}
+        </span>
+      </>
+    ),
+    body: output === undefined ? undefined : <WindowedText text={output} />,
+  }),
+
+  list_threads: (_input, output) => ({
+    icon: List,
+    title: <>List the threads</>,
+    body: output === undefined ? undefined : <WindowedText text={output} />,
+  }),
+
+  read_thread: (input, output) => ({
+    icon: Waypoints,
+    title: (
+      <>
+        Show <ThreadId id={input.thread} />
+      </>
+    ),
+    body:
+      output === undefined ? undefined : (
+        <WindowedText text={output} head={20} tail={5} />
+      ),
+  }),
+
+  create_thread: (input, output) => ({
+    icon: GitFork,
+    title: (
+      <>
+        New thread <span className="font-medium">{input.name}</span>
+        {input.title && (
+          <>
+            <span className="text-muted-foreground"> · </span>
+            {clamp(input.title, 90)}
+          </>
+        )}
+      </>
+    ),
+    summary: output === undefined ? undefined : lastLine(output),
+  }),
+
+  place_messages: (input, output) => ({
+    icon: Paperclip,
+    title: (
+      <>
+        Place{" "}
+        <span className="font-mono text-mist">
+          {input.ids?.length ?? 0} message{input.ids?.length === 1 ? "" : "s"}
+        </span>{" "}
+        <span className="text-muted-foreground">→</span>{" "}
+        <ThreadId id={input.thread} />
+      </>
+    ),
+    summary: output === undefined ? undefined : lastLine(output),
+  }),
+
+  attach_entity: (input, output) => ({
+    icon: Paperclip,
+    title: (
+      <>
+        Attach <Ref value={input.ref} />{" "}
+        <span className="text-muted-foreground">→</span>{" "}
+        <ThreadId id={input.thread} />
+      </>
+    ),
+    summary: output === undefined ? undefined : lastLine(output),
+  }),
+
+  detach_entity: (input, output) => ({
+    icon: CircleSlash,
+    title: (
+      <>
+        Detach <Ref value={input.ref} />{" "}
+        <span className="text-muted-foreground">from</span>{" "}
+        <ThreadId id={input.thread} />
+      </>
+    ),
+    summary: output === undefined ? undefined : lastLine(output),
+  }),
+
+  brief_thread: (input, output) => ({
+    icon: Send,
+    title: (
+      <>
+        Brief <ThreadId id={input.thread} />{" "}
+        <span className="text-muted-foreground">·</span>{" "}
+        {clamp(firstLine(input.text ?? ""), 90)}
+      </>
+    ),
+    summary: output === undefined ? undefined : lastLine(output),
+    body:
+      countLines(input.text ?? "") > 1 ? <Prose>{input.text}</Prose> : undefined,
+  }),
+
+  rename_thread: (input) => ({
+    icon: Tag,
+    title: (
+      <>
+        Rename <ThreadId id={input.thread} />
+        {input.name && (
+          <>
+            {" "}
+            <span className="font-medium">{input.name}</span>
+          </>
+        )}
+        {input.title && (
+          <>
+            <span className="text-muted-foreground"> · </span>
+            {clamp(input.title, 90)}
+          </>
+        )}
+      </>
+    ),
+  }),
+
+  read_issue: (input, output) => ({
+    icon: FileText,
+    title: (
+      <>
+        Read issue <Ref value={`${input.repo}#${input.number}`} />
+      </>
+    ),
+    body: output === undefined ? undefined : <WindowedText text={output} />,
+  }),
+
+  read_pull: (input, output) => ({
+    icon: GitPullRequestArrow,
+    title: (
+      <>
+        Read pull <Ref value={`${input.repo}#${input.number}`} />
+      </>
+    ),
+    body: output === undefined ? undefined : <WindowedText text={output} />,
+  }),
+
+  send_reply: (input) => ({
     icon: MessageSquare,
-    title: <>Comment on the pull request</>,
-    body: input.message ? <Mono>{input.message}</Mono> : undefined,
-  }),
-
-  sync_checkout: (_input, output, running) => ({
-    icon: RefreshCw,
-    title: <>Sync checkout to the pull request&apos;s head</>,
-    summary: running || output === undefined ? undefined : lastLine(output),
+    title: (
+      <>
+        Reply <span className="text-muted-foreground">·</span>{" "}
+        {clamp(firstLine(input.text ?? ""), 110)}
+      </>
+    ),
+    body:
+      countLines(input.text ?? "") > 1 ? <Prose>{input.text}</Prose> : undefined,
   }),
 };
 
@@ -394,7 +602,16 @@ const REVIEWER: Renderers<typeof ReviewerLive> & {
  */
 const CODER: Renderers<typeof GeneralEngineer> = {
   bash: (input, output, running) => {
-    const parsed = output === undefined ? undefined : parseBashOutput(output);
+    const record = parseRecord(output);
+    const parsed =
+      record === undefined
+        ? undefined
+        : {
+            exit:
+              typeof record.exitCode === "number" ? record.exitCode : undefined,
+            stdout: String(record.stdout ?? ""),
+            stderr: String(record.stderr ?? ""),
+          };
     return {
       icon: Terminal,
       title: (
@@ -440,83 +657,111 @@ const CODER: Renderers<typeof GeneralEngineer> = {
     };
   },
 
-  readFile: (input, output) => ({
-    icon: FileText,
-    title: (
-      <>
-        Read <span className="font-mono text-mist">{input.path}</span>
-        {input.offset !== undefined && input.offset !== 1 && (
-          <span className="text-muted-foreground">:{input.offset}</span>
-        )}
-      </>
-    ),
-    body:
-      output === undefined ? undefined : (
-        <WindowedText text={stripDigest(output)} head={20} tail={5} />
+  readFile: (input, output) => {
+    const content = parseRecord(output)?.content as string | undefined;
+    return {
+      icon: FileText,
+      title: (
+        <>
+          Read <span className="font-mono text-mist">{input.path}</span>
+          {input.offset !== undefined && input.offset !== 1 && (
+            <span className="text-muted-foreground">:{input.offset}</span>
+          )}
+        </>
       ),
-  }),
+      body:
+        content === undefined ? undefined : (
+          <WindowedText text={content} head={20} tail={5} />
+        ),
+    };
+  },
 
-  grep: (input, output) => ({
-    icon: Search,
-    title: (
-      <>
-        grep <span className="font-mono text-honey">/{input.pattern}/</span>
-        {input.path && (
-          <span className="text-muted-foreground"> in {input.path}</span>
-        )}
-      </>
-    ),
-    badge:
-      output === undefined ? undefined : (
-        <span className="shrink-0 text-[11px] text-muted-foreground">
-          {/no matches/i.test(output) ? "0" : countLines(output)}
-        </span>
+  grep: (input, output) => {
+    const matches = parseRecord(output)?.matches as string | undefined;
+    return {
+      icon: Search,
+      title: (
+        <>
+          grep <span className="font-mono text-honey">/{input.pattern}/</span>
+          {input.path && (
+            <span className="text-muted-foreground"> in {input.path}</span>
+          )}
+        </>
       ),
-    summary: output === undefined ? undefined : firstLine(stripAnsi(output)),
-    body: output === undefined ? undefined : <WindowedText text={output} />,
-  }),
+      badge:
+        matches === undefined ? undefined : (
+          <span className="shrink-0 text-[11px] text-muted-foreground">
+            {/no matches/i.test(matches) ? "0" : countLines(matches)}
+          </span>
+        ),
+      summary:
+        matches === undefined ? undefined : firstLine(stripAnsi(matches)),
+      body: matches === undefined ? undefined : <WindowedText text={matches} />,
+    };
+  },
 
-  glob: (input, output) => ({
-    icon: FolderSearch,
-    title: (
-      <>
-        glob <span className="font-mono text-honey">{input.pattern}</span>
-        {input.path && (
-          <span className="text-muted-foreground"> in {input.path}</span>
-        )}
-      </>
-    ),
-    badge:
-      output === undefined ? undefined : (
-        <span className="shrink-0 text-[11px] text-muted-foreground">
-          {/no files/i.test(output) ? "0" : countLines(output)}
-        </span>
+  glob: (input, output) => {
+    const files = parseRecord(output)?.files as string | undefined;
+    return {
+      icon: FolderSearch,
+      title: (
+        <>
+          glob <span className="font-mono text-honey">{input.pattern}</span>
+          {input.path && (
+            <span className="text-muted-foreground"> in {input.path}</span>
+          )}
+        </>
       ),
-    body: output === undefined ? undefined : <WindowedText text={output} />,
-  }),
+      badge:
+        files === undefined ? undefined : (
+          <span className="shrink-0 text-[11px] text-muted-foreground">
+            {/no files/i.test(files) ? "0" : countLines(files)}
+          </span>
+        ),
+      body: files === undefined ? undefined : <WindowedText text={files} />,
+    };
+  },
 
-  listDirectory: (input, output) => ({
-    icon: FolderTree,
-    title: (
-      <>
-        ls <span className="font-mono text-mist">{input.path || "."}</span>
-      </>
-    ),
-    body: output === undefined ? undefined : <WindowedText text={output} />,
-  }),
+  listDirectory: (input, output) => {
+    const record = parseRecord(output);
+    const entries = Array.isArray(record?.entries)
+      ? (record.entries as string[])
+      : undefined;
+    return {
+      icon: FolderTree,
+      title: (
+        <>
+          ls <span className="font-mono text-mist">{input.path || "."}</span>
+        </>
+      ),
+      badge:
+        typeof record?.total === "number" ? (
+          <span className="shrink-0 text-[11px] text-muted-foreground">
+            {record.total}
+          </span>
+        ) : undefined,
+      body:
+        entries === undefined ? undefined : (
+          <WindowedText text={entries.join("\n")} />
+        ),
+    };
+  },
 
-  readOutput: (input, output) => ({
-    icon: ScrollText,
-    title: (
-      <>
-        Read output{" "}
-        <span className="font-mono text-muted-foreground">
-          {input.outputId}
-        </span>
-      </>
-    ),
-    body: output === undefined ? undefined : <WindowedText text={output} />,
-  }),
+  readOutput: (input, output) => {
+    const content = parseRecord(output)?.content as string | undefined;
+    return {
+      icon: ScrollText,
+      title: (
+        <>
+          Read output{" "}
+          <span className="font-mono text-muted-foreground">
+            {input.outputId}
+          </span>
+        </>
+      ),
+      body: content === undefined ? undefined : <WindowedText text={content} />,
+    };
+  },
 
   writeFile: (input, output) => ({
     icon: FilePlus2,
@@ -586,19 +831,25 @@ const CODER: Renderers<typeof GeneralEngineer> = {
     };
   },
 
-  pushBranch: (input, output, running) => ({
-    icon: Upload,
-    title: (
-      <>
-        Push branch <span className="font-mono text-mist">{input.branch}</span>
-      </>
-    ),
-    summary: running || output === undefined ? undefined : lastLine(output),
-    body: output === undefined ? undefined : <Mono>{output}</Mono>,
-  }),
+  pushBranch: (input, output, running) => {
+    const record = parseRecord(output);
+    return {
+      icon: Upload,
+      title: (
+        <>
+          Push branch{" "}
+          <span className="font-mono text-mist">{input.branch}</span>
+        </>
+      ),
+      summary:
+        running || record === undefined
+          ? undefined
+          : `pushed to ${record.remote}@${record.pushed}`,
+    };
+  },
 
   openPullRequest: (input, output) => {
-    const url = output?.match(/https:\/\/\S+/)?.[0];
+    const url = parseRecord(output)?.url as string | undefined;
     return {
       icon: GitPullRequestArrow,
       title: (
@@ -660,7 +911,8 @@ const EXTRAS: Record<string, Renderer> = {
 const RENDERERS: Record<string, Renderer> = {
   ...EXTRAS,
   ...CODER,
-  ...REVIEWER,
+  ...THREAD,
+  ...CHANNEL,
 };
 
 /** Whether a compact per-tool card exists for this tool name. */

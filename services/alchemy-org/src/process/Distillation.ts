@@ -1,6 +1,5 @@
 import * as AI from "alchemy/AI";
 import { distilled, nameOf } from "../github/Repos.ts";
-import { FindCompanions } from "../review/Companions.ts";
 
 /**
  * DISTILLATION — the flywheel that produces alchemy's cloud coverage:
@@ -89,9 +88,8 @@ export const DistillationGeneral = Distillation.make`
   patches and the regenerated service) and the alchemy one, whose
   submodule pin points at it — the companion's head commit until it
   merges, its merge commit after. Publish the companion first; in the
-  alchemy pull request, name it and state the pin. Reviewing, \`git
-  ls-tree HEAD distilled\` in the checkout shows the pinned commit and
-  ${FindCompanions.source} finds the companion by branch name; a pin
-  at some unrelated commit, or a companion the alchemy side never
-  mentions, is a problem to name. Neither side is complete without the
-  other.`;
+  alchemy pull request, name it and state the pin. Checking your own
+  work, \`git ls-tree HEAD distilled\` in the checkout shows the pinned
+  commit, and the companion is found by its branch name; a pin at some
+  unrelated commit, or a companion the alchemy side never mentions, is
+  a problem to name. Neither side is complete without the other.`;

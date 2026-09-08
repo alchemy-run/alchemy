@@ -1,6 +1,5 @@
 import * as AI from "alchemy/AI";
 import { floci, nameOf } from "../github/Repos.ts";
-import { FindCompanions } from "../review/Companions.ts";
 import { SandboxGuidance } from "../sandbox/SandboxGuidance.ts";
 
 /**
@@ -77,7 +76,5 @@ export const AwsEmulationGeneral = AwsEmulation.make`
   \`{Resource}.local.test.ts\`. Nothing pins floci in the alchemy tree
   (the image is released separately), so the pairing is the branch
   name and the description: the alchemy pull request names its
-  companion, or says why the emulation is deferred. Reviewing,
-  ${FindCompanions.source} finds the companion by branch name; an
-  absent emulation is a NOTE in the review, not a blocker on its own —
-  an unexplained one is a problem to name.`;
+  companion (found by its branch name), or says why the emulation is
+  deferred — an unexplained absence is a problem to name.`;

@@ -43,7 +43,9 @@ describe("DriverCore ⨯ Anthropic", () => {
       const search = Layer.succeed(Search, ((input: { query: string }) =>
         Effect.sync(() => {
           corpus.push(input.query);
-          return `Fact: the alchemy-effect framework calls its model "Infrastructure-as-Effects" (IaE).`;
+          return {
+            results: `Fact: the alchemy-effect framework calls its model "Infrastructure-as-Effects" (IaE).`,
+          };
         })) as never);
       return Effect.gen(function* () {
         // the user-facing spelling: the agent's default Layer was

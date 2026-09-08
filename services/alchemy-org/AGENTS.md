@@ -5,9 +5,9 @@
 # Working on alchemy-org — the harness
 
 `services/alchemy-org` is the software factory that maintains the
-alchemy repository: coding and review agents whose charters are
-prose, running over sandboxes that hold a checkout, proposing every
-GitHub write to an operator. It lives INSIDE the repository it
+alchemy repository: coding agents whose charters are prose, running
+over sandboxes that hold a checkout, pushing to pull requests and
+opening new ones directly. It lives INSIDE the repository it
 maintains, so a change here changes the hands that make the next
 change. The lift runs in three stages — a human coding agent editing
 this folder; `alchemy dev` running the org on the developer's
@@ -24,15 +24,15 @@ barrel `index.ts`: import the file.
 
 - `coding/` — the Engineer: its charter, the toolbox (Read + Run),
   the editor (the ONLY Layer that grants a write), the publish pair.
-- `review/` — the Reviewer: its charter, the GitHub event router,
-  the review tools, the Ledger.
+- `channel/` + `thread/` — the control plane: the org-wide channel,
+  threads (one task, one agent, one machine), their Durable Objects.
 - `sandbox/` — where code runs: a session's machine and its checkout.
 - `artifacts/` — what tools print: the `Artifacts` store (a temp
   dir locally, the session's sandbox on Cloudflare — the sandbox is
   one physics of it, not its home), output bounding, the spill net,
   and the tool that pages a spilled result back.
-- `github/` — the connected repositories, the proposals gate and its
-  stores, the UI projections.
+- `github/` — the connected repositories, the publish token, the
+  UI projections.
 - `process/` — HOW the unit the org maintains is built and judged:
   the alchemy repository and the two it moves with, distilled (the
   SDK factory it pins) and floci (the AWS emulator it runs against)
@@ -47,7 +47,7 @@ barrel `index.ts`: import the file.
   two rules that span every domain live at the top, in none.
 
 Names carry the convention: a variant family keeps its prefix
-(`Sandbox*`, `Checkouts*`, `Artifacts*`, `Proposals*`); an
+(`Sandbox*`, `Checkouts*`, `Artifacts*`); an
 implementation Layer is `*Live` (`*General` for a teaching, `*DO` /
 `*D1` / `*Memory` for a store). One file, one term — a tool, a
 skill, an agent, each with its Layer. When a file moves, move it with
@@ -63,7 +63,6 @@ you activate what your change touches — no more:
 - `ToolGuidance` — adding or changing a tool.
 - `CharterGuidance` — agents, skills, fragments: prose is code.
 - `SandboxGuidance` — sessions, machines, trees, checkouts.
-- `ProposalsGuidance` — anything that would write to GitHub.
 
 A rule that does not fit one of these is a new small skill in the
 domain it belongs to, named here — never a paragraph added to a
@@ -93,7 +92,7 @@ will do next.
 ## Writing a tool
 
 One file, one tool. A tool's contract (the `AI.Tool` tag, its tagged
-template, the `AI.Parameter`s it splices) and its `*Live` Layer
+template, the `AI.Thing`s it splices) and its `*Live` Layer
 live in ONE file named after the tool — `src/coding/Bash.ts` is the model.
 A parameter lives with its canonical tool and is imported from there
 (`path` from `src/coding/ReadFile.ts`, `content` from `src/coding/WriteFile.ts`),
@@ -137,15 +136,15 @@ Mention is presence: a stance's toolkit is exactly what its prose
 splices, and every splice charges the Layer's requirement channel,
 so capability is a type-level fact. Authority therefore lives in
 reference topology, not configuration — the editor is granted by
-one Layer in `coding/` alone and the Reviewer's Layer graph never
-includes it; no charter names a merge tool, because merging is the
-operator's click. Never widen a stance to "make something work": if
-a capability must be granted, grant it where the domain says so and
-make the grant visible in the Layer graph.
+one Layer in `coding/` alone; no charter names a merge tool,
+because merging is the operator's act on GitHub. Never widen a
+stance to "make something work": if a capability must be granted,
+grant it where the domain says so and make the grant visible in the
+Layer graph.
 
 Doctrine is PLUGGABLE. Guidance lives beside the code it governs, one
 small skill per domain (`src/coding/ToolGuidance.ts`, `src/sandbox/SandboxGuidance.ts`,
-`src/github/ProposalsGuidance.ts`, `src/process/ProviderEngineering.ts`), and a stance
+`src/process/ProviderEngineering.ts`), and a stance
 names the skills its work can touch; a skill that grows past one
 domain is two skills. A rule that spans every domain — this one,
 `src/CharterGuidance.ts`, and the org's entry skill that names it —
@@ -203,33 +202,3 @@ the tools use, on the same branch — the operator sees what the agent
 sees. What a tool prints is not the sandbox's concern: output
 bounding and the spill net live in `artifacts/`, and the sandbox is
 merely one physics of that store (`artifacts/ArtifactsSandbox.ts`).
-
-## GitHub is behind the proposals gate
-
-No agent writes to GitHub. A review, a comment, a merge, a pull
-request is a PROPOSAL (`github/Proposals.ts`) the operator accepts,
-declines, or sends back for changes in the UI; `ProposalActions.ts`
-performs the write on accept — the ONLY place a GitHub write lives.
-A new GitHub write is a new proposal kind (a payload variant, its
-executor arm, its card in the UI), never a direct call from a tool.
-
-A pending proposal is a living draft: the proposing agent revises it
-in place (`Proposals.revise`) when the code moves or the operator
-asks, so one review per pull request waits in the inbox, never a
-stack. Resolution is idempotent — `resolve` answers `false` for a
-proposal already resolved, and the world outranks the click.
-
-The store is partitioned by pull request: `ProposalsDO` is one
-Durable Object per `owner/repo#N` (the proposal's id carries its
-partition) with a light index for the inbox — what the Worker runs.
-`ProposalsD1` (one table) and `ProposalsMemory` (tests) are the
-other variants of the same contract; a change to the contract is a
-change to all three.
-
-Events arrive through `GitHub.consumeRepositoryEvents` — a real
-webhook deployed, polling under `alchemy dev` — deduped by the
-Ledger (`review/Ledger.ts`); `review/ReviewerEvents.ts` routes them:
-a pull request opening starts its review, every push wakes the same
-session to revise it, close or merge settles it and withdraws what
-still waits. The connected repositories are the static list in
-`github/Repos.ts`; the org claims ownership of none of them.

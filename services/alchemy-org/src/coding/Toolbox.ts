@@ -11,8 +11,8 @@ import { ReadOutputLive } from "../artifacts/ReadOutput.ts";
  * composition: Verification = Read + Run (verify, never author);
  * the engineer = Read + Run + the editor (`Editor.ts`, deliberately
  * NOT a member of either group here — the write tools are granted
- * only by that layer, so a reviewer assembled from these two groups
- * alone is a judge by construction).
+ * only by that layer, so an agent assembled from these two groups
+ * alone can inspect and run but never author, by construction).
  *
  * Every tool's physics runs over the session {@link AI.Sandbox}, so
  * the same groups work on the trusted host (SandboxLocal), in a

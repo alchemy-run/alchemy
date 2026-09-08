@@ -6,10 +6,6 @@ import type * as Path from "effect/Path";
 import { CharterGuidance, CharterGuidanceGeneral } from "./CharterGuidance.ts";
 import { ToolGuidance, ToolGuidanceGeneral } from "./coding/ToolGuidance.ts";
 import {
-  ProposalsGuidance,
-  ProposalsGuidanceGeneral,
-} from "./github/ProposalsGuidance.ts";
-import {
   SandboxGuidance,
   SandboxGuidanceGeneral,
 } from "./sandbox/SandboxGuidance.ts";
@@ -35,9 +31,9 @@ export const OrgGuidanceGeneral = OrgGuidance.make`
   # Working on alchemy-org — the harness
 
   \`services/alchemy-org\` is the software factory that maintains the
-  alchemy repository: coding and review agents whose charters are
-  prose, running over sandboxes that hold a checkout, proposing every
-  GitHub write to an operator. It lives INSIDE the repository it
+  alchemy repository: coding agents whose charters are prose, running
+  over sandboxes that hold a checkout, pushing to pull requests and
+  opening new ones directly. It lives INSIDE the repository it
   maintains, so a change here changes the hands that make the next
   change. The lift runs in three stages — a human coding agent editing
   this folder; \`alchemy dev\` running the org on the developer's
@@ -54,15 +50,15 @@ export const OrgGuidanceGeneral = OrgGuidance.make`
 
   - \`coding/\` — the Engineer: its charter, the toolbox (Read + Run),
     the editor (the ONLY Layer that grants a write), the publish pair.
-  - \`review/\` — the Reviewer: its charter, the GitHub event router,
-    the review tools, the Ledger.
+  - \`channel/\` + \`thread/\` — the control plane: the org-wide channel,
+    threads (one task, one agent, one machine), their Durable Objects.
   - \`sandbox/\` — where code runs: a session's machine and its checkout.
   - \`artifacts/\` — what tools print: the \`Artifacts\` store (a temp
     dir locally, the session's sandbox on Cloudflare — the sandbox is
     one physics of it, not its home), output bounding, the spill net,
     and the tool that pages a spilled result back.
-  - \`github/\` — the connected repositories, the proposals gate and its
-    stores, the UI projections.
+  - \`github/\` — the connected repositories, the publish token, the
+    UI projections.
   - \`process/\` — HOW the unit the org maintains is built and judged:
     the alchemy repository and the two it moves with, distilled (the
     SDK factory it pins) and floci (the AWS emulator it runs against)
@@ -77,7 +73,7 @@ export const OrgGuidanceGeneral = OrgGuidance.make`
     two rules that span every domain live at the top, in none.
 
   Names carry the convention: a variant family keeps its prefix
-  (\`Sandbox*\`, \`Checkouts*\`, \`Artifacts*\`, \`Proposals*\`); an
+  (\`Sandbox*\`, \`Checkouts*\`, \`Artifacts*\`); an
   implementation Layer is \`*Live\` (\`*General\` for a teaching, \`*DO\` /
   \`*D1\` / \`*Memory\` for a store). One file, one term — a tool, a
   skill, an agent, each with its Layer. When a file moves, move it with
@@ -93,7 +89,6 @@ export const OrgGuidanceGeneral = OrgGuidance.make`
   - ${ToolGuidance} — adding or changing a tool.
   - ${CharterGuidance} — agents, skills, fragments: prose is code.
   - ${SandboxGuidance} — sessions, machines, trees, checkouts.
-  - ${ProposalsGuidance} — anything that would write to GitHub.
 
   A rule that does not fit one of these is a new small skill in the
   domain it belongs to, named here — never a paragraph added to a
@@ -128,7 +123,6 @@ export const OrgDoctrine = Layer.provideMerge(OrgGuidanceGeneral, [
   ToolGuidanceGeneral,
   CharterGuidanceGeneral,
   SandboxGuidanceGeneral,
-  ProposalsGuidanceGeneral,
 ]);
 
 /**
@@ -148,7 +142,6 @@ export const renderAgentsMd: Effect.Effect<
     ToolGuidanceGeneral,
     CharterGuidanceGeneral,
     SandboxGuidanceGeneral,
-    ProposalsGuidanceGeneral,
   ];
   yield* Effect.forEach(teachings, (teaching) =>
     AI.resolveSources(teaching.refs),

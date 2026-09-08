@@ -33,11 +33,8 @@ import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import { ArtifactsLocal } from "../src/artifacts/ArtifactsLocal.ts";
-import { makeProposalExecutor } from "../src/github/ProposalActions.ts";
 import { testAlchemy } from "../src/github/Repos.ts";
 import { CheckoutsSandbox } from "../src/sandbox/CheckoutsSandbox.ts";
-import { Proposals } from "../src/github/Proposals.ts";
-import { ProposalsMemory } from "../src/github/ProposalsMemory.ts";
 import { Bash, BashLive } from "../src/coding/Bash.ts";
 import {
   OpenPullRequest,
@@ -144,12 +141,12 @@ test(
           const bash = yield* Bash;
           const status = (yield* (bash as any)({
             command: "git status --porcelain=v1",
-          })) as string;
-          expect(status).toContain("exit: 0");
+          })) as { exitCode: number; stdout: string };
+          expect(status.exitCode).toBe(0);
           const head = (yield* (bash as any)({
             command: "git rev-parse --abbrev-ref HEAD",
-          })) as string;
-          expect(head).toContain("main");
+          })) as { exitCode: number; stdout: string };
+          expect(head.stdout).toContain("main");
 
           // (2) checkout ADOPTS the bake: no wipe, no re-clone
           const checkouts = yield* Git.Checkouts;
@@ -266,18 +263,18 @@ test(
           const bash = yield* Bash;
           const sandbox = yield* AI.Sandbox;
           expect(
-            (yield* (bash as any)({
+            ((yield* (bash as any)({
               command: "git switch -c agent/feature-a",
-            })) as string,
-          ).toContain("exit: 0");
+            })) as { exitCode: number }).exitCode,
+          ).toBe(0);
           yield* sandbox
             .writeFile("feature.txt", "session A's work\n")
             .pipe(Effect.orDie);
           expect(
-            (yield* (bash as any)({
+            ((yield* (bash as any)({
               command: `git add -A && git ${IDENT.join(" ")} commit -m "feat: session A"`,
-            })) as string,
-          ).toContain("exit: 0");
+            })) as { exitCode: number }).exitCode,
+          ).toBe(0);
         }).pipe(Effect.provide(sessionLayers(path.join(root, "tree-a"))));
 
         // session B sees NONE of it
@@ -286,8 +283,8 @@ test(
           const sandbox = yield* AI.Sandbox;
           const branches = (yield* (bash as any)({
             command: "git branch --list 'agent/*'",
-          })) as string;
-          expect(branches).not.toContain("agent/feature-a");
+          })) as { stdout: string };
+          expect(branches.stdout).not.toContain("agent/feature-a");
           expect(yield* sandbox.exists("feature.txt")).toBe(false);
         }).pipe(Effect.provide(sessionLayers(path.join(root, "tree-b"))));
       }),
@@ -299,8 +296,8 @@ test(
 // LIVE: the publish pair against the real sandbox repo. The tree is a
 // clone of `alchemy-run/test-alchemy` (exactly the baked-image shape);
 // the REAL `PushBranchLive` / `OpenPullRequestLive` implementations
-// run over it — only the token minting (a deploy-time resource) and
-// the approval gate are provided from the environment.
+// run over it — only the token minting (a deploy-time resource) is
+// provided from the environment.
 // ---------------------------------------------------------------------------
 
 const LIVE_TOKEN = process.env.GITHUB_TOKEN;
@@ -373,18 +370,13 @@ test.skipIf(!LIVE_TOKEN)(
                 PublishToken,
                 Effect.succeed(Redacted.make(LIVE_TOKEN!)),
               ),
-              // the proposal inbox the tool files into, and the REAL
-              // octokit operations the executor performs the accepted
-              // proposal with — off ambient credentials (no
+              // the REAL octokit operation openPullRequest performs the
+              // write with — off ambient credentials (no
               // PersonalAccessToken resource — the deploy-time half of
               // the Http impl)
-              ProposalsMemory,
-              Layer.mergeAll(
-                GitHub.CreatePullRequestLocal,
-                GitHub.CreatePullRequestReviewLocal,
-                GitHub.CreateIssueCommentLocal,
-                GitHub.MergePullRequestLocal,
-              ).pipe(Layer.provide(GitHub.fromToken(LIVE_TOKEN!))),
+              GitHub.CreatePullRequestLocal.pipe(
+                Layer.provide(GitHub.fromToken(LIVE_TOKEN!)),
+              ),
             ),
           ),
         );
@@ -394,10 +386,10 @@ test.skipIf(!LIVE_TOKEN)(
           const bash = yield* Bash;
           const sandbox = yield* AI.Sandbox;
           expect(
-            (yield* (bash as any)({
+            ((yield* (bash as any)({
               command: `git switch -c ${BRANCH}`,
-            })) as string,
-          ).toContain("exit: 0");
+            })) as { exitCode: number }).exitCode,
+          ).toBe(0);
           yield* sandbox
             .writeFile(
               "worktree-proof.txt",
@@ -405,50 +397,36 @@ test.skipIf(!LIVE_TOKEN)(
             )
             .pipe(Effect.orDie);
           expect(
-            (yield* (bash as any)({
+            ((yield* (bash as any)({
               command: `git add -A && git ${IDENT.join(" ")} commit -m "test: worktree publish"`,
-            })) as string,
-          ).toContain("exit: 0");
+            })) as { exitCode: number }).exitCode,
+          ).toBe(0);
 
           // the REAL pushBranch tool — token rides the push URL
           const push = yield* PushBranch;
-          const pushed = (yield* (push as any)({ branch: BRANCH })) as string;
-          expect(pushed).toContain(`pushed HEAD to ${REPO}@${BRANCH}`);
+          const pushed = (yield* (push as any)({ branch: BRANCH })) as {
+            remote: string;
+            pushed: string;
+          };
+          expect(pushed).toEqual({ remote: REPO, pushed: BRANCH });
 
           // out-of-band: the branch exists on the remote
           const ref = yield* gh(`/git/ref/heads/${encodeURIComponent(BRANCH)}`);
           expect(ref.status).toBe(200);
 
-          // the REAL openPullRequest tool: it PROPOSES — nothing on
-          // GitHub yet
+          // the REAL openPullRequest tool: the PR lands on GitHub
+          // immediately — the answer carries its URL and number
           const open = yield* OpenPullRequest;
-          const proposed = (yield* (open as any)({
+          const opened = (yield* (open as any)({
             head: BRANCH,
             base: "main",
             title: "test: sandbox worktree publish",
             body: "Automated worktree publish test — closed by the test itself.",
-          }).pipe(
-            Effect.provideService(AI.Thread, {
-              key: "worktree-publish-test",
-            } as unknown as AI.Thread["Service"]),
-          )) as string;
-          expect(proposed).toMatch(/pull request proposed as proposal-\d+/);
-          const proposals = yield* Proposals;
-          const [pending] = yield* proposals.list({ status: "pending" });
-          expect(pending?.payload.kind).toBe("pull_request");
-          expect(pending?.repo).toBe(REPO);
-          const before = yield* gh(
-            `/pulls?head=${REPO.split("/")[0]}:${BRANCH}&state=open`,
-          );
-          expect((before.json as Array<unknown>).length).toBe(0);
-
-          // the operator's ACCEPT — the executor opens it for real
-          const execute = yield* makeProposalExecutor([testAlchemy]);
-          const url = yield* execute(pending!);
-          expect(url).toMatch(/\/pull\/\d+$/);
+          })) as { url: string; number: number };
+          expect(opened.url).toMatch(/\/pull\/\d+$/);
 
           // out-of-band: the PR is real — then close it and delete the ref
-          const number = Number(/\/pull\/(\d+)$/.exec(url)![1]);
+          const number = opened.number;
           const pr = yield* gh(`/pulls/${number}`);
           expect(pr.status).toBe(200);
           expect((pr.json as { state?: string }).state).toBe("open");

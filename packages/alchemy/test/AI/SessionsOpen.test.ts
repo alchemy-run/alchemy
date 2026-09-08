@@ -30,7 +30,7 @@ describe("Sessions.open (DriverLocal)", () => {
     () => {
       const model = Model.make([() => [Model.text("hello"), Model.finish()]]);
       const search = Layer.succeed(Search, ((input: { query: string }) =>
-        Effect.succeed(`results for ${input.query}`)) as never);
+        Effect.succeed({ results: `results for ${input.query}` })) as never);
       const storage = ThreadStorageMemory;
       // one shared index: the driver's Events feed it (captured from
       // the interpreting context), Sessions.list reads it (layers

@@ -26,7 +26,7 @@ import {
 
 // ── the sandbox-touching agent: the alchemy-org shape ─────────────
 
-export const cmd = AI.Parameter("cmd", S.String)`
+export const cmd = AI.Thing("cmd", S.String)`
 The shell command to run on the machine.`;
 
 export class Probe extends (AI.Tool<Probe>()("probe")`
@@ -47,7 +47,6 @@ export const ProbeLive = Layer.effect(
           stdout: result.stdout.trim(),
           exitCode: result.exitCode,
         });
-        return `exit ${result.exitCode}`;
       })) as never;
   }),
 ).pipe(

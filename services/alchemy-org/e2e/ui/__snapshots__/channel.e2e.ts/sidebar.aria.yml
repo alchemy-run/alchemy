@@ -1,0 +1,8 @@
+- navigation "Threads":
+  - button "# channel"
+  - text: Your turn
+  - button "w-yours"
+  - text: Agents working
+  - button "w-working"
+  - text: Closed
+  - button "w-done"

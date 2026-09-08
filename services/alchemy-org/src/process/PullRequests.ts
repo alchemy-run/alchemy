@@ -6,12 +6,11 @@ import { CloudflareEmulation } from "./CloudflareEmulation.ts";
 
 /**
  * THE STANDARD a pull request on alchemy is held to — one document,
- * spliced into both charters: the engineer writes toward it, the
- * reviewer judges against it. Prose only, on purpose: it names no tool
- * (so splicing it charges no capability to either agent) — HOW to
- * check each point is the reviewer's stance, with its own tools. The
- * companion repositories are named by reference (`nameOf`), and the
- * skills for working in them by `.source`: naming, not activating.
+ * spliced into the engineer's charter: the engineer writes toward it
+ * and checks their own work against it. Prose only, on purpose: it
+ * names no tool (so splicing it charges no capability to the agent).
+ * The companion repositories are named by reference (`nameOf`), and
+ * the skills for working in them by `.source`: naming, not activating.
  *
  * A nested fragment is one BLOCK of the rendered document: the driver
  * freezes it into the system prompt on the first tick and never
@@ -46,7 +45,7 @@ export const PullRequests = AI.fragment`
      where one fits — then the why the snippet cannot show. It ends
      with a VERIFICATION REPORT: the exact test command(s) run, what
      passed, what was skipped and the exact reason (an entitlement, a
-     platform limit), and any manual step a reviewer must repeat. No
+     platform limit), and any manual step a human must repeat. No
      checklists of promised future testing; no marketing copy.
 
   4. **A new provider is two pull requests.** Alchemy's providers call

@@ -191,7 +191,7 @@ const streamed = (
 
 // ── the org ──────────────────────────────────────────────────────────
 
-export const line = AI.Parameter("line", S.String)`
+export const line = AI.Thing("line", S.String)`
 The line to write into the record.`;
 
 export class Write extends (AI.Tool<Write>()("write")`
@@ -204,12 +204,9 @@ asked for it.`) {}
  * parks nor ends the run.
  */
 export const WriteLive = Layer.succeed(Write, ((input: { line: string }) =>
-  Effect.gen(function* () {
-    yield* AI.reply({ wrote: input.line });
-    return `wrote ${input.line}`;
-  })) as never);
+  AI.reply({ wrote: input.line })) as never);
 
-export const seconds = AI.Parameter("seconds", S.Int)`
+export const seconds = AI.Thing("seconds", S.Int)`
 How long to wait, in seconds.`;
 
 export class Remind extends (AI.Tool<Remind>()("remind")`
@@ -219,7 +216,6 @@ export const RemindLive = Layer.succeed(Remind, ((input: { seconds: number }) =>
   Effect.gen(function* () {
     const thread = yield* AI.Thread;
     yield* thread.remind(`${input.seconds} seconds`, "the timer elapsed");
-    return `scheduled in ${input.seconds}s`;
   })) as never);
 
 export class Scribe extends AI.Agent<Scribe>()("Scribe") {}

@@ -1,14 +1,20 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import type * as S from "effect/Schema";
 import type { RuntimeContext } from "../RuntimeContext.ts";
-import type { Parameter } from "./Parameter.ts";
+import type { In, Out, Thing } from "./Thing.ts";
 import type { Services } from "./Fragment.ts";
 import { makeSource, type Source } from "./Source.ts";
 
+/**
+ * The things a template splices as INPUTS — a bare `${q}` (the
+ * default) or an explicit `${AI.in(repo, number)}`.
+ */
+type InThing<Refs> =
+  Refs extends In<infer T> ? T : Refs extends Thing ? Refs : never;
+
 type ParamOf<Refs, N> = Extract<
-  Refs,
-  Parameter & { readonly "~alchemy/Name": N }
+  InThing<Refs>,
+  Thing & { readonly "~alchemy/Name": N }
 >;
 
 // per-key PRECISE: each parameter name maps to ITS schema's type (not
@@ -21,15 +27,16 @@ export type ErrorTerm = new (...args: any[]) => Error;
 
 /**
  * The tool's DECLARED failures, from the error classes its template
- * splices — error mention-is-presence, exactly like `${Parameter}`
+ * splices — error mention-is-presence, exactly like `${Thing}`
  * declares a field:
  *
  * ```ts
  * class Missing extends Data.TaggedError("Missing")<{ path: string }> {}
  *
- * export class ReadFile extends AI.Tool<ReadFile>()("readFile", S.String)`
- *   Read ${path}. Fails with ${Missing} when it does not exist.` {}
- * // → readFile(input: { path: string }): Effect<string, Missing>
+ * export class ReadFile extends AI.Tool<ReadFile>()("readFile")`
+ *   Read ${path} — answers ${AI.out(content)}. Fails with ${Missing}
+ *   when it does not exist.` {}
+ * // → readFile(input: { path: string }): Effect<{ content: string }, Missing>
  * ```
  *
  * A failure the template never mentions is not in the error channel:
@@ -41,7 +48,7 @@ export type ToolErrors<Refs> = Refs extends ErrorTerm
 
 export type ToolParameters<Refs> = {
   [
-    N in Extract<Refs, Parameter>["~alchemy/Name"] as ParamOf<
+    N in InThing<Refs>["~alchemy/Name"] as ParamOf<
       Refs,
       N
     >["schema"]["~type.optionality"] extends "optional"
@@ -50,7 +57,7 @@ export type ToolParameters<Refs> = {
   ]: ParamOf<Refs, N>["schema"]["Type"];
 } & {
   [
-    N in Extract<Refs, Parameter>["~alchemy/Name"] as ParamOf<
+    N in InThing<Refs>["~alchemy/Name"] as ParamOf<
       Refs,
       N
     >["schema"]["~type.optionality"] extends "optional"
@@ -59,11 +66,68 @@ export type ToolParameters<Refs> = {
   ]?: ParamOf<Refs, N>["schema"]["Type"];
 };
 
+/** The things a template splices as OUTPUTS (`${AI.out(title, body)}`). */
+type OutThing<Refs> = Refs extends Out<infer T> ? T : never;
+type OutOf<Refs, N> = Extract<
+  OutThing<Refs>,
+  Thing & { readonly "~alchemy/Name": N }
+>;
+
 /**
- * A `Tool` term is a **capability term** (with `Parameter` — design §1
+ * The tool's DECLARED return type — the record of its out-things,
+ * output mention-is-presence exactly like `${Thing}` declares an
+ * input field:
+ *
+ * ```ts
+ * const hits = AI.Thing("hits", S.Array(Row))`Matching rows.`;
+ *
+ * const search = yield* AI.Tool("search")`
+ *   Search for ${AI.in(q)}. Answers ${AI.out(hits)}.`(
+ *   Effect.fn(function* (p: { q: string }) {
+ *     return { hits: yield* find(p.q) }; // ← type-checked
+ *   }),
+ * );
+ * // codemode: search(input: { q: string }): Promise<{ hits: Array<…> }>
+ * ```
+ *
+ * OUTPUT TYPES ARE STRICT, EXPLICIT, AND LIVE IN THE PROSE: the
+ * `${AI.out(…)}` splices are the ONLY way to declare an output — there
+ * is no returns-schema argument. A template with no out-splices means
+ * the tool RETURNS VOID: it acts, it does not answer. Codemode is why:
+ * the generated signature the model programs against is only as good
+ * as the declared return type, and a bare confirmation string
+ * ("closed", "card posted") tells a program nothing — answer a record
+ * or answer nothing.
+ */
+export type ToolReturns<Refs> = 0 extends 1 & Refs
+  ? any // erased (`Tool<any, any>`) — driver internals, never a call site
+  : [OutThing<Refs>] extends [never]
+    ? void
+    : {
+        [
+          N in OutThing<Refs>["~alchemy/Name"] as OutOf<
+            Refs,
+            N
+          >["schema"]["~type.optionality"] extends "optional"
+            ? never
+            : N
+        ]: OutOf<Refs, N>["schema"]["Type"];
+      } & {
+        [
+          N in OutThing<Refs>["~alchemy/Name"] as OutOf<
+            Refs,
+            N
+          >["schema"]["~type.optionality"] extends "optional"
+            ? N
+            : never
+        ]?: OutOf<Refs, N>["schema"]["Type"];
+      };
+
+/**
+ * A `Tool` term is a **capability term** (with `Thing` — design §1
  * taxonomy): never interpreted by the Driver, it is compiled *into* its
  * host process term's turns — the template becomes the toolkit
- * description, the interpolated `Parameter` refs become the schema, and
+ * description, the interpolated `Thing` refs become the schema, and
  * the `<Self>()` tag resolves its implementation (the physics) from
  * ambient context. A tool has no inbox, no sessions, and no ring.
  */
@@ -82,15 +146,6 @@ export interface Tool<
    * tool (see Source.ts).
    */
   readonly source?: Source;
-  /**
-   * The RETURN schema (`AI.Tool("readDiff", S.String)` — the optional
-   * second argument). Direct tool-calling barely needs it (the model
-   * sees results as text either way), but CODEMODE does: the generated
-   * signature the model programs against is
-   * `readDiff(input: {…}): Effect<string>`, and that return type comes
-   * from here. Unspecified means `unknown`.
-   */
-  returns?: S.Top;
   params: {
     [p in keyof ToolParameters<Refs[number]>]: ToolParameters<Refs[number]>[p];
   };
@@ -107,13 +162,15 @@ export interface Tool<
    */
   <Err extends ToolErrors<Refs[number]> = never, Req = never>(
     impl: Effect.Effect<
-      (props: this["params"]) => Effect.Effect<any>,
+      (props: this["params"]) => Effect.Effect<ToolReturns<Refs[number]>>,
       Err,
       Req
     >,
   ): Effect.Effect<ToolImpl<this, Err, Req>, never, Services<Refs>>;
   <Err extends ToolErrors<Refs[number]> = never, Req = never>(
-    impl: (props: this["params"]) => Effect.Effect<any, Err, Req>,
+    impl: (
+      props: this["params"],
+    ) => Effect.Effect<ToolReturns<Refs[number]>, Err, Req>,
   ): Effect.Effect<ToolImpl<this, Err, Req>, never, Services<Refs>>;
 }
 
@@ -131,7 +188,6 @@ export interface ToolImpl<
 export const Tool: {
   <Name extends string>(
     name: Name,
-    returns?: S.Top,
   ): {
     <Refs extends any[]>(
       template: TemplateStringsArray,
@@ -145,7 +201,6 @@ export const Tool: {
   <Self>(meta?: ImportMeta): {
     <Name extends string>(
       name: Name,
-      returns?: S.Top,
     ): {
       <Refs extends any[]>(
         template: TemplateStringsArray,
@@ -159,17 +214,21 @@ export const Tool: {
           // function, never an Effect to normalize
           (
             input: ToolParameters<Refs[number]>,
-          ) => Effect.Effect<any, ToolErrors<Refs[number]>, RuntimeContext>
+          ) => Effect.Effect<
+            ToolReturns<Refs[number]>,
+            ToolErrors<Refs[number]>,
+            RuntimeContext
+          >
         >;
     };
   };
-} = ((nameOrMeta?: string | ImportMeta, returns?: any) =>
+} = ((nameOrMeta?: string | ImportMeta) =>
   typeof nameOrMeta === "string"
     ? (template: TemplateStringsArray, ...refs: any[]) =>
-        makeTool(nameOrMeta, template, refs, returns)
-    : (name: string, returns2?: any) =>
+        makeTool(nameOrMeta, template, refs)
+    : (name: string) =>
         (template: TemplateStringsArray, ...refs: any[]) =>
-          makeTool(name, template, refs, returns2, nameOrMeta)) as any;
+          makeTool(name, template, refs, nameOrMeta)) as any;
 
 // The Context.Service tag is what gives each Tool a distinct ServiceMap
 // key (`alchemy/AI/Tool/{name}`) — without it every Tool resolves to the
@@ -181,7 +240,6 @@ const makeTool = (
   name: string,
   template: TemplateStringsArray,
   refs: any[],
-  returns?: S.Top,
   meta?: ImportMeta,
 ) => {
   const term = function (impl: (props: any) => Effect.Effect<any, any, any>) {
@@ -198,7 +256,6 @@ const makeTool = (
     "~alchemy/Name": name,
     refs,
     template,
-    ...(returns !== undefined ? { returns } : {}),
     ...(meta !== undefined ? { source: makeSource(meta, "Tool", name) } : {}),
   }) as any;
 };

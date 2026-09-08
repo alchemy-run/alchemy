@@ -9,8 +9,8 @@ import { ReadOutput } from "../artifacts/ReadOutput.ts";
 /**
  * VERIFICATION — how a change to alchemy is checked against the real
  * checkout: search, read, RUN, with the repository's own commands.
- * Read-and-run tools only, so both charters can hold it and the
- * Reviewer stays a judge (no editor) as a type-level fact.
+ * Read-and-run tools only, so any charter can hold it without being
+ * granted an editor.
  */
 export class Verification extends AI.Skill<Verification>(import.meta)(
   "Verification",

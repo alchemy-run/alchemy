@@ -4,11 +4,9 @@ import type * as Effect from "effect/Effect";
 import { provide } from "effect/Effect";
 
 /**
- * The org's ONE D1 database — the book of record on Cloudflare: the
- * Ledger's delivery dedupe and the SessionIndex's board rows keep
- * their tables here (proposals live in Durable Objects partitioned by
- * pull request — `github/ProposalsDO.ts`). The resource IS the
- * export (memoized by FQN): every Layer that yields this const and
+ * The org's ONE D1 database — the book of record on Cloudflare for
+ * anything relational the Durable Objects don't own. The resource IS
+ * the export (memoized by FQN): every Layer that yields this const and
  * the Stack that provisions it resolve the same instance.
  */
 export const database = D1.Database("org-db", {});

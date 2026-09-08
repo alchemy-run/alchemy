@@ -23,17 +23,22 @@ import type * as Response from "effect/unstable/ai/Response";
 
 // ─── the org under test ─────────────────────────────────────────────
 
-const query = AI.Parameter("query", S.String)`The search query.`;
+const query = AI.Thing("query", S.String)`The search query.`;
+
+const results = AI.Thing("results", S.String)`The matching entries.`;
 
 export class Search extends (AI.Tool<Search>()("search")`
-Search the corpus for ${query}.`) {}
+Search the corpus for ${query} — answers ${AI.out(results)}.`) {}
 
 export class Missing extends Data.TaggedError("Missing")<{ path: string }> {}
 
-const path = AI.Parameter("path", S.String)`Path to read.`;
+const path = AI.Thing("path", S.String)`Path to read.`;
+
+const content = AI.Thing("content", S.String)`The file's contents.`;
 
 export class ReadFile extends (AI.Tool<ReadFile>()("readFile")`
-Read ${path}; fails with ${Missing} when the file is absent.`) {}
+Read ${path} — answers ${AI.out(content)}; fails with ${Missing} when
+the file is absent.`) {}
 
 export class Probe extends AI.Agent<Probe>()("Probe") {}
 
@@ -127,7 +132,7 @@ export const sessionFacts = (options: {
     const searchLayer = Layer.succeed(Search, ((input: { query: string }) =>
       Effect.sync(() => {
         queries.push(input.query);
-        return `results for ${input.query}`;
+        return { results: `results for ${input.query}` };
       })) as never);
     const readFileLayer = Layer.succeed(ReadFile, ((input: { path: string }) =>
       Effect.fail(new Missing({ path: input.path }))) as never);

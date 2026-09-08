@@ -61,7 +61,13 @@ export default Alchemy.Stack(
       dev: { port: 1337 },
       assets: {
         notFoundHandling: "single-page-application",
-        runWorkerFirst: ["/api/*", "/attach/*", "/terminal/*"],
+        runWorkerFirst: [
+          "/api/*",
+          "/attach/*",
+          "/terminal/*",
+          "/channel",
+          "/thread/*",
+        ],
       },
       memo: {
         include: ["**/*", "../package.json"],

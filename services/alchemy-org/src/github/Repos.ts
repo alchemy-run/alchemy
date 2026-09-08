@@ -21,7 +21,7 @@ export const testAlchemy = GitHub.Repository("test-alchemy", {
   owner: "alchemy-run",
   name: "test-alchemy",
   description:
-    "Sandbox repository managed by the alchemy-org review bot — open pull requests here and the bot reviews them",
+    "Sandbox repository managed by alchemy-org — where the org's agents proved the loop before the real repository",
   hasIssues: true,
   deleteBranchOnMerge: true,
 });
@@ -84,9 +84,10 @@ export const nameOf = (repository: GitHub.RepositoryLike): string => {
 
 /**
  * The repositories a pull request on {@link alchemy} may have a
- * COMPANION in — what `review/Companions.ts` searches by branch name.
- * `submodule` is the path the alchemy tree pins the companion at
- * (`undefined` for a reference-only vendor checkout nothing pins).
+ * COMPANION in — a change that patches distilled or floci ships as a
+ * pair of pull requests, matched by branch name. `submodule` is the
+ * path the alchemy tree pins the companion at (`undefined` for a
+ * reference-only vendor checkout nothing pins).
  */
 export const companions = [
   { repository: distilled, submodule: "distilled" },
@@ -109,21 +110,16 @@ export const publishTargets = [alchemy, testAlchemy] as const;
  *
  * - `sessions` — coding sessions may be created under the repo
  *   (session keys are `<owner>/<repo>/<name>`; threads within a
- *   session append `::<thread>` and share the session's sandbox).
- * - `reviews` — the Reviewer reviews every pull request opened on the
- *   repo (and re-reviews on every push) as PROPOSALS for the operator
- *   (review session keys are `<owner>/<repo>#<n>`).
+ *   session append `::<thread>` and share the session's sandbox;
+ *   pull-request sessions are keyed `<owner>/<repo>#<n>`).
  *
- * This is the REAL alchemy repository: nothing an agent does here
- * reaches GitHub without the operator — reviews, comments, merges, and
- * pull requests are PROPOSALS the operator accepts in the UI
- * (github/Proposals.ts); pushing a topic branch is the one direct
- * write.
+ * This is the REAL alchemy repository: the org's agents own the work
+ * on it — they push to the pull requests their threads govern and
+ * open new ones to solve issues. Merging stays the operator's act on
+ * GitHub.
  */
-export const connected = [
-  { repository: alchemy, sessions: true, reviews: true },
-] as const;
+export const connected = [{ repository: alchemy, sessions: true }] as const;
 
-/** The connected repository the review surface (board, PR pages,
- *  proposals) serves — ONE for now. */
+/** The connected repository the review surface (PR pages, diffs)
+ *  serves — ONE for now. */
 export const primary = connected[0].repository;

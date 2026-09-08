@@ -89,7 +89,7 @@ describe("SessionSocket (DriverLocal)", () => {
         () => [Model.text("hello from memory"), Model.finish()],
       ]);
       const search = Layer.succeed(Search, ((input: { query: string }) =>
-        Effect.succeed(`results for ${input.query}`)) as never);
+        Effect.succeed({ results: `results for ${input.query}` })) as never);
 
       return Effect.gen(function* () {
         // resolving the agent's tag interprets it — which registers
@@ -235,7 +235,9 @@ describe("SessionSocket (DriverLocal)", () => {
         () => [Model.text("It is IaE."), Model.finish()],
       ]);
       const search = Layer.succeed(Search, ((input: { query: string }) =>
-        Effect.succeed(`results for ${input.query}: alchemy is IaE`)) as never);
+        Effect.succeed({
+          results: `results for ${input.query}: alchemy is IaE`,
+        })) as never);
 
       return Effect.gen(function* () {
         yield* Researcher;
@@ -292,7 +294,7 @@ describe("SessionSocket (DriverLocal)", () => {
             const output = chunks.find(
               (chunk) => chunk.type === "tool-output-available",
             )!;
-            expect(String(output.output)).toContain("alchemy is IaE");
+            expect(JSON.stringify(output.output)).toContain("alchemy is IaE");
             const text = chunks.find((chunk) => chunk.type === "text-delta")!;
             expect(text.delta).toBe("It is IaE.");
 
@@ -353,7 +355,7 @@ describe("SessionSocket (DriverLocal)", () => {
         () => [Model.text("first answer"), Model.finish()],
       ]);
       const search = Layer.succeed(Search, ((input: { query: string }) =>
-        Effect.succeed(`results for ${input.query}`)) as never);
+        Effect.succeed({ results: `results for ${input.query}` })) as never);
 
       return Effect.gen(function* () {
         yield* Researcher;

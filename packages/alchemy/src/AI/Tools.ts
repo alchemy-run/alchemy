@@ -4,18 +4,20 @@ import type * as AiTool from "effect/unstable/ai/Tool";
 
 /**
  * One MENTIONED tool, resolved for the wire: the stance's splice bound
- * to its teaching, JSON schemas for input and RETURN (from the Tool's
- * `returns` schema — `AI.Tool("readDiff", S.String)`), its declared
- * failures, and the live handler. A tool appears here iff this tick's
- * stance mentioned it — the array {@link ToolsService.present}
- * receives is mention-is-presence, materialized.
+ * to its teaching, JSON schemas for input and RETURN (from the
+ * template's `${AI.out(…)}` splices), its declared failures, and the
+ * live handler. A tool appears here iff this tick's stance mentioned
+ * it — the array {@link ToolsService.present} receives is
+ * mention-is-presence, materialized.
  */
 export interface ToolMention {
   readonly name: string;
   readonly description: string;
   /** JSON schema of the tool's input object. */
   readonly parameters: unknown;
-  /** JSON schema of the tool's return value (`unknown` when undeclared). */
+  /** JSON schema of the tool's return value — or the driver's
+   *  `{ type: "void" }` marker for a tool that answers nothing (a
+   *  template with no `${AI.out(…)}` splices). */
   readonly returns: unknown;
   /**
    * The tool's DECLARED failures — the error classes its template

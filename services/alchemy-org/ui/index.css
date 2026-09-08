@@ -49,6 +49,7 @@
   --brick: #b3462e; /* danger, destroy */
   --mist: #4a7a8a; /* note — slate teal */
   --terracotta: #c56e3c;
+  --plum: #7a5c8a; /* merged, done — GitHub's purple, on brand */
 
   /* the CODE surface — the frame around every rendered snippet and
      diff. Light: lifted paper (the card color) with the earthy +/−;
@@ -112,6 +113,7 @@
   --brick: #d76a4e;
   --mist: #6da4b4;
   --terracotta: #d8835a;
+  --plum: #b48cc4;
 
   /* the walnut code block — tokens.css `--alc-bg-code` — lifts a
      step off the night page (code-theme.ts WALNUT) */
@@ -168,6 +170,7 @@
   --color-brick: var(--brick);
   --color-mist: var(--mist);
   --color-terracotta: var(--terracotta);
+  --color-plum: var(--plum);
   --color-code: var(--code);
   --color-code-foreground: var(--code-foreground);
   --color-code-muted: var(--code-muted);
@@ -199,7 +202,7 @@
    Callouts — the docs' asides (custom.css `.starlight-aside--*`):
    a 14% tint of the semantic color, a 45% border, the color itself
    for the title. `callout` is the frame; the variant picks the hue.
-   Anything that is a "note on the page" — a proposal awaiting you,
+   Anything that is a "note on the page" — a card from a thread,
    a review comment, a failed tool, a machine error — wears one.
    ============================================================ */
 @utility callout {

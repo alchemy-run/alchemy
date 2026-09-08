@@ -1,262 +1,134 @@
 /**
- * The GALLERY — one screenshot per feature state, in the order a tour
- * would show them. Committed under `__screenshots__/` so a reviewer
- * SEES the UX; enforced with `toHaveScreenshot` so it can't drift
- * unnoticed. Re-bless after a deliberate change: `pnpm test:e2e:update`.
+ * The GALLERY — one pixel snapshot per feature state, committed under
+ * `__screenshots__/` so the UX can be SEEN in review, not just diffed
+ * as an aria tree. Every shot runs against the same fake as the `ui`
+ * project, under the fixed clock.
  */
-import { REPO, pathOf, expect, main, openApp, tab, test } from "./harness.ts";
+import type { Page } from "@playwright/test";
+import {
+  expect,
+  NOW,
+  openApp,
+  REPO,
+  test,
+  threadPath,
+  type FakeApi,
+} from "./harness.ts";
 
-const PR = `${REPO}#148`;
+const shot = (page: Page, name: string) =>
+  expect(page).toHaveScreenshot(`${name}.png`, { fullPage: false });
 
-const shell = (page: Parameters<typeof openApp>[0]) =>
-  expect(main(page)).toContainText("connected — the session's machine");
-
-test.describe("code", () => {
-  test("01 empty directory", async ({ page }) => {
-    await openApp(page);
-    await expect(main(page)).toContainText("No session selected");
-    await expect(page).toHaveScreenshot("code-01-empty.png");
+const seedWorld = (api: FakeApi) => {
+  api.seedThread({
+    id: "t-1",
+    name: "w-reconcile",
+    title: "Fix the reconcile bug",
+    turn: "you",
+    entities: [
+      {
+        ref: `${REPO}#12`,
+        kind: "issue",
+        state: "open",
+        title: "Bug in reconcile",
+      },
+      {
+        ref: `${REPO}#148`,
+        kind: "pull",
+        state: "open",
+        title: "Add sumToN helper",
+        worktree: "/workspace/trees/pr-148",
+      },
+    ],
+    agents: [
+      {
+        key: "engineer-1",
+        kind: "engineer",
+        brief: "Implement the fix in pr-148's worktree",
+        state: "running",
+        startedAt: NOW.getTime() - 120_000,
+      },
+    ],
   });
-
-  test("02 new session dialog", async ({ page }) => {
-    await openApp(page);
-    await page.getByRole("button", { name: "new session" }).click();
-    await expect(page.getByRole("dialog")).toBeVisible();
-    // the generated name has a random tail — pin it for the picture
-    await page.getByRole("textbox", { name: "Session name" }).fill("s-gallery");
-    await expect(page).toHaveScreenshot("code-02-new-session.png");
+  api.seedThread({
+    id: "t-2",
+    name: "w-charts",
+    title: "Terminal charts",
+    turn: "agents",
   });
+  api.seedEvent(
+    `opened issue [${REPO}#12](https://github.com/${REPO}/issues/12) — Bug in reconcile`,
+    { author: "octocat", event: "IssueOpened", ref: `${REPO}#12` },
+  );
+  api.seedUser("triage that issue and start on a fix");
+  api.seedAgent("Placed it on w-reconcile; the engineer is on it.");
+  api.seedCard(
+    { thread: "t-1", title: "Pushed the fix to #148" },
+    "The loop bound is corrected; CI is running on the pull request.",
+  );
+};
 
-  test("03 a session: threads and terminals on one machine", async ({
-    page,
-    api,
-  }) => {
-    api.seedChat(`Engineer:${REPO}/s-alpha`, "running");
-    api.seedChat(`Engineer:${REPO}/s-alpha::t-review-notes`);
-    api.seedChat(`Engineer:${REPO}/s-beta`, "settled");
-    await openApp(page, pathOf(`Engineer:${REPO}/s-alpha`));
-    await main(page).getByRole("button", { name: "+" }).click();
-    await page.getByRole("menuitem", { name: "New terminal" }).click();
-    await shell(page);
-    await page.keyboard.type("git status --short");
-    await expect.poll(() => api.terminal.typed.main).toBe("git status --short");
-    await expect(page).toHaveScreenshot("code-03-session-terminal.png");
-  });
-
-  test("06 a build's colored output in the transcript", async ({
-    page,
-    api,
-  }) => {
-    api.seedBash(`Engineer:${REPO}/s-alpha`, {
-      ask: "build the runtime package",
-      command: "pnpm --filter @alchemy.run/cloudflare-runtime build",
-      stdout: [
-        "\u001b[35m.\u001b[39m \u001b[96mprepare\u001b[39m: \u001b[33m@alchemy.run/cloudflare-runtime:build: \u001b[0m\u001b[34mℹ\u001b[39m building for \u001b[1mproduction\u001b[22m",
-        "\u001b[2mdist/core/node/\u001b[22m\u001b[32m\u001b[1mbindings/AiSearch.d.mts\u001b[22m\u001b[39m  \u001b[2m0.51 kB\u001b[22m \u001b[2m│ gzip: 0.25 kB\u001b[22m",
-        "\u001b[2mdist/core/node/\u001b[22m\u001b[32m\u001b[1mbindings/rate-limit/RateLimitProps.shared.d.mts\u001b[22m\u001b[39m  \u001b[2m0.48 kB\u001b[22m",
-        "\u001b[33m▲\u001b[39m \u001b[33mwarning\u001b[39m: unused export \u001b[36mlegacyBinding\u001b[39m",
-        "\u001b[32m✓\u001b[39m built in \u001b[1m1.42s\u001b[22m",
-      ].join("\n"),
-      reply: "Built clean — one unused-export warning in `legacyBinding`.",
-    });
-    await openApp(page, pathOf(`Engineer:${REPO}/s-alpha`));
-    // expand the bash card
-    await main(page)
-      .getByRole("button", { name: /pnpm --filter/ })
-      .click();
-    await expect(main(page)).toContainText("built in");
-    await expect(page).toHaveScreenshot("code-06-ansi-output.png");
-  });
-
-  test("04 tab context menu", async ({ page, api }) => {
-    api.seedChat(`Engineer:${REPO}/s-alpha`);
-    api.seedChat(`Engineer:${REPO}/s-alpha::t-review-notes`);
-    await openApp(page, pathOf(`Engineer:${REPO}/s-alpha`));
-    await tab(page, "main").click({ button: "right" });
-    await expect(page.getByRole("menu")).toBeVisible();
-    await expect(page).toHaveScreenshot("code-04-tab-menu.png");
-  });
-
-  test("05 delete thread confirmation", async ({ page, api }) => {
-    api.seedChat(`Engineer:${REPO}/s-alpha`);
-    api.seedChat(`Engineer:${REPO}/s-alpha::t-review-notes`);
-    await openApp(page, pathOf(`Engineer:${REPO}/s-alpha::t-review-notes`));
-    await tab(page, /review-notes/).click({ button: "right" });
-    await page.getByRole("menuitem", { name: "Delete thread" }).click();
-    await expect(page.getByRole("dialog")).toBeVisible();
-    await expect(page).toHaveScreenshot("code-05-delete-thread.png");
-  });
+test("channel: the stream, a card, the directory", async ({ page, api }) => {
+  seedWorld(api);
+  await openApp(page);
+  await shot(page, "channel-01-stream");
 });
 
-test.describe("review", () => {
-  test("01 the board", async ({ page, api }) => {
-    api.seedChat(`Engineer:${PR}`);
-    await openApp(page);
-    await page.getByRole("button", { name: /^Review/ }).click();
-    await expect(main(page)).toContainText("Select a pull request.");
-    await expect(page).toHaveScreenshot("review-01-board.png");
+test("channel: light mode", async ({ page, api }) => {
+  seedWorld(api);
+  await openApp(page);
+  await page.emulateMedia({ colorScheme: "light" });
+  await page.evaluate(() => {
+    localStorage.setItem("theme", "light");
+    document.documentElement.classList.remove("dark");
   });
+  await shot(page, "channel-02-stream-light");
+});
 
-  test("02 pull request overview", async ({ page }) => {
-    await openApp(page, pathOf(`pr:${PR}`));
-    await expect(main(page)).toContainText("approved these changes");
-    await expect(page).toHaveScreenshot("review-02-overview.png");
+test("channel: the bell's list", async ({ page, api }) => {
+  seedWorld(api);
+  await openApp(page);
+  await page
+    .getByRole("button", { name: /notifications, 1 new/ })
+    .click();
+  await shot(page, "channel-03-bell");
+});
+
+test("thread: the conversation and the state pane", async ({ page, api }) => {
+  seedWorld(api);
+  api.seedTool("Thread:t-1", {
+    ask: "get a worktree for the PR",
+    name: "worktree",
+    input: { ref: `${REPO}#148` },
+    output: { path: "/workspace/trees/pr-148", branch: "pr-148" },
+    reply: "Worktree ready — the engineer works there.",
   });
+  await openApp(page, threadPath("t-1"));
+  await expect(page.getByRole("main")).toContainText("Worktree ready");
+  await shot(page, "thread-01-conversation");
+});
 
-  test("03 inline review comment expanded", async ({ page }) => {
-    await openApp(page, pathOf(`pr:${PR}`));
-    await main(page)
-      .getByRole("button", { name: /flow-test\/sum\.ts:4/ })
-      .click();
-    await expect(main(page)).toContainText("export function sumToN");
-    await expect(page).toHaveScreenshot("review-03-inline-diff.png");
-  });
-
-  test("04 machine pulled onto the PR head", async ({ page }) => {
-    await openApp(page, pathOf(`pr:${PR}`));
-    await main(page).getByRole("button", { name: "pull" }).click();
-    await expect(main(page)).toContainText("on flow-test-deploy @ 7d7584e");
-    await expect(page).toHaveScreenshot("review-04-machine-ready.png");
-  });
-
-  test("05 the bot's review alongside an engineer thread", async ({
+test("review: the diff beside the chat", async ({ page, api }) => {
+  seedWorld(api);
+  api.seedTurn(
+    "Thread:t-1",
+    "review the helper",
+    "The loop bound is off by one — see the selection.",
+  );
+  await openApp(
     page,
-    api,
-  }) => {
-    api.seedChat(`Reviewer:${PR}`, "running");
-    api.board.prs[0]!.session = { id: `Reviewer:${PR}`, status: "running" };
-    api.seedChat(`Engineer:${PR}`);
-    await openApp(page, pathOf(`pr:${PR}`));
-    await expect(tab(page, "Review")).toBeVisible();
-    await expect(tab(page, "main")).toBeVisible();
-    await expect(page).toHaveScreenshot("review-05-review-and-thread-tabs.png");
-  });
+    `${threadPath("t-1")}/alchemy-run/test-alchemy/pull/148`,
+  );
+  await expect(page.getByRole("main")).toContainText("flow-test/sum.ts");
+  await shot(page, "review-01-diff");
+});
 
-  test("08 a review proposed by the bot, awaiting the operator", async ({
-    page,
-    api,
-  }) => {
-    api.seedChat(`Reviewer:${PR}`, "idle");
-    api.board.prs[0]!.session = { id: `Reviewer:${PR}`, status: "idle" };
-    api.seedProposal(
-      148,
-      {
-        kind: "review",
-        number: 148,
-        verdict: "request_changes",
-        body: "The helper is right but the test never exercises `n = 0`.",
-        comments: [
-          {
-            path: "src/sum.ts",
-            line: 4,
-            body: "`Array.from({ length: n })` allocates — a closed form is O(1).",
-          },
-        ],
-      },
-      "request changes on #148 (1 inline comment)",
-    );
-    await openApp(page, `${pathOf(`pr:${PR}`)}/proposals`);
-    await expect(main(page)).toContainText("1 awaiting you");
-    await expect(page).toHaveScreenshot("review-08-proposal.png");
-  });
-
-  test("09 the inbox: one line per proposal, one opened", async ({
-    page,
-    api,
-  }) => {
-    api.seedProposal(
-      148,
-      { kind: "comment", number: 148, body: "Looks right; one nit inline." },
-      "comment on #148",
-    );
-    api.seedProposal(
-      148,
-      {
-        kind: "review",
-        number: 148,
-        verdict: "request_changes",
-        body: "The retry loop never backs off.",
-        comments: [],
-      },
-      "request changes on #148: retry loop never backs off",
-    );
-    await openApp(page);
-    await page
-      .getByRole("banner")
-      .getByRole("button", { name: "notifications, 2 awaiting you" })
-      .click();
-    const inbox = page.getByRole("dialog", { name: "proposals" });
-    await expect(inbox).toContainText("2 awaiting you");
-    await inbox.getByRole("button", { name: "details" }).last().click();
-    await expect(
-      inbox.getByRole("button", { name: "post comment" }),
-    ).toBeVisible();
-    await expect(page).toHaveScreenshot("review-09-inbox.png");
-  });
-
-  test("10 the pull request overview, in light", async ({ page }) => {
-    await page.emulateMedia({ colorScheme: "light" });
-    await openApp(page, pathOf(`pr:${PR}`));
-    await expect(main(page)).toContainText("approved these changes");
-    await expect(page).toHaveScreenshot("review-10-overview-light.png");
-  });
-
-  test("11 the account menu", async ({ page }) => {
-    await openApp(page);
-    await page
-      .getByRole("banner")
-      .getByRole("button", { name: "account, sam-goodwin" })
-      .click();
-    await expect(page.getByRole("menu")).toContainText("@sam-goodwin");
-    await expect(page).toHaveScreenshot("review-11-account-menu.png");
-  });
-
-  test("12 files changed — the diff with the review's comment on its line", async ({
-    page,
-  }) => {
-    await openApp(page, `${pathOf(`pr:${PR}`)}/files`);
-    const files = main(page).getByLabel("files changed");
-    await expect(files).toContainText("1 file changed");
-    await expect(
-      files.locator("[data-changed-file]").getByText("return total"),
-    ).toBeVisible();
-    await expect(files).toContainText("The loop condition");
-    await expect(page).toHaveScreenshot("review-12-files-changed.png");
-  });
-
-  test("13 files changed, in light — the same walnut diff as the docs", async ({
-    page,
-  }) => {
-    await page.emulateMedia({ colorScheme: "light" });
-    await openApp(page, `${pathOf(`pr:${PR}`)}/files`);
-    const files = main(page).getByLabel("files changed");
-    await expect(
-      files.locator("[data-changed-file]").getByText("return total"),
-    ).toBeVisible();
-    await expect(files).toContainText("The loop condition");
-    await expect(page).toHaveScreenshot("review-13-files-changed-light.png");
-  });
-
-  test("06 a terminal on the PR's machine", async ({ page, api }) => {
-    api.seedChat(`Engineer:${PR}`);
-    await openApp(page, pathOf(`pr:${PR}`));
-    await main(page).getByRole("button", { name: "terminal" }).click();
-    await shell(page);
-    await page.keyboard.type("git log --oneline -1");
-    await expect
-      .poll(() => api.terminal.typed.main)
-      .toBe("git log --oneline -1");
-    await expect(page).toHaveScreenshot("review-06-terminal.png");
-  });
-
-  test("07 pull request context menu", async ({ page }) => {
-    await openApp(page);
-    await page.getByRole("button", { name: /^Review/ }).click();
-    await page
-      .getByRole("complementary")
-      .getByRole("button", { name: /Add sumToN helper/ })
-      .click({ button: "right" });
-    await expect(page.getByRole("menu")).toBeVisible();
-    await expect(page).toHaveScreenshot("review-07-pr-menu.png");
-  });
+test("terminal: the thread's machine", async ({ page, api }) => {
+  seedWorld(api);
+  await openApp(page, threadPath("t-1"));
+  await page.getByRole("button", { name: "new terminal" }).click();
+  // the prompt's bytes land in ghostty's canvas, not the DOM — the
+  // status line is the socket's proof of life
+  await expect(page.getByRole("main")).toContainText("connected");
+  await expect.poll(() => api.terminal.opened.length).toBe(1);
+  await shot(page, "thread-02-terminal");
 });

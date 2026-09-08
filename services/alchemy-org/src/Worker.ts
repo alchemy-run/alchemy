@@ -17,51 +17,38 @@ import { GeneralEngineer } from "./coding/Engineer.ts";
 import { OpenPullRequestLive } from "./coding/OpenPullRequest.ts";
 import { PushBranchLive } from "./coding/PushBranch.ts";
 import { ReadTools, RunTools } from "./coding/Toolbox.ts";
+import { ChannelAgentLive } from "./channel/ChannelAgent.ts";
+import { Channel } from "./channel/Channel.ts";
+import { ChannelLive } from "./channel/ChannelDO.ts";
+import { ChannelEvents } from "./channel/ChannelEvents.ts";
 import { GitHubWorker } from "./github/GitHubWorker.ts";
-import { ProposalsDO } from "./github/ProposalsDO.ts";
 import { PublishTokenLive } from "./github/PublishToken.ts";
 import { OrgDoctrine } from "./OrgGuidance.ts";
 import { DriverCloudflare } from "./platform/DriverCloudflare.ts";
-import { FindCompanionsLive } from "./review/Companions.ts";
-import { LedgerD1 } from "./review/LedgerD1.ts";
-import { ReadDiffLive } from "./review/ReadDiff.ts";
-import { ReadIssueLive } from "./review/ReadIssue.ts";
-import { ReviewerLive } from "./review/Reviewer.ts";
-import { ReviewerEvents } from "./review/ReviewerEvents.ts";
 import { routes } from "./Routes.ts";
 import { ArtifactsSandbox } from "./artifacts/ArtifactsSandbox.ts";
 import { ReadOutputLive } from "./artifacts/ReadOutput.ts";
 import { SandboxSession } from "./sandbox/SandboxSession.ts";
 import { SessionRepoLive } from "./github/SessionRepo.ts";
 import { SpillingTools } from "./artifacts/SpillingTools.ts";
+import { ThreadAgentLive } from "./thread/ThreadAgent.ts";
+import { ThreadsLive } from "./thread/ThreadDO.ts";
+import { Threads } from "./thread/Threads.ts";
 
-/** The artifact store on the session's machine (readOutput reads what
- *  the spill net and the bash tool parked). */
+/** The artifact store on the session's machine. */
 const Store = ArtifactsSandbox;
 
-/** Git over that same machine — `SandboxSession` provides
- *  `Git.Checkouts` alongside `AI.Sandbox` (the pairing is per machine:
- *  converging git in a MicroVM, worktrees over the dev checkout), ONE
- *  composition shared by both charters (the engineer claims the session
- *  repo's tree; the reviewer claims the PR head's). */
+/** Git over that same machine — one composition shared by every
+ *  charter (worktrees per thread ride the same seam). */
 const Checkouts = SandboxSession;
 
-/** Read + Run over the session machine — what BOTH agents hold. The
- *  editor (`coding/Editor.ts`) is added to the engineer alone below. */
+/** Read + Run over the session machine — what every agent holds. */
 const Toolbox = Layer.mergeAll(ReadTools, RunTools).pipe(
   Layer.provide(Store),
   Layer.provide(SandboxSession),
 );
 
-/** The pluggable doctrine both charters hold, dormant until a change
- *  touches its domain: how alchemy is verified (`process/Verification.ts`,
- *  over the read/run tools), how a provider is built and tested
- *  (`process/ProviderEngineering.ts`), the flywheel that feeds SDK
- *  mismatches back into distilled (`process/Distillation.ts`), how an
- *  resource is emulated locally (`process/AwsEmulation.ts` for floci,
- *  `process/CloudflareEmulation.ts` for the workerd runtime), and
- *  the org's own entry skill with
- *  the domain skills it names (`OrgGuidance.ts`). */
+/** The pluggable doctrine, dormant until a change touches its domain. */
 const Guidance = Layer.mergeAll(
   VerificationGeneral,
   ProviderEngineeringGeneral,
@@ -82,14 +69,12 @@ const Spill = SpillingTools.pipe(
   Layer.provide(SandboxSession),
 );
 
-/** The engineer over the session machine — Read + Run + the editor,
- *  plus the PUBLISH pair: push rides the sandbox's own git, the PR the
- *  GitHub REST API, both authenticated by the host's one FQN-memoized
- *  token resource. */
+/** The ENGINEER — a thread's coding subagent: Read + Run + editor,
+ *  plus the publish pair (push the branch, open the pull request —
+ *  both land on GitHub directly). */
 const EngineerWorker = GeneralEngineer.pipe(
   Layer.provide(
     Layer.mergeAll(PushBranchLive, OpenPullRequestLive).pipe(
-      // the host-minted PAT — one FQN-memoized resource for the pair
       Layer.provide(PublishTokenLive),
     ),
   ),
@@ -99,27 +84,27 @@ const EngineerWorker = GeneralEngineer.pipe(
   Layer.provide(Spill),
   Layer.provide(Checkouts),
   Layer.provide(SandboxSession),
-  // which tree the session works in — for the stance's prose only; the
-  // checkout itself happens on first tool touch (SandboxCheckout)
   Layer.provide(SessionRepoLive),
 );
 
-/** The review charter: Read + Run (no editor — judge, not author, by
- *  construction) plus the review tools; tools + checkout live INSIDE
- *  the session's machine — git runs one RPC hop away, exactly the
- *  local reading experience (repo-relative paths at the tree root). */
-const ReviewerWorkerLive = Layer.suspend(() => ReviewerLive).pipe(
-  Layer.provide([ReadDiffLive, ReadIssueLive, FindCompanionsLive, Guidance]),
-  Layer.provide(Toolbox),
-  Layer.provide(Spill),
-  Layer.provide(Checkouts),
+/** The THREAD AGENT — one session per thread, the task's whole
+ *  conversation; governs entities, worktrees, subagents. */
+const ThreadWorker = Layer.suspend(() => ThreadAgentLive).pipe(
+  Layer.provide(EngineerWorker),
   Layer.provide(SessionRepoLive),
+  Layer.provide(Checkouts),
+  Layer.provide(SandboxSession),
+);
+
+/** The CHANNEL AGENT — codemode over the control plane; runs only on
+ *  the operator's channel messages. */
+const ChannelWorker = Layer.suspend(() => ChannelAgentLive).pipe(
+  Layer.provide(ThreadWorker),
 );
 
 /**
  * The ROUTER runs at the Worker level, where no session machine
- * exists: `release` is a no-op (the machine recycles with its
- * session), `checkout` is the charter's act alone.
+ * exists: `checkout` belongs to session charters alone.
  */
 const CheckoutsRouter = Layer.succeed(Git.Checkouts, {
   checkout: () =>
@@ -130,92 +115,94 @@ const CheckoutsRouter = Layer.succeed(Git.Checkouts, {
   release: () => Effect.void,
 });
 
-/** The review pipeline: the GitHub event router + the charter. Every
- *  pull request opened on the repository is reviewed as it opens and
- *  re-reviewed on every push (`review/ReviewerEvents.ts`); the HTTP
- *  edge addresses the charter too (`POST /api/prs/:n/review` admits a
- *  session by hand). */
-const ReviewerWorker = ReviewerEvents.pipe(
-  // provideMERGE: the HTTP edge addresses the reviewer too
-  Layer.provideMerge(ReviewerWorkerLive),
+/** INGEST: GitHub webhooks → ChannelDO.deliver → owned threads. */
+const IngestWorker = ChannelEvents.pipe(
+  Layer.provide(ThreadWorker),
   Layer.provide(CheckoutsRouter),
-  // a REAL webhook: deploy provisions it against the Worker's URL,
-  // runtime verifies signatures and claims the delivery path; under
-  // `alchemy dev` the Webhook resource's local provider polls GitHub
-  // and posts the same deliveries to the local Worker
+  // a REAL webhook: deploy provisions it against the Worker's URL;
+  // under `alchemy dev` the local provider polls GitHub and posts the
+  // same deliveries to the local Worker
   Layer.provide(Cloudflare.GitHubRepositoryEventSourceLive),
-  Layer.provideMerge(LedgerD1),
 );
 
-/** The whole org over CLOUDFLARE physics. SandboxSession is merged in
- *  so the ROUTES see `AI.Sandbox` too (the terminal door) — the same
- *  layer reference the charters consume, deduped by the build MemoMap,
- *  so the terminal lands on the same machine registry the tools use. */
+/**
+ * The whole org over CLOUDFLARE physics, CHANNEL-FIRST:
+ *
+ * - the channel  → ONE ChannelDO (`main`): the org-wide log, the
+ *                  thread directory, webhook dedupe, `/channel` WS
+ * - threads      → one ThreadDO per task (`t-…`): entities, agents,
+ *                  `/thread/:id` WS; the thread's CONVERSATION is its
+ *                  agent session (DriverCloudflare)
+ * - sessions     → Durable Objects (`platform/DriverCloudflare.ts`);
+ *                  no session management surface — sessions exist only
+ *                  as channel runs, thread agents, and subagents
+ * - GitHub       → `*Http` bindings + a REAL repository webhook; reads
+ *                  for the review view are on demand, nothing mirrored;
+ *                  agents write directly (push, open pull requests)
+ * - the tools    → each thread's OWN machine (one sandbox per thread,
+ *                  a worktree per pull request)
+ */
 const Org = Layer.mergeAll(
+  ThreadWorker,
+  ChannelWorker,
+  IngestWorker,
   EngineerWorker,
-  ReviewerWorker,
   SandboxSession,
-  // the routes read the operator's identity off the same host token
-  // the publish pair uses (`GET /api/me`) — one FQN-memoized resource
   PublishTokenLive,
 ).pipe(
+  Layer.provideMerge(ThreadsLive),
+  Layer.provideMerge(ChannelLive),
   Layer.provideMerge(DriverCloudflare),
   Layer.provideMerge(GitHubWorker),
-  // one Durable Object per pull request — the store scales with the
-  // number of pull requests, not one database's write throughput
-  Layer.provideMerge(ProposalsDO),
   Layer.provide(Cloudflare.D1.QueryDatabaseBinding),
   Layer.orDie,
 );
 
 /**
- * The org, deployed — a Cloudflare Worker hosting both agents over
- * Cloudflare physics:
- *
- * - sessions   → Durable Objects (`platform/DriverCloudflare.ts`)
- * - the board  → D1 (`SessionIndexD1`), fed by the driver's stream
- * - GitHub     → `*Http` bindings (a PersonalAccessToken bound as a
- *                Worker secret) + a REAL repository webhook (push
- *                delivery — the polling latency disappears)
- * - dedupe     → the Ledger on D1
- * - proposals  → Durable Objects partitioned by pull request
- *                (`github/ProposalsDO.ts`; the operator accepts from
- *                any instance, the executor in Routes performs the
- *                GitHub write)
- * - the tools  → each session's OWN machine (`sandbox/SandboxSession.ts`:
- *                a MicroVM deployed, a worktree of this checkout in dev)
- * - checkouts  → git INSIDE that machine (`CheckoutsSandbox` /
- *                `CheckoutsWorktree`)
- *
- * The same HTTP surface as the local server (Routes.ts) plus the
- * substrate's own doors: the GitHub webhook path is claimed by the
- * event-source binding BEFORE this fetch handler, and
- * `/attach/:term/:key` upgrades a WebSocket into the session's own
- * Durable Object.
+ * The org, deployed — a Cloudflare Worker whose HTTP surface is the
+ * channel (Routes.ts) plus the sockets: `/channel` upgrades into the
+ * ChannelDO, `/thread/:id` into that thread's DO, and
+ * `/attach/:term/:key` + `/terminal/:term/:key` into the session's
+ * own DO exactly as before.
  */
 export default class Worker extends Cloudflare.Worker<Worker>()(
   "Worker",
   {
-    // API + sessions only — the SPA is its own Worker
+    // API + sockets only — the SPA is its own Worker
     // (`Cloudflare.Website.Vite` in alchemy.run.ts) that forwards
-    // /api and /attach here over a service binding.
+    // /api, /attach, /terminal, /channel, /thread here over a service
+    // binding.
     main: import.meta.url,
     // PINNED dev port (the Website pins 1337): stable addresses across
-    // restarts — no more port roulette between the two workers
+    // restarts
     dev: { port: 1340 },
   },
   Effect.gen(function* () {
     const sessions = yield* AI.Sessions;
+    const channelService = yield* Channel;
+    const threadsService = yield* Threads;
     const api = yield* HttpRouter.toHttpEffect(yield* routes);
 
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
         const path = new URL(request.url, "http://worker").pathname;
-        // keys may contain `/` (owner/repo#n) — rest-join after term.
-        // BOTH live views ride the same forward into the session's DO:
-        // /attach/… is the chat socket, /terminal/… the PTY bridge —
-        // the DO tells them apart by pathname (the request rides along).
+        // the channel's live tail
+        if (path === "/channel") {
+          return yield* channelService.socket(request);
+        }
+        // a thread's state push
+        if (path.startsWith("/thread/")) {
+          const id = decodeURIComponent(path.slice("/thread/".length));
+          if (id.length === 0) {
+            return HttpServerResponse.text("bad thread socket path", {
+              status: 400,
+            });
+          }
+          return yield* threadsService.socket(id, request);
+        }
+        // session sockets: /attach/… is the chat socket, /terminal/…
+        // the PTY bridge — the session DO tells them apart by pathname
         if (path.startsWith("/attach/") || path.startsWith("/terminal/")) {
           const [, , term, ...rest] = path.split("/");
           if (!term || rest.length === 0) {

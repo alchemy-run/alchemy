@@ -5,7 +5,7 @@ import * as S from "effect/Schema";
 import { sha256Hex } from "./Digest.ts";
 import { path } from "./ReadFile.ts";
 
-const edits = AI.Parameter(
+const edits = AI.Thing(
   "edits",
   S.Array(
     S.Struct({
@@ -15,21 +15,29 @@ const edits = AI.Parameter(
     }),
   ).pipe(S.check(S.isMinLength(1))),
 )`
-One or more non-overlapping replacements, all matched against the
-ORIGINAL file. oldString must match byte-for-byte (including
-indentation), be unique unless replaceAll is true, and must not
-include readFile's "N: " prefix. Merge nearby changes into one edit;
-do not pad distant edits with large unchanged regions.`;
+  One or more non-overlapping replacements, all matched against the
+  ORIGINAL file. oldString must match byte-for-byte (including
+  indentation), be unique unless replaceAll is true, and must not
+  include readFile's "N: " prefix. Merge nearby changes into one edit;
+  do not pad distant edits with large unchanged regions.`;
 
-const expectedDigest = AI.Parameter("expectedDigest", S.String)`
-The SHA-256 digest returned by readFile for this exact file version.`;
+const expectedDigest = AI.Thing("expectedDigest", S.String)`
+  The SHA-256 digest returned by readFile for this exact file version.`;
+
+const replaced = AI.Thing("replaced", S.Int)`
+  How many blocks were replaced.`;
+
+const digest = AI.Thing("digest", S.String)`
+  The edited file's new SHA-256 — pass it as expectedDigest on the next
+  edit instead of re-reading.`;
 
 export class EditFile extends (AI.Tool<EditFile>(import.meta)("editFile")`
-Apply atomic exact-string ${edits} to the existing file at ${path}.
-The entire call is preflighted before anything is written; any
-missing, ambiguous, or overlapping edit leaves the file unchanged.
-Pass ${expectedDigest} to prove the file has not changed since you
-read it. Prefer this over writeFile for existing files.`) {}
+  Apply atomic exact-string ${edits} to the existing file at ${path} —
+  answers ${AI.out(replaced, digest)}. The entire call is preflighted
+  before anything is written; any missing, ambiguous, or overlapping
+  edit leaves the file unchanged. Pass ${expectedDigest} to prove the
+  file has not changed since you read it. Prefer this over writeFile
+  for existing files.`) {}
 
 /** Physics over the session {@link AI.Sandbox}. */
 export const EditFileLive = Layer.effect(
@@ -120,7 +128,7 @@ export const EditFileLive = Layer.effect(
         }
         yield* sandbox.writeFile(input.path, updated);
         const next = yield* sha256Hex(updated);
-        return `edited ${input.path}: replaced ${replacements.length} block(s)\n[SHA-256: ${next}]`;
+        return { replaced: replacements.length, digest: next };
       })) as never;
   }),
 );

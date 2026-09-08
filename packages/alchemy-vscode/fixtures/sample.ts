@@ -8,7 +8,7 @@ declare const AI: {
   prose: (t: TemplateStringsArray, ...refs: unknown[]) => unknown;
   say: (t: TemplateStringsArray, ...refs: unknown[]) => unknown;
   Tool: (name: string) => (t: TemplateStringsArray) => unknown;
-  Parameter: (
+  Thing: (
     name: string,
     schema: unknown,
   ) => (t: TemplateStringsArray) => unknown;
@@ -21,7 +21,7 @@ declare const AI: {
     payload: Record<string, unknown>,
   ) => (t: TemplateStringsArray) => new () => unknown;
 };
-declare const Parameter: (name: string, props: unknown) => unknown;
+declare const Thing: (name: string, props: unknown) => unknown;
 declare const typescript: (
   t: TemplateStringsArray,
   ...values: unknown[]
@@ -97,7 +97,7 @@ export const charter = () => {
 };
 
 /** Call-tagged prose: the tag is a call rather than a member access. */
-const task = AI.Parameter("task", String)`
+const task = AI.Thing("task", String)`
   The work itself, standing alone — the issue reference and the
   acceptance criteria verbatim.`;
 
@@ -113,7 +113,7 @@ export const risky = AI.Tool("risky")`
 run(now)`;
 
 /** A call whose arguments are spread over several lines is prose too. */
-export const spread = AI.Parameter(
+export const spread = AI.Thing(
   "spread",
   Schema.optionalKey(Schema.check(Schema.Int, 1, 3600, "seconds")),
 )`
@@ -127,7 +127,7 @@ export class Wake extends (AI.Event("Wake", {
 A **scheduled** wake, described where the payload is declared.`) {}
 
 /** A call that only looks like a tag is handed back, arguments and all. */
-export const notATag = Parameter("not-a-tag", {
+export const notATag = Thing("not-a-tag", {
   /** No template follows this one. */
   value: Redacted.make("not-prose"),
 });

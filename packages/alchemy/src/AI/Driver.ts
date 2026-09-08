@@ -22,7 +22,7 @@ import { isTool } from "./Tool.ts";
 
 /**
  * The one term kind the Driver can interpret: an {@link Agent}.
- * Capability terms (`Tool`/`Parameter`) are compiled *into* their
+ * Capability terms (`Tool`/`Thing`) are compiled *into* their
  * host's turns — they have no sessions and no loop of their own. A
  * domain-shaped surface (a process) is not a term at all: it is a
  * plain `Context.Service` whose hand-written Layer interprets a

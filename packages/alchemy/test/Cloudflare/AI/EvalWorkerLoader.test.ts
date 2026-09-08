@@ -123,7 +123,7 @@ test(
           const first = await search({ query: "alchemy" });
           const second = await search({ query: "effect" });
           console.log("composed", first, second);
-          return first + " // " + second;
+          return first.results + " // " + second.results;
         }`,
     );
     expect(facts.answer).toBe("done");
@@ -131,7 +131,7 @@ test(
     expect(facts.wireTools).toEqual(["eval", "spawn"]);
     // the generated signature reached the model
     expect(facts.signature).toContain(
-      "declare function search(input: { query: string }): Promise<unknown>",
+      "declare function search(input: { query: string }): Promise<{ results: string }>",
     );
     // BOTH calls executed inside the isolate, in one round trip
     expect(facts.queries).toEqual(["alchemy", "effect"]);
@@ -225,7 +225,7 @@ test(
           const direct = await search({ query: "direct" });
           const aliased = await find({ query: "aliased" });
           const viaNamespace = await everything.search({ query: "namespace" });
-          return [direct, aliased, viaNamespace, marker].join(" | ");
+          return [direct.results, aliased.results, viaNamespace.results, marker].join(" | ");
         }`,
     );
     expect(facts.queries).toEqual(["direct", "aliased", "namespace"]);
@@ -266,14 +266,14 @@ test(
           const first = yield* search({ query: "alchemy" });
           const second = yield* search({ query: "effect" });
           console.log("composed");
-          return first + " // " + second;
+          return first.results + " // " + second.results;
         });`,
     );
     expect(facts.answer).toBe("done");
     expect(facts.wireTools).toEqual(["eval", "spawn"]);
     // the EFFECT signature shape reached the model
     expect(facts.signature).toContain(
-      "declare function search(input: { query: string }): Effect<unknown, never>",
+      "declare function search(input: { query: string }): Effect<{ results: string }, never>",
     );
     // both calls ran in the isolate, in one round trip
     expect(facts.queries).toEqual(["alchemy", "effect"]);
@@ -329,7 +329,7 @@ test(
           const viaRootNamed = Duration.toMillis(millis(3));
           const searched = yield* search({ query: "matrix" });
           const found = yield* find({ query: "alias" });
-          return [fromPure, viaRootNamespace, viaRootNamed, searched, found].join(" | ");
+          return [fromPure, viaRootNamespace, viaRootNamed, searched.results, found.results].join(" | ");
         });`,
     );
     expect(facts.queries).toEqual(["matrix", "alias"]);

@@ -19,11 +19,11 @@ export const EngineerLive = Engineer.make`...prose...`;
 // TOOL — a typed verb (template = description, splices = schema)
 export class Grep extends AI.Tool<Grep>()("grep")`Search with ${pattern}.` {}
 export const GrepLocal = Layer.succeed(Grep, (input) => Effect.succeed("..."));
-// optional returns schema (codemode signatures): AI.Tool<Self>()("name", S.String)
+// outputs live in the prose: `Answers ${AI.out(matches)}.` — no out-splices means void
 
 // PARAMETER — name + schema + doc, one term
-export const pattern = AI.Parameter("pattern", S.String)`A regex.`;
-const glob = AI.Parameter("glob", S.optionalKey(S.String))`Optional filter.`;
+export const pattern = AI.Thing("pattern", S.String)`A regex.`;
+const glob = AI.Thing("glob", S.optionalKey(S.String))`Optional filter.`;
 
 // SKILL — a craft, dormant until activated; teaching lives on the Layer
 export class Coding extends AI.Skill<Coding>()("Coding") {}

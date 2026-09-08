@@ -88,6 +88,10 @@ const renderType = (schema: any, depth = 0): string => {
     return schema.enum.map((value: any) => JSON.stringify(value)).join(" | ");
   }
   switch (schema.type) {
+    // not JSON schema — the driver's marker for a tool that answers
+    // nothing (see the mention building in DriverCore.ts)
+    case "void":
+      return "void";
     case "string":
       return "string";
     case "number":
@@ -114,29 +118,58 @@ const renderType = (schema: any, depth = 0): string => {
 };
 
 /**
+ * A DECLARED failure as a type the model can program against: the
+ * tagged shape `{ _tag: "NotFound"; message: string }` — the `_tag`
+ * is the literal the program catches on (`Effect.catchTag`, or a
+ * `_tag` check in a promise rejection handler), and the fields are
+ * whatever the error schema can describe (a `Schema.TaggedError`
+ * carries them; a `Data.TaggedError` contributes the tag alone).
+ */
+const renderErrorType = (error: {
+  readonly tag: string;
+  readonly fields?: unknown;
+}): string => {
+  const schema = (error.fields ?? {}) as {
+    properties?: Record<string, unknown>;
+    required?: ReadonlyArray<string>;
+  };
+  const properties = { ...schema.properties };
+  delete properties._tag; // ours to render — always the literal
+  const required = new Set(schema.required ?? []);
+  const fields = Object.entries(properties).map(
+    ([key, value]) =>
+      `${key}${required.has(key) ? "" : "?"}: ${renderType(value, 1)}`,
+  );
+  const tag = `_tag: ${JSON.stringify(error.tag)}`;
+  return fields.length === 0
+    ? `{ ${tag} }`
+    : `{ ${tag}; ${fields.join("; ")} }`;
+};
+
+/**
  * One `declare function` line per mention, with its doc as a comment —
  * plus a line per DECLARED failure, so the model can see what a call
  * may fail with and handle it. `wrap` reflects the convention's return
- * shape: it receives the success type and the union of error tags
- * (`never` when the tool declares none).
+ * shape: it receives the SUCCESS type (every tool declares one — an
+ * explicit `returns` schema or `${AI.out(…)}` splices; see ToolReturns
+ * in Tool.ts) and the union of the declared failures as TAGGED SHAPES
+ * (`{ _tag: "NotFound"; message: string } | …`, `never` when the tool
+ * declares none) — the effect convention puts that union in the
+ * `Effect<A, E>` error channel verbatim.
  */
-const renderSignature = (
+export const renderSignature = (
   mention: ToolMention,
   wrap: (returns: string, errors: string) => string,
 ): string => {
   const lines = mention.description.split("\n");
   for (const error of mention.errors) {
-    lines.push(
-      error.fields === undefined
-        ? `@throws ${error.tag}`
-        : `@throws ${error.tag} ${renderType(error.fields)}`,
-    );
+    lines.push(`@throws ${renderErrorType(error)}`);
   }
   const doc = lines.map((line) => `// ${line}`).join("\n");
   const errors =
     mention.errors.length === 0
       ? "never"
-      : mention.errors.map((error) => error.tag).join(" | ");
+      : mention.errors.map(renderErrorType).join(" | ");
   return `${doc}\ndeclare function ${mention.name}(input: ${renderType(
     mention.parameters,
   )}): ${wrap(renderType(mention.returns), errors)}`;

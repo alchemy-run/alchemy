@@ -22,7 +22,6 @@ import { VerificationGeneral } from "../src/process/Verification.ts";
 import { Bash } from "../src/coding/Bash.ts";
 import { CharterGuidanceGeneral } from "../src/CharterGuidance.ts";
 import { ToolGuidanceGeneral } from "../src/coding/ToolGuidance.ts";
-import { ProposalsGuidanceGeneral } from "../src/github/ProposalsGuidance.ts";
 import { OrgGuidanceGeneral, renderAgentsMd } from "../src/OrgGuidance.ts";
 import { SandboxGuidanceGeneral } from "../src/sandbox/SandboxGuidance.ts";
 
@@ -53,7 +52,6 @@ test("the domain guidance skills are prose — they splice sources and skills, n
     ToolGuidanceGeneral,
     CharterGuidanceGeneral,
     SandboxGuidanceGeneral,
-    ProposalsGuidanceGeneral,
     ProviderEngineeringGeneral,
     DistillationGeneral,
     AwsEmulationGeneral,
@@ -63,12 +61,7 @@ test("the domain guidance skills are prose — they splice sources and skills, n
   }
   // the entry skill names exactly the domain skills — the skill graph
   expect(new Set(names(OrgGuidanceGeneral.refs))).toEqual(
-    new Set([
-      "ToolGuidance",
-      "CharterGuidance",
-      "SandboxGuidance",
-      "ProposalsGuidance",
-    ]),
+    new Set(["ToolGuidance", "CharterGuidance", "SandboxGuidance"]),
   );
 });
 

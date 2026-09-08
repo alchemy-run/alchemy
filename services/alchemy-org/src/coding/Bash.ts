@@ -2,14 +2,14 @@ import * as AI from "alchemy/AI";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as S from "effect/Schema";
-import { truncateTail } from "../artifacts/Output.ts";
 import { Artifacts } from "../artifacts/Artifacts.ts";
+import { truncateTail } from "../artifacts/Output.ts";
 
-export const command = AI.Parameter("command", S.String)`
-A shell command run with 'sh -c' at the workspace root. Chain steps
-with '&&'; quote paths containing spaces.`;
+export const command = AI.Thing("command", S.String)`
+  A shell command run with 'sh -c' at the workspace root. Chain steps
+  with '&&'; quote paths containing spaces.`;
 
-const timeout = AI.Parameter(
+const timeout = AI.Thing(
   "timeout",
   S.optionalKey(
     S.Int.pipe(
@@ -17,20 +17,30 @@ const timeout = AI.Parameter(
     ),
   ),
 )`
-Timeout in seconds (1-3600, default 60). Increase it for long builds
-or test suites.`;
+  Timeout in seconds (1-3600, default 60). Increase it for long builds
+  or test suites.`;
+
+const exitCode = AI.Thing("exitCode", S.Int)`
+  The command's exit code — 0 is success.`;
+
+const stdout = AI.Thing("stdout", S.String)`
+  The command's stdout, tail-truncated to the last 2000 lines / 50KB
+  (the end of a build or test log is where the verdict is). When
+  truncated, the full stream is retained and the note at the end names
+  the opaque artifact ID readOutput can page.`;
+
+const stderr = AI.Thing("stderr", S.String)`
+  The command's stderr, truncated and retained exactly like stdout.`;
 
 export class Bash extends (AI.Tool<Bash>(import.meta)("bash")`
-Run ${command} and return its exit code, stdout, and stderr,
-tail-truncated to the last 2000 lines / 50KB (the end of a build or
-test log is where the verdict is). Set ${timeout} for long test
-runs. Do NOT use bash for file operations — use grep instead of
-grep/rg/find, readFile instead of cat/head/tail, and
-editFile/writeFile instead of sed/awk/echo-redirection; the
-dedicated tools are cheaper, safer, and truncate for you. Prefer a
-single command chained with '&&' over multiple calls. If output is
-truncated, use readOutput with the returned opaque ID. The test suite
-is the only oracle of done-ness.`) {}
+  Run ${command} — answers ${AI.out(exitCode, stdout, stderr)}. Set
+  ${timeout} for long test runs. Do NOT use bash for file operations —
+  use grep instead of grep/rg/find, readFile instead of cat/head/tail,
+  and editFile/writeFile instead of sed/awk/echo-redirection; the
+  dedicated tools are cheaper, safer, and truncate for you. Prefer a
+  single command chained with '&&' over multiple calls. If output is
+  truncated, use readOutput with the returned opaque ID. The test suite
+  is the only oracle of done-ness.`) {}
 
 const DEFAULT_TIMEOUT_SECONDS = 60;
 const MAX_LINES = 2000;
@@ -77,13 +87,11 @@ export const BashLive = Layer.effect(
           result.stderr,
           result.stderrTruncated,
         );
-        return (
-          `exit: ${result.exitCode}\n` +
-          `--- stdout ---\n${stdout.text || "(no output)"}` +
-          stdout.note +
-          `\n--- stderr ---\n${stderr.text || "(no output)"}` +
-          stderr.note
-        );
+        return {
+          exitCode: result.exitCode,
+          stdout: stdout.text + stdout.note,
+          stderr: stderr.text + stderr.note,
+        };
       })) as never;
   }),
 );
