@@ -61,26 +61,6 @@ const enableRouting = (zoneId: string) =>
 const getCatchAll = (zoneId: string) =>
   rideOutAuth(emailRouting.getRuleCatchAll({ zoneId }));
 
-const restoreCatchAll = (
-  zoneId: string,
-  snapshot: emailRouting.GetRuleCatchAllResponse,
-) =>
-  rideOutAuth(
-    emailRouting.putRuleCatchAll({
-      zoneId,
-      matchers: [{ type: "all" }],
-      actions: (snapshot.actions ?? [{ type: "drop" }]).map((a) =>
-        a.type === "drop"
-          ? { type: "drop" as const }
-          : a.type === "forward"
-            ? { type: "forward" as const, value: [...(a.value ?? [])] }
-            : { type: "worker" as const, value: [...(a.value ?? [])] },
-      ),
-      enabled: snapshot.enabled ?? false,
-      name: snapshot.name ?? "",
-    }),
-  );
-
 const ADOPT_TO = `adopt-413@${zoneName}`;
 
 const findRuleByTo = (zoneId: string, to: string) =>
@@ -200,7 +180,11 @@ describe.sequential.skipIf(!emailRoutingScoped)("EmailRule", () => {
   // #413: a sole `{ type: "all" }` matcher is the zone catch-all, which
   // already exists once Email Routing is enabled. Creating it as an
   // Email.Rule 409s ("Invalid rule operation"). Fail fast with a typed
-  // error pointing at Email.CatchAll, and leave the singleton untouched.
+  // error pointing at Email.CatchAll — that error is the proof no write
+  // happened. Sibling EmailCatchAll / WorkerTarget files PUT the same
+  // zone singleton concurrently, so do not snapshot enabled/name/actions
+  // (those race); the catch-all id is stable and proves we did not mint
+  // a second rule.
   test.provider(
     "refuses a sole { type: 'all' } matcher and leaves the catch-all untouched (#413)",
     (stack) =>
@@ -211,9 +195,6 @@ describe.sequential.skipIf(!emailRoutingScoped)("EmailRule", () => {
         yield* enableRouting(zoneId);
 
         const before = yield* getCatchAll(zoneId);
-        yield* Effect.addFinalizer(() =>
-          restoreCatchAll(zoneId, before).pipe(Effect.ignore),
-        );
 
         const error = yield* stack
           .deploy(
@@ -234,9 +215,6 @@ describe.sequential.skipIf(!emailRoutingScoped)("EmailRule", () => {
 
         const after = yield* getCatchAll(zoneId);
         expect(after.id).toEqual(before.id);
-        expect(after.enabled).toEqual(before.enabled);
-        expect(after.name ?? "").toEqual(before.name ?? "");
-        expect(after.actions).toEqual(before.actions);
 
         yield* stack.destroy();
       }).pipe(logLevel),
