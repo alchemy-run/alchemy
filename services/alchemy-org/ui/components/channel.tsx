@@ -505,7 +505,8 @@ export const ChannelView = ({
           onContextMenu={() => setMenuIds(selection.target(message.id))}
           className={cn(
             "-mx-2 rounded-md border-l-2 border-transparent px-1.5 transition-colors",
-            selected && "border-primary/60 bg-accent/60",
+            // the row under the pointer lifts; a selected one stays lit
+            selected ? "border-primary/60 bg-accent/60" : "hover:bg-accent/70",
             flash === message.seq && "bg-primary/15",
           )}
         >

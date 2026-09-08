@@ -797,8 +797,11 @@ const ChatTranscript = ({
                     setMenuIds(selection.target(message.id))
                   }
                   className={cn(
-                    "-mx-2 flex items-start gap-2 rounded-md border-l-2 border-transparent px-1.5 transition-colors",
-                    selection.has(message.id) && "border-primary/60 bg-accent/60",
+                    "-mx-2 -my-1.5 flex items-start gap-2 rounded-md border-l-2 border-transparent px-1.5 py-1.5 transition-colors",
+                    // the row under the pointer lifts; a selected one stays lit
+                    selection.has(message.id)
+                      ? "border-primary/60 bg-accent/60"
+                      : "hover:bg-accent/70",
                   )}
                 >
                   {/* wall-clock gutter — the observation's `at` */}
