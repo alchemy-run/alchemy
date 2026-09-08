@@ -36,6 +36,8 @@ export interface ChannelMessage {
   readonly thread?: string;
   readonly placed?: boolean;
   readonly card?: ChannelCard;
+  /** The messages this one answers (an inline reply) — ids. */
+  readonly replyTo?: ReadonlyArray<string>;
 }
 
 /* ── the directory (the rail) ─────────────────────────────────────── */
@@ -157,11 +159,17 @@ export const anchorLabel = (anchor: Anchor): string => {
 
 /* ── API calls ────────────────────────────────────────────────────── */
 
-export const postChannel = (text: string): Promise<Response> =>
+/** Post to the channel; `replyTo` names the messages it answers. */
+export const postChannel = (
+  text: string,
+  replyTo: ReadonlyArray<string> = [],
+): Promise<Response> =>
   fetch("/api/channel", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ text }),
+    body: JSON.stringify(
+      replyTo.length === 0 ? { text } : { text, replyTo },
+    ),
   });
 
 export const steerThread = (id: string, text: string): Promise<Response> =>
@@ -169,4 +177,33 @@ export const steerThread = (id: string, text: string): Promise<Response> =>
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ text }),
+  });
+
+/** Delete a thread — its state, its agent sessions, its machine. The
+ *  channel rows it placed stay (untagged); the rail drops it over the
+ *  socket's next `directory` frame. */
+export const deleteThread = (id: string): Promise<Response> =>
+  fetch(`/api/threads/${encodeURIComponent(id)}`, { method: "DELETE" });
+
+/** Delete channel messages (a selection) — every open view drops them
+ *  over the socket's `remove` frame. */
+export const deleteChannelMessages = (
+  ids: ReadonlyArray<string>,
+): Promise<Response> =>
+  fetch("/api/channel/messages", {
+    method: "DELETE",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ ids }),
+  });
+
+/** Delete chat messages (a thread's transcript rows) by UIMessage id
+ *  — the server redacts the whole burst behind each. */
+export const deleteChatMessages = (
+  sessionId: string,
+  ids: ReadonlyArray<string>,
+): Promise<Response> =>
+  fetch(`/api/chats/${encodeURIComponent(sessionId)}/messages`, {
+    method: "DELETE",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ ids }),
   });

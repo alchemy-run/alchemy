@@ -135,38 +135,46 @@ export const App = () => {
     navigate(threadPath(id));
   }, []);
 
-  // DELETE a thread — from the sidebar or its own pane. Destructive
-  // and unrecoverable (the transcript, the subagents, the machine), so
-  // one confirm stands between the click and the erase. Afterwards the
-  // page is forgotten (its sockets close with it), so are the ptys it
-  // opened (the machine is gone), and a view that was ON the thread
-  // falls back to the channel.
-  const removeThread = useCallback(
-    (id: string) => {
-      const name = directory.find((row) => row.id === id)?.name ?? id;
+  // DELETE threads — one from its pane, one or a selection from the
+  // sidebar's menu. Destructive and unrecoverable (the transcript, the
+  // subagents, the machine), so one confirm stands between the click
+  // and the erase. Afterwards each page is forgotten (its sockets
+  // close with it), so are the ptys it opened (the machine is gone),
+  // and a view that was ON a deleted thread falls back to the channel.
+  const removeThreads = useCallback(
+    (ids: ReadonlyArray<string>) => {
+      if (ids.length === 0) return;
+      const nameOf = (id: string) =>
+        directory.find((row) => row.id === id)?.name ?? id;
+      const what =
+        ids.length === 1
+          ? `thread "${nameOf(ids[0]!)}"? Its`
+          : `${ids.length} threads (${ids.map(nameOf).join(", ")})? Their`;
       if (
         !window.confirm(
-          `Delete thread "${name}"? Its conversation, subagents, and machine are erased. The channel keeps its messages.`,
+          `Delete ${what} conversation, subagents, and machine are erased. The channel keeps its messages.`,
         )
       ) {
         return;
       }
-      void deleteThread(id).then((response) => {
-        if (!response.ok) return;
-        setVisited((current) => current.filter((entry) => entry !== id));
-        setTerminals((current) => {
-          const { [id]: _dropped, ...rest } = current;
-          try {
-            localStorage.setItem(TERMINALS_KEY, JSON.stringify(rest));
-          } catch {
-            // storage disabled — nothing to forget
+      for (const id of ids) {
+        void deleteThread(id).then((response) => {
+          if (!response.ok) return;
+          setVisited((current) => current.filter((entry) => entry !== id));
+          setTerminals((current) => {
+            const { [id]: _dropped, ...rest } = current;
+            try {
+              localStorage.setItem(TERMINALS_KEY, JSON.stringify(rest));
+            } catch {
+              // storage disabled — nothing to forget
+            }
+            return rest;
+          });
+          if (route.kind === "thread" && route.id === id) {
+            navigate(pathOf({ kind: "channel" }));
           }
-          return rest;
         });
-        if (route.kind === "thread" && route.id === id) {
-          navigate(pathOf({ kind: "channel" }));
-        }
-      });
+      }
     },
     [directory, route],
   );
@@ -283,7 +291,7 @@ export const App = () => {
             channelSelected={route.kind === "channel"}
             onOpenChannel={() => navigate(pathOf({ kind: "channel" }))}
             onOpenThread={openThread}
-            onDeleteThread={removeThread}
+            onDeleteThreads={removeThreads}
           />
         </Rail>
         <main className="relative flex min-w-0 flex-1 flex-col">
@@ -355,7 +363,7 @@ export const App = () => {
                     }));
                     navigate(threadPath(id));
                   }}
-                  onDeleteThread={() => removeThread(id)}
+                  onDeleteThread={() => removeThreads([id])}
                 />
               </div>
             );

@@ -95,8 +95,10 @@ export class FakeApi {
   /** The log, seq-dense from 1. */
   messages: ChannelMessage[] = [];
   directory: ThreadDirectoryRow[] = [];
-  /** Every `POST /api/channel` body, in order. */
+  /** Every `POST /api/channel` text, in order. */
   posts: string[] = [];
+  /** Every `POST /api/channel` that replied — `{ text, replyTo }`. */
+  replies: Array<{ text: string; replyTo: string[] }> = [];
   /** The live `/channel` sockets (the app opens one). */
   private channelSockets: WebSocketRoute[] = [];
 
@@ -162,6 +164,23 @@ export class FakeApi {
     return message;
   }
 
+  /** Every id `DELETE /api/channel/messages` named, in order. */
+  deletedMessages: string[] = [];
+
+  /** Delete messages and push the `remove` frame — what the Worker's
+   *  DO does when the operator deletes rows. */
+  removeMessages(ids: ReadonlyArray<string>): void {
+    const drop = new Set(ids);
+    const seqs = this.messages
+      .filter((message) => drop.has(message.id))
+      .map((message) => message.seq);
+    if (seqs.length === 0) return;
+    this.messages = this.messages.filter((message) => !drop.has(message.id));
+    for (const socket of this.channelSockets) {
+      socket.send(JSON.stringify({ type: "remove", seqs }));
+    }
+  }
+
   /** Amend a message in place and push the `update` frame. */
   amendMessage(seq: number, patch: Partial<ChannelMessage>): void {
     this.messages = this.messages.map((message) =>
@@ -189,6 +208,8 @@ export class FakeApi {
   steered: Array<{ thread: string; text: string }> = [];
   /** Every `POST /api/threads/:id/close`, in order. */
   closedThreads: string[] = [];
+  /** Every `DELETE /api/threads/:id`, in order. */
+  deletedThreads: string[] = [];
   private threadSockets: Record<string, WebSocketRoute[]> = {};
 
   seedThread(partial: Partial<ThreadState> & { id: string }): ThreadState {
@@ -248,6 +269,9 @@ export class FakeApi {
   /** Durable observations per chat id, in seq order — what the socket
    *  replays when the transcript view subscribes. */
   transcripts: Record<string, unknown[]> = {};
+
+  /** Every `DELETE /api/chats/:id/messages/:mid`, in order. */
+  deletedChatMessages: Array<{ id: string; messageId: string }> = [];
 
   /**
    * One finished turn in chat `id`: the user asks, the agent calls one
@@ -467,18 +491,32 @@ export class FakeApi {
       });
     }
     if (path === "/api/channel" && method === "POST") {
-      const body = (request.postDataJSON() ?? {}) as { text?: string };
+      const body = (request.postDataJSON() ?? {}) as {
+        text?: string;
+        replyTo?: string[];
+      };
       const text = body.text ?? "";
       this.posts.push(text);
+      const replyTo = body.replyTo ?? [];
+      if (replyTo.length > 0) this.replies.push({ text, replyTo });
       this.pushMessage({
         kind: "user",
         text,
         author: { login: "sam-goodwin" },
+        ...(replyTo.length > 0 ? { replyTo } : {}),
       });
       return this.json(route, {});
     }
     if (path === "/api/channel/directory") {
       return this.json(route, this.directory);
+    }
+
+    if (path === "/api/channel/messages" && method === "DELETE") {
+      const body = (request.postDataJSON() ?? {}) as { ids?: string[] };
+      const ids = body.ids ?? [];
+      this.deletedMessages.push(...ids);
+      this.removeMessages(ids);
+      return this.json(route, { deleted: ids.length });
     }
 
     const thread = path.match(/^\/api\/threads\/([^/]+)(\/(close))?$/);
@@ -492,6 +530,21 @@ export class FakeApi {
         this.closedThreads.push(id);
         this.updateThread(id, { status: "closed" });
         return this.json(route, {});
+      }
+      if (method === "DELETE") {
+        // the thread is erased; the rail learns over the directory
+        // frame, the channel rows it placed lose their tag
+        this.deletedThreads.push(id);
+        const { [id]: _dropped, ...rest } = this.threads;
+        this.threads = rest;
+        this.directory = this.directory.filter((row) => row.id !== id);
+        this.messages = this.messages.map((message) =>
+          message.thread === id && message.placed === true
+            ? { ...message, thread: undefined, placed: undefined }
+            : message,
+        );
+        this.pushDirectory();
+        return this.json(route, { ok: true });
       }
       if (method === "POST") {
         // POST /api/threads/:id — steer: words into the thread agent
@@ -531,6 +584,33 @@ export class FakeApi {
       }
       this.pullLoads.push(number);
       return this.json(route, view);
+    }
+
+    const chatDelete = path.match(/^\/api\/chats\/([^/]+)\/messages$/);
+    if (chatDelete !== null && method === "DELETE") {
+      const id = decodeURIComponent(chatDelete[1]!);
+      const body = (request.postDataJSON() ?? {}) as { ids?: string[] };
+      for (const messageId of body.ids ?? []) {
+        this.deletedChatMessages.push({ id, messageId });
+        // redact the span the way the Worker does: `u-<seq>` takes the
+        // one input, `a-<seq>` the burst up to the next input
+        const seq = Number(messageId.split("-")[1]);
+        const rows = (this.transcripts[id] ?? []) as Array<{
+          seq: number;
+          type: string;
+        }>;
+        const isBurst = messageId.startsWith("a-");
+        const nextInput = rows.find(
+          (row) => row.seq > seq && row.type === "input",
+        )?.seq;
+        this.transcripts[id] = rows.filter((row) =>
+          isBurst
+            ? row.seq < seq ||
+              (nextInput !== undefined && row.seq >= nextInput)
+            : row.seq !== seq,
+        );
+      }
+      return this.json(route, { deleted: (body.ids ?? []).length });
     }
 
     const chat = path.match(/^\/api\/chats\/([^/]+)\/(messages|log)$/);

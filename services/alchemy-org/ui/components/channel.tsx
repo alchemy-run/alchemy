@@ -19,29 +19,100 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Rail } from "@/components/rail";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import type { ChannelMessage, ThreadDirectoryRow } from "@/lib/channel";
-import { deleteChannelMessage, postChannel } from "@/lib/channel";
+import { deleteChannelMessages, postChannel } from "@/lib/channel";
+import { onRowMouseDown, skipRowClick, useSelection } from "@/lib/selection";
 import { cn } from "@/lib/utils";
 import {
   ArrowUp,
   ChevronDown,
+  Copy,
+  CornerUpLeft,
   FileDiff,
   MessageCircle,
+  Reply,
+  SquareArrowOutUpRight,
   Terminal,
   Trash2,
   X,
 } from "lucide-react";
 import {
   memo,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
+  type MouseEvent,
   type ReactNode,
 } from "react";
 import { AlchemyMark } from "@/components/app-header";
+
+/* ── replies ──────────────────────────────────────────────────────── */
+
+/** Who a message reads as — for quoting it. */
+const whoOf = (message: ChannelMessage): string =>
+  message.author?.login ??
+  (message.kind === "agent"
+    ? "channel"
+    : message.kind === "card"
+      ? message.card?.title ?? "card"
+      : "event");
+
+/** One line of a message, for a quote. */
+const excerptOf = (text: string): string => {
+  const line = text.trim().split("\n")[0] ?? "";
+  return line.length > 140 ? `${line.slice(0, 140)}…` : line;
+};
+
+/** The quoted originals above a reply — each jumps to its message;
+ *  a deleted original says so. */
+const ReplyQuotes = ({
+  ids,
+  byId,
+  onJump,
+}: {
+  ids: ReadonlyArray<string>;
+  byId: ReadonlyMap<string, ChannelMessage>;
+  onJump: (seq: number) => void;
+}) => (
+  <div className="mb-0.5 flex flex-col gap-0.5">
+    {ids.map((id) => {
+      const original = byId.get(id);
+      return (
+        <button
+          key={id}
+          type="button"
+          disabled={original === undefined}
+          onClick={() => original !== undefined && onJump(original.seq)}
+          title={original === undefined ? undefined : "Jump to the message"}
+          className="flex min-w-0 max-w-full cursor-pointer items-center gap-1.5 text-left text-[11px] text-muted-foreground hover:text-foreground disabled:cursor-default disabled:hover:text-muted-foreground"
+        >
+          <CornerUpLeft className="size-3 shrink-0" />
+          {original === undefined ? (
+            <span className="italic">original message deleted</span>
+          ) : (
+            <>
+              <span className="shrink-0 font-medium">{whoOf(original)}</span>
+              <span className="min-w-0 truncate">
+                {excerptOf(original.text)}
+              </span>
+            </>
+          )}
+        </button>
+      );
+    })}
+  </div>
+);
 
 /* ── rows ─────────────────────────────────────────────────────────── */
 
@@ -133,11 +204,14 @@ const UserRow = memo(
     working,
     runOpen,
     onToggleRun,
+    quotes,
   }: {
     message: ChannelMessage;
     working: boolean;
     runOpen: boolean;
     onToggleRun: () => void;
+    /** The originals this message replies to, rendered above it. */
+    quotes?: ReactNode;
   }) => {
     const login = message.author?.login;
     return (
@@ -152,6 +226,7 @@ const UserRow = memo(
           </AvatarFallback>
         </Avatar>
         <div className="min-w-0 flex-1">
+          {quotes}
           <div className="flex items-baseline gap-2">
             <span className="text-[13px] font-semibold">
               {login ?? "you"}
@@ -282,25 +357,28 @@ const CardRow = memo(
 );
 CardRow.displayName = "CardRow";
 
-/** The hover-revealed delete on every row — its own column beside
- *  the text (never over it), shown on hover without shifting layout.
- *  Confirmed, then the DO broadcasts the removal so the row vanishes
- *  from every open view at once. */
-const DeleteMessageButton = ({ id }: { id: string }) => (
-  <button
-    type="button"
-    onClick={() => {
-      if (window.confirm("Delete this message from the channel?")) {
-        void deleteChannelMessage(id);
-      }
-    }}
-    aria-label="Delete message"
-    title="Delete this message"
-    className="invisible mt-0.5 flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground group-hover:visible hover:bg-accent hover:text-destructive"
-  >
-    <Trash2 className="size-3.5" />
-  </button>
-);
+/** Confirm, then delete — the DO broadcasts the removal so the rows
+ *  vanish from every open view at once. Deferred a tick so the menu
+ *  that asked has closed before the confirm blocks. */
+const confirmDeleteMessages = (ids: ReadonlyArray<string>) => {
+  if (ids.length === 0) return;
+  setTimeout(() => {
+    if (
+      window.confirm(
+        ids.length === 1
+          ? "Delete this message from the channel?"
+          : `Delete ${ids.length} messages from the channel?`,
+      )
+    ) {
+      void deleteChannelMessages(ids);
+    }
+  }, 0);
+};
+
+/** Put the messages' text on the clipboard, blank-line separated. */
+const copyText = (texts: ReadonlyArray<string>) => {
+  void navigator.clipboard?.writeText(texts.join("\n\n")).catch(() => {});
+};
 
 /* ── the view ─────────────────────────────────────────────────────── */
 
@@ -331,6 +409,40 @@ export const ChannelView = ({
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const stickRef = useRef(true);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // SELECTION over the stream (click / ⌘ / ⇧), the ids the open
+  // context menu acts on, and the inline reply being composed
+  const order = useMemo(() => messages.map((message) => message.id), [messages]);
+  const byId = useMemo(
+    () => new Map(messages.map((message) => [message.id, message] as const)),
+    [messages],
+  );
+  const selection = useSelection(order, { onDelete: confirmDeleteMessages });
+  const [menuIds, setMenuIds] = useState<ReadonlyArray<string>>([]);
+  const [replyTo, setReplyTo] = useState<ReadonlyArray<string>>([]);
+  // a reply's originals that were deleted meanwhile drop out of it
+  useEffect(() => {
+    setReplyTo((current) => {
+      const alive = current.filter((id) => byId.has(id));
+      return alive.length === current.length ? current : alive;
+    });
+  }, [byId]);
+  const startReply = useCallback((ids: ReadonlyArray<string>) => {
+    setReplyTo(ids);
+    selection.clear();
+    // the next frame — the menu is still closing on this one
+    setTimeout(() => textareaRef.current?.focus(), 0);
+  }, [selection]);
+
+  // jump to a quoted message: scroll it into view and flash it
+  const [flash, setFlash] = useState<number | undefined>(undefined);
+  const jumpTo = useCallback((seq: number) => {
+    scrollRef.current
+      ?.querySelector(`[data-seq="${seq}"]`)
+      ?.scrollIntoView({ block: "center", behavior: "smooth" });
+    setFlash(seq);
+    setTimeout(() => setFlash((current) => (current === seq ? undefined : current)), 1500);
+  }, []);
 
   // stick to the bottom while the user is there; never yank them up
   useEffect(() => {
@@ -372,12 +484,27 @@ export const ChannelView = ({
           </div>,
         );
       }
-      // every row deletes the same way: hover, trash, gone — the
-      // socket's remove frame drops it from every open view
+      // every row is SELECTABLE (click, ⌘-click, ⇧-click) and carries
+      // the context menu; the menu acts on the selection it lands in
+      const selected = selection.has(message.id);
       const wrap = (node: ReactNode) => (
-        <div key={message.seq} className="group flex items-start">
-          <div className="min-w-0 flex-1">{node}</div>
-          <DeleteMessageButton id={message.id} />
+        <div
+          key={message.seq}
+          data-seq={message.seq}
+          data-message-id={message.id}
+          data-selected={selected ? "" : undefined}
+          onMouseDown={onRowMouseDown}
+          onClick={(event: MouseEvent) => {
+            if (!skipRowClick(event)) selection.click(message.id, event);
+          }}
+          onContextMenu={() => setMenuIds(selection.target(message.id))}
+          className={cn(
+            "-mx-2 rounded-md border-l-2 border-transparent px-1.5 transition-colors",
+            selected && "border-primary/60 bg-accent/60",
+            flash === message.seq && "bg-primary/15",
+          )}
+        >
+          {node}
         </div>
       );
       switch (message.kind) {
@@ -403,6 +530,16 @@ export const ChannelView = ({
                   setRunSeq((current) =>
                     current === message.seq ? undefined : message.seq,
                   )
+                }
+                quotes={
+                  message.replyTo !== undefined &&
+                  message.replyTo.length > 0 ? (
+                    <ReplyQuotes
+                      ids={message.replyTo}
+                      byId={byId}
+                      onJump={jumpTo}
+                    />
+                  ) : undefined
                 }
               />,
             ),
@@ -434,18 +571,27 @@ export const ChannelView = ({
     runSeq,
     onOpenThread,
     onOpenReview,
+    selection,
+    byId,
+    flash,
+    jumpTo,
   ]);
 
   const send = () => {
     const text = draft.trim();
     if (text.length === 0 || sending) return;
     setSending(true);
-    void postChannel(text)
+    void postChannel(text, replyTo)
       .then((response) => {
-        if (response.ok) setDraft("");
+        if (response.ok) {
+          setDraft("");
+          setReplyTo([]);
+        }
       })
       .finally(() => setSending(false));
   };
+
+  const many = menuIds.length > 1 ? `${menuIds.length} messages` : undefined;
 
   return (
     <div className="flex min-h-0 flex-1">
@@ -460,26 +606,106 @@ export const ChannelView = ({
           }}
           className="min-h-0 flex-1 overflow-y-auto"
         >
-          <div className="mx-auto flex max-w-4xl flex-col px-4 py-4">
-            {rows.length === 0 && (
-              <div className="flex flex-col items-center gap-2 py-16 text-muted-foreground">
-                {live ? (
-                  <>
-                    <AlchemyMark className="size-8 opacity-40" />
-                    <span className="text-sm">
-                      The channel is empty — events land here as they happen.
-                    </span>
-                  </>
-                ) : (
-                  <Spinner className="size-5" />
+          {/* ONE menu for the stream; the row under the pointer picks
+              the ids (its own, or the selection it belongs to) */}
+          <ContextMenu>
+            <ContextMenuTrigger asChild>
+              <div
+                onContextMenu={(event) => {
+                  // off a row there is nothing to act on — no menu
+                  if (
+                    !(event.target instanceof Element) ||
+                    event.target.closest("[data-seq]") === null
+                  ) {
+                    event.preventDefault();
+                  }
+                }}
+                className="mx-auto flex max-w-4xl flex-col px-4 py-4"
+              >
+                {rows.length === 0 && (
+                  <div className="flex flex-col items-center gap-2 py-16 text-muted-foreground">
+                    {live ? (
+                      <>
+                        <AlchemyMark className="size-8 opacity-40" />
+                        <span className="text-sm">
+                          The channel is empty — events land here as they
+                          happen.
+                        </span>
+                      </>
+                    ) : (
+                      <Spinner className="size-5" />
+                    )}
+                  </div>
                 )}
+                {rows}
               </div>
-            )}
-            {rows}
-          </div>
+            </ContextMenuTrigger>
+            <ContextMenuContent>
+              <ContextMenuItem onSelect={() => startReply(menuIds)}>
+                <Reply />
+                {many === undefined ? "Reply" : `Reply to ${many}`}
+              </ContextMenuItem>
+              <ContextMenuItem
+                onSelect={() =>
+                  copyText(menuIds.map((id) => byId.get(id)?.text ?? ""))
+                }
+              >
+                <Copy />
+                Copy text
+              </ContextMenuItem>
+              <ContextMenuSeparator />
+              <ContextMenuItem
+                variant="destructive"
+                onSelect={() => confirmDeleteMessages(menuIds)}
+              >
+                <Trash2 />
+                {many === undefined ? "Delete" : `Delete ${many}`}
+              </ContextMenuItem>
+            </ContextMenuContent>
+          </ContextMenu>
         </div>
         <div className="mx-auto w-full max-w-4xl px-4 pb-4">
           <div className="relative rounded-lg border border-border bg-card shadow-xs focus-within:ring-1 focus-within:ring-ring">
+            {/* the reply bar — what the message will answer */}
+            {replyTo.length > 0 && (
+              <div
+                aria-label="Replying to"
+                className="flex flex-col gap-0.5 border-b border-border px-3 py-1.5"
+              >
+                {replyTo.map((id) => {
+                  const original = byId.get(id)!;
+                  return (
+                    <div
+                      key={id}
+                      className="flex items-center gap-1.5 text-[11px] text-muted-foreground"
+                    >
+                      <CornerUpLeft className="size-3 shrink-0" />
+                      <span className="shrink-0">
+                        Replying to{" "}
+                        <span className="font-medium text-foreground">
+                          {whoOf(original)}
+                        </span>
+                      </span>
+                      <span className="min-w-0 flex-1 truncate">
+                        {excerptOf(original.text)}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setReplyTo((current) =>
+                            current.filter((entry) => entry !== id),
+                          )
+                        }
+                        aria-label={`Stop replying to ${whoOf(original)}`}
+                        className="flex size-5 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
+                      >
+                        <X className="size-3" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
             <Textarea
               ref={textareaRef}
               value={draft}
@@ -488,9 +714,16 @@ export const ChannelView = ({
                 if (event.key === "Enter" && !event.shiftKey) {
                   event.preventDefault();
                   send();
+                } else if (event.key === "Escape" && replyTo.length > 0) {
+                  event.preventDefault();
+                  setReplyTo([]);
                 }
               }}
-              placeholder="Message the channel — the agent routes, you decide…"
+              placeholder={
+                replyTo.length > 0
+                  ? "Reply…"
+                  : "Message the channel — the agent routes, you decide…"
+              }
               aria-label="Message the channel"
               className="min-h-12 resize-none border-0 bg-transparent pr-12 shadow-none focus-visible:ring-0"
             />
@@ -573,15 +806,16 @@ export const ThreadList = ({
   channelSelected,
   onOpenChannel,
   onOpenThread,
-  onDeleteThread,
+  onDeleteThreads,
 }: {
   directory: ReadonlyArray<ThreadDirectoryRow>;
   selected: string | undefined;
   channelSelected: boolean;
   onOpenChannel: () => void;
   onOpenThread: (id: string) => void;
-  /** The row's hover trash — the shell confirms and erases. */
-  onDeleteThread: (id: string) => void;
+  /** The menu's delete (one thread or a selection) — the shell
+   *  confirms and erases. */
+  onDeleteThreads: (ids: ReadonlyArray<string>) => void;
 }) => {
   const groups = useMemo(() => {
     const open = directory.filter((row) => row.status === "open");
@@ -599,8 +833,33 @@ export const ThreadList = ({
     ].filter(([, rows]) => rows.length > 0);
   }, [directory]);
 
+  // SELECTION over the rows as listed (⌘/⇧-click select without
+  // opening; a plain click opens AND selects) and the context menu
+  const order = useMemo(
+    () => groups.flatMap(([, rows]) => rows.map((row) => row.id)),
+    [groups],
+  );
+  const pick = useSelection(order, { onDelete: onDeleteThreads });
+  const [menuIds, setMenuIds] = useState<ReadonlyArray<string>>([]);
+  const many =
+    menuIds.length > 1 ? `${menuIds.length} threads` : undefined;
+
   return (
-    <nav aria-label="Threads" className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto p-2">
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+    <nav
+      aria-label="Threads"
+      onContextMenu={(event) => {
+        // off a row there is nothing to act on — no menu
+        if (
+          !(event.target instanceof Element) ||
+          event.target.closest("[data-thread]") === null
+        ) {
+          event.preventDefault();
+        }
+      }}
+      className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto p-2"
+    >
       <button
         type="button"
         onClick={onOpenChannel}
@@ -621,51 +880,60 @@ export const ThreadList = ({
             {turn === "closed" ? "Closed" : TURN_LABEL[turn]}
           </div>
           {rows.map((row) => (
-            // the row: the nav button plus a hover trash beside it (its
-            // own column — never over the name, no layout shift)
-            <div
+            <button
               key={row.id}
+              type="button"
+              data-thread={row.id}
+              data-selected={pick.has(row.id) ? "" : undefined}
+              onClick={(event) => {
+                if (!pick.click(row.id, event)) onOpenThread(row.id);
+              }}
+              onContextMenu={() => setMenuIds(pick.target(row.id))}
+              aria-current={selected === row.id ? "page" : undefined}
+              title={row.title}
               className={cn(
-                "group flex items-center rounded-md",
-                selected === row.id ? "bg-accent" : "hover:bg-accent/60",
+                "flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm",
+                selected === row.id
+                  ? "bg-accent font-medium text-foreground"
+                  : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
+                pick.has(row.id) && "bg-primary/10 text-foreground",
+                turn === "closed" && "opacity-60",
               )}
             >
-              <button
-                type="button"
-                onClick={() => onOpenThread(row.id)}
-                aria-current={selected === row.id ? "page" : undefined}
-                title={row.title}
+              <span
                 className={cn(
-                  "flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 text-left text-sm",
-                  selected === row.id
-                    ? "font-medium text-foreground"
-                    : "text-muted-foreground group-hover:text-foreground",
-                  turn === "closed" && "opacity-60",
+                  "size-2 shrink-0 rounded-full",
+                  turn === "closed"
+                    ? "bg-muted-foreground/30"
+                    : TURN_DOT[row.turn],
                 )}
-              >
-                <span
-                  className={cn(
-                    "size-2 shrink-0 rounded-full",
-                    turn === "closed"
-                      ? "bg-muted-foreground/30"
-                      : TURN_DOT[row.turn],
-                  )}
-                />
-                <span className="min-w-0 flex-1 truncate">{row.name}</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => onDeleteThread(row.id)}
-                aria-label={`Delete thread ${row.name}`}
-                title="Delete the thread — its conversation, subagents, and machine are erased"
-                className="invisible mr-1 flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground group-hover:visible hover:bg-accent hover:text-destructive"
-              >
-                <Trash2 className="size-3.5" />
-              </button>
-            </div>
+              />
+              <span className="min-w-0 flex-1 truncate">{row.name}</span>
+            </button>
           ))}
         </div>
       ))}
     </nav>
+      </ContextMenuTrigger>
+      <ContextMenuContent>
+        {menuIds.length === 1 && (
+          <>
+            <ContextMenuItem onSelect={() => onOpenThread(menuIds[0]!)}>
+              <SquareArrowOutUpRight />
+              Open
+            </ContextMenuItem>
+            <ContextMenuSeparator />
+          </>
+        )}
+        <ContextMenuItem
+          variant="destructive"
+          // deferred a tick so the menu has closed before the confirm
+          onSelect={() => setTimeout(() => onDeleteThreads(menuIds), 0)}
+        >
+          <Trash2 />
+          {many === undefined ? "Delete thread" : `Delete ${many}`}
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
   );
 };

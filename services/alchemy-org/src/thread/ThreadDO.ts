@@ -113,6 +113,14 @@ interface ThreadRpc extends MainRpc<Cloudflare.DurableObjectState> {
     readonly title?: string;
   }) => Effect.Effect<ThreadState, never, RuntimeContext>;
   readonly close: () => Effect.Effect<ThreadState, never, RuntimeContext>;
+  /** Erase this thread: the last snapshot (for the caller to unwind
+   *  the channel projections), then every row is gone and watchers
+   *  are closed. `undefined` when the thread never existed. */
+  readonly destroy: () => Effect.Effect<
+    ThreadState | undefined,
+    never,
+    RuntimeContext
+  >;
 }
 
 const ThreadDOLive = Cloudflare.DurableObject<ThreadRpc>()(
@@ -121,14 +129,13 @@ const ThreadDOLive = Cloudflare.DurableObject<ThreadRpc>()(
     const state = yield* Cloudflare.DurableObjectState;
     const sql = state.storage.sql;
 
-    const ensured = yield* Effect.cached(
-      Effect.forEach(
-        TABLES,
-        (table) =>
-          sql.exec(table.trim().replaceAll(/\s+/g, " ")).pipe(Effect.asVoid),
-        { discard: true },
-      ),
+    const createTables = Effect.forEach(
+      TABLES,
+      (table) =>
+        sql.exec(table.trim().replaceAll(/\s+/g, " ")).pipe(Effect.asVoid),
+      { discard: true },
     );
+    const ensured = yield* Effect.cached(createTables);
 
     const metaGet = (key: string) =>
       Effect.gen(function* () {
@@ -412,6 +419,21 @@ const ThreadDOLive = Cloudflare.DurableObject<ThreadRpc>()(
           yield* metaSet("status", "closed");
           return yield* commit;
         }),
+
+      destroy: () =>
+        Effect.gen(function* () {
+          const snap = yield* snapshot;
+          // watchers see the end, not a stale snapshot
+          for (const socket of yield* state.getWebSockets(TAG)) {
+            yield* Effect.ignore(socket.close(1000, "thread deleted"));
+          }
+          yield* state.storage.deleteAll().pipe(Effect.orDie);
+          // this instance stays resident with `ensured` already run —
+          // recreate the (empty) tables now so a later `state()` on
+          // the same name reads "never existed" instead of failing
+          yield* createTables;
+          return snap;
+        }),
     });
   }),
 );
@@ -515,6 +537,18 @@ export const ThreadsLive: Layer.Layer<
         Effect.gen(function* () {
           const snap = yield* inWorker(stub(id).close());
           return yield* project(snap);
+        }),
+      remove: (id) =>
+        Effect.gen(function* () {
+          const snap = yield* inWorker(stub(id).destroy());
+          // the DO is gone either way; the projections unwind from
+          // the last snapshot (directoryRemove also frees every
+          // attachment the thread held, snapshot or not)
+          if (snap !== undefined && snap.members.length > 0) {
+            yield* channel.tag(snap.members, null, false);
+          }
+          yield* channel.directoryRemove(id);
+          return snap;
         }),
       socket: (id, request) =>
         inWorker(stub(id).fetch(request).pipe(Effect.orDie)),

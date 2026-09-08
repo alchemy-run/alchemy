@@ -16,6 +16,7 @@ type ServerFrame =
   | { type: "live"; seq: number }
   | { type: "item"; item: ChannelMessage }
   | { type: "update"; item: ChannelMessage }
+  | { type: "remove"; seqs: number[] }
   | { type: "directory"; rows: ThreadDirectoryRow[] };
 
 export interface ChannelStream {
@@ -106,6 +107,18 @@ export const useChannelStream = (): ChannelStream => {
               paint();
             }
             break;
+          case "remove": {
+            // deleted rows vanish from the view. The watermark is NOT
+            // advanced (a mid-replay client may hold rows below these
+            // seqs); a live item past a deleted seq trips the gap
+            // check and re-subscribes, which converges.
+            let dropped = false;
+            for (const seq of frame.seqs) {
+              if (bySeq.delete(seq)) dropped = true;
+            }
+            if (dropped) paint();
+            break;
+          }
           case "directory":
             setDirectory(frame.rows);
             break;

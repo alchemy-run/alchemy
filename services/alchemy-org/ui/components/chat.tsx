@@ -33,6 +33,13 @@ import {
 import { RefHoverCard } from "@/components/ref-hover-card";
 import { hasToolCard, ToolCard } from "@/components/tool-card";
 import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
+import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
@@ -40,7 +47,8 @@ import {
 } from "@/components/ui/tooltip";
 import { useAnchoredToggle } from "@/lib/anchor";
 import { Ansi } from "@/lib/ansi";
-import { anchorLabel, parseAnchor } from "@/lib/channel";
+import { anchorLabel, deleteChatMessages, parseAnchor } from "@/lib/channel";
+import { onRowMouseDown, skipRowClick, useSelection } from "@/lib/selection";
 import { cn } from "@/lib/utils";
 import type { UIMessage } from "ai";
 import { useAgent, useChat } from "alchemy/AI/React";
@@ -48,20 +56,24 @@ import {
   AlarmClock,
   ChevronDown,
   CircleDot,
+  Copy,
   FileCode2,
   GitMerge,
   GitPullRequestArrow,
   MessageSquare,
+  Trash2,
   Zap,
   type LucideIcon,
 } from "lucide-react";
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
   useRef,
   useState,
+  type MouseEvent,
   type ReactNode,
 } from "react";
 
@@ -621,6 +633,58 @@ const ChatTranscript = ({
     void sendMessage({ text: transformSubmit?.(text) ?? text });
   };
 
+  // DELETION is optimistic: hide the messages now, redact them on the
+  // server (the whole burst behind an assistant message). Only
+  // durable rows delete — a `live-*` streaming sample isn't a row
+  // yet. The snapshot on the next mount won't contain deleted rows.
+  // Deferred a tick so the menu that asked has closed before the
+  // confirm blocks.
+  const [deleted, setDeleted] = useState<Set<string>>(() => new Set());
+  const removeMessages = useCallback(
+    (ids: ReadonlyArray<string>) => {
+      const durable = ids.filter((messageId) =>
+        /^(u|a|crash)-\d+$/.test(messageId),
+      );
+      if (durable.length === 0) return;
+      setTimeout(() => {
+        if (
+          !window.confirm(
+            durable.length === 1
+              ? "Delete this message from the transcript?"
+              : `Delete ${durable.length} messages from the transcript?`,
+          )
+        ) {
+          return;
+        }
+        setDeleted((current) => {
+          const next = new Set(current);
+          for (const messageId of durable) next.add(messageId);
+          return next;
+        });
+        void deleteChatMessages(id, durable).catch(() => {});
+      }, 0);
+    },
+    [id],
+  );
+
+  // SELECTION over the transcript (click / ⌘ / ⇧) and the ids the
+  // open context menu acts on
+  const order = useMemo(
+    () =>
+      messages
+        .filter((message) => !deleted.has(message.id))
+        .map((message) => message.id),
+    [messages, deleted],
+  );
+  const selection = useSelection(order, { onDelete: removeMessages });
+  const [menuIds, setMenuIds] = useState<ReadonlyArray<string>>([]);
+  const many = menuIds.length > 1 ? `${menuIds.length} messages` : undefined;
+  const textOf = (messageId: string) =>
+    messages
+      .find((message) => message.id === messageId)
+      ?.parts.flatMap((part) => (part.type === "text" ? [part.text] : []))
+      .join("\n") ?? "";
+
   // The final reply is the CHANNEL's message (Routes lands the run's
   // quiescent text there) — the rail shows the exploration, not the
   // answer. The reply is the text of the trailing assistant message
@@ -639,7 +703,24 @@ const ChatTranscript = ({
       {/* initial="instant": open AT the end, no scroll animation */}
       <Conversation className="min-h-0 flex-1" initial="instant">
         <ConversationContent className="mx-auto max-w-3xl">
+          {/* ONE menu for the transcript; the row under the pointer
+              picks the ids (its own, or the selection it belongs to) */}
+          <ContextMenu>
+            <ContextMenuTrigger asChild>
+          <div
+            className="contents"
+            onContextMenu={(event) => {
+              // off a row there is nothing to act on — no menu
+              if (
+                !(event.target instanceof Element) ||
+                event.target.closest("[data-message-id]") === null
+              ) {
+                event.preventDefault();
+              }
+            }}
+          >
           {messages.map((message, messageIndex) => {
+            if (deleted.has(message.id)) return null;
             // the reply: every text part after the message's last tool
             // call (all of them when it called none)
             const lastToolIndex =
@@ -697,7 +778,23 @@ const ChatTranscript = ({
                     <div className="h-px flex-1 bg-border" />
                   </div>
                 )}
-                <div className="flex items-start gap-2">
+                <div
+                  data-message-id={message.id}
+                  data-selected={selection.has(message.id) ? "" : undefined}
+                  onMouseDown={onRowMouseDown}
+                  onClick={(event: MouseEvent) => {
+                    if (!skipRowClick(event)) {
+                      selection.click(message.id, event);
+                    }
+                  }}
+                  onContextMenu={() =>
+                    setMenuIds(selection.target(message.id))
+                  }
+                  className={cn(
+                    "-mx-2 flex items-start gap-2 rounded-md border-l-2 border-transparent px-1.5 transition-colors",
+                    selection.has(message.id) && "border-primary/60 bg-accent/60",
+                  )}
+                >
                   {/* wall-clock gutter — the observation's `at` */}
                   <div className="w-12 shrink-0 select-none pt-1 text-right font-mono text-[10px] leading-4 text-muted-foreground/60">
                     {meta?.at !== undefined ? (
@@ -800,6 +897,29 @@ const ChatTranscript = ({
               </div>
             );
           })}
+          </div>
+            </ContextMenuTrigger>
+            <ContextMenuContent>
+              <ContextMenuItem
+                onSelect={() => {
+                  void navigator.clipboard
+                    ?.writeText(menuIds.map(textOf).join("\n\n"))
+                    .catch(() => {});
+                }}
+              >
+                <Copy />
+                Copy text
+              </ContextMenuItem>
+              <ContextMenuSeparator />
+              <ContextMenuItem
+                variant="destructive"
+                onSelect={() => removeMessages(menuIds)}
+              >
+                <Trash2 />
+                {many === undefined ? "Delete" : `Delete ${many}`}
+              </ContextMenuItem>
+            </ContextMenuContent>
+          </ContextMenu>
         </ConversationContent>
         <ConversationScrollButton />
       </Conversation>

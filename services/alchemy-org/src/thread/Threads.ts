@@ -127,6 +127,16 @@ export class Threads extends Context.Service<
       input: { readonly name?: string; readonly title?: string },
     ) => Effect.Effect<ThreadState>;
     readonly close: (id: string) => Effect.Effect<ThreadState>;
+    /**
+     * DELETE the thread: erase its DO and unwind every channel
+     * projection — the directory row, the `ref → thread` ownership of
+     * its entities, the placed tags on its members (the channel rows
+     * themselves stay; they are the channel's history, not the
+     * thread's). Answers the last snapshot so the caller can tear down
+     * what lives beyond the thread (its agent sessions, its machine);
+     * `undefined` when the thread never existed. Idempotent.
+     */
+    readonly remove: (id: string) => Effect.Effect<ThreadState | undefined>;
     /** Route the `/thread/:id` WebSocket upgrade into the thread's DO. */
     readonly socket: (
       id: string,

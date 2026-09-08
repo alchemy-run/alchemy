@@ -10,6 +10,7 @@ import {
   openApp,
   REPO,
   test,
+  threadNav,
   threadPath,
 } from "./harness.ts";
 
@@ -61,6 +62,34 @@ test("the conversation renders the session transcript", async ({
   await expect(main(page)).toContainText(
     "The engineer is mid-way; tests pass locally.",
   );
+});
+
+test("right-click a chat message: Delete redacts it from the transcript", async ({
+  page,
+  api,
+}) => {
+  seedThread(api);
+  api.seedTurn("Thread:t-1", "first question", "first answer");
+  api.seedTurn("Thread:t-1", "delete this one", "second answer");
+  await openApp(page, threadPath("t-1"));
+  await expect(main(page)).toContainText("delete this one");
+
+  // right-click the user message, Delete, confirm — the row hides at
+  // once and the DELETE lands on the transcript endpoint
+  const row = main(page)
+    .locator("[data-message-id]", { hasText: "delete this one" })
+    .first();
+  await row.click({ button: "right" });
+  page.once("dialog", (dialog) => void dialog.accept());
+  await page.getByRole("menuitem", { name: "Delete" }).click();
+
+  await expect
+    .poll(() => api.deletedChatMessages)
+    .toEqual([{ id: "Thread:t-1", messageId: "u-2" }]);
+  await expect(main(page)).not.toContainText("delete this one");
+  // the rest of the conversation survives
+  await expect(main(page)).toContainText("first question");
+  await expect(main(page)).toContainText("second answer");
 });
 
 test("a tool call renders as its card", async ({ page, api }) => {
@@ -139,6 +168,36 @@ test("close thread posts and the header shows closed", async ({
   await expect.poll(() => api.closedThreads).toEqual(["t-1"]);
   // the fake pushes the closed state over the thread socket
   await expect(main(page)).toContainText("closed");
+});
+
+test("delete thread confirms, erases, and returns to the channel", async ({
+  page,
+  api,
+}) => {
+  seedThread(api);
+  api.seedThread({ id: "t-2", name: "w-other", title: "Another task" });
+  await openApp(page, threadPath("t-1"));
+  const nav = (name: string) =>
+    threadNav(page).getByRole("button", { name, exact: true });
+  await expect(nav("w-reconcile")).toBeVisible();
+
+  // a dismissed confirm deletes nothing
+  page.once("dialog", (dialog) => void dialog.dismiss());
+  await main(page).getByRole("button", { name: "Delete thread" }).click();
+  await expect.poll(() => api.deletedThreads).toEqual([]);
+  await expect(nav("w-reconcile")).toBeVisible();
+
+  // accepted: the DELETE lands, the rail forgets the thread, and the
+  // view falls back to the channel
+  page.once("dialog", (dialog) => void dialog.accept());
+  await main(page).getByRole("button", { name: "Delete thread" }).click();
+  await expect.poll(() => api.deletedThreads).toEqual(["t-1"]);
+  await expect(nav("w-reconcile")).toHaveCount(0);
+  await expect(nav("w-other")).toBeVisible();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(
+    page.getByRole("textbox", { name: "Message the channel" }),
+  ).toBeVisible();
 });
 
 test("a review URL deep-links straight into the diff", async ({

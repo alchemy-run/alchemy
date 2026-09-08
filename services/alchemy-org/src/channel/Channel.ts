@@ -64,6 +64,12 @@ export interface ChannelMessage {
   /** `true` when the channel agent PLACED it into that thread. */
   readonly placed?: boolean;
   readonly card?: ChannelCard;
+  /**
+   * The messages this one answers (the operator replying inline, one
+   * or several). Ids, not seqs — a deleted original leaves a dangling
+   * id the UI renders as "deleted".
+   */
+  readonly replyTo?: ReadonlyArray<string>;
 }
 
 /** A thread's row in the channel's directory — what the rail lists. */
@@ -110,6 +116,7 @@ export interface AppendInput {
   readonly event?: string;
   readonly thread?: string;
   readonly card?: ChannelCard;
+  readonly replyTo?: ReadonlyArray<string>;
 }
 
 /**
@@ -139,6 +146,12 @@ export class Channel extends Context.Service<
       thread: string | null,
       placed: boolean,
     ) => Effect.Effect<void>;
+    /**
+     * DELETE rows by id — the operator pruning the log. Retired seqs
+     * are never re-minted (the DO's head counter is monotonic), so
+     * cursor watermarks stay valid. Unknown ids are ignored.
+     */
+    readonly remove: (ids: ReadonlyArray<string>) => Effect.Effect<void>;
     readonly page: (options?: {
       readonly after?: number;
       readonly limit?: number;
@@ -154,6 +167,8 @@ export class Channel extends Context.Service<
     readonly directoryUpsert: (
       row: ThreadDirectoryRow,
     ) => Effect.Effect<void>;
+    /** Drop a thread's row (a deleted thread) — the rail forgets it. */
+    readonly directoryRemove: (id: string) => Effect.Effect<void>;
     /** `ref → thread` ownership, pushed by ThreadDOs on attach/detach. */
     readonly attachmentsSet: (
       ref: string,

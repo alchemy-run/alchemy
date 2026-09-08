@@ -47,6 +47,12 @@ export type ChannelSocketFrame =
   | {
       readonly type: "directory";
       readonly rows: ReadonlyArray<ThreadDirectoryRow>;
+    }
+  | {
+      /** Rows the operator deleted — drop them from the view. Their
+       *  seqs are retired (never re-minted), so watermarks hold. */
+      readonly type: "remove";
+      readonly seqs: ReadonlyArray<number>;
     };
 
 const TABLES = [
@@ -62,7 +68,8 @@ const TABLES = [
     event TEXT,
     thread TEXT,
     placed INTEGER NOT NULL DEFAULT 0,
-    card TEXT
+    card TEXT,
+    reply_to TEXT
   )`,
   `CREATE TABLE IF NOT EXISTS directory (
     thread_id TEXT PRIMARY KEY,
@@ -98,7 +105,15 @@ interface MessageRow extends Record<string, Cloudflare.SqlStorageValue> {
   thread: string | null;
   placed: number;
   card: string | null;
+  reply_to: string | null;
 }
+
+/** Columns added after the table shipped — `CREATE TABLE IF NOT
+ *  EXISTS` skips an existing table, so each is ALTERed in when
+ *  `PRAGMA table_info` says it is missing. */
+const MIGRATIONS: ReadonlyArray<readonly [column: string, ddl: string]> = [
+  ["reply_to", "ALTER TABLE messages ADD COLUMN reply_to TEXT"],
+];
 
 interface DirectoryRow extends Record<string, Cloudflare.SqlStorageValue> {
   thread_id: string;
@@ -124,6 +139,9 @@ const toMessage = (row: MessageRow): ChannelMessage => ({
   ...(row.card === null
     ? {}
     : { card: JSON.parse(row.card) as ChannelCard }),
+  ...(row.reply_to === null
+    ? {}
+    : { replyTo: JSON.parse(row.reply_to) as ReadonlyArray<string> }),
 });
 
 const toDirectory = (row: DirectoryRow): ThreadDirectoryRow => ({
@@ -154,6 +172,9 @@ interface ChannelRpc extends MainRpc<Cloudflare.DurableObjectState> {
     thread: string | null,
     placed: boolean,
   ) => Effect.Effect<void, never, RuntimeContext>;
+  readonly remove: (
+    ids: ReadonlyArray<string>,
+  ) => Effect.Effect<void, never, RuntimeContext>;
   readonly page: (options?: {
     readonly after?: number;
     readonly limit?: number;
@@ -171,6 +192,9 @@ interface ChannelRpc extends MainRpc<Cloudflare.DurableObjectState> {
   >;
   readonly directoryUpsert: (
     row: ThreadDirectoryRow,
+  ) => Effect.Effect<void, never, RuntimeContext>;
+  readonly directoryRemove: (
+    id: string,
   ) => Effect.Effect<void, never, RuntimeContext>;
   readonly attachmentsSet: (
     ref: string,
@@ -195,14 +219,30 @@ const ChannelDOLive = Cloudflare.DurableObject<ChannelRpc>()(
     // the constructor also runs at PLAN time against a mock state —
     // tables are ensured lazily, once, on the first call
     const ensured = yield* Effect.cached(
-      Effect.forEach(
-        TABLES,
-        (table) =>
-          sql.exec(table.trim().replaceAll(/\s+/g, " ")).pipe(Effect.asVoid),
-        { discard: true },
-      ),
+      Effect.gen(function* () {
+        yield* Effect.forEach(
+          TABLES,
+          (table) =>
+            sql
+              .exec(table.trim().replaceAll(/\s+/g, " "))
+              .pipe(Effect.asVoid),
+          { discard: true },
+        );
+        const info = yield* sql.exec<
+          { name: string } & Record<string, Cloudflare.SqlStorageValue>
+        >("PRAGMA table_info(messages)");
+        const columns = new Set((yield* info.toArray()).map((c) => c.name));
+        for (const [column, ddl] of MIGRATIONS) {
+          if (!columns.has(column)) yield* sql.exec(ddl);
+        }
+      }),
     );
 
+    // the head is a MONOTONIC counter persisted in meta, not
+    // MAX(seq): deleting the tail row must not let the next append
+    // re-mint a retired seq (clients watermarked past it would
+    // silently miss the new row). MAX(seq) is folded in only to
+    // migrate logs written before the counter existed.
     const head = Effect.gen(function* () {
       const cursor = yield* sql.exec<{
         head: number;
@@ -210,7 +250,12 @@ const ChannelDOLive = Cloudflare.DurableObject<ChannelRpc>()(
         "SELECT COALESCE(MAX(seq), 0) AS head FROM messages",
       );
       const rows = yield* cursor.toArray();
-      return rows[0]?.head ?? 0;
+      const maxSeq = rows[0]?.head ?? 0;
+      const meta = yield* sql.exec<
+        { value: string } & Record<string, Cloudflare.SqlStorageValue>
+      >("SELECT value FROM meta WHERE key = 'head'");
+      const stored = Number((yield* meta.toArray())[0]?.value ?? 0);
+      return Math.max(maxSeq, stored);
     });
 
     const slice = (after: number, limit: number) =>
@@ -259,10 +304,16 @@ const ChannelDOLive = Cloudflare.DurableObject<ChannelRpc>()(
         const existing = yield* byId(id);
         if (existing !== undefined) return { message: existing, fresh: false };
         const seq = (yield* head) + 1;
+        // advance the monotonic counter WITH the row (same DO turn) —
+        // a delete of this row later can never roll the head back
+        yield* sql.exec(
+          "INSERT OR REPLACE INTO meta (key, value) VALUES ('head', ?)",
+          String(seq),
+        );
         const at = yield* Clock.currentTimeMillis;
         yield* sql.exec(
-          `INSERT INTO messages (id, seq, at, kind, author, text, repo, ref, event, thread, placed, card)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          `INSERT INTO messages (id, seq, at, kind, author, text, repo, ref, event, thread, placed, card, reply_to)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
             .trim()
             .replaceAll(/\s+/g, " "),
           id,
@@ -277,6 +328,9 @@ const ChannelDOLive = Cloudflare.DurableObject<ChannelRpc>()(
           input.thread ?? null,
           0,
           input.card === undefined ? null : JSON.stringify(input.card),
+          input.replyTo === undefined || input.replyTo.length === 0
+            ? null
+            : JSON.stringify(input.replyTo),
         );
         const message = (yield* byId(id))!;
         yield* broadcast({ type: "item", item: message });
@@ -425,6 +479,21 @@ const ChannelDOLive = Cloudflare.DurableObject<ChannelRpc>()(
           }
         }),
 
+      remove: (ids) =>
+        Effect.gen(function* () {
+          yield* ensured;
+          const seqs: Array<number> = [];
+          for (const id of ids) {
+            const current = yield* byId(id);
+            if (current === undefined) continue;
+            yield* sql.exec("DELETE FROM messages WHERE id = ?", id);
+            seqs.push(current.seq);
+          }
+          if (seqs.length > 0) {
+            yield* broadcast({ type: "remove", seqs });
+          }
+        }),
+
       page: (options) =>
         Effect.gen(function* () {
           yield* ensured;
@@ -516,6 +585,15 @@ const ChannelDOLive = Cloudflare.DurableObject<ChannelRpc>()(
           yield* broadcast({ type: "directory", rows: yield* readDirectory });
         }),
 
+      directoryRemove: (id) =>
+        Effect.gen(function* () {
+          yield* ensured;
+          yield* sql.exec("DELETE FROM directory WHERE thread_id = ?", id);
+          // a deleted thread owns nothing — its refs are free again
+          yield* sql.exec("DELETE FROM attachments WHERE thread_id = ?", id);
+          yield* broadcast({ type: "directory", rows: yield* readDirectory });
+        }),
+
       attachmentsSet: (ref, thread) =>
         Effect.gen(function* () {
           yield* ensured;
@@ -576,11 +654,13 @@ export const ChannelLive: Layer.Layer<Channel, never, Cloudflare.Worker> =
         update: (id, patch) => inWorker(stub().update(id, patch)),
         tag: (ids, thread, placed) =>
           inWorker(stub().tag(ids, thread, placed)),
+        remove: (ids) => inWorker(stub().remove(ids)),
         page: (options) => inWorker(stub().page(options)),
         search: (filter) => inWorker(stub().search(filter)),
         read: (ids) => inWorker(stub().read(ids)),
         directory: () => inWorker(stub().directory()),
         directoryUpsert: (row) => inWorker(stub().directoryUpsert(row)),
+        directoryRemove: (id) => inWorker(stub().directoryRemove(id)),
         attachmentsSet: (ref, thread) =>
           inWorker(stub().attachmentsSet(ref, thread)),
         attachmentOf: (ref) => inWorker(stub().attachmentOf(ref)),

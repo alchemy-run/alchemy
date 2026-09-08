@@ -30,6 +30,7 @@ import {
   MessageSquare,
   Plus,
   SquareTerminal,
+  Trash2,
   X,
 } from "lucide-react";
 import type { ReactNode } from "react";
@@ -94,15 +95,17 @@ const Section = ({
   </div>
 );
 
-/** The thread's books: entities, agents, close. */
+/** The thread's books: entities, agents, close, delete. */
 const ThreadPane = ({
   state,
   onOpenReview,
   onClose,
+  onDelete,
 }: {
   state: ThreadState;
   onOpenReview: (owner: string, repo: string, number: number) => void;
   onClose: () => void;
+  onDelete: () => void;
 }) => {
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
@@ -189,8 +192,8 @@ const ThreadPane = ({
           </div>
         ))}
       </Section>
-      {state.status === "open" && (
-        <div className="px-3 py-2.5">
+      <div className="flex items-center gap-2 px-3 py-2.5">
+        {state.status === "open" && (
           <Button
             size="sm"
             variant="outline"
@@ -200,8 +203,18 @@ const ThreadPane = ({
           >
             Close thread
           </Button>
-        </div>
-      )}
+        )}
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={onDelete}
+          title="Delete the thread — its conversation, subagents, and machine are erased; the channel keeps its rows"
+          className="text-muted-foreground hover:text-destructive"
+        >
+          <Trash2 className="size-3.5" />
+          Delete thread
+        </Button>
+      </div>
     </div>
   );
 };
@@ -218,6 +231,7 @@ export const ThreadView = ({
   onNewTerminal,
   onCloseTerminal,
   onCloseThread,
+  onDeleteThread,
 }: {
   id: string;
   state: ThreadState | undefined;
@@ -229,6 +243,7 @@ export const ThreadView = ({
   onNewTerminal: () => void;
   onCloseTerminal: (pty: string) => void;
   onCloseThread: () => void;
+  onDeleteThread: () => void;
 }) => {
   const sessionId = threadSessionId(id);
   const reviews = (state?.entities ?? []).filter(
@@ -380,7 +395,7 @@ export const ThreadView = ({
               <div
                 key={pty}
                 className={cn(
-                  "min-h-0 min-w-0 flex-1",
+                  "flex min-h-0 min-w-0 flex-1 flex-col",
                   (tab.kind !== "terminal" || tab.pty !== pty) && "hidden",
                 )}
               >
@@ -404,6 +419,7 @@ export const ThreadView = ({
                     onTab({ kind: "review", owner, repo, number })
                   }
                   onClose={onCloseThread}
+                  onDelete={onDeleteThread}
                 />
               </Rail>
             )}

@@ -22,8 +22,9 @@ import {
   type PullRequestView,
 } from "./github/PullRequest.ts";
 import { connected, primary } from "./github/Repos.ts";
+import { Engineer } from "./coding/Engineer.ts";
 import { ThreadAgent } from "./thread/ThreadAgent.ts";
-import { Threads } from "./thread/Threads.ts";
+import { THREAD_TERM, Threads } from "./thread/Threads.ts";
 
 /** `${term}:${key}` → the session it names (the key may contain `:`). */
 const parseSessionId = (id: string): { term: string; key: string } => {
@@ -230,7 +231,7 @@ export const routes = Effect.gen(function* () {
       const request = yield* HttpServerRequest;
       const body = (yield* request.json.pipe(
         Effect.catch(() => Effect.succeed({})),
-      )) as { text?: string };
+      )) as { text?: string; replyTo?: unknown };
       const text = typeof body.text === "string" ? body.text.trim() : "";
       if (text.length === 0) {
         return yield* HttpServerResponse.json(
@@ -238,18 +239,46 @@ export const routes = Effect.gen(function* () {
           { status: 400 },
         );
       }
+      // an inline reply names the messages it answers; only ids that
+      // exist are kept (a stale client can't pin a phantom)
+      const replyIds = Array.isArray(body.replyTo)
+        ? body.replyTo.filter(
+            (id): id is string => typeof id === "string" && id.length > 0,
+          )
+        : [];
+      const originals =
+        replyIds.length === 0 ? [] : yield* channel.read(replyIds);
       const operator = yield* readOperator;
       const message = yield* channel.append({
         kind: "user",
         ...(operator === null ? {} : { author: { login: operator.login } }),
         text,
+        ...(originals.length === 0
+          ? {}
+          : { replyTo: originals.map((row) => row.id) }),
       });
       // the ONE trigger of the channel agent: a fresh session pinned
       // to this message's seq; the request answers immediately, the
-      // run's reply lands in the channel when it lands
+      // run's reply lands in the channel when it lands. A reply hands
+      // the agent the quoted originals — it reads what was answered
+      // without having to search for it.
+      const prompt =
+        originals.length === 0
+          ? text
+          : `${originals
+              .map(
+                (row) =>
+                  `> In reply to ${row.kind} message ${row.id}${
+                    row.author === undefined ? "" : ` by ${row.author.login}`
+                  }:\n${row.text
+                    .split("\n")
+                    .map((line) => `> ${line}`)
+                    .join("\n")}`,
+              )
+              .join("\n\n")}\n\n${text}`;
       yield* exec.waitUntil(
         channelAgent
-          .dispatch(text, { key: channelRunKey(message.seq) })
+          .dispatch(prompt, { key: channelRunKey(message.seq) })
           .pipe(
             Effect.flatMap((outcome) =>
               Effect.gen(function* () {
@@ -274,6 +303,40 @@ export const routes = Effect.gen(function* () {
           ),
       );
       return yield* HttpServerResponse.json(message);
+    }),
+  );
+
+  /** The body of a bulk delete: `{ ids: string[] }`, empty when
+   *  malformed. */
+  const readIds = (request: HttpServerRequest) =>
+    request.json.pipe(
+      Effect.catch(() => Effect.succeed({})),
+      Effect.map((body) => {
+        const ids = (body as { ids?: unknown }).ids;
+        return Array.isArray(ids)
+          ? ids.filter(
+              (id): id is string => typeof id === "string" && id.length > 0,
+            )
+          : [];
+      }),
+    );
+
+  /** The operator pruning the log — delete rows by id (one or a
+   *  selection). The DO broadcasts a `remove` frame so every open view
+   *  drops them. */
+  const channelMessagesDelete = HttpRouter.add(
+    "DELETE",
+    "/api/channel/messages",
+    Effect.gen(function* () {
+      const ids = yield* readIds(yield* HttpServerRequest);
+      if (ids.length === 0) {
+        return yield* HttpServerResponse.json(
+          { error: "ids required" },
+          { status: 400 },
+        );
+      }
+      yield* channel.remove(ids);
+      return yield* HttpServerResponse.json({ deleted: ids.length });
     }),
   );
 
@@ -336,6 +399,33 @@ export const routes = Effect.gen(function* () {
     Effect.gen(function* () {
       const id = yield* threadId;
       return yield* HttpServerResponse.json(yield* threads.close(id));
+    }),
+  );
+
+  /**
+   * DELETE a thread — everything it was: its DO and channel
+   * projections (`threads.remove`), then its sessions. The subagents
+   * go first with the machine spared (they share the thread's — the
+   * key's `::` prefix), then the thread agent's own session takes the
+   * machine down with it. Idempotent on an unknown id.
+   */
+  const threadDelete = HttpRouter.add(
+    "DELETE",
+    "/api/threads/:id",
+    Effect.gen(function* () {
+      const id = yield* threadId;
+      const snap = yield* threads.remove(id);
+      const engineerTerm = Engineer["~alchemy/Name"];
+      yield* Effect.forEach(
+        snap?.agents ?? [],
+        (agent) =>
+          sessions.remove(engineerTerm, agent.key, { machine: false }),
+        { discard: true },
+      ).pipe(Effect.provide(RuntimeContext.phantom));
+      yield* sessions
+        .remove(THREAD_TERM, id)
+        .pipe(Effect.provide(RuntimeContext.phantom));
+      return yield* HttpServerResponse.json({ ok: true });
     }),
   );
 
@@ -484,6 +574,46 @@ export const routes = Effect.gen(function* () {
     }),
   );
 
+  /**
+   * Delete chat messages (`{ ids }`): resolve each UIMessage id
+   * (`u-<seq>`, `a-<seq>`, `crash-<seq>`) to its observation span and
+   * redact the union. Projection-only — the model's working context
+   * is untouched.
+   */
+  const sessionMessagesDelete = HttpRouter.add(
+    "DELETE",
+    "/api/chats/:id/messages",
+    Effect.gen(function* () {
+      const params = yield* HttpRouter.params;
+      const { term, key } = parseSessionId(
+        decodeURIComponent(String(params.id ?? "")),
+      );
+      const ids = yield* readIds(yield* HttpServerRequest);
+      if (ids.length === 0) {
+        return yield* HttpServerResponse.json(
+          { error: "ids required" },
+          { status: 400 },
+        );
+      }
+      const log = yield* sessions
+        .history(term, key)
+        .pipe(Effect.provide(RuntimeContext.phantom));
+      const seqs = [
+        ...new Set(ids.flatMap((id) => AI.observationSpan(log, id))),
+      ];
+      if (seqs.length === 0) {
+        return yield* HttpServerResponse.json(
+          { error: "unknown messages" },
+          { status: 404 },
+        );
+      }
+      yield* sessions
+        .redact(term, key, seqs)
+        .pipe(Effect.provide(RuntimeContext.phantom));
+      return yield* HttpServerResponse.json({ deleted: seqs.length });
+    }),
+  );
+
   const sessionLog = HttpRouter.add(
     "GET",
     "/api/chats/:id/log",
@@ -600,13 +730,16 @@ export const routes = Effect.gen(function* () {
   return Layer.mergeAll(
     channelPage,
     channelPost,
+    channelMessagesDelete,
     channelDirectory,
     threadState,
     threadSteer,
     threadClose,
+    threadDelete,
     pullRequest,
     pullRequestFiles,
     sessionMessages,
+    sessionMessagesDelete,
     sessionLog,
     sessionExec,
     whoami,

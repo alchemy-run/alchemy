@@ -3,6 +3,7 @@
  * operator's messages, cards from threads, the sidebar directory,
  * the bell.
  */
+import type { Page } from "@playwright/test";
 import {
   expect,
   main,
@@ -94,7 +95,11 @@ test("the run pill opens the run rail; the eval card shows code and output", asy
   await expect(rail).toBeHidden();
 });
 
-test("hovering a message reveals delete; deleting drops the row live", async ({
+/** The stream row holding `text`. */
+const rowOf = (page: Page, text: string) =>
+  main(page).locator("[data-seq]", { hasText: text }).first();
+
+test("right-click a message: Delete asks, then drops the row live", async ({
   page,
   api,
 }) => {
@@ -104,27 +109,103 @@ test("hovering a message reveals delete; deleting drops the row live", async ({
   await openApp(page);
   await expect(main(page)).toContainText("delete me please");
 
-  // the trash appears on hover; clicking it asks first — a dismissed
-  // confirm deletes nothing
-  const row = main(page)
-    .locator("div.group", { hasText: "delete me please" })
-    .first();
-  await row.hover();
+  // the menu opens on the row; Delete asks first — a dismissed confirm
+  // deletes nothing
+  await rowOf(page, "delete me please").click({ button: "right" });
   page.once("dialog", (dialog) => void dialog.dismiss());
-  await row.getByRole("button", { name: "Delete message" }).click();
+  await page.getByRole("menuitem", { name: "Delete" }).click();
   await expect.poll(() => api.deletedMessages).toEqual([]);
   await expect(main(page)).toContainText("delete me please");
 
   // confirmed: the DELETE lands and the socket's remove frame drops
   // the row from the view
-  await row.hover();
+  await rowOf(page, "delete me please").click({ button: "right" });
   page.once("dialog", (dialog) => void dialog.accept());
-  await row.getByRole("button", { name: "Delete message" }).click();
+  await page.getByRole("menuitem", { name: "Delete" }).click();
   await expect.poll(() => api.deletedMessages).toEqual([doomed.id]);
   await expect(main(page)).not.toContainText("delete me please");
   // the neighbors survive
   await expect(main(page)).toContainText("Bug in reconcile");
   await expect(main(page)).toContainText("Noted.");
+});
+
+test("click, ⇧-click and ⌘-click build a selection; the menu acts on all of it", async ({
+  page,
+  api,
+}) => {
+  const one = api.seedEvent("event one", { author: "octocat" });
+  const two = api.seedEvent("event two", { author: "octocat" });
+  const three = api.seedEvent("event three", { author: "octocat" });
+  api.seedEvent("event four", { author: "octocat" });
+  const five = api.seedEvent("event five", { author: "octocat" });
+  await openApp(page);
+  await expect(main(page)).toContainText("event five");
+
+  const selected = main(page).locator("[data-seq][data-selected]");
+  // a plain click selects the one row (the anchor)
+  await main(page).getByText("event one").click();
+  await expect(selected).toHaveCount(1);
+  // ⇧-click ranges from the anchor
+  await main(page).getByText("event three").click({ modifiers: ["Shift"] });
+  await expect(selected).toHaveCount(3);
+  // ⌘-click toggles one more in
+  await main(page).getByText("event five").click({ modifiers: ["Meta"] });
+  await expect(selected).toHaveCount(4);
+  // ...and out again
+  await main(page).getByText("event five").click({ modifiers: ["Meta"] });
+  await expect(selected).toHaveCount(3);
+  await main(page).getByText("event five").click({ modifiers: ["Meta"] });
+
+  // right-click INSIDE the selection keeps it — the menu counts it
+  await rowOf(page, "event two").click({ button: "right" });
+  page.once("dialog", (dialog) => void dialog.accept());
+  await page.getByRole("menuitem", { name: "Delete 4 messages" }).click();
+  await expect
+    .poll(() => api.deletedMessages)
+    .toEqual([one.id, two.id, three.id, five.id]);
+  await expect(main(page)).not.toContainText("event one");
+  await expect(main(page)).toContainText("event four");
+
+  // right-click OUTSIDE the selection replaces it with that one row
+  await main(page).getByText("event four").click();
+  await expect(selected).toHaveCount(1);
+  await expect(page.getByRole("menuitem")).toHaveCount(0);
+  // Escape clears
+  await page.keyboard.press("Escape");
+  await expect(selected).toHaveCount(0);
+});
+
+test("Reply from the menu quotes the original; the post carries replyTo", async ({
+  page,
+  api,
+}) => {
+  const original = api.seedEvent("opened issue — Bug in reconcile", {
+    author: "octocat",
+  });
+  api.seedAgent("Noted.");
+  await openApp(page);
+
+  // Reply → the composer shows what it will answer and takes focus
+  await rowOf(page, "Bug in reconcile").click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Reply" }).click();
+  const bar = main(page).getByLabel("Replying to", { exact: true });
+  await expect(bar).toContainText("octocat");
+  await expect(bar).toContainText("Bug in reconcile");
+  const composer = page.getByRole("textbox", { name: "Message the channel" });
+  await expect(composer).toBeFocused();
+
+  // send: the POST names the original; the echoed row quotes it
+  await composer.fill("on it — fixing now");
+  await composer.press("Enter");
+  await expect
+    .poll(() => api.replies)
+    .toEqual([{ text: "on it — fixing now", replyTo: [original.id] }]);
+  await expect(bar).toBeHidden();
+  const reply = rowOf(page, "on it — fixing now");
+  await expect(reply).toContainText("octocat");
+  await expect(
+    reply.getByRole("button", { name: /Bug in reconcile/ }),
+  ).toBeVisible();
 });
 
 test("a live event pushed over the socket appears without a reload", async ({
@@ -190,36 +271,65 @@ test("the sidebar groups open threads by turn and selects on click", async ({
   await expect(yours).toHaveAttribute("aria-current", "page");
 });
 
-test("a sidebar row's hover trash deletes the thread after a confirm", async ({
+test("right-click a sidebar row: Delete thread asks, then erases it", async ({
   page,
   api,
 }) => {
   api.seedThread({ id: "t-old", name: "container-fixes", status: "closed" });
   api.seedThread({ id: "t-live", name: "w-reconcile", turn: "you" });
   await openApp(page);
-  const row = threadNav(page)
-    .locator("div.group", { hasText: "container-fixes" })
-    .first();
+  const row = threadNav(page).getByRole("button", {
+    name: "container-fixes",
+    exact: true,
+  });
   await expect(row).toBeVisible();
 
   // dismissed: nothing happens
-  await row.hover();
+  await row.click({ button: "right" });
   page.once("dialog", (dialog) => void dialog.dismiss());
-  await row.getByRole("button", { name: "Delete thread container-fixes" }).click();
+  await page.getByRole("menuitem", { name: "Delete thread" }).click();
   await expect.poll(() => api.deletedThreads).toEqual([]);
   await expect(row).toBeVisible();
 
   // confirmed: the DELETE lands and the directory frame drops the row;
   // the view was on the channel and stays there
-  await row.hover();
+  await row.click({ button: "right" });
   page.once("dialog", (dialog) => void dialog.accept());
-  await row.getByRole("button", { name: "Delete thread container-fixes" }).click();
+  await page.getByRole("menuitem", { name: "Delete thread" }).click();
   await expect.poll(() => api.deletedThreads).toEqual(["t-old"]);
   await expect(threadNav(page)).not.toContainText("container-fixes");
   await expect(threadNav(page)).toContainText("w-reconcile");
   await expect(
     page.getByRole("textbox", { name: "Message the channel" }),
   ).toBeVisible();
+});
+
+test("⌘-click selects sidebar rows without opening them; the menu deletes the set", async ({
+  page,
+  api,
+}) => {
+  api.seedThread({ id: "t-a", name: "w-alpha", turn: "you" });
+  api.seedThread({ id: "t-b", name: "w-beta", turn: "you" });
+  api.seedThread({ id: "t-c", name: "w-gamma", status: "closed" });
+  await openApp(page);
+  const nav = threadNav(page);
+  const rowOf = (name: string) =>
+    nav.getByRole("button", { name, exact: true });
+
+  await rowOf("w-alpha").click({ modifiers: ["Meta"] });
+  await rowOf("w-gamma").click({ modifiers: ["Meta"] });
+  // still on the channel — ⌘-click selects, it doesn't open
+  await expect(page).toHaveURL(/\/$/);
+  await expect(nav.locator("[data-thread][data-selected]")).toHaveCount(2);
+
+  await rowOf("w-gamma").click({ button: "right" });
+  page.once("dialog", (dialog) => void dialog.accept());
+  await page.getByRole("menuitem", { name: "Delete 2 threads" }).click();
+  await expect
+    .poll(() => [...api.deletedThreads].sort())
+    .toEqual(["t-a", "t-c"]);
+  await expect(nav).not.toContainText("w-alpha");
+  await expect(nav).toContainText("w-beta");
 });
 
 test("a card from a thread renders and its header jumps to the thread", async ({
