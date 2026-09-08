@@ -171,6 +171,21 @@ test("click, ⇧-click and ⌘-click build a selection; the menu acts on all of 
   // ⇧-click ranges from the anchor
   await main(page).getByText("event three").click({ modifiers: ["Shift"] });
   await expect(selected).toHaveCount(3);
+
+  // right-click inside it, then dismiss the menu — the gesture is over
+  // and the selection goes with it
+  await rowOf(page, "event two").click({ button: "right" });
+  await expect(
+    page.getByRole("menuitem", { name: "Delete 3 messages" }),
+  ).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("menuitem")).toHaveCount(0);
+  await expect(selected).toHaveCount(0);
+
+  // rebuild it: ⌘-click anchors, ⇧-click ranges
+  await main(page).getByText("event one").click({ modifiers: ["Meta"] });
+  await main(page).getByText("event three").click({ modifiers: ["Shift"] });
+  await expect(selected).toHaveCount(3);
   // ⌘-click toggles one more in
   await main(page).getByText("event five").click({ modifiers: ["Meta"] });
   await expect(selected).toHaveCount(4);

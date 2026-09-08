@@ -712,7 +712,11 @@ const ChatTranscript = ({
               picks the ids (its own, or the selection it belongs to) */}
           <ContextMenu
             onOpenChange={(open) => {
-              if (!open) setMenuIds([]);
+              // the menu closing ends the gesture — target and selection go
+              if (!open) {
+                setMenuIds([]);
+                selection.clear();
+              }
             }}
           >
             <ContextMenuTrigger asChild>

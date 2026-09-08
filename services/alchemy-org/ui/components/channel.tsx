@@ -619,11 +619,15 @@ export const ChannelView = ({
           className="min-h-0 flex-1 overflow-y-auto"
         >
           {/* ONE menu for the stream; the row under the pointer picks
-              the ids (its own, or the selection it belongs to); the
-              target's highlight lasts as long as the menu */}
+              the ids (its own, or the selection it belongs to). The
+              menu closing — an item chosen or a click away — ends the
+              gesture: the target's highlight AND the selection go */}
           <ContextMenu
             onOpenChange={(open) => {
-              if (!open) setMenuIds([]);
+              if (!open) {
+                setMenuIds([]);
+                selection.clear();
+              }
             }}
           >
             <ContextMenuTrigger asChild>
@@ -865,7 +869,11 @@ export const ThreadList = ({
   return (
     <ContextMenu
       onOpenChange={(open) => {
-        if (!open) setMenuIds([]);
+        // the menu closing ends the gesture — target and selection go
+        if (!open) {
+          setMenuIds([]);
+          pick.clear();
+        }
       }}
     >
       <ContextMenuTrigger asChild>
