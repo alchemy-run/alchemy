@@ -129,6 +129,29 @@ test("right-click a message: Delete asks, then drops the row live", async ({
   await expect(main(page)).toContainText("Noted.");
 });
 
+test("right-click on a link is the browser's — our menu stays shut", async ({
+  page,
+  api,
+}) => {
+  api.seedEvent(
+    `opened issue [${REPO}#12](https://github.com/${REPO}/issues/12) — Bug in reconcile`,
+    { author: "octocat", ref: `${REPO}#12` },
+  );
+  await openApp(page);
+  const link = main(page).getByRole("link", { name: `${REPO}#12` });
+  await expect(link).toBeVisible();
+
+  // on the link: no menu of ours (the native link menu is the browser's
+  // to draw), and the row is not selected by it either
+  await link.click({ button: "right" });
+  await expect(page.getByRole("menuitem")).toHaveCount(0);
+  await expect(main(page).locator("[data-seq][data-selected]")).toHaveCount(0);
+
+  // beside the link, the same row still opens ours
+  await main(page).getByText("Bug in reconcile").click({ button: "right" });
+  await expect(page.getByRole("menuitem", { name: "Delete" })).toBeVisible();
+});
+
 test("click, ⇧-click and ⌘-click build a selection; the menu acts on all of it", async ({
   page,
   api,

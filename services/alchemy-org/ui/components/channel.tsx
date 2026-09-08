@@ -30,7 +30,12 @@ import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import type { ChannelMessage, ThreadDirectoryRow } from "@/lib/channel";
 import { deleteChannelMessages, postChannel } from "@/lib/channel";
-import { onRowMouseDown, skipRowClick, useSelection } from "@/lib/selection";
+import {
+  onRowMouseDown,
+  skipRowClick,
+  useSelection,
+  yieldLinkContextMenu,
+} from "@/lib/selection";
 import { cn } from "@/lib/utils";
 import {
   ArrowUp,
@@ -611,6 +616,7 @@ export const ChannelView = ({
           <ContextMenu>
             <ContextMenuTrigger asChild>
               <div
+                onContextMenuCapture={yieldLinkContextMenu}
                 onContextMenu={(event) => {
                   // off a row there is nothing to act on — no menu
                   if (

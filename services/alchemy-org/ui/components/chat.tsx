@@ -48,7 +48,12 @@ import {
 import { useAnchoredToggle } from "@/lib/anchor";
 import { Ansi } from "@/lib/ansi";
 import { anchorLabel, deleteChatMessages, parseAnchor } from "@/lib/channel";
-import { onRowMouseDown, skipRowClick, useSelection } from "@/lib/selection";
+import {
+  onRowMouseDown,
+  skipRowClick,
+  useSelection,
+  yieldLinkContextMenu,
+} from "@/lib/selection";
 import { cn } from "@/lib/utils";
 import type { UIMessage } from "ai";
 import { useAgent, useChat } from "alchemy/AI/React";
@@ -709,6 +714,7 @@ const ChatTranscript = ({
             <ContextMenuTrigger asChild>
           <div
             className="contents"
+            onContextMenuCapture={yieldLinkContextMenu}
             onContextMenu={(event) => {
               // off a row there is nothing to act on — no menu
               if (

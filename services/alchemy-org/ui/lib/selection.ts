@@ -62,6 +62,24 @@ export const onInteractive = (target: EventTarget | null): boolean =>
   target.closest("a, button, input, textarea, select, [role=button]") !==
     null;
 
+/**
+ * `onContextMenuCapture` for a list's menu trigger: a right-click ON
+ * A LINK is the browser's (open in new tab, copy address…) — stop it
+ * in the capture phase so neither the row nor the menu sees it, and
+ * the native menu opens untouched.
+ */
+export const yieldLinkContextMenu = (event: {
+  readonly target: EventTarget | null;
+  stopPropagation(): void;
+}): void => {
+  if (
+    event.target instanceof Element &&
+    event.target.closest("a[href]") !== null
+  ) {
+    event.stopPropagation();
+  }
+};
+
 interface RowMouseEvent extends Modifiers {
   readonly target: EventTarget | null;
   preventDefault(): void;
