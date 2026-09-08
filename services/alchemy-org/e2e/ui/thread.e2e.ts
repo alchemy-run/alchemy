@@ -145,7 +145,12 @@ test("the state pane shows entities, agents, and the worktree", async ({
   const pane = page.getByRole("complementary", { name: "Thread state" });
   await expect(pane).toContainText("Bug in reconcile");
   await expect(pane).toContainText("Add sumToN helper");
-  await expect(pane).toContainText("trees/pr-148");
+  await expect(pane).toContainText("pr-148");
+  await expect(
+    pane.getByRole("button", {
+      name: "copy worktree path /workspace/trees/pr-148",
+    }),
+  ).toBeVisible();
   await expect(pane).toContainText("engineer");
   await expect(pane).toMatchAriaSnapshot({ name: "thread-pane.aria.yml" });
 });

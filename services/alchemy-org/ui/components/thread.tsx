@@ -26,6 +26,7 @@ import type { ThreadTab } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 import {
   Bot,
+  Check,
   CircleDot,
   FileDiff,
   FolderGit2,
@@ -39,14 +40,14 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useCallback, type ReactNode } from "react";
+import { useCallback, useState, type ReactNode } from "react";
 import { ReviewView } from "@/components/review";
 
 const Hint = ({ label, children }: { label: string; children: ReactNode }) => (
   <TooltipProvider>
     <Tooltip>
       <TooltipTrigger asChild>{children}</TooltipTrigger>
-      <TooltipContent side="bottom" className="text-xs">
+      <TooltipContent side="bottom" className="whitespace-pre-line text-xs">
         {label}
       </TooltipContent>
     </Tooltip>
@@ -72,6 +73,48 @@ const entityIcon = (kind: "issue" | "pull", state: string) => {
     return <GitPullRequestClosed className="size-3.5 text-brick" />;
   }
   return <GitPullRequestArrow className="size-3.5 text-moss" />;
+};
+
+/** The short name of a worktree: the part after the thread's own slug
+ *  (`<thread>--pr-1521` → `pr-1521`), else the directory's name. Every
+ *  tree on a thread shares the slug, so it says nothing here. */
+const worktreeName = (path: string): string => {
+  const base = path.replace(/\/+$/, "").split("/").pop() ?? path;
+  const cut = base.lastIndexOf("--");
+  return cut === -1 ? base : base.slice(cut + 2);
+};
+
+/** An entity's worktree, as a chip: the short name, the full path on
+ *  hover, the path on the clipboard on click — so a long path never
+ *  decides the row's layout. */
+const WorktreeChip = ({ path }: { path: string }) => {
+  const [copied, setCopied] = useState(false);
+  const copy = useCallback(() => {
+    void navigator.clipboard
+      ?.writeText(path)
+      .then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1200);
+      })
+      .catch(() => {});
+  }, [path]);
+  return (
+    <Hint label={copied ? "Copied" : `${path}\nClick to copy the path`}>
+      <button
+        type="button"
+        onClick={copy}
+        aria-label={`copy worktree path ${path}`}
+        className="ml-auto flex min-w-0 max-w-[60%] cursor-pointer items-center gap-1 rounded border border-border/60 bg-muted/40 px-1.5 py-px font-mono text-[10px] leading-4 text-muted-foreground hover:border-border hover:bg-accent hover:text-foreground"
+      >
+        {copied ? (
+          <Check className="size-3 shrink-0 text-moss" />
+        ) : (
+          <FolderGit2 className="size-3 shrink-0" />
+        )}
+        <span className="truncate">{worktreeName(path)}</span>
+      </button>
+    </Hint>
+  );
 };
 
 const AGENT_DOT: Record<string, string> = {
@@ -151,24 +194,21 @@ const ThreadPane = ({
                   </Hint>
                 )}
               </div>
-              <div className="flex items-center gap-2 pl-5 text-[11px] text-muted-foreground">
+              <div className="flex min-w-0 items-center gap-x-2 pl-5 text-[11px] text-muted-foreground">
                 <a
                   href={`https://github.com/${entity.ref.replace("#", "/issues/")}`}
                   target="_blank"
                   rel="noreferrer"
-                  className="hover:text-foreground hover:underline"
+                  title={entity.ref}
+                  className="shrink-0 whitespace-nowrap hover:text-foreground hover:underline"
                 >
-                  {entity.ref}
+                  {/* the number alone: a thread's entities live in the one
+                      connected repository, and the row is narrow */}
+                  {parsed === undefined ? entity.ref : `#${parsed.number}`}
                 </a>
-                <span>{entity.state}</span>
+                <span className="shrink-0">{entity.state}</span>
                 {entity.worktree !== undefined && (
-                  <span
-                    title={entity.worktree}
-                    className="flex min-w-0 items-center gap-1 truncate font-mono text-[10px]"
-                  >
-                    <FolderGit2 className="size-3 shrink-0" />
-                    {entity.worktree.split("/").slice(-2).join("/")}
-                  </span>
+                  <WorktreeChip path={entity.worktree} />
                 )}
               </div>
             </div>
