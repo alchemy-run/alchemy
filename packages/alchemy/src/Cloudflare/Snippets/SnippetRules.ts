@@ -224,7 +224,7 @@ interface WireRule {
 }
 
 const listObservedRules = (zoneId: string) =>
-  snippets.getRule({ zoneId }).pipe(
+  snippets.listRules({ zoneId }).pipe(
     // A zone that has never had a snippet-rule list 404s — there is simply
     // no rule list, which is equivalent to an empty one.
     Effect.catchTag("SnippetRulesNotFound", () => Effect.succeed([])),
