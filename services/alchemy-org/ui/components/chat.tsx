@@ -710,7 +710,11 @@ const ChatTranscript = ({
         <ConversationContent className="mx-auto max-w-3xl">
           {/* ONE menu for the transcript; the row under the pointer
               picks the ids (its own, or the selection it belongs to) */}
-          <ContextMenu>
+          <ContextMenu
+            onOpenChange={(open) => {
+              if (!open) setMenuIds([]);
+            }}
+          >
             <ContextMenuTrigger asChild>
           <div
             className="contents"
@@ -787,6 +791,9 @@ const ChatTranscript = ({
                 <div
                   data-message-id={message.id}
                   data-selected={selection.has(message.id) ? "" : undefined}
+                  data-targeted={
+                    menuIds.includes(message.id) ? "" : undefined
+                  }
                   onMouseDown={onRowMouseDown}
                   onClick={(event: MouseEvent) => {
                     if (!skipRowClick(event)) {
@@ -799,7 +806,7 @@ const ChatTranscript = ({
                   className={cn(
                     "-mx-2 -my-1.5 flex items-start gap-2 rounded-md border-l-2 border-transparent px-1.5 py-1.5 transition-colors",
                     // the row under the pointer lifts; a selected one stays lit
-                    selection.has(message.id)
+                    selection.has(message.id) || menuIds.includes(message.id)
                       ? "border-primary/60 bg-accent/60"
                       : "hover:bg-accent/70",
                   )}

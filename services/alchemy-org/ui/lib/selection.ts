@@ -3,11 +3,14 @@
  * (channel messages, the sidebar's threads, a thread's transcript).
  * The gestures are the ones IDEs and mail clients taught everyone:
  *
- * - click       → select just this item (the anchor for ranges)
+ * - click       → NOT a selection: clears one, and marks this item as
+ *                 the anchor a later ⇧-click ranges from
  * - ⌘/ctrl+click → toggle this item, keeping the rest
  * - ⇧+click     → select the range from the anchor to this item
- * - right-click → an item outside the selection replaces it; an item
- *                 inside leaves it — the menu acts on the whole set
+ * - right-click → inside the selection, the menu acts on the whole
+ *                 set; outside, the selection is dropped and the menu
+ *                 acts on that one item — TARGETED (highlighted) only
+ *                 for as long as the menu is open
  * - Escape      → clear; Delete/Backspace → the caller's delete
  *
  * Items are addressed by id; `order` (the ids as displayed, top to
@@ -29,14 +32,15 @@ export interface Selection {
   /**
    * A click on an item. Returns `true` when it was a SELECTION gesture
    * (⌘ or ⇧) — the caller then skips its plain-click action (opening
-   * a thread, say). A plain click selects the one item AND returns
-   * `false` so the plain action runs too.
+   * a thread, say). A plain click selects nothing (it clears, and
+   * sets the anchor) and returns `false` so the plain action runs.
    */
   readonly click: (id: string, mods: Modifiers) => boolean;
   /**
    * A right-click on an item: the ids the menu acts on, in display
-   * order. Outside the selection the item replaces it; inside, the
-   * selection stands.
+   * order. Inside the selection, the selection; outside, just the item
+   * (and the selection is dropped — the item is the menu's transient
+   * target, not selected).
    */
   readonly target: (id: string) => ReadonlyArray<string>;
   /** The selection in display order. */
@@ -159,7 +163,9 @@ export const useSelection = (
       anchorRef.current = id;
       return true;
     }
-    setSelected(new Set([id]));
+    // plain: only ⌘, ⇧ and right-click select — but this is where a
+    // later ⇧-click ranges from
+    setSelected((current) => (current.size === 0 ? current : new Set()));
     anchorRef.current = id;
     return false;
   }, []);
@@ -172,7 +178,7 @@ export const useSelection = (
     if (selectedRef.current.has(id)) {
       return list.filter((entry) => selectedRef.current.has(entry));
     }
-    setSelected(new Set([id]));
+    setSelected((current) => (current.size === 0 ? current : new Set()));
     anchorRef.current = id;
     return [id];
   }, []);

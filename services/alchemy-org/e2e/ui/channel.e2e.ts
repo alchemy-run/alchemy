@@ -165,9 +165,9 @@ test("click, ⇧-click and ⌘-click build a selection; the menu acts on all of 
   await expect(main(page)).toContainText("event five");
 
   const selected = main(page).locator("[data-seq][data-selected]");
-  // a plain click selects the one row (the anchor)
+  // a plain click selects NOTHING — it only sets the anchor
   await main(page).getByText("event one").click();
-  await expect(selected).toHaveCount(1);
+  await expect(selected).toHaveCount(0);
   // ⇧-click ranges from the anchor
   await main(page).getByText("event three").click({ modifiers: ["Shift"] });
   await expect(selected).toHaveCount(3);
@@ -189,13 +189,29 @@ test("click, ⇧-click and ⌘-click build a selection; the menu acts on all of 
   await expect(main(page)).not.toContainText("event one");
   await expect(main(page)).toContainText("event four");
 
-  // right-click OUTSIDE the selection replaces it with that one row
-  await main(page).getByText("event four").click();
+  // ⌘-click selects one; a plain click anywhere clears it
+  await main(page).getByText("event four").click({ modifiers: ["Meta"] });
   await expect(selected).toHaveCount(1);
-  await expect(page.getByRole("menuitem")).toHaveCount(0);
-  // Escape clears
+  await main(page).getByText("event four").click();
+  await expect(selected).toHaveCount(0);
+  // ...and so does Escape
+  await main(page).getByText("event four").click({ modifiers: ["Meta"] });
+  await expect(selected).toHaveCount(1);
   await page.keyboard.press("Escape");
   await expect(selected).toHaveCount(0);
+
+  // right-click on an UNSELECTED row: not selected — TARGETED, lit only
+  // while its menu is open, and the menu acts on it alone
+  // (CSS, not role-scoped: the open menu is modal, so the rest of the
+  // page is aria-hidden and `getByRole("main")` resolves to nothing)
+  const targeted = page.locator("main [data-seq][data-targeted]");
+  await rowOf(page, "event four").click({ button: "right" });
+  await expect(targeted).toHaveCount(1);
+  await expect(page.locator("main [data-seq][data-selected]")).toHaveCount(0);
+  await expect(page.getByRole("menuitem", { name: "Delete" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("menuitem")).toHaveCount(0);
+  await expect(targeted).toHaveCount(0);
 });
 
 test("Reply from the menu quotes the original; the post carries replyTo", async ({

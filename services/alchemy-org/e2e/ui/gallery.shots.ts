@@ -100,8 +100,10 @@ test("channel: a selection and its menu, one item under the pointer", async ({
   seedWorld(api);
   await openApp(page);
   const main = page.getByRole("main");
-  // two rows selected (click, ⌘-click), the menu opened on one of them
-  await main.getByText("triage that issue and start on a fix").click();
+  // two rows selected (⌘-click each), the menu opened on one of them
+  await main
+    .getByText("triage that issue and start on a fix")
+    .click({ modifiers: ["Meta"] });
   await main
     .getByText("Placed it on w-reconcile; the engineer is on it.")
     .click({ modifiers: ["Meta"] });

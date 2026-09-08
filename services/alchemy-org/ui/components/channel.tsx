@@ -489,15 +489,18 @@ export const ChannelView = ({
           </div>,
         );
       }
-      // every row is SELECTABLE (click, ⌘-click, ⇧-click) and carries
-      // the context menu; the menu acts on the selection it lands in
+      // every row is SELECTABLE (⌘-click, ⇧-click) and carries the
+      // context menu; a row the open menu TARGETS lights up like a
+      // selected one, for as long as the menu is up
       const selected = selection.has(message.id);
+      const targeted = menuIds.includes(message.id);
       const wrap = (node: ReactNode) => (
         <div
           key={message.seq}
           data-seq={message.seq}
           data-message-id={message.id}
           data-selected={selected ? "" : undefined}
+          data-targeted={targeted ? "" : undefined}
           onMouseDown={onRowMouseDown}
           onClick={(event: MouseEvent) => {
             if (!skipRowClick(event)) selection.click(message.id, event);
@@ -506,7 +509,9 @@ export const ChannelView = ({
           className={cn(
             "-mx-2 rounded-md border-l-2 border-transparent px-1.5 transition-colors",
             // the row under the pointer lifts; a selected one stays lit
-            selected ? "border-primary/60 bg-accent/60" : "hover:bg-accent/70",
+            selected || targeted
+              ? "border-primary/60 bg-accent/60"
+              : "hover:bg-accent/70",
             flash === message.seq && "bg-primary/15",
           )}
         >
@@ -578,6 +583,7 @@ export const ChannelView = ({
     onOpenThread,
     onOpenReview,
     selection,
+    menuIds,
     byId,
     flash,
     jumpTo,
@@ -613,8 +619,13 @@ export const ChannelView = ({
           className="min-h-0 flex-1 overflow-y-auto"
         >
           {/* ONE menu for the stream; the row under the pointer picks
-              the ids (its own, or the selection it belongs to) */}
-          <ContextMenu>
+              the ids (its own, or the selection it belongs to); the
+              target's highlight lasts as long as the menu */}
+          <ContextMenu
+            onOpenChange={(open) => {
+              if (!open) setMenuIds([]);
+            }}
+          >
             <ContextMenuTrigger asChild>
               <div
                 onContextMenuCapture={yieldLinkContextMenu}
@@ -852,7 +863,11 @@ export const ThreadList = ({
     menuIds.length > 1 ? `${menuIds.length} threads` : undefined;
 
   return (
-    <ContextMenu>
+    <ContextMenu
+      onOpenChange={(open) => {
+        if (!open) setMenuIds([]);
+      }}
+    >
       <ContextMenuTrigger asChild>
     <nav
       aria-label="Threads"
@@ -892,6 +907,7 @@ export const ThreadList = ({
               type="button"
               data-thread={row.id}
               data-selected={pick.has(row.id) ? "" : undefined}
+              data-targeted={menuIds.includes(row.id) ? "" : undefined}
               onClick={(event) => {
                 if (!pick.click(row.id, event)) onOpenThread(row.id);
               }}
@@ -903,7 +919,8 @@ export const ThreadList = ({
                 selected === row.id
                   ? "bg-accent font-medium text-foreground"
                   : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
-                pick.has(row.id) && "bg-primary/10 text-foreground",
+                (pick.has(row.id) || menuIds.includes(row.id)) &&
+                  "bg-primary/10 text-foreground",
                 turn === "closed" && "opacity-60",
               )}
             >
