@@ -70,6 +70,7 @@ import {
   FileCode2,
   GitMerge,
   GitPullRequestArrow,
+  GitPullRequestClosed,
   MessageSquare,
   Square,
   Trash2,
@@ -165,9 +166,16 @@ export const timeAgo = (at: number): string => {
 export const EVENT_FAMILY: Array<
   [RegExp, { icon: LucideIcon; className: string }]
 > = [
+  // GitHub's own colors: open is green, merged is the accent, closed
+  // is red — the same reading as the thread pane's entity icons
   [/^PullRequestMerged/, { icon: GitMerge, className: "text-terracotta" }],
-  [/^PullRequest/, { icon: GitPullRequestArrow, className: "text-terracotta" }],
+  [
+    /^PullRequestClosed/,
+    { icon: GitPullRequestClosed, className: "text-brick" },
+  ],
+  [/^PullRequest/, { icon: GitPullRequestArrow, className: "text-moss" }],
   [/^IssueComment/, { icon: MessageSquare, className: "text-mist" }],
+  [/^IssueClosed/, { icon: CircleDot, className: "text-muted-foreground" }],
   [/^Issue/, { icon: CircleDot, className: "text-moss" }],
   [
     /^(CheckRun|CheckSuite|WorkflowRun|Push)/,
