@@ -19,6 +19,7 @@ export {
   SectionHeading,
   Stack,
   Viewport,
+  VirtualList,
   type BoxProps,
   type RowProps,
   type StackProps,
