@@ -86,9 +86,7 @@ test("the run pill opens the run rail; the eval card shows code and output", asy
 
   // the reply lands → the pill settles to "ran"
   api.pushMessage({ kind: "agent", text: "Placed it on w-triage." });
-  await expect(
-    main(page).getByRole("button", { name: /^ran$/ }),
-  ).toBeVisible();
+  await expect(main(page).getByRole("button", { name: /^ran$/ })).toBeVisible();
 
   // the rail closes on demand
   await rail.getByRole("button", { name: "Close the run pane" }).click();
@@ -169,7 +167,9 @@ test("click, ⇧-click and ⌘-click build a selection; the menu acts on all of 
   await main(page).getByText("event one").click();
   await expect(selected).toHaveCount(1);
   // ⇧-click ranges from the anchor
-  await main(page).getByText("event three").click({ modifiers: ["Shift"] });
+  await main(page)
+    .getByText("event three")
+    .click({ modifiers: ["Shift"] });
   await expect(selected).toHaveCount(3);
 
   // right-click inside it, then dismiss the menu — the gesture is over
@@ -184,15 +184,23 @@ test("click, ⇧-click and ⌘-click build a selection; the menu acts on all of 
 
   // rebuild it: click anchors, ⇧-click ranges
   await main(page).getByText("event one").click();
-  await main(page).getByText("event three").click({ modifiers: ["Shift"] });
+  await main(page)
+    .getByText("event three")
+    .click({ modifiers: ["Shift"] });
   await expect(selected).toHaveCount(3);
   // ⌘-click toggles one more in
-  await main(page).getByText("event five").click({ modifiers: ["Meta"] });
+  await main(page)
+    .getByText("event five")
+    .click({ modifiers: ["Meta"] });
   await expect(selected).toHaveCount(4);
   // ...and out again
-  await main(page).getByText("event five").click({ modifiers: ["Meta"] });
+  await main(page)
+    .getByText("event five")
+    .click({ modifiers: ["Meta"] });
   await expect(selected).toHaveCount(3);
-  await main(page).getByText("event five").click({ modifiers: ["Meta"] });
+  await main(page)
+    .getByText("event five")
+    .click({ modifiers: ["Meta"] });
 
   // right-click INSIDE the selection keeps it — the menu counts it
   await rowOf(page, "event two").click({ button: "right" });
@@ -212,7 +220,9 @@ test("click, ⇧-click and ⌘-click build a selection; the menu acts on all of 
   await expect(selected).toHaveCount(0);
   await main(page).getByText("event four").click();
   await expect(selected).toHaveCount(1);
-  await main(page).getByText("event four").click({ modifiers: ["Meta"] });
+  await main(page)
+    .getByText("event four")
+    .click({ modifiers: ["Meta"] });
   await expect(selected).toHaveCount(0);
   await main(page).getByText("event four").click();
   await expect(selected).toHaveCount(1);
@@ -294,6 +304,15 @@ test("⌘-click while replying adds to the reply; the bar counts them", async ({
   await rowOf(page, "event one").click({ modifiers: ["ControlOrMeta"] });
   await expect(bar).toContainText("Replying to 3 messages");
   await expect(replying).toHaveCount(3);
+  // the list of originals is collapsed behind the count by default;
+  // the header toggles it
+  await expect(bar).not.toContainText("event two");
+  const toggle = bar.getByRole("button", { name: "Replying to 3 messages" });
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  await expect(bar).toContainText("event two");
+  await expect(bar).toContainText("event three");
   // ⌘-click again removes; so does the row's ✕
   await rowOf(page, "event three").click({ modifiers: ["ControlOrMeta"] });
   await expect(bar).toContainText("Replying to 2 messages");
@@ -301,6 +320,9 @@ test("⌘-click while replying adds to the reply; the bar counts them", async ({
   await bar.getByRole("button", { name: "Stop replying to hubot" }).click();
   await expect(bar).toContainText("Replying to 2 messages");
   await expect(bar).not.toContainText("event two");
+  await expect(bar).toContainText("event three");
+  await bar.getByRole("button", { name: "Replying to 2 messages" }).click();
+  await expect(bar).not.toContainText("event three");
 
   const composer = page.getByRole("textbox", { name: "Message the channel" });
   await composer.fill("both of these");

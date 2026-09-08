@@ -70,7 +70,7 @@ const whoOf = (message: ChannelMessage): string =>
   (message.kind === "agent"
     ? "channel"
     : message.kind === "card"
-      ? message.card?.title ?? "card"
+      ? (message.card?.title ?? "card")
       : "event");
 
 /** One line of a message, for a quote — markdown links collapse to
@@ -237,9 +237,7 @@ const UserRow = memo(
         <div className="min-w-0 flex-1">
           {quotes}
           <div className="flex items-baseline gap-2">
-            <span className="text-[13px] font-semibold">
-              {login ?? "you"}
-            </span>
+            <span className="text-[13px] font-semibold">{login ?? "you"}</span>
             <button
               type="button"
               onClick={onToggleRun}
@@ -421,7 +419,10 @@ export const ChannelView = ({
 
   // SELECTION over the stream (click / ⌘ / ⇧), the ids the open
   // context menu acts on, and the inline reply being composed
-  const order = useMemo(() => messages.map((message) => message.id), [messages]);
+  const order = useMemo(
+    () => messages.map((message) => message.id),
+    [messages],
+  );
   const byId = useMemo(
     () => new Map(messages.map((message) => [message.id, message] as const)),
     [messages],
@@ -429,6 +430,12 @@ export const ChannelView = ({
   const selection = useSelection(order, { onDelete: confirmDeleteMessages });
   const [menuIds, setMenuIds] = useState<ReadonlyArray<string>>([]);
   const [replyTo, setReplyTo] = useState<ReadonlyArray<string>>([]);
+  // several originals: the bar counts them and the list is COLLAPSED
+  // until asked for; a new reply starts collapsed again
+  const [replyListOpen, setReplyListOpen] = useState(false);
+  useEffect(() => {
+    if (replyTo.length < 2) setReplyListOpen(false);
+  }, [replyTo.length]);
   // a reply's originals that were deleted meanwhile drop out of it
   useEffect(() => {
     setReplyTo((current) => {
@@ -472,7 +479,10 @@ export const ChannelView = ({
       ?.querySelector(`[data-seq="${seq}"]`)
       ?.scrollIntoView({ block: "center", behavior: "smooth" });
     setFlash(seq);
-    setTimeout(() => setFlash((current) => (current === seq ? undefined : current)), 1500);
+    setTimeout(
+      () => setFlash((current) => (current === seq ? undefined : current)),
+      1500,
+    );
   }, []);
 
   // stick to the bottom while the user is there; never yank them up
@@ -506,7 +516,10 @@ export const ChannelView = ({
       if (day !== undefined && day !== lastDay) {
         lastDay = day;
         out.push(
-          <div key={`day-${message.seq}`} className="flex items-center gap-3 py-1">
+          <div
+            key={`day-${message.seq}`}
+            className="flex items-center gap-3 py-1"
+          >
             <div className="h-px flex-1 bg-border" />
             <span className="shrink-0 text-[11px] text-muted-foreground">
               {formatDay(message.at)}
@@ -651,8 +664,7 @@ export const ChannelView = ({
           onScroll={(event) => {
             const target = event.currentTarget;
             stickRef.current =
-              target.scrollHeight - target.scrollTop - target.clientHeight <
-              80;
+              target.scrollHeight - target.scrollTop - target.clientHeight < 80;
           }}
           className="min-h-0 flex-1 overflow-y-auto"
         >
@@ -733,20 +745,35 @@ export const ChannelView = ({
                 className="flex flex-col gap-0.5 border-b border-border px-3 py-1.5 text-[11px] text-muted-foreground"
               >
                 {/* several originals: a header counts them (and drops
-                    them all); each then gets a compact row. One: a
-                    single line says who and what */}
+                    them all) and toggles the list of compact rows,
+                    collapsed by default. One: a single line says who
+                    and what */}
                 {replyTo.length > 1 && (
                   <div className="flex items-center gap-1.5">
                     <CornerUpLeft className="size-3 shrink-0" />
-                    <span className="flex-1">
-                      Replying to{" "}
-                      <span className="font-medium text-foreground">
-                        {replyTo.length} messages
+                    <button
+                      type="button"
+                      onClick={() => setReplyListOpen((open) => !open)}
+                      aria-expanded={replyListOpen}
+                      aria-label={`Replying to ${replyTo.length} messages`}
+                      className="flex min-w-0 flex-1 cursor-pointer items-center gap-1 rounded text-left hover:text-foreground"
+                    >
+                      <span>
+                        Replying to{" "}
+                        <span className="font-medium text-foreground">
+                          {replyTo.length} messages
+                        </span>
                       </span>
-                      <span className="ml-1.5 text-muted-foreground/70">
+                      <ChevronDown
+                        className={cn(
+                          "size-3 shrink-0 transition-transform",
+                          !replyListOpen && "-rotate-90",
+                        )}
+                      />
+                      <span className="ml-1 truncate text-muted-foreground/70">
                         ⌘-click a message to add or remove it
                       </span>
-                    </span>
+                    </button>
                     <button
                       type="button"
                       onClick={() => setReplyTo([])}
@@ -757,42 +784,43 @@ export const ChannelView = ({
                     </button>
                   </div>
                 )}
-                {replyTo.map((id) => {
-                  const original = byId.get(id)!;
-                  const single = replyTo.length === 1;
-                  return (
-                    <div
-                      key={id}
-                      className={cn(
-                        "flex items-center gap-1.5",
-                        !single && "pl-[18px]",
-                      )}
-                    >
-                      {single && <CornerUpLeft className="size-3 shrink-0" />}
-                      <span className="shrink-0">
-                        {single && "Replying to "}
-                        <span className="font-medium text-foreground">
-                          {whoOf(original)}
-                        </span>
-                      </span>
-                      <span className="min-w-0 flex-1 truncate">
-                        {excerptOf(original.text)}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setReplyTo((current) =>
-                            current.filter((entry) => entry !== id),
-                          )
-                        }
-                        aria-label={`Stop replying to ${whoOf(original)}`}
-                        className="flex size-5 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
+                {(replyTo.length === 1 || replyListOpen) &&
+                  replyTo.map((id) => {
+                    const original = byId.get(id)!;
+                    const single = replyTo.length === 1;
+                    return (
+                      <div
+                        key={id}
+                        className={cn(
+                          "flex items-center gap-1.5",
+                          !single && "pl-[18px]",
+                        )}
                       >
-                        <X className="size-3" />
-                      </button>
-                    </div>
-                  );
-                })}
+                        {single && <CornerUpLeft className="size-3 shrink-0" />}
+                        <span className="shrink-0">
+                          {single && "Replying to "}
+                          <span className="font-medium text-foreground">
+                            {whoOf(original)}
+                          </span>
+                        </span>
+                        <span className="min-w-0 flex-1 truncate">
+                          {excerptOf(original.text)}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setReplyTo((current) =>
+                              current.filter((entry) => entry !== id),
+                            )
+                          }
+                          aria-label={`Stop replying to ${whoOf(original)}`}
+                          className="flex size-5 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
+                        >
+                          <X className="size-3" />
+                        </button>
+                      </div>
+                    );
+                  })}
               </div>
             )}
             <Textarea
@@ -930,8 +958,7 @@ export const ThreadList = ({
   );
   const pick = useSelection(order, { onDelete: onDeleteThreads });
   const [menuIds, setMenuIds] = useState<ReadonlyArray<string>>([]);
-  const many =
-    menuIds.length > 1 ? `${menuIds.length} threads` : undefined;
+  const many = menuIds.length > 1 ? `${menuIds.length} threads` : undefined;
 
   return (
     <ContextMenu
@@ -944,75 +971,75 @@ export const ThreadList = ({
       }}
     >
       <ContextMenuTrigger asChild>
-    <nav
-      aria-label="Threads"
-      onContextMenu={(event) => {
-        // off a row there is nothing to act on — no menu
-        if (
-          !(event.target instanceof Element) ||
-          event.target.closest("[data-thread]") === null
-        ) {
-          event.preventDefault();
-        }
-      }}
-      className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto p-2"
-    >
-      <button
-        type="button"
-        onClick={onOpenChannel}
-        aria-current={channelSelected ? "page" : undefined}
-        className={cn(
-          "flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm",
-          channelSelected
-            ? "bg-accent font-medium text-foreground"
-            : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
-        )}
-      >
-        <Terminal className="size-4 shrink-0" />
-        <span className="truncate"># channel</span>
-      </button>
-      {groups.map(([turn, rows]) => (
-        <div key={turn} className="mt-2 flex flex-col gap-0.5">
-          <div className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/70">
-            {turn === "closed" ? "Closed" : TURN_LABEL[turn]}
-          </div>
-          {rows.map((row) => (
-            <button
-              key={row.id}
-              type="button"
-              data-thread={row.id}
-              data-selected={pick.has(row.id) ? "" : undefined}
-              data-targeted={menuIds.includes(row.id) ? "" : undefined}
-              onClick={(event) => {
-                if (!pick.click(row.id, event)) onOpenThread(row.id);
-              }}
-              onContextMenu={() => setMenuIds(pick.target(row.id))}
-              aria-current={selected === row.id ? "page" : undefined}
-              title={row.title}
-              className={cn(
-                "flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm",
-                selected === row.id
-                  ? "bg-accent font-medium text-foreground"
-                  : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
-                (pick.has(row.id) || menuIds.includes(row.id)) &&
-                  "bg-primary/10 text-foreground",
-                turn === "closed" && "opacity-60",
-              )}
-            >
-              <span
-                className={cn(
-                  "size-2 shrink-0 rounded-full",
-                  turn === "closed"
-                    ? "bg-muted-foreground/30"
-                    : TURN_DOT[row.turn],
-                )}
-              />
-              <span className="min-w-0 flex-1 truncate">{row.name}</span>
-            </button>
+        <nav
+          aria-label="Threads"
+          onContextMenu={(event) => {
+            // off a row there is nothing to act on — no menu
+            if (
+              !(event.target instanceof Element) ||
+              event.target.closest("[data-thread]") === null
+            ) {
+              event.preventDefault();
+            }
+          }}
+          className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto p-2"
+        >
+          <button
+            type="button"
+            onClick={onOpenChannel}
+            aria-current={channelSelected ? "page" : undefined}
+            className={cn(
+              "flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm",
+              channelSelected
+                ? "bg-accent font-medium text-foreground"
+                : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
+            )}
+          >
+            <Terminal className="size-4 shrink-0" />
+            <span className="truncate"># channel</span>
+          </button>
+          {groups.map(([turn, rows]) => (
+            <div key={turn} className="mt-2 flex flex-col gap-0.5">
+              <div className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/70">
+                {turn === "closed" ? "Closed" : TURN_LABEL[turn]}
+              </div>
+              {rows.map((row) => (
+                <button
+                  key={row.id}
+                  type="button"
+                  data-thread={row.id}
+                  data-selected={pick.has(row.id) ? "" : undefined}
+                  data-targeted={menuIds.includes(row.id) ? "" : undefined}
+                  onClick={(event) => {
+                    if (!pick.click(row.id, event)) onOpenThread(row.id);
+                  }}
+                  onContextMenu={() => setMenuIds(pick.target(row.id))}
+                  aria-current={selected === row.id ? "page" : undefined}
+                  title={row.title}
+                  className={cn(
+                    "flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm",
+                    selected === row.id
+                      ? "bg-accent font-medium text-foreground"
+                      : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
+                    (pick.has(row.id) || menuIds.includes(row.id)) &&
+                      "bg-primary/10 text-foreground",
+                    turn === "closed" && "opacity-60",
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "size-2 shrink-0 rounded-full",
+                      turn === "closed"
+                        ? "bg-muted-foreground/30"
+                        : TURN_DOT[row.turn],
+                    )}
+                  />
+                  <span className="min-w-0 flex-1 truncate">{row.name}</span>
+                </button>
+              ))}
+            </div>
           ))}
-        </div>
-      ))}
-    </nav>
+        </nav>
       </ContextMenuTrigger>
       <ContextMenuContent>
         {menuIds.length === 1 && (
