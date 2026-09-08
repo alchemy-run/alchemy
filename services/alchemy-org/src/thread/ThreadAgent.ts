@@ -316,12 +316,18 @@ export const ThreadAgentLive = ThreadAgent.make(
       request you govern gets its OWN worktree (${worktree}); tell
       every subagent which tree to work in. ${spawn} runs an
       engineer to completion and hands you its report. ${attach}
-      and ${detach} change what you govern. ${postCard} is the one
-      way to reach the operator in the channel — use it when work
-      landed or you are blocked on them, never as a log.
-      ${closeThread} when the task is done.
+      and ${detach} change what you govern — the moment an engineer
+      reports a pull request it opened, ${attach} it: an unattached
+      pull has no review tab and its GitHub events route nowhere.
+      ${postCard} is the one way to reach the operator in the channel
+      — use it when work landed or you are blocked on them, never as
+      a log. ${closeThread} when the task is done.
 
       Keep replies short and factual; the operator reads this
-      conversation as the thread's record.`;
+      conversation as the thread's record. Name every issue and pull
+      request — in replies and in cards — as a full markdown link to
+      its GitHub URL ("[owner/repo#832](https://github.com/owner/repo/pull/832)",
+      /issues/ for issues), never a bare "#832": the channel renders
+      those links with a hover card.`;
   }),
 );

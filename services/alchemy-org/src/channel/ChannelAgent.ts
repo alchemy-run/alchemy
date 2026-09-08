@@ -271,7 +271,10 @@ const charter = Effect.gen(function* () {
   const createThread = yield* AI.Tool("create_thread")`
     Create a thread — a task with its own agent, sandbox, and
     conversation: ${name}, ${title}. Answers the ${AI.out(Thread)}.
-    Then place messages, attach entities, and brief its agent.`(
+    A thread is a shell until you fill it: in the same run, attach
+    every issue and pull request it is about (attach_entity), place
+    the channel messages that led to it (place_messages), then brief
+    its agent (brief_thread).`(
     Effect.fn(function* (p: { name: string; title: string }) {
       const thread = yield* threads.create({
         id: mintThreadId(p.name),
@@ -423,9 +426,23 @@ const charter = Effect.gen(function* () {
     ${readThread}, ${readIssue}, ${readPull}. Reshape with
     ${renameThread}, ${detachEntity}, ${closeThread}.
 
+    A thread is NOT DONE until its record is complete. Every issue or
+    pull request the task concerns — the one the operator pointed at,
+    the ones the messages you placed link to — is attached with
+    ${attachEntity} before you reply; an unattached entity has no
+    review tab, and its GitHub events route nowhere. Creating a thread
+    without attaching what it is about is the single most common
+    mistake — do not make it.
+
     Every run ENDS with exactly one ${sendReply} — short, factual,
-    what you did and where it lives. If the ask is ambiguous, reply
-    with the question instead of guessing.`;
+    what you did and where it lives. Name every issue and pull request
+    you mention as a full markdown link to its GitHub URL
+    ("[owner/repo#832](https://github.com/owner/repo/pull/832)" —
+    /issues/ for issues), never a bare "#832" or a plain ref: the
+    channel renders those links with a hover card, and the operator
+    follows them. Name the thread you created or steered by its id.
+    If the ask is ambiguous, reply with the question instead of
+    guessing.`;
 });
 
 /**
