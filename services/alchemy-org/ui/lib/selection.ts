@@ -3,7 +3,8 @@
  * (channel messages, the sidebar's threads, a thread's transcript).
  * The gestures are the ones IDEs and mail clients taught everyone:
  *
- * - click       → select just this item (the anchor for ranges)
+ * - click       → select just this item (the anchor for ranges); on
+ *                 the one item already selected alone, deselect it
  * - ⌘/ctrl+click → toggle this item, keeping the rest
  * - ⇧+click     → select the range from the anchor to this item
  * - right-click → inside the selection, the menu acts on the whole
@@ -162,8 +163,11 @@ export const useSelection = (
       anchorRef.current = id;
       return true;
     }
-    // plain: this one item, the anchor a later ⇧-click ranges from
-    setSelected(new Set([id]));
+    // plain: this one item, the anchor a later ⇧-click ranges from —
+    // clicked again while it is the lone selection, it deselects
+    setSelected((current) =>
+      current.size === 1 && current.has(id) ? new Set() : new Set([id]),
+    );
     anchorRef.current = id;
     return false;
   }, []);

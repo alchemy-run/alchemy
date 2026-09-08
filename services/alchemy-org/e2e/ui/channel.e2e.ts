@@ -204,7 +204,12 @@ test("click, ⇧-click and ⌘-click build a selection; the menu acts on all of 
   await expect(main(page)).not.toContainText("event one");
   await expect(main(page)).toContainText("event four");
 
-  // ⌘-click toggles one out; Escape clears
+  // clicking the lone selected row again deselects it; ⌘-click toggles
+  // one out; Escape clears
+  await main(page).getByText("event four").click();
+  await expect(selected).toHaveCount(1);
+  await main(page).getByText("event four").click();
+  await expect(selected).toHaveCount(0);
   await main(page).getByText("event four").click();
   await expect(selected).toHaveCount(1);
   await main(page).getByText("event four").click({ modifiers: ["Meta"] });
