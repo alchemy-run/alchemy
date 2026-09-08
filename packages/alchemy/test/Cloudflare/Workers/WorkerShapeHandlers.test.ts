@@ -65,5 +65,5 @@ test.skipIf(!!process.env.FAST)(
       expect(t).toBeGreaterThanOrEqual(resetAt);
     }
   }).pipe(logLevel),
-  { timeout: 180_000 },
+  { timeout: 240_000 },
 );

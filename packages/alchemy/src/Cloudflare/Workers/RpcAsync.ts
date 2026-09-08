@@ -5,22 +5,25 @@ import { isRpcErrorEnvelope, isRpcStreamEnvelope } from "../Bridge.ts";
 import {
   isExportedHandlerMethod,
   type ExportedHandlerMethod,
+  type RpcMethods,
 } from "./Worker.ts";
 
 export type RpcAsync<Shape> = {
-  [
-    K in keyof Shape as K extends ExportedHandlerMethod ? never : K
-  ]: Shape[K] extends (...args: infer A) => Effect.Effect<infer T, any, any>
+  [K in keyof RpcMethods<Shape>]: RpcMethods<Shape>[K] extends (
+    ...args: infer A
+  ) => Effect.Effect<infer T, any, any>
     ? (...args: A) => Promise<T>
-    : Shape[K] extends (...args: infer A) => Stream.Stream<any, any, any>
+    : RpcMethods<Shape>[K] extends (
+          ...args: infer A
+        ) => Stream.Stream<any, any, any>
       ? (...args: A) => Promise<ReadableStream<Uint8Array>>
-      : Shape[K] extends Effect.Effect<infer T, any, any>
+      : RpcMethods<Shape>[K] extends Effect.Effect<infer T, any, any>
         ? Promise<T>
-        : Shape[K] extends Stream.Stream<any, any, any>
+        : RpcMethods<Shape>[K] extends Stream.Stream<any, any, any>
           ? Promise<ReadableStream<Uint8Array>>
-          : Shape[K] extends (...args: infer A) => infer R
+          : RpcMethods<Shape>[K] extends (...args: infer A) => infer R
             ? (...args: A) => Promise<Awaited<R>>
-            : Promise<Shape[K]>;
+            : Promise<RpcMethods<Shape>[K]>;
 };
 
 /**

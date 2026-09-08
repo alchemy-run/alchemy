@@ -283,6 +283,20 @@ export const ExportedHandlerMethods = [
 
 export type ExportedHandlerMethod = (typeof ExportedHandlerMethods)[number];
 
+/**
+ * RPC-callable methods on a Worker init shape. Drops Cloudflare
+ * `ExportedHandler` event methods (`fetch`, `scheduled`, `email`,
+ * `queue`, …). The string-index key of {@link MainRpc} is stripped
+ * first so `Omit` over a Worker class does not widen remaining methods
+ * to the index-signature union.
+ */
+export type RpcMethods<Shape> = Omit<
+  {
+    [K in keyof Shape as string extends K ? never : K]: Shape[K];
+  },
+  ExportedHandlerMethod
+>;
+
 const exportedHandlerMethodSet: ReadonlySet<string> = new Set(
   ExportedHandlerMethods,
 );

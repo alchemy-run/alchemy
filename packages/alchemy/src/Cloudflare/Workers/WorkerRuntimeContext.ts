@@ -87,6 +87,8 @@ export const makeWorkerRuntimeContext = (id: string): WorkerRuntimeContext => {
               if (!isWorkerEvent(event) || event.type !== method) return;
               const methodHandler = shape![method];
               if (typeof methodHandler === "function") {
+                // A failing handler Effect rejects the WorkerEntrypoint
+                // promise (Cloudflare may retry scheduled/queue).
                 return methodHandler(event.input) as Effect.Effect<
                   unknown,
                   never,
