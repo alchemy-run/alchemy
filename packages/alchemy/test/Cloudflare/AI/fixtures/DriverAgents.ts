@@ -59,6 +59,13 @@ const respond = (prompt: Prompt.Prompt): Array<Response.PartEncoded> => {
           toolCall("remind", { seconds: Number(argument) || 2 }),
           finish("tool-calls"),
         ];
+      // the Supervisor's OWN delegation tool (a charter dispatching a
+      // named agent directly, the org's thread→engineer shape)
+      case "handoff":
+        return [toolCall("handoff", { task: argument }), finish("tool-calls")];
+      // a handler that never answers on its own — the eraser tests cut it
+      case "stall":
+        return [toolCall("stall", { label: argument }), finish("tool-calls")];
       // the container fixture's sandbox probe (DriverContainerWorker)
       case "probe":
         return [toolCall("probe", { cmd: argument }), finish("tool-calls")];
@@ -218,16 +225,59 @@ export const RemindLive = Layer.succeed(Remind, ((input: { seconds: number }) =>
     yield* thread.remind(`${input.seconds} seconds`, "the timer elapsed");
   })) as never);
 
+export const label = AI.Thing("label", S.String)`What is being waited on.`;
+
+export class Stall extends (AI.Tool<Stall>()("stall")`
+Wait on ${label} for as long as it takes.`) {}
+
+/** Blocks until INTERRUPTED — a tool mid-command (a test suite on the
+ *  machine) at the moment the operator erases the session. */
+export const StallLive = Layer.succeed(Stall, ((_input: { label: string }) =>
+  Effect.never.pipe(
+    Effect.onInterrupt(() => Effect.log("[fixture] stall interrupted")),
+  )) as never);
+
 export class Scribe extends AI.Agent<Scribe>()("Scribe") {}
 
 export const ScribeLive = Scribe.make(
   AI.fragment`
     You keep the record. Put anything you are handed into it with
-    ${Write}, and use ${Remind} when you are asked to wait.
+    ${Write}, use ${Remind} when you are asked to wait, and ${Stall}
+    when you are asked to wait on something.
 
     When you are not calling a tool, report the state of your thread.
   `,
-).pipe(Layer.provide([WriteLive, RemindLive]));
+).pipe(Layer.provide([WriteLive, RemindLive, StallLive]));
+
+export const task = AI.Thing("task", S.String)`The task to hand off.`;
+
+export class Handoff extends (AI.Tool<Handoff>()("handoff")`
+Hand ${task} to the Scribe under a session of its own and wait for
+what comes back.`) {}
+
+/** The key a handoff's Scribe session runs under — fixed, so a test
+ *  can address (and erase) the session the handler dispatched. */
+export const HANDOFF_KEY = "handoff-scribe";
+
+/** A charter dispatching a named agent DIRECTLY (not through the
+ *  driver's own delegation tool) — alchemy-org's thread→engineer
+ *  shape: the child is a session in its own right, not a registered
+ *  child of the supervisor's, and this handler is parked on its
+ *  outcome for as long as it runs. */
+export const HandoffLive = Layer.effect(
+  Handoff,
+  Effect.gen(function* () {
+    const scribe = yield* Scribe;
+    return ((input: { task: string }) =>
+      Effect.gen(function* () {
+        const session = yield* AI.Thread;
+        return yield* scribe.dispatch(input.task, {
+          key: HANDOFF_KEY,
+          parent: { term: "Supervisor", key: session.key },
+        });
+      })) as never;
+  }),
+);
 
 export class Supervisor extends AI.Agent<Supervisor>()("Supervisor") {}
 
@@ -236,9 +286,9 @@ export class Supervisor extends AI.Agent<Supervisor>()("Supervisor") {}
 export const SupervisorLive = Supervisor.make(
   AI.fragment`
     You do no work yourself. Hand every task to ${Scribe} and report
-    what came back.
+    what came back — or ${Handoff} it when asked to.
   `,
-);
+).pipe(Layer.provide(HandoffLive));
 
 /**
  * Every driver observation into the Worker's log, which is what makes

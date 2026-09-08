@@ -81,6 +81,19 @@ export default class KernelTestWorker extends Cloudflare.Worker<KernelTestWorker
             yield* actor.settle(key, { reason: input });
             return yield* HttpServerResponse.json({ settled: true });
           }
+          // the eraser — `Sessions.remove`, as the org's thread DELETE
+          // calls it; `?machine=false` spares the machine
+          case "/remove": {
+            const agent = url.searchParams.get("agent") ?? "Scribe";
+            yield* gateway.remove(agent, key, {
+              machine: url.searchParams.get("machine") !== "false",
+            });
+            return yield* HttpServerResponse.json({ removed: true });
+          }
+          // the directory, as the session index has it
+          case "/list": {
+            return yield* HttpServerResponse.json(yield* gateway.list());
+          }
           default:
             return HttpServerResponse.text("ok");
         }

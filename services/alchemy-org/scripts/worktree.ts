@@ -34,7 +34,9 @@ import { $ } from "bun";
 import {
   existsSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
+  renameSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -42,6 +44,9 @@ import {
 import { resolve } from "node:path";
 
 const WORKTREES = ".alchemy/worktrees";
+/** A dropped tree's files wait for the reaper under this prefix, beside
+ *  the live trees (see `drop`). */
+const TRASH_PREFIX = ".trash-";
 /** The repo's own distilled bootstrap (the `post-checkout` hook's
  *  script), run from the TREE's copy so it matches the tree's layout. */
 const BOOTSTRAP_DISTILLED = "scripts/bootstrap-distilled.mjs";
@@ -276,12 +281,26 @@ switch (verb) {
     break;
   }
   case "drop": {
+    let reap = false;
     await locked(async () => {
       const branch = present()
         ? await tryGit(["rev-parse", "--abbrev-ref", "HEAD"], treeDir)
         : undefined;
-      // already-gone is success: drops are idempotent
-      await tryGit(["worktree", "remove", "--force", treePath], root);
+      // The tree's FILES are not deleted here. A tree that has seen a
+      // `pnpm install` is hundreds of thousands of files, and `worktree
+      // remove` unlinks them inline — tens of seconds per tree, under
+      // the lock, on the thread DELETE that drops several. Moving the
+      // directory aside is one rename; git's registration is pruned
+      // against the now-missing path, and the files are reaped by a
+      // detached process once the lock is released (below). Already
+      // gone is success: drops are idempotent.
+      if (existsSync(treeDir)) {
+        renameSync(
+          treeDir,
+          resolve(root, WORKTREES, `${TRASH_PREFIX}${name}-${Date.now()}`),
+        );
+        reap = true;
+      }
       await tryGit(["worktree", "prune"], root);
       // the synthetic branch was ours to mint and ours to drop; a REAL
       // branch (a PR's head) is only let go when nothing on it is
@@ -293,6 +312,19 @@ switch (verb) {
       await pruneDistilled();
       await tryGit(["branch", "-D", synthetic], distilledRepo);
     });
+    // the reaper: every trashed tree (this drop's and any earlier reap
+    // that was cut short), in a process this one does not wait for —
+    // the Worker's exec returns the moment the lock is free. Each
+    // trash directory has a unique name, so a reaper can never take a
+    // later drop's rename target out from under it.
+    if (reap) {
+      const trashed = readdirSync(resolve(root, WORKTREES))
+        .filter((entry) => entry.startsWith(TRASH_PREFIX))
+        .map((entry) => resolve(root, WORKTREES, entry));
+      Bun.spawn(["rm", "-rf", ...trashed], {
+        stdio: ["ignore", "ignore", "ignore"],
+      }).unref();
+    }
     break;
   }
 }

@@ -2559,6 +2559,16 @@ export const makeSessionEngine = (
       // busy dies with the session — a settled session must not keep
       // recovery re-entering it
       s.busy = undefined;
+      // the round is cut FIRST, before the cascade: a parent parked
+      // in its dispatch tool would otherwise be handed the child's
+      // settle as that tool's result and run its round to the end
+      // (an assistant turn, a tool-result row) on a session already
+      // settled — so `s.round` is gone by the time a cut after the
+      // cascade looks for it. Only a session settling ITSELF (from
+      // its own round) cuts last: its cut is forked, and must not
+      // land on this very settle mid-flight.
+      const inside = yield* insideRound(s);
+      if (!inside) yield* cutRound(s, false);
       yield* putMeta(s);
       yield* observe(s, { type: "settled" });
       // anyone still waiting gets the outcome — the current round's
@@ -2573,8 +2583,16 @@ export const makeSessionEngine = (
       );
       yield* Deferred.succeed(s.settledSignal, outcomeValue);
       yield* settleChildren(s);
-      yield* cutRound(s);
+      if (inside) yield* cutRound(s, true);
     });
+
+  /** Is the current fiber running INSIDE this session's own round (a
+   *  session settling itself from its own tool handler)? */
+  const insideRound = (s: EngineSession): Effect.Effect<boolean> =>
+    Effect.map(
+      Effect.serviceOption(Thread),
+      (self) => Option.isSome(self) && self.value.key === s.key,
+    );
 
   /**
    * A settled session must not keep WORKING: its outcome is fixed, so
@@ -2589,15 +2607,13 @@ export const makeSessionEngine = (
    * interruption is a self-kill; the cut is forked instead and lands
    * the moment the handler returns.
    */
-  const cutRound = (s: EngineSession): Effect.Effect<void> =>
+  const cutRound = (s: EngineSession, inside: boolean): Effect.Effect<void> =>
     Effect.gen(function* () {
       const fiber = s.round;
       if (fiber === undefined) return;
       // booked as an abort by the burst (silently — the session is
       // settled, so `onAbort` has nothing to add)
       s.aborting = true;
-      const self = yield* Effect.serviceOption(Thread);
-      const inside = Option.isSome(self) && self.value.key === s.key;
       if (inside) {
         yield* Effect.forkDetach(Fiber.interrupt(fiber));
       } else {

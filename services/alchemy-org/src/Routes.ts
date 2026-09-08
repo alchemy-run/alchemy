@@ -432,29 +432,11 @@ export const routes = Effect.gen(function* () {
     Effect.gen(function* () {
       const id = yield* threadId;
       const snap = yield* threads.get(id);
-      if (Option.isSome(checkouts)) {
-        yield* Effect.forEach(
-          (snap?.entities ?? []).flatMap((entity) => {
-            const parsed = parseEntityRef(entity.ref);
-            return entity.worktree === undefined ||
-              entity.worktree === "." ||
-              entity.worktree === "" ||
-              parsed === undefined
-              ? []
-              : [pullWorktreeKey(id, parsed.number)];
-          }),
-          (key) =>
-            checkouts.value.release(key).pipe(
-              Effect.provideService(AI.Thread, phantomThread(id)),
-              Effect.catch((error) =>
-                Effect.logWarning(
-                  `deleting thread '${id}': dropping worktree '${key}' failed (contained): ${error.message}`,
-                ),
-              ),
-            ),
-          { discard: true },
-        );
-      }
+      // THE ORDER: agents first, trees second, the record last. The
+      // agents are the ones still writing into the trees, so they are
+      // stopped (rounds cut, machines released) before a tree goes;
+      // the record goes last so the thread reads as "deleting" until
+      // everything under it is actually gone.
       yield* sessions
         .remove(THREAD_TERM, id)
         .pipe(Effect.provide(RuntimeContext.phantom));
@@ -490,6 +472,29 @@ export const routes = Effect.gen(function* () {
         ({ term, key }) => sessions.remove(term, key, { machine: false }),
         { discard: true, concurrency: 8 },
       ).pipe(Effect.provide(RuntimeContext.phantom));
+      if (Option.isSome(checkouts)) {
+        yield* Effect.forEach(
+          (snap?.entities ?? []).flatMap((entity) => {
+            const parsed = parseEntityRef(entity.ref);
+            return entity.worktree === undefined ||
+              entity.worktree === "." ||
+              entity.worktree === "" ||
+              parsed === undefined
+              ? []
+              : [pullWorktreeKey(id, parsed.number)];
+          }),
+          (key) =>
+            checkouts.value.release(key).pipe(
+              Effect.provideService(AI.Thread, phantomThread(id)),
+              Effect.catch((error) =>
+                Effect.logWarning(
+                  `deleting thread '${id}': dropping worktree '${key}' failed (contained): ${error.message}`,
+                ),
+              ),
+            ),
+          { discard: true },
+        );
+      }
       yield* threads.remove(id);
       return yield* HttpServerResponse.json({ ok: true });
     }),
