@@ -320,6 +320,12 @@ export const DriverLocal: Layer.Layer<
         remove: (term, key) =>
           Effect.gen(function* () {
             yield* stop(term, key);
+            // a round still in flight (a tool mid-call) is CUT, not
+            // awaited: settle only marks the session; the tick would
+            // otherwise run to its end and write into the rows purged
+            // below. Settled first, the abort books nothing and the
+            // kick after it has nowhere to go.
+            yield* engines.get(term)?.abort(key) ?? Effect.void;
             // forget the RAM shell + resident machinery so the key
             // can be admitted fresh, then purge the durable rows
             yield* engines.get(term)?.forget(key) ?? Effect.void;

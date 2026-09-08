@@ -938,6 +938,16 @@ export const DurableObjectHost: Layer.Layer<
                     cause,
                   ),
               );
+              // a round still in flight (a tool mid-call on the
+              // machine) is CUT, not awaited: settle only marks the
+              // session — the tick would otherwise run on to its end
+              // and write into the rows purged below, resurrecting a
+              // deleted session. Settled first, the abort books
+              // nothing and its kick has nowhere to go; a hibernated
+              // session has no round to cut.
+              if (engineRef !== undefined) {
+                yield* engineRef.abort(me.key);
+              }
               for (const socket of yield* state.getWebSockets()) {
                 yield* Effect.ignore(socket.close(1000, "session removed"));
               }

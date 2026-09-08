@@ -1,5 +1,6 @@
 import * as AI from "alchemy/AI";
 import * as Cloudflare from "alchemy/Cloudflare";
+import * as Git from "alchemy/Git";
 import * as GitHub from "alchemy/GitHub";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Effect from "effect/Effect";
@@ -11,7 +12,7 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpRouter from "effect/unstable/http/HttpRouter";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import { Channel } from "./channel/Channel.ts";
+import { Channel, parseEntityRef } from "./channel/Channel.ts";
 import { ChannelAgent, channelRunKey } from "./channel/ChannelAgent.ts";
 import { PublishToken } from "./github/PublishToken.ts";
 import {
@@ -24,7 +25,7 @@ import {
 import { connected, primary } from "./github/Repos.ts";
 import { Engineer } from "./coding/Engineer.ts";
 import { ThreadAgent } from "./thread/ThreadAgent.ts";
-import { THREAD_TERM, Threads } from "./thread/Threads.ts";
+import { pullWorktreeKey, THREAD_TERM, Threads } from "./thread/Threads.ts";
 
 /** `${term}:${key}` → the session it names (the key may contain `:`). */
 const parseSessionId = (id: string): { term: string; key: string } => {
@@ -68,8 +69,11 @@ export const routes = Effect.gen(function* () {
   const threads = yield* Threads;
   const channelAgent = yield* ChannelAgent;
   const threadAgent = yield* ThreadAgent;
-  // OPTIONAL: the terminal door needs the session machine seam
+  // OPTIONAL: the terminal door needs the session machine seam, and
+  // deleting a thread drops its pull requests' worktrees through git
+  // over that same machine
   const sandbox = yield* Effect.serviceOption(AI.Sandbox);
+  const checkouts = yield* Effect.serviceOption(Git.Checkouts);
   const exec = yield* Cloudflare.WorkerExecutionContext;
   const publishToken = yield* Effect.serviceOption(PublishToken);
 
@@ -397,11 +401,23 @@ export const routes = Effect.gen(function* () {
   );
 
   /**
-   * DELETE a thread — everything it was: its DO and channel
-   * projections (`threads.remove`), then its sessions. The subagents
-   * go first with the machine spared (they share the thread's — the
-   * key's `::` prefix), then the thread agent's own session takes the
-   * machine down with it. Idempotent on an unknown id.
+   * DELETE a thread — everything it was, in an order that leaves no
+   * one running:
+   *
+   * 1. its DO and channel projections (`threads.remove`) — the
+   *    snapshot it returns is the book of what else to tear down;
+   * 2. the pull requests' worktrees on its machine (`worktree` tool
+   *    trees, `pullWorktreeKey`) — dropped through `Git.Checkouts`
+   *    while the machine still answers; a tree that IS the machine's
+   *    disk (`.`) goes with the machine below;
+   * 3. the thread agent's own session — settle + cut its round (a
+   *    `spawn` mid-await dies here, so no waiter re-books an agent on
+   *    the erased DO) and take the machine down with it;
+   * 4. the subagents' sessions, machine spared (they shared the
+   *    thread's — the key's `::` prefix): each settles and has its
+   *    round cut, so an engineer mid-command stops.
+   *
+   * Idempotent on an unknown id.
    */
   const threadDelete = HttpRouter.add(
     "DELETE",
@@ -409,15 +425,38 @@ export const routes = Effect.gen(function* () {
     Effect.gen(function* () {
       const id = yield* threadId;
       const snap = yield* threads.remove(id);
+      if (Option.isSome(checkouts)) {
+        yield* Effect.forEach(
+          (snap?.entities ?? []).flatMap((entity) => {
+            const parsed = parseEntityRef(entity.ref);
+            return entity.worktree === undefined ||
+              entity.worktree === "." ||
+              entity.worktree === "" ||
+              parsed === undefined
+              ? []
+              : [pullWorktreeKey(id, parsed.number)];
+          }),
+          (key) =>
+            checkouts.value.release(key).pipe(
+              Effect.provideService(AI.Thread, phantomThread(id)),
+              Effect.catch((error) =>
+                Effect.logWarning(
+                  `deleting thread '${id}': dropping worktree '${key}' failed (contained): ${error.message}`,
+                ),
+              ),
+            ),
+          { discard: true },
+        );
+      }
+      yield* sessions
+        .remove(THREAD_TERM, id)
+        .pipe(Effect.provide(RuntimeContext.phantom));
       const engineerTerm = Engineer["~alchemy/Name"];
       yield* Effect.forEach(
         snap?.agents ?? [],
         (agent) => sessions.remove(engineerTerm, agent.key, { machine: false }),
         { discard: true },
       ).pipe(Effect.provide(RuntimeContext.phantom));
-      yield* sessions
-        .remove(THREAD_TERM, id)
-        .pipe(Effect.provide(RuntimeContext.phantom));
       return yield* HttpServerResponse.json({ ok: true });
     }),
   );

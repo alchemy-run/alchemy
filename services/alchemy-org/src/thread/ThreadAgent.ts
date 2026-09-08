@@ -7,7 +7,7 @@ import { parseEntityRef } from "../channel/Channel.ts";
 import { Engineer } from "../coding/Engineer.ts";
 import { BadRef, makeEntityLookup } from "../github/Entity.ts";
 import { SessionRepo } from "../github/SessionRepo.ts";
-import { THREAD_TERM, Threads } from "./Threads.ts";
+import { pullWorktreeKey, THREAD_TERM, Threads } from "./Threads.ts";
 
 /**
  * The THREAD AGENT — one durable session per thread (`t-<id>`), the
@@ -178,7 +178,7 @@ export const ThreadAgentLive = ThreadAgent.make(
             }),
           );
         }
-        const key = `${id}--pr-${parsed.number}`;
+        const key = pullWorktreeKey(id, parsed.number);
         const checkout = yield* checkouts
           .checkout({
             key,

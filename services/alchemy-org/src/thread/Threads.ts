@@ -148,6 +148,12 @@ export class Threads extends Context.Service<
 /** The thread agent's session term — `/attach/Thread/<id>`. */
 export const THREAD_TERM = "Thread";
 
+/** The `Git.Checkouts` key of a pull request's worktree on a thread's
+ *  machine — minted by the thread agent's `worktree` tool, released
+ *  when the thread is deleted. */
+export const pullWorktreeKey = (threadId: string, number: number): string =>
+  `${threadId}--pr-${number}`;
+
 /** Mint a thread id from its name (stable, readable, collision-safe). */
 export const mintThreadId = (name: string): string =>
   `t-${name

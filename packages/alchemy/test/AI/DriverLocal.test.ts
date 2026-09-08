@@ -335,6 +335,61 @@ describe("DriverLocal (in-memory)", () => {
   );
 
   it.live(
+    "Sessions.remove cuts the round in flight — the tool's finalizer runs, nothing resurrects the rows",
+    () => {
+      const model = Model.make([
+        () => [
+          Model.toolCall("search", { query: "the void" }),
+          Model.finish("tool-calls"),
+        ],
+        // never reached: the tick is cut, not finished
+        () => [Model.text("should not run"), Model.finish()],
+      ]);
+      const entered = Effect.runSync(Deferred.make<void>());
+      let released = false;
+      const search = Layer.succeed(Search, ((_input: { query: string }) =>
+        Effect.andThen(Deferred.succeed(entered, undefined), Effect.never).pipe(
+          Effect.onInterrupt(() =>
+            Effect.sync(() => {
+              released = true;
+            }),
+          ),
+        )) as never);
+      const storage = ThreadStorageMemory;
+      const layer = Layer.mergeAll(
+        DriverLocal.pipe(Layer.provide(storage), Layer.provide(model.layer)),
+        storage,
+        search,
+        RuntimeContext.phantom,
+      );
+      return Effect.gen(function* () {
+        const researcher = yield* interpret(Researcher, ResearcherCharter);
+        const sessions = yield* AI.Sessions;
+        const threads = yield* AI.ThreadStorage;
+
+        const waiting = yield* Effect.forkChild(
+          researcher.dispatch("look into it", { key: "w-erase" }),
+        );
+        yield* Deferred.await(entered);
+
+        // the eraser: the blocked handler is interrupted (its
+        // finalizer ran) and the dispatch resolves with the settle
+        yield* sessions.remove("Researcher", "w-erase");
+        yield* Fiber.await(waiting);
+        expect(released).toBe(true);
+
+        // nothing lingers: no second model call, and the purged
+        // transcript stays purged — a cut tick writes nothing after
+        yield* Effect.sleep("50 millis");
+        expect(model.calls).toHaveLength(1);
+        const handle = yield* threads.open("Researcher", "w-erase");
+        expect(yield* handle.observations(0)).toEqual([]);
+      }).pipe(Effect.scoped, Effect.provide(layer));
+    },
+    { timeout: 30_000 },
+  );
+
+  it.live(
     "quiet send (wake: false) accumulates without waking a parked run",
     () => {
       const model = Model.make([

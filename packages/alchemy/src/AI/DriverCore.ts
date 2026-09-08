@@ -2534,8 +2534,11 @@ export const makeSessionEngine = (
       // included; the burst then books the abort under its gate
       yield* Fiber.interrupt(fiber);
       // input that queued during the round opens the next one (a kick
-      // with nothing to do just parks — which the views see)
-      yield* kick(s.key);
+      // with nothing to do just parks — which the views see). A
+      // SETTLED session is not kicked: the eraser settles before it
+      // cuts the round, and a kick after the purge would re-admit the
+      // key over empty rows — a zombie of the session just removed.
+      if (s.settledOutcome === undefined) yield* kick(s.key);
       return true;
     });
 
@@ -2750,9 +2753,16 @@ export const makeSessionEngine = (
     restore,
     ensure: (key) => Effect.map(ensureSession(key), (s) => s.key),
     socketHost,
+    // NON-ADMITTING: a resident fiber asks this between bursts, and a
+    // key whose shell was FORGOTTEN meanwhile (the eraser) must read
+    // as settled — admitting here would re-create the session over
+    // the purged rows the moment it was removed
     awaitSettled: (key) =>
-      Effect.flatMap(ensureSession(key), (s) =>
-        Deferred.await(s.settledSignal),
-      ),
+      Effect.suspend(() => {
+        const s = sessions.get(key);
+        return s === undefined
+          ? Effect.succeed(undefined)
+          : Deferred.await(s.settledSignal);
+      }),
   };
 };
