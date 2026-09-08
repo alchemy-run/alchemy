@@ -82,14 +82,20 @@ export const describeEvent = (event: GitHub.RepositoryEvent): AppendInput => {
         author: author(),
         text: `closed pull request ${link(repo, event.pullRequest.number, event.pullRequest.html_url)} without merging`,
       };
-    case "Push":
+    case "Push": {
+      // the head commit as a link — the UI's commit hover card keys on
+      // the `/commit/<sha>` URL shape, like it keys `/pull/N` for refs
+      const head = event.headCommit;
+      const sha =
+        head === null
+          ? ""
+          : ` [\`${head.id.slice(0, 7)}\`](https://github.com/${repo}/commit/${head.id})`;
       return {
         ...base,
-        text: `pushed to \`${event.branch}\`${
-          event.headCommit === null
-            ? ""
-            : ` — ${firstLine(event.headCommit.message)}`
+        text: `pushed${sha} to \`${event.branch}\`${
+          head === null ? "" : ` — ${firstLine(head.message)}`
         }`,
       };
+    }
   }
 };

@@ -280,6 +280,27 @@ test("a live event pushed over the socket appears without a reload", async ({
   await expect(main(page)).toContainText("pushed 2 commits");
 });
 
+test("a push's commit is a link with a hover card, like a PR ref", async ({
+  page,
+  api,
+}) => {
+  const sha = "0123456789abcdef0123456789abcdef01234567";
+  api.seedEvent(
+    `pushed [\`${sha.slice(0, 7)}\`](https://github.com/${REPO}/commit/${sha}) to \`main\` — fix reconcile`,
+  );
+  await openApp(page);
+
+  const link = main(page).getByRole("link", { name: sha.slice(0, 7) });
+  await expect(link).toHaveAttribute(
+    "href",
+    `https://github.com/${REPO}/commit/${sha}`,
+  );
+  await link.hover();
+  // the harness blocks api.github.com, so the card settles on its
+  // fallback line — proof the commit URL shape opens a hover card
+  await expect(page.getByText(`${REPO}@${sha.slice(0, 7)}`)).toBeVisible();
+});
+
 test("an event placed on a thread wears its chip; the chip navigates", async ({
   page,
   api,

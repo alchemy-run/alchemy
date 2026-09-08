@@ -30,7 +30,7 @@ import {
   ToolInput,
   ToolOutput,
 } from "@/components/ai-elements/tool";
-import { RefHoverCard } from "@/components/ref-hover-card";
+import { CommitHoverCard, RefHoverCard } from "@/components/ref-hover-card";
 import { hasToolCard, ToolCard } from "@/components/tool-card";
 import {
   ContextMenu,
@@ -336,8 +336,12 @@ const MarkdownAnchorLink = ({ href, children, node: _node, ...rest }: any) => {
       </button>
     );
   }
-  const ref = String(href ?? "").match(
+  const url = String(href ?? "");
+  const ref = url.match(
     /^https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/(?:issues|pull)\/(\d+)$/,
+  );
+  const commit = url.match(
+    /^https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/commit\/([0-9a-f]{7,40})$/,
   );
   const link = (
     <a
@@ -350,13 +354,21 @@ const MarkdownAnchorLink = ({ href, children, node: _node, ...rest }: any) => {
       {children}
     </a>
   );
-  return ref ? (
-    <RefHoverCard repo={ref[1]!} number={Number(ref[2])}>
-      {link}
-    </RefHoverCard>
-  ) : (
-    link
-  );
+  if (ref) {
+    return (
+      <RefHoverCard repo={ref[1]!} number={Number(ref[2])}>
+        {link}
+      </RefHoverCard>
+    );
+  }
+  if (commit) {
+    return (
+      <CommitHoverCard repo={commit[1]!} sha={commit[2]!}>
+        {link}
+      </CommitHoverCard>
+    );
+  }
+  return link;
 };
 
 const MARKDOWN_COMPONENTS = { a: MarkdownAnchorLink };
