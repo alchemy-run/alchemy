@@ -5,6 +5,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as S from "effect/Schema";
+import { BadRef, makeEntityLookup } from "../github/Entity.ts";
 import { connected } from "../github/Repos.ts";
 import { ThreadAgent } from "../thread/ThreadAgent.ts";
 import { mintThreadId, Threads } from "../thread/Threads.ts";
@@ -290,18 +291,21 @@ const charter = Effect.gen(function* () {
     }),
   );
 
+  // an attach is VERIFIED against GitHub, never taken on the model's word
+  const lookup = yield* makeEntityLookup;
+
   const attachEntity = yield* AI.Tool("attach_entity")`
-    Attach entity ${ref} (${kind}, ${entityTitle}) to ${threadId} —
-    the thread governs it from now on: its events route there.`(
-    Effect.fn(function* (p: {
-      thread: string;
-      ref: string;
-      kind: "issue" | "pull";
-      title: string;
-    }) {
-      yield* threads.attach(p.thread, [
-        { ref: p.ref, kind: p.kind, title: p.title },
-      ]);
+    Attach entity ${ref} to ${threadId} — the thread governs it from
+    now on: its events route there. The ref is looked up on GitHub;
+    answers ${AI.out(kind, entityTitle)} as GitHub has them. Fails
+    with ${BadRef} when the ref is not "owner/repo#N", names a
+    repository that is not connected, or does not exist — copy refs
+    from the channel's links, never derive them from an author's
+    login.`(
+    Effect.fn(function* (p: { thread: string; ref: string }) {
+      const entity = yield* lookup(p.ref);
+      yield* threads.attach(p.thread, [entity]);
+      return { kind: entity.kind, title: entity.title };
     }),
   );
 

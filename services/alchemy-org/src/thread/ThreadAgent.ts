@@ -5,6 +5,7 @@ import * as Effect from "effect/Effect";
 import * as S from "effect/Schema";
 import { parseEntityRef } from "../channel/Channel.ts";
 import { Engineer } from "../coding/Engineer.ts";
+import { BadRef, makeEntityLookup } from "../github/Entity.ts";
 import { SessionRepo } from "../github/SessionRepo.ts";
 import { THREAD_TERM, Threads } from "./Threads.ts";
 
@@ -92,7 +93,6 @@ const state = AI.Thing(
 class NotAttached extends Data.TaggedError("NotAttached")<{
   message: string;
 }> {}
-class BadRef extends Data.TaggedError("BadRef")<{ message: string }> {}
 class CheckoutFailed extends Data.TaggedError("CheckoutFailed")<{
   message: string;
 }> {}
@@ -119,24 +119,21 @@ export const ThreadAgentLive = ThreadAgent.make(
       );
     });
 
+    // an attach is VERIFIED against GitHub, never taken on the model's word
+    const lookup = yield* makeEntityLookup;
+
     const attach = yield* AI.Tool("attach")`
-      Attach ${ref} (${kind}, ${entityTitle}) to this thread — you
-      govern it from now on: its events arrive here, closing the
-      thread settles it. Fails with ${BadRef} when the ref is not
-      "owner/repo#N".`(
-      Effect.fn(function* (p: {
-        ref: string;
-        kind: "issue" | "pull";
-        title: string;
-      }) {
-        if (parseEntityRef(p.ref) === undefined) {
-          return yield* Effect.fail(
-            new BadRef({ message: `${p.ref} is not owner/repo#N` }),
-          );
-        }
-        yield* threads.attach(id, [
-          { ref: p.ref, kind: p.kind, title: p.title },
-        ]);
+      Attach ${ref} to this thread — you govern it from now on: its
+      events arrive here, closing the thread settles it. The ref is
+      looked up on GitHub; answers ${AI.out(kind, entityTitle)} as
+      GitHub has them. Fails with ${BadRef} when the ref is not
+      "owner/repo#N", names a repository that is not connected, or
+      does not exist — copy refs from the channel's links, never
+      derive them from an author's login.`(
+      Effect.fn(function* (p: { ref: string }) {
+        const entity = yield* lookup(p.ref);
+        yield* threads.attach(id, [entity]);
+        return { kind: entity.kind, title: entity.title };
       }),
     );
 
