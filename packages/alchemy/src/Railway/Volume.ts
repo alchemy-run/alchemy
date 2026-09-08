@@ -597,7 +597,7 @@ const waitUntilGone = (input: {
 };
 
 const stampName = (volumeId: string, name: string) =>
-  railway.volumeUpdate({
+  railway.updateVolume({
     volumeId,
     input: { name },
   });
@@ -762,7 +762,7 @@ export const VolumeProvider = () =>
 
           if (current === undefined) {
             const created = yield* railway
-              .volumeCreate({
+              .createVolume({
                 input: {
                   projectId,
                   environmentId,
@@ -830,7 +830,7 @@ export const VolumeProvider = () =>
             desiredServiceId !== undefined &&
             desiredServiceId !== observedServiceId;
           if (mountChanged || serviceChanged) {
-            yield* railway.volumeInstanceUpdate({
+            yield* railway.updateVolumeInstance({
               volumeId: current.volumeId,
               environmentId,
               input: {
@@ -860,7 +860,7 @@ export const VolumeProvider = () =>
       const volumeId = output.volumeId;
       if (volumeId.length === 0) return;
       yield* railway
-        .volumeDelete({ volumeId })
+        .deleteVolume({ volumeId })
         .pipe(
           Effect.catchTag(["RailwayNotFound", "NotFound"], () => Effect.void),
         );
