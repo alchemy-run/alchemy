@@ -451,6 +451,40 @@ test("right-click a sidebar row: Delete thread asks, then erases it", async ({
   ).toBeVisible();
 });
 
+test("a thread being deleted shows as deleting until the server has torn it down", async ({
+  page,
+  api,
+}) => {
+  api.seedThread({ id: "t-slow", name: "w-slow", turn: "you" });
+  const release = api.holdThreadDelete();
+  await openApp(page, threadPath("t-slow"));
+
+  page.once("dialog", (dialog) => void dialog.accept());
+  await page
+    .getByRole("complementary", { name: "Thread state" })
+    .getByRole("button", { name: "Delete thread" })
+    .click();
+  await expect.poll(() => api.deletedThreads).toEqual(["t-slow"]);
+
+  // the DELETE is in flight: the row stays, spinning; the pane's
+  // button is disabled; the body says what is happening
+  const row = threadNav(page).locator("[data-thread='t-slow']");
+  await expect(row).toHaveAttribute("data-deleting", "");
+  await expect(row).toHaveAttribute("aria-busy", "true");
+  await expect(page.getByRole("button", { name: "Deleting…" })).toBeDisabled();
+  await expect(page.getByRole("status")).toContainText("Deleting this thread");
+  // a second delete while one is in flight is a no-op
+  expect(api.deletedThreads).toEqual(["t-slow"]);
+
+  // the server answers: the row goes, the view falls back to the channel
+  release();
+  await expect(threadNav(page)).not.toContainText("w-slow");
+  await expect(page).toHaveURL(/\/$/);
+  await expect(
+    page.getByRole("textbox", { name: "Message the channel" }),
+  ).toBeVisible();
+});
+
 test("⌘-click selects sidebar rows without opening them; the menu deletes the set", async ({
   page,
   api,

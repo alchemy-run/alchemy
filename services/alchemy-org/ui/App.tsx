@@ -53,6 +53,7 @@ const ThreadPage = ({
   onTab,
   onNewTerminal,
   onCloseTerminal,
+  deleting,
   onDeleteThread,
 }: {
   id: string;
@@ -62,6 +63,8 @@ const ThreadPage = ({
   onTab: (tab: ThreadTab) => void;
   onNewTerminal: () => void;
   onCloseTerminal: (pty: string) => void;
+  /** The thread's DELETE is in flight. */
+  deleting: boolean;
   /** The pane's "Delete thread" — the shell confirms and erases. */
   onDeleteThread: () => void;
 }) => {
@@ -82,6 +85,7 @@ const ThreadPage = ({
       onNewTerminal={onNewTerminal}
       onCloseTerminal={onCloseTerminal}
       onCloseThread={onCloseThread}
+      deleting={deleting}
       onDeleteThread={onDeleteThread}
     />
   );
@@ -139,8 +143,15 @@ export const App = () => {
   // and the erase. Afterwards each page is forgotten (its sockets
   // close with it), so are the ptys it opened (the machine is gone),
   // and a view that was ON a deleted thread falls back to the channel.
+  // threads whose DELETE is in flight — the server tears down agents,
+  // worktrees, and the machine before it answers, and the row stays
+  // in the directory until then; these render as "deleting"
+  const [deleting, setDeleting] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
   const removeThreads = useCallback(
-    (ids: ReadonlyArray<string>) => {
+    (requested: ReadonlyArray<string>) => {
+      const ids = requested.filter((id) => !deleting.has(id));
       if (ids.length === 0) return;
       const nameOf = (id: string) =>
         directory.find((row) => row.id === id)?.name ?? id;
@@ -155,26 +166,39 @@ export const App = () => {
       ) {
         return;
       }
-      for (const id of ids) {
-        void deleteThread(id).then((response) => {
-          if (!response.ok) return;
-          setVisited((current) => current.filter((entry) => entry !== id));
-          setTerminals((current) => {
-            const { [id]: _dropped, ...rest } = current;
-            try {
-              localStorage.setItem(TERMINALS_KEY, JSON.stringify(rest));
-            } catch {
-              // storage disabled — nothing to forget
-            }
-            return rest;
-          });
-          if (route.kind === "thread" && route.id === id) {
-            navigate(pathOf({ kind: "channel" }));
-          }
+      setDeleting((current) => new Set([...current, ...ids]));
+      const done = (id: string) =>
+        setDeleting((current) => {
+          const next = new Set(current);
+          next.delete(id);
+          return next;
         });
+      for (const id of ids) {
+        void deleteThread(id)
+          .then(
+            (response) => response.ok,
+            () => false,
+          )
+          .then((ok) => {
+            done(id);
+            if (!ok) return;
+            setVisited((current) => current.filter((entry) => entry !== id));
+            setTerminals((current) => {
+              const { [id]: _dropped, ...rest } = current;
+              try {
+                localStorage.setItem(TERMINALS_KEY, JSON.stringify(rest));
+              } catch {
+                // storage disabled — nothing to forget
+              }
+              return rest;
+            });
+            if (route.kind === "thread" && route.id === id) {
+              navigate(pathOf({ kind: "channel" }));
+            }
+          });
       }
     },
-    [directory, route],
+    [deleting, directory, route],
   );
 
   const openReview = useCallback(
@@ -292,6 +316,7 @@ export const App = () => {
             channelSelected={route.kind === "channel"}
             onOpenChannel={() => navigate(pathOf({ kind: "channel" }))}
             onOpenThread={openThread}
+            deleting={deleting}
             onDeleteThreads={removeThreads}
           />
         </Rail>
@@ -365,6 +390,7 @@ export const App = () => {
                     }));
                     navigate(threadPath(id));
                   }}
+                  deleting={deleting.has(id)}
                   onDeleteThread={() => removeThreads([id])}
                 />
               </div>

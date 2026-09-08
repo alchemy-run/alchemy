@@ -939,12 +939,13 @@ export const DurableObjectHost: Layer.Layer<
                   ),
               );
               // a round still in flight (a tool mid-call on the
-              // machine) is CUT, not awaited: settle only marks the
-              // session — the tick would otherwise run on to its end
-              // and write into the rows purged below, resurrecting a
-              // deleted session. Settled first, the abort books
-              // nothing and its kick has nowhere to go; a hibernated
-              // session has no round to cut.
+              // machine) must be CUT before the purge, or the tick
+              // would run on to its end and write into the rows
+              // purged below, resurrecting a deleted session. Settle
+              // already cuts it; this is the belt to that brace for
+              // the path where settle failed above. Settled first,
+              // the abort books nothing and its kick has nowhere to
+              // go; a hibernated session has no round to cut.
               if (engineRef !== undefined) {
                 yield* engineRef.abort(me.key);
               }

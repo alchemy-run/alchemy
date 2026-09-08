@@ -390,6 +390,95 @@ describe("DriverLocal (in-memory)", () => {
   );
 
   it.live(
+    "Sessions.stop cuts the round in flight — and the cascade cuts the child's, not just marks it",
+    () => {
+      const model = Model.make([
+        // call 0: the lead hands the work through the door
+        () => [
+          Model.toolCall("hand_to_researcher", { task: "dig into it" }),
+          Model.finish("tool-calls"),
+        ],
+        // call 1: the researcher's round — a search that never answers
+        () => [
+          Model.toolCall("search", { query: "the void" }),
+          Model.finish("tool-calls"),
+        ],
+        // never reached on either side: both rounds are cut
+        () => [Model.text("should not run"), Model.finish()],
+      ]);
+      const entered = Effect.runSync(Deferred.make<void>());
+      let released = false;
+      const search = Layer.succeed(Search, ((_input: { query: string }) =>
+        Effect.andThen(Deferred.succeed(entered, undefined), Effect.never).pipe(
+          Effect.onInterrupt(() =>
+            Effect.sync(() => {
+              released = true;
+            }),
+          ),
+        )) as never);
+      const seen: Array<AI.SessionObservation> = [];
+      const ObserverLive = Layer.succeed(AI.Events, {
+        emit: (observation) => Effect.sync(() => void seen.push(observation)),
+      });
+      const driver = InMemoryDriver.pipe(Layer.provide(model.layer));
+      const doorCharter = Effect.gen(function* () {
+        const task = AI.Thing("task", S.String)`The work, standing alone.`;
+        const door = yield* AI.Dispatch(Researcher, "hand_to_researcher")`
+Hand the research to the researcher with ${task}.`((p, thread) => ({
+          task: p.task,
+          key: `${thread.key}/Researcher`,
+        }));
+        return AI.fragment`Route every request through ${door}.`;
+      });
+      return Effect.gen(function* () {
+        const lead = yield* interpret(Lead, doorCharter);
+        const sessions = yield* AI.Sessions;
+
+        const waiting = yield* Effect.forkChild(
+          lead.dispatch("Widget needed", { key: "job#stop" }),
+        );
+        // the child is inside its tool handler now
+        yield* Deferred.await(entered);
+        expect(released).toBe(false);
+
+        // the operator stops the LEAD: when this returns, the child's
+        // blocked handler has been interrupted (finalizer ran) — a
+        // settled session does not keep working
+        yield* sessions.stop("Lead", "job#stop");
+        expect(released).toBe(true);
+        yield* Fiber.await(waiting);
+
+        const childKey = "job#stop/Researcher";
+        expect(
+          seen.some(
+            (observation) =>
+              observation.key === childKey && observation.type === "settled",
+          ),
+        ).toBe(true);
+        // no third sampling on either side
+        yield* Effect.sleep("50 millis");
+        expect(model.calls).toHaveLength(2);
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(
+          Layer.mergeAll(
+            driver,
+            Researcher.make(ResearcherCharter).pipe(
+              Layer.provide(driver),
+              Layer.provide(search),
+              Layer.provide(ObserverLive),
+            ),
+            search,
+            ObserverLive,
+            RuntimeContext.phantom,
+          ),
+        ),
+      );
+    },
+    { timeout: 30_000 },
+  );
+
+  it.live(
     "quiet send (wake: false) accumulates without waking a parked run",
     () => {
       const model = Model.make([

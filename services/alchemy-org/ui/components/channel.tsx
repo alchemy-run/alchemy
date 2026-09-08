@@ -43,6 +43,7 @@ import {
   Copy,
   CornerUpLeft,
   FileDiff,
+  LoaderCircle,
   MessageCircle,
   Reply,
   SquareArrowOutUpRight,
@@ -923,6 +924,7 @@ export const ThreadList = ({
   channelSelected,
   onOpenChannel,
   onOpenThread,
+  deleting,
   onDeleteThreads,
 }: {
   directory: ReadonlyArray<ThreadDirectoryRow>;
@@ -930,6 +932,10 @@ export const ThreadList = ({
   channelSelected: boolean;
   onOpenChannel: () => void;
   onOpenThread: (id: string) => void;
+  /** Threads whose DELETE is in flight — the server is stopping their
+   *  agents and dropping their worktrees; the row stays until it is
+   *  done and shows a spinner meanwhile. */
+  deleting: ReadonlySet<string>;
   /** The menu's delete (one thread or a selection) — the shell
    *  confirms and erases. */
   onDeleteThreads: (ids: ReadonlyArray<string>) => void;
@@ -1003,40 +1009,53 @@ export const ThreadList = ({
               <div className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/70">
                 {turn === "closed" ? "Closed" : TURN_LABEL[turn]}
               </div>
-              {rows.map((row) => (
-                <button
-                  key={row.id}
-                  type="button"
-                  data-thread={row.id}
-                  data-selected={pick.has(row.id) ? "" : undefined}
-                  data-targeted={menuIds.includes(row.id) ? "" : undefined}
-                  onClick={(event) => {
-                    if (!pick.click(row.id, event)) onOpenThread(row.id);
-                  }}
-                  onContextMenu={() => setMenuIds(pick.target(row.id))}
-                  aria-current={selected === row.id ? "page" : undefined}
-                  title={row.title}
-                  className={cn(
-                    "flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm",
-                    selected === row.id
-                      ? "bg-accent font-medium text-foreground"
-                      : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
-                    (pick.has(row.id) || menuIds.includes(row.id)) &&
-                      "bg-primary/10 text-foreground",
-                    turn === "closed" && "opacity-60",
-                  )}
-                >
-                  <span
+              {rows.map((row) => {
+                const busy = deleting.has(row.id);
+                return (
+                  <button
+                    key={row.id}
+                    type="button"
+                    data-thread={row.id}
+                    data-selected={pick.has(row.id) ? "" : undefined}
+                    data-targeted={menuIds.includes(row.id) ? "" : undefined}
+                    data-deleting={busy ? "" : undefined}
+                    aria-busy={busy || undefined}
+                    onClick={(event) => {
+                      if (!pick.click(row.id, event)) onOpenThread(row.id);
+                    }}
+                    onContextMenu={() => setMenuIds(pick.target(row.id))}
+                    aria-current={selected === row.id ? "page" : undefined}
+                    title={
+                      busy
+                        ? "Deleting — stopping its agents, dropping its worktrees, erasing its machine…"
+                        : row.title
+                    }
                     className={cn(
-                      "size-2 shrink-0 rounded-full",
-                      turn === "closed"
-                        ? "bg-muted-foreground/30"
-                        : TURN_DOT[row.turn],
+                      "flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm",
+                      selected === row.id
+                        ? "bg-accent font-medium text-foreground"
+                        : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
+                      (pick.has(row.id) || menuIds.includes(row.id)) &&
+                        "bg-primary/10 text-foreground",
+                      (turn === "closed" || busy) && "opacity-60",
                     )}
-                  />
-                  <span className="min-w-0 flex-1 truncate">{row.name}</span>
-                </button>
-              ))}
+                  >
+                    {busy ? (
+                      <LoaderCircle className="size-3 shrink-0 animate-spin text-muted-foreground" />
+                    ) : (
+                      <span
+                        className={cn(
+                          "size-2 shrink-0 rounded-full",
+                          turn === "closed"
+                            ? "bg-muted-foreground/30"
+                            : TURN_DOT[row.turn],
+                        )}
+                      />
+                    )}
+                    <span className="min-w-0 flex-1 truncate">{row.name}</span>
+                  </button>
+                );
+              })}
             </div>
           ))}
         </nav>

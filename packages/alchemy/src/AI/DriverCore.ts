@@ -2573,6 +2573,36 @@ export const makeSessionEngine = (
       );
       yield* Deferred.succeed(s.settledSignal, outcomeValue);
       yield* settleChildren(s);
+      yield* cutRound(s);
+    });
+
+  /**
+   * A settled session must not keep WORKING: its outcome is fixed, so
+   * a round still in flight (a sampling, an engineer's tool mid-
+   * command) is spending money to change nothing — cut it. Awaits the
+   * fiber's end, handlers' finalizers included, so a caller stopping
+   * a tree (`Sessions.stop`, the cascade onto children, a delete)
+   * returns only once the work has actually stopped.
+   *
+   * The one exception: the caller IS the round (a session settling
+   * itself from its own tool handler). Awaiting our own ancestor's
+   * interruption is a self-kill; the cut is forked instead and lands
+   * the moment the handler returns.
+   */
+  const cutRound = (s: EngineSession): Effect.Effect<void> =>
+    Effect.gen(function* () {
+      const fiber = s.round;
+      if (fiber === undefined) return;
+      // booked as an abort by the burst (silently — the session is
+      // settled, so `onAbort` has nothing to add)
+      s.aborting = true;
+      const self = yield* Effect.serviceOption(Thread);
+      const inside = Option.isSome(self) && self.value.key === s.key;
+      if (inside) {
+        yield* Effect.forkDetach(Fiber.interrupt(fiber));
+      } else {
+        yield* Fiber.interrupt(fiber);
+      }
     });
 
   const resume: SessionEngine["resume"] = (key) =>

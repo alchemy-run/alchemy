@@ -208,6 +208,18 @@ export class FakeApi {
   closedThreads: string[] = [];
   /** Every `DELETE /api/threads/:id`, in order. */
   deletedThreads: string[] = [];
+  /** When set, thread DELETEs answer only once this resolves — the
+   *  real server tears down agents, worktrees, and the machine before
+   *  answering, and the row stays in the directory until then. */
+  private threadDeleteGate: Promise<void> | undefined;
+  /** Hold every thread DELETE open; returns the release. */
+  holdThreadDelete(): () => void {
+    let release!: () => void;
+    this.threadDeleteGate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    return release;
+  }
   private threadSockets: Record<string, WebSocketRoute[]> = {};
 
   seedThread(partial: Partial<ThreadState> & { id: string }): ThreadState {
@@ -589,6 +601,7 @@ export class FakeApi {
         // the thread is erased; the rail learns over the directory
         // frame, the channel rows it placed lose their tag
         this.deletedThreads.push(id);
+        if (this.threadDeleteGate !== undefined) await this.threadDeleteGate;
         const { [id]: _dropped, ...rest } = this.threads;
         this.threads = rest;
         this.directory = this.directory.filter((row) => row.id !== id);

@@ -267,8 +267,8 @@ export const DriverLocal: Layer.Layer<
       });
 
     // the operator's off switch: settle in place (children cascade,
-    // the fiber loop's settled race ends it) — a term this process
-    // never interpreted has nothing to stop
+    // the round in flight is cut, the fiber loop's settled race ends
+    // it) — a term this process never interpreted has nothing to stop
     const stop = (term: string, key: string): Effect.Effect<void> => {
       const engine = engines.get(term);
       return engine === undefined

@@ -81,8 +81,11 @@ export class Sessions extends Context.Service<
     /**
      * STOP one session from the outside — the operator's off switch.
      * Settles it (terminal: children cascade, the `settled`
-     * observation lands, attached views see the end); idempotent on
-     * an already-settled or never-seen key.
+     * observation lands, attached views see the end) and CUTS the
+     * round in flight — its sampling, its tool handlers — awaiting
+     * their end, so a stopped engineer mid-command has stopped when
+     * this returns; idempotent on an already-settled or never-seen
+     * key.
      */
     readonly stop: (
       term: string,

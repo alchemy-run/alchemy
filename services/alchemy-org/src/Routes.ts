@@ -402,20 +402,27 @@ export const routes = Effect.gen(function* () {
 
   /**
    * DELETE a thread — everything it was, in an order that leaves no
-   * one running:
+   * one running. The response answers only when it is all done, and
+   * the thread's directory row is the LAST thing to go, so a rail
+   * showing the row as "deleting" is telling the truth:
    *
-   * 1. its DO and channel projections (`threads.remove`) — the
-   *    snapshot it returns is the book of what else to tear down;
+   * 1. the snapshot (`threads.get`) — the book of what to tear down;
    * 2. the pull requests' worktrees on its machine (`worktree` tool
    *    trees, `pullWorktreeKey`) — dropped through `Git.Checkouts`
    *    while the machine still answers; a tree that IS the machine's
    *    disk (`.`) goes with the machine below;
    * 3. the thread agent's own session — settle + cut its round (a
-   *    `spawn` mid-await dies here, so no waiter re-books an agent on
-   *    the erased DO) and take the machine down with it;
-   * 4. the subagents' sessions, machine spared (they shared the
-   *    thread's — the key's `::` prefix): each settles and has its
-   *    round cut, so an engineer mid-command stops.
+   *    `spawn` mid-await dies here, so no waiter re-books an agent)
+   *    and take the machine down with it;
+   * 4. EVERY session descended from it, machine spared (they shared
+   *    the thread's — the key's `::` prefix): the engineers the
+   *    thread's agent rows name AND whatever the session index's
+   *    parent edges reach beyond them (an engineer's own dispatches,
+   *    a row the thread never got to book). Each settles and has its
+   *    round cut, so an engineer mid-command stops. Anonymous
+   *    `spawn-*` workers are skipped: they run inside their spawner's
+   *    round and died with it in step 3;
+   * 5. its DO and channel projections (`threads.remove`).
    *
    * Idempotent on an unknown id.
    */
@@ -424,7 +431,7 @@ export const routes = Effect.gen(function* () {
     "/api/threads/:id",
     Effect.gen(function* () {
       const id = yield* threadId;
-      const snap = yield* threads.remove(id);
+      const snap = yield* threads.get(id);
       if (Option.isSome(checkouts)) {
         yield* Effect.forEach(
           (snap?.entities ?? []).flatMap((entity) => {
@@ -452,11 +459,38 @@ export const routes = Effect.gen(function* () {
         .remove(THREAD_TERM, id)
         .pipe(Effect.provide(RuntimeContext.phantom));
       const engineerTerm = Engineer["~alchemy/Name"];
+      const descendants = new Map<string, { term: string; key: string }>();
+      for (const agent of snap?.agents ?? []) {
+        descendants.set(AI.sessionId(engineerTerm, agent.key), {
+          term: engineerTerm,
+          key: agent.key,
+        });
+      }
+      // the index's parent edges, walked transitively from the thread's
+      // session — a directory, so a stale or absent index only means
+      // fewer rows here, never a wrong one
+      const listed = yield* sessions.list();
+      const frontier = [AI.sessionId(THREAD_TERM, id), ...descendants.keys()];
+      while (frontier.length > 0) {
+        const parent = frontier.pop()!;
+        for (const row of listed) {
+          if (
+            row.parent !== parent ||
+            descendants.has(row.id) ||
+            row.key.startsWith("spawn-")
+          ) {
+            continue;
+          }
+          descendants.set(row.id, { term: row.term, key: row.key });
+          frontier.push(row.id);
+        }
+      }
       yield* Effect.forEach(
-        snap?.agents ?? [],
-        (agent) => sessions.remove(engineerTerm, agent.key, { machine: false }),
-        { discard: true },
+        descendants.values(),
+        ({ term, key }) => sessions.remove(term, key, { machine: false }),
+        { discard: true, concurrency: 8 },
       ).pipe(Effect.provide(RuntimeContext.phantom));
+      yield* threads.remove(id);
       return yield* HttpServerResponse.json({ ok: true });
     }),
   );

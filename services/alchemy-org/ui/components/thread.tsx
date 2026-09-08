@@ -30,6 +30,7 @@ import {
   FileDiff,
   FolderGit2,
   GitMerge,
+  LoaderCircle,
   GitPullRequestArrow,
   GitPullRequestClosed,
   MessageSquare,
@@ -102,6 +103,7 @@ const ThreadPane = ({
   onOpenReview,
   onOpenAgent,
   onClose,
+  deleting,
   onDelete,
 }: {
   state: ThreadState;
@@ -110,6 +112,8 @@ const ThreadPane = ({
   onOpenReview: (owner: string, repo: string, number: number) => void;
   onOpenAgent: (key: string) => void;
   onClose: () => void;
+  /** The thread's DELETE is in flight. */
+  deleting: boolean;
   onDelete: () => void;
 }) => {
   return (
@@ -221,11 +225,21 @@ const ThreadPane = ({
           size="sm"
           variant="ghost"
           onClick={onDelete}
-          title="Delete the thread — its conversation, subagents, and machine are erased; the channel keeps its rows"
+          disabled={deleting}
+          aria-busy={deleting || undefined}
+          title={
+            deleting
+              ? "Deleting — stopping its agents, dropping its worktrees, erasing its machine…"
+              : "Delete the thread — its conversation, subagents, and machine are erased; the channel keeps its rows"
+          }
           className="text-muted-foreground hover:text-destructive"
         >
-          <Trash2 className="size-3.5" />
-          Delete thread
+          {deleting ? (
+            <LoaderCircle className="size-3.5 animate-spin" />
+          ) : (
+            <Trash2 className="size-3.5" />
+          )}
+          {deleting ? "Deleting…" : "Delete thread"}
         </Button>
       </div>
     </div>
@@ -296,6 +310,7 @@ export const ThreadView = ({
   onNewTerminal,
   onCloseTerminal,
   onCloseThread,
+  deleting,
   onDeleteThread,
 }: {
   id: string;
@@ -308,6 +323,9 @@ export const ThreadView = ({
   onNewTerminal: () => void;
   onCloseTerminal: (pty: string) => void;
   onCloseThread: () => void;
+  /** The thread's DELETE is in flight — the server is stopping its
+   *  agents, dropping its worktrees, and erasing its machine. */
+  deleting: boolean;
   onDeleteThread: () => void;
 }) => {
   const sessionId = threadSessionId(id);
@@ -478,6 +496,22 @@ export const ThreadView = ({
         </div>
       </div>
 
+      {deleting && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="flex items-center gap-2 border-b border-border bg-muted/60 px-4 py-1.5 text-xs text-muted-foreground"
+        >
+          <LoaderCircle className="size-3.5 shrink-0 animate-spin" />
+          <span>
+            <span className="font-medium text-foreground">
+              Deleting this thread
+            </span>{" "}
+            — stopping its agents, dropping its worktrees, erasing its machine…
+          </span>
+        </div>
+      )}
+
       {/* body */}
       <div className="flex min-h-0 flex-1">
         {tab.kind === "review" ? (
@@ -552,6 +586,7 @@ export const ThreadView = ({
                     }
                     onOpenAgent={(key) => onTab({ kind: "agent", key })}
                     onClose={onCloseThread}
+                    deleting={deleting}
                     onDelete={onDeleteThread}
                   />
                 </Rail>
