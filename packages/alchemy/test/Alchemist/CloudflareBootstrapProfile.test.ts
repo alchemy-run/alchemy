@@ -10,6 +10,7 @@ import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
 
 const STAGING_ACCOUNT = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const DEFAULT_ACCOUNT = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
@@ -29,13 +30,21 @@ const CLOUDFLARE_ENV_KEYS = [
  * `resolveProviderConfig` actually reads the profile store. The alchemy-test
  * runner sets `CI=true` and `--profile testing` exports `ALCHEMY_PROFILE`,
  * both of which would otherwise skip the named-profile path under test.
+ *
+ * An empty `--env-file` in the temp home is passed through so
+ * `loadConfigProvider` never falls back to the checkout's cwd `.env`.
  */
-const withIsolatedHome = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+const withIsolatedHome = <A, E, R>(
+  effect: (envFile: string) => Effect.Effect<A, E, R>,
+) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
     const dir = yield* fs.makeTempDirectoryScoped({
       prefix: "alchemy-cf-bootstrap-profile-",
     });
+    const envFile = path.join(dir, "empty.env");
+    yield* fs.writeFileString(envFile, "");
     const previous: Record<string, string | undefined> = {
       ALCHEMY_HOME: process.env.ALCHEMY_HOME,
     };
@@ -57,7 +66,7 @@ const withIsolatedHome = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
           }
         }),
     );
-    return yield* effect.pipe(
+    return yield* effect(envFile).pipe(
       Effect.provide(
         Layer.mergeAll(
           Layer.provide(ProfileStoreLive, PlatformServices),
@@ -84,7 +93,7 @@ const storedToken = (accountId: string, apiToken: string) => ({
 it.live(
   "cloudflare bootstrap --profile resolves that profile's credentials, not default (#252)",
   () =>
-    withIsolatedHome(
+    withIsolatedHome((envFile) =>
       Effect.gen(function* () {
         const profiles = yield* ProfileStore;
         yield* profiles.createProfile("staging");
@@ -99,7 +108,10 @@ it.live(
           storedToken(DEFAULT_ACCOUNT, "default-token"),
         );
 
-        const scoped = yield* resolveStateStoreScope({ profile: "staging" });
+        const scoped = yield* resolveStateStoreScope({
+          profile: "staging",
+          envFile,
+        });
         expect(scoped.profile).toBe("staging");
         expect(scoped.accountId).toBe(STAGING_ACCOUNT);
       }),
@@ -110,7 +122,7 @@ it.live(
 it.live(
   "cloudflare bootstrap without --profile uses the default profile",
   () =>
-    withIsolatedHome(
+    withIsolatedHome((envFile) =>
       Effect.gen(function* () {
         const profiles = yield* ProfileStore;
         yield* profiles.setProviderConfig(
@@ -119,7 +131,7 @@ it.live(
           storedToken(DEFAULT_ACCOUNT, "default-token"),
         );
 
-        const scoped = yield* resolveStateStoreScope({});
+        const scoped = yield* resolveStateStoreScope({ envFile });
         expect(scoped.profile).toBe("default");
         expect(scoped.accountId).toBe(DEFAULT_ACCOUNT);
       }),
@@ -130,7 +142,7 @@ it.live(
 it.live(
   "cloudflare bootstrap --profile does not fall back to an unconfigured default",
   () =>
-    withIsolatedHome(
+    withIsolatedHome((envFile) =>
       Effect.gen(function* () {
         const profiles = yield* ProfileStore;
         yield* profiles.createProfile("staging");
@@ -140,10 +152,15 @@ it.live(
           storedToken(STAGING_ACCOUNT, "staging-token"),
         );
 
-        const scoped = yield* resolveStateStoreScope({ profile: "staging" });
+        const scoped = yield* resolveStateStoreScope({
+          profile: "staging",
+          envFile,
+        });
         expect(scoped.accountId).toBe(STAGING_ACCOUNT);
 
-        const missing = yield* resolveStateStoreScope({}).pipe(Effect.flip);
+        const missing = yield* resolveStateStoreScope({ envFile }).pipe(
+          Effect.flip,
+        );
         expect(missing).toBeInstanceOf(AuthError);
         expect((missing as AuthError).message).toContain("profile 'default'");
       }),
