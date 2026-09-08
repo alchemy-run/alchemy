@@ -281,6 +281,21 @@ export const ExportedHandlerMethods = [
   "queue",
 ] as const satisfies (keyof cf.ExportedHandler)[];
 
+export type ExportedHandlerMethod = (typeof ExportedHandlerMethods)[number];
+
+const exportedHandlerMethodSet: ReadonlySet<string> = new Set(
+  ExportedHandlerMethods,
+);
+
+/**
+ * True when `name` is a Cloudflare `ExportedHandler` method (`fetch`,
+ * `scheduled`, `email`, `queue`, …). Those are event listeners, not RPC
+ * methods on the Worker's service-binding interface.
+ */
+export const isExportedHandlerMethod = (
+  name: string,
+): name is ExportedHandlerMethod => exportedHandlerMethodSet.has(name);
+
 export type WorkerServices =
   | Worker
   | Request

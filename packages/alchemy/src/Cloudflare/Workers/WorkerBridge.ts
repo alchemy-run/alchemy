@@ -32,6 +32,7 @@ import {
 } from "./Rpc.ts";
 import {
   ExportedHandlerMethods,
+  isExportedHandlerMethod,
   Worker,
   WorkerEnvironment,
   WorkerExecutionContext,
@@ -173,6 +174,8 @@ export const makeWorkerBridge = (
         get: (target, prop) => {
           if (typeof prop !== "string") return (target as any)[prop];
           if (prop in target) return (target as any)[prop];
+          // ExportedHandler methods are event listeners, not RPC methods.
+          if (isExportedHandlerMethod(prop)) return (target as any)[prop];
           return (...args: unknown[]) =>
             processEvent(
               (built) => {
@@ -449,6 +452,7 @@ export const makeRpcProxy = (
     get: (target, prop) => {
       if (typeof prop !== "string") return (target as any)[prop];
       if (prop in target) return (target as any)[prop];
+      if (isExportedHandlerMethod(prop)) return (target as any)[prop];
       return (...args: unknown[]) =>
         userShape
           .pipe(
