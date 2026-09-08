@@ -37,8 +37,15 @@ export const CodeModeEffect = (
         "program.js": code,
         "main.js": typescript`
           import * as Effect from "effect/Effect";
-          import program from "./program.js";
-          export default () => Effect.runPromise(program);
+          import * as program from "./program.js";
+          export default () => {
+            if (!("default" in program)) {
+              throw new Error(
+                "program.js has no default export. Write \`export default Effect.gen(function* () { ...; return result; })\`.",
+              );
+            }
+            return Effect.runPromise(program.default);
+          };
         `,
       },
     }),

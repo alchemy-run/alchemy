@@ -62,7 +62,9 @@ const countLines = (text: string): number =>
 /** Tool outputs are the record of the tool's `AI.out(…)` splices —
  *  the transcript hands renderers the JSON-stringified value, so a
  *  structured renderer parses it back. */
-const parseRecord = (raw: string | undefined): Record<string, any> | undefined => {
+const parseRecord = (
+  raw: string | undefined,
+): Record<string, any> | undefined => {
   if (raw === undefined) return undefined;
   try {
     const value = JSON.parse(raw);
@@ -252,16 +254,16 @@ const THREAD: {
     input: { ref: string; kind: string; title: string },
     output: string | undefined,
   ) => ToolCallView;
-  detach: (
-    input: { ref: string },
-    output: string | undefined,
-  ) => ToolCallView;
+  detach: (input: { ref: string }, output: string | undefined) => ToolCallView;
   worktree: (
     input: { ref: string },
     output: string | undefined,
   ) => ToolCallView;
+  /** Two tools share the name: the thread agent's `spawn` (an Engineer
+   *  on a `brief`) and the driver's intrinsic `spawn` (an anonymous
+   *  subagent given `instructions` + a `task`). */
   spawn: (
-    input: { brief: string },
+    input: { brief?: string; instructions?: string; task?: string },
     output: string | undefined,
     running: boolean,
   ) => ToolCallView;
@@ -309,20 +311,24 @@ const THREAD: {
         </>
       ),
       summary:
-        record === undefined
-          ? undefined
-          : `${record.path} (${record.branch})`,
+        record === undefined ? undefined : `${record.path} (${record.branch})`,
     };
   },
 
   spawn: (input, output, running) => {
-    const report = parseRecord(output)?.report as string | undefined;
+    const intrinsic = input.brief === undefined;
+    const brief = input.brief ?? input.task ?? "";
+    const record = parseRecord(output);
+    const report =
+      (record?.report as string | undefined) ??
+      (record === undefined ? output : undefined);
     return {
       icon: Hammer,
       title: (
         <>
-          Engineer <span className="text-muted-foreground">·</span>{" "}
-          {clamp(firstLine(input.brief ?? ""), 110)}
+          {intrinsic ? "Subagent" : "Engineer"}{" "}
+          <span className="text-muted-foreground">·</span>{" "}
+          {clamp(firstLine(brief), 110)}
         </>
       ),
       badge: running ? (
@@ -332,8 +338,18 @@ const THREAD: {
       ) : undefined,
       body: (
         <div className="divide-y divide-border/50">
-          {countLines(input.brief ?? "") > 1 && <Prose>{input.brief}</Prose>}
-          {report !== undefined && <WindowedText text={report} />}
+          {input.instructions && (
+            <div>
+              <div className="px-2 pt-1.5 text-[11px] font-medium text-muted-foreground">
+                instructions
+              </div>
+              <Prose>{input.instructions}</Prose>
+            </div>
+          )}
+          {countLines(brief) > 1 && <Prose>{brief}</Prose>}
+          {report !== undefined && report.length > 0 && (
+            <WindowedText text={report} />
+          )}
         </div>
       ),
     };
@@ -536,7 +552,9 @@ const CHANNEL: {
     ),
     summary: output === undefined ? undefined : lastLine(output),
     body:
-      countLines(input.text ?? "") > 1 ? <Prose>{input.text}</Prose> : undefined,
+      countLines(input.text ?? "") > 1 ? (
+        <Prose>{input.text}</Prose>
+      ) : undefined,
   }),
 
   rename_thread: (input) => ({
@@ -589,7 +607,9 @@ const CHANNEL: {
       </>
     ),
     body:
-      countLines(input.text ?? "") > 1 ? <Prose>{input.text}</Prose> : undefined,
+      countLines(input.text ?? "") > 1 ? (
+        <Prose>{input.text}</Prose>
+      ) : undefined,
   }),
 };
 
@@ -916,8 +936,7 @@ const EXTRAS: Record<string, Renderer> = {
           </span>
         </>
       ),
-      summary:
-        parsed === undefined ? undefined : lastLine(parsed.result),
+      summary: parsed === undefined ? undefined : lastLine(parsed.result),
       defaultOpen: true,
       body: (
         <div className="divide-y divide-border/50">

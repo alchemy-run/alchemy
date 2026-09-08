@@ -87,11 +87,18 @@ const toolsRawModule = (names: ReadonlyArray<string>): string =>
  * program module's default thunk, and returns a JSON-encoded
  * `{ output, logs }` or `{ error, logs }`. `main` is the convention's
  * entry module (its default export is the async thunk).
+ *
+ * The program graph is imported DYNAMICALLY, inside `evaluate`, after
+ * the dispatcher and the capturing console are in place — so the
+ * model's module may do work at its top level (a top-level `await` of
+ * a tool, a `console.log`) and it runs with tools and logs intact,
+ * and a syntax error or a missing export in the model's code is a
+ * model-facing `program failed: …` rather than an opaque "Failed to
+ * start Worker" from the loader.
  */
 const entryModule = (main: string): string =>
   typescript`
     import { WorkerEntrypoint } from "cloudflare:workers";
-    import run from "./${main}";
 
     const format = (value) =>
       typeof value === "string" ? value : (JSON.stringify(value) ?? String(value));
@@ -112,6 +119,7 @@ const entryModule = (main: string): string =>
           debug: record("debug"),
         });
         try {
+          const { default: run } = await import(${JSON.stringify(`./${main}`)});
           const output = await run();
           return JSON.stringify({ output: output === undefined ? null : output, logs });
         } catch (error) {

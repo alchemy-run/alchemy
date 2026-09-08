@@ -179,7 +179,34 @@ test(
       "export default async function () { return ] not javascript }",
     );
     expect(facts.answer).toBe("done");
-    expect(facts.resultPrompt).toContain("code did not evaluate");
+    // the graph is imported inside `evaluate`, so a syntax error is the
+    // program's own failure (with the SyntaxError text), not an opaque
+    // "Failed to start Worker" from the loader
+    expect(facts.resultPrompt).toContain("program failed");
+    expect(facts.resultPrompt).toContain("SyntaxError");
+  }),
+  { timeout: 180_000 },
+);
+
+test(
+  "a module that skips the convention (top-level await, no default) still runs its tools",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const facts = yield* session(
+      url,
+      `
+        import { search } from "./tools.js";
+        const hits = await search({ query: "toplevel" });
+        console.log("saw", hits.results);`,
+    );
+    expect(facts.answer).toBe("done");
+    // the tool call at the module's top level reached the host — the
+    // dispatcher was in place before the graph was imported
+    expect(facts.queries).toEqual(["toplevel"]);
+    // the console captured, and the runner's warning tells the model how
+    // to return a value next time
+    expect(facts.resultPrompt).toContain("saw results for toplevel");
+    expect(facts.resultPrompt).toContain("no default export");
   }),
   { timeout: 180_000 },
 );

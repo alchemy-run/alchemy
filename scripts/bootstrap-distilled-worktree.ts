@@ -36,7 +36,13 @@ if (gitDir === commonDir) {
   process.exit(0);
 }
 
-const desiredCommit = await git(["rev-parse", "HEAD:distilled"], root);
+// A tree whose commit predates the submodule (an old branch, a PR off
+// an older main) has nothing to bootstrap — not an error.
+const desiredCommit = await tryGit(["rev-parse", "HEAD:distilled"], root);
+if (desiredCommit === undefined) {
+  console.log("No distilled submodule at HEAD; nothing to bootstrap.");
+  process.exit(0);
+}
 const sharedRepository = resolve(commonDir, "modules/distilled");
 const checkout = resolve(root, "distilled");
 

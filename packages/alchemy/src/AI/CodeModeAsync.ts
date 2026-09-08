@@ -31,7 +31,11 @@ export const CodeModeAsync = (
     wrap: (type) => `Promise<${type}>`,
     // the model's module already targets the evaluator's async tool
     // bridges — "./tools.js" re-exports them as-is, and the runner's
-    // thunk simply invokes the default export
+    // thunk invokes the default export. A module that skipped the
+    // convention (top-level `await`s and no default export) is not
+    // thrown away: its top level already ran under the evaluator (tools
+    // and console intact), so the runner answers with what it exported
+    // and a warning in the logs that says how to return a value.
     program: (code) => ({
       main: "main.js",
       modules: {
@@ -40,8 +44,19 @@ export const CodeModeAsync = (
         `,
         "program.js": code,
         "main.js": typescript`
-          import program from "./program.js";
-          export default () => program();
+          import * as program from "./program.js";
+          export default async () => {
+            if (typeof program.default === "function") return program.default();
+            if ("default" in program) return program.default;
+            console.warn(
+              "program.js has no default export, so only its top level ran. " +
+                "Write \`export default async function () { ...; return result; }\` to return a value.",
+            );
+            const named = Object.keys(program);
+            return named.length === 0
+              ? undefined
+              : Object.fromEntries(named.map((name) => [name, program[name]]));
+          };
         `,
       },
     }),

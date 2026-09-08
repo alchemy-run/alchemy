@@ -36,6 +36,26 @@ export const inputToUIMessage = (
 });
 
 /**
+ * A tool's FAILURE as the text a client shows: a declared failure
+ * arrives as its encoded record (`{ _tag, message, … }`), a plain
+ * failure as a string. `String(record)` would read `[object Object]`.
+ */
+export const renderToolFailure = (output: unknown): string => {
+  if (typeof output === "string") return output;
+  if (typeof output === "object" && output !== null) {
+    const record = output as { _tag?: unknown; message?: unknown };
+    const tag = typeof record._tag === "string" ? record._tag : undefined;
+    const message =
+      typeof record.message === "string" ? record.message : undefined;
+    if (tag !== undefined && message !== undefined) return `${tag}: ${message}`;
+    if (message !== undefined) return message;
+    if (tag !== undefined) return tag;
+    return JSON.stringify(output) ?? String(output);
+  }
+  return String(output);
+};
+
+/**
  * The Vercel AI SDK adapter, snapshot half — driver vocabulary
  * rendered into the `useChat` wire protocol (designs/ai/streaming.md;
  * only TYPES are imported from `ai`, no runtime dependency): reduce a
@@ -135,7 +155,7 @@ export const toUIMessages = (
             ? "output-error"
             : "output-available";
           if (observation.isFailure) {
-            part.errorText = String(observation.output);
+            part.errorText = renderToolFailure(observation.output);
           } else {
             part.output = observation.output;
           }
@@ -403,7 +423,7 @@ export const makeChunkTranslator = () => {
             ? {
                 type: "tool-output-error",
                 toolCallId: observation.toolCallId,
-                errorText: String(observation.output),
+                errorText: renderToolFailure(observation.output),
                 dynamic: true,
               }
             : {
