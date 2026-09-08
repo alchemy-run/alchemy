@@ -115,6 +115,13 @@ class InputStream extends PassThrough {
 
   setRawMode(mode: boolean) {
     this.isRaw = mode;
+    if (mode) {
+      // Size-only consumers no longer query capabilities. Input is ready once
+      // the raw-mode reader attaches; a query may temporarily detach it.
+      setImmediate(() => {
+        if (this.listenerCount("readable") > 0) this.resolveReady?.();
+      });
+    }
     return this;
   }
 
