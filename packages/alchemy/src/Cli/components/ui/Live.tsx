@@ -2,7 +2,8 @@
 import type { ReactNode } from "react";
 import { useSyncExternalStore } from "react";
 import { useGlyphs } from "./Environment.tsx";
-import { ProgressBar, SpinnerGlyph } from "./Feedback.tsx";
+import { SpinnerGlyph } from "./Feedback.tsx";
+import { ProgressBar } from "./ProgressBar.tsx";
 import { Box, Row, Stack } from "./Layout.tsx";
 import { Text } from "./Typography.tsx";
 import { theme } from "../../../Util/Theme.ts";

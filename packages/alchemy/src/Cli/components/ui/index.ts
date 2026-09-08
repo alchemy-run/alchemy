@@ -19,6 +19,7 @@ export {
   SectionHeading,
   Stack,
   Viewport,
+  VirtualList,
   type BoxProps,
   type RowProps,
   type StackProps,
@@ -27,7 +28,6 @@ export { Link, Text, type TextProps, type TextTone } from "./Typography.tsx";
 export {
   Alert,
   KeyBar,
-  ProgressBar,
   Spinner,
   SpinnerGlyph,
   Status,
@@ -63,3 +63,5 @@ export {
   type ProgressGroupRow,
   type TaskRowProps,
 } from "./Live.tsx";
+
+export { ProgressBar, type ProgressBarProps } from "./ProgressBar.tsx";

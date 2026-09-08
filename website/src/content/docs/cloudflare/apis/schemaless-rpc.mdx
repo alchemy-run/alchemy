@@ -62,7 +62,7 @@ export default class BindingEffectCaller extends Cloudflare.Worker<BindingEffect
 ) {}
 ```
 
-`bindWorker(BindingTargetWorker)` registers a service Binding at deploy time and returns a stub typed as the target's Shape — `target.greet(name)` is fully inferred from the target class, and every call rides native JSRPC. Service bindings in depth: [Workers](/cloudflare/compute/workers#schemaless-rpc).
+`bindWorker(BindingTargetWorker)` registers a service Binding at deploy time and returns a stub typed as the target's Shape — `target.greet(name)` is fully inferred from the target class, and every call rides native JSRPC. Service bindings in depth: [Workers](/cloudflare/compute/workers#call-another-worker).
 
 ## Worker → Durable Object
 

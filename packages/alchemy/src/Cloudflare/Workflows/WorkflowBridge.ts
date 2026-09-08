@@ -131,7 +131,7 @@ const wrapWorkflowEvent = (event: any): WorkflowEventService["Service"] => ({
       : new Date(event.timestamp),
   instanceId: event.instanceId ?? "",
   workflowName: event.workflowName ?? "",
-  schedule: event.schedule,
+  schedule: event.schedule ?? undefined,
 });
 
 export const wrapWorkflowStep = (step: any): WorkflowStep["Service"] => ({

@@ -17,6 +17,7 @@ import {
   Unowned,
 } from "./AdoptPolicy.ts";
 import { AlchemyContext } from "./AlchemyContext.ts";
+import { demandRemoteCredentials } from "./Auth/Demand.ts";
 import {
   Artifacts,
   ArtifactStore,
@@ -432,6 +433,20 @@ export const make = <A>(
       const provider = yield* providerForMode(base, mode);
       return { provider, mode };
     });
+
+    // Credential-free dev: the adoption probe below runs each new row's
+    // `read` — for `Alchemy.remote()` rows that is a real cloud call, and
+    // it happens before apply's demand gate. Demand those credentials up
+    // front so a dev plan with nothing configured fails with the typed
+    // CredentialsRequired rather than the first read's raw auth error.
+    if (runDefaultMode === "local") {
+      const remote: Array<{ Type: string; FQN: string }> = [];
+      for (const resource of resources) {
+        const { mode } = yield* resolveProviderAndMode(resource);
+        if (mode === "live") remote.push(resource);
+      }
+      if (remote.length > 0) yield* demandRemoteCredentials(remote);
+    }
 
     /**
      * Has this resource switched provider modes since it was last

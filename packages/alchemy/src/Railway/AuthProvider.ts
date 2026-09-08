@@ -267,7 +267,7 @@ export const RailwayAuth = AuthProviderLayer<
       );
 
     /**
-     * Flag-driven (`--method token --set ...` / `--method env`) fields,
+     * Flag-driven (`--method stored --set ...` / `--method env`) fields,
      * mirroring the interactive prompts. OAuth requires a browser and stays
      * interactive-only, so it is deliberately absent.
      */
@@ -282,7 +282,7 @@ export const RailwayAuth = AuthProviderLayer<
     ];
 
     const configureMethods: ReadonlyArray<ConfigureMethod> = [
-      { method: "token", fields: tokenFields },
+      { method: "stored", fields: tokenFields },
       { method: "env", fields: [] },
     ];
 
@@ -293,7 +293,7 @@ export const RailwayAuth = AuthProviderLayer<
         readonly values: Record<string, string>;
       },
     ): Effect.Effect<RailwayAuthConfig, AuthError, Interaction.Interaction> =>
-      input.method === "token"
+      input.method === "stored"
         ? validateFieldValues(
             RAILWAY_AUTH_PROVIDER_NAME,
             tokenFields,
@@ -314,7 +314,7 @@ export const RailwayAuth = AuthProviderLayer<
           ? Effect.succeed({ method: "env" as const })
           : Effect.fail(
               new AuthError({
-                message: `Railway: unknown method '${input.method}'. Only 'token' and 'env' are supported (OAuth is interactive-only).`,
+                message: `Railway: unknown method '${input.method}'. Valid methods: stored, env. (OAuth is interactive-only.)`,
               }),
             );
 

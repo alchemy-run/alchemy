@@ -12,6 +12,7 @@ import {
 import {
   AnsweredPrompt,
   Alert,
+  Box,
   ChoiceGroup,
   DescriptionList,
   Heading,
@@ -19,6 +20,7 @@ import {
   LiveStore,
   PromptFrame,
   ProgressGroup,
+  ProgressBar,
   SectionHeading,
   Status,
   Toast,
@@ -31,6 +33,15 @@ import {
 import { tabsWindow } from "@/Cli/components/ui/Layout.tsx";
 import { makeRuntime } from "@/Cli/components/view/Runtime.tsx";
 import { sigilCli } from "@/Cli/components/view/SigilCli.tsx";
+import { Cli, Progress } from "@/Report.ts";
+import {
+  NukeProgress,
+  NukeProgressStore,
+  nukePlan,
+  reviewNuke,
+  renderNukeDelete,
+  renderNukeScan,
+} from "@/Cli/components/view/Nuke.tsx";
 import { renderApply } from "@/Cli/commands/render.ts";
 import { isInProgress } from "@/Cli/components/view/statusStyle.ts";
 import { spinnerFramesFor } from "@/Util/Theme.ts";
@@ -41,7 +52,17 @@ import {
 import { stackOutputsView } from "@/Cli/components/view/StackOutputs.tsx";
 import { Plan, PlanTree } from "@/Cli/components/view/PlanView.tsx";
 import { ApprovePlan } from "@/Cli/components/view/ApprovePlan.tsx";
-import { ProfileDetailsBody } from "@/Cli/components/view/Profile.tsx";
+import {
+  ProfileDetailsBody,
+  providerBlockHeight,
+  providerPaneWidth,
+  type ProfileProviderDisplay,
+} from "@/Cli/components/view/Profile.tsx";
+import {
+  Dashboard,
+  DashStore,
+  runProfileDashboardSession,
+} from "@/Cli/components/view/ProfileDashboard.tsx";
 import {
   buildStageNodes,
   stateExplorerScreen,
@@ -49,6 +70,9 @@ import {
   type StateExplorerSource,
 } from "@/Cli/components/view/StateExplorer.tsx";
 import * as Effect from "effect/Effect";
+import * as Context from "effect/Context";
+import * as NukeRoute from "@/Alchemist/routes/nuke.ts";
+import type { ProviderService } from "@/Provider.ts";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
@@ -91,8 +115,19 @@ class InputStream extends PassThrough {
 
   setRawMode(mode: boolean) {
     this.isRaw = mode;
-    if (mode) this.resolveReady?.();
     return this;
+  }
+
+  connect(stdout: CaptureStream) {
+    stdout.on("data", (chunk) => {
+      if (!chunk.toString().includes("\x1b[c")) return;
+      // Raw mode starts before Sigil finishes querying the terminal. Answer
+      // its device query, then allow input handlers to attach before typing.
+      setImmediate(() => {
+        this.write("\x1b[?1;2c");
+        setImmediate(() => this.resolveReady?.());
+      });
+    });
   }
 
   ref() {
@@ -411,14 +446,62 @@ it("keeps apply totals on top and destroy progress on the last row", () => {
   );
 });
 
-it("includes binding work in apply totals and failures", () => {
+it("binding rows mirror their host resource and stay out of totals", () => {
   const { service } = makeStatic();
   const worker = {
-    ...noopNode({}, "Worker"),
+    ...updateNode({ a: 1 }, { a: 2 }, "Worker"),
     bindings: [
       { sid: "BUCKET", action: "update" as const, data: {} },
+      { sid: "OLD", action: "delete" as const, data: {} },
       { sid: "STABLE", action: "noop" as const, data: {} },
     ],
+  };
+  const tree = new PlanTree(planWith([worker]), {
+    mode: "apply",
+    label: "Deploying stack",
+    busy: true,
+  });
+  const render = () =>
+    service.output.format(<Plan tree={tree} />, { columns: 80 });
+
+  // Three bindings never inflate the total: only the host is work.
+  expect(tree.progress()).toEqual({ completed: 0, failures: 0, total: 1 });
+  let output = render();
+  expect(output).toContain("Deploying stack (0/1)");
+  expect(output).toContain("unbind");
+  expect(output).toContain("no change");
+
+  tree.emit({
+    _tag: "apply.resource.status",
+    fqn: "Worker",
+    id: "Worker",
+    type: "Test.Resource",
+    status: "updating",
+  });
+  output = render();
+  expect(output).toContain("unbinding");
+  expect(output).toContain("Deploying stack (0/1)");
+
+  tree.emit({
+    _tag: "apply.resource.status",
+    fqn: "Worker",
+    id: "Worker",
+    type: "Test.Resource",
+    status: "updated",
+  });
+  expect(tree.progress()).toEqual({ completed: 1, failures: 0, total: 1 });
+  output = render();
+  expect(output).toContain("Deploying stack (1/1)");
+  expect(output).toContain("unbound");
+  expect(output).toContain("1 updated");
+  expect(output).not.toContain("pending");
+});
+
+it("binding rows follow a failed host", () => {
+  const { service } = makeStatic();
+  const worker = {
+    ...updateNode({ a: 1 }, { a: 2 }, "Worker"),
+    bindings: [{ sid: "BUCKET", action: "update" as const, data: {} }],
   };
   const tree = new PlanTree(planWith([worker]), {
     mode: "apply",
@@ -430,17 +513,16 @@ it("includes binding work in apply totals and failures", () => {
     fqn: "Worker",
     id: "Worker",
     type: "Test.Resource",
-    bindingId: "BUCKET",
     status: "fail",
-    message: "binding failed",
+    message: "worker failed",
   });
 
   const output = service.output.format(<Plan tree={tree} />, { columns: 80 });
+  expect(tree.progress()).toEqual({ completed: 1, failures: 1, total: 1 });
   expect(output).toContain("1 fail");
-  expect(output).toContain("1 no change");
-  expect(output).not.toContain("2 no change");
   expect(output).toContain("Deploying stack (1/1)");
-  expect(output).toContain("binding failed");
+  expect(output).toContain("worker failed");
+  expect(output).not.toContain("pending");
 });
 
 it.effect("keeps native progress active until the apply outcome settles", () =>
@@ -545,6 +627,39 @@ it.effect("removes the dev apply widget when its generation scope closes", () =>
   }),
 );
 
+// `p` hides the dev widget; a hot reload opens a fresh session and must not
+// bring it back — the user's choice outlives the generation that made it.
+it.effect("keeps the dev plan widget hidden across hot reloads", () =>
+  Effect.gen(function* () {
+    const stdin = new InputStream();
+    const { service, stdout } = yield* makeLive({ stdin });
+    const plan = {
+      ...planWith([updateNode({ version: 1 }, { version: 2 })]),
+      defaultMode: "local" as const,
+    };
+    const cli = sigilCli().pipe(Layer.provide(Layer.succeed(CliKit, service)));
+    yield* Effect.gen(function* () {
+      const { startApplySession } = yield* Cli;
+      const first = yield* startApplySession(plan, { dev: true });
+      yield* first.done("success");
+      yield* Effect.promise(() => stdout.waitFor("p hide widget"));
+      yield* Effect.promise(() => stdin.ready);
+      yield* Effect.sync(() => stdin.write("p"));
+      yield* Effect.promise(() => stdout.waitFor("p show plan/output"));
+      yield* first.close!;
+
+      const reloadedAt = stdout.output.length;
+      const second = yield* startApplySession(plan, { dev: true });
+      yield* second.done("success");
+      yield* Effect.promise(() => stdout.waitFor("Dev stack ready"));
+      const reloaded = stdout.output.slice(reloadedAt);
+      expect(reloaded).toContain("p show plan/output");
+      expect(reloaded).not.toContain("p hide widget");
+      yield* second.close!;
+    }).pipe(Effect.provide(cli));
+  }),
+);
+
 it("virtualizes dev stack output", () => {
   const { service } = makeStatic();
   const tree = new PlanTree(planWith([updateNode({}, {})]), {
@@ -617,6 +732,178 @@ it("replaces provider details with refresh progress in place", () => {
   expect(output).toContain("token: gho_cZ****");
 });
 
+// Eight providers of varying height: 49 rows in total, twice a 24-row terminal.
+const dashboardProviders: ReadonlyArray<ProfileProviderDisplay> = [
+  {
+    name: "AWS",
+    method: "sso",
+    status: "ready",
+    lines: [
+      "accessKeyId: ASIA****",
+      "secretAccessKey: I7hs****",
+      "sessionToken: IQoJ****",
+      "region: us-east-2",
+      "source: sso - default",
+    ],
+  },
+  {
+    name: "Cloudflare",
+    method: "stored",
+    status: "configured",
+    lines: [
+      "apiKey: cfk_****",
+      "email: blan****",
+      "accountId: 2b29****",
+      "source: stored",
+    ],
+  },
+  {
+    name: "Fly",
+    method: "stored",
+    status: "configured",
+    lines: ["apiKey: FlyV****"],
+  },
+  {
+    name: "GitHub",
+    method: "gh-cli",
+    status: "configured",
+    lines: ["token: gho_cZ****", "source: gh-cli"],
+  },
+  {
+    name: "Hetzner",
+    method: "stored",
+    status: "configured",
+    lines: ["token: 50Kt****"],
+  },
+  {
+    name: "Prisma",
+    method: "stored",
+    status: "configured",
+    lines: ["serviceToken: eyJr****"],
+  },
+  {
+    name: "Railway",
+    method: "oauth",
+    status: "configured",
+    lines: [
+      "token: rw_Fe2****",
+      "tokenKind: account",
+      "apiBaseUrl: https://backboard.railway.com",
+      "source: oauth",
+    ],
+  },
+  {
+    name: "Vercel",
+    method: "stored",
+    status: "reauth",
+    lines: ["token: vc_****"],
+  },
+];
+
+const dashboardEntries = [{ name: "default", isActive: true, isDefault: true }];
+
+// The dashboard windows providers by `providerBlockHeight`, so the number must
+// match what a block actually renders.
+it("sizes provider blocks by providerBlockHeight", () => {
+  const { service } = makeStatic();
+  const output = service.output.format(
+    <ProfileDetailsBody providers={dashboardProviders} showFocusRail />,
+    { columns: 80 },
+  );
+  const expected = dashboardProviders.reduce(
+    (rows, provider, index) =>
+      rows + providerBlockHeight(provider, index === 0),
+    0,
+  );
+  expect(output.split("\n").length).toBe(expected);
+});
+
+const separatorWidth = (output: string) =>
+  Math.max(
+    0,
+    ...output
+      .split("\n")
+      .filter((line) => /^─+$/.test(line))
+      .map((line) => line.length),
+  );
+
+// `profile show` sizes the table to its content: a row box shrink-wraps the
+// column of blocks. The dashboard's windowed pane cannot lay out every block,
+// so it sizes itself by `providerPaneWidth`, which must match that width.
+it("providerPaneWidth matches the intrinsic width of the provider table", () => {
+  const { service } = makeStatic();
+  const options = { showFocusRail: true, reauthHint: "press r to re-login" };
+  const output = service.output.format(
+    <Box>
+      <ProfileDetailsBody providers={dashboardProviders} {...options} />
+    </Box>,
+    { columns: 120 },
+  );
+  const width = providerPaneWidth(dashboardProviders, options);
+  expect(width).toBeLessThan(120);
+  expect(separatorWidth(output)).toBe(width);
+});
+
+it("windows the profile dashboard's providers to the terminal height", () => {
+  const { service, stdout } = makeStatic();
+  const store = new DashStore(dashboardEntries);
+  store.setDetails("default", {
+    state: "ready",
+    providers: dashboardProviders,
+    available: [],
+  });
+  const output = service.output.format(
+    <Dashboard store={store} initialSelected={0} />,
+    { columns: 80 },
+  );
+
+  expect(output.split("\n").length).toBeLessThanOrEqual(stdout.rows);
+  expect(output).toContain("AWS");
+  expect(output).toContain("Cloudflare");
+  expect(output).toContain("switch profile");
+  expect(output).not.toContain("Vercel");
+  // Separators span the table, not the terminal.
+  expect(separatorWidth(output)).toBe(
+    providerPaneWidth(dashboardProviders, {
+      showFocusRail: true,
+      reauthHint: "press r to re-login",
+    }),
+  );
+});
+
+// The session sleeps on a real clock (loader delay, notice auto-dismiss).
+it.live("scrolls the profile dashboard to the focused provider", () =>
+  Effect.gen(function* () {
+    const stdin = new InputStream();
+    const { service, stdout } = yield* makeLive({ stdin });
+    const session = yield* runProfileDashboardSession({
+      entries: dashboardEntries,
+      selected: "default",
+      loadDetails: () =>
+        Effect.succeed({ providers: dashboardProviders, available: [] }),
+      execute: () =>
+        Effect.succeed({ ok: true, message: "", entries: dashboardEntries }),
+      runFlow: () => Effect.succeed({ ok: true, message: "" }),
+      reloadEntries: Effect.succeed(dashboardEntries),
+    }).pipe(Effect.provideService(CliKit, service), Effect.forkChild);
+
+    // "focus provider" joins the key bar once the providers have resolved;
+    // arrow keys are ignored while the pane still shows the loading spinner.
+    yield* Effect.promise(() => stdout.waitFor("focus provider"));
+    yield* Effect.promise(() => stdin.ready);
+    expect(stdout.output).not.toContain("Vercel");
+
+    // Walk the focus cursor down to the last provider; the list follows it.
+    for (const _ of dashboardProviders) {
+      yield* Effect.sync(() => stdin.write("\x1b[B"));
+    }
+    yield* Effect.promise(() => stdout.waitFor("Vercel"));
+
+    yield* Effect.sync(() => stdin.write("q"));
+    yield* Fiber.join(session);
+  }),
+);
+
 it("renders input frames inline by default and keeps a stacked variant", () => {
   const { service } = makeStatic();
   const inline = service.output.format(
@@ -672,6 +959,7 @@ const makeLive = (
       // process.stdin pipe Sigil's useInput throws during commit, which now
       // surfaces as a renderer error instead of being silently swallowed.
       const stdin = overrides.stdin ?? (input ? new InputStream() : undefined);
+      stdin?.connect(stdout);
       const runtime = makeRuntime(
         {
           input,
@@ -1987,5 +2275,364 @@ it.live(
       expect(after).toContain("app/prod/Api/Worker");
       yield* press("q");
       yield* Fiber.join(fiber);
+    }),
+);
+
+it.effect("renders nuke scan counts and outstanding providers", () =>
+  Effect.gen(function* () {
+    const { service } = makeStatic();
+    const store = new NukeProgressStore();
+    store.emit({ _tag: "nuke.scan.started", total: 2 });
+    store.emit({ _tag: "nuke.scan.provider.started", provider: "Test.Fast" });
+    store.emit({ _tag: "nuke.scan.provider.started", provider: "Test.Slow" });
+    store.emit({
+      _tag: "nuke.scan.provider.completed",
+      provider: "Test.Fast",
+      resources: 3,
+    });
+    const output = yield* service.output.render(<NukeProgress store={store} />);
+    expect(output).toContain("1/2");
+    expect(output).toContain("3 resources found");
+    expect(output).toContain("Scanning Test.Slow");
+    const lines = output.split("\n");
+    const header = lines.findIndex((line) => line.includes("1/2"));
+    expect(lines[header]).toMatch(/^  \[[⣿⡇ ]+\] {2}\[1\/2\]\s*$/);
+    expect(lines[header + 1]?.trim()).toBe("");
+    expect(lines[header + 2]).toContain("Scanning providers");
+    expect(output).not.toContain("Scanning Test.Fast");
+  }),
+);
+
+it.effect("updates individual nuke plan rows during deletion", () =>
+  Effect.gen(function* () {
+    const { service } = makeStatic();
+    const tree = new PlanTree(
+      nukePlan(
+        [
+          { providerId: "Test.B", displayName: "same-name" },
+          { providerId: "Test.A", displayName: "same-name" },
+          { providerId: "Test.A", displayName: "same-name" },
+        ],
+        { mode: "live" },
+      ),
+      { mode: "apply", viewport: "full", busy: true },
+    );
+    tree.setLabel("Deleting resources · pass 2");
+    tree.emit({
+      _tag: "apply.resource.status",
+      fqn: "nuke/2",
+      id: "Test.A",
+      type: "Test.A",
+      status: "deleted",
+    });
+    tree.emit({
+      _tag: "apply.resource.status",
+      fqn: "nuke/1",
+      id: "Test.A",
+      type: "Test.A",
+      status: "fail",
+      message: "blocked",
+    });
+    tree.emit({
+      _tag: "apply.resource.status",
+      fqn: "nuke/0",
+      id: "Test.B",
+      type: "Test.B",
+      status: "deleting",
+    });
+    expect(tree.snapshot().tasks.get("nuke/2")?.status).toBe("deleted");
+    expect(tree.snapshot().tasks.get("nuke/1")?.status).toBe("fail");
+    expect(tree.progress()).toEqual({ completed: 2, total: 3, failures: 1 });
+    const output = yield* service.output.render(<Plan tree={tree} />);
+    expect(output).toContain("pass 2");
+    expect(output).toContain("blocked");
+    expect(output.match(/same-name/g)).toHaveLength(3);
+    expect(output).not.toContain("(Test.A)");
+  }),
+);
+
+it.effect("renders nuke execution outcomes in the shared plan", () =>
+  Effect.gen(function* () {
+    const { service, stdout } = yield* makeLive();
+    const provider: ProviderService = {
+      nuke: { dependsOn: ["Test.Parent"] },
+      list: () => Effect.succeed([]),
+      reconcile: () => Effect.succeed({}),
+      delete: () => Effect.void,
+    };
+    const resources = [
+      {
+        providerId: "Test.Parent",
+        displayName: "parent",
+        attributes: {},
+        provider: { ...provider, nuke: undefined },
+      },
+      {
+        providerId: "Test.Child",
+        displayName: "same-name",
+        attributes: {},
+        provider: {
+          ...provider,
+          delete: () => Effect.fail("cannot delete child"),
+        },
+      },
+      {
+        providerId: "Test.Child",
+        displayName: "same-name",
+        attributes: {},
+        provider,
+      },
+    ];
+    const result = yield* NukeRoute.execute({
+      scan: { resources, mode: "live", context: Context.empty(), failures: [] },
+      resources,
+      strategy: { _tag: "coordinated" },
+    }).pipe(
+      renderNukeDelete(resources, "live"),
+      Effect.provideService(CliKit, service),
+    );
+    expect(result.deleted).toHaveLength(1);
+    expect(result.failed).toHaveLength(1);
+    expect(result.held).toHaveLength(1);
+    expect(stdout.output).toContain("Nuke incomplete");
+    expect(stdout.output).toContain("Held back by Test.Child");
+    expect(stdout.output).toContain("cannot delete child");
+    expect(stdout.output).toContain("same-name");
+    expect(stdout.output).not.toContain("Test.Child 1/2");
+  }),
+);
+
+it.effect("closes nuke live progress when the operation fails", () =>
+  Effect.gen(function* () {
+    const { service, stdout } = yield* makeLive();
+    yield* Effect.gen(function* () {
+      const report = yield* Progress;
+      yield* report({ _tag: "nuke.scan.started", total: 2 });
+      yield* Effect.fail("scan failed");
+    }).pipe(
+      renderNukeScan(),
+      Effect.provideService(CliKit, service),
+      Effect.result,
+    );
+    expect(stdout.output).toContain("\u001B[?25h");
+    yield* service.output.info("After nuke");
+    expect(stdout.output).toContain("After nuke");
+  }),
+);
+
+it.effect("renders fixed-width Braille progress bars with partial cells", () =>
+  Effect.gen(function* () {
+    const { service } = makeStatic();
+    for (const [value, expected] of [
+      [-1, "[  ]"],
+      [0, "[  ]"],
+      [0.0625, "[  ]"],
+      [0.25, "[⡇ ]"],
+      [0.5, "[⣿ ]"],
+      [0.75, "[⣿⡇]"],
+      [1, "[⣿⣿]"],
+      [2, "[⣿⣿]"],
+    ] as const) {
+      const output = yield* service.output.render(
+        <ProgressBar value={value} width={2} showPercent={false} />,
+      );
+      expect(output.trim()).toBe(expected);
+    }
+    const labeled = yield* service.output.render(
+      <ProgressBar
+        value={0.5}
+        width={2}
+        label="Uploading"
+        detail="2 of 4 files"
+      />,
+    );
+    expect(labeled).toContain("[⣿ ]");
+    expect(labeled).toContain("50%");
+    expect(labeled).toContain("Uploading");
+    expect(labeled).toContain("2 of 4 files");
+  }),
+);
+
+it.effect("falls back to ASCII for progress bars without Unicode", () =>
+  Effect.gen(function* () {
+    const { service } = yield* makeLive({ input: false, unicode: false });
+    const output = yield* service.output.render(
+      <ProgressBar value={0.5} width={4} showPercent={false} />,
+    );
+    expect(output.trim()).toBe("[##..]");
+  }),
+);
+
+it.effect(
+  "renders nuke inventory with resource types as names and distinct row keys",
+  () =>
+    Effect.gen(function* () {
+      const { service } = makeStatic();
+      const targets = [
+        { providerId: "Cloudflare.R2.Bucket", displayName: "same/name" },
+        { providerId: "Cloudflare.R2.Bucket", displayName: "same/name" },
+        { providerId: "AWS.S3.Bucket", displayName: "" },
+      ];
+      const plan = nukePlan(targets, { mode: "live" });
+      const tree = new PlanTree(plan, { viewport: "full" });
+      expect(tree.progressRows).toHaveLength(3);
+      expect(new Set(tree.rows.map((row) => row.key)).size).toBe(3);
+      expect(tree.rows.map((row) => row.id)).toEqual([
+        "AWS.S3.Bucket",
+        "Cloudflare.R2.Bucket",
+        "Cloudflare.R2.Bucket",
+      ]);
+      expect(
+        tree.rows.every((row) => row.type === "resource" && row.depth === 0),
+      ).toBe(true);
+      const output = yield* service.output.render(<Plan tree={tree} />);
+      expect(output).toContain("3 to delete");
+      expect(output.match(/Cloudflare.R2.Bucket/g)).toHaveLength(2);
+      expect(output).not.toContain("(Cloudflare.R2.Bucket)");
+      expect(output.match(/same\/name/g)).toHaveLength(2);
+
+      const compact = yield* service.output.render(
+        <Plan
+          tree={
+            new PlanTree(nukePlan(targets, { mode: "live" }), {
+              viewport: "full",
+            })
+          }
+        />,
+      );
+      expect(compact).toContain("3 to delete");
+      expect(compact.match(/same\/name/g)).toHaveLength(2);
+      expect(compact.match(/Cloudflare.R2.Bucket/g)).toHaveLength(2);
+      expect(compact).not.toContain("(x2)");
+    }),
+);
+
+it.effect(
+  "prints the shared nuke plan for dry-run and yes without prompting",
+  () =>
+    Effect.gen(function* () {
+      for (const options of [
+        { yes: false, dryRun: true },
+        { yes: true, dryRun: false },
+      ]) {
+        const { service, stdout } = makeStatic();
+        const result = yield* reviewNuke(
+          [{ providerId: "AWS.S3.Bucket", displayName: "bucket" }],
+          { ...options, mode: "local" },
+        ).pipe(Effect.provideService(CliKit, service));
+        expect(result).toBe(true);
+        expect(stdout.output).toContain("1 to delete");
+        expect(stdout.output).toContain("AWS.S3.Bucket");
+        expect(stdout.output).toContain("bucket");
+      }
+    }),
+);
+
+it.live("defaults nuke plan approval to Cancel", () =>
+  Effect.gen(function* () {
+    const stdin = new InputStream();
+    const { service, stdout } = yield* makeLive({ stdin });
+    const review = yield* reviewNuke(
+      [{ providerId: "AWS.S3.Bucket", displayName: "bucket" }],
+      { mode: "local", yes: false, dryRun: false },
+    ).pipe(Effect.provideService(CliKit, service), Effect.forkChild);
+    yield* Effect.promise(flushEffects);
+    yield* Effect.raceFirst(
+      Effect.promise(() => stdout.waitFor("Cancel")),
+      Fiber.join(review).pipe(
+        Effect.flatMap(() => Effect.die("review ended before prompt")),
+      ),
+    );
+    yield* Effect.promise(() => stdin.ready);
+    expect(stdout.output).toContain("1 to delete");
+    expect(stdout.output).toContain("locally emulated");
+    yield* Effect.sync(() => stdin.write("\r"));
+    yield* Effect.promise(flushEffects);
+    expect(yield* Fiber.join(review)).toBe(false);
+  }),
+);
+
+it.effect("keeps unnamed and duplicate nuke targets as individual rows", () =>
+  Effect.gen(function* () {
+    const { service } = makeStatic();
+    const targets = [
+      { providerId: "AWS.ApiGateway.GatewayResponse", displayName: "api-123" },
+      { providerId: "AWS.ApiGateway.GatewayResponse", displayName: "api-123" },
+      { providerId: "AWS.S3.Bucket", displayName: "photos" },
+      { providerId: "AWS.S3.Bucket", displayName: "backups" },
+      { providerId: "Test.Unknown", displayName: "unknown" },
+      { providerId: "Test.Unknown", displayName: "" },
+    ];
+    const plan = nukePlan(targets, { mode: "live" });
+    expect(plan.rows).toHaveLength(6);
+    const output = yield* service.output.render(
+      <Plan tree={new PlanTree(plan, { viewport: "full" })} />,
+    );
+    expect(output).toContain("6 to delete");
+    expect(output.match(/api-123/g)).toHaveLength(2);
+    expect(output.match(/Test.Unknown/g)).toHaveLength(2);
+    expect(output).not.toContain("(x2)");
+    expect(output).toContain("photos");
+    expect(output).toContain("backups");
+    expect(output).not.toContain("· unknown");
+  }),
+);
+
+it.effect(
+  "logs nuke errors immediately through the configured Effect logger",
+  () =>
+    Effect.gen(function* () {
+      for (const input of [true, false]) {
+        const { service } = yield* makeLive({ input });
+        const entries: Array<{ level: string; message: unknown }> = [];
+        const logger = Logger.make<unknown, void>(({ logLevel, message }) => {
+          entries.push({ level: logLevel, message });
+        });
+        yield* Effect.gen(function* () {
+          const report = yield* Progress;
+          yield* report({ _tag: "nuke.scan.started", total: 2 });
+          yield* report({
+            _tag: "nuke.scan.provider.completed",
+            provider: "Test.Failed",
+            resources: 0,
+            error: "denied during scan",
+          });
+          // Check before the operation returns: errors must not wait for completion.
+          expect(entries).toEqual([
+            { level: "Warn", message: ["Test.Failed: denied during scan"] },
+          ]);
+          yield* report({
+            _tag: "nuke.resource.failed",
+            provider: "Test.Resource",
+            resource: "example",
+            message: "denied during delete",
+          });
+          expect(entries[1]).toEqual({
+            level: "Warn",
+            message: ["Test.Resource example: denied during delete"],
+          });
+          yield* report({
+            _tag: "nuke.scan.provider.completed",
+            provider: "Test.Ready",
+            resources: 1,
+          });
+          yield* report({
+            _tag: "nuke.resource.deleted",
+            provider: "Test.Ready",
+            resource: "gone",
+          });
+        }).pipe(
+          renderNukeScan(),
+          Effect.provideService(CliKit, service),
+          Effect.provide(Logger.layer([logger])),
+        );
+        expect(entries).toHaveLength(input ? 2 : 4);
+        if (!input) {
+          expect(entries.slice(2)).toEqual([
+            { level: "Info", message: ["scanned Test.Ready (1)"] },
+            { level: "Info", message: ["deleted Test.Ready gone"] },
+          ]);
+        }
+      }
     }),
 );

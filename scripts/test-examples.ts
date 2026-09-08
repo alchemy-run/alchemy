@@ -1,9 +1,5 @@
 export {};
 
-// Example tests must only use credentials injected by the test environment.
-// Auth providers refuse to consult stored profiles while CI is enabled.
-process.env.CI = "true";
-
 const examples = [
   "./examples/cloudflare-dev",
   "./examples/cloudflare-worker",
@@ -25,6 +21,7 @@ const examples = [
   "./examples/cloudflare-website-sveltekit",
   "./examples/cloudflare-website-vite",
   "./examples/cloudflare-website-waku",
+  "./examples/cloudflare-website-vocs",
   "./examples/aws-dev",
   // "./examples/aws-ecs",
   "./examples/aws-lambda",
@@ -186,6 +183,23 @@ const makeStatusRenderer = (states: readonly TaskState[]) => {
   };
 
   return {
+    failure(result: CommandResult) {
+      if (interactive && renderedRows > 0) {
+        process.stdout.write(`\x1b[${renderedRows}F\x1b[J`);
+        renderedRows = 0;
+      }
+      const output = [
+        `\nFailed: ${result.label} (exit ${result.exitCode ?? "signal"}): ${result.command.join(" ")}`,
+        `--- ${result.label} stdout ---`,
+        result.stdout.trimEnd() || "(empty)",
+        `--- ${result.label} stderr ---`,
+        result.stderr.trimEnd() || "(empty)",
+        "",
+      ].join("\n");
+      // Use the TUI's stream so its next repaint starts below the logs.
+      (interactive ? process.stdout : process.stderr).write(output);
+      this.render();
+    },
     render() {
       if (!interactive) {
         return;
@@ -265,7 +279,11 @@ const runParallel = async (
 
   try {
     return await Promise.all(
-      states.map((state) => run(state, () => renderer.render())),
+      states.map(async (state) => {
+        const result = await run(state, () => renderer.render());
+        if (result.exitCode !== 0) renderer.failure(result);
+        return result;
+      }),
     );
   } finally {
     clearInterval(interval);
@@ -295,21 +313,6 @@ if (failedTests.length > 0) {
     );
   }
 
-  for (const failure of failedTests) {
-    console.error(`\n--- ${failure.label} stdout ---`);
-    if (failure.stdout.length > 0) {
-      console.error(failure.stdout.trimEnd());
-    } else {
-      console.error("(empty)");
-    }
-
-    console.error(`\n--- ${failure.label} stderr ---`);
-    if (failure.stderr.length > 0) {
-      console.error(failure.stderr.trimEnd());
-    } else {
-      console.error("(empty)");
-    }
-  }
   process.exit(1);
 }
 
@@ -326,8 +329,6 @@ if (failedCliTests.length > 0) {
   for (const failure of failedCliTests) {
     const exit = failure.exitCode === null ? "signal" : failure.exitCode;
     console.error(`- ${failure.label} (exit ${exit})`);
-    if (failure.stdout.length > 0) console.error(failure.stdout.trimEnd());
-    if (failure.stderr.length > 0) console.error(failure.stderr.trimEnd());
   }
   process.exit(1);
 }

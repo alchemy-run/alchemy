@@ -3,7 +3,7 @@
  *
  * Deploys real AWS resources (S3 Bucket, SQS Queue, DynamoDB Table) through
  * the regular live providers, but pointed at a locally-running floci emulator
- * via the `{ method: "local" }` AWS auth method.
+ * via the floci-scoped environment the local AWS providers carry.
  *
  * ## How local mode is activated
  *
@@ -17,8 +17,8 @@
  *
  * ## Why no real-AWS calls can happen
  *
- * The `local` method's credentials are hardcoded dummies and its accountId is
- * fixed — it never calls STS. Every SDK call carries the emulator endpoint
+ * The floci environment's credentials are hardcoded dummies and its accountId
+ * is fixed — it never calls STS. Every SDK call carries the emulator endpoint
  * (via `Endpoint.fromEnvironment`); if any call ever escaped to real AWS it
  * would fail auth immediately (the dummy keys exist in no real account).
  *

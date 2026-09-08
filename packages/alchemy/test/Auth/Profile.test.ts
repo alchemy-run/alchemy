@@ -1,5 +1,6 @@
 import {
   AuthError,
+  AuthProvider,
   AuthProviderLayer,
   AuthProviders,
   getAuthProvider,
@@ -13,6 +14,7 @@ import {
   ProfileError,
   ProfileStore,
   ProfileStoreLive,
+  SuppressMissingProviderConfig,
   validateProfileName,
 } from "@/Auth/Profile.ts";
 import { resolveProfileName, resolveProviderConfig } from "@/Auth/Resolve.ts";
@@ -22,6 +24,7 @@ import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import path from "pathe";
@@ -122,21 +125,6 @@ const withTempHome = <A, E, R>(
     );
     return yield* effect.pipe(Effect.provide(makeTestLayer(config)));
   }).pipe(Effect.scoped, Effect.provide(NodeServices.layer));
-
-/** Set a process env var for the duration of the surrounding scope. */
-const withProcessEnv = (name: string, value: string) =>
-  Effect.acquireRelease(
-    Effect.sync(() => {
-      const previous = process.env[name];
-      process.env[name] = value;
-      return previous;
-    }),
-    (previous) =>
-      Effect.sync(() => {
-        if (previous === undefined) delete process.env[name];
-        else process.env[name] = previous;
-      }),
-  );
 
 it.live(
   "loadProviderConfig requires profiles to be explicitly created",
@@ -535,35 +523,107 @@ it.effect("resolves the profile from env files and --profile overrides", () =>
 );
 
 it.live(
-  "explicitly exported provider variables work without a profile",
+  "environment notices share a provider cache and reset when its layer is rebuilt",
+  () => {
+    const messages: unknown[] = [];
+    const run = withTempHome(
+      Effect.gen(function* () {
+        const auth = yield* getAuthProvider(ENV_PROVIDER);
+        yield* AuthProvider()("OtherNoticeProvider", auth);
+        const resolve = resolveProviderConfig(ENV_PROVIDER);
+        yield* resolve.pipe(
+          Effect.provideService(SuppressMissingProviderConfig, true),
+        );
+        expect(messages).toEqual([]);
+        const results = yield* Effect.all(
+          Array.from({ length: 10 }, () => resolve),
+          { concurrency: "unbounded" },
+        );
+        for (const result of results) {
+          expect(yield* result.resolve).toBe("environment-credentials");
+        }
+        yield* resolveProviderConfig("OtherNoticeProvider");
+        expect(messages).toEqual([
+          [
+            "FakeEnvAuthProvider: using environment variables (FAKE_ENV_TOKEN) instead of the profile.",
+          ],
+          [
+            "OtherNoticeProvider: using environment variables (FAKE_ENV_TOKEN) instead of the profile.",
+          ],
+        ]);
+      }),
+      { FAKE_ENV_TOKEN: "from-env" },
+    );
+    return Effect.gen(function* () {
+      yield* run;
+      messages.length = 0;
+      yield* run;
+    }).pipe(
+      Effect.provide(
+        Logger.layer([
+          Logger.make<unknown, void>((options) => {
+            messages.push(options.message);
+          }),
+        ]),
+      ),
+    );
+  },
+  { exclusive: true },
+);
+
+it.live(
+  "provider variables present in config resolve without a profile",
   () =>
     withTempHome(
       Effect.gen(function* () {
-        yield* withProcessEnv("FAKE_ENV_TOKEN", "from-env");
         const resolved = yield* resolveProviderConfig(ENV_PROVIDER);
         expect(resolved.source).toBe("environment");
         expect(yield* resolved.resolve).toBe("environment-credentials");
       }),
+      // Environment credentials are read through the config provider —
+      // the process environment, `.env`, and `--env-file` alike.
+      { FAKE_ENV_TOKEN: "from-env" },
     ),
   { exclusive: true },
 );
 
 it.live(
-  "an explicit profile selection ignores provider environment variables",
+  "provider environment variables take precedence over a selected profile",
   () =>
     withTempHome(
       Effect.gen(function* () {
-        yield* withProcessEnv("FAKE_ENV_TOKEN", "from-env");
-        // ALCHEMY_PROFILE (the --profile mechanism) selects the profile
-        // explicitly, so the exported variable must NOT short-circuit —
-        // the unconfigured provider fails with the connect hint instead.
-        const error = yield* resolveProviderConfig(ENV_PROVIDER).pipe(
-          Effect.flip,
-        );
-        expect(error).toBeInstanceOf(AuthError);
-        expect((error as AuthError).message).toContain("--add");
+        // ALCHEMY_PROFILE (the --profile mechanism) selects a profile, but
+        // a fully present environment contract still wins — the profile
+        // is never consulted, so its unconfigured provider cannot fail.
+        const resolved = yield* resolveProviderConfig(ENV_PROVIDER);
+        expect(resolved.source).toBe("environment");
+        expect(resolved.profileName).toBeUndefined();
+        expect(yield* resolved.resolve).toBe("environment-credentials");
       }),
-      { ALCHEMY_PROFILE: "default" },
+      { ALCHEMY_PROFILE: "default", FAKE_ENV_TOKEN: "from-env" },
+    ),
+  { exclusive: true },
+);
+
+it.live(
+  "providers mix: one from environment variables, the rest from the profile",
+  () =>
+    withTempHome(
+      Effect.gen(function* () {
+        const profile = yield* ProfileStore;
+        yield* profile.setProviderConfig("default", FAKE_PROVIDER, {
+          method: "stored",
+        });
+        // Precedence is decided per provider, not per run: the provider
+        // whose contract is present resolves from the environment while a
+        // provider without those variables still comes from the profile.
+        const fromEnv = yield* resolveProviderConfig(ENV_PROVIDER);
+        expect(fromEnv.source).toBe("environment");
+        const fromProfile = yield* resolveProviderConfig(FAKE_PROVIDER);
+        expect(fromProfile.source).toBe("profile");
+        expect(fromProfile.profileName).toBe("default");
+      }),
+      { FAKE_ENV_TOKEN: "from-env" },
     ),
   { exclusive: true },
 );

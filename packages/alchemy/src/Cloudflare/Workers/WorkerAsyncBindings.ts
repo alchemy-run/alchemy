@@ -215,6 +215,7 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
               className,
               scriptName: resource.workerName,
               limits: binding.limits,
+              schedules: binding.schedules,
             });
           }
         }
