@@ -11,6 +11,13 @@ import { GhosttyTerminal } from "@/components/terminal";
 import { OpenAgentContext, type SpawnTarget } from "@/components/tool-card";
 import { Button } from "@/components/ui/button";
 import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
+import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
@@ -18,11 +25,15 @@ import {
 } from "@/components/ui/tooltip";
 import type { ThreadAgentRow, ThreadState } from "@/lib/channel";
 import {
+  deleteAgent,
   engineerSessionId,
   parseEntityRef,
+  resumeAgent,
+  stopAgent,
   threadSessionId,
 } from "@/lib/channel";
 import type { ThreadTab } from "@/lib/routes";
+import { useSelection } from "@/lib/selection";
 import { cn } from "@/lib/utils";
 import {
   Bot,
@@ -35,12 +46,15 @@ import {
   GitPullRequestArrow,
   GitPullRequestClosed,
   MessageSquare,
+  Play,
   Plus,
+  Square,
+  SquareArrowOutUpRight,
   SquareTerminal,
   Trash2,
   X,
 } from "lucide-react";
-import { useCallback, useState, type ReactNode } from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { ReviewView } from "@/components/review";
 
 const Hint = ({ label, children }: { label: string; children: ReactNode }) => (
@@ -140,11 +154,23 @@ const Section = ({
 );
 
 /** The thread's books: entities, agents, close, delete. */
+/** The operator's switches on a thread's agents — each takes the keys
+ *  it acts on (a selection, or the one agent in a pane). */
+export interface AgentActions {
+  /** Keys with a request in flight — rows show a spinner. */
+  readonly busy: ReadonlySet<string>;
+  readonly stop: (keys: ReadonlyArray<string>) => void;
+  readonly resume: (keys: ReadonlyArray<string>) => void;
+  /** Confirms, then erases. */
+  readonly remove: (keys: ReadonlyArray<string>) => void;
+}
+
 const ThreadPane = ({
   state,
   selectedAgent,
   onOpenReview,
   onOpenAgent,
+  agentActions,
   onClose,
   deleting,
   onDelete,
@@ -154,11 +180,71 @@ const ThreadPane = ({
   selectedAgent: string | undefined;
   onOpenReview: (owner: string, repo: string, number: number) => void;
   onOpenAgent: (key: string) => void;
+  agentActions: AgentActions;
   onClose: () => void;
   /** The thread's DELETE is in flight. */
   deleting: boolean;
   onDelete: () => void;
 }) => {
+  // SELECTION over the agents as listed (⌘/⇧-click select without
+  // opening; a plain click opens AND selects) and the context menu
+  const order = useMemo(
+    () => state.agents.map((agent) => agent.key),
+    [state.agents],
+  );
+  const pick = useSelection(order, { onDelete: agentActions.remove });
+  const [menuKeys, setMenuKeys] = useState<ReadonlyArray<string>>([]);
+  const menuRows = state.agents.filter((agent) => menuKeys.includes(agent.key));
+  const running = menuRows.filter((agent) => agent.state === "running");
+  const settled = menuRows.filter((agent) => agent.state !== "running");
+  const plural = (rows: ReadonlyArray<unknown>) =>
+    rows.length > 1 ? `${rows.length} agents` : "agent";
+  const agentRow = (agent: ThreadAgentRow) => {
+    const busy = agentActions.busy.has(agent.key);
+    return (
+      <button
+        key={agent.key}
+        type="button"
+        data-agent={agent.key}
+        data-state={agent.state}
+        data-selected={pick.has(agent.key) ? "" : undefined}
+        data-targeted={menuKeys.includes(agent.key) ? "" : undefined}
+        aria-busy={busy || undefined}
+        onClick={(event) => {
+          if (!pick.click(agent.key, event)) onOpenAgent(agent.key);
+        }}
+        onContextMenu={() => setMenuKeys(pick.target(agent.key))}
+        aria-label={`open agent ${agent.key}`}
+        aria-current={selectedAgent === agent.key ? "page" : undefined}
+        title={`${agent.brief}\n\nOpen the agent's session — every tool call, as it happens. Right-click to stop, resume, or delete.`}
+        className={cn(
+          "flex w-full cursor-pointer items-center gap-2 rounded-md px-1 py-0.5 text-left hover:bg-accent/70",
+          selectedAgent === agent.key && "bg-accent",
+          (pick.has(agent.key) || menuKeys.includes(agent.key)) &&
+            "bg-primary/10",
+        )}
+      >
+        {busy ? (
+          <LoaderCircle className="size-3 shrink-0 animate-spin text-muted-foreground" />
+        ) : (
+          <span
+            className={cn(
+              "size-2 shrink-0 rounded-full",
+              AGENT_DOT[agent.state] ?? "bg-muted-foreground/40",
+            )}
+          />
+        )}
+        <Bot className="size-3.5 shrink-0 text-muted-foreground" />
+        <span className="min-w-0 flex-1 truncate text-[12px] text-muted-foreground">
+          <span className="font-medium text-foreground">{agent.kind}</span> —{" "}
+          {agent.brief}
+        </span>
+        <span className="shrink-0 text-[10px] text-muted-foreground/70">
+          {timeAgo(agent.settledAt ?? agent.startedAt)}
+        </span>
+      </button>
+    );
+  };
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
       <Section title="Entities">
@@ -215,40 +301,78 @@ const ThreadPane = ({
           );
         })}
       </Section>
-      <Section title="Agents">
-        {state.agents.length === 0 && (
-          <div className="text-xs text-muted-foreground">No subagents yet.</div>
-        )}
-        {state.agents.map((agent) => (
-          <button
-            key={agent.key}
-            type="button"
-            onClick={() => onOpenAgent(agent.key)}
-            aria-label={`open agent ${agent.key}`}
-            aria-current={selectedAgent === agent.key ? "page" : undefined}
-            title={`${agent.brief}\n\nOpen the agent's session — every tool call, as it happens`}
-            className={cn(
-              "flex w-full cursor-pointer items-center gap-2 rounded-md px-1 py-0.5 text-left hover:bg-accent/70",
-              selectedAgent === agent.key && "bg-accent",
-            )}
+      <ContextMenu
+        onOpenChange={(open) => {
+          // the menu closing ends the gesture — target and selection go
+          if (!open) {
+            setMenuKeys([]);
+            pick.clear();
+          }
+        }}
+      >
+        <ContextMenuTrigger asChild>
+          <div
+            onContextMenu={(event) => {
+              // off a row there is nothing to act on — no menu
+              if (
+                !(event.target instanceof Element) ||
+                event.target.closest("[data-agent]") === null
+              ) {
+                event.preventDefault();
+              }
+            }}
           >
-            <span
-              className={cn(
-                "size-2 shrink-0 rounded-full",
-                AGENT_DOT[agent.state] ?? "bg-muted-foreground/40",
+            <Section title="Agents">
+              {state.agents.length === 0 && (
+                <div className="text-xs text-muted-foreground">
+                  No subagents yet.
+                </div>
               )}
-            />
-            <Bot className="size-3.5 shrink-0 text-muted-foreground" />
-            <span className="min-w-0 flex-1 truncate text-[12px] text-muted-foreground">
-              <span className="font-medium text-foreground">{agent.kind}</span>{" "}
-              — {agent.brief}
-            </span>
-            <span className="shrink-0 text-[10px] text-muted-foreground/70">
-              {timeAgo(agent.settledAt ?? agent.startedAt)}
-            </span>
-          </button>
-        ))}
-      </Section>
+              {state.agents.map(agentRow)}
+            </Section>
+          </div>
+        </ContextMenuTrigger>
+        <ContextMenuContent>
+          {menuKeys.length === 1 && (
+            <>
+              <ContextMenuItem onSelect={() => onOpenAgent(menuKeys[0]!)}>
+                <SquareArrowOutUpRight />
+                Open
+              </ContextMenuItem>
+              <ContextMenuSeparator />
+            </>
+          )}
+          {running.length > 0 && (
+            <ContextMenuItem
+              onSelect={() =>
+                agentActions.stop(running.map((agent) => agent.key))
+              }
+            >
+              <Square />
+              Stop {plural(running)}
+            </ContextMenuItem>
+          )}
+          {settled.length > 0 && (
+            <ContextMenuItem
+              onSelect={() =>
+                agentActions.resume(settled.map((agent) => agent.key))
+              }
+            >
+              <Play />
+              Resume {plural(settled)}
+            </ContextMenuItem>
+          )}
+          <ContextMenuSeparator />
+          <ContextMenuItem
+            variant="destructive"
+            // deferred a tick so the menu has closed before the confirm
+            onSelect={() => setTimeout(() => agentActions.remove(menuKeys), 0)}
+          >
+            <Trash2 />
+            Delete {plural(menuKeys)}
+          </ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenu>
       <div className="flex items-center gap-2 px-3 py-2.5">
         {state.status === "open" && (
           <Button
@@ -299,44 +423,102 @@ const AGENT_STATE_LABEL: Record<string, string> = {
 const AgentHeader = ({
   agentKey,
   row,
+  actions,
 }: {
   agentKey: string;
   row: ThreadAgentRow | undefined;
-}) => (
-  <div className="flex items-start gap-2 border-b border-border bg-sidebar/60 px-4 py-2">
-    <Bot className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-    <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-      <div className="flex items-center gap-2 text-xs">
-        <span className="font-medium">{row?.kind ?? "agent"}</span>
-        <span className="font-mono text-[10px] text-muted-foreground/70">
-          {agentKey}
-        </span>
-        {row !== undefined && (
-          <span className="ml-auto flex shrink-0 items-center gap-1.5 text-[11px] text-muted-foreground">
-            <span
-              className={cn(
-                "size-2 rounded-full",
-                AGENT_DOT[row.state] ?? "bg-muted-foreground/40",
-              )}
-            />
-            {AGENT_STATE_LABEL[row.state] ?? row.state}
-            <span className="text-muted-foreground/70">
-              · {timeAgo(row.settledAt ?? row.startedAt)}
-            </span>
+  actions: AgentActions;
+}) => {
+  const busy = actions.busy.has(agentKey);
+  const running = row?.state === "running";
+  const control =
+    "flex h-6 cursor-pointer items-center gap-1 rounded-md border border-border bg-card px-1.5 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-default disabled:opacity-50";
+  return (
+    <div className="flex items-start gap-2 border-b border-border bg-sidebar/60 px-4 py-2">
+      <Bot className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <div className="flex items-center gap-2 text-xs">
+          <span className="font-medium">{row?.kind ?? "agent"}</span>
+          <span className="font-mono text-[10px] text-muted-foreground/70">
+            {agentKey}
           </span>
+          {row !== undefined && (
+            <span className="ml-auto flex shrink-0 items-center gap-1.5 text-[11px] text-muted-foreground">
+              {busy ? (
+                <LoaderCircle className="size-3 animate-spin" />
+              ) : (
+                <span
+                  className={cn(
+                    "size-2 rounded-full",
+                    AGENT_DOT[row.state] ?? "bg-muted-foreground/40",
+                  )}
+                />
+              )}
+              {AGENT_STATE_LABEL[row.state] ?? row.state}
+              <span className="text-muted-foreground/70">
+                · {timeAgo(row.settledAt ?? row.startedAt)}
+              </span>
+            </span>
+          )}
+          {row !== undefined && (
+            <span
+              role="toolbar"
+              aria-label="agent controls"
+              className="flex shrink-0 items-center gap-1"
+            >
+              {running ? (
+                <Hint label="Stop the agent — its command in flight is cut and its session settles. You can resume it.">
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => actions.stop([agentKey])}
+                    aria-label="stop agent"
+                    className={control}
+                  >
+                    <Square className="size-3" />
+                    Stop
+                  </button>
+                </Hint>
+              ) : (
+                <Hint label="Resume the agent — it takes input again; steer it from the prompt below.">
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => actions.resume([agentKey])}
+                    aria-label="resume agent"
+                    className={control}
+                  >
+                    <Play className="size-3" />
+                    Resume
+                  </button>
+                </Hint>
+              )}
+              <Hint label="Delete the agent — its session and transcript are erased; the thread keeps its machine.">
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => actions.remove([agentKey])}
+                  aria-label="delete agent"
+                  className={cn(control, "hover:text-destructive")}
+                >
+                  <Trash2 className="size-3" />
+                </button>
+              </Hint>
+            </span>
+          )}
+        </div>
+        {row !== undefined && (
+          <div
+            title={row.brief}
+            className="line-clamp-2 text-[12px] text-muted-foreground"
+          >
+            {row.brief}
+          </div>
         )}
       </div>
-      {row !== undefined && (
-        <div
-          title={row.brief}
-          className="line-clamp-2 text-[12px] text-muted-foreground"
-        >
-          {row.brief}
-        </div>
-      )}
     </div>
-  </div>
-);
+  );
+};
 
 /* ── the page ─────────────────────────────────────────────────────── */
 
@@ -391,6 +573,64 @@ export const ThreadView = ({
       if (row !== undefined) onTab({ kind: "agent", key: row.key });
     },
     [agents, onTab],
+  );
+
+  // THE SWITCHES on this thread's agents. The thread's state frame
+  // carries the outcome (stopped, running again, gone); `busy` covers
+  // the request's flight so a row shows it is being acted on.
+  const [busy, setBusy] = useState<ReadonlySet<string>>(() => new Set());
+  const act = useCallback(
+    (
+      keys: ReadonlyArray<string>,
+      request: (key: string) => Promise<Response>,
+      after?: (key: string) => void,
+    ) => {
+      setBusy((current) => new Set([...current, ...keys]));
+      for (const key of keys) {
+        void request(key)
+          .then(
+            (response) => response.ok,
+            () => false,
+          )
+          .then((ok) => {
+            setBusy((current) => {
+              const next = new Set(current);
+              next.delete(key);
+              return next;
+            });
+            if (ok) after?.(key);
+          });
+      }
+    },
+    [],
+  );
+  const agentActions = useMemo<AgentActions>(
+    () => ({
+      busy,
+      stop: (keys) => act(keys, (key) => stopAgent(id, key)),
+      resume: (keys) => act(keys, (key) => resumeAgent(id, key)),
+      remove: (keys) => {
+        if (keys.length === 0) return;
+        const what =
+          keys.length === 1 ? "this agent" : `these ${keys.length} agents`;
+        if (
+          !window.confirm(
+            `Delete ${what}? The session and its transcript are erased. This can't be undone.`,
+          )
+        ) {
+          return;
+        }
+        act(
+          keys,
+          (key) => deleteAgent(id, key),
+          (key) => {
+            // the pane that showed it has nothing to show
+            if (openAgent === key) onTab({ kind: "chat" });
+          },
+        );
+      },
+    }),
+    [act, busy, id, onTab, openAgent],
   );
 
   return (
@@ -584,13 +824,20 @@ export const ThreadView = ({
                 data-agent-session={openAgent}
                 className="flex min-h-0 min-w-0 flex-1 flex-col"
               >
-                <AgentHeader agentKey={openAgent} row={openAgentRow} />
+                <AgentHeader
+                  agentKey={openAgent}
+                  row={openAgentRow}
+                  actions={agentActions}
+                />
                 <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+                  {/* the prompt is live while the agent is: a settled
+                      session ignores input — Resume brings it back */}
                   <ChatView
                     key={openAgent}
                     id={engineerSessionId(openAgent)}
                     active={active}
-                    readOnly
+                    readOnly={openAgentRow?.state !== "running"}
+                    placeholder="Steer the agent…"
                   />
                 </div>
               </div>
@@ -625,6 +872,7 @@ export const ThreadView = ({
                       onTab({ kind: "review", owner, repo, number })
                     }
                     onOpenAgent={(key) => onTab({ kind: "agent", key })}
+                    agentActions={agentActions}
                     onClose={onCloseThread}
                     deleting={deleting}
                     onDelete={onDeleteThread}

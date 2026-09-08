@@ -67,6 +67,7 @@ export const routes = Effect.gen(function* () {
   const sessions = yield* AI.Sessions;
   const channel = yield* Channel;
   const threads = yield* Threads;
+  const engineerTerm = Engineer["~alchemy/Name"];
   const channelAgent = yield* ChannelAgent;
   const threadAgent = yield* ThreadAgent;
   // OPTIONAL: the terminal door needs the session machine seam, and
@@ -440,7 +441,6 @@ export const routes = Effect.gen(function* () {
       yield* sessions
         .remove(THREAD_TERM, id)
         .pipe(Effect.provide(RuntimeContext.phantom));
-      const engineerTerm = Engineer["~alchemy/Name"];
       const descendants = new Map<string, { term: string; key: string }>();
       for (const agent of snap?.agents ?? []) {
         descendants.set(AI.sessionId(engineerTerm, agent.key), {
@@ -497,6 +497,86 @@ export const routes = Effect.gen(function* () {
       }
       yield* threads.remove(id);
       return yield* HttpServerResponse.json({ ok: true });
+    }),
+  );
+
+  /* ── a thread's agents: the operator's switches on one engineer ─── */
+
+  /** `:id/agents/:key` → the thread and the agent's row, or a 404. */
+  const agentParams = Effect.gen(function* () {
+    const id = yield* threadId;
+    const params = yield* HttpRouter.params;
+    const key = decodeURIComponent(String(params.key ?? ""));
+    const snap = yield* threads.get(id);
+    const row = snap?.agents.find((agent) => agent.key === key);
+    return { id, key, row };
+  });
+  const noSuchAgent = (id: string, key: string) =>
+    HttpServerResponse.json(
+      { error: `thread ${id} has no agent ${key}` },
+      { status: 404 },
+    );
+  /**
+   * STOP an agent: the off switch. Its session settles (the round in
+   * flight — a command on the machine — is cut) and the books say
+   * stopped. The thread's spawn tool, waiting on the dispatch, is
+   * answered with the Stopped outcome and records the same.
+   */
+  const agentStop = HttpRouter.add(
+    "POST",
+    "/api/threads/:id/agents/:key/stop",
+    Effect.gen(function* () {
+      const { id, key, row } = yield* agentParams;
+      if (row === undefined) return yield* noSuchAgent(id, key);
+      yield* sessions
+        .stop(engineerTerm, key)
+        .pipe(Effect.provide(RuntimeContext.phantom));
+      const state = yield* threads.agentUpsert(id, {
+        ...row,
+        state: "stopped",
+        settledAt: Date.now(),
+      });
+      return yield* HttpServerResponse.json(state);
+    }),
+  );
+
+  /**
+   * RESUME a stopped (or finished) agent: the tombstone is cleared and
+   * the session takes input again — the operator steers it from its
+   * pane. Nothing runs until something is said to it.
+   */
+  const agentResume = HttpRouter.add(
+    "POST",
+    "/api/threads/:id/agents/:key/resume",
+    Effect.gen(function* () {
+      const { id, key, row } = yield* agentParams;
+      if (row === undefined) return yield* noSuchAgent(id, key);
+      yield* sessions
+        .resume(engineerTerm, key)
+        .pipe(Effect.provide(RuntimeContext.phantom));
+      const { settledAt: _settled, ...rest } = row;
+      const state = yield* threads.agentUpsert(id, {
+        ...rest,
+        state: "running",
+      });
+      return yield* HttpServerResponse.json(state);
+    }),
+  );
+
+  /** DELETE an agent: its session is erased (round cut, transcript
+   *  purged; the thread's machine is shared and stays) and its row
+   *  leaves the books. */
+  const agentDelete = HttpRouter.add(
+    "DELETE",
+    "/api/threads/:id/agents/:key",
+    Effect.gen(function* () {
+      const { id, key, row } = yield* agentParams;
+      if (row === undefined) return yield* noSuchAgent(id, key);
+      yield* sessions
+        .remove(engineerTerm, key, { machine: false })
+        .pipe(Effect.provide(RuntimeContext.phantom));
+      const state = yield* threads.agentRemove(id, key);
+      return yield* HttpServerResponse.json(state);
     }),
   );
 
@@ -827,6 +907,9 @@ export const routes = Effect.gen(function* () {
     threadSteer,
     threadClose,
     threadDelete,
+    agentStop,
+    agentResume,
+    agentDelete,
     pullRequest,
     pullRequestFiles,
     sessionMessages,

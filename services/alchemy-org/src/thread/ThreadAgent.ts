@@ -2,6 +2,7 @@ import * as AI from "alchemy/AI";
 import * as Git from "alchemy/Git";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Predicate from "effect/Predicate";
 import * as S from "effect/Schema";
 import { parseEntityRef } from "../channel/Channel.ts";
 import { Engineer } from "../coding/Engineer.ts";
@@ -219,19 +220,20 @@ export const ThreadAgentLive = ThreadAgent.make(
           state: "running",
           startedAt,
         });
-        const settle = (state: "done" | "failed") =>
-          threads.agentUpsert(id, {
-            key,
-            kind: "engineer",
-            brief: p.brief,
-            state,
-            startedAt,
-            settledAt: Date.now(),
-          });
+        // an UPDATE, not an upsert: an agent the operator deleted while
+        // this dispatch was in flight must not come back as a row
+        const settle = (state: "done" | "failed" | "stopped") =>
+          threads.agentSettle(id, key, state, Date.now());
         const outcome = yield* engineer
           .dispatch(p.brief, { key, parent: session })
           .pipe(Effect.onError(() => settle("failed")));
-        yield* settle("done");
+        // the operator's off switch answers the dispatch with the
+        // Stopped outcome — the books say stopped, not done
+        yield* settle(
+          Predicate.hasProperty(outcome, "_tag") && outcome._tag === "Stopped"
+            ? "stopped"
+            : "done",
+        );
         return {
           agent: key,
           report: (JSON.stringify(outcome) ?? "").slice(0, 2000),

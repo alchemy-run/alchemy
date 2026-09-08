@@ -109,6 +109,19 @@ export class Threads extends Context.Service<
       id: string,
       row: ThreadAgentRow,
     ) => Effect.Effect<ThreadState>;
+    /** Settle an agent's row (state + settledAt) — an update only; a
+     *  row deleted by the operator mid-dispatch is not resurrected. */
+    readonly agentSettle: (
+      id: string,
+      key: string,
+      state: ThreadAgentRow["state"],
+      settledAt: number,
+    ) => Effect.Effect<ThreadState>;
+    /** Forget an agent's row — after its session has been removed. */
+    readonly agentRemove: (
+      id: string,
+      key: string,
+    ) => Effect.Effect<ThreadState>;
     /** A card in the channel, from this thread. */
     readonly postCard: (
       id: string,

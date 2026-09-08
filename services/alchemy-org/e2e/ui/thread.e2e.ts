@@ -177,12 +177,12 @@ test("an agent row opens the subagent's session; close returns to chat", async (
   await expect(page).toHaveURL(/\/t-1\/agent\/engineer-1$/);
 
   // the body is now the engineer's session: its brief, its status,
-  // its tool calls — read-only, the thread stays the point of contact
+  // its tool calls — and, while it works, a prompt to steer it by
   const session = main(page).locator("[data-agent-session='engineer-1']");
   await expect(session).toContainText("working");
   await expect(session).toContainText("pnpm test test/reconcile");
   await expect(session).toContainText("Tests are green in the worktree.");
-  await expect(session.getByRole("button", { name: "Submit" })).toHaveCount(0);
+  await expect(session.getByRole("button", { name: "Submit" })).toBeVisible();
 
   await page.getByRole("button", { name: "close agent" }).click();
   await expect(page).toHaveURL(new RegExp(`${threadPath("t-1")}$`));
@@ -210,6 +210,186 @@ test("the Engineer card's open button jumps to the running agent", async ({
   await expect(
     main(page).locator("[data-agent-session='engineer-1']"),
   ).toContainText("Implement the fix in pr-148's worktree");
+});
+
+const agentRow = (page: import("@playwright/test").Page, key: string) =>
+  page
+    .getByRole("complementary", { name: "Thread state" })
+    .locator(`[data-agent='${key}']`);
+
+test("right-click on an agent: Stop settles it, Resume brings it back", async ({
+  page,
+  api,
+}) => {
+  seedThread(api);
+  await openApp(page, threadPath("t-1"));
+
+  // a running agent's menu offers Stop, not Resume
+  await agentRow(page, "engineer-1").click({ button: "right" });
+  await expect(page.getByRole("menuitem", { name: "Open" })).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: "Resume" })).toHaveCount(0);
+  await page.getByRole("menuitem", { name: "Stop agent" }).click();
+  await expect
+    .poll(() => api.agentActions)
+    .toEqual([{ thread: "t-1", key: "engineer-1", action: "stop" }]);
+  // the thread's state frame carries the outcome
+  await expect(agentRow(page, "engineer-1")).toHaveAttribute(
+    "data-state",
+    "stopped",
+  );
+
+  // a stopped agent's menu offers Resume, not Stop
+  await agentRow(page, "engineer-1").click({ button: "right" });
+  await expect(page.getByRole("menuitem", { name: "Stop" })).toHaveCount(0);
+  await page.getByRole("menuitem", { name: "Resume agent" }).click();
+  await expect
+    .poll(() => api.agentActions.at(-1))
+    .toEqual({
+      thread: "t-1",
+      key: "engineer-1",
+      action: "resume",
+    });
+  await expect(agentRow(page, "engineer-1")).toHaveAttribute(
+    "data-state",
+    "running",
+  );
+});
+
+test("the agent pane's controls: Stop shows the request in flight; the prompt follows the state", async ({
+  page,
+  api,
+}) => {
+  seedThread(api);
+  await openApp(page, threadPath("t-1") + "/agent/engineer-1");
+  const session = main(page).locator("[data-agent-session='engineer-1']");
+  const controls = session.getByRole("toolbar", { name: "agent controls" });
+
+  // a running agent takes input — the operator can steer it
+  await expect(session.getByRole("button", { name: "Submit" })).toBeVisible();
+  await expect(
+    controls.getByRole("button", { name: "stop agent" }),
+  ).toBeVisible();
+  await expect(
+    controls.getByRole("button", { name: "resume agent" }),
+  ).toHaveCount(0);
+
+  // stop: the row is busy until the server answers, then it reads stopped
+  const release = api.holdAgentActions();
+  await controls.getByRole("button", { name: "stop agent" }).click();
+  await expect(agentRow(page, "engineer-1")).toHaveAttribute(
+    "aria-busy",
+    "true",
+  );
+  await expect(
+    controls.getByRole("button", { name: "stop agent" }),
+  ).toBeDisabled();
+  release();
+  await expect(agentRow(page, "engineer-1")).not.toHaveAttribute(
+    "aria-busy",
+    "true",
+  );
+  await expect(session).toContainText("stopped");
+
+  // a settled agent ignores input: no prompt, Resume in its place
+  await expect(session.getByRole("button", { name: "Submit" })).toHaveCount(0);
+  await controls.getByRole("button", { name: "resume agent" }).click();
+  await expect(session).toContainText("working");
+  await expect(session.getByRole("button", { name: "Submit" })).toBeVisible();
+  expect(api.agentActions.map((entry) => entry.action)).toEqual([
+    "stop",
+    "resume",
+  ]);
+});
+
+test("deleting an agent from its pane confirms, erases it, and returns to the chat", async ({
+  page,
+  api,
+}) => {
+  seedThread(api);
+  await openApp(page, threadPath("t-1") + "/agent/engineer-1");
+  const controls = main(page)
+    .locator("[data-agent-session='engineer-1']")
+    .getByRole("toolbar", { name: "agent controls" });
+
+  // dismissed: nothing happens
+  page.once("dialog", (dialog) => void dialog.dismiss());
+  await controls.getByRole("button", { name: "delete agent" }).click();
+  await expect(agentRow(page, "engineer-1")).toBeVisible();
+  expect(api.agentActions).toEqual([]);
+
+  // accepted: the row goes, the pane closes onto the conversation
+  page.once("dialog", (dialog) => void dialog.accept());
+  await controls.getByRole("button", { name: "delete agent" }).click();
+  await expect
+    .poll(() => api.agentActions)
+    .toEqual([{ thread: "t-1", key: "engineer-1", action: "delete" }]);
+  await expect(agentRow(page, "engineer-1")).toHaveCount(0);
+  await expect(page).toHaveURL(new RegExp(`${threadPath("t-1")}$`));
+  await expect(
+    page.getByRole("complementary", { name: "Thread state" }),
+  ).toContainText("No subagents yet.");
+});
+
+test("⌘-click selects several agents; the menu acts on all of them", async ({
+  page,
+  api,
+}) => {
+  api.seedThread({
+    id: "t-1",
+    name: "w-reconcile",
+    agents: [
+      {
+        key: "engineer-1",
+        kind: "engineer",
+        brief: "one",
+        state: "running",
+        startedAt: NOW.getTime() - 120_000,
+      },
+      {
+        key: "engineer-2",
+        kind: "engineer",
+        brief: "two",
+        state: "done",
+        startedAt: NOW.getTime() - 100_000,
+        settledAt: NOW.getTime() - 50_000,
+      },
+      {
+        key: "engineer-3",
+        kind: "engineer",
+        brief: "three",
+        state: "running",
+        startedAt: NOW.getTime() - 60_000,
+      },
+    ],
+  });
+  await openApp(page, threadPath("t-1"));
+
+  await agentRow(page, "engineer-1").click();
+  await agentRow(page, "engineer-3").click({ modifiers: ["ControlOrMeta"] });
+  await agentRow(page, "engineer-3").click({ button: "right" });
+  // no Open for several; one Stop for the two running ones
+  await expect(page.getByRole("menuitem", { name: "Open" })).toHaveCount(0);
+  await page.getByRole("menuitem", { name: "Stop 2 agents" }).click();
+  await expect
+    .poll(() => api.agentActions.map((entry) => entry.key).sort())
+    .toEqual(["engineer-1", "engineer-3"]);
+  await expect(agentRow(page, "engineer-3")).toHaveAttribute(
+    "data-state",
+    "stopped",
+  );
+
+  // ⇧-click ranges; a mixed selection offers both switches, and Delete
+  // names the count
+  await agentRow(page, "engineer-1").click();
+  await agentRow(page, "engineer-3").click({ modifiers: ["Shift"] });
+  await agentRow(page, "engineer-2").click({ button: "right" });
+  await expect(
+    page.getByRole("menuitem", { name: "Resume 3 agents" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("menuitem", { name: "Delete 3 agents" }),
+  ).toBeVisible();
+  await page.keyboard.press("Escape");
 });
 
 test("a pull entity opens its review tab; the diff renders", async ({

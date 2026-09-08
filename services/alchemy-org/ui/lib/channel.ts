@@ -222,3 +222,28 @@ export const interruptChat = (sessionId: string): Promise<Response> =>
   fetch(`/api/chats/${encodeURIComponent(sessionId)}/interrupt`, {
     method: "POST",
   });
+
+/* ── a thread's agents: the operator's switches ── */
+
+const agentUrl = (threadId: string, key: string) =>
+  `/api/threads/${encodeURIComponent(threadId)}/agents/${encodeURIComponent(key)}`;
+
+/** STOP an agent — its session settles, its command in flight is cut;
+ *  the row reads stopped. Resumable. */
+export const stopAgent = (threadId: string, key: string): Promise<Response> =>
+  fetch(`${agentUrl(threadId, key)}/stop`, { method: "POST" });
+
+/** RESUME a stopped (or finished) agent — it takes input again from
+ *  its pane; nothing runs until it is told something. */
+export const resumeAgent = (
+  threadId: string,
+  key: string,
+): Promise<Response> =>
+  fetch(`${agentUrl(threadId, key)}/resume`, { method: "POST" });
+
+/** DELETE an agent — its session and transcript are erased and its
+ *  row leaves the thread. The thread's machine stays. */
+export const deleteAgent = (
+  threadId: string,
+  key: string,
+): Promise<Response> => fetch(agentUrl(threadId, key), { method: "DELETE" });

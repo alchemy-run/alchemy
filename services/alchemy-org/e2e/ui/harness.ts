@@ -220,6 +220,23 @@ export class FakeApi {
     });
     return release;
   }
+  /** Every stop / resume / delete on a thread's agent, in order. */
+  agentActions: Array<{
+    thread: string;
+    key: string;
+    action: "stop" | "resume" | "delete";
+  }> = [];
+  /** When set, agent actions answer only once this resolves — the row
+   *  shows the request in flight until then. */
+  private agentActionGate: Promise<void> | undefined;
+  /** Hold every agent action open; returns the release. */
+  holdAgentActions(): () => void {
+    let release!: () => void;
+    this.agentActionGate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    return release;
+  }
   private threadSockets: Record<string, WebSocketRoute[]> = {};
 
   seedThread(partial: Partial<ThreadState> & { id: string }): ThreadState {
@@ -583,6 +600,45 @@ export class FakeApi {
       this.deletedMessages.push(...ids);
       this.removeMessages(ids);
       return this.json(route, { deleted: ids.length });
+    }
+
+    // a thread's agents: POST …/agents/:key/(stop|resume), DELETE …/agents/:key
+    const agent = path.match(
+      /^\/api\/threads\/([^/]+)\/agents\/([^/]+)(\/(stop|resume))?$/,
+    );
+    if (agent !== null) {
+      const id = decodeURIComponent(agent[1]!);
+      const key = decodeURIComponent(agent[2]!);
+      const verb = agent[4];
+      const state = this.threads[id];
+      const row = state?.agents.find((entry) => entry.key === key);
+      if (state === undefined || row === undefined) {
+        return this.json(route, { error: `no agent ${key}` }, 404);
+      }
+      if (verb === undefined && method === "DELETE") {
+        this.agentActions.push({ thread: id, key, action: "delete" });
+        if (this.agentActionGate !== undefined) await this.agentActionGate;
+        this.updateThread(id, {
+          agents: state.agents.filter((entry) => entry.key !== key),
+        });
+        return this.json(route, this.threads[id]);
+      }
+      if ((verb === "stop" || verb === "resume") && method === "POST") {
+        this.agentActions.push({ thread: id, key, action: verb });
+        if (this.agentActionGate !== undefined) await this.agentActionGate;
+        const { settledAt: _settled, ...rest } = row;
+        this.updateThread(id, {
+          agents: state.agents.map((entry) =>
+            entry.key === key
+              ? verb === "stop"
+                ? { ...entry, state: "stopped", settledAt: NOW.getTime() }
+                : { ...rest, state: "running" }
+              : entry,
+          ),
+        });
+        return this.json(route, this.threads[id]);
+      }
+      return this.json(route, { error: "method not allowed" }, 405);
     }
 
     const thread = path.match(/^\/api\/threads\/([^/]+)(\/(close))?$/);

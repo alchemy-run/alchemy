@@ -108,6 +108,17 @@ interface ThreadRpc extends MainRpc<Cloudflare.DurableObjectState> {
   readonly agentUpsert: (
     row: ThreadAgentRow,
   ) => Effect.Effect<ThreadState, never, RuntimeContext>;
+  /** Settle an agent's row — an UPDATE, never an insert: a row the
+   *  operator deleted while the dispatch was in flight stays gone. */
+  readonly agentSettle: (
+    key: string,
+    state: ThreadAgentRow["state"],
+    settledAt: number,
+  ) => Effect.Effect<ThreadState, never, RuntimeContext>;
+  /** Forget an agent — its row goes; the session is the caller's. */
+  readonly agentRemove: (
+    key: string,
+  ) => Effect.Effect<ThreadState, never, RuntimeContext>;
   readonly rename: (input: {
     readonly name?: string;
     readonly title?: string;
@@ -402,6 +413,25 @@ const ThreadDOLive = Cloudflare.DurableObject<ThreadRpc>()(
           return yield* commit;
         }),
 
+      agentSettle: (key, state, settledAt) =>
+        Effect.gen(function* () {
+          yield* ensured;
+          yield* sql.exec(
+            "UPDATE agents SET state = ?, settled_at = ? WHERE key = ?",
+            state,
+            settledAt,
+            key,
+          );
+          return yield* commit;
+        }),
+
+      agentRemove: (key) =>
+        Effect.gen(function* () {
+          yield* ensured;
+          yield* sql.exec("DELETE FROM agents WHERE key = ?", key);
+          return yield* commit;
+        }),
+
       rename: (input) =>
         Effect.gen(function* () {
           yield* ensured;
@@ -510,6 +540,18 @@ export const ThreadsLive: Layer.Layer<
       agentUpsert: (id, row) =>
         Effect.gen(function* () {
           const snap = yield* inWorker(stub(id).agentUpsert(row));
+          return yield* project(snap);
+        }),
+      agentSettle: (id, key, state, settledAt) =>
+        Effect.gen(function* () {
+          const snap = yield* inWorker(
+            stub(id).agentSettle(key, state, settledAt),
+          );
+          return yield* project(snap);
+        }),
+      agentRemove: (id, key) =>
+        Effect.gen(function* () {
+          const snap = yield* inWorker(stub(id).agentRemove(key));
           return yield* project(snap);
         }),
       postCard: (id, card) =>
