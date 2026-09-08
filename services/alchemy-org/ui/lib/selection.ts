@@ -3,8 +3,7 @@
  * (channel messages, the sidebar's threads, a thread's transcript).
  * The gestures are the ones IDEs and mail clients taught everyone:
  *
- * - click       → NOT a selection: clears one, and marks this item as
- *                 the anchor a later ⇧-click ranges from
+ * - click       → select just this item (the anchor for ranges)
  * - ⌘/ctrl+click → toggle this item, keeping the rest
  * - ⇧+click     → select the range from the anchor to this item
  * - right-click → inside the selection, the menu acts on the whole
@@ -32,8 +31,8 @@ export interface Selection {
   /**
    * A click on an item. Returns `true` when it was a SELECTION gesture
    * (⌘ or ⇧) — the caller then skips its plain-click action (opening
-   * a thread, say). A plain click selects nothing (it clears, and
-   * sets the anchor) and returns `false` so the plain action runs.
+   * a thread, say). A plain click selects the one item — the anchor —
+   * AND returns `false` so the plain action runs too.
    */
   readonly click: (id: string, mods: Modifiers) => boolean;
   /**
@@ -163,9 +162,8 @@ export const useSelection = (
       anchorRef.current = id;
       return true;
     }
-    // plain: only ⌘, ⇧ and right-click select — but this is where a
-    // later ⇧-click ranges from
-    setSelected((current) => (current.size === 0 ? current : new Set()));
+    // plain: this one item, the anchor a later ⇧-click ranges from
+    setSelected(new Set([id]));
     anchorRef.current = id;
     return false;
   }, []);

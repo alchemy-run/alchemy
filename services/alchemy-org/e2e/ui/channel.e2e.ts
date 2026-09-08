@@ -165,9 +165,9 @@ test("click, ⇧-click and ⌘-click build a selection; the menu acts on all of 
   await expect(main(page)).toContainText("event five");
 
   const selected = main(page).locator("[data-seq][data-selected]");
-  // a plain click selects NOTHING — it only sets the anchor
+  // a plain click selects the one row — the anchor
   await main(page).getByText("event one").click();
-  await expect(selected).toHaveCount(0);
+  await expect(selected).toHaveCount(1);
   // ⇧-click ranges from the anchor
   await main(page).getByText("event three").click({ modifiers: ["Shift"] });
   await expect(selected).toHaveCount(3);
@@ -182,8 +182,8 @@ test("click, ⇧-click and ⌘-click build a selection; the menu acts on all of 
   await expect(page.getByRole("menuitem")).toHaveCount(0);
   await expect(selected).toHaveCount(0);
 
-  // rebuild it: ⌘-click anchors, ⇧-click ranges
-  await main(page).getByText("event one").click({ modifiers: ["Meta"] });
+  // rebuild it: click anchors, ⇧-click ranges
+  await main(page).getByText("event one").click();
   await main(page).getByText("event three").click({ modifiers: ["Shift"] });
   await expect(selected).toHaveCount(3);
   // ⌘-click toggles one more in
@@ -204,13 +204,12 @@ test("click, ⇧-click and ⌘-click build a selection; the menu acts on all of 
   await expect(main(page)).not.toContainText("event one");
   await expect(main(page)).toContainText("event four");
 
-  // ⌘-click selects one; a plain click anywhere clears it
-  await main(page).getByText("event four").click({ modifiers: ["Meta"] });
-  await expect(selected).toHaveCount(1);
+  // ⌘-click toggles one out; Escape clears
   await main(page).getByText("event four").click();
-  await expect(selected).toHaveCount(0);
-  // ...and so does Escape
+  await expect(selected).toHaveCount(1);
   await main(page).getByText("event four").click({ modifiers: ["Meta"] });
+  await expect(selected).toHaveCount(0);
+  await main(page).getByText("event four").click();
   await expect(selected).toHaveCount(1);
   await page.keyboard.press("Escape");
   await expect(selected).toHaveCount(0);
