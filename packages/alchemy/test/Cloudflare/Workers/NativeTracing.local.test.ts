@@ -53,6 +53,18 @@ test.provider(
         `${url}/rpc?id=local-rpc`,
         "native-did-rpc:do-ok",
       );
+      // A second call into the already-activated object, and a forwarded
+      // request: under local emulation the Worker and its Durable Objects
+      // share one isolate, so the DO's fiber steps can run on the Worker
+      // event's ticks, where its spans' snapshots belong to another event.
+      yield* expectUrlContains(
+        `${url}/rpc?id=local-rpc-again`,
+        "native-did-rpc:do-ok",
+      );
+      yield* expectUrlContains(
+        `${url}/do-fetch?id=local-do-fetch`,
+        "native-did-do-fetch",
+      );
       yield* expectUrlContains(`${url}/enqueue?id=local-queue`, "local-queue");
       yield* expectUrlContains(`${url}/sampled`, "native-did-sample");
 

@@ -22,6 +22,30 @@ type CloudflareSpan = ReturnType<
   (typeof import("cloudflare:workers"))["tracing"]["startSpan"]
 >;
 
+/**
+ * workerd binds a snapshot to the event that took it, and rejects replaying
+ * it from another event. A fiber's steps can still land there: two events
+ * in one isolate (a Worker and its Durable Objects under `alchemy dev`,
+ * overlapping invocations of one isolate) resume each other's yielded fibers
+ * on their own ticks. Left alone that throw repeats on every step, and the
+ * run loop answers each one by re-entering itself with a die exit until the
+ * stack overflows (`RangeError: Maximum call stack size exceeded`, with
+ * `durableObjectReset` on a DO). Run such a step bare instead; the next
+ * step, back on its own event, nests under the Cloudflare span again.
+ */
+const isForeignEvent = (error: unknown): boolean =>
+  error instanceof Error &&
+  error.message.includes("outside of the request in which it was created");
+
+const replay = <A>(runInContext: RunInContext, fn: () => A): A => {
+  try {
+    return runInContext(fn);
+  } catch (error) {
+    if (isForeignEvent(error)) return fn();
+    throw error;
+  }
+};
+
 class Span extends Tracer.NativeSpan {
   constructor(
     options: SpanOptions,
@@ -96,7 +120,7 @@ export const layer: Layer.Layer<never> = Layer.effect(
           return new Span(options, parentContext);
         }
 
-        return parentContext(() =>
+        return replay(parentContext, () =>
           tracing.startActiveSpan(
             options.name,
             (span) => new Span(options, AsyncLocalStorage.snapshot(), span),
@@ -104,7 +128,7 @@ export const layer: Layer.Layer<never> = Layer.effect(
         );
       },
       context(primitive, fiber) {
-        return contextFor(fiber.currentSpan)(() =>
+        return replay(contextFor(fiber.currentSpan), () =>
           primitive["~effect/Effect/evaluate"](fiber),
         );
       },

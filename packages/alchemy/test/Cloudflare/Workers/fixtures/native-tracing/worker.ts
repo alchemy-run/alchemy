@@ -16,8 +16,8 @@ export const Store = Cloudflare.KV.Namespace("NativeTracingStore");
 export const TracingQueue = Cloudflare.Queues.Queue("NativeTracingQueue");
 
 /**
- * Durable Object whose RPC method opens Effect spans, so the
- * DurableObjectBridge's per-call telemetry build is covered.
+ * Durable Object whose RPC method and `fetch` open Effect spans, so the
+ * DurableObjectBridge's per-call telemetry build is covered on both paths.
  */
 export class TracingTarget extends Cloudflare.DurableObject<TracingTarget>()(
   "TracingTarget",
@@ -29,6 +29,16 @@ export class TracingTarget extends Cloudflare.DurableObject<TracingTarget>()(
           yield* Effect.log("do-work").pipe(Effect.withSpan("do.inner"));
           return "do-ok";
         }).pipe(Effect.withSpan("do.operation")),
+      // A forwarded request: the `http.server` span opens on the DO's own
+      // event, under the Worker event that is still awaiting the reply.
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        yield* Effect.log("do-fetch").pipe(Effect.withSpan("do.fetch.inner"));
+        return yield* HttpServerResponse.json({
+          marker: "native-did-do-fetch",
+          url: request.url,
+        });
+      }),
     }),
   ),
 ) {}
@@ -149,6 +159,10 @@ export const tracedWorkerImpl = Effect.gen(function* () {
           marker: `native-did-rpc:${result}`,
           id: requestId,
         });
+      }
+
+      if (url.pathname === "/do-fetch") {
+        return yield* targets.getByName("tracing").fetch(request);
       }
 
       if (url.pathname === "/enqueue") {
