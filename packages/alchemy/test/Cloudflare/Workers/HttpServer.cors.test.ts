@@ -20,18 +20,20 @@ const corsRequest = (method: string, extraHeaders?: Record<string, string>) =>
   new Request("https://worker.test/hello", {
     method,
     headers: { Origin: ORIGIN, ...extraHeaders },
-  }) as any;
+  });
+
+// `makeRequestEffect` is typed `as any` at its return; pin R to `never` so
+// `it.effect` does not see `Effect<void, unknown, unknown>`.
+const handleCors = (request: Request): Effect.Effect<Response> =>
+  makeRequestEffect<never>(request as any, corsHandler);
 
 describe("makeRequestEffect drains HttpMiddleware.cors() pre-response handlers", () => {
   it.effect("tags GET responses with Access-Control-Allow-Origin", () =>
     Effect.gen(function* () {
-      const response = yield* makeRequestEffect(
-        corsRequest("GET"),
-        corsHandler,
-      );
+      const response = yield* handleCors(corsRequest("GET"));
       expect(response.status).toBe(200);
       expect(response.headers.get("access-control-allow-origin")).toBe("*");
-      expect(yield* Effect.promise(() => response.json())).toEqual({
+      expect(yield* Effect.tryPromise(() => response.json())).toEqual({
         message: "world",
       });
     }),
@@ -39,9 +41,8 @@ describe("makeRequestEffect drains HttpMiddleware.cors() pre-response handlers",
 
   it.effect("tags OPTIONS preflight with Access-Control-Allow-Origin", () =>
     Effect.gen(function* () {
-      const response = yield* makeRequestEffect(
+      const response = yield* handleCors(
         corsRequest("OPTIONS", { "Access-Control-Request-Method": "GET" }),
-        corsHandler,
       );
       expect(response.status).toBe(204);
       expect(response.headers.get("access-control-allow-origin")).toBe("*");
@@ -50,10 +51,7 @@ describe("makeRequestEffect drains HttpMiddleware.cors() pre-response handlers",
 
   it.effect("tags POST responses with Access-Control-Allow-Origin", () =>
     Effect.gen(function* () {
-      const response = yield* makeRequestEffect(
-        corsRequest("POST"),
-        corsHandler,
-      );
+      const response = yield* handleCors(corsRequest("POST"));
       expect(response.status).toBe(200);
       expect(response.headers.get("access-control-allow-origin")).toBe("*");
     }),
