@@ -1110,7 +1110,7 @@ export const compileTick = (
       // under this session — the call/reply seam: same name,
       // same worker, same context — and the child is REMEMBERED
       // for the supervision cascade (settle propagates down).
-      handlers.dispatch = (params: {
+      handlers.dispatch ??= (params: {
         agent: string;
         task: string;
         session?: string;
@@ -1139,10 +1139,20 @@ export const compileTick = (
             .pipe(Effect.provide(RuntimeContext.phantom));
         });
     }
-    handlers.spawn = (params) => ops.spawn(params as SpawnParams);
+    // a charter tool of the same name WINS over the intrinsic — the
+    // presentation below keeps the wire tool (first by name), so the
+    // handler must agree, or the model calls the charter's `spawn`
+    // schema into the intrinsic's handler (a `task`-less worker
+    // whose first input is `undefined`)
+    handlers.spawn ??= (params: SpawnParams) =>
+      typeof params.task === "string" && typeof params.instructions === "string"
+        ? ops.spawn(params)
+        : Effect.fail(
+            "spawn needs `instructions` (the worker's role) and `task` (what to do), both strings",
+          );
     /** The per-session `skill` switch — activation is the session's
      *  act, persisted by the host. */
-    handlers.skill = (params: {
+    handlers.skill ??= (params: {
       action: "activate" | "deactivate";
       skill: string;
     }) =>

@@ -44,6 +44,7 @@ import * as Exit from "effect/Exit";
 import * as Data from "effect/Data";
 import * as Ref from "effect/Ref";
 import * as S from "effect/Schema";
+import * as AiTool from "effect/unstable/ai/Tool";
 import * as Schedule from "effect/Schedule";
 import {
   ArchivesLive,
@@ -1199,6 +1200,45 @@ Counter: ${Ref.get(count)}. Use ${bump} when told.`;
       expect(prompt).toContain("\\n  - search first"); // margin gone, nesting kept
     }).pipe(Effect.scoped, Effect.provide(testLayer(model, Layer.empty)));
   });
+
+  it.effect(
+    "a charter tool named like an intrinsic wins both schema and handler",
+    () => {
+      const model = Model.make([
+        // the model calls the CHARTER's spawn schema ({ brief })
+        () => [
+          Model.toolCall("spawn", { brief: "fix the flaky test" }),
+          Model.finish("tool-calls"),
+        ],
+        () => [Model.text("delegated"), Model.finish()],
+      ]);
+      return Effect.gen(function* () {
+        const briefs: string[] = [];
+        const charter = Effect.gen(function* () {
+          const brief = AI.Thing("brief", S.String)`what to do`;
+          const spawn = yield* AI.Tool("spawn")`
+          Hand ${brief} to an engineer.`((p: { brief: string }) =>
+            Effect.sync(() => {
+              briefs.push(p.brief);
+            }),
+          );
+          return AI.fragment`Use ${spawn} to delegate.`;
+        });
+        const researcher = yield* interpret(Researcher, charter);
+        const answer = yield* researcher.dispatch("delegate this");
+        expect(answer).toBe("delegated");
+        // ONE spawn on the wire — the charter's, with its own schema…
+        const spawns = model.calls[0]!.tools.filter((t) => t.name === "spawn");
+        expect(spawns).toHaveLength(1);
+        const schema = JSON.stringify(AiTool.getJsonSchema(spawns[0]!));
+        expect(schema).toContain('"brief"');
+        expect(schema).not.toContain('"task"');
+        // …and its handler ran, NOT the intrinsic's (which would have
+        // enqueued a worker whose first input is `undefined`)
+        expect(briefs).toEqual(["fix the flaky test"]);
+      }).pipe(Effect.scoped, Effect.provide(testLayer(model, Layer.empty)));
+    },
+  );
 
   it.effect(
     "compaction: a handoff tool resets the thread at the boundary",
