@@ -61,13 +61,13 @@ export const makeHttpSearchIndexClient = (
     describe: () =>
       local((name) =>
         vectorize
-          .listInfo({ accountId, indexName: name })
+          .getIndexInfo({ accountId, indexName: name })
           .pipe(Effect.map(toIndexInfo)),
       ),
     query: (vector, options) =>
       local((name) =>
         vectorize
-          .listQuery({
+          .queryIndex({
             accountId,
             indexName: name,
             vector: Array.from(vector),
@@ -161,7 +161,7 @@ const toMutation = (r: {
 }): runtime.VectorizeAsyncMutation => ({ mutationId: r.mutationId ?? "" });
 
 const toIndexInfo = (
-  r: vectorize.ListInfoResponse,
+  r: vectorize.GetIndexInfoResponse,
 ): runtime.VectorizeIndexInfo =>
   ({
     vectorCount: r.vectorCount ?? 0,
@@ -170,7 +170,7 @@ const toIndexInfo = (
     processedUpToMutation: r.processedUpToMutation ?? undefined,
   }) as unknown as runtime.VectorizeIndexInfo;
 
-const toMatches = (r: vectorize.ListQueryResponse): runtime.VectorizeMatches =>
+const toMatches = (r: vectorize.QueryIndexResponse): runtime.VectorizeMatches =>
   ({
     count: r.count ?? r.matches?.length ?? 0,
     matches: (r.matches ?? []).map((m) => ({
