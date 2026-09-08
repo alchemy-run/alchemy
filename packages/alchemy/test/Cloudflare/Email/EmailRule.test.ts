@@ -109,24 +109,30 @@ const purgeRuleByTo = (zoneId: string, to: string) =>
   });
 
 /**
- * Pull the {@link OwnedBySomeoneElse} value out of a Cause regardless of
- * whether the engine raised it as a typed failure or a defect.
+ * Pull a tagged error out of a Cause regardless of whether the engine
+ * raised it as a typed failure or a defect.
  */
-const findOwnedError = (
-  cause: Cause.Cause<unknown>,
-): OwnedBySomeoneElse | undefined =>
-  cause.reasons
-    .map((reason) =>
-      Cause.isFailReason(reason)
-        ? reason.error
-        : Cause.isDieReason(reason)
-          ? reason.defect
-          : undefined,
-    )
-    .find(
-      (value): value is OwnedBySomeoneElse =>
-        value instanceof OwnedBySomeoneElse,
-    );
+const findCauseError =
+  <E>(is: (value: unknown) => value is E) =>
+  (cause: Cause.Cause<unknown>): E | undefined =>
+    cause.reasons
+      .map((reason) =>
+        Cause.isFailReason(reason)
+          ? reason.error
+          : Cause.isDieReason(reason)
+            ? reason.defect
+            : undefined,
+      )
+      .find(is);
+
+const findOwnedError = findCauseError(
+  (value): value is OwnedBySomeoneElse => value instanceof OwnedBySomeoneElse,
+);
+
+const findCatchAllError = findCauseError(
+  (value): value is CatchAllRuleNotSupported =>
+    value instanceof CatchAllRuleNotSupported,
+);
 
 describe.sequential.skipIf(!emailRoutingScoped)("EmailRule", () => {
   // Canonical `list()` test (zone-scoped collection): email routing rules live
@@ -217,8 +223,12 @@ describe.sequential.skipIf(!emailRoutingScoped)("EmailRule", () => {
               actions: [{ type: "drop" }],
             }),
           )
-          .pipe(Effect.flip);
-
+          .pipe(
+            Effect.as(undefined),
+            Effect.catchCause((cause) =>
+              Effect.succeed(findCatchAllError(cause)),
+            ),
+          );
         expect(error).toBeInstanceOf(CatchAllRuleNotSupported);
         expect(String(error)).toContain("Cloudflare.Email.CatchAll");
 

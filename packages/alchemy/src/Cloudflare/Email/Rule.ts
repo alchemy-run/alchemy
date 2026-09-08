@@ -224,9 +224,13 @@ export const RuleProvider = () =>
         : undefined;
 
       // 2. Fall back to scanning the zone for the same matchers.
-      //    Ownership has already been verified upstream — `read` reports
-      //    existing rules as `Unowned` and the engine gates takeover
-      //    behind the adopt policy before reconcile ever runs.
+      //    `read` brands an existing match `Unowned` so the engine can
+      //    gate takeover behind adopt — but plan skips that probe when
+      //    props are still unresolved (e.g. `zone: routing.zoneId` from
+      //    a sibling created in the same deploy). In that case this scan
+      //    is the AlreadyExists race: Cloudflare rejects a second rule
+      //    with the same literal matchers, so converging on the match is
+      //    the same as catching Conflict and re-listing.
       if (!observed) {
         observed = yield* findByMatchers(zoneId, desired.matchers);
       }
@@ -296,6 +300,8 @@ const isCatchAllRule = (rule: {
 const isCatchAllMatchers = (matchers: Matcher[]): boolean =>
   matchers.length === 1 && matchers[0]?.type === "all";
 
+// `olds.matchers` may still be unresolved Inputs after stripUnresolved;
+// only treat a concrete array as matcher identity for the adoption scan.
 const asMatchers = (value: unknown): Matcher[] | undefined =>
   Array.isArray(value) ? (value as Matcher[]) : undefined;
 
