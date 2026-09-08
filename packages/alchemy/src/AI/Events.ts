@@ -41,6 +41,21 @@ export class RoundAbandoned extends Data.TaggedError("RoundAbandoned")<{
 }
 
 /**
+ * The operator ABORTED the round (`Sessions.interrupt`) while a caller
+ * was awaiting its answer — the typed failure that caller's `dispatch`
+ * sees. The session itself is alive and parked; only this round is
+ * gone.
+ */
+export class RoundAborted extends Data.TaggedError("RoundAborted")<{
+  readonly term: string;
+  readonly key: string;
+}> {
+  override get message() {
+    return `session '${this.term}/${this.key}': round aborted by the operator`;
+  }
+}
+
+/**
  * The envelope every observation carries: which session it belongs to
  * (`term` + `key`), WHERE in that session's history it sits (`seq` — a
  * per-session monotonic sequence, the resume/dedupe cursor), and when.
@@ -192,6 +207,20 @@ export type SessionObservation = ObservationEnvelope &
         readonly type: "parked";
       }
     | { readonly type: "settled" }
+    | {
+        /**
+         * The in-flight round was ABORTED by the operator
+         * (`Sessions.interrupt`): its sampling or tool handlers were
+         * interrupted mid-flight and the round abandoned — the inputs
+         * it was answering may go unanswered (a model-facing note says
+         * so). The session stays alive and parks; the next input opens
+         * a fresh round. Distinct from `interrupted` (an attempt that
+         * DIED and is being recovered) and `settled` (the session
+         * ended).
+         */
+        readonly type: "aborted";
+        readonly by: "operator";
+      }
     | {
         /**
          * A settled session was REOPENED by the operator

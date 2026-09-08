@@ -214,6 +214,9 @@ interface SessionRpc extends MainRpc<DurableObjectState> {
   readonly open: () => Effect.Effect<void, unknown, RuntimeContext>;
   /** Reopen a settled session (the operator's undo for `stop`). */
   readonly resume: () => Effect.Effect<void, unknown, RuntimeContext>;
+  /** Abort the in-flight round (`Sessions.interrupt`) — the session
+   *  stays alive and parks. */
+  readonly abort: () => Effect.Effect<void, unknown, RuntimeContext>;
   /** Erase this session: settle, detach views, purge storage.
    *  `machine` (default true) also terminates the session's sandbox
    *  machine — pass false when sibling threads still share it. */
@@ -898,6 +901,14 @@ export const DurableObjectHost: Layer.Layer<
               // lazily waking on the next sandbox call is the fallback)
               yield* machineLifecycle("resume");
             }),
+          // the round runs in THIS isolate (the burst rides waitUntil
+          // on this same object), so its fiber is right here to
+          // interrupt; a hibernated session has no round in flight
+          abort: (): Effect.Effect<void, never, RuntimeContext> =>
+            Effect.gen(function* () {
+              if (engineRef === undefined) return;
+              yield* engineRef.abort(me.key);
+            }),
           /**
            * The ERASER (`Sessions.remove`): settle first (idempotent —
            * children cascade, attached views see the end), close every
@@ -1081,6 +1092,11 @@ export const DurableObjectHost: Layer.Layer<
           sessions
             .getByName(sessionName(term, key))
             .resume()
+            .pipe(Effect.orDie, Effect.asVoid),
+        interrupt: (term, key) =>
+          sessions
+            .getByName(sessionName(term, key))
+            .abort()
             .pipe(Effect.orDie, Effect.asVoid),
         remove: (term, key, options) =>
           Effect.gen(function* () {

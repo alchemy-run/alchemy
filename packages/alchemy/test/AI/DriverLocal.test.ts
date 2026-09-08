@@ -39,6 +39,8 @@ import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
+import * as Cause from "effect/Cause";
+import * as Exit from "effect/Exit";
 import * as Data from "effect/Data";
 import * as Ref from "effect/Ref";
 import * as S from "effect/Schema";
@@ -243,6 +245,93 @@ describe("DriverLocal (in-memory)", () => {
       yield* researcher.settle("repo#7", { closed: "again" });
     }).pipe(Effect.scoped, Effect.provide(testLayer(model, search.layer)));
   });
+
+  it.live(
+    "Sessions.interrupt aborts the round in flight; the session lives on",
+    () => {
+      const model = Model.make([
+        // round 1: the model reaches for a tool that never returns
+        () => [
+          Model.toolCall("search", { query: "the void" }),
+          Model.finish("tool-calls"),
+        ],
+        // round 2 (after the abort): a fresh input, a plain answer
+        () => [Model.text("back"), Model.finish()],
+      ]);
+      const entered = Effect.runSync(Deferred.make<void>());
+      const search = Layer.succeed(Search, ((_input: { query: string }) =>
+        Effect.andThen(
+          Deferred.succeed(entered, undefined),
+          Effect.never,
+        )) as never);
+      const storage = ThreadStorageMemory;
+      const layer = Layer.mergeAll(
+        DriverLocal.pipe(Layer.provide(storage), Layer.provide(model.layer)),
+        storage,
+        search,
+        RuntimeContext.phantom,
+      );
+      return Effect.gen(function* () {
+        const researcher = yield* interpret(Researcher, ResearcherCharter);
+        const sessions = yield* AI.Sessions;
+        const threads = yield* AI.ThreadStorage;
+
+        // the round opens and blocks inside the tool handler
+        const waiting = yield* Effect.forkChild(
+          researcher.dispatch("look into it", { key: "w-abort" }),
+        );
+        yield* Deferred.await(entered);
+
+        // the operator's stop: the awaiting caller fails with the
+        // typed RoundAborted (a defect at the Actor boundary, like
+        // every delivered crash — the log is the record)
+        yield* sessions.interrupt("Researcher", "w-abort");
+        const outcome = yield* Fiber.await(waiting);
+        expect(Exit.isFailure(outcome)).toBe(true);
+        if (Exit.isFailure(outcome)) {
+          expect((Cause.squash(outcome.cause) as { _tag: string })._tag).toBe(
+            "RoundAborted",
+          );
+        }
+
+        // …the log records the abort and then parks (the kick that
+        // follows an abort runs on the resident fiber — poll for it);
+        // no crash, no recovery, and the model was called exactly once
+        const handle = yield* threads.open("Researcher", "w-abort");
+        const types = yield* handle.observations(0).pipe(
+          Effect.map((log) => log.map((observation) => observation.type)),
+          Effect.repeat({
+            schedule: Schedule.spaced("10 millis"),
+            until: (list) =>
+              list.lastIndexOf("parked") > list.indexOf("aborted"),
+            times: 200,
+          }),
+        );
+        expect(types).toContain("aborted");
+        expect(types).not.toContain("crashed");
+        expect(types).not.toContain("interrupted");
+        expect(types.lastIndexOf("parked")).toBeGreaterThan(
+          types.indexOf("aborted"),
+        );
+        expect(model.calls).toHaveLength(1);
+
+        // an interrupt with nothing in flight is a no-op
+        yield* sessions.interrupt("Researcher", "w-abort");
+
+        // the session is alive: the next input opens a fresh round,
+        // and the model sees the note about the cut-short work
+        const answer = yield* researcher.dispatch("still there?", {
+          key: "w-abort",
+        });
+        expect(answer).toBe("back");
+        expect(model.calls).toHaveLength(2);
+        expect(Model.promptText(model.calls[1]!)).toContain(
+          "operator stopped this round",
+        );
+      }).pipe(Effect.scoped, Effect.provide(layer));
+    },
+    { timeout: 30_000 },
+  );
 
   it.live(
     "quiet send (wake: false) accumulates without waking a parked run",

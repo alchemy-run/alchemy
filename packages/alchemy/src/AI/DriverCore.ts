@@ -4,6 +4,7 @@ import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
 import * as Exit from "effect/Exit";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as S from "effect/Schema";
@@ -27,6 +28,7 @@ import * as Response from "effect/unstable/ai/Response";
 import {
   isLiveObservation,
   RoundAbandoned,
+  RoundAborted,
   Events,
   type EncodedCrash,
   type SessionObservation,
@@ -1599,6 +1601,13 @@ interface EngineSession {
   readonly active: Set<string>;
   busy?: { readonly attempts: number; readonly since: number };
   settledOutcome?: { readonly outcome: unknown };
+  /** The fiber running the current burst's rounds — what `abort`
+   *  interrupts. Set for the burst's duration only. */
+  round?: Fiber.Fiber<void, unknown>;
+  /** Raised by `abort` before it interrupts `round`, so the burst
+   *  can tell the operator's stop from a fiber dying with its scope
+   *  (process shutdown), which must leave the round OWED. */
+  aborting?: boolean;
   /** The park race for a resident fiber; late verbs read
    *  `settledOutcome`. Replaced by `resume` (a Deferred is one-shot,
    *  so a reopened session needs a fresh signal to park on). */
@@ -1681,6 +1690,15 @@ export interface SessionEngine {
   readonly admit: (key: string) => Effect.Effect<boolean>;
   /** Settle every RAM-resident session (process shutdown). */
   readonly interrupt: Effect.Effect<void>;
+  /** ABORT one session's in-flight round — the operator's stop
+   *  button. Interrupts the running burst (its sampling, its tool
+   *  handlers), abandons the round visibly (`aborted` observation, a
+   *  model-facing note), fails the round's waiters with
+   *  {@link RoundAborted}, and settles the children it dispatched.
+   *  The session stays alive and parks; queued input opens the next
+   *  round. Resolves `true` when a round was actually in flight — a
+   *  parked, settled, or never-seen key is a no-op `false`. */
+  readonly abort: (key: string) => Effect.Effect<boolean>;
   /** Drop one session's RAM entry (after `settle`) so the key can be
    *  admitted FRESH — the eraser's second half. Purging the durable
    *  rows is the driver's job (`ThreadStorage.remove` locally, the
@@ -2167,7 +2185,40 @@ export const makeSessionEngine = (
       // re-entry scheduling) — the burst itself never fails, so a
       // kicking verb can never be poisoned by the round it kicked
       yield* s.gate.withPermits(1)(
-        rounds(s).pipe(Effect.tapCause((cause) => onCrash(s, cause))),
+        Effect.gen(function* () {
+          // the rounds run as a CHILD fiber so the operator's `abort`
+          // has something to interrupt without touching the burst
+          // (whose host channel — workerd's waitUntil — must resolve)
+          const fiber = yield* Effect.forkChild(
+            rounds(s).pipe(
+              Effect.tapCause((cause) =>
+                // an interrupt is never a crash: the operator's abort
+                // is booked below, a scope death leaves the round owed
+                Cause.hasInterruptsOnly(cause)
+                  ? Effect.void
+                  : onCrash(s, cause),
+              ),
+            ),
+          );
+          s.round = fiber;
+          const exit = yield* Fiber.await(fiber).pipe(
+            Effect.ensuring(
+              Effect.sync(() => {
+                if (s.round === fiber) s.round = undefined;
+              }),
+            ),
+          );
+          // the operator's stop, booked while the gate is still ours
+          // so no re-entry can slip in and "recover" the round first
+          if (
+            s.aborting === true &&
+            Exit.isFailure(exit) &&
+            Cause.hasInterruptsOnly(exit.cause)
+          ) {
+            s.aborting = false;
+            yield* onAbort(s);
+          }
+        }),
       );
     }).pipe(
       // TOTAL containment, ensure included: a burst often rides a
@@ -2427,6 +2478,57 @@ export const makeSessionEngine = (
       );
     });
 
+  /**
+   * The operator ABORTED the round mid-flight (`abort` interrupted the
+   * round fiber; this runs under the burst's gate once it is gone).
+   * The round is abandoned, not owed: `busy` clears so no re-entry
+   * recovers it; the model learns the gap exactly as it does on a
+   * recovery (interrupted handlers' effects may or may not have
+   * landed); waiters fail with the typed {@link RoundAborted}; the
+   * children it dispatched settle — stopping a thread stops the
+   * workers it was waiting on.
+   */
+  const onAbort = (s: EngineSession) =>
+    Effect.gen(function* () {
+      if (s.settledOutcome !== undefined) return;
+      s.busy = undefined;
+      yield* putMeta(s);
+      yield* appendThread(s, [
+        noteMessage(
+          `The operator stopped this round while it was in progress. ` +
+            `Any actions it took may or may not have completed — verify ` +
+            `before repeating anything with side effects. The messages ` +
+            `above it may be unanswered; wait for the operator's next input.`,
+        ),
+      ]);
+      yield* observe(s, { type: "aborted", by: "operator" });
+      yield* Effect.forEach(
+        s.roundWaiters.splice(0),
+        (waiter) =>
+          Deferred.fail(waiter, new RoundAborted({ term, key: s.key })),
+        { discard: true },
+      );
+      yield* settleChildren(s);
+      yield* Effect.logInfo(
+        `${driver} session '${term}/${s.key}': round aborted by the operator`,
+      );
+    });
+
+  const abort: SessionEngine["abort"] = (key) =>
+    Effect.gen(function* () {
+      const s = sessions.get(key);
+      const fiber = s?.round;
+      if (s === undefined || fiber === undefined) return false;
+      s.aborting = true;
+      // waits for the fiber to actually end — its handlers' finalizers
+      // included; the burst then books the abort under its gate
+      yield* Fiber.interrupt(fiber);
+      // input that queued during the round opens the next one (a kick
+      // with nothing to do just parks — which the views see)
+      yield* kick(s.key);
+      return true;
+    });
+
   const settle = (
     key: string,
     outcomeValue: unknown,
@@ -2628,6 +2730,7 @@ export const makeSessionEngine = (
         { discard: true },
       ),
     ),
+    abort,
     forget: (key) =>
       Effect.sync(() => {
         sessions.delete(key);

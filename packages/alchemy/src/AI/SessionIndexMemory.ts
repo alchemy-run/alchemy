@@ -96,6 +96,10 @@ export const SessionIndexMemory = (
             case "resumed":
               row.status = "idle";
               return;
+            // the operator stopped the round: parked, alive
+            case "aborted":
+              row.status = "idle";
+              return;
             case "crashed":
               row.status = "crashed";
               return;

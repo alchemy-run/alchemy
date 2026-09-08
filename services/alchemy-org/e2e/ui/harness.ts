@@ -272,6 +272,57 @@ export class FakeApi {
 
   /** Every `DELETE /api/chats/:id/messages/:mid`, in order. */
   deletedChatMessages: Array<{ id: string; messageId: string }> = [];
+  /** Every `POST /api/chats/:id/interrupt` — the stop button. */
+  interrupted: string[] = [];
+  private chatSockets: Record<string, WebSocketRoute[]> = {};
+
+  private envelope(id: string, seq: number) {
+    const at = id.indexOf(":");
+    return {
+      term: id.slice(0, at),
+      key: id.slice(at + 1),
+      seq,
+      at: NOW.getTime() - 60_000 + seq * 1000,
+    };
+  }
+
+  /**
+   * A round IN FLIGHT in chat `id`: the user asked, the agent called
+   * `name` — and nothing has come back yet. The transcript view sees
+   * an open turn (the stop button shows) until an observation ends it.
+   */
+  seedOpenRound(
+    id: string,
+    turn: { ask: string; name: string; input: unknown },
+  ): void {
+    const rows = this.transcripts[id] ?? [];
+    const seq = rows.length;
+    this.transcripts[id] = [
+      ...rows,
+      { ...this.envelope(id, seq), type: "input", text: turn.ask },
+      {
+        ...this.envelope(id, seq + 1),
+        type: "assistant",
+        tick: 0,
+        ms: 800,
+        text: "",
+        toolCalls: [{ id: `call-${seq + 1}`, name: turn.name, input: turn.input }],
+      },
+    ];
+  }
+
+  /** Append one durable observation to chat `id` and broadcast it to
+   *  every attached view — what the Worker does as a round runs. */
+  pushObservation(id: string, observation: Record<string, unknown>): void {
+    const rows = this.transcripts[id] ?? [];
+    const full = { ...this.envelope(id, rows.length), ...observation };
+    this.transcripts[id] = [...rows, full];
+    for (const ws of this.chatSockets[id] ?? []) {
+      ws.send(
+        JSON.stringify({ type: "observation", durable: true, observation: full }),
+      );
+    }
+  }
 
   /**
    * One finished turn in chat `id`: the user asks, the agent calls one
@@ -434,6 +485,7 @@ export class FakeApi {
     // /attach/<term>/<key…>
     const [, , term, ...rest] = path.split("/");
     const id = `${term}:${rest.join("/")}`;
+    this.chatSockets[id] = [...(this.chatSockets[id] ?? []), ws];
     ws.onMessage((raw) => {
       const frame = JSON.parse(String(raw)) as { type: string };
       if (frame.type !== "subscribe") return;
@@ -611,6 +663,17 @@ export class FakeApi {
         );
       }
       return this.json(route, { deleted: (body.ids ?? []).length });
+    }
+
+    const chatInterrupt = path.match(/^\/api\/chats\/([^/]+)\/interrupt$/);
+    if (chatInterrupt !== null && method === "POST") {
+      const id = decodeURIComponent(chatInterrupt[1]!);
+      this.interrupted.push(id);
+      // the Worker aborts the round; the `aborted` observation ends the
+      // turn for every attached view, then the session parks
+      this.pushObservation(id, { type: "aborted", by: "operator" });
+      this.pushObservation(id, { type: "parked" });
+      return this.json(route, { ok: true });
     }
 
     const chat = path.match(/^\/api\/chats\/([^/]+)\/(messages|log)$/);

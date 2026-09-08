@@ -207,3 +207,10 @@ export const deleteChatMessages = (
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ ids }),
   });
+
+/** The stop button: abort the session's round in flight. The session
+ *  stays alive — the next message opens a fresh round. */
+export const interruptChat = (sessionId: string): Promise<Response> =>
+  fetch(`/api/chats/${encodeURIComponent(sessionId)}/interrupt`, {
+    method: "POST",
+  });

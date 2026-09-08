@@ -286,6 +286,11 @@ export const DriverLocal: Layer.Layer<
             onSome: (index) => index.list(),
           }),
         stop,
+        // the operator's stop button: abort the round in flight, keep
+        // the session — a term this process never interpreted has
+        // nothing in flight
+        interrupt: (term, key) =>
+          Effect.asVoid(engines.get(term)?.abort(key) ?? Effect.void),
         // storage-only, like the socket's replay: never through the
         // shell, so viewing a transcript can't boot its machine
         history: (term, key) =>

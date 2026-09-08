@@ -107,6 +107,32 @@ test("a tool call renders as its card", async ({ page, api }) => {
   await expect(main(page)).toContainText(`${REPO}#148`);
 });
 
+test("the stop button interrupts the round in flight; the turn ends", async ({
+  page,
+  api,
+}) => {
+  seedThread(api);
+  api.seedOpenRound("Thread:t-1", {
+    ask: "review the PR",
+    name: "worktree",
+    input: { ref: `${REPO}#148` },
+  });
+  await openApp(page, threadPath("t-1"));
+
+  // a round is open: the composer's button is STOP
+  const stop = main(page).getByRole("button", { name: "Stop" });
+  await expect(stop).toBeVisible();
+  await stop.click();
+  await expect.poll(() => api.interrupted).toEqual(["Thread:t-1"]);
+
+  // the `aborted` observation ends the turn: the marker lands and the
+  // button is a plain submit again — the session is still there to
+  // talk to
+  await expect(main(page).locator("[data-aborted]")).toHaveText("Stopped");
+  await expect(stop).toBeHidden();
+  await expect(main(page).getByRole("button", { name: "Submit" })).toBeVisible();
+});
+
 test("the state pane shows entities, agents, and the worktree", async ({
   page,
   api,

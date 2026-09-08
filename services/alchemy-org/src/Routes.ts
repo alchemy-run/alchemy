@@ -614,6 +614,26 @@ export const routes = Effect.gen(function* () {
     }),
   );
 
+  /**
+   * The stop button: abort the session's round in flight. The session
+   * stays alive — the next message opens a fresh round. A parked
+   * session is a no-op.
+   */
+  const sessionInterrupt = HttpRouter.add(
+    "POST",
+    "/api/chats/:id/interrupt",
+    Effect.gen(function* () {
+      const params = yield* HttpRouter.params;
+      const { term, key } = parseSessionId(
+        decodeURIComponent(String(params.id ?? "")),
+      );
+      yield* sessions
+        .interrupt(term, key)
+        .pipe(Effect.provide(RuntimeContext.phantom));
+      return yield* HttpServerResponse.json({ ok: true });
+    }),
+  );
+
   const sessionLog = HttpRouter.add(
     "GET",
     "/api/chats/:id/log",
@@ -740,6 +760,7 @@ export const routes = Effect.gen(function* () {
     pullRequestFiles,
     sessionMessages,
     sessionMessagesDelete,
+    sessionInterrupt,
     sessionLog,
     sessionExec,
     whoami,

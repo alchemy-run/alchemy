@@ -89,6 +89,20 @@ export class Sessions extends Context.Service<
       key: string,
     ) => Effect.Effect<void, never, RuntimeContext>;
     /**
+     * INTERRUPT one session's in-flight round — the operator's stop
+     * button, as opposed to `stop`'s off switch. The running sampling
+     * or tool handlers are interrupted and the round abandoned: an
+     * `aborted` observation lands (attached views see the turn end),
+     * the model gets a note that the work was cut short, and the
+     * workers the round dispatched settle. The session itself stays
+     * alive and parked — the next input opens a fresh round. A parked,
+     * settled, or never-seen key is a no-op.
+     */
+    readonly interrupt: (
+      term: string,
+      key: string,
+    ) => Effect.Effect<void, never, RuntimeContext>;
+    /**
      * RESUME a stopped session — the operator's undo for `stop`: the
      * settled tombstone is cleared and the session accepts input
      * again (its machine, if suspended, wakes on the next call).

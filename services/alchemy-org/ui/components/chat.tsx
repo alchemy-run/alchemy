@@ -47,7 +47,12 @@ import {
 } from "@/components/ui/tooltip";
 import { useAnchoredToggle } from "@/lib/anchor";
 import { Ansi } from "@/lib/ansi";
-import { anchorLabel, deleteChatMessages, parseAnchor } from "@/lib/channel";
+import {
+  anchorLabel,
+  deleteChatMessages,
+  interruptChat,
+  parseAnchor,
+} from "@/lib/channel";
 import {
   onRowMouseDown,
   skipRowClick,
@@ -66,6 +71,7 @@ import {
   GitMerge,
   GitPullRequestArrow,
   MessageSquare,
+  Square,
   Trash2,
   Zap,
   type LucideIcon,
@@ -660,7 +666,7 @@ const ChatTranscript = ({
   const removeMessages = useCallback(
     (ids: ReadonlyArray<string>) => {
       const durable = ids.filter((messageId) =>
-        /^(u|a|crash)-\d+$/.test(messageId),
+        /^(u|a|crash|abort)-\d+$/.test(messageId),
       );
       if (durable.length === 0) return;
       setTimeout(() => {
@@ -766,7 +772,7 @@ const ChatTranscript = ({
               return null;
             }
             const meta = message.metadata as
-              | { kind?: "note" | "reminder"; at?: number }
+              | { kind?: "note" | "reminder"; at?: number; aborted?: boolean }
               | undefined;
             const kind = meta?.kind;
             // DAY DIVIDER: a rule wherever the calendar day advances
@@ -923,6 +929,18 @@ const ChatTranscript = ({
                         }
                         return null;
                       })}
+                      {/* the operator's stop — a quiet marker where the
+                          round was cut short (live: the turn's finish
+                          carried it; snapshot: the burst wears it) */}
+                      {meta?.aborted === true && (
+                        <div
+                          data-aborted
+                          className="flex items-center gap-1.5 py-0.5 text-xs text-muted-foreground"
+                        >
+                          <Square className="size-3 fill-current" />
+                          Stopped
+                        </div>
+                      )}
                     </MessageContent>
                   </Message>
                 </div>
@@ -966,8 +984,14 @@ const ChatTranscript = ({
                 className="pr-12"
               />
             </PromptInputBody>
+            {/* while the agent works the button is STOP: abort the
+                round on the server (the session lives on); the turn's
+                end arrives over the socket and the button turns back */}
             <PromptInputSubmit
               status={status === "streaming" ? "streaming" : undefined}
+              onStop={() => {
+                void interruptChat(id).catch(() => {});
+              }}
               variant="ghost"
               className="absolute right-2 bottom-2 text-muted-foreground"
             />

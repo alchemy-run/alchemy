@@ -159,6 +159,27 @@ export const toUIMessages = (
         });
         break;
       }
+      case "aborted": {
+        // the operator's stop ends the burst: the message it cut short
+        // wears `aborted` (the live translator's `finish` carries the
+        // same metadata); a stop before any sampling landed stands
+        // alone. The next sampling starts a fresh assistant message.
+        if (assistant !== undefined) {
+          assistant.message.metadata = {
+            ...(assistant.message.metadata as object | undefined),
+            aborted: true,
+          };
+        } else {
+          messages.push({
+            id: `abort-${observation.seq}`,
+            role: "assistant",
+            parts: [],
+            metadata: { at: observation.at, aborted: true },
+          });
+        }
+        assistant = undefined;
+        break;
+      }
       default:
         break;
     }
@@ -229,6 +250,13 @@ export const observationSpan = (
         assistant = undefined;
         pending = [];
         groups.set(`crash-${observation.seq}`, [observation.seq]);
+        break;
+      case "aborted":
+        // part of the burst it ended; alone when nothing had sampled
+        if (assistant !== undefined) assistant.push(observation.seq);
+        else groups.set(`abort-${observation.seq}`, [observation.seq]);
+        assistant = undefined;
+        pending = [];
         break;
       case "assistant":
         if (assistant === undefined) {
@@ -393,6 +421,18 @@ export const makeChunkTranslator = () => {
         // before producing anything (e.g. steering a settled session)
         if (!started) chunks.push({ type: "start" });
         chunks.push({ type: "finish" });
+        done = true;
+        break;
+      }
+      case "aborted": {
+        // the operator stopped the round: whatever streamed stays, the
+        // message wears `aborted` (as the snapshot's does), the turn
+        // is over — the client's status returns to ready
+        closeStep();
+        if (!started) {
+          chunks.push({ type: "start", messageId: `abort-${observation.seq}` });
+        }
+        chunks.push({ type: "finish", messageMetadata: { aborted: true } });
         done = true;
         break;
       }
