@@ -1,12 +1,16 @@
 import * as path from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterEach, expect, it, vi } from "vitest";
-import { runBuildChild } from "../BuildChild.ts";
+import { runBuildChild, type BuildChildOptions } from "../BuildChild.ts";
 import { makeProject, run } from "./helpers.ts";
 
 afterEach(() => vi.unstubAllEnvs());
 
-it.each([
+it.each<{
+  nodeEnv: string;
+  env: BuildChildOptions["env"];
+  expected: string;
+}>([
   { nodeEnv: "test", env: undefined, expected: "production" },
   {
     nodeEnv: "development",
