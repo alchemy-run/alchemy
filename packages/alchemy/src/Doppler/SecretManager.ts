@@ -60,9 +60,11 @@ const makeResolve = (selector: SecretsSelector | undefined, fetch: Fetch) =>
   Effect.fn("Doppler.secrets.resolve")(function* ({
     stack,
     stage,
+    dev,
   }: SecretManagerResolveOptions) {
     const selection = yield* Effect.try({
-      try: () => (selector === undefined ? {} : selector({ stack, stage })),
+      try: () =>
+        selector === undefined ? {} : selector({ stack, stage, dev }),
       catch: (cause) =>
         failure(
           `Doppler could not select a project or config for stack '${stack}'.`,

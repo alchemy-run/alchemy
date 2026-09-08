@@ -15,13 +15,15 @@ import * as Redacted from "effect/Redacted";
 export const externalIntegration = (onResolve: () => void = () => {}) =>
   makeSecretManager({
     name: "External typed fixture",
-    resolve: ({ stage }) =>
+    resolve: ({ stage, dev }) =>
       Effect.sync(() => {
         onResolve();
         return {
           provider: ConfigProvider.fromUnknown({
             API_KEY: `secret-${stage}`,
-            PUBLIC_URL: `https://${stage}.example.com`,
+            PUBLIC_URL: dev
+              ? "http://localhost:4321"
+              : `https://${stage}.example.com`,
             FEATURE_ENABLED: "true",
             DEPLOY_TOKEN: "tooling-only",
           }),

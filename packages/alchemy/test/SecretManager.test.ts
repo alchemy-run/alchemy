@@ -20,6 +20,32 @@ const read = (provider: ConfigProvider.ConfigProvider, name: string) =>
   );
 
 it.effect(
+  "forwards true, false and omitted dev flags unchanged to the resolver",
+  () =>
+    Effect.gen(function* () {
+      const received: (boolean | undefined)[] = [];
+      const secrets = Layer.succeed(SecretManager, {
+        name: "Dev fixture",
+        resolve: ({ dev }) =>
+          Effect.sync(() => {
+            received.push(dev);
+            return ConfigProvider.fromUnknown({});
+          }),
+      });
+      for (const dev of [true, false, undefined]) {
+        yield* resolveSecretManagerConfig({
+          secrets,
+          stack: "app",
+          stage: "dev_user",
+          dev,
+          fallback: ConfigProvider.fromUnknown({}),
+        });
+      }
+      expect(received).toEqual([true, false, undefined]);
+    }),
+);
+
+it.effect(
   "uses the existing provider when no secret manager is configured",
   () =>
     Effect.gen(function* () {

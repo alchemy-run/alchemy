@@ -192,9 +192,10 @@ const makeResolve = (selector: SecretsSelector, loadSecret: LoadSecret) =>
   Effect.fn("AWS.SecretsManager.secrets.resolve")(function* ({
     stack,
     stage,
+    dev,
   }: SecretManagerResolveOptions) {
     const selected = yield* Effect.try({
-      try: () => selector({ stack, stage }),
+      try: () => selector({ stack, stage, dev }),
       catch: (cause) =>
         failure(
           `AWS Secrets Manager could not select a secret for stack '${stack}'.`,

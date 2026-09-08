@@ -12,6 +12,8 @@ export interface SecretManagerResolveOptions {
   readonly stack: string;
   /** Concrete Alchemy stage, when the command addresses a stack instance. */
   readonly stage?: string;
+  /** Whether this session uses local emulation, as in `alchemy dev`. */
+  readonly dev?: boolean;
 }
 
 /** Application configuration selected by an adapter for explicit forwarding. */
@@ -120,6 +122,7 @@ export const resolveSecretManager = Effect.fn("SecretManager.resolve")(
     readonly secrets?: SecretManagerLayer;
     readonly stack: string;
     readonly stage?: string;
+    readonly dev?: boolean;
     readonly fallback: ConfigProvider.ConfigProvider;
   }) {
     if (options.secrets === undefined)
@@ -132,6 +135,7 @@ export const resolveSecretManager = Effect.fn("SecretManager.resolve")(
       manager.resolve({
         stack: options.stack,
         stage: options.stage,
+        dev: options.dev,
       }),
       ConfigProvider.ConfigProvider,
       options.fallback,

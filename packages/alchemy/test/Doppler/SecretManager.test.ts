@@ -24,6 +24,7 @@ const resolve = (
   fallback: ConfigProvider.ConfigProvider,
   stack = "payments",
   stage: string | undefined = "preview",
+  dev?: boolean,
 ) =>
   Effect.gen(function* () {
     const context = yield* Layer.build(makeSecretManager(selector, fetch));
@@ -31,6 +32,7 @@ const resolve = (
       Context.get(context, SecretManagerService).resolve({
         stack,
         stage,
+        dev,
       }),
       ConfigProvider.ConfigProvider,
       fallback,
@@ -227,4 +229,24 @@ it.effect("rejects invalid secret-set selections", () =>
       }),
     ),
   ),
+);
+
+it.effect("forwards local-development mode to the selector", () =>
+  Effect.gen(function* () {
+    const received: (boolean | undefined)[] = [];
+    for (const dev of [true, false, undefined]) {
+      yield* resolve(
+        ({ dev }) => {
+          received.push(dev);
+          return {};
+        },
+        async () => new Response("{}"),
+        ConfigProvider.fromUnknown({ DOPPLER_TOKEN: "test-token" }),
+        "app",
+        "dev_user",
+        dev,
+      );
+    }
+    expect(received).toEqual([true, false, undefined]);
+  }),
 );

@@ -369,6 +369,7 @@ export const evalStack = <A, B, StackErr, Err, Req>(
       secrets: effect.secrets,
       stack: effect.stackName ?? "",
       stage: options.stage,
+      dev: (yield* AlchemyContext).dev,
       fallback,
     });
     const configProvider = resolved.provider;

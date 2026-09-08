@@ -143,6 +143,7 @@ interface SessionServicesOptions {
   readonly secrets?: SecretManagerLayer;
   readonly stack: string;
   readonly stage?: string;
+  readonly dev?: boolean;
   readonly logger?: Layer.Layer<never, never, never>;
   readonly extra?: Layer.Layer<never, never, never>;
 }
@@ -156,6 +157,7 @@ const sessionServices = Effect.fn("sessionServices")(function* (
     secrets: options.secrets,
     stack: options.stack,
     stage: options.stage,
+    dev: options.dev,
     fallback,
   });
   const configProvider = withProfileOverride(
@@ -314,6 +316,7 @@ const openUncached = Effect.fn("openStackSessionUncached")(function* (
     secrets: stackEffect.secrets,
     stack: stackEffect.stackName,
     stage: target.stage,
+    dev: options.dev,
   });
   const services = Layer.mergeAll(
     Layer.effect(
@@ -358,7 +361,9 @@ export const open = Effect.fn("openStackSession")(function* (
   target: Target,
   options: OpenOptions = {},
 ) {
-  return yield* (yield* RouteCache).open(target, options);
+  // Cache and resolve secrets with the same effective mode as the providers.
+  const dev = options.dev ?? (yield* AlchemyContext).dev;
+  return yield* (yield* RouteCache).open(target, { ...options, dev });
 });
 
 const placeholderStack = (name: string) => ({

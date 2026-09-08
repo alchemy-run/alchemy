@@ -265,9 +265,10 @@ const makeResolve = (selector: SecretsSelector, fetch: Fetch) =>
   Effect.fn("Infisical.secrets.resolve")(function* ({
     stack,
     stage,
+    dev,
   }: SecretManagerResolveOptions) {
     const selection = yield* Effect.try({
-      try: () => selector({ stack, stage }),
+      try: () => selector({ stack, stage, dev }),
       catch: (cause) =>
         failure(
           `Infisical could not select a secret set for stack '${stack}'.`,

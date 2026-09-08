@@ -16,6 +16,7 @@ import {
   StackModuleLoader,
 } from "@/Alchemist/Session.ts";
 import * as Nuke from "@/Alchemist/routes/nuke.ts";
+import { AlchemyContext } from "@/AlchemyContext.ts";
 import * as ProviderRoute from "@/Alchemist/routes/provider.ts";
 import * as AlchemistState from "@/Alchemist/routes/state.ts";
 import * as CliKit from "@/Cli/CliKit/index.ts";
@@ -57,6 +58,72 @@ const runFixture = (path: string) =>
   );
 
 describe("importStack", () => {
+  test("separates dev and deployed configuration for the same cached stage", async () => {
+    const sessions = await TestCore.run(
+      Effect.gen(function* () {
+        const target = {
+          entrypoint: secretManagerBindingsFixture,
+          stage: "dev_user",
+        };
+        const local = yield* open(target, { dev: true });
+        const deployed = yield* open(target, { dev: false });
+        const inheritedLocal = yield* open(target).pipe(
+          Effect.updateService(AlchemyContext, (context) => ({
+            ...context,
+            dev: true,
+          })),
+        );
+        const explicitLive = yield* open(target, { dev: false }).pipe(
+          Effect.updateService(AlchemyContext, (context) => ({
+            ...context,
+            dev: true,
+          })),
+        );
+        const defaultLive = yield* open(target).pipe(
+          Effect.updateService(AlchemyContext, (context) => ({
+            ...context,
+            dev: false,
+          })),
+        );
+        expect(inheritedLocal).toBe(local);
+        expect(explicitLive).toBe(deployed);
+        expect(defaultLive).toBe(deployed);
+        return [local, deployed];
+      }).pipe(
+        Effect.provide(routeCacheLayer),
+        Effect.provide(CliKit.layer({ input: false })),
+      ),
+      { providers: TestLayers() },
+    );
+    expect(
+      sessions.map(
+        (session) =>
+          (session.stack.output as { PUBLIC_URL: string }).PUBLIC_URL,
+      ),
+    ).toEqual(["http://localhost:4321", "https://dev_user.example.com"]);
+  });
+
+  test("forwards programmatic local-development mode to secret managers", async () => {
+    const values = await TestCore.run(
+      Effect.gen(function* () {
+        const stackEffect = yield* importStack(secretManagerBindingsFixture);
+        return yield* Effect.forEach([true, false, undefined], (dev) =>
+          evalStack(stackEffect, (stack) => Effect.succeed(stack.output), {
+            stage: "dev_user",
+            dev,
+          }),
+        );
+      }),
+      { providers: TestLayers() },
+    );
+    expect(
+      values.map((value) => (value as { PUBLIC_URL: string }).PUBLIC_URL),
+    ).toEqual([
+      "http://localhost:4321",
+      "https://dev_user.example.com",
+      "https://dev_user.example.com",
+    ]);
+  });
   test("exposes typed bindings through CLI sessions and programmatic stack evaluation", async () => {
     const session = await TestCore.run(
       open({ entrypoint: secretManagerBindingsFixture, stage: "preview" }).pipe(

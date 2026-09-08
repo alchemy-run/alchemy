@@ -27,11 +27,12 @@ const resolve = (
   fallback: ConfigProvider.ConfigProvider = ConfigProvider.fromUnknown({}),
   stack = "payments",
   stage: string | undefined = "preview",
+  dev?: boolean,
 ) =>
   Effect.gen(function* () {
     const context = yield* Layer.build(makeSecretManager(selector, loadSecret));
     return yield* Effect.provideService(
-      Context.get(context, SecretManagerService).resolve({ stack, stage }),
+      Context.get(context, SecretManagerService).resolve({ stack, stage, dev }),
       ConfigProvider.ConfigProvider,
       fallback,
     ).pipe(
@@ -227,4 +228,24 @@ it.effect("rejects invalid secret selections", () =>
       }),
     ),
   ),
+);
+
+it.effect("forwards local-development mode to the selector", () =>
+  Effect.gen(function* () {
+    const received: (boolean | undefined)[] = [];
+    for (const dev of [true, false, undefined]) {
+      yield* resolve(
+        ({ dev }) => {
+          received.push(dev);
+          return "app/preview";
+        },
+        () => Effect.succeed({ SecretString: Redacted.make("{}") }),
+        ConfigProvider.fromUnknown({}),
+        "app",
+        "dev_user",
+        dev,
+      );
+    }
+    expect(received).toEqual([true, false, undefined]);
+  }),
 );
