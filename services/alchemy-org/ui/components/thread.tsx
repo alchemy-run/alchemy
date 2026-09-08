@@ -8,6 +8,7 @@
 import { ChatView, timeAgo } from "@/components/chat";
 import { Rail } from "@/components/rail";
 import { GhosttyTerminal } from "@/components/terminal";
+import { OpenAgentContext, type SpawnTarget } from "@/components/tool-card";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -15,8 +16,12 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import type { ThreadState } from "@/lib/channel";
-import { parseEntityRef, threadSessionId } from "@/lib/channel";
+import type { ThreadAgentRow, ThreadState } from "@/lib/channel";
+import {
+  engineerSessionId,
+  parseEntityRef,
+  threadSessionId,
+} from "@/lib/channel";
 import type { ThreadTab } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 import {
@@ -33,7 +38,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import type { ReactNode } from "react";
+import { useCallback, type ReactNode } from "react";
 import { ReviewView } from "@/components/review";
 
 const Hint = ({ label, children }: { label: string; children: ReactNode }) => (
@@ -93,12 +98,17 @@ const Section = ({
 /** The thread's books: entities, agents, close, delete. */
 const ThreadPane = ({
   state,
+  selectedAgent,
   onOpenReview,
+  onOpenAgent,
   onClose,
   onDelete,
 }: {
   state: ThreadState;
+  /** The agent whose session is open in the body, if any. */
+  selectedAgent: string | undefined;
   onOpenReview: (owner: string, repo: string, number: number) => void;
+  onOpenAgent: (key: string) => void;
   onClose: () => void;
   onDelete: () => void;
 }) => {
@@ -166,7 +176,18 @@ const ThreadPane = ({
           <div className="text-xs text-muted-foreground">No subagents yet.</div>
         )}
         {state.agents.map((agent) => (
-          <div key={agent.key} className="flex items-center gap-2 px-1 py-0.5">
+          <button
+            key={agent.key}
+            type="button"
+            onClick={() => onOpenAgent(agent.key)}
+            aria-label={`open agent ${agent.key}`}
+            aria-current={selectedAgent === agent.key ? "page" : undefined}
+            title={`${agent.brief}\n\nOpen the agent's session — every tool call, as it happens`}
+            className={cn(
+              "flex w-full cursor-pointer items-center gap-2 rounded-md px-1 py-0.5 text-left hover:bg-accent/70",
+              selectedAgent === agent.key && "bg-accent",
+            )}
+          >
             <span
               className={cn(
                 "size-2 shrink-0 rounded-full",
@@ -174,17 +195,14 @@ const ThreadPane = ({
               )}
             />
             <Bot className="size-3.5 shrink-0 text-muted-foreground" />
-            <span
-              title={agent.brief}
-              className="min-w-0 flex-1 truncate text-[12px] text-muted-foreground"
-            >
+            <span className="min-w-0 flex-1 truncate text-[12px] text-muted-foreground">
               <span className="font-medium text-foreground">{agent.kind}</span>{" "}
               — {agent.brief}
             </span>
             <span className="shrink-0 text-[10px] text-muted-foreground/70">
               {timeAgo(agent.settledAt ?? agent.startedAt)}
             </span>
-          </div>
+          </button>
         ))}
       </Section>
       <div className="flex items-center gap-2 px-3 py-2.5">
@@ -213,6 +231,58 @@ const ThreadPane = ({
     </div>
   );
 };
+
+const AGENT_STATE_LABEL: Record<string, string> = {
+  running: "working",
+  done: "done",
+  failed: "failed",
+  stopped: "stopped",
+};
+
+/** The strip above a subagent's transcript — what it was asked and
+ *  where it stands. The row may be missing for a moment while the
+ *  thread's state catches up to a fresh spawn. */
+const AgentHeader = ({
+  agentKey,
+  row,
+}: {
+  agentKey: string;
+  row: ThreadAgentRow | undefined;
+}) => (
+  <div className="flex items-start gap-2 border-b border-border bg-sidebar/60 px-4 py-2">
+    <Bot className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+    <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+      <div className="flex items-center gap-2 text-xs">
+        <span className="font-medium">{row?.kind ?? "agent"}</span>
+        <span className="font-mono text-[10px] text-muted-foreground/70">
+          {agentKey}
+        </span>
+        {row !== undefined && (
+          <span className="ml-auto flex shrink-0 items-center gap-1.5 text-[11px] text-muted-foreground">
+            <span
+              className={cn(
+                "size-2 rounded-full",
+                AGENT_DOT[row.state] ?? "bg-muted-foreground/40",
+              )}
+            />
+            {AGENT_STATE_LABEL[row.state] ?? row.state}
+            <span className="text-muted-foreground/70">
+              · {timeAgo(row.settledAt ?? row.startedAt)}
+            </span>
+          </span>
+        )}
+      </div>
+      {row !== undefined && (
+        <div
+          title={row.brief}
+          className="line-clamp-2 text-[12px] text-muted-foreground"
+        >
+          {row.brief}
+        </div>
+      )}
+    </div>
+  </div>
+);
 
 /* ── the page ─────────────────────────────────────────────────────── */
 
@@ -243,6 +313,26 @@ export const ThreadView = ({
   const sessionId = threadSessionId(id);
   const reviews = (state?.entities ?? []).filter(
     (entity) => entity.kind === "pull",
+  );
+  const agents = state?.agents ?? [];
+  const openAgent = tab.kind === "agent" ? tab.key : undefined;
+  const openAgentRow = agents.find((agent) => agent.key === openAgent);
+
+  // a spawn card names its agent by key once settled; while it is
+  // still working only the brief is on the wire — match that to the
+  // thread's agents, newest first, so the running one wins
+  const onOpenSpawn = useCallback(
+    (target: SpawnTarget) => {
+      const row =
+        (target.key !== undefined
+          ? agents.find((agent) => agent.key === target.key)
+          : undefined) ??
+        [...agents]
+          .sort((a, b) => b.startedAt - a.startedAt)
+          .find((agent) => agent.brief === target.brief);
+      if (row !== undefined) onTab({ kind: "agent", key: row.key });
+    },
+    [agents, onTab],
   );
 
   return (
@@ -315,6 +405,33 @@ export const ThreadView = ({
               </Hint>
             );
           })}
+          {openAgent !== undefined && (
+            <span className="flex h-7 items-center gap-0.5 rounded-md border border-border bg-card pl-2 pr-1 text-xs font-medium shadow-xs">
+              <span
+                aria-current="page"
+                title={openAgentRow?.brief ?? openAgent}
+                className="flex items-center gap-1.5"
+              >
+                <span
+                  className={cn(
+                    "size-2 shrink-0 rounded-full",
+                    AGENT_DOT[openAgentRow?.state ?? ""] ??
+                      "bg-muted-foreground/40",
+                  )}
+                />
+                <Bot className="size-3.5" />
+                {openAgentRow?.kind ?? "agent"}
+              </span>
+              <button
+                type="button"
+                onClick={() => onTab({ kind: "chat" })}
+                aria-label="close agent"
+                className="cursor-pointer rounded p-0.5 hover:bg-accent"
+              >
+                <X className="size-3" />
+              </button>
+            </span>
+          )}
           {terminals.map((pty) => {
             const selected = tab.kind === "terminal" && tab.pty === pty;
             return (
@@ -380,12 +497,30 @@ export const ThreadView = ({
                 tab.kind !== "chat" && "hidden",
               )}
             >
-              <ChatView
-                id={sessionId}
-                active={active && tab.kind === "chat"}
-                placeholder="Talk to the thread…"
-              />
+              <OpenAgentContext.Provider value={onOpenSpawn}>
+                <ChatView
+                  id={sessionId}
+                  active={active && tab.kind === "chat"}
+                  placeholder="Talk to the thread…"
+                />
+              </OpenAgentContext.Provider>
             </div>
+            {openAgent !== undefined && (
+              <div
+                data-agent-session={openAgent}
+                className="flex min-h-0 min-w-0 flex-1 flex-col"
+              >
+                <AgentHeader agentKey={openAgent} row={openAgentRow} />
+                <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+                  <ChatView
+                    key={openAgent}
+                    id={engineerSessionId(openAgent)}
+                    active={active}
+                    readOnly
+                  />
+                </div>
+              </div>
+            )}
             {terminals.map((pty) => (
               <div
                 key={pty}
@@ -401,23 +536,26 @@ export const ThreadView = ({
                 />
               </div>
             ))}
-            {state !== undefined && tab.kind === "chat" && (
-              <Rail
-                label="Thread state"
-                storageKey="thread-pane-width"
-                defaultWidth={320}
-                minWidth={260}
-              >
-                <ThreadPane
-                  state={state}
-                  onOpenReview={(owner, repo, number) =>
-                    onTab({ kind: "review", owner, repo, number })
-                  }
-                  onClose={onCloseThread}
-                  onDelete={onDeleteThread}
-                />
-              </Rail>
-            )}
+            {state !== undefined &&
+              (tab.kind === "chat" || tab.kind === "agent") && (
+                <Rail
+                  label="Thread state"
+                  storageKey="thread-pane-width"
+                  defaultWidth={320}
+                  minWidth={260}
+                >
+                  <ThreadPane
+                    state={state}
+                    selectedAgent={openAgent}
+                    onOpenReview={(owner, repo, number) =>
+                      onTab({ kind: "review", owner, repo, number })
+                    }
+                    onOpenAgent={(key) => onTab({ kind: "agent", key })}
+                    onClose={onCloseThread}
+                    onDelete={onDeleteThread}
+                  />
+                </Rail>
+              )}
           </>
         )}
       </div>

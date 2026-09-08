@@ -150,6 +150,63 @@ test("the state pane shows entities, agents, and the worktree", async ({
   await expect(pane).toMatchAriaSnapshot({ name: "thread-pane.aria.yml" });
 });
 
+test("an agent row opens the subagent's session; close returns to chat", async ({
+  page,
+  api,
+}) => {
+  seedThread(api);
+  // the engineer's own transcript — a tool call the THREAD never saw
+  api.seedBash("Engineer:engineer-1", {
+    ask: "Implement the fix in pr-148's worktree",
+    command: "pnpm test test/reconcile",
+    stdout: "3 passed",
+    reply: "Tests are green in the worktree.",
+  });
+  await openApp(page, threadPath("t-1"));
+  await expect(main(page)).not.toContainText("pnpm test test/reconcile");
+
+  await page
+    .getByRole("complementary", { name: "Thread state" })
+    .getByRole("button", { name: "open agent engineer-1" })
+    .click();
+  await expect(page).toHaveURL(/\/t-1\/agent\/engineer-1$/);
+
+  // the body is now the engineer's session: its brief, its status,
+  // its tool calls — read-only, the thread stays the point of contact
+  const session = main(page).locator("[data-agent-session='engineer-1']");
+  await expect(session).toContainText("working");
+  await expect(session).toContainText("pnpm test test/reconcile");
+  await expect(session).toContainText("Tests are green in the worktree.");
+  await expect(session.getByRole("button", { name: "Submit" })).toHaveCount(0);
+
+  await page.getByRole("button", { name: "close agent" }).click();
+  await expect(page).toHaveURL(new RegExp(`${threadPath("t-1")}$`));
+  await expect(main(page)).not.toContainText("pnpm test test/reconcile");
+});
+
+test("the Engineer card's open button jumps to the running agent", async ({
+  page,
+  api,
+}) => {
+  seedThread(api);
+  // the spawn is still in flight: no key on the wire yet — the card
+  // finds its agent by the brief
+  api.seedOpenRound("Thread:t-1", {
+    ask: "fix the reconcile bug",
+    name: "spawn",
+    input: { brief: "Implement the fix in pr-148's worktree" },
+  });
+  await openApp(page, threadPath("t-1"));
+
+  await main(page)
+    .getByRole("button", { name: "Open the agent's session", exact: true })
+    .click();
+  await expect(page).toHaveURL(/\/t-1\/agent\/engineer-1$/);
+  await expect(
+    main(page).locator("[data-agent-session='engineer-1']"),
+  ).toContainText("Implement the fix in pr-148's worktree");
+});
+
 test("a pull entity opens its review tab; the diff renders", async ({
   page,
   api,

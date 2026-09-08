@@ -130,6 +130,19 @@ test("thread: the conversation and the state pane", async ({ page, api }) => {
   await shot(page, "thread-01-conversation");
 });
 
+test("thread: a subagent's session", async ({ page, api }) => {
+  seedWorld(api);
+  api.seedBash("Engineer:engineer-1", {
+    ask: "Implement the fix in pr-148's worktree",
+    command: "pnpm test test/reconcile",
+    stdout: "3 passed",
+    reply: "Tests are green in the worktree; pushing the fix.",
+  });
+  await openApp(page, `${threadPath("t-1")}/agent/engineer-1`);
+  await expect(page.getByRole("main")).toContainText("3 passed");
+  await shot(page, "thread-02-agent-session");
+});
+
 test("review: the diff beside the chat", async ({ page, api }) => {
   seedWorld(api);
   api.seedTurn(

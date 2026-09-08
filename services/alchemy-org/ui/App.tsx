@@ -14,6 +14,7 @@ import { deleteThread, type ChannelMessage } from "@/lib/channel";
 import { useChannelStream, useThreadState } from "@/lib/cursor";
 import type { ThreadState } from "@/lib/channel";
 import {
+  agentPath,
   NAVIGATE_EVENT,
   navigate,
   pathOf,
@@ -334,7 +335,9 @@ export const App = () => {
                         ? threadPath(id)
                         : tab.kind === "review"
                           ? reviewPath(id, tab.owner, tab.repo, tab.number)
-                          : terminalPath(id, tab.pty),
+                          : tab.kind === "agent"
+                            ? agentPath(id, tab.key)
+                            : terminalPath(id, tab.pty),
                     );
                   }}
                   onNewTerminal={() => {

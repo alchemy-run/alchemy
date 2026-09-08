@@ -22,6 +22,7 @@ import {
   Send,
   Signpost,
   Sparkles,
+  SquareArrowOutUpRight,
   SquareCode,
   StickyNote,
   Tag,
@@ -31,7 +32,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type * as AI from "alchemy/AI";
-import { useState, type ReactNode } from "react";
+import { createContext, useContext, useState, type ReactNode } from "react";
 import type { GeneralEngineer } from "../../src/coding/Engineer.ts";
 import { useAnchoredToggle } from "@/lib/anchor";
 import { Ansi, stripAnsi } from "@/lib/ansi";
@@ -150,6 +151,52 @@ const WindowedText = ({
       {"\n"}
       <Ansi text={lines.slice(-tail).join("\n")} />
     </Mono>
+  );
+};
+
+/* ── opening a subagent ──────────────────────────────────────── */
+
+/** What a spawn card knows about its subagent: the session `key`
+ *  once the spawn has settled (it rides the tool's output), and the
+ *  `brief` from the very first chunk — the thread view matches a
+ *  still-running card to its agent row by that. */
+export interface SpawnTarget {
+  readonly key?: string;
+  readonly brief?: string;
+}
+
+/** How a spawn card opens its subagent's session — the thread view
+ *  provides one; anywhere else the card has no door and shows none. */
+export const OpenAgentContext = createContext<
+  ((target: SpawnTarget) => void) | undefined
+>(undefined);
+
+const OpenAgentButton = ({ target }: { target: SpawnTarget }) => {
+  const open = useContext(OpenAgentContext);
+  if (open === undefined) return null;
+  // the card's header is itself a button (expand/collapse), so this is
+  // a role=button span — nested <button>s are invalid HTML
+  return (
+    <span
+      role="button"
+      tabIndex={0}
+      onClick={(event) => {
+        event.stopPropagation();
+        open(target);
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          event.stopPropagation();
+          open(target);
+        }
+      }}
+      aria-label="Open the agent's session"
+      className="flex cursor-pointer items-center gap-1 rounded border border-border px-1.5 py-0 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground"
+    >
+      <SquareArrowOutUpRight className="size-3" />
+      open
+    </span>
   );
 };
 
@@ -322,6 +369,8 @@ const THREAD: {
     const report =
       (record?.report as string | undefined) ??
       (record === undefined ? output : undefined);
+    const agentKey =
+      typeof record?.agent === "string" ? record.agent : undefined;
     return {
       icon: Hammer,
       title: (
@@ -331,11 +380,16 @@ const THREAD: {
           {clamp(firstLine(brief), 110)}
         </>
       ),
-      badge: running ? (
-        <span className="shrink-0 animate-pulse text-[11px] text-moss">
-          working
+      badge: (
+        <span className="flex shrink-0 items-center gap-2">
+          {running && (
+            <span className="animate-pulse text-[11px] text-moss">working</span>
+          )}
+          {!intrinsic && (
+            <OpenAgentButton target={{ key: agentKey, brief: input.brief }} />
+          )}
         </span>
-      ) : undefined,
+      ),
       body: (
         <div className="divide-y divide-border/50">
           {input.instructions && (

@@ -219,19 +219,23 @@ export const ThreadAgentLive = ThreadAgent.make(
           state: "running",
           startedAt,
         });
-        const outcome = yield* engineer.dispatch(p.brief, {
-          key,
-          parent: session,
-        });
-        yield* threads.agentUpsert(id, {
-          key,
-          kind: "engineer",
-          brief: p.brief,
-          state: "done",
-          startedAt,
-          settledAt: Date.now(),
-        });
-        return { agent: key, report: JSON.stringify(outcome).slice(0, 2000) };
+        const settle = (state: "done" | "failed") =>
+          threads.agentUpsert(id, {
+            key,
+            kind: "engineer",
+            brief: p.brief,
+            state,
+            startedAt,
+            settledAt: Date.now(),
+          });
+        const outcome = yield* engineer
+          .dispatch(p.brief, { key, parent: session })
+          .pipe(Effect.onError(() => settle("failed")));
+        yield* settle("done");
+        return {
+          agent: key,
+          report: (JSON.stringify(outcome) ?? "").slice(0, 2000),
+        };
       }),
     );
 

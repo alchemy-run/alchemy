@@ -92,6 +92,14 @@ export const THREAD_TERM = "Thread";
 
 export const threadSessionId = (id: string): string => `${THREAD_TERM}:${id}`;
 
+/** A spawned engineer's session term — the thread's `spawn` tool
+ *  dispatches `Engineer` under the key it records in `agents`, so the
+ *  subagent's transcript is `/api/chats/Engineer:<key>/…`. */
+export const ENGINEER_TERM = "Engineer";
+
+export const engineerSessionId = (key: string): string =>
+  `${ENGINEER_TERM}:${key}`;
+
 /* ── entity refs ──────────────────────────────────────────────────── */
 
 /** Parse `owner/repo#N`; `undefined` when it is not one. */

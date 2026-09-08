@@ -7,5 +7,7 @@
   - button /open review for alchemy-run\/test-alchemy#\d+/
   - link /alchemy-run\/test-alchemy#\d+/:
     - /url: https://github.com/alchemy-run/test-alchemy/issues/148
-  - text: /open trees\/pr-\d+ Agents engineer — Implement the fix in pr-\d+'s worktree [\d,.]+[bkmBKM]+/
+  - text: /open trees\/pr-\d+ Agents/
+  - button "open agent engineer-1": /engineer — Implement the fix in pr-\d+'s worktree [\d,.]+[bkmBKM]+/
   - button "Close thread"
+  - button "Delete thread"

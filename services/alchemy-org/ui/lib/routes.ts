@@ -7,6 +7,7 @@
  * /threads/{id}                             a thread (its conversation)
  * /threads/{id}/{owner}/{repo}/pull/{n}     … a pull request's review
  * /threads/{id}/terminal/{pty}              … a terminal on its machine
+ * /threads/{id}/agent/{key}                 … a subagent's session
  * ```
  */
 
@@ -14,7 +15,8 @@
 export type ThreadTab =
   | { kind: "chat" }
   | { kind: "review"; owner: string; repo: string; number: number }
-  | { kind: "terminal"; pty: string };
+  | { kind: "terminal"; pty: string }
+  | { kind: "agent"; key: string };
 
 export type Route =
   | { kind: "channel" }
@@ -48,6 +50,9 @@ export const reviewPath = (
 export const terminalPath = (id: string, pty: string): string =>
   `${threadPath(id)}/terminal/${segment(pty)}`;
 
+export const agentPath = (id: string, key: string): string =>
+  `${threadPath(id)}/agent/${segment(key)}`;
+
 export const pathOf = (route: Route): string => {
   if (route.kind === "channel") return CHANNEL_PATH;
   switch (route.tab.kind) {
@@ -62,6 +67,8 @@ export const pathOf = (route: Route): string => {
       );
     case "terminal":
       return terminalPath(route.id, route.tab.pty);
+    case "agent":
+      return agentPath(route.id, route.tab.key);
   }
 };
 
@@ -76,6 +83,9 @@ export const routeOf = (pathname: string): Route => {
   if (rest.length === 0) return { kind: "thread", id, tab: { kind: "chat" } };
   if (rest.length === 2 && rest[0] === "terminal") {
     return { kind: "thread", id, tab: { kind: "terminal", pty: rest[1]! } };
+  }
+  if (rest.length === 2 && rest[0] === "agent") {
+    return { kind: "thread", id, tab: { kind: "agent", key: rest[1]! } };
   }
   if (rest.length === 4 && rest[2] === "pull" && /^\d+$/.test(rest[3]!)) {
     return {
