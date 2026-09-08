@@ -73,9 +73,13 @@ const whoOf = (message: ChannelMessage): string =>
       ? message.card?.title ?? "card"
       : "event");
 
-/** One line of a message, for a quote. */
+/** One line of a message, for a quote — markdown links collapse to
+ *  their label (`[#12](https://…)` → `#12`), code spans lose their
+ *  ticks; the quote is plain text. */
 const excerptOf = (text: string): string => {
-  const line = text.trim().split("\n")[0] ?? "";
+  const line = (text.trim().split("\n")[0] ?? "")
+    .replace(/\[([^\]]*)\]\([^()\s]*\)/g, "$1")
+    .replace(/`([^`]*)`/g, "$1");
   return line.length > 140 ? `${line.slice(0, 140)}…` : line;
 };
 
@@ -494,6 +498,10 @@ export const ChannelView = ({
       // selected one, for as long as the menu is up
       const selected = selection.has(message.id);
       const targeted = menuIds.includes(message.id);
+      // the originals of a reply being typed stay lit until it is sent
+      // (or dropped) — the click selection went with the menu, this is
+      // the composer's
+      const replying = replyTo.includes(message.id);
       const wrap = (node: ReactNode) => (
         <div
           key={message.seq}
@@ -501,6 +509,7 @@ export const ChannelView = ({
           data-message-id={message.id}
           data-selected={selected ? "" : undefined}
           data-targeted={targeted ? "" : undefined}
+          data-replying={replying ? "" : undefined}
           onMouseDown={onRowMouseDown}
           onClick={(event: MouseEvent) => {
             if (!skipRowClick(event)) selection.click(message.id, event);
@@ -509,7 +518,7 @@ export const ChannelView = ({
           className={cn(
             "-mx-2 rounded-md border-l-2 border-transparent px-1.5 transition-colors",
             // the row under the pointer lifts; a selected one stays lit
-            selected || targeted
+            selected || targeted || replying
               ? "border-primary/60 bg-accent/60"
               : "hover:bg-accent/70",
             flash === message.seq && "bg-primary/15",
@@ -584,6 +593,7 @@ export const ChannelView = ({
     onOpenReview,
     selection,
     menuIds,
+    replyTo,
     byId,
     flash,
     jumpTo,

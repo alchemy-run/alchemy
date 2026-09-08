@@ -251,6 +251,11 @@ test("Reply from the menu quotes the original; the post carries replyTo", async 
   await expect(bar).toContainText("Bug in reconcile");
   const composer = page.getByRole("textbox", { name: "Message the channel" });
   await expect(composer).toBeFocused();
+  // the original stays lit while the reply is typed — the menu closing
+  // dropped the click selection, but not this
+  const replying = main(page).locator("[data-seq][data-replying]");
+  await expect(replying).toHaveCount(1);
+  await expect(replying).toContainText("Bug in reconcile");
 
   // send: the POST names the original; the echoed row quotes it
   await composer.fill("on it — fixing now");
@@ -259,6 +264,7 @@ test("Reply from the menu quotes the original; the post carries replyTo", async 
     .poll(() => api.replies)
     .toEqual([{ text: "on it — fixing now", replyTo: [original.id] }]);
   await expect(bar).toBeHidden();
+  await expect(replying).toHaveCount(0);
   const reply = rowOf(page, "on it — fixing now");
   await expect(reply).toContainText("octocat");
   await expect(
