@@ -22,7 +22,7 @@ import { Rail } from "@/components/rail";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import type { ChannelMessage, ThreadDirectoryRow } from "@/lib/channel";
-import { postChannel } from "@/lib/channel";
+import { deleteChannelMessage, postChannel } from "@/lib/channel";
 import { cn } from "@/lib/utils";
 import {
   ArrowUp,
@@ -30,6 +30,7 @@ import {
   FileDiff,
   MessageCircle,
   Terminal,
+  Trash2,
   X,
 } from "lucide-react";
 import {
@@ -281,6 +282,26 @@ const CardRow = memo(
 );
 CardRow.displayName = "CardRow";
 
+/** The hover-revealed delete on every row — its own column beside
+ *  the text (never over it), shown on hover without shifting layout.
+ *  Confirmed, then the DO broadcasts the removal so the row vanishes
+ *  from every open view at once. */
+const DeleteMessageButton = ({ id }: { id: string }) => (
+  <button
+    type="button"
+    onClick={() => {
+      if (window.confirm("Delete this message from the channel?")) {
+        void deleteChannelMessage(id);
+      }
+    }}
+    aria-label="Delete message"
+    title="Delete this message"
+    className="invisible mt-0.5 flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground group-hover:visible hover:bg-accent hover:text-destructive"
+  >
+    <Trash2 className="size-3.5" />
+  </button>
+);
+
 /* ── the view ─────────────────────────────────────────────────────── */
 
 export const ChannelView = ({
@@ -351,44 +372,55 @@ export const ChannelView = ({
           </div>,
         );
       }
+      // every row deletes the same way: hover, trash, gone — the
+      // socket's remove frame drops it from every open view
+      const wrap = (node: ReactNode) => (
+        <div key={message.seq} className="group flex items-start">
+          <div className="min-w-0 flex-1">{node}</div>
+          <DeleteMessageButton id={message.id} />
+        </div>
+      );
       switch (message.kind) {
         case "event":
           out.push(
-            <EventRow
-              key={message.seq}
-              message={message}
-              directory={directory}
-              onOpenThread={onOpenThread}
-            />,
+            wrap(
+              <EventRow
+                message={message}
+                directory={directory}
+                onOpenThread={onOpenThread}
+              />,
+            ),
           );
           break;
         case "user":
           out.push(
-            <UserRow
-              key={message.seq}
-              message={message}
-              working={live && message.seq > lastAnswered}
-              runOpen={runSeq === message.seq}
-              onToggleRun={() =>
-                setRunSeq((current) =>
-                  current === message.seq ? undefined : message.seq,
-                )
-              }
-            />,
+            wrap(
+              <UserRow
+                message={message}
+                working={live && message.seq > lastAnswered}
+                runOpen={runSeq === message.seq}
+                onToggleRun={() =>
+                  setRunSeq((current) =>
+                    current === message.seq ? undefined : message.seq,
+                  )
+                }
+              />,
+            ),
           );
           break;
         case "agent":
-          out.push(<AgentRow key={message.seq} message={message} />);
+          out.push(wrap(<AgentRow message={message} />));
           break;
         case "card":
           out.push(
-            <CardRow
-              key={message.seq}
-              message={message}
-              directory={directory}
-              onOpenThread={onOpenThread}
-              onOpenReview={onOpenReview}
-            />,
+            wrap(
+              <CardRow
+                message={message}
+                directory={directory}
+                onOpenThread={onOpenThread}
+                onOpenReview={onOpenReview}
+              />,
+            ),
           );
           break;
       }
@@ -541,12 +573,15 @@ export const ThreadList = ({
   channelSelected,
   onOpenChannel,
   onOpenThread,
+  onDeleteThread,
 }: {
   directory: ReadonlyArray<ThreadDirectoryRow>;
   selected: string | undefined;
   channelSelected: boolean;
   onOpenChannel: () => void;
   onOpenThread: (id: string) => void;
+  /** The row's hover trash — the shell confirms and erases. */
+  onDeleteThread: (id: string) => void;
 }) => {
   const groups = useMemo(() => {
     const open = directory.filter((row) => row.status === "open");
@@ -586,30 +621,48 @@ export const ThreadList = ({
             {turn === "closed" ? "Closed" : TURN_LABEL[turn]}
           </div>
           {rows.map((row) => (
-            <button
+            // the row: the nav button plus a hover trash beside it (its
+            // own column — never over the name, no layout shift)
+            <div
               key={row.id}
-              type="button"
-              onClick={() => onOpenThread(row.id)}
-              aria-current={selected === row.id ? "page" : undefined}
-              title={row.title}
               className={cn(
-                "flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm",
-                selected === row.id
-                  ? "bg-accent font-medium text-foreground"
-                  : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
-                turn === "closed" && "opacity-60",
+                "group flex items-center rounded-md",
+                selected === row.id ? "bg-accent" : "hover:bg-accent/60",
               )}
             >
-              <span
+              <button
+                type="button"
+                onClick={() => onOpenThread(row.id)}
+                aria-current={selected === row.id ? "page" : undefined}
+                title={row.title}
                 className={cn(
-                  "size-2 shrink-0 rounded-full",
-                  turn === "closed"
-                    ? "bg-muted-foreground/30"
-                    : TURN_DOT[row.turn],
+                  "flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 text-left text-sm",
+                  selected === row.id
+                    ? "font-medium text-foreground"
+                    : "text-muted-foreground group-hover:text-foreground",
+                  turn === "closed" && "opacity-60",
                 )}
-              />
-              <span className="min-w-0 flex-1 truncate">{row.name}</span>
-            </button>
+              >
+                <span
+                  className={cn(
+                    "size-2 shrink-0 rounded-full",
+                    turn === "closed"
+                      ? "bg-muted-foreground/30"
+                      : TURN_DOT[row.turn],
+                  )}
+                />
+                <span className="min-w-0 flex-1 truncate">{row.name}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => onDeleteThread(row.id)}
+                aria-label={`Delete thread ${row.name}`}
+                title="Delete the thread — its conversation, subagents, and machine are erased"
+                className="invisible mr-1 flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground group-hover:visible hover:bg-accent hover:text-destructive"
+              >
+                <Trash2 className="size-3.5" />
+              </button>
+            </div>
           ))}
         </div>
       ))}

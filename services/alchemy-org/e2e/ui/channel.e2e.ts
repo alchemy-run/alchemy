@@ -94,6 +94,39 @@ test("the run pill opens the run rail; the eval card shows code and output", asy
   await expect(rail).toBeHidden();
 });
 
+test("hovering a message reveals delete; deleting drops the row live", async ({
+  page,
+  api,
+}) => {
+  api.seedEvent("opened issue — Bug in reconcile", { author: "octocat" });
+  const doomed = api.seedUser("delete me please");
+  api.seedAgent("Noted.");
+  await openApp(page);
+  await expect(main(page)).toContainText("delete me please");
+
+  // the trash appears on hover; clicking it asks first — a dismissed
+  // confirm deletes nothing
+  const row = main(page)
+    .locator("div.group", { hasText: "delete me please" })
+    .first();
+  await row.hover();
+  page.once("dialog", (dialog) => void dialog.dismiss());
+  await row.getByRole("button", { name: "Delete message" }).click();
+  await expect.poll(() => api.deletedMessages).toEqual([]);
+  await expect(main(page)).toContainText("delete me please");
+
+  // confirmed: the DELETE lands and the socket's remove frame drops
+  // the row from the view
+  await row.hover();
+  page.once("dialog", (dialog) => void dialog.accept());
+  await row.getByRole("button", { name: "Delete message" }).click();
+  await expect.poll(() => api.deletedMessages).toEqual([doomed.id]);
+  await expect(main(page)).not.toContainText("delete me please");
+  // the neighbors survive
+  await expect(main(page)).toContainText("Bug in reconcile");
+  await expect(main(page)).toContainText("Noted.");
+});
+
 test("a live event pushed over the socket appears without a reload", async ({
   page,
   api,
@@ -150,11 +183,43 @@ test("the sidebar groups open threads by turn and selects on click", async ({
   const nav = threadNav(page);
   await expect(nav).toMatchAriaSnapshot({ name: "sidebar.aria.yml" });
 
-  await nav.getByRole("button", { name: "w-yours" }).click();
+  // exact: the row's hover trash is also a button named after the thread
+  const yours = nav.getByRole("button", { name: "w-yours", exact: true });
+  await yours.click();
   await expect(page).toHaveURL(new RegExp(`${threadPath("t-you")}$`));
+  await expect(yours).toHaveAttribute("aria-current", "page");
+});
+
+test("a sidebar row's hover trash deletes the thread after a confirm", async ({
+  page,
+  api,
+}) => {
+  api.seedThread({ id: "t-old", name: "container-fixes", status: "closed" });
+  api.seedThread({ id: "t-live", name: "w-reconcile", turn: "you" });
+  await openApp(page);
+  const row = threadNav(page)
+    .locator("div.group", { hasText: "container-fixes" })
+    .first();
+  await expect(row).toBeVisible();
+
+  // dismissed: nothing happens
+  await row.hover();
+  page.once("dialog", (dialog) => void dialog.dismiss());
+  await row.getByRole("button", { name: "Delete thread container-fixes" }).click();
+  await expect.poll(() => api.deletedThreads).toEqual([]);
+  await expect(row).toBeVisible();
+
+  // confirmed: the DELETE lands and the directory frame drops the row;
+  // the view was on the channel and stays there
+  await row.hover();
+  page.once("dialog", (dialog) => void dialog.accept());
+  await row.getByRole("button", { name: "Delete thread container-fixes" }).click();
+  await expect.poll(() => api.deletedThreads).toEqual(["t-old"]);
+  await expect(threadNav(page)).not.toContainText("container-fixes");
+  await expect(threadNav(page)).toContainText("w-reconcile");
   await expect(
-    nav.getByRole("button", { name: "w-yours" }),
-  ).toHaveAttribute("aria-current", "page");
+    page.getByRole("textbox", { name: "Message the channel" }),
+  ).toBeVisible();
 });
 
 test("a card from a thread renders and its header jumps to the thread", async ({
