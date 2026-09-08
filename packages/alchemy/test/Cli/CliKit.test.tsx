@@ -104,8 +104,19 @@ class InputStream extends PassThrough {
 
   setRawMode(mode: boolean) {
     this.isRaw = mode;
-    if (mode) this.resolveReady?.();
     return this;
+  }
+
+  connect(stdout: CaptureStream) {
+    stdout.on("data", (chunk) => {
+      if (!chunk.toString().includes("\x1b[c")) return;
+      // Raw mode starts before Sigil finishes querying the terminal. Answer
+      // its device query, then allow input handlers to attach before typing.
+      setImmediate(() => {
+        this.write("\x1b[?1;2c");
+        setImmediate(() => this.resolveReady?.());
+      });
+    });
   }
 
   ref() {
@@ -765,6 +776,7 @@ const makeLive = (
       // process.stdin pipe Sigil's useInput throws during commit, which now
       // surfaces as a renderer error instead of being silently swallowed.
       const stdin = overrides.stdin ?? (input ? new InputStream() : undefined);
+      stdin?.connect(stdout);
       const runtime = makeRuntime(
         {
           input,
@@ -2348,11 +2360,7 @@ it.live("defaults nuke plan approval to Cancel", () =>
         Effect.flatMap(() => Effect.die("review ended before prompt")),
       ),
     );
-    // Answer Sigil's startup device query before sending the confirmation key.
-    yield* Effect.promise(() => stdout.waitFor("\x1b[c"));
-    yield* Effect.sync(() => stdin.write("\x1b[?1;2c"));
-    yield* Effect.promise(flushEffects);
-    yield* settleInput;
+    yield* Effect.promise(() => stdin.ready);
     expect(stdout.output).toContain("1 to delete");
     expect(stdout.output).toContain("locally emulated");
     yield* Effect.sync(() => stdin.write("\r"));
