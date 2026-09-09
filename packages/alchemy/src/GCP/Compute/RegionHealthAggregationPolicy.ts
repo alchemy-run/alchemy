@@ -206,8 +206,8 @@ const awaitResource = (project: string, region: string, policyName: string) =>
     Effect.retry({
       while: (error) =>
         error._tag === "GCP.Compute.RegionHealthAggregationPolicyNotResolved",
-      times: 8,
-      schedule: Schedule.spaced("1 second"),
+      times: 20,
+      schedule: Schedule.spaced("2 seconds"),
     }),
   );
 

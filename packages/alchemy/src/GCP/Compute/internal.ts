@@ -175,7 +175,7 @@ export const waitRegion = (
     if (name.length === 0) return operation;
     return yield* waitRegionOperations(
       { project, region, operation: name },
-      { times: options?.times ?? 12 },
+      { times: options?.times ?? 30 },
     );
   });
 

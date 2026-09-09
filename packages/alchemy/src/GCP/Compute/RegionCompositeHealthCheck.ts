@@ -188,8 +188,8 @@ const awaitResource = (
     Effect.retry({
       while: (error) =>
         error._tag === "GCP.Compute.RegionCompositeHealthCheckNotResolved",
-      times: 8,
-      schedule: Schedule.spaced("1 second"),
+      times: 20,
+      schedule: Schedule.spaced("2 seconds"),
     }),
   );
 

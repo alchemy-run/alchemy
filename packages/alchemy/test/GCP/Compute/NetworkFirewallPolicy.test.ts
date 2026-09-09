@@ -44,8 +44,10 @@ const hasReservedGotoNext = (rules: compute.FirewallPolicyRule[] | undefined) =>
       rule.priority <= 2147483647,
   );
 
-const nextName = (name: string) =>
-  name.length < 63 ? `${name}x` : `${name.slice(0, 62)}x`;
+const nextName = (name: string) => {
+  const flip = name.endsWith("x") ? "z" : "x";
+  return name.length < 63 ? `${name}${flip}` : `${name.slice(0, -1)}${flip}`;
+};
 
 test.provider.skipIf(!hasGcpCreds)(
   "getNetworkFirewallPolicies on a missing policy fails with NotFound",
