@@ -908,7 +908,11 @@ await bootstrap(entrypoint);
           .pipe(
             retryActAs,
             Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
-            Effect.tapError(() => deleteHostServiceAccount(env.project, jobId)),
+            Effect.tapError(() =>
+              managed
+                ? deleteHostServiceAccount(env.project, jobId)
+                : Effect.void,
+            ),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);

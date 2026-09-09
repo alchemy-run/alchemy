@@ -1070,7 +1070,9 @@ await bootstrap(entrypoint);
             retryActAs,
             Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
             Effect.tapError(() =>
-              deleteHostServiceAccount(env.project, workerPoolId),
+              managed
+                ? deleteHostServiceAccount(env.project, workerPoolId)
+                : Effect.void,
             ),
           );
         if (created !== undefined) {
