@@ -174,7 +174,7 @@ export const attachStripeToken = (
     const host = yield* Binding.Host;
     if (host === undefined) return;
     const Token = yield* RestrictedApiKey;
-    const token = yield* Token(`${host.LogicalId}StripeToken`);
+    const token = yield* Token(`${host.LogicalId}StripeToken`, {});
     const sid =
       resource !== undefined
         ? `${bindId}:${resource.LogicalId}`

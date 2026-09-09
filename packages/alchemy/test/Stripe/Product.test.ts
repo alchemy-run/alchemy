@@ -136,3 +136,36 @@ test.provider(
     }).pipe(logLevel),
   { timeout: 120_000 },
 );
+
+test.provider(
+  "destroy archives a product that still has prices",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const created = yield* stack.deploy(
+        Effect.gen(function* () {
+          const product = yield* Stripe.Product("PricedProduct", {
+            name: "Alchemy Priced Product",
+          });
+          const price = yield* Stripe.Price("AttachedPrice", {
+            product: product.id,
+            currency: "usd",
+            unitAmount: 1500,
+          });
+          return { product, price };
+        }),
+      );
+
+      expect(created.product.id).toMatch(/^prod_/);
+      expect(created.price.id).toMatch(/^price_/);
+      expect(created.price.product).toEqual(created.product.id);
+
+      yield* stack.destroy();
+
+      const archived = yield* GetProduct({ id: created.product.id });
+      expect(archived.id).toEqual(created.product.id);
+      expect(archived.active).toEqual(false);
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
