@@ -308,6 +308,15 @@ const charter = Effect.gen(function* () {
     Effect.fn(function* (p: { thread: string; ref: string }) {
       const entity = yield* lookup(p.ref);
       yield* threads.attach(p.thread, [entity]);
+      // the thread's conversation is its record, and this attach
+      // happened OUTSIDE it — so it is told, quietly (no wake: the
+      // brief that follows wakes it, with this already in the inbox).
+      // Without this the thread opens on a brief saying "#1521" with
+      // no trace that #1521 is attached, and asks which repository.
+      yield* threadAgent.send(
+        `[attached] ${entity.ref} — ${entity.kind}, ${entity.state} — ${entity.title}`,
+        { key: p.thread, wake: false },
+      );
       return { kind: entity.kind, title: entity.title };
     }),
   );
@@ -316,13 +325,19 @@ const charter = Effect.gen(function* () {
     Detach ${ref} from ${threadId}.`(
     Effect.fn(function* (p: { thread: string; ref: string }) {
       yield* threads.detach(p.thread, p.ref);
+      yield* threadAgent.send(`[detached] ${p.ref}`, {
+        key: p.thread,
+        wake: false,
+      });
     }),
   );
 
   const briefThread = yield* AI.Tool("brief_thread")`
     Send ${text} to ${threadId}'s agent — the brief that starts its
-    work, a steer, the operator's instruction relayed. Fire and
-    forget; its work shows up in the thread.`(
+    work, a steer, the operator's instruction relayed. Name every
+    entity in it fully qualified ("owner/repo#832", as attached),
+    never a bare "#832". Fire and forget; its work shows up in the
+    thread.`(
     Effect.fn(function* (p: { thread: string; text: string }) {
       yield* threadAgent.send(p.text, { key: p.thread });
     }),

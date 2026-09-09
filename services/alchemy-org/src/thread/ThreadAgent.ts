@@ -7,6 +7,7 @@ import * as S from "effect/Schema";
 import { parseEntityRef } from "../channel/Channel.ts";
 import { Engineer } from "../coding/Engineer.ts";
 import { BadRef, makeEntityLookup } from "../github/Entity.ts";
+import { connected, nameOf, primary } from "../github/Repos.ts";
 import { SessionRepo } from "../github/SessionRepo.ts";
 import { pullWorktreeKey, THREAD_TERM, Threads } from "./Threads.ts";
 
@@ -290,6 +291,13 @@ export const ThreadAgentLive = ThreadAgent.make(
       }),
     );
 
+    // the connected repositories are static code (Repos.ts) — constant
+    // for the deploy, so they belong in the stance
+    const primaryName = nameOf(primary);
+    const repoNames = connected
+      .map((entry) => nameOf(entry.repository))
+      .join(", ");
+
     // ── the STANCE: STATIC — one prompt for the session's whole life.
     // Never splice mutable state here: a stance that changes between
     // samplings busts the provider's prompt cache on every call. The
@@ -307,10 +315,14 @@ export const ThreadAgentLive = ThreadAgent.make(
       never post review comments or feedback for humans to act on;
       you do the work instead.
 
-      This thread is ${id}. The conversation is its record — what you
-      attached, spawned, and were told all happened here. ${readState}
-      answers the current books (entities, worktrees, subagents) when
-      you need a snapshot.
+      This thread is ${id}. The org is connected to ${repoNames};
+      ${primaryName} is the primary repository, and a bare "#N" in a
+      brief or a message means ${primaryName}#N — never ask which
+      repository is meant. The conversation is its record — what you
+      attached, spawned, and were told all happened here, including
+      what the channel attached on your behalf ("[attached] …"
+      messages). ${readState} answers the current books (entities,
+      worktrees, subagents) when you need a snapshot.
 
       Your machine is one sandbox for the whole thread. Each pull
       request you govern gets its OWN worktree (${worktree}); tell

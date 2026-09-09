@@ -824,7 +824,10 @@ const ChatTranscript = ({
                           part.type === "text" &&
                           (parseWorldEvent(part.text) !== undefined ||
                             part.text.trim().startsWith("<note>") ||
-                            part.text.trim().startsWith("[reminder]")),
+                            part.text.trim().startsWith("[reminder]") ||
+                            // the channel's bookkeeping, told to the thread
+                            part.text.trim().startsWith("[attached]") ||
+                            part.text.trim().startsWith("[detached]")),
                       ));
                   return (
                     <div key={message.id} className="contents">
