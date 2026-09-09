@@ -25,6 +25,8 @@ import {
   defaultComputeServiceAccount,
   deleteHostServiceAccount,
   ensureHostServiceAccount,
+  hostServiceAccountEmail,
+  hostServiceAccountId,
   retryActAs,
   type GcpHostBinding,
 } from "../Host.ts";
@@ -688,6 +690,12 @@ const toAttrs = (
     image: pool.template?.containers?.[0]?.image,
     createTime: pool.createTime,
     updateTime: pool.updateTime,
+    managedServiceAccount:
+      (pool.template?.serviceAccount ?? "") ===
+      hostServiceAccountEmail(
+        parsed.project || project,
+        hostServiceAccountId(parsed.workerPoolId),
+      ),
   };
 };
 
@@ -1122,10 +1130,7 @@ await bootstrap(entrypoint);
         return yield* new WorkerPoolNotResolved({ name });
       }
 
-      return {
-        ...toAttrs(current, env.project),
-        managedServiceAccount: managed,
-      };
+      return toAttrs(current, env.project);
     }),
 
     delete: Effect.fn(function* ({ output }) {

@@ -23,6 +23,8 @@ import {
   defaultComputeServiceAccount,
   deleteHostServiceAccount,
   ensureHostServiceAccount,
+  hostServiceAccountEmail,
+  hostServiceAccountId,
   retryActAs,
   type GcpHostBinding,
 } from "../Host.ts";
@@ -599,6 +601,12 @@ const toAttrs = (
     trigger: fn.eventTrigger?.trigger,
     createTime: fn.createTime,
     updateTime: fn.updateTime,
+    managedServiceAccount:
+      (fn.serviceConfig?.serviceAccountEmail ?? "") ===
+      hostServiceAccountEmail(
+        parsed.project || project,
+        hostServiceAccountId(parsed.functionId),
+      ),
   };
 };
 
@@ -1093,10 +1101,7 @@ export const FunctionProvider = () =>
         return yield* new FunctionNotResolved({ name });
       }
 
-      return {
-        ...toAttrs(current, env.project),
-        managedServiceAccount: managed,
-      };
+      return toAttrs(current, env.project);
     }),
 
     delete: Effect.fn(function* ({ output }) {

@@ -7,6 +7,7 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import BoundRedisService from "./fixtures/service-redis.ts";
 import BoundService from "./fixtures/service.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -125,7 +126,7 @@ class ServiceNotReady extends Data.TaggedError("ServiceNotReady")<{
 }> {}
 
 test.provider.skipIf(!hasGcpCreds)(
-  "effect-native Function with PubSub, Redis, and Storage bindings",
+  "effect-native Function with PubSub and Storage bindings",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -151,14 +152,45 @@ test.provider.skipIf(!hasGcpCreds)(
           times: 10,
         }),
       );
-      const body = (yield* res.json) as {
-        redis: string | null;
-        published: boolean;
-      };
-      expect(body.redis).toEqual("ok");
+      const body = (yield* res.json) as { published: boolean };
       expect(body.published).toEqual(true);
 
       yield* stack.destroy();
     }).pipe(logLevel),
   { timeout: 180_000 },
+);
+
+test.provider.skipIf(!hasGcpCreds || !process.env.GCP_TEST_REDIS)(
+  "effect-native Function with Memorystore Redis over Direct VPC",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const out = yield* stack.deploy(
+        Effect.gen(function* () {
+          const service = yield* BoundRedisService;
+          return { uri: service.uri };
+        }),
+      );
+
+      expect(out.uri).toEqual(expect.any(String));
+      const client = yield* HttpClient.HttpClient;
+      const res = yield* client.get(out.uri!).pipe(
+        Effect.flatMap((response) =>
+          response.status === 200
+            ? Effect.succeed(response)
+            : Effect.fail(new ServiceNotReady({ status: response.status })),
+        ),
+        Effect.retry({
+          while: (e): e is ServiceNotReady => e._tag === "ServiceNotReady",
+          schedule: Schedule.exponential("500 millis"),
+          times: 10,
+        }),
+      );
+      const body = (yield* res.json) as { redis: string | null };
+      expect(body.redis).toEqual("ok");
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 420_000 },
 );

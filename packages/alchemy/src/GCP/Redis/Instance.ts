@@ -952,14 +952,26 @@ export const InstanceProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
+      yield* getByName(output.name).pipe(
+        Effect.filterOrFail(
+          (instance) =>
+            instance === undefined || (instance.state ?? "") !== "CREATING",
+          () => new InstanceOperationPending({ operation: output.name }),
+        ),
+        Effect.retry({
+          while: (error) => error._tag === "GCP.Redis.InstanceOperationPending",
+          times: 36,
+          schedule: Schedule.spaced("8 seconds"),
+        }),
+      );
       const operation = yield* redis
         .deleteProjectsLocationsInstances({ name: output.name })
         .pipe(
           Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
-            times: 8,
-            schedule: Schedule.spaced("5 seconds"),
+            times: 24,
+            schedule: Schedule.spaced("8 seconds"),
           }),
         );
       if (operation !== undefined) {

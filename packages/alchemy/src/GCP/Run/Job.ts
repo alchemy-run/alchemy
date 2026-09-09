@@ -25,6 +25,8 @@ import {
   defaultComputeServiceAccount,
   deleteHostServiceAccount,
   ensureHostServiceAccount,
+  hostServiceAccountEmail,
+  hostServiceAccountId,
   retryActAs,
   type GcpHostBinding,
 } from "../Host.ts";
@@ -453,6 +455,12 @@ const toAttrs = (job: cloudrun.GoogleCloudRunV2Job, project: string) => {
     taskCount: job.template?.taskCount,
     parallelism: job.template?.parallelism,
     serviceAccount: task?.serviceAccount,
+    managedServiceAccount:
+      (task?.serviceAccount ?? "") ===
+      hostServiceAccountEmail(
+        parsed.project || project,
+        hostServiceAccountId(parsed.jobId),
+      ),
   };
 };
 
@@ -984,10 +992,7 @@ await bootstrap(entrypoint);
         return yield* new JobNotResolved({ name });
       }
 
-      return {
-        ...toAttrs(current, env.project),
-        managedServiceAccount: managed,
-      };
+      return toAttrs(current, env.project);
     }),
 
     delete: Effect.fn(function* ({ output }) {

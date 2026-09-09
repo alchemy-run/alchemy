@@ -25,6 +25,8 @@ import {
   defaultComputeServiceAccount,
   deleteHostServiceAccount,
   ensureHostServiceAccount,
+  hostServiceAccountEmail,
+  hostServiceAccountId,
   retryActAs,
   type GcpHostBinding,
 } from "../Host.ts";
@@ -757,6 +759,12 @@ const toAttrs = (
     generation: service.generation,
     createTime: service.createTime,
     updateTime: service.updateTime,
+    managedServiceAccount:
+      (service.template?.serviceAccount ?? "") ===
+      hostServiceAccountEmail(
+        parsed.project || project,
+        hostServiceAccountId(parsed.serviceId),
+      ),
   };
 };
 
@@ -1186,10 +1194,7 @@ await bootstrap(entrypoint);
         return yield* new ServiceNotResolved({ name });
       }
 
-      return {
-        ...toAttrs(current, env.project),
-        managedServiceAccount: managed,
-      };
+      return toAttrs(current, env.project);
     }),
 
     delete: Effect.fn(function* ({ output }) {
