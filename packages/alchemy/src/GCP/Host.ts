@@ -189,6 +189,7 @@ const isSaCreateQuotaError = (error: {
   message?: string;
 }): boolean =>
   error._tag === "TooManyRequests" ||
+  error._tag === "ServiceAccountQuotaExceeded" ||
   (error._tag === "UnknownGCPError" &&
     (error.message ?? "").includes("Service accounts created per minute"));
 
@@ -206,21 +207,51 @@ const grantActAs = (project: string, saName: string) =>
       const fs = yield* FileSystem.FileSystem;
       const raw = yield* fs
         .readFileString(keyFile.value)
-        .pipe(Effect.catch(() => Effect.succeed("")));
+        .pipe(
+          Effect.catchReason("PlatformError", "NotFound", () =>
+            Effect.succeed(""),
+          ),
+        );
       if (raw.length > 0) {
         const parsed = yield* parseServiceAccountKey(raw).pipe(
-          Effect.catch(() => Effect.succeed(undefined)),
+          Effect.catchTag("AuthError", () => Effect.succeed(undefined)),
         );
         if (parsed?.client_email) {
           members.push(`serviceAccount:${parsed.client_email}`);
         }
       }
     }
+    const policy = yield* iam
+      .getIamPolicyProjectsServiceAccounts({ resource: saName })
+      .pipe(
+        Effect.catchTag("NotFound", () =>
+          Effect.succeed({ bindings: [] as iam.Policy["bindings"] }),
+        ),
+      );
+    const bindings = [...(policy.bindings ?? [])];
+    const role = "roles/iam.serviceAccountUser";
+    let dirty = false;
+    const existing = bindings.find((binding) => binding.role === role);
+    if (existing === undefined) {
+      bindings.push({ role, members });
+      dirty = true;
+    } else {
+      const current = existing.members ?? [];
+      for (const member of members) {
+        if (!current.includes(member)) {
+          existing.members = [...current, member];
+          dirty = true;
+        }
+      }
+    }
+    if (!dirty) return;
     yield* iam.setIamPolicyProjectsServiceAccounts({
       resource: saName,
       body: {
         policy: {
-          bindings: [{ role: "roles/iam.serviceAccountUser", members }],
+          ...policy,
+          etag: policy.etag,
+          bindings,
         },
       },
     });

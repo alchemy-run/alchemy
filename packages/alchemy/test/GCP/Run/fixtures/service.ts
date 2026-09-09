@@ -12,6 +12,12 @@ export default class BoundService extends GCP.Function<BoundService>()(
     main: import.meta.url,
     location: "us-central1",
     invokerIamDisabled: true,
+    template: {
+      vpcAccess: {
+        egress: "PRIVATE_RANGES_ONLY",
+        networkInterfaces: [{ network: "default", subnetwork: "default" }],
+      },
+    },
   },
   Effect.gen(function* () {
     const tweets = yield* GCP.PubSub.Topic("tweets", {});

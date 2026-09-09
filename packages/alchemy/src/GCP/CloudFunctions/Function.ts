@@ -327,6 +327,8 @@ export type Function = Resource<
     createTime: string | undefined;
     /** RFC3339 last-update timestamp. */
     updateTime: string | undefined;
+    /** True when Alchemy minted the per-host runtime service account. */
+    managedServiceAccount: boolean;
   },
   GcpHostBinding,
   Providers
@@ -1091,7 +1093,10 @@ export const FunctionProvider = () =>
         return yield* new FunctionNotResolved({ name });
       }
 
-      return toAttrs(current, env.project);
+      return {
+        ...toAttrs(current, env.project),
+        managedServiceAccount: managed,
+      };
     }),
 
     delete: Effect.fn(function* ({ output }) {
@@ -1102,6 +1107,8 @@ export const FunctionProvider = () =>
         yield* waitForOperation(operation, { notFoundOk: true });
       }
       yield* waitUntilGone(output.name);
-      yield* deleteHostServiceAccount(output.project, output.functionId);
+      if (output.managedServiceAccount) {
+        yield* deleteHostServiceAccount(output.project, output.functionId);
+      }
     }),
   });
