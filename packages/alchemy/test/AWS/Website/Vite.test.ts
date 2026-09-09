@@ -35,7 +35,11 @@ const staticFixtureDir = pathe.resolve(
 // hoisted node_modules (the fixture has no node_modules).
 const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
 
-describe.skipIf(!runLive)("AWS.Website.Vite", () => {
+// Also skipped under the floci runner (`runEmulated`): in dev the composite
+// deploys nothing but the vite dev server, so the live CloudFront topology
+// this test asserts never exists. The emulated pipeline test below and
+// Vite.local.test.ts cover the dev-mode behavior.
+describe.skipIf(!runLive || runEmulated)("AWS.Website.Vite", () => {
   test.provider(
     "deploys the vite build to S3 behind CloudFront with SPA fallback",
     (stack) =>

@@ -27,6 +27,7 @@ export interface ViteChildConfig {
   source?: {
     descriptor: WorkerSourceDescriptor;
     id: string;
+    fqn: string;
     assets: WorkerAssetsConfig | undefined;
   };
   worker: {

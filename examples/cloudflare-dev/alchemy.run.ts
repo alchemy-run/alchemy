@@ -122,7 +122,6 @@ const MediaWorker = Effect.gen(function* () {
   });
   const worker = yield* Cloudflare.Worker("MediaWorker", {
     main: "./src/MediaWorker.ts",
-    compatibility: { flags: ["nodejs_compat"] },
     env: {
       BROWSER: Cloudflare.Browser("BROWSER"),
       IMAGES: Cloudflare.Images.Images("IMAGES"),

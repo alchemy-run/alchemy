@@ -1,3 +1,34 @@
+import { preferLocalFlociImage } from "./floci-image.ts";
+
+// `bun test:examples --profile testing` — the example suites read the
+// profile from `ALCHEMY_PROFILE` (`Test.make({ profile: process.env.ALCHEMY_PROFILE })`),
+// so translate the flag into the env every spawned `bun test` inherits.
+// Without this the flag was silently ignored and every suite ran against
+// the `default` profile, which only works when the shell already exports
+// `ALCHEMY_PROFILE`.
+{
+  const argv = process.argv.slice(2);
+  const index = argv.findIndex(
+    (arg) => arg === "--profile" || arg.startsWith("--profile="),
+  );
+  if (index !== -1) {
+    const arg = argv[index]!;
+    const profile = arg.includes("=")
+      ? arg.slice("--profile=".length)
+      : argv[index + 1];
+    if (profile === undefined || profile.startsWith("-")) {
+      console.error("--profile requires a value, e.g. --profile testing");
+      process.exit(2);
+    }
+    process.env.ALCHEMY_PROFILE = profile;
+  }
+}
+
+// The AWS examples run against the floci emulator: use the locally built
+// image when there is one so an emulator fix is testable before its
+// release image lands on GHCR.
+preferLocalFlociImage("test:examples");
+
 const examples = [
   "./examples/cloudflare-dev",
   "./examples/cloudflare-worker",
@@ -19,6 +50,7 @@ const examples = [
   "./examples/cloudflare-website-sveltekit",
   "./examples/cloudflare-website-vite",
   "./examples/cloudflare-website-waku",
+  "./examples/cloudflare-website-vocs",
   "./examples/aws-dev",
   // "./examples/aws-ecs",
   "./examples/aws-lambda",
@@ -85,6 +117,13 @@ const examples = [
   "./examples/fly-postgres",
 ] as const;
 
+// The AWS examples share one floci emulator container (`alchemy-floci`):
+// two `alchemy dev` sessions ensuring it at the same time race to recreate
+// it on an image bump and hot-swap each other's Lambda code, so they run
+// one at a time. Everything else stays concurrent.
+const serialGroup = (example: string): string | undefined =>
+  example.startsWith("./examples/aws-") ? "floci" : undefined;
+
 type CommandResult = {
   label: string;
   command: readonly string[];
@@ -93,10 +132,15 @@ type CommandResult = {
   stderr: string;
 };
 
-type TaskState = {
+type Task = {
   label: string;
   command: readonly string[];
   cwd?: string;
+  /** Tasks sharing a key run one at a time, in list order. */
+  serial?: string;
+};
+
+type TaskState = Task & {
   status: "pending" | "running" | "ok" | "failed";
   startedAt?: number;
   endedAt?: number;
@@ -180,6 +224,23 @@ const makeStatusRenderer = (states: readonly TaskState[]) => {
   };
 
   return {
+    failure(result: CommandResult) {
+      if (interactive && renderedRows > 0) {
+        process.stdout.write(`\x1b[${renderedRows}F\x1b[J`);
+        renderedRows = 0;
+      }
+      const output = [
+        `\nFailed: ${result.label} (exit ${result.exitCode ?? "signal"}): ${result.command.join(" ")}`,
+        `--- ${result.label} stdout ---`,
+        result.stdout.trimEnd() || "(empty)",
+        `--- ${result.label} stderr ---`,
+        result.stderr.trimEnd() || "(empty)",
+        "",
+      ].join("\n");
+      // Use the TUI's stream so its next repaint starts below the logs.
+      (interactive ? process.stdout : process.stderr).write(output);
+      this.render();
+    },
     render() {
       if (!interactive) {
         return;
@@ -243,11 +304,7 @@ const run = async (
 };
 
 const runParallel = async (
-  tasks: readonly {
-    label: string;
-    command: readonly string[];
-    cwd?: string;
-  }[],
+  tasks: readonly Task[],
 ): Promise<readonly CommandResult[]> => {
   const states = tasks.map((task): TaskState => ({
     ...task,
@@ -256,10 +313,24 @@ const runParallel = async (
   const renderer = makeStatusRenderer(states);
   renderer.render();
   const interval = setInterval(() => renderer.render(), 1000);
+  const chains = new Map<string, Promise<unknown>>();
 
   try {
     return await Promise.all(
-      states.map((state) => run(state, () => renderer.render())),
+      states.map((state) => {
+        const start = async () => {
+          const result = await run(state, () => renderer.render());
+          if (result.exitCode !== 0) renderer.failure(result);
+          return result;
+        };
+        if (state.serial === undefined) return start();
+        const next = (chains.get(state.serial) ?? Promise.resolve()).then(
+          start,
+          start,
+        );
+        chains.set(state.serial, next);
+        return next;
+      }),
     );
   } finally {
     clearInterval(interval);
@@ -276,6 +347,7 @@ const testResults = await runParallel(
     // ever spawn the actual test process.
     command: ["bun", "test"] as const,
     cwd: example,
+    serial: serialGroup(example),
   })),
 );
 const failedTests = testResults.filter((result) => result.exitCode !== 0);
@@ -289,20 +361,23 @@ if (failedTests.length > 0) {
     );
   }
 
-  for (const failure of failedTests) {
-    console.error(`\n--- ${failure.label} stdout ---`);
-    if (failure.stdout.length > 0) {
-      console.error(failure.stdout.trimEnd());
-    } else {
-      console.error("(empty)");
-    }
+  process.exit(1);
+}
 
-    console.error(`\n--- ${failure.label} stderr ---`);
-    if (failure.stderr.length > 0) {
-      console.error(failure.stderr.trimEnd());
-    } else {
-      console.error("(empty)");
-    }
+const cliResults = await runParallel(
+  examples.map((example) => ({
+    label: `${example} CLI lifecycle`,
+    command: ["bun", "scripts/test-example-cli.ts", example],
+    serial: serialGroup(example),
+  })),
+);
+const failedCliTests = cliResults.filter((result) => result.exitCode !== 0);
+
+if (failedCliTests.length > 0) {
+  console.error("\nFailed example CLI lifecycle tests:");
+  for (const failure of failedCliTests) {
+    const exit = failure.exitCode === null ? "signal" : failure.exitCode;
+    console.error(`- ${failure.label} (exit ${exit})`);
   }
   process.exit(1);
 }

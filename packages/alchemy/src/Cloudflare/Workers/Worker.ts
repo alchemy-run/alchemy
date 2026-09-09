@@ -23,6 +23,7 @@ import {
 import {
   isResourceOfType,
   Resource,
+  type ResourceClass,
   type ResourceClassLike,
 } from "../../Resource.ts";
 import type { Rpc } from "../../Rpc.ts";
@@ -1301,6 +1302,14 @@ export type Worker<Bindings = any> = Resource<
      * `WorkerProps.cache` takes precedence.
      */
     cache?: WorkerCache;
+    /**
+     * Workers Observability traces settings contributed by
+     * `Cloudflare.Telemetry()`. Deep-merged into upload metadata: bound
+     * traces fill in when `WorkerProps.observability.traces` is omitted,
+     * and never clobber the default logs config. An explicit
+     * `observability.traces` object wins.
+     */
+    observability?: Pick<WorkerObservability, "traces">;
     containers?: {
       className: string;
       dev: DevContainerImage | undefined;
@@ -1450,11 +1459,11 @@ export const isSelf = (value: unknown): value is Self =>
  *
  * ```typescript
  * Effect.gen(function* () {
- *   // Phase 1: bind resources (runs at deploy time)
+ *   // Construction: bind resources (deploy time and cold start)
  *   const kv = yield* Cloudflare.KV.ReadWriteNamespace(MyKV);
  *
  *   return {
- *     // Phase 2: runtime handlers (runs on each request)
+ *     // Runtime: handlers, once per request
  *     fetch: Effect.gen(function* () {
  *       const value = yield* kv.get("key");
  *       return HttpServerResponse.text(value ?? "not found");
@@ -1464,7 +1473,7 @@ export const isSelf = (value: unknown): value is Self =>
  * ```
  *
  * There are three ways to define a Worker, from simplest to most
- * flexible. See the [Functions & Servers](/infrastructure-as-effects/functions-and-servers)
+ * flexible. See the [Runtime](/infrastructure-as-effects/runtime)
  * page for the full explanation.
  *
  * - **Async** — plain `async fetch` handler, no Effect runtime in the bundle.
@@ -1571,6 +1580,37 @@ export const isSelf = (value: unknown): value is Self =>
  * };
  * ```
  *
+ * **Example:** Binding a named entrypoint
+ *
+ * `env: { TARGET: worker }` targets the Worker's default entrypoint.
+ * `Cloudflare.WorkerEntrypoint` binds one of its named
+ * `WorkerEntrypoint` class exports instead; `InferEnv` types the entry
+ * as a `Fetcher` stub whose RPC methods are called directly.
+ * ```typescript
+ * const caller = yield* Cloudflare.Worker("Caller", {
+ *   main: "./src/caller.ts",
+ *   env: {
+ *     API: Cloudflare.WorkerEntrypoint(target, "Api"), // env.API.greet("alice")
+ *   },
+ * });
+ * ```
+ *
+ * **Example:** Entrypoint props
+ *
+ * The options form attaches properties the target entrypoint reads from
+ * `this.ctx.props`. `Output` values resolve at deploy time. `alchemy dev`
+ * delivers `props` to the local workerd; the deploy API's binding schema
+ * does not carry the field yet, so `props` are dropped at upload while the
+ * binding itself deploys correctly.
+ * ```typescript
+ * env: {
+ *   VENDOR: Cloudflare.WorkerEntrypoint(vendorWorker, {
+ *     entrypoint: "Vendor",
+ *     props: { baseUrl: site.url },
+ *   }),
+ * }
+ * ```
+ *
  * ### Python Workers
  * Point `main` at a `.py` file to deploy a
  * [Python Worker](https://developers.cloudflare.com/workers/languages/python/)
@@ -1634,11 +1674,11 @@ export const isSelf = (value: unknown): value is Self =>
  *   "MyWorker",
  *   { main: import.meta.url },
  *   Effect.gen(function* () {
- *     // init: bind resources
+ *     // Construction: bind resources
  *     const kv = yield* Cloudflare.KV.ReadWriteNamespace(MyKV);
  *
  *     return {
- *       // runtime: use them
+ *       // Runtime: use them
  *       fetch: Effect.gen(function* () {
  *         const value = yield* kv.get("key");
  *         return HttpServerResponse.text(value ?? "not found");
@@ -1674,11 +1714,11 @@ export const isSelf = (value: unknown): value is Self =>
  * export default WorkerB.make(
  *   { main: import.meta.url },
  *   Effect.gen(function* () {
- *     // init: bind resources
+ *     // Construction: bind resources
  *     const kv = yield* Cloudflare.KV.ReadWriteNamespace(MyKV);
  *
  *     return {
- *       // runtime: use them
+ *       // Runtime: use them
  *       greet: (name: string) =>
  *         Effect.gen(function* () {
  *           yield* kv.put("last-greeted", name);
@@ -1718,7 +1758,7 @@ export const isSelf = (value: unknown): value is Self =>
  *   main: import.meta.url,
  *   compatibility: {
  *     flags: ["nodejs_compat"],
- *     date: "2026-03-17",
+ *     date: "2026-08-31",
  *   },
  * }
  * ```
@@ -1728,6 +1768,25 @@ export const isSelf = (value: unknown): value is Self =>
  * {
  *   main: import.meta.url,
  *   assets: "./public",
+ * }
+ * ```
+ *
+ * **Example:** Run the Worker before the asset layer
+ *
+ * A path that matches no asset already falls through to the Worker.
+ * `runWorkerFirst` routes the listed paths (or, with `true`, every
+ * request) through the Worker ahead of asset matching, for an asset
+ * that would otherwise shadow a route or an SPA fallback that would
+ * answer an API call. A `_headers` or `_redirects` file in the
+ * directory is applied automatically and `.assetsignore` excludes
+ * files from the upload.
+ * ```typescript
+ * {
+ *   main: import.meta.url,
+ *   assets: {
+ *     directory: "./public",
+ *     runWorkerFirst: ["/api/*", "/admin/*"],
+ *   },
  * }
  * ```
  *
@@ -1774,17 +1833,13 @@ export const isSelf = (value: unknown): value is Self =>
  * ```
  *
  * ### Bundling & Tree-shaking
- * `main` is bundled with rolldown at deploy time. Top-level calls in the
- * `effect`, `@effect/*`, `alchemy`, `@alchemy.run/*`, and
- * `@distilled.cloud/*` packages receive `#__PURE__` annotations by
- * default, so anything the Worker doesn't use from those packages is
- * tree-shaken out of the bundle. Any other
- * package — including your own app — is left untouched unless you list
- * it explicitly.
+ * `main` is bundled with rolldown at deploy time. Unused code is
+ * tree-shaken. `effect`, alchemy, and `@distilled.cloud` are marked
+ * pure so unused parts prune more aggressively. Your app is not
+ * marked pure.
  *
- * **Example:** Treat additional packages as pure
- * Pass package names (or picomatch globs) via `build.pure.packages` to
- * annotate them in addition to the defaults.
+ * **Example:** Mark additional packages as pure
+ * Only list packages with no top-level side effects.
  * ```typescript
  * {
  *   main: "./src/worker.ts",
@@ -1794,18 +1849,7 @@ export const isSelf = (value: unknown): value is Self =>
  * }
  * ```
  *
- * Listing a package annotates calls whose result is bound (variable
- * initializers, exports) — safe anywhere. If a listed package also
- * declares `"sideEffects": false` (or `[]`) in its `package.json`, that
- * combination opts it into full annotation: top-level calls whose result
- * is discarded (e.g. `router.on("/path", handler)` registrations) are
- * also marked pure and deleted under minification when unused. Only list
- * a `sideEffects: false` package if its modules really are free of
- * meaningful top-level side effects. The `effect`, `alchemy`, and
- * `@distilled.cloud` defaults declare exactly that, on purpose — their
- * modules are designed to be fully tree-shakeable.
- *
- * **Example:** Disable pure annotations
+ * **Example:** Turn it off
  * ```typescript
  * {
  *   main: "./src/worker.ts",
@@ -1957,10 +2001,10 @@ export const isSelf = (value: unknown): value is Self =>
  *     return {
  *       fetch: Effect.gen(function* () {
  *         const publicUrl = yield* url;
- *         return Response.json({ url: publicUrl });
+ *         return yield* HttpServerResponse.json({ url: publicUrl });
  *       }),
  *     };
- *   }).pipe(Effect.provide(Cloudflare.Workers.URLBinding)),
+ *   }),
  * );
  * ```
  *
@@ -1984,6 +2028,12 @@ export const isSelf = (value: unknown): value is Self =>
  * prop. Pass the prop yourself to tune sampling, enable persistence, or
  * turn on the new `traces` channel (the same toggle the dashboard's
  * Observability tab writes).
+ *
+ * Effect-native Workers should prefer `Cloudflare.Telemetry()` over
+ * setting `observability.traces` by hand: providing the Layer enables
+ * traces on this Worker and mirrors `Effect.withSpan` into the Cloudflare
+ * waterfall. Pin `compatibility: { date: "2026-08-25" }` (or later) until
+ * the global default date is raised past 2026-07-28.
  *
  * Field names match the Cloudflare API (camelCased): `headSamplingRate`,
  * `invocationLogs`, etc.
@@ -2058,7 +2108,7 @@ export const isSelf = (value: unknown): value is Self =>
  * Workers Cache puts a regionally tiered cache in front of the Worker —
  * cache hits are served from the edge without invoking the Worker (and
  * without billing CPU time). In an Effect-native Worker, enable it by
- * yielding `Cloudflare.cache()` in the init phase, which also returns the
+ * yielding `Cloudflare.cache()` in the Construction phase, which also returns the
  * runtime purge client; async Workers use the `cache` prop instead. Control
  * what gets cached from your handlers via standard response headers:
  * `Cache-Control` (including `stale-while-revalidate`), `Cache-Tag` for
@@ -2071,7 +2121,7 @@ export const isSelf = (value: unknown): value is Self =>
  * **Example:** Enabling and purging the cache in an Effect Worker
  * ```typescript
  * Effect.gen(function* () {
- *   // init: enable Workers Cache on this Worker
+ *   // Construction: enable Workers Cache on this Worker
  *   const { purge } = yield* Cloudflare.cache({ crossVersionCache: true });
  *
  *   return {
@@ -2114,17 +2164,17 @@ export const isSelf = (value: unknown): value is Self =>
  *
  * For ad-hoc background work, `WorkerExecutionContext.waitUntil(effect)`
  * forks an Effect with the caller's full context and keeps the invocation
- * alive until it settles. The context can be yielded once in the init
- * closure and used from any handler; its methods are `RuntimeContext`-
+ * alive until it settles. The context can be yielded once in the
+ * constructor and used from any handler; its methods are `RuntimeContext`-
  * colored, so they can only run inside a handler.
  *
- * The init closure is evaluated once per isolate: the bridge builds the
+ * The constructor is evaluated once per isolate: the bridge builds the
  * Worker's layer stack on the first event and every later event reuses the
  * built services. Resolve services, bind resources, build handlers there —
  * one-shot I/O that caches a plain value (e.g. fetching a secret for a
  * client) is fine, but nothing disposable: the build scope is never closed
- * (workerd has no isolate-teardown hook), so a finalizer added in the init
- * closure never runs, and I/O-backed objects (sockets, response bodies) are
+ * (workerd has no isolate-teardown hook), so a finalizer added in the
+ * constructor never runs, and I/O-backed objects (sockets, response bodies) are
  * pinned to the request that created them. Anything that needs cleanup
  * belongs in a handler, where `Effect.addFinalizer` attaches to the
  * per-event scope.
@@ -2142,7 +2192,7 @@ export const isSelf = (value: unknown): value is Self =>
  *
  * **Example:** Background work with waitUntil
  * ```typescript
- * // init
+ * // Construction
  * const exec = yield* Cloudflare.WorkerExecutionContext;
  *
  * return {
@@ -2155,13 +2205,13 @@ export const isSelf = (value: unknown): value is Self =>
  * ```
  *
  * ### R2 Bucket
- * Bind an R2 bucket in the init phase with `Cloudflare.R2.ReadWriteBucket`.
+ * Bind an R2 bucket in the Construction phase with `Cloudflare.R2.ReadWriteBucket`.
  * The returned handle exposes `get`, `put`, `delete`, and `list`
  * methods you can call in your runtime handlers.
  *
  * **Example:** Binding and using R2
  * ```typescript
- * // init
+ * // Construction
  * const bucket = yield* Cloudflare.R2.ReadWriteBucket(MyBucket);
  *
  * return {
@@ -2189,7 +2239,7 @@ export const isSelf = (value: unknown): value is Self =>
  *
  * **Example:** Binding and using KV
  * ```typescript
- * // init
+ * // Construction
  * const kv = yield* Cloudflare.KV.ReadWriteNamespace(MyKV);
  *
  * return {
@@ -2207,7 +2257,7 @@ export const isSelf = (value: unknown): value is Self =>
  *
  * **Example:** Binding and querying D1
  * ```typescript
- * // init
+ * // Construction
  * const db = yield* Cloudflare.D1.QueryDatabase(MyDatabase);
  *
  * return {
@@ -2222,13 +2272,13 @@ export const isSelf = (value: unknown): value is Self =>
  * ```
  *
  * ### Durable Objects
- * Yield a `DurableObject` class in the init phase to get a
+ * Yield a `DurableObject` class in the Construction phase to get a
  * namespace handle. Call `getByName` or `getById` to get a typed RPC
  * stub, then call its methods from your runtime handlers.
  *
  * **Example:** Using a Durable Object
  * ```typescript
- * // init
+ * // Construction
  * const counters = yield* Counter;
  *
  * return {
@@ -2242,7 +2292,7 @@ export const isSelf = (value: unknown): value is Self =>
  *
  * ### Containers
  * Containers run long-lived processes alongside Durable Objects.
- * Provide `Cloudflare.Containers.layer(Sandbox, …)` on a DO's init to
+ * Provide `Cloudflare.Containers.layer(Sandbox, …)` on a DO's constructor to
  * bind, start, and monitor the container; then `yield* Sandbox`
  * resolves the **running** instance. Call its typed methods or use
  * `getTcpPort` to make HTTP requests to its exposed ports.
@@ -2282,13 +2332,13 @@ export const isSelf = (value: unknown): value is Self =>
  *
  * **Example:** Loading a dynamic Worker
  * ```typescript
- * // init
+ * // Construction
  * const loader = yield* Cloudflare.WorkerLoader("Loader");
  *
  * return {
  *   fetch: Effect.gen(function* () {
  *     const worker = yield* loader.load({
- *       compatibilityDate: "2026-01-28",
+ *       compatibilityDate: "2026-08-31",
  *       mainModule: "worker.js",
  *       modules: {
  *         "worker.js": `export default {
@@ -2310,6 +2360,7 @@ export const isSelf = (value: unknown): value is Self =>
  * @category Workers & Compute
  */
 export const Worker: ResourceClassLike<Worker> &
+  Pick<ResourceClass<Worker>, "ref"> &
   Effect.Effect<
     Worker & WorkerRuntimeContext & RuntimeContext,
     never,

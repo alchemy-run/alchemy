@@ -2,8 +2,8 @@
  * The `alchemy-test` CLI.
  *
  * ```sh
- * alchemy-test [paths...] [-t pattern] [--timeout ms] [--retry n]
- *              [--concurrency n] [--sequential] [--tui]
+ * alchemy-test [paths...] [-t pattern] [--exclude path]... [--timeout ms]
+ *              [--retry n] [--concurrency n] [--sequential] [--tui]
  *              [--profile name] [--fast]
  * ```
  *
@@ -47,6 +47,13 @@ const testNamePattern = Flag.string("test-name-pattern").pipe(
   Flag.withAlias("t"),
   Flag.withDescription("Only run tests whose title matches this regex"),
   Flag.optional,
+);
+
+const exclude = Flag.string("exclude").pipe(
+  Flag.withDescription(
+    "Skip test files under this path (repeatable). Existing files/directories exclude by prefix; anything else is a case-insensitive substring filter. Explicitly passing an excluded path as a positional argument overrides the exclusion.",
+  ),
+  Flag.atLeast(0),
 );
 
 const timeout = Flag.integer("timeout").pipe(
@@ -134,6 +141,7 @@ const rootCommand = Command.make(
   {
     paths,
     testNamePattern,
+    exclude,
     timeout,
     retry,
     concurrency,
@@ -146,21 +154,25 @@ const rootCommand = Command.make(
     // Environment knobs — set BEFORE any test module is imported (imports
     // happen inside `run` during collection), so `skipIf(process.env.FAST)`
     // gates and profile-dependent layers see the final values.
-    //
-    // CI=true: interactive-detection gates (`process.env.CI`, TTY probes)
-    // make tools take "inherit the terminal" paths — e.g. drizzle-kit is
-    // spawned with stdio: "inherit" when interactive — and raw child writes
-    // to our TTY corrupt the reporter/TUI. CI=true forces every such tool
-    // down its non-interactive path; anything they print through pipes or
-    // the Console service is still captured per test.
+    // Inherit CI from the caller: setting it here also disables local auth
+    // profiles, even when the caller explicitly selected one.
     yield* Effect.sync(() => {
-      process.env.CI ??= "true";
       if (Option.isSome(args.profile)) {
         process.env.ALCHEMY_PROFILE = args.profile.value;
       }
       if (args.fast) {
         process.env.FAST = "1";
       }
+      // The runner owns the terminal: stdout belongs to the reporter (or
+      // the TUI) and stdin carries TUI keystrokes. Code under test must see
+      // the same non-interactive, colorless process CI gives it, regardless
+      // of the terminal this run was launched from — otherwise assertions
+      // on CLI output and on interactive-vs-plain copy depend on whether a
+      // human or a pipeline started the run. Sigil's detection honors
+      // FORCE_COLOR over everything else, so pin it rather than NO_COLOR.
+      process.env.ALCHEMY_NO_TUI = "1";
+      process.env.NO_COLOR = "1";
+      process.env.FORCE_COLOR = "0";
     });
 
     // Plain line output by default; the TUI is opt-in (`--tui`) and requires
@@ -185,6 +197,7 @@ const rootCommand = Command.make(
     const options: RunOptions = {
       root,
       paths: args.paths,
+      exclude: args.exclude,
       filter: toFilter(args.testNamePattern),
       timeout: args.timeout,
       retry: args.retry,

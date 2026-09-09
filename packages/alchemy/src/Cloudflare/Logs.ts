@@ -6,6 +6,7 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as Socket from "effect/unstable/socket/Socket";
 import type { LogLine, LogsInput } from "../Provider.ts";
+import { profileCommandHint } from "../Util/interactive.ts";
 
 const DEFAULT_LOOKBACK_MS = 1 * 60 * 60 * 1000;
 
@@ -80,7 +81,7 @@ export const CloudflareLogs = Effect.gen(function* () {
 
   /**
    * The telemetry query needs the `workers_observability:read` OAuth scope.
-   * A token minted by an older `alchemy login` (before the scope joined the
+   * A token minted by an older login (before the scope joined the
    * defaults) keeps its original grants forever, so the query fails with a
    * bare `Unauthorized`/`Forbidden` even though a fresh login would work —
    * explain the fix instead of surfacing the raw tag.
@@ -90,15 +91,20 @@ export const CloudflareLogs = Effect.gen(function* () {
   ): Effect.Effect<A, workers.QueryObservabilityTelemetryError, R> =>
     effect.pipe(
       Effect.catchTag("Unauthorized", () =>
-        Effect.die(
-          new Error(
-            "Cloudflare rejected the observability telemetry query (Unauthorized). " +
-              'Your stored credentials are likely missing the "workers_observability:read" scope — ' +
-              "OAuth tokens keep the scopes they were minted with, so tokens from an older " +
-              "`alchemy login` won't have it. Run `alchemy login` again to mint a token with " +
-              "the current default scopes, or use an API token that grants Workers Observability read access.",
-          ),
-        ),
+        Effect.gen(function* () {
+          const command = yield* profileCommandHint(
+            "alchemy profile edit --reconfigure Cloudflare",
+          );
+          return yield* Effect.die(
+            new Error(
+              "Cloudflare rejected the observability telemetry query (Unauthorized). " +
+                'Your stored credentials are likely missing the "workers_observability:read" scope — ' +
+                "OAuth tokens keep the scopes they were minted with, so tokens minted by " +
+                `an older login won't have it. Run \`${command}\` to mint a token with ` +
+                "the current default scopes, or use an API token that grants Workers Observability read access.",
+            ),
+          );
+        }),
       ),
     );
 

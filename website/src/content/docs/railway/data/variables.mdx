@@ -4,7 +4,7 @@ description: Config.redacted on a Service, Railway.Variable when Railway should 
 ---
 
 Most secrets in a [`Service`](/railway/compute/services) come from
-your `.env`. Yield `Config.redacted` in init. Alchemy binds the
+your `.env`. Yield `Config.redacted` in the constructor. Alchemy binds the
 value onto the Service.
 
 Use [`Railway.Variable`](/providers/railway/variable) when the value
@@ -114,7 +114,7 @@ export default class Api extends Railway.Service<Api>()(
 ) {}
 ```
 
-Yield the Variable in the Stack (or from Service init) so it is
+Yield the Variable in the Stack (or from the Service's constructor) so it is
 part of the graph.
 
 ## Variable references
