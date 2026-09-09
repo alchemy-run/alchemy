@@ -165,7 +165,50 @@ const makeClient = () => {
         project: resourceRef("projects", "project-1", "app"),
         region: { id: "us-east-1", name: "US East" },
         source: { type: "empty" },
-        branchId: null,
+        branchId: (input as { branchId?: string }).branchId ?? null,
+      });
+    },
+    updateDatabase: (
+      id: string,
+      input: { name?: string; branchId?: string },
+    ) => {
+      calls.push(["updateDatabase", { id, input }]);
+      return Effect.succeed({
+        id,
+        type: "database",
+        url: `https://api.prisma.test/v1/databases/${id}`,
+        name: input.name ?? "main",
+        status: "ready",
+        createdAt,
+        isDefault: false,
+        defaultConnectionId: "connection-1",
+        connections: [
+          {
+            id: "connection-1",
+            type: "connection",
+            url: "https://api.prisma.test/v1/connections/connection-1",
+            name: "default",
+            createdAt,
+            kind: "postgres",
+            endpoints: {
+              direct: {
+                host: "db.prisma.test",
+                port: 5432,
+                connectionString: "postgres://direct",
+              },
+              pooled: {
+                host: "pool.prisma.test",
+                port: 5432,
+                connectionString: "postgres://pooled",
+              },
+            },
+            database: resourceRef("databases", id, "main"),
+          },
+        ],
+        project: resourceRef("projects", "project-1", "app"),
+        region: { id: "us-east-1", name: "US East" },
+        source: { type: "empty" },
+        branchId: input.branchId ?? null,
       });
     },
     listDatabaseConnections: (databaseId: string, query: unknown) => {
@@ -2024,6 +2067,18 @@ describe("Prisma resource providers", () => {
               branchGitName: undefined,
             },
           ],
+          ["listBranches", { projectId: "project-1", query: { limit: 100 } }],
+          [
+            "updateDatabase",
+            {
+              id: "database-1",
+              input: {
+                name: "main",
+                branchId: "branch-1",
+                branchGitName: undefined,
+              },
+            },
+          ],
           [
             "listDatabaseConnections",
             { databaseId: "database-1", query: { limit: 100 } },
@@ -2098,7 +2153,7 @@ describe("Prisma resource providers", () => {
             "listBranches",
             {
               projectId: "project-1",
-              query: { gitName: "main", limit: 100 },
+              query: { gitName: "main", limit: 2 },
             },
           ],
         ]);
@@ -3414,13 +3469,9 @@ describe("Prisma resource providers", () => {
           ["getDatabase", "database-1"],
           [
             "listBranches",
-            { projectId: "project-1", query: { gitName: "main", limit: 2 } },
-          ],
-          [
-            "listBranches",
             {
               projectId: "project-1",
-              query: { gitName: "main", limit: 100 },
+              query: { gitName: "main", limit: 2 },
             },
           ],
           ["getApp", "service-1"],
@@ -3428,7 +3479,7 @@ describe("Prisma resource providers", () => {
             "listBranches",
             {
               projectId: "project-1",
-              query: { gitName: "main", limit: 100 },
+              query: { gitName: "main", limit: 2 },
             },
           ],
         ]);
@@ -3464,7 +3515,7 @@ describe("Prisma resource providers", () => {
         project: resourceRef("projects", "project-1", "app"),
         region: { id: "us-east-1", name: "US East" },
         source: { type: "database" as const, databaseId: "source" },
-        branchId: null,
+        branchId: "branch-1",
       };
       const client = {
         getDatabase: (id: string) =>
@@ -3472,6 +3523,19 @@ describe("Prisma resource providers", () => {
             calls.push(["getDatabase", id]);
             return database;
           }),
+        listBranches: (projectId: string) =>
+          Effect.succeed([
+            {
+              id: "branch-1",
+              type: "branch" as const,
+              url: "https://api.prisma.test/v1/branches/branch-1",
+              gitName: "main",
+              isDefault: true,
+              createdAt,
+              updatedAt,
+              project: resourceRef("projects", projectId, "app"),
+            },
+          ]),
         updateDatabase: () =>
           Effect.die("normalized clone source must not trigger an update"),
       } as unknown as PrismaManagementClient;
@@ -3494,7 +3558,7 @@ describe("Prisma resource providers", () => {
               status: "ready" as const,
               region: "us-east-1",
               isDefault: false,
-              branchId: null,
+              branchId: "branch-1",
               defaultConnectionId: "connection-clone",
               createdAt,
               directConnectionString: undefined,
@@ -3513,91 +3577,99 @@ describe("Prisma resource providers", () => {
     },
   );
 
-  it.effect("detaches an observed branch when branch props are omitted", () => {
-    const calls: Call[] = [];
-    const database = {
-      id: "database-1",
-      type: "database" as const,
-      url: "https://api.prisma.test/v1/databases/database-1",
-      name: "main",
-      status: "ready" as const,
-      createdAt,
-      isDefault: false,
-      defaultConnectionId: "connection-1",
-      connections: [],
-      project: resourceRef("projects", "project-1", "app"),
-      region: { id: "us-east-1", name: "US East" },
-      source: { type: "empty" as const },
-      branchId: "branch-1",
-    };
-    const client = {
-      getDatabase: (id: string) =>
-        Effect.sync(() => {
-          calls.push(["getDatabase", id]);
-          return database;
-        }),
-      updateDatabase: (id: string, input: unknown) =>
-        Effect.sync(() => {
-          calls.push(["updateDatabase", { id, input }]);
-          return { ...database, branchId: null };
-        }),
-      rotateConnection: () =>
-        Effect.die("persisted credentials must prevent an unrelated rotation"),
-    } as unknown as PrismaManagementClient;
+  it.effect(
+    "keeps the observed branch attachment when branch props are omitted",
+    () => {
+      const calls: Call[] = [];
+      const database = {
+        id: "database-1",
+        type: "database" as const,
+        url: "https://api.prisma.test/v1/databases/database-1",
+        name: "main",
+        status: "ready" as const,
+        createdAt,
+        isDefault: false,
+        defaultConnectionId: "connection-1",
+        connections: [],
+        project: resourceRef("projects", "project-1", "app"),
+        region: { id: "us-east-1", name: "US East" },
+        source: { type: "empty" as const },
+        branchId: "branch-1",
+      };
+      const client = {
+        getDatabase: (id: string) =>
+          Effect.sync(() => {
+            calls.push(["getDatabase", id]);
+            return database;
+          }),
+        listBranches: (projectId: string) =>
+          Effect.sync(() => {
+            calls.push(["listBranches", projectId]);
+            return [
+              {
+                id: "branch-1",
+                type: "branch" as const,
+                url: "https://api.prisma.test/v1/branches/branch-1",
+                gitName: "main",
+                isDefault: true,
+                createdAt,
+                updatedAt,
+                project: resourceRef("projects", projectId, "app"),
+              },
+            ];
+          }),
+        updateDatabase: () =>
+          Effect.die("omitted branch props must never detach the database"),
+        rotateConnection: () =>
+          Effect.die(
+            "persisted credentials must prevent an unrelated rotation",
+          ),
+      } as unknown as PrismaManagementClient;
 
-    return Effect.gen(function* () {
-      const provider = yield* PrismaDatabase.Provider;
-      const result = yield* provider.reconcile(
-        reconcileInput(
-          "Database",
-          {
-            project: "project-1",
-            name: "main",
-            region: "us-east-1",
-          },
-          {
-            databaseId: "database-1",
-            databaseName: "main",
-            projectId: "project-1",
-            status: "ready" as const,
-            region: "us-east-1",
-            isDefault: false,
-            branchId: "branch-1",
-            defaultConnectionId: "connection-1",
-            createdAt,
-            directConnectionString: Redacted.make("postgres://persisted"),
-            pooledConnectionString: undefined,
-            accelerateConnectionString: undefined,
-            host: "db.prisma.test",
-            user: "user",
-            password: undefined,
-          },
-          {
-            project: "project-1",
-            name: "main",
-            region: "us-east-1",
-            branchId: "branch-1",
-          },
-        ),
-      );
-
-      expect(result.branchId).toBeNull();
-      expect(calls).toEqual([
-        ["getDatabase", "database-1"],
-        [
-          "updateDatabase",
-          {
-            id: "database-1",
-            input: {
+      return Effect.gen(function* () {
+        const provider = yield* PrismaDatabase.Provider;
+        const result = yield* provider.reconcile(
+          reconcileInput(
+            "Database",
+            {
+              project: "project-1",
               name: "main",
-              branchId: null,
-              branchGitName: undefined,
+              region: "us-east-1",
             },
-          },
-        ],
-      ]);
-    }).pipe(Effect.provide(providerLayer(client)));
-  });
+            {
+              databaseId: "database-1",
+              databaseName: "main",
+              projectId: "project-1",
+              status: "ready" as const,
+              region: "us-east-1",
+              isDefault: false,
+              branchId: "branch-1",
+              defaultConnectionId: "connection-1",
+              createdAt,
+              directConnectionString: Redacted.make("postgres://persisted"),
+              pooledConnectionString: undefined,
+              accelerateConnectionString: undefined,
+              host: "db.prisma.test",
+              user: "user",
+              password: undefined,
+            },
+            {
+              project: "project-1",
+              name: "main",
+              region: "us-east-1",
+              branchId: "branch-1",
+            },
+          ),
+        );
+
+        expect(result.branchId).toBe("branch-1");
+        expect(calls).toEqual([
+          ["getDatabase", "database-1"],
+          ["listBranches", "project-1"],
+        ]);
+      }).pipe(Effect.provide(providerLayer(client)));
+    },
+  );
 
   it.effect(
     "forces Project and Database reconcile when adoption rotation is enabled",

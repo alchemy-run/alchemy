@@ -233,7 +233,7 @@ const verifyRepositoryLink = Effect.fn(function* (
   }
   const branches = yield* client.listBranches(repo.projectId, {
     gitName: observed.defaultBranch,
-    limit: 100,
+    limit: 2,
   });
   const defaults = branches.filter(
     (branch) =>

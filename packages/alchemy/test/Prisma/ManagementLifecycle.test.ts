@@ -872,6 +872,7 @@ const apiDatabase = (
     region?: string;
     isDefault?: boolean;
     source?: ApiDatabase["source"];
+    branchId?: string | null;
   },
 ): ApiDatabase => ({
   id,
@@ -890,7 +891,7 @@ const apiDatabase = (
   },
   region: { id: input.region ?? "us-east-1", name: "Region" },
   source: input.source ?? { type: "empty" },
-  branchId: null,
+  branchId: input.branchId ?? null,
 });
 
 const makeDatabaseCloud = () => {
@@ -905,6 +906,27 @@ const makeDatabaseCloud = () => {
           (database) => database.project.id === projectId,
         ),
       ),
+    listBranches: (projectId: string) =>
+      Effect.sync(() => {
+        calls.push(["listBranches", projectId]);
+        return [
+          {
+            id: "branch-default",
+            type: "branch" as const,
+            url: "https://api.prisma.test/v1/branches/branch-default",
+            gitName: "main",
+            isDefault: true,
+            role: "production" as const,
+            createdAt,
+            updatedAt: createdAt,
+            project: {
+              id: projectId,
+              url: `https://api.prisma.test/v1/projects/${projectId}`,
+              name: "app",
+            },
+          },
+        ];
+      }),
     getDatabase: (id: string) =>
       Effect.suspend(() => {
         calls.push(["getDatabase", id]);
@@ -926,6 +948,7 @@ const makeDatabaseCloud = () => {
       region?: string;
       isDefault?: boolean;
       source?: ApiDatabase["source"];
+      branchId?: string;
     }) =>
       Effect.sync(() => {
         calls.push(["createDatabase", input]);
@@ -941,10 +964,15 @@ const makeDatabaseCloud = () => {
         databases.set(id, database);
         return database;
       }),
-    updateDatabase: (id: string, input: { name?: string }) =>
+    updateDatabase: (id: string, input: { name?: string; branchId?: string }) =>
       Effect.sync(() => {
+        calls.push(["updateDatabase", { id, input }]);
         const database = databases.get(id)!;
-        const updated = { ...database, name: input.name ?? database.name };
+        const updated = {
+          ...database,
+          name: input.name ?? database.name,
+          branchId: input.branchId ?? database.branchId,
+        };
         databases.set(id, updated);
         return updated;
       }),
