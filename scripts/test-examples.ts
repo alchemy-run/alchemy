@@ -159,7 +159,7 @@ const elapsedSeconds = (state: TaskState): string => {
   return `${Math.round((endedAt - state.startedAt) / 1000)}s`;
 };
 
-const makeStatusRenderer = (states: readonly TaskState[]) => {
+const makeStatusRenderer = (title: string, states: readonly TaskState[]) => {
   const interactive = process.stdout.isTTY === true;
   let renderedRows = 0;
 
@@ -185,7 +185,7 @@ const makeStatusRenderer = (states: readonly TaskState[]) => {
   const rowsForAll = (output: readonly string[]) =>
     output.reduce((total, line) => total + rowsFor(line), 0);
 
-  const fullLines = () => ["Example tests", ...states.map(taskLine)];
+  const fullLines = () => [title, ...states.map(taskLine)];
 
   // The in-place repaint moves the cursor up with `\x1b[NF`, which cannot
   // climb above the top of the viewport: if a paint is taller than the
@@ -201,7 +201,7 @@ const makeStatusRenderer = (states: readonly TaskState[]) => {
     }
     const done = states.filter((state) => state.status === "ok").length;
     const active = states.filter((state) => state.status !== "ok");
-    const header = `Example tests (${done}/${states.length} ok)`;
+    const header = `${title} (${done}/${states.length} ok)`;
     const activeLines = active.map(taskLine);
     let shown = activeLines.length;
     const fits = (count: number) => {
@@ -304,24 +304,52 @@ const run = async (
 };
 
 const runParallel = async (
+  title: string,
   tasks: readonly Task[],
+  options?: { readonly concurrency?: number },
 ): Promise<readonly CommandResult[]> => {
   const states = tasks.map((task): TaskState => ({
     ...task,
     status: "pending",
   }));
-  const renderer = makeStatusRenderer(states);
+  const renderer = makeStatusRenderer(title, states);
   renderer.render();
   const interval = setInterval(() => renderer.render(), 1000);
   const chains = new Map<string, Promise<unknown>>();
+
+  // At most `concurrency` tasks run at once; the rest wait for a slot.
+  const limit = options?.concurrency ?? Infinity;
+  let active = 0;
+  const waiting: Array<() => void> = [];
+  const acquire = () =>
+    new Promise<void>((resolve) => {
+      if (active < limit) {
+        active++;
+        resolve();
+      } else {
+        waiting.push(() => {
+          active++;
+          resolve();
+        });
+      }
+    });
+  const release = () => {
+    active--;
+    waiting.shift()?.();
+  };
 
   try {
     return await Promise.all(
       states.map((state) => {
         const start = async () => {
-          const result = await run(state, () => renderer.render());
-          if (result.exitCode !== 0) renderer.failure(result);
-          return result;
+          await acquire();
+          try {
+            const result = await run(state, () => renderer.render());
+            if (result.exitCode !== 0) renderer.failure(result);
+            return result;
+          } finally {
+            release();
+          }
         };
         if (state.serial === undefined) return start();
         const next = (chains.get(state.serial) ?? Promise.resolve()).then(
@@ -339,6 +367,7 @@ const runParallel = async (
 };
 
 const testResults = await runParallel(
+  "Example tests",
   examples.map((example) => ({
     label: example,
     // Run `bun test` IN the example directory. Concurrent
@@ -365,11 +394,16 @@ if (failedTests.length > 0) {
 }
 
 const cliResults = await runParallel(
+  "Example CLI lifecycle",
   examples.map((example) => ({
     label: `${example} CLI lifecycle`,
     command: ["bun", "scripts/test-example-cli.ts", example],
     serial: serialGroup(example),
   })),
+  // Each `alchemy dev` session is a CLI, an exec child, sidecars, workerd
+  // and a bundler watch loop; 30 at once starve each other past the
+  // 4-minute readiness timeout.
+  { concurrency: 8 },
 );
 const failedCliTests = cliResults.filter((result) => result.exitCode !== 0);
 
@@ -382,7 +416,7 @@ if (failedCliTests.length > 0) {
   process.exit(1);
 }
 
-const [formatFailure] = await runParallel([
+const [formatFailure] = await runParallel("Format", [
   { label: "format", command: ["bun", "run", "format"] },
 ]);
 if (formatFailure.exitCode !== 0) {
