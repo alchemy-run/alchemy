@@ -1,12 +1,12 @@
 import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
   GetBillingPortalConfigurations,
-  GetBillingPortalConfigurationsConfiguration,
-  PostBillingPortalConfigurations,
-  PostBillingPortalConfigurationsConfiguration,
+  GetBillingPortalConfiguration,
+  CreateBillingPortalConfiguration,
+  UpdateBillingPortalConfiguration,
   type BillingPortalConfiguration as StripeBillingPortalConfiguration,
   type PortalFeatures,
-  type PostBillingPortalConfigurationsRequestFeatures,
+  type CreateBillingPortalConfigurationRequestFeatures,
 } from "@distilled.cloud/stripe/stripe";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -516,7 +516,7 @@ const emptyOrList = <T>(value: T[] | undefined): T[] | "" | undefined => {
 
 const toWireFeatures = (
   features: BillingPortalFeatures,
-): PostBillingPortalConfigurationsRequestFeatures => ({
+): CreateBillingPortalConfigurationRequestFeatures => ({
   ...(features.customerUpdate !== undefined
     ? {
         customer_update: {
@@ -711,7 +711,7 @@ const toWireBusinessProfile = (profile: BillingPortalBusinessProfile) => ({
 const isMissingConfiguration = isMissingStripeResource;
 
 const getById = (configuration: string) =>
-  GetBillingPortalConfigurationsConfiguration({ configuration }).pipe(
+  GetBillingPortalConfiguration({ configuration }).pipe(
     Effect.catchIf(isMissingConfiguration, () => Effect.succeed(undefined)),
   );
 
@@ -826,7 +826,7 @@ export const BillingPortalConfigurationProvider = () =>
       });
 
       if (current === undefined) {
-        current = yield* PostBillingPortalConfigurations({
+        current = yield* CreateBillingPortalConfiguration({
           features: wireFeatures,
           metadata,
           ...(news.name !== undefined ? { name: news.name } : {}),
@@ -883,7 +883,7 @@ export const BillingPortalConfigurationProvider = () =>
         return attrs;
       }
 
-      const updated = yield* PostBillingPortalConfigurationsConfiguration({
+      const updated = yield* UpdateBillingPortalConfiguration({
         configuration: current.id,
         ...(activeChanged ? { active: desiredActive } : {}),
         ...(nameChanged ? { name: news.name } : {}),
@@ -912,7 +912,7 @@ export const BillingPortalConfigurationProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const existing = yield* getById(output.id);
       if (existing === undefined || !existing.active) return;
-      yield* PostBillingPortalConfigurationsConfiguration({
+      yield* UpdateBillingPortalConfiguration({
         configuration: existing.id,
         active: false,
       }).pipe(Effect.catchIf(isMissingConfiguration, () => Effect.void));

@@ -1,7 +1,7 @@
 import type {
   Customer as StripeCustomer,
-  PostCustomersError,
-  PostCustomersRequest,
+  CreateCustomerError,
+  CreateCustomerRequest,
 } from "@distilled.cloud/stripe/stripe";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../Binding.ts";
@@ -28,8 +28,8 @@ export interface CreateCustomer extends Binding.Service<
   "Stripe.CreateCustomer",
   () => Effect.Effect<
     (
-      request: PostCustomersRequest,
-    ) => Effect.Effect<StripeCustomer, PostCustomersError, RuntimeContext>
+      request: CreateCustomerRequest,
+    ) => Effect.Effect<StripeCustomer, CreateCustomerError, RuntimeContext>
   >
 > {}
 

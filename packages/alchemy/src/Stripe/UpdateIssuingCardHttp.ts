@@ -1,4 +1,4 @@
-import { PostIssuingCardsCard } from "@distilled.cloud/stripe/stripe";
+import { UpdateIssuingCard as updateIssuingCardOp } from "@distilled.cloud/stripe/stripe";
 import * as Layer from "effect/Layer";
 import { makeHttpStripeIdBinding } from "./StripeHttp.ts";
 import { UpdateIssuingCard } from "./UpdateIssuingCard.ts";
@@ -14,7 +14,7 @@ export const UpdateIssuingCardHttp = Layer.effect(
   UpdateIssuingCard,
   makeHttpStripeIdBinding({
     tag: "Stripe.UpdateIssuingCard",
-    operation: PostIssuingCardsCard,
+    operation: updateIssuingCardOp,
     idField: "card",
     permissions: ["issuing_write"],
   }),

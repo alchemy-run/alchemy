@@ -1,9 +1,9 @@
 import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
   GetPrices,
-  GetPricesPrice,
-  PostPrices,
-  PostPricesPrice,
+  GetPrice,
+  CreatePrice,
+  UpdatePrice,
   type Price as StripePrice,
   type PriceProduct,
 } from "@distilled.cloud/stripe/stripe";
@@ -243,7 +243,7 @@ const toAttrs = (price: StripePrice) => ({
 const isMissingPrice = isMissingStripeResource;
 
 const getById = (price: string) =>
-  GetPricesPrice({ price }).pipe(
+  GetPrice({ price }).pipe(
     Effect.catchIf(isMissingPrice, () => Effect.succeed(undefined)),
   );
 
@@ -412,7 +412,7 @@ export const PriceProvider = () =>
       }
 
       if (current === undefined) {
-        current = yield* PostPrices({
+        current = yield* CreatePrice({
           product: news.product,
           currency: news.currency,
           active: desiredActive,
@@ -476,7 +476,7 @@ export const PriceProvider = () =>
         return toAttrs(current);
       }
 
-      const updated = yield* PostPricesPrice({
+      const updated = yield* UpdatePrice({
         price: current.id,
         ...(activeChanged ? { active: desiredActive } : {}),
         ...(nicknameChanged ? { nickname: desiredNickname } : {}),
@@ -500,7 +500,7 @@ export const PriceProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const existing = yield* getById(output.id);
       if (existing === undefined || !existing.active) return;
-      yield* PostPricesPrice({
+      yield* UpdatePrice({
         price: existing.id,
         active: false,
       }).pipe(Effect.catchIf(isMissingPrice, () => Effect.void));

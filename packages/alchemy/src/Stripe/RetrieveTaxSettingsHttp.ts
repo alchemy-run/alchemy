@@ -1,14 +1,12 @@
-import { Credentials } from "@distilled.cloud/stripe";
 import { GetTaxSettings } from "@distilled.cloud/stripe/stripe";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import type * as HttpClient from "effect/unstable/http/HttpClient";
 import type { ResourceLike } from "../Resource.ts";
 import {
   RetrieveTaxSettings,
   type RetrieveTaxSettingsRequest,
 } from "./RetrieveTaxSettings.ts";
-import { attachStripeToken, makeStripeAuth } from "./StripeHttp.ts";
+import { attachStripeToken, resolveStripeAuth } from "./StripeHttp.ts";
 import type { TaxSettings } from "./TaxSettings.ts";
 
 /**
@@ -22,10 +20,7 @@ import type { TaxSettings } from "./TaxSettings.ts";
 export const RetrieveTaxSettingsHttp = Layer.effect(
   RetrieveTaxSettings,
   Effect.gen(function* () {
-    const context = yield* Effect.context<
-      Credentials | HttpClient.HttpClient
-    >();
-    const auth = makeStripeAuth(context);
+    const auth = yield* resolveStripeAuth;
 
     return Effect.fn(function* (settings: TaxSettings) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {

@@ -1,10 +1,10 @@
 import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
-  DeleteTerminalReadersReader,
+  DeleteTerminalReader,
   GetTerminalReaders,
-  GetTerminalReadersReader,
-  PostTerminalReaders,
-  PostTerminalReadersReader,
+  GetTerminalReader,
+  CreateTerminalReader,
+  UpdateTerminalReader,
   type DeletedTerminalReader,
   type TerminalReader as StripeTerminalReader,
   type TerminalReaderDeviceType,
@@ -202,7 +202,7 @@ const toAttrs = (reader: StripeTerminalReader): TerminalReaderAttributes => ({
 const isMissingReader = isMissingStripeResource;
 
 const getById = (reader: string) =>
-  GetTerminalReadersReader({ reader }).pipe(
+  GetTerminalReader({ reader }).pipe(
     Effect.map(asReader),
     Effect.catchIf(isMissingReader, () => Effect.succeed(undefined)),
   );
@@ -320,7 +320,7 @@ export const TerminalReaderProvider = () =>
       }
 
       if (current === undefined) {
-        current = yield* PostTerminalReaders({
+        current = yield* CreateTerminalReader({
           registration_code: news.registrationCode,
           metadata,
           ...(news.label !== undefined ? { label: news.label } : {}),
@@ -348,7 +348,7 @@ export const TerminalReaderProvider = () =>
         return toAttrs(current);
       }
 
-      const updated = yield* PostTerminalReadersReader({
+      const updated = yield* UpdateTerminalReader({
         reader: current.id,
         ...(labelChanged ? { label: news.label } : {}),
         ...(metadataChanged
@@ -370,7 +370,7 @@ export const TerminalReaderProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      yield* DeleteTerminalReadersReader({ reader: output.id }).pipe(
+      yield* DeleteTerminalReader({ reader: output.id }).pipe(
         Effect.catchIf(isMissingReader, () => Effect.void),
       );
     }),

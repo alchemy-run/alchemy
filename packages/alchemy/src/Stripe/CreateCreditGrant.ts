@@ -1,7 +1,7 @@
 import type {
   BillingCreditGrant as StripeCreditGrant,
-  PostBillingCreditGrantsError,
-  PostBillingCreditGrantsRequest,
+  CreateBillingCreditGrantError,
+  CreateBillingCreditGrantRequest,
 } from "@distilled.cloud/stripe/stripe";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../Binding.ts";
@@ -31,10 +31,10 @@ export interface CreateCreditGrant extends Binding.Service<
   "Stripe.CreateCreditGrant",
   () => Effect.Effect<
     (
-      request: PostBillingCreditGrantsRequest,
+      request: CreateBillingCreditGrantRequest,
     ) => Effect.Effect<
       StripeCreditGrant,
-      PostBillingCreditGrantsError,
+      CreateBillingCreditGrantError,
       RuntimeContext
     >
   >

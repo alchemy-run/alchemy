@@ -1,7 +1,7 @@
 import type {
-  GetTerminalLocationsLocationError,
-  GetTerminalLocationsLocationRequest,
-  GetTerminalLocationsLocationResponse,
+  GetTerminalLocationError,
+  GetTerminalLocationRequest,
+  GetTerminalLocationResponse,
 } from "@distilled.cloud/stripe/stripe";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../Binding.ts";
@@ -9,7 +9,7 @@ import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { TerminalLocation } from "./TerminalLocation.ts";
 
 export interface RetrieveTerminalLocationRequest extends Omit<
-  GetTerminalLocationsLocationRequest,
+  GetTerminalLocationRequest,
   "location"
 > {}
 
@@ -34,8 +34,8 @@ export interface RetrieveTerminalLocation extends Binding.Service<
     (
       request?: RetrieveTerminalLocationRequest,
     ) => Effect.Effect<
-      GetTerminalLocationsLocationResponse,
-      GetTerminalLocationsLocationError,
+      GetTerminalLocationResponse,
+      GetTerminalLocationError,
       RuntimeContext
     >
   >

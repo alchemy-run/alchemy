@@ -1,6 +1,6 @@
 import type {
-  GetIssuingPersonalizationDesignsPersonalizationDesignError,
-  GetIssuingPersonalizationDesignsPersonalizationDesignRequest,
+  GetIssuingPersonalizationDesignError,
+  GetIssuingPersonalizationDesignRequest,
   IssuingPersonalizationDesign as StripeIssuingPersonalizationDesign,
 } from "@distilled.cloud/stripe/stripe";
 import type * as Effect from "effect/Effect";
@@ -9,7 +9,7 @@ import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { IssuingPersonalizationDesign } from "./IssuingPersonalizationDesign.ts";
 
 export interface RetrieveIssuingPersonalizationDesignRequest extends Omit<
-  GetIssuingPersonalizationDesignsPersonalizationDesignRequest,
+  GetIssuingPersonalizationDesignRequest,
   "personalization_design"
 > {}
 
@@ -35,7 +35,7 @@ export interface RetrieveIssuingPersonalizationDesign extends Binding.Service<
       request?: RetrieveIssuingPersonalizationDesignRequest,
     ) => Effect.Effect<
       StripeIssuingPersonalizationDesign,
-      GetIssuingPersonalizationDesignsPersonalizationDesignError,
+      GetIssuingPersonalizationDesignError,
       RuntimeContext
     >
   >

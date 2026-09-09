@@ -2,10 +2,10 @@ import * as Provider from "@/Provider";
 import * as Stripe from "@/Stripe";
 import * as Test from "@/Test/Alchemy";
 import {
-  GetPaymentLinksPaymentLink,
-  PostPrices,
-  PostProducts,
-  PostProductsId,
+  GetPaymentLink,
+  CreatePrice,
+  CreateProduct,
+  UpdateProduct,
 } from "@distilled.cloud/stripe/stripe";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -23,7 +23,7 @@ const logLevel = Effect.provideService(
 const isMissing = isMissingStripeResource;
 
 const waitUntilDeactivated = (id: string) =>
-  GetPaymentLinksPaymentLink({ payment_link: id }).pipe(
+  GetPaymentLink({ payment_link: id }).pipe(
     Effect.map((link) =>
       link.active ? ("active" as const) : ("inactive" as const),
     ),
@@ -36,7 +36,7 @@ const waitUntilDeactivated = (id: string) =>
   );
 
 const archiveProduct = (id: string) =>
-  PostProductsId({ id, active: false }).pipe(
+  UpdateProduct({ id, active: false }).pipe(
     Effect.catchIf(isMissing, () => Effect.void),
   );
 
@@ -46,10 +46,10 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const product = yield* PostProducts({
+      const product = yield* CreateProduct({
         name: "Alchemy Payment Link Product",
       });
-      const price = yield* PostPrices({
+      const price = yield* CreatePrice({
         product: product.id,
         currency: "usd",
         unit_amount: 2000,
@@ -75,7 +75,7 @@ test.provider(
       expect(created.metadata).toMatchObject({ campaign: "launch" });
       expect(created.livemode).toEqual(false);
 
-      const fetched = yield* GetPaymentLinksPaymentLink({
+      const fetched = yield* GetPaymentLink({
         payment_link: created.id,
       });
       expect(fetched.id).toEqual(created.id);
@@ -111,7 +111,7 @@ test.provider(
       expect(updated.metadata).toEqual({ campaign: "spring", sku: "pro" });
       expect(updated.active).toEqual(true);
 
-      const refetched = yield* GetPaymentLinksPaymentLink({
+      const refetched = yield* GetPaymentLink({
         payment_link: updated.id,
       });
       expect(refetched.allow_promotion_codes).toEqual(true);
@@ -138,10 +138,10 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const product = yield* PostProducts({
+      const product = yield* CreateProduct({
         name: "Alchemy Payment Link List Product",
       });
-      const price = yield* PostPrices({
+      const price = yield* CreatePrice({
         product: product.id,
         currency: "usd",
         unit_amount: 1500,
@@ -183,15 +183,15 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const product = yield* PostProducts({
+      const product = yield* CreateProduct({
         name: "Alchemy Payment Link Replace Product",
       });
-      const priceV1 = yield* PostPrices({
+      const priceV1 = yield* CreatePrice({
         product: product.id,
         currency: "usd",
         unit_amount: 1000,
       });
-      const priceV2 = yield* PostPrices({
+      const priceV2 = yield* CreatePrice({
         product: product.id,
         currency: "usd",
         unit_amount: 2500,
@@ -218,12 +218,12 @@ test.provider(
         expect.objectContaining({ price: priceV2.id, quantity: 1 }),
       ]);
 
-      const oldFetched = yield* GetPaymentLinksPaymentLink({
+      const oldFetched = yield* GetPaymentLink({
         payment_link: created.id,
       });
       expect(oldFetched.active).toEqual(false);
 
-      const newFetched = yield* GetPaymentLinksPaymentLink({
+      const newFetched = yield* GetPaymentLink({
         payment_link: replaced.id,
       });
       expect(newFetched.active).toEqual(true);

@@ -1,10 +1,10 @@
 import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
-  DeletePlansPlan,
+  DeletePlan,
   GetPlans,
-  GetPlansPlan,
-  PostPlans,
-  PostPlansPlan,
+  GetPlan,
+  CreatePlan,
+  UpdatePlan,
   type Plan as StripePlan,
   type PlanProduct,
 } from "@distilled.cloud/stripe/stripe";
@@ -241,7 +241,7 @@ const toAttrs = (plan: StripePlan): PlanAttributes => ({
 const isMissingPlan = isMissingStripeResource;
 
 const getById = (plan: string) =>
-  GetPlansPlan({ plan }).pipe(
+  GetPlan({ plan }).pipe(
     Effect.catchIf(isMissingPlan, () => Effect.succeed(undefined)),
   );
 
@@ -396,7 +396,7 @@ export const PlanProvider = () =>
       }
 
       if (current === undefined) {
-        current = yield* PostPlans({
+        current = yield* CreatePlan({
           product: news.product,
           currency: news.currency,
           interval: news.interval,
@@ -454,7 +454,7 @@ export const PlanProvider = () =>
         return toAttrs(current);
       }
 
-      const updated = yield* PostPlansPlan({
+      const updated = yield* UpdatePlan({
         plan: current.id,
         ...(activeChanged ? { active: desiredActive } : {}),
         ...(nicknameChanged ? { nickname: desiredNickname } : {}),
@@ -475,7 +475,7 @@ export const PlanProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      yield* DeletePlansPlan({ plan: output.id }).pipe(
+      yield* DeletePlan({ plan: output.id }).pipe(
         Effect.catchIf(isMissingPlan, () => Effect.void),
       );
     }),

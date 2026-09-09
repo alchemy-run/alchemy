@@ -3,9 +3,9 @@ import * as Stripe from "@/Stripe";
 import * as Test from "@/Test/Alchemy";
 import { Credentials } from "@distilled.cloud/stripe";
 import {
-  GetFileLinksLink,
+  GetFileLink,
   GetFiles,
-  PostFiles,
+  CreateFile,
 } from "@distilled.cloud/stripe/stripe";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -41,7 +41,7 @@ const EXPIRES_AT_UPDATED = 1_920_000_000;
 const isMissing = isMissingStripeResource;
 
 const waitUntilExpired = (id: string) =>
-  GetFileLinksLink({ link: id }).pipe(
+  GetFileLink({ link: id }).pipe(
     Effect.map((link) =>
       link.expired ? ("expired" as const) : ("active" as const),
     ),
@@ -60,7 +60,7 @@ const postFile = (file: File) =>
   Effect.gen(function* () {
     const resolve = yield* Credentials;
     const creds = yield* resolve;
-    return yield* PostFiles({
+    return yield* CreateFile({
       file: file as unknown as string,
       purpose: FILE_PURPOSE,
     }).pipe(
@@ -141,7 +141,7 @@ test.provider(
       expect(created.created).toEqual(expect.any(Number));
       expect(created.livemode).toEqual(false);
 
-      const fetched = yield* GetFileLinksLink({ link: created.id });
+      const fetched = yield* GetFileLink({ link: created.id });
       expect(fetched.id).toEqual(created.id);
       expect(
         typeof fetched.file === "string" ? fetched.file : fetched.file.id,
@@ -172,7 +172,7 @@ test.provider(
       expect(updated.expiresAt).toEqual(EXPIRES_AT);
       expect(updated.metadata).toEqual({ kind: "report", env: "test" });
 
-      const refetched = yield* GetFileLinksLink({ link: updated.id });
+      const refetched = yield* GetFileLink({ link: updated.id });
       expect(refetched.expires_at).toEqual(EXPIRES_AT);
       expect(refetched.metadata?.kind).toEqual("report");
       expect(refetched.metadata?.env).toEqual("test");

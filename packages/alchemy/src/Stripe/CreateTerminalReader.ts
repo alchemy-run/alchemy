@@ -1,6 +1,6 @@
 import type {
-  PostTerminalReadersError,
-  PostTerminalReadersRequest,
+  CreateTerminalReaderError,
+  CreateTerminalReaderRequest,
   TerminalReader as StripeTerminalReader,
 } from "@distilled.cloud/stripe/stripe";
 import type * as Effect from "effect/Effect";
@@ -29,10 +29,10 @@ export interface CreateTerminalReader extends Binding.Service<
   "Stripe.CreateTerminalReader",
   () => Effect.Effect<
     (
-      request: PostTerminalReadersRequest,
+      request: CreateTerminalReaderRequest,
     ) => Effect.Effect<
       StripeTerminalReader,
-      PostTerminalReadersError,
+      CreateTerminalReaderError,
       RuntimeContext
     >
   >

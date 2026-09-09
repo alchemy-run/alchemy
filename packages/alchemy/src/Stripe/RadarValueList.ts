@@ -1,10 +1,10 @@
 import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
-  DeleteRadarValueListsValueList,
+  DeleteRadarValueList,
   GetRadarValueLists,
-  GetRadarValueListsValueList,
-  PostRadarValueLists,
-  PostRadarValueListsValueList,
+  GetRadarValueList,
+  CreateRadarValueList,
+  UpdateRadarValueList,
   type RadarValueList as StripeRadarValueList,
 } from "@distilled.cloud/stripe/stripe";
 import * as Data from "effect/Data";
@@ -202,7 +202,7 @@ const toAttrs = (list: StripeRadarValueList): RadarValueListAttributes => ({
 const isMissingValueList = isMissingStripeResource;
 
 const getById = (valueList: string) =>
-  GetRadarValueListsValueList({ value_list: valueList }).pipe(
+  GetRadarValueList({ value_list: valueList }).pipe(
     Effect.catchIf(isMissingValueList, () => Effect.succeed(undefined)),
   );
 
@@ -347,7 +347,7 @@ export const RadarValueListProvider = () =>
       }
 
       if (current === undefined) {
-        current = yield* PostRadarValueLists({
+        current = yield* CreateRadarValueList({
           alias,
           name,
           item_type: itemType,
@@ -372,7 +372,7 @@ export const RadarValueListProvider = () =>
         return toAttrs(current);
       }
 
-      const updated = yield* PostRadarValueListsValueList({
+      const updated = yield* UpdateRadarValueList({
         value_list: current.id,
         ...(nameChanged ? { name } : {}),
         ...(metadataChanged
@@ -390,7 +390,7 @@ export const RadarValueListProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      yield* DeleteRadarValueListsValueList({ value_list: output.id }).pipe(
+      yield* DeleteRadarValueList({ value_list: output.id }).pipe(
         Effect.catchIf(isMissingValueList, () => Effect.void),
       );
     }),

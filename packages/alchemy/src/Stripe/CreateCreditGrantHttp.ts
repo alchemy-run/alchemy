@@ -1,4 +1,4 @@
-import { PostBillingCreditGrants } from "@distilled.cloud/stripe/stripe";
+import { CreateBillingCreditGrant } from "@distilled.cloud/stripe/stripe";
 import * as Layer from "effect/Layer";
 import { CreateCreditGrant } from "./CreateCreditGrant.ts";
 import { makeHttpStripeAccountBinding } from "./StripeHttp.ts";
@@ -14,7 +14,7 @@ export const CreateCreditGrantHttp = Layer.effect(
   CreateCreditGrant,
   makeHttpStripeAccountBinding({
     tag: "Stripe.CreateCreditGrant",
-    operation: PostBillingCreditGrants,
+    operation: CreateBillingCreditGrant,
     permissions: ["credit_grants_write"],
   }),
 );

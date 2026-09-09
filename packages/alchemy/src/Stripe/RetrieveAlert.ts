@@ -1,7 +1,7 @@
 import type {
   BillingAlert as StripeBillingAlert,
-  GetBillingAlertsIdError,
-  GetBillingAlertsIdRequest,
+  GetBillingAlertError,
+  GetBillingAlertRequest,
 } from "@distilled.cloud/stripe/stripe";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../Binding.ts";
@@ -9,7 +9,7 @@ import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { Alert } from "./Alert.ts";
 
 export interface RetrieveAlertRequest extends Omit<
-  GetBillingAlertsIdRequest,
+  GetBillingAlertRequest,
   "id"
 > {}
 
@@ -33,11 +33,7 @@ export interface RetrieveAlert extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: RetrieveAlertRequest,
-    ) => Effect.Effect<
-      StripeBillingAlert,
-      GetBillingAlertsIdError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<StripeBillingAlert, GetBillingAlertError, RuntimeContext>
   >
 > {}
 

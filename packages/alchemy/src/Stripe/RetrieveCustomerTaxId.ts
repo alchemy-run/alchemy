@@ -1,6 +1,6 @@
 import type {
-  GetCustomersCustomerTaxIdsIdError,
-  GetCustomersCustomerTaxIdsIdRequest,
+  GetCustomerTaxIdsByIdError,
+  GetCustomerTaxIdsByIdRequest,
   TaxId as StripeTaxId,
 } from "@distilled.cloud/stripe/stripe";
 import type * as Effect from "effect/Effect";
@@ -9,7 +9,7 @@ import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { CustomerTaxId } from "./CustomerTaxId.ts";
 
 export interface RetrieveCustomerTaxIdRequest extends Omit<
-  GetCustomersCustomerTaxIdsIdRequest,
+  GetCustomerTaxIdsByIdRequest,
   "id" | "customer"
 > {}
 
@@ -33,11 +33,7 @@ export interface RetrieveCustomerTaxId extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: RetrieveCustomerTaxIdRequest,
-    ) => Effect.Effect<
-      StripeTaxId,
-      GetCustomersCustomerTaxIdsIdError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<StripeTaxId, GetCustomerTaxIdsByIdError, RuntimeContext>
   >
 > {}
 

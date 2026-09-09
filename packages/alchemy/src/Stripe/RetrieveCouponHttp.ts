@@ -1,4 +1,4 @@
-import { GetCouponsCoupon } from "@distilled.cloud/stripe/stripe";
+import { GetCoupon } from "@distilled.cloud/stripe/stripe";
 import * as Layer from "effect/Layer";
 import { RetrieveCoupon } from "./RetrieveCoupon.ts";
 import { makeHttpStripeIdBinding } from "./StripeHttp.ts";
@@ -14,7 +14,7 @@ export const RetrieveCouponHttp = Layer.effect(
   RetrieveCoupon,
   makeHttpStripeIdBinding({
     tag: "Stripe.RetrieveCoupon",
-    operation: GetCouponsCoupon,
+    operation: GetCoupon,
     idField: "coupon",
     permissions: ["coupons_read"],
   }),

@@ -1,7 +1,7 @@
 import type {
   Account as StripeAccount,
-  GetAccountsAccountError,
-  GetAccountsAccountRequest,
+  GetAccountByAccountError,
+  GetAccountByAccountRequest,
 } from "@distilled.cloud/stripe/stripe";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../Binding.ts";
@@ -9,7 +9,7 @@ import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { Account } from "./Account.ts";
 
 export interface RetrieveAccountRequest extends Omit<
-  GetAccountsAccountRequest,
+  GetAccountByAccountRequest,
   "account"
 > {}
 
@@ -33,7 +33,7 @@ export interface RetrieveAccount extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: RetrieveAccountRequest,
-    ) => Effect.Effect<StripeAccount, GetAccountsAccountError, RuntimeContext>
+    ) => Effect.Effect<StripeAccount, GetAccountByAccountError, RuntimeContext>
   >
 > {}
 

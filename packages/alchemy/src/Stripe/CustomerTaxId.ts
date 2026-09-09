@@ -1,11 +1,11 @@
 import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
-  DeleteCustomersCustomerTaxIdsId,
+  DeleteCustomerTaxIds,
   GetCustomers,
-  GetCustomersCustomerTaxIds,
-  GetCustomersCustomerTaxIdsId,
-  GetTaxIdsId,
-  PostCustomersCustomerTaxIds,
+  GetCustomerTaxIds,
+  GetCustomerTaxIdsById,
+  GetTaxIdsById,
+  CreateCustomerTaxIds,
   type Customer as StripeCustomer,
   type TaxId as StripeTaxId,
   type TaxIdCustomer,
@@ -136,11 +136,11 @@ const isMissing = isMissingStripeResource;
 
 const getById = (id: string, customer?: string) => {
   if (customer !== undefined) {
-    return GetCustomersCustomerTaxIdsId({ customer, id }).pipe(
+    return GetCustomerTaxIdsById({ customer, id }).pipe(
       Effect.catchIf(isMissing, () => Effect.succeed(undefined)),
     );
   }
-  return GetTaxIdsId({ id }).pipe(
+  return GetTaxIdsById({ id }).pipe(
     Effect.catchIf(isMissing, () => Effect.succeed(undefined)),
   );
 };
@@ -149,7 +149,7 @@ const listTaxIds = Effect.fn(function* (customer: string) {
   const taxIds: StripeTaxId[] = [];
   let startingAfter: string | undefined;
   for (let page = 0; page < LIST_MAX_PAGES; page++) {
-    const response = yield* GetCustomersCustomerTaxIds({
+    const response = yield* GetCustomerTaxIds({
       customer,
       limit: LIST_PAGE_SIZE,
       ...(startingAfter !== undefined ? { starting_after: startingAfter } : {}),
@@ -315,7 +315,7 @@ export const CustomerTaxIdProvider = () =>
       }
 
       if (current === undefined) {
-        current = yield* PostCustomersCustomerTaxIds({
+        current = yield* CreateCustomerTaxIds({
           customer: news.customer,
           type: news.type,
           value: news.value,
@@ -343,7 +343,7 @@ export const CustomerTaxIdProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      yield* DeleteCustomersCustomerTaxIdsId({
+      yield* DeleteCustomerTaxIds({
         customer: output.customer,
         id: output.id,
       }).pipe(Effect.catchIf(isMissing, () => Effect.void));

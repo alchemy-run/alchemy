@@ -1,7 +1,7 @@
 import type {
   FileLink as StripeFileLink,
-  PostFileLinksError,
-  PostFileLinksRequest,
+  CreateFileLinkError,
+  CreateFileLinkRequest,
 } from "@distilled.cloud/stripe/stripe";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../Binding.ts";
@@ -27,8 +27,8 @@ export interface CreateFileLink extends Binding.Service<
   "Stripe.CreateFileLink",
   () => Effect.Effect<
     (
-      request: PostFileLinksRequest,
-    ) => Effect.Effect<StripeFileLink, PostFileLinksError, RuntimeContext>
+      request: CreateFileLinkRequest,
+    ) => Effect.Effect<StripeFileLink, CreateFileLinkError, RuntimeContext>
   >
 > {}
 

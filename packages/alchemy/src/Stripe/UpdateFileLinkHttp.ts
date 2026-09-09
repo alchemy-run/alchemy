@@ -1,4 +1,4 @@
-import { PostFileLinksLink } from "@distilled.cloud/stripe/stripe";
+import { UpdateFileLink as updateFileLinkOp } from "@distilled.cloud/stripe/stripe";
 import * as Layer from "effect/Layer";
 import { makeHttpStripeIdBinding } from "./StripeHttp.ts";
 import { UpdateFileLink } from "./UpdateFileLink.ts";
@@ -14,7 +14,7 @@ export const UpdateFileLinkHttp = Layer.effect(
   UpdateFileLink,
   makeHttpStripeIdBinding({
     tag: "Stripe.UpdateFileLink",
-    operation: PostFileLinksLink,
+    operation: updateFileLinkOp,
     idField: "link",
     permissions: ["files_write"],
   }),

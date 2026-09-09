@@ -1,7 +1,7 @@
 import type {
   FileLink as StripeFileLink,
-  GetFileLinksLinkError,
-  GetFileLinksLinkRequest,
+  GetFileLinkError,
+  GetFileLinkRequest,
 } from "@distilled.cloud/stripe/stripe";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../Binding.ts";
@@ -9,7 +9,7 @@ import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { FileLink } from "./FileLink.ts";
 
 export interface RetrieveFileLinkRequest extends Omit<
-  GetFileLinksLinkRequest,
+  GetFileLinkRequest,
   "link"
 > {}
 
@@ -33,7 +33,7 @@ export interface RetrieveFileLink extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: RetrieveFileLinkRequest,
-    ) => Effect.Effect<StripeFileLink, GetFileLinksLinkError, RuntimeContext>
+    ) => Effect.Effect<StripeFileLink, GetFileLinkError, RuntimeContext>
   >
 > {}
 

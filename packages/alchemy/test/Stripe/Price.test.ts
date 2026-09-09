@@ -2,9 +2,9 @@ import * as Provider from "@/Provider";
 import * as Stripe from "@/Stripe";
 import * as Test from "@/Test/Alchemy";
 import {
-  GetPricesPrice,
-  PostProducts,
-  PostProductsId,
+  GetPrice,
+  CreateProduct,
+  UpdateProduct,
 } from "@distilled.cloud/stripe/stripe";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -22,7 +22,7 @@ const logLevel = Effect.provideService(
 const isMissing = isMissingStripeResource;
 
 const waitUntilDeactivated = (id: string) =>
-  GetPricesPrice({ price: id }).pipe(
+  GetPrice({ price: id }).pipe(
     Effect.map((price) =>
       price.active ? ("active" as const) : ("inactive" as const),
     ),
@@ -35,7 +35,7 @@ const waitUntilDeactivated = (id: string) =>
   );
 
 const archiveProduct = (id: string) =>
-  PostProductsId({ id, active: false }).pipe(
+  UpdateProduct({ id, active: false }).pipe(
     Effect.catchIf(isMissing, () => Effect.void),
   );
 
@@ -45,7 +45,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const product = yield* PostProducts({
+      const product = yield* CreateProduct({
         name: "Alchemy One-Time Price Product",
       });
 
@@ -72,7 +72,7 @@ test.provider(
       expect(created.metadata).toMatchObject({ tier: "pro" });
       expect(created.livemode).toEqual(false);
 
-      const fetched = yield* GetPricesPrice({ price: created.id });
+      const fetched = yield* GetPrice({ price: created.id });
       expect(fetched.id).toEqual(created.id);
       expect(fetched.unit_amount).toEqual(2000);
       expect(fetched.nickname).toEqual("Launch price");
@@ -104,7 +104,7 @@ test.provider(
       expect(updated.active).toEqual(false);
       expect(updated.metadata).toEqual({ tier: "enterprise", sku: "ent-1" });
 
-      const refetched = yield* GetPricesPrice({ price: updated.id });
+      const refetched = yield* GetPrice({ price: updated.id });
       expect(refetched.nickname).toEqual(updated.nickname);
       expect(refetched.active).toEqual(false);
       expect(refetched.metadata?.tier).toEqual("enterprise");
@@ -127,7 +127,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const product = yield* PostProducts({
+      const product = yield* CreateProduct({
         name: "Alchemy Recurring Price Product",
       });
 
@@ -148,7 +148,7 @@ test.provider(
       expect(deployed.recurring?.interval).toEqual("month");
       expect(deployed.unitAmount).toEqual(1500);
 
-      const fetched = yield* GetPricesPrice({ price: deployed.id });
+      const fetched = yield* GetPrice({ price: deployed.id });
       expect(fetched.recurring?.interval).toEqual("month");
       expect(fetched.unit_amount).toEqual(1500);
 
@@ -179,7 +179,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const product = yield* PostProducts({
+      const product = yield* CreateProduct({
         name: "Alchemy Replace Price Product",
       });
 
@@ -210,10 +210,10 @@ test.provider(
       expect(replaced.nickname).toEqual("v2");
       expect(replaced.product).toEqual(product.id);
 
-      const newFetched = yield* GetPricesPrice({ price: replaced.id });
+      const newFetched = yield* GetPrice({ price: replaced.id });
       expect(newFetched.unit_amount).toEqual(2500);
 
-      const oldFetched = yield* GetPricesPrice({ price: created.id });
+      const oldFetched = yield* GetPrice({ price: created.id });
       expect(oldFetched.active).toEqual(false);
 
       yield* stack.destroy();
