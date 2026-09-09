@@ -310,7 +310,7 @@ export const ensurePostgresBranchParameters = Effect.fn(function* (
   parameters: PostgresClusterParameters,
 ) {
   const desired = Object.entries(parameters).flatMap(([namespace, values]) =>
-    Object.entries(values ?? {}).map(
+    Object.entries<string>(values ?? {}).map(
       ([name, value]) => [namespace, name, value] as const,
     ),
   );
