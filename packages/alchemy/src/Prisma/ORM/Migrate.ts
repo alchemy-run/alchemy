@@ -81,8 +81,8 @@ export type Migrate = Resource<
  * Destroying the resource never touches the database — dropping tables is
  * not the IaC engine's call to make.
  *
- * @section Migrating a database on deploy
- * @example Neon branch
+ * ### Migrating a database on deploy
+ * **Example:** Neon branch
  * ```typescript
  * const contract = yield* Prisma.Contract("contract");
  * const project = yield* Neon.Project("db");
@@ -94,7 +94,7 @@ export type Migrate = Resource<
  * });
  * ```
  *
- * @example Prisma Postgres
+ * **Example:** Prisma Postgres
  * ```typescript
  * const contract = yield* Prisma.Contract("contract");
  * const database = yield* Prisma.Database("db", { project });
@@ -105,7 +105,7 @@ export type Migrate = Resource<
  * });
  * ```
  *
- * @example Pinning an environment to a contract ref
+ * **Example:** Pinning an environment to a contract ref
  * ```typescript
  * yield* Prisma.Migrate("migrate", {
  *   url: branch.origin.connectionString,

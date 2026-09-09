@@ -107,14 +107,14 @@ export type Contract = Resource<
  * the migrations directory or the emitted contract, since both are checked
  * in and shared with other environments.
  *
- * @section Declaring the contract
- * @example Contract at the project root
+ * ### Declaring the contract
+ * **Example:** Contract at the project root
  * ```typescript
  * // expects ./prisma.config.ts and writes ./migrations
  * const contract = yield* Prisma.Contract("contract");
  * ```
  *
- * @example Custom config location
+ * **Example:** Custom config location
  * ```typescript
  * const contract = yield* Prisma.Contract("contract", {
  *   config: "./db/prisma.config.ts",
@@ -123,8 +123,8 @@ export type Contract = Resource<
  * });
  * ```
  *
- * @section Applying migrations on deploy
- * @example Contract + Migrate against Neon
+ * ### Applying migrations on deploy
+ * **Example:** Contract + Migrate against Neon
  * ```typescript
  * const contract = yield* Prisma.Contract("contract");
  * const project = yield* Neon.Project("db");
