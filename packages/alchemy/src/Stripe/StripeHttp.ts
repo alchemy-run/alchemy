@@ -123,7 +123,7 @@ type StripeHostBinding = {
   bindings?: ReadonlyArray<{
     type: "secret_text" | "plain_text";
     name: string;
-    text: unknown;
+    text: string;
   }>;
 };
 
@@ -132,27 +132,54 @@ const asBindableHost = (
 ): Resource<string, object, object, StripeHostBinding> =>
   host as Resource<string, object, object, StripeHostBinding>;
 
+/** Resolve Output/Effect/Redacted env values to a Cloudflare-safe string. */
+const unwrapBindingText = (value: unknown): Effect.Effect<string> =>
+  Effect.gen(function* () {
+    let current: unknown = value;
+    if (Output.isOutput(current)) {
+      current = yield* current.asEffect();
+    }
+    if (Effect.isEffect(current)) {
+      current = yield* current as Effect.Effect<unknown>;
+    }
+    if (Redacted.isRedacted(current)) {
+      current = Redacted.value(current);
+    }
+    if (typeof current === "string") return current;
+    if (current === undefined || current === null) {
+      return yield* Effect.die("Stripe binding expected a string env value");
+    }
+    return JSON.stringify(current);
+  }) as Effect.Effect<string>;
+
 export const bindStripeEnv = (
   host: ResourceLike,
   resource: ResourceLike | undefined,
   env: Record<string, unknown>,
-): Effect.Effect<void> => {
-  const target = resource ?? host;
-  if (isBindingHost(host) || isFlyHost(host)) {
-    return asBindableHost(host).bind`${target}`({ env });
-  }
-  if (isWorker(host)) {
-    const bindings = Object.entries(env).map(([name, value]) =>
-      Redacted.isRedacted(value) || name === STRIPE_API_KEY_ENV
-        ? { type: "secret_text" as const, name, text: value }
-        : { type: "plain_text" as const, name, text: value },
+): Effect.Effect<void> =>
+  Effect.gen(function* () {
+    const target = resource ?? host;
+    const resolved: Record<string, string> = {};
+    for (const [name, value] of Object.entries(env)) {
+      resolved[name] = yield* unwrapBindingText(value);
+    }
+    if (isBindingHost(host) || isFlyHost(host)) {
+      yield* asBindableHost(host).bind`${target}`({ env: resolved });
+      return;
+    }
+    if (isWorker(host)) {
+      const bindings = Object.entries(resolved).map(([name, text]) =>
+        name === STRIPE_API_KEY_ENV
+          ? { type: "secret_text" as const, name, text }
+          : { type: "plain_text" as const, name, text },
+      );
+      yield* asBindableHost(host).bind`${target}`({ bindings });
+      return;
+    }
+    return yield* Effect.die(
+      `Stripe HTTP bindings cannot attach to host type '${host.Type}'`,
     );
-    return asBindableHost(host).bind`${target}`({ bindings });
-  }
-  return Effect.die(
-    `Stripe HTTP bindings cannot attach to host type '${host.Type}'`,
-  );
-};
+  });
 
 /**
  * Mint (or reuse) the host's {@link RestrictedApiKey}, attach this
