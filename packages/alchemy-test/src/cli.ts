@@ -163,6 +163,16 @@ const rootCommand = Command.make(
       if (args.fast) {
         process.env.FAST = "1";
       }
+      // The runner owns the terminal: stdout belongs to the reporter (or
+      // the TUI) and stdin carries TUI keystrokes. Code under test must see
+      // the same non-interactive, colorless process CI gives it, regardless
+      // of the terminal this run was launched from — otherwise assertions
+      // on CLI output and on interactive-vs-plain copy depend on whether a
+      // human or a pipeline started the run. Sigil's detection honors
+      // FORCE_COLOR over everything else, so pin it rather than NO_COLOR.
+      process.env.ALCHEMY_NO_TUI = "1";
+      process.env.NO_COLOR = "1";
+      process.env.FORCE_COLOR = "0";
     });
 
     // Plain line output by default; the TUI is opt-in (`--tui`) and requires
