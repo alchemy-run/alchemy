@@ -1,0 +1,95 @@
+---
+title: Bindings
+description: Retrieve and create Stripe objects from a Worker — Binding.Service, *Http layers, RestrictedApiKey, and RuntimeContext.
+---
+
+Stripe has no native Worker binding. Alchemy HTTP capabilities
+(`RetrieveProduct`, `CreateCustomer`, …) are `Binding.Service`s: the
+outer Effect registers deploy-time permissions on a
+[`RestrictedApiKey`](/providers/stripe/restrictedapikey), and the
+inner callable talks to the Stripe API at request time.
+
+Provide the matching `*Http` layer on the **Worker or Function
+Effect**, not on the Stack. The runtime callable requires
+`Alchemy.RuntimeContext` — it only runs inside the deployed host.
+
+## Bind a retrieve
+
+Yield the capability with the resource. That both declares the
+permission and returns a function you call in `fetch`:
+
+```typescript
+const retrieveProduct = yield* Stripe.RetrieveProduct(product);
+
+return {
+  fetch: Effect.gen(function* () {
+    const live = yield* retrieveProduct().pipe(Effect.orDie);
+    return yield* HttpServerResponse.json({
+      id: live.id,
+      name: live.name,
+    });
+  }),
+};
+```
+
+`retrieveProduct()` is request-scoped. The product id is an Output
+accessor — it is not resolved at plan time.
+
+## Provide the HTTP layer
+
+The implementation layer is what actually talks to Stripe. Merge it
+onto the Worker Effect:
+
+```diff lang="typescript"
+  }).pipe(
++    Effect.provide(Stripe.RetrieveProductHttp),
+  ),
+```
+
+Add one layer per capability (`RetrievePriceHttp`,
+`CreateCustomerHttp`, …). Do not `Effect.provide` Credentials and
+HttpClient as separate subsequent calls — each `*Http` layer builds
+one runtime auth.
+
+## RestrictedApiKey
+
+The first HTTP binding on a host mints (or reuses) a
+`RestrictedApiKey` named `{WorkerLogicalId}StripeToken`. Each
+capability calls `token.bind(id, { permissions })` with the Stripe
+permission it needs (`products_read`, `customers_write`, …).
+
+The secret is registered with `yield* token.value` so
+`RuntimeContext.set` + `packEnvValueKeepRedacted` emit a Cloudflare
+`secret_text` binding — the same accessor pattern as R2/KV HTTP
+tokens. Do not push raw `{ type: "secret_text" }` items; the Worker
+provider forwards those unresolved.
+
+Lambda, ECS, and Fly also receive `{ env: { STRIPE_API_KEY } }`
+because those hosts ship environment through their binding contract.
+
+Until Stripe publishes a public create-key API, the token value is
+the account secret or a Dashboard `rk_…` you passed as `value`. See
+[Setup](/stripe/setup).
+
+## Create from the Worker
+
+`CreateCustomer` is account-scoped — no resource argument. The
+callable takes the Stripe request:
+
+```typescript
+const createCustomer = yield* Stripe.CreateCustomer();
+
+const customer = yield* createCustomer({
+  email: "ada@example.com",
+  name: "Ada",
+}).pipe(Effect.orDie);
+```
+
+Provide `Stripe.CreateCustomerHttp` next to the retrieve layers.
+
+## Reference
+
+[RetrieveProduct](/providers/stripe/retrieveproduct) ·
+[CreateCustomer](/providers/stripe/createcustomer) ·
+[RestrictedApiKey](/providers/stripe/restrictedapikey) ·
+[RetrieveProductHttp](/providers/stripe/retrieveproducthttp)

@@ -1,0 +1,68 @@
+---
+title: Webhooks
+description: WebhookEndpoint plus a Worker route — Stripe POSTs events to your stack.
+---
+
+A `WebhookEndpoint` is the HTTPS URL Stripe POSTs event payloads to.
+Point it at a Worker route and Alchemy creates the endpoint, stores
+the signing secret as `Redacted`, and tears it down with the stack.
+
+## Worker route
+
+Handle `POST /webhooks/stripe` on the Worker. The billing example
+acknowledges with `200` and leaves signature verification to you:
+
+```typescript
+if (request.method === "POST" && url.pathname === "/webhooks/stripe") {
+  return HttpServerResponse.text("ok");
+}
+```
+
+Stripe retries on non-2xx. Keep the handler fast; do the real work
+after you return.
+
+## Endpoint resource
+
+Declare the endpoint in the Stack, interpolating the Worker URL:
+
+```typescript
+const api = yield* Api;
+const webhook = yield* Stripe.WebhookEndpoint("Events", {
+  url: Output.interpolate`${api.url}/webhooks/stripe`,
+  enabledEvents: ["customer.created", "checkout.session.completed"],
+});
+```
+
+`enabledEvents: ["*"]` subscribes to every event except those Stripe
+requires you to pick explicitly. `url`, events, `description`,
+`disabled`, and `metadata` update in place. `apiVersion` and
+`connect` are create-only — changing them replaces the endpoint.
+
+## Signing secret
+
+`webhook.secret` is returned only at create and preserved in state as
+`Redacted`. Never log it. Verify payloads with Stripe's
+`Stripe-Signature` header against that secret.
+
+## Disable without deleting
+
+```typescript
+yield* Stripe.WebhookEndpoint("Events", {
+  url: Output.interpolate`${api.url}/webhooks/stripe`,
+  enabledEvents: ["customer.created"],
+  disabled: true,
+});
+```
+
+`disabled: true` stops delivery and keeps the endpoint id. Destroy
+deletes the endpoint.
+
+## Connect events
+
+`connect: true` receives events from connected accounts instead of
+this account. It is create-only. Live Connect coverage is gated on
+`STRIPE_TEST_CONNECT=1` — see [Connect](/stripe/guides/connect).
+
+## Reference
+
+[WebhookEndpoint](/providers/stripe/webhookendpoint)

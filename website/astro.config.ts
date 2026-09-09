@@ -34,6 +34,7 @@ function providersSidebarEntry() {
       { label: "Better Auth", link: "/better-auth" },
       { label: "Axiom", link: "/axiom" },
       { label: "GitHub", link: "/github" },
+      { label: "Stripe", link: "/stripe" },
       { label: "Docker", link: "/docker" },
       { label: "SQL", link: "/sql" },
       { label: "Command", link: "/command" },
@@ -1098,6 +1099,27 @@ export default defineConfig({
               ],
             },
             providerResourcesEntry("Prisma"),
+          ],
+        },
+        {
+          label: "Stripe",
+          items: [
+            { label: "Overview", link: "/stripe" },
+            { label: "Setup", link: "/stripe/setup" },
+            {
+              label: "Tutorial",
+              items: [{ autogenerate: { directory: "stripe/tutorial" } }],
+            },
+            {
+              label: "Guides",
+              items: [
+                { label: "Bindings", link: "/stripe/guides/bindings" },
+                { label: "Catalog", link: "/stripe/guides/catalog" },
+                { label: "Webhooks", link: "/stripe/guides/webhooks" },
+                { label: "Connect", link: "/stripe/guides/connect" },
+              ],
+            },
+            providerResourcesEntry("Stripe"),
           ],
         },
         {

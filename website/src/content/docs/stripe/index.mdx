@@ -1,0 +1,67 @@
+---
+title: Stripe
+description: Products, prices, coupons, customers, payment links, and webhooks as Stack resources — catalog and billing next to the Worker that serves them.
+---
+
+Stripe is the payments API. With alchemy you declare catalog items,
+prices, customers, and webhook endpoints as resources in the same
+Stack as the Worker that sells them — a price change is a reviewable
+diff, and destroy tears the test catalog down with the stage.
+
+New here? [Set up credentials](/stripe/setup) first.
+
+## Resources
+
+A `Product` is the catalog item. A `Price` is what you charge for
+it. Omit `name` and Alchemy generates one from the stack, stage, and
+logical id:
+
+```typescript
+const product = yield* Stripe.Product("Pro", {
+  name: "Pro",
+  description: "Billed monthly",
+});
+
+const price = yield* Stripe.Price("ProMonthly", {
+  product: product.id,
+  currency: "usd",
+  unitAmount: 2000,
+  recurring: { interval: "month" },
+});
+```
+
+`Coupon`, `PromotionCode`, and `PaymentLink` complete a checkout
+catalog — see [Catalog](/stripe/guides/catalog). `Customer` is the
+buyer. `WebhookEndpoint` is the HTTPS destination Stripe POSTs
+events to — see [Webhooks](/stripe/guides/webhooks).
+
+HTTP bindings (`RetrieveProduct`, `CreateCustomer`, …) run inside a
+Worker or Lambda. Provide the matching `*Http` layer on the host
+Effect — see [Bindings](/stripe/guides/bindings).
+
+## The Stripe path
+
+1. [Setup](/stripe/setup) — secret key, profile, CI
+2. [Tutorial](/stripe/tutorial/part-1) — Product, Price, Worker
+   bindings, WebhookEndpoint
+3. [Catalog](/stripe/guides/catalog) — Product / Price / Coupon /
+   PaymentLink together
+4. [Bindings](/stripe/guides/bindings) — RestrictedApiKey and `*Http`
+   layers on a Worker
+
+Connect accounts and Issuing are implemented but live-gated
+(`STRIPE_TEST_CONNECT`, `STRIPE_TEST_ISSUING`) — see
+[Connect](/stripe/guides/connect).
+
+## Reference
+
+[Product](/providers/stripe/product) ·
+[Price](/providers/stripe/price) ·
+[Coupon](/providers/stripe/coupon) ·
+[Customer](/providers/stripe/customer) ·
+[PaymentLink](/providers/stripe/paymentlink) ·
+[WebhookEndpoint](/providers/stripe/webhookendpoint) ·
+[RestrictedApiKey](/providers/stripe/restrictedapikey)
+
+The full resource list lives in the [Resources](/providers) sidebar
+group on this hub.

@@ -1,0 +1,105 @@
+---
+title: "Part 4: Webhooks"
+description: Point a Stripe WebhookEndpoint at the Worker and receive customer.created events.
+sidebar:
+  order: 4
+---
+
+import Terminal from "../../../../components/Terminal.astro";
+
+In [Part 3](/stripe/tutorial/part-3) `POST /customers` creates a
+Stripe Customer. Stripe can POST `customer.created` back to you
+through a `WebhookEndpoint`.
+
+## Add a webhook route
+
+Acknowledge Stripe with `200` so it does not retry. Signature
+verification is yours to add later — see
+[Webhooks](/stripe/guides/webhooks):
+
+```diff lang="typescript"
+        if (request.method === "POST" && request.url.startsWith("/customers")) {
+          // ...
+        }
++        if (request.method === "POST" && request.url.startsWith("/webhooks/stripe")) {
++          return HttpServerResponse.text("ok");
++        }
+        return HttpServerResponse.text("ok");
+```
+
+## Interpolate the Worker URL
+
+`WebhookEndpoint.url` must be HTTPS. The Worker's `url` is an
+Output — interpolate the path with `Output.interpolate`:
+
+```diff lang="typescript"
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Cloudflare from "alchemy/Cloudflare";
++import * as Output from "alchemy/Output";
+import * as Stripe from "alchemy/Stripe";
+```
+
+## Create the WebhookEndpoint
+
+Declare it in the Stack after `Api`, so the Worker URL exists:
+
+```diff lang="typescript"
+    const api = yield* Api;
++    const webhook = yield* Stripe.WebhookEndpoint("Events", {
++      url: Output.interpolate`${api.url}/webhooks/stripe`,
++      enabledEvents: ["customer.created"],
++    });
+```
+
+`enabledEvents` is the allow-list Stripe will POST. Add
+`checkout.session.completed` when you introduce Payment Links.
+
+## Return the endpoint id
+
+```diff lang="typescript"
+    return {
+      productId: product.id,
+      name: product.name,
+      priceId: price.id,
+      couponId: coupon.id,
+      url: api.url.as<string>(),
++      webhookId: webhook.id,
+    };
+```
+
+`webhook.secret` is `Redacted` and returned only at create. Do not
+print it in stack outputs.
+
+## Deploy
+
+```sh
+bun alchemy deploy
+```
+
+<Terminal content={`[u]Plan[/u]: [g]1 to create[/g]
+
+[g]+[/g] [b]Events[/b] [d](Stripe.WebhookEndpoint)[/d]
+
+Proceed?
+◉ Yes ○ No
+[g]✓[/g] [b]Events[/b] [d](Stripe.WebhookEndpoint)[/d] [g]created[/g]
+`} />
+
+Create a customer through `/customers` and Stripe POSTs
+`customer.created` to `/webhooks/stripe`.
+
+## Recap
+
+You now have a Product, a Price, a Coupon, a Worker that retrieves
+the Product and creates Customers, and a WebhookEndpoint pointed at
+that Worker.
+
+- [Catalog](/stripe/guides/catalog) — PaymentLink and PromotionCode
+- [Bindings](/stripe/guides/bindings) — RestrictedApiKey and `*Http`
+- [Connect](/stripe/guides/connect) — gated connected accounts
+- [Reference](/providers/stripe/product) — every resource
+
+`alchemy destroy` tears the test catalog down with the stack.
+Prices with history are deactivated; products that still have prices
+are archived.
