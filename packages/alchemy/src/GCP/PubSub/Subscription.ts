@@ -491,7 +491,14 @@ export const SubscriptionProvider = () =>
         ...(yield* createInternalLabels(id)),
       };
 
-      let current = yield* getByName(name);
+      let current =
+        output !== undefined
+          ? yield* waitUntilPresent(name).pipe(
+              Effect.catchTag("GCP.PubSub.SubscriptionNotResolved", () =>
+                Effect.succeed(undefined),
+              ),
+            )
+          : yield* getByName(name);
 
       if (current === undefined) {
         const created = yield* pubsub
@@ -499,7 +506,7 @@ export const SubscriptionProvider = () =>
             name,
             body: toCreateBody(topicName, news, desiredLabels),
           })
-          .pipe(Effect.catchTag("Conflict", () => getByName(name)));
+          .pipe(Effect.catchTag("Conflict", () => waitUntilPresent(name)));
         current =
           created === undefined
             ? undefined
