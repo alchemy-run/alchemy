@@ -1,4 +1,4 @@
-export {};
+import { preferLocalFlociImage } from "./floci-image.ts";
 
 // `bun test:examples --profile testing` — the example suites read the
 // profile from `ALCHEMY_PROFILE` (`Test.make({ profile: process.env.ALCHEMY_PROFILE })`),
@@ -23,6 +23,11 @@ export {};
     process.env.ALCHEMY_PROFILE = profile;
   }
 }
+
+// The AWS examples run against the floci emulator: use the locally built
+// image when there is one so an emulator fix is testable before its
+// release image lands on GHCR.
+preferLocalFlociImage("test:examples");
 
 const examples = [
   "./examples/cloudflare-dev",
@@ -112,6 +117,13 @@ const examples = [
   "./examples/fly-postgres",
 ] as const;
 
+// The AWS examples share one floci emulator container (`alchemy-floci`):
+// two `alchemy dev` sessions ensuring it at the same time race to recreate
+// it on an image bump and hot-swap each other's Lambda code, so they run
+// one at a time. Everything else stays concurrent.
+const serialGroup = (example: string): string | undefined =>
+  example.startsWith("./examples/aws-") ? "floci" : undefined;
+
 type CommandResult = {
   label: string;
   command: readonly string[];
@@ -120,10 +132,15 @@ type CommandResult = {
   stderr: string;
 };
 
-type TaskState = {
+type Task = {
   label: string;
   command: readonly string[];
   cwd?: string;
+  /** Tasks sharing a key run one at a time, in list order. */
+  serial?: string;
+};
+
+type TaskState = Task & {
   status: "pending" | "running" | "ok" | "failed";
   startedAt?: number;
   endedAt?: number;
@@ -287,11 +304,7 @@ const run = async (
 };
 
 const runParallel = async (
-  tasks: readonly {
-    label: string;
-    command: readonly string[];
-    cwd?: string;
-  }[],
+  tasks: readonly Task[],
 ): Promise<readonly CommandResult[]> => {
   const states = tasks.map((task): TaskState => ({
     ...task,
@@ -300,13 +313,23 @@ const runParallel = async (
   const renderer = makeStatusRenderer(states);
   renderer.render();
   const interval = setInterval(() => renderer.render(), 1000);
+  const chains = new Map<string, Promise<unknown>>();
 
   try {
     return await Promise.all(
-      states.map(async (state) => {
-        const result = await run(state, () => renderer.render());
-        if (result.exitCode !== 0) renderer.failure(result);
-        return result;
+      states.map((state) => {
+        const start = async () => {
+          const result = await run(state, () => renderer.render());
+          if (result.exitCode !== 0) renderer.failure(result);
+          return result;
+        };
+        if (state.serial === undefined) return start();
+        const next = (chains.get(state.serial) ?? Promise.resolve()).then(
+          start,
+          start,
+        );
+        chains.set(state.serial, next);
+        return next;
       }),
     );
   } finally {
@@ -324,6 +347,7 @@ const testResults = await runParallel(
     // ever spawn the actual test process.
     command: ["bun", "test"] as const,
     cwd: example,
+    serial: serialGroup(example),
   })),
 );
 const failedTests = testResults.filter((result) => result.exitCode !== 0);
@@ -344,6 +368,7 @@ const cliResults = await runParallel(
   examples.map((example) => ({
     label: `${example} CLI lifecycle`,
     command: ["bun", "scripts/test-example-cli.ts", example],
+    serial: serialGroup(example),
   })),
 );
 const failedCliTests = cliResults.filter((result) => result.exitCode !== 0);
