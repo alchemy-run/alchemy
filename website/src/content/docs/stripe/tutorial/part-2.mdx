@@ -1,0 +1,140 @@
+---
+title: "Part 2: Price and Coupon"
+description: Attach a recurring Price to the Product, add a Coupon, and deploy the catalog.
+sidebar:
+  order: 2
+---
+
+import Terminal from "../../../../components/Terminal.astro";
+
+In [Part 1](/stripe/tutorial/part-1) you deployed a Product. A
+Product is not sellable on its own — Stripe charges a **Price**.
+Then a **Coupon** takes a percentage off.
+
+## Add a Price
+
+A Price belongs to a Product. Pass `product.id` (an Output) so
+Alchemy creates the Product first:
+
+```diff lang="typescript"
+  Effect.gen(function* () {
+    const product = yield* Stripe.Product("Pro", {
+      name: "Pro",
+      description: "Billed monthly",
+    });
++    const price = yield* Stripe.Price("ProMonthly", {
++      product: product.id,
++      currency: "usd",
++      unitAmount: 2000,
++    });
+
+    return {
+      productId: product.id,
+      name: product.name,
+    };
+  }),
+```
+
+`unitAmount` is in the currency's minor units — `2000` with
+`"usd"` is $20.00. `product`, `currency`, and `unitAmount` are
+create-only: changing them replaces the Price.
+
+## Make it recurring
+
+Omit `recurring` for a one-time charge. Add `interval: "month"` for
+a subscription price:
+
+```diff lang="typescript"
+    const price = yield* Stripe.Price("ProMonthly", {
+      product: product.id,
+      currency: "usd",
+      unitAmount: 2000,
++      recurring: { interval: "month" },
+    });
+```
+
+`interval` is create-only too. Destroy deactivates a used Price
+(`active: false`) because Stripe will not delete one that has been
+billed.
+
+## Return the Price id
+
+Expose `price.id` (`price_…`) next to the Product:
+
+```diff lang="typescript"
+    return {
+      productId: product.id,
+      name: product.name,
++      priceId: price.id,
+    };
+```
+
+## Add a Coupon
+
+A Coupon is independent of the Product — it discounts invoices and
+Checkout:
+
+```diff lang="typescript"
+    const price = yield* Stripe.Price("ProMonthly", {
+      product: product.id,
+      currency: "usd",
+      unitAmount: 2000,
+      recurring: { interval: "month" },
+    });
++    const coupon = yield* Stripe.Coupon("Launch20", {
++      percentOff: 20,
++      duration: "once",
++      name: "Launch 20%",
++    });
+
+    return {
+      productId: product.id,
+      name: product.name,
+      priceId: price.id,
+    };
+```
+
+`percentOff: 20` and `duration: "once"` is 20% off the first
+invoice. Use `amountOff` plus `currency` for a fixed discount.
+
+## Return the Coupon id
+
+```diff lang="typescript"
+    return {
+      productId: product.id,
+      name: product.name,
+      priceId: price.id,
++      couponId: coupon.id,
+    };
+```
+
+## Deploy
+
+```sh
+bun alchemy deploy
+```
+
+<Terminal content={`[u]Plan[/u]: [g]2 to create[/g]
+
+[g]+[/g] [b]ProMonthly[/b] [d](Stripe.Price)[/d]
+[g]+[/g] [b]Launch20[/b] [d](Stripe.Coupon)[/d]
+
+Proceed?
+◉ Yes ○ No
+[g]✓[/g] [b]ProMonthly[/b] [d](Stripe.Price)[/d] [g]created[/g]
+[g]✓[/g] [b]Launch20[/b] [d](Stripe.Coupon)[/d] [g]created[/g]
+{
+[s2]productId: "prod_aaaaaaaaaaaaaaaa",
+[s2]name: "Pro",
+[s2]priceId: "price_bbbbbbbbbbbbbbbb",
+[s2]couponId: "xxxxxxxx",
+}`} />
+
+The Product is a no-op. The Price and Coupon are created.
+
+## Recap
+
+You now have a $20/month Price on `Pro` and a one-time 20% coupon.
+[Catalog](/stripe/guides/catalog) covers PaymentLink and
+PromotionCode. In [Part 3](/stripe/tutorial/part-3) you'll bind the
+Product into a Worker.
