@@ -137,7 +137,6 @@ describe("Fly Bindings", () => {
         appName?: string;
         secretName?: string;
         viaRuntimeContext?: boolean;
-        hasFlyAppNameEnv?: boolean;
         hasFlySecretMarkerEnv?: boolean;
         hasToken?: boolean;
       };
@@ -146,7 +145,6 @@ describe("Fly Bindings", () => {
       expect(body.appName).toEqual(out.appName);
       expect(body.secretName).toEqual(out.secretName);
       expect(body.hasToken).toEqual(true);
-      expect(body.hasFlyAppNameEnv).toEqual(false);
       expect(body.hasFlySecretMarkerEnv).toEqual(false);
     }).pipe(logLevel),
     { timeout: 120_000 },

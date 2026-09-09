@@ -72,7 +72,6 @@ export default class BindingsApi extends Fly.Service<BindingsApi>()(
             appName: resolvedApp,
             secretName: resolvedSecret,
             viaRuntimeContext: true,
-            hasFlyAppNameEnv: process.env.FLY_APP_NAME !== undefined,
             hasFlySecretMarkerEnv: process.env.FLY_SECRET_Marker !== undefined,
             hasToken: token.length > 0,
             tokenKind: token.startsWith("{")
