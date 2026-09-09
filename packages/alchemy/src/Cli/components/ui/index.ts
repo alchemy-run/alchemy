@@ -42,6 +42,7 @@ export {
   ChoiceGroup,
   CycleList,
   InlineConfirm,
+  Pointer,
   PromptFrame,
   TextField,
   useCycleNavigation,
