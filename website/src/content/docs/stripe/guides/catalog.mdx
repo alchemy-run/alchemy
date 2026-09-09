@@ -6,7 +6,7 @@ description: Product, Price, Coupon, PromotionCode, and PaymentLink as one check
 A sellable catalog is a `Product`, one or more `Price`s, optional
 `Coupon` / `PromotionCode`, and a `PaymentLink` that points at a
 price. All of them are Stack resources — the Worker in
-[Bindings](/stripe/guides/bindings) reads them back over HTTP.
+[Sell from a Worker](/stripe/guides/sell-from-a-worker) reads them back over HTTP.
 
 Everything below runs inside your Stack's `Effect.gen` — see
 [Setup](/stripe/setup) for credentials.
@@ -29,7 +29,7 @@ prices remain.
 
 ```typescript
 const price = yield* Stripe.Price("ProMonthly", {
-  product: product.id,
+  product,
   currency: "usd",
   unitAmount: 2000,
   recurring: { interval: "month" },

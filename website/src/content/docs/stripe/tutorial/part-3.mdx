@@ -1,128 +1,46 @@
 ---
 title: "Part 3: Worker Bindings"
-description: Serve the Product from a Cloudflare Worker with RetrieveProduct, then create Customers at runtime.
+description: Retrieve the Product over HTTP and create Customers from the Worker.
 sidebar:
   order: 3
 ---
 
 import Terminal from "../../../../components/Terminal.astro";
 
-In [Part 2](/stripe/tutorial/part-2) the catalog lives in Stripe. A
-Worker reads it back over HTTP through Alchemy bindings — there is
-no native Stripe Worker binding.
-
-You need a Cloudflare account for this part. The Stripe resources
-stay where they are.
-
-## Move the Product to a module
-
-So far the Product lives inside the Stack's generator. To let the
-Worker reference it, declare it at **module scope**. Create
-`src/product.ts`:
-
-```typescript
-// src/product.ts
-import * as Stripe from "alchemy/Stripe";
-
-export const Pro = Stripe.Product("Pro", {
-  name: "Pro",
-  description: "Billed monthly",
-});
-```
-
-The logical id is still `Pro`, so Alchemy recognizes it as the same
-Product you deployed in Part 1.
-
-## Update the Stack
-
-Import `Pro` and yield it from the Stack. The Price still takes
-`product.id`:
-
-```diff lang="typescript"
-// alchemy.run.ts
-import * as Alchemy from "alchemy";
-import * as Stripe from "alchemy/Stripe";
-import * as Effect from "effect/Effect";
-+import { Pro } from "./src/product.ts";
-
-export default Alchemy.Stack(
-  "MyApp",
-  {
-    providers: Stripe.providers(),
-    state: Alchemy.localState(),
-  },
-  Effect.gen(function* () {
--    const product = yield* Stripe.Product("Pro", {
--      name: "Pro",
--      description: "Billed monthly",
--    });
-+    const product = yield* Pro;
-    const price = yield* Stripe.Price("ProMonthly", {
-      product: product.id,
-      currency: "usd",
-      unitAmount: 2000,
-      recurring: { interval: "month" },
-    });
-```
-
-## Create the Worker file
-
-A Worker is a class with an Effect `fetch` handler. Create
-`src/api.ts`:
-
-```typescript
-// src/api.ts
-import * as Cloudflare from "alchemy/Cloudflare";
-import * as Effect from "effect/Effect";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-
-export default class Api extends Cloudflare.Worker<Api>()(
-  "Api",
-  {
-    main: import.meta.url,
-  },
-  Effect.gen(function* () {
-    return {
-      fetch: Effect.gen(function* () {
-        return HttpServerResponse.text("ok");
-      }),
-    };
-  }),
-) {}
-```
-
-`main: import.meta.url` is required in `alchemy dev`. Inline
-`script` is deploy-only.
+In [Part 2](/stripe/tutorial/part-2) the catalog lives on the Worker
+but `fetch` still returns `"ok"`. Bindings read Stripe back over
+HTTP — there is no native Stripe Worker binding.
 
 ## Bind RetrieveProduct
 
-Yield `Pro` inside the Worker and pass it to
-`Stripe.RetrieveProduct`. That registers `products_read` on the host
-token and returns a callable:
+Pass the Product to `Stripe.RetrieveProduct`. That registers
+`products_read` on the host token and returns a callable:
 
 ```diff lang="typescript"
 // src/api.ts
-import * as Cloudflare from "alchemy/Cloudflare";
-+import * as Stripe from "alchemy/Stripe";
-import * as Effect from "effect/Effect";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-+import { Pro } from "./product.ts";
-
-export default class Api extends Cloudflare.Worker<Api>()(
-  "Api",
-  {
-    main: import.meta.url,
-  },
-  Effect.gen(function* () {
-+    const product = yield* Pro;
-+    const retrieveProduct = yield* Stripe.RetrieveProduct(product);
-    return {
-      fetch: Effect.gen(function* () {
-        return HttpServerResponse.text("ok");
-      }),
-    };
-  }),
-) {}
+Effect.gen(function* () {
+  const product = yield* Stripe.Product("Pro", {
+    name: "Pro",
+    description: "Billed monthly",
+  });
+  const price = yield* Stripe.Price("ProMonthly", {
+    product,
+    currency: "usd",
+    unitAmount: 2000,
+    recurring: { interval: "month" },
+  });
+  const coupon = yield* Stripe.Coupon("Launch20", {
+    percentOff: 20,
+    duration: "once",
+    name: "Launch 20%",
+  });
++  const retrieveProduct = yield* Stripe.RetrieveProduct(product);
+  return {
+    fetch: Effect.gen(function* () {
+      return HttpServerResponse.text("ok");
+    }),
+  };
+}),
 ```
 
 The callable requires `RuntimeContext` — it only runs inside the
@@ -133,22 +51,26 @@ deployed Worker.
 Call `retrieveProduct()` from `fetch`:
 
 ```diff lang="typescript"
+// src/api.ts
 +import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 ```
 
 ```diff lang="typescript"
-fetch: Effect.gen(function* () {
-+  const request = yield* HttpServerRequest;
-+  if (request.url.startsWith("/product")) {
-+    const live = yield* retrieveProduct().pipe(Effect.orDie);
-+    return yield* HttpServerResponse.json({
-+      id: live.id,
-+      name: live.name,
-+    });
-+  }
-  return HttpServerResponse.text("ok");
-}),
+// src/api.ts
+return {
+  fetch: Effect.gen(function* () {
++    const request = yield* HttpServerRequest;
++    if (request.url.startsWith("/product")) {
++      const live = yield* retrieveProduct().pipe(Effect.orDie);
++      return yield* HttpServerResponse.json({
++        id: live.id,
++        name: live.name,
++      });
++    }
+    return HttpServerResponse.text("ok");
+  }),
+};
 ```
 
 `Effect.orDie` turns a Stripe error into a 500 for this tutorial.
@@ -159,69 +81,15 @@ The HTTP implementation is a Layer on the **Worker Effect**, not the
 Stack:
 
 ```diff lang="typescript"
-        return HttpServerResponse.text("ok");
+// src/api.ts
+    return {
+      fetch: Effect.gen(function* () {
+        // ...
       }),
     };
 -  }),
 +  }).pipe(Effect.provide(Stripe.RetrieveProductHttp)),
 ) {}
-```
-
-## Merge Cloudflare providers
-
-The Worker needs `Cloudflare.providers()` next to Stripe:
-
-```diff lang="typescript"
-// alchemy.run.ts
-import * as Alchemy from "alchemy";
-+import * as Cloudflare from "alchemy/Cloudflare";
-import * as Stripe from "alchemy/Stripe";
-import * as Effect from "effect/Effect";
-+import * as Layer from "effect/Layer";
-import { Pro } from "./src/product.ts";
-
-export default Alchemy.Stack(
-  "MyApp",
-  {
--    providers: Stripe.providers(),
-+    providers: Layer.mergeAll(Cloudflare.providers(), Stripe.providers()),
-    state: Alchemy.localState(),
-  },
-```
-
-## Yield the Worker
-
-Import `Api` and return its URL:
-
-```diff lang="typescript"
-+import Api from "./src/api.ts";
-import { Pro } from "./src/product.ts";
-```
-
-```diff lang="typescript"
-Effect.gen(function* () {
-  const product = yield* Pro;
-  const price = yield* Stripe.Price("ProMonthly", {
-    product: product.id,
-    currency: "usd",
-    unitAmount: 2000,
-    recurring: { interval: "month" },
-  });
-  const coupon = yield* Stripe.Coupon("Launch20", {
-    percentOff: 20,
-    duration: "once",
-    name: "Launch 20%",
-  });
-+  const api = yield* Api;
-
-  return {
-    productId: product.id,
-    name: product.name,
-    priceId: price.id,
-    couponId: coupon.id,
-+    url: api.url.as<string>(),
-  };
-}),
 ```
 
 ## Deploy and fetch
@@ -230,16 +98,15 @@ Effect.gen(function* () {
 bun alchemy deploy
 ```
 
-<Terminal content={`[u]Plan[/u]: [g]2 to create[/g]
+<Terminal content={`[u]Plan[/u]: [g]1 to create[/g]
 
-[g]+[/g] [b]Api[/b] [d](Cloudflare.Worker)[/d]
 [g]+[/g] [b]ApiStripeToken[/b] [d](Stripe.RestrictedApiKey)[/d]
 
 Proceed?
 ◉ Yes ○ No`} />
 
 The RestrictedApiKey is the host token Bindings attach permissions
-to — see [Bindings](/stripe/guides/bindings). Then:
+to — see [Sell from a Worker](/stripe/guides/sell-from-a-worker). Then:
 
 ```sh
 curl "$(bun alchemy stack output url)/product"
@@ -253,6 +120,7 @@ You get `{ "id": "prod_…", "name": "Pro" }`.
 next to `RetrieveProduct`:
 
 ```diff lang="typescript"
+// src/api.ts
 const retrieveProduct = yield* Stripe.RetrieveProduct(product);
 +const createCustomer = yield* Stripe.CreateCustomer();
 return {
@@ -261,48 +129,52 @@ return {
 ## Provide CreateCustomerHttp
 
 ```diff lang="typescript"
+// src/api.ts
 -  }).pipe(Effect.provide(Stripe.RetrieveProductHttp)),
 +  }).pipe(
-+    Effect.provide(
-+      Layer.mergeAll(
-+        Stripe.RetrieveProductHttp,
-+        Stripe.CreateCustomerHttp,
-+      ),
-+    ),
++    Effect.provide([
++      Stripe.RetrieveProductHttp,
++      Stripe.CreateCustomerHttp,
++    ]),
 +  ),
+) {}
 ```
-
-Add `import * as Layer from "effect/Layer"` at the top of
-`src/api.ts`.
 
 ## Handle POST /customers
 
 ```diff lang="typescript"
-if (request.url.startsWith("/product")) {
-  const live = yield* retrieveProduct().pipe(Effect.orDie);
-  return yield* HttpServerResponse.json({
-    id: live.id,
-    name: live.name,
-  });
-}
-+if (request.method === "POST" && request.url.startsWith("/customers")) {
-+  const body = (yield* request.json) as { email?: string; name?: string };
-+  if (!body.email) {
+// src/api.ts
+fetch: Effect.gen(function* () {
+  const request = yield* HttpServerRequest;
+  if (request.url.startsWith("/product")) {
+    const live = yield* retrieveProduct().pipe(Effect.orDie);
+    return yield* HttpServerResponse.json({
+      id: live.id,
+      name: live.name,
+    });
+  }
++  if (request.method === "POST" && request.url.startsWith("/customers")) {
++    const body = (yield* request.json) as {
++      email?: string;
++      name?: string;
++    };
++    if (!body.email) {
++      return yield* HttpServerResponse.json(
++        { error: "email is required" },
++        { status: 400 },
++      );
++    }
++    const customer = yield* createCustomer({
++      email: body.email,
++      ...(body.name !== undefined ? { name: body.name } : {}),
++    }).pipe(Effect.orDie);
 +    return yield* HttpServerResponse.json(
-+      { error: "email is required" },
-+      { status: 400 },
++      { id: customer.id, email: customer.email },
++      { status: 201 },
 +    );
 +  }
-+  const customer = yield* createCustomer({
-+    email: body.email,
-+    ...(body.name !== undefined ? { name: body.name } : {}),
-+  }).pipe(Effect.orDie);
-+  return yield* HttpServerResponse.json(
-+    { id: customer.id, email: customer.email },
-+    { status: 201 },
-+  );
-+}
-return HttpServerResponse.text("ok");
+  return HttpServerResponse.text("ok");
+}),
 ```
 
 Redeploy, then:

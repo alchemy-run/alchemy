@@ -1,6 +1,6 @@
 ---
 title: "Part 4: Webhooks"
-description: Point a Stripe WebhookEndpoint at the Worker and receive customer.created events.
+description: Handle customer.created on the Worker with consumeEvents.
 sidebar:
   order: 4
 ---
@@ -8,69 +8,46 @@ sidebar:
 import Terminal from "../../../../components/Terminal.astro";
 
 In [Part 3](/stripe/tutorial/part-3) `POST /customers` creates a
-Stripe Customer. Stripe can POST `customer.created` back to you
-through a `WebhookEndpoint`.
+Stripe Customer. Handle the `customer.created` webhook on the same
+Worker.
 
-## Add a webhook route
+## Subscribe with consumeEvents
 
-Acknowledge Stripe with `200` so it does not retry. Putting
-`webhook.secret` on the Worker as `STRIPE_WEBHOOK_SECRET` and
-verifying with `Webhooks.constructEvent` is in
-[Webhooks](/stripe/guides/webhooks):
+Call `consumeEvents` in the Worker init. Pass event **classes**:
 
 ```diff lang="typescript"
-if (request.method === "POST" && request.url.startsWith("/customers")) {
-  // ...
-}
-+if (request.method === "POST" && request.url.startsWith("/webhooks/stripe")) {
-+  return HttpServerResponse.text("ok");
-+}
-return HttpServerResponse.text("ok");
-```
-
-## Interpolate the Worker URL
-
-`WebhookEndpoint.url` must be HTTPS. The Worker's `url` is an
-Output — interpolate the path with `Output.interpolate`:
-
-```diff lang="typescript"
-// alchemy.run.ts
-import * as Alchemy from "alchemy";
-import * as Cloudflare from "alchemy/Cloudflare";
-+import * as Output from "alchemy/Output";
-import * as Stripe from "alchemy/Stripe";
-```
-
-## Create the WebhookEndpoint
-
-Declare it in the Stack after `Api`, so the Worker URL exists:
-
-```diff lang="typescript"
-const api = yield* Api;
-+const webhook = yield* Stripe.WebhookEndpoint("Events", {
-+  url: Output.interpolate`${api.url}/webhooks/stripe`,
-+  enabledEvents: ["customer.created"],
-+});
-```
-
-`enabledEvents` is the allow-list Stripe will POST. Add
-`checkout.session.completed` when you introduce Payment Links.
-
-## Return the endpoint id
-
-```diff lang="typescript"
+// src/api.ts
+const retrieveProduct = yield* Stripe.RetrieveProduct(product);
+const createCustomer = yield* Stripe.CreateCustomer();
++yield* Stripe.consumeEvents(
++  "Events",
++  { events: [Stripe.CustomerCreated] },
++  Effect.fn(function* (event) {
++    yield* Effect.log(event.type);
++  }),
++);
 return {
-  productId: product.id,
-  name: product.name,
-  priceId: price.id,
-  couponId: coupon.id,
-  url: api.url.as<string>(),
-+  webhookId: webhook.id,
-};
 ```
 
-`webhook.secret` is `Redacted` and returned only at create. Do not
-print it in stack outputs.
+The handler runs once per delivery. `event` is a `CustomerCreated`.
+
+## Provide ConsumeEventsLive
+
+```diff lang="typescript"
+// src/api.ts
+-  }).pipe(Effect.provide(Stripe.RetrieveProductHttp)),
++  }).pipe(
++    Effect.provide([
++      Stripe.RetrieveProductHttp,
++      Stripe.CreateCustomerHttp,
++      Stripe.ConsumeEventsLive,
++    ]),
++  ),
+) {}
+```
+
+This yields a `WebhookEndpoint` pointed at the Worker and verifies
+`Stripe-Signature`. See [Handle webhook events](/stripe/guides/webhooks).
 
 ## Deploy
 
@@ -87,19 +64,18 @@ Proceed?
 [g]✓[/g] [b]Events[/b] [d](Stripe.WebhookEndpoint)[/d] [g]created[/g]
 `} />
 
-Create a customer through `/customers` and Stripe POSTs
-`customer.created` to `/webhooks/stripe`.
+Create a customer through `/customers` and the handler logs
+`customer.created`.
 
 ## Recap
 
-You now have a Product, a Price, a Coupon, a Worker that retrieves
-the Product and creates Customers, and a WebhookEndpoint pointed at
-that Worker.
+The Worker now retrieves the Product, creates Customers, and handles
+Stripe events.
 
 - [Catalog](/stripe/guides/catalog) — PaymentLink and PromotionCode
-- [Bindings](/stripe/guides/bindings) — RestrictedApiKey and `*Http`
+- [Sell from a Worker](/stripe/guides/sell-from-a-worker)
+- [Handle webhook events](/stripe/guides/webhooks)
 - [Connect](/stripe/guides/connect) — gated connected accounts
-- [Reference](/providers/stripe/product) — every resource
 
 `alchemy destroy` tears the test catalog down with the stack.
 Prices with history are deactivated; products that still have prices

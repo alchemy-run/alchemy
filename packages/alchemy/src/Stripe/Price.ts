@@ -22,6 +22,7 @@ import {
   stripInternalMetadata,
   toMetadata,
 } from "./Metadata.ts";
+import type { Product } from "./Product.ts";
 import type { Providers } from "./Providers.ts";
 import { isMissingStripeResource } from "./missing.ts";
 
@@ -62,10 +63,10 @@ export interface PriceRecurring {
 
 export interface PriceProps {
   /**
-   * Id of the Stripe Product this price belongs to (`prod_…`). Create-only
-   * — changing it replaces the price.
+   * Stripe Product this price belongs to — the resource, or a `prod_…`
+   * id. Create-only — changing it replaces the price.
    */
-  product: string;
+  product: string | Product;
   /**
    * Three-letter ISO currency code, lowercase (e.g. `"usd"`). Create-only
    * — changing it replaces the price.
@@ -158,7 +159,7 @@ export type Price = Resource<
  * ```typescript
  * const product = yield* Stripe.Product("pro-plan", { name: "Pro Plan" });
  * const price = yield* Stripe.Price("pro-once", {
- *   product: product.id,
+ *   product,
  *   currency: "usd",
  *   unitAmount: 2000,
  * });
@@ -167,7 +168,7 @@ export type Price = Resource<
  * **Example:** Recurring monthly price
  * ```typescript
  * const price = yield* Stripe.Price("pro-monthly", {
- *   product: product.id,
+ *   product,
  *   currency: "usd",
  *   unitAmount: 1500,
  *   recurring: { interval: "month" },
@@ -179,7 +180,7 @@ export type Price = Resource<
  * **Example:** Nickname, metadata, and deactivate
  * ```typescript
  * const price = yield* Stripe.Price("pro-monthly", {
- *   product: product.id,
+ *   product,
  *   currency: "usd",
  *   unitAmount: 1500,
  *   recurring: { interval: "month" },
@@ -187,6 +188,13 @@ export type Price = Resource<
  *   active: false,
  *   metadata: { tier: "pro" },
  * });
+ * ```
+ *
+ * ### Destroying a Price
+ * **Example:** Deactivate instead of delete
+ * ```typescript
+ * // Stripe cannot delete a used price. `alchemy destroy` sets
+ * // `active: false`.
  * ```
  *
  * @resource
@@ -208,6 +216,9 @@ const productIdOf = (product: PriceProduct): string => {
   if (typeof product === "string") return product;
   return product.id;
 };
+
+const alchemyProductId = (product: string | Product): string =>
+  typeof product === "string" ? product : product.id;
 
 const toRecurring = (
   recurring: StripePrice["recurring"],
@@ -342,7 +353,7 @@ const shouldReplace = (
   output: Price["Attributes"] | undefined,
 ) => {
   if (output === undefined) return false;
-  if (news.product !== output.product) return true;
+  if (alchemyProductId(news.product) !== output.product) return true;
   if (news.currency !== output.currency) return true;
   if (news.unitAmount !== undefined && news.unitAmount !== output.unitAmount) {
     return true;
@@ -413,7 +424,7 @@ export const PriceProvider = () =>
 
       if (current === undefined) {
         current = yield* CreatePrice({
-          product: news.product,
+          product: alchemyProductId(news.product),
           currency: news.currency,
           active: desiredActive,
           metadata,
@@ -455,7 +466,7 @@ export const PriceProvider = () =>
 
       if (current === undefined) {
         return yield* new PriceNotResolved({
-          product: news.product,
+          product: alchemyProductId(news.product),
           currency: news.currency,
         });
       }

@@ -425,12 +425,12 @@ Products, prices, coupons, customers, payment links, and webhooks as Stack resou
 - [Stripe](https://alchemy.run/stripe) — Products, prices, coupons, customers, payment links, and webhooks as Stack resources — catalog and billing next to the Worker that serves them.
 - [Setup](https://alchemy.run/stripe/setup) — Connect alchemy to Stripe — secret key, profiles, and CI.
 - [Part 1: Your First Product](https://alchemy.run/stripe/tutorial/part-1) — Install Alchemy, create a Stack with a Stripe Product, and deploy it.
-- [Part 2: Price and Coupon](https://alchemy.run/stripe/tutorial/part-2) — Attach a recurring Price to the Product, add a Coupon, and deploy the catalog.
-- [Part 3: Worker Bindings](https://alchemy.run/stripe/tutorial/part-3) — Serve the Product from a Cloudflare Worker with RetrieveProduct, then create Customers at runtime.
-- [Part 4: Webhooks](https://alchemy.run/stripe/tutorial/part-4) — Point a Stripe WebhookEndpoint at the Worker and receive customer.created events.
-- [Bindings](https://alchemy.run/stripe/guides/bindings) — Retrieve and create Stripe objects from a Worker — Binding.Service, *Http layers, RestrictedApiKey, and RuntimeContext.
+- [Part 2: Price on a Worker](https://alchemy.run/stripe/tutorial/part-2) — Put the Product on a Cloudflare Worker, attach a recurring Price and a Coupon, and deploy.
+- [Part 3: Worker Bindings](https://alchemy.run/stripe/tutorial/part-3) — Retrieve the Product over HTTP and create Customers from the Worker.
+- [Part 4: Webhooks](https://alchemy.run/stripe/tutorial/part-4) — Handle customer.created on the Worker with consumeEvents.
+- [Sell from a Worker](https://alchemy.run/stripe/guides/sell-from-a-worker) — Read the catalog and create customers over HTTP from a Cloudflare Worker.
 - [Catalog](https://alchemy.run/stripe/guides/catalog) — Product, Price, Coupon, PromotionCode, and PaymentLink as one checkout catalog.
-- [Webhooks](https://alchemy.run/stripe/guides/webhooks) — WebhookEndpoint plus a Worker route — Stripe POSTs events to your stack.
+- [Handle webhook events](https://alchemy.run/stripe/guides/webhooks) — WebhookEndpoint lifecycle plus consumeEvents — one Effect per Stripe delivery.
 - [Connect](https://alchemy.run/stripe/guides/connect) — Connected accounts, persons, and external accounts — implemented, live-gated on STRIPE_TEST_CONNECT.
 
 ## Docker

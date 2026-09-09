@@ -398,7 +398,7 @@ const SECTIONS: Section[] = [
         "stripe/tutorial/part-2",
         "stripe/tutorial/part-3",
         "stripe/tutorial/part-4",
-        "stripe/guides/bindings",
+        "stripe/guides/sell-from-a-worker",
         "stripe/guides/catalog",
         "stripe/guides/webhooks",
         "stripe/guides/connect",
