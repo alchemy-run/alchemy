@@ -843,17 +843,18 @@ export const JobProvider = () =>
       if (news.main !== undefined) {
         const images = yield* makeImageSource;
         const handler = news.handler ?? "default";
-        const image = yield* images.resolve({
-          id,
-          source: {
-            main: news.main,
-            handler,
-            build: news.build,
-          },
-          repositoryName: rfc1035(`${jobId}-src`),
-          location,
-          isExternal: news.isExternal,
-          bootstrap: (importPath: string) => `
+        const image = yield* images
+          .resolve({
+            id,
+            source: {
+              main: news.main,
+              handler,
+              build: news.build,
+            },
+            repositoryName: rfc1035(`${jobId}-src`),
+            location,
+            isExternal: news.isExternal,
+            bootstrap: (importPath: string) => `
 import { bootstrap } from "alchemy/Runtime/Bootstrap/CloudRunJob";
 
 globalThis.__ALCHEMY_RUNTIME__ = true;
@@ -861,8 +862,15 @@ const { ${handler}: entrypoint } = await import(${JSON.stringify(importPath)});
 
 await bootstrap(entrypoint);
 `,
-          session,
-        });
+            session,
+          })
+          .pipe(
+            Effect.tapError(() =>
+              managed && output === undefined
+                ? deleteHostServiceAccount(env.project, jobId)
+                : Effect.void,
+            ),
+          );
         containers = [
           {
             image: image.imageUri,
