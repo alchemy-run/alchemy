@@ -1,10 +1,14 @@
 import * as GCP from "@/GCP";
 import * as Test from "@/Test/Alchemy";
 import * as cloudrun from "@distilled.cloud/gcp/run_v2";
+import * as storage from "@distilled.cloud/gcp/storage_v1";
 import { expect } from "alchemy-test";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { spawnSync } from "node:child_process";
+import MarkerJob, { MARKER_OBJECT } from "./fixtures/job.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -19,7 +23,22 @@ const hasGcpCreds = !!(
     process.env.GOOGLE_APPLICATION_CREDENTIALS)
 );
 
+const dockerAvailable = (() => {
+  try {
+    return (
+      spawnSync("docker", ["info"], { stdio: "ignore", timeout: 15_000 })
+        .status === 0
+    );
+  } catch {
+    return false;
+  }
+})();
+
 const IMAGE = "us-docker.pkg.dev/cloudrun/container/job:latest";
+
+class JobRunNotReady extends Data.TaggedError("JobRunNotReady")<{
+  reason: string;
+}> {}
 
 const waitUntilGone = (name: string) =>
   cloudrun.getProjectsLocationsJobs({ name }).pipe(
@@ -103,4 +122,68 @@ test.provider.skipIf(!hasGcpCreds)(
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
   { timeout: 120_000 },
+);
+
+test.provider.skipIf(!hasGcpCreds || !dockerAvailable)(
+  "effect-native Job run writes a Storage object",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const out = yield* stack.deploy(
+        Effect.gen(function* () {
+          const job = yield* MarkerJob;
+          return { name: job.name, project: job.project };
+        }),
+      );
+
+      yield* cloudrun.runProjectsLocationsJobs({ name: out.name });
+
+      const execution = yield* cloudrun
+        .listProjectsLocationsJobsExecutions({
+          parent: out.name,
+          pageSize: 10,
+        })
+        .pipe(
+          Effect.map((page) => page.executions?.[0]),
+          Effect.filterOrFail(
+            (item): item is cloudrun.GoogleCloudRunV2Execution =>
+              item !== undefined &&
+              (item.completionTime ?? "").length > 0 &&
+              (item.succeededCount ?? 0) >= 1,
+            (item) =>
+              new JobRunNotReady({
+                reason: item?.completionTime
+                  ? `failed:${item.failedCount ?? 0}`
+                  : "pending",
+              }),
+          ),
+          Effect.retry({
+            while: (error): error is JobRunNotReady =>
+              error._tag === "JobRunNotReady" && error.reason === "pending",
+            schedule: Schedule.spaced("3 seconds"),
+            times: 20,
+          }),
+        );
+      expect((execution.succeededCount ?? 0) >= 1).toEqual(true);
+
+      const listed = yield* storage.listBuckets({
+        project: out.project,
+        maxResults: 1000,
+      });
+      const markerBucket = (listed.items ?? []).find((bucket) =>
+        (bucket.labels?.["alchemy-id"] ?? "").includes("jobrunmarker"),
+      );
+      expect(markerBucket?.name).toEqual(expect.any(String));
+      const object = yield* storage.getObjects({
+        bucket: markerBucket!.name!,
+        object: MARKER_OBJECT,
+      });
+      expect(object.name).toEqual(MARKER_OBJECT);
+
+      yield* stack.destroy();
+      const gone = yield* waitUntilGone(out.name);
+      expect(gone).toEqual("gone");
+    }).pipe(logLevel),
+  { timeout: 240_000 },
 );
