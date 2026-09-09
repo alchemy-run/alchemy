@@ -52,7 +52,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
                 retrieveCheckout(),
               ],
               { concurrency: 4 },
-            );
+            ).pipe(Effect.orDie);
           return yield* HttpServerResponse.json({
             product: {
               id: liveProduct.id,
@@ -88,7 +88,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
           const customer = yield* createCustomer({
             email: body.email,
             ...(body.name !== undefined ? { name: body.name } : {}),
-          });
+          }).pipe(Effect.orDie);
           return yield* HttpServerResponse.json(
             { id: customer.id, email: customer.email, name: customer.name },
             { status: 201 },
