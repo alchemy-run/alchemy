@@ -7,7 +7,6 @@ import * as Layer from "effect/Layer";
 import * as S from "effect/Schema";
 import { BadRef, makeEntityLookup } from "../github/Entity.ts";
 import { connected } from "../github/Repos.ts";
-import { ThreadAgent } from "../thread/ThreadAgent.ts";
 import { mintThreadId, Threads } from "../thread/Threads.ts";
 import { Channel } from "./Channel.ts";
 
@@ -177,7 +176,6 @@ const charter = Effect.gen(function* () {
   // ── INIT: once per run (a run is one operator message) ───────────
   const channel = yield* Channel;
   const threads = yield* Threads;
-  const threadAgent = yield* ThreadAgent;
   const thread = yield* AI.Thread;
   const pinned = pinnedOf(thread.key);
 
@@ -288,7 +286,9 @@ const charter = Effect.gen(function* () {
   const placeMessages = yield* AI.Tool("place_messages")`
     Place channel messages ${ids} into ${threadId} — retroactive
     curation: the rows stay in the channel, tagged; the thread's view
-    shows them. Idempotent.`(
+    shows them, and the thread's agent hears them as said (author,
+    time, text) — place the operator's words rather than restating
+    them in a brief. Idempotent.`(
     Effect.fn(function* (p: { thread: string; ids: ReadonlyArray<string> }) {
       yield* threads.place(p.thread, p.ids);
     }),
@@ -307,16 +307,9 @@ const charter = Effect.gen(function* () {
     login.`(
     Effect.fn(function* (p: { thread: string; ref: string }) {
       const entity = yield* lookup(p.ref);
+      // the thread tells its agent (quietly — the brief that follows
+      // wakes it, with the attach already in its inbox)
       yield* threads.attach(p.thread, [entity]);
-      // the thread's conversation is its record, and this attach
-      // happened OUTSIDE it — so it is told, quietly (no wake: the
-      // brief that follows wakes it, with this already in the inbox).
-      // Without this the thread opens on a brief saying "#1521" with
-      // no trace that #1521 is attached, and asks which repository.
-      yield* threadAgent.send(
-        `[attached] ${entity.ref} — ${entity.kind}, ${entity.state} — ${entity.title}`,
-        { key: p.thread, wake: false },
-      );
       return { kind: entity.kind, title: entity.title };
     }),
   );
@@ -325,10 +318,6 @@ const charter = Effect.gen(function* () {
     Detach ${ref} from ${threadId}.`(
     Effect.fn(function* (p: { thread: string; ref: string }) {
       yield* threads.detach(p.thread, p.ref);
-      yield* threadAgent.send(`[detached] ${p.ref}`, {
-        key: p.thread,
-        wake: false,
-      });
     }),
   );
 
@@ -339,7 +328,7 @@ const charter = Effect.gen(function* () {
     never a bare "#832". Fire and forget; its work shows up in the
     thread.`(
     Effect.fn(function* (p: { thread: string; text: string }) {
-      yield* threadAgent.send(p.text, { key: p.thread });
+      yield* threads.brief(p.thread, p.text);
     }),
   );
 

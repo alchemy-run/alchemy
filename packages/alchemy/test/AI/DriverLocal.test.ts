@@ -522,6 +522,57 @@ Hand the research to the researcher with ${task}.`((p, thread) => ({
     },
   );
 
+  it.live("Sessions.send delivers by name — no agent service in hand", () => {
+    const model = Model.make([
+      () => [Model.text("noted"), Model.finish()],
+      () => [Model.text("caught up"), Model.finish()],
+      () => [Model.text("on it"), Model.finish()],
+    ]);
+    const search = recordingSearch();
+    const calls = (count: number) =>
+      Effect.sync(() => model.calls.length).pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("10 millis"),
+          until: (length) => length >= count,
+          times: 200,
+        }),
+      );
+    return Effect.gen(function* () {
+      const researcher = yield* interpret(Researcher, ResearcherCharter);
+      const sessions = yield* AI.Sessions;
+      const term = Researcher["~alchemy/Name"];
+      expect(yield* researcher.dispatch("issue opened", { key: "t-1" })).toBe(
+        "noted",
+      );
+
+      // a QUIET by-name delivery: in the inbox, no sampling
+      yield* sessions.send(term, "t-1", "[attached] owner/repo#7 — pull", {
+        wake: false,
+      });
+      yield* Effect.sleep("100 millis");
+      expect(model.calls).toHaveLength(1);
+
+      // a WAKING one: the round runs, and hears the quiet one first
+      yield* sessions.send(term, "t-1", "brief: fix #7");
+      yield* calls(2);
+      const prompt = Model.promptText(model.calls[1]!);
+      expect(prompt).toContain("[attached] owner/repo#7");
+      expect(prompt).toContain("brief: fix #7");
+      expect(prompt.indexOf("[attached]")).toBeLessThan(
+        prompt.indexOf("brief: fix #7"),
+      );
+
+      // a term this driver never interpreted has nothing to hear
+      yield* sessions.send("Nobody", "t-1", "hello");
+      yield* Effect.sleep("50 millis");
+      expect(model.calls).toHaveLength(2);
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(testLayer(model, search.layer)),
+      Effect.provide(RuntimeContext.phantom),
+    );
+  });
+
   it.effect("agent references compile into ONE dispatch tool", () => {
     const model = Model.make([
       // call 0: the LEAD delegates

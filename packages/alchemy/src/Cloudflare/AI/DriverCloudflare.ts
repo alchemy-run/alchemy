@@ -1094,6 +1094,11 @@ export const DurableObjectHost: Layer.Layer<
             .getByName(sessionName(term, key))
             .open()
             .pipe(Effect.orDie, Effect.asVoid),
+        send: (term, key, input, options) =>
+          sessions
+            .getByName(sessionName(term, key))
+            .deliver(input, { wake: options?.wake })
+            .pipe(Effect.orDie, Effect.asVoid),
         stop: (term, key) =>
           sessions
             .getByName(sessionName(term, key))

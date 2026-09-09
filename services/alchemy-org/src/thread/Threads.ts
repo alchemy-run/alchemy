@@ -65,8 +65,32 @@ export interface ThreadSocketFrame {
 }
 
 /**
- * The threads, as the rest of the org addresses them — a facade over
- * the per-thread ThreadDOs that ALSO pushes the channel-side
+ * Who is touching the thread's books. The thread's OWN agent already
+ * knows what it did (the tool call is in its conversation); everyone
+ * else — the channel, the operator, a webhook — is outside the
+ * conversation, so the thread tells its agent about the change.
+ */
+export interface ByOptions {
+  /** `"agent"`: the thread's agent is the author — no note is sent
+   *  into its conversation. Default: an outsider — the agent is told. */
+  readonly by?: "agent";
+}
+
+/**
+ * THE THREAD, as an object: the one API for everything a thread is —
+ * its books (entities, worktrees, agents, members, the rail's meta)
+ * AND its agent. Callers never hold the agent: they call the thread,
+ * and the thread manipulates its agent — `brief` speaks to it,
+ * `attach`/`detach`/`place`/`noteEvent` update the books and put the
+ * fact in the agent's conversation, `agentStop`/`agentResume`/
+ * `agentDelete` operate an engineer's session and its row together,
+ * `remove` tears the whole thing down. Deterministic verbs; the
+ * conversation is the record they write into.
+ *
+ * Physics: a facade over the per-thread ThreadDO (the books) and the
+ * agent's session (addressed by name through `AI.Sessions` — the
+ * agent's own Layer depends on this one, so this one must not depend
+ * back on it). Every mutation also pushes the channel-side
  * projections (directory row, attachment ownership, placed tags,
  * cards). The ThreadDO's storage is truth if a projection disagrees.
  */
@@ -79,10 +103,27 @@ export class Threads extends Context.Service<
       readonly title: string;
     }) => Effect.Effect<ThreadState>;
     readonly get: (id: string) => Effect.Effect<ThreadState | undefined>;
-    /** Place channel messages into the thread (tags them in the channel). */
+    /**
+     * SPEAK to the thread's agent — the brief that starts its work, a
+     * steer, the operator's instruction relayed. Wakes it; fire and
+     * forget — its work shows up in the thread.
+     */
+    readonly brief: (id: string, text: string) => Effect.Effect<void>;
+    /**
+     * TELL the thread's agent something without waking it — context
+     * in its inbox, heard at its next sampling. What the books-verbs
+     * below use to keep the conversation the record.
+     */
+    readonly tell: (id: string, input: unknown) => Effect.Effect<void>;
+    /**
+     * Place channel messages into the thread (tags them in the
+     * channel) — and the agent hears them: the operator's real words,
+     * with author and time, not a paraphrase of them.
+     */
     readonly place: (
       id: string,
       messageIds: ReadonlyArray<string>,
+      options?: ByOptions,
     ) => Effect.Effect<ThreadState>;
     readonly attach: (
       id: string,
@@ -92,9 +133,15 @@ export class Threads extends Context.Service<
         readonly title: string;
         readonly state?: string;
       }>,
+      options?: ByOptions,
     ) => Effect.Effect<ThreadState>;
-    readonly detach: (id: string, ref: string) => Effect.Effect<ThreadState>;
-    /** A GitHub event for an owned ref: update the entity's state. */
+    readonly detach: (
+      id: string,
+      ref: string,
+      options?: ByOptions,
+    ) => Effect.Effect<ThreadState>;
+    /** A GitHub event for an owned ref: the entity's state converges
+     *  and the agent hears the event — context, not a trigger. */
     readonly noteEvent: (
       id: string,
       event: GitHub.RepositoryEvent,
@@ -117,11 +164,33 @@ export class Threads extends Context.Service<
       state: ThreadAgentRow["state"],
       settledAt: number,
     ) => Effect.Effect<ThreadState>;
-    /** Forget an agent's row — after its session has been removed. */
-    readonly agentRemove: (
+    /**
+     * STOP an agent: the off switch. Its session settles (the round in
+     * flight — a command on the machine — is cut) and the books say
+     * stopped. The thread agent's spawn tool, waiting on the dispatch,
+     * is answered with the Stopped outcome and records the same.
+     * `undefined` when the thread has no such agent.
+     */
+    readonly agentStop: (
       id: string,
       key: string,
-    ) => Effect.Effect<ThreadState>;
+    ) => Effect.Effect<ThreadState | undefined>;
+    /**
+     * RESUME a stopped (or finished) agent: the tombstone is cleared
+     * and the session takes input again — the operator steers it from
+     * its pane. Nothing runs until something is said to it.
+     */
+    readonly agentResume: (
+      id: string,
+      key: string,
+    ) => Effect.Effect<ThreadState | undefined>;
+    /** DELETE an agent: its session is erased (round cut, transcript
+     *  purged; the thread's machine is shared and stays) and its row
+     *  leaves the books. */
+    readonly agentDelete: (
+      id: string,
+      key: string,
+    ) => Effect.Effect<ThreadState | undefined>;
     /** A card in the channel, from this thread. */
     readonly postCard: (
       id: string,
@@ -141,13 +210,26 @@ export class Threads extends Context.Service<
     ) => Effect.Effect<ThreadState>;
     readonly close: (id: string) => Effect.Effect<ThreadState>;
     /**
-     * DELETE the thread: erase its DO and unwind every channel
-     * projection — the directory row, the `ref → thread` ownership of
-     * its entities, the placed tags on its members (the channel rows
-     * themselves stay; they are the channel's history, not the
-     * thread's). Answers the last snapshot so the caller can tear down
-     * what lives beyond the thread (its agent sessions, its machine);
-     * `undefined` when the thread never existed. Idempotent.
+     * DELETE the thread — everything it is, in THE ORDER: agents
+     * first, trees second, the record last.
+     *
+     * 1. the thread agent's own session — settled, its round cut (a
+     *    `spawn` mid-await dies here, so no waiter re-books an agent),
+     *    its machine taken down with it;
+     * 2. EVERY session descended from it, machine spared (they shared
+     *    the thread's): the engineers its agent rows name AND whatever
+     *    the session index's parent edges reach beyond them. Each
+     *    settles and has its round cut, so an engineer mid-command
+     *    stops — before a tree it writes into goes;
+     * 3. its pull requests' worktrees on that machine;
+     * 4. its DO and every channel projection — the directory row, the
+     *    `ref → thread` ownership of its entities, the placed tags on
+     *    its members (the channel rows themselves stay; they are the
+     *    channel's history). Last, so the thread reads as "deleting"
+     *    until everything under it is actually gone.
+     *
+     * Answers the last snapshot; `undefined` when the thread never
+     * existed. Idempotent.
      */
     readonly remove: (id: string) => Effect.Effect<ThreadState | undefined>;
     /** Route the `/thread/:id` WebSocket upgrade into the thread's DO. */

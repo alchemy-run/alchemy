@@ -4,7 +4,6 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import { connected } from "../github/Repos.ts";
-import { ThreadAgent } from "../thread/ThreadAgent.ts";
 import { Threads } from "../thread/Threads.ts";
 import { Channel } from "./Channel.ts";
 
@@ -16,10 +15,10 @@ import { Channel } from "./Channel.ts";
  * webhook handler completes (and GitHub gets its 2xx) only after
  * `deliver` returns.
  *
- * An OWNED event additionally reaches its thread: the ThreadDO's
- * entity state converges (merged/closed/reopened) and the thread
- * agent hears the event as non-waking input — context, not a trigger;
- * the agent reads it at its next wake.
+ * An OWNED event additionally reaches its thread (`Threads.noteEvent`):
+ * the entity state converges (merged/closed/reopened) and the thread
+ * tells its agent — non-waking input, context not a trigger; the agent
+ * reads it at its next wake.
  *
  * Nothing else runs on ingest. The channel agent runs ONLY on the
  * operator's messages (`POST /api/channel`); routing decisions —
@@ -30,7 +29,6 @@ export const ChannelEvents = Layer.effectDiscard(
   Effect.gen(function* () {
     const channel = yield* Channel;
     const threads = yield* Threads;
-    const agent = yield* ThreadAgent;
     const secret = yield* Config.option(
       Config.redacted("GITHUB_WEBHOOK_SECRET"),
     );
@@ -62,24 +60,14 @@ export const ChannelEvents = Layer.effectDiscard(
           Effect.fn(function* (event) {
             const { duplicate, owner } = yield* channel.deliver(event);
             if (duplicate || owner === undefined) return;
-            // the owning thread: entity state first (facts), then the
-            // agent hears it — a routing failure never costs the
-            // channel its row (deliver already committed)
+            // the owning thread: entity state converges and its agent
+            // hears the event (the thread tells it) — a routing failure
+            // never costs the channel its row (deliver already committed)
             yield* threads
               .noteEvent(owner, event)
               .pipe(
                 Effect.catchCause((cause) =>
                   Effect.logWarning(`thread ${owner}: noteEvent failed`, cause),
-                ),
-              );
-            yield* agent
-              .send(event, { key: owner, wake: false })
-              .pipe(
-                Effect.catchCause((cause) =>
-                  Effect.logWarning(
-                    `thread ${owner}: agent delivery failed`,
-                    cause,
-                  ),
                 ),
               );
           }),

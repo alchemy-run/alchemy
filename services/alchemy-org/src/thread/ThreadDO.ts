@@ -1,16 +1,28 @@
+import * as AI from "alchemy/AI";
 import * as Cloudflare from "alchemy/Cloudflare";
+import * as Git from "alchemy/Git";
 import type * as GitHub from "alchemy/GitHub";
 import type { MainRpc } from "alchemy/Platform";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import type * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import { Channel, refOf } from "../channel/Channel.ts";
+import {
+  Channel,
+  parseEntityRef,
+  refOf,
+  type ChannelMessage,
+} from "../channel/Channel.ts";
+import { Engineer } from "../coding/Engineer.ts";
 import { inWorker } from "../platform/Database.ts";
 import {
+  pullWorktreeKey,
+  THREAD_TERM,
   Threads,
+  type ByOptions,
   type ThreadAgentRow,
   type ThreadEntity,
   type ThreadSocketFrame,
@@ -476,24 +488,69 @@ const directoryOf = (snap: ThreadState) => ({
 });
 
 /**
- * The {@link Threads} facade: per-thread DO stubs plus the channel
- * projections every mutation pushes (directory row, attachments,
- * placed tags, cards). Cross-DO writes are idempotent on their ids;
- * the ThreadDO's storage is truth if a projection disagrees.
+ * A PHANTOM thread identity — just enough `AI.Thread` for the sandbox
+ * layer to derive a thread's machine (it only reads `key`). Lets the
+ * facade drop a thread's worktrees without being inside its session.
+ */
+const phantomThread = (key: string): AI.ThreadService => ({
+  key,
+  tokens: Effect.succeed(0),
+  entries: Effect.succeed([]),
+  compact: () => Effect.void,
+  reply: () => Effect.void,
+  remind: () => Effect.void,
+});
+
+/** The engineers' session term — the thread's agent rows are its keys. */
+const engineerTerm = Engineer["~alchemy/Name"];
+
+/** A placed channel message, as the thread's agent hears it. */
+const quote = (message: ChannelMessage): string =>
+  `[channel] ${message.author?.login ?? message.kind} · ${new Date(
+    message.at,
+  ).toISOString()}\n${message.text}`;
+
+/**
+ * The {@link Threads} facade — the thread as an object. Books through
+ * the per-thread DO stub, the agent through `AI.Sessions` by name
+ * (`Thread/<id>` — the agent's Layer depends on this one, so the
+ * agent's tag is never resolved here), projections into the channel
+ * on every mutation. Cross-DO writes are idempotent on their ids; the
+ * ThreadDO's storage is truth if a projection disagrees.
  */
 export const ThreadsLive: Layer.Layer<
   Threads,
   never,
-  Cloudflare.Worker | Channel
+  Cloudflare.Worker | Channel | AI.Sessions
 > = Layer.effect(
   Threads,
   Effect.gen(function* () {
     const namespace = yield* ThreadDOLive;
     const channel = yield* Channel;
+    const sessions = yield* AI.Sessions;
+    // OPTIONAL: dropping a deleted thread's worktrees runs git over
+    // the thread's machine; without the seam the trees are left
+    const checkouts = yield* Effect.serviceOption(Git.Checkouts);
     const stub = (id: string) => namespace.getByName(id);
 
     const project = (snap: ThreadState) =>
       channel.directoryUpsert(directoryOf(snap)).pipe(Effect.as(snap));
+
+    // ── the agent, by name ──────────────────────────────────────────
+    // a delivery that fails must never cost the caller its books
+    // write (already committed) — logged, contained
+    const tell = (id: string, input: unknown, wake: boolean) =>
+      inWorker(sessions.send(THREAD_TERM, id, input, { wake })).pipe(
+        Effect.catchCause((cause) =>
+          Effect.logWarning(`thread ${id}: telling the agent failed`, cause),
+        ),
+      );
+    const told = (options: ByOptions | undefined) => options?.by !== "agent";
+
+    const agentRow = (id: string, key: string) =>
+      Effect.map(inWorker(stub(id).state()), (snap) =>
+        snap?.agents.find((agent) => agent.key === key),
+      );
 
     return Threads.of({
       create: (input) =>
@@ -505,13 +562,25 @@ export const ThreadsLive: Layer.Layer<
           return yield* project(snap);
         }),
       get: (id) => inWorker(stub(id).state()),
-      place: (id, messageIds) =>
+      brief: (id, text) => inWorker(sessions.send(THREAD_TERM, id, text)),
+      tell: (id, input) => tell(id, input, false),
+      place: (id, messageIds, options) =>
         Effect.gen(function* () {
           const snap = yield* inWorker(stub(id).place(messageIds));
           yield* channel.tag(messageIds, id, true);
+          if (told(options) && messageIds.length > 0) {
+            // the rows themselves, oldest first — the operator's words
+            // reach the agent as said, not as the channel summarized them
+            const rows = yield* channel.read(messageIds);
+            yield* Effect.forEach(
+              [...rows].sort((a, b) => a.seq - b.seq),
+              (row) => tell(id, quote(row), false),
+              { discard: true },
+            );
+          }
           return yield* project(snap);
         }),
-      attach: (id, entities) =>
+      attach: (id, entities, options) =>
         Effect.gen(function* () {
           const snap = yield* inWorker(stub(id).attach(entities));
           yield* Effect.forEach(
@@ -519,17 +588,38 @@ export const ThreadsLive: Layer.Layer<
             (entity) => channel.attachmentsSet(entity.ref, id),
             { discard: true },
           );
+          if (told(options)) {
+            // the conversation is the record, and this attach happened
+            // OUTSIDE it — without this the agent opens on a brief
+            // saying "#1521" with no trace that #1521 is attached
+            yield* Effect.forEach(
+              entities,
+              (entity) =>
+                tell(
+                  id,
+                  `[attached] ${entity.ref} — ${entity.kind}${
+                    entity.state === undefined ? "" : `, ${entity.state}`
+                  } — ${entity.title}`,
+                  false,
+                ),
+              { discard: true },
+            );
+          }
           return yield* project(snap);
         }),
-      detach: (id, ref) =>
+      detach: (id, ref, options) =>
         Effect.gen(function* () {
           const snap = yield* inWorker(stub(id).detach(ref));
           yield* channel.attachmentsSet(ref, null);
+          if (told(options)) yield* tell(id, `[detached] ${ref}`, false);
           return yield* project(snap);
         }),
       noteEvent: (id, event) =>
         Effect.gen(function* () {
           const snap = yield* inWorker(stub(id).noteEvent(event));
+          // the agent hears the event as non-waking input — context,
+          // not a trigger; it reads it at its next wake
+          yield* tell(id, event, false);
           return yield* project(snap);
         }),
       setWorktree: (id, ref, worktree) =>
@@ -549,8 +639,38 @@ export const ThreadsLive: Layer.Layer<
           );
           return yield* project(snap);
         }),
-      agentRemove: (id, key) =>
+      agentStop: (id, key) =>
         Effect.gen(function* () {
+          const row = yield* agentRow(id, key);
+          if (row === undefined) return undefined;
+          yield* inWorker(sessions.stop(engineerTerm, key));
+          const snap = yield* inWorker(
+            stub(id).agentUpsert({
+              ...row,
+              state: "stopped",
+              settledAt: Date.now(),
+            }),
+          );
+          return yield* project(snap);
+        }),
+      agentResume: (id, key) =>
+        Effect.gen(function* () {
+          const row = yield* agentRow(id, key);
+          if (row === undefined) return undefined;
+          yield* inWorker(sessions.resume(engineerTerm, key));
+          const { settledAt: _settled, ...rest } = row;
+          const snap = yield* inWorker(
+            stub(id).agentUpsert({ ...rest, state: "running" }),
+          );
+          return yield* project(snap);
+        }),
+      agentDelete: (id, key) =>
+        Effect.gen(function* () {
+          const row = yield* agentRow(id, key);
+          if (row === undefined) return undefined;
+          yield* inWorker(
+            sessions.remove(engineerTerm, key, { machine: false }),
+          );
           const snap = yield* inWorker(stub(id).agentRemove(key));
           return yield* project(snap);
         }),
@@ -579,6 +699,72 @@ export const ThreadsLive: Layer.Layer<
         }),
       remove: (id) =>
         Effect.gen(function* () {
+          const before = yield* inWorker(stub(id).state());
+          // 1. the thread's own agent: settled, round cut, machine down
+          yield* inWorker(sessions.remove(THREAD_TERM, id));
+          // 2. every session descended from it — the agent rows, then
+          // the index's parent edges walked transitively from the
+          // thread's session (a directory: a stale or absent index only
+          // means fewer rows here, never a wrong one). Anonymous
+          // `spawn-*` workers are skipped: they ran inside their
+          // spawner's round and died with it in step 1.
+          const descendants = new Map<string, { term: string; key: string }>();
+          for (const agent of before?.agents ?? []) {
+            descendants.set(AI.sessionId(engineerTerm, agent.key), {
+              term: engineerTerm,
+              key: agent.key,
+            });
+          }
+          const listed = yield* inWorker(sessions.list());
+          const frontier = [
+            AI.sessionId(THREAD_TERM, id),
+            ...descendants.keys(),
+          ];
+          while (frontier.length > 0) {
+            const parent = frontier.pop()!;
+            for (const row of listed) {
+              if (
+                row.parent !== parent ||
+                descendants.has(row.id) ||
+                row.key.startsWith("spawn-")
+              ) {
+                continue;
+              }
+              descendants.set(row.id, { term: row.term, key: row.key });
+              frontier.push(row.id);
+            }
+          }
+          yield* Effect.forEach(
+            descendants.values(),
+            ({ term, key }) =>
+              inWorker(sessions.remove(term, key, { machine: false })),
+            { discard: true, concurrency: 8 },
+          );
+          // 3. the pull requests' worktrees on the thread's machine
+          if (Option.isSome(checkouts)) {
+            yield* Effect.forEach(
+              (before?.entities ?? []).flatMap((entity) => {
+                const parsed = parseEntityRef(entity.ref);
+                return entity.worktree === undefined ||
+                  entity.worktree === "." ||
+                  entity.worktree === "" ||
+                  parsed === undefined
+                  ? []
+                  : [pullWorktreeKey(id, parsed.number)];
+              }),
+              (key) =>
+                checkouts.value.release(key).pipe(
+                  Effect.provideService(AI.Thread, phantomThread(id)),
+                  Effect.catch((error) =>
+                    Effect.logWarning(
+                      `deleting thread '${id}': dropping worktree '${key}' failed (contained): ${error.message}`,
+                    ),
+                  ),
+                ),
+              { discard: true },
+            );
+          }
+          // 4. the record, last
           const snap = yield* inWorker(stub(id).destroy());
           // the DO is gone either way; the projections unwind from
           // the last snapshot (directoryRemove also frees every

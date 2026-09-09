@@ -134,7 +134,8 @@ export const ThreadAgentLive = ThreadAgent.make(
       derive them from an author's login.`(
       Effect.fn(function* (p: { ref: string }) {
         const entity = yield* lookup(p.ref);
-        yield* threads.attach(id, [entity]);
+        // by the agent itself: the tool call is already in its conversation
+        yield* threads.attach(id, [entity], { by: "agent" });
         return { kind: entity.kind, title: entity.title };
       }),
     );
@@ -143,7 +144,7 @@ export const ThreadAgentLive = ThreadAgent.make(
       Detach ${ref} from this thread — its events stop arriving; the
       entity itself is untouched.`(
       Effect.fn(function* (p: { ref: string }) {
-        yield* threads.detach(id, p.ref);
+        yield* threads.detach(id, p.ref, { by: "agent" });
       }),
     );
 

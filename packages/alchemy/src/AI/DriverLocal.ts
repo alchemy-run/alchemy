@@ -306,6 +306,12 @@ export const DriverLocal: Layer.Layer<
         // the operator's "new session": the durable admitted row, no
         // shell, no init — the first input builds it
         open: (term, key) => engines.get(term)?.admit(key) ?? Effect.void,
+        // by-name delivery: the term's engine admits the key on the
+        // way in, exactly as `Agent.send` would — a term this process
+        // never interpreted has no charter to hear it
+        send: (term, key, input, options) =>
+          engines.get(term)?.send(input, { key, wake: options?.wake }) ??
+          Effect.void,
         // the operator's undo for stop: clear the settled tombstone;
         // the settled resident fiber exited its loop, so drop its
         // start marker too — the next kick forks a fresh one parked

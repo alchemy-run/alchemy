@@ -97,10 +97,10 @@ const ThreadWorker = Layer.suspend(() => ThreadAgentLive).pipe(
 );
 
 /** The CHANNEL AGENT — codemode over the control plane; runs only on
- *  the operator's channel messages. */
-const ChannelWorker = Layer.suspend(() => ChannelAgentLive).pipe(
-  Layer.provide(ThreadWorker),
-);
+ *  the operator's channel messages. It never holds the thread agent:
+ *  it calls the thread (`Threads`), and the thread manipulates its
+ *  agent. */
+const ChannelWorker = Layer.suspend(() => ChannelAgentLive);
 
 /**
  * The ROUTER runs at the Worker level, where no session machine
@@ -117,7 +117,6 @@ const CheckoutsRouter = Layer.succeed(Git.Checkouts, {
 
 /** INGEST: GitHub webhooks → ChannelDO.deliver → owned threads. */
 const IngestWorker = ChannelEvents.pipe(
-  Layer.provide(ThreadWorker),
   Layer.provide(CheckoutsRouter),
   // a REAL webhook: deploy provisions it against the Worker's URL;
   // under `alchemy dev` the local provider polls GitHub and posts the
@@ -150,7 +149,10 @@ const Org = Layer.mergeAll(
   SandboxSession,
   PublishTokenLive,
 ).pipe(
-  Layer.provideMerge(ThreadsLive),
+  // the thread as an object: its books (ThreadDO) and its agent (by
+  // name through AI.Sessions); dropping a deleted thread's worktrees
+  // runs git over the thread's machine, so the seam rides along
+  Layer.provideMerge(ThreadsLive.pipe(Layer.provide(SandboxSession))),
   Layer.provideMerge(ChannelLive),
   Layer.provideMerge(DriverCloudflare),
   Layer.provideMerge(GitHubWorker),

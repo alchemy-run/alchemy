@@ -79,6 +79,24 @@ export class Sessions extends Context.Service<
       key: string,
     ) => Effect.Effect<void, never, RuntimeContext>;
     /**
+     * SEND one input to a session BY NAME — `Agent.send` without the
+     * agent's service in hand. This is how a domain object that OWNS
+     * a session (a thread's DO fronting its thread agent) talks to
+     * it from a Layer that must not depend on the agent's own Layer
+     * (which depends back on the object): the term and key address
+     * the session, the driver finds the charter. Same semantics as
+     * `Agent.send`: the input is admitted to the session's inbox;
+     * `wake: false` records it without starting a round — the next
+     * sampling hears it. Fire-and-forget; the session answers into
+     * its own conversation, never to the caller.
+     */
+    readonly send: (
+      term: string,
+      key: string,
+      input: unknown,
+      options?: { readonly wake?: boolean },
+    ) => Effect.Effect<void, never, RuntimeContext>;
+    /**
      * STOP one session from the outside — the operator's off switch.
      * Settles it (terminal: children cascade, the `settled`
      * observation lands, attached views see the end) and CUTS the

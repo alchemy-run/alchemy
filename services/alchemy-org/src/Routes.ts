@@ -1,6 +1,5 @@
 import * as AI from "alchemy/AI";
 import * as Cloudflare from "alchemy/Cloudflare";
-import * as Git from "alchemy/Git";
 import * as GitHub from "alchemy/GitHub";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Effect from "effect/Effect";
@@ -12,7 +11,7 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpRouter from "effect/unstable/http/HttpRouter";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import { Channel, parseEntityRef } from "./channel/Channel.ts";
+import { Channel } from "./channel/Channel.ts";
 import { ChannelAgent, channelRunKey } from "./channel/ChannelAgent.ts";
 import { PublishToken } from "./github/PublishToken.ts";
 import {
@@ -23,9 +22,7 @@ import {
   type PullRequestView,
 } from "./github/PullRequest.ts";
 import { connected, primary } from "./github/Repos.ts";
-import { Engineer } from "./coding/Engineer.ts";
-import { ThreadAgent } from "./thread/ThreadAgent.ts";
-import { pullWorktreeKey, THREAD_TERM, Threads } from "./thread/Threads.ts";
+import { Threads, type ThreadState } from "./thread/Threads.ts";
 
 /** `${term}:${key}` → the session it names (the key may contain `:`). */
 const parseSessionId = (id: string): { term: string; key: string } => {
@@ -67,14 +64,9 @@ export const routes = Effect.gen(function* () {
   const sessions = yield* AI.Sessions;
   const channel = yield* Channel;
   const threads = yield* Threads;
-  const engineerTerm = Engineer["~alchemy/Name"];
   const channelAgent = yield* ChannelAgent;
-  const threadAgent = yield* ThreadAgent;
-  // OPTIONAL: the terminal door needs the session machine seam, and
-  // deleting a thread drops its pull requests' worktrees through git
-  // over that same machine
+  // OPTIONAL: the terminal door needs the session machine seam
   const sandbox = yield* Effect.serviceOption(AI.Sandbox);
-  const checkouts = yield* Effect.serviceOption(Git.Checkouts);
   const exec = yield* Cloudflare.WorkerExecutionContext;
   const publishToken = yield* Effect.serviceOption(PublishToken);
 
@@ -387,7 +379,7 @@ export const routes = Effect.gen(function* () {
           { status: 400 },
         );
       }
-      yield* threadAgent.send(text, { key: id });
+      yield* threads.brief(id, text);
       return yield* HttpServerResponse.json({ ok: true }, { status: 202 });
     }),
   );
@@ -401,182 +393,59 @@ export const routes = Effect.gen(function* () {
     }),
   );
 
-  /**
-   * DELETE a thread — everything it was, in an order that leaves no
-   * one running. The response answers only when it is all done, and
-   * the thread's directory row is the LAST thing to go, so a rail
-   * showing the row as "deleting" is telling the truth:
-   *
-   * 1. the snapshot (`threads.get`) — the book of what to tear down;
-   * 2. the pull requests' worktrees on its machine (`worktree` tool
-   *    trees, `pullWorktreeKey`) — dropped through `Git.Checkouts`
-   *    while the machine still answers; a tree that IS the machine's
-   *    disk (`.`) goes with the machine below;
-   * 3. the thread agent's own session — settle + cut its round (a
-   *    `spawn` mid-await dies here, so no waiter re-books an agent)
-   *    and take the machine down with it;
-   * 4. EVERY session descended from it, machine spared (they shared
-   *    the thread's — the key's `::` prefix): the engineers the
-   *    thread's agent rows name AND whatever the session index's
-   *    parent edges reach beyond them (an engineer's own dispatches,
-   *    a row the thread never got to book). Each settles and has its
-   *    round cut, so an engineer mid-command stops. Anonymous
-   *    `spawn-*` workers are skipped: they run inside their spawner's
-   *    round and died with it in step 3;
-   * 5. its DO and channel projections (`threads.remove`).
-   *
-   * Idempotent on an unknown id.
-   */
+  /** DELETE a thread — the thread tears itself down (agents, then
+   *  trees, then the record; see `Threads.remove`). Idempotent. */
   const threadDelete = HttpRouter.add(
     "DELETE",
     "/api/threads/:id",
     Effect.gen(function* () {
-      const id = yield* threadId;
-      const snap = yield* threads.get(id);
-      // THE ORDER: agents first, trees second, the record last. The
-      // agents are the ones still writing into the trees, so they are
-      // stopped (rounds cut, machines released) before a tree goes;
-      // the record goes last so the thread reads as "deleting" until
-      // everything under it is actually gone.
-      yield* sessions
-        .remove(THREAD_TERM, id)
-        .pipe(Effect.provide(RuntimeContext.phantom));
-      const descendants = new Map<string, { term: string; key: string }>();
-      for (const agent of snap?.agents ?? []) {
-        descendants.set(AI.sessionId(engineerTerm, agent.key), {
-          term: engineerTerm,
-          key: agent.key,
-        });
-      }
-      // the index's parent edges, walked transitively from the thread's
-      // session — a directory, so a stale or absent index only means
-      // fewer rows here, never a wrong one
-      const listed = yield* sessions.list();
-      const frontier = [AI.sessionId(THREAD_TERM, id), ...descendants.keys()];
-      while (frontier.length > 0) {
-        const parent = frontier.pop()!;
-        for (const row of listed) {
-          if (
-            row.parent !== parent ||
-            descendants.has(row.id) ||
-            row.key.startsWith("spawn-")
-          ) {
-            continue;
-          }
-          descendants.set(row.id, { term: row.term, key: row.key });
-          frontier.push(row.id);
-        }
-      }
-      yield* Effect.forEach(
-        descendants.values(),
-        ({ term, key }) => sessions.remove(term, key, { machine: false }),
-        { discard: true, concurrency: 8 },
-      ).pipe(Effect.provide(RuntimeContext.phantom));
-      if (Option.isSome(checkouts)) {
-        yield* Effect.forEach(
-          (snap?.entities ?? []).flatMap((entity) => {
-            const parsed = parseEntityRef(entity.ref);
-            return entity.worktree === undefined ||
-              entity.worktree === "." ||
-              entity.worktree === "" ||
-              parsed === undefined
-              ? []
-              : [pullWorktreeKey(id, parsed.number)];
-          }),
-          (key) =>
-            checkouts.value.release(key).pipe(
-              Effect.provideService(AI.Thread, phantomThread(id)),
-              Effect.catch((error) =>
-                Effect.logWarning(
-                  `deleting thread '${id}': dropping worktree '${key}' failed (contained): ${error.message}`,
-                ),
-              ),
-            ),
-          { discard: true },
-        );
-      }
-      yield* threads.remove(id);
+      yield* threads.remove(yield* threadId);
       return yield* HttpServerResponse.json({ ok: true });
     }),
   );
 
   /* ── a thread's agents: the operator's switches on one engineer ─── */
 
-  /** `:id/agents/:key` → the thread and the agent's row, or a 404. */
+  /** `:id/agents/:key` → the thread and the (decoded) agent key. */
   const agentParams = Effect.gen(function* () {
     const id = yield* threadId;
     const params = yield* HttpRouter.params;
-    const key = decodeURIComponent(String(params.key ?? ""));
-    const snap = yield* threads.get(id);
-    const row = snap?.agents.find((agent) => agent.key === key);
-    return { id, key, row };
+    return { id, key: decodeURIComponent(String(params.key ?? "")) };
   });
-  const noSuchAgent = (id: string, key: string) =>
-    HttpServerResponse.json(
-      { error: `thread ${id} has no agent ${key}` },
-      { status: 404 },
-    );
-  /**
-   * STOP an agent: the off switch. Its session settles (the round in
-   * flight — a command on the machine — is cut) and the books say
-   * stopped. The thread's spawn tool, waiting on the dispatch, is
-   * answered with the Stopped outcome and records the same.
-   */
+  const agentAnswer = (
+    id: string,
+    key: string,
+    state: ThreadState | undefined,
+  ) =>
+    state === undefined
+      ? HttpServerResponse.json(
+          { error: `thread ${id} has no agent ${key}` },
+          { status: 404 },
+        )
+      : HttpServerResponse.json(state);
+
   const agentStop = HttpRouter.add(
     "POST",
     "/api/threads/:id/agents/:key/stop",
     Effect.gen(function* () {
-      const { id, key, row } = yield* agentParams;
-      if (row === undefined) return yield* noSuchAgent(id, key);
-      yield* sessions
-        .stop(engineerTerm, key)
-        .pipe(Effect.provide(RuntimeContext.phantom));
-      const state = yield* threads.agentUpsert(id, {
-        ...row,
-        state: "stopped",
-        settledAt: Date.now(),
-      });
-      return yield* HttpServerResponse.json(state);
+      const { id, key } = yield* agentParams;
+      return yield* agentAnswer(id, key, yield* threads.agentStop(id, key));
     }),
   );
-
-  /**
-   * RESUME a stopped (or finished) agent: the tombstone is cleared and
-   * the session takes input again — the operator steers it from its
-   * pane. Nothing runs until something is said to it.
-   */
   const agentResume = HttpRouter.add(
     "POST",
     "/api/threads/:id/agents/:key/resume",
     Effect.gen(function* () {
-      const { id, key, row } = yield* agentParams;
-      if (row === undefined) return yield* noSuchAgent(id, key);
-      yield* sessions
-        .resume(engineerTerm, key)
-        .pipe(Effect.provide(RuntimeContext.phantom));
-      const { settledAt: _settled, ...rest } = row;
-      const state = yield* threads.agentUpsert(id, {
-        ...rest,
-        state: "running",
-      });
-      return yield* HttpServerResponse.json(state);
+      const { id, key } = yield* agentParams;
+      return yield* agentAnswer(id, key, yield* threads.agentResume(id, key));
     }),
   );
-
-  /** DELETE an agent: its session is erased (round cut, transcript
-   *  purged; the thread's machine is shared and stays) and its row
-   *  leaves the books. */
   const agentDelete = HttpRouter.add(
     "DELETE",
     "/api/threads/:id/agents/:key",
     Effect.gen(function* () {
-      const { id, key, row } = yield* agentParams;
-      if (row === undefined) return yield* noSuchAgent(id, key);
-      yield* sessions
-        .remove(engineerTerm, key, { machine: false })
-        .pipe(Effect.provide(RuntimeContext.phantom));
-      const state = yield* threads.agentRemove(id, key);
-      return yield* HttpServerResponse.json(state);
+      const { id, key } = yield* agentParams;
+      return yield* agentAnswer(id, key, yield* threads.agentDelete(id, key));
     }),
   );
 
