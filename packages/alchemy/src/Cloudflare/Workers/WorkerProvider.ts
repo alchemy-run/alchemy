@@ -5268,12 +5268,16 @@ export const LiveWorkerProvider = () =>
               ));
           }
 
-          // Publish the stable workers.dev URL on the precreate stub so a
-          // cycle peer (e.g. Stripe.WebhookEndpoint interpolating
-          // `worker.url`) can POST a valid HTTPS URL instead of
-          // `"undefined/webhooks/stripe"`. Custom domains are still
-          // unresolved here; workers.dev is deterministic from name +
-          // account subdomain.
+          /**
+           * Precreate publishes the stable `https://{name}.{subdomain}.workers.dev`
+           * URL when `workersDev` is enabled (the default). Cycle peers that
+           * interpolate `worker.url` (e.g. Stripe.WebhookEndpoint) need a
+           * valid HTTPS URL here — the previous `url: undefined` stub made
+           * Stripe reject `"undefined/webhooks/stripe"`. Custom domains and
+           * version/preview URLs are still unresolved; reconcile overwrites
+           * `url` with the final value. `workersDev: false` keeps `url`
+           * undefined.
+           */
           const workersDevUrl = resolveWorkersDev(
             news.workersDev as WorkerProps["workersDev"],
           ).enabled
