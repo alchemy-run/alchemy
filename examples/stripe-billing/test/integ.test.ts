@@ -83,8 +83,9 @@ test(
 
     yield* DeleteCustomer({ customer: body.id }).pipe(
       Effect.catch(() => Effect.void),
-      Effect.provide(Stripe.CredentialsFromEnv),
-      Effect.provide(FetchHttpClient.layer),
+      Effect.provide(
+        Layer.mergeAll(Stripe.CredentialsFromEnv, FetchHttpClient.layer),
+      ),
     );
   }),
   { timeout: 120_000 },
