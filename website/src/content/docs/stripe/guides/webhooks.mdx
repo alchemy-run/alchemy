@@ -7,24 +7,19 @@ Two pieces: a **resource** that owns the Stripe endpoint, and
 **`consumeEvents`** that runs one Effect per POST. That matches
 GitHub `consumeRepositoryEvents` and SQS `consumeQueueMessages`.
 
+The Worker must not depend on the endpoint (Stripe rejects a stub
+`undefined` URL). The endpoint depends on `worker.url`. The signing
+secret is bound onto the Worker afterwards.
+
 ## Subscribe on the Worker
 
-Declare a `WebhookEndpoint` **after** the Worker (it needs
-`worker.url`). Pass that endpoint into `consumeEvents` with event
-**classes** — not `"customer.created"` strings.
+`consumeEvents` only listens. Pass event **classes** — not
+`"customer.created"` strings.
 
 ```typescript
 // src/api.ts
-export const Events = Stripe.WebhookEndpoint("Events", {
-  url: Output.interpolate`${Api.url}/webhooks/stripe`,
-  enabledEvents: [
-    Stripe.CustomerCreated.type,
-    Stripe.InvoicePaid.type,
-  ],
-});
-
 yield* Stripe.consumeEvents(
-  Events,
+  "Events",
   {
     events: [Stripe.CustomerCreated, Stripe.InvoicePaid],
   },
@@ -43,25 +38,36 @@ Provide `Stripe.ConsumeEventsLive` on the Worker Effect:
     Stripe.RetrieveProductHttp,
     Stripe.ConsumeEventsLive,
   ]),
-),
+)
 ```
 
-`consumeEvents` verifies `Stripe-Signature` with the endpoint secret
-and runs the handler. It does not create the endpoint.
+## Endpoint + secret in the Stack
 
-## Endpoint resource
+Yield the Worker first, then the endpoint, then bind the minted
+secret:
+
+```typescript
+// alchemy.run.ts
+const api = yield* Api;
+const webhook = yield* Stripe.WebhookEndpoint("Events", {
+  url: Output.interpolate`${api.url}/webhooks/stripe`,
+  enabledEvents: [Stripe.CustomerCreated, Stripe.InvoicePaid],
+});
+yield* Stripe.bindWebhookSecret(api, webhook.secret);
+```
+
+`consumeEvents` verifies `Stripe-Signature` with that secret.
+
+## Endpoint resource only
 
 Manage the endpoint yourself when you need a URL you already have:
 
 ```typescript
 const webhook = yield* Stripe.WebhookEndpoint("Events", {
-  url: Output.interpolate`${api.url}/webhooks/stripe`,
+  url: "https://example.com/webhooks/stripe",
   enabledEvents: ["customer.created"],
 });
 ```
-
-Yield the endpoint from the Stack next to the Worker. `consumeEvents`
-only attaches the listener.
 
 ## Reference
 

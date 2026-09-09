@@ -1409,6 +1409,13 @@ export type Worker<Bindings = any> = Resource<
   {
     bindings?: WorkerBinding[];
     /**
+     * Extra env vars merged into the Worker at reconcile. `Redacted`
+     * values deploy as `secret_text`. Used by later resources (e.g. a
+     * Stripe webhook signing secret) to attach env without the Worker
+     * init depending on that resource.
+     */
+    env?: Record<string, any>;
+    /**
      * Workers Cache settings contributed by `yield* Cloudflare.cache()`.
      * Merged into the upload metadata's `cache_options`; an explicit
      * `WorkerProps.cache` takes precedence.

@@ -114,10 +114,14 @@ export const makeWorkerRuntimeContext = (id: string): WorkerRuntimeContext => {
           }
           if (effects.length > 1) {
             return [
-              Effect.all(effects, {
-                concurrency: "unbounded",
-                discard: true,
-              }),
+              Effect.all(effects, { concurrency: "unbounded" }).pipe(
+                Effect.map((results) => {
+                  for (const result of results) {
+                    if (result instanceof Response) return result;
+                  }
+                  return results[results.length - 1];
+                }),
+              ),
               services,
             ];
           }

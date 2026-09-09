@@ -1113,9 +1113,15 @@ export default defineConfig({
             {
               label: "Guides",
               items: [
-                { label: "Sell from a Worker", link: "/stripe/guides/sell-from-a-worker" },
+                {
+                  label: "Sell from a Worker",
+                  link: "/stripe/guides/sell-from-a-worker",
+                },
                 { label: "Catalog", link: "/stripe/guides/catalog" },
-                { label: "Handle webhook events", link: "/stripe/guides/webhooks" },
+                {
+                  label: "Handle webhook events",
+                  link: "/stripe/guides/webhooks",
+                },
                 { label: "Connect", link: "/stripe/guides/connect" },
               ],
             },

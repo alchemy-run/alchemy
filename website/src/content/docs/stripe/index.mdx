@@ -65,8 +65,9 @@ the Worker URL — see [Webhooks](/stripe/guides/webhooks).
 const api = yield* Api;
 const webhook = yield* Stripe.WebhookEndpoint("Events", {
   url: Output.interpolate`${api.url}/webhooks/stripe`,
-  enabledEvents: ["customer.created", "checkout.session.completed"],
+  enabledEvents: [Stripe.CustomerCreated, Stripe.CheckoutSessionCompleted],
 });
+yield* Stripe.bindWebhookSecret(api, webhook.secret);
 ```
 
 ## The Stripe path

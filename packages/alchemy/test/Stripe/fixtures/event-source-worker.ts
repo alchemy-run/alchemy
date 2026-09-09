@@ -1,5 +1,4 @@
 import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Output from "@/Output.ts";
 import * as Stripe from "@/Stripe/index.ts";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
@@ -16,9 +15,10 @@ export default class StripeEventSourceWorker extends Cloudflare.Worker<StripeEve
     const createCustomer = yield* Stripe.CreateCustomer();
 
     yield* Stripe.consumeEvents(
-      Events,
+      "Events",
       { events: [Stripe.CustomerCreated] },
       Effect.fn(function* (event) {
+        yield* kv.put(event.object.id, "1").pipe(Effect.orDie);
         yield* kv.put("lastCustomerId", event.object.id).pipe(Effect.orDie);
       }),
     ).pipe(Effect.orDie);
@@ -26,6 +26,13 @@ export default class StripeEventSourceWorker extends Cloudflare.Worker<StripeEve
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
+        if (request.url.startsWith("/last/")) {
+          const id = request.url.slice("/last/".length).split("?")[0];
+          const seen = yield* kv.get(id).pipe(Effect.orDie);
+          return yield* HttpServerResponse.json({
+            id: seen === "1" ? id : null,
+          });
+        }
         if (request.url.startsWith("/last")) {
           const id = yield* kv.get("lastCustomerId").pipe(Effect.orDie);
           return yield* HttpServerResponse.json({ id: id ?? null });
@@ -50,8 +57,3 @@ export default class StripeEventSourceWorker extends Cloudflare.Worker<StripeEve
     ]),
   ),
 ) {}
-
-export const Events = Stripe.WebhookEndpoint("Events", {
-  url: Output.interpolate`${StripeEventSourceWorker.url}/webhooks/stripe`,
-  enabledEvents: [Stripe.CustomerCreated.type],
-});

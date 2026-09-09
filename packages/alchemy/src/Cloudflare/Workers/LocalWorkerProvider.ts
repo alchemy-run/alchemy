@@ -379,7 +379,9 @@ export const LocalWorkerProvider = () =>
         // change (a Dockerfile edit, a rebuilt bundle) would never change
         // the config and the running container would serve stale code.
         const containerHashes: Record<string, string> = {};
+        const boundEnv: Record<string, any> = { ...props.env };
         for (const { data } of bindings) {
+          if (data.env) Object.assign(boundEnv, data.env);
           for (const binding of data.bindings ?? []) {
             if (
               binding.type === "durable_object_namespace" &&
@@ -476,7 +478,7 @@ export const LocalWorkerProvider = () =>
           name,
           compatibility,
           /** User env (Redacted preserved — the canonical hasher unwraps). */
-          env: props.env,
+          env: Object.keys(boundEnv).length > 0 ? boundEnv : props.env,
           /**
            * Raw inline module source (mutually exclusive with `main`).
            * Serves as-is without the bundler; part of the hashed config so
