@@ -44,7 +44,7 @@ a per-host `alch-*` service account and grants `roles/storage.objectAdmin`.
 ```typescript
 export const App = Alchemy.Stack(
   "App",
-  { providers: GCP.providers() },
+  { providers: GCP.providers(), state: Alchemy.localState() },
   Effect.gen(function* () {
     const api = yield* Api;
     return { url: api.uri };

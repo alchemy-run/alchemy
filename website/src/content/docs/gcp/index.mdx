@@ -21,8 +21,7 @@ The pieces you will use most:
   `main`).
 - **Storage** — `GCP.Storage.Bucket` plus `PutObject` / `GetObject`
   bindings.
-- **Pub/Sub** — `Topic`, `Publish`, and `consumeMessages` (push to
-  the Function URL).
+- **Pub/Sub** — `Topic`, `Publish`, and `Subscription`.
 - **Memorystore** — `GCP.Redis.Instance` over `alchemy/Redis`
   Read/Write/ReadWrite.
 - **Secret Manager, Cloud SQL, BigQuery, KMS, IAM** — same
@@ -33,7 +32,6 @@ The pieces you will use most:
 import * as GCP from "alchemy/GCP";
 
 const bucket = yield* GCP.Storage.Bucket("assets", { forceDestroy: true });
-const api = yield* GCP.Function;
 ```
 
 ## The GCP path

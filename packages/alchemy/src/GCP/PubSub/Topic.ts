@@ -107,15 +107,6 @@ export type Topic = Resource<
  * ) {}
  * ```
  *
- * ### Consuming messages
- * **Example:** Push subscription on the Function URL
- * ```typescript
- * yield* GCP.PubSub.consumeMessages(topic, (stream) =>
- *   Stream.runForEach(stream, (msg) => Effect.log(msg.value)),
- * );
- * ```
- * Provide `GCP.PubSub.EventSourceLive` on the Function.
- *
  * ### Destroying a Topic
  * **Example:** `alchemy destroy` deletes the topic after its subscriptions.
  *

@@ -53,7 +53,7 @@ import * as Effect from "effect/Effect";
 
 export const App = Alchemy.Stack(
   "App",
-  { providers: GCP.providers() },
+  { providers: GCP.providers(), state: Alchemy.localState() },
   Effect.gen(function* () {
     const bucket = yield* GCP.Storage.Bucket("assets", {
       forceDestroy: true,
