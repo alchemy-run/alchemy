@@ -21,7 +21,8 @@ import { makeImageSource } from "../ArtifactRegistry/ImageSource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import {
   applyHostBindings,
-  defaultComputeServiceAccount,
+  deleteHostServiceAccount,
+  ensureHostServiceAccount,
   type GcpHostBinding,
 } from "../Host.ts";
 import {
@@ -986,7 +987,7 @@ export const ServiceProvider = () =>
       const serviceAccount =
         template.serviceAccount && template.serviceAccount.length > 0
           ? template.serviceAccount
-          : yield* defaultComputeServiceAccount(env.project);
+          : yield* ensureHostServiceAccount(env.project, serviceId);
       template.serviceAccount = serviceAccount;
       const collected = yield* applyHostBindings({
         project: env.project,
@@ -1179,5 +1180,6 @@ await bootstrap(entrypoint);
         yield* waitForOperation(operation, { notFoundOk: true });
       }
       yield* waitUntilGone(output.name);
+      yield* deleteHostServiceAccount(output.project, output.serviceId);
     }),
   });

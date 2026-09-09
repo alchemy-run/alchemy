@@ -1,4 +1,5 @@
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
+import * as iam from "@distilled.cloud/gcp/unstable/iam_v1";
 import * as Effect from "effect/Effect";
 import * as Binding from "../Binding.ts";
 import {
@@ -159,16 +160,65 @@ const memberOf = (email: string) =>
   email.startsWith("serviceAccount:") ? email : `serviceAccount:${email}`;
 
 /**
- * Grant `roles` to `member` on the GCP project (read-modify-write of
- * `projects.setIamPolicy`). Empty `roles` is a no-op.
+ * RFC1035 account id for a per-host runtime SA (`6-30` chars).
  */
-export const grantProjectIam = (
+export const hostServiceAccountId = (resourceId: string): string => {
+  const base = resourceId
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  let id = `alch-${base}`.slice(0, 30).replace(/-+$/g, "");
+  if (!/^[a-z]/.test(id)) id = `a${id}`.slice(0, 30);
+  if (id.length < 6) id = `${id}xxxxxx`.slice(0, 6);
+  return id;
+};
+
+export const hostServiceAccountEmail = (project: string, accountId: string) =>
+  `${accountId}@${project}.iam.gserviceaccount.com`;
+
+/**
+ * Create (or adopt) the per-host runtime service account. Conflict/Already
+ * exists is a race — continue.
+ */
+export const ensureHostServiceAccount = (
+  project: string,
+  resourceId: string,
+) => {
+  const accountId = hostServiceAccountId(resourceId);
+  const email = hostServiceAccountEmail(project, accountId);
+  const name = `projects/${project}/serviceAccounts/${email}`;
+  return Effect.gen(function* () {
+    const existing = yield* iam
+      .getProjectsServiceAccounts({ name })
+      .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    if (existing?.email !== undefined && existing.email.length > 0) {
+      return existing.email;
+    }
+    const created = yield* iam
+      .createProjectsServiceAccounts({
+        name: `projects/${project}`,
+        body: {
+          accountId,
+          serviceAccount: { displayName: accountId },
+        },
+      })
+      .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+    return created?.email ?? email;
+  });
+};
+
+/**
+ * Grant `roles` to `member` on the GCP project and remove the member from
+ * every other role (read-modify-write of `projects.setIamPolicy`). Empty
+ * `roles` revokes the member from all project roles.
+ */
+export const syncProjectIam = (
   project: string,
   member: string,
   roles: readonly string[],
 ) => {
   const unique = [...new Set(roles.filter((role) => role.length > 0))];
-  if (unique.length === 0) return Effect.void;
   const principal = memberOf(member);
   const resource = `projects/${project}`;
   return Effect.gen(function* () {
@@ -188,16 +238,47 @@ export const grantProjectIam = (
         dirty = true;
       }
     }
+    for (const binding of bindings) {
+      if (binding.role !== undefined && unique.includes(binding.role)) continue;
+      const members = binding.members ?? [];
+      if (!members.includes(principal)) continue;
+      binding.members = members.filter((item) => item !== principal);
+      dirty = true;
+    }
     if (!dirty) return;
     yield* resourcemanager.setIamPolicyProjects({
       resource,
       body: {
         policy: {
           ...policy,
-          bindings,
+          bindings: bindings.filter(
+            (binding) => (binding.members?.length ?? 0) > 0,
+          ),
         },
       },
     });
+  });
+};
+
+/** @deprecated Use {@link syncProjectIam}. Additive-only; kept for callers. */
+export const grantProjectIam = syncProjectIam;
+
+/**
+ * Delete the alchemy-managed host SA (no-op if it does not exist) after
+ * revoking its project IAM.
+ */
+export const deleteHostServiceAccount = (
+  project: string,
+  resourceId: string,
+) => {
+  const accountId = hostServiceAccountId(resourceId);
+  const email = hostServiceAccountEmail(project, accountId);
+  const name = `projects/${project}/serviceAccounts/${email}`;
+  return Effect.gen(function* () {
+    yield* syncProjectIam(project, email, []);
+    yield* iam
+      .deleteProjectsServiceAccounts({ name })
+      .pipe(Effect.catchTag("NotFound", () => Effect.void));
   });
 };
 
@@ -244,8 +325,14 @@ export const applyHostBindings = Effect.fn(function* (options: {
       roles.push(grant.role);
     }
   }
+  yield* syncProjectIam(
+    options.project,
+    options.serviceAccount,
+    rolesByProject.get(options.project) ?? [],
+  );
   for (const [project, roles] of rolesByProject) {
-    yield* grantProjectIam(project, options.serviceAccount, roles);
+    if (project === options.project) continue;
+    yield* syncProjectIam(project, options.serviceAccount, roles);
   }
   return collected;
 });

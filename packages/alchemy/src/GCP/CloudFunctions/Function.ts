@@ -19,7 +19,8 @@ import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import { GcpEnvironment } from "../Environment.ts";
 import {
   applyHostBindings,
-  defaultComputeServiceAccount,
+  deleteHostServiceAccount,
+  ensureHostServiceAccount,
   type GcpHostBinding,
 } from "../Host.ts";
 import {
@@ -897,7 +898,7 @@ export const FunctionProvider = () =>
         news.serviceConfig?.serviceAccountEmail &&
         news.serviceConfig.serviceAccountEmail.length > 0
           ? news.serviceConfig.serviceAccountEmail
-          : yield* defaultComputeServiceAccount(env.project);
+          : yield* ensureHostServiceAccount(env.project, functionId);
       const collected = yield* applyHostBindings({
         project: env.project,
         serviceAccount,
@@ -1082,5 +1083,6 @@ export const FunctionProvider = () =>
         yield* waitForOperation(operation, { notFoundOk: true });
       }
       yield* waitUntilGone(output.name);
+      yield* deleteHostServiceAccount(output.project, output.functionId);
     }),
   });
