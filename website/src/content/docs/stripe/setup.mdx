@@ -10,9 +10,22 @@ cloud's:
 
 ```typescript
 // alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Cloudflare from "alchemy/Cloudflare";
 import * as Stripe from "alchemy/Stripe";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 
-providers: Layer.mergeAll(Cloudflare.providers(), Stripe.providers()),
+export default Alchemy.Stack(
+  "MyApp",
+  {
+    providers: Layer.mergeAll(Cloudflare.providers(), Stripe.providers()),
+    state: Alchemy.localState(),
+  },
+  Effect.gen(function* () {
+    // resources go here
+  }),
+);
 ```
 
 Run `alchemy profile edit --add Stripe`. The secret key is entered
