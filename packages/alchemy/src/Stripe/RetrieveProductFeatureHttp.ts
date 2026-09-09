@@ -1,22 +1,16 @@
 import { GetProductFeature } from "@distilled.cloud/stripe/stripe";
-import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Binding from "../Binding.ts";
 import type { ResourceLike } from "../Resource.ts";
-import { sanitizeKey } from "../RuntimeContext.ts";
 import type { ProductFeature } from "./ProductFeature.ts";
 import { RetrieveProductFeature } from "./RetrieveProductFeature.ts";
 import {
   asStringEffect,
   attachStripeToken,
-  idEnvKey,
+  authorizeWith,
   resolveStripeAuth,
 } from "./StripeHttp.ts";
-
-const productEnvKey = (resource: { readonly LogicalId: string }): string =>
-  `STRIPE_PRODUCT_${sanitizeKey(resource.LogicalId)}`;
-
-const envName = (key: string) => Config.string(key).pipe(Effect.orDie);
 
 /**
  * HTTP implementation of {@link RetrieveProductFeature}. The list-item
@@ -28,33 +22,23 @@ const envName = (key: string) => Config.string(key).pipe(Effect.orDie);
 export const RetrieveProductFeatureHttp = Layer.effect(
   RetrieveProductFeature,
   Effect.gen(function* () {
-    const auth = yield* resolveStripeAuth;
+    const ambient = yield* resolveStripeAuth;
 
     return Effect.fn(function* (feature: ProductFeature) {
-      const idKey = idEnvKey(feature);
-      const productKey = productEnvKey(feature);
-      if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* attachStripeToken(
-          feature as unknown as ResourceLike,
-          {
-            [idKey]: feature.id,
-            [productKey]: feature.product,
-          },
-          ["products_read"],
-          "Stripe.RetrieveProductFeature",
-        );
-      }
-
-      const id = globalThis.__ALCHEMY_RUNTIME__
-        ? envName(idKey)
-        : asStringEffect(feature.id);
-      const product = globalThis.__ALCHEMY_RUNTIME__
-        ? envName(productKey)
-        : asStringEffect(feature.product);
+      const host = yield* Binding.Host;
+      const bound = yield* attachStripeToken(
+        feature as unknown as ResourceLike,
+        ["products_read"],
+        "Stripe.RetrieveProductFeature",
+      );
+      const id = yield* asStringEffect(feature.id);
+      const product = yield* asStringEffect(feature.product);
+      const auth =
+        host !== undefined ? authorizeWith(bound) : ambient.authorize;
 
       return Effect.fn(`Stripe.RetrieveProductFeature(${feature.LogicalId})`)(
         function* (request?: { expand?: string[] }) {
-          return yield* auth.authorize(
+          return yield* auth(
             GetProductFeature({
               ...(request ?? {}),
               id: yield* id,

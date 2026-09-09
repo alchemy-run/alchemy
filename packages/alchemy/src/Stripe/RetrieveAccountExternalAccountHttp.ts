@@ -1,22 +1,16 @@
 import { GetAccountExternalAccount } from "@distilled.cloud/stripe/stripe";
-import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Binding from "../Binding.ts";
 import type { ResourceLike } from "../Resource.ts";
-import { sanitizeKey } from "../RuntimeContext.ts";
 import type { AccountExternalAccount } from "./AccountExternalAccount.ts";
 import { RetrieveAccountExternalAccount } from "./RetrieveAccountExternalAccount.ts";
 import {
   asStringEffect,
   attachStripeToken,
-  idEnvKey,
+  authorizeWith,
   resolveStripeAuth,
 } from "./StripeHttp.ts";
-
-const accountEnvKey = (resource: { readonly LogicalId: string }): string =>
-  `STRIPE_ACCOUNT_${sanitizeKey(resource.LogicalId)}`;
-
-const envName = (key: string) => Config.string(key).pipe(Effect.orDie);
 
 /**
  * HTTP implementation of {@link RetrieveAccountExternalAccount}. The
@@ -28,34 +22,24 @@ const envName = (key: string) => Config.string(key).pipe(Effect.orDie);
 export const RetrieveAccountExternalAccountHttp = Layer.effect(
   RetrieveAccountExternalAccount,
   Effect.gen(function* () {
-    const auth = yield* resolveStripeAuth;
+    const ambient = yield* resolveStripeAuth;
 
     return Effect.fn(function* (externalAccount: AccountExternalAccount) {
-      const idKey = idEnvKey(externalAccount);
-      const accountKey = accountEnvKey(externalAccount);
-      if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* attachStripeToken(
-          externalAccount as unknown as ResourceLike,
-          {
-            [idKey]: externalAccount.id,
-            [accountKey]: externalAccount.account,
-          },
-          ["accounts_read"],
-          "Stripe.RetrieveAccountExternalAccount",
-        );
-      }
-
-      const id = globalThis.__ALCHEMY_RUNTIME__
-        ? envName(idKey)
-        : asStringEffect(externalAccount.id);
-      const account = globalThis.__ALCHEMY_RUNTIME__
-        ? envName(accountKey)
-        : asStringEffect(externalAccount.account);
+      const host = yield* Binding.Host;
+      const bound = yield* attachStripeToken(
+        externalAccount as unknown as ResourceLike,
+        ["accounts_read"],
+        "Stripe.RetrieveAccountExternalAccount",
+      );
+      const id = yield* asStringEffect(externalAccount.id);
+      const account = yield* asStringEffect(externalAccount.account);
+      const auth =
+        host !== undefined ? authorizeWith(bound) : ambient.authorize;
 
       return Effect.fn(
         `Stripe.RetrieveAccountExternalAccount(${externalAccount.LogicalId})`,
       )(function* (request?: { expand?: string[] }) {
-        return yield* auth.authorize(
+        return yield* auth(
           GetAccountExternalAccount({
             ...(request ?? {}),
             id: yield* id,

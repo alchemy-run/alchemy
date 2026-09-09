@@ -1,12 +1,17 @@
 import { GetTaxSettings } from "@distilled.cloud/stripe/stripe";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Binding from "../Binding.ts";
 import type { ResourceLike } from "../Resource.ts";
 import {
   RetrieveTaxSettings,
   type RetrieveTaxSettingsRequest,
 } from "./RetrieveTaxSettings.ts";
-import { attachStripeToken, resolveStripeAuth } from "./StripeHttp.ts";
+import {
+  attachStripeToken,
+  authorizeWith,
+  resolveStripeAuth,
+} from "./StripeHttp.ts";
 import type { TaxSettings } from "./TaxSettings.ts";
 
 /**
@@ -20,20 +25,20 @@ import type { TaxSettings } from "./TaxSettings.ts";
 export const RetrieveTaxSettingsHttp = Layer.effect(
   RetrieveTaxSettings,
   Effect.gen(function* () {
-    const auth = yield* resolveStripeAuth;
+    const ambient = yield* resolveStripeAuth;
 
     return Effect.fn(function* (settings: TaxSettings) {
-      if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* attachStripeToken(
-          settings as unknown as ResourceLike,
-          {},
-          ["tax_read"],
-          "Stripe.RetrieveTaxSettings",
-        );
-      }
+      const host = yield* Binding.Host;
+      const bound = yield* attachStripeToken(
+        settings as unknown as ResourceLike,
+        ["tax_read"],
+        "Stripe.RetrieveTaxSettings",
+      );
+      const auth =
+        host !== undefined ? authorizeWith(bound) : ambient.authorize;
       return Effect.fn(`Stripe.RetrieveTaxSettings(${settings.LogicalId})`)(
         function* (request?: RetrieveTaxSettingsRequest) {
-          return yield* auth.authorize(GetTaxSettings(request ?? {}));
+          return yield* auth(GetTaxSettings(request ?? {}));
         },
       );
     });
