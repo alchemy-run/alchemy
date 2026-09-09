@@ -49,7 +49,7 @@ export const bindWebhookSecret = (
   secret: WebhookEndpoint["secret"],
   path?: string,
 ): Effect.Effect<void> =>
-  host.bind("stripe-webhook", {
+  host.bind(`stripe-webhook:${webhookPath(path)}`, {
     env: {
       [webhookSecretEnvName(path)]: secret,
     },
@@ -169,11 +169,7 @@ export const ConsumeEventsLive = Layer.effect(
         }
         if (pathname !== path) return;
         const env = (event.env ?? {}) as Record<string, unknown>;
-        return handleDelivery(request, env, secretKey, byType, process).pipe(
-          Effect.catchCause(() =>
-            Effect.succeed(new Response("invalid signature", { status: 401 })),
-          ),
-        );
+        return handleDelivery(request, env, secretKey, byType, process);
       });
     }) as EventSourceService;
   }),
@@ -221,7 +217,12 @@ const handleDelivery = <Req>(
       payload,
       signature,
       secret: Redacted.value(resolved),
-    }).pipe(Effect.catch(() => Effect.succeed(undefined)));
+    }).pipe(
+      Effect.catchTag(
+        ["StripeWebhookSignatureError", "StripeWebhookPayloadParseError"],
+        () => Effect.succeed(undefined),
+      ),
+    );
     if (parsed === undefined) {
       return new Response("invalid signature", { status: 401 });
     }
