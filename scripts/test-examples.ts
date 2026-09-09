@@ -1,5 +1,29 @@
 export {};
 
+// `bun test:examples --profile testing` — the example suites read the
+// profile from `ALCHEMY_PROFILE` (`Test.make({ profile: process.env.ALCHEMY_PROFILE })`),
+// so translate the flag into the env every spawned `bun test` inherits.
+// Without this the flag was silently ignored and every suite ran against
+// the `default` profile, which only works when the shell already exports
+// `ALCHEMY_PROFILE`.
+{
+  const argv = process.argv.slice(2);
+  const index = argv.findIndex(
+    (arg) => arg === "--profile" || arg.startsWith("--profile="),
+  );
+  if (index !== -1) {
+    const arg = argv[index]!;
+    const profile = arg.includes("=")
+      ? arg.slice("--profile=".length)
+      : argv[index + 1];
+    if (profile === undefined || profile.startsWith("-")) {
+      console.error("--profile requires a value, e.g. --profile testing");
+      process.exit(2);
+    }
+    process.env.ALCHEMY_PROFILE = profile;
+  }
+}
+
 const examples = [
   "./examples/cloudflare-dev",
   "./examples/cloudflare-worker",

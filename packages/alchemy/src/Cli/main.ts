@@ -180,7 +180,6 @@ const services = Layer.mergeAll(
   Layer.succeed(ArtifactStore, createArtifactStore()),
   FetchHttpClient.layer,
   ConfigProvider.layer(ConfigProvider.fromEnv()),
-  TelemetryLive,
   routeCacheLayer,
   Layer.provide(
     Layer.provideMerge(
@@ -192,7 +191,14 @@ const services = Layer.mergeAll(
   // Debug run log under ~/.alchemy/logs — the console noise floor stays at
   // Info, but full causes and auth-flow breadcrumbs land in the file so
   // support can ask users for it.
-  Layer.provide(GlobalLogLive, PlatformServices),
+  //
+  // Telemetry sits on top of the console/file loggers so its OTLP logger
+  // merges with them. Listed as `mergeAll` siblings, whichever came last
+  // would win the `CurrentLoggers` slot and silently drop the other.
+  Layer.provideMerge(
+    TelemetryLive,
+    Layer.provide(GlobalLogLive, PlatformServices),
+  ),
 );
 
 const program = Effect.gen(function* () {

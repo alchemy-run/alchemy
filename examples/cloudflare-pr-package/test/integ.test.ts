@@ -176,6 +176,10 @@ test(
     // Random defaults to 32 bytes -> 64 hex chars.
     expect(authToken).toMatch(/^[0-9a-f]{64}$/);
   }),
+  // Same budget as every other test here: `yield* stack` still has to
+  // wait on the shared deploy handle, which bun's 5s default cannot cover
+  // on a loaded machine.
+  { timeout: 180_000 },
 );
 
 test(
