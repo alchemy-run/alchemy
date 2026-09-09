@@ -333,6 +333,11 @@ export default defineVideo(
         await t.run(
           "unset CI CURSOR_AGENT CLAUDECODE CLAUDE_CODE NO_COLOR FORCE_COLOR; export ALCHEMY_TUI=1",
         );
+        // tcut's pty has no TERM_PROGRAM, so terminal-capability detection
+        // assumes OSC 8 hyperlinks are unsupported and the CLI falls back to
+        // printing every URL in full after its label (the OAuth URL is ~1KB).
+        // Real terminals (Ghostty, iTerm2, kitty, …) render the link inline.
+        await t.run("export FORCE_HYPERLINK=1");
         // A previous take may have left a live stack behind: tear it down with
         // a temporary profile before the home is wiped for the on-camera setup.
         await t.run(`${connectCloudflare("default")} --no-input`);
@@ -488,12 +493,19 @@ export default defineVideo(
       });
       if (/Select a Cloudflare account/.test(t.screen())) {
         await t.sleep("1.5s");
-        // The picker filters on name and id alike; the name reads better.
-        await t.type(
-          env("CLOUDFLARE_ACCOUNT_NAME") ??
-            process.env.CLOUDFLARE_ACCOUNT_ID ??
-            "",
-        );
+        // Arrow down to the configured account (the focused row starts with
+        // ❯) instead of typing into the filter; the first row is the default.
+        const wanted =
+          env("CLOUDFLARE_ACCOUNT_NAME") ?? process.env.CLOUDFLARE_ACCOUNT_ID;
+        const focused = () =>
+          t
+            .screen()
+            .split("\n")
+            .find((line) => /^\s*❯/.test(line)) ?? "";
+        for (let i = 0; i < 8 && wanted && !focused().includes(wanted); i++) {
+          await t.down();
+          await t.sleep("400ms");
+        }
         await t.sleep("600ms");
         await t.enter();
         await t.wait(/Cloudflare added/, { scope: "screen" });
