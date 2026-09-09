@@ -1,36 +1,126 @@
 ---
-title: "Part 2: Price and Coupon"
-description: Attach a recurring Price to the Product, add a Coupon, and deploy the catalog.
+title: "Part 2: Price on a Worker"
+description: Put the Product on a Cloudflare Worker, attach a recurring Price and a Coupon, and deploy.
 sidebar:
   order: 2
 ---
 
 import Terminal from "../../../../components/Terminal.astro";
 
-In [Part 1](/stripe/tutorial/part-1) you deployed a Product. A
-Product is not sellable on its own — Stripe charges a **Price**.
-Then a **Coupon** takes a percentage off.
+In [Part 1](/stripe/tutorial/part-1) the Product lives in the Stack
+generator. Catalog belongs next to the Worker that will sell it —
+the same shape as `examples/stripe-billing`. You need a Cloudflare
+account for this part.
+
+## Create the Worker
+
+A Worker is a class with an Effect `fetch` handler. Create
+`src/api.ts` and yield the same Product (`Pro`) inside it:
+
+```typescript
+// src/api.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Stripe from "alchemy/Stripe";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+
+export default class Api extends Cloudflare.Worker<Api>()(
+  "Api",
+  {
+    main: import.meta.url,
+  },
+  Effect.gen(function* () {
+    const product = yield* Stripe.Product("Pro", {
+      name: "Pro",
+      description: "Billed monthly",
+    });
+    return {
+      fetch: Effect.gen(function* () {
+        return HttpServerResponse.text("ok");
+      }),
+    };
+  }),
+) {}
+```
+
+`main: import.meta.url` is required in `alchemy dev`. The logical id
+`Pro` is the Product from Part 1.
+
+## Merge Cloudflare providers
+
+The Worker needs `Cloudflare.providers()` next to Stripe:
+
+```diff lang="typescript"
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
++import * as Cloudflare from "alchemy/Cloudflare";
+import * as Stripe from "alchemy/Stripe";
+import * as Effect from "effect/Effect";
++import * as Layer from "effect/Layer";
+
+export default Alchemy.Stack(
+  "MyApp",
+  {
+-    providers: Stripe.providers(),
++    providers: Layer.mergeAll(Cloudflare.providers(), Stripe.providers()),
+    state: Alchemy.localState(),
+  },
+```
+
+## Yield the Worker
+
+Import `Api` and drop the Product from the Stack — it now lives on
+the Worker:
+
+```diff lang="typescript"
+import * as Layer from "effect/Layer";
++import Api from "./src/api.ts";
+
+export default Alchemy.Stack(
+  "MyApp",
+  {
+    providers: Layer.mergeAll(Cloudflare.providers(), Stripe.providers()),
+    state: Alchemy.localState(),
+  },
+  Effect.gen(function* () {
+-    const product = yield* Stripe.Product("Pro", {
+-      name: "Pro",
+-      description: "Billed monthly",
+-    });
+-
+-    return {
+-      productId: product.id,
+-      name: product.name,
+-    };
++    const api = yield* Api;
++    return {
++      url: api.url.as<string>(),
++    };
+  }),
+);
+```
 
 ## Add a Price
 
-A Price belongs to a Product. Pass `product.id` (an Output) so
-Alchemy creates the Product first:
+A Price belongs to a Product. Pass the Product so Alchemy creates
+it first:
 
 ```diff lang="typescript"
+// src/api.ts
 Effect.gen(function* () {
   const product = yield* Stripe.Product("Pro", {
     name: "Pro",
     description: "Billed monthly",
   });
 +  const price = yield* Stripe.Price("ProMonthly", {
-+    product: product.id,
++    product,
 +    currency: "usd",
 +    unitAmount: 2000,
 +  });
-
   return {
-    productId: product.id,
-    name: product.name,
+    fetch: Effect.gen(function* () {
+      return HttpServerResponse.text("ok");
+    }),
   };
 }),
 ```
@@ -46,28 +136,15 @@ a subscription price:
 
 ```diff lang="typescript"
 const price = yield* Stripe.Price("ProMonthly", {
-  product: product.id,
+  product,
   currency: "usd",
   unitAmount: 2000,
 +  recurring: { interval: "month" },
 });
 ```
 
-`interval` is create-only too. Destroy deactivates a used Price
-(`active: false`) because Stripe will not delete one that has been
-billed.
-
-## Return the Price id
-
-Expose `price.id` (`price_…`) next to the Product:
-
-```diff lang="typescript"
-return {
-  productId: product.id,
-  name: product.name,
-+  priceId: price.id,
-};
-```
+Destroy deactivates a used Price (`active: false`) because Stripe
+will not delete one that has been billed.
 
 ## Add a Coupon
 
@@ -76,7 +153,7 @@ Checkout:
 
 ```diff lang="typescript"
 const price = yield* Stripe.Price("ProMonthly", {
-  product: product.id,
+  product,
   currency: "usd",
   unitAmount: 2000,
   recurring: { interval: "month" },
@@ -86,27 +163,15 @@ const price = yield* Stripe.Price("ProMonthly", {
 +  duration: "once",
 +  name: "Launch 20%",
 +});
-
 return {
-  productId: product.id,
-  name: product.name,
-  priceId: price.id,
+  fetch: Effect.gen(function* () {
+    return HttpServerResponse.text("ok");
+  }),
 };
 ```
 
 `percentOff: 20` and `duration: "once"` is 20% off the first
-invoice. Use `amountOff` plus `currency` for a fixed discount.
-
-## Return the Coupon id
-
-```diff lang="typescript"
-return {
-  productId: product.id,
-  name: product.name,
-  priceId: price.id,
-+  couponId: coupon.id,
-};
-```
+invoice.
 
 ## Deploy
 
@@ -114,27 +179,27 @@ return {
 bun alchemy deploy
 ```
 
-<Terminal content={`[u]Plan[/u]: [g]2 to create[/g]
+<Terminal content={`[u]Plan[/u]: [g]3 to create[/g]
 
+[g]+[/g] [b]Api[/b] [d](Cloudflare.Worker)[/d]
 [g]+[/g] [b]ProMonthly[/b] [d](Stripe.Price)[/d]
 [g]+[/g] [b]Launch20[/b] [d](Stripe.Coupon)[/d]
 
 Proceed?
 ◉ Yes ○ No
+[g]✓[/g] [b]Api[/b] [d](Cloudflare.Worker)[/d] [g]created[/g]
 [g]✓[/g] [b]ProMonthly[/b] [d](Stripe.Price)[/d] [g]created[/g]
 [g]✓[/g] [b]Launch20[/b] [d](Stripe.Coupon)[/d] [g]created[/g]
 {
-[s2]productId: "prod_aaaaaaaaaaaaaaaa",
-[s2]name: "Pro",
-[s2]priceId: "price_bbbbbbbbbbbbbbbb",
-[s2]couponId: "xxxxxxxx",
+[s2]url: "https://api.example.workers.dev",
 }`} />
 
-The Product is a no-op. The Price and Coupon are created.
+The Product is a no-op. Price and Coupon are created as children of
+the Worker.
 
 ## Recap
 
-You now have a $20/month Price on `Pro` and a one-time 20% coupon.
-[Catalog](/stripe/guides/catalog) covers PaymentLink and
-PromotionCode. In [Part 3](/stripe/tutorial/part-3) you'll bind the
-Product into a Worker.
+The catalog now lives on a Worker: Product, $20/month Price, one-time
+20% coupon. [Catalog](/stripe/guides/catalog) covers PaymentLink and
+PromotionCode. In [Part 3](/stripe/tutorial/part-3) you'll bind
+`RetrieveProduct` and `CreateCustomer` on this Worker.

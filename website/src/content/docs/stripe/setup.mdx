@@ -41,18 +41,11 @@ and switched.
 
 ## Restricted keys
 
-HTTP bindings collect the Stripe permissions they need onto a
-[`RestrictedApiKey`](/providers/stripe/restrictedapikey) — the same
-shape as a Cloudflare `AccountApiToken`. Stripe has no public API to
-mint restricted keys (`POST /v2/iam/api_keys` is Apps preview), so
-the resource stores those permissions and injects either:
-
-- a Dashboard-created restricted key (`rk_test_…` / `rk_live_…`)
-  passed as `value`, or
-- the account secret from the profile / `STRIPE_API_KEY`
-
-Until Stripe ships a public mint, treat the collected permissions as
-the intended scope, not as an enforced key policy.
+Bindings attach permissions to a
+[`RestrictedApiKey`](/providers/stripe/restrictedapikey) the same way
+Cloudflare HTTP bindings use `AccountApiToken`. Stripe has no public
+mint API, so the token is your secret key (or a Dashboard `rk_…`
+you pass as `value`). See [Sell from a Worker](/stripe/guides/sell-from-a-worker).
 
 ## Next steps
 
