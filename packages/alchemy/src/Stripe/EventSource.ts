@@ -165,7 +165,12 @@ const handleDelivery = <Req>(
       payload,
       signature,
       secret: resolved,
-    }).pipe(Effect.catch(() => Effect.succeed(undefined)));
+    }).pipe(
+      Effect.catchTag(
+        ["StripeWebhookSignatureError", "StripeWebhookPayloadParseError"],
+        () => Effect.succeed(undefined),
+      ),
+    );
     if (parsed === undefined) {
       return new Response("invalid signature", { status: 401 });
     }
@@ -179,6 +184,6 @@ const handleDelivery = <Req>(
       "object" in parsed.data
         ? (parsed.data as { object: unknown }).object
         : parsed.data;
-    yield* process(new Ctor(data)).pipe(Effect.orDie);
+    yield* process(new Ctor(data as never)).pipe(Effect.orDie);
     return new Response(null, { status: 200 });
   });
