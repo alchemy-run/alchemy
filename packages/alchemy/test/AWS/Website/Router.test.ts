@@ -55,10 +55,11 @@ describe.skipIf(!runLive)("AWS.Website.Router", () => {
         expect(deployed.router.kvStoreArn).toBeDefined();
 
         // urls contract (cloudfront-default arm): a router without a
-        // domain serves only at its CloudFront default domain, and `url`
-        // is always `urls[0]`.
+        // domain serves only at the distribution's own URL (its CloudFront
+        // default domain live, a local edge port under the emulator), and
+        // `url` is always `urls[0]`.
         expect(deployed.router.urls).toEqual([
-          `https://${deployed.router.distribution.domainName}`,
+          deployed.router.distribution.url,
         ]);
         expect(deployed.router.url).toBe(deployed.router.urls[0]);
         // A path-only attached site inherits the router's primary URL.

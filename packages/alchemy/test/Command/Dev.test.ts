@@ -491,6 +491,17 @@ describe("extractUrl", () => {
     ).toBe("https://docs.astro.build/en/guides/x/");
   });
 
+  it("normalizes a bind-all address to localhost", () => {
+    // Nuxt prints its *bind* address (`0.0.0.0`), which is not a
+    // connectable host — consumers of `url` must be able to dial it.
+    expect(Command.extractUrl("Listening on http://0.0.0.0:3000/")).toBe(
+      "http://localhost:3000/",
+    );
+    expect(Command.extractUrl("Listening on http://[::]:3000/")).toBe(
+      "http://localhost:3000/",
+    );
+  });
+
   it("strips ANSI escapes before matching", () => {
     expect(Command.extractUrl("\x1b[36mhttp://localhost:5173/\x1b[0m")).toBe(
       "http://localhost:5173/",

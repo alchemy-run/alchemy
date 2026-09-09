@@ -27,7 +27,13 @@ const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
 
 const fixtureEntries = [".gitignore", "package.json", "src", "static"];
 
-describe.skipIf(!runLive)("AWS.Website.SvelteKit", () => {
+// Skipped under the floci runner: in dev the composite deploys only the
+// framework dev server (no Lambda/S3/CloudFront), so this test's live
+// topology assertions are meaningless there. Dev behavior is covered by
+// the co-located SvelteKit.local.test.ts suite.
+const runEmulated = process.env.ALCHEMY_TEST_DEV === "1";
+
+describe.skipIf(!runLive || runEmulated)("AWS.Website.SvelteKit", () => {
   test.provider(
     "deploys SSR on a streaming Lambda URL with S3 assets behind CloudFront",
     (stack) =>

@@ -40,7 +40,7 @@ a Sprite service on `port` (default `3000`).
 
 ## Serve HTTP with `fetch`
 
-Return `fetch` from the init Effect to boot an HTTP server. The
+Return `fetch` from the constructor Effect to boot an HTTP server. The
 Sprite URL proxies to `port`.
 
 ```diff lang="typescript"
@@ -95,11 +95,11 @@ Fly's API default is `sprite`. Alchemy defaults to `public` so a
 
 ## Config
 
-Yield `Config` in init. Alchemy reads the value from the env of
+Yield `Config` in the constructor. Alchemy reads the value from the env of
 whoever deploys and writes it onto the Sprite. Do not pass
 `env: { ... }` on a Sprite.
 
-Yield `FileSystem.FileSystem` in init, never inside `fetch`.
+Yield `FileSystem.FileSystem` in the constructor, never inside `fetch`.
 
 ```typescript
 import * as Config from "effect/Config";
