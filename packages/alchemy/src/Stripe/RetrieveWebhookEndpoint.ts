@@ -1,6 +1,6 @@
 import type {
-  GetWebhookEndpointsWebhookEndpointError,
-  GetWebhookEndpointsWebhookEndpointRequest,
+  GetWebhookEndpointError,
+  GetWebhookEndpointRequest,
   WebhookEndpoint as StripeWebhookEndpoint,
 } from "@distilled.cloud/stripe/stripe";
 import type * as Effect from "effect/Effect";
@@ -9,7 +9,7 @@ import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { WebhookEndpoint } from "./WebhookEndpoint.ts";
 
 export interface RetrieveWebhookEndpointRequest extends Omit<
-  GetWebhookEndpointsWebhookEndpointRequest,
+  GetWebhookEndpointRequest,
   "webhook_endpoint"
 > {}
 
@@ -35,7 +35,7 @@ export interface RetrieveWebhookEndpoint extends Binding.Service<
       request?: RetrieveWebhookEndpointRequest,
     ) => Effect.Effect<
       StripeWebhookEndpoint,
-      GetWebhookEndpointsWebhookEndpointError,
+      GetWebhookEndpointError,
       RuntimeContext
     >
   >

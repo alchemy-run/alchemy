@@ -4,7 +4,7 @@ import { isMissingStripeResource } from "@/Stripe/missing.ts";
 import * as Test from "@/Test/Alchemy";
 import {
   GetTerminalReaders,
-  GetTerminalReadersReader,
+  GetTerminalReader,
   type DeletedTerminalReader,
   type TerminalReader as StripeTerminalReader,
 } from "@distilled.cloud/stripe/stripe";
@@ -37,7 +37,7 @@ const isDeletedReader = (
   "deleted" in value && value.deleted === true;
 
 const waitUntilGone = (id: string) =>
-  GetTerminalReadersReader({ reader: id }).pipe(
+  GetTerminalReader({ reader: id }).pipe(
     Effect.map((reader) =>
       isDeletedReader(reader) ? ("gone" as const) : ("found" as const),
     ),
@@ -108,7 +108,7 @@ test.provider(
       expect(created.reader.metadata).toMatchObject({ station: "1" });
       expect(created.reader.livemode).toEqual(false);
 
-      const fetched = yield* GetTerminalReadersReader({
+      const fetched = yield* GetTerminalReader({
         reader: created.reader.id,
       });
       expect(isDeletedReader(fetched)).toEqual(false);
@@ -152,7 +152,7 @@ test.provider(
         floor: "lobby",
       });
 
-      const refetched = yield* GetTerminalReadersReader({
+      const refetched = yield* GetTerminalReader({
         reader: updated.reader.id,
       });
       expect(isDeletedReader(refetched)).toEqual(false);

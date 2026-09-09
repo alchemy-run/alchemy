@@ -1,4 +1,4 @@
-import { PostTerminalReaders } from "@distilled.cloud/stripe/stripe";
+import { CreateTerminalReader as createTerminalReaderOp } from "@distilled.cloud/stripe/stripe";
 import * as Layer from "effect/Layer";
 import { CreateTerminalReader } from "./CreateTerminalReader.ts";
 import { makeHttpStripeAccountBinding } from "./StripeHttp.ts";
@@ -14,7 +14,7 @@ export const CreateTerminalReaderHttp = Layer.effect(
   CreateTerminalReader,
   makeHttpStripeAccountBinding({
     tag: "Stripe.CreateTerminalReader",
-    operation: PostTerminalReaders,
+    operation: createTerminalReaderOp,
     permissions: ["terminal_write"],
   }),
 );

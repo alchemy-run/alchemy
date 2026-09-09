@@ -1,9 +1,9 @@
 import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
   GetPaymentMethodDomains,
-  GetPaymentMethodDomainsPaymentMethodDomain,
-  PostPaymentMethodDomains,
-  PostPaymentMethodDomainsPaymentMethodDomain,
+  GetPaymentMethodDomain,
+  CreatePaymentMethodDomain,
+  UpdatePaymentMethodDomain,
   type PaymentMethodDomain as StripePaymentMethodDomain,
   type PaymentMethodDomainResourcePaymentMethodStatus,
 } from "@distilled.cloud/stripe/stripe";
@@ -193,7 +193,7 @@ const toAttrs = (
 const isMissingDomain = isMissingStripeResource;
 
 const getById = (paymentMethodDomain: string) =>
-  GetPaymentMethodDomainsPaymentMethodDomain({
+  GetPaymentMethodDomain({
     payment_method_domain: paymentMethodDomain,
   }).pipe(Effect.catchIf(isMissingDomain, () => Effect.succeed(undefined)));
 
@@ -306,7 +306,7 @@ export const PaymentMethodDomainProvider = () =>
       }
 
       if (current === undefined) {
-        current = yield* PostPaymentMethodDomains({
+        current = yield* CreatePaymentMethodDomain({
           domain_name: domainName,
           enabled: desiredEnabled,
         }).pipe(
@@ -324,7 +324,7 @@ export const PaymentMethodDomainProvider = () =>
         return toAttrs(current);
       }
 
-      const updated = yield* PostPaymentMethodDomainsPaymentMethodDomain({
+      const updated = yield* UpdatePaymentMethodDomain({
         payment_method_domain: current.id,
         enabled: desiredEnabled,
       });
@@ -334,7 +334,7 @@ export const PaymentMethodDomainProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const existing = yield* getById(output.id);
       if (existing === undefined || !existing.enabled) return;
-      yield* PostPaymentMethodDomainsPaymentMethodDomain({
+      yield* UpdatePaymentMethodDomain({
         payment_method_domain: existing.id,
         enabled: false,
       }).pipe(Effect.catchIf(isMissingDomain, () => Effect.void));

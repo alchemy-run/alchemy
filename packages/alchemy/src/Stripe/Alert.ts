@@ -1,11 +1,11 @@
 import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
   GetBillingAlerts,
-  GetBillingAlertsId,
-  PostBillingAlerts,
-  PostBillingAlertsIdActivate,
-  PostBillingAlertsIdArchive,
-  PostBillingAlertsIdDeactivate,
+  GetBillingAlert,
+  CreateBillingAlert,
+  CreateBillingAlertActivate,
+  CreateBillingAlertArchive,
+  CreateBillingAlertDeactivate,
   type BillingAlert as StripeBillingAlert,
   type ThresholdsResourceUsageAlertFilterCustomer,
   type ThresholdsResourceUsageThresholdConfig,
@@ -253,7 +253,7 @@ const toAttrs = (alert: StripeBillingAlert): AlertAttributes => ({
 const isMissingAlert = isMissingStripeResource;
 
 const getById = (id: string) =>
-  GetBillingAlertsId({ id }).pipe(
+  GetBillingAlert({ id }).pipe(
     Effect.catchIf(isMissingAlert, () => Effect.succeed(undefined)),
   );
 
@@ -401,7 +401,7 @@ export const AlertProvider = () =>
       }
 
       if (current === undefined) {
-        current = yield* PostBillingAlerts({
+        current = yield* CreateBillingAlert({
           alert_type: alertType,
           title,
           usage_threshold: toCreateUsageThreshold(news.usageThreshold),
@@ -420,8 +420,8 @@ export const AlertProvider = () =>
       if (currentStatus !== desiredStatus) {
         current =
           desiredStatus === "inactive"
-            ? yield* PostBillingAlertsIdDeactivate({ id: current.id })
-            : yield* PostBillingAlertsIdActivate({ id: current.id });
+            ? yield* CreateBillingAlertDeactivate({ id: current.id })
+            : yield* CreateBillingAlertActivate({ id: current.id });
       }
 
       return toAttrs(current);
@@ -430,7 +430,7 @@ export const AlertProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const existing = yield* getById(output.id);
       if (existing === undefined || existing.status === "archived") return;
-      yield* PostBillingAlertsIdArchive({ id: existing.id }).pipe(
+      yield* CreateBillingAlertArchive({ id: existing.id }).pipe(
         Effect.catchIf(isMissingAlert, () => Effect.void),
       );
     }),

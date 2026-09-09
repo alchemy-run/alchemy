@@ -1,9 +1,7 @@
-import { Credentials } from "@distilled.cloud/stripe";
-import { GetAccountsAccountPersonsPerson } from "@distilled.cloud/stripe/stripe";
+import { GetAccountPerson } from "@distilled.cloud/stripe/stripe";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import type * as HttpClient from "effect/unstable/http/HttpClient";
 import type { ResourceLike } from "../Resource.ts";
 import { sanitizeKey } from "../RuntimeContext.ts";
 import type { AccountPerson } from "./AccountPerson.ts";
@@ -12,7 +10,7 @@ import {
   asStringEffect,
   attachStripeToken,
   idEnvKey,
-  makeStripeAuth,
+  resolveStripeAuth,
 } from "./StripeHttp.ts";
 
 const accountEnvKey = (resource: { readonly LogicalId: string }): string =>
@@ -30,10 +28,7 @@ const envName = (key: string) => Config.string(key).pipe(Effect.orDie);
 export const RetrieveAccountPersonHttp = Layer.effect(
   RetrieveAccountPerson,
   Effect.gen(function* () {
-    const context = yield* Effect.context<
-      Credentials | HttpClient.HttpClient
-    >();
-    const auth = makeStripeAuth(context);
+    const auth = yield* resolveStripeAuth;
 
     return Effect.fn(function* (person: AccountPerson) {
       const idKey = idEnvKey(person);
@@ -60,7 +55,7 @@ export const RetrieveAccountPersonHttp = Layer.effect(
       return Effect.fn(`Stripe.RetrieveAccountPerson(${person.LogicalId})`)(
         function* (request?: { expand?: string[] }) {
           return yield* auth.authorize(
-            GetAccountsAccountPersonsPerson({
+            GetAccountPerson({
               ...(request ?? {}),
               person: yield* id,
               account: yield* account,

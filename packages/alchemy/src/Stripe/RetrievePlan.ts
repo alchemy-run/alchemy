@@ -1,6 +1,6 @@
 import type {
-  GetPlansPlanError,
-  GetPlansPlanRequest,
+  GetPlanError,
+  GetPlanRequest,
   Plan as StripePlan,
 } from "@distilled.cloud/stripe/stripe";
 import type * as Effect from "effect/Effect";
@@ -8,10 +8,7 @@ import * as Binding from "../Binding.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { Plan } from "./Plan.ts";
 
-export interface RetrievePlanRequest extends Omit<
-  GetPlansPlanRequest,
-  "plan"
-> {}
+export interface RetrievePlanRequest extends Omit<GetPlanRequest, "plan"> {}
 
 /**
  * Retrieve a bound Stripe Plan over HTTP.
@@ -33,7 +30,7 @@ export interface RetrievePlan extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: RetrievePlanRequest,
-    ) => Effect.Effect<StripePlan, GetPlansPlanError, RuntimeContext>
+    ) => Effect.Effect<StripePlan, GetPlanError, RuntimeContext>
   >
 > {}
 

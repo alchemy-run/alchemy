@@ -1,7 +1,7 @@
 import * as Provider from "@/Provider";
 import * as Stripe from "@/Stripe";
 import * as Test from "@/Test/Alchemy";
-import { GetEntitlementsFeaturesId } from "@distilled.cloud/stripe/stripe";
+import { GetEntitlementsFeature } from "@distilled.cloud/stripe/stripe";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -18,7 +18,7 @@ const logLevel = Effect.provideService(
 const isMissing = isMissingStripeResource;
 
 const waitUntilInactive = (id: string) =>
-  GetEntitlementsFeaturesId({ id }).pipe(
+  GetEntitlementsFeature({ id }).pipe(
     Effect.map((feature) =>
       feature.active ? ("active" as const) : ("inactive" as const),
     ),
@@ -53,7 +53,7 @@ test.provider(
       expect(created.metadata).toMatchObject({ plan: "pro" });
       expect(created.livemode).toEqual(false);
 
-      const fetched = yield* GetEntitlementsFeaturesId({ id: created.id });
+      const fetched = yield* GetEntitlementsFeature({ id: created.id });
       expect(fetched.id).toEqual(created.id);
       expect(fetched.lookup_key).toEqual("alchemy-ent-feat-lifecycle");
       expect(fetched.name).toEqual("Alchemy Seats Feature");
@@ -83,7 +83,7 @@ test.provider(
       expect(updated.active).toEqual(true);
       expect(updated.metadata).toEqual({ plan: "enterprise", sku: "ent-1" });
 
-      const refetched = yield* GetEntitlementsFeaturesId({ id: updated.id });
+      const refetched = yield* GetEntitlementsFeature({ id: updated.id });
       expect(refetched.id).toEqual(updated.id);
       expect(refetched.name).toEqual("Alchemy Seats Feature Updated");
       expect(refetched.lookup_key).toEqual("alchemy-ent-feat-lifecycle");
@@ -95,7 +95,7 @@ test.provider(
 
       const inactive = yield* waitUntilInactive(created.id);
       expect(inactive).toEqual("inactive");
-      const deactivated = yield* GetEntitlementsFeaturesId({ id: created.id });
+      const deactivated = yield* GetEntitlementsFeature({ id: created.id });
       expect(deactivated.active).toEqual(false);
     }).pipe(logLevel),
   { timeout: 120_000 },
@@ -168,7 +168,7 @@ test.provider(
       expect(replaced.lookupKey).toEqual("alchemy-ent-feat-replace-b");
       expect(replaced.name).toEqual("Alchemy Replace Feature");
 
-      const fetched = yield* GetEntitlementsFeaturesId({ id: replaced.id });
+      const fetched = yield* GetEntitlementsFeature({ id: replaced.id });
       expect(fetched.id).toEqual(replaced.id);
       expect(fetched.lookup_key).toEqual("alchemy-ent-feat-replace-b");
 

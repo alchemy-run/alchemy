@@ -1,4 +1,4 @@
-import { GetCustomersCustomer } from "@distilled.cloud/stripe/stripe";
+import { GetCustomer } from "@distilled.cloud/stripe/stripe";
 import * as Layer from "effect/Layer";
 import { RetrieveCustomer } from "./RetrieveCustomer.ts";
 import { makeHttpStripeIdBinding } from "./StripeHttp.ts";
@@ -14,7 +14,7 @@ export const RetrieveCustomerHttp = Layer.effect(
   RetrieveCustomer,
   makeHttpStripeIdBinding({
     tag: "Stripe.RetrieveCustomer",
-    operation: GetCustomersCustomer,
+    operation: GetCustomer,
     idField: "customer",
     permissions: ["customers_read"],
   }),

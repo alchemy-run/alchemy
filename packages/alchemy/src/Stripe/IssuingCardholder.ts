@@ -4,14 +4,14 @@ import {
 } from "@distilled.cloud/stripe";
 import {
   GetIssuingCardholders,
-  GetIssuingCardholdersCardholder,
-  PostIssuingCardholders,
-  PostIssuingCardholdersCardholder,
+  GetIssuingCardholder,
+  CreateIssuingCardholder,
+  UpdateIssuingCardholder,
   type IssuingCardholder as StripeIssuingCardholder,
-  type PostIssuingCardholdersRequestBilling,
-  type PostIssuingCardholdersRequestCompany,
-  type PostIssuingCardholdersRequestIndividual,
-  type PostIssuingCardholdersRequestSpendingControls,
+  type CreateIssuingCardholderRequestBilling,
+  type CreateIssuingCardholderRequestCompany,
+  type CreateIssuingCardholderRequestIndividual,
+  type CreateIssuingCardholderRequestSpendingControls,
 } from "@distilled.cloud/stripe/stripe";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -445,7 +445,7 @@ const fromObservedBilling = (
 
 const toWireBilling = (
   billing: IssuingCardholderBilling,
-): PostIssuingCardholdersRequestBilling => ({
+): CreateIssuingCardholderRequestBilling => ({
   address: {
     city: billing.address.city,
     country: billing.address.country,
@@ -518,7 +518,7 @@ const fromObservedSpendingControls = (
 
 const toWireSpendingControls = (
   controls: IssuingCardholderSpendingControls,
-): PostIssuingCardholdersRequestSpendingControls => ({
+): CreateIssuingCardholderRequestSpendingControls => ({
   ...(controls.allowedCardPresences !== undefined
     ? { allowed_card_presences: controls.allowedCardPresences }
     : {}),
@@ -555,13 +555,13 @@ const toWireSpendingControls = (
 
 const toWireCompany = (
   company: IssuingCardholderCompany,
-): PostIssuingCardholdersRequestCompany => ({
+): CreateIssuingCardholderRequestCompany => ({
   ...(company.taxId !== undefined ? { tax_id: company.taxId } : {}),
 });
 
 const toWireIndividual = (
   individual: IssuingCardholderIndividual,
-): PostIssuingCardholdersRequestIndividual => ({
+): CreateIssuingCardholderRequestIndividual => ({
   ...(individual.firstName !== undefined
     ? { first_name: individual.firstName }
     : {}),
@@ -620,7 +620,7 @@ const isIssuingNotEnabled = (error: StripeOpError): boolean =>
   error.message.includes("not set up to use Issuing");
 
 const getById = (cardholder: string) =>
-  GetIssuingCardholdersCardholder({ cardholder }).pipe(
+  GetIssuingCardholder({ cardholder }).pipe(
     Effect.catchIf(isMissingCardholder, () => Effect.succeed(undefined)),
     Effect.catchIf(isIssuingNotEnabled, () => Effect.succeed(undefined)),
   );
@@ -780,7 +780,7 @@ export const IssuingCardholderProvider = () =>
       }
 
       if (current === undefined) {
-        current = yield* PostIssuingCardholders({
+        current = yield* CreateIssuingCardholder({
           name: news.name,
           billing,
           type: desiredType,
@@ -866,7 +866,7 @@ export const IssuingCardholderProvider = () =>
         return toAttrs(current);
       }
 
-      const updated = yield* PostIssuingCardholdersCardholder({
+      const updated = yield* UpdateIssuingCardholder({
         cardholder: current.id,
         ...(billingChanged ? { billing } : {}),
         ...(emailChanged ? { email: desiredEmail } : {}),
@@ -899,7 +899,7 @@ export const IssuingCardholderProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const existing = yield* getById(output.id);
       if (existing === undefined || existing.status === "inactive") return;
-      yield* PostIssuingCardholdersCardholder({
+      yield* UpdateIssuingCardholder({
         cardholder: existing.id,
         status: "inactive",
       }).pipe(Effect.catchIf(isMissingCardholder, () => Effect.void));

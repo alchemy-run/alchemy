@@ -1,7 +1,7 @@
 import type {
   ApplePayDomain as StripeApplePayDomain,
-  GetApplePayDomainsDomainError,
-  GetApplePayDomainsDomainRequest,
+  GetApplePayDomainError,
+  GetApplePayDomainRequest,
 } from "@distilled.cloud/stripe/stripe";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../Binding.ts";
@@ -9,7 +9,7 @@ import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { ApplePayDomain } from "./ApplePayDomain.ts";
 
 export interface RetrieveApplePayDomainRequest extends Omit<
-  GetApplePayDomainsDomainRequest,
+  GetApplePayDomainRequest,
   "domain"
 > {}
 
@@ -35,7 +35,7 @@ export interface RetrieveApplePayDomain extends Binding.Service<
       request?: RetrieveApplePayDomainRequest,
     ) => Effect.Effect<
       StripeApplePayDomain,
-      GetApplePayDomainsDomainError,
+      GetApplePayDomainError,
       RuntimeContext
     >
   >

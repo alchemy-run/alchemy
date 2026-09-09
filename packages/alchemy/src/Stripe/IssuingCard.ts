@@ -2,11 +2,11 @@ import { withRequestOptions } from "@distilled.cloud/stripe";
 import type { StripeOpError } from "@distilled.cloud/stripe";
 import {
   GetIssuingCards,
-  GetIssuingCardsCard,
-  PostIssuingCards,
-  PostIssuingCardsCard,
+  GetIssuingCard,
+  CreateIssuingCard,
+  UpdateIssuingCard,
   type IssuingCard as StripeIssuingCard,
-  type PostIssuingCardsRequestSpendingControls,
+  type CreateIssuingCardRequestSpendingControls,
 } from "@distilled.cloud/stripe/stripe";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -367,7 +367,7 @@ const toSpendingControls = (
 
 const toWireSpendingControls = (
   controls: IssuingCardSpendingControls,
-): PostIssuingCardsRequestSpendingControls => ({
+): CreateIssuingCardRequestSpendingControls => ({
   ...(controls.allowedCardPresences !== undefined
     ? { allowed_card_presences: controls.allowedCardPresences }
     : {}),
@@ -429,13 +429,13 @@ const isIssuingUnavailable = (error: StripeOpError): boolean =>
   error._tag === "InvalidRequestError" || error._tag === "Forbidden";
 
 const getById = (card: string) =>
-  GetIssuingCardsCard({ card }).pipe(
+  GetIssuingCard({ card }).pipe(
     Effect.map((live) => (live.status === "canceled" ? undefined : live)),
     Effect.catchIf(isMissingCard, () => Effect.succeed(undefined)),
   );
 
 const getByIdAny = (card: string) =>
-  GetIssuingCardsCard({ card }).pipe(
+  GetIssuingCard({ card }).pipe(
     Effect.catchIf(isMissingCard, () => Effect.succeed(undefined)),
   );
 
@@ -615,7 +615,7 @@ export const IssuingCardProvider = () =>
       }
 
       if (current === undefined) {
-        current = yield* PostIssuingCards({
+        current = yield* CreateIssuingCard({
           cardholder: news.cardholder,
           currency: news.currency,
           type: desiredType,
@@ -680,7 +680,7 @@ export const IssuingCardProvider = () =>
         return toAttrs(current);
       }
 
-      const updated = yield* PostIssuingCardsCard({
+      const updated = yield* UpdateIssuingCard({
         card: current.id,
         ...(statusChanged ? { status: desiredStatus } : {}),
         ...(personalizationChanged
@@ -704,7 +704,7 @@ export const IssuingCardProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const existing = yield* getByIdAny(output.id);
       if (existing === undefined || existing.status === "canceled") return;
-      yield* PostIssuingCardsCard({
+      yield* UpdateIssuingCard({
         card: existing.id,
         status: "canceled",
       }).pipe(Effect.catchIf(isMissingCard, () => Effect.void));

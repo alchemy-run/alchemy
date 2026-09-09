@@ -1,12 +1,12 @@
 import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
-  DeleteCouponsCoupon,
+  DeleteCoupon,
   GetCoupons,
-  GetCouponsCoupon,
-  PostCoupons,
-  PostCouponsCoupon,
+  GetCoupon,
+  CreateCoupon,
+  UpdateCoupon,
   type Coupon as StripeCoupon,
-  type PostCouponsRequestCurrencyOptionsMap,
+  type CreateCouponRequestCurrencyOptionsMap,
 } from "@distilled.cloud/stripe/stripe";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -233,7 +233,7 @@ const fromWireCurrencyOptions = (
 
 const toWireCurrencyOptions = (
   options: Record<string, CouponCurrencyOption> | undefined,
-): PostCouponsRequestCurrencyOptionsMap | undefined => {
+): CreateCouponRequestCurrencyOptionsMap | undefined => {
   if (options === undefined) return undefined;
   return Object.fromEntries(
     Object.entries(options).map(([currency, value]) => [
@@ -272,7 +272,7 @@ const toAttrs = (coupon: StripeCoupon): CouponAttributes => ({
 const isMissingCoupon = isMissingStripeResource;
 
 const getById = (coupon: string) =>
-  GetCouponsCoupon({ coupon }).pipe(
+  GetCoupon({ coupon }).pipe(
     Effect.catchIf(isMissingCoupon, () => Effect.succeed(undefined)),
   );
 
@@ -453,7 +453,7 @@ export const CouponProvider = () =>
       });
 
       if (current === undefined) {
-        current = yield* PostCoupons({
+        current = yield* CreateCoupon({
           ...(news.couponId !== undefined ? { id: news.couponId } : {}),
           ...(news.name !== undefined ? { name: news.name } : {}),
           ...(news.percentOff !== undefined
@@ -507,7 +507,7 @@ export const CouponProvider = () =>
         return toAttrs(current);
       }
 
-      const updated = yield* PostCouponsCoupon({
+      const updated = yield* UpdateCoupon({
         coupon: current.id,
         ...(nameChanged ? { name: news.name } : {}),
         ...(currencyOptionsChanged
@@ -528,7 +528,7 @@ export const CouponProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      yield* DeleteCouponsCoupon({ coupon: output.id }).pipe(
+      yield* DeleteCoupon({ coupon: output.id }).pipe(
         Effect.catchIf(isMissingCoupon, () => Effect.void),
       );
     }),

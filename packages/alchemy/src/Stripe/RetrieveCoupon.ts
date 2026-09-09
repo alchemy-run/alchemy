@@ -1,7 +1,7 @@
 import type {
   Coupon as StripeCoupon,
-  GetCouponsCouponError,
-  GetCouponsCouponRequest,
+  GetCouponError,
+  GetCouponRequest,
 } from "@distilled.cloud/stripe/stripe";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../Binding.ts";
@@ -9,7 +9,7 @@ import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { Coupon } from "./Coupon.ts";
 
 export interface RetrieveCouponRequest extends Omit<
-  GetCouponsCouponRequest,
+  GetCouponRequest,
   "coupon"
 > {}
 
@@ -33,7 +33,7 @@ export interface RetrieveCoupon extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: RetrieveCouponRequest,
-    ) => Effect.Effect<StripeCoupon, GetCouponsCouponError, RuntimeContext>
+    ) => Effect.Effect<StripeCoupon, GetCouponError, RuntimeContext>
   >
 > {}
 

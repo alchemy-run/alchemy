@@ -1,10 +1,10 @@
 import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
-  DeleteRadarValueListItemsItem,
+  DeleteRadarValueListItem,
   GetRadarValueListItems,
-  GetRadarValueListItemsItem,
+  GetRadarValueListItem,
   GetRadarValueLists,
-  PostRadarValueListItems,
+  CreateRadarValueListItem,
   type RadarValueList as StripeRadarValueList,
   type RadarValueListItem as StripeRadarValueListItem,
 } from "@distilled.cloud/stripe/stripe";
@@ -112,7 +112,7 @@ const toAttrs = (
 const isMissing = isMissingStripeResource;
 
 const getById = (item: string) =>
-  GetRadarValueListItemsItem({ item }).pipe(
+  GetRadarValueListItem({ item }).pipe(
     Effect.catchIf(isMissing, () => Effect.succeed(undefined)),
   );
 
@@ -275,7 +275,7 @@ export const RadarValueListItemProvider = () =>
       }
 
       if (current === undefined) {
-        current = yield* PostRadarValueListItems({
+        current = yield* CreateRadarValueListItem({
           value_list: news.valueList,
           value: news.value,
         }).pipe(
@@ -301,7 +301,7 @@ export const RadarValueListItemProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      yield* DeleteRadarValueListItemsItem({ item: output.id }).pipe(
+      yield* DeleteRadarValueListItem({ item: output.id }).pipe(
         Effect.catchIf(isMissing, () => Effect.void),
       );
     }),

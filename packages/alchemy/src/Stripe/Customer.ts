@@ -1,10 +1,10 @@
 import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
-  DeleteCustomersCustomer,
+  DeleteCustomer,
   GetCustomers,
-  GetCustomersCustomer,
-  PostCustomers,
-  PostCustomersCustomer,
+  GetCustomer,
+  CreateCustomer,
+  UpdateCustomer,
   type Customer as StripeCustomer,
   type DeletedCustomer,
 } from "@distilled.cloud/stripe/stripe";
@@ -151,7 +151,7 @@ const toAttrs = (customer: StripeCustomer) => ({
 const isMissingCustomer = isMissingStripeResource;
 
 const getById = (customer: string) =>
-  GetCustomersCustomer({ customer }).pipe(
+  GetCustomer({ customer }).pipe(
     Effect.map(asCustomer),
     Effect.catchIf(isMissingCustomer, () => Effect.succeed(undefined)),
   );
@@ -253,7 +253,7 @@ export const CustomerProvider = () =>
       });
 
       if (current === undefined) {
-        current = yield* PostCustomers({
+        current = yield* CreateCustomer({
           ...(desiredEmail.length > 0 ? { email: desiredEmail } : {}),
           ...(desiredName.length > 0 ? { name: desiredName } : {}),
           ...(desiredDescription.length > 0
@@ -287,7 +287,7 @@ export const CustomerProvider = () =>
         return toAttrs(current);
       }
 
-      const updated = yield* PostCustomersCustomer({
+      const updated = yield* UpdateCustomer({
         customer: current.id,
         ...(emailChanged ? { email: desiredEmail } : {}),
         ...(nameChanged ? { name: desiredName } : {}),
@@ -308,7 +308,7 @@ export const CustomerProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      yield* DeleteCustomersCustomer({ customer: output.id }).pipe(
+      yield* DeleteCustomer({ customer: output.id }).pipe(
         Effect.catchIf(isMissingCustomer, () => Effect.void),
       );
     }),

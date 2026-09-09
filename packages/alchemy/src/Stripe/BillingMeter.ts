@@ -1,11 +1,11 @@
 import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
   GetBillingMeters,
-  GetBillingMetersId,
-  PostBillingMeters,
-  PostBillingMetersId,
-  PostBillingMetersIdDeactivate,
-  PostBillingMetersIdReactivate,
+  GetBillingMeter,
+  CreateBillingMeter,
+  UpdateBillingMeter,
+  CreateBillingMeterDeactivate,
+  CreateBillingMeterReactivate,
   type BillingMeter as StripeBillingMeter,
 } from "@distilled.cloud/stripe/stripe";
 import * as Data from "effect/Data";
@@ -254,7 +254,7 @@ const toAttrs = (meter: StripeBillingMeter): BillingMeterAttributes => ({
 const isMissingMeter = isMissingStripeResource;
 
 const getById = (id: string) =>
-  GetBillingMetersId({ id }).pipe(
+  GetBillingMeter({ id }).pipe(
     Effect.catchIf(isMissingMeter, () => Effect.succeed(undefined)),
   );
 
@@ -388,7 +388,7 @@ export const BillingMeterProvider = () =>
       }
 
       if (current === undefined) {
-        current = yield* PostBillingMeters({
+        current = yield* CreateBillingMeter({
           display_name: displayName,
           event_name: eventName,
           default_aggregation: { formula: news.defaultAggregation.formula },
@@ -423,7 +423,7 @@ export const BillingMeterProvider = () =>
 
       const displayNameChanged = current.display_name !== displayName;
       if (displayNameChanged) {
-        current = yield* PostBillingMetersId({
+        current = yield* UpdateBillingMeter({
           id: current.id,
           display_name: displayName,
         });
@@ -432,8 +432,8 @@ export const BillingMeterProvider = () =>
       if (current.status !== desiredStatus) {
         current =
           desiredStatus === "inactive"
-            ? yield* PostBillingMetersIdDeactivate({ id: current.id })
-            : yield* PostBillingMetersIdReactivate({ id: current.id });
+            ? yield* CreateBillingMeterDeactivate({ id: current.id })
+            : yield* CreateBillingMeterReactivate({ id: current.id });
       }
 
       return toAttrs(current);
@@ -442,7 +442,7 @@ export const BillingMeterProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const existing = yield* getById(output.id);
       if (existing === undefined || existing.status === "inactive") return;
-      yield* PostBillingMetersIdDeactivate({ id: existing.id }).pipe(
+      yield* CreateBillingMeterDeactivate({ id: existing.id }).pipe(
         Effect.catchIf(isMissingMeter, () => Effect.void),
       );
     }),

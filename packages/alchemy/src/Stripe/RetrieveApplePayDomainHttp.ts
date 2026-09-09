@@ -1,4 +1,4 @@
-import { GetApplePayDomainsDomain } from "@distilled.cloud/stripe/stripe";
+import { GetApplePayDomain } from "@distilled.cloud/stripe/stripe";
 import * as Layer from "effect/Layer";
 import { RetrieveApplePayDomain } from "./RetrieveApplePayDomain.ts";
 import { makeHttpStripeIdBinding } from "./StripeHttp.ts";
@@ -14,7 +14,7 @@ export const RetrieveApplePayDomainHttp = Layer.effect(
   RetrieveApplePayDomain,
   makeHttpStripeIdBinding({
     tag: "Stripe.RetrieveApplePayDomain",
-    operation: GetApplePayDomainsDomain,
+    operation: GetApplePayDomain,
     idField: "domain",
     permissions: ["apple_pay_domains_read"],
   }),

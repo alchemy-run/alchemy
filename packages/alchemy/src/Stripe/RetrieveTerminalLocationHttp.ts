@@ -1,4 +1,4 @@
-import { GetTerminalLocationsLocation } from "@distilled.cloud/stripe/stripe";
+import { GetTerminalLocation } from "@distilled.cloud/stripe/stripe";
 import * as Layer from "effect/Layer";
 import { RetrieveTerminalLocation } from "./RetrieveTerminalLocation.ts";
 import { makeHttpStripeIdBinding } from "./StripeHttp.ts";
@@ -14,7 +14,7 @@ export const RetrieveTerminalLocationHttp = Layer.effect(
   RetrieveTerminalLocation,
   makeHttpStripeIdBinding({
     tag: "Stripe.RetrieveTerminalLocation",
-    operation: GetTerminalLocationsLocation,
+    operation: GetTerminalLocation,
     idField: "location",
     permissions: ["terminal_read"],
   }),

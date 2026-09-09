@@ -1,7 +1,7 @@
 import type {
   IssuingCardholder as StripeIssuingCardholder,
-  PostIssuingCardholdersCardholderError,
-  PostIssuingCardholdersCardholderRequest,
+  UpdateIssuingCardholderError,
+  UpdateIssuingCardholderRequest as DistilledUpdateIssuingCardholderRequest,
 } from "@distilled.cloud/stripe/stripe";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../Binding.ts";
@@ -9,7 +9,7 @@ import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { IssuingCardholder } from "./IssuingCardholder.ts";
 
 export interface UpdateIssuingCardholderRequest extends Omit<
-  PostIssuingCardholdersCardholderRequest,
+  DistilledUpdateIssuingCardholderRequest,
   "cardholder"
 > {}
 
@@ -35,7 +35,7 @@ export interface UpdateIssuingCardholder extends Binding.Service<
       request?: UpdateIssuingCardholderRequest,
     ) => Effect.Effect<
       StripeIssuingCardholder,
-      PostIssuingCardholdersCardholderError,
+      UpdateIssuingCardholderError,
       RuntimeContext
     >
   >

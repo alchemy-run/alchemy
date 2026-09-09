@@ -1,4 +1,4 @@
-import { GetShippingRatesShippingRateToken } from "@distilled.cloud/stripe/stripe";
+import { GetShippingRate } from "@distilled.cloud/stripe/stripe";
 import * as Layer from "effect/Layer";
 import { RetrieveShippingRate } from "./RetrieveShippingRate.ts";
 import { makeHttpStripeIdBinding } from "./StripeHttp.ts";
@@ -14,7 +14,7 @@ export const RetrieveShippingRateHttp = Layer.effect(
   RetrieveShippingRate,
   makeHttpStripeIdBinding({
     tag: "Stripe.RetrieveShippingRate",
-    operation: GetShippingRatesShippingRateToken,
+    operation: GetShippingRate,
     idField: "shipping_rate_token",
     permissions: ["shipping_rates_read"],
   }),

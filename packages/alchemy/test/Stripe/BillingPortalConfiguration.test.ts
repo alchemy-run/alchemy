@@ -1,7 +1,7 @@
 import * as Provider from "@/Provider";
 import * as Stripe from "@/Stripe";
 import * as Test from "@/Test/Alchemy";
-import { GetBillingPortalConfigurationsConfiguration } from "@distilled.cloud/stripe/stripe";
+import { GetBillingPortalConfiguration } from "@distilled.cloud/stripe/stripe";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -18,7 +18,7 @@ const logLevel = Effect.provideService(
 const isMissing = isMissingStripeResource;
 
 const waitUntilDeactivated = (id: string) =>
-  GetBillingPortalConfigurationsConfiguration({ configuration: id }).pipe(
+  GetBillingPortalConfiguration({ configuration: id }).pipe(
     Effect.map((configuration) =>
       configuration.active ? ("active" as const) : ("inactive" as const),
     ),
@@ -75,7 +75,7 @@ test.provider(
       expect(created.livemode).toEqual(false);
       expect(created.created).toEqual(expect.any(Number));
 
-      const fetched = yield* GetBillingPortalConfigurationsConfiguration({
+      const fetched = yield* GetBillingPortalConfiguration({
         configuration: created.id,
       });
       expect(fetched.id).toEqual(created.id);
@@ -131,7 +131,7 @@ test.provider(
       expect(updated.features.paymentMethodUpdate.enabled).toEqual(true);
       expect(updated.metadata).toEqual({ env: "test", revision: "2" });
 
-      const refetched = yield* GetBillingPortalConfigurationsConfiguration({
+      const refetched = yield* GetBillingPortalConfiguration({
         configuration: updated.id,
       });
       expect(refetched.name).toEqual("Alchemy Customer Portal Updated");

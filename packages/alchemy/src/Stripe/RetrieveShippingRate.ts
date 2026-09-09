@@ -1,6 +1,6 @@
 import type {
-  GetShippingRatesShippingRateTokenError,
-  GetShippingRatesShippingRateTokenRequest,
+  GetShippingRateError,
+  GetShippingRateRequest,
   ShippingRate as StripeShippingRate,
 } from "@distilled.cloud/stripe/stripe";
 import type * as Effect from "effect/Effect";
@@ -9,7 +9,7 @@ import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { ShippingRate } from "./ShippingRate.ts";
 
 export interface RetrieveShippingRateRequest extends Omit<
-  GetShippingRatesShippingRateTokenRequest,
+  GetShippingRateRequest,
   "shipping_rate_token"
 > {}
 
@@ -33,11 +33,7 @@ export interface RetrieveShippingRate extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: RetrieveShippingRateRequest,
-    ) => Effect.Effect<
-      StripeShippingRate,
-      GetShippingRatesShippingRateTokenError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<StripeShippingRate, GetShippingRateError, RuntimeContext>
   >
 > {}
 

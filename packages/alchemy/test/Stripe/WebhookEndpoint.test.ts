@@ -1,7 +1,7 @@
 import * as Provider from "@/Provider";
 import * as Stripe from "@/Stripe";
 import * as Test from "@/Test/Alchemy";
-import { GetWebhookEndpointsWebhookEndpoint } from "@distilled.cloud/stripe/stripe";
+import { GetWebhookEndpoint } from "@distilled.cloud/stripe/stripe";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
@@ -20,7 +20,7 @@ const TEST_URL = "https://example.com/alchemy-stripe-webhook";
 const UPDATED_URL = "https://example.com/alchemy-stripe-webhook/updated";
 
 const waitUntilGone = (id: string) =>
-  GetWebhookEndpointsWebhookEndpoint({ webhook_endpoint: id }).pipe(
+  GetWebhookEndpoint({ webhook_endpoint: id }).pipe(
     Effect.as("found" as const),
     Effect.catchIf(isMissingStripeResource, () =>
       Effect.succeed("gone" as const),
@@ -66,7 +66,7 @@ test.provider(
       expect(created.livemode).toEqual(false);
       expectSecret(created.secret);
 
-      const fetched = yield* GetWebhookEndpointsWebhookEndpoint({
+      const fetched = yield* GetWebhookEndpoint({
         webhook_endpoint: created.id,
       });
       expect(fetched.id).toEqual(created.id);
@@ -106,7 +106,7 @@ test.provider(
       expect(updated.metadata).toEqual({ purpose: "charges", env: "test" });
       expectSecret(updated.secret);
 
-      const refetched = yield* GetWebhookEndpointsWebhookEndpoint({
+      const refetched = yield* GetWebhookEndpoint({
         webhook_endpoint: updated.id,
       });
       expect(refetched.url).toEqual(UPDATED_URL);

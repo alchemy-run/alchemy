@@ -1,7 +1,7 @@
 import * as Provider from "@/Provider";
 import * as Stripe from "@/Stripe";
 import * as Test from "@/Test/Alchemy";
-import { GetProductsId } from "@distilled.cloud/stripe/stripe";
+import { GetProduct } from "@distilled.cloud/stripe/stripe";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -16,7 +16,7 @@ const logLevel = Effect.provideService(
 );
 
 const waitUntilGone = (id: string) =>
-  GetProductsId({ id }).pipe(
+  GetProduct({ id }).pipe(
     Effect.as("found" as const),
     Effect.catchIf(isMissingStripeResource, () =>
       Effect.succeed("gone" as const),
@@ -54,7 +54,7 @@ test.provider(
       expect(created.created).toEqual(expect.any(Number));
       expect(created.livemode).toEqual(false);
 
-      const fetched = yield* GetProductsId({ id: created.id });
+      const fetched = yield* GetProduct({ id: created.id });
       expect(fetched.id).toEqual(created.id);
       expect(fetched.name).toEqual(created.name);
       expect(fetched.description).toEqual("Initial description");
@@ -90,7 +90,7 @@ test.provider(
       ]);
       expect(updated.metadata).toEqual({ tier: "enterprise", sku: "ent-1" });
 
-      const refetched = yield* GetProductsId({ id: updated.id });
+      const refetched = yield* GetProduct({ id: updated.id });
       expect(refetched.name).toEqual(updated.name);
       expect(refetched.description).toEqual("Updated description");
       expect(refetched.active).toEqual(false);

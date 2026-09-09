@@ -1,4 +1,4 @@
-import { PostFileLinks } from "@distilled.cloud/stripe/stripe";
+import { CreateFileLink as createFileLinkOp } from "@distilled.cloud/stripe/stripe";
 import * as Layer from "effect/Layer";
 import { CreateFileLink } from "./CreateFileLink.ts";
 import { makeHttpStripeAccountBinding } from "./StripeHttp.ts";
@@ -14,7 +14,7 @@ export const CreateFileLinkHttp = Layer.effect(
   CreateFileLink,
   makeHttpStripeAccountBinding({
     tag: "Stripe.CreateFileLink",
-    operation: PostFileLinks,
+    operation: createFileLinkOp,
     permissions: ["files_write"],
   }),
 );

@@ -1,7 +1,7 @@
 import * as Provider from "@/Provider";
 import * as Stripe from "@/Stripe";
 import * as Test from "@/Test/Alchemy";
-import { GetPaymentMethodConfigurationsConfiguration } from "@distilled.cloud/stripe/stripe";
+import { GetPaymentMethodConfiguration } from "@distilled.cloud/stripe/stripe";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -18,7 +18,7 @@ const logLevel = Effect.provideService(
 const isMissing = isMissingStripeResource;
 
 const waitUntilInactive = (id: string) =>
-  GetPaymentMethodConfigurationsConfiguration({ configuration: id }).pipe(
+  GetPaymentMethodConfiguration({ configuration: id }).pipe(
     Effect.map((configuration) =>
       configuration.active ? ("active" as const) : ("inactive" as const),
     ),
@@ -54,7 +54,7 @@ test.provider(
       expect(created.link?.displayPreference.preference).toEqual("off");
       expect(created.livemode).toEqual(false);
 
-      const fetched = yield* GetPaymentMethodConfigurationsConfiguration({
+      const fetched = yield* GetPaymentMethodConfiguration({
         configuration: created.id,
       });
       expect(fetched.id).toEqual(created.id);
@@ -81,7 +81,7 @@ test.provider(
       expect(updated.card?.displayPreference.preference).toEqual("on");
       expect(updated.link?.displayPreference.preference).toEqual("on");
 
-      const refetched = yield* GetPaymentMethodConfigurationsConfiguration({
+      const refetched = yield* GetPaymentMethodConfiguration({
         configuration: updated.id,
       });
       expect(refetched.id).toEqual(updated.id);
@@ -94,7 +94,7 @@ test.provider(
 
       const inactive = yield* waitUntilInactive(created.id);
       expect(inactive).toEqual("inactive");
-      const deactivated = yield* GetPaymentMethodConfigurationsConfiguration({
+      const deactivated = yield* GetPaymentMethodConfiguration({
         configuration: created.id,
       });
       expect(deactivated.active).toEqual(false);

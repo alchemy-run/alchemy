@@ -1,9 +1,9 @@
 import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
   GetEntitlementsFeatures,
-  GetEntitlementsFeaturesId,
-  PostEntitlementsFeatures,
-  PostEntitlementsFeaturesId,
+  GetEntitlementsFeature,
+  CreateEntitlementsFeature,
+  UpdateEntitlementsFeature,
   type EntitlementsFeature as StripeEntitlementsFeature,
 } from "@distilled.cloud/stripe/stripe";
 import * as Effect from "effect/Effect";
@@ -177,7 +177,7 @@ const toAttrs = (
 const isMissingFeature = isMissingStripeResource;
 
 const getById = (id: string) =>
-  GetEntitlementsFeaturesId({ id }).pipe(
+  GetEntitlementsFeature({ id }).pipe(
     Effect.catchIf(isMissingFeature, () => Effect.succeed(undefined)),
   );
 
@@ -334,7 +334,7 @@ export const EntitlementsFeatureProvider = () =>
       }
 
       if (current === undefined) {
-        current = yield* PostEntitlementsFeatures({
+        current = yield* CreateEntitlementsFeature({
           lookup_key: lookupKey,
           name,
           metadata,
@@ -355,7 +355,7 @@ export const EntitlementsFeatureProvider = () =>
         return toAttrs(current);
       }
 
-      const updated = yield* PostEntitlementsFeaturesId({
+      const updated = yield* UpdateEntitlementsFeature({
         id: current.id,
         ...(nameChanged ? { name } : {}),
         ...(activeChanged ? { active: desiredActive } : {}),
@@ -376,7 +376,7 @@ export const EntitlementsFeatureProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const existing = yield* getById(output.id);
       if (existing === undefined || !existing.active) return;
-      yield* PostEntitlementsFeaturesId({
+      yield* UpdateEntitlementsFeature({
         id: existing.id,
         active: false,
       }).pipe(Effect.catchIf(isMissingFeature, () => Effect.void));

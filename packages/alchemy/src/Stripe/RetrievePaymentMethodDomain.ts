@@ -1,6 +1,6 @@
 import type {
-  GetPaymentMethodDomainsPaymentMethodDomainError,
-  GetPaymentMethodDomainsPaymentMethodDomainRequest,
+  GetPaymentMethodDomainError,
+  GetPaymentMethodDomainRequest,
   PaymentMethodDomain as StripePaymentMethodDomain,
 } from "@distilled.cloud/stripe/stripe";
 import type * as Effect from "effect/Effect";
@@ -9,7 +9,7 @@ import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { PaymentMethodDomain } from "./PaymentMethodDomain.ts";
 
 export interface RetrievePaymentMethodDomainRequest extends Omit<
-  GetPaymentMethodDomainsPaymentMethodDomainRequest,
+  GetPaymentMethodDomainRequest,
   "payment_method_domain"
 > {}
 
@@ -35,7 +35,7 @@ export interface RetrievePaymentMethodDomain extends Binding.Service<
       request?: RetrievePaymentMethodDomainRequest,
     ) => Effect.Effect<
       StripePaymentMethodDomain,
-      GetPaymentMethodDomainsPaymentMethodDomainError,
+      GetPaymentMethodDomainError,
       RuntimeContext
     >
   >

@@ -1,7 +1,7 @@
 import type {
   AppsSecret as StripeAppsSecret,
-  PostAppsSecretsError,
-  PostAppsSecretsRequest,
+  CreateAppsSecretError,
+  CreateAppsSecretRequest,
 } from "@distilled.cloud/stripe/stripe";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../Binding.ts";
@@ -29,8 +29,8 @@ export interface CreateAppsSecret extends Binding.Service<
   "Stripe.CreateAppsSecret",
   () => Effect.Effect<
     (
-      request: PostAppsSecretsRequest,
-    ) => Effect.Effect<StripeAppsSecret, PostAppsSecretsError, RuntimeContext>
+      request: CreateAppsSecretRequest,
+    ) => Effect.Effect<StripeAppsSecret, CreateAppsSecretError, RuntimeContext>
   >
 > {}
 

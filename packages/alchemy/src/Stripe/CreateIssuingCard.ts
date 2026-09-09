@@ -1,7 +1,7 @@
 import type {
   IssuingCard as StripeIssuingCard,
-  PostIssuingCardsError,
-  PostIssuingCardsRequest,
+  CreateIssuingCardError,
+  CreateIssuingCardRequest,
 } from "@distilled.cloud/stripe/stripe";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../Binding.ts";
@@ -29,8 +29,12 @@ export interface CreateIssuingCard extends Binding.Service<
   "Stripe.CreateIssuingCard",
   () => Effect.Effect<
     (
-      request: PostIssuingCardsRequest,
-    ) => Effect.Effect<StripeIssuingCard, PostIssuingCardsError, RuntimeContext>
+      request: CreateIssuingCardRequest,
+    ) => Effect.Effect<
+      StripeIssuingCard,
+      CreateIssuingCardError,
+      RuntimeContext
+    >
   >
 > {}
 

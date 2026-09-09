@@ -1,4 +1,4 @@
-import { PostCustomers } from "@distilled.cloud/stripe/stripe";
+import { CreateCustomer as createCustomerOp } from "@distilled.cloud/stripe/stripe";
 import * as Layer from "effect/Layer";
 import { CreateCustomer } from "./CreateCustomer.ts";
 import { makeHttpStripeAccountBinding } from "./StripeHttp.ts";
@@ -14,7 +14,7 @@ export const CreateCustomerHttp = Layer.effect(
   CreateCustomer,
   makeHttpStripeAccountBinding({
     tag: "Stripe.CreateCustomer",
-    operation: PostCustomers,
+    operation: createCustomerOp,
     permissions: ["customers_write"],
   }),
 );

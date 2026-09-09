@@ -1,4 +1,4 @@
-import { PostAccounts } from "@distilled.cloud/stripe/stripe";
+import { CreateAccount as createAccountOp } from "@distilled.cloud/stripe/stripe";
 import * as Layer from "effect/Layer";
 import { CreateAccount } from "./CreateAccount.ts";
 import { makeHttpStripeAccountBinding } from "./StripeHttp.ts";
@@ -14,7 +14,7 @@ export const CreateAccountHttp = Layer.effect(
   CreateAccount,
   makeHttpStripeAccountBinding({
     tag: "Stripe.CreateAccount",
-    operation: PostAccounts,
+    operation: createAccountOp,
     permissions: ["accounts_write"],
   }),
 );

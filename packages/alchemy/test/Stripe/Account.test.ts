@@ -2,9 +2,9 @@ import * as Provider from "@/Provider";
 import * as Stripe from "@/Stripe";
 import * as Test from "@/Test/Alchemy";
 import {
-  DeleteAccountsAccount,
-  GetAccountsAccount,
-  PostAccounts,
+  DeleteAccount,
+  GetAccountByAccount,
+  CreateAccount,
 } from "@distilled.cloud/stripe/stripe";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -26,7 +26,7 @@ const CONNECT_ENABLED = process.env.STRIPE_TEST_CONNECT === "1";
 const isMissing = isMissingStripeResource;
 
 const waitUntilGone = (id: string) =>
-  GetAccountsAccount({ account: id }).pipe(
+  GetAccountByAccount({ account: id }).pipe(
     Effect.as("found" as const),
     Effect.catchIf(isMissing, () => Effect.succeed("gone" as const)),
     Effect.repeat({
@@ -37,12 +37,10 @@ const waitUntilGone = (id: string) =>
   );
 
 const deleteAccount = (account: string) =>
-  DeleteAccountsAccount({ account }).pipe(
-    Effect.catchIf(isMissing, () => Effect.void),
-  );
+  DeleteAccount({ account }).pipe(Effect.catchIf(isMissing, () => Effect.void));
 
 const probeCreate = () =>
-  PostAccounts({
+  CreateAccount({
     type: "express",
     country: "US",
     email: "alchemy.account.probe@example.com",
@@ -114,7 +112,7 @@ test.provider.skipIf(!CONNECT_ENABLED)(
         expect.arrayContaining(["card_payments", "transfers"]),
       );
 
-      const fetched = yield* GetAccountsAccount({ account: created.id });
+      const fetched = yield* GetAccountByAccount({ account: created.id });
       expect(fetched.id).toEqual(created.id);
       expect(fetched.email).toEqual(created.email);
       expect(fetched.business_profile?.name).toEqual(
@@ -166,7 +164,7 @@ test.provider.skipIf(!CONNECT_ENABLED)(
       );
       expect(updated.metadata).toEqual({ tier: "platinum", sku: "acct-1" });
 
-      const refetched = yield* GetAccountsAccount({ account: updated.id });
+      const refetched = yield* GetAccountByAccount({ account: updated.id });
       expect(refetched.email).toEqual(updated.email);
       expect(refetched.business_profile?.name).toEqual(
         "Alchemy Catalog Merchant Updated",

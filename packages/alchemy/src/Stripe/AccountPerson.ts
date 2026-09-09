@@ -3,16 +3,16 @@ import {
   type StripeOpError,
 } from "@distilled.cloud/stripe";
 import {
-  DeleteAccountsAccountPersonsPerson,
+  DeleteAccountPerson,
   GetAccounts,
-  GetAccountsAccountPersons,
-  GetAccountsAccountPersonsPerson,
-  PostAccountsAccountPersons,
-  PostAccountsAccountPersonsPerson,
+  GetAccountPersons,
+  GetAccountPerson,
+  CreateAccountPerson,
+  UpdateAccountPerson,
   type Account as StripeAccount,
   type Person as StripePerson,
   type PersonRelationship,
-  type PostAccountsAccountPersonsRequestRelationship,
+  type CreateAccountPersonRequestRelationship,
 } from "@distilled.cloud/stripe/stripe";
 import * as Effect from "effect/Effect";
 import { Unowned } from "../AdoptPolicy.ts";
@@ -219,7 +219,7 @@ const fromRelationship = (
 
 const toRelationshipWire = (
   relationship: AccountPersonRelationship,
-): PostAccountsAccountPersonsRequestRelationship => ({
+): CreateAccountPersonRequestRelationship => ({
   ...(relationship.authorizer !== undefined
     ? { authorizer: relationship.authorizer }
     : {}),
@@ -299,7 +299,7 @@ const isSkippedListError = (error: StripeOpError): boolean =>
   error._tag === "Forbidden";
 
 const getById = (account: string, person: string) =>
-  GetAccountsAccountPersonsPerson({ account, person }).pipe(
+  GetAccountPerson({ account, person }).pipe(
     Effect.catchIf(isMissing, () => Effect.succeed(undefined)),
   );
 
@@ -307,7 +307,7 @@ const listPersons = Effect.fn(function* (account: string) {
   const people: StripePerson[] = [];
   let startingAfter: string | undefined;
   for (let page = 0; page < LIST_MAX_PAGES; page++) {
-    const response = yield* GetAccountsAccountPersons({
+    const response = yield* GetAccountPersons({
       account,
       limit: LIST_PAGE_SIZE,
       ...(startingAfter !== undefined ? { starting_after: startingAfter } : {}),
@@ -487,7 +487,7 @@ export const AccountPersonProvider = () =>
       }
 
       if (current === undefined) {
-        current = yield* PostAccountsAccountPersons({
+        current = yield* CreateAccountPerson({
           account: news.account,
           ...(desiredFirstName.length > 0
             ? { first_name: desiredFirstName }
@@ -529,7 +529,7 @@ export const AccountPersonProvider = () =>
         return toAttrs(news.account, current);
       }
 
-      const updated = yield* PostAccountsAccountPersonsPerson({
+      const updated = yield* UpdateAccountPerson({
         account: news.account,
         person: current.id,
         ...(firstNameChanged ? { first_name: desiredFirstName } : {}),
@@ -554,7 +554,7 @@ export const AccountPersonProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      yield* DeleteAccountsAccountPersonsPerson({
+      yield* DeleteAccountPerson({
         account: output.account,
         person: output.id,
       }).pipe(Effect.catchIf(isMissing, () => Effect.void));

@@ -1,10 +1,10 @@
 import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
   GetTaxRegistrations,
-  GetTaxRegistrationsId,
-  PostTaxRegistrations,
-  PostTaxRegistrationsId,
-  type PostTaxRegistrationsRequestCountryOptions,
+  GetTaxRegistration,
+  CreateTaxRegistration,
+  UpdateTaxRegistration,
+  type CreateTaxRegistrationRequestCountryOptions,
   type TaxProductRegistrationsResourceCountryOptions,
   type TaxRegistration as StripeTaxRegistration,
 } from "@distilled.cloud/stripe/stripe";
@@ -465,11 +465,11 @@ const renameDeep = (value: unknown, map: Record<string, string>): unknown => {
 
 const toWireCountryOptions = (
   options: TaxRegistrationCountryOptions,
-): PostTaxRegistrationsRequestCountryOptions =>
+): CreateTaxRegistrationRequestCountryOptions =>
   renameDeep(
     options,
     CAMEL_TO_SNAKE,
-  ) as PostTaxRegistrationsRequestCountryOptions;
+  ) as CreateTaxRegistrationRequestCountryOptions;
 
 const fromWireCountryOptions = (
   options: TaxProductRegistrationsResourceCountryOptions,
@@ -512,7 +512,7 @@ const toAttrs = (
 const isMissingRegistration = isMissingStripeResource;
 
 const getById = (id: string) =>
-  GetTaxRegistrationsId({ id }).pipe(
+  GetTaxRegistration({ id }).pipe(
     Effect.catchIf(isMissingRegistration, () => Effect.succeed(undefined)),
   );
 
@@ -650,7 +650,7 @@ export const TaxRegistrationProvider = () =>
       }
 
       if (current === undefined) {
-        current = yield* PostTaxRegistrations({
+        current = yield* CreateTaxRegistration({
           country: news.country,
           country_options: countryOptions,
           active_from: desiredActiveFrom,
@@ -686,7 +686,7 @@ export const TaxRegistrationProvider = () =>
         return toAttrs(current);
       }
 
-      const updated = yield* PostTaxRegistrationsId({
+      const updated = yield* UpdateTaxRegistration({
         id: current.id,
         ...(activeFromChanged || activateNow
           ? { active_from: desiredActiveFrom }
@@ -712,7 +712,7 @@ export const TaxRegistrationProvider = () =>
       // when the registration was created in the same unix second.
       const nowSec = yield* Effect.sync(() => Math.floor(Date.now() / 1000));
       const expiresAt = Math.max(nowSec, existing.active_from + 1);
-      yield* PostTaxRegistrationsId({
+      yield* UpdateTaxRegistration({
         id: existing.id,
         expires_at: expiresAt,
       }).pipe(Effect.catchIf(isMissingRegistration, () => Effect.void));

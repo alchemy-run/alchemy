@@ -1,7 +1,7 @@
 import * as Provider from "@/Provider";
 import * as Stripe from "@/Stripe";
 import * as Test from "@/Test/Alchemy";
-import { GetBillingMetersId } from "@distilled.cloud/stripe/stripe";
+import { GetBillingMeter } from "@distilled.cloud/stripe/stripe";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -18,7 +18,7 @@ const logLevel = Effect.provideService(
 const isMissing = isMissingStripeResource;
 
 const waitUntilInactive = (id: string) =>
-  GetBillingMetersId({ id }).pipe(
+  GetBillingMeter({ id }).pipe(
     Effect.map((meter) =>
       meter.status === "inactive" ? ("inactive" as const) : ("active" as const),
     ),
@@ -65,7 +65,7 @@ test.provider(
       expect(created.updated).toEqual(expect.any(Number));
       expect(created.livemode).toEqual(false);
 
-      const fetched = yield* GetBillingMetersId({ id: created.id });
+      const fetched = yield* GetBillingMeter({ id: created.id });
       expect(fetched.id).toEqual(created.id);
       expect(fetched.display_name).toEqual("Alchemy API Calls");
       expect(fetched.event_name).toEqual("alchemy_bm_lifecycle");
@@ -97,7 +97,7 @@ test.provider(
       expect(updated.eventName).toEqual("alchemy_bm_lifecycle");
       expect(updated.status).toEqual("active");
 
-      const refetched = yield* GetBillingMetersId({ id: updated.id });
+      const refetched = yield* GetBillingMeter({ id: updated.id });
       expect(refetched.id).toEqual(updated.id);
       expect(refetched.display_name).toEqual("Alchemy API Calls Updated");
       expect(refetched.event_name).toEqual("alchemy_bm_lifecycle");
@@ -107,7 +107,7 @@ test.provider(
 
       const inactive = yield* waitUntilInactive(created.id);
       expect(inactive).toEqual("inactive");
-      const deactivated = yield* GetBillingMetersId({ id: created.id });
+      const deactivated = yield* GetBillingMeter({ id: created.id });
       expect(deactivated.status).toEqual("inactive");
     }).pipe(logLevel),
   { timeout: 120_000 },
@@ -146,7 +146,7 @@ test.provider(
       expect(replaced.eventName).toEqual("alchemy_bm_replace_b");
       expect(replaced.status).toEqual("active");
 
-      const fetched = yield* GetBillingMetersId({ id: replaced.id });
+      const fetched = yield* GetBillingMeter({ id: replaced.id });
       expect(fetched.id).toEqual(replaced.id);
       expect(fetched.event_name).toEqual("alchemy_bm_replace_b");
       expect(fetched.status).toEqual("active");

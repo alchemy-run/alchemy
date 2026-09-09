@@ -3,9 +3,9 @@ import * as Stripe from "@/Stripe";
 import * as Test from "@/Test/Alchemy";
 import { isMissingStripeResource } from "@/Stripe/missing.ts";
 import {
-  DeleteAccountsAccount,
-  GetAccountsAccountPersonsPerson,
-  PostAccounts,
+  DeleteAccount,
+  GetAccountPerson,
+  CreateAccount,
 } from "@distilled.cloud/stripe/stripe";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -25,7 +25,7 @@ const CONNECT_ENABLED = process.env.STRIPE_TEST_CONNECT === "1";
 const isMissing = isMissingStripeResource;
 
 const waitUntilGone = (account: string, person: string) =>
-  GetAccountsAccountPersonsPerson({ account, person }).pipe(
+  GetAccountPerson({ account, person }).pipe(
     Effect.as("found" as const),
     Effect.catchIf(isMissing, () => Effect.succeed("gone" as const)),
     Effect.repeat({
@@ -35,7 +35,7 @@ const waitUntilGone = (account: string, person: string) =>
     }),
   );
 
-const probeConnectAccount = PostAccounts({
+const probeConnectAccount = CreateAccount({
   type: "custom",
   country: "US",
   email: "alchemy.account.person.probe@example.com",
@@ -66,7 +66,7 @@ test.provider(
         return;
       }
 
-      yield* DeleteAccountsAccount({ account: probe.success.id }).pipe(
+      yield* DeleteAccount({ account: probe.success.id }).pipe(
         Effect.catchIf(isMissing, () => Effect.void),
       );
       yield* stack.destroy();
@@ -117,7 +117,7 @@ test.provider.skipIf(!CONNECT_ENABLED)(
       expect(created.person.metadata).toMatchObject({ role: "finance" });
       expect(created.person.created).toEqual(expect.any(Number));
 
-      const fetched = yield* GetAccountsAccountPersonsPerson({
+      const fetched = yield* GetAccountPerson({
         account: created.account.id,
         person: created.person.id,
       });
@@ -172,7 +172,7 @@ test.provider.skipIf(!CONNECT_ENABLED)(
       expect(updated.person.relationship?.title).toEqual("COO");
       expect(updated.person.metadata).toEqual({ role: "ops", sku: "exec-1" });
 
-      const refetched = yield* GetAccountsAccountPersonsPerson({
+      const refetched = yield* GetAccountPerson({
         account: updated.account.id,
         person: updated.person.id,
       });
