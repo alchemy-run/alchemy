@@ -1,7 +1,4 @@
-import {
-  withRequestOptions,
-  type StripeOpError,
-} from "@distilled.cloud/stripe";
+import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
   DeleteProduct,
   GetProducts,
@@ -147,10 +144,6 @@ const toAttrs = (product: StripeProduct) => ({
 });
 
 const isMissingProduct = isMissingStripeResource;
-
-const isProductReferencedByPrices = (error: StripeOpError): boolean =>
-  error._tag === "InvalidRequestError" &&
-  (error.message ?? "").includes("cannot be deleted because it has");
 
 const getById = (id: string) =>
   GetProduct({ id }).pipe(
@@ -328,12 +321,12 @@ export const ProductProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       yield* DeleteProduct({ id: output.id }).pipe(
-        Effect.catchIf(isMissingProduct, () => Effect.void),
-        Effect.catchIf(isProductReferencedByPrices, () =>
+        Effect.catchTag("ProductHasPrices", () =>
           UpdateProduct({ id: output.id, active: false }).pipe(
             Effect.catchIf(isMissingProduct, () => Effect.void),
           ),
         ),
+        Effect.catchIf(isMissingProduct, () => Effect.void),
       );
     }),
   });
