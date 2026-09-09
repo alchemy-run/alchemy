@@ -115,6 +115,13 @@ export type Product = Resource<
  * });
  * ```
  *
+ * ### Destroying a Product
+ * **Example:** Delete when it has no prices
+ * ```typescript
+ * // alchemy destroy deletes the Product. If prices remain, Stripe
+ * // rejects the delete and Alchemy archives it (`active: false`).
+ * ```
+ *
  * @resource
  */
 export const Product = Resource<Product>("Stripe.Product");

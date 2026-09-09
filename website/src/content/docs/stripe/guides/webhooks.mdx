@@ -1,99 +1,60 @@
 ---
-title: Webhooks
-description: WebhookEndpoint plus a Worker route — Stripe POSTs events to your stack.
+title: Handle webhook events
+description: WebhookEndpoint lifecycle plus consumeEvents — one Effect per Stripe delivery.
 ---
 
-A `WebhookEndpoint` is the HTTPS URL Stripe POSTs event payloads to.
-Point it at a Worker route and Alchemy creates the endpoint, stores
-the signing secret as `Redacted`, and tears it down with the stack.
+Two pieces: a **resource** that owns the Stripe endpoint, and
+**`consumeEvents`** that runs one Effect per POST. That matches
+GitHub `consumeRepositoryEvents` and SQS `consumeQueueMessages`.
 
-## Worker route
+## Subscribe on the Worker
 
-Handle `POST /webhooks/stripe` on the Worker. Stripe retries on
-non-2xx, so return `200` quickly.
+Call `consumeEvents` during Worker init. Pass event **classes** — not
+`"customer.created"` strings. The handler `event` is the union of
+those classes.
 
 ```typescript
-if (request.method === "POST" && url.pathname === "/webhooks/stripe") {
-  return HttpServerResponse.text("ok");
-}
+// src/api.ts
+yield* Stripe.consumeEvents(
+  "Events",
+  {
+    events: [Stripe.CustomerCreated, Stripe.InvoicePaid],
+  },
+  Effect.fn(function* (event) {
+    // event: CustomerCreated | InvoicePaid
+    yield* Effect.log(event.type);
+  }),
+);
 ```
+
+Provide `Stripe.ConsumeEventsLive` on the Worker Effect:
+
+```typescript
+}).pipe(
+  Effect.provide([
+    Stripe.RetrieveProductHttp,
+    Stripe.ConsumeEventsLive,
+  ]),
+),
+```
+
+`consumeEvents` yields a `WebhookEndpoint` pointed at this Worker
+and verifies `Stripe-Signature` with the endpoint secret.
 
 ## Endpoint resource
 
-Declare the endpoint in the Stack, interpolating the Worker URL:
+Manage the endpoint yourself when you need a URL you already have:
 
 ```typescript
-const api = yield* Api;
 const webhook = yield* Stripe.WebhookEndpoint("Events", {
   url: Output.interpolate`${api.url}/webhooks/stripe`,
-  enabledEvents: ["customer.created", "checkout.session.completed"],
-});
-```
-
-`enabledEvents: ["*"]` subscribes to every event except those Stripe
-requires you to pick explicitly. `url`, events, `description`,
-`disabled`, and `metadata` update in place. `apiVersion` and
-`connect` are create-only — changing them replaces the endpoint.
-
-## Signing secret
-
-`webhook.secret` is returned only at create and preserved in state as
-`Redacted`. Never log it. Thread it into the Worker as env — Alchemy
-ships a `Redacted` value as a secret binding:
-
-```typescript
-export default class Api extends Cloudflare.Worker<Api>()(
-  "Api",
-  {
-    main: import.meta.url,
-    env: {
-      STRIPE_WEBHOOK_SECRET: webhook.secret,
-    },
-  },
-  // ...
-) {}
-```
-
-At request time, verify the raw body with distilled's
-`Webhooks.constructEvent`:
-
-```typescript
-import { Webhooks } from "@distilled.cloud/stripe";
-import * as Config from "effect/Config";
-
-const secret = yield* Config.redacted("STRIPE_WEBHOOK_SECRET");
-const signature = request.headers["stripe-signature"] ?? "";
-const payload = yield* request.text;
-const event = yield* Webhooks.constructEvent({
-  payload,
-  signature,
-  secret,
-});
-```
-
-The endpoint depends on `api.url` and the Worker depends on
-`webhook.secret` — both are Outputs in the same Stack; the engine
-converges them. Pass the **raw** body, not parsed JSON.
-
-## Disable without deleting
-
-```typescript
-yield* Stripe.WebhookEndpoint("Events", {
-  url: Output.interpolate`${api.url}/webhooks/stripe`,
   enabledEvents: ["customer.created"],
-  disabled: true,
 });
 ```
 
-`disabled: true` stops delivery and keeps the endpoint id. Destroy
-deletes the endpoint.
-
-## Connect events
-
-`connect: true` receives events from connected accounts instead of
-this account. It is create-only. Live Connect coverage is gated on
-`STRIPE_TEST_CONNECT=1` — see [Connect](/stripe/guides/connect).
+Prefer `consumeEvents` for a Worker that handles the deliveries.
 
 ## Reference
 
-[WebhookEndpoint](/providers/stripe/webhookendpoint)
+[WebhookEndpoint](/providers/stripe/webhookendpoint) ·
+[consumeEvents](/providers/stripe/eventsource)

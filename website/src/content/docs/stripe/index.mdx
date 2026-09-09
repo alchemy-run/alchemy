@@ -3,51 +3,81 @@ title: Stripe
 description: Products, prices, coupons, customers, payment links, and webhooks as Stack resources — catalog and billing next to the Worker that serves them.
 ---
 
-Stripe catalog, customers, and webhooks as Stack resources. With
-alchemy you declare products, prices, and webhook endpoints next to
-the Worker that sells them — a price change is a reviewable diff,
-and destroy tears the test catalog down with the stage.
+Stripe catalog, customers, and webhooks as Stack resources. Declare
+the Product and Price on the Worker that sells them, bind
+`RetrieveProduct` / `CreateCustomer`, and point a `WebhookEndpoint`
+at that Worker.
 
 New here? [Set up credentials](/stripe/setup) first.
 
 ## Resources
 
-A `Product` is the catalog item. A `Price` is what you charge for
-it. Omit `name` and Alchemy generates one from the stack, stage, and
-logical id:
+A `Product` is the catalog item. A `Price` takes the Product (or a
+`prod_…` id). HTTP bindings run inside the Worker — provide the
+`*Http` layers on the Worker Effect:
 
 ```typescript
-const product = yield* Stripe.Product("Pro", {
-  name: "Pro",
-  description: "Billed monthly",
-});
+// src/api.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Stripe from "alchemy/Stripe";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
-const price = yield* Stripe.Price("ProMonthly", {
-  product: product.id,
-  currency: "usd",
-  unitAmount: 2000,
-  recurring: { interval: "month" },
-});
+export default class Api extends Cloudflare.Worker<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const product = yield* Stripe.Product("Pro", {
+      name: "Pro",
+      description: "Billed monthly",
+    });
+    const price = yield* Stripe.Price("ProMonthly", {
+      product,
+      currency: "usd",
+      unitAmount: 2000,
+      recurring: { interval: "month" },
+    });
+    const retrieveProduct = yield* Stripe.RetrieveProduct(product);
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        if (request.url.startsWith("/product")) {
+          const live = yield* retrieveProduct().pipe(Effect.orDie);
+          return yield* HttpServerResponse.json({
+            id: live.id,
+            name: live.name,
+          });
+        }
+        return HttpServerResponse.text("ok");
+      }),
+    };
+  }).pipe(Effect.provide(Stripe.RetrieveProductHttp)),
+) {}
 ```
 
-`Coupon`, `PromotionCode`, and `PaymentLink` complete a checkout
-catalog — see [Catalog](/stripe/guides/catalog). `Customer` is the
-buyer. `WebhookEndpoint` is the HTTPS destination Stripe POSTs
-events to — see [Webhooks](/stripe/guides/webhooks).
+`Coupon`, `PromotionCode`, and `PaymentLink` complete checkout —
+see [Catalog](/stripe/guides/catalog). Point a `WebhookEndpoint` at
+the Worker URL — see [Webhooks](/stripe/guides/webhooks).
 
-HTTP bindings (`RetrieveProduct`, `CreateCustomer`, …) run inside a
-Worker or Lambda. Provide the matching `*Http` layer on the host
-Effect — see [Bindings](/stripe/guides/bindings).
+```typescript
+// alchemy.run.ts
+const api = yield* Api;
+const webhook = yield* Stripe.WebhookEndpoint("Events", {
+  url: Output.interpolate`${api.url}/webhooks/stripe`,
+  enabledEvents: ["customer.created", "checkout.session.completed"],
+});
+```
 
 ## The Stripe path
 
 1. [Setup](/stripe/setup) — secret key, profile, CI
-2. [Tutorial](/stripe/tutorial/part-1) — Product, Price, Worker
+2. [Tutorial](/stripe/tutorial/part-1) — Product, Worker, Price,
    bindings, WebhookEndpoint
 3. [Catalog](/stripe/guides/catalog) — Product / Price / Coupon /
    PaymentLink together
-4. [Bindings](/stripe/guides/bindings) — RestrictedApiKey and `*Http`
-   layers on a Worker
+4. [Sell from a Worker](/stripe/guides/sell-from-a-worker) — retrieve
+   the catalog and create customers
 
 Connect accounts and Issuing are implemented but live-gated
 (`STRIPE_TEST_CONNECT`, `STRIPE_TEST_ISSUING`) — see
