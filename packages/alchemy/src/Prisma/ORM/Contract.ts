@@ -287,7 +287,7 @@ export const ContractProvider = () =>
           );
           const emitted = yield* emit(news);
           // Emits leak unpublished @internal/* specifiers (through rc.8);
-          // rewrite them to the public @prisma/orm-postgres/* subpaths.
+          // rewrite them to the public @prisma/orm-* packages.
           yield* rewriteEmittedTypes(emitted.files.dts);
           const migrationsDir = resolveMigrationsDir(news);
           let packages = yield* readMigrationPackages(migrationsDir);

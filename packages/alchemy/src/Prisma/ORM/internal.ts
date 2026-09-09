@@ -286,22 +286,24 @@ export interface MigrateShowResult {
 /**
  * Prisma ORM v8 bug workaround (through 8.0.0-rc.8): `contract emit` writes
  * the Prisma monorepo's `@internal/*` aliases into `contract.d.ts` instead of
- * the public `@prisma/orm-postgres/*` subpaths. Those packages are not
- * published, so the emitted types would not resolve in a user project.
+ * the public `@prisma/orm-*` packages. Those packages are not published, so
+ * the emitted types would not resolve in a user project.
  * Longest-prefix-first so `sql-contract` is not eaten by `contract`.
+ * `@internal/extension-<name>/` maps to `@prisma/orm-extension-<name>/`.
  */
 const INTERNAL_SPECIFIER_REWRITES: ReadonlyArray<readonly [string, string]> = [
   ["@internal/adapter-postgres/", "@prisma/orm-postgres/adapter/"],
   ["@internal/target-postgres/", "@prisma/orm-postgres/target/"],
   ["@internal/sql-contract/", "@prisma/orm-postgres/family-contract/"],
   ["@internal/contract/", "@prisma/orm-postgres/contract/"],
+  ["@internal/extension-", "@prisma/orm-extension-"],
 ];
 
 /**
- * Rewrite leaked `@internal/*` import specifiers in an emitted
- * `contract.d.ts` to their public `@prisma/orm-postgres/*` equivalents.
- * A no-op for PSL-authored emits (which never contain them); fails
- * actionably if an unmapped `@internal/*` specifier remains.
+ * Rewrite leaked `@internal/*` specifiers in an emitted `contract.d.ts` to
+ * their public `@prisma/orm-*` equivalents. A no-op for PSL-authored emits
+ * (which never contain them); fails actionably if an unmapped `@internal/*`
+ * specifier remains.
  */
 export const rewriteEmittedTypes = (dtsPath: string) =>
   Effect.gen(function* () {
