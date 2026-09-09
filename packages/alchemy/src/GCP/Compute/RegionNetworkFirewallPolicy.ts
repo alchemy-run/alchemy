@@ -198,7 +198,7 @@ const rfc1035 = (name: string): string => {
 
 const toName = (id: string, name: string | undefined, existing?: string) =>
   Effect.gen(function* () {
-    if (name !== undefined) return name;
+    if (name !== undefined) return rfc1035(name);
     if (existing !== undefined) return existing;
     return rfc1035(
       yield* createPhysicalName({
@@ -621,16 +621,17 @@ export const RegionNetworkFirewallPolicyProvider = () =>
       "creationTimestamp",
     ],
 
-    diff: Effect.fn(function* ({ news, olds, output }) {
+    diff: Effect.fn(function* ({ id, news, olds, output }) {
       if (!isResolved(news)) return undefined;
 
+      // Name is immutable on GCP. Resolve the desired name the same way
+      // create does — do not fall back to previousName when news omits
+      // firewallPolicyName, or a generated-name change looks like a no-op.
       const previousName =
-        olds?.firewallPolicyName ?? output?.firewallPolicyName;
-      const nextName = news.firewallPolicyName ?? previousName;
+        output?.firewallPolicyName ?? olds?.firewallPolicyName;
+      const nextName = yield* toName(id, news.firewallPolicyName);
       const nameChanged =
-        previousName !== undefined &&
-        nextName !== undefined &&
-        previousName !== nextName;
+        previousName !== undefined && previousName !== nextName;
 
       const previousRegion = normalizeRegion(olds?.region ?? output?.region);
       const nextRegion = normalizeRegion(news.region ?? output?.region);

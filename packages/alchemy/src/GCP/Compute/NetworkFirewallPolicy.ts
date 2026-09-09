@@ -196,7 +196,7 @@ const rfc1035 = (name: string): string => {
 
 const toName = (id: string, name: string | undefined, existing?: string) =>
   Effect.gen(function* () {
-    if (name !== undefined) return name;
+    if (name !== undefined) return rfc1035(name);
     if (existing !== undefined) return existing;
     return rfc1035(
       yield* createPhysicalName({
@@ -662,15 +662,16 @@ export const NetworkFirewallPolicyProvider = () =>
       "creationTimestamp",
     ],
 
-    diff: Effect.fn(function* ({ news, olds, output }) {
+    diff: Effect.fn(function* ({ id, news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      // Name is immutable on GCP. Resolve the desired name the same way
+      // create does — do not fall back to previousName when news omits
+      // networkFirewallPolicyName, or a generated-name change looks like a no-op.
       const previousName =
-        olds?.networkFirewallPolicyName ?? output?.networkFirewallPolicyName;
-      const nextName = news.networkFirewallPolicyName ?? previousName;
+        output?.networkFirewallPolicyName ?? olds?.networkFirewallPolicyName;
+      const nextName = yield* toName(id, news.networkFirewallPolicyName);
       const nameChanged =
-        previousName !== undefined &&
-        nextName !== undefined &&
-        previousName !== nextName;
+        previousName !== undefined && previousName !== nextName;
       const previousType = typeOf(olds?.policyType ?? output?.policyType);
       const nextType = typeOf(news.policyType ?? previousType);
       if (nameChanged) {
