@@ -215,7 +215,11 @@ const projectFromResource = (
   if (resource === undefined || resource.length === 0) return fallback;
   const match = /^projects\/([^/]+)/.exec(resource);
   const project = match?.[1];
-  return project !== undefined && project.length > 0 ? project : fallback;
+  // Storage uses `projects/_/buckets/{name}`; `_` is not a project id.
+  if (project === undefined || project.length === 0 || project === "_") {
+    return fallback;
+  }
+  return project;
 };
 
 /**
