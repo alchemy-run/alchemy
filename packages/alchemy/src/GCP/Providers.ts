@@ -2,7 +2,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
-import { ProfileLive } from "../Auth/Profile.ts";
+import { ProfileStoreLive } from "../Auth/Profile.ts";
 import { DockerLive } from "../Docker/Docker.ts";
 import * as Provider from "../Provider.ts";
 import { GcpAuth } from "./AuthProvider.ts";
@@ -3839,7 +3839,7 @@ const gcpLive = Layer.mergeAll(
   gcpCredentials,
   fromCredentials().pipe(Layer.provide(gcpCredentials)),
   GcpAuth,
-  ProfileLive,
+  ProfileStoreLive,
   CredentialsStoreLive,
   FetchHttpClient.layer,
 );

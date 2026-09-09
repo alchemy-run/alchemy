@@ -39,18 +39,23 @@ export const makeNamedHttpBinding = <
     const run = yield* options.operation;
     return Effect.fn(function* (resource: Resource) {
       const name = yield* options.resourceName(resource);
+      const resourceName = yield* name;
       yield* bindGcpHost({
         tag: options.tag,
         resource,
-        iam: [{ role: options.role ?? defaultRoleFor(options.tag) }],
+        iam: [
+          {
+            role: options.role ?? defaultRoleFor(options.tag),
+            resource: resourceName,
+          },
+        ],
       });
       return Effect.fn(`${options.tag}(${resource.LogicalId})`)(function* (
         request?: Omit<I, "name">,
       ) {
-        const resourceName = yield* name;
         return yield* run({
           ...(request ?? {}),
-          name: resourceName,
+          name: yield* name,
         } as I);
       });
     });

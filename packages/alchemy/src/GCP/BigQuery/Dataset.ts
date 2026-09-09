@@ -458,7 +458,7 @@ export const DatasetProvider = () =>
 
       if (metadataChanged || accessChanged) {
         const nextLabels: Record<string, string | null> = { ...desiredLabels };
-        for (const [key] of removed) {
+        for (const key of removed) {
           nextLabels[key] = null;
         }
         const body: bigquery.Dataset = {};

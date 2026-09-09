@@ -836,7 +836,7 @@ export const InstanceProvider = () =>
         const nextLabels: Record<string, string | null> = {
           ...desiredLabels,
         };
-        for (const [key] of removed) {
+        for (const key of removed) {
           nextLabels[key] = null;
         }
         const patched = yield* applyPatch(env.project, instanceName, {

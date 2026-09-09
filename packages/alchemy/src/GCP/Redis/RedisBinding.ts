@@ -81,7 +81,7 @@ export const makeRedisBinding = <Client>(options: {
           yield* bindGcpHost({
             tag: "GCP.Redis.RESP",
             resource: instance,
-            iam: [{ role: options.role }],
+            iam: [{ role: options.role, resource: name }],
             env: {
               [REDIS_URL_ENV]: encodeUrl({
                 host: hostName,

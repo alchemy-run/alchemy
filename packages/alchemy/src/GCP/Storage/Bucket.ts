@@ -388,7 +388,7 @@ export const BucketProvider = () =>
         ublChanged
       ) {
         const nextLabels: Record<string, string | null> = { ...desiredLabels };
-        for (const [key] of removed) {
+        for (const key of removed) {
           nextLabels[key] = null;
         }
         current = yield* storage.patchBuckets({

@@ -202,8 +202,26 @@ export const grantProjectIam = (
 };
 
 /**
+ * Project id a grant applies to. `projects/{id}/...` resource names
+ * (and bare `projects/{id}`) pin a project; anything else falls back
+ * to the host project. HTTP bindings grant on the project (the runtime
+ * SA analog of AWS `policyStatements`) — resource-scoped IAM APIs
+ * differ per service.
+ */
+const projectFromResource = (
+  resource: string | undefined,
+  fallback: string,
+): string => {
+  if (resource === undefined || resource.length === 0) return fallback;
+  const match = /^projects\/([^/]+)/.exec(resource);
+  const project = match?.[1];
+  return project !== undefined && project.length > 0 ? project : fallback;
+};
+
+/**
  * Apply collected host bindings: merge env, grant IAM to the runtime
- * service account.
+ * service account. Grants are grouped by `grant.resource`'s project
+ * (default: the host project).
  */
 export const applyHostBindings = Effect.fn(function* (options: {
   project: string;
@@ -211,11 +229,20 @@ export const applyHostBindings = Effect.fn(function* (options: {
   bindings: readonly ResourceBinding<GcpHostBinding>[];
 }) {
   const collected = collectHostBindings(options.bindings);
-  yield* grantProjectIam(
-    options.project,
-    options.serviceAccount,
-    collected.iam.map((grant) => grant.role),
-  );
+  const rolesByProject = new Map<string, string[]>();
+  for (const grant of collected.iam) {
+    if (grant.role.length === 0) continue;
+    const project = projectFromResource(grant.resource, options.project);
+    const roles = rolesByProject.get(project);
+    if (roles === undefined) {
+      rolesByProject.set(project, [grant.role]);
+    } else {
+      roles.push(grant.role);
+    }
+  }
+  for (const [project, roles] of rolesByProject) {
+    yield* grantProjectIam(project, options.serviceAccount, roles);
+  }
   return collected;
 });
 

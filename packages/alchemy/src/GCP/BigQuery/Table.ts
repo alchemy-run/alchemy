@@ -655,7 +655,7 @@ export const TableProvider = () =>
           const nextLabels: Record<string, string | null> = {
             ...desiredLabels,
           };
-          for (const [key] of removed) {
+          for (const key of removed) {
             nextLabels[key] = null;
           }
           body.labels = nextLabels as unknown as Record<string, string>;

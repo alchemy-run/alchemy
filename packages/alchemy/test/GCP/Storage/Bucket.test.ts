@@ -76,6 +76,27 @@ test.provider.skipIf(!hasGcpCreds)(
       expect(updated.storageClass).toEqual("NEARLINE");
       expect(updated.labels).toMatchObject({ env: "prod", role: "assets" });
 
+      const trimmed = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* GCP.Storage.Bucket("Assets", {
+            bucketName: created.bucketName,
+            location: "US-CENTRAL1",
+            storageClass: "NEARLINE",
+            versioning: true,
+            labels: { env: "prod" },
+            forceDestroy: true,
+          });
+        }),
+      );
+
+      expect(trimmed.labels).toMatchObject({ env: "prod" });
+      expect(trimmed.labels.role).toBeUndefined();
+      const fetchedTrimmed = yield* storage.getBuckets({
+        bucket: trimmed.bucketName,
+        projection: "full",
+      });
+      expect(fetchedTrimmed.labels?.role).toBeUndefined();
+
       yield* stack.destroy();
 
       const gone = yield* waitUntilGone(created.bucketName);
