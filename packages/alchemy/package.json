@@ -131,6 +131,18 @@
       "worker": "./src/Docker/index.ts",
       "import": "./lib/Docker/index.js"
     },
+    "./Doppler": {
+      "types": "./lib/Doppler/index.d.ts",
+      "bun": "./src/Doppler/index.ts",
+      "worker": "./src/Doppler/index.ts",
+      "import": "./lib/Doppler/index.js"
+    },
+    "./Infisical": {
+      "types": "./lib/Infisical/index.d.ts",
+      "bun": "./src/Infisical/index.ts",
+      "worker": "./src/Infisical/index.ts",
+      "import": "./lib/Infisical/index.js"
+    },
     "./Kubernetes": {
       "types": "./lib/Kubernetes/index.d.ts",
       "bun": "./src/Kubernetes/index.ts",

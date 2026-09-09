@@ -815,9 +815,9 @@ export interface WorkerProps<
    *   another Worker, Durable Object, etc.) — emitted as the
    *   corresponding native binding.
    * - `effect/Config` values (`Config.redacted`, `Config.string`,
-   *   `Config.number`, …) — resolved at deploy time and bound as
-   *   `secret_text` on Cloudflare regardless of the `Config`
-   *   constructor used. See
+   *   `Config.number`, …) — resolved at deploy time and classified by
+   *   the resulting value: `Redacted` → `secret_text`, `string` →
+   *   `plain_text`, other JSON values → `json`. See
    *   [Secrets & env](/cloudflare/security/secrets-env).
    * - Literal values — routed by shape: `Redacted<string>` →
    *   `secret_text`, `string` → `plain_text`, anything else → `json`.
@@ -828,7 +828,7 @@ export interface WorkerProps<
    *   the resource itself instead.
    *
    * In Effect-native Workers you can alternatively `yield*` a
-   * `Config` in the Init phase to register the binding implicitly;
+   * `Config` in the Init phase to register a secret binding implicitly;
    * `env` is the only option for async (non-Effect) Workers.
    */
   env?: Bindings;

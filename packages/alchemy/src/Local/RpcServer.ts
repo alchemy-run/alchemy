@@ -1,10 +1,12 @@
+import type { RpcStub } from "capnweb";
 import * as Console from "effect/Console";
 import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
-import type * as Scope from "effect/Scope";
+import * as Scope from "effect/Scope";
+import * as Exit from "effect/Exit";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import { makePlainConsoleSink } from "../Util/ConsoleSink.ts";
 import type { HttpClient } from "effect/unstable/http/HttpClient";
@@ -17,6 +19,7 @@ import {
   runMain,
 } from "../Util/PlatformServices.ts";
 import * as RpcSerialization from "./RpcSerialization.ts";
+import * as RpcConfigProvider from "./RpcConfigProvider.ts";
 import * as RpcServerEnvironment from "./RpcServerEnvironment.ts";
 import type { SessionEnvironment } from "./RpcServerEnvironment.ts";
 import {
@@ -54,6 +57,7 @@ export interface RpcProxyApi {
    */
   readonly getProvider: <R extends ResourceLike>(
     type: R["Type"],
+    readConfig?: RpcConfigProvider.ConfigReader,
   ) => Promise<RpcSerialization.RpcWrapped<RpcProviderService<R>>>;
 }
 
@@ -82,6 +86,7 @@ export class SessionProviders extends Context.Service<
     readonly get: (
       sessionEnv: string | undefined,
       type: string,
+      readConfig?: RpcStub<RpcConfigProvider.ConfigReader>,
     ) => Promise<RpcSerialization.RpcWrapped<RpcProviderService<any>>>;
   }
 >()("alchemy/Local/SessionProviders") {}
@@ -108,59 +113,115 @@ const sessionProviders = <ROut, E>(
       const base = yield* RpcServerEnvironment.fromProcessEnv.pipe(
         Effect.orDie,
       );
-      const builds = new Map<string, Promise<Context.Context<ROut>>>();
+      type Entry = {
+        context: Context.Context<ROut>;
+        scope: Scope.Closeable;
+        config?: ReturnType<typeof RpcConfigProvider.make>;
+        read?: RpcStub<RpcConfigProvider.ConfigReader>;
+      };
+      const entries = new Map<string, Entry>();
+      const pending = new Map<string, Promise<unknown>>();
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          for (const entry of entries.values()) entry.read?.[Symbol.dispose]();
+        }),
+      );
 
       const contextFor = (
         sessionEnv: string | undefined,
+        readConfig?: RpcStub<RpcConfigProvider.ConfigReader>,
       ): Promise<Context.Context<ROut>> => {
         const key = sessionEnv ?? "";
-        const existing = builds.get(key);
-        if (existing !== undefined) {
-          return existing;
-        }
-        const resolved: SessionEnvironment | undefined =
-          sessionEnv !== undefined
-            ? RpcServerEnvironment.decodeSessionEnvironment(sessionEnv)
-            : base.stack !== undefined && base.alchemyContext !== undefined
-              ? { stack: base.stack, alchemyContext: base.alchemyContext }
-              : undefined;
-        if (resolved === undefined) {
-          return Promise.reject(
-            new Error(
-              "RPC session carried no session environment and the server was booted without a default one",
-            ),
-          );
-        }
-        const build = Effect.runPromise(
-          Layer.buildWithScope(
-            providers.pipe(
-              Layer.provide(
-                RpcServerEnvironment.layer({
-                  profile: base.profile,
-                  envFile: base.envFile,
-                  ...resolved,
-                }),
-              ),
-            ),
-            scope,
-          ).pipe(
-            Effect.provideContext(ambient as Context.Context<any>),
-          ) as Effect.Effect<Context.Context<ROut>>,
-        );
-        builds.set(key, build);
-        // Don't poison the memo with a transient build failure — the next
-        // session for this stack retries.
-        build.catch(() => {
-          if (builds.get(key) === build) {
-            builds.delete(key);
+        // Capnweb disposes callback parameters when getProvider returns. Keep
+        // our own reference for lazy config reads during provider operations.
+        const read = readConfig?.dup();
+        const build = (pending.get(key) ?? Promise.resolve()).then(async () => {
+          let retained = false;
+          try {
+            const existing = entries.get(key);
+            const changed =
+              existing !== undefined &&
+              ((read === undefined) !== (existing.read === undefined) ||
+                (read !== undefined &&
+                  existing.config !== undefined &&
+                  (await existing.config.changed(read))));
+            if (existing && !changed) {
+              if (read) {
+                existing.config!.update(read);
+                existing.read?.[Symbol.dispose]();
+                existing.read = read;
+                retained = true;
+              }
+              return existing.context;
+            }
+            const resolved: SessionEnvironment | undefined =
+              sessionEnv !== undefined
+                ? RpcServerEnvironment.decodeSessionEnvironment(sessionEnv)
+                : base.stack !== undefined && base.alchemyContext !== undefined
+                  ? { stack: base.stack, alchemyContext: base.alchemyContext }
+                  : undefined;
+            if (resolved === undefined) {
+              throw new Error(
+                "RPC session carried no session environment and the server was booted without a default one",
+              );
+            }
+            // Credentials may be cached at layer construction. Close the old
+            // context (including its local processes) before rebuilding with
+            // changed config. Unchanged reloads keep their running instances.
+            if (existing) {
+              entries.delete(key);
+              await Effect.runPromise(Scope.close(existing.scope, Exit.void));
+              existing.read?.[Symbol.dispose]();
+            }
+            const config = read && RpcConfigProvider.make(read);
+            const entryScope = await Effect.runPromise(Scope.fork(scope));
+            try {
+              const context = await Effect.runPromise(
+                Layer.buildWithScope(
+                  providers.pipe(
+                    Layer.provide(
+                      RpcServerEnvironment.layer(
+                        {
+                          profile: base.profile,
+                          envFile: base.envFile,
+                          ...resolved,
+                        },
+                        config?.provider,
+                      ),
+                    ),
+                  ),
+                  entryScope,
+                ).pipe(
+                  Effect.provideContext(ambient as Context.Context<any>),
+                ) as Effect.Effect<Context.Context<ROut>>,
+              );
+              entries.set(key, { context, scope: entryScope, config, read });
+              retained = true;
+              return context;
+            } catch (error) {
+              await Effect.runPromise(Scope.close(entryScope, Exit.void));
+              throw error;
+            }
+          } finally {
+            if (!retained) read?.[Symbol.dispose]();
           }
+        });
+        // Serialize reloads for this stack, without poisoning retries after a
+        // failed config read or layer build. Other stacks remain independent.
+        const settled = build.then(
+          () => {},
+          () => {},
+        );
+        pending.set(key, settled);
+        void settled.then(() => {
+          if (pending.get(key) === settled) pending.delete(key);
         });
         return build;
       };
 
       return SessionProviders.of({
-        get: async (sessionEnv, type) => {
-          const context = await contextFor(sessionEnv);
+        get: async (sessionEnv, type, readConfig) => {
+          const context = await contextFor(sessionEnv, readConfig);
           const provider = context.mapUnsafe.get(type) as
             | ProviderService<any>
             | undefined;
@@ -261,8 +322,15 @@ export const layerServer = (
       const { url } = yield* serve({
         createRpcSession: (ws, sessionEnv) =>
           makeServerRpcSession<RpcProxyApi>(ws, {
-            getProvider: (<R extends ResourceLike>(type: R["Type"]) =>
-              providers.get(sessionEnv, type)) as RpcProxyApi["getProvider"],
+            getProvider: (<R extends ResourceLike>(
+              type: R["Type"],
+              readConfig?: RpcStub<RpcConfigProvider.ConfigReader>,
+            ) =>
+              providers.get(
+                sessionEnv,
+                type,
+                readConfig,
+              )) as RpcProxyApi["getProvider"],
           }),
         parentConnected: () => Deferred.doneUnsafe(connected, Effect.void),
         parentDisconnected: () =>

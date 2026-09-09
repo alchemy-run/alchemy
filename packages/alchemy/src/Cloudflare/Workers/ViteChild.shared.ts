@@ -24,6 +24,8 @@ export interface ViteChildConfig {
   storageDirectory: string;
   stack: { name: string; stage: string };
   env: Record<string, unknown>;
+  /** Tooling auth configuration; never forwarded to application bindings. */
+  credentialConfig: Record<string, string>;
   source?: {
     descriptor: WorkerSourceDescriptor;
     id: string;

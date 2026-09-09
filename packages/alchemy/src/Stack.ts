@@ -26,6 +26,11 @@ import type { Input, InputProps } from "./Input.ts";
 import * as Output from "./Output.ts";
 import type { Provider, ProviderCollectionLike } from "./Provider.ts";
 import type { ResourceBinding, ResourceLike } from "./Resource.ts";
+import {
+  resolveSecretManager,
+  SecretManagerContext,
+  type SecretManagerLayer,
+} from "./SecretManager.ts";
 import { Stage } from "./Stage.ts";
 import type { State } from "./State/State.ts";
 import { loadConfigProvider } from "./Util/ConfigProvider.ts";
@@ -94,6 +99,8 @@ export type Stack = Context.ServiceClass.Shape<
 export interface StackProps<Req> {
   providers: Layer.Layer<Extract<Req, ProviderServices>, never, StackServices>;
   state: Layer.Layer<State, never, StackServices>;
+  /** Optional deploy-time configuration and secret source. */
+  secrets?: SecretManagerLayer;
 }
 
 export const Stack: Context.ServiceClass<
@@ -158,6 +165,7 @@ export const Stack: Context.ServiceClass<
               stage: createStageProxy(stackName),
               state: options?.state,
               providers: options?.providers,
+              secrets: options?.secrets,
               make: <Req = never>(
                 options: StackProps<NoInfer<Req>>,
                 eff: Effect.Effect<A, ConfigError, Req>,
@@ -179,6 +187,7 @@ export const Stack: Context.ServiceClass<
             stage: createStageProxy(stackName),
             state: options?.state,
             providers: options?.providers,
+            secrets: options?.secrets,
           }),
       );
     },
@@ -223,6 +232,7 @@ export interface MakeStackProps<ROut = never> {
   name: string;
   providers: Layer.Layer<ROut, never, StackServices>;
   state: Layer.Layer<State, never, StackServices>;
+  secrets?: SecretManagerLayer;
   /** @internal */
   stack?: StackSpec;
 }
@@ -329,7 +339,10 @@ const alchemy = (overrides?: { dev?: boolean }) =>
   );
 
 export const evalStack = <A, B, StackErr, Err, Req>(
-  effect: StackEffect<CompiledStack<A>, StackErr, Stage | AlchemyContext>,
+  effect: StackEffect<CompiledStack<A>, StackErr, Stage | AlchemyContext> & {
+    readonly secrets?: SecretManagerLayer;
+    readonly stackName?: string;
+  },
   fn: (stack: CompiledStack<A>) => Effect.Effect<B, Err, Req>,
   options: {
     stage: string;
@@ -346,11 +359,28 @@ export const evalStack = <A, B, StackErr, Err, Req>(
   },
 ) => {
   const body = Effect.gen(function* () {
-    const stack = yield* effect;
-    const configProvider = yield* loadConfigProvider(Option.none());
+    const fallback = yield* loadConfigProvider(Option.none());
+    if (effect.secrets !== undefined && effect.stackName === undefined) {
+      return yield* Effect.die(
+        new Error("A stack using a secret manager is missing its stack name."),
+      );
+    }
+    const resolved = yield* resolveSecretManager({
+      secrets: effect.secrets,
+      stack: effect.stackName ?? "",
+      stage: options.stage,
+      dev: (yield* AlchemyContext).dev,
+      fallback,
+    });
+    const configProvider = resolved.provider;
+    const stack = yield* effect.pipe(
+      Effect.provideService(ConfigProvider, configProvider),
+      Effect.provideService(SecretManagerContext, resolved),
+    );
 
     return yield* fn(stack).pipe(
       provideFreshArtifactStore,
+      Effect.provideService(SecretManagerContext, resolved),
       Effect.provide(
         Layer.succeedContext(stack.services).pipe(
           Layer.provideMerge(Layer.succeed(ConfigProvider, configProvider)),

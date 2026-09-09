@@ -79,6 +79,7 @@ const registry = (input: ProviderContext) =>
     main: input.entrypoint ?? DEFAULT_ENTRYPOINT,
     envFile: Option.fromNullishOr(input.envFile),
     profile: input.profile,
+    stage: input.stage,
   });
 
 /** The effective profile and how it was selected. */
