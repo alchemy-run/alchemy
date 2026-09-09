@@ -1,5 +1,4 @@
 import * as Cloudflare from "alchemy/Cloudflare";
-import * as Output from "alchemy/Output";
 import * as Stripe from "alchemy/Stripe";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
@@ -37,7 +36,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
     const retrieveCheckout = yield* Stripe.RetrievePaymentLink(checkout);
     const createCustomer = yield* Stripe.CreateCustomer();
     yield* Stripe.consumeEvents(
-      Events,
+      "Events",
       {
         events: [Stripe.CustomerCreated, Stripe.CheckoutSessionCompleted],
       },
@@ -121,11 +120,3 @@ export default class Api extends Cloudflare.Worker<Api>()(
     ]),
   ),
 ) {}
-
-export const Events = Stripe.WebhookEndpoint("Events", {
-  url: Output.interpolate`${Api.url}/webhooks/stripe`,
-  enabledEvents: [
-    Stripe.CustomerCreated.type,
-    Stripe.CheckoutSessionCompleted.type,
-  ],
-});
