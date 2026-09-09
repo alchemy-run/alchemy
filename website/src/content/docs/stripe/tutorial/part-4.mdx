@@ -8,19 +8,34 @@ sidebar:
 import Terminal from "../../../../components/Terminal.astro";
 
 In [Part 3](/stripe/tutorial/part-3) `POST /customers` creates a
-Stripe Customer. Handle the `customer.created` webhook on the same
-Worker.
+Stripe Customer. Handle `customer.created` on the same Worker.
+Declare the {@link WebhookEndpoint} **after** the Worker so planning
+does not deadlock on `worker.url`.
+
+## Create the WebhookEndpoint
+
+After the class, export an endpoint pointed at the Worker URL:
+
+```typescript
+// src/api.ts
+export const Events = Stripe.WebhookEndpoint("Events", {
+  url: Output.interpolate`${Api.url}/webhooks/stripe`,
+  enabledEvents: [Stripe.CustomerCreated.type],
+});
+```
+
+Yield it from the Stack next to `Api`.
 
 ## Subscribe with consumeEvents
 
-Call `consumeEvents` in the Worker init. Pass event **classes**:
+Inside the Worker, pass the endpoint and event **classes**:
 
 ```diff lang="typescript"
 // src/api.ts
 const retrieveProduct = yield* Stripe.RetrieveProduct(product);
 const createCustomer = yield* Stripe.CreateCustomer();
 +yield* Stripe.consumeEvents(
-+  "Events",
++  Events,
 +  { events: [Stripe.CustomerCreated] },
 +  Effect.fn(function* (event) {
 +    yield* Effect.log(event.type);
@@ -35,7 +50,6 @@ The handler runs once per delivery. `event` is a `CustomerCreated`.
 
 ```diff lang="typescript"
 // src/api.ts
--  }).pipe(Effect.provide(Stripe.RetrieveProductHttp)),
 +  }).pipe(
 +    Effect.provide([
 +      Stripe.RetrieveProductHttp,
@@ -46,8 +60,9 @@ The handler runs once per delivery. `event` is a `CustomerCreated`.
 ) {}
 ```
 
-This yields a `WebhookEndpoint` pointed at the Worker and verifies
-`Stripe-Signature`. See [Handle webhook events](/stripe/guides/webhooks).
+`consumeEvents` only listens and verifies the signature — it does not
+create the endpoint. See
+[Handle webhook events](/stripe/guides/webhooks).
 
 ## Deploy
 
@@ -69,13 +84,13 @@ Create a customer through `/customers` and the handler logs
 
 ## Recap
 
-The Worker now retrieves the Product, creates Customers, and handles
+The Worker retrieves the Product, creates Customers, and handles
 Stripe events.
 
-- [Catalog](/stripe/guides/catalog) — PaymentLink and PromotionCode
+- [Catalog](/stripe/guides/catalog)
 - [Sell from a Worker](/stripe/guides/sell-from-a-worker)
 - [Handle webhook events](/stripe/guides/webhooks)
-- [Connect](/stripe/guides/connect) — gated connected accounts
+- [Connect](/stripe/guides/connect)
 
 `alchemy destroy` tears the test catalog down with the stack.
 Prices with history are deactivated; products that still have prices
