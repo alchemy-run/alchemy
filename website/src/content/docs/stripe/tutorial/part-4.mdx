@@ -9,33 +9,20 @@ import Terminal from "../../../../components/Terminal.astro";
 
 In [Part 3](/stripe/tutorial/part-3) `POST /customers` creates a
 Stripe Customer. Handle `customer.created` on the same Worker.
-Declare the {@link WebhookEndpoint} **after** the Worker so planning
-does not deadlock on `worker.url`.
-
-## Create the WebhookEndpoint
-
-After the class, export an endpoint pointed at the Worker URL:
-
-```typescript
-// src/api.ts
-export const Events = Stripe.WebhookEndpoint("Events", {
-  url: Output.interpolate`${Api.url}/webhooks/stripe`,
-  enabledEvents: [Stripe.CustomerCreated.type],
-});
-```
-
-Yield it from the Stack next to `Api`.
+Declare the WebhookEndpoint **after** the Worker so planning does
+not deadlock on `worker.url`.
 
 ## Subscribe with consumeEvents
 
-Inside the Worker, pass the endpoint and event **classes**:
+Inside the Worker, pass event **classes**. `consumeEvents` only
+listens — it does not create the endpoint.
 
 ```diff lang="typescript"
 // src/api.ts
 const retrieveProduct = yield* Stripe.RetrieveProduct(product);
 const createCustomer = yield* Stripe.CreateCustomer();
 +yield* Stripe.consumeEvents(
-+  Events,
++  "Events",
 +  { events: [Stripe.CustomerCreated] },
 +  Effect.fn(function* (event) {
 +    yield* Effect.log(event.type);
@@ -60,9 +47,23 @@ The handler runs once per delivery. `event` is a `CustomerCreated`.
 ) {}
 ```
 
-`consumeEvents` only listens and verifies the signature — it does not
-create the endpoint. See
-[Handle webhook events](/stripe/guides/webhooks).
+## Create the WebhookEndpoint in the Stack
+
+After the Worker exists, point Stripe at its URL and bind the
+signing secret:
+
+```diff lang="typescript"
+// alchemy.run.ts
+const api = yield* Api;
++const webhook = yield* Stripe.WebhookEndpoint("Events", {
++  url: Output.interpolate`${api.url}/webhooks/stripe`,
++  enabledEvents: [Stripe.CustomerCreated],
++});
++yield* Stripe.bindWebhookSecret(api, webhook.secret);
+```
+
+`enabledEvents` accepts the same event classes `consumeEvents`
+uses. See [Handle webhook events](/stripe/guides/webhooks).
 
 ## Deploy
 

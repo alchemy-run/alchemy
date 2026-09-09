@@ -32,16 +32,27 @@ const LIST_MAX_PAGES = 100;
 
 export type WebhookEndpointStatus = "enabled" | "disabled";
 
+/**
+ * A Stripe event type string (`"customer.created"`) or an event class
+ * (`Stripe.CustomerCreated`) whose static `type` is used.
+ */
+export type WebhookEnabledEvent = string | { readonly type: string };
+
+const enabledEventTypes = (events: readonly WebhookEnabledEvent[]): string[] =>
+  events.map((event) => (typeof event === "string" ? event : event.type));
+
 export interface WebhookEndpointProps {
   /**
    * HTTPS URL Stripe POSTs event payloads to.
    */
   url: string;
   /**
-   * Event types this endpoint receives. `["*"]` enables every event
-   * except those that require explicit selection.
+   * Event types this endpoint receives. Pass Stripe event classes
+   * (`Stripe.CustomerCreated`) or type strings (`"customer.created"`).
+   * `["*"]` enables every event except those that require explicit
+   * selection.
    */
-  enabledEvents: string[];
+  enabledEvents: WebhookEnabledEvent[];
   /**
    * Optional description of what the webhook is used for.
    */
@@ -122,6 +133,15 @@ export type WebhookEndpoint = Resource<
  *   url: "https://example.com/alchemy-stripe-webhook",
  *   enabledEvents: ["charge.succeeded", "charge.failed"],
  * });
+ * ```
+ *
+ * **Example:** Event classes (same as consumeEvents)
+ * ```typescript
+ * const webhook = yield* Stripe.WebhookEndpoint("Events", {
+ *   url: Output.interpolate`${api.url}/webhooks/stripe`,
+ *   enabledEvents: [Stripe.CustomerCreated, Stripe.InvoicePaid],
+ * });
+ * yield* Stripe.bindWebhookSecret(api, webhook.secret);
  * ```
  *
  * **Example:** Description, metadata, and all events
@@ -313,7 +333,7 @@ export const WebhookEndpointProvider = () =>
       const desiredDescription = news.description ?? "";
       const desiredDisabled = news.disabled ?? false;
       const desiredUrl = news.url;
-      const desiredEvents = news.enabledEvents;
+      const desiredEvents = enabledEventTypes(news.enabledEvents);
       const previousSecret = output?.secret;
 
       let current = yield* observe({

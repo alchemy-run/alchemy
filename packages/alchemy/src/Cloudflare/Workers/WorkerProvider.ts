@@ -24,6 +24,7 @@ import { type ResourceBinding } from "../../Resource.ts";
 import { Stack } from "../../Stack.ts";
 import { cachedFunction } from "../../Util/cached-function.ts";
 import { initialCwd } from "../../Util/Node.ts";
+import { isRedactedMarker } from "../../RuntimeContext.ts";
 import { sha256Object } from "../../Util/sha256.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { localRuntimeServices } from "../LocalRuntime.ts";
@@ -2607,6 +2608,36 @@ export const LiveWorkerProvider = () =>
       };
 
       /**
+       * Merge `Worker["Binding"].env` from active bindings into `news.env`.
+       * Stack-level `worker.bind({ env })` is how a later resource (webhook
+       * secret, etc.) attaches env without the Worker init depending on it.
+       */
+      const secretTextFromEnvValue = (value: unknown): string | undefined => {
+        if (Redacted.isRedacted(value)) {
+          const inner = Redacted.value(value);
+          return typeof inner === "string" ? inner : undefined;
+        }
+        if (isRedactedMarker(value) && typeof value.value === "string") {
+          return value.value;
+        }
+        return undefined;
+      };
+
+      const newsWithBoundEnv = (
+        news: WorkerProps,
+        bindings: readonly ResourceBinding<Worker["Binding"]>[],
+      ): { news: WorkerProps; boundKeys: string[] } => {
+        const bound: Record<string, any> = {};
+        for (const binding of bindings) {
+          if ((binding as { action?: string }).action === "delete") continue;
+          if (binding.data?.env) Object.assign(bound, binding.data.env);
+        }
+        const boundKeys = Object.keys(bound);
+        if (boundKeys.length === 0) return { news, boundKeys };
+        return { news: { ...news, env: { ...news.env, ...bound } }, boundKeys };
+      };
+
+      /**
        * Append the standard Alchemy runtime bindings plus the user's `env`
        * entries (routed by shape: `Redacted` → secret_text, string →
        * plain_text, everything else → json) to a metadata binding list.
@@ -2650,15 +2681,12 @@ export const LiveWorkerProvider = () =>
           for (const [key, value] of Object.entries(news.env)) {
             if (value === undefined) continue;
             if (metadataBindings.some((b) => b.name === key)) continue;
-            if (Redacted.isRedacted(value)) {
-              const unredacted = Redacted.value(value);
+            const secretText = secretTextFromEnvValue(value);
+            if (secretText !== undefined) {
               metadataBindings.push({
                 type: "secret_text",
                 name: key,
-                text:
-                  typeof unredacted === "string"
-                    ? unredacted
-                    : JSON.stringify(unredacted),
+                text: secretText,
               });
             } else if (typeof value === "string") {
               metadataBindings.push({
@@ -2901,6 +2929,7 @@ export const LiveWorkerProvider = () =>
         session: ScopedPlanStatusSession,
         output: Worker["Attributes"] | undefined,
       ) {
+        ({ news } = newsWithBoundEnv(news, bindings));
         const { accountId } = yield* yield* CloudflareEnvironment;
         const version = news.version!;
         const parentName = resolveVersionParentName(version);
@@ -3510,6 +3539,7 @@ export const LiveWorkerProvider = () =>
         session: ScopedPlanStatusSession,
         existingSettings?: workers.GetScriptScriptAndVersionSettingResponse,
       ) {
+        news = newsWithBoundEnv(news, bindings).news;
         const { accountId } = yield* yield* CloudflareEnvironment;
         // Prefer the deployed name: regenerating would target a different
         // script if the generator's output for this id ever drifts.
@@ -5238,6 +5268,18 @@ export const LiveWorkerProvider = () =>
               ));
           }
 
+          // Publish the stable workers.dev URL on the precreate stub so a
+          // cycle peer (e.g. Stripe.WebhookEndpoint interpolating
+          // `worker.url`) can POST a valid HTTPS URL instead of
+          // `"undefined/webhooks/stripe"`. Custom domains are still
+          // unresolved here; workers.dev is deterministic from name +
+          // account subdomain.
+          const workersDevUrl = resolveWorkersDev(
+            news.workersDev as WorkerProps["workersDev"],
+          ).enabled
+            ? `https://${name}.${yield* getAccountSubdomain(accountId)}.workers.dev`
+            : undefined;
+
           return {
             // The placeholder upload's tag (or, when adopting an existing
             // script, the listing lookup); reconcile re-records it after
@@ -5247,11 +5289,11 @@ export const LiveWorkerProvider = () =>
             workerName: name,
             namespace: dispatchNamespace,
             logpush: existingSettings?.logpush ?? undefined,
-            url: undefined,
+            url: workersDevUrl,
             tags: existingSettings?.tags ?? tags,
             durableObjectNamespaces,
             accountId,
-            urls: [],
+            urls: workersDevUrl !== undefined ? [workersDevUrl] : [],
             domain: undefined,
             routes: [],
             crons: [],

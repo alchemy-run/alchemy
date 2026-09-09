@@ -1,5 +1,6 @@
 import * as Alchemy from "@/index.ts";
 import * as Cloudflare from "@/Cloudflare";
+import * as Output from "@/Output.ts";
 import * as Stripe from "@/Stripe";
 import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
@@ -9,9 +10,7 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import StripeEventSourceWorker, {
-  Events,
-} from "./fixtures/event-source-worker.ts";
+import StripeEventSourceWorker from "./fixtures/event-source-worker.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Layer.mergeAll(Cloudflare.providers(), Stripe.providers()),
@@ -31,7 +30,11 @@ const Stack = Alchemy.Stack(
   },
   Effect.gen(function* () {
     const worker = yield* StripeEventSourceWorker;
-    yield* Events;
+    const events = yield* Stripe.WebhookEndpoint("Events", {
+      url: Output.interpolate`${worker.url}/webhooks/stripe`,
+      enabledEvents: [Stripe.CustomerCreated],
+    });
+    yield* Stripe.bindWebhookSecret(worker, events.secret);
     return { url: worker.url.as<string>() };
   }),
 );
@@ -55,7 +58,7 @@ test(
 
     const id = yield* Effect.gen(function* () {
       const res = yield* HttpClient.execute(
-        HttpClientRequest.get(`${base}/last`),
+        HttpClientRequest.get(`${base}/last/${body.id}`),
       );
       if (res.status !== 200) return null;
       const json = (yield* res.json) as { id: string | null };
