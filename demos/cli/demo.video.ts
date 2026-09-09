@@ -7,8 +7,8 @@
  *   tcut render out/alchemy-cli.cast … # re-render the last recording, no shell
  *
  * The run never touches your real `~/.alchemy`: it starts from an EMPTY
- * throwaway `ALCHEMY_HOME` and follows a brand-new user in order, one title
- * card per step: connect Cloudflare through the `alchemy profile` TUI (OAuth,
+ * throwaway `ALCHEMY_HOME` and follows a brand-new user in order, one mp4
+ * chapter per step: connect Cloudflare through the `alchemy profile` TUI (OAuth,
  * granted in tcut's browser pane), `alchemy dev`, `alchemy deploy`, an
  * out-of-band edit caught and fixed by `alchemy drift`, and `alchemy destroy`.
  * Stack state stays in this directory's `.alchemy/`; everything the demo
@@ -212,7 +212,7 @@ const seedOpenShim = () => {
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** The authorization URL the CLI asked `open` to launch. */
-const waitForOAuthUrl = async (attempts = 120) => {
+const waitForOAuthUrl = async (attempts = 240) => {
   for (let i = 0; i < attempts; i++) {
     if (existsSync(oauthUrlFile)) return readFileSync(oauthUrlFile, "utf8");
     await sleep(250);
@@ -300,22 +300,15 @@ export default defineVideo(
     const originalApi = readFileSync(apiFile, "utf8");
 
     /**
-     * A title card between steps. tcut has no video-level transitions (it
-     * renders what the terminal shows), so the card is made in the terminal
-     * itself: clear the screen, park the cursor mid-frame, render the
-     * caption, hold, and clear again so the next command starts on a fresh
-     * screen. Every card is also an mp4 chapter (`--chapters`, `--split-chapters`).
+     * Marks the start of a step as an mp4 chapter (`--chapters`,
+     * `--split-chapters`) and starts it on a fresh screen. No title cards:
+     * tcut has no video-level transitions yet, and cards drawn into the
+     * terminal itself read poorly.
      */
-    let step = 0;
-    const slide = async (chapter: string, heading: string, body: string) => {
-      step += 1;
-      await t.chapter(chapter);
-      await t.hide(() =>
-        t.run(`clear && tput cup ${Math.floor(t.rows / 2) - 3} 0`),
-      );
-      await t.print(`## ${step} · ${heading}\n\n${body}`);
-      await t.sleep("3s");
+    const chapter = async (name: string) => {
+      await t.chapter(name);
       await t.hide(() => t.run("clear"));
+      await t.sleep("800ms");
     };
 
     try {
@@ -350,11 +343,7 @@ export default defineVideo(
       });
 
       // ── 1. Connect to Cloudflare ─────────────────────────────────────────
-      await slide(
-        "connect",
-        "Connect to Cloudflare",
-        "A fresh machine, no profile yet. `alchemy profile` signs in once; every stack uses it.",
-      );
+      await chapter("connect");
       await t.type("alchemy profile");
       await t.enter();
       await t.wait(/e edit/, { scope: "screen" });
@@ -384,7 +373,9 @@ export default defineVideo(
       // The CLI hands the grant URL to `open` — our shim catches it and the
       // grant happens in the browser pane, exactly as it would in a real tab.
       await t.wait(/waiting for browser authorization/, { scope: "screen" });
-      const oauthUrl = await waitForOAuthUrl();
+      const oauthUrl = await waitForOAuthUrl().catch((error) => {
+        throw new Error(`${error.message}\n--- screen ---\n${t.screen()}`);
+      });
       await t.sleep("2s");
       await t.browser.goto(oauthUrl);
       await t.focus("browser");
@@ -517,11 +508,7 @@ export default defineVideo(
       await t.sleep("1s");
 
       // ── 2. Launch alchemy dev ────────────────────────────────────────────
-      await slide(
-        "dev",
-        "Launch `alchemy dev`",
-        "The Worker, KV and R2 run locally, with live reload on every save. `←/→` flips the widget between the stack's output and the plan.",
-      );
+      await chapter("dev");
       await t.type("alchemy dev");
       await t.enter();
       await t.wait(STARTED, { scope: "screen" });
@@ -587,11 +574,7 @@ export default defineVideo(
       await t.sleep("1s");
 
       // ── 3. Deploy to the cloud ───────────────────────────────────────────
-      await slide(
-        "deploy",
-        "Deploy to the cloud",
-        "`alchemy deploy` shows the plan, asks once, then converges the account to it.",
-      );
+      await chapter("deploy");
       await t.type("alchemy deploy");
       await t.enter();
       await t.wait(/Deploy\?/, { scope: "screen" });
@@ -624,11 +607,7 @@ export default defineVideo(
       const visits = deployedVisitsNamespace();
       const visitsApi = kvNamespaceApi(credentials, visits.namespaceId);
       await visitsApi.rename("renamed-in-the-dashboard");
-      await slide(
-        "drift",
-        "Detect and repair drift",
-        "Meanwhile, a teammate renamed the KV namespace in the dashboard. `alchemy drift` re-reads the account and shows what moved.",
-      );
+      await chapter("drift");
       await t.type("alchemy drift");
       await t.enter();
       await t.wait(/Drift detected/, { scope: "screen" });
@@ -646,11 +625,7 @@ export default defineVideo(
       }
 
       // ── 5. Tear down ─────────────────────────────────────────────────────
-      await slide(
-        "destroy",
-        "Tear down",
-        "`alchemy destroy` removes everything the stack created.",
-      );
+      await chapter("destroy");
       await t.type("alchemy destroy");
       await t.enter();
       await t.wait(/Destroy\?/, { scope: "screen" });
