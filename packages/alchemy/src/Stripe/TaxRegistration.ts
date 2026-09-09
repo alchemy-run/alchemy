@@ -708,10 +708,12 @@ export const TaxRegistrationProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const existing = yield* getById(output.id);
       if (existing === undefined || existing.status === "expired") return;
-      // Stripe requires expires_at > active_from. `expires_at: "now"` fails
-      // when the registration was created in the same unix second.
+      // Stripe requires expires_at > active_from and strictly in the
+      // future. `expires_at: "now"` fails when the registration was
+      // created in the same unix second; `expires_at: nowSec` fails
+      // when the clock ticks between compute and the request.
       const nowSec = yield* Effect.sync(() => Math.floor(Date.now() / 1000));
-      const expiresAt = Math.max(nowSec, existing.active_from + 1);
+      const expiresAt = Math.max(nowSec + 1, existing.active_from + 1);
       yield* UpdateTaxRegistration({
         id: existing.id,
         expires_at: expiresAt,
