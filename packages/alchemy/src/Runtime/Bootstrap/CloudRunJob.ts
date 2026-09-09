@@ -11,6 +11,8 @@ import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Redacted from "effect/Redacted";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import { reifyBoundConfigProvider } from "../../Runtime.ts";
 import {
   entrypointLayer,
@@ -19,32 +21,44 @@ import {
   stackFromEnv,
 } from "./Process.ts";
 
-const metadataCredentials = Layer.succeed(
+const metadataCredentials = Layer.effect(
   Credentials,
-  Effect.tryPromise({
-    try: async () => {
-      const response = await fetch(
-        "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token",
-        { headers: { "Metadata-Flavor": "Google" } },
+  Effect.gen(function* () {
+    const http = yield* HttpClient.HttpClient;
+    return Effect.gen(function* () {
+      const response = yield* http.execute(
+        HttpClientRequest.get(
+          "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token",
+        ).pipe(HttpClientRequest.setHeader("Metadata-Flavor", "Google")),
       );
-      if (!response.ok) {
-        throw new Error(`metadata token HTTP ${response.status}`);
+      if (response.status !== 200) {
+        return yield* Effect.fail(
+          new Error(`metadata token HTTP ${response.status}`),
+        );
       }
-      const body = (await response.json()) as { access_token?: string };
-      if (!body.access_token) {
-        throw new Error("metadata token response missing access_token");
+      const body = yield* response.json;
+      const token =
+        typeof body === "object" &&
+        body !== null &&
+        "access_token" in body &&
+        typeof body.access_token === "string"
+          ? body.access_token
+          : undefined;
+      if (token === undefined) {
+        return yield* Effect.fail(
+          new Error("metadata token response missing access_token"),
+        );
       }
+      const project = yield* Effect.sync(
+        () => process.env.GOOGLE_CLOUD_PROJECT ?? process.env.GCLOUD_PROJECT,
+      );
       return {
-        accessToken: Redacted.make(body.access_token),
-        project: process.env.GOOGLE_CLOUD_PROJECT ?? process.env.GCLOUD_PROJECT,
+        accessToken: Redacted.make(token),
+        project,
       };
-    },
-    catch: (cause) =>
-      new Error("Failed to mint Cloud Run metadata access token", {
-        cause,
-      }),
-  }).pipe(Effect.orDie),
-);
+    }).pipe(Effect.orDie);
+  }),
+).pipe(Layer.provide(FetchHttpClient.layer));
 
 export const bootstrap = (entrypoint: unknown): Promise<void> => {
   const platform = Layer.mergeAll(

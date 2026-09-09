@@ -1,5 +1,8 @@
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as NodeCrypto from "node:crypto";
 import { AuthError } from "../Auth/AuthProvider.ts";
 
@@ -53,35 +56,34 @@ export const mintAccessToken = (
           cause,
         }),
     });
-    // Use fetch + form-urlencoded. Effect HttpClient in the GCP provider
-    // stack may attach JSON content-type, and Google's token endpoint then
-    // rejects the body as `Invalid JSON payload`.
-    const tokenResponse = yield* Effect.tryPromise({
-      try: () =>
-        fetch(TOKEN_URL, {
-          method: "POST",
-          headers: {
-            "content-type": "application/x-www-form-urlencoded",
-          },
-          body: new URLSearchParams({
+    const http = yield* HttpClient.HttpClient;
+    const tokenResponse = yield* http
+      .execute(
+        HttpClientRequest.post(TOKEN_URL).pipe(
+          HttpClientRequest.bodyUrlParams({
             grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
             assertion: jwt,
           }),
-        }),
-      catch: (cause) =>
-        new AuthError({
-          message: "Failed to mint Google access token",
-          cause,
-        }),
-    });
-    const body = yield* Effect.tryPromise({
-      try: () => tokenResponse.json(),
-      catch: (cause) =>
-        new AuthError({
-          message: "Google token response was not JSON",
-          cause,
-        }),
-    });
+        ),
+      )
+      .pipe(
+        Effect.mapError(
+          (cause) =>
+            new AuthError({
+              message: "Failed to mint Google access token",
+              cause,
+            }),
+        ),
+      );
+    const body = yield* tokenResponse.json.pipe(
+      Effect.mapError(
+        (cause) =>
+          new AuthError({
+            message: "Google token response was not JSON",
+            cause,
+          }),
+      ),
+    );
     if (
       typeof body !== "object" ||
       body === null ||
@@ -103,7 +105,7 @@ export const mintAccessToken = (
       expirationMs: now + expiresIn * 1000,
       project: sa.project_id,
     };
-  });
+  }).pipe(Effect.provide(FetchHttpClient.layer));
 
 export const parseServiceAccountKey = (
   raw: string,
