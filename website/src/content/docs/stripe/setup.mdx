@@ -1,0 +1,47 @@
+---
+title: Setup
+description: Connect alchemy to Stripe — secret key, profiles, and CI.
+---
+
+Sign up at [stripe.com](https://stripe.com) and copy a secret key
+from the [API keys](https://dashboard.stripe.com/apikeys) page
+(`sk_test_…` for test mode). Register the provider next to your
+cloud's:
+
+```typescript
+// alchemy.run.ts
+import * as Stripe from "alchemy/Stripe";
+
+providers: Layer.mergeAll(Cloudflare.providers(), Stripe.providers()),
+```
+
+Run `alchemy profile edit --add Stripe`. The secret key is entered
+interactively and saved under
+`~/.alchemy/credentials/<profile>/`. An optional API base URL
+overrides the default `https://api.stripe.com`.
+
+When `CI=true`, profiles are bypassed and Alchemy reads
+`STRIPE_API_KEY` directly. `STRIPE_API_BASE_URL` is optional.
+
+See [Profiles](/environments/profiles) for how credentials are stored
+and switched.
+
+## Restricted keys
+
+HTTP bindings collect the Stripe permissions they need onto a
+[`RestrictedApiKey`](/providers/stripe/restrictedapikey) — the same
+shape as a Cloudflare `AccountApiToken`. Stripe has no public API to
+mint restricted keys (`POST /v2/iam/api_keys` is Apps preview), so
+the resource stores those permissions and injects either:
+
+- a Dashboard-created restricted key (`rk_test_…` / `rk_live_…`)
+  passed as `value`, or
+- the account secret from the profile / `STRIPE_API_KEY`
+
+Until Stripe ships a public mint, treat the collected permissions as
+the intended scope, not as an enforced key policy.
+
+## Next steps
+
+- [Stripe overview](/stripe) — resources and compositions.
+- [Tutorial part 1](/stripe/tutorial/part-1) — first Product.

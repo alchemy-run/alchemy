@@ -1,0 +1,45 @@
+---
+title: Connect
+description: Connected accounts, persons, and external accounts — implemented, live-gated on STRIPE_TEST_CONNECT.
+---
+
+Connect resources (`Account`, `AccountPerson`,
+`AccountExternalAccount`) are implemented as Alchemy resources with
+the same reconcile/delete path as Product. Live tests against a real
+Connect platform are **off by default**.
+
+Set `STRIPE_TEST_CONNECT=1` to run them. Without that env var the
+suites `skipIf` — they do not create connected accounts on an
+ordinary `pnpm test test/Stripe` run.
+
+Issuing (`IssuingCard`, `IssuingCardholder`,
+`IssuingPersonalizationDesign`) is the same shape with
+`STRIPE_TEST_ISSUING=1`.
+
+This is an entitlement/platform gate, not a missing implementation.
+The resources type-check, register in `Stripe.providers()`, and
+show up in [Reference](/providers). Do not assume a standard Stripe
+account can mint connected accounts or issuing cards.
+
+## Account
+
+```typescript
+const merchant = yield* Stripe.Account("Merchant", {
+  type: "express",
+  country: "US",
+  capabilities: {
+    card_payments: { requested: true },
+    transfers: { requested: true },
+  },
+});
+```
+
+`AccountPerson` and `AccountExternalAccount` nest under an account
+id. Retrieve bindings take both the parent account and the nested
+id — see [Bindings](/stripe/guides/bindings).
+
+## Reference
+
+[Account](/providers/stripe/account) ·
+[AccountPerson](/providers/stripe/accountperson) ·
+[AccountExternalAccount](/providers/stripe/accountexternalaccount)
