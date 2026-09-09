@@ -8,7 +8,8 @@ import type { Postgres } from "./Postgres.ts";
 /**
  * Bind a {@link Postgres} cluster to a Fly {@link Service} and obtain
  * the Effect-native connection strings for `Drizzle.Postgres` /
- * `SQL.Postgres`.
+ * `SQL.Postgres`. URIs travel as Outputs (`yield* postgres.connectionUri`),
+ * not a hand-built host env map.
  *
  * `ConnectPostgres` is the Context tag, the type, and the callable —
  * `yield* Fly.ConnectPostgres(Db)`. Provide {@link ConnectPostgresHttp}.
