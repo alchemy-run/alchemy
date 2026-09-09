@@ -1,6 +1,6 @@
 - complementary "Thread state":
   - separator "Resize the Thread state rail"
-  - text: Entities Bug in reconcile
+  - text: Assigned Bug in reconcile
   - link /#\d+/:
     - /url: https://github.com/alchemy-run/test-alchemy/issues/12
   - text: open Add sumToN helper

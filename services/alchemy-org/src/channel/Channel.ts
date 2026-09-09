@@ -89,7 +89,7 @@ export interface ThreadDirectoryRow {
 export interface Delivered {
   /** The delivery was seen before — nothing was written. */
   readonly duplicate: boolean;
-  /** The thread that owns the event's ref, when one is attached. */
+  /** The thread that owns the event's ref, when one is assigned. */
   readonly owner: string | undefined;
   readonly message: ChannelMessage | undefined;
 }
@@ -167,7 +167,7 @@ export class Channel extends Context.Service<
     readonly directoryUpsert: (row: ThreadDirectoryRow) => Effect.Effect<void>;
     /** Drop a thread's row (a deleted thread) — the rail forgets it. */
     readonly directoryRemove: (id: string) => Effect.Effect<void>;
-    /** `ref → thread` ownership, pushed by ThreadDOs on attach/detach. */
+    /** `ref → thread` ownership, pushed by ThreadDOs on assign/unassign. */
     readonly attachmentsSet: (
       ref: string,
       thread: string | null,

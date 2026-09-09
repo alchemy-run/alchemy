@@ -81,6 +81,18 @@ there, never a rewrite. Every behavior change ships with its test —
 the standard in `process/PullRequests.ts` applies to this service as
 to any other.
 
+## The gallery grows with the UI
+
+`e2e/ui/gallery.shots.ts` is the UX as SEEN: one pixel snapshot per
+feature state, committed under `e2e/ui/__screenshots__/`. Every UI
+feature you add, change, or redesign lands there in the same change
+— a new `test(...)` + `shot(page, "<area>-NN-<state>")` for a new
+state, the existing shot re-blessed for a redesign — generated with
+`pnpm test:e2e:update --project shots` and looked at before it is
+committed. An aria snapshot proves the structure; the shot is what a
+reviewer (and the next agent) can actually see. A UI change without
+its shot is not done.
+
 ## Changing this doctrine
 
 Edit the skill that owns the rule, run `bun scripts/agents-md.ts` to

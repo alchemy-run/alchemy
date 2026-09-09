@@ -334,6 +334,142 @@ describe("DriverLocal (in-memory)", () => {
     { timeout: 30_000 },
   );
 
+  /**
+   * The org's thread→engineer shape: a charter's OWN tool dispatches a
+   * named agent directly (not through a door or the dispatch
+   * intrinsic), naming its session as the child's `parent`. That
+   * child is under the parent's supervision like any other: abort the
+   * parent's round and the child's stalled round is cut; stop the child
+   * and the parent's tool is answered with the Stopped outcome.
+   */
+  it.live(
+    "a charter tool's direct dispatch joins the cascade: abort the parent → the child stops; stop the child → the parent is answered",
+    () => {
+      const model = Model.make([
+        // call 0: foreman #1 hands off
+        () => [
+          Model.toolCall("handoff", { task: "dig" }),
+          Model.finish("tool-calls"),
+        ],
+        // call 1: researcher #1 — a search that never answers
+        () => [
+          Model.toolCall("search", { query: "the void" }),
+          Model.finish("tool-calls"),
+        ],
+        // call 2: foreman #2 hands off
+        () => [
+          Model.toolCall("handoff", { task: "dig again" }),
+          Model.finish("tool-calls"),
+        ],
+        // call 3: researcher #2 — stalls too
+        () => [
+          Model.toolCall("search", { query: "the void" }),
+          Model.finish("tool-calls"),
+        ],
+        // call 4: foreman #2 hears its tool answered (the child was
+        // stopped) and concludes
+        () => [Model.text("the researcher was stopped"), Model.finish()],
+      ]);
+      const entered: Array<Deferred.Deferred<void>> = [
+        Effect.runSync(Deferred.make<void>()),
+        Effect.runSync(Deferred.make<void>()),
+      ];
+      let stalls = 0;
+      const released: Array<number> = [];
+      const search = Layer.succeed(Search, ((_input: { query: string }) =>
+        Effect.suspend(() => {
+          const mine = stalls++;
+          return Effect.andThen(
+            Deferred.succeed(entered[mine]!, undefined),
+            Effect.never,
+          ).pipe(
+            Effect.onInterrupt(() => Effect.sync(() => released.push(mine))),
+          );
+        })) as never);
+      const seen: Array<AI.SessionObservation> = [];
+      const ObserverLive = Layer.succeed(AI.Events, {
+        emit: (observation) => Effect.sync(() => void seen.push(observation)),
+      });
+      const driver = InMemoryDriver.pipe(Layer.provide(model.layer));
+      class Foreman extends AI.Agent<Foreman>()("Foreman") {}
+      const foremanCharter = Effect.gen(function* () {
+        const researcher = yield* Researcher;
+        const task = AI.Thing("task", S.String)`The work.`;
+        const handoff = yield* AI.Tool("handoff")`
+Hand ${task} to the researcher yourself and wait for the answer.`(
+          Effect.fn(function* (p: { task: string }) {
+            const self = yield* AI.Thread;
+            const outcome = yield* researcher.dispatch(p.task, {
+              key: `${self.key}::child`,
+              parent: { term: "Foreman", key: self.key },
+            });
+            return { outcome: JSON.stringify(outcome) };
+          }),
+        );
+        return AI.fragment`Route every request through ${handoff}.`;
+      });
+      const observed = (key: string, type: AI.SessionObservation["type"]) =>
+        seen.some(
+          (observation) => observation.key === key && observation.type === type,
+        );
+      const until = (predicate: () => boolean) =>
+        Effect.sync(predicate).pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("10 millis"),
+            until: (ok) => ok,
+            times: 300,
+          }),
+        );
+      return Effect.gen(function* () {
+        const foreman = yield* interpret(Foreman, foremanCharter);
+        const sessions = yield* AI.Sessions;
+
+        // ── (1) abort the parent: the child it dispatched is settled
+        // and its stalled handler interrupted
+        const first = yield* Effect.forkChild(
+          foreman.dispatch("Widget needed", { key: "f-1" }),
+        );
+        yield* Deferred.await(entered[0]!);
+        yield* sessions.interrupt("Foreman", "f-1");
+        yield* Fiber.await(first);
+        yield* until(() => observed("f-1::child", "settled"));
+        expect(released).toContain(0);
+        expect(observed("f-1", "aborted")).toBe(true);
+
+        // ── (2) stop the child: its handler is cut, and the parent's
+        // tool is answered with the Stopped outcome — its round runs on
+        // to a conclusion instead of waiting forever
+        const second = yield* Effect.forkChild(
+          foreman.dispatch("Widget needed", { key: "f-2" }),
+        );
+        yield* Deferred.await(entered[1]!);
+        yield* sessions.stop("Researcher", "f-2::child");
+        expect(released).toContain(1);
+        const answer = yield* Fiber.join(second);
+        expect(answer).toBe("the researcher was stopped");
+        // the tool's result carried the Stopped outcome to the model
+        expect(Model.promptText(model.calls[4]!)).toContain("Stopped");
+        expect(model.calls).toHaveLength(5);
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(
+          Layer.mergeAll(
+            driver,
+            Researcher.make(ResearcherCharter).pipe(
+              Layer.provide(driver),
+              Layer.provide(search),
+              Layer.provide(ObserverLive),
+            ),
+            search,
+            ObserverLive,
+            RuntimeContext.phantom,
+          ),
+        ),
+      );
+    },
+    { timeout: 30_000 },
+  );
+
   it.live(
     "Sessions.remove cuts the round in flight — the tool's finalizer runs, nothing resurrects the rows",
     () => {

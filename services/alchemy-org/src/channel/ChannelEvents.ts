@@ -11,7 +11,7 @@ import { Channel } from "./Channel.ts";
  * INGEST: GitHub webhooks → the channel. One consumer per connected
  * repository; every delivery becomes exactly one `deliver` on the one
  * ChannelDO — dedupe on content, the event row appended with the real
- * GitHub actor, the owning thread named when the ref is attached. The
+ * GitHub actor, the owning thread named when the ref is assigned. The
  * webhook handler completes (and GitHub gets its 2xx) only after
  * `deliver` returns.
  *

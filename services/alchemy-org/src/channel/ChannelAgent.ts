@@ -20,8 +20,8 @@ import { Channel } from "./Channel.ts";
  * message it serves exists for it.
  *
  * It is a ROUTER and a LIBRARIAN, never a worker: it reads the
- * channel, creates and shapes threads (place messages, attach
- * entities, brief the thread's agent), and answers the operator. The
+ * channel, creates and shapes threads (place messages, assign
+ * issues and pulls, brief the thread's agent), and answers the operator. The
  * work itself belongs to thread agents.
  *
  * CODEMODE: its tools are presented as importable functions and a
@@ -47,22 +47,29 @@ const threadId = AI.Thing("thread", S.String)`
 
 const name = AI.Thing("name", S.String)`
   The thread's short handle for the rail — lowercase, hyphenated,
-  2-4 words ("do-init-hang").`;
+  2-4 words, and CONTEXTUAL: it names the substance of the work as
+  you found it by reading, not the surface of one reference. Five
+  pulls whose commit prefix says "fix(cloudflare)" but whose bodies
+  are all about container images are "container-image-fixes", not
+  "cloudflare-fixes"; one issue about a Durable Object hanging on
+  init is "do-init-hang". Never a generic bucket ("misc-fixes",
+  "pr-review"), never an author's login, never a bare number.`;
 
 const title = AI.Thing("title", S.String)`
-  One line — what the task is about, in plain words.`;
+  One line — what the task is about, in plain words, specific enough
+  that someone reading only the rail knows what the thread does.`;
 
 const text = AI.Thing("text", S.String)`
   The text, complete and self-contained. Markdown.`;
 
 const ref = AI.Thing("ref", S.String)`
-  A GitHub entity, fully qualified — "owner/repo#832".`;
+  A GitHub issue or pull request, fully qualified — "owner/repo#832".`;
 
 const kind = AI.Thing("kind", S.Literals(["issue", "pull"]))`
   What the ref is.`;
 
 const entityTitle = AI.Thing("title", S.String)`
-  The entity's title, as GitHub has it.`;
+  Its title, as GitHub has it.`;
 
 const repo = AI.Thing("repo", S.String)`
   The repository, "owner/repo".`;
@@ -112,7 +119,7 @@ const state = AI.Thing(
   "state",
   S.Struct({
     ...ThreadRow.fields,
-    entities: S.Array(
+    assigned: S.Array(
       S.Struct({
         ref: S.String,
         kind: S.Literals(["issue", "pull"]),
@@ -132,21 +139,21 @@ const state = AI.Thing(
     members: S.Array(S.String),
   }),
 )`
-  One thread's full state: its entities (the GitHub issues and pulls it
-  governs), its subagents, and the channel message ids placed on it
+  One thread's full state: what is assigned to it (the GitHub issues
+  and pulls it governs), its subagents, and the channel message ids placed on it
   (members).`;
 
 const Thread = AI.Thing("thread", ThreadRow)`
   A thread: id, name, title, status, whose turn.`;
 
 const issueState = AI.Thing("state", S.Literals(["open", "closed"]))`
-  The entity's state as GitHub reports it.`;
+  Its state as GitHub reports it.`;
 
 const body = AI.Thing("body", S.String)`
-  The entity's body, markdown, verbatim.`;
+  Its body, markdown, verbatim.`;
 
 const author = AI.Thing("author", S.UndefinedOr(S.String))`
-  The GitHub login that authored the entity.`;
+  The GitHub login that authored it.`;
 
 const merged = AI.Thing("merged", S.Boolean)`
   Whether the pull request has been merged.`;
@@ -156,6 +163,21 @@ const head = AI.Thing("head", S.UndefinedOr(S.String))`
 
 const base = AI.Thing("base", S.UndefinedOr(S.String))`
   The pull request's base branch.`;
+
+const files = AI.Thing(
+  "files",
+  S.Array(
+    S.Struct({
+      path: S.String,
+      status: S.String,
+      additions: S.Int,
+      deletions: S.Int,
+    }),
+  ),
+)`
+  The files the pull request changes (first 100): path, status
+  (added/modified/removed/renamed), +/− line counts. The paths are
+  what a pull is ABOUT — read them before you name its thread.`;
 
 /* ── declared failures ──────────────────────────────────────────── */
 
@@ -187,6 +209,7 @@ const charter = Effect.gen(function* () {
         full: `${identity.owner}/${identity.repository}`,
         getIssue: yield* GitHub.GetIssue(entry.repository),
         getPullRequest: yield* GitHub.GetPullRequest(entry.repository),
+        listPullFiles: yield* GitHub.ListPullRequestFiles(entry.repository),
       };
     }),
   );
@@ -269,10 +292,13 @@ const charter = Effect.gen(function* () {
   const createThread = yield* AI.Tool("create_thread")`
     Create a thread — a task with its own agent, sandbox, and
     conversation: ${name}, ${title}. Answers the ${AI.out(Thread)}.
-    A thread is a shell until you fill it: in the same run, attach
-    every issue and pull request it is about (attach_entity), place
-    the channel messages that led to it (place_messages), then brief
-    its agent (brief_thread).`(
+    Call it only AFTER you have read what the thread is about
+    (read_pull / read_issue on every reference): the name and title
+    come from what the work actually is, and you cannot know that
+    from event one-liners. A thread is a shell until you fill it: in
+    the same run, assign every issue and pull request it is about
+    (assign), place the channel messages that led to it
+    (place_messages), then brief its agent (brief_thread).`(
     Effect.fn(function* (p: { name: string; title: string }) {
       const thread = yield* threads.create({
         id: mintThreadId(p.name),
@@ -294,11 +320,11 @@ const charter = Effect.gen(function* () {
     }),
   );
 
-  // an attach is VERIFIED against GitHub, never taken on the model's word
+  // an assignment is VERIFIED against GitHub, never taken on the model's word
   const lookup = yield* makeEntityLookup;
 
-  const attachEntity = yield* AI.Tool("attach_entity")`
-    Attach entity ${ref} to ${threadId} — the thread governs it from
+  const assign = yield* AI.Tool("assign")`
+    Assign ${ref} to ${threadId} — the thread governs it from
     now on: its events route there. The ref is looked up on GitHub;
     answers ${AI.out(kind, entityTitle)} as GitHub has them. Fails
     with ${BadRef} when the ref is not "owner/repo#N", names a
@@ -308,23 +334,24 @@ const charter = Effect.gen(function* () {
     Effect.fn(function* (p: { thread: string; ref: string }) {
       const entity = yield* lookup(p.ref);
       // the thread tells its agent (quietly — the brief that follows
-      // wakes it, with the attach already in its inbox)
-      yield* threads.attach(p.thread, [entity]);
+      // wakes it, with the assignment already in its inbox)
+      yield* threads.assign(p.thread, [entity]);
       return { kind: entity.kind, title: entity.title };
     }),
   );
 
-  const detachEntity = yield* AI.Tool("detach_entity")`
-    Detach ${ref} from ${threadId}.`(
+  const unassign = yield* AI.Tool("unassign")`
+    Unassign ${ref} from ${threadId}.`(
     Effect.fn(function* (p: { thread: string; ref: string }) {
-      yield* threads.detach(p.thread, p.ref);
+      yield* threads.unassign(p.thread, p.ref);
     }),
   );
 
   const briefThread = yield* AI.Tool("brief_thread")`
     Send ${text} to ${threadId}'s agent — the brief that starts its
     work, a steer, the operator's instruction relayed. Name every
-    entity in it fully qualified ("owner/repo#832", as attached),
+    issue and pull request in it fully qualified ("owner/repo#832", as
+    assigned),
     never a bare "#832". Fire and forget; its work shows up in the
     thread.`(
     Effect.fn(function* (p: { thread: string; text: string }) {
@@ -375,16 +402,24 @@ const charter = Effect.gen(function* () {
 
   const readPull = yield* AI.Tool("read_pull")`
     Read ${repo}'s pull request ${number} fresh from GitHub — answers
-    ${AI.out(entityTitle, issueState, merged, head, base, body, author)}.
+    ${AI.out(entityTitle, issueState, merged, head, base, body, author, files)}.
     Fails with ${UnknownRepo} for a repository the org is not
     connected to, ${NotFound} when it does not exist.`(
     Effect.fn(function* (p: { repo: string; number: number }) {
       const client = yield* repoOf(p.repo);
-      const pull = yield* client
-        .getPullRequest({ pull_number: p.number })
-        .pipe(
-          Effect.mapError((error) => new NotFound({ message: String(error) })),
-        );
+      const notFound = (error: unknown) =>
+        new NotFound({ message: String(error) });
+      const [pull, changed] = yield* Effect.all(
+        [
+          client
+            .getPullRequest({ pull_number: p.number })
+            .pipe(Effect.mapError(notFound)),
+          client
+            .listPullFiles({ pull_number: p.number, per_page: 100 })
+            .pipe(Effect.mapError(notFound)),
+        ],
+        { concurrency: 2 },
+      );
       return {
         title: pull.title,
         state:
@@ -394,6 +429,12 @@ const charter = Effect.gen(function* () {
         base: pull.base?.ref,
         body: pull.body ?? "",
         author: pull.user?.login,
+        files: changed.map((file) => ({
+          path: file.filename,
+          status: file.status,
+          additions: file.additions,
+          deletions: file.deletions,
+        })),
       };
     }),
   );
@@ -425,17 +466,33 @@ const charter = Effect.gen(function* () {
     THREADS: ${listThreads} is the directory — read it before you
     route. ${createThread} makes one, ${placeMessages} curates
     channel messages into it (retroactively — that is normal),
-    ${attachEntity} gives it the GitHub entities it governs, and
+    ${assign} gives it the issues and pull requests it governs, and
     ${briefThread} starts or steers its agent. Read the world with
     ${readThread}, ${readIssue}, ${readPull}. Reshape with
-    ${renameThread}, ${detachEntity}, ${closeThread}.
+    ${renameThread}, ${unassign}, ${closeThread}.
+
+    READ BEFORE YOU ROUTE. A channel event is a one-liner — an
+    author, a verb, a title; it is not the work. Before you name a
+    thread, brief an agent, or answer a question about a pull or an
+    issue, read every one the messages reference, fully, with
+    ${readPull} / ${readIssue}: the body, the branches, the state,
+    what it changes and why. Then read what THOSE reference — a pull
+    that says "fixes #830" means #830 is part of the task too. In
+    codemode this is one program: collect the refs, read them all,
+    then decide. Only once you know what the set of changes is
+    actually about do you choose a name and title — for the substance
+    (five pulls all reworking container image publication are a
+    container thread, whatever their commit prefixes say), never for
+    a surface feature like a shared scope or an author. The brief you
+    send carries that understanding: what each item is, how they
+    relate, what the operator wants done with them.
 
     A thread is NOT DONE until its record is complete. Every issue or
     pull request the task concerns — the one the operator pointed at,
-    the ones the messages you placed link to — is attached with
-    ${attachEntity} before you reply; an unattached entity has no
+    the ones the messages you placed link to — is assigned with
+    ${assign} before you reply; an unassigned issue or pull has no
     review tab, and its GitHub events route nowhere. Creating a thread
-    without attaching what it is about is the single most common
+    without assigning what it is about is the single most common
     mistake — do not make it.
 
     Every run ENDS with exactly one ${sendReply} — short, factual,

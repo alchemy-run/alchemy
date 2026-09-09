@@ -81,6 +81,26 @@ export default class KernelTestWorker extends Cloudflare.Worker<KernelTestWorker
             yield* actor.settle(key, { reason: input });
             return yield* HttpServerResponse.json({ settled: true });
           }
+          // the operator's switches, as the org's agent routes call them
+          case "/stop": {
+            const agent = url.searchParams.get("agent") ?? "Scribe";
+            yield* gateway.stop(agent, key);
+            return yield* HttpServerResponse.json({ stopped: true });
+          }
+          case "/interrupt": {
+            const agent = url.searchParams.get("agent") ?? "Scribe";
+            yield* gateway.interrupt(agent, key);
+            return yield* HttpServerResponse.json({ interrupted: true });
+          }
+          // the transcript's observation types, in order — what the
+          // views project; storage-only, never wakes the session
+          case "/history": {
+            const agent = url.searchParams.get("agent") ?? "Scribe";
+            const log = yield* gateway.history(agent, key);
+            return yield* HttpServerResponse.json({
+              types: log.map((observation) => observation.type),
+            });
+          }
           // the eraser — `Sessions.remove`, as the org's thread DELETE
           // calls it; `?machine=false` spares the machine
           case "/remove": {

@@ -24,7 +24,7 @@ import {
   Threads,
   type ByOptions,
   type ThreadAgentRow,
-  type ThreadEntity,
+  type Assignment,
   type ThreadSocketFrame,
   type ThreadState,
   type Turn,
@@ -99,15 +99,15 @@ interface ThreadRpc extends MainRpc<Cloudflare.DurableObjectState> {
   readonly place: (
     ids: ReadonlyArray<string>,
   ) => Effect.Effect<ThreadState, never, RuntimeContext>;
-  readonly attach: (
-    entities: ReadonlyArray<{
+  readonly assign: (
+    assigned: ReadonlyArray<{
       readonly ref: string;
       readonly kind: "issue" | "pull";
       readonly title: string;
       readonly state?: string;
     }>,
   ) => Effect.Effect<ThreadState, never, RuntimeContext>;
-  readonly detach: (
+  readonly unassign: (
     ref: string,
   ) => Effect.Effect<ThreadState, never, RuntimeContext>;
   readonly noteEvent: (
@@ -185,11 +185,11 @@ const ThreadDOLive = Cloudflare.DurableObject<ThreadRpc>()(
       yield* ensured;
       const id = yield* metaGet("id");
       if (id === undefined) return undefined;
-      const entities = (yield* (yield* sql.exec<EntityRow>(
+      const assigned = (yield* (yield* sql.exec<EntityRow>(
         "SELECT * FROM entities ORDER BY ref ASC",
-      )).toArray()).map((row): ThreadEntity => ({
+      )).toArray()).map((row): Assignment => ({
         ref: row.ref,
-        kind: row.kind as ThreadEntity["kind"],
+        kind: row.kind as Assignment["kind"],
         state: row.state,
         title: row.title,
         ...(row.worktree === null ? {} : { worktree: row.worktree }),
@@ -218,7 +218,7 @@ const ThreadDOLive = Cloudflare.DurableObject<ThreadRpc>()(
           ? "idle"
           : agents.some((a) => a.state === "running")
             ? "agents"
-            : entities.some((e) => e.state === "open")
+            : assigned.some((e) => e.state === "open")
               ? "others"
               : "idle";
       return {
@@ -229,7 +229,7 @@ const ThreadDOLive = Cloudflare.DurableObject<ThreadRpc>()(
         turn,
         createdAt: Number((yield* metaGet("created_at")) ?? 0),
         updatedAt: Number((yield* metaGet("updated_at")) ?? 0),
-        entities,
+        assigned,
         agents,
         members,
       } satisfies ThreadState;
@@ -333,11 +333,11 @@ const ThreadDOLive = Cloudflare.DurableObject<ThreadRpc>()(
           return yield* commit;
         }),
 
-      attach: (entities) =>
+      assign: (items) =>
         Effect.gen(function* () {
           yield* ensured;
           yield* Effect.forEach(
-            entities,
+            items,
             (entity) =>
               sql
                 .exec(
@@ -356,7 +356,7 @@ const ThreadDOLive = Cloudflare.DurableObject<ThreadRpc>()(
           return yield* commit;
         }),
 
-      detach: (ref) =>
+      unassign: (ref) =>
         Effect.gen(function* () {
           yield* ensured;
           yield* sql.exec("DELETE FROM entities WHERE ref = ?", ref);
@@ -552,7 +552,7 @@ export const ThreadsLive: Layer.Layer<
         snap?.agents.find((agent) => agent.key === key),
       );
 
-    return Threads.of({
+    const self: Threads["Service"] = Threads.of({
       create: (input) =>
         Effect.gen(function* () {
           const id = input.id ?? crypto.randomUUID();
@@ -580,24 +580,24 @@ export const ThreadsLive: Layer.Layer<
           }
           return yield* project(snap);
         }),
-      attach: (id, entities, options) =>
+      assign: (id, items, options) =>
         Effect.gen(function* () {
-          const snap = yield* inWorker(stub(id).attach(entities));
+          const snap = yield* inWorker(stub(id).assign(items));
           yield* Effect.forEach(
-            entities,
+            items,
             (entity) => channel.attachmentsSet(entity.ref, id),
             { discard: true },
           );
           if (told(options)) {
-            // the conversation is the record, and this attach happened
-            // OUTSIDE it — without this the agent opens on a brief
-            // saying "#1521" with no trace that #1521 is attached
+            // the conversation is the record, and this assignment
+            // happened OUTSIDE it — without this the agent opens on a
+            // brief saying "#1521" with no trace that #1521 is assigned
             yield* Effect.forEach(
-              entities,
+              items,
               (entity) =>
                 tell(
                   id,
-                  `[attached] ${entity.ref} — ${entity.kind}${
+                  `[assigned] ${entity.ref} — ${entity.kind}${
                     entity.state === undefined ? "" : `, ${entity.state}`
                   } — ${entity.title}`,
                   false,
@@ -607,11 +607,11 @@ export const ThreadsLive: Layer.Layer<
           }
           return yield* project(snap);
         }),
-      detach: (id, ref, options) =>
+      unassign: (id, ref, options) =>
         Effect.gen(function* () {
-          const snap = yield* inWorker(stub(id).detach(ref));
+          const snap = yield* inWorker(stub(id).unassign(ref));
           yield* channel.attachmentsSet(ref, null);
-          if (told(options)) yield* tell(id, `[detached] ${ref}`, false);
+          if (told(options)) yield* tell(id, `[unassigned] ${ref}`, false);
           return yield* project(snap);
         }),
       noteEvent: (id, event) =>
@@ -673,6 +673,38 @@ export const ThreadsLive: Layer.Layer<
           );
           const snap = yield* inWorker(stub(id).agentRemove(key));
           return yield* project(snap);
+        }),
+      agents: (id, verb, keys) =>
+        Effect.gen(function* () {
+          const before = yield* inWorker(stub(id).state());
+          if (before === undefined) return undefined;
+          const chosen =
+            keys === undefined
+              ? before.agents
+              : before.agents.filter((agent) => keys.includes(agent.key));
+          // the single verbs, each contained: one agent's session
+          // refusing must not leave the others running
+          const one = (key: string) =>
+            (verb === "stop"
+              ? self.agentStop(id, key)
+              : verb === "resume"
+                ? self.agentResume(id, key)
+                : self.agentDelete(id, key)
+            ).pipe(
+              Effect.asVoid,
+              Effect.catchCause((cause) =>
+                Effect.logWarning(
+                  `thread '${id}': ${verb} of agent '${key}' failed (contained)`,
+                  cause,
+                ),
+              ),
+            );
+          yield* Effect.forEach(chosen, (agent) => one(agent.key), {
+            discard: true,
+            concurrency: 8,
+          });
+          const snap = yield* inWorker(stub(id).state());
+          return snap === undefined ? undefined : yield* project(snap);
         }),
       postCard: (id, card) =>
         Effect.gen(function* () {
@@ -743,7 +775,7 @@ export const ThreadsLive: Layer.Layer<
           // 3. the pull requests' worktrees on the thread's machine
           if (Option.isSome(checkouts)) {
             yield* Effect.forEach(
-              (before?.entities ?? []).flatMap((entity) => {
+              (before?.assigned ?? []).flatMap((entity) => {
                 const parsed = parseEntityRef(entity.ref);
                 return entity.worktree === undefined ||
                   entity.worktree === "." ||
@@ -778,5 +810,6 @@ export const ThreadsLive: Layer.Layer<
       socket: (id, request) =>
         inWorker(stub(id).fetch(request).pipe(Effect.orDie)),
     });
+    return self;
   }),
 );

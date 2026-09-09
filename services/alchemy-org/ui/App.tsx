@@ -26,7 +26,7 @@ import {
   type ThreadTab,
 } from "@/lib/routes";
 import { cn } from "@/lib/utils";
-import { FileDiff, MessageCircle } from "lucide-react";
+import { NotificationRow } from "@/components/notification";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 /* ── per-thread terminals (local, remembered) ─────────────────────── */
@@ -234,11 +234,15 @@ export const App = () => {
     [cards, bellSeen],
   );
   const [bellOpen, setBellOpen] = useState(false);
+  // the mark as it stood when the bell opened — the rows that were new
+  // at that moment stay marked while it is up
+  const [seenAtOpen, setSeenAtOpen] = useState(bellSeen);
   const onBellOpen = useCallback(
     (open: boolean) => {
       setBellOpen(open);
       if (open && cards.length > 0) {
         const latest = cards[0]!.seq;
+        setSeenAtOpen(bellSeen);
         setBellSeen(latest);
         try {
           localStorage.setItem(BELL_SEEN_KEY, String(latest));
@@ -247,7 +251,38 @@ export const App = () => {
         }
       }
     },
-    [cards],
+    [cards, bellSeen],
+  );
+
+  // jump to a card in the channel: go home, then the channel view
+  // scrolls to the row and flashes it (the nonce re-fires a repeat
+  // jump to the same card)
+  const [focus, setFocus] = useState<
+    { seq: number; nonce: number } | undefined
+  >(undefined);
+  const jumpToCard = useCallback((seq: number) => {
+    setBellOpen(false);
+    navigate(pathOf({ kind: "channel" }));
+    setFocus((current) => ({ seq, nonce: (current?.nonce ?? 0) + 1 }));
+  }, []);
+  const notificationActions = useMemo(
+    () => ({
+      onJumpToCard: jumpToCard,
+      onOpenThread: (id: string) => {
+        setBellOpen(false);
+        openThread(id);
+      },
+      onOpenReview: (
+        thread: string,
+        owner: string,
+        repo: string,
+        number: number,
+      ) => {
+        setBellOpen(false);
+        openReview(thread, owner, repo, number);
+      },
+    }),
+    [jumpToCard, openThread, openReview],
   );
 
   const selectedThread = route.kind === "thread" ? route.id : undefined;
@@ -266,38 +301,19 @@ export const App = () => {
               </div>
             )}
             {cards.map((message) => (
-              <button
+              <NotificationRow
                 key={message.id}
-                type="button"
-                onClick={() => {
-                  setBellOpen(false);
-                  if (message.card.review !== undefined) {
-                    openReview(
-                      message.card.thread,
-                      message.card.review.owner,
-                      message.card.review.repo,
-                      message.card.review.number,
-                    );
-                  } else {
-                    openThread(message.card.thread);
-                  }
-                }}
-                className="flex cursor-pointer items-start gap-2 border-b border-border/60 px-3 py-2 text-left hover:bg-accent/60"
-              >
-                {message.card.review !== undefined ? (
-                  <FileDiff className="mt-0.5 size-3.5 shrink-0 text-mist" />
-                ) : (
-                  <MessageCircle className="mt-0.5 size-3.5 shrink-0 text-mist" />
-                )}
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[13px] font-medium">
-                    {message.card.title}
-                  </span>
-                  <span className="block truncate text-[11px] text-muted-foreground">
-                    {message.text.split("\n")[0]}
-                  </span>
-                </span>
-              </button>
+                message={message}
+                threadName={
+                  directory.find((row) => row.id === message.card.thread)
+                    ?.name ?? message.card.thread
+                }
+                // "new" is judged against the seen mark the bell had when
+                // it opened — the mark moves on open, the dots stay for
+                // this look
+                unseen={message.seq > seenAtOpen}
+                actions={notificationActions}
+              />
             ))}
           </div>
         }
@@ -333,6 +349,7 @@ export const App = () => {
               directory={directory}
               live={live}
               active={route.kind === "channel"}
+              focus={focus}
               onOpenThread={openThread}
               onOpenReview={openReview}
             />

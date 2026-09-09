@@ -55,7 +55,7 @@ export interface ThreadDirectoryRow {
 
 /* ── thread state (the `/thread/:id` socket) ──────────────────────── */
 
-export interface ThreadEntity {
+export interface Assignment {
   readonly ref: string;
   readonly kind: "issue" | "pull";
   readonly state: string;
@@ -81,7 +81,7 @@ export interface ThreadState {
   readonly turn: Turn;
   readonly createdAt: number;
   readonly updatedAt: number;
-  readonly entities: ReadonlyArray<ThreadEntity>;
+  readonly assigned: ReadonlyArray<Assignment>;
   readonly agents: ReadonlyArray<ThreadAgentRow>;
   readonly members: ReadonlyArray<string>;
 }
@@ -247,3 +247,16 @@ export const deleteAgent = (
   threadId: string,
   key: string,
 ): Promise<Response> => fetch(agentUrl(threadId, key), { method: "DELETE" });
+
+/** The same switch on MANY agents at once — `keys` (a selection), or
+ *  every agent of the thread when omitted. One request, one answer. */
+export const agentsBulk = (
+  threadId: string,
+  verb: "stop" | "resume" | "delete",
+  keys?: ReadonlyArray<string>,
+): Promise<Response> =>
+  fetch(`/api/threads/${encodeURIComponent(threadId)}/agents/${verb}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(keys === undefined ? {} : { keys }),
+  });

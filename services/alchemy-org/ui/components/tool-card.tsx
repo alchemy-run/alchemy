@@ -171,6 +171,48 @@ export const OpenAgentContext = createContext<
   ((target: SpawnTarget) => void) | undefined
 >(undefined);
 
+/** One agent as the thread's BOOKS have it — what a spawn card reads
+ *  its state from, so the card never says "working" over an agent the
+ *  operator stopped or deleted while the spawn call is still open. */
+export interface AgentBook {
+  readonly key: string;
+  readonly brief: string;
+  readonly state: "running" | "done" | "failed" | "stopped";
+  readonly startedAt: number;
+}
+
+/** The thread's agents, live — provided by the thread view; `undefined`
+ *  anywhere the books are not at hand (the card then trusts the call). */
+export const AgentBooksContext = createContext<
+  ReadonlyArray<AgentBook> | undefined
+>(undefined);
+
+/** The book for a spawn target: by key once the call answered; while
+ *  it is still working only the brief is on the wire — the newest
+ *  agent with that brief. */
+export const findAgentBook = (
+  books: ReadonlyArray<AgentBook>,
+  target: SpawnTarget,
+): AgentBook | undefined =>
+  (target.key !== undefined
+    ? books.find((agent) => agent.key === target.key)
+    : undefined) ??
+  [...books]
+    .sort((a, b) => b.startedAt - a.startedAt)
+    .find((agent) => agent.brief === target.brief);
+
+/** What a spawn card shows instead of "working" when the books say the
+ *  agent is not running (or no longer exists) while its call is open. */
+export const spawnSettledLabel = (
+  books: ReadonlyArray<AgentBook> | undefined,
+  target: SpawnTarget,
+): string | undefined => {
+  if (books === undefined) return undefined;
+  const book = findAgentBook(books, target);
+  if (book === undefined) return "deleted";
+  return book.state === "running" ? undefined : book.state;
+};
+
 const OpenAgentButton = ({ target }: { target: SpawnTarget }) => {
   const open = useContext(OpenAgentContext);
   if (open === undefined) return null;
@@ -211,6 +253,10 @@ export interface ToolCallView {
   readonly badge?: ReactNode;
   /** Expanded detail; undefined = nothing to expand. */
   readonly body?: ReactNode;
+  /** The card's own verdict that the call is OVER although the
+   *  transcript still shows it open — shown in place of "running…",
+   *  and the card stops pulsing. */
+  readonly settled?: string;
   /** Collapsed result line (`→ …`) — the outcome without expanding. */
   readonly summary?: string;
   /** Open the body on first render — for cards whose detail IS the
@@ -278,10 +324,17 @@ const outputText = (output: unknown): string | undefined =>
 /** A renderer as the transcript sees it — the wire is untyped JSON, so
  *  `input` is `any` here; the Engineer's own cards are authored against
  *  their PRECISE input types (see {@link CODER}) and merge in. */
+/** What the transcript's surroundings tell a card — the thread's
+ *  books, when the card renders inside a thread. */
+export interface RenderEnv {
+  readonly agents?: ReadonlyArray<AgentBook>;
+}
+
 type Renderer = (
   input: any,
   output: string | undefined,
   running: boolean,
+  env: RenderEnv,
 ) => ToolCallView;
 
 /**
@@ -338,7 +391,7 @@ interface ThreadStateAnswer {
   readonly title?: string;
   readonly status?: string;
   readonly turn?: string;
-  readonly entities?: ReadonlyArray<{
+  readonly assigned?: ReadonlyArray<{
     readonly ref?: string;
     readonly kind?: string;
     readonly state?: string;
@@ -362,7 +415,7 @@ const parseThreadState = (
   const state = record.state ?? record;
   return typeof state === "object" &&
     state !== null &&
-    ("entities" in state || "agents" in state || "status" in state)
+    ("assigned" in state || "agents" in state || "status" in state)
     ? (state as ThreadStateAnswer)
     : undefined;
 };
@@ -376,7 +429,7 @@ const AGENT_STATE_DOT: Record<string, string> = {
 
 /** The books, laid out: what the thread governs and who is working. */
 const ThreadStateBody = ({ state }: { state: ThreadStateAnswer }) => {
-  const entities = state.entities ?? [];
+  const assigned = state.assigned ?? [];
   const agents = state.agents ?? [];
   return (
     <div className="divide-y divide-border/50 text-[12px]">
@@ -392,13 +445,13 @@ const ThreadStateBody = ({ state }: { state: ThreadStateAnswer }) => {
       </div>
       <div className="px-3 py-1.5">
         <div className="text-[11px] font-medium text-muted-foreground">
-          Entities · {entities.length}
+          Assigned · {assigned.length}
         </div>
-        {entities.length === 0 ? (
-          <div className="text-muted-foreground">none attached</div>
+        {assigned.length === 0 ? (
+          <div className="text-muted-foreground">nothing assigned</div>
         ) : (
           <ul className="mt-0.5 flex flex-col gap-0.5">
-            {entities.map((entity, index) => (
+            {assigned.map((entity, index) => (
               <li
                 key={entity.ref ?? index}
                 className="flex min-w-0 items-baseline gap-2"
@@ -470,14 +523,14 @@ const ThreadStateBody = ({ state }: { state: ThreadStateAnswer }) => {
 
 /** The collapsed line for a thread's state: what it holds, in counts. */
 const summarizeThreadState = (state: ThreadStateAnswer): string => {
-  const entities = state.entities ?? [];
+  const assigned = state.assigned ?? [];
   const agents = state.agents ?? [];
   const running = agents.filter((agent) => agent.state === "running").length;
   const count = (n: number, one: string, many: string) =>
     `${n} ${n === 1 ? one : many}`;
   return [
     state.status,
-    count(entities.length, "entity", "entities"),
+    `${assigned.length} assigned`,
     running > 0
       ? `${count(agents.length, "agent", "agents")} (${running} working)`
       : count(agents.length, "agent", "agents"),
@@ -493,11 +546,16 @@ const summarizeThreadState = (state: ThreadStateAnswer): string => {
  * declared by hand here and must be kept in step with the charter.
  */
 const THREAD: {
-  attach: (
-    input: { ref: string; kind: string; title: string },
+  /** Shared with the channel agent — its call names the `thread` the
+   *  ref goes to; the thread agent's own call is about itself. */
+  assign: (
+    input: { ref: string; thread?: string; title?: string },
     output: string | undefined,
   ) => ToolCallView;
-  detach: (input: { ref: string }, output: string | undefined) => ToolCallView;
+  unassign: (
+    input: { ref: string; thread?: string },
+    output: string | undefined,
+  ) => ToolCallView;
   worktree: (
     input: { ref: string },
     output: string | undefined,
@@ -510,6 +568,7 @@ const THREAD: {
     input: { brief?: string; instructions?: string; task?: string },
     output: string | undefined,
     running: boolean,
+    env: RenderEnv,
   ) => ToolCallView;
   post_card: (input: { title: string; text: string }) => ToolCallView;
   /** Shared with the channel agent's bookkeeping close — the thread
@@ -519,11 +578,18 @@ const THREAD: {
     output: string | undefined,
   ) => ToolCallView;
 } = {
-  attach: (input, output) => ({
+  assign: (input, output) => ({
     icon: Paperclip,
     title: (
       <>
-        Attach <Ref value={input.ref} />
+        Assign <Ref value={input.ref} />
+        {input.thread && (
+          <>
+            {" "}
+            <span className="text-muted-foreground">→</span>{" "}
+            <ThreadId id={input.thread} />
+          </>
+        )}
         {input.title && (
           <>
             <span className="text-muted-foreground"> · </span>
@@ -535,11 +601,18 @@ const THREAD: {
     summary: output === undefined ? undefined : summarize(output),
   }),
 
-  detach: (input, output) => ({
+  unassign: (input, output) => ({
     icon: CircleSlash,
     title: (
       <>
-        Detach <Ref value={input.ref} />
+        Unassign <Ref value={input.ref} />
+        {input.thread && (
+          <>
+            {" "}
+            <span className="text-muted-foreground">from</span>{" "}
+            <ThreadId id={input.thread} />
+          </>
+        )}
       </>
     ),
     summary: output === undefined ? undefined : summarize(output),
@@ -574,7 +647,7 @@ const THREAD: {
     };
   },
 
-  spawn: (input, output, running) => {
+  spawn: (input, output, running, env) => {
     const intrinsic = input.brief === undefined;
     const brief = input.brief ?? input.task ?? "";
     const record = parseRecord(output);
@@ -583,8 +656,16 @@ const THREAD: {
       (record === undefined ? output : undefined);
     const agentKey =
       typeof record?.agent === "string" ? record.agent : undefined;
+    // the books outrank the open call: an engineer the operator
+    // stopped or deleted mid-spawn is not "working", whatever the
+    // transcript still owes
+    const settled =
+      running && !intrinsic
+        ? spawnSettledLabel(env.agents, { key: agentKey, brief: input.brief })
+        : undefined;
     return {
       icon: Hammer,
+      settled,
       title: (
         <>
           {intrinsic ? "Subagent" : "Engineer"}{" "}
@@ -594,7 +675,7 @@ const THREAD: {
       ),
       badge: (
         <span className="flex shrink-0 items-center gap-2">
-          {running && (
+          {running && settled === undefined && (
             <span className="animate-pulse text-[11px] text-moss">working</span>
           )}
           {!intrinsic && (
@@ -651,7 +732,7 @@ const THREAD: {
  * Cards for the CHANNEL agent's wire (`src/channel/ChannelAgent.ts`)
  * — inline tools, hand declared like the thread's. Its runs mostly
  * read (search_messages, read_history, read_thread) and route
- * (create_thread, place_messages, attach_entity); every card is one
+ * (create_thread, place_messages, assign); every card is one
  * line with the detail a click away.
  */
 const CHANNEL: {
@@ -675,14 +756,6 @@ const CHANNEL: {
   ) => ToolCallView;
   place_messages: (
     input: { thread: string; ids: ReadonlyArray<string> },
-    output: string | undefined,
-  ) => ToolCallView;
-  attach_entity: (
-    input: { thread: string; ref: string; kind: string; title: string },
-    output: string | undefined,
-  ) => ToolCallView;
-  detach_entity: (
-    input: { thread: string; ref: string },
     output: string | undefined,
   ) => ToolCallView;
   brief_thread: (
@@ -783,30 +856,6 @@ const CHANNEL: {
           {input.ids?.length ?? 0} message{input.ids?.length === 1 ? "" : "s"}
         </span>{" "}
         <span className="text-muted-foreground">→</span>{" "}
-        <ThreadId id={input.thread} />
-      </>
-    ),
-    summary: output === undefined ? undefined : summarize(output),
-  }),
-
-  attach_entity: (input, output) => ({
-    icon: Paperclip,
-    title: (
-      <>
-        Attach <Ref value={input.ref} />{" "}
-        <span className="text-muted-foreground">→</span>{" "}
-        <ThreadId id={input.thread} />
-      </>
-    ),
-    summary: output === undefined ? undefined : summarize(output),
-  }),
-
-  detach_entity: (input, output) => ({
-    icon: CircleSlash,
-    title: (
-      <>
-        Detach <Ref value={input.ref} />{" "}
-        <span className="text-muted-foreground">from</span>{" "}
         <ThreadId id={input.thread} />
       </>
     ),
@@ -1279,6 +1328,148 @@ const RENDERERS: Record<string, Renderer> = {
 /** Whether a compact per-tool card exists for this tool name. */
 export const hasToolCard = (toolName: string): boolean => toolName in RENDERERS;
 
+/* ── runs: consecutive calls of one tool, folded ─────────────── */
+
+/** How many consecutive calls of one tool make a RUN worth folding.
+ *  Two cards read fine as two cards; three or more of the same verb
+ *  in a row are a list, and the list's headline is what matters. */
+export const MIN_TOOL_RUN = 3;
+
+/** One line for a run of `n` calls — the verb in the run's tense.
+ *  Tools not named here fold under a generic count. */
+const RUN_LABELS: Record<string, (n: number, running: boolean) => string> = {
+  worktree: (n, running) =>
+    `${running ? "Creating" : "Created"} ${n} worktrees`,
+  assign: (n, running) => `${running ? "Assigning" : "Assigned"} ${n} refs`,
+  unassign: (n, running) =>
+    `${running ? "Unassigning" : "Unassigned"} ${n} refs`,
+  spawn: (n, running) => `${running ? "Spawning" : "Spawned"} ${n} agents`,
+  read_pull: (n, running) =>
+    `${running ? "Reading" : "Read"} ${n} pull requests`,
+  read_issue: (n, running) => `${running ? "Reading" : "Read"} ${n} issues`,
+  read_thread: (n, running) => `${running ? "Reading" : "Read"} ${n} threads`,
+  read_messages: (n, running) =>
+    `${running ? "Reading" : "Read"} ${n} pages of messages`,
+  place_messages: (n, running) =>
+    `${running ? "Placing" : "Placed"} messages ${n} times`,
+  brief_thread: (n, running) =>
+    `${running ? "Briefing" : "Briefed"} ${n} threads`,
+  create_thread: (n, running) =>
+    `${running ? "Creating" : "Created"} ${n} threads`,
+  bash: (n, running) => `${running ? "Running" : "Ran"} ${n} commands`,
+  grep: (n, running) => `${running ? "Searching" : "Searched"} ${n} times`,
+  glob: (n, running) => `${running ? "Globbing" : "Globbed"} ${n} times`,
+  readFile: (n, running) => `${running ? "Reading" : "Read"} ${n} files`,
+  writeFile: (n, running) => `${running ? "Writing" : "Wrote"} ${n} files`,
+  editFile: (n, running) => `${running ? "Editing" : "Edited"} ${n} files`,
+  listDirectory: (n, running) =>
+    `${running ? "Listing" : "Listed"} ${n} directories`,
+  pushBranch: (n, running) =>
+    `${running ? "Pushing" : "Pushed"} ${n} branches`,
+  openPullRequest: (n, running) =>
+    `${running ? "Opening" : "Opened"} ${n} pull requests`,
+  eval: (n, running) => `${running ? "Evaluating" : "Evaluated"} ${n} programs`,
+};
+
+const runLabel = (toolName: string, n: number, running: boolean): string =>
+  RUN_LABELS[toolName]?.(n, running) ?? `${n} × ${toolName}`;
+
+/** Whether a run of `toolName` calls can fold: the tool has a card
+ *  (the fold's rows are those cards) — the generic collapsible has
+ *  no headline to fold under. */
+export const canFoldToolRun = (toolName: string): boolean =>
+  hasToolCard(toolName);
+
+export interface ToolRunProps {
+  readonly toolName: string;
+  /** The calls, in transcript order — three or more. */
+  readonly calls: ReadonlyArray<ToolCardProps>;
+}
+
+/**
+ * A RUN of one tool — `worktree` five times in a row — folded into one
+ * line ("Created 5 worktrees") that opens into the calls' own cards.
+ * The headline carries the run's state: how many are still running,
+ * how many failed. A run with a failure opens by default, as a single
+ * failed card does — the failure is the story.
+ */
+export const ToolRun = ({ toolName, calls }: ToolRunProps) => {
+  const agents = useContext(AgentBooksContext);
+  const anchored = useAnchoredToggle();
+  const renderer = RENDERERS[toolName];
+  const inFlight = calls.filter(
+    (call) =>
+      call.state === "input-available" || call.state === "input-streaming",
+  ).length;
+  const failed = calls.filter((call) => call.state === "output-error").length;
+  const [open, setOpen] = useState(failed > 0);
+
+  if (renderer === undefined) return null;
+  const first = calls[0]!;
+  const Icon = renderer(
+    (first.input ?? {}) as Record<string, any>,
+    undefined,
+    false,
+    { agents },
+  ).icon;
+  const running = inFlight > 0;
+
+  return (
+    <div
+      data-tool-run={toolName}
+      data-count={calls.length}
+      className={cn(
+        "callout overflow-hidden text-sm",
+        failed > 0 ? "callout-danger" : running && "border-primary/40",
+      )}
+    >
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={(event) => anchored(event.currentTarget, () => setOpen(!open))}
+        className="flex w-full cursor-pointer items-center gap-2 px-2.5 py-1.5 text-left hover:bg-accent/50"
+      >
+        <Icon
+          className={cn(
+            "size-3.5 shrink-0",
+            failed > 0
+              ? "text-brick"
+              : running
+                ? "animate-pulse text-primary"
+                : "text-muted-foreground",
+          )}
+        />
+        <span className="min-w-0 flex-1 truncate">
+          {runLabel(toolName, calls.length, running)}
+        </span>
+        {running && (
+          <span className="shrink-0 animate-pulse text-[11px] text-primary">
+            {inFlight} running…
+          </span>
+        )}
+        {failed > 0 && (
+          <span className="shrink-0 text-[11px] text-brick">
+            {failed} failed
+          </span>
+        )}
+        <ChevronDown
+          className={cn(
+            "size-3.5 shrink-0 text-muted-foreground transition-transform",
+            !open && "-rotate-90",
+          )}
+        />
+      </button>
+      {open && (
+        <div className="flex flex-col gap-1.5 border-t border-border/50 bg-muted/20 p-1.5">
+          {calls.map((call, index) => (
+            <ToolCard key={index} {...call} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 /* ── the card ────────────────────────────────────────────────── */
 
 export interface ToolCardProps {
@@ -1302,12 +1493,14 @@ export const ToolCard = ({
   errorText,
 }: ToolCardProps) => {
   const renderer = RENDERERS[toolName];
-  const running = state === "input-available" || state === "input-streaming";
+  const agents = useContext(AgentBooksContext);
+  const open_ = state === "input-available" || state === "input-streaming";
   const failed = state === "output-error";
   const view = renderer?.(
     (input ?? {}) as Record<string, any>,
     failed ? undefined : outputText(output),
-    running,
+    open_,
+    { agents },
   );
   // errors default open — the failure is the story; some cards open
   // by design (eval — the program IS the story)
@@ -1315,6 +1508,10 @@ export const ToolCard = ({
   const anchored = useAnchoredToggle();
 
   if (renderer === undefined || view === undefined) return null;
+
+  // an open call the card knows to be over (the books say the agent
+  // stopped) is not running — no pulse, its verdict where "running…" was
+  const running = open_ && view.settled === undefined;
 
   const expandable = view.body !== undefined || failed;
 
@@ -1351,6 +1548,14 @@ export const ToolCard = ({
             running…
           </span>
         )}
+        {open_ && view.settled !== undefined && (
+          <span
+            data-settled={view.settled}
+            className="shrink-0 text-[11px] text-muted-foreground"
+          >
+            {view.settled}
+          </span>
+        )}
         {view.badge}
         {expandable && (
           <ChevronDown
@@ -1365,6 +1570,17 @@ export const ToolCard = ({
         <div className="flex items-start gap-2 px-2.5 pb-1.5 font-mono text-[11px] text-muted-foreground">
           <span className="shrink-0">→</span>
           <span className="min-w-0 truncate">{clamp(view.summary, 140)}</span>
+        </div>
+      )}
+      {/* a failure that arrived AFTER mount (a call cut short by the
+          operator's stop) stays collapsed — its first line is still
+          the story, so it shows where the summary would */}
+      {!open && failed && errorText !== undefined && (
+        <div className="flex items-start gap-2 px-2.5 pb-1.5 font-mono text-[11px] text-brick/80">
+          <span className="shrink-0">→</span>
+          <span className="min-w-0 truncate">
+            {clamp(firstLine(errorText), 140)}
+          </span>
         </div>
       )}
       {open && failed && errorText !== undefined && (

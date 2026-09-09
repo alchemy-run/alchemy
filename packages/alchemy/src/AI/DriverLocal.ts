@@ -12,6 +12,7 @@ import {
   makeSessionEngine,
   reminderInput,
   stoppedByOperator,
+  supervised,
   type SessionEngine,
 } from "./DriverCore.ts";
 import * as Option from "effect/Option";
@@ -198,7 +199,9 @@ export const DriverLocal: Layer.Layer<
           ) as Effect.Effect<void>;
         }
 
-        return {
+        // `supervised`: a dispatch made from inside another session's
+        // round joins that session's cascade (see DriverCore)
+        return supervised(termName, {
           send: (item, options) => engine.send(item, options),
           // a waiter failed with the session's typed crash surfaces
           // at the Actor boundary as a defect — same as the RPC
@@ -212,7 +215,7 @@ export const DriverLocal: Layer.Layer<
               : engine.steer(first as string, second)) as Actor["steer"],
           settle: (sessionKey, event) => engine.settle(sessionKey, event),
           interrupt: () => engine.interrupt,
-        } satisfies Actor;
+        } satisfies Actor);
       });
 
     /**

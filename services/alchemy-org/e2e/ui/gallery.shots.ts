@@ -15,8 +15,8 @@ import {
   type FakeApi,
 } from "./harness.ts";
 
-const shot = (page: Page, name: string) =>
-  expect(page).toHaveScreenshot(`${name}.png`, { fullPage: false });
+const shot = (page: Page, name: string, options?: { maxDiffPixels?: number }) =>
+  expect(page).toHaveScreenshot(`${name}.png`, { fullPage: false, ...options });
 
 const seedWorld = (api: FakeApi) => {
   api.seedThread({
@@ -24,7 +24,7 @@ const seedWorld = (api: FakeApi) => {
     name: "w-reconcile",
     title: "Fix the reconcile bug",
     turn: "you",
-    entities: [
+    assigned: [
       {
         ref: `${REPO}#12`,
         kind: "issue",
@@ -116,6 +116,104 @@ test("channel: a selection and its menu, one item under the pointer", async ({
   await shot(page, "channel-04-selection-menu");
 });
 
+test("channel: replying to several messages, the list collapsed", async ({
+  page,
+  api,
+}) => {
+  seedWorld(api);
+  await openApp(page);
+  const main = page.getByRole("main");
+  const rowOf = (text: string) =>
+    main.locator("[data-seq]", { hasText: text }).first();
+  await rowOf("triage that issue").click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Reply" }).click();
+  await rowOf("Placed it on w-reconcile").click({
+    modifiers: ["ControlOrMeta"],
+  });
+  const bar = main.getByLabel("Replying to", { exact: true });
+  await expect(bar).toContainText("Replying to 2 messages");
+  await shot(page, "channel-05-reply-bar");
+});
+
+/** A thread asking the operator something only they can answer. */
+const seedQuestion = (api: FakeApi) => {
+  seedWorld(api);
+  api.seedCard(
+    { thread: "t-1", title: "Which base branch for #148?" },
+    "The fix is ready to open. Against `main`, or the `release/2.x` branch the issue names? I will hold until you say.",
+  );
+};
+
+test("notification: answering a card on the card", async ({ page, api }) => {
+  seedQuestion(api);
+  await openApp(page);
+  const card = page.getByRole("main").locator("[data-card]").last();
+  await card
+    .getByRole("button", { name: "Answer: Which base branch for #148?" })
+    .click();
+  await card.getByLabel("Your answer").fill("main — release/2.x is frozen");
+  await shot(page, "channel-07-card-answer");
+});
+
+test("notification: the card once answered", async ({ page, api }) => {
+  seedQuestion(api);
+  await openApp(page);
+  const card = page.getByRole("main").locator("[data-card]").last();
+  await card
+    .getByRole("button", { name: "Answer: Which base branch for #148?" })
+    .click();
+  await card.getByLabel("Your answer").fill("main");
+  await card.getByRole("button", { name: "Send" }).click();
+  await expect(card.locator("[data-answered]")).toBeVisible();
+  await shot(page, "channel-08-card-answered");
+});
+
+test("notification: answering from the bell, on another page", async ({
+  page,
+  api,
+}) => {
+  seedQuestion(api);
+  await openApp(page, threadPath("t-2"));
+  await page.getByRole("button", { name: /notifications, 2 new/ }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog
+    .getByRole("button", { name: "Answer: Which base branch for #148?" })
+    .click();
+  await dialog.getByLabel("Your answer").fill("main");
+  await shot(page, "channel-09-bell-answer");
+});
+
+test("notification: the bell's jump lands on the card, flashed", async ({
+  page,
+  api,
+}) => {
+  seedQuestion(api);
+  await openApp(page, threadPath("t-2"));
+  await page.getByRole("button", { name: /notifications, 2 new/ }).click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Jump to the card: Which base branch for #148?" })
+    .click();
+  await expect(
+    page.getByRole("main").locator("[data-seq][data-flash]"),
+  ).toBeVisible();
+  await shot(page, "channel-10-card-jump");
+});
+
+test("channel: a thread being deleted", async ({ page, api }) => {
+  seedWorld(api);
+  const release = api.holdThreadDelete();
+  await openApp(page, threadPath("t-2"));
+  page.once("dialog", (dialog) => void dialog.accept());
+  await page
+    .getByRole("complementary", { name: "Thread state" })
+    .getByRole("button", { name: "Delete thread" })
+    .click();
+  await expect(page.getByRole("status")).toContainText("Deleting this thread");
+  await shot(page, "channel-06-thread-deleting");
+  release();
+});
+
 test("thread: the conversation and the state pane", async ({ page, api }) => {
   seedWorld(api);
   api.seedTool("Thread:t-1", {
@@ -143,6 +241,183 @@ test("thread: a subagent's session", async ({ page, api }) => {
   await shot(page, "thread-02-agent-session");
 });
 
+test("thread: the bookkeeping the channel told the agent", async ({
+  page,
+  api,
+}) => {
+  seedWorld(api);
+  // quiet deliveries — the agent hears them, it does not answer each:
+  // the rows stack like the channel's own timeline
+  for (const [number, title] of [
+    [1521, "fix(cloudflare): forward container memoryMib"],
+    [1523, "fix(cloudflare): validate cached container identity"],
+    [1525, "fix(cloudflare): deduplicate container image publication"],
+  ] as const) {
+    api.seedInput(
+      "Thread:t-1",
+      `[assigned] ${REPO}#${number} — pull, open — ${title}`,
+    );
+  }
+  api.seedInput(
+    "Thread:t-1",
+    `[channel] danieljvdm · ${new Date(NOW.getTime() - 3_600_000).toISOString()}\nopened pull request #1521 — fix(cloudflare): forward container memoryMib`,
+  );
+  api.seedInput(
+    "Thread:t-1",
+    `[channel] sam-goodwin · ${new Date(NOW.getTime() - 1_800_000).toISOString()}\nreview all three and merge what passes\nleave a note on anything you skip`,
+  );
+  api.seedInput("Thread:t-1", `[unassigned] ${REPO}#1525`);
+  // then the brief wakes it, and it answers once
+  api.seedTurn(
+    "Thread:t-1",
+    "Review the three pull requests and merge what passes.",
+    "Reviewing all three now; I will merge what is green.",
+  );
+  await openApp(page, threadPath("t-1"));
+  await expect(page.getByRole("main")).toContainText("Reviewing all three");
+  await shot(page, "thread-03-bookkeeping");
+});
+
+test("thread: the read_state card, opened", async ({ page, api }) => {
+  seedWorld(api);
+  api.seedTool("Thread:t-1", {
+    ask: "where do things stand?",
+    name: "read_state",
+    input: {},
+    output: {
+      state: {
+        id: "t-1",
+        name: "w-reconcile",
+        title: "Fix the reconcile bug",
+        status: "open",
+        turn: "agents",
+        assigned: [
+          {
+            ref: `${REPO}#148`,
+            kind: "pull",
+            state: "open",
+            title: "Add sumToN helper",
+            worktree: "/workspace/trees/pr-148",
+          },
+          { ref: `${REPO}#12`, kind: "issue", state: "open", title: "Bug" },
+        ],
+        agents: [
+          {
+            key: "engineer-1",
+            kind: "engineer",
+            brief: "Implement the fix",
+            state: "running",
+          },
+        ],
+      },
+    },
+    reply: "One engineer is still working.",
+  });
+  await openApp(page, threadPath("t-1"));
+  const card = page.getByRole("main").locator("[data-tool='read_state']");
+  await card.getByRole("button").first().click();
+  await expect(card).toContainText("Assigned · 2");
+  await shot(page, "thread-04-read-state");
+});
+
+test("thread: an agent's menu in the state pane", async ({ page, api }) => {
+  seedWorld(api);
+  await openApp(page, threadPath("t-1"));
+  await page
+    .getByRole("complementary", { name: "Thread state" })
+    .locator("[data-agent='engineer-1']")
+    .click({ button: "right" });
+  const item = page.getByRole("menuitem", { name: "Stop" });
+  await item.hover();
+  await expect(item).toHaveAttribute("data-highlighted", "");
+  await shot(page, "thread-05-agent-menu");
+});
+
+test("thread: the switches en masse, and a card reading the books", async ({
+  page,
+  api,
+}) => {
+  seedWorld(api);
+  api.seedThread({
+    id: "t-1",
+    name: "w-reconcile",
+    title: "Fix the reconcile bug",
+    turn: "you",
+    agents: [
+      {
+        key: "engineer-1",
+        kind: "engineer",
+        brief: "Implement the fix in pr-148's worktree",
+        state: "running",
+        startedAt: NOW.getTime() - 120_000,
+      },
+      {
+        key: "engineer-2",
+        kind: "engineer",
+        brief: "Add a regression test for the off-by-one",
+        state: "stopped",
+        startedAt: NOW.getTime() - 100_000,
+        settledAt: NOW.getTime() - 40_000,
+      },
+    ],
+  });
+  // the spawn call is still open on the wire, but the books say the
+  // operator stopped that engineer — the card reads the books
+  api.seedOpenRound("Thread:t-1", {
+    ask: "cover the fix with a regression test",
+    name: "spawn",
+    input: { brief: "Add a regression test for the off-by-one" },
+  });
+  await openApp(page, threadPath("t-1"));
+  await expect(page.getByRole("main").locator("[data-settled]")).toHaveText(
+    "stopped",
+  );
+  await expect(
+    page.getByRole("complementary", { name: "Thread state" }).getByRole("button", {
+      name: "Stop all",
+    }),
+  ).toBeVisible();
+  await shot(page, "thread-06-agent-switches");
+});
+
+test("thread: a run of worktrees folded, and another opened", async ({
+  page,
+  api,
+}) => {
+  seedWorld(api);
+  const worktree = (n: number) => ({
+    name: "worktree",
+    input: { ref: `${REPO}#${n}` },
+    output: { path: `/workspace/trees/pr-${n}`, branch: `pr-${n}` },
+  });
+  // five in a row: one line
+  api.seedTools("Thread:t-1", {
+    ask: "make a worktree for each of the five pulls",
+    calls: [1521, 1522, 1523, 1524, 1525].map(worktree),
+    reply: "Five worktrees ready.",
+  });
+  // three more, still running two of them
+  api.seedTools("Thread:t-1", {
+    ask: "and the three follow-ups",
+    calls: [
+      worktree(1526),
+      { ...worktree(1527), open: true },
+      { ...worktree(1528), open: true },
+    ],
+    reply: "",
+  });
+  await openApp(page, threadPath("t-1"));
+  const runs = page.getByRole("main").locator("[data-tool-run='worktree']");
+  await expect(runs).toHaveCount(2);
+  await expect(runs.nth(1)).toContainText("2 running…");
+  // the first one opened, to show the fold's inside
+  await runs.nth(0).getByRole("button", { expanded: false }).click();
+  await expect(
+    page.getByRole("main").locator("[data-tool='worktree']"),
+  ).toHaveCount(5);
+  await shot(page, "thread-07-tool-run");
+});
+
 test("review: the diff beside the chat", async ({ page, api }) => {
   seedWorld(api);
   api.seedTurn(
@@ -163,5 +438,7 @@ test("terminal: the thread's machine", async ({ page, api }) => {
   // status line is the socket's proof of life
   await expect(page.getByRole("main")).toContainText("connected");
   await expect.poll(() => api.terminal.opened.length).toBe(1);
-  await shot(page, "thread-02-terminal");
+  // ghostty paints its own canvas (cursor, glyph atlas) — the one shot
+  // that is not pixel-reproducible, a few hundred pixels run to run
+  await shot(page, "thread-02-terminal", { maxDiffPixels: 2_000 });
 });

@@ -88,7 +88,7 @@ const EngineerWorker = GeneralEngineer.pipe(
 );
 
 /** The THREAD AGENT — one session per thread, the task's whole
- *  conversation; governs entities, worktrees, subagents. */
+ *  conversation; governs its assigned refs, worktrees, subagents. */
 const ThreadWorker = Layer.suspend(() => ThreadAgentLive).pipe(
   Layer.provide(EngineerWorker),
   Layer.provide(SessionRepoLive),
@@ -129,7 +129,7 @@ const IngestWorker = ChannelEvents.pipe(
  *
  * - the channel  → ONE ChannelDO (`main`): the org-wide log, the
  *                  thread directory, webhook dedupe, `/channel` WS
- * - threads      → one ThreadDO per task (`t-…`): entities, agents,
+ * - threads      → one ThreadDO per task (`t-…`): assigned refs, agents,
  *                  `/thread/:id` WS; the thread's CONVERSATION is its
  *                  agent session (DriverCloudflare)
  * - sessions     → Durable Objects (`platform/DriverCloudflare.ts`);

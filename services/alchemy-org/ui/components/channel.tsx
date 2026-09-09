@@ -62,6 +62,7 @@ import {
   type ReactNode,
 } from "react";
 import { AlchemyMark } from "@/components/app-header";
+import { Answered, AnswerBox } from "@/components/notification";
 
 /* ── replies ──────────────────────────────────────────────────────── */
 
@@ -317,24 +318,31 @@ const CardRow = memo(
   }) => {
     const card = message.card!;
     const row = directory.find((entry) => entry.id === card.thread);
+    // the operator's answer, typed on the card itself; once sent it
+    // lives in the thread and the card says so
+    const [answering, setAnswering] = useState(false);
+    const [answered, setAnswered] = useState(false);
+    const open = () =>
+      card.review !== undefined
+        ? onOpenReview(
+            card.thread,
+            card.review.owner,
+            card.review.repo,
+            card.review.number,
+          )
+        : onOpenThread(card.thread);
 
     return (
       <div className="flex items-start gap-2 px-1 py-1.5">
         <Gutter at={message.at} />
-        <div className="min-w-0 flex-1 rounded-lg border border-border bg-card shadow-xs">
+        <div
+          data-card={message.id}
+          className="min-w-0 flex-1 rounded-lg border border-border bg-card shadow-xs"
+        >
           <div className="flex items-center gap-2 border-b border-border/60 px-3 py-1.5">
             <button
               type="button"
-              onClick={() =>
-                card.review !== undefined
-                  ? onOpenReview(
-                      card.thread,
-                      card.review.owner,
-                      card.review.repo,
-                      card.review.number,
-                    )
-                  : onOpenThread(card.thread)
-              }
+              onClick={open}
               className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 text-left"
               title={
                 card.review !== undefined
@@ -357,6 +365,56 @@ const CardRow = memo(
           </div>
           <div className="px-3 py-2 text-[13px]">
             <MarkdownText text={message.text} repo={message.repo} />
+          </div>
+          <div className="border-t border-border/60 px-3 py-1.5">
+            {answered ? (
+              <Answered onOpenThread={() => onOpenThread(card.thread)} />
+            ) : answering ? (
+              <AnswerBox
+                thread={card.thread}
+                title={card.title}
+                onAnswered={() => {
+                  setAnswering(false);
+                  setAnswered(true);
+                }}
+                onCancel={() => setAnswering(false)}
+              />
+            ) : (
+              <div className="flex items-center gap-1">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 gap-1 px-1.5 text-[11px] text-muted-foreground"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setAnswering(true);
+                  }}
+                  aria-label={`Answer: ${card.title}`}
+                >
+                  <Reply className="size-3" />
+                  Answer
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 gap-1 px-1.5 text-[11px] text-muted-foreground"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    open();
+                  }}
+                  aria-label={
+                    card.review !== undefined
+                      ? `Open the review: ${card.title}`
+                      : `Open the thread: ${card.title}`
+                  }
+                >
+                  <SquareArrowOutUpRight className="size-3" />
+                  {card.review !== undefined ? "Review" : "Thread"}
+                </Button>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -395,6 +453,7 @@ export const ChannelView = ({
   directory,
   live,
   active,
+  focus,
   onOpenThread,
   onOpenReview,
 }: {
@@ -402,6 +461,9 @@ export const ChannelView = ({
   directory: ReadonlyArray<ThreadDirectoryRow>;
   live: boolean;
   active: boolean;
+  /** A row to scroll to and flash — the bell's "jump to the card". The
+   *  nonce distinguishes a repeat jump to the same row. */
+  focus?: { seq: number; nonce: number };
   onOpenThread: (id: string) => void;
   onOpenReview: (
     thread: string,
@@ -485,6 +547,15 @@ export const ChannelView = ({
       1500,
     );
   }, []);
+  // the bell's jump lands here — after the frame that unhides the view
+  useEffect(() => {
+    if (focus === undefined) return;
+    // leaving the bottom: the stream must not yank back down on the
+    // next append
+    stickRef.current = false;
+    const frame = requestAnimationFrame(() => jumpTo(focus.seq));
+    return () => cancelAnimationFrame(frame);
+  }, [focus, jumpTo]);
 
   // stick to the bottom while the user is there; never yank them up
   useEffect(() => {
@@ -546,6 +617,7 @@ export const ChannelView = ({
           data-selected={selected ? "" : undefined}
           data-targeted={targeted ? "" : undefined}
           data-replying={replying ? "" : undefined}
+          data-flash={flash === message.seq ? "" : undefined}
           onMouseDown={onRowMouseDown}
           onClick={(event: MouseEvent) => {
             if (skipRowClick(event)) return;

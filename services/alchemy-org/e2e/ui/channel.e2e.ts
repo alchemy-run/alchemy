@@ -12,6 +12,7 @@ import {
   test,
   threadNav,
   threadPath,
+  type FakeApi,
 } from "./harness.ts";
 
 test("events, the operator, and the agent render as rows", async ({
@@ -526,7 +527,7 @@ test("a card from a thread renders and its header jumps to the thread", async ({
 
   await expect(main(page)).toContainText("CI is running.");
   await main(page)
-    .getByRole("button", { name: /Pull request opened for #12/ })
+    .getByRole("button", { name: "Pull request opened for #12", exact: true })
     .click();
   await expect(page).toHaveURL(new RegExp(`${threadPath("t-1")}$`));
 });
@@ -547,9 +548,14 @@ test("the bell counts new cards and its list jumps to the thread", async ({
   });
   await expect(bell).toBeVisible();
   await bell.click();
-  await page
-    .getByRole("dialog")
-    .getByRole("button", { name: /Merged #14/ })
+  const dialog = page.getByRole("dialog");
+  // the new one is marked, and the row names its thread
+  await expect(dialog.locator("[data-notification][data-unseen]")).toHaveCount(
+    1,
+  );
+  await expect(dialog).toContainText("w-fix");
+  await dialog
+    .getByRole("button", { name: "Open the thread: Merged #14" })
     .click();
   await expect(page).toHaveURL(new RegExp(`${threadPath("t-1")}$`));
 
@@ -557,6 +563,129 @@ test("the bell counts new cards and its list jumps to the thread", async ({
   await expect(
     page.getByRole("button", { name: /^notifications$/ }),
   ).toBeVisible();
+});
+
+const seedQuestionCard = (api: FakeApi) => {
+  api.seedThread({ id: "t-1", name: "w-fix", title: "Fix the bug" });
+  api.seedEvent("opened issue #12 — Bug in reconcile", { author: "octocat" });
+  return api.seedCard(
+    { thread: "t-1", title: "Which base branch?" },
+    "#14 is ready to open. Against `main`, or the `release/2.x` branch the issue names?",
+  );
+};
+
+test("a card is answered on the card: the words reach the thread's agent, quoting the question", async ({
+  page,
+  api,
+}) => {
+  seedQuestionCard(api);
+  await openApp(page);
+
+  const card = main(page).locator("[data-card]");
+  await expect(card).toContainText("Which base branch?");
+  await card.getByRole("button", { name: "Answer: Which base branch?" }).click();
+  // the box takes focus; the card row underneath did not get selected
+  const box = card.getByLabel("Your answer");
+  await expect(box).toBeFocused();
+  await expect(main(page).locator("[data-selected]")).toHaveCount(0);
+  await box.fill("main — release/2.x is frozen");
+  await box.press("ControlOrMeta+Enter");
+
+  // ONE steer, to the card's thread, the card's headline quoted first
+  await expect.poll(() => api.steered).toEqual([
+    {
+      thread: "t-1",
+      text: "> Which base branch?\n\nmain — release/2.x is frozen",
+    },
+  ]);
+  // the card now says so, and links into the thread
+  await expect(card.locator("[data-answered]")).toContainText("Answered");
+  await expect(card.getByLabel("Your answer")).toHaveCount(0);
+  await card.getByRole("button", { name: "see the thread" }).click();
+  await expect(page).toHaveURL(new RegExp(`${threadPath("t-1")}$`));
+});
+
+test("Escape drops an answer being typed; Cancel too — nothing is sent", async ({
+  page,
+  api,
+}) => {
+  seedQuestionCard(api);
+  await openApp(page);
+
+  const card = main(page).locator("[data-card]");
+  await card.getByRole("button", { name: "Answer: Which base branch?" }).click();
+  await card.getByLabel("Your answer").fill("hmm");
+  await card.getByLabel("Your answer").press("Escape");
+  await expect(card.getByLabel("Your answer")).toHaveCount(0);
+  await card.getByRole("button", { name: "Answer: Which base branch?" }).click();
+  await card.getByRole("button", { name: "Cancel" }).click();
+  await expect(card.getByLabel("Your answer")).toHaveCount(0);
+  // Send stays off for an empty answer
+  await card.getByRole("button", { name: "Answer: Which base branch?" }).click();
+  await expect(card.getByRole("button", { name: "Send" })).toBeDisabled();
+  expect(api.steered).toEqual([]);
+});
+
+test("the bell answers inline too — from any page, without leaving it", async ({
+  page,
+  api,
+}) => {
+  seedQuestionCard(api);
+  api.seedThread({ id: "t-2", name: "w-other", title: "Elsewhere" });
+  // the operator is on another thread when the question comes
+  await openApp(page, threadPath("t-2"));
+
+  await page.getByRole("button", { name: /notifications, 1 new/ }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog
+    .getByRole("button", { name: "Answer: Which base branch?" })
+    .click();
+  const box = dialog.getByLabel("Your answer");
+  await expect(box).toBeFocused();
+  await box.fill("main");
+  await dialog.getByRole("button", { name: "Send" }).click();
+
+  await expect.poll(() => api.steered).toEqual([
+    { thread: "t-1", text: "> Which base branch?\n\nmain" },
+  ]);
+  await expect(dialog.locator("[data-answered]")).toContainText("Answered");
+  // still where they were
+  await expect(page).toHaveURL(new RegExp(`${threadPath("t-2")}$`));
+  // and the link goes to the thread that asked
+  await dialog.getByRole("button", { name: "see the thread" }).click();
+  await expect(page).toHaveURL(new RegExp(`${threadPath("t-1")}$`));
+});
+
+test("the bell jumps to the card itself: home, scrolled to the row, flashed", async ({
+  page,
+  api,
+}) => {
+  // a long stream, the card early in it — the jump has to scroll
+  api.seedThread({ id: "t-1", name: "w-fix", title: "Fix the bug" });
+  const card = api.seedCard(
+    { thread: "t-1", title: "Which base branch?" },
+    "main or release/2.x?",
+  );
+  for (let n = 0; n < 40; n++) {
+    api.seedEvent(`opened issue #${100 + n} — filler ${n}`, {
+      author: "octocat",
+    });
+  }
+  api.seedThread({ id: "t-2", name: "w-other", title: "Elsewhere" });
+  await openApp(page, threadPath("t-2"));
+
+  await page.getByRole("button", { name: /notifications, 1 new/ }).click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Jump to the card: Which base branch?" })
+    .click();
+
+  await expect(page).toHaveURL(/\/$/);
+  const row = main(page).locator(`[data-seq="${card.seq}"]`);
+  await expect(row).toHaveAttribute("data-flash", "");
+  await expect(row).toBeInViewport();
+  // the popover went with the jump
+  await expect(page.getByRole("dialog")).toHaveCount(0);
 });
 
 test("the channel URL survives a reload", async ({ page, api }) => {

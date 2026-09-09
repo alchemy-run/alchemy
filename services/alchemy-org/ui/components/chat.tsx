@@ -31,7 +31,13 @@ import {
   ToolOutput,
 } from "@/components/ai-elements/tool";
 import { CommitHoverCard, RefHoverCard } from "@/components/ref-hover-card";
-import { hasToolCard, ToolCard } from "@/components/tool-card";
+import {
+  canFoldToolRun,
+  hasToolCard,
+  MIN_TOOL_RUN,
+  ToolCard,
+  ToolRun,
+} from "@/components/tool-card";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -71,9 +77,12 @@ import {
   GitMerge,
   GitPullRequestArrow,
   GitPullRequestClosed,
+  Hash,
+  Link2,
   MessageSquare,
   Square,
   Trash2,
+  Unlink2,
   Zap,
   type LucideIcon,
 } from "lucide-react";
@@ -443,12 +452,201 @@ const TextPart = ({
       </div>
     );
   }
+  const bookkeeping = parseThreadNote(text);
+  if (bookkeeping !== undefined) {
+    return <ThreadNoteRow note={bookkeeping} repo={repo} />;
+  }
   const world = parseWorldEvent(text);
   if (world === undefined) {
     return <MarkdownText text={text} repo={repo} />;
   }
   const { event, raw } = world;
   return <EventCard event={event} raw={raw} />;
+};
+
+/* ── the thread's bookkeeping, told to its agent ──────────────────── */
+
+/**
+ * What the thread puts in its agent's conversation on the channel's
+ * behalf (`Threads.assign`/`unassign`/`place` — see ThreadDO.ts):
+ *
+ *   [assigned] owner/repo#N — pull, open — title
+ *   [unassigned] owner/repo#N
+ *   [channel] login · 2026-09-08T20:25:21.187Z\ntext
+ *
+ * Rendered as timeline rows like the channel's own — never as the
+ * operator's speech bubble. The older `[attached]`/`[detached]`
+ * spelling still parses, so transcripts written before the rename
+ * keep their rows.
+ */
+type ThreadNote =
+  | {
+      kind: "assigned";
+      ref: string;
+      entity?: "issue" | "pull";
+      state?: string;
+      title?: string;
+    }
+  | { kind: "unassigned"; ref: string }
+  | { kind: "channel"; author: string; at?: number; text: string };
+
+const ASSIGNED = /^\[(?:assigned|attached)\] /;
+const UNASSIGNED = /^\[(?:unassigned|detached)\] /;
+
+const parseThreadNote = (text: string): ThreadNote | undefined => {
+  const trimmed = text.trim();
+  if (ASSIGNED.test(trimmed)) {
+    const [head, meta, ...rest] = trimmed.replace(ASSIGNED, "").split(" — ");
+    const [entity, state] = (meta ?? "").split(", ");
+    return {
+      kind: "assigned",
+      ref: (head ?? "").trim(),
+      entity: entity === "issue" || entity === "pull" ? entity : undefined,
+      state: state?.trim() || undefined,
+      title: rest.join(" — ").trim() || undefined,
+    };
+  }
+  if (UNASSIGNED.test(trimmed)) {
+    return {
+      kind: "unassigned",
+      ref: trimmed.replace(UNASSIGNED, "").trim(),
+    };
+  }
+  if (trimmed.startsWith("[channel] ")) {
+    const newline = trimmed.indexOf("\n");
+    const header = newline === -1 ? trimmed : trimmed.slice(0, newline);
+    const body = newline === -1 ? "" : trimmed.slice(newline + 1);
+    const [author, stamp] = header.slice("[channel] ".length).split(" · ");
+    const at = stamp === undefined ? Number.NaN : Date.parse(stamp.trim());
+    return {
+      kind: "channel",
+      author: (author ?? "").trim() || "channel",
+      at: Number.isFinite(at) ? at : undefined,
+      text: body,
+    };
+  }
+  return undefined;
+};
+
+/** The assigned ref's icon, read like the channel's event rows. */
+const entityFamily = (
+  entity: "issue" | "pull" | undefined,
+  state: string | undefined,
+): { icon: LucideIcon; className: string } => {
+  if (entity === "pull") {
+    if (state === "merged") return eventFamilyOf("PullRequestMerged");
+    if (state === "closed") return eventFamilyOf("PullRequestClosed");
+    return eventFamilyOf("PullRequestOpened");
+  }
+  if (entity === "issue") {
+    return eventFamilyOf(state === "closed" ? "IssueClosed" : "IssueOpened");
+  }
+  return { icon: Link2, className: "text-muted-foreground" };
+};
+
+/** `owner/repo#N` → a hover-carded link showing just `#N`. */
+const RefLink = ({ ref: full }: { ref: string }) => {
+  const match = full.match(/^([\w.-]+\/[\w.-]+)#(\d+)$/);
+  if (!match) {
+    return <span className="font-mono text-[11px]">{full}</span>;
+  }
+  return (
+    <RefHoverCard repo={match[1]!} number={Number(match[2])}>
+      <a
+        href={`https://github.com/${match[1]}/issues/${match[2]}`}
+        target="_blank"
+        rel="noreferrer"
+        title={full}
+        className="font-mono text-[11px] text-muted-foreground underline decoration-border underline-offset-2 hover:text-foreground hover:decoration-foreground"
+      >
+        #{match[2]}
+      </a>
+    </RefHoverCard>
+  );
+};
+
+const ThreadNoteRow = ({ note, repo }: { note: ThreadNote; repo?: string }) => {
+  const [open, setOpen] = useState(false);
+  const anchored = useAnchoredToggle();
+  if (note.kind === "assigned") {
+    const family = entityFamily(note.entity, note.state);
+    const Icon = family.icon;
+    return (
+      <div
+        data-thread-note="assigned"
+        className="flex w-full min-w-0 items-center gap-2 px-1 py-0.5 text-[13px]"
+      >
+        <Icon className={cn("size-3.5 shrink-0", family.className)} />
+        <span className="shrink-0 text-muted-foreground">assigned</span>
+        {note.title && (
+          <span className="min-w-0 flex-1 truncate" title={note.title}>
+            {note.title}
+          </span>
+        )}
+        {note.state && (
+          <span className="shrink-0 text-[11px] text-muted-foreground">
+            {note.state}
+          </span>
+        )}
+        <RefLink ref={note.ref} />
+      </div>
+    );
+  }
+  if (note.kind === "unassigned") {
+    return (
+      <div
+        data-thread-note="unassigned"
+        className="flex w-full min-w-0 items-center gap-2 px-1 py-0.5 text-[13px]"
+      >
+        <Unlink2 className="size-3.5 shrink-0 text-muted-foreground" />
+        <span className="shrink-0 text-muted-foreground">unassigned</span>
+        <span className="min-w-0 flex-1" />
+        <RefLink ref={note.ref} />
+      </div>
+    );
+  }
+  // a channel message, as said: one line, click for the whole thing
+  const firstLine = note.text.split("\n")[0] ?? "";
+  const more = note.text.trim() !== firstLine.trim();
+  return (
+    <div data-thread-note="channel" className="w-full text-[13px]">
+      <button
+        type="button"
+        disabled={!more}
+        onClick={(click) => anchored(click.currentTarget, () => setOpen(!open))}
+        className={cn(
+          "group flex w-full min-w-0 items-center gap-2 rounded px-1 py-0.5 text-left",
+          more && "cursor-pointer hover:bg-accent/40",
+        )}
+      >
+        <Hash className="size-3.5 shrink-0 text-muted-foreground" />
+        <span className="shrink-0 text-muted-foreground">{note.author}</span>
+        <span className="min-w-0 flex-1 truncate">
+          <LinkifiedText text={firstLine} repo={repo} />
+        </span>
+        {note.at !== undefined && (
+          <AtTooltip at={note.at}>
+            <span className="shrink-0 cursor-default font-mono text-[11px] text-muted-foreground">
+              {formatAt(note.at)}
+            </span>
+          </AtTooltip>
+        )}
+        {more && (
+          <ChevronDown
+            className={cn(
+              "size-3.5 shrink-0 text-muted-foreground opacity-0 transition-all group-hover:opacity-100",
+              !open && "-rotate-90",
+            )}
+          />
+        )}
+      </button>
+      {open && (
+        <div className="ml-[7px] whitespace-pre-wrap border-l border-border/60 py-1 pl-4 text-xs text-muted-foreground">
+          <LinkifiedText text={note.text} repo={repo} />
+        </div>
+      )}
+    </div>
+  );
 };
 
 /**
@@ -570,6 +768,91 @@ const ReasoningTrace = ({
       {open && <div className="mt-2 whitespace-pre-wrap">{text}</div>}
     </div>
   );
+};
+
+/**
+ * A user-role message that is the WORLD speaking, not the operator —
+ * a GitHub event, a note, a reminder, the thread's bookkeeping. These
+ * render as full-width timeline rows (the bubble around them reads as
+ * an ugly double border), and consecutive ones stack.
+ */
+const isBare = (message: UIMessage): boolean => {
+  const kind = (message.metadata as { kind?: string } | undefined)?.kind;
+  return (
+    message.role === "user" &&
+    (kind !== undefined ||
+      message.parts.every(
+        (part) =>
+          part.type === "text" &&
+          (parseWorldEvent(part.text) !== undefined ||
+            part.text.trim().startsWith("<note>") ||
+            part.text.trim().startsWith("[reminder]") ||
+            parseThreadNote(part.text) !== undefined),
+      ))
+  );
+};
+
+type Part = UIMessage["parts"][number];
+type ToolPart = Extract<Part, { type: "dynamic-tool" }>;
+
+/** How a message's parts render: one at a time, or a RUN of the same
+ *  tool folded into one line. */
+type RenderItem =
+  | { readonly kind: "part"; readonly index: number; readonly part: Part }
+  | {
+      readonly kind: "run";
+      readonly index: number;
+      readonly toolName: string;
+      readonly calls: ReadonlyArray<ToolPart>;
+    };
+
+/**
+ * Fold a message's parts: {@link MIN_TOOL_RUN} or more consecutive
+ * calls of one card-bearing tool become a run (the step boundaries
+ * between sequential ticks are transparent); text, reasoning, and a
+ * different tool end the run. Parts the caller rules out (superseded
+ * cards, orphans) are dropped before folding, so they neither join
+ * nor break a run.
+ */
+const foldToolRuns = (
+  parts: ReadonlyArray<Part>,
+  skip: (part: Part, index: number) => boolean,
+): ReadonlyArray<RenderItem> => {
+  const items: Array<RenderItem> = [];
+  let run: Array<{ index: number; part: ToolPart }> = [];
+  const flush = () => {
+    if (run.length >= MIN_TOOL_RUN) {
+      items.push({
+        kind: "run",
+        index: run[0]!.index,
+        toolName: run[0]!.part.toolName,
+        calls: run.map((entry) => entry.part),
+      });
+    } else {
+      for (const entry of run) {
+        items.push({ kind: "part", index: entry.index, part: entry.part });
+      }
+    }
+    run = [];
+  };
+  parts.forEach((part, index) => {
+    if (skip(part, index)) return;
+    // a step boundary between two ticks of the same tool is not a break
+    if (part.type === "step-start") return;
+    if (
+      part.type === "dynamic-tool" &&
+      part.toolName &&
+      canFoldToolRun(part.toolName)
+    ) {
+      if (run.length > 0 && run[0]!.part.toolName !== part.toolName) flush();
+      run.push({ index, part });
+      return;
+    }
+    flush();
+    items.push({ kind: "part", index, part });
+  });
+  flush();
+  return items;
 };
 
 /* ── the chat ─────────────────────────────────────────────────────── */
@@ -805,30 +1088,27 @@ const ChatTranscript = ({
                     | undefined;
                   const kind = meta?.kind;
                   // DAY DIVIDER: a rule wherever the calendar day advances
-                  const previousAt = (
-                    messages[messageIndex - 1]?.metadata as
-                      | { at?: number }
-                      | undefined
-                  )?.at;
+                  // — against the nearest earlier message that HAS a clock
+                  // (a message without one must not read as a new day)
+                  let previousAt: number | undefined;
+                  for (let back = messageIndex - 1; back >= 0; back--) {
+                    previousAt = (
+                      messages[back]?.metadata as { at?: number } | undefined
+                    )?.at;
+                    if (previousAt !== undefined) break;
+                  }
                   const day = dayOf(meta?.at);
                   const newDay =
                     day !== undefined &&
                     (messageIndex === 0 || day !== dayOf(previousAt));
-                  // world events and notes carry their own card chrome — the
-                  // user-bubble around them reads as an ugly double border
-                  const bare =
-                    message.role === "user" &&
-                    (kind !== undefined ||
-                      message.parts.every(
-                        (part) =>
-                          part.type === "text" &&
-                          (parseWorldEvent(part.text) !== undefined ||
-                            part.text.trim().startsWith("<note>") ||
-                            part.text.trim().startsWith("[reminder]") ||
-                            // the channel's bookkeeping, told to the thread
-                            part.text.trim().startsWith("[attached]") ||
-                            part.text.trim().startsWith("[detached]")),
-                      ));
+                  const bare = isBare(message);
+                  // consecutive timeline rows STACK like the channel's — the
+                  // conversation's message gap is for speech, not for a log
+                  const stacked =
+                    bare &&
+                    !newDay &&
+                    messageIndex > 0 &&
+                    isBare(messages[messageIndex - 1]!);
                   return (
                     <div key={message.id} className="contents">
                       {newDay && meta?.at !== undefined && (
@@ -861,6 +1141,7 @@ const ChatTranscript = ({
                         }
                         className={cn(
                           "-mx-2 -my-1.5 flex items-start gap-2 rounded-md border-l-2 border-transparent px-1.5 py-1.5 transition-colors",
+                          stacked && "-mt-8",
                           // the row under the pointer lifts; a selected one stays lit
                           selection.has(message.id) ||
                             menuIds.includes(message.id)
@@ -892,7 +1173,33 @@ const ChatTranscript = ({
                                 "w-full max-w-full group-[.is-user]:bg-transparent group-[.is-user]:px-0 group-[.is-user]:py-0",
                             )}
                           >
-                            {message.parts.map((part, index) => {
+                            {foldToolRuns(message.parts, (part, index) =>
+                              part.type === "text"
+                                ? isReplyText(index)
+                                : part.type === "dynamic-tool"
+                                  ? // orphan part (an output whose call this
+                                    // client never saw) — nothing renderable;
+                                    // restated in a later message — that one
+                                    // renders the card
+                                    !part.toolName || superseded(message, part)
+                                  : false,
+                            ).map((item) => {
+                              if (item.kind === "run") {
+                                return (
+                                  <ToolRun
+                                    key={item.index}
+                                    toolName={item.toolName}
+                                    calls={item.calls.map((call) => ({
+                                      toolName: call.toolName,
+                                      state: call.state,
+                                      input: call.input,
+                                      output: call.output,
+                                      errorText: call.errorText,
+                                    }))}
+                                  />
+                                );
+                              }
+                              const { part, index } = item;
                               if (part.type === "reasoning") {
                                 const key = traceKey(part.text);
                                 return (
@@ -906,7 +1213,6 @@ const ChatTranscript = ({
                                 );
                               }
                               if (part.type === "text") {
-                                if (isReplyText(index)) return null;
                                 return (
                                   <TextPart
                                     key={index}
@@ -918,12 +1224,6 @@ const ChatTranscript = ({
                               }
                               if (part.type === "dynamic-tool") {
                                 const tool = part;
-                                // orphan part (an output whose call this
-                                // client never saw) — nothing renderable
-                                if (!tool.toolName) return null;
-                                // restated in a later message — that one
-                                // renders the card
-                                if (superseded(message, tool)) return null;
                                 const card = (
                                   <ToolCard
                                     key={index}

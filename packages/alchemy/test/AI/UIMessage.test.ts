@@ -9,6 +9,7 @@ import type { SessionObservation } from "@/AI/Events.ts";
 import {
   makeChunkTranslator,
   observationSpan,
+  STOPPED_TEXT,
   toUIMessages,
 } from "@/AI/UIMessage.ts";
 import { describe, expect, it } from "alchemy-test";
@@ -137,6 +138,14 @@ describe("aborted", () => {
       "a-7",
     ]);
     expect((messages[1]!.metadata as { aborted?: boolean }).aborted).toBe(true);
+    // the call the stop cut short is CLOSED, not running forever: the
+    // round that owed its result is over
+    expect(messages[1]!.parts[1]).toMatchObject({
+      type: "dynamic-tool",
+      toolCallId: "call-1",
+      state: "output-error",
+      errorText: STOPPED_TEXT,
+    });
     expect(messages[3]!.parts).toEqual([]);
     expect((messages[3]!.metadata as { aborted?: boolean }).aborted).toBe(true);
     expect(messages[5]!.metadata).not.toHaveProperty("aborted");
@@ -157,10 +166,16 @@ describe("aborted", () => {
     expect(opened.done).toBe(false);
     const stopped = translate(cut[2]!);
     expect(stopped.done).toBe(true);
+    // the open call is closed on the wire too, before the step ends
     expect(stopped.chunks.map((chunk) => chunk.type)).toEqual([
+      "tool-output-error",
       "finish-step",
       "finish",
     ]);
+    expect(stopped.chunks[0]).toMatchObject({
+      toolCallId: "call-1",
+      errorText: STOPPED_TEXT,
+    });
     expect(stopped.chunks.at(-1)).toMatchObject({
       messageMetadata: { aborted: true },
     });
@@ -259,5 +274,37 @@ describe("in-flight tool calls", () => {
     for (const message of toUIMessages(landed)) {
       expect(observationSpan(landed, message.id).length).toBeGreaterThan(0);
     }
+  });
+
+  /**
+   * The session ENDS with the calls still open (`Sessions.stop`, the
+   * supervision cascade, a delete's settle): the round is cut and no
+   * `tool-result` will ever land — the projection closes the calls, or
+   * a spawn card would say "working" over a session that is gone.
+   */
+  it("a settle closes the calls the cut round still owed — snapshot and live", () => {
+    const settled: Array<SessionObservation> = [
+      ...landed,
+      { ...base, type: "settled", seq: 5 },
+    ] as Array<SessionObservation>;
+    const parts = toUIMessages(settled)[1]!.parts as Array<any>;
+    // the answered call keeps its answer; the open one is closed
+    expect(parts[2].state).toBe("output-available");
+    expect(parts[3]).toMatchObject({
+      toolCallId: "call-b",
+      state: "output-error",
+      errorText: STOPPED_TEXT,
+    });
+
+    const translate = makeChunkTranslator();
+    for (const observation of landed.slice(1)) translate(observation);
+    const end = translate(settled[5]!);
+    expect(end.done).toBe(true);
+    expect(end.chunks.map((chunk) => chunk.type)).toEqual([
+      "tool-output-error",
+      "finish-step",
+      "finish",
+    ]);
+    expect(end.chunks[0]).toMatchObject({ toolCallId: "call-b" });
   });
 });

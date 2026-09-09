@@ -11,7 +11,7 @@ const seed = (api: import("./harness.ts").FakeApi) => {
     id: "t-1",
     name: "w-viz",
     title: "Terminal charts",
-    entities: [
+    assigned: [
       {
         ref: `${REPO}#147`,
         kind: "pull",

@@ -1,7 +1,9 @@
 import * as AI from "alchemy/AI";
 import * as Git from "alchemy/Git";
+import * as Cause from "effect/Cause";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Predicate from "effect/Predicate";
 import * as S from "effect/Schema";
 import { parseEntityRef } from "../channel/Channel.ts";
@@ -14,7 +16,7 @@ import { pullWorktreeKey, THREAD_TERM, Threads } from "./Threads.ts";
 /**
  * The THREAD AGENT — one durable session per thread (`t-<id>`), the
  * task's whole life; the thread's conversation IS this session's
- * transcript. It governs a set of GitHub entities, one machine with a
+ * transcript. It governs the issues and pulls assigned to it, one machine with a
  * worktree per pull request, and the engineers it kicks off. Its
  * engineers act on GitHub DIRECTLY: they push to the pull requests the
  * thread governs and open new ones to solve issues — there is no
@@ -68,7 +70,7 @@ const state = AI.Thing(
     title: S.String,
     status: S.Literals(["open", "closed"]),
     turn: S.Literals(["you", "agents", "others", "idle"]),
-    entities: S.Array(
+    assigned: S.Array(
       S.Struct({
         ref: S.String,
         kind: S.Literals(["issue", "pull"]),
@@ -88,11 +90,11 @@ const state = AI.Thing(
   }),
 )`
   This thread's full state: meta (name, title, status, whose turn), the
-  GitHub entities it governs (with their worktrees), and its subagents.`;
+  issues and pulls assigned to it (with their worktrees), and its subagents.`;
 
 /* ── declared failures ──────────────────────────────────────────── */
 
-class NotAttached extends Data.TaggedError("NotAttached")<{
+class NotAssigned extends Data.TaggedError("NotAssigned")<{
   message: string;
 }> {}
 class CheckoutFailed extends Data.TaggedError("CheckoutFailed")<{
@@ -121,11 +123,11 @@ export const ThreadAgentLive = ThreadAgent.make(
       );
     });
 
-    // an attach is VERIFIED against GitHub, never taken on the model's word
+    // an assignment is VERIFIED against GitHub, never taken on the model's word
     const lookup = yield* makeEntityLookup;
 
-    const attach = yield* AI.Tool("attach")`
-      Attach ${ref} to this thread — you govern it from now on: its
+    const assign = yield* AI.Tool("assign")`
+      Assign ${ref} to this thread — you govern it from now on: its
       events arrive here, closing the thread settles it. The ref is
       looked up on GitHub; answers ${AI.out(kind, entityTitle)} as
       GitHub has them. Fails with ${BadRef} when the ref is not
@@ -135,16 +137,16 @@ export const ThreadAgentLive = ThreadAgent.make(
       Effect.fn(function* (p: { ref: string }) {
         const entity = yield* lookup(p.ref);
         // by the agent itself: the tool call is already in its conversation
-        yield* threads.attach(id, [entity], { by: "agent" });
+        yield* threads.assign(id, [entity], { by: "agent" });
         return { kind: entity.kind, title: entity.title };
       }),
     );
 
-    const detach = yield* AI.Tool("detach")`
-      Detach ${ref} from this thread — its events stop arriving; the
-      entity itself is untouched.`(
+    const unassign = yield* AI.Tool("unassign")`
+      Unassign ${ref} from this thread — its events stop arriving; the
+      issue or pull request itself is untouched.`(
       Effect.fn(function* (p: { ref: string }) {
-        yield* threads.detach(id, p.ref, { by: "agent" });
+        yield* threads.unassign(id, p.ref, { by: "agent" });
       }),
     );
 
@@ -154,7 +156,7 @@ export const ThreadAgentLive = ThreadAgent.make(
       tree. Answers ${AI.out(path, branch)}; subagents you spawn
       should be told to work there. Fails with ${BadRef} for a ref
       that is not a pull request of a connected repository,
-      ${NotAttached} when it is not attached here, ${CheckoutFailed}
+      ${NotAssigned} when it is not assigned here, ${CheckoutFailed}
       when git refuses.`(
       Effect.fn(function* (p: { ref: string }) {
         const parsed = parseEntityRef(p.ref);
@@ -164,10 +166,10 @@ export const ThreadAgentLive = ThreadAgent.make(
           );
         }
         const state = yield* current;
-        if (!state.entities.some((e) => e.ref === p.ref)) {
+        if (!state.assigned.some((e) => e.ref === p.ref)) {
           return yield* Effect.fail(
-            new NotAttached({
-              message: `${p.ref} is not attached — attach first`,
+            new NotAssigned({
+              message: `${p.ref} is not assigned — assign first`,
             }),
           );
         }
@@ -226,9 +228,22 @@ export const ThreadAgentLive = ThreadAgent.make(
         // this dispatch was in flight must not come back as a row
         const settle = (state: "done" | "failed" | "stopped") =>
           threads.agentSettle(id, key, state, Date.now());
+        // `parent: session` from inside this round puts the engineer
+        // under the thread's supervision: the operator stopping the
+        // thread (abort, stop, delete) settles the engineer too. This
+        // handler is then INTERRUPTED — the books say stopped, not
+        // failed; a real failure of the dispatch says failed.
         const outcome = yield* engineer
           .dispatch(p.brief, { key, parent: session })
-          .pipe(Effect.onError(() => settle("failed")));
+          .pipe(
+            Effect.onExit((exit) =>
+              Exit.isFailure(exit)
+                ? settle(
+                    Cause.hasInterruptsOnly(exit.cause) ? "stopped" : "failed",
+                  )
+                : Effect.void,
+            ),
+          );
         // the operator's off switch answers the dispatch with the
         // Stopped outcome — the books say stopped, not done
         yield* settle(
@@ -280,7 +295,7 @@ export const ThreadAgentLive = ThreadAgent.make(
             title: found.title,
             status: found.status,
             turn: found.turn,
-            entities: found.entities,
+            assigned: found.assigned,
             agents: found.agents.map((a) => ({
               key: a.key,
               kind: a.kind,
@@ -305,10 +320,10 @@ export const ThreadAgentLive = ThreadAgent.make(
     // conversation history carries what happened; ${readState} answers
     // what is.
     return AI.fragment`
-      You govern ONE thread — a task over a set of GitHub entities
+      You govern ONE thread — a task over the issues and pull requests assigned to it
       (issues, pull requests, possibly across repositories). This
       session is the thread's whole conversation: the operator
-      speaks to you here, GitHub events for your entities arrive
+      speaks to you here, GitHub events for what is assigned arrive
       here (prefixed by their payload), and your subagents report
       back here. You OWN the work end to end: your engineers push
       commits to the pull requests you govern and open new pull
@@ -320,17 +335,18 @@ export const ThreadAgentLive = ThreadAgent.make(
       ${primaryName} is the primary repository, and a bare "#N" in a
       brief or a message means ${primaryName}#N — never ask which
       repository is meant. The conversation is its record — what you
-      attached, spawned, and were told all happened here, including
-      what the channel attached on your behalf ("[attached] …"
-      messages). ${readState} answers the current books (entities,
-      worktrees, subagents) when you need a snapshot.
+      were assigned, spawned, and were told all happened here,
+      including what the channel assigned on your behalf
+      ("[assigned] …" messages). ${readState} answers the current
+      books (what is assigned, worktrees, subagents) when you need a
+      snapshot.
 
       Your machine is one sandbox for the whole thread. Each pull
       request you govern gets its OWN worktree (${worktree}); tell
       every subagent which tree to work in. ${spawn} runs an
-      engineer to completion and hands you its report. ${attach}
-      and ${detach} change what you govern — the moment an engineer
-      reports a pull request it opened, ${attach} it: an unattached
+      engineer to completion and hands you its report. ${assign}
+      and ${unassign} change what you govern — the moment an engineer
+      reports a pull request it opened, ${assign} it: an unassigned
       pull has no review tab and its GitHub events route nowhere.
       ${postCard} is the one way to reach the operator in the channel
       — use it when work landed or you are blocked on them, never as

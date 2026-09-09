@@ -12,7 +12,7 @@ import type { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
  *
  * - the channel messages PLACED into it (the rows stay in the channel,
  *   tagged; the membership lives here),
- * - the GitHub entities it governs (refs + last-known state + the
+ * - the GitHub issues and pulls assigned to it (refs + last-known state + the
  *   worktree each PR gets in the thread's one sandbox),
  * - the subagent registry (who is running on whose brief),
  * - the meta the rail shows (name, title, status, turn).
@@ -20,7 +20,7 @@ import type { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 
 export type Turn = "you" | "agents" | "others" | "idle";
 
-export interface ThreadEntity {
+export interface Assignment {
   /** `owner/repo#N`. */
   readonly ref: string;
   readonly kind: "issue" | "pull";
@@ -52,7 +52,7 @@ export interface ThreadState {
   readonly turn: Turn;
   readonly createdAt: number;
   readonly updatedAt: number;
-  readonly entities: ReadonlyArray<ThreadEntity>;
+  readonly assigned: ReadonlyArray<Assignment>;
   readonly agents: ReadonlyArray<ThreadAgentRow>;
   /** Channel message ids placed into this thread, oldest first. */
   readonly members: ReadonlyArray<string>;
@@ -78,10 +78,10 @@ export interface ByOptions {
 
 /**
  * THE THREAD, as an object: the one API for everything a thread is —
- * its books (entities, worktrees, agents, members, the rail's meta)
+ * its books (assigned refs, worktrees, agents, members, the rail's meta)
  * AND its agent. Callers never hold the agent: they call the thread,
  * and the thread manipulates its agent — `brief` speaks to it,
- * `attach`/`detach`/`place`/`noteEvent` update the books and put the
+ * `assign`/`unassign`/`place`/`noteEvent` update the books and put the
  * fact in the agent's conversation, `agentStop`/`agentResume`/
  * `agentDelete` operate an engineer's session and its row together,
  * `remove` tears the whole thing down. Deterministic verbs; the
@@ -125,9 +125,11 @@ export class Threads extends Context.Service<
       messageIds: ReadonlyArray<string>,
       options?: ByOptions,
     ) => Effect.Effect<ThreadState>;
-    readonly attach: (
+    /** ASSIGN issues / pull requests to the thread — it governs them
+     *  from now on: their events route here; each pull gets a worktree. */
+    readonly assign: (
       id: string,
-      entities: ReadonlyArray<{
+      assigned: ReadonlyArray<{
         readonly ref: string;
         readonly kind: "issue" | "pull";
         readonly title: string;
@@ -135,7 +137,7 @@ export class Threads extends Context.Service<
       }>,
       options?: ByOptions,
     ) => Effect.Effect<ThreadState>;
-    readonly detach: (
+    readonly unassign: (
       id: string,
       ref: string,
       options?: ByOptions,
@@ -146,7 +148,7 @@ export class Threads extends Context.Service<
       id: string,
       event: GitHub.RepositoryEvent,
     ) => Effect.Effect<ThreadState>;
-    /** Record a worktree on an attached entity. */
+    /** Record a worktree on an assigned pull request. */
     readonly setWorktree: (
       id: string,
       ref: string,
@@ -191,6 +193,18 @@ export class Threads extends Context.Service<
       id: string,
       key: string,
     ) => Effect.Effect<ThreadState | undefined>;
+    /**
+     * The same switches EN MASSE: `keys` names the agents (a
+     * selection), or every agent of the thread when omitted. Each is
+     * stopped/resumed/deleted as its single verb would — concurrently,
+     * a failure on one contained so the rest still land. Answers the
+     * books afterwards; `undefined` when there is no such thread.
+     */
+    readonly agents: (
+      id: string,
+      verb: "stop" | "resume" | "delete",
+      keys?: ReadonlyArray<string>,
+    ) => Effect.Effect<ThreadState | undefined>;
     /** A card in the channel, from this thread. */
     readonly postCard: (
       id: string,
@@ -223,7 +237,7 @@ export class Threads extends Context.Service<
      *    stops — before a tree it writes into goes;
      * 3. its pull requests' worktrees on that machine;
      * 4. its DO and every channel projection — the directory row, the
-     *    `ref → thread` ownership of its entities, the placed tags on
+     *    `ref → thread` ownership of its assigned refs, the placed tags on
      *    its members (the channel rows themselves stay; they are the
      *    channel's history). Last, so the thread reads as "deleting"
      *    until everything under it is actually gone.

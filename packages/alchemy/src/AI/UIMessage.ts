@@ -40,6 +40,11 @@ export const inputToUIMessage = (
  * arrives as its encoded record (`{ _tag, message, … }`), a plain
  * failure as a string. `String(record)` would read `[object Object]`.
  */
+/** What a call cut short by the round's end says in place of its
+ *  result — the operator's stop, or the session's settle. */
+export const STOPPED_TEXT =
+  "stopped — the round ended before this call answered";
+
 export const renderToolFailure = (output: unknown): string => {
   if (typeof output === "string") return output;
   if (typeof output === "object" && output !== null) {
@@ -117,6 +122,17 @@ export const toUIMessages = (
   };
   /** A call's part — the one already announced by its `tool-call`
    *  row, else a new one. */
+  /** Every call still awaiting its result ends as a failure that says
+   *  so — the round that owed the result is over. */
+  const closeOpenCalls = (why: string) => {
+    for (const part of toolParts.values()) {
+      if (part.state === "input-available") {
+        part.state = "output-error";
+        part.errorText = why;
+      }
+    }
+  };
+
   const toolPart = (
     current: { parts: Array<UIMessagePart<any, any>> },
     call: { id: string; name: string; input: unknown },
@@ -230,11 +246,20 @@ export const toUIMessages = (
         });
         break;
       }
+      // a settle cuts a round the same way an abort does (`Sessions.stop`,
+      // the supervision cascade): calls the round had in flight never
+      // get their `tool-result` row — the projection closes them, or a
+      // card would say "running" over a session that is gone
+      case "settled": {
+        closeOpenCalls(STOPPED_TEXT);
+        break;
+      }
       case "aborted": {
         // the operator's stop ends the burst: the message it cut short
         // wears `aborted` (the live translator's `finish` carries the
         // same metadata); a stop before any sampling landed stands
         // alone. The next sampling starts a fresh assistant message.
+        closeOpenCalls(STOPPED_TEXT);
         if (assistant !== undefined) {
           assistant.message.metadata = {
             ...(assistant.message.metadata as object | undefined),
@@ -371,12 +396,27 @@ export const makeChunkTranslator = () => {
   // (a subscribe that opened mid-burst) must be dropped, or the AI
   // SDK fabricates an orphan tool part with no name and no input
   const knownCalls = new Set<string>();
+  // announced calls still owed a result — closed as stopped when the
+  // round is cut (abort, settle) instead of running forever in the view
+  const openCalls = new Set<string>();
 
   return (
     observation: SessionObservation,
   ): { chunks: Array<UIMessageChunk>; done: boolean } => {
     const chunks: Array<UIMessageChunk> = [];
     let done = false;
+
+    const closeOpenCalls = () => {
+      for (const toolCallId of openCalls) {
+        chunks.push({
+          type: "tool-output-error",
+          toolCallId,
+          errorText: STOPPED_TEXT,
+          dynamic: true,
+        });
+      }
+      openCalls.clear();
+    };
 
     const closeStep = () => {
       if (openStep) {
@@ -397,6 +437,9 @@ export const makeChunkTranslator = () => {
           chunks.push({
             type: "start",
             messageId: `a-live-${observation.tick}`,
+            // the wall clock, as a snapshot's message would carry it —
+            // the view's day dividers read it
+            messageMetadata: { at: observation.at },
           });
           started = true;
         }
@@ -407,6 +450,7 @@ export const makeChunkTranslator = () => {
           liveStepTick = observation.tick;
         }
         knownCalls.add(observation.toolCallId);
+        openCalls.add(observation.toolCallId);
         chunks.push({
           type: "tool-input-available",
           toolCallId: observation.toolCallId,
@@ -418,7 +462,11 @@ export const makeChunkTranslator = () => {
       }
       case "assistant": {
         if (!started) {
-          chunks.push({ type: "start", messageId: `a-${observation.seq}` });
+          chunks.push({
+            type: "start",
+            messageId: `a-${observation.seq}`,
+            messageMetadata: { at: observation.at },
+          });
           started = true;
         }
         // the step a live tool-call of THIS sampling already opened is
@@ -454,6 +502,7 @@ export const makeChunkTranslator = () => {
         }
         for (const call of observation.toolCalls) {
           knownCalls.add(call.id);
+          openCalls.add(call.id);
           chunks.push({
             type: "tool-input-available",
             toolCallId: call.id,
@@ -474,6 +523,7 @@ export const makeChunkTranslator = () => {
         // orphaned result (call announced before this stream opened):
         // drop it — the durable snapshot restates the full pair
         if (!knownCalls.has(observation.toolCallId)) break;
+        openCalls.delete(observation.toolCallId);
         chunks.push(
           observation.isFailure
             ? {
@@ -492,6 +542,9 @@ export const makeChunkTranslator = () => {
         break;
       }
       case "settled": {
+        // the round is cut with the session: calls it had in flight
+        // never land their results — closed here, as the snapshot does
+        closeOpenCalls();
         closeStep();
         // a stream must resolve cleanly even when the session ended
         // before producing anything (e.g. steering a settled session)
@@ -504,6 +557,7 @@ export const makeChunkTranslator = () => {
         // the operator stopped the round: whatever streamed stays, the
         // message wears `aborted` (as the snapshot's does), the turn
         // is over — the client's status returns to ready
+        closeOpenCalls();
         closeStep();
         if (!started) {
           chunks.push({ type: "start", messageId: `abort-${observation.seq}` });

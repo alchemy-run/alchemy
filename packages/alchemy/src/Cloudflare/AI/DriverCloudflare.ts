@@ -51,6 +51,7 @@ import {
   makeSessionEngine,
   reminderInput,
   stoppedByOperator,
+  supervised,
   type SessionEngine,
 } from "../../AI/DriverCore.ts";
 import type { DriverError } from "../../AI/Errors.ts";
@@ -1019,7 +1020,11 @@ export const DurableObjectHost: Layer.Layer<
           sessions.getByName(sessionName(termName, key));
         const mint = () => `session-${mintPrefix}-${minted++}`;
 
-        return {
+        // `supervised`: a dispatch made from inside another session's
+        // round (the org's thread agent handing an engineer its brief)
+        // joins that session's cascade — stop the thread, its
+        // engineers' DOs settle too (see DriverCore)
+        return supervised(termName, {
           send: (item: unknown, options?: Parameters<Actor["send"]>[1]) =>
             stub(options?.key ?? mint())
               .deliver(item, { parent: options?.parent, wake: options?.wake })
@@ -1049,7 +1054,7 @@ export const DurableObjectHost: Layer.Layer<
                 "DriverCloudflare: interrupt() is process-local; settle sessions by key instead",
               ),
             ),
-        } as Actor;
+        } as Actor);
       }) as Effect.Effect<Actor, DriverError, never>;
 
     /** The gateway: route a WebSocket upgrade into the session's own

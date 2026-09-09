@@ -154,6 +154,55 @@ export const reminderInput = (note: string): ReminderInput => ({
 /** The outcome an operator's `Sessions.stop`/`remove` settles with. */
 export const stoppedByOperator = { _tag: "Stopped", by: "operator" } as const;
 
+/**
+ * The SUPERVISION seam a round exposes to the code running inside it:
+ * the session's key, and the register a child joins so the session's
+ * end (a settle, the operator's abort) cascades onto it. Provided
+ * alongside `AI.Thread` to handlers only — never a public service.
+ */
+export interface SupervisionService {
+  readonly term: string;
+  readonly key: string;
+  readonly adopt: (agent: string, childKey: string, actor: Actor) => void;
+}
+
+export class Supervision extends Context.Service<
+  Supervision,
+  SupervisionService
+>()("alchemy/AI/Supervision") {}
+
+/**
+ * Put an Actor under the AMBIENT round's supervision: a `dispatch`
+ * made from inside a session's round, naming that session as the
+ * child's `parent`, registers the child with it — exactly as the
+ * driver's own `dispatch` intrinsic and dispatch doors do — so
+ * stopping or aborting the parent settles the child too. A charter's
+ * own tool that hands work to a named agent directly (the org's
+ * thread→engineer shape) is otherwise a supervision hole: the parent
+ * dies, its worker runs on.
+ *
+ * Outside a round (nothing ambient), or naming another session as
+ * the parent, the dispatch is exactly the plain one. `send` is left
+ * alone on purpose: a fire-and-forget hand-off is a peer, not a
+ * worker the caller waits on.
+ */
+export const supervised = (agent: string, actor: Actor): Actor => ({
+  ...actor,
+  dispatch: (item, options) =>
+    options?.key === undefined || options.parent === undefined
+      ? actor.dispatch(item, options)
+      : Effect.flatMap(Effect.serviceOption(Supervision), (ambient) => {
+          if (
+            Option.isSome(ambient) &&
+            ambient.value.term === options.parent!.term &&
+            ambient.value.key === options.parent!.key
+          ) {
+            ambient.value.adopt(agent, options.key!, actor);
+          }
+          return actor.dispatch(item, options);
+        }),
+});
+
 /** Unwrap an inbox row into its thread value + observation kind. */
 export const inputProvenance = (
   input: unknown,
@@ -1877,6 +1926,16 @@ export const makeSessionEngine = (
       options.remind(s.key, Date.now() + Duration.toMillis(delay), note),
   });
 
+  /** The round's supervision seam — `supervised` actors register the
+   *  children they dispatch from inside it here. */
+  const makeSupervision = (s: EngineSession): SupervisionService => ({
+    term,
+    key: s.key,
+    adopt: (agent, childKey, actor) => {
+      s.children.set(`${agent}:${childKey}`, { key: childKey, actor });
+    },
+  });
+
   const makeTickService = (s: EngineSession): TickService => ({
     count: s.tick,
     say: (note) =>
@@ -1892,6 +1951,7 @@ export const makeSessionEngine = (
       effect.pipe(
         Effect.provideService(Thread, makeThreadService(s)),
         Effect.provideService(Tick, makeTickService(s)),
+        Effect.provideService(Supervision, makeSupervision(s)),
         Effect.provideService(PersistentRef.Store, s.stateStore),
         // the FRAME: refs are namespaced by the session's identity
         PersistentRef.within(term, s.key),

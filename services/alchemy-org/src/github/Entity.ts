@@ -24,7 +24,7 @@ export class BadRef extends Data.TaggedError("BadRef")<{ message: string }> {}
 
 /**
  * Resolve an `owner/repo#N` ref against GitHub — one read per lookup,
- * over the connected repositories only. Every attach goes through
+ * over the connected repositories only. Every assignment goes through
  * this so an entity is never recorded on the model's word: a model
  * that derives `author/repo#N` from a PR's author login (the fork's
  * owner is not the repository) fails here with the connected list in

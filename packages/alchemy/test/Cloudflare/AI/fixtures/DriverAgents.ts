@@ -256,14 +256,25 @@ Hand ${task} to the Scribe under a session of its own and wait for
 what comes back.`) {}
 
 /** The key a handoff's Scribe session runs under — fixed, so a test
- *  can address (and erase) the session the handler dispatched. */
+ *  can address (and erase) the session the handler dispatched. A task
+ *  of the form `<suffix>|<task>` runs under `handoff-scribe-<suffix>`
+ *  instead, so tests in one file address distinct children. */
 export const HANDOFF_KEY = "handoff-scribe";
+
+export const handoffKey = (task: string): { key: string; task: string } => {
+  const match = task.match(/^([\w-]+)\|(.*)$/s);
+  return match === null
+    ? { key: HANDOFF_KEY, task }
+    : { key: `${HANDOFF_KEY}-${match[1]}`, task: match[2]! };
+};
 
 /** A charter dispatching a named agent DIRECTLY (not through the
  *  driver's own delegation tool) — alchemy-org's thread→engineer
- *  shape: the child is a session in its own right, not a registered
- *  child of the supervisor's, and this handler is parked on its
- *  outcome for as long as it runs. */
+ *  shape: the child is a session in its own right, and this handler
+ *  is parked on its outcome for as long as it runs. Naming this
+ *  session as the child's `parent` from inside the round puts the
+ *  child under the supervisor's cascade (DriverCore `supervised`):
+ *  the supervisor's stop or abort settles the child too. */
 export const HandoffLive = Layer.effect(
   Handoff,
   Effect.gen(function* () {
@@ -271,10 +282,12 @@ export const HandoffLive = Layer.effect(
     return ((input: { task: string }) =>
       Effect.gen(function* () {
         const session = yield* AI.Thread;
-        return yield* scribe.dispatch(input.task, {
-          key: HANDOFF_KEY,
+        const { key, task } = handoffKey(input.task);
+        const outcome = yield* scribe.dispatch(task, {
+          key,
           parent: { term: "Supervisor", key: session.key },
         });
+        return { outcome };
       })) as never;
   }),
 );

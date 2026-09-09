@@ -72,8 +72,12 @@ export default defineConfig({
             },
             expect: {
               toHaveScreenshot: {
-                // the terminal's blinking caret and sub-pixel text edges
-                maxDiffPixelRatio: 0.01,
+                // EXACT. Same fake, same fonts, same platform — a render
+                // is reproducible to the pixel, so any drift is a real
+                // change. The old ratios (1%, then 0.1% ≈ 1,400 pixels)
+                // both let a one-word label swap ("Entities" → "Assigned")
+                // pass as "unchanged" — a stale gallery nobody saw.
+                maxDiffPixels: 0,
                 animations: "disabled" as const,
                 caret: "hide" as const,
               },

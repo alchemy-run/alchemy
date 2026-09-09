@@ -449,6 +449,34 @@ export const routes = Effect.gen(function* () {
     }),
   );
 
+  /** The switches EN MASSE: `POST :id/agents/<verb>` with `{ keys }`
+   *  (a selection) or no body (every agent of the thread). */
+  const agentsBulk = (verb: "stop" | "resume" | "delete") =>
+    HttpRouter.add(
+      "POST",
+      `/api/threads/:id/agents/${verb}`,
+      Effect.gen(function* () {
+        const id = yield* threadId;
+        const request = yield* HttpServerRequest;
+        const body = (yield* request.json.pipe(
+          Effect.catch(() => Effect.succeed({})),
+        )) as { keys?: unknown };
+        const keys = Array.isArray(body.keys)
+          ? body.keys.filter((key): key is string => typeof key === "string")
+          : undefined;
+        const state = yield* threads.agents(id, verb, keys);
+        return state === undefined
+          ? yield* HttpServerResponse.json(
+              { error: `no thread ${id}` },
+              { status: 404 },
+            )
+          : yield* HttpServerResponse.json(state);
+      }),
+    );
+  const agentsStop = agentsBulk("stop");
+  const agentsResume = agentsBulk("resume");
+  const agentsDelete = agentsBulk("delete");
+
   /* ── pull requests: on-demand GitHub reads for the review view ──── */
 
   /** `:owner/:repo/:number` → the PR number, when the repo is the
@@ -776,6 +804,11 @@ export const routes = Effect.gen(function* () {
     threadSteer,
     threadClose,
     threadDelete,
+    // the bulk routes BEFORE the keyed ones: `agents/stop` must not
+    // match `agents/:key`
+    agentsStop,
+    agentsResume,
+    agentsDelete,
     agentStop,
     agentResume,
     agentDelete,

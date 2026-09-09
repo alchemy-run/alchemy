@@ -1,14 +1,18 @@
 /**
  * A THREAD's page — the conversation IS the thread (the agent
  * session's chat), with the task's state in a right pane: the GitHub
- * entities it governs (each pull opens its review), the subagents,
+ * issues and pulls assigned to it (each pull opens its review), the subagents,
  * the worktrees. Terminals open on the thread's one machine.
  */
 
 import { ChatView, timeAgo } from "@/components/chat";
 import { Rail } from "@/components/rail";
 import { GhosttyTerminal } from "@/components/terminal";
-import { OpenAgentContext, type SpawnTarget } from "@/components/tool-card";
+import {
+  AgentBooksContext,
+  OpenAgentContext,
+  type SpawnTarget,
+} from "@/components/tool-card";
 import { Button } from "@/components/ui/button";
 import {
   ContextMenu,
@@ -25,6 +29,7 @@ import {
 } from "@/components/ui/tooltip";
 import type { ThreadAgentRow, ThreadState } from "@/lib/channel";
 import {
+  agentsBulk,
   deleteAgent,
   engineerSessionId,
   parseEntityRef,
@@ -53,6 +58,7 @@ import {
   SquareTerminal,
   Trash2,
   X,
+  type LucideIcon,
 } from "lucide-react";
 import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { ReviewView } from "@/components/review";
@@ -140,20 +146,57 @@ const AGENT_DOT: Record<string, string> = {
 
 const Section = ({
   title,
+  actions,
   children,
 }: {
   title: string;
+  /** Controls on the heading's right — the section-wide switches. */
+  actions?: ReactNode;
   children: ReactNode;
 }) => (
   <div className="flex flex-col gap-1 border-b border-border/60 px-3 py-2.5">
-    <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/70">
-      {title}
+    <div className="flex items-center gap-2">
+      <div className="min-w-0 flex-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/70">
+        {title}
+      </div>
+      {actions}
     </div>
     {children}
   </div>
 );
 
-/** The thread's books: entities, agents, close, delete. */
+/** A section heading's switch: tiny, quiet, labelled by what it does. */
+const HeadingAction = ({
+  icon: Icon,
+  label,
+  title,
+  onClick,
+  disabled,
+  destructive,
+}: {
+  icon: LucideIcon;
+  label: string;
+  title: string;
+  onClick: () => void;
+  disabled?: boolean;
+  destructive?: boolean;
+}) => (
+  <button
+    type="button"
+    onClick={onClick}
+    disabled={disabled}
+    title={title}
+    className={cn(
+      "flex shrink-0 cursor-pointer items-center gap-1 rounded border border-border px-1.5 py-0 text-[10px] text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-default disabled:opacity-50",
+      destructive && "hover:text-destructive",
+    )}
+  >
+    <Icon className="size-3" />
+    {label}
+  </button>
+);
+
+/** The thread's books: assigned refs, agents, close, delete. */
 /** The operator's switches on a thread's agents — each takes the keys
  *  it acts on (a selection, or the one agent in a pane). */
 export interface AgentActions {
@@ -197,6 +240,8 @@ const ThreadPane = ({
   const menuRows = state.agents.filter((agent) => menuKeys.includes(agent.key));
   const running = menuRows.filter((agent) => agent.state === "running");
   const settled = menuRows.filter((agent) => agent.state !== "running");
+  const allRunning = state.agents.filter((agent) => agent.state === "running");
+  const allSettled = state.agents.filter((agent) => agent.state !== "running");
   const plural = (rows: ReadonlyArray<unknown>) =>
     rows.length > 1 ? `${rows.length} agents` : "agent";
   const agentRow = (agent: ThreadAgentRow) => {
@@ -247,13 +292,13 @@ const ThreadPane = ({
   };
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-      <Section title="Entities">
-        {state.entities.length === 0 && (
+      <Section title="Assigned">
+        {state.assigned.length === 0 && (
           <div className="text-xs text-muted-foreground">
-            Nothing attached yet.
+            Nothing assigned yet.
           </div>
         )}
-        {state.entities.map((entity) => {
+        {state.assigned.map((entity) => {
           const parsed = parseEntityRef(entity.ref);
           return (
             <div
@@ -288,7 +333,7 @@ const ThreadPane = ({
                   title={entity.ref}
                   className="shrink-0 whitespace-nowrap hover:text-foreground hover:underline"
                 >
-                  {/* the number alone: a thread's entities live in the one
+                  {/* the number alone: a thread's assigned refs live in the one
                       connected repository, and the row is narrow */}
                   {parsed === undefined ? entity.ref : `#${parsed.number}`}
                 </a>
@@ -322,7 +367,45 @@ const ThreadPane = ({
               }
             }}
           >
-            <Section title="Agents">
+            <Section
+              title="Agents"
+              actions={
+                state.agents.length > 0 && (
+                  <>
+                    {allRunning.length > 0 && (
+                      <HeadingAction
+                        icon={Square}
+                        label={`Stop all${allRunning.length > 1 ? ` (${allRunning.length})` : ""}`}
+                        title="Stop every working agent — their commands in flight are cut"
+                        onClick={() =>
+                          agentActions.stop(allRunning.map((a) => a.key))
+                        }
+                        disabled={agentActions.busy.size > 0}
+                      />
+                    )}
+                    {allRunning.length === 0 && allSettled.length > 0 && (
+                      <HeadingAction
+                        icon={Play}
+                        label={`Resume all${allSettled.length > 1 ? ` (${allSettled.length})` : ""}`}
+                        title="Resume every stopped agent — they take input again; nothing runs until told"
+                        onClick={() =>
+                          agentActions.resume(allSettled.map((a) => a.key))
+                        }
+                        disabled={agentActions.busy.size > 0}
+                      />
+                    )}
+                    <HeadingAction
+                      icon={Trash2}
+                      label="Delete all"
+                      title="Delete every agent — sessions and transcripts erased"
+                      onClick={() => agentActions.remove(order)}
+                      disabled={agentActions.busy.size > 0}
+                      destructive
+                    />
+                  </>
+                )
+              }
+            >
               {state.agents.length === 0 && (
                 <div className="text-xs text-muted-foreground">
                   No subagents yet.
@@ -551,7 +634,7 @@ export const ThreadView = ({
   onDeleteThread: () => void;
 }) => {
   const sessionId = threadSessionId(id);
-  const reviews = (state?.entities ?? []).filter(
+  const reviews = (state?.assigned ?? []).filter(
     (entity) => entity.kind === "pull",
   );
   const agents = state?.agents ?? [];
@@ -582,33 +665,44 @@ export const ThreadView = ({
   const act = useCallback(
     (
       keys: ReadonlyArray<string>,
-      request: (key: string) => Promise<Response>,
+      verb: "stop" | "resume" | "delete",
       after?: (key: string) => void,
     ) => {
+      if (keys.length === 0) return;
       setBusy((current) => new Set([...current, ...keys]));
-      for (const key of keys) {
-        void request(key)
-          .then(
-            (response) => response.ok,
-            () => false,
-          )
-          .then((ok) => {
-            setBusy((current) => {
-              const next = new Set(current);
-              next.delete(key);
-              return next;
-            });
-            if (ok) after?.(key);
-          });
-      }
+      const done = (settled: ReadonlyArray<string>, ok: boolean) => {
+        setBusy((current) => {
+          const next = new Set(current);
+          for (const key of settled) next.delete(key);
+          return next;
+        });
+        if (ok) for (const key of settled) after?.(key);
+      };
+      const single =
+        verb === "stop"
+          ? stopAgent
+          : verb === "resume"
+            ? resumeAgent
+            : deleteAgent;
+      // one agent: its own switch; several: ONE bulk request — the
+      // server fans out and answers once, so a selection of twelve is
+      // not twelve round-trips racing each other
+      const request =
+        keys.length === 1 ? single(id, keys[0]!) : agentsBulk(id, verb, keys);
+      void request
+        .then(
+          (response) => response.ok,
+          () => false,
+        )
+        .then((ok) => done(keys, ok));
     },
-    [],
+    [id],
   );
   const agentActions = useMemo<AgentActions>(
     () => ({
       busy,
-      stop: (keys) => act(keys, (key) => stopAgent(id, key)),
-      resume: (keys) => act(keys, (key) => resumeAgent(id, key)),
+      stop: (keys) => act(keys, "stop"),
+      resume: (keys) => act(keys, "resume"),
       remove: (keys) => {
         if (keys.length === 0) return;
         const what =
@@ -620,14 +714,10 @@ export const ThreadView = ({
         ) {
           return;
         }
-        act(
-          keys,
-          (key) => deleteAgent(id, key),
-          (key) => {
-            // the pane that showed it has nothing to show
-            if (openAgent === key) onTab({ kind: "chat" });
-          },
-        );
+        act(keys, "delete", (key) => {
+          // the pane that showed it has nothing to show
+          if (openAgent === key) onTab({ kind: "chat" });
+        });
       },
     }),
     [act, busy, id, onTab, openAgent],
@@ -812,11 +902,15 @@ export const ThreadView = ({
               )}
             >
               <OpenAgentContext.Provider value={onOpenSpawn}>
-                <ChatView
-                  id={sessionId}
-                  active={active && tab.kind === "chat"}
-                  placeholder="Talk to the thread…"
-                />
+                {/* the books, so a spawn card reads its agent's real
+                    state — stopped, deleted — not the open call's */}
+                <AgentBooksContext.Provider value={state?.agents}>
+                  <ChatView
+                    id={sessionId}
+                    active={active && tab.kind === "chat"}
+                    placeholder="Talk to the thread…"
+                  />
+                </AgentBooksContext.Provider>
               </OpenAgentContext.Provider>
             </div>
             {openAgent !== undefined && (

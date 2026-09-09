@@ -228,6 +228,9 @@ export class FakeApi {
   }> = [];
   /** When set, agent actions answer only once this resolves — the row
    *  shows the request in flight until then. */
+  /** How many EN-MASSE requests landed (`…/agents/<verb>`) — the
+   *  per-agent actions above are recorded for each key either way. */
+  bulkRequests = 0;
   private agentActionGate: Promise<void> | undefined;
   /** Hold every agent action open; returns the release. */
   holdAgentActions(): () => void {
@@ -247,7 +250,7 @@ export class FakeApi {
       turn: "you",
       createdAt: NOW.getTime() - 3_600_000,
       updatedAt: NOW.getTime() - 60_000,
-      entities: [],
+      assigned: [],
       agents: [],
       members: [],
       ...partial,
@@ -453,6 +456,82 @@ export class FakeApi {
     ];
   }
 
+  /**
+   * One turn with a RUN of tool calls — the agent calls a tool once
+   * per tick, `calls.length` ticks in a row, then replies. The shape
+   * "make a worktree for each of these five pulls" takes, and what
+   * the transcript folds into one line.
+   */
+  seedTools(
+    id: string,
+    turn: {
+      ask: string;
+      calls: ReadonlyArray<{
+        name: string;
+        input: unknown;
+        output: unknown;
+        isFailure?: boolean;
+        /** Still running: a durable `tool-call` row, no result yet —
+         *  the round has not landed, and there is no reply. */
+        open?: boolean;
+      }>;
+      reply: string;
+    },
+  ): void {
+    const at = id.indexOf(":");
+    const envelope = (seq: number) => ({
+      term: id.slice(0, at),
+      key: id.slice(at + 1),
+      seq,
+      at: NOW.getTime() - 60_000 + seq * 1000,
+    });
+    const rows = [...(this.transcripts[id] ?? [])];
+    rows.push({ ...envelope(rows.length), type: "input", text: turn.ask });
+    let inFlight = false;
+    turn.calls.forEach((call, tick) => {
+      const callId = `call-${rows.length + 1}`;
+      if (call.open) {
+        inFlight = true;
+        rows.push({
+          ...envelope(rows.length),
+          type: "tool-call",
+          tick,
+          toolCallId: callId,
+          toolName: call.name,
+          input: call.input,
+        });
+        return;
+      }
+      rows.push({
+        ...envelope(rows.length),
+        type: "assistant",
+        tick,
+        ms: 500,
+        text: "",
+        toolCalls: [{ id: callId, name: call.name, input: call.input }],
+      });
+      rows.push({
+        ...envelope(rows.length),
+        type: "tool-result",
+        toolCallId: callId,
+        toolName: call.name,
+        output: call.output,
+        isFailure: call.isFailure ?? false,
+      });
+    });
+    if (!inFlight) {
+      rows.push({
+        ...envelope(rows.length),
+        type: "assistant",
+        tick: turn.calls.length,
+        ms: 600,
+        text: turn.reply,
+        toolCalls: [],
+      });
+    }
+    this.transcripts[id] = rows;
+  }
+
   /** A turn where the agent runs `command` through `bash`. `stdout`
    *  may carry ANSI escapes — the point of seeding it. */
   seedBash(
@@ -477,6 +556,25 @@ export class FakeApi {
       },
       reply: turn.reply,
     });
+  }
+
+  /** An input the session heard WITHOUT answering — a quiet delivery
+   *  (`wake: false`): the thread's bookkeeping, a webhook event. */
+  seedInput(id: string, text: string): void {
+    const at = id.indexOf(":");
+    const rows = this.transcripts[id] ?? [];
+    const seq = rows.length;
+    this.transcripts[id] = [
+      ...rows,
+      {
+        term: id.slice(0, at),
+        key: id.slice(at + 1),
+        seq,
+        at: NOW.getTime() - 60_000 + seq * 1000,
+        type: "input",
+        text,
+      },
+    ];
   }
 
   /** A plain exchange (no tool call) in chat `id`. */
@@ -638,6 +736,41 @@ export class FakeApi {
       this.deletedMessages.push(...ids);
       this.removeMessages(ids);
       return this.json(route, { deleted: ids.length });
+    }
+
+    // the switches EN MASSE: POST …/agents/(stop|resume|delete) with
+    // `{ keys }` (a selection) or nothing (every agent) — recorded as
+    // one action per agent, exactly what the server's fan-out does
+    const bulk = path.match(
+      /^\/api\/threads\/([^/]+)\/agents\/(stop|resume|delete)$/,
+    );
+    if (bulk !== null && method === "POST") {
+      this.bulkRequests += 1;
+      const id = decodeURIComponent(bulk[1]!);
+      const verb = bulk[2] as "stop" | "resume" | "delete";
+      const state = this.threads[id];
+      if (state === undefined) {
+        return this.json(route, { error: `no thread ${id}` }, 404);
+      }
+      const body = (request.postDataJSON() ?? {}) as { keys?: string[] };
+      const keys = body.keys ?? state.agents.map((entry) => entry.key);
+      for (const key of keys) {
+        this.agentActions.push({ thread: id, key, action: verb });
+      }
+      if (this.agentActionGate !== undefined) await this.agentActionGate;
+      this.updateThread(id, {
+        agents:
+          verb === "delete"
+            ? state.agents.filter((entry) => !keys.includes(entry.key))
+            : state.agents.map((entry) => {
+                if (!keys.includes(entry.key)) return entry;
+                const { settledAt: _settled, ...rest } = entry;
+                return verb === "stop"
+                  ? { ...entry, state: "stopped", settledAt: NOW.getTime() }
+                  : { ...rest, state: "running" };
+              }),
+      });
+      return this.json(route, this.threads[id]);
     }
 
     // a thread's agents: POST …/agents/:key/(stop|resume), DELETE …/agents/:key

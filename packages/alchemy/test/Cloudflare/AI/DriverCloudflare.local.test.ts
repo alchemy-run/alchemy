@@ -257,9 +257,10 @@ test.provider(
       const url = deployed.url;
 
       // alchemy-org's thread→engineer shape: the Supervisor's OWN tool
-      // dispatches the Scribe directly (no registered child, so no
-      // cascade), and is parked on it while the Scribe's round is
-      // parked in a tool that never answers
+      // dispatches the Scribe directly and is parked on it while the
+      // Scribe's round is parked in a tool that never answers. The
+      // org's delete erases BOTH by name regardless of the cascade —
+      // the directory, not the supervisor's RAM, is what it trusts
       yield* getJsonReady(
         `${url}/send?agent=Supervisor&key=parent-e&input=${encodeURIComponent(
           "call:handoff:call:stall:the suite",
@@ -291,6 +292,152 @@ test.provider(
       )) as { answer?: string; error?: string };
       expect(fresh.error).toBeUndefined();
       expect(JSON.parse(fresh.answer!)).toMatchObject({ users: 1, tools: 0 });
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 240_000 },
+);
+
+/** Poll a session's transcript until `predicate` holds over its
+ *  observation types — bounded, so a hang names itself. */
+const historyUntil = (
+  url: string | undefined,
+  agent: string,
+  key: string,
+  predicate: (types: ReadonlyArray<string>) => boolean,
+) =>
+  Effect.gen(function* () {
+    const client = yield* HttpClient.HttpClient;
+    const res = yield* client.get(
+      `${url}/history?agent=${agent}&key=${encodeURIComponent(key)}`,
+    );
+    return ((yield* res.json) as { types: Array<string> }).types;
+  }).pipe(
+    Effect.orDie,
+    Effect.repeat({
+      schedule: Schedule.spaced("500 millis"),
+      until: predicate,
+      times: 60,
+    }),
+  );
+
+test.provider(
+  "(f) the operator's STOP on a supervisor cascades over a direct handoff: the child's DO is settled, its stall cut",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          const worker = yield* DriverTestWorker;
+          return { url: worker.url };
+        }),
+      );
+      const url = deployed.url;
+
+      // alchemy-org's thread→engineer shape across TWO Durable Objects:
+      // the Supervisor's own tool dispatches the Scribe directly and is
+      // parked on it; the Scribe's round is parked in a tool that never
+      // answers
+      yield* getJsonReady(
+        `${url}/send?agent=Supervisor&key=parent-f&input=${encodeURIComponent(
+          "call:handoff:f|call:stall:the suite",
+        )}`,
+      );
+      yield* historyUntil(url, "Scribe", "handoff-scribe-f", (types) =>
+        types.includes("tool-call"),
+      );
+
+      // the operator aborts the SUPERVISOR's round (the thread's stop
+      // button): the handoff's child was registered from inside the
+      // round, so the abort settles it — in its own DO
+      const aborted = yield* getJsonWithin(
+        `${url}/interrupt?agent=Supervisor&key=parent-f`,
+        "30 seconds",
+      );
+      expect(aborted).toEqual({ interrupted: true });
+
+      const parent = yield* historyUntil(url, "Supervisor", "parent-f", (t) =>
+        t.includes("aborted"),
+      );
+      expect(parent).toContain("aborted");
+      expect(parent).not.toContain("crashed");
+      const child = yield* historyUntil(
+        url,
+        "Scribe",
+        "handoff-scribe-f",
+        (types) => types.includes("settled"),
+      );
+      expect(child).toContain("settled");
+      expect(child).not.toContain("crashed");
+
+      // a settled child is not working: a late dispatch answers with
+      // the settled outcome instead of queueing behind the stall
+      const late = (yield* getJsonWithin(
+        `${url}/dispatch?agent=Scribe&key=handoff-scribe-f&input=hello`,
+        "30 seconds",
+      )) as { answer?: unknown; error?: string };
+      expect(late.error).toBeUndefined();
+      expect(late.answer).toBeDefined();
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 240_000 },
+);
+
+test.provider(
+  "(g) the operator's STOP on the child answers the supervisor's handoff — its round runs on to a conclusion",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          const worker = yield* DriverTestWorker;
+          return { url: worker.url };
+        }),
+      );
+      const url = deployed.url;
+
+      yield* getJsonReady(
+        `${url}/send?agent=Supervisor&key=parent-g&input=${encodeURIComponent(
+          "call:handoff:g|call:stall:the suite",
+        )}`,
+      );
+      yield* historyUntil(url, "Scribe", "handoff-scribe-g", (types) =>
+        types.includes("tool-call"),
+      );
+
+      // the org's agent "stop" switch: the Scribe's session settles in
+      // its own DO — its stall is cut — and the Supervisor's parked
+      // handoff tool is handed the Stopped outcome
+      const stopped = yield* getJsonWithin(
+        `${url}/stop?agent=Scribe&key=handoff-scribe-g`,
+        "30 seconds",
+      );
+      expect(stopped).toEqual({ stopped: true });
+
+      const child = yield* historyUntil(
+        url,
+        "Scribe",
+        "handoff-scribe-g",
+        (types) => types.includes("settled"),
+      );
+      expect(child).toContain("settled");
+
+      // the supervisor's round LANDS: its tool result is a durable row,
+      // the model reports, and the session parks — nothing aborted,
+      // nothing crashed, nothing still waiting
+      const parent = yield* historyUntil(
+        url,
+        "Supervisor",
+        "parent-g",
+        (types) => types.includes("tool-result") && types.at(-1) === "parked",
+      );
+      expect(parent).toContain("tool-result");
+      expect(parent.at(-1)).toBe("parked");
+      expect(parent).not.toContain("aborted");
+      expect(parent).not.toContain("crashed");
 
       yield* stack.destroy();
     }).pipe(logLevel),
