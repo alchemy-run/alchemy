@@ -1,22 +1,16 @@
 import { GetCustomerTaxIdsById } from "@distilled.cloud/stripe/stripe";
-import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Binding from "../Binding.ts";
 import type { ResourceLike } from "../Resource.ts";
-import { sanitizeKey } from "../RuntimeContext.ts";
 import type { CustomerTaxId } from "./CustomerTaxId.ts";
 import { RetrieveCustomerTaxId } from "./RetrieveCustomerTaxId.ts";
 import {
   asStringEffect,
   attachStripeToken,
-  idEnvKey,
+  authorizeWith,
   resolveStripeAuth,
 } from "./StripeHttp.ts";
-
-const customerEnvKey = (resource: { readonly LogicalId: string }): string =>
-  `STRIPE_CUSTOMER_${sanitizeKey(resource.LogicalId)}`;
-
-const envName = (key: string) => Config.string(key).pipe(Effect.orDie);
 
 /**
  * HTTP implementation of {@link RetrieveCustomerTaxId}. The nested
@@ -28,33 +22,23 @@ const envName = (key: string) => Config.string(key).pipe(Effect.orDie);
 export const RetrieveCustomerTaxIdHttp = Layer.effect(
   RetrieveCustomerTaxId,
   Effect.gen(function* () {
-    const auth = yield* resolveStripeAuth;
+    const ambient = yield* resolveStripeAuth;
 
     return Effect.fn(function* (taxId: CustomerTaxId) {
-      const idKey = idEnvKey(taxId);
-      const customerKey = customerEnvKey(taxId);
-      if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* attachStripeToken(
-          taxId as unknown as ResourceLike,
-          {
-            [idKey]: taxId.id,
-            [customerKey]: taxId.customer,
-          },
-          ["customers_read"],
-          "Stripe.RetrieveCustomerTaxId",
-        );
-      }
-
-      const id = globalThis.__ALCHEMY_RUNTIME__
-        ? envName(idKey)
-        : asStringEffect(taxId.id);
-      const customer = globalThis.__ALCHEMY_RUNTIME__
-        ? envName(customerKey)
-        : asStringEffect(taxId.customer);
+      const host = yield* Binding.Host;
+      const bound = yield* attachStripeToken(
+        taxId as unknown as ResourceLike,
+        ["customers_read"],
+        "Stripe.RetrieveCustomerTaxId",
+      );
+      const id = yield* asStringEffect(taxId.id);
+      const customer = yield* asStringEffect(taxId.customer);
+      const auth =
+        host !== undefined ? authorizeWith(bound) : ambient.authorize;
 
       return Effect.fn(`Stripe.RetrieveCustomerTaxId(${taxId.LogicalId})`)(
         function* (request?: { expand?: string[] }) {
-          return yield* auth.authorize(
+          return yield* auth(
             GetCustomerTaxIdsById({
               ...(request ?? {}),
               id: yield* id,

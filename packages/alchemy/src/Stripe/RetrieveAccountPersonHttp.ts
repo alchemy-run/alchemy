@@ -1,22 +1,16 @@
 import { GetAccountPerson } from "@distilled.cloud/stripe/stripe";
-import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Binding from "../Binding.ts";
 import type { ResourceLike } from "../Resource.ts";
-import { sanitizeKey } from "../RuntimeContext.ts";
 import type { AccountPerson } from "./AccountPerson.ts";
 import { RetrieveAccountPerson } from "./RetrieveAccountPerson.ts";
 import {
   asStringEffect,
   attachStripeToken,
-  idEnvKey,
+  authorizeWith,
   resolveStripeAuth,
 } from "./StripeHttp.ts";
-
-const accountEnvKey = (resource: { readonly LogicalId: string }): string =>
-  `STRIPE_ACCOUNT_${sanitizeKey(resource.LogicalId)}`;
-
-const envName = (key: string) => Config.string(key).pipe(Effect.orDie);
 
 /**
  * HTTP implementation of {@link RetrieveAccountPerson}. Retrieve takes
@@ -28,33 +22,23 @@ const envName = (key: string) => Config.string(key).pipe(Effect.orDie);
 export const RetrieveAccountPersonHttp = Layer.effect(
   RetrieveAccountPerson,
   Effect.gen(function* () {
-    const auth = yield* resolveStripeAuth;
+    const ambient = yield* resolveStripeAuth;
 
     return Effect.fn(function* (person: AccountPerson) {
-      const idKey = idEnvKey(person);
-      const accountKey = accountEnvKey(person);
-      if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* attachStripeToken(
-          person as unknown as ResourceLike,
-          {
-            [idKey]: person.id,
-            [accountKey]: person.account,
-          },
-          ["accounts_read"],
-          "Stripe.RetrieveAccountPerson",
-        );
-      }
-
-      const id = globalThis.__ALCHEMY_RUNTIME__
-        ? envName(idKey)
-        : asStringEffect(person.id);
-      const account = globalThis.__ALCHEMY_RUNTIME__
-        ? envName(accountKey)
-        : asStringEffect(person.account);
+      const host = yield* Binding.Host;
+      const bound = yield* attachStripeToken(
+        person as unknown as ResourceLike,
+        ["accounts_read"],
+        "Stripe.RetrieveAccountPerson",
+      );
+      const id = yield* asStringEffect(person.id);
+      const account = yield* asStringEffect(person.account);
+      const auth =
+        host !== undefined ? authorizeWith(bound) : ambient.authorize;
 
       return Effect.fn(`Stripe.RetrieveAccountPerson(${person.LogicalId})`)(
         function* (request?: { expand?: string[] }) {
-          return yield* auth.authorize(
+          return yield* auth(
             GetAccountPerson({
               ...(request ?? {}),
               person: yield* id,
