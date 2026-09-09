@@ -6,6 +6,7 @@ import { DeleteCustomer } from "@distilled.cloud/stripe/stripe";
 import { expect } from "bun:test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import Stack from "../alchemy.run.ts";
@@ -82,6 +83,8 @@ test(
 
     yield* DeleteCustomer({ customer: body.id }).pipe(
       Effect.catch(() => Effect.void),
+      Effect.provide(Stripe.CredentialsFromEnv),
+      Effect.provide(FetchHttpClient.layer),
     );
   }),
   { timeout: 120_000 },

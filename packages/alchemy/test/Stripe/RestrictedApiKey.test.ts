@@ -13,6 +13,32 @@ const logLevel = Effect.provideService(
 );
 
 test.provider(
+  "creates a logical restricted key with default props",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const created = yield* stack.deploy(
+        Effect.gen(function* () {
+          const token = yield* Stripe.RestrictedApiKey("HostToken");
+          yield* token.bind("RetrieveProduct", {
+            permissions: ["products_read"],
+          });
+          return token;
+        }),
+      );
+
+      expect(created.id).toEqual(expect.any(String));
+      expect(created.name).toEqual(expect.any(String));
+      expect(Redacted.isRedacted(created.value)).toEqual(true);
+      expect(created.permissions).toEqual(["products_read"]);
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+test.provider(
   "creates a logical restricted key and merges bound permissions",
   (stack) =>
     Effect.gen(function* () {
