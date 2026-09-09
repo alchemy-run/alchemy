@@ -1,0 +1,50 @@
+---
+title: GCP
+description: Google Cloud resources as one Effect program — Cloud Run Functions, Storage, Pub/Sub, Memorystore, and the rest of the catalog.
+---
+
+Alchemy's GCP provider is Infrastructure-as-Effects: you declare
+Cloud Run services, buckets, topics, and Memorystore instances in the
+same type-safe program that serves HTTP. Bindings grant IAM onto a
+per-host service account and inject env — the analog of AWS
+`policyStatements` and Cloudflare `AccountApiToken`.
+
+New here? [Set up credentials](/gcp/setup) first.
+
+## Resources
+
+The pieces you will use most:
+
+- **Run** — `GCP.Function` (alias of `GCP.Run.Service`) is the
+  effectful HTTP platform. `GCP.Run.Job` runs to completion.
+  `GCP.CloudFunctions.Function` is the zip-source API wrapper (no
+  `main`).
+- **Storage** — `GCP.Storage.Bucket` plus `PutObject` / `GetObject`
+  bindings.
+- **Pub/Sub** — `Topic`, `Publish`, and `consumeMessages` (push to
+  the Function URL).
+- **Memorystore** — `GCP.Redis.Instance` over `alchemy/Redis`
+  Read/Write/ReadWrite.
+- **Secret Manager, Cloud SQL, BigQuery, KMS, IAM** — same
+  observe-ensure-sync reconcilers. The generated reference lists
+  every resource.
+
+```typescript
+import * as GCP from "alchemy/GCP";
+
+const bucket = yield* GCP.Storage.Bucket("assets", { forceDestroy: true });
+const api = yield* GCP.Function;
+```
+
+## The GCP path
+
+1. [Setup](/gcp/setup) — service-account JSON, project, profile
+2. [Tutorial](/gcp/tutorial/part-1) — bucket, Function, Pub/Sub, destroy
+3. [Serve an API](/gcp/guides/cloud-run-api)
+4. [Publish and subscribe](/gcp/guides/pubsub)
+5. [Cache with Memorystore](/gcp/guides/memorystore)
+
+## Reference
+
+Generated API pages for every GCP resource live under Resources in
+the sidebar.

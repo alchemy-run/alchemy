@@ -78,6 +78,47 @@ export type Topic = Resource<
  * });
  * ```
  *
+ * ### Updating a Topic
+ * **Example:** Change labels
+ * ```typescript
+ * const topic = yield* GCP.PubSub.Topic("events", {
+ *   labels: { env: "prod" },
+ * });
+ * ```
+ *
+ * ### Binding from a Function
+ * **Example:** Publish from Cloud Run
+ * ```typescript
+ * export class Api extends GCP.Function<Api>()(
+ *   "Api",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const topic = yield* GCP.PubSub.Topic("events", {});
+ *     const publish = yield* GCP.PubSub.Publish(topic);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         yield* publish({
+ *           body: { messages: [{ data: btoa("hello") }] },
+ *         }).pipe(Effect.orDie);
+ *         return HttpServerResponse.text("ok");
+ *       }),
+ *     };
+ *   }).pipe(Effect.provide([GCP.PubSub.PublishHttp])),
+ * ) {}
+ * ```
+ *
+ * ### Consuming messages
+ * **Example:** Push subscription on the Function URL
+ * ```typescript
+ * yield* GCP.PubSub.consumeMessages(topic, (stream) =>
+ *   Stream.runForEach(stream, (msg) => Effect.log(msg.value)),
+ * );
+ * ```
+ * Provide `GCP.PubSub.EventSourceLive` on the Function.
+ *
+ * ### Destroying a Topic
+ * **Example:** `alchemy destroy` deletes the topic after its subscriptions.
+ *
  * @resource
  * @product GCP
  * @category PubSub

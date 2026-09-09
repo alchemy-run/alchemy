@@ -1,0 +1,42 @@
+---
+title: Setup
+description: Connect alchemy to Google Cloud — service-account JSON, project id, and profiles.
+---
+
+Create a GCP project and a service-account key with enough IAM to
+create the resources you will deploy (Cloud Run Admin, Storage Admin,
+Pub/Sub Admin, and Service Account Admin for per-host `alch-*`
+accounts).
+
+Register the provider next to any other clouds:
+
+```typescript
+// alchemy.run.ts
+import * as GCP from "alchemy/GCP";
+
+providers: GCP.providers(),
+```
+
+## Credentials
+
+Run `alchemy profile edit --add GCP`. Choose **Service account JSON**
+and point at the key file. Alchemy stores it under
+`~/.alchemy/credentials/<profile>/`.
+
+In CI (`CI=true`), Alchemy skips profiles. Set:
+
+- `GOOGLE_PROJECT_ID` — project id
+- `GOOGLE_APPLICATION_CREDENTIALS` — path to the key file
+
+or `GOOGLE_ACCESS_TOKEN` plus `GOOGLE_PROJECT_ID` for a short-lived
+token.
+
+`GOOGLE_CLOUD_PROJECT` is accepted as an alias of `GOOGLE_PROJECT_ID`.
+
+See [Profiles](/environments/profiles) for how credentials are stored
+and switched.
+
+## Next steps
+
+- [GCP overview](/gcp) — resources and compositions.
+- [Tutorial part 1](/gcp/tutorial/part-1) — first bucket.

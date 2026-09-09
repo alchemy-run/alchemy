@@ -53,6 +53,13 @@ export type SubscriptionExpirationPolicy = {
   ttl?: string;
 };
 
+export type SubscriptionOidcToken = {
+  /** Service account email Pub/Sub uses to sign the JWT. */
+  serviceAccountEmail?: string;
+  /** JWT audience. Defaults to the push endpoint. */
+  audience?: string;
+};
+
 export type SubscriptionPushConfig = {
   /**
    * HTTPS endpoint that receives pushed messages
@@ -64,6 +71,10 @@ export type SubscriptionPushConfig = {
    * `x-goog-version` (`v1` / `v1beta1` / `v1beta2`).
    */
   attributes?: Record<string, string>;
+  /**
+   * Attach an OIDC JWT as `Authorization` on every push.
+   */
+  oidcToken?: SubscriptionOidcToken;
 };
 
 export type SubscriptionProps = {
@@ -277,6 +288,7 @@ const toPushConfig = (
   return {
     pushEndpoint,
     attributes: Object.keys(attributes).length > 0 ? attributes : undefined,
+    oidcToken: config.oidcToken,
   };
 };
 
@@ -360,7 +372,11 @@ const pushChanged = (
   const desiredAttributes = tagRecord(desired.attributes);
   return (
     (desired.pushEndpoint ?? "") !== (observed?.pushEndpoint ?? "") ||
-    JSON.stringify(desiredAttributes) !== JSON.stringify(observedAttributes)
+    JSON.stringify(desiredAttributes) !== JSON.stringify(observedAttributes) ||
+    (desired.oidcToken?.serviceAccountEmail ?? "") !==
+      (observed?.oidcToken?.serviceAccountEmail ?? "") ||
+    (desired.oidcToken?.audience ?? "") !==
+      (observed?.oidcToken?.audience ?? "")
   );
 };
 

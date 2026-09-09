@@ -1,0 +1,32 @@
+---
+title: Publish and subscribe with Pub/Sub
+description: Publish from a Function and consume push messages with consumeMessages.
+---
+
+## Publish
+
+```typescript
+const topic = yield* GCP.PubSub.Topic("events", {});
+const publish = yield* GCP.PubSub.Publish(topic);
+yield* publish({
+  body: { messages: [{ data: btoa("hello") }] },
+});
+```
+
+Provide `GCP.PubSub.PublishHttp` on the Function.
+
+## Consume
+
+`consumeMessages` yields a push `Subscription` at
+`{function.uri}/__alchemy/pubsub`, verifies the OIDC audience, and
+runs one Effect per `PubSub.Message` (`value` + `type`).
+
+```typescript
+yield* GCP.PubSub.consumeMessages(topic, (stream) =>
+  Stream.runForEach(stream, (msg) => Effect.log(msg.value)),
+);
+```
+
+Provide `GCP.PubSub.EventSourceLive` on the Function. Each message is
+a `GCP.PubSub.Message` with `type`
+`google.cloud.pubsub.topic.v1.messagePublished`.

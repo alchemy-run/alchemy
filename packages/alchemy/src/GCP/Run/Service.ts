@@ -362,17 +362,36 @@ export type ServiceShape = Main<ServiceServices>;
  *     const redis = yield* GCP.Redis.ReadWriteRedis(cache);
  *     return {
  *       fetch: Effect.gen(function* () {
- *         const body = yield* redis.get("last-tweet");
- *         yield* publish({ json: { text: body ?? "hello twitter" } });
+ *         const text = (yield* redis.get("last-tweet")) ?? "hello twitter";
+ *         yield* publish({
+ *           body: { messages: [{ data: btoa(text) }] },
+ *         });
  *         return HttpServerResponse.text("queued");
  *       }),
  *     };
  *   }).pipe(
- *     Effect.provide(GCP.PubSub.PublishHttp),
- *     Effect.provide(GCP.Redis.ReadWriteRedisHttp),
+ *     Effect.provide([
+ *       GCP.PubSub.PublishHttp,
+ *       GCP.Redis.ReadWriteRedisHttp,
+ *     ]),
  *   ),
  * ) {}
  * ```
+ *
+ * ### Updating a Service
+ * **Example:** New revision
+ * ```typescript
+ * const api = yield* GCP.Run.Service("api", {
+ *   template: {
+ *     timeout: "120s",
+ *     containers: [{ image: "us-docker.pkg.dev/cloudrun/container/hello" }],
+ *   },
+ * });
+ * ```
+ * Template changes create a new revision. The runtime service account is kept.
+ *
+ * ### Destroying a Service
+ * **Example:** `alchemy destroy` deletes the service and the minted `alch-*` service account.
  *
  * ### Reading a Service
  * **Example:** Get the live service

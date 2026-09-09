@@ -1,0 +1,76 @@
+---
+title: "Part 1: Create a Bucket"
+description: Install Alchemy, create a Stack with a GCS bucket, and deploy it.
+sidebar:
+  order: 1
+---
+
+import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
+import { effectVersion } from "../../../../versions";
+
+export const pkgs = `"alchemy@next" "effect@${effectVersion}"`;
+
+Install Alchemy, create a Stack with a Cloud Storage bucket, and
+deploy it.
+
+## Prerequisites
+
+- [Bun](https://bun.sh) (recommended) or Node.js 22+
+- A GCP project and service-account key — see [Setup](/gcp/setup)
+
+## Create a project
+
+Start with an empty directory and initialize a `package.json`:
+
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun">
+    <Code code="mkdir my-app && cd my-app && bun init -y" lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code="mkdir my-app && cd my-app && npm init -y" lang="sh" />
+  </TabItem>
+</Tabs>
+
+## Install dependencies
+
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun">
+    <Code code={`bun add ${pkgs}`} lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code={`npm install ${pkgs}`} lang="sh" />
+  </TabItem>
+</Tabs>
+
+## Write the Stack
+
+Create `alchemy.run.ts`:
+
+```typescript
+import * as Alchemy from "alchemy";
+import * as GCP from "alchemy/GCP";
+import * as Effect from "effect/Effect";
+
+export const App = Alchemy.Stack(
+  "App",
+  { providers: GCP.providers() },
+  Effect.gen(function* () {
+    const bucket = yield* GCP.Storage.Bucket("assets", {
+      forceDestroy: true,
+    });
+    return { bucketName: bucket.bucketName };
+  }),
+);
+```
+
+`forceDestroy: true` empties the bucket on `alchemy destroy`.
+
+## Deploy
+
+```sh
+bun alchemy deploy --profile testing
+```
+
+The bucket name is generated from the stack, stage, and logical id.
+
+Next: [Part 2 — Effect-native Function](/gcp/tutorial/part-2).

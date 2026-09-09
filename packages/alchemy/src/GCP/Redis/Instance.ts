@@ -291,6 +291,32 @@ export type Instance = Resource<
  * });
  * ```
  *
+ * ### Binding from a Function
+ * **Example:** ReadWriteRedis over REDIS_URL
+ * ```typescript
+ * export class Api extends GCP.Function<Api>()(
+ *   "Api",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const cache = yield* GCP.Redis.Instance("Cache", { memorySizeGb: 1 });
+ *     const redis = yield* GCP.Redis.ReadWriteRedis(cache);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         yield* redis.set("k", "v").pipe(Effect.orDie);
+ *         return HttpServerResponse.text("ok");
+ *       }),
+ *     };
+ *   }).pipe(Effect.provide([GCP.Redis.ReadWriteRedisHttp])),
+ * ) {}
+ * ```
+ *
+ * ### Destroying an Instance
+ * **Example:** Delete waits out CREATING
+ * ```typescript
+ * const cache = yield* GCP.Redis.Instance("Cache", { memorySizeGb: 1 });
+ * ```
+ * `alchemy destroy` waits for `CREATING` to finish, then retries `Conflict` until the instance is gone.
+ *
  * ### High Availability
  * **Example:** STANDARD_HA across two zones
  * ```typescript

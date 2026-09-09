@@ -1,0 +1,43 @@
+---
+title: "Part 3: Publish to Pub/Sub"
+description: Add a topic and publish a message from the Function.
+sidebar:
+  order: 3
+---
+
+The Function already writes to Storage. Add a topic and publish from
+`fetch`.
+
+## Create a topic and bind Publish
+
+```diff lang="typescript"
+  Effect.gen(function* () {
+    const bucket = yield* GCP.Storage.Bucket("assets", { forceDestroy: true });
++   const topic = yield* GCP.PubSub.Topic("events", {});
+    const putObject = yield* GCP.Storage.PutObject(bucket);
++   const publish = yield* GCP.PubSub.Publish(topic);
+    return {
+      fetch: Effect.gen(function* () {
+        yield* putObject({
+          name: "hello.txt",
+          body: { name: "hello.txt", contentType: "text/plain" },
+        }).pipe(Effect.orDie);
++       yield* publish({
++         body: { messages: [{ data: btoa("hello") }] },
++       }).pipe(Effect.orDie);
+        return HttpServerResponse.text("ok");
+      }),
+    };
+- }).pipe(Effect.provide([GCP.Storage.PutObjectHttp])),
++ }).pipe(
++   Effect.provide([GCP.Storage.PutObjectHttp, GCP.PubSub.PublishHttp]),
++ ),
+```
+
+`publish` takes `{ body: { messages: [{ data }] } }` — base64 payload,
+not `{ json }`.
+
+To consume those messages on the same Function, see
+[Publish and subscribe](/gcp/guides/pubsub).
+
+Next: [Part 4 — Destroy](/gcp/tutorial/part-4).

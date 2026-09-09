@@ -129,6 +129,46 @@ export type Bucket = Resource<
  * });
  * ```
  *
+ * ### Updating a Bucket
+ * **Example:** Change labels
+ * ```typescript
+ * const bucket = yield* GCP.Storage.Bucket("assets", {
+ *   forceDestroy: true,
+ *   labels: { env: "prod" },
+ * });
+ * ```
+ *
+ * ### Binding from a Function
+ * **Example:** PutObject from Cloud Run
+ * ```typescript
+ * export class Api extends GCP.Function<Api>()(
+ *   "Api",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const bucket = yield* GCP.Storage.Bucket("assets", { forceDestroy: true });
+ *     const putObject = yield* GCP.Storage.PutObject(bucket);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         yield* putObject({
+ *           name: "hello.txt",
+ *           body: { name: "hello.txt", contentType: "text/plain" },
+ *         }).pipe(Effect.orDie);
+ *         return HttpServerResponse.text("ok");
+ *       }),
+ *     };
+ *   }).pipe(Effect.provide([GCP.Storage.PutObjectHttp])),
+ * ) {}
+ * ```
+ *
+ * ### Destroying a Bucket
+ * **Example:** Empty then delete
+ * ```typescript
+ * const bucket = yield* GCP.Storage.Bucket("assets", {
+ *   forceDestroy: true,
+ * });
+ * ```
+ * `forceDestroy: true` deletes objects before the bucket. `alchemy destroy` waits until the bucket is gone.
+ *
  * @resource
  * @product GCP
  * @category Storage

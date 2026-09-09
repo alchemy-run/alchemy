@@ -1,4 +1,5 @@
 export * from "./Acknowledge.ts";
+export * from "./EventSource.ts";
 export * from "./AcknowledgeHttp.ts";
 export * from "./GetSchema.ts";
 export * from "./GetSchemaHttp.ts";
