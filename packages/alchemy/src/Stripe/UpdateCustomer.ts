@@ -1,7 +1,7 @@
 import type {
   Customer as StripeCustomer,
-  PostCustomersCustomerError,
-  PostCustomersCustomerRequest,
+  UpdateCustomerError,
+  UpdateCustomerRequest as DistilledUpdateCustomerRequest,
 } from "@distilled.cloud/stripe/stripe";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../Binding.ts";
@@ -9,7 +9,7 @@ import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { Customer } from "./Customer.ts";
 
 export interface UpdateCustomerRequest extends Omit<
-  PostCustomersCustomerRequest,
+  DistilledUpdateCustomerRequest,
   "customer"
 > {}
 
@@ -33,11 +33,7 @@ export interface UpdateCustomer extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: UpdateCustomerRequest,
-    ) => Effect.Effect<
-      StripeCustomer,
-      PostCustomersCustomerError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<StripeCustomer, UpdateCustomerError, RuntimeContext>
   >
 > {}
 

@@ -1,7 +1,7 @@
 import * as Provider from "@/Provider";
 import * as Stripe from "@/Stripe";
 import * as Test from "@/Test/Alchemy";
-import { GetCouponsCoupon } from "@distilled.cloud/stripe/stripe";
+import { GetCoupon } from "@distilled.cloud/stripe/stripe";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -16,7 +16,7 @@ const logLevel = Effect.provideService(
 );
 
 const waitUntilGone = (id: string) =>
-  GetCouponsCoupon({ coupon: id }).pipe(
+  GetCoupon({ coupon: id }).pipe(
     Effect.as("found" as const),
     Effect.catchIf(isMissingStripeResource, () =>
       Effect.succeed("gone" as const),
@@ -55,7 +55,7 @@ test.provider(
       expect(created.metadata).toMatchObject({ campaign: "welcome" });
       expect(created.created).toEqual(expect.any(Number));
 
-      const fetched = yield* GetCouponsCoupon({ coupon: created.id });
+      const fetched = yield* GetCoupon({ coupon: created.id });
       expect(fetched.id).toEqual(created.id);
       expect(fetched.percent_off).toEqual(20);
       expect(fetched.duration).toEqual("forever");
@@ -89,7 +89,7 @@ test.provider(
         sku: "welcome-2",
       });
 
-      const refetched = yield* GetCouponsCoupon({ coupon: updated.id });
+      const refetched = yield* GetCoupon({ coupon: updated.id });
       expect(refetched.id).toEqual(updated.id);
       expect(refetched.name).toEqual("Alchemy Welcome 20% Updated");
       expect(refetched.percent_off).toEqual(20);
@@ -141,7 +141,7 @@ test.provider(
       expect(replaced.percentOff).toBeUndefined();
       expect(replaced.duration).toEqual("once");
 
-      const fetched = yield* GetCouponsCoupon({ coupon: replaced.id });
+      const fetched = yield* GetCoupon({ coupon: replaced.id });
       expect(fetched.id).toEqual(replaced.id);
       expect(fetched.amount_off).toEqual(500);
       expect(fetched.currency).toEqual("usd");

@@ -1,10 +1,8 @@
-import { Credentials } from "@distilled.cloud/stripe";
-import { PostTaxSettings } from "@distilled.cloud/stripe/stripe";
+import { CreateTaxSettings } from "@distilled.cloud/stripe/stripe";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import type * as HttpClient from "effect/unstable/http/HttpClient";
 import type { ResourceLike } from "../Resource.ts";
-import { attachStripeToken, makeStripeAuth } from "./StripeHttp.ts";
+import { attachStripeToken, resolveStripeAuth } from "./StripeHttp.ts";
 import type { TaxSettings } from "./TaxSettings.ts";
 import {
   UpdateTaxSettings,
@@ -22,10 +20,7 @@ import {
 export const UpdateTaxSettingsHttp = Layer.effect(
   UpdateTaxSettings,
   Effect.gen(function* () {
-    const context = yield* Effect.context<
-      Credentials | HttpClient.HttpClient
-    >();
-    const auth = makeStripeAuth(context);
+    const auth = yield* resolveStripeAuth;
 
     return Effect.fn(function* (settings: TaxSettings) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
@@ -38,7 +33,7 @@ export const UpdateTaxSettingsHttp = Layer.effect(
       }
       return Effect.fn(`Stripe.UpdateTaxSettings(${settings.LogicalId})`)(
         function* (request?: UpdateTaxSettingsRequest) {
-          return yield* auth.authorize(PostTaxSettings(request ?? {}));
+          return yield* auth.authorize(CreateTaxSettings(request ?? {}));
         },
       );
     });

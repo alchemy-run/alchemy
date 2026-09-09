@@ -1,7 +1,7 @@
 import type {
   BillingMeter as StripeBillingMeter,
-  GetBillingMetersIdError,
-  GetBillingMetersIdRequest,
+  GetBillingMeterError,
+  GetBillingMeterRequest,
 } from "@distilled.cloud/stripe/stripe";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../Binding.ts";
@@ -9,7 +9,7 @@ import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { BillingMeter } from "./BillingMeter.ts";
 
 export interface RetrieveBillingMeterRequest extends Omit<
-  GetBillingMetersIdRequest,
+  GetBillingMeterRequest,
   "id"
 > {}
 
@@ -33,11 +33,7 @@ export interface RetrieveBillingMeter extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: RetrieveBillingMeterRequest,
-    ) => Effect.Effect<
-      StripeBillingMeter,
-      GetBillingMetersIdError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<StripeBillingMeter, GetBillingMeterError, RuntimeContext>
   >
 > {}
 

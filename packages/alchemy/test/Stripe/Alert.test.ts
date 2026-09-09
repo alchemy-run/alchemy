@@ -1,7 +1,7 @@
 import * as Provider from "@/Provider";
 import * as Stripe from "@/Stripe";
 import * as Test from "@/Test/Alchemy";
-import { GetBillingAlertsId } from "@distilled.cloud/stripe/stripe";
+import { GetBillingAlert } from "@distilled.cloud/stripe/stripe";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -18,7 +18,7 @@ const logLevel = Effect.provideService(
 const isMissing = isMissingStripeResource;
 
 const waitUntilArchived = (id: string) =>
-  GetBillingAlertsId({ id }).pipe(
+  GetBillingAlert({ id }).pipe(
     Effect.map((alert) =>
       alert.status === "archived"
         ? ("archived" as const)
@@ -68,7 +68,7 @@ test.provider(
       });
       expect(created.alert.livemode).toEqual(false);
 
-      const fetched = yield* GetBillingAlertsId({ id: created.alert.id });
+      const fetched = yield* GetBillingAlert({ id: created.alert.id });
       expect(fetched.id).toEqual(created.alert.id);
       expect(fetched.title).toEqual("Alchemy Usage Alert");
       expect(fetched.alert_type).toEqual("usage_threshold");
@@ -106,7 +106,7 @@ test.provider(
       expect(updated.alert.status).toEqual("inactive");
       expect(updated.alert.usageThreshold?.gte).toEqual(100);
 
-      const refetched = yield* GetBillingAlertsId({ id: updated.alert.id });
+      const refetched = yield* GetBillingAlert({ id: updated.alert.id });
       expect(refetched.id).toEqual(updated.alert.id);
       expect(refetched.title).toEqual("Alchemy Usage Alert");
       expect(refetched.status).toEqual("inactive");
@@ -170,7 +170,7 @@ test.provider(
       expect(replaced.alert.usageThreshold?.gte).toEqual(500);
       expect(replaced.alert.status).toEqual("active");
 
-      const fetched = yield* GetBillingAlertsId({ id: replaced.alert.id });
+      const fetched = yield* GetBillingAlert({ id: replaced.alert.id });
       expect(fetched.id).toEqual(replaced.alert.id);
       expect(fetched.usage_threshold?.gte).toEqual(500);
       expect(fetched.status).toEqual("active");

@@ -1,11 +1,11 @@
 import { unwrapRedactedDeep } from "@distilled.cloud/core/protocol-rest";
 import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
-  DeleteWebhookEndpointsWebhookEndpoint,
+  DeleteWebhookEndpoint,
   GetWebhookEndpoints,
-  GetWebhookEndpointsWebhookEndpoint,
-  PostWebhookEndpoints,
-  PostWebhookEndpointsWebhookEndpoint,
+  GetWebhookEndpoint,
+  CreateWebhookEndpoint,
+  UpdateWebhookEndpoint,
   type WebhookEndpoint as StripeWebhookEndpoint,
 } from "@distilled.cloud/stripe/stripe";
 import * as Effect from "effect/Effect";
@@ -193,7 +193,7 @@ const toAttrs = (
 const isMissingWebhookEndpoint = isMissingStripeResource;
 
 const getById = (webhookEndpoint: string) =>
-  GetWebhookEndpointsWebhookEndpoint({
+  GetWebhookEndpoint({
     webhook_endpoint: webhookEndpoint,
   }).pipe(
     Effect.catchIf(isMissingWebhookEndpoint, () => Effect.succeed(undefined)),
@@ -322,7 +322,7 @@ export const WebhookEndpointProvider = () =>
       });
 
       if (current === undefined) {
-        current = yield* PostWebhookEndpoints({
+        current = yield* CreateWebhookEndpoint({
           url: desiredUrl,
           enabled_events: desiredEvents,
           ...(desiredDescription.length > 0
@@ -360,7 +360,7 @@ export const WebhookEndpointProvider = () =>
         return toAttrs(current, previousSecret);
       }
 
-      const updated = yield* PostWebhookEndpointsWebhookEndpoint({
+      const updated = yield* UpdateWebhookEndpoint({
         webhook_endpoint: current.id,
         ...(urlChanged ? { url: desiredUrl } : {}),
         ...(eventsChanged ? { enabled_events: desiredEvents } : {}),
@@ -381,7 +381,7 @@ export const WebhookEndpointProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      yield* DeleteWebhookEndpointsWebhookEndpoint({
+      yield* DeleteWebhookEndpoint({
         webhook_endpoint: output.id,
       }).pipe(Effect.catchIf(isMissingWebhookEndpoint, () => Effect.void));
     }),

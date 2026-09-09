@@ -1,7 +1,6 @@
 import { Credentials } from "@distilled.cloud/stripe";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
-import { isResolved } from "../Diff.ts";
 import { createPhysicalName } from "../PhysicalName.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
@@ -159,35 +158,11 @@ export const collectPermissions = (
   return [...set].sort();
 };
 
-const fingerprint = (permissions: StripePermission[]) =>
-  permissions.slice().sort().join(",");
-
 export const RestrictedApiKeyProvider = () =>
   Provider.succeed(RestrictedApiKey, {
     stables: ["id"],
 
-    diff: Effect.fn(function* ({ news, olds, output }) {
-      if (!isResolved(news)) return undefined;
-      const newName = yield* resolveName(
-        output?.id ?? "RestrictedApiKey",
-        news.name,
-      );
-      if (
-        output !== undefined &&
-        news.name !== undefined &&
-        newName !== output.name
-      ) {
-        return { action: "update" } as const;
-      }
-      const oldFp = fingerprint(olds?.permissions ?? output?.permissions ?? []);
-      const newFp = fingerprint(news.permissions ?? []);
-      if (
-        output !== undefined &&
-        oldFp !== newFp &&
-        news.permissions !== undefined
-      ) {
-        return { action: "update" } as const;
-      }
+    diff: Effect.fn(function* () {
       return undefined;
     }),
 
@@ -212,13 +187,11 @@ export const RestrictedApiKeyProvider = () =>
       const value =
         news.value !== undefined
           ? Redacted.make(news.value)
-          : output?.value !== undefined
-            ? output.value
-            : yield* Effect.gen(function* () {
-                const resolve = yield* Credentials;
-                const cfg = yield* resolve;
-                return cfg.apiKey;
-              });
+          : yield* Effect.gen(function* () {
+              const resolve = yield* Credentials;
+              const cfg = yield* resolve;
+              return Redacted.make(Redacted.value(cfg.apiKey));
+            });
       return {
         id: output?.id ?? name,
         name,

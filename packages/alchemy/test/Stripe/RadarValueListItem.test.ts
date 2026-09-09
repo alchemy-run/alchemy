@@ -2,7 +2,7 @@ import * as Provider from "@/Provider";
 import * as Stripe from "@/Stripe";
 import * as Test from "@/Test/Alchemy";
 import {
-  GetRadarValueListItemsItem,
+  GetRadarValueListItem,
   GetRadarValueLists,
 } from "@distilled.cloud/stripe/stripe";
 import { expect } from "alchemy-test";
@@ -22,7 +22,7 @@ const logLevel = Effect.provideService(
 const isMissing = isMissingStripeResource;
 
 const waitUntilGone = (id: string) =>
-  GetRadarValueListItemsItem({ item: id }).pipe(
+  GetRadarValueListItem({ item: id }).pipe(
     Effect.as("found" as const),
     Effect.catchIf(isMissing, () => Effect.succeed("gone" as const)),
     Effect.repeat({
@@ -82,7 +82,7 @@ test.provider(
       expect(created.item.created).toEqual(expect.any(Number));
       expect(created.item.createdBy).toEqual(expect.any(String));
 
-      const fetched = yield* GetRadarValueListItemsItem({
+      const fetched = yield* GetRadarValueListItem({
         item: created.item.id,
       });
       expect(fetched.id).toEqual(created.item.id);
@@ -196,7 +196,7 @@ test.provider(
       expect(replaced.item.valueList).toEqual(created.list.id);
       expect(replaced.item.value).toEqual("second@example.com");
 
-      const newFetched = yield* GetRadarValueListItemsItem({
+      const newFetched = yield* GetRadarValueListItem({
         item: replaced.item.id,
       });
       expect(newFetched.value).toEqual("second@example.com");

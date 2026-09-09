@@ -1,7 +1,7 @@
 import * as Provider from "@/Provider";
 import * as Stripe from "@/Stripe";
 import * as Test from "@/Test/Alchemy";
-import { GetTerminalLocationsLocation } from "@distilled.cloud/stripe/stripe";
+import { GetTerminalLocation } from "@distilled.cloud/stripe/stripe";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -16,7 +16,7 @@ const logLevel = Effect.provideService(
 );
 
 const waitUntilGone = (id: string) =>
-  GetTerminalLocationsLocation({ location: id }).pipe(
+  GetTerminalLocation({ location: id }).pipe(
     Effect.map((location) =>
       "deleted" in location && location.deleted
         ? ("gone" as const)
@@ -80,7 +80,7 @@ test.provider(
       expect(created.metadata).toMatchObject({ region: "west" });
       expect(created.livemode).toEqual(false);
 
-      const fetched = yield* GetTerminalLocationsLocation({
+      const fetched = yield* GetTerminalLocation({
         location: created.id,
       });
       if (!("display_name" in fetched)) {
@@ -120,7 +120,7 @@ test.provider(
       expect(updated.phone).toEqual("+14155550199");
       expect(updated.metadata).toEqual({ region: "bay", sku: "loc-2" });
 
-      const refetched = yield* GetTerminalLocationsLocation({
+      const refetched = yield* GetTerminalLocation({
         location: updated.id,
       });
       if (!("display_name" in refetched)) {
@@ -172,7 +172,7 @@ test.provider(
       expect(replaced.address).toEqual(caAddress);
       expect(replaced.displayName).toEqual("Alchemy Replace Store");
 
-      const fetched = yield* GetTerminalLocationsLocation({
+      const fetched = yield* GetTerminalLocation({
         location: replaced.id,
       });
       if (!("display_name" in fetched)) {

@@ -1,6 +1,6 @@
 import type {
-  GetPaymentLinksPaymentLinkError,
-  GetPaymentLinksPaymentLinkRequest,
+  GetPaymentLinkError,
+  GetPaymentLinkRequest,
   PaymentLink as StripePaymentLink,
 } from "@distilled.cloud/stripe/stripe";
 import type * as Effect from "effect/Effect";
@@ -9,7 +9,7 @@ import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { PaymentLink } from "./PaymentLink.ts";
 
 export interface RetrievePaymentLinkRequest extends Omit<
-  GetPaymentLinksPaymentLinkRequest,
+  GetPaymentLinkRequest,
   "payment_link"
 > {}
 
@@ -33,11 +33,7 @@ export interface RetrievePaymentLink extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: RetrievePaymentLinkRequest,
-    ) => Effect.Effect<
-      StripePaymentLink,
-      GetPaymentLinksPaymentLinkError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<StripePaymentLink, GetPaymentLinkError, RuntimeContext>
   >
 > {}
 

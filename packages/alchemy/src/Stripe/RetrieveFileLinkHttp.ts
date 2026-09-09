@@ -1,4 +1,4 @@
-import { GetFileLinksLink } from "@distilled.cloud/stripe/stripe";
+import { GetFileLink } from "@distilled.cloud/stripe/stripe";
 import * as Layer from "effect/Layer";
 import { RetrieveFileLink } from "./RetrieveFileLink.ts";
 import { makeHttpStripeIdBinding } from "./StripeHttp.ts";
@@ -14,7 +14,7 @@ export const RetrieveFileLinkHttp = Layer.effect(
   RetrieveFileLink,
   makeHttpStripeIdBinding({
     tag: "Stripe.RetrieveFileLink",
-    operation: GetFileLinksLink,
+    operation: GetFileLink,
     idField: "link",
     permissions: ["files_read"],
   }),

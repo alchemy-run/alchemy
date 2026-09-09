@@ -1,4 +1,4 @@
-import { GetAccountsAccount } from "@distilled.cloud/stripe/stripe";
+import { GetAccountByAccount } from "@distilled.cloud/stripe/stripe";
 import * as Layer from "effect/Layer";
 import { RetrieveAccount } from "./RetrieveAccount.ts";
 import { makeHttpStripeIdBinding } from "./StripeHttp.ts";
@@ -14,7 +14,7 @@ export const RetrieveAccountHttp = Layer.effect(
   RetrieveAccount,
   makeHttpStripeIdBinding({
     tag: "Stripe.RetrieveAccount",
-    operation: GetAccountsAccount,
+    operation: GetAccountByAccount,
     idField: "account",
     permissions: ["accounts_read"],
   }),

@@ -2,13 +2,13 @@ import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
   GetAppsSecrets,
   GetAppsSecretsFind,
-  PostAppsSecrets,
-  PostAppsSecretsDelete,
+  CreateAppsSecret,
+  CreateAppsSecretsDelete,
   type AppsSecret as StripeAppsSecret,
   type GetAppsSecretsFindRequestScope,
   type GetAppsSecretsRequestScope,
-  type PostAppsSecretsDeleteRequestScope,
-  type PostAppsSecretsRequestScope,
+  type CreateAppsSecretsDeleteRequestScope,
+  type CreateAppsSecretRequestScope,
 } from "@distilled.cloud/stripe/stripe";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -161,10 +161,10 @@ const toScope = (scope: AppsSecretScope | undefined): AppsSecretScope => {
 
 const toWireScope = (
   scope: AppsSecretScope,
-): PostAppsSecretsRequestScope &
+): CreateAppsSecretRequestScope &
   GetAppsSecretsFindRequestScope &
   GetAppsSecretsRequestScope &
-  PostAppsSecretsDeleteRequestScope =>
+  CreateAppsSecretsDeleteRequestScope =>
   scope.user !== undefined
     ? { type: scope.type, user: scope.user }
     : { type: scope.type };
@@ -331,7 +331,7 @@ export const AppsSecretProvider = () =>
       }
 
       const put = (idempotencyKey: string) =>
-        PostAppsSecrets({
+        CreateAppsSecret({
           name,
           payload: news.payload,
           scope: toWireScope(scope),
@@ -377,7 +377,7 @@ export const AppsSecretProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      yield* PostAppsSecretsDelete({
+      yield* CreateAppsSecretsDelete({
         name: output.name,
         scope: toWireScope(output.scope),
       }).pipe(Effect.catchIf(isMissingSecret, () => Effect.void));

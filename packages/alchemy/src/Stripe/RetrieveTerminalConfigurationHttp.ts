@@ -1,4 +1,4 @@
-import { GetTerminalConfigurationsConfiguration } from "@distilled.cloud/stripe/stripe";
+import { GetTerminalConfiguration } from "@distilled.cloud/stripe/stripe";
 import * as Layer from "effect/Layer";
 import { RetrieveTerminalConfiguration } from "./RetrieveTerminalConfiguration.ts";
 import { makeHttpStripeIdBinding } from "./StripeHttp.ts";
@@ -14,7 +14,7 @@ export const RetrieveTerminalConfigurationHttp = Layer.effect(
   RetrieveTerminalConfiguration,
   makeHttpStripeIdBinding({
     tag: "Stripe.RetrieveTerminalConfiguration",
-    operation: GetTerminalConfigurationsConfiguration,
+    operation: GetTerminalConfiguration,
     idField: "configuration",
     permissions: ["terminal_read"],
   }),

@@ -1,4 +1,4 @@
-import { GetIssuingCardsCard } from "@distilled.cloud/stripe/stripe";
+import { GetIssuingCard } from "@distilled.cloud/stripe/stripe";
 import * as Layer from "effect/Layer";
 import { RetrieveIssuingCard } from "./RetrieveIssuingCard.ts";
 import { makeHttpStripeIdBinding } from "./StripeHttp.ts";
@@ -14,7 +14,7 @@ export const RetrieveIssuingCardHttp = Layer.effect(
   RetrieveIssuingCard,
   makeHttpStripeIdBinding({
     tag: "Stripe.RetrieveIssuingCard",
-    operation: GetIssuingCardsCard,
+    operation: GetIssuingCard,
     idField: "card",
     permissions: ["issuing_read"],
   }),

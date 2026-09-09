@@ -1,4 +1,4 @@
-import { GetEntitlementsFeaturesId } from "@distilled.cloud/stripe/stripe";
+import { GetEntitlementsFeature } from "@distilled.cloud/stripe/stripe";
 import * as Layer from "effect/Layer";
 import { RetrieveEntitlementsFeature } from "./RetrieveEntitlementsFeature.ts";
 import { makeHttpStripeIdBinding } from "./StripeHttp.ts";
@@ -13,7 +13,7 @@ export const RetrieveEntitlementsFeatureHttp = Layer.effect(
   RetrieveEntitlementsFeature,
   makeHttpStripeIdBinding({
     tag: "Stripe.RetrieveEntitlementsFeature",
-    operation: GetEntitlementsFeaturesId,
+    operation: GetEntitlementsFeature,
     idField: "id",
     permissions: ["entitlements_read"],
   }),

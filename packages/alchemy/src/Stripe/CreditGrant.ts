@@ -4,13 +4,13 @@ import {
 } from "@distilled.cloud/stripe";
 import {
   GetBillingCreditGrants,
-  GetBillingCreditGrantsId,
-  PostBillingCreditGrants,
-  PostBillingCreditGrantsId,
-  PostBillingCreditGrantsIdVoid,
+  GetBillingCreditGrant,
+  CreateBillingCreditGrant,
+  UpdateBillingCreditGrant,
+  CreateBillingCreditGrantVoid,
   type BillingCreditGrant as StripeCreditGrant,
-  type PostBillingCreditGrantsRequestAmount,
-  type PostBillingCreditGrantsRequestApplicabilityConfig,
+  type CreateBillingCreditGrantRequestAmount,
+  type CreateBillingCreditGrantRequestApplicabilityConfig,
 } from "@distilled.cloud/stripe/stripe";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -301,7 +301,7 @@ const fromWireAmount = (
 
 const toWireAmount = (
   amount: CreditGrantAmount,
-): PostBillingCreditGrantsRequestAmount => ({
+): CreateBillingCreditGrantRequestAmount => ({
   type: amount.type,
   ...(amount.monetary !== undefined
     ? {
@@ -333,7 +333,7 @@ const fromWireApplicability = (
 
 const toWireApplicability = (
   config: CreditGrantApplicabilityConfig,
-): PostBillingCreditGrantsRequestApplicabilityConfig => ({
+): CreateBillingCreditGrantRequestApplicabilityConfig => ({
   scope: {
     ...(config.scope.priceType !== undefined
       ? { price_type: config.scope.priceType }
@@ -378,7 +378,7 @@ const alreadyVoided = (error: StripeOpError): boolean =>
   (error.message?.toLowerCase().includes("void") ?? false);
 
 const getById = (id: string) =>
-  GetBillingCreditGrantsId({ id }).pipe(
+  GetBillingCreditGrant({ id }).pipe(
     Effect.catchIf(isMissingGrant, () => Effect.succeed(undefined)),
   );
 
@@ -560,7 +560,7 @@ export const CreditGrantProvider = () =>
       }
 
       if (current === undefined) {
-        current = yield* PostBillingCreditGrants({
+        current = yield* CreateBillingCreditGrant({
           amount: toWireAmount(news.amount),
           applicability_config: toWireApplicability(applicabilityConfig),
           name,
@@ -599,7 +599,7 @@ export const CreditGrantProvider = () =>
         return toAttrs(current);
       }
 
-      const updated = yield* PostBillingCreditGrantsId({
+      const updated = yield* UpdateBillingCreditGrant({
         id: current.id,
         ...(expiresAtChanged ? { expires_at: news.expiresAt } : {}),
         ...(metadataChanged
@@ -619,7 +619,7 @@ export const CreditGrantProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const existing = yield* getById(output.id);
       if (existing === undefined || isVoided(existing)) return;
-      yield* PostBillingCreditGrantsIdVoid({ id: existing.id }).pipe(
+      yield* CreateBillingCreditGrantVoid({ id: existing.id }).pipe(
         Effect.catchIf(isMissingGrant, () => Effect.void),
         Effect.catchIf(alreadyVoided, () => Effect.void),
       );

@@ -1,4 +1,4 @@
-import { GetPaymentLinksPaymentLink } from "@distilled.cloud/stripe/stripe";
+import { GetPaymentLink } from "@distilled.cloud/stripe/stripe";
 import * as Layer from "effect/Layer";
 import { RetrievePaymentLink } from "./RetrievePaymentLink.ts";
 import { makeHttpStripeIdBinding } from "./StripeHttp.ts";
@@ -14,7 +14,7 @@ export const RetrievePaymentLinkHttp = Layer.effect(
   RetrievePaymentLink,
   makeHttpStripeIdBinding({
     tag: "Stripe.RetrievePaymentLink",
-    operation: GetPaymentLinksPaymentLink,
+    operation: GetPaymentLink,
     idField: "payment_link",
     permissions: ["payment_links_read"],
   }),

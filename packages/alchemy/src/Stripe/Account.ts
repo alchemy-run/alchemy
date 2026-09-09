@@ -1,20 +1,20 @@
 import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
-  DeleteAccountsAccount,
+  DeleteAccount,
   GetAccounts,
-  GetAccountsAccount,
-  PostAccounts,
-  PostAccountsAccount,
+  GetAccountByAccount,
+  CreateAccount,
+  UpdateAccount,
   type Account as StripeAccount,
   type AccountBusinessType as StripeAccountBusinessType,
   type AccountType as StripeAccountType,
-  type PostAccountsRequestBusinessProfile,
-  type PostAccountsRequestCapabilities,
-  type PostAccountsRequestCompany,
-  type PostAccountsRequestController,
-  type PostAccountsRequestIndividual,
-  type PostAccountsRequestSettings,
-  type PostAccountsRequestTosAcceptance,
+  type CreateAccountRequestBusinessProfile,
+  type CreateAccountRequestCapabilities,
+  type CreateAccountRequestCompany,
+  type CreateAccountRequestController,
+  type CreateAccountRequestIndividual,
+  type CreateAccountRequestSettings,
+  type CreateAccountRequestTosAcceptance,
 } from "@distilled.cloud/stripe/stripe";
 import * as Effect from "effect/Effect";
 import { Unowned } from "../AdoptPolicy.ts";
@@ -179,12 +179,12 @@ export interface AccountProps {
    *
    * Nested fields use Stripe's wire names.
    */
-  capabilities?: PostAccountsRequestCapabilities;
+  capabilities?: CreateAccountRequestCapabilities;
   /**
    * Account behaviour settings (branding, payouts, card payments, …).
    * Mutable. Nested fields use Stripe's wire names.
    */
-  settings?: PostAccountsRequestSettings;
+  settings?: CreateAccountRequestSettings;
   /**
    * Three-letter ISO currency code used as the account's default currency.
    * Must be a currency Stripe supports in the account's country. Mutable.
@@ -195,12 +195,12 @@ export interface AccountProps {
    * while `controller.requirement_collection` is `application` (Custom).
    * Nested fields use Stripe's wire names.
    */
-  company?: PostAccountsRequestCompany;
+  company?: CreateAccountRequestCompany;
   /**
    * Individual represented by the account. Only meaningful when
    * `businessType` is `individual`. Nested fields use Stripe's wire names.
    */
-  individual?: PostAccountsRequestIndividual;
+  individual?: CreateAccountRequestIndividual;
   /**
    * Record of the account holder accepting the Stripe Services Agreement.
    * Only settable for Custom accounts.
@@ -371,7 +371,7 @@ const capabilityStatuses = (
 
 const toWireBusinessProfile = (
   profile: AccountBusinessProfile,
-): PostAccountsRequestBusinessProfile => ({
+): CreateAccountRequestBusinessProfile => ({
   ...(profile.name !== undefined ? { name: profile.name } : {}),
   ...(profile.url !== undefined ? { url: profile.url } : {}),
   ...(profile.mcc !== undefined ? { mcc: profile.mcc } : {}),
@@ -391,7 +391,7 @@ const toWireBusinessProfile = (
 
 const toWireController = (
   controller: AccountController,
-): PostAccountsRequestController => ({
+): CreateAccountRequestController => ({
   ...(controller.fees !== undefined
     ? {
         fees: {
@@ -426,7 +426,7 @@ const toWireController = (
 
 const toWireTosAcceptance = (
   tos: AccountTosAcceptance,
-): PostAccountsRequestTosAcceptance => ({
+): CreateAccountRequestTosAcceptance => ({
   ...(tos.date !== undefined ? { date: tos.date } : {}),
   ...(tos.ip !== undefined ? { ip: tos.ip } : {}),
   ...(tos.userAgent !== undefined ? { user_agent: tos.userAgent } : {}),
@@ -458,7 +458,7 @@ const toAttrs = (account: StripeAccount) => ({
 const isMissingAccount = isMissingStripeResource;
 
 const getById = (account: string) =>
-  GetAccountsAccount({ account }).pipe(
+  GetAccountByAccount({ account }).pipe(
     Effect.catchIf(isMissingAccount, () => Effect.succeed(undefined)),
   );
 
@@ -566,7 +566,7 @@ const businessProfileChanged = (
 };
 
 const capabilitiesDiverge = (
-  desired: PostAccountsRequestCapabilities | undefined,
+  desired: CreateAccountRequestCapabilities | undefined,
   observed: Record<string, string>,
 ): boolean => {
   if (desired === undefined) return false;
@@ -664,7 +664,7 @@ export const AccountProvider = () =>
       let createdThisPass = false;
 
       if (current === undefined) {
-        current = yield* PostAccounts({
+        current = yield* CreateAccount({
           ...(news.type !== undefined ? { type: news.type } : {}),
           ...(news.country !== undefined ? { country: news.country } : {}),
           ...(controller !== undefined ? { controller } : {}),
@@ -752,7 +752,7 @@ export const AccountProvider = () =>
         return toAttrs(current);
       }
 
-      const updated = yield* PostAccountsAccount({
+      const updated = yield* UpdateAccount({
         account: current.id,
         ...(emailChanged ? { email: news.email } : {}),
         ...(businessTypeChanged ? { business_type: news.businessType } : {}),
@@ -788,7 +788,7 @@ export const AccountProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      yield* DeleteAccountsAccount({ account: output.id }).pipe(
+      yield* DeleteAccount({ account: output.id }).pipe(
         Effect.catchIf(isMissingAccount, () => Effect.void),
       );
     }),

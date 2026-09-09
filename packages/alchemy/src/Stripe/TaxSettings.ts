@@ -1,9 +1,9 @@
 import {
   GetTaxSettings,
-  PostTaxSettings,
-  type PostTaxSettingsRequest,
-  type PostTaxSettingsRequestDefaults,
-  type PostTaxSettingsRequestHeadOfficeAddress,
+  CreateTaxSettings,
+  type CreateTaxSettingsRequest,
+  type CreateTaxSettingsRequestDefaults,
+  type CreateTaxSettingsRequestHeadOfficeAddress,
   type TaxSettings as StripeTaxSettings,
 } from "@distilled.cloud/stripe/stripe";
 import * as Effect from "effect/Effect";
@@ -223,7 +223,7 @@ const toAddress = (
 
 const toWireAddress = (
   address: TaxSettingsAddress,
-): PostTaxSettingsRequestHeadOfficeAddress => ({
+): CreateTaxSettingsRequestHeadOfficeAddress => ({
   ...(address.city !== undefined ? { city: address.city } : {}),
   ...(address.country !== undefined ? { country: address.country } : {}),
   ...(address.line1 !== undefined ? { line1: address.line1 } : {}),
@@ -263,9 +263,9 @@ const observe = GetTaxSettings({});
 
 const desiredDefaults = (
   news: TaxSettingsProps,
-): PostTaxSettingsRequestDefaults | undefined => {
+): CreateTaxSettingsRequestDefaults | undefined => {
   if (news.defaults === undefined) return undefined;
-  const defaults: PostTaxSettingsRequestDefaults = {
+  const defaults: CreateTaxSettingsRequestDefaults = {
     ...(news.defaults.taxBehavior !== undefined
       ? { tax_behavior: news.defaults.taxBehavior }
       : {}),
@@ -284,8 +284,8 @@ const desiredHeadOffice = (news: TaxSettingsProps) =>
 const syncBody = (
   news: TaxSettingsProps,
   observed: StripeTaxSettings,
-): PostTaxSettingsRequest | undefined => {
-  const body: PostTaxSettingsRequest = {};
+): CreateTaxSettingsRequest | undefined => {
+  const body: CreateTaxSettingsRequest = {};
   const snapshot = toSnapshot(observed);
   const defaults = desiredDefaults(news);
   if (defaults !== undefined) {
@@ -314,10 +314,10 @@ const syncBody = (
 const restoreBody = (
   initial: TaxSettingsSnapshot,
   observed: StripeTaxSettings,
-): PostTaxSettingsRequest | undefined => {
+): CreateTaxSettingsRequest | undefined => {
   const current = toSnapshot(observed);
-  const body: PostTaxSettingsRequest = {};
-  const defaults: PostTaxSettingsRequestDefaults = {};
+  const body: CreateTaxSettingsRequest = {};
+  const defaults: CreateTaxSettingsRequestDefaults = {};
   // Stripe will not unset a field that was originally null — only restore
   // values that were already set when Alchemy first captured the snapshot.
   if (
@@ -380,7 +380,7 @@ export const TaxSettingsProvider = () =>
       //    differs. Skip the API on no delta.
       const body = syncBody(news, observed);
       if (body !== undefined) {
-        observed = yield* PostTaxSettings(body);
+        observed = yield* CreateTaxSettings(body);
       }
 
       return toAttrs(observed, initialSettings);
@@ -390,6 +390,6 @@ export const TaxSettingsProvider = () =>
       const observed = yield* observe;
       const body = restoreBody(output.initialSettings, observed);
       if (body === undefined) return;
-      yield* PostTaxSettings(body);
+      yield* CreateTaxSettings(body);
     }),
   });

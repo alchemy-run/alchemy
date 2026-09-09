@@ -1,7 +1,7 @@
 import * as Provider from "@/Provider";
 import * as Stripe from "@/Stripe";
 import * as Test from "@/Test/Alchemy";
-import { GetTaxRatesTaxRate } from "@distilled.cloud/stripe/stripe";
+import { GetTaxRate } from "@distilled.cloud/stripe/stripe";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -18,7 +18,7 @@ const logLevel = Effect.provideService(
 const isMissing = isMissingStripeResource;
 
 const waitUntilInactive = (id: string) =>
-  GetTaxRatesTaxRate({ tax_rate: id }).pipe(
+  GetTaxRate({ tax_rate: id }).pipe(
     Effect.map((rate) =>
       rate.active ? ("active" as const) : ("inactive" as const),
     ),
@@ -60,7 +60,7 @@ test.provider(
       expect(created.created).toEqual(expect.any(Number));
       expect(created.livemode).toEqual(false);
 
-      const fetched = yield* GetTaxRatesTaxRate({ tax_rate: created.id });
+      const fetched = yield* GetTaxRate({ tax_rate: created.id });
       expect(fetched.id).toEqual(created.id);
       expect(fetched.display_name).toEqual("Alchemy Sales Tax");
       expect(fetched.percentage).toEqual(8.25);
@@ -98,7 +98,7 @@ test.provider(
       expect(updated.description).toEqual("Updated sales tax");
       expect(updated.metadata).toEqual({ region: "ca", sku: "tax-2" });
 
-      const refetched = yield* GetTaxRatesTaxRate({ tax_rate: updated.id });
+      const refetched = yield* GetTaxRate({ tax_rate: updated.id });
       expect(refetched.id).toEqual(updated.id);
       expect(refetched.display_name).toEqual("Alchemy Sales Tax Updated");
       expect(refetched.percentage).toEqual(8.25);
@@ -111,7 +111,7 @@ test.provider(
 
       const inactive = yield* waitUntilInactive(created.id);
       expect(inactive).toEqual("inactive");
-      const deactivated = yield* GetTaxRatesTaxRate({ tax_rate: created.id });
+      const deactivated = yield* GetTaxRate({ tax_rate: created.id });
       expect(deactivated.active).toEqual(false);
     }).pipe(logLevel),
   { timeout: 120_000 },
@@ -150,7 +150,7 @@ test.provider(
       expect(replaced.percentage).toEqual(10);
       expect(replaced.inclusive).toEqual(true);
 
-      const fetched = yield* GetTaxRatesTaxRate({ tax_rate: replaced.id });
+      const fetched = yield* GetTaxRate({ tax_rate: replaced.id });
       expect(fetched.id).toEqual(replaced.id);
       expect(fetched.percentage).toEqual(10);
       expect(fetched.inclusive).toEqual(true);

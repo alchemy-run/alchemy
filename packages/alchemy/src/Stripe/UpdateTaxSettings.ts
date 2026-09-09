@@ -1,6 +1,6 @@
 import type {
-  PostTaxSettingsError,
-  PostTaxSettingsRequest,
+  CreateTaxSettingsError,
+  CreateTaxSettingsRequest,
   TaxSettings as StripeTaxSettings,
 } from "@distilled.cloud/stripe/stripe";
 import type * as Effect from "effect/Effect";
@@ -8,7 +8,7 @@ import * as Binding from "../Binding.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { TaxSettings } from "./TaxSettings.ts";
 
-export interface UpdateTaxSettingsRequest extends PostTaxSettingsRequest {}
+export interface UpdateTaxSettingsRequest extends CreateTaxSettingsRequest {}
 
 /**
  * Update bound Stripe Tax Settings over HTTP. Tax Settings is an account
@@ -35,7 +35,11 @@ export interface UpdateTaxSettings extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: UpdateTaxSettingsRequest,
-    ) => Effect.Effect<StripeTaxSettings, PostTaxSettingsError, RuntimeContext>
+    ) => Effect.Effect<
+      StripeTaxSettings,
+      CreateTaxSettingsError,
+      RuntimeContext
+    >
   >
 > {}
 

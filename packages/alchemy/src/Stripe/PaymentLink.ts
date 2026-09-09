@@ -1,16 +1,16 @@
 import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
   GetPaymentLinks,
-  GetPaymentLinksPaymentLink,
-  GetPaymentLinksPaymentLinkLineItems,
-  PostPaymentLinks,
-  PostPaymentLinksPaymentLink,
+  GetPaymentLink,
+  GetPaymentLinkLineItems,
+  CreatePaymentLink,
+  UpdatePaymentLink,
   type Item as StripeLineItem,
   type PaymentLink as StripePaymentLink,
-  type PostPaymentLinksRequestAfterCompletion,
-  type PostPaymentLinksRequestLineItemsItem,
-  type PostPaymentLinksPaymentLinkRequestAfterCompletion,
-  type PostPaymentLinksPaymentLinkRequestLineItemsItem,
+  type CreatePaymentLinkRequestAfterCompletion,
+  type CreatePaymentLinkRequestLineItemsItem,
+  type UpdatePaymentLinkRequestAfterCompletion,
+  type UpdatePaymentLinkRequestLineItemsItem,
 } from "@distilled.cloud/stripe/stripe";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -330,7 +330,7 @@ const fromObservedAfterCompletion = (
 
 const toWireAfterCompletion = (
   value: PaymentLinkAfterCompletion,
-): PostPaymentLinksRequestAfterCompletion => ({
+): CreatePaymentLinkRequestAfterCompletion => ({
   type: value.type,
   ...(value.type === "hosted_confirmation"
     ? {
@@ -348,7 +348,7 @@ const toWireAfterCompletion = (
 
 const toWireCreateLineItems = (
   items: PaymentLinkLineItem[],
-): PostPaymentLinksRequestLineItemsItem[] =>
+): CreatePaymentLinkRequestLineItemsItem[] =>
   items.map((item) => ({
     price: item.price,
     quantity: item.quantity,
@@ -392,7 +392,7 @@ const hydrateLineItems = (link: StripePaymentLink) =>
     const data: StripeLineItem[] = [];
     let startingAfter: string | undefined;
     for (let page = 0; page < LIST_MAX_PAGES; page++) {
-      const response = yield* GetPaymentLinksPaymentLinkLineItems({
+      const response = yield* GetPaymentLinkLineItems({
         payment_link: link.id,
         limit: LIST_PAGE_SIZE,
         ...(startingAfter !== undefined
@@ -420,7 +420,7 @@ const hydrateLineItems = (link: StripePaymentLink) =>
   });
 
 const getById = (payment_link: string) =>
-  GetPaymentLinksPaymentLink({ payment_link }).pipe(
+  GetPaymentLink({ payment_link }).pipe(
     Effect.catchIf(isMissingPaymentLink, () => Effect.succeed(undefined)),
     Effect.flatMap((link) =>
       link === undefined ? Effect.succeed(undefined) : hydrateLineItems(link),
@@ -537,9 +537,9 @@ const lineItemsNeedUpdate = (
 const toWireUpdateLineItems = (
   desired: PaymentLinkLineItem[],
   observedItems: ReadonlyArray<StripeLineItem>,
-): PostPaymentLinksPaymentLinkRequestLineItemsItem[] | undefined => {
+): UpdatePaymentLinkRequestLineItemsItem[] | undefined => {
   if (desired.length !== observedItems.length) return undefined;
-  const items: PostPaymentLinksPaymentLinkRequestLineItemsItem[] = [];
+  const items: UpdatePaymentLinkRequestLineItemsItem[] = [];
   for (let index = 0; index < desired.length; index++) {
     const item = desired[index];
     const observed = observedItems[index];
@@ -616,7 +616,7 @@ export const PaymentLinkProvider = () =>
       }
 
       if (current === undefined) {
-        current = yield* PostPaymentLinks({
+        current = yield* CreatePaymentLink({
           line_items: toWireCreateLineItems(news.lineItems),
           metadata,
           ...(news.allowPromotionCodes !== undefined
@@ -718,7 +718,7 @@ export const PaymentLinkProvider = () =>
         return toAttrs(current);
       }
 
-      const updated = yield* PostPaymentLinksPaymentLink({
+      const updated = yield* UpdatePaymentLink({
         payment_link: current.id,
         ...(activeChanged ? { active: desiredActive } : {}),
         ...(allowPromotionCodesChanged
@@ -748,7 +748,7 @@ export const PaymentLinkProvider = () =>
           ? {
               after_completion: toWireAfterCompletion(
                 afterCompletion,
-              ) as PostPaymentLinksPaymentLinkRequestAfterCompletion,
+              ) as UpdatePaymentLinkRequestAfterCompletion,
             }
           : {}),
         ...(updateLineItems !== undefined
@@ -771,7 +771,7 @@ export const PaymentLinkProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const existing = yield* getById(output.id);
       if (existing === undefined || !existing.active) return;
-      yield* PostPaymentLinksPaymentLink({
+      yield* UpdatePaymentLink({
         payment_link: existing.id,
         active: false,
       }).pipe(Effect.catchIf(isMissingPaymentLink, () => Effect.void));

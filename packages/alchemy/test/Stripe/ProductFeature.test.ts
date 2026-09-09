@@ -3,10 +3,10 @@ import * as Stripe from "@/Stripe";
 import * as Test from "@/Test/Alchemy";
 import {
   GetEntitlementsFeatures,
-  GetProductsProductFeatures,
-  GetProductsProductFeaturesId,
-  PostEntitlementsFeatures,
-  PostEntitlementsFeaturesId,
+  GetProductFeatures,
+  GetProductFeature,
+  CreateEntitlementsFeature,
+  UpdateEntitlementsFeature,
   type EntitlementsFeature as StripeEntitlementsFeature,
 } from "@distilled.cloud/stripe/stripe";
 import { expect } from "alchemy-test";
@@ -25,7 +25,7 @@ const logLevel = Effect.provideService(
 const isMissing = isMissingStripeResource;
 
 const waitUntilGone = (product: string, id: string) =>
-  GetProductsProductFeatures({ product, limit: 100 }).pipe(
+  GetProductFeatures({ product, limit: 100 }).pipe(
     Effect.map((response) =>
       response.data.some((feature) => feature.id === id)
         ? ("found" as const)
@@ -52,7 +52,7 @@ const ensureFeature = (lookupKey: string, name: string) =>
       limit: 1,
     });
     if (active.data[0] !== undefined) return active.data[0];
-    return yield* PostEntitlementsFeatures({
+    return yield* CreateEntitlementsFeature({
       lookup_key: lookupKey,
       name,
       metadata: { [Stripe.alchemyMetadataKeys.stack]: "ProductFeatureTest" },
@@ -76,7 +76,7 @@ const ensureFeature = (lookupKey: string, name: string) =>
   });
 
 const archiveFeature = (id: string) =>
-  PostEntitlementsFeaturesId({ id, active: false }).pipe(
+  UpdateEntitlementsFeature({ id, active: false }).pipe(
     Effect.catchIf(isMissing, () => Effect.void),
     Effect.catchIf(
       (e) => e._tag === "InvalidRequestError",
@@ -133,7 +133,7 @@ test.provider(
           expect(created.attachment.entitlementFeature).toEqual(feature.id);
           expect(created.attachment.livemode).toEqual(false);
 
-          const fetched = yield* GetProductsProductFeaturesId({
+          const fetched = yield* GetProductFeature({
             product: created.attachment.product,
             id: created.attachment.id,
           });
@@ -277,7 +277,7 @@ test.provider(
           expect(replaced.attachment.product).toEqual(created.product.id);
           expect(replaced.attachment.entitlementFeature).toEqual(featureB.id);
 
-          const newFetched = yield* GetProductsProductFeaturesId({
+          const newFetched = yield* GetProductFeature({
             product: replaced.attachment.product,
             id: replaced.attachment.id,
           });

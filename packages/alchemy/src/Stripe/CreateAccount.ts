@@ -1,7 +1,7 @@
 import type {
   Account as StripeAccount,
-  PostAccountsError,
-  PostAccountsRequest,
+  CreateAccountError,
+  CreateAccountRequest,
 } from "@distilled.cloud/stripe/stripe";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../Binding.ts";
@@ -29,8 +29,8 @@ export interface CreateAccount extends Binding.Service<
   "Stripe.CreateAccount",
   () => Effect.Effect<
     (
-      request: PostAccountsRequest,
-    ) => Effect.Effect<StripeAccount, PostAccountsError, RuntimeContext>
+      request: CreateAccountRequest,
+    ) => Effect.Effect<StripeAccount, CreateAccountError, RuntimeContext>
   >
 > {}
 

@@ -1,7 +1,7 @@
 import * as Provider from "@/Provider";
 import * as Stripe from "@/Stripe";
 import * as Test from "@/Test/Alchemy";
-import { GetPlansPlan } from "@distilled.cloud/stripe/stripe";
+import { GetPlan } from "@distilled.cloud/stripe/stripe";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -16,7 +16,7 @@ const logLevel = Effect.provideService(
 );
 
 const waitUntilGone = (id: string) =>
-  GetPlansPlan({ plan: id }).pipe(
+  GetPlan({ plan: id }).pipe(
     Effect.as("found" as const),
     Effect.catchIf(isMissingStripeResource, () =>
       Effect.succeed("gone" as const),
@@ -64,7 +64,7 @@ test.provider(
       expect(created.metadata).toMatchObject({ tier: "pro" });
       expect(created.created).toEqual(expect.any(Number));
 
-      const fetched = yield* GetPlansPlan({ plan: created.id });
+      const fetched = yield* GetPlan({ plan: created.id });
       expect(fetched.id).toEqual(created.id);
       expect(fetched.amount).toEqual(1500);
       expect(fetched.interval).toEqual("month");
@@ -105,7 +105,7 @@ test.provider(
         sku: "ent-1",
       });
 
-      const refetched = yield* GetPlansPlan({ plan: updated.id });
+      const refetched = yield* GetPlan({ plan: updated.id });
       expect(refetched.id).toEqual(updated.id);
       expect(refetched.nickname).toEqual("Alchemy monthly (trial)");
       expect(refetched.trial_period_days).toEqual(14);
@@ -165,7 +165,7 @@ test.provider(
       expect(replaced.nickname).toEqual("v2");
       expect(replaced.interval).toEqual("month");
 
-      const fetched = yield* GetPlansPlan({ plan: replaced.id });
+      const fetched = yield* GetPlan({ plan: replaced.id });
       expect(fetched.id).toEqual(replaced.id);
       expect(fetched.amount).toEqual(2500);
       expect(fetched.nickname).toEqual("v2");

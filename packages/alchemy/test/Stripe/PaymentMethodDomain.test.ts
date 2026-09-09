@@ -1,7 +1,7 @@
 import * as Provider from "@/Provider";
 import * as Stripe from "@/Stripe";
 import * as Test from "@/Test/Alchemy";
-import { GetPaymentMethodDomainsPaymentMethodDomain } from "@distilled.cloud/stripe/stripe";
+import { GetPaymentMethodDomain } from "@distilled.cloud/stripe/stripe";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -18,7 +18,7 @@ const logLevel = Effect.provideService(
 const isMissing = isMissingStripeResource;
 
 const waitUntilDisabled = (id: string) =>
-  GetPaymentMethodDomainsPaymentMethodDomain({
+  GetPaymentMethodDomain({
     payment_method_domain: id,
   }).pipe(
     Effect.map((domain) =>
@@ -58,7 +58,7 @@ test.provider(
       expect(created.created).toEqual(expect.any(Number));
       expect(created.livemode).toEqual(false);
 
-      const fetched = yield* GetPaymentMethodDomainsPaymentMethodDomain({
+      const fetched = yield* GetPaymentMethodDomain({
         payment_method_domain: created.id,
       });
       expect(fetched.id).toEqual(created.id);
@@ -78,7 +78,7 @@ test.provider(
       expect(updated.domainName).toEqual("alchemy-pmd-lifecycle.example.com");
       expect(updated.enabled).toEqual(false);
 
-      const refetched = yield* GetPaymentMethodDomainsPaymentMethodDomain({
+      const refetched = yield* GetPaymentMethodDomain({
         payment_method_domain: updated.id,
       });
       expect(refetched.id).toEqual(updated.id);
@@ -91,7 +91,7 @@ test.provider(
 
       const disabled = yield* waitUntilDisabled(created.id);
       expect(disabled).toEqual("disabled");
-      const deactivated = yield* GetPaymentMethodDomainsPaymentMethodDomain({
+      const deactivated = yield* GetPaymentMethodDomain({
         payment_method_domain: created.id,
       });
       expect(deactivated.enabled).toEqual(false);

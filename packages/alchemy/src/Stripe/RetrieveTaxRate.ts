@@ -1,6 +1,6 @@
 import type {
-  GetTaxRatesTaxRateError,
-  GetTaxRatesTaxRateRequest,
+  GetTaxRateError,
+  GetTaxRateRequest,
   TaxRate as StripeTaxRate,
 } from "@distilled.cloud/stripe/stripe";
 import type * as Effect from "effect/Effect";
@@ -9,7 +9,7 @@ import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { TaxRate } from "./TaxRate.ts";
 
 export interface RetrieveTaxRateRequest extends Omit<
-  GetTaxRatesTaxRateRequest,
+  GetTaxRateRequest,
   "tax_rate"
 > {}
 
@@ -33,7 +33,7 @@ export interface RetrieveTaxRate extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: RetrieveTaxRateRequest,
-    ) => Effect.Effect<StripeTaxRate, GetTaxRatesTaxRateError, RuntimeContext>
+    ) => Effect.Effect<StripeTaxRate, GetTaxRateError, RuntimeContext>
   >
 > {}
 

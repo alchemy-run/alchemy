@@ -1,6 +1,6 @@
 import type {
-  GetTaxRegistrationsIdError,
-  GetTaxRegistrationsIdRequest,
+  GetTaxRegistrationError,
+  GetTaxRegistrationRequest,
   TaxRegistration as StripeTaxRegistration,
 } from "@distilled.cloud/stripe/stripe";
 import type * as Effect from "effect/Effect";
@@ -9,7 +9,7 @@ import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { TaxRegistration } from "./TaxRegistration.ts";
 
 export interface RetrieveTaxRegistrationRequest extends Omit<
-  GetTaxRegistrationsIdRequest,
+  GetTaxRegistrationRequest,
   "id"
 > {}
 
@@ -35,7 +35,7 @@ export interface RetrieveTaxRegistration extends Binding.Service<
       request?: RetrieveTaxRegistrationRequest,
     ) => Effect.Effect<
       StripeTaxRegistration,
-      GetTaxRegistrationsIdError,
+      GetTaxRegistrationError,
       RuntimeContext
     >
   >

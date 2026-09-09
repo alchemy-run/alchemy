@@ -1,7 +1,7 @@
 import type {
-  GetTerminalConfigurationsConfigurationError,
-  GetTerminalConfigurationsConfigurationRequest,
-  GetTerminalConfigurationsConfigurationResponse,
+  GetTerminalConfigurationError,
+  GetTerminalConfigurationRequest,
+  GetTerminalConfigurationResponse,
 } from "@distilled.cloud/stripe/stripe";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../Binding.ts";
@@ -9,7 +9,7 @@ import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { TerminalConfiguration } from "./TerminalConfiguration.ts";
 
 export interface RetrieveTerminalConfigurationRequest extends Omit<
-  GetTerminalConfigurationsConfigurationRequest,
+  GetTerminalConfigurationRequest,
   "configuration"
 > {}
 
@@ -34,8 +34,8 @@ export interface RetrieveTerminalConfiguration extends Binding.Service<
     (
       request?: RetrieveTerminalConfigurationRequest,
     ) => Effect.Effect<
-      GetTerminalConfigurationsConfigurationResponse,
-      GetTerminalConfigurationsConfigurationError,
+      GetTerminalConfigurationResponse,
+      GetTerminalConfigurationError,
       RuntimeContext
     >
   >

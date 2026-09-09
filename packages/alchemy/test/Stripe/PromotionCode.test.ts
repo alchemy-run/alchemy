@@ -1,7 +1,7 @@
 import * as Provider from "@/Provider";
 import * as Stripe from "@/Stripe";
 import * as Test from "@/Test/Alchemy";
-import { GetPromotionCodesPromotionCode } from "@distilled.cloud/stripe/stripe";
+import { GetPromotionCode } from "@distilled.cloud/stripe/stripe";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -16,7 +16,7 @@ const logLevel = Effect.provideService(
 );
 
 const waitUntilInactive = (id: string) =>
-  GetPromotionCodesPromotionCode({ promotion_code: id }).pipe(
+  GetPromotionCode({ promotion_code: id }).pipe(
     Effect.map((promo) =>
       promo.active ? ("active" as const) : ("inactive" as const),
     ),
@@ -57,7 +57,7 @@ test.provider(
       expect(created.metadata).toMatchObject({ env: "test" });
       expect(created.livemode).toEqual(false);
 
-      const fetched = yield* GetPromotionCodesPromotionCode({
+      const fetched = yield* GetPromotionCode({
         promotion_code: created.id,
       });
       expect(fetched.id).toEqual(created.id);
@@ -92,7 +92,7 @@ test.provider(
         campaign: "spring",
       });
 
-      const refetched = yield* GetPromotionCodesPromotionCode({
+      const refetched = yield* GetPromotionCode({
         promotion_code: updated.id,
       });
       expect(refetched.metadata?.env).toEqual("prod");
@@ -104,7 +104,7 @@ test.provider(
       const inactive = yield* waitUntilInactive(created.id);
       expect(inactive === "inactive" || inactive === "gone").toEqual(true);
       if (inactive === "inactive") {
-        const deactivated = yield* GetPromotionCodesPromotionCode({
+        const deactivated = yield* GetPromotionCode({
           promotion_code: created.id,
         });
         expect(deactivated.active).toEqual(false);

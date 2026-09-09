@@ -1,7 +1,7 @@
 import type {
-  GetCustomersCustomerError,
-  GetCustomersCustomerRequest,
-  GetCustomersCustomerResponse,
+  GetCustomerError,
+  GetCustomerRequest,
+  GetCustomerResponse,
 } from "@distilled.cloud/stripe/stripe";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../Binding.ts";
@@ -9,7 +9,7 @@ import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { Customer } from "./Customer.ts";
 
 export interface RetrieveCustomerRequest extends Omit<
-  GetCustomersCustomerRequest,
+  GetCustomerRequest,
   "customer"
 > {}
 
@@ -33,11 +33,7 @@ export interface RetrieveCustomer extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: RetrieveCustomerRequest,
-    ) => Effect.Effect<
-      GetCustomersCustomerResponse,
-      GetCustomersCustomerError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<GetCustomerResponse, GetCustomerError, RuntimeContext>
   >
 > {}
 

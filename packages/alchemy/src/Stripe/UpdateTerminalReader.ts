@@ -1,7 +1,7 @@
 import type {
-  PostTerminalReadersReaderError,
-  PostTerminalReadersReaderRequest,
-  PostTerminalReadersReaderResponse,
+  UpdateTerminalReaderError,
+  UpdateTerminalReaderRequest as DistilledUpdateTerminalReaderRequest,
+  UpdateTerminalReaderResponse,
 } from "@distilled.cloud/stripe/stripe";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../Binding.ts";
@@ -9,7 +9,7 @@ import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { TerminalReader } from "./TerminalReader.ts";
 
 export interface UpdateTerminalReaderRequest extends Omit<
-  PostTerminalReadersReaderRequest,
+  DistilledUpdateTerminalReaderRequest,
   "reader"
 > {}
 
@@ -34,8 +34,8 @@ export interface UpdateTerminalReader extends Binding.Service<
     (
       request?: UpdateTerminalReaderRequest,
     ) => Effect.Effect<
-      PostTerminalReadersReaderResponse,
-      PostTerminalReadersReaderError,
+      UpdateTerminalReaderResponse,
+      UpdateTerminalReaderError,
       RuntimeContext
     >
   >

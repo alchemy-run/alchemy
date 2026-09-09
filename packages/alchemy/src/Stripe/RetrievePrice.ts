@@ -1,6 +1,6 @@
 import type {
-  GetPricesPriceError,
-  GetPricesPriceRequest,
+  GetPriceError,
+  GetPriceRequest,
   Price as StripePrice,
 } from "@distilled.cloud/stripe/stripe";
 import type * as Effect from "effect/Effect";
@@ -8,10 +8,7 @@ import * as Binding from "../Binding.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { Price } from "./Price.ts";
 
-export interface RetrievePriceRequest extends Omit<
-  GetPricesPriceRequest,
-  "price"
-> {}
+export interface RetrievePriceRequest extends Omit<GetPriceRequest, "price"> {}
 
 /**
  * Retrieve a bound Stripe Price over HTTP.
@@ -33,7 +30,7 @@ export interface RetrievePrice extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: RetrievePriceRequest,
-    ) => Effect.Effect<StripePrice, GetPricesPriceError, RuntimeContext>
+    ) => Effect.Effect<StripePrice, GetPriceError, RuntimeContext>
   >
 > {}
 

@@ -1,7 +1,7 @@
 import * as Provider from "@/Provider";
 import * as Stripe from "@/Stripe";
 import * as Test from "@/Test/Alchemy";
-import { GetCustomersCustomer } from "@distilled.cloud/stripe/stripe";
+import { GetCustomer } from "@distilled.cloud/stripe/stripe";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -16,7 +16,7 @@ const logLevel = Effect.provideService(
 );
 
 const waitUntilGone = (id: string) =>
-  GetCustomersCustomer({ customer: id }).pipe(
+  GetCustomer({ customer: id }).pipe(
     Effect.map((customer) =>
       "deleted" in customer && customer.deleted
         ? ("gone" as const)
@@ -59,7 +59,7 @@ test.provider(
       expect(created.created).toEqual(expect.any(Number));
       expect(created.livemode).toEqual(false);
 
-      const fetched = yield* GetCustomersCustomer({ customer: created.id });
+      const fetched = yield* GetCustomer({ customer: created.id });
       if (!("email" in fetched)) {
         return;
       }
@@ -98,7 +98,7 @@ test.provider(
       expect(updated.phone).toEqual("+15555550199");
       expect(updated.metadata).toEqual({ plan: "enterprise", sku: "ent-1" });
 
-      const refetched = yield* GetCustomersCustomer({ customer: updated.id });
+      const refetched = yield* GetCustomer({ customer: updated.id });
       if (!("email" in refetched)) {
         return;
       }

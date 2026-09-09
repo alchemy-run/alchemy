@@ -1,15 +1,15 @@
 import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
-  DeleteTerminalLocationsLocation,
+  DeleteTerminalLocation,
   GetTerminalLocations,
-  GetTerminalLocationsLocation,
-  PostTerminalLocations,
-  PostTerminalLocationsLocation,
+  GetTerminalLocation,
+  CreateTerminalLocation,
+  UpdateTerminalLocation,
   type Address,
   type DeletedTerminalLocation,
   type LegalEntityJapanAddress,
-  type PostAccountsRequestCompanyAddressKana,
-  type PostTerminalLocationsRequestAddress,
+  type CreateAccountRequestCompanyAddressKana,
+  type CreateTerminalLocationRequestAddress,
   type TerminalLocation as StripeTerminalLocation,
 } from "@distilled.cloud/stripe/stripe";
 import * as Data from "effect/Data";
@@ -317,7 +317,7 @@ const fromObservedJapanAddress = (
 
 const toWireAddress = (
   address: TerminalLocationAddress,
-): PostTerminalLocationsRequestAddress => ({
+): CreateTerminalLocationRequestAddress => ({
   country: address.country,
   ...(address.city !== undefined ? { city: address.city } : {}),
   ...(address.line1 !== undefined ? { line1: address.line1 } : {}),
@@ -330,7 +330,7 @@ const toWireAddress = (
 
 const toWireJapanAddress = (
   address: TerminalLocationJapanAddress,
-): PostAccountsRequestCompanyAddressKana => ({
+): CreateAccountRequestCompanyAddressKana => ({
   ...(address.city !== undefined ? { city: address.city } : {}),
   ...(address.country !== undefined ? { country: address.country } : {}),
   ...(address.line1 !== undefined ? { line1: address.line1 } : {}),
@@ -386,7 +386,7 @@ const toDisplayName = (
 const isMissingLocation = isMissingStripeResource;
 
 const getById = (location: string) =>
-  GetTerminalLocationsLocation({ location }).pipe(
+  GetTerminalLocation({ location }).pipe(
     Effect.map(asLocation),
     Effect.catchIf(isMissingLocation, () => Effect.succeed(undefined)),
   );
@@ -507,7 +507,7 @@ export const TerminalLocationProvider = () =>
       }
 
       if (current === undefined) {
-        current = yield* PostTerminalLocations({
+        current = yield* CreateTerminalLocation({
           display_name: displayName,
           address,
           metadata,
@@ -583,7 +583,7 @@ export const TerminalLocationProvider = () =>
         return toAttrs(current);
       }
 
-      const updated = yield* PostTerminalLocationsLocation({
+      const updated = yield* UpdateTerminalLocation({
         location: current.id,
         ...(displayNameChanged ? { display_name: displayName } : {}),
         ...(addressChanged ? { address } : {}),
@@ -620,7 +620,7 @@ export const TerminalLocationProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      yield* DeleteTerminalLocationsLocation({ location: output.id }).pipe(
+      yield* DeleteTerminalLocation({ location: output.id }).pipe(
         Effect.catchIf(isMissingLocation, () => Effect.void),
       );
     }),

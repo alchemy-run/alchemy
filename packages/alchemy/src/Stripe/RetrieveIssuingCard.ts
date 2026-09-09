@@ -1,6 +1,6 @@
 import type {
-  GetIssuingCardsCardError,
-  GetIssuingCardsCardRequest,
+  GetIssuingCardError,
+  GetIssuingCardRequest,
   IssuingCard as StripeIssuingCard,
 } from "@distilled.cloud/stripe/stripe";
 import type * as Effect from "effect/Effect";
@@ -9,7 +9,7 @@ import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { IssuingCard } from "./IssuingCard.ts";
 
 export interface RetrieveIssuingCardRequest extends Omit<
-  GetIssuingCardsCardRequest,
+  GetIssuingCardRequest,
   "card"
 > {}
 
@@ -33,11 +33,7 @@ export interface RetrieveIssuingCard extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: RetrieveIssuingCardRequest,
-    ) => Effect.Effect<
-      StripeIssuingCard,
-      GetIssuingCardsCardError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<StripeIssuingCard, GetIssuingCardError, RuntimeContext>
   >
 > {}
 

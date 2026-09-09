@@ -1,10 +1,10 @@
 import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
-  DeleteProductsId,
+  DeleteProduct,
   GetProducts,
-  GetProductsId,
-  PostProducts,
-  PostProductsId,
+  GetProduct,
+  CreateProduct,
+  UpdateProduct,
   type Product as StripeProduct,
 } from "@distilled.cloud/stripe/stripe";
 import * as Effect from "effect/Effect";
@@ -146,7 +146,7 @@ const toAttrs = (product: StripeProduct) => ({
 const isMissingProduct = isMissingStripeResource;
 
 const getById = (id: string) =>
-  GetProductsId({ id }).pipe(
+  GetProduct({ id }).pipe(
     Effect.catchIf(isMissingProduct, () => Effect.succeed(undefined)),
   );
 
@@ -263,7 +263,7 @@ export const ProductProvider = () =>
       });
 
       if (current === undefined) {
-        current = yield* PostProducts({
+        current = yield* CreateProduct({
           name,
           active: desiredActive,
           ...(desiredDescription.length > 0
@@ -297,7 +297,7 @@ export const ProductProvider = () =>
         return toAttrs(current);
       }
 
-      const updated = yield* PostProductsId({
+      const updated = yield* UpdateProduct({
         id: current.id,
         ...(nameChanged ? { name } : {}),
         ...(activeChanged ? { active: desiredActive } : {}),
@@ -320,7 +320,7 @@ export const ProductProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      yield* DeleteProductsId({ id: output.id }).pipe(
+      yield* DeleteProduct({ id: output.id }).pipe(
         Effect.catchIf(isMissingProduct, () => Effect.void),
       );
     }),

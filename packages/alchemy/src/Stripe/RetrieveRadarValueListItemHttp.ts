@@ -1,4 +1,4 @@
-import { GetRadarValueListItemsItem } from "@distilled.cloud/stripe/stripe";
+import { GetRadarValueListItem } from "@distilled.cloud/stripe/stripe";
 import * as Layer from "effect/Layer";
 import { RetrieveRadarValueListItem } from "./RetrieveRadarValueListItem.ts";
 import { makeHttpStripeIdBinding } from "./StripeHttp.ts";
@@ -13,7 +13,7 @@ export const RetrieveRadarValueListItemHttp = Layer.effect(
   RetrieveRadarValueListItem,
   makeHttpStripeIdBinding({
     tag: "Stripe.RetrieveRadarValueListItem",
-    operation: GetRadarValueListItemsItem,
+    operation: GetRadarValueListItem,
     idField: "item",
     permissions: ["radar_read"],
   }),

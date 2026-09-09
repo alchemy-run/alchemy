@@ -3,10 +3,10 @@ import * as Stripe from "@/Stripe";
 import { isMissingStripeResource } from "@/Stripe/missing.ts";
 import * as Test from "@/Test/Alchemy";
 import {
-  DeleteAccountsAccount,
-  GetAccountsAccountExternalAccountsId,
-  PostAccounts,
-  PostTokens,
+  DeleteAccount,
+  GetAccountExternalAccount,
+  CreateAccount,
+  CreateToken,
 } from "@distilled.cloud/stripe/stripe";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -27,7 +27,7 @@ const CONNECT_ENABLED = process.env.STRIPE_TEST_CONNECT === "1";
 const isMissing = isMissingStripeResource;
 
 const waitUntilGone = (account: string, id: string) =>
-  GetAccountsAccountExternalAccountsId({ account, id }).pipe(
+  GetAccountExternalAccount({ account, id }).pipe(
     Effect.as("found" as const),
     Effect.catchIf(isMissing, () => Effect.succeed("gone" as const)),
     Effect.repeat({
@@ -38,7 +38,7 @@ const waitUntilGone = (account: string, id: string) =>
   );
 
 const deleteAccount = (account: string) =>
-  DeleteAccountsAccount({ account }).pipe(
+  DeleteAccount({ account }).pipe(
     Effect.catchIf(isMissing, () => Effect.void),
     Effect.catchIf(
       (e) => e._tag === "InvalidRequestError",
@@ -48,7 +48,7 @@ const deleteAccount = (account: string) =>
   );
 
 const createBankToken = (holderName: string) =>
-  PostTokens({
+  CreateToken({
     bank_account: {
       country: "US",
       currency: "usd",
@@ -77,7 +77,7 @@ const connectAccountProps = {
 };
 
 const probeConnectAccount = () =>
-  PostAccounts({
+  CreateAccount({
     type: "custom",
     country: "US",
     email: "alchemy.account-external-account.probe@example.com",
@@ -159,7 +159,7 @@ test.provider.skipIf(!CONNECT_ENABLED)(
       });
       expect(created.externalAccount.routingNumber).toEqual("110000000");
 
-      const fetched = yield* GetAccountsAccountExternalAccountsId({
+      const fetched = yield* GetAccountExternalAccount({
         account: created.externalAccount.account,
         id: created.externalAccount.id,
       });
@@ -211,7 +211,7 @@ test.provider.skipIf(!CONNECT_ENABLED)(
         region: "us",
       });
 
-      const refetched = yield* GetAccountsAccountExternalAccountsId({
+      const refetched = yield* GetAccountExternalAccount({
         account: updated.externalAccount.account,
         id: updated.externalAccount.id,
       });

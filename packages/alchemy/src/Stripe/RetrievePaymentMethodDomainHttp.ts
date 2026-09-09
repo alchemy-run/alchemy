@@ -1,4 +1,4 @@
-import { GetPaymentMethodDomainsPaymentMethodDomain } from "@distilled.cloud/stripe/stripe";
+import { GetPaymentMethodDomain } from "@distilled.cloud/stripe/stripe";
 import * as Layer from "effect/Layer";
 import { RetrievePaymentMethodDomain } from "./RetrievePaymentMethodDomain.ts";
 import { makeHttpStripeIdBinding } from "./StripeHttp.ts";
@@ -13,7 +13,7 @@ export const RetrievePaymentMethodDomainHttp = Layer.effect(
   RetrievePaymentMethodDomain,
   makeHttpStripeIdBinding({
     tag: "Stripe.RetrievePaymentMethodDomain",
-    operation: GetPaymentMethodDomainsPaymentMethodDomain,
+    operation: GetPaymentMethodDomain,
     idField: "payment_method_domain",
     permissions: ["payment_method_domains_read"],
   }),

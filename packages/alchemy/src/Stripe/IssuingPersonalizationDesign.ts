@@ -1,11 +1,11 @@
 import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
   GetIssuingPersonalizationDesigns,
-  GetIssuingPersonalizationDesignsPersonalizationDesign,
-  PostIssuingPersonalizationDesigns,
-  PostIssuingPersonalizationDesignsPersonalizationDesign,
+  GetIssuingPersonalizationDesign,
+  CreateIssuingPersonalizationDesign,
+  UpdateIssuingPersonalizationDesign,
   type IssuingPersonalizationDesign as StripeIssuingPersonalizationDesign,
-  type PostIssuingPersonalizationDesignsRequestCarrierText,
+  type CreateIssuingPersonalizationDesignRequestCarrierText,
 } from "@distilled.cloud/stripe/stripe";
 import * as Effect from "effect/Effect";
 import { Unowned } from "../AdoptPolicy.ts";
@@ -322,7 +322,7 @@ const fromObservedCarrierText = (
 
 const toWireCarrierText = (
   input: IssuingPersonalizationDesignCarrierText,
-): PostIssuingPersonalizationDesignsRequestCarrierText => ({
+): CreateIssuingPersonalizationDesignRequestCarrierText => ({
   ...(input.footerBody !== undefined ? { footer_body: input.footerBody } : {}),
   ...(input.footerTitle !== undefined
     ? { footer_title: input.footerTitle }
@@ -356,7 +356,7 @@ const toAttrs = (
 const isMissingDesign = isMissingStripeResource;
 
 const getById = (personalizationDesign: string) =>
-  GetIssuingPersonalizationDesignsPersonalizationDesign({
+  GetIssuingPersonalizationDesign({
     personalization_design: personalizationDesign,
   }).pipe(Effect.catchIf(isMissingDesign, () => Effect.succeed(undefined)));
 
@@ -485,7 +485,7 @@ export const IssuingPersonalizationDesignProvider = () =>
       });
 
       if (current === undefined) {
-        current = yield* PostIssuingPersonalizationDesigns({
+        current = yield* CreateIssuingPersonalizationDesign({
           physical_bundle: desiredPhysicalBundle,
           name,
           lookup_key: lookupKey,
@@ -534,43 +534,42 @@ export const IssuingPersonalizationDesignProvider = () =>
         return toAttrs(current);
       }
 
-      const updated =
-        yield* PostIssuingPersonalizationDesignsPersonalizationDesign({
-          personalization_design: current.id,
-          ...(nameChanged ? { name } : {}),
-          ...(lookupKeyChanged
-            ? { lookup_key: lookupKey, transfer_lookup_key: true }
-            : {}),
-          ...(physicalBundleChanged
-            ? { physical_bundle: desiredPhysicalBundle }
-            : {}),
-          ...(cardLogoChanged
-            ? {
-                card_logo: desiredCardLogo !== undefined ? desiredCardLogo : "",
-              }
-            : {}),
-          ...(carrierTextChanged
-            ? {
-                carrier_text:
-                  desiredCarrierText !== undefined
-                    ? toWireCarrierText(desiredCarrierText)
-                    : "",
-              }
-            : {}),
-          ...(preferencesChanged
-            ? { preferences: { is_default: desiredIsDefault } }
-            : {}),
-          ...(metadataChanged
-            ? {
-                metadata: {
-                  ...Object.fromEntries(
-                    upsert.map((tag) => [tag.Key, tag.Value]),
-                  ),
-                  ...Object.fromEntries(removed.map((key) => [key, ""])),
-                },
-              }
-            : {}),
-        });
+      const updated = yield* UpdateIssuingPersonalizationDesign({
+        personalization_design: current.id,
+        ...(nameChanged ? { name } : {}),
+        ...(lookupKeyChanged
+          ? { lookup_key: lookupKey, transfer_lookup_key: true }
+          : {}),
+        ...(physicalBundleChanged
+          ? { physical_bundle: desiredPhysicalBundle }
+          : {}),
+        ...(cardLogoChanged
+          ? {
+              card_logo: desiredCardLogo !== undefined ? desiredCardLogo : "",
+            }
+          : {}),
+        ...(carrierTextChanged
+          ? {
+              carrier_text:
+                desiredCarrierText !== undefined
+                  ? toWireCarrierText(desiredCarrierText)
+                  : "",
+            }
+          : {}),
+        ...(preferencesChanged
+          ? { preferences: { is_default: desiredIsDefault } }
+          : {}),
+        ...(metadataChanged
+          ? {
+              metadata: {
+                ...Object.fromEntries(
+                  upsert.map((tag) => [tag.Key, tag.Value]),
+                ),
+                ...Object.fromEntries(removed.map((key) => [key, ""])),
+              },
+            }
+          : {}),
+      });
       return toAttrs(updated);
     }),
 

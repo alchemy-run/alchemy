@@ -2,11 +2,11 @@ import { withRequestOptions } from "@distilled.cloud/stripe";
 import { isMissingStripeResource } from "./missing.ts";
 import {
   GetPromotionCodes,
-  GetPromotionCodesPromotionCode,
-  PostPromotionCodes,
-  PostPromotionCodesPromotionCode,
-  type PostPromotionCodesRequestRestrictions,
-  type PostPromotionCodesRequestRestrictionsCurrencyOptionsMap,
+  GetPromotionCode,
+  CreatePromotionCode,
+  UpdatePromotionCode,
+  type CreatePromotionCodeRequestRestrictions,
+  type CreatePromotionCodeRequestRestrictionsCurrencyOptionsMap,
   type PromotionCode as StripePromotionCode,
 } from "@distilled.cloud/stripe/stripe";
 import * as Data from "effect/Data";
@@ -231,7 +231,7 @@ const fromWireCurrencyOptions = (
 
 const toWireCurrencyOptions = (
   options: Record<string, PromotionCodeCurrencyOption> | undefined,
-): PostPromotionCodesRequestRestrictionsCurrencyOptionsMap | undefined => {
+): CreatePromotionCodeRequestRestrictionsCurrencyOptionsMap | undefined => {
   if (options === undefined) return undefined;
   return Object.fromEntries(
     Object.entries(options).map(([currency, value]) => [
@@ -265,10 +265,10 @@ const fromObservedRestrictions = (
 
 const toCreateRestrictions = (
   restrictions: PromotionCodeRestrictions | undefined,
-): PostPromotionCodesRequestRestrictions | undefined => {
+): CreatePromotionCodeRequestRestrictions | undefined => {
   if (restrictions === undefined) return undefined;
   const currency_options = toWireCurrencyOptions(restrictions.currencyOptions);
-  const body: PostPromotionCodesRequestRestrictions = {
+  const body: CreatePromotionCodeRequestRestrictions = {
     ...(restrictions.firstTimeTransaction !== undefined
       ? { first_time_transaction: restrictions.firstTimeTransaction }
       : {}),
@@ -311,7 +311,7 @@ const toCode = (id: string, code: string | undefined, existing?: string) =>
 const isResourceMissing = isMissingStripeResource;
 
 const getById = (promotionCode: string) =>
-  GetPromotionCodesPromotionCode({
+  GetPromotionCode({
     promotion_code: promotionCode,
     expand: ["promotion.coupon"],
   }).pipe(Effect.catchIf(isResourceMissing, () => Effect.succeed(undefined)));
@@ -520,7 +520,7 @@ export const PromotionCodeProvider = () =>
       }
 
       if (current === undefined) {
-        current = yield* PostPromotionCodes({
+        current = yield* CreatePromotionCode({
           promotion: { type: "coupon", coupon: news.coupon },
           expand: ["promotion.coupon"],
           code,
@@ -560,7 +560,7 @@ export const PromotionCodeProvider = () =>
       }
 
       if (current.active !== active) {
-        current = yield* PostPromotionCodesPromotionCode({
+        current = yield* UpdatePromotionCode({
           promotion_code: current.id,
           active,
         });
@@ -569,7 +569,7 @@ export const PromotionCodeProvider = () =>
       const observedMeta = tagRecord(current.metadata);
       const { upsert, removed } = diffMetadata(observedMeta, metadata);
       if (upsert.length > 0 || removed.length > 0) {
-        current = yield* PostPromotionCodesPromotionCode({
+        current = yield* UpdatePromotionCode({
           promotion_code: current.id,
           metadata: {
             ...Object.fromEntries(upsert.map((tag) => [tag.Key, tag.Value])),
@@ -586,7 +586,7 @@ export const PromotionCodeProvider = () =>
         desiredCurrency !== undefined &&
         !deepEqual(desiredCurrency, observedCurrency, { stripNullish: true })
       ) {
-        current = yield* PostPromotionCodesPromotionCode({
+        current = yield* UpdatePromotionCode({
           promotion_code: current.id,
           restrictions: {
             currency_options: toWireCurrencyOptions(desiredCurrency),
@@ -604,7 +604,7 @@ export const PromotionCodeProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const existing = yield* observe({ id: output.id, code: output.code });
       if (existing === undefined || !existing.active) return;
-      yield* PostPromotionCodesPromotionCode({
+      yield* UpdatePromotionCode({
         promotion_code: existing.id,
         active: false,
       }).pipe(Effect.catchIf(isResourceMissing, () => Effect.void));

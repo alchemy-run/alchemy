@@ -1,6 +1,6 @@
 import type {
-  GetPromotionCodesPromotionCodeError,
-  GetPromotionCodesPromotionCodeRequest,
+  GetPromotionCodeError,
+  GetPromotionCodeRequest,
   PromotionCode as StripePromotionCode,
 } from "@distilled.cloud/stripe/stripe";
 import type * as Effect from "effect/Effect";
@@ -9,7 +9,7 @@ import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { PromotionCode } from "./PromotionCode.ts";
 
 export interface RetrievePromotionCodeRequest extends Omit<
-  GetPromotionCodesPromotionCodeRequest,
+  GetPromotionCodeRequest,
   "promotion_code"
 > {}
 
@@ -35,7 +35,7 @@ export interface RetrievePromotionCode extends Binding.Service<
       request?: RetrievePromotionCodeRequest,
     ) => Effect.Effect<
       StripePromotionCode,
-      GetPromotionCodesPromotionCodeError,
+      GetPromotionCodeError,
       RuntimeContext
     >
   >

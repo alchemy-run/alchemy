@@ -1,7 +1,7 @@
 import type {
   ExternalAccount as StripeExternalAccount,
-  GetAccountsAccountExternalAccountsIdError,
-  GetAccountsAccountExternalAccountsIdRequest,
+  GetAccountExternalAccountError,
+  GetAccountExternalAccountRequest,
 } from "@distilled.cloud/stripe/stripe";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../Binding.ts";
@@ -9,7 +9,7 @@ import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { AccountExternalAccount } from "./AccountExternalAccount.ts";
 
 export interface RetrieveAccountExternalAccountRequest extends Omit<
-  GetAccountsAccountExternalAccountsIdRequest,
+  GetAccountExternalAccountRequest,
   "id" | "account"
 > {}
 
@@ -35,7 +35,7 @@ export interface RetrieveAccountExternalAccount extends Binding.Service<
       request?: RetrieveAccountExternalAccountRequest,
     ) => Effect.Effect<
       StripeExternalAccount,
-      GetAccountsAccountExternalAccountsIdError,
+      GetAccountExternalAccountError,
       RuntimeContext
     >
   >

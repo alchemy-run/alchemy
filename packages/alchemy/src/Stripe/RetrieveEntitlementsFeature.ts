@@ -1,7 +1,7 @@
 import type {
   EntitlementsFeature as StripeEntitlementsFeature,
-  GetEntitlementsFeaturesIdError,
-  GetEntitlementsFeaturesIdRequest,
+  GetEntitlementsFeatureError,
+  GetEntitlementsFeatureRequest,
 } from "@distilled.cloud/stripe/stripe";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../Binding.ts";
@@ -9,7 +9,7 @@ import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { EntitlementsFeature } from "./EntitlementsFeature.ts";
 
 export interface RetrieveEntitlementsFeatureRequest extends Omit<
-  GetEntitlementsFeaturesIdRequest,
+  GetEntitlementsFeatureRequest,
   "id"
 > {}
 
@@ -35,7 +35,7 @@ export interface RetrieveEntitlementsFeature extends Binding.Service<
       request?: RetrieveEntitlementsFeatureRequest,
     ) => Effect.Effect<
       StripeEntitlementsFeature,
-      GetEntitlementsFeaturesIdError,
+      GetEntitlementsFeatureError,
       RuntimeContext
     >
   >

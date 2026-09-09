@@ -1,7 +1,7 @@
 import * as Provider from "@/Provider";
 import * as Stripe from "@/Stripe";
 import * as Test from "@/Test/Alchemy";
-import { GetShippingRatesShippingRateToken } from "@distilled.cloud/stripe/stripe";
+import { GetShippingRate } from "@distilled.cloud/stripe/stripe";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -18,7 +18,7 @@ const logLevel = Effect.provideService(
 const isMissing = isMissingStripeResource;
 
 const waitUntilDeactivated = (id: string) =>
-  GetShippingRatesShippingRateToken({ shipping_rate_token: id }).pipe(
+  GetShippingRate({ shipping_rate_token: id }).pipe(
     Effect.map((rate) =>
       rate.active ? ("active" as const) : ("inactive" as const),
     ),
@@ -64,7 +64,7 @@ test.provider(
       expect(created.metadata).toMatchObject({ region: "us" });
       expect(created.livemode).toEqual(false);
 
-      const fetched = yield* GetShippingRatesShippingRateToken({
+      const fetched = yield* GetShippingRate({
         shipping_rate_token: created.id,
       });
       expect(fetched.id).toEqual(created.id);
@@ -102,7 +102,7 @@ test.provider(
       expect(updated.taxBehavior).toEqual("exclusive");
       expect(updated.metadata).toEqual({ region: "us", channel: "web" });
 
-      const refetched = yield* GetShippingRatesShippingRateToken({
+      const refetched = yield* GetShippingRate({
         shipping_rate_token: updated.id,
       });
       expect(refetched.active).toEqual(true);
@@ -187,12 +187,12 @@ test.provider(
       expect(replaced.amount).toEqual(2500);
       expect(replaced.metadata).toMatchObject({ version: "v2" });
 
-      const newFetched = yield* GetShippingRatesShippingRateToken({
+      const newFetched = yield* GetShippingRate({
         shipping_rate_token: replaced.id,
       });
       expect(newFetched.fixed_amount?.amount).toEqual(2500);
 
-      const oldFetched = yield* GetShippingRatesShippingRateToken({
+      const oldFetched = yield* GetShippingRate({
         shipping_rate_token: created.id,
       });
       expect(oldFetched.active).toEqual(false);

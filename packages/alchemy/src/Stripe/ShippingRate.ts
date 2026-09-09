@@ -1,10 +1,10 @@
 import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
   GetShippingRates,
-  GetShippingRatesShippingRateToken,
-  PostShippingRates,
-  PostShippingRatesShippingRateToken,
-  type PostShippingRatesRequestFixedAmountCurrencyOptionsMap,
+  GetShippingRate,
+  CreateShippingRate,
+  UpdateShippingRate,
+  type CreateShippingRateRequestFixedAmountCurrencyOptionsMap,
   type ShippingRate as StripeShippingRate,
   type ShippingRateFixedAmountCurrencyOptionsMap,
   type ShippingRateTaxCode,
@@ -279,7 +279,7 @@ const withoutBaseCurrency = <T>(
 
 const toWireCurrencyOptions = (
   options: Record<string, ShippingRateCurrencyOption> | undefined,
-): PostShippingRatesRequestFixedAmountCurrencyOptionsMap | undefined => {
+): CreateShippingRateRequestFixedAmountCurrencyOptionsMap | undefined => {
   if (options === undefined) return undefined;
   return Object.fromEntries(
     Object.entries(options).map(([currency, value]) => [
@@ -348,7 +348,7 @@ const toDisplayName = (
 const isMissingShippingRate = isMissingStripeResource;
 
 const getById = (shipping_rate_token: string) =>
-  GetShippingRatesShippingRateToken({ shipping_rate_token }).pipe(
+  GetShippingRate({ shipping_rate_token }).pipe(
     Effect.catchIf(isMissingShippingRate, () => Effect.succeed(undefined)),
   );
 
@@ -515,7 +515,7 @@ export const ShippingRateProvider = () =>
       }
 
       if (current === undefined) {
-        current = yield* PostShippingRates({
+        current = yield* CreateShippingRate({
           display_name: displayName,
           type: desiredType,
           fixed_amount: {
@@ -582,7 +582,7 @@ export const ShippingRateProvider = () =>
         return toAttrs(current);
       }
 
-      const updated = yield* PostShippingRatesShippingRateToken({
+      const updated = yield* UpdateShippingRate({
         shipping_rate_token: current.id,
         ...(activeChanged ? { active: desiredActive } : {}),
         ...(taxBehaviorChanged ? { tax_behavior: news.taxBehavior } : {}),
@@ -606,7 +606,7 @@ export const ShippingRateProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const existing = yield* getById(output.id);
       if (existing === undefined || !existing.active) return;
-      yield* PostShippingRatesShippingRateToken({
+      yield* UpdateShippingRate({
         shipping_rate_token: existing.id,
         active: false,
       }).pipe(Effect.catchIf(isMissingShippingRate, () => Effect.void));

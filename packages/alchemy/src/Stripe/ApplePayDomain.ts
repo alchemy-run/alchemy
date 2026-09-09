@@ -1,9 +1,9 @@
 import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
-  DeleteApplePayDomainsDomain,
+  DeleteApplePayDomain,
   GetApplePayDomains,
-  GetApplePayDomainsDomain,
-  PostApplePayDomains,
+  GetApplePayDomain,
+  CreateApplePayDomain,
   type ApplePayDomain as StripeApplePayDomain,
 } from "@distilled.cloud/stripe/stripe";
 import * as Data from "effect/Data";
@@ -106,7 +106,7 @@ const toAttrs = (domain: StripeApplePayDomain): ApplePayDomainAttributes => ({
 const isMissing = isMissingStripeResource;
 
 const getById = (domain: string) =>
-  GetApplePayDomainsDomain({ domain }).pipe(
+  GetApplePayDomain({ domain }).pipe(
     Effect.catchIf(isMissing, () => Effect.succeed(undefined)),
   );
 
@@ -219,7 +219,7 @@ export const ApplePayDomainProvider = () =>
       }
 
       if (current === undefined) {
-        current = yield* PostApplePayDomains({
+        current = yield* CreateApplePayDomain({
           domain_name: news.domainName,
         }).pipe(
           withRequestOptions({
@@ -247,7 +247,7 @@ export const ApplePayDomainProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      yield* DeleteApplePayDomainsDomain({ domain: output.id }).pipe(
+      yield* DeleteApplePayDomain({ domain: output.id }).pipe(
         Effect.catchIf(isMissing, () => Effect.void),
       );
     }),

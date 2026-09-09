@@ -1,4 +1,4 @@
-import { GetBillingPortalConfigurationsConfiguration } from "@distilled.cloud/stripe/stripe";
+import { GetBillingPortalConfiguration } from "@distilled.cloud/stripe/stripe";
 import * as Layer from "effect/Layer";
 import { RetrieveBillingPortalConfiguration } from "./RetrieveBillingPortalConfiguration.ts";
 import { makeHttpStripeIdBinding } from "./StripeHttp.ts";
@@ -13,7 +13,7 @@ export const RetrieveBillingPortalConfigurationHttp = Layer.effect(
   RetrieveBillingPortalConfiguration,
   makeHttpStripeIdBinding({
     tag: "Stripe.RetrieveBillingPortalConfiguration",
-    operation: GetBillingPortalConfigurationsConfiguration,
+    operation: GetBillingPortalConfiguration,
     idField: "configuration",
     permissions: ["billing_portal_read"],
   }),

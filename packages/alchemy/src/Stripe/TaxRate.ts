@@ -1,9 +1,9 @@
 import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
   GetTaxRates,
-  GetTaxRatesTaxRate,
-  PostTaxRates,
-  PostTaxRatesTaxRate,
+  GetTaxRate,
+  CreateTaxRate,
+  UpdateTaxRate,
   type TaxRate as StripeTaxRate,
 } from "@distilled.cloud/stripe/stripe";
 import * as Data from "effect/Data";
@@ -237,7 +237,7 @@ const toAttrs = (rate: StripeTaxRate): TaxRateAttributes => ({
 const isMissingTaxRate = isMissingStripeResource;
 
 const getById = (taxRate: string) =>
-  GetTaxRatesTaxRate({ tax_rate: taxRate }).pipe(
+  GetTaxRate({ tax_rate: taxRate }).pipe(
     Effect.catchIf(isMissingTaxRate, () => Effect.succeed(undefined)),
   );
 
@@ -375,7 +375,7 @@ export const TaxRateProvider = () =>
       }
 
       if (current === undefined) {
-        current = yield* PostTaxRates({
+        current = yield* CreateTaxRate({
           display_name: displayName,
           percentage: news.percentage,
           inclusive: news.inclusive,
@@ -434,7 +434,7 @@ export const TaxRateProvider = () =>
         return toAttrs(current);
       }
 
-      const updated = yield* PostTaxRatesTaxRate({
+      const updated = yield* UpdateTaxRate({
         tax_rate: current.id,
         ...(displayNameChanged ? { display_name: displayName } : {}),
         ...(activeChanged ? { active: desiredActive } : {}),
@@ -460,7 +460,7 @@ export const TaxRateProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const existing = yield* getById(output.id);
       if (existing === undefined || !existing.active) return;
-      yield* PostTaxRatesTaxRate({
+      yield* UpdateTaxRate({
         tax_rate: existing.id,
         active: false,
       }).pipe(Effect.catchIf(isMissingTaxRate, () => Effect.void));

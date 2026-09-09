@@ -1,13 +1,20 @@
-import { Credentials, CredentialsFromEnv } from "@distilled.cloud/stripe";
-import type * as Context from "effect/Context";
+import {
+  Credentials,
+  CredentialsFromEnv,
+  type Config as StripeCredentialsConfig,
+} from "@distilled.cloud/stripe";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import type * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import { isBindingHost } from "../AWS/Lambda/Function.ts";
 import * as Binding from "../Binding.ts";
-import type { ResourceLike } from "../Resource.ts";
+import { isWorker } from "../Cloudflare/Workers/Worker.ts";
+import * as Output from "../Output.ts";
+import { type Resource, type ResourceLike } from "../Resource.ts";
 import { sanitizeKey, type RuntimeContext } from "../RuntimeContext.ts";
 import { STRIPE_API_KEY_ENV } from "./AuthProvider.ts";
 import { RestrictedApiKey, type StripePermission } from "./RestrictedApiKey.ts";
@@ -42,9 +49,13 @@ const RuntimeLayer = CredentialsFromEnv.pipe(
   Layer.provideMerge(FetchHttpClient.layer),
 );
 
-export const makeStripeAuth = (
-  ambient: Context.Context<Credentials | HttpClient.HttpClient>,
-): StripeAuth => ({
+const isFlyHost = (host: ResourceLike): boolean =>
+  host.Type === "Fly.Service" || host.Type === "Fly.Machine";
+
+export const makeStripeAuth = (options: {
+  credentials: Effect.Effect<StripeCredentialsConfig> | undefined;
+  http: HttpClient.HttpClient | undefined;
+}): StripeAuth => ({
   authorize: <A, E>(
     eff: Effect.Effect<A, E, Credentials | HttpClient.HttpClient>,
   ): Effect.Effect<A, E, RuntimeContext> => {
@@ -55,53 +66,92 @@ export const makeStripeAuth = (
         RuntimeContext
       >;
     }
-    return eff.pipe(Effect.provideContext(ambient)) as Effect.Effect<
-      A,
-      E,
-      RuntimeContext
-    >;
+    if (options.credentials === undefined || options.http === undefined) {
+      return Effect.die(
+        "Stripe HTTP binding missing Credentials or HttpClient at plan time",
+      ) as Effect.Effect<A, E, RuntimeContext>;
+    }
+    return eff.pipe(
+      Effect.provideService(Credentials, options.credentials),
+      Effect.provideService(HttpClient.HttpClient, options.http),
+    ) as Effect.Effect<A, E, RuntimeContext>;
   },
+});
+
+/**
+ * Resolve plan-time Credentials/HttpClient with `serviceOption` so this
+ * layer can be built hostless inside `providers()`. Missing services die
+ * when a client is actually invoked, not at layer build.
+ */
+export const resolveStripeAuth = Effect.gen(function* () {
+  const credentials = yield* Effect.serviceOption(Credentials).pipe(
+    Effect.map(Option.getOrUndefined),
+  );
+  const http = yield* Effect.serviceOption(HttpClient.HttpClient).pipe(
+    Effect.map(Option.getOrUndefined),
+  );
+  return makeStripeAuth({ credentials, http });
 });
 
 const envName = (key: string): Effect.Effect<string> =>
   Config.string(key).pipe(Effect.orDie);
 
+const asResolvedString = (value: unknown): Effect.Effect<string> =>
+  typeof value === "string"
+    ? Effect.succeed(value)
+    : Effect.die("Stripe binding expected a resolved resource id");
+
 export const asStringEffect = (value: unknown): Effect.Effect<string> => {
   if (typeof value === "string") return Effect.succeed(value);
+  if (Output.isOutput(value)) {
+    return Effect.flatMap(
+      value.asEffect(),
+      asResolvedString,
+    ) as Effect.Effect<string>;
+  }
   if (Effect.isEffect(value)) {
-    return value as Effect.Effect<string>;
+    return Effect.flatMap(
+      value as Effect.Effect<unknown>,
+      asResolvedString,
+    ) as Effect.Effect<string>;
   }
   return Effect.die("Stripe binding expected a resolved resource id");
 };
 
-const isEnvHost = (type: string | undefined): boolean =>
-  type === "AWS.Lambda.Function" ||
-  type === "AWS.ECS.Task" ||
-  type === "AWS.ECS.Service" ||
-  type === "Kubernetes.Deployment" ||
-  type === "Kubernetes.Job" ||
-  type === "Fly.Service" ||
-  type === "Fly.Machine";
+type StripeHostBinding = {
+  env?: Record<string, unknown>;
+  bindings?: ReadonlyArray<{
+    type: "secret_text" | "plain_text";
+    name: string;
+    text: unknown;
+  }>;
+};
+
+const asBindableHost = (
+  host: ResourceLike,
+): Resource<string, object, object, StripeHostBinding> =>
+  host as Resource<string, object, object, StripeHostBinding>;
 
 export const bindStripeEnv = (
   host: ResourceLike,
   resource: ResourceLike | undefined,
   env: Record<string, unknown>,
 ): Effect.Effect<void> => {
-  const type = host.Type;
   const target = resource ?? host;
-  if (isEnvHost(type)) {
-    return (host as any).bind`${target}`({ env }) as Effect.Effect<void>;
+  if (isBindingHost(host) || isFlyHost(host)) {
+    return asBindableHost(host).bind`${target}`({ env });
   }
-  if (type === "Cloudflare.Worker") {
+  if (isWorker(host)) {
     const bindings = Object.entries(env).map(([name, value]) =>
       Redacted.isRedacted(value) || name === STRIPE_API_KEY_ENV
         ? { type: "secret_text" as const, name, text: value }
         : { type: "plain_text" as const, name, text: value },
     );
-    return (host as any).bind`${target}`({ bindings }) as Effect.Effect<void>;
+    return asBindableHost(host).bind`${target}`({ bindings });
   }
-  return Effect.void;
+  return Effect.die(
+    `Stripe HTTP bindings cannot attach to host type '${host.Type}'`,
+  );
 };
 
 /**
@@ -125,7 +175,11 @@ export const attachStripeToken = (
     if (host === undefined) return;
     const Token = yield* RestrictedApiKey;
     const token = yield* Token(`${host.LogicalId}StripeToken`);
-    yield* token.bind(bindId, {
+    const sid =
+      resource !== undefined
+        ? `${bindId}:${resource.LogicalId}`
+        : `${bindId}:${host.LogicalId}`;
+    yield* token.bind(sid, {
       permissions: [...permissions],
     });
     // One STRIPE_API_KEY on the host; resource ids bind onto the resource.
@@ -155,10 +209,7 @@ export const makeHttpStripeIdBinding = <
   permissions: readonly StripePermission[];
 }) =>
   Effect.gen(function* () {
-    const context = yield* Effect.context<
-      Credentials | HttpClient.HttpClient
-    >();
-    const auth = makeStripeAuth(context);
+    const auth = yield* resolveStripeAuth;
 
     return Effect.fn(function* (resource: StripeIdResource) {
       const key = idEnvKey(resource);
@@ -199,10 +250,7 @@ export const makeHttpStripeAccountBinding = <I, A, E>(options: {
   permissions: readonly StripePermission[];
 }) =>
   Effect.gen(function* () {
-    const context = yield* Effect.context<
-      Credentials | HttpClient.HttpClient
-    >();
-    const auth = makeStripeAuth(context);
+    const auth = yield* resolveStripeAuth;
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {

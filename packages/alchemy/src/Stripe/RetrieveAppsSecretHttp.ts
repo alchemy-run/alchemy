@@ -1,9 +1,7 @@
-import { Credentials } from "@distilled.cloud/stripe";
 import { GetAppsSecretsFind } from "@distilled.cloud/stripe/stripe";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import type * as HttpClient from "effect/unstable/http/HttpClient";
 import type { ResourceLike } from "../Resource.ts";
 import { sanitizeKey } from "../RuntimeContext.ts";
 import type { AppsSecret, AppsSecretScopeType } from "./AppsSecret.ts";
@@ -11,7 +9,7 @@ import { RetrieveAppsSecret } from "./RetrieveAppsSecret.ts";
 import {
   asStringEffect,
   attachStripeToken,
-  makeStripeAuth,
+  resolveStripeAuth,
 } from "./StripeHttp.ts";
 
 const nameEnvKey = (resource: { readonly LogicalId: string }): string =>
@@ -31,17 +29,9 @@ const toOptionalStringEffect = (
   if (value === undefined || value === null || value === "") {
     return Effect.succeed(undefined);
   }
-  if (typeof value === "string") return Effect.succeed(value);
-  if (Effect.isEffect(value)) {
-    return (value as Effect.Effect<unknown>).pipe(
-      Effect.map((resolved) =>
-        typeof resolved === "string" && resolved.length > 0
-          ? resolved
-          : undefined,
-      ),
-    ) as Effect.Effect<string | undefined>;
-  }
-  return Effect.succeed(undefined);
+  return asStringEffect(value).pipe(
+    Effect.map((resolved) => (resolved.length > 0 ? resolved : undefined)),
+  );
 };
 
 /**
@@ -54,10 +44,7 @@ const toOptionalStringEffect = (
 export const RetrieveAppsSecretHttp = Layer.effect(
   RetrieveAppsSecret,
   Effect.gen(function* () {
-    const context = yield* Effect.context<
-      Credentials | HttpClient.HttpClient
-    >();
-    const auth = makeStripeAuth(context);
+    const auth = yield* resolveStripeAuth;
 
     return Effect.fn(function* (secret: AppsSecret) {
       const nameKey = nameEnvKey(secret);

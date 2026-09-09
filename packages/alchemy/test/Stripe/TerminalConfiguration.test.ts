@@ -2,7 +2,7 @@ import * as Provider from "@/Provider";
 import * as Stripe from "@/Stripe";
 import * as Test from "@/Test/Alchemy";
 import {
-  GetTerminalConfigurationsConfiguration,
+  GetTerminalConfiguration,
   type DeletedTerminalConfiguration,
   type TerminalConfiguration as StripeTerminalConfiguration,
 } from "@distilled.cloud/stripe/stripe";
@@ -27,7 +27,7 @@ const isDeletedConfiguration = (
   "deleted" in value && value.deleted === true;
 
 const waitUntilGone = (id: string) =>
-  GetTerminalConfigurationsConfiguration({ configuration: id }).pipe(
+  GetTerminalConfiguration({ configuration: id }).pipe(
     Effect.map((configuration) =>
       "deleted" in configuration && configuration.deleted === true
         ? ("gone" as const)
@@ -74,7 +74,7 @@ test.provider(
       expect(created.rebootWindow).toEqual({ startHour: 2, endHour: 4 });
       expect(created.livemode).toEqual(false);
 
-      const fetched = yield* GetTerminalConfigurationsConfiguration({
+      const fetched = yield* GetTerminalConfiguration({
         configuration: created.id,
       });
       expect(isDeletedConfiguration(fetched)).toEqual(false);
@@ -117,7 +117,7 @@ test.provider(
       expect(updated.tipping?.usd?.smartTipThreshold).toEqual(2000);
       expect(updated.rebootWindow).toEqual({ startHour: 3, endHour: 5 });
 
-      const refetched = yield* GetTerminalConfigurationsConfiguration({
+      const refetched = yield* GetTerminalConfiguration({
         configuration: updated.id,
       });
       expect(isDeletedConfiguration(refetched)).toEqual(false);

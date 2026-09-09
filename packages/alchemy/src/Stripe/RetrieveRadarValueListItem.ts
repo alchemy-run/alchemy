@@ -1,6 +1,6 @@
 import type {
-  GetRadarValueListItemsItemError,
-  GetRadarValueListItemsItemRequest,
+  GetRadarValueListItemError,
+  GetRadarValueListItemRequest,
   RadarValueListItem as StripeRadarValueListItem,
 } from "@distilled.cloud/stripe/stripe";
 import type * as Effect from "effect/Effect";
@@ -9,7 +9,7 @@ import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { RadarValueListItem } from "./RadarValueListItem.ts";
 
 export interface RetrieveRadarValueListItemRequest extends Omit<
-  GetRadarValueListItemsItemRequest,
+  GetRadarValueListItemRequest,
   "item"
 > {}
 
@@ -35,7 +35,7 @@ export interface RetrieveRadarValueListItem extends Binding.Service<
       request?: RetrieveRadarValueListItemRequest,
     ) => Effect.Effect<
       StripeRadarValueListItem,
-      GetRadarValueListItemsItemError,
+      GetRadarValueListItemError,
       RuntimeContext
     >
   >

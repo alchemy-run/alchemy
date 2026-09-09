@@ -1,7 +1,7 @@
 import * as Provider from "@/Provider";
 import * as Stripe from "@/Stripe";
 import * as Test from "@/Test/Alchemy";
-import { GetApplePayDomainsDomain } from "@distilled.cloud/stripe/stripe";
+import { GetApplePayDomain } from "@distilled.cloud/stripe/stripe";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -21,7 +21,7 @@ const REPLACE_TO_DOMAIN = "alchemy-apple-pay-replace-b.example.com";
 const LIST_DOMAIN = "alchemy-apple-pay-list.example.com";
 
 const waitUntilGone = (id: string) =>
-  GetApplePayDomainsDomain({ domain: id }).pipe(
+  GetApplePayDomain({ domain: id }).pipe(
     Effect.as("found" as const),
     Effect.catchIf(isMissingStripeResource, () =>
       Effect.succeed("gone" as const),
@@ -52,7 +52,7 @@ test.provider(
       expect(created.created).toEqual(expect.any(Number));
       expect(created.livemode).toEqual(false);
 
-      const fetched = yield* GetApplePayDomainsDomain({
+      const fetched = yield* GetApplePayDomain({
         domain: created.id,
       });
       expect(fetched.id).toEqual(created.id);
@@ -70,7 +70,7 @@ test.provider(
       expect(updated.id).toEqual(created.id);
       expect(updated.domainName).toEqual(LIFECYCLE_DOMAIN);
 
-      const refetched = yield* GetApplePayDomainsDomain({
+      const refetched = yield* GetApplePayDomain({
         domain: updated.id,
       });
       expect(refetched.id).toEqual(updated.id);
@@ -111,7 +111,7 @@ test.provider(
       expect(replaced.id).not.toEqual(created.id);
       expect(replaced.domainName).toEqual(REPLACE_TO_DOMAIN);
 
-      const fetched = yield* GetApplePayDomainsDomain({
+      const fetched = yield* GetApplePayDomain({
         domain: replaced.id,
       });
       expect(fetched.id).toEqual(replaced.id);

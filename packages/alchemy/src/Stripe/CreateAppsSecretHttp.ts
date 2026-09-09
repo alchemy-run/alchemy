@@ -1,4 +1,4 @@
-import { PostAppsSecrets } from "@distilled.cloud/stripe/stripe";
+import { CreateAppsSecret as createAppsSecretOp } from "@distilled.cloud/stripe/stripe";
 import * as Layer from "effect/Layer";
 import { CreateAppsSecret } from "./CreateAppsSecret.ts";
 import { makeHttpStripeAccountBinding } from "./StripeHttp.ts";
@@ -14,7 +14,7 @@ export const CreateAppsSecretHttp = Layer.effect(
   CreateAppsSecret,
   makeHttpStripeAccountBinding({
     tag: "Stripe.CreateAppsSecret",
-    operation: PostAppsSecrets,
+    operation: createAppsSecretOp,
     permissions: ["apps_secrets_write"],
   }),
 );

@@ -2,7 +2,7 @@ import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Stripe from "alchemy/Stripe";
 import * as Test from "alchemy/Test/Bun";
-import { DeleteCustomersCustomer } from "@distilled.cloud/stripe/stripe";
+import { DeleteCustomer } from "@distilled.cloud/stripe/stripe";
 import { expect } from "bun:test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -80,7 +80,7 @@ test(
     expect(body.email).toEqual("stripe-billing-example@example.com");
     expect(body.name).toEqual("Example Customer");
 
-    yield* DeleteCustomersCustomer({ customer: body.id }).pipe(
+    yield* DeleteCustomer({ customer: body.id }).pipe(
       Effect.catch(() => Effect.void),
     );
   }),

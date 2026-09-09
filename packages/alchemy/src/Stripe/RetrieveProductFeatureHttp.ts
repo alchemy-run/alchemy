@@ -1,9 +1,7 @@
-import { Credentials } from "@distilled.cloud/stripe";
-import { GetProductsProductFeaturesId } from "@distilled.cloud/stripe/stripe";
+import { GetProductFeature } from "@distilled.cloud/stripe/stripe";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import type * as HttpClient from "effect/unstable/http/HttpClient";
 import type { ResourceLike } from "../Resource.ts";
 import { sanitizeKey } from "../RuntimeContext.ts";
 import type { ProductFeature } from "./ProductFeature.ts";
@@ -12,7 +10,7 @@ import {
   asStringEffect,
   attachStripeToken,
   idEnvKey,
-  makeStripeAuth,
+  resolveStripeAuth,
 } from "./StripeHttp.ts";
 
 const productEnvKey = (resource: { readonly LogicalId: string }): string =>
@@ -30,10 +28,7 @@ const envName = (key: string) => Config.string(key).pipe(Effect.orDie);
 export const RetrieveProductFeatureHttp = Layer.effect(
   RetrieveProductFeature,
   Effect.gen(function* () {
-    const context = yield* Effect.context<
-      Credentials | HttpClient.HttpClient
-    >();
-    const auth = makeStripeAuth(context);
+    const auth = yield* resolveStripeAuth;
 
     return Effect.fn(function* (feature: ProductFeature) {
       const idKey = idEnvKey(feature);
@@ -60,7 +55,7 @@ export const RetrieveProductFeatureHttp = Layer.effect(
       return Effect.fn(`Stripe.RetrieveProductFeature(${feature.LogicalId})`)(
         function* (request?: { expand?: string[] }) {
           return yield* auth.authorize(
-            GetProductsProductFeaturesId({
+            GetProductFeature({
               ...(request ?? {}),
               id: yield* id,
               product: yield* product,

@@ -1,4 +1,4 @@
-import { GetPricesPrice } from "@distilled.cloud/stripe/stripe";
+import { GetPrice } from "@distilled.cloud/stripe/stripe";
 import * as Layer from "effect/Layer";
 import { RetrievePrice } from "./RetrievePrice.ts";
 import { makeHttpStripeIdBinding } from "./StripeHttp.ts";
@@ -14,7 +14,7 @@ export const RetrievePriceHttp = Layer.effect(
   RetrievePrice,
   makeHttpStripeIdBinding({
     tag: "Stripe.RetrievePrice",
-    operation: GetPricesPrice,
+    operation: GetPrice,
     idField: "price",
     permissions: ["prices_read"],
   }),

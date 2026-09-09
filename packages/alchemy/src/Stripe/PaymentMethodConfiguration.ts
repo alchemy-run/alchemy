@@ -1,9 +1,9 @@
 import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
   GetPaymentMethodConfigurations,
-  GetPaymentMethodConfigurationsConfiguration,
-  PostPaymentMethodConfigurations,
-  PostPaymentMethodConfigurationsConfiguration,
+  GetPaymentMethodConfiguration,
+  CreatePaymentMethodConfiguration,
+  UpdatePaymentMethodConfiguration,
   type PaymentMethodConfigResourcePaymentMethodProperties,
   type PaymentMethodConfiguration as StripePaymentMethodConfiguration,
 } from "@distilled.cloud/stripe/stripe";
@@ -452,7 +452,7 @@ const toChangedWireMethods = (
 const isMissingConfiguration = isMissingStripeResource;
 
 const getById = (configuration: string) =>
-  GetPaymentMethodConfigurationsConfiguration({ configuration }).pipe(
+  GetPaymentMethodConfiguration({ configuration }).pipe(
     Effect.catchIf(isMissingConfiguration, () => Effect.succeed(undefined)),
   );
 
@@ -573,7 +573,7 @@ export const PaymentMethodConfigurationProvider = () =>
       }
 
       if (current === undefined) {
-        current = yield* PostPaymentMethodConfigurations({
+        current = yield* CreatePaymentMethodConfiguration({
           name,
           ...(news.parent !== undefined ? { parent: news.parent } : {}),
           ...wireMethods,
@@ -597,7 +597,7 @@ export const PaymentMethodConfigurationProvider = () =>
         return toAttrs(current);
       }
 
-      const updated = yield* PostPaymentMethodConfigurationsConfiguration({
+      const updated = yield* UpdatePaymentMethodConfiguration({
         configuration: current.id,
         ...(nameChanged ? { name } : {}),
         ...(activeChanged ? { active: desiredActive } : {}),
@@ -611,7 +611,7 @@ export const PaymentMethodConfigurationProvider = () =>
       if (existing === undefined || !existing.active || existing.is_default) {
         return;
       }
-      yield* PostPaymentMethodConfigurationsConfiguration({
+      yield* UpdatePaymentMethodConfiguration({
         configuration: existing.id,
         active: false,
       }).pipe(Effect.catchIf(isMissingConfiguration, () => Effect.void));

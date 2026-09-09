@@ -1,7 +1,7 @@
 import type {
   BillingPortalConfiguration as StripeBillingPortalConfiguration,
-  GetBillingPortalConfigurationsConfigurationError,
-  GetBillingPortalConfigurationsConfigurationRequest,
+  GetBillingPortalConfigurationError,
+  GetBillingPortalConfigurationRequest,
 } from "@distilled.cloud/stripe/stripe";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../Binding.ts";
@@ -9,7 +9,7 @@ import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { BillingPortalConfiguration } from "./BillingPortalConfiguration.ts";
 
 export interface RetrieveBillingPortalConfigurationRequest extends Omit<
-  GetBillingPortalConfigurationsConfigurationRequest,
+  GetBillingPortalConfigurationRequest,
   "configuration"
 > {}
 
@@ -35,7 +35,7 @@ export interface RetrieveBillingPortalConfiguration extends Binding.Service<
       request?: RetrieveBillingPortalConfigurationRequest,
     ) => Effect.Effect<
       StripeBillingPortalConfiguration,
-      GetBillingPortalConfigurationsConfigurationError,
+      GetBillingPortalConfigurationError,
       RuntimeContext
     >
   >

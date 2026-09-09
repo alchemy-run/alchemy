@@ -1,6 +1,6 @@
 import type {
-  GetPaymentMethodConfigurationsConfigurationError,
-  GetPaymentMethodConfigurationsConfigurationRequest,
+  GetPaymentMethodConfigurationError,
+  GetPaymentMethodConfigurationRequest,
   PaymentMethodConfiguration as StripePaymentMethodConfiguration,
 } from "@distilled.cloud/stripe/stripe";
 import type * as Effect from "effect/Effect";
@@ -9,7 +9,7 @@ import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { PaymentMethodConfiguration } from "./PaymentMethodConfiguration.ts";
 
 export interface RetrievePaymentMethodConfigurationRequest extends Omit<
-  GetPaymentMethodConfigurationsConfigurationRequest,
+  GetPaymentMethodConfigurationRequest,
   "configuration"
 > {}
 
@@ -35,7 +35,7 @@ export interface RetrievePaymentMethodConfiguration extends Binding.Service<
       request?: RetrievePaymentMethodConfigurationRequest,
     ) => Effect.Effect<
       StripePaymentMethodConfiguration,
-      GetPaymentMethodConfigurationsConfigurationError,
+      GetPaymentMethodConfigurationError,
       RuntimeContext
     >
   >

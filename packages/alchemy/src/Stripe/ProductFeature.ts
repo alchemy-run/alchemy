@@ -1,10 +1,10 @@
 import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
-  DeleteProductsProductFeaturesId,
+  DeleteProductFeature,
   GetProducts,
-  GetProductsProductFeatures,
-  GetProductsProductFeaturesId,
-  PostProductsProductFeatures,
+  GetProductFeatures,
+  GetProductFeature,
+  CreateProductFeature,
   type Product as StripeProduct,
   type ProductFeature as StripeProductFeature,
 } from "@distilled.cloud/stripe/stripe";
@@ -110,7 +110,7 @@ const toAttrs = (
 const isMissing = isMissingStripeResource;
 
 const getById = (product: string, id: string) =>
-  GetProductsProductFeaturesId({ product, id }).pipe(
+  GetProductFeature({ product, id }).pipe(
     Effect.catchIf(isMissing, () => Effect.succeed(undefined)),
   );
 
@@ -118,7 +118,7 @@ const listFeatures = Effect.fn(function* (product: string) {
   const features: StripeProductFeature[] = [];
   let startingAfter: string | undefined;
   for (let page = 0; page < LIST_MAX_PAGES; page++) {
-    const response = yield* GetProductsProductFeatures({
+    const response = yield* GetProductFeatures({
       product,
       limit: LIST_PAGE_SIZE,
       ...(startingAfter !== undefined ? { starting_after: startingAfter } : {}),
@@ -266,7 +266,7 @@ export const ProductFeatureProvider = () =>
       }
 
       if (current === undefined) {
-        current = yield* PostProductsProductFeatures({
+        current = yield* CreateProductFeature({
           product: news.product,
           entitlement_feature: news.entitlementFeature,
         }).pipe(
@@ -292,7 +292,7 @@ export const ProductFeatureProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      yield* DeleteProductsProductFeaturesId({
+      yield* DeleteProductFeature({
         product: output.product,
         id: output.id,
       }).pipe(Effect.catchIf(isMissing, () => Effect.void));

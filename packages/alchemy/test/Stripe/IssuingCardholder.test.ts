@@ -3,7 +3,7 @@ import * as Stripe from "@/Stripe";
 import * as Test from "@/Test/Alchemy";
 import {
   GetIssuingCardholders,
-  GetIssuingCardholdersCardholder,
+  GetIssuingCardholder,
 } from "@distilled.cloud/stripe/stripe";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -24,7 +24,7 @@ const logLevel = Effect.provideService(
 const isMissing = isMissingStripeResource;
 
 const waitUntilInactive = (id: string) =>
-  GetIssuingCardholdersCardholder({ cardholder: id }).pipe(
+  GetIssuingCardholder({ cardholder: id }).pipe(
     Effect.map((cardholder) =>
       cardholder.status === "inactive"
         ? ("inactive" as const)
@@ -111,7 +111,7 @@ test.provider.skipIf(!ISSUING_ENABLED)(
       expect(created.created).toEqual(expect.any(Number));
       expect(created.livemode).toEqual(false);
 
-      const fetched = yield* GetIssuingCardholdersCardholder({
+      const fetched = yield* GetIssuingCardholder({
         cardholder: created.id,
       });
       expect(fetched.id).toEqual(created.id);
@@ -166,7 +166,7 @@ test.provider.skipIf(!ISSUING_ENABLED)(
       expect(updated.metadata).toEqual({ team: "finance", role: "lead" });
       expect(updated.status).toEqual("active");
 
-      const refetched = yield* GetIssuingCardholdersCardholder({
+      const refetched = yield* GetIssuingCardholder({
         cardholder: updated.id,
       });
       expect(refetched.email).toEqual(
@@ -183,7 +183,7 @@ test.provider.skipIf(!ISSUING_ENABLED)(
 
       const inactive = yield* waitUntilInactive(created.id);
       expect(inactive).toEqual("inactive");
-      const deactivated = yield* GetIssuingCardholdersCardholder({
+      const deactivated = yield* GetIssuingCardholder({
         cardholder: created.id,
       });
       expect(deactivated.status).toEqual("inactive");

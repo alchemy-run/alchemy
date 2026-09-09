@@ -1,6 +1,6 @@
 import type {
-  GetProductsProductFeaturesIdError,
-  GetProductsProductFeaturesIdRequest,
+  GetProductFeatureError,
+  GetProductFeatureRequest,
   ProductFeature as StripeProductFeature,
 } from "@distilled.cloud/stripe/stripe";
 import type * as Effect from "effect/Effect";
@@ -9,7 +9,7 @@ import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { ProductFeature } from "./ProductFeature.ts";
 
 export interface RetrieveProductFeatureRequest extends Omit<
-  GetProductsProductFeaturesIdRequest,
+  GetProductFeatureRequest,
   "id" | "product"
 > {}
 
@@ -35,7 +35,7 @@ export interface RetrieveProductFeature extends Binding.Service<
       request?: RetrieveProductFeatureRequest,
     ) => Effect.Effect<
       StripeProductFeature,
-      GetProductsProductFeaturesIdError,
+      GetProductFeatureError,
       RuntimeContext
     >
   >

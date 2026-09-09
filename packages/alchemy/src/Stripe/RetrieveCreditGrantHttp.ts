@@ -1,4 +1,4 @@
-import { GetBillingCreditGrantsId } from "@distilled.cloud/stripe/stripe";
+import { GetBillingCreditGrant } from "@distilled.cloud/stripe/stripe";
 import * as Layer from "effect/Layer";
 import { RetrieveCreditGrant } from "./RetrieveCreditGrant.ts";
 import { makeHttpStripeIdBinding } from "./StripeHttp.ts";
@@ -14,7 +14,7 @@ export const RetrieveCreditGrantHttp = Layer.effect(
   RetrieveCreditGrant,
   makeHttpStripeIdBinding({
     tag: "Stripe.RetrieveCreditGrant",
-    operation: GetBillingCreditGrantsId,
+    operation: GetBillingCreditGrant,
     idField: "id",
     permissions: ["credit_grants_read"],
   }),

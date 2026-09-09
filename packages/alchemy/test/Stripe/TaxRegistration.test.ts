@@ -2,9 +2,9 @@ import * as Provider from "@/Provider";
 import * as Stripe from "@/Stripe";
 import * as Test from "@/Test/Alchemy";
 import {
-  GetTaxRegistrationsId,
+  GetTaxRegistration,
   GetTaxSettings,
-  PostTaxSettings,
+  CreateTaxSettings,
 } from "@distilled.cloud/stripe/stripe";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -26,7 +26,7 @@ const FAR_FUTURE = 1_893_456_000; // 2030-01-01T00:00:00Z
 const ensureHeadOffice = Effect.gen(function* () {
   const settings = yield* GetTaxSettings({});
   if (settings.head_office != null) return;
-  yield* PostTaxSettings({
+  yield* CreateTaxSettings({
     head_office: {
       address: {
         country: "US",
@@ -40,7 +40,7 @@ const ensureHeadOffice = Effect.gen(function* () {
 });
 
 const waitUntilExpired = (id: string) =>
-  GetTaxRegistrationsId({ id }).pipe(
+  GetTaxRegistration({ id }).pipe(
     Effect.map((registration) =>
       registration.status === "expired"
         ? ("expired" as const)
@@ -79,7 +79,7 @@ test.provider(
       expect(created.created).toEqual(expect.any(Number));
       expect(created.livemode).toEqual(false);
 
-      const fetched = yield* GetTaxRegistrationsId({ id: created.id });
+      const fetched = yield* GetTaxRegistration({ id: created.id });
       expect(fetched.id).toEqual(created.id);
       expect(fetched.country).toEqual("TJ");
       expect(fetched.country_options.tj?.type).toEqual("simplified");
@@ -101,7 +101,7 @@ test.provider(
       expect(updated.expiresAt).toEqual(FAR_FUTURE);
       expect(updated.status).toEqual("active");
 
-      const refetched = yield* GetTaxRegistrationsId({ id: updated.id });
+      const refetched = yield* GetTaxRegistration({ id: updated.id });
       expect(refetched.id).toEqual(updated.id);
       expect(refetched.expires_at).toEqual(FAR_FUTURE);
       expect(refetched.status).toEqual("active");
@@ -110,7 +110,7 @@ test.provider(
 
       const expired = yield* waitUntilExpired(created.id);
       expect(expired).toEqual("expired");
-      const deactivated = yield* GetTaxRegistrationsId({ id: created.id });
+      const deactivated = yield* GetTaxRegistration({ id: created.id });
       expect(deactivated.status).toEqual("expired");
     }).pipe(logLevel),
   { timeout: 120_000 },
@@ -179,7 +179,7 @@ test.provider(
       expect(replaced.country).toEqual("UZ");
       expect(replaced.countryOptions.uz?.type).toEqual("simplified");
 
-      const fetched = yield* GetTaxRegistrationsId({ id: replaced.id });
+      const fetched = yield* GetTaxRegistration({ id: replaced.id });
       expect(fetched.id).toEqual(replaced.id);
       expect(fetched.country).toEqual("UZ");
 

@@ -1,14 +1,14 @@
 import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
-  DeleteTerminalConfigurationsConfiguration,
+  DeleteTerminalConfiguration,
   GetTerminalConfigurations,
-  GetTerminalConfigurationsConfiguration,
-  PostTerminalConfigurations,
-  PostTerminalConfigurationsConfiguration,
+  GetTerminalConfiguration,
+  CreateTerminalConfiguration,
+  UpdateTerminalConfiguration,
   type DeletedTerminalConfiguration,
-  type PostTerminalConfigurationsRequest,
-  type PostTerminalConfigurationsRequestTippingCase0,
-  type PostTerminalConfigurationsRequestWifiCase0,
+  type CreateTerminalConfigurationRequest,
+  type CreateTerminalConfigurationRequestTippingCase0,
+  type CreateTerminalConfigurationRequestWifiCase0,
   type TerminalConfiguration as StripeTerminalConfiguration,
   type TerminalConfigurationConfigurationResourceCurrencySpecificConfig,
   type TerminalConfigurationConfigurationResourceDeviceTypeSpecificConfig,
@@ -612,8 +612,8 @@ const toWireTippingCurrency = (value: TerminalTippingCurrency) => ({
 
 const toWireTipping = (
   tipping: TerminalTipping,
-): PostTerminalConfigurationsRequestTippingCase0 => {
-  const out: PostTerminalConfigurationsRequestTippingCase0 = {};
+): CreateTerminalConfigurationRequestTippingCase0 => {
+  const out: CreateTerminalConfigurationRequestTippingCase0 = {};
   for (const currency of TIPPING_CURRENCIES) {
     const value = tipping[currency];
     if (value !== undefined) {
@@ -625,7 +625,7 @@ const toWireTipping = (
 
 const toWireWifi = (
   wifi: TerminalWifi,
-): PostTerminalConfigurationsRequestWifiCase0 => ({
+): CreateTerminalConfigurationRequestWifiCase0 => ({
   type: wifi.type,
   ...(wifi.enterpriseEapPeap !== undefined
     ? {
@@ -740,7 +740,7 @@ const nestedNeedSync = (desired: unknown, observed: unknown): boolean => {
 const isMissingConfiguration = isMissingStripeResource;
 
 const getById = (configuration: string) =>
-  GetTerminalConfigurationsConfiguration({ configuration }).pipe(
+  GetTerminalConfiguration({ configuration }).pipe(
     Effect.map(asConfiguration),
     Effect.catchIf(isMissingConfiguration, () => Effect.succeed(undefined)),
   );
@@ -803,7 +803,7 @@ const specifiedDevices = (
 const toCreatePayload = (
   name: string,
   news: TerminalConfigurationProps,
-): PostTerminalConfigurationsRequest => {
+): CreateTerminalConfigurationRequest => {
   const devices = specifiedDevices(news);
   const createDevices: Partial<Record<SnakeDeviceKey, DeviceWire>> = {};
   for (const [snake, value] of Object.entries(devices) as Array<
@@ -869,7 +869,7 @@ export const TerminalConfigurationProvider = () =>
       }
 
       if (current === undefined) {
-        current = yield* PostTerminalConfigurations(
+        current = yield* CreateTerminalConfiguration(
           toCreatePayload(name, news),
         ).pipe(
           withRequestOptions({
@@ -926,7 +926,7 @@ export const TerminalConfigurationProvider = () =>
         return attrs;
       }
 
-      const updated = yield* PostTerminalConfigurationsConfiguration({
+      const updated = yield* UpdateTerminalConfiguration({
         configuration: current.id,
         ...(nameChanged ? { name } : {}),
         ...(offlineChanged
@@ -970,7 +970,7 @@ export const TerminalConfigurationProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const existing = yield* getById(output.id);
       if (existing === undefined || isAccountDefault(existing)) return;
-      yield* DeleteTerminalConfigurationsConfiguration({
+      yield* DeleteTerminalConfiguration({
         configuration: existing.id,
       }).pipe(Effect.catchIf(isMissingConfiguration, () => Effect.void));
     }),

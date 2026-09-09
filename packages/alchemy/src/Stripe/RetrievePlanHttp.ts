@@ -1,4 +1,4 @@
-import { GetPlansPlan } from "@distilled.cloud/stripe/stripe";
+import { GetPlan } from "@distilled.cloud/stripe/stripe";
 import * as Layer from "effect/Layer";
 import { RetrievePlan } from "./RetrievePlan.ts";
 import { makeHttpStripeIdBinding } from "./StripeHttp.ts";
@@ -14,7 +14,7 @@ export const RetrievePlanHttp = Layer.effect(
   RetrievePlan,
   makeHttpStripeIdBinding({
     tag: "Stripe.RetrievePlan",
-    operation: GetPlansPlan,
+    operation: GetPlan,
     idField: "plan",
     permissions: ["plans_read"],
   }),

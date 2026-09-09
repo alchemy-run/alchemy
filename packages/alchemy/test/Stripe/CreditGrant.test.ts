@@ -1,7 +1,7 @@
 import * as Provider from "@/Provider";
 import * as Stripe from "@/Stripe";
 import * as Test from "@/Test/Alchemy";
-import { GetBillingCreditGrantsId } from "@distilled.cloud/stripe/stripe";
+import { GetBillingCreditGrant } from "@distilled.cloud/stripe/stripe";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -18,7 +18,7 @@ const logLevel = Effect.provideService(
 const EXPIRES_AT = 4_102_444_800;
 
 const waitUntilVoided = (id: string) =>
-  GetBillingCreditGrantsId({ id }).pipe(
+  GetBillingCreditGrant({ id }).pipe(
     Effect.map((grant) =>
       grant.voided_at != null ? ("voided" as const) : ("active" as const),
     ),
@@ -74,7 +74,7 @@ test.provider(
       expect(created.metadata).toMatchObject({ campaign: "welcome" });
       expect(created.created).toEqual(expect.any(Number));
 
-      const fetched = yield* GetBillingCreditGrantsId({ id: created.id });
+      const fetched = yield* GetBillingCreditGrant({ id: created.id });
       expect(fetched.id).toEqual(created.id);
       expect(fetched.amount.monetary?.currency).toEqual("usd");
       expect(fetched.amount.monetary?.value).toEqual(1000);
@@ -120,7 +120,7 @@ test.provider(
       });
       expect(updated.amount.monetary?.value).toEqual(1000);
 
-      const refetched = yield* GetBillingCreditGrantsId({ id: updated.id });
+      const refetched = yield* GetBillingCreditGrant({ id: updated.id });
       expect(refetched.id).toEqual(updated.id);
       expect(refetched.expires_at).toEqual(EXPIRES_AT);
       expect(refetched.metadata?.campaign).toEqual("spring");
@@ -133,7 +133,7 @@ test.provider(
       const voided = yield* waitUntilVoided(created.id);
       expect(voided === "voided" || voided === "gone").toEqual(true);
       if (voided === "voided") {
-        const deactivated = yield* GetBillingCreditGrantsId({
+        const deactivated = yield* GetBillingCreditGrant({
           id: created.id,
         });
         expect(deactivated.voided_at).toEqual(expect.any(Number));
@@ -237,7 +237,7 @@ test.provider(
       expect(replaced.id).not.toEqual(created.id);
       expect(replaced.amount.monetary?.value).toEqual(2000);
 
-      const fetched = yield* GetBillingCreditGrantsId({ id: replaced.id });
+      const fetched = yield* GetBillingCreditGrant({ id: replaced.id });
       expect(fetched.id).toEqual(replaced.id);
       expect(fetched.amount.monetary?.value).toEqual(2000);
 

@@ -1,7 +1,7 @@
 import * as Provider from "@/Provider";
 import * as Stripe from "@/Stripe";
 import * as Test from "@/Test/Alchemy";
-import { GetCustomersCustomerTaxIdsId } from "@distilled.cloud/stripe/stripe";
+import { GetCustomerTaxIdsById } from "@distilled.cloud/stripe/stripe";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -18,7 +18,7 @@ const logLevel = Effect.provideService(
 const isMissing = isMissingStripeResource;
 
 const waitUntilGone = (customer: string, id: string) =>
-  GetCustomersCustomerTaxIdsId({ customer, id }).pipe(
+  GetCustomerTaxIdsById({ customer, id }).pipe(
     Effect.as("found" as const),
     Effect.catchIf(isMissing, () => Effect.succeed("gone" as const)),
     Effect.repeat({
@@ -57,7 +57,7 @@ test.provider(
       expect(created.taxId.livemode).toEqual(false);
       expect(created.taxId.created).toEqual(expect.any(Number));
 
-      const fetched = yield* GetCustomersCustomerTaxIdsId({
+      const fetched = yield* GetCustomerTaxIdsById({
         customer: created.taxId.customer,
         id: created.taxId.id,
       });
@@ -184,7 +184,7 @@ test.provider(
       expect(replaced.taxId.customer).toEqual(created.customer.id);
       expect(replaced.taxId.value).toEqual("DE000000000");
 
-      const newFetched = yield* GetCustomersCustomerTaxIdsId({
+      const newFetched = yield* GetCustomerTaxIdsById({
         customer: replaced.taxId.customer,
         id: replaced.taxId.id,
       });

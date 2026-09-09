@@ -1,11 +1,11 @@
 import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
-  DeleteAccountsAccountExternalAccountsId,
+  DeleteAccountExternalAccount,
   GetAccounts,
-  GetAccountsAccountExternalAccounts,
-  GetAccountsAccountExternalAccountsId,
-  PostAccountsAccountExternalAccounts,
-  PostAccountsAccountExternalAccountsId,
+  GetAccountExternalAccounts,
+  GetAccountExternalAccount,
+  CreateAccountExternalAccount,
+  UpdateAccountExternalAccount,
   type Account as StripeAccount,
   type BankAccount as StripeBankAccount,
   type Card as StripeCard,
@@ -261,7 +261,7 @@ const toAttrs = (
 const isMissing = isMissingStripeResource;
 
 const getById = (account: string, id: string) =>
-  GetAccountsAccountExternalAccountsId({ account, id }).pipe(
+  GetAccountExternalAccount({ account, id }).pipe(
     Effect.catchIf(isMissing, () => Effect.succeed(undefined)),
   );
 
@@ -269,7 +269,7 @@ const listExternalAccounts = Effect.fn(function* (account: string) {
   const accounts: StripeExternalAccount[] = [];
   let startingAfter: string | undefined;
   for (let page = 0; page < LIST_MAX_PAGES; page++) {
-    const response = yield* GetAccountsAccountExternalAccounts({
+    const response = yield* GetAccountExternalAccounts({
       account,
       limit: LIST_PAGE_SIZE,
       ...(startingAfter !== undefined ? { starting_after: startingAfter } : {}),
@@ -467,7 +467,7 @@ export const AccountExternalAccountProvider = () =>
       }
 
       if (current === undefined) {
-        current = yield* PostAccountsAccountExternalAccounts({
+        current = yield* CreateAccountExternalAccount({
           account: news.account,
           external_account: news.externalAccount,
           metadata,
@@ -524,7 +524,7 @@ export const AccountExternalAccountProvider = () =>
         return attrs;
       }
 
-      const updated = yield* PostAccountsAccountExternalAccountsId({
+      const updated = yield* UpdateAccountExternalAccount({
         account: news.account,
         id: current.id,
         ...(holderNameChanged
@@ -560,7 +560,7 @@ export const AccountExternalAccountProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      yield* DeleteAccountsAccountExternalAccountsId({
+      yield* DeleteAccountExternalAccount({
         account: output.account,
         id: output.id,
       }).pipe(Effect.catchIf(isMissing, () => Effect.void));

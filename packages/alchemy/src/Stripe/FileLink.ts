@@ -1,9 +1,9 @@
 import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
   GetFileLinks,
-  GetFileLinksLink,
-  PostFileLinks,
-  PostFileLinksLink,
+  GetFileLink,
+  CreateFileLink,
+  UpdateFileLink,
   type FileLink as StripeFileLink,
 } from "@distilled.cloud/stripe/stripe";
 import * as Effect from "effect/Effect";
@@ -145,7 +145,7 @@ const toAttrs = (link: StripeFileLink) => ({
 const isMissingFileLink = isMissingStripeResource;
 
 const getById = (link: string) =>
-  GetFileLinksLink({ link }).pipe(
+  GetFileLink({ link }).pipe(
     Effect.catchIf(isMissingFileLink, () => Effect.succeed(undefined)),
   );
 
@@ -276,7 +276,7 @@ export const FileLinkProvider = () =>
       }
 
       if (current === undefined) {
-        current = yield* PostFileLinks({
+        current = yield* CreateFileLink({
           file: news.file,
           metadata,
           ...(desiredExpiresAt !== undefined
@@ -299,7 +299,7 @@ export const FileLinkProvider = () =>
         return toAttrs(current);
       }
 
-      const updated = yield* PostFileLinksLink({
+      const updated = yield* UpdateFileLink({
         link: current.id,
         ...(expiresAtChanged
           ? {
@@ -324,7 +324,7 @@ export const FileLinkProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const existing = yield* getById(output.id);
       if (existing === undefined || existing.expired) return;
-      yield* PostFileLinksLink({
+      yield* UpdateFileLink({
         link: existing.id,
         expires_at: "now",
       }).pipe(

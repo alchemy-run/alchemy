@@ -1,7 +1,7 @@
 import type {
-  GetTerminalReadersReaderError,
-  GetTerminalReadersReaderRequest,
-  GetTerminalReadersReaderResponse,
+  GetTerminalReaderError,
+  GetTerminalReaderRequest,
+  GetTerminalReaderResponse,
 } from "@distilled.cloud/stripe/stripe";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../Binding.ts";
@@ -9,7 +9,7 @@ import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { TerminalReader } from "./TerminalReader.ts";
 
 export interface RetrieveTerminalReaderRequest extends Omit<
-  GetTerminalReadersReaderRequest,
+  GetTerminalReaderRequest,
   "reader"
 > {}
 
@@ -34,8 +34,8 @@ export interface RetrieveTerminalReader extends Binding.Service<
     (
       request?: RetrieveTerminalReaderRequest,
     ) => Effect.Effect<
-      GetTerminalReadersReaderResponse,
-      GetTerminalReadersReaderError,
+      GetTerminalReaderResponse,
+      GetTerminalReaderError,
       RuntimeContext
     >
   >

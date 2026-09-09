@@ -3,7 +3,7 @@ import * as Stripe from "@/Stripe";
 import * as Test from "@/Test/Alchemy";
 import {
   GetIssuingPersonalizationDesigns,
-  GetIssuingPersonalizationDesignsPersonalizationDesign,
+  GetIssuingPersonalizationDesign,
   GetIssuingPhysicalBundles,
 } from "@distilled.cloud/stripe/stripe";
 import { expect } from "alchemy-test";
@@ -102,10 +102,9 @@ test.provider.skipIf(!ISSUING_ENABLED)(
         created.status,
       );
 
-      const fetched =
-        yield* GetIssuingPersonalizationDesignsPersonalizationDesign({
-          personalization_design: created.id,
-        });
+      const fetched = yield* GetIssuingPersonalizationDesign({
+        personalization_design: created.id,
+      });
       expect(fetched.id).toEqual(created.id);
       expect(fetched.name).toEqual("Alchemy Card Design");
       expect(
@@ -137,10 +136,9 @@ test.provider.skipIf(!ISSUING_ENABLED)(
       expect(updated.physicalBundle).toEqual(physicalBundle);
       expect(updated.metadata).toEqual({ line: "test", version: "2" });
 
-      const refetched =
-        yield* GetIssuingPersonalizationDesignsPersonalizationDesign({
-          personalization_design: updated.id,
-        });
+      const refetched = yield* GetIssuingPersonalizationDesign({
+        personalization_design: updated.id,
+      });
       expect(refetched.id).toEqual(updated.id);
       expect(refetched.name).toEqual("Alchemy Card Design Updated");
       expect(refetched.metadata?.line).toEqual("test");
@@ -150,14 +148,13 @@ test.provider.skipIf(!ISSUING_ENABLED)(
       yield* stack.destroy();
 
       // No delete/archive API — destroy is a no-op and the design remains.
-      const residue =
-        yield* GetIssuingPersonalizationDesignsPersonalizationDesign({
-          personalization_design: created.id,
-        }).pipe(
-          Effect.catchIf(isMissingStripeResource, () =>
-            Effect.succeed(undefined),
-          ),
-        );
+      const residue = yield* GetIssuingPersonalizationDesign({
+        personalization_design: created.id,
+      }).pipe(
+        Effect.catchIf(isMissingStripeResource, () =>
+          Effect.succeed(undefined),
+        ),
+      );
       expect(residue).toBeDefined();
       expect(residue?.id).toEqual(created.id);
     }).pipe(logLevel),

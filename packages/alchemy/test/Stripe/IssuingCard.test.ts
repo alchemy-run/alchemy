@@ -4,7 +4,7 @@ import * as Test from "@/Test/Alchemy";
 import { isMissingStripeResource } from "@/Stripe/missing.ts";
 import {
   GetIssuingCards,
-  GetIssuingCardsCard,
+  GetIssuingCard,
 } from "@distilled.cloud/stripe/stripe";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -32,7 +32,7 @@ const billing = {
 } as const;
 
 const waitUntilCanceled = (id: string) =>
-  GetIssuingCardsCard({ card: id }).pipe(
+  GetIssuingCard({ card: id }).pipe(
     Effect.map((card) =>
       card.status === "canceled" ? ("canceled" as const) : ("live" as const),
     ),
@@ -110,7 +110,7 @@ test.provider.skipIf(!ISSUING_ENABLED)(
       expect(created.card.metadata).toMatchObject({ team: "ops" });
       expect(created.card.livemode).toEqual(false);
 
-      const fetched = yield* GetIssuingCardsCard({ card: created.card.id });
+      const fetched = yield* GetIssuingCard({ card: created.card.id });
       expect(fetched.id).toEqual(created.card.id);
       expect(fetched.cardholder.id).toEqual(created.cardholder.id);
       expect(fetched.currency).toEqual("usd");
@@ -156,7 +156,7 @@ test.provider.skipIf(!ISSUING_ENABLED)(
         { amount: 50_000, interval: "monthly" },
       ]);
 
-      const refetched = yield* GetIssuingCardsCard({ card: updated.card.id });
+      const refetched = yield* GetIssuingCard({ card: updated.card.id });
       expect(refetched.id).toEqual(updated.card.id);
       expect(refetched.status).toEqual("inactive");
       expect(refetched.metadata?.team).toEqual("finance");
