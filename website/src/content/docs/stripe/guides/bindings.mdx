@@ -58,12 +58,10 @@ The first HTTP binding on a host mints (or reuses) a
 capability calls `token.bind(id, { permissions })` with the Stripe
 permission it needs (`products_read`, `customers_write`, …).
 
-The key is injected into the Worker as a secret binding; you never
-handle it. Runtime bindings always call `https://api.stripe.com`;
-`STRIPE_API_BASE_URL` applies to plan/deploy only.
-
-Lambda, ECS, and Fly receive `STRIPE_API_KEY` as an environment
-variable on the host.
+The key is injected into the host as a secret via `yield* token.value`
+(an Output accessor). You never handle it. Runtime bindings always
+call `https://api.stripe.com`; `STRIPE_API_BASE_URL` applies to
+plan/deploy only.
 
 Until Stripe publishes a public create-key API, the token value is
 the account secret or a Dashboard `rk_…` you passed as `value`. See

@@ -4,16 +4,15 @@ import {
   type Config as StripeCredentialsConfig,
 } from "@distilled.cloud/stripe";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpClient from "effect/unstable/http/HttpClient";
-import { isBindingHost } from "../AWS/Lambda/Function.ts";
 import * as Binding from "../Binding.ts";
 import * as Output from "../Output.ts";
-import { type Resource, type ResourceLike } from "../Resource.ts";
+import { type ResourceLike } from "../Resource.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
-import { STRIPE_API_KEY_ENV } from "./AuthProvider.ts";
 import { RestrictedApiKey, type StripePermission } from "./RestrictedApiKey.ts";
 
 /**
@@ -41,22 +40,17 @@ export interface StripeAuth {
   ) => Effect.Effect<A, E, RuntimeContext>;
 }
 
-const isFlyHost = (host: ResourceLike): boolean =>
-  host.Type === "Fly.Service" || host.Type === "Fly.Machine";
-
-type EnvHostBinding = {
-  env?: Record<string, unknown>;
-};
-
-const asEnvHost = (
-  host: ResourceLike,
-): Resource<string, object, object, EnvHostBinding> =>
-  host as Resource<string, object, object, EnvHostBinding>;
-
 /**
  * Accessor for a bound RestrictedApiKey value. The `yield*` of `token.value`
  * is RuntimeContext.set — it does not resolve the secret at plan time.
  */
+const stripeRuntimeLayer = (
+  credentials: Effect.Effect<StripeCredentialsConfig>,
+): Layer.Layer<Credentials | HttpClient.HttpClient> =>
+  Layer.succeed(Credentials, credentials).pipe(
+    Layer.provideMerge(FetchHttpClient.layer),
+  );
+
 export const authorizeWith =
   (token: { value: Effect.Effect<Redacted.Redacted<string>> }) =>
   <A, E>(
@@ -65,14 +59,14 @@ export const authorizeWith =
     token.value.pipe(
       Effect.flatMap((apiKey) =>
         eff.pipe(
-          Effect.provideService(
-            Credentials,
-            Effect.succeed({
-              apiKey,
-              apiBaseUrl: DEFAULT_API_BASE_URL,
-            } satisfies StripeCredentialsConfig),
+          Effect.provide(
+            stripeRuntimeLayer(
+              Effect.succeed({
+                apiKey,
+                apiBaseUrl: DEFAULT_API_BASE_URL,
+              } satisfies StripeCredentialsConfig),
+            ),
           ),
-          Effect.provide(FetchHttpClient.layer),
         ),
       ),
     ) as Effect.Effect<A, E, RuntimeContext>;
@@ -90,8 +84,12 @@ export const makeStripeAuth = (options: {
       ) as Effect.Effect<A, E, RuntimeContext>;
     }
     return eff.pipe(
-      Effect.provideService(Credentials, options.credentials),
-      Effect.provideService(HttpClient.HttpClient, options.http),
+      Effect.provide(
+        Layer.mergeAll(
+          Layer.succeed(Credentials, options.credentials),
+          Layer.succeed(HttpClient.HttpClient, options.http),
+        ),
+      ),
     ) as Effect.Effect<A, E, RuntimeContext>;
   },
 });
@@ -143,9 +141,8 @@ export const asOptionalStringEffect = (
 /**
  * Mint (or reuse) the host's RestrictedApiKey and attach permissions.
  * Returns a runtime accessor for the key value (`yield* token.value`).
- * Lambda/ECS/Fly also receive `{ env: { STRIPE_API_KEY } }` because those
- * hosts ship env through their binding contract. Workers do not — their
- * contract is `bindings[]` and would leak an unresolved Output.
+ * That Output is the plan-to-runtime transport on every host — do not
+ * also `host.bind({ env })`.
  */
 const missingHostToken = {
   value: Effect.die("Stripe token accessed without a host") as Effect.Effect<
@@ -173,14 +170,6 @@ export const attachStripeToken = (
       yield* token.bind(sid, {
         permissions: [...permissions],
       });
-      // Lambda/ECS/Fly ship env through their binding contract. Workers
-      // pick the secret up from RuntimeContext.set via `yield* token.value`
-      // below — do not host.bind({ env }) or hand-build secret_text.
-      if (isBindingHost(host) || isFlyHost(host)) {
-        yield* asEnvHost(host).bind`${host}`({
-          env: { [STRIPE_API_KEY_ENV]: token.value },
-        });
-      }
     }
     return { value: yield* token.value };
   });
