@@ -25,11 +25,6 @@ export type GcpUserAccessBindingApplication = acm.Application;
 export type GcpUserAccessBindingSessionSettings = acm.SessionSettings;
 export type GcpUserAccessBindingScopedAccessSettings = acm.ScopedAccessSettings;
 
-/** Distilled GcpUserAccessBinding omits this wire field; the API still accepts it. */
-type GcpUserAccessBindingWire = acm.GcpUserAccessBinding & {
-  restrictedClientApplications?: GcpUserAccessBindingApplication[];
-};
-
 export type GcpUserAccessBindingProps = {
   /**
    * Organization parent (`organizations/{organization}` or the numeric
@@ -163,8 +158,7 @@ const toAttrs = (
     accessLevels: binding.accessLevels ?? [],
     dryRunAccessLevels: binding.dryRunAccessLevels ?? [],
     sessionSettings: binding.sessionSettings,
-    restrictedClientApplications:
-      (binding as GcpUserAccessBindingWire).restrictedClientApplications ?? [],
+    restrictedClientApplications: binding.restrictedClientApplications ?? [],
     scopedAccessSettings: binding.scopedAccessSettings ?? [],
   };
 };
@@ -286,7 +280,7 @@ export const GcpUserAccessBindingProvider = () =>
               sessionSettings: news.sessionSettings,
               scopedAccessSettings: news.scopedAccessSettings,
               restrictedClientApplications: news.restrictedClientApplications,
-            } as GcpUserAccessBindingWire,
+            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         if (created !== undefined) {
@@ -330,7 +324,7 @@ export const GcpUserAccessBindingProvider = () =>
       const appsChanged =
         news.restrictedClientApplications !== undefined &&
         !jsonEqual(
-          (current as GcpUserAccessBindingWire).restrictedClientApplications,
+          current.restrictedClientApplications,
           news.restrictedClientApplications,
         );
       const scopedChanged =
@@ -356,7 +350,7 @@ export const GcpUserAccessBindingProvider = () =>
             sessionSettings: news.sessionSettings,
             scopedAccessSettings: news.scopedAccessSettings,
             restrictedClientApplications: news.restrictedClientApplications,
-          } as GcpUserAccessBindingWire,
+          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getByName(current.name), current.name);
