@@ -7,11 +7,12 @@
  *   tcut render out/alchemy-cli.cast … # re-render the last recording, no shell
  *
  * The run never touches your real `~/.alchemy`: it starts from an EMPTY
- * throwaway `ALCHEMY_HOME`, connects Cloudflare to the default profile on
- * camera through the TUI (OAuth, granted in tcut's browser pane), then runs
- * `alchemy dev`, `alchemy deploy` and `alchemy destroy`, keeping the stack
- * state in this directory's `.alchemy/`. Everything the demo deploys is
- * destroyed at the end.
+ * throwaway `ALCHEMY_HOME` and follows a brand-new user in order, one title
+ * card per step: connect Cloudflare through the `alchemy profile` TUI (OAuth,
+ * granted in tcut's browser pane), `alchemy dev`, `alchemy deploy`, an
+ * out-of-band edit caught and fixed by `alchemy drift`, and `alchemy destroy`.
+ * Stack state stays in this directory's `.alchemy/`; everything the demo
+ * deploys is destroyed at the end.
  *
  * Inputs (environment):
  *   CLOUDFLARE_ACCOUNT_NAME  (env or ./.env, optional)
@@ -38,6 +39,7 @@ import {
   chmodSync,
   existsSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
@@ -101,6 +103,9 @@ const waitForWorker = async (url: string, attempts = 90) => {
  * them through `--env-file demo.env`, so the value is never typed and never
  * lands in the `.cast`; no other command loads the file, so deploy/dev
  * authenticate through the profile rather than the environment.
+ *
+ * Returns the credentials for the script's own out-of-band API call (the
+ * drift step).
  */
 const writeCredentialEnvFile = () => {
   let token = env("CLOUDFLARE_API_TOKEN");
@@ -128,10 +133,63 @@ const writeCredentialEnvFile = () => {
     `CLOUDFLARE_API_TOKEN=${token}\nCLOUDFLARE_ACCOUNT_ID=${accountId}\n`,
     { mode: 0o600 },
   );
+  return { token, accountId };
 };
 
 const connectCloudflare = (profile: string) =>
   `alchemy profile edit --profile ${profile} --add Cloudflare --method stored --set apiToken=env:CLOUDFLARE_API_TOKEN --set accountId=env:CLOUDFLARE_ACCOUNT_ID --env-file demo.env`;
+
+/**
+ * The deployed `Visits` KV namespace, read from the stack's local state
+ * (`alchemy deploy` targets the `live_<user>` stage).
+ */
+const deployedVisitsNamespace = () => {
+  const stackDir = path.join(here, ".alchemy", "state", "Demo");
+  const stage = readdirSync(stackDir).find((name) => name.startsWith("live_"));
+  if (stage === undefined) {
+    throw new Error(`no live stage under ${stackDir}`);
+  }
+  const state = JSON.parse(
+    readFileSync(path.join(stackDir, stage, "Visits.json"), "utf8"),
+  ) as { attr: { title: string; namespaceId: string; accountId: string } };
+  return state.attr;
+};
+
+/** Direct Cloudflare API access to one KV namespace, bypassing alchemy. */
+const kvNamespaceApi = (
+  credentials: { token: string; accountId: string },
+  namespaceId: string,
+) => {
+  const call = async (init: RequestInit) => {
+    const response = await fetch(
+      `https://api.cloudflare.com/client/v4/accounts/${credentials.accountId}/storage/kv/namespaces/${namespaceId}`,
+      {
+        ...init,
+        headers: {
+          Authorization: `Bearer ${credentials.token}`,
+          "Content-Type": "application/json",
+        },
+      },
+    );
+    const body = (await response.json()) as { result: { title: string } };
+    if (!response.ok) {
+      throw new Error(
+        `KV namespace ${namespaceId}: ${init.method} failed with ${response.status} ${JSON.stringify(body)}`,
+      );
+    }
+    return body.result;
+  };
+  return {
+    title: async () => (await call({ method: "GET" })).title,
+    /**
+     * Rename the namespace behind alchemy's back — what a teammate clicking
+     * around the dashboard would do. This is the drift the demo detects and
+     * repairs.
+     */
+    rename: (title: string) =>
+      call({ method: "PUT", body: JSON.stringify({ title }) }),
+  };
+};
 
 /** Fresh, empty `ALCHEMY_HOME`. */
 const seedDemoHome = () => {
@@ -238,8 +296,27 @@ export default defineVideo(
   async (t) => {
     seedDemoHome();
     seedOpenShim();
-    writeCredentialEnvFile();
+    const credentials = writeCredentialEnvFile();
     const originalApi = readFileSync(apiFile, "utf8");
+
+    /**
+     * A title card between steps. tcut has no video-level transitions (it
+     * renders what the terminal shows), so the card is made in the terminal
+     * itself: clear the screen, park the cursor mid-frame, render the
+     * caption, hold, and clear again so the next command starts on a fresh
+     * screen. Every card is also an mp4 chapter (`--chapters`, `--split-chapters`).
+     */
+    let step = 0;
+    const slide = async (chapter: string, heading: string, body: string) => {
+      step += 1;
+      await t.chapter(chapter);
+      await t.hide(() =>
+        t.run(`clear && tput cup ${Math.floor(t.rows / 2) - 3} 0`),
+      );
+      await t.print(`## ${step} · ${heading}\n\n${body}`);
+      await t.sleep("3s");
+      await t.hide(() => t.run("clear"));
+    };
 
     try {
       // Off-camera: point the CLI at the empty home, put the `open` shim and
@@ -267,12 +344,12 @@ export default defineVideo(
         await t.run("clear");
       });
 
-      // ── Profiles ─────────────────────────────────────────────────────────
-      await t.chapter("profiles");
-      await t.print(
-        "## `alchemy profile`\nConnect a provider account once, then use it from every stack.",
+      // ── 1. Connect to Cloudflare ─────────────────────────────────────────
+      await slide(
+        "connect",
+        "Connect to Cloudflare",
+        "A fresh machine, no profile yet. `alchemy profile` signs in once; every stack uses it.",
       );
-      await t.sleep("2s");
       await t.type("alchemy profile");
       await t.enter();
       await t.wait(/e edit/, { scope: "screen" });
@@ -421,28 +498,18 @@ export default defineVideo(
         await t.enter();
         await t.wait(/Cloudflare added/, { scope: "screen" });
       }
-      await t.sleep("3s");
-
-      // Create a second profile from the dashboard.
-      await t.type("n");
-      await t.wait(/new profile name/, { scope: "screen" });
-      await t.sleep("800ms");
-      await t.type("staging");
-      await t.sleep("500ms");
-      await t.enter();
-      await t.wait(/Created profile 'staging'/, { scope: "screen" });
-      await t.sleep("2.5s");
+      // Hold on the dashboard: one profile, one connected provider.
+      await t.sleep("3.5s");
       await t.type("q");
       await t.wait();
-      await t.sleep("1.5s");
+      await t.sleep("1s");
 
-      // ── Dev ──────────────────────────────────────────────────────────────
-      await t.chapter("dev");
-      await t.hide(() => t.run("clear"));
-      await t.print(
-        "## `alchemy dev`\nThe stack, emulated locally with live reload.",
+      // ── 2. Launch alchemy dev ────────────────────────────────────────────
+      await slide(
+        "dev",
+        "Launch `alchemy dev`",
+        "The Worker, KV and R2 run locally, with live reload on every save.",
       );
-      await t.sleep("2s");
       await t.type("alchemy dev");
       await t.enter();
       await t.wait(STARTED, { scope: "screen" });
@@ -489,15 +556,14 @@ export default defineVideo(
       await t.wait();
       // Put the source back so the deploy ships the original greeting.
       writeFileSync(apiFile, originalApi);
-      await t.sleep("1.5s");
+      await t.sleep("1s");
 
-      // ── Deploy ───────────────────────────────────────────────────────────
-      await t.chapter("deploy");
-      await t.hide(() => t.run("clear"));
-      await t.print(
-        "## `alchemy deploy`\nReview the plan, confirm, watch it converge.",
+      // ── 3. Deploy to the cloud ───────────────────────────────────────────
+      await slide(
+        "deploy",
+        "Deploy to the cloud",
+        "`alchemy deploy` shows the plan, asks once, then converges the account to it.",
       );
-      await t.sleep("2s");
       await t.type("alchemy deploy");
       await t.enter();
       await t.wait(/Deploy\?/, { scope: "screen" });
@@ -523,13 +589,40 @@ export default defineVideo(
       await t.sleep("1s");
       await t.run(`curl -s ${url}`);
       await t.expect(/"visits":2/);
-      await t.sleep("2.5s");
+      await t.sleep("2s");
 
-      // ── Destroy ──────────────────────────────────────────────────────────
-      await t.chapter("destroy");
-      await t.hide(() => t.run("clear"));
-      await t.print("## `alchemy destroy`");
-      await t.sleep("1.5s");
+      // ── 4. Detect and repair drift ───────────────────────────────────────
+      // Off camera, "someone" renames the KV namespace in the dashboard.
+      const visits = deployedVisitsNamespace();
+      const visitsApi = kvNamespaceApi(credentials, visits.namespaceId);
+      await visitsApi.rename("renamed-in-the-dashboard");
+      await slide(
+        "drift",
+        "Detect and repair drift",
+        "Meanwhile, a teammate renamed the KV namespace in the dashboard. `alchemy drift` re-reads the account and shows what moved.",
+      );
+      await t.type("alchemy drift");
+      await t.enter();
+      await t.wait(/Drift detected/, { scope: "screen" });
+      await t.expect(/renamed-in-the-dashboard/, { scope: "screen" });
+      await t.sleep("4s");
+      // Cancel is preselected; ← moves to Repair.
+      await t.left();
+      await t.sleep("1s");
+      await t.enter();
+      await t.wait();
+      await t.expect(/Stack deployed/, { scope: "screen" });
+      await t.sleep("2.5s");
+      if ((await visitsApi.title()) !== visits.title) {
+        throw new Error("drift repair did not restore the namespace title");
+      }
+
+      // ── 5. Tear down ─────────────────────────────────────────────────────
+      await slide(
+        "destroy",
+        "Tear down",
+        "`alchemy destroy` removes everything the stack created.",
+      );
       await t.type("alchemy destroy");
       await t.enter();
       await t.wait(/Destroy\?/, { scope: "screen" });
