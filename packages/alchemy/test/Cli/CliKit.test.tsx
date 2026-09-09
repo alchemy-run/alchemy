@@ -30,6 +30,7 @@ import {
   TextField,
   useLiveStore,
 } from "@/Cli/components/ui/index.ts";
+import { Menu } from "@/Cli/components/ui/Interactive.tsx";
 import { tabsWindow } from "@/Cli/components/ui/Layout.tsx";
 import { makeRuntime } from "@/Cli/components/view/Runtime.tsx";
 import { sigilCli } from "@/Cli/components/view/SigilCli.tsx";
@@ -55,7 +56,6 @@ import { ApprovePlan } from "@/Cli/components/view/ApprovePlan.tsx";
 import {
   ProfileDetailsBody,
   providerBlockHeight,
-  providerPaneWidth,
   type ProfileProviderDisplay,
 } from "@/Cli/components/view/Profile.tsx";
 import {
@@ -733,10 +733,11 @@ it("replaces provider details with refresh progress in place", () => {
 
   expect(output).toContain("Cloudflare");
   expect(output).toContain("refreshing OAuth credentials…");
-  expect(output).not.toContain("accessToken: cfoa****");
-  expect(output).not.toContain("expires: in 59m");
+  expect(output).not.toContain("cfoa****");
+  expect(output).not.toContain("in 59m");
   expect(output).toContain("GitHub");
-  expect(output).toContain("token: gho_cZ****");
+  // `key: value` detail lines render as an aligned key column + value
+  expect(output).toContain("token  gho_cZ****");
 });
 
 // Eight providers of varying height: 49 rows in total, twice a 24-row terminal.
@@ -814,7 +815,7 @@ const dashboardEntries = [{ name: "default", isActive: true, isDefault: true }];
 it("sizes provider blocks by providerBlockHeight", () => {
   const { service } = makeStatic();
   const output = service.output.format(
-    <ProfileDetailsBody providers={dashboardProviders} showFocusRail />,
+    <ProfileDetailsBody providers={dashboardProviders} focusColumn />,
     { columns: 80 },
   );
   const expected = dashboardProviders.reduce(
@@ -825,30 +826,32 @@ it("sizes provider blocks by providerBlockHeight", () => {
   expect(output.split("\n").length).toBe(expected);
 });
 
-const separatorWidth = (output: string) =>
-  Math.max(
-    0,
-    ...output
-      .split("\n")
-      .filter((line) => /^─+$/.test(line))
-      .map((line) => line.length),
-  );
-
-// `profile show` sizes the table to its content: a row box shrink-wraps the
-// column of blocks. The dashboard's windowed pane cannot lay out every block,
-// so it sizes itself by `providerPaneWidth`, which must match that width.
-it("providerPaneWidth matches the intrinsic width of the provider table", () => {
+// Providers are a table separated by blank rows, not rules; the focused
+// provider is marked by the cursor glyph in a reserved column, never a rail.
+it("marks the focused provider with the pointer and no rails", () => {
   const { service } = makeStatic();
-  const options = { showFocusRail: true, reauthHint: "press r to re-login" };
   const output = service.output.format(
-    <Box>
-      <ProfileDetailsBody providers={dashboardProviders} {...options} />
-    </Box>,
-    { columns: 120 },
+    <ProfileDetailsBody
+      providers={dashboardProviders}
+      focusColumn
+      focusedProvider="Cloudflare"
+      reauthHint="press r to re-login"
+    />,
+    { columns: 80 },
   );
-  const width = providerPaneWidth(dashboardProviders, options);
-  expect(width).toBeLessThan(120);
-  expect(separatorWidth(output)).toBe(width);
+  const lines = output.split("\n");
+  expect(lines.some((line) => /[│─]/.test(line))).toBe(false);
+  const pointed = lines.filter((line) => line.includes("❯"));
+  expect(pointed).toHaveLength(1);
+  expect(pointed[0]).toMatch(/^  ❯ Cloudflare\s+stored\s+! configured$/);
+  expect(lines.some((line) => /^    AWS\s+sso\s+✓ ready$/.test(line))).toBe(
+    true,
+  );
+  // detail keys render as an aligned column: key, gap, value
+  expect(output).toContain("apiKey     cfk_****");
+  expect(output).toContain("accountId  2b29****");
+  // the re-login hint follows the focus cursor, so it is hidden here
+  expect(output).not.toContain("press r to re-login");
 });
 
 it("windows the profile dashboard's providers to the terminal height", () => {
@@ -869,13 +872,10 @@ it("windows the profile dashboard's providers to the terminal height", () => {
   expect(output).toContain("Cloudflare");
   expect(output).toContain("switch profile");
   expect(output).not.toContain("Vercel");
-  // Separators span the table, not the terminal.
-  expect(separatorWidth(output)).toBe(
-    providerPaneWidth(dashboardProviders, {
-      showFocusRail: true,
-      reauthHint: "press r to re-login",
-    }),
-  );
+  // The profile row holds the initial focus slot: the pointer sits on it and
+  // the provider rows keep a blank cursor column so the table stays aligned.
+  expect(output).toContain("\n  ❯ default");
+  expect(output).toContain("\n    AWS ");
 });
 
 // The session sleeps on a real clock (loader delay, notice auto-dismiss).
@@ -934,13 +934,45 @@ it("renders input frames inline by default and keeps a stacked variant", () => {
   expect(stacked).toContain("production");
 });
 
-it("renders compact informational toasts with a rail", () => {
+it("renders compact informational toasts as a bare status line", () => {
   const { service } = makeStatic();
   const output = service.output.format(
     <Toast variant="info">Credentials refreshed.</Toast>,
   );
 
-  expect(output).toBe("│ • Credentials refreshed.");
+  expect(output).toBe("• Credentials refreshed.");
+});
+
+it("renders prompt frames with an indented body and no rail", () => {
+  const { service } = makeStatic();
+  const output = service.output.format(
+    <PromptFrame message="Cloudflare authentication method">
+      <Menu
+        cursor={0}
+        choices={[
+          { value: "oauth", label: "OAuth", description: "recommended" },
+          {
+            value: "token",
+            label: "API Token or API Key",
+            description: "use an API token",
+          },
+        ]}
+      />
+    </PromptFrame>,
+    { columns: 100 },
+  );
+
+  const lines = output.split("\n");
+  expect(lines[0]).toBe("◆ Cloudflare authentication method");
+  // options sit directly under the heading; ❯ is the only chevron on screen
+  expect(lines[1]).toMatch(/^  ❯ OAuth\s+recommended$/);
+  expect(lines[2]).toMatch(/^    API Token or API Key\s+use an API token$/);
+  // descriptions share one column across rows
+  expect(lines[1]!.indexOf("recommended")).toBe(
+    lines[2]!.indexOf("use an API token"),
+  );
+  expect(output).not.toContain("│");
+  expect(output).not.toContain("›");
 });
 
 /**
