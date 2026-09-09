@@ -217,8 +217,12 @@ const productIdOf = (product: PriceProduct): string => {
   return product.id;
 };
 
-const alchemyProductId = (product: string | Product): string =>
-  typeof product === "string" ? product : product.id;
+const alchemyProductId = (product: string | Product): string => {
+  if (typeof product === "string") return product;
+  const id = product.id as unknown;
+  if (typeof id === "string") return id;
+  return String(id);
+};
 
 const toRecurring = (
   recurring: StripePrice["recurring"],

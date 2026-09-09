@@ -1,7 +1,6 @@
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Stripe from "alchemy/Stripe";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
@@ -16,7 +15,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
       description: "Billed monthly",
     });
     const price = yield* Stripe.Price("ProMonthly", {
-      product: product.id,
+      product,
       currency: "usd",
       unitAmount: 2000,
       recurring: { interval: "month" },
@@ -36,6 +35,15 @@ export default class Api extends Cloudflare.Worker<Api>()(
     const retrieveCoupon = yield* Stripe.RetrieveCoupon(coupon);
     const retrieveCheckout = yield* Stripe.RetrievePaymentLink(checkout);
     const createCustomer = yield* Stripe.CreateCustomer();
+    yield* Stripe.consumeEvents(
+      "Events",
+      {
+        events: [Stripe.CustomerCreated, Stripe.CheckoutSessionCompleted],
+      },
+      Effect.fn(function* (event) {
+        yield* Effect.log(event.type);
+      }),
+    );
 
     return {
       fetch: Effect.gen(function* () {
@@ -95,10 +103,6 @@ export default class Api extends Cloudflare.Worker<Api>()(
           );
         }
 
-        if (request.method === "POST" && url.pathname === "/webhooks/stripe") {
-          return HttpServerResponse.text("ok");
-        }
-
         return yield* HttpServerResponse.json(
           { error: "Not found" },
           { status: 404 },
@@ -106,14 +110,13 @@ export default class Api extends Cloudflare.Worker<Api>()(
       }),
     };
   }).pipe(
-    Effect.provide(
-      Layer.mergeAll(
-        Stripe.CreateCustomerHttp,
-        Stripe.RetrieveCouponHttp,
-        Stripe.RetrievePaymentLinkHttp,
-        Stripe.RetrievePriceHttp,
-        Stripe.RetrieveProductHttp,
-      ),
-    ),
+    Effect.provide([
+      Stripe.CreateCustomerHttp,
+      Stripe.RetrieveCouponHttp,
+      Stripe.RetrievePaymentLinkHttp,
+      Stripe.RetrievePriceHttp,
+      Stripe.RetrieveProductHttp,
+      Stripe.ConsumeEventsLive,
+    ]),
   ),
 ) {}
