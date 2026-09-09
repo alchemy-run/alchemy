@@ -32,7 +32,7 @@ const entitled = process.env.GCP_TEST_CLOUDSUPPORT === "1";
 const runLifecycle = hasGcpCreds && entitled && !process.env.FAST;
 
 const waitUntilGone = (name: string) =>
-  cloudsupport.getSupportEventSubscriptions({ name }).pipe(
+  cloudsupport.getOrganizationsSupportEventSubscriptions({ name }).pipe(
     Effect.map((subscription) =>
       subscription.state === "DELETED" ? ("gone" as const) : ("found" as const),
     ),
@@ -92,7 +92,7 @@ test.provider.skipIf(!hasGcpCreds)(
 
       const organization = (yield* organizationOf()) || "organizations/0";
       const error = yield* Effect.flip(
-        cloudsupport.getSupportEventSubscriptions({
+        cloudsupport.getOrganizationsSupportEventSubscriptions({
           name: `${organization}/supportEventSubscriptions/alchemy-missing`,
         }),
       );
@@ -111,7 +111,7 @@ test.provider.skipIf(!hasGcpCreds)(
 
       const organization = (yield* organizationOf()) || "organizations/0";
       const error = yield* Effect.flip(
-        cloudsupport.createSupportEventSubscriptions({
+        cloudsupport.createOrganizationsSupportEventSubscriptions({
           parent: organization,
           body: {
             pubSubTopic: `projects/${project}/topics/alchemy-missing-topic`,
@@ -155,9 +155,10 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.subscription.organization).toEqual(organization);
       expect(created.subscription.pubSubTopic).toEqual(created.topic.name);
 
-      const fetched = yield* cloudsupport.getSupportEventSubscriptions({
-        name: created.subscription.name,
-      });
+      const fetched =
+        yield* cloudsupport.getOrganizationsSupportEventSubscriptions({
+          name: created.subscription.name,
+        });
       expect(fetched.name).toEqual(created.subscription.name);
       expect(fetched.pubSubTopic).toEqual(created.topic.name);
 

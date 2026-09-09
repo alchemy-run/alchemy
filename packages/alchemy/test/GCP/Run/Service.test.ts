@@ -1,6 +1,8 @@
 import * as GCP from "@/GCP";
 import * as Test from "@/Test/Alchemy";
 import * as cloudrun from "@distilled.cloud/gcp/run_v2";
+import * as iam from "@distilled.cloud/gcp/unstable/iam_v1";
+import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -146,11 +148,37 @@ test.provider.skipIf(!hasGcpCreds || !dockerAvailable)(
       const out = yield* stack.deploy(
         Effect.gen(function* () {
           const service = yield* BoundService;
-          return { uri: service.uri };
+          return {
+            uri: service.uri,
+            name: service.name,
+            project: service.project,
+            serviceAccount: service.serviceAccount,
+            managedServiceAccount: service.managedServiceAccount,
+          };
         }),
       );
 
       expect(out.uri).toEqual(expect.any(String));
+      expect(out.managedServiceAccount).toEqual(true);
+      expect(out.serviceAccount ?? "").toContain("alch-");
+
+      const live = yield* cloudrun.getProjectsLocationsServices({
+        name: out.name,
+      });
+      expect(live.template?.serviceAccount).toEqual(out.serviceAccount);
+
+      const policy = yield* resourcemanager.getIamPolicyProjects({
+        resource: `projects/${out.project}`,
+      });
+      const member = `serviceAccount:${out.serviceAccount}`;
+      const roles = new Set(
+        (policy.bindings ?? [])
+          .filter((binding) => (binding.members ?? []).includes(member))
+          .map((binding) => binding.role),
+      );
+      expect(roles.has("roles/pubsub.publisher")).toEqual(true);
+      expect(roles.has("roles/storage.objectAdmin")).toEqual(true);
+
       const client = yield* HttpClient.HttpClient;
       const res = yield* client.get(out.uri!).pipe(
         Effect.flatMap((response) =>
@@ -168,6 +196,15 @@ test.provider.skipIf(!hasGcpCreds || !dockerAvailable)(
       expect(body.published).toEqual(true);
 
       yield* stack.destroy();
+
+      const saName = `projects/${out.project}/serviceAccounts/${out.serviceAccount}`;
+      const saGone = yield* iam
+        .getProjectsServiceAccounts({ name: saName })
+        .pipe(
+          Effect.as("found" as const),
+          Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
+        );
+      expect(saGone).toEqual("gone");
     }).pipe(logLevel),
   { timeout: 180_000 },
 );

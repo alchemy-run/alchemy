@@ -307,7 +307,7 @@ export const SupportEventSubscriptionProvider = () =>
 
       if (current === undefined || isDeleted(current)) {
         const created = yield* cloudsupport
-          .createSupportEventSubscriptions({
+          .createOrganizationsSupportEventSubscriptions({
             parent,
             body: {
               pubSubTopic: topicName,
@@ -345,13 +345,14 @@ export const SupportEventSubscriptionProvider = () =>
 
       const name = current.name;
       if (!sameTopic(current.pubSubTopic, topicName)) {
-        current = yield* cloudsupport.patchSupportEventSubscriptions({
-          name,
-          updateMask: "pub_sub_topic",
-          body: {
-            pubSubTopic: topicName,
-          },
-        });
+        current =
+          yield* cloudsupport.patchOrganizationsSupportEventSubscriptions({
+            name,
+            updateMask: "pub_sub_topic",
+            body: {
+              pubSubTopic: topicName,
+            },
+          });
       }
 
       const fresh = (yield* getDeletedByName(name)) ?? current;
@@ -363,7 +364,7 @@ export const SupportEventSubscriptionProvider = () =>
         output.name || toSubscriptionName(output.parent, output.subscriptionId);
       if (name.length > 0) {
         yield* cloudsupport
-          .deleteSupportEventSubscriptions({ name })
+          .deleteOrganizationsSupportEventSubscriptions({ name })
           .pipe(Effect.catchTag(["NotFound", "Forbidden"], () => Effect.void));
       }
       if (output.managedTopic === true) {

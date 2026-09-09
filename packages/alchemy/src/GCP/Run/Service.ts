@@ -16,6 +16,7 @@ import {
   type HostRuntimeContext,
   type ServerHost,
 } from "../../Server/Process.ts";
+import { packEnvValue } from "../../RuntimeContext.ts";
 import { tagRecord } from "../../Tags.ts";
 import { makeImageSource } from "../ArtifactRegistry/ImageSource.ts";
 import { GcpEnvironment } from "../Environment.ts";
@@ -296,6 +297,8 @@ export type Service = Resource<
     createTime: string | undefined;
     /** RFC3339 last-update timestamp. */
     updateTime: string | undefined;
+    /** Runtime service account email. */
+    serviceAccount: string | undefined;
     /** True when Alchemy minted the per-host runtime service account. */
     managedServiceAccount: boolean;
   },
@@ -759,6 +762,7 @@ const toAttrs = (
     generation: service.generation,
     createTime: service.createTime,
     updateTime: service.updateTime,
+    serviceAccount: service.template?.serviceAccount,
     managedServiceAccount:
       (service.template?.serviceAccount ?? "") ===
       hostServiceAccountEmail(
@@ -1056,8 +1060,7 @@ await bootstrap(entrypoint);
               ...(existing.env ?? []),
               ...Object.entries(runtimeEnv).map(([envName, value]) => ({
                 name: envName,
-                value:
-                  typeof value === "string" ? value : JSON.stringify(value),
+                value: packEnvValue(value),
               })),
             ],
           },
@@ -1069,7 +1072,7 @@ await bootstrap(entrypoint);
             ...(existing.env ?? []),
             ...Object.entries(runtimeEnv).map(([envName, value]) => ({
               name: envName,
-              value: typeof value === "string" ? value : JSON.stringify(value),
+              value: packEnvValue(value),
             })),
           ];
         }

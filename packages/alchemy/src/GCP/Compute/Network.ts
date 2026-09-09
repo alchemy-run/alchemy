@@ -318,6 +318,21 @@ const isInUseOp = (
     );
   });
 
+const isDeletingOp = (
+  errors: ReadonlyArray<{ code?: string; message?: string }>,
+) =>
+  errors.some((error) => {
+    const code = (error.code ?? "").toLowerCase();
+    const message = (error.message ?? "").toLowerCase();
+    return (
+      code.includes("resource_not_ready") ||
+      code.includes("resourcenotready") ||
+      message.includes("not ready") ||
+      message.includes("being deleted") ||
+      message.includes("resource is not ready")
+    );
+  });
+
 const operationErrors = (operation: compute.Operation) => {
   const errors = (operation.error?.errors ?? [])
     .map((error) => ({
@@ -640,8 +655,8 @@ export const NetworkProvider = () =>
             while: (error) =>
               error._tag === "Conflict" ||
               (error._tag === "GCP.Compute.NetworkOperationFailed" &&
-                isInUseOp(error.errors)),
-            times: 10,
+                (isInUseOp(error.errors) || isDeletingOp(error.errors))),
+            times: 20,
             schedule: Schedule.spaced("3 seconds"),
           }),
         );

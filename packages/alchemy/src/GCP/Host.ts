@@ -228,7 +228,7 @@ const grantActAs = (project: string, saName: string) =>
       .getIamPolicyProjectsServiceAccounts({ resource: saName })
       .pipe(
         Effect.catchTag("NotFound", () =>
-          Effect.succeed({ bindings: [] as iam.Policy["bindings"] }),
+          Effect.succeed({ bindings: [] } as iam.Policy),
         ),
       );
     const bindings = [...(policy.bindings ?? [])];

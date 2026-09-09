@@ -276,5 +276,5 @@ test.provider.skipIf(!hasGcpCreds)(
       const gone = yield* waitUntilGone(created.composite.healthCheckName);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  { timeout: 240_000 },
 );

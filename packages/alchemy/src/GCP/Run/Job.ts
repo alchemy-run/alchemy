@@ -8,14 +8,22 @@ import { Unowned } from "../../AdoptPolicy.ts";
 import type * as Bundle from "../../Bundle/Bundle.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
-import { Platform, type Main, type PlatformProps } from "../../Platform.ts";
+import {
+  Platform,
+  type Main,
+  type PlatformProps,
+  type PlatformServices,
+} from "../../Platform.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
+import type { RuntimeContext } from "../../RuntimeContext.ts";
+import { packEnvValue } from "../../RuntimeContext.ts";
 import {
-  createHostRuntimeContext,
+  createContainerRuntimeContext,
   type HostRuntimeContext,
   type ServerHost,
 } from "../../Server/Process.ts";
+import type { Scope } from "effect/Scope";
 import { tagRecord } from "../../Tags.ts";
 import { makeImageSource } from "../ArtifactRegistry/ImageSource.ts";
 import { GcpEnvironment } from "../Environment.ts";
@@ -269,7 +277,19 @@ export type Job = Resource<
 
 export type JobRuntimeContext = HostRuntimeContext;
 export type JobServices = Credentials | GcpEnvironment | ServerHost;
-export type JobShape = Main<JobServices>;
+/**
+ * Effect-native Job shape: a `run` entry that executes to completion
+ * when the container starts, and/or a `fetch` HTTP handler.
+ */
+export type JobShape =
+  | void
+  | (Exclude<Main<JobServices>, void> & {
+      run?: Effect.Effect<
+        void,
+        never,
+        JobServices | PlatformServices | RuntimeContext | Scope
+      >;
+    });
 
 /**
  * A Cloud Run Job — a container that runs to completion.
@@ -331,7 +351,7 @@ export type JobShape = Main<JobServices>;
  */
 export const Job: Platform<Job, JobServices, JobShape, JobRuntimeContext> =
   Platform("GCP.Run.Job", {
-    createRuntimeContext: createHostRuntimeContext("GCP.Run.Job") as (
+    createRuntimeContext: createContainerRuntimeContext("GCP.Run.Job") as (
       id: string,
     ) => JobRuntimeContext,
   });
@@ -848,7 +868,7 @@ await bootstrap(entrypoint);
             image: image.imageUri,
             env: Object.entries(runtimeEnv).map(([envName, value]) => ({
               name: envName,
-              value: typeof value === "string" ? value : JSON.stringify(value),
+              value: packEnvValue(value),
             })),
           },
         ];

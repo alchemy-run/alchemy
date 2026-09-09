@@ -14,6 +14,7 @@ import {
   type HostRuntimeContext,
   type ServerHost,
 } from "../../Server/Process.ts";
+import { packEnvValue } from "../../RuntimeContext.ts";
 import { tagRecord } from "../../Tags.ts";
 import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import { GcpEnvironment } from "../Environment.ts";
@@ -419,8 +420,10 @@ export type FunctionShape = Main<FunctionServices>;
  * const { downloadUrl } = yield* download();
  * ```
  *
- * Effect-native HTTP functions with bindings use `GCP.Run.Service`
- * (also exported as `GCP.Function`) — Cloud Run is the gen2 runtime.
+ * This resource has no `main` / bundle path. An Effect impl passed as
+ * the third argument is ignored. Effect-native HTTP functions with
+ * bindings use `GCP.Run.Service` (also exported as `GCP.Function`) —
+ * Cloud Run is the gen2 runtime.
  *
  * @resource
  * @product GCP
@@ -935,7 +938,7 @@ export const FunctionProvider = () =>
           ...Object.fromEntries(
             Object.entries(collected.env).map(([key, value]) => [
               key,
-              typeof value === "string" ? value : JSON.stringify(value),
+              packEnvValue(value),
             ]),
           ),
         },

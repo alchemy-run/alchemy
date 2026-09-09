@@ -8,14 +8,22 @@ import { Unowned } from "../../AdoptPolicy.ts";
 import type * as Bundle from "../../Bundle/Bundle.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
-import { Platform, type Main, type PlatformProps } from "../../Platform.ts";
+import {
+  Platform,
+  type Main,
+  type PlatformProps,
+  type PlatformServices,
+} from "../../Platform.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
+import type { RuntimeContext } from "../../RuntimeContext.ts";
+import { packEnvValue } from "../../RuntimeContext.ts";
 import {
-  createHostRuntimeContext,
+  createContainerRuntimeContext,
   type HostRuntimeContext,
   type ServerHost,
 } from "../../Server/Process.ts";
+import type { Scope } from "effect/Scope";
 import { tagRecord } from "../../Tags.ts";
 import { makeImageSource } from "../ArtifactRegistry/ImageSource.ts";
 import { GcpEnvironment } from "../Environment.ts";
@@ -266,7 +274,19 @@ export type WorkerPool = Resource<
 
 export type WorkerPoolRuntimeContext = HostRuntimeContext;
 export type WorkerPoolServices = Credentials | GcpEnvironment | ServerHost;
-export type WorkerPoolShape = Main<WorkerPoolServices>;
+/**
+ * Effect-native Worker Pool shape: a `run` entry that executes when
+ * the container starts, and/or a `fetch` HTTP handler.
+ */
+export type WorkerPoolShape =
+  | void
+  | (Exclude<Main<WorkerPoolServices>, void> & {
+      run?: Effect.Effect<
+        void,
+        never,
+        WorkerPoolServices | PlatformServices | RuntimeContext | Scope
+      >;
+    });
 
 /**
  * A Cloud Run worker pool (pull-based revision + instance split).
@@ -331,7 +351,7 @@ export const WorkerPool: Platform<
   WorkerPoolShape,
   WorkerPoolRuntimeContext
 > = Platform("GCP.Run.WorkerPool", {
-  createRuntimeContext: createHostRuntimeContext("GCP.Run.WorkerPool") as (
+  createRuntimeContext: createContainerRuntimeContext("GCP.Run.WorkerPool") as (
     id: string,
   ) => WorkerPoolRuntimeContext,
 });
@@ -1007,8 +1027,7 @@ await bootstrap(entrypoint);
               ...(existing.env ?? []),
               ...Object.entries(runtimeEnv).map(([envName, value]) => ({
                 name: envName,
-                value:
-                  typeof value === "string" ? value : JSON.stringify(value),
+                value: packEnvValue(value),
               })),
             ],
           },
@@ -1020,7 +1039,7 @@ await bootstrap(entrypoint);
             ...(existing.env ?? []),
             ...Object.entries(runtimeEnv).map(([envName, value]) => ({
               name: envName,
-              value: typeof value === "string" ? value : JSON.stringify(value),
+              value: packEnvValue(value),
             })),
           ];
         }

@@ -25,6 +25,11 @@ export type GcpUserAccessBindingApplication = acm.Application;
 export type GcpUserAccessBindingSessionSettings = acm.SessionSettings;
 export type GcpUserAccessBindingScopedAccessSettings = acm.ScopedAccessSettings;
 
+/** Distilled GcpUserAccessBinding omits this wire field; the API still accepts it. */
+type GcpUserAccessBindingWire = acm.GcpUserAccessBinding & {
+  restrictedClientApplications?: GcpUserAccessBindingApplication[];
+};
+
 export type GcpUserAccessBindingProps = {
   /**
    * Organization parent (`organizations/{organization}` or the numeric
@@ -158,7 +163,8 @@ const toAttrs = (
     accessLevels: binding.accessLevels ?? [],
     dryRunAccessLevels: binding.dryRunAccessLevels ?? [],
     sessionSettings: binding.sessionSettings,
-    restrictedClientApplications: binding.restrictedClientApplications ?? [],
+    restrictedClientApplications:
+      (binding as GcpUserAccessBindingWire).restrictedClientApplications ?? [],
     scopedAccessSettings: binding.scopedAccessSettings ?? [],
   };
 };
@@ -278,9 +284,9 @@ export const GcpUserAccessBindingProvider = () =>
               dryRunAccessLevels:
                 desiredDryRun.length > 0 ? desiredDryRun : undefined,
               sessionSettings: news.sessionSettings,
-              restrictedClientApplications: news.restrictedClientApplications,
               scopedAccessSettings: news.scopedAccessSettings,
-            },
+              restrictedClientApplications: news.restrictedClientApplications,
+            } as GcpUserAccessBindingWire,
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         if (created !== undefined) {
@@ -324,7 +330,7 @@ export const GcpUserAccessBindingProvider = () =>
       const appsChanged =
         news.restrictedClientApplications !== undefined &&
         !jsonEqual(
-          current.restrictedClientApplications,
+          (current as GcpUserAccessBindingWire).restrictedClientApplications,
           news.restrictedClientApplications,
         );
       const scopedChanged =
@@ -348,9 +354,9 @@ export const GcpUserAccessBindingProvider = () =>
             accessLevels: desiredLevels,
             dryRunAccessLevels: desiredDryRun,
             sessionSettings: news.sessionSettings,
-            restrictedClientApplications: news.restrictedClientApplications,
             scopedAccessSettings: news.scopedAccessSettings,
-          },
+            restrictedClientApplications: news.restrictedClientApplications,
+          } as GcpUserAccessBindingWire,
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getByName(current.name), current.name);

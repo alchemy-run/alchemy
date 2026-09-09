@@ -178,7 +178,7 @@ export const listOrganizationParents = () =>
 export const getByName = (name: string) =>
   name.length === 0
     ? Effect.succeed(undefined)
-    : cloudsupport.getSupportEventSubscriptions({ name }).pipe(
+    : cloudsupport.getOrganizationsSupportEventSubscriptions({ name }).pipe(
         Effect.catchTag(["NotFound", "Forbidden"], () =>
           Effect.succeed(undefined),
         ),
@@ -191,7 +191,7 @@ export const getDeletedByName = (name: string) =>
   name.length === 0
     ? Effect.succeed(undefined)
     : cloudsupport
-        .getSupportEventSubscriptions({ name })
+        .getOrganizationsSupportEventSubscriptions({ name })
         .pipe(
           Effect.catchTag(["NotFound", "Forbidden"], () =>
             Effect.succeed(undefined),
@@ -328,7 +328,7 @@ export const listSubscriptions = (
 ) =>
   parent.length === 0
     ? emptyList<cloudsupport.SupportEventSubscription>()
-    : cloudsupport.listSupportEventSubscriptions
+    : cloudsupport.listOrganizationsSupportEventSubscriptions
         .pages({
           parent,
           pageSize: 200,
@@ -412,7 +412,7 @@ export const findOwnedSubscription = (
 
 export const undeleteSubscription = (name: string) =>
   cloudsupport
-    .undeleteSupportEventSubscriptions({ name, body: {} })
+    .undeleteOrganizationsSupportEventSubscriptions({ name, body: {} })
     .pipe(
       Effect.catchTag(["NotFound", "Forbidden", "BadRequest", "Conflict"], () =>
         getDeletedByName(name),

@@ -25,8 +25,8 @@ export default class BoundRedisService extends GCP.Function<BoundRedisService>()
 
     return {
       fetch: Effect.gen(function* () {
-        yield* redis.set("probe", "ok");
-        const cached = yield* redis.get("probe");
+        yield* redis.set("probe", "ok").pipe(Effect.orDie);
+        const cached = yield* redis.get("probe").pipe(Effect.orDie);
         return yield* HttpServerResponse.json({ redis: cached });
       }),
     };
