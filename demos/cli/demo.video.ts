@@ -2,13 +2,14 @@
  * Scripted terminal demo of the Alchemy CLI, recorded with tcut
  * (https://github.com/AmanVarshney01/tcut).
  *
- *   tcut demo.video.ts                 # record + render out/alchemy-cli.{mp4,gif}
+ *   tcut demo.video.ts                 # record + render out/alchemy-cli.mp4
  *   tcut test demo.video.ts            # replay fast, assertions only (no video)
  *   tcut render out/alchemy-cli.cast … # re-render the last recording, no shell
  *
  * The run never touches your real `~/.alchemy`: it starts from an EMPTY
- * throwaway `ALCHEMY_HOME` and follows a brand-new user in order, one mp4
- * chapter per step: connect Cloudflare through the `alchemy profile` TUI (OAuth,
+ * throwaway `ALCHEMY_HOME` and follows a brand-new user in order, one title
+ * card (`t.slide`, tcut ≥ 1.3) and mp4 chapter per step: connect Cloudflare
+ * through the `alchemy profile` TUI (OAuth,
  * granted in tcut's browser pane), `alchemy dev`, `alchemy deploy`, an
  * out-of-band edit caught and fixed by `alchemy drift`, and `alchemy destroy`.
  * Stack state stays in this directory's `.alchemy/`; everything the demo
@@ -16,8 +17,8 @@
  *
  * Inputs (environment):
  *   CLOUDFLARE_ACCOUNT_NAME  (env or ./.env, optional)
- *       Typed into the account picker when the login sees several accounts;
- *       defaults to the account id, which the picker also matches on.
+ *       The account to arrow down to in the picker when the login sees
+ *       several accounts; defaults to the account id.
  *   CLOUDFLARE_LOGIN_EMAIL / CLOUDFLARE_LOGIN_PASSWORD  (env or ./.env)
  *       Dashboard login for the Cloudflare account used on camera. If unset,
  *       the script waits (up to 4 min) for you to sign in by hand in the
@@ -276,14 +277,14 @@ const VIDEO = { width: 1368, height: 816 };
 
 export default defineVideo(
   {
-    output: ["out/alchemy-cli.mp4", "out/alchemy-cli.gif"],
+    output: ["out/alchemy-cli.mp4"],
     shell: "zsh",
     cols: 110,
     rows: 32,
     width: VIDEO.width,
     height: VIDEO.height,
     theme: "catppuccin-mocha",
-    typingSpeed: "35ms",
+    typingSpeed: "15ms",
     typingJitter: 0.3,
     waitTimeout: "180s",
     endPause: "2s",
@@ -300,15 +301,27 @@ export default defineVideo(
     const originalApi = readFileSync(apiFile, "utf8");
 
     /**
-     * Marks the start of a step as an mp4 chapter (`--chapters`,
-     * `--split-chapters`) and starts it on a fresh screen. No title cards:
-     * tcut has no video-level transitions yet, and cards drawn into the
-     * terminal itself read poorly.
+     * A full-screen transition card between steps (`t.slide`, tcut ≥ 1.3),
+     * drawn at render time in real typography and faded in and out. It also
+     * records an mp4 chapter of the same name (`--chapters`,
+     * `--split-chapters`), and the screen is cleared behind the card so the
+     * next step starts fresh.
      */
-    const chapter = async (name: string) => {
-      await t.chapter(name);
-      await t.hide(() => t.run("clear"));
-      await t.sleep("800ms");
+    let step = 0;
+    const slide = async (heading: string, subtitle: string) => {
+      step += 1;
+      await t.slide(heading, {
+        eyebrow: String(step),
+        subtitle,
+        duration: "2.2s",
+        fade: "400ms",
+        during: async () => {
+          // `run` waits for a fresh prompt, which never comes when the screen
+          // is already just a prompt (clear redraws nothing new).
+          const lines = t.screen().split("\n").filter((l) => l.trim());
+          if (lines.length > 1) await t.run("clear");
+        },
+      });
     };
 
     try {
@@ -343,7 +356,7 @@ export default defineVideo(
       });
 
       // ── 1. Connect to Cloudflare ─────────────────────────────────────────
-      await chapter("connect");
+      await slide("Connect Cloudflare", "alchemy profile · sign in with OAuth");
       await t.type("alchemy profile");
       await t.enter();
       await t.wait(/e edit/, { scope: "screen" });
@@ -508,7 +521,7 @@ export default defineVideo(
       await t.sleep("1s");
 
       // ── 2. Launch alchemy dev ────────────────────────────────────────────
-      await chapter("dev");
+      await slide("Launch alchemy dev", "local emulation · plan view · live reload");
       await t.type("alchemy dev");
       await t.enter();
       await t.wait(STARTED, { scope: "screen" });
@@ -574,7 +587,7 @@ export default defineVideo(
       await t.sleep("1s");
 
       // ── 3. Deploy to the cloud ───────────────────────────────────────────
-      await chapter("deploy");
+      await slide("Deploy to the cloud", "alchemy deploy · review the plan · confirm");
       await t.type("alchemy deploy");
       await t.enter();
       await t.wait(/Deploy\?/, { scope: "screen" });
@@ -607,7 +620,7 @@ export default defineVideo(
       const visits = deployedVisitsNamespace();
       const visitsApi = kvNamespaceApi(credentials, visits.namespaceId);
       await visitsApi.rename("renamed-in-the-dashboard");
-      await chapter("drift");
+      await slide("Detect and repair drift", "alchemy drift · a namespace renamed in the dashboard");
       await t.type("alchemy drift");
       await t.enter();
       await t.wait(/Drift detected/, { scope: "screen" });
@@ -625,7 +638,7 @@ export default defineVideo(
       }
 
       // ── 5. Tear down ─────────────────────────────────────────────────────
-      await chapter("destroy");
+      await slide("Tear it down", "alchemy destroy");
       await t.type("alchemy destroy");
       await t.enter();
       await t.wait(/Destroy\?/, { scope: "screen" });
