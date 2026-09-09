@@ -3,7 +3,7 @@ import * as Cloudflare from "alchemy/Cloudflare";
 import * as Stripe from "alchemy/Stripe";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import Api from "./src/Api.ts";
+import Api, { Events } from "./src/Api.ts";
 
 export default Alchemy.Stack(
   "StripeBillingExample",
@@ -13,8 +13,10 @@ export default Alchemy.Stack(
   },
   Effect.gen(function* () {
     const api = yield* Api;
+    const webhook = yield* Events;
     return {
       url: api.url.as<string>(),
+      webhookId: webhook.id,
     };
   }),
 );

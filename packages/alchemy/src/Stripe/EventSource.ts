@@ -5,11 +5,10 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import type { RuntimeContext } from "../RuntimeContext.ts";
-import * as Namespace from "../Namespace.ts";
 import * as Output from "../Output.ts";
 import { isWorkerEvent, Worker } from "../Cloudflare/Workers/Worker.ts";
 import type { StripeEventClass, StripeEventInstance } from "./Events.ts";
-import { WebhookEndpoint } from "./WebhookEndpoint.ts";
+import type { WebhookEndpoint } from "./WebhookEndpoint.ts";
 
 export interface ConsumeEventsProps<
   E extends readonly StripeEventClass[] = readonly StripeEventClass[],
@@ -37,8 +36,9 @@ export const webhookSecretEnvName = (id: string): string =>
 /**
  * Subscribe to Stripe webhook events on the host Worker.
  *
- * Deploy-time: yields a {@link WebhookEndpoint} pointed at this Worker.
- * Runtime: verifies `Stripe-Signature` and runs one Effect per delivery.
+ * Declare a {@link WebhookEndpoint} in the Stack (after the Worker, using
+ * `worker.url`). `consumeEvents` only listens and verifies — it does not
+ * create the endpoint, so Worker init cannot deadlock on `url`.
  *
  * Provide {@link ConsumeEventsLive} on the Worker Effect.
  *
@@ -46,7 +46,7 @@ export const webhookSecretEnvName = (id: string): string =>
  * **Example:** Customer created and invoice paid
  * ```typescript
  * yield* Stripe.consumeEvents(
- *   "Events",
+ *   Events,
  *   {
  *     events: [Stripe.CustomerCreated, Stripe.InvoicePaid],
  *   },
@@ -63,20 +63,20 @@ export function consumeEvents<
   const E extends readonly StripeEventClass[],
   Req = never,
 >(
-  id: string,
+  endpoint: WebhookEndpoint,
   props: ConsumeEventsProps<E>,
   process: (
     event: SelectedStripeEvent<E>,
   ) => Effect.Effect<void, never, Req | RuntimeContext>,
 ): Effect.Effect<void, never, EventSource> {
-  return EventSource.use((source) => source(id, props, process));
+  return EventSource.use((source) => source(endpoint, props, process));
 }
 
 export type EventSourceService = <
   E extends readonly StripeEventClass[],
   Req = never,
 >(
-  id: string,
+  endpoint: WebhookEndpoint,
   props: ConsumeEventsProps<E>,
   process: (event: SelectedStripeEvent<E>) => Effect.Effect<void, never, Req>,
 ) => Effect.Effect<void, never, never>;
@@ -96,35 +96,22 @@ export const ConsumeEventsLive = Layer.effect(
   EventSource,
   Effect.gen(function* () {
     const ctx = yield* Worker;
-    const createEndpoint = yield* WebhookEndpoint;
 
     return Effect.fn(function* (
-      id: string,
+      endpoint: WebhookEndpoint,
       props: ConsumeEventsProps,
       process: (
         event: StripeEventInstance,
       ) => Effect.Effect<void, never, never>,
     ) {
       const path = webhookPath(props.path);
-      const enabledEvents = props.events.map((event) => event.type);
       const byType = new Map(
         props.events.map((event) => [event.type, event] as const),
       );
 
-      const secretSource = globalThis.__ALCHEMY_RUNTIME__
-        ? Output.literal(undefined as Redacted.Redacted<string> | undefined)
-        : Output.asOutput(
-            (yield* Namespace.push(
-              ctx.LogicalId,
-              createEndpoint(id, {
-                url: Output.interpolate`${ctx.url}${path}`,
-                enabledEvents: [...enabledEvents],
-              }),
-            )).secret,
-          );
       const secret = yield* Output.named(
-        secretSource,
-        webhookSecretEnvName(id),
+        Output.asOutput(endpoint.secret),
+        webhookSecretEnvName(endpoint.LogicalId),
       );
 
       yield* ctx.listen((event) => {
