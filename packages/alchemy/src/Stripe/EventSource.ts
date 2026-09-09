@@ -30,8 +30,13 @@ export type SelectedStripeEvent<E extends readonly StripeEventClass[]> =
 export const webhookPath = (path?: string): string =>
   path ?? "/webhooks/stripe";
 
-export const webhookSecretEnvName = (id: string): string =>
-  `STRIPE_WEBHOOK_SECRET_${id.replaceAll(/[^a-zA-Z0-9]/g, "_")}`;
+export const webhookSecretEnvName = (path: string): string =>
+  `STRIPE_WEBHOOK_SECRET_${path.replaceAll(/[^a-zA-Z0-9]/g, "_")}`;
+
+const isEndpointInstance = (value: unknown): value is WebhookEndpoint =>
+  typeof value === "object" &&
+  value !== null &&
+  typeof (value as WebhookEndpoint).LogicalId === "string";
 
 /**
  * Subscribe to Stripe webhook events on the host Worker.
@@ -63,7 +68,7 @@ export function consumeEvents<
   const E extends readonly StripeEventClass[],
   Req = never,
 >(
-  endpoint: WebhookEndpoint,
+  endpoint: WebhookEndpoint | Effect.Effect<WebhookEndpoint>,
   props: ConsumeEventsProps<E>,
   process: (
     event: SelectedStripeEvent<E>,
@@ -76,7 +81,7 @@ export type EventSourceService = <
   E extends readonly StripeEventClass[],
   Req = never,
 >(
-  endpoint: WebhookEndpoint,
+  endpoint: WebhookEndpoint | Effect.Effect<WebhookEndpoint>,
   props: ConsumeEventsProps<E>,
   process: (event: SelectedStripeEvent<E>) => Effect.Effect<void, never, Req>,
 ) => Effect.Effect<void, never, never>;
@@ -98,7 +103,7 @@ export const ConsumeEventsLive = Layer.effect(
     const ctx = yield* Worker;
 
     return Effect.fn(function* (
-      endpoint: WebhookEndpoint,
+      endpoint: WebhookEndpoint | Effect.Effect<WebhookEndpoint>,
       props: ConsumeEventsProps,
       process: (
         event: StripeEventInstance,
@@ -109,9 +114,17 @@ export const ConsumeEventsLive = Layer.effect(
         props.events.map((event) => [event.type, event] as const),
       );
 
+      const secretOutput = isEndpointInstance(endpoint)
+        ? Output.asOutput(endpoint.secret)
+        : Output.fromEffect(
+            (endpoint as Effect.Effect<WebhookEndpoint>).pipe(
+              Effect.map((value) => value.secret),
+              Effect.orDie,
+            ),
+          );
       const secret = yield* Output.named(
-        Output.asOutput(endpoint.secret),
-        webhookSecretEnvName(endpoint.LogicalId),
+        secretOutput,
+        webhookSecretEnvName(path),
       );
 
       yield* ctx.listen((event) => {
