@@ -41,9 +41,9 @@ The implementation layer is what actually talks to Stripe. Merge it
 onto the Worker Effect:
 
 ```diff lang="typescript"
-  }).pipe(
-+    Effect.provide(Stripe.RetrieveProductHttp),
-  ),
+}).pipe(
++  Effect.provide(Stripe.RetrieveProductHttp),
+),
 ```
 
 Add one layer per capability (`RetrievePriceHttp`,
@@ -58,14 +58,12 @@ The first HTTP binding on a host mints (or reuses) a
 capability calls `token.bind(id, { permissions })` with the Stripe
 permission it needs (`products_read`, `customers_write`, …).
 
-The secret is registered with `yield* token.value` so
-`RuntimeContext.set` + `packEnvValueKeepRedacted` emit a Cloudflare
-`secret_text` binding — the same accessor pattern as R2/KV HTTP
-tokens. Do not push raw `{ type: "secret_text" }` items; the Worker
-provider forwards those unresolved.
+The key is injected into the Worker as a secret binding; you never
+handle it. Runtime bindings always call `https://api.stripe.com`;
+`STRIPE_API_BASE_URL` applies to plan/deploy only.
 
-Lambda, ECS, and Fly also receive `{ env: { STRIPE_API_KEY } }`
-because those hosts ship environment through their binding contract.
+Lambda, ECS, and Fly receive `STRIPE_API_KEY` as an environment
+variable on the host.
 
 Until Stripe publishes a public create-key API, the token value is
 the account secret or a Dashboard `rk_…` you passed as `value`. See

@@ -13,18 +13,19 @@ through a `WebhookEndpoint`.
 
 ## Add a webhook route
 
-Acknowledge Stripe with `200` so it does not retry. Signature
-verification is yours to add later — see
+Acknowledge Stripe with `200` so it does not retry. Putting
+`webhook.secret` on the Worker as `STRIPE_WEBHOOK_SECRET` and
+verifying with `Webhooks.constructEvent` is in
 [Webhooks](/stripe/guides/webhooks):
 
 ```diff lang="typescript"
-        if (request.method === "POST" && request.url.startsWith("/customers")) {
-          // ...
-        }
-+        if (request.method === "POST" && request.url.startsWith("/webhooks/stripe")) {
-+          return HttpServerResponse.text("ok");
-+        }
-        return HttpServerResponse.text("ok");
+if (request.method === "POST" && request.url.startsWith("/customers")) {
+  // ...
+}
++if (request.method === "POST" && request.url.startsWith("/webhooks/stripe")) {
++  return HttpServerResponse.text("ok");
++}
+return HttpServerResponse.text("ok");
 ```
 
 ## Interpolate the Worker URL
@@ -45,11 +46,11 @@ import * as Stripe from "alchemy/Stripe";
 Declare it in the Stack after `Api`, so the Worker URL exists:
 
 ```diff lang="typescript"
-    const api = yield* Api;
-+    const webhook = yield* Stripe.WebhookEndpoint("Events", {
-+      url: Output.interpolate`${api.url}/webhooks/stripe`,
-+      enabledEvents: ["customer.created"],
-+    });
+const api = yield* Api;
++const webhook = yield* Stripe.WebhookEndpoint("Events", {
++  url: Output.interpolate`${api.url}/webhooks/stripe`,
++  enabledEvents: ["customer.created"],
++});
 ```
 
 `enabledEvents` is the allow-list Stripe will POST. Add
@@ -58,14 +59,14 @@ Declare it in the Stack after `Api`, so the Worker URL exists:
 ## Return the endpoint id
 
 ```diff lang="typescript"
-    return {
-      productId: product.id,
-      name: product.name,
-      priceId: price.id,
-      couponId: coupon.id,
-      url: api.url.as<string>(),
-+      webhookId: webhook.id,
-    };
+return {
+  productId: product.id,
+  name: product.name,
+  priceId: price.id,
+  couponId: coupon.id,
+  url: api.url.as<string>(),
++  webhookId: webhook.id,
+};
 ```
 
 `webhook.secret` is `Redacted` and returned only at create. Do not

@@ -9,17 +9,14 @@ the signing secret as `Redacted`, and tears it down with the stack.
 
 ## Worker route
 
-Handle `POST /webhooks/stripe` on the Worker. The billing example
-acknowledges with `200` and leaves signature verification to you:
+Handle `POST /webhooks/stripe` on the Worker. Stripe retries on
+non-2xx, so return `200` quickly.
 
 ```typescript
 if (request.method === "POST" && url.pathname === "/webhooks/stripe") {
   return HttpServerResponse.text("ok");
 }
 ```
-
-Stripe retries on non-2xx. Keep the handler fast; do the real work
-after you return.
 
 ## Endpoint resource
 
@@ -41,8 +38,42 @@ requires you to pick explicitly. `url`, events, `description`,
 ## Signing secret
 
 `webhook.secret` is returned only at create and preserved in state as
-`Redacted`. Never log it. Verify payloads with Stripe's
-`Stripe-Signature` header against that secret.
+`Redacted`. Never log it. Thread it into the Worker as env — Alchemy
+ships a `Redacted` value as a secret binding:
+
+```typescript
+export default class Api extends Cloudflare.Worker<Api>()(
+  "Api",
+  {
+    main: import.meta.url,
+    env: {
+      STRIPE_WEBHOOK_SECRET: webhook.secret,
+    },
+  },
+  // ...
+) {}
+```
+
+At request time, verify the raw body with distilled's
+`Webhooks.constructEvent`:
+
+```typescript
+import { Webhooks } from "@distilled.cloud/stripe";
+import * as Config from "effect/Config";
+
+const secret = yield* Config.redacted("STRIPE_WEBHOOK_SECRET");
+const signature = request.headers["stripe-signature"] ?? "";
+const payload = yield* request.text;
+const event = yield* Webhooks.constructEvent({
+  payload,
+  signature,
+  secret,
+});
+```
+
+The endpoint depends on `api.url` and the Worker depends on
+`webhook.secret` — both are Outputs in the same Stack; the engine
+converges them. Pass the **raw** body, not parsed JSON.
 
 ## Disable without deleting
 

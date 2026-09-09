@@ -134,21 +134,21 @@ Call `retrieveProduct()` from `fetch`:
 
 ```diff lang="typescript"
 +import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
- import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 ```
 
 ```diff lang="typescript"
-      fetch: Effect.gen(function* () {
-+        const request = yield* HttpServerRequest;
-+        if (request.url.startsWith("/product")) {
-+          const live = yield* retrieveProduct().pipe(Effect.orDie);
-+          return yield* HttpServerResponse.json({
-+            id: live.id,
-+            name: live.name,
-+          });
-+        }
-        return HttpServerResponse.text("ok");
-      }),
+fetch: Effect.gen(function* () {
++  const request = yield* HttpServerRequest;
++  if (request.url.startsWith("/product")) {
++    const live = yield* retrieveProduct().pipe(Effect.orDie);
++    return yield* HttpServerResponse.json({
++      id: live.id,
++      name: live.name,
++    });
++  }
+  return HttpServerResponse.text("ok");
+}),
 ```
 
 `Effect.orDie` turns a Stripe error into a 500 for this tutorial.
@@ -195,33 +195,33 @@ Import `Api` and return its URL:
 
 ```diff lang="typescript"
 +import Api from "./src/api.ts";
- import { Pro } from "./src/product.ts";
+import { Pro } from "./src/product.ts";
 ```
 
 ```diff lang="typescript"
-  Effect.gen(function* () {
-    const product = yield* Pro;
-    const price = yield* Stripe.Price("ProMonthly", {
-      product: product.id,
-      currency: "usd",
-      unitAmount: 2000,
-      recurring: { interval: "month" },
-    });
-    const coupon = yield* Stripe.Coupon("Launch20", {
-      percentOff: 20,
-      duration: "once",
-      name: "Launch 20%",
-    });
-+    const api = yield* Api;
+Effect.gen(function* () {
+  const product = yield* Pro;
+  const price = yield* Stripe.Price("ProMonthly", {
+    product: product.id,
+    currency: "usd",
+    unitAmount: 2000,
+    recurring: { interval: "month" },
+  });
+  const coupon = yield* Stripe.Coupon("Launch20", {
+    percentOff: 20,
+    duration: "once",
+    name: "Launch 20%",
+  });
++  const api = yield* Api;
 
-    return {
-      productId: product.id,
-      name: product.name,
-      priceId: price.id,
-      couponId: coupon.id,
-+      url: api.url.as<string>(),
-    };
-  }),
+  return {
+    productId: product.id,
+    name: product.name,
+    priceId: price.id,
+    couponId: coupon.id,
++    url: api.url.as<string>(),
+  };
+}),
 ```
 
 ## Deploy and fetch
@@ -242,7 +242,7 @@ The RestrictedApiKey is the host token Bindings attach permissions
 to — see [Bindings](/stripe/guides/bindings). Then:
 
 ```sh
-curl "$(bun alchemy inspect MyApp url)/product"
+curl "$(bun alchemy stack output url)/product"
 ```
 
 You get `{ "id": "prod_…", "name": "Pro" }`.
@@ -253,9 +253,9 @@ You get `{ "id": "prod_…", "name": "Pro" }`.
 next to `RetrieveProduct`:
 
 ```diff lang="typescript"
-    const retrieveProduct = yield* Stripe.RetrieveProduct(product);
-+    const createCustomer = yield* Stripe.CreateCustomer();
-    return {
+const retrieveProduct = yield* Stripe.RetrieveProduct(product);
++const createCustomer = yield* Stripe.CreateCustomer();
+return {
 ```
 
 ## Provide CreateCustomerHttp
@@ -278,37 +278,37 @@ Add `import * as Layer from "effect/Layer"` at the top of
 ## Handle POST /customers
 
 ```diff lang="typescript"
-        if (request.url.startsWith("/product")) {
-          const live = yield* retrieveProduct().pipe(Effect.orDie);
-          return yield* HttpServerResponse.json({
-            id: live.id,
-            name: live.name,
-          });
-        }
-+        if (request.method === "POST" && request.url.startsWith("/customers")) {
-+          const body = (yield* request.json) as { email?: string; name?: string };
-+          if (!body.email) {
-+            return yield* HttpServerResponse.json(
-+              { error: "email is required" },
-+              { status: 400 },
-+            );
-+          }
-+          const customer = yield* createCustomer({
-+            email: body.email,
-+            ...(body.name !== undefined ? { name: body.name } : {}),
-+          }).pipe(Effect.orDie);
-+          return yield* HttpServerResponse.json(
-+            { id: customer.id, email: customer.email },
-+            { status: 201 },
-+          );
-+        }
-        return HttpServerResponse.text("ok");
+if (request.url.startsWith("/product")) {
+  const live = yield* retrieveProduct().pipe(Effect.orDie);
+  return yield* HttpServerResponse.json({
+    id: live.id,
+    name: live.name,
+  });
+}
++if (request.method === "POST" && request.url.startsWith("/customers")) {
++  const body = (yield* request.json) as { email?: string; name?: string };
++  if (!body.email) {
++    return yield* HttpServerResponse.json(
++      { error: "email is required" },
++      { status: 400 },
++    );
++  }
++  const customer = yield* createCustomer({
++    email: body.email,
++    ...(body.name !== undefined ? { name: body.name } : {}),
++  }).pipe(Effect.orDie);
++  return yield* HttpServerResponse.json(
++    { id: customer.id, email: customer.email },
++    { status: 201 },
++  );
++}
+return HttpServerResponse.text("ok");
 ```
 
 Redeploy, then:
 
 ```sh
-curl -X POST "$(bun alchemy inspect MyApp url)/customers" \
+curl -X POST "$(bun alchemy stack output url)/customers" \
   -H "content-type: application/json" \
   -d '{"email":"ada@example.com"}'
 ```
