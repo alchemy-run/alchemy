@@ -4,7 +4,7 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
 /**
  * Effect-native Cloud Run Service that binds Memorystore over Direct VPC
- * egress. Gated by `GCP_TEST_MEMORYSTORE=1` — instance create takes minutes.
+ * egress. Gated by `GCP_TEST_REDIS=1` — instance create takes minutes.
  */
 export default class BoundRedisService extends GCP.Function<BoundRedisService>()(
   "BoundRedisService",

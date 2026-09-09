@@ -7,6 +7,7 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import { spawnSync } from "node:child_process";
 import BoundRedisService from "./fixtures/service-redis.ts";
 import BoundService from "./fixtures/service.ts";
 
@@ -22,6 +23,17 @@ const hasGcpCreds = !!(
   (process.env.GOOGLE_ACCESS_TOKEN ||
     process.env.GOOGLE_APPLICATION_CREDENTIALS)
 );
+
+const dockerAvailable = (() => {
+  try {
+    return (
+      spawnSync("docker", ["info"], { stdio: "ignore", timeout: 15_000 })
+        .status === 0
+    );
+  } catch {
+    return false;
+  }
+})();
 
 const HELLO_IMAGE = "us-docker.pkg.dev/cloudrun/container/hello";
 
@@ -125,7 +137,7 @@ class ServiceNotReady extends Data.TaggedError("ServiceNotReady")<{
   status: number;
 }> {}
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider.skipIf(!hasGcpCreds || !dockerAvailable)(
   "effect-native Function with PubSub and Storage bindings",
   (stack) =>
     Effect.gen(function* () {
@@ -160,7 +172,9 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 180_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds || !process.env.GCP_TEST_REDIS)(
+test.provider.skipIf(
+  !hasGcpCreds || !dockerAvailable || !process.env.GCP_TEST_REDIS,
+)(
   "effect-native Function with Memorystore Redis over Direct VPC",
   (stack) =>
     Effect.gen(function* () {

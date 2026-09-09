@@ -184,6 +184,9 @@ export const hostServiceAccountId = (resourceId: string): string => {
 export const hostServiceAccountEmail = (project: string, accountId: string) =>
   `${accountId}@${project}.iam.gserviceaccount.com`;
 
+/** Display name stamped on Alchemy-minted host SAs so nuke can list them. */
+export const ALCHEMY_HOST_SA_DISPLAY_NAME = "alchemy-host";
+
 const isSaCreateQuotaError = (error: {
   _tag: string;
   message?: string;
@@ -279,7 +282,7 @@ export const ensureHostServiceAccount = (
           name: `projects/${project}`,
           body: {
             accountId,
-            serviceAccount: { displayName: accountId },
+            serviceAccount: { displayName: ALCHEMY_HOST_SA_DISPLAY_NAME },
           },
         })
         .pipe(

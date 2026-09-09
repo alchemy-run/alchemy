@@ -3782,6 +3782,10 @@ import {
   UserProfilesGuardianInvitationProvider,
 } from "./Classroom/UserProfilesGuardianInvitation.ts";
 import {
+  HostServiceAccount,
+  HostServiceAccountProvider,
+} from "./IAM/HostServiceAccount.ts";
+import {
   Policy as IamPolicy,
   PolicyProvider as IamPolicyProvider,
 } from "./IAM/Policy.ts";
@@ -5000,6 +5004,7 @@ export const providers = () =>
           EnvironmentsApisRevisionsDebugsession,
           UserProfilesGuardianInvitation,
           IamPolicy,
+          HostServiceAccount,
         ]) as unknown as Effect.Effect<
           { providers: Record<string, any> },
           never,
@@ -6333,6 +6338,7 @@ export const providers = () =>
                 EnvironmentsApisRevisionsDebugsessionProvider(),
                 UserProfilesGuardianInvitationProvider(),
                 IamPolicyProvider(),
+                HostServiceAccountProvider(),
                 SasportalSignedCustomersDeploymentsDeviceProvider(),
                 SasportalSignedNodesDeploymentsDeviceProvider(),
                 DoubleclickbidmanagerQueryProvider(),
