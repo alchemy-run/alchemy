@@ -31,8 +31,11 @@ export default class BindingsApi extends Fly.Service<BindingsApi>()(
     guest: { cpuKind: "shared", cpus: 1, memoryMb: 256 },
   },
   Effect.gen(function* () {
-    yield* Marker;
-    const get = yield* Fly.GetSecret(Marker);
+    const site = yield* Site;
+    const marker = yield* Marker;
+    const appName = yield* site.appName;
+    const secretName = yield* marker.name;
+    const get = yield* Fly.GetSecret(marker);
     const list = yield* Fly.ListSecrets(Site);
     const write = yield* Fly.WriteSecret(Marker);
     const encrypt = yield* Fly.Encrypt(BoxKey);
@@ -61,12 +64,16 @@ export default class BindingsApi extends Fly.Service<BindingsApi>()(
         };
 
         if (path === "/health") {
+          const resolvedApp = yield* appName;
+          const resolvedSecret = yield* secretName;
           const token = process.env.FLY_API_TOKEN ?? "";
           return yield* HttpServerResponse.json({
             ok: true,
+            appName: resolvedApp,
+            secretName: resolvedSecret,
+            viaRuntimeContext: true,
+            hasFlySecretMarkerEnv: process.env.FLY_SECRET_Marker !== undefined,
             hasToken: token.length > 0,
-            hasAppName: typeof process.env.FLY_APP_NAME === "string",
-            hasSecretName: typeof process.env.FLY_SECRET_Marker === "string",
             tokenKind: token.startsWith("{")
               ? "marker"
               : token.startsWith("FlyV1")

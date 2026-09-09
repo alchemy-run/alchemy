@@ -106,9 +106,9 @@ export interface ServiceBinding {
    */
   bucket?: { name: string; id?: string };
   /**
-   * Managed Postgres cluster to attach. `Fly.ConnectPostgres` packs
-   * the cluster's connection URI Outputs into the host and records
-   * the MPG attachment during Service reconcile.
+   * Managed Postgres cluster to attach. `Fly.ConnectPostgres` records
+   * the MPG attachment during Service reconcile. Connection URIs travel
+   * as Outputs (`yield* postgres.connectionUri`), not bind env.
    */
   postgres?: { clusterId: string; variableName?: string };
 }

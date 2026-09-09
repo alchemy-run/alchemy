@@ -213,11 +213,6 @@ export const collectBindingState = (
           name?: unknown;
           id?: unknown;
           addOnId?: unknown;
-          accessKeyId?: unknown;
-          secretAccessKey?: unknown;
-          endpoint?: unknown;
-          region?: unknown;
-          bucketName?: unknown;
         }
       | undefined;
     const bucketName = coerceBindingName(bucket?.name);
@@ -228,19 +223,6 @@ export const collectBindingState = (
         name: bucketName ?? "",
         id: bucketId,
       });
-    }
-    if (bucket !== undefined) {
-      Object.assign(
-        env,
-        toEnvRecord({
-          AWS_ACCESS_KEY_ID: bucket.accessKeyId,
-          AWS_SECRET_ACCESS_KEY: bucket.secretAccessKey,
-          AWS_ENDPOINT_URL_S3: bucket.endpoint,
-          AWS_ENDPOINT_URL: bucket.endpoint,
-          AWS_REGION: bucket.region,
-          BUCKET_NAME: bucket.bucketName ?? bucket.name,
-        }),
-      );
     }
     const pg = binding?.data?.postgres;
     const clusterId = coerceBindingName(pg?.clusterId);

@@ -134,14 +134,18 @@ describe("Fly Bindings", () => {
       expect(out.ip).toEqual(expect.any(String));
       const body = (yield* getJson("/health")) as {
         ok: boolean;
+        appName?: string;
+        secretName?: string;
+        viaRuntimeContext?: boolean;
+        hasFlySecretMarkerEnv?: boolean;
         hasToken?: boolean;
-        hasAppName?: boolean;
-        hasSecretName?: boolean;
       };
       expect(body.ok).toEqual(true);
+      expect(body.viaRuntimeContext).toEqual(true);
+      expect(body.appName).toEqual(out.appName);
+      expect(body.secretName).toEqual(out.secretName);
       expect(body.hasToken).toEqual(true);
-      expect(body.hasAppName).toEqual(true);
-      expect(body.hasSecretName).toEqual(true);
+      expect(body.hasFlySecretMarkerEnv).toEqual(false);
     }).pipe(logLevel),
     { timeout: 120_000 },
   );

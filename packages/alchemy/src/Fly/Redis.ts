@@ -102,6 +102,12 @@ export type Redis = Resource<
     orgSlug: string | undefined;
     /** Whether eviction is enabled. */
     eviction: boolean | undefined;
+    /**
+     * Upstash Redis URL from GraphQL `publicUrl`. Never logged.
+     * Bindings `yield*` this so RuntimeContext transports it; Service
+     * reconcile also writes `REDIS_URL` as an App secret.
+     */
+    url: Redacted.Redacted<string> | undefined;
   },
   never,
   Providers
@@ -110,9 +116,9 @@ export type Redis = Resource<
 /**
  * Managed Upstash Redis in a Fly org. Bind {@link ReadRedis},
  * {@link WriteRedis}, or {@link ReadWriteRedis} on a {@link Service}.
- * Alchemy writes `REDIS_URL` as an App secret and the runtime client
- * uses it internally. Redis is not reachable from CI — drive it over
- * HTTP.
+ * Alchemy writes `REDIS_URL` as an App secret. The runtime client
+ * `yield*`s the Redis `url` attribute. Redis is not reachable from CI —
+ * drive it over HTTP.
  *
  * @see https://fly.io/docs/upstash/redis/
  *
@@ -331,6 +337,15 @@ const resolveName = (id: string, name: string | undefined, existing?: string) =>
     return yield* createFlyAppName(id);
   });
 
+const urlOf = (
+  row: ObservedRedis,
+  previous?: Redacted.Redacted<string>,
+): Redacted.Redacted<string> | undefined => {
+  const raw = unwrapSensitive(row.publicUrl);
+  if (raw !== undefined && raw.length > 0) return Redacted.make(raw);
+  return previous;
+};
+
 const toAttrs = (
   row: ObservedRedis,
   fallback: {
@@ -338,6 +353,7 @@ const toAttrs = (
     primaryRegion: string;
     orgSlug?: string;
     planId?: string;
+    url?: Redacted.Redacted<string>;
   },
 ): Redis["Attributes"] => ({
   redisId: row.id,
@@ -358,6 +374,7 @@ const toAttrs = (
         fallback.orgSlug)
       : fallback.orgSlug,
   eviction: evictionOf(row.options),
+  url: urlOf(row, fallback.url),
 });
 
 export const listRedisAddOns = Effect.fn(function* () {
@@ -644,6 +661,7 @@ export const RedisProvider = () =>
         name,
         primaryRegion: olds?.primaryRegion ?? DEFAULT_REDIS_REGION,
         orgSlug: olds?.orgSlug ?? output?.orgSlug,
+        url: output?.url,
       });
       if (output !== undefined) return attrs;
       return isOwnedRedis(found) ? attrs : Unowned(attrs);
@@ -774,13 +792,24 @@ export const RedisProvider = () =>
         }
       }
 
-      const latest =
-        (yield* findRedisAddOn({ id: current.id, name })) ?? current;
+      let latest = (yield* findRedisAddOn({ id: current.id, name })) ?? current;
+      if (
+        unwrapSensitive(latest.publicUrl) === undefined &&
+        latest.id !== undefined
+      ) {
+        const detail = yield* addons
+          .addOn({ id: latest.id })
+          .pipe(
+            Effect.catchTag("FlyIoParseError", () => Effect.succeed(undefined)),
+          );
+        if (detail !== undefined) latest = { ...latest, ...detail };
+      }
       return toAttrs(latest, {
         name,
         primaryRegion,
         orgSlug,
         planId: plan.id,
+        url: output?.url,
       });
     }),
 

@@ -3,7 +3,9 @@ import { Credentials, CredentialsFromEnv } from "@distilled.cloud/fly-io";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Redacted from "effect/Redacted";
 import { resolveProviderConfig } from "../Auth/Resolve.ts";
+import * as Output from "../Output.ts";
 import {
   FLY_AUTH_PROVIDER_NAME,
   type FlyAuthConfig,
@@ -20,15 +22,37 @@ export {
 } from "@distilled.cloud/fly-io";
 
 /**
+ * Resolve the org API token from ambient stack credentials and `yield*`
+ * it so RuntimeContext.set runs. Platform copies `runtimeContext.env`
+ * into host `props.env`; Fly flattens that onto the Machine. Do not
+ * `host.bind({ env: { FLY_API_TOKEN } })`.
+ *
+ * The token is read now (bind/init), not via `Output.fromEffect`, so
+ * plan/diff keeps the profile-backed Credentials instead of falling
+ * through to CI env.
+ */
+export const bindFlyApiToken = (): Effect.Effect<void> =>
+  Effect.gen(function* () {
+    const token = globalThis.__ALCHEMY_RUNTIME__
+      ? ""
+      : yield* Credentials.pipe(
+          Effect.flatMap((resolve) => resolve),
+          Effect.map((cfg) => Redacted.value(cfg.apiKey)),
+        );
+    yield* Output.named(Output.asOutput(token), "FLY_API_TOKEN");
+  }) as Effect.Effect<void>;
+
+/**
  * `Credentials` for the HTTP binding layers (`GetSecretHttp`, `ExecHttp`, …).
  *
  * Those layers are built in two places. Inside a stack (plan/deploy, or an
  * Action) `providers()` has already resolved the profile-backed
  * `Credentials`, and the binding must use them — a laptop deploy has no
  * `FLY_API_TOKEN` in its env once the token lives in the Alchemy profile.
- * Inside a deployed Machine there is no profile; the host injected
- * `FLY_API_TOKEN` into the process env (see `SecretHttp.ts`). So: reuse the
- * ambient `Credentials` when present, otherwise read the env.
+ * Inside a deployed Machine there is no profile; `bindFlyApiToken`
+ * has already `RuntimeContext.set` the org token, which Platform copies
+ * into Machine env as `FLY_API_TOKEN`. So: reuse the ambient
+ * `Credentials` when present, otherwise read the env.
  */
 export const CredentialsFromAmbientOrEnv: Layer.Layer<Credentials> =
   Layer.effect(
