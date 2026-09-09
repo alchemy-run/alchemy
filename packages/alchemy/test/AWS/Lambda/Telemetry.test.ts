@@ -1,10 +1,11 @@
 import * as AWS from "@/AWS";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Test from "@/Test/Alchemy";
-import { describe } from "alchemy-test";
+import { describe, expect } from "alchemy-test";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as pathe from "pathe";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 import type { OtelSink } from "./fixtures/otel-collector-worker.ts";
@@ -108,6 +109,29 @@ describe("AWS.Lambda Telemetry", () => {
         yield* expectUrlContains(collected, "lambda.child-span");
         // Log record shipped by the OTLP logger.
         yield* expectUrlContains(collected, "lambda-work-log");
+
+        // A timing-out invocation: the fixture's timeout is 5 s and `/slow`
+        // sleeps 60 s, so Lambda kills it and the Function URL answers with
+        // an error. 500 ms before that the deadline flush ended the root
+        // span with the timeout and drained the exporters, so the trace
+        // exists. Without it Lambda freezes the sandbox and nothing below
+        // ever reaches the collector.
+        const client = yield* HttpClient.HttpClient;
+        const slow = yield* client.get(`${fnUrl}/slow`);
+        expect(slow.status).not.toBe(200);
+        yield* expectUrlContains(
+          collected,
+          "AWS.Lambda.InvocationTimeoutError",
+          {
+            timeout: "120 seconds",
+            label: "timed-out invocation's root span",
+          },
+        );
+        yield* expectUrlContains(collected, "aws.lambda.timeout.imminent");
+        // The child span that ended before the sleep and its log travel in
+        // the same flush.
+        yield* expectUrlContains(collected, "lambda.slow-span");
+        yield* expectUrlContains(collected, "lambda-slow-log");
       }),
     { timeout: 600_000 },
   );

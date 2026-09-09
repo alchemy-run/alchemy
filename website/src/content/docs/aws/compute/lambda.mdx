@@ -293,6 +293,46 @@ the response, keep them cheap, and anything that must not be lost
 gets written durably (a queue, a table) inside the handler itself.
 :::
 
+### Timeouts still export their trace
+
+A Lambda that hits its timeout is frozen mid-flight, and its buffered
+telemetry is lost with it, on exactly the invocation you most want a
+trace for. So the runtime watches the deadline. If the handler is
+still running 500 ms before the timeout, the runtime ends the
+invocation's root span with an `AWS.Lambda.InvocationTimeoutError`,
+logs a warning, and drains the exporters. The handler is not
+interrupted and the response is not changed: if it does finish in
+that last half second, it returns as normal and the span is
+re-exported with the real outcome, the earlier one marked
+`aws.lambda.timeout.imminent`.
+
+Size the margin for one export round-trip to your telemetry backend,
+or set it to zero to turn the flush off:
+
+```typescript
+// src/api.ts
+import * as AWS from "alchemy/AWS";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+
+export default class Api extends AWS.Lambda.Function<Api>()(
+  "Api",
+  {
+    main: import.meta.url,
+    functionUrl: true,
+    timeout: Duration.seconds(30),
+    // flush 1 s before the deadline instead of the default 500 ms
+    timeoutMargin: Duration.seconds(1),
+  },
+  Effect.gen(function* () {
+    return {
+      fetch: Effect.succeed(HttpServerResponse.text("Hello from Lambda!")),
+    };
+  }),
+) {}
+```
+
 Construction-level finalizers run at **sandbox shutdown**. A Lambda sandbox
 with no registered extensions is killed with no signal at all, so
 the generated entry registers an internal extension with the

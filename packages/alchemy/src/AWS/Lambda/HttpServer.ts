@@ -13,6 +13,7 @@ import * as HttpMiddleware from "effect/unstable/http/HttpMiddleware";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import * as Http from "../../Http.ts";
+import { withInvocationDeadline } from "./InvocationDeadline.ts";
 
 export const isFunctionURLEvent = (
   event: any,
@@ -51,7 +52,15 @@ export const makeFunctionHttpHandler = <Req>(handler: Http.HttpEffect<Req>) => {
   // fetch path. With the default no-op tracer this is free; with a telemetry
   // exporter installed the span is exported when the invocation scope
   // flushes.
-  const safeHandler = HttpMiddleware.tracer(Http.safeHttpEffect(handler));
+  //
+  // The invocation deadline flush sits INSIDE the span so it can find the
+  // `http.server` root span in context and end it — with
+  // `InvocationTimeoutError` as its status — before draining the exporters.
+  // The dispatcher's outer guard stands down when this one takes the
+  // deadline; see `withInvocationDeadline`.
+  const safeHandler = HttpMiddleware.tracer(
+    withInvocationDeadline(Http.safeHttpEffect(handler)),
+  );
   return (
     event: any,
   ):

@@ -40,7 +40,7 @@ import {
   type DurableRetryPolicy,
   type DurableStepOptions,
 } from "./Durable.ts";
-import { HandlerContext } from "./Function.ts";
+import { HandlerContext } from "./InvocationDeadline.ts";
 
 /** Module id of AWS's Durable Execution SDK (an optional peer dependency). */
 export const DURABLE_SDK_MODULE = "@aws/durable-execution-sdk-js";
