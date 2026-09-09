@@ -25,10 +25,11 @@ afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), {
 });
 
 test(
-  "deploys a worker URL",
+  "deploys a worker URL and webhook endpoint",
   Effect.gen(function* () {
-    const { url } = yield* stack;
+    const { url, webhookId } = yield* stack;
     expect(url).toBeString();
+    expect(webhookId).toMatch(/^we_/);
   }),
 );
 

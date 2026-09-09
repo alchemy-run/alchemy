@@ -9,14 +9,22 @@ GitHub `consumeRepositoryEvents` and SQS `consumeQueueMessages`.
 
 ## Subscribe on the Worker
 
-Call `consumeEvents` during Worker init. Pass event **classes** — not
-`"customer.created"` strings. The handler `event` is the union of
-those classes.
+Declare a `WebhookEndpoint` **after** the Worker (it needs
+`worker.url`). Pass that endpoint into `consumeEvents` with event
+**classes** — not `"customer.created"` strings.
 
 ```typescript
 // src/api.ts
+export const Events = Stripe.WebhookEndpoint("Events", {
+  url: Output.interpolate`${Api.url}/webhooks/stripe`,
+  enabledEvents: [
+    Stripe.CustomerCreated.type,
+    Stripe.InvoicePaid.type,
+  ],
+});
+
 yield* Stripe.consumeEvents(
-  "Events",
+  Events,
   {
     events: [Stripe.CustomerCreated, Stripe.InvoicePaid],
   },
@@ -38,8 +46,8 @@ Provide `Stripe.ConsumeEventsLive` on the Worker Effect:
 ),
 ```
 
-`consumeEvents` yields a `WebhookEndpoint` pointed at this Worker
-and verifies `Stripe-Signature` with the endpoint secret.
+`consumeEvents` verifies `Stripe-Signature` with the endpoint secret
+and runs the handler. It does not create the endpoint.
 
 ## Endpoint resource
 
@@ -52,7 +60,8 @@ const webhook = yield* Stripe.WebhookEndpoint("Events", {
 });
 ```
 
-Prefer `consumeEvents` for a Worker that handles the deliveries.
+Yield the endpoint from the Stack next to the Worker. `consumeEvents`
+only attaches the listener.
 
 ## Reference
 

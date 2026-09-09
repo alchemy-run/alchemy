@@ -9,7 +9,9 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import StripeEventSourceWorker from "./fixtures/event-source-worker.ts";
+import StripeEventSourceWorker, {
+  Events,
+} from "./fixtures/event-source-worker.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Layer.mergeAll(Cloudflare.providers(), Stripe.providers()),
@@ -29,6 +31,7 @@ const Stack = Alchemy.Stack(
   },
   Effect.gen(function* () {
     const worker = yield* StripeEventSourceWorker;
+    yield* Events;
     return { url: worker.url.as<string>() };
   }),
 );
