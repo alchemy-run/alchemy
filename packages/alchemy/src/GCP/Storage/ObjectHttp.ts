@@ -31,24 +31,19 @@ export const makeObjectHttpBinding = <
   Effect.gen(function* () {
     const run = yield* options.operation;
     return Effect.fn(function* (bucket: Bucket) {
-      const bucketName = yield* bucket.bucketName;
       yield* bindGcpHost({
         tag: options.tag,
         resource: bucket,
-        iam: [
-          {
-            role: options.role ?? defaultRoleFor(options.tag),
-            resource: `projects/_/buckets/${bucketName}`,
-          },
-        ],
+        iam: [{ role: options.role ?? defaultRoleFor(options.tag) }],
       });
+      const bucketName = yield* bucket.bucketName;
       return Effect.fn(`${options.tag}(${bucket.LogicalId})`)(function* (
         request: Omit<I, "bucket">,
       ) {
         return yield* run({
           ...request,
-          bucket: bucketName,
-        } as unknown as I);
+          bucket: yield* bucketName,
+        } as I);
       });
     });
   });

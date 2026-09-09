@@ -898,6 +898,7 @@ const waitUntilGone = (name: string) =>
 const toCreateBody = (
   news: ServiceProps,
   labels: Record<string, string>,
+  template: cloudrun.GoogleCloudRunV2RevisionTemplate,
 ): cloudrun.GoogleCloudRunV2Service => ({
   labels,
   annotations: news.annotations,
@@ -909,7 +910,7 @@ const toCreateBody = (
   customAudiences: news.customAudiences,
   scaling: news.scaling,
   traffic: news.traffic,
-  template: desiredTemplate(news),
+  template,
 });
 
 export const ServiceProvider = () =>
@@ -1060,7 +1061,7 @@ await bootstrap(entrypoint);
           .createProjectsLocationsServices({
             parent,
             serviceId,
-            body: toCreateBody(news, desiredLabels),
+            body: toCreateBody(news, desiredLabels, template),
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         if (created !== undefined) {

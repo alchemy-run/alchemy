@@ -828,6 +828,7 @@ const waitUntilGone = (name: string) =>
 const toCreateBody = (
   news: WorkerPoolProps,
   labels: Record<string, string>,
+  template: cloudrun.GoogleCloudRunV2WorkerPoolRevisionTemplate,
 ): cloudrun.GoogleCloudRunV2WorkerPool => ({
   labels,
   annotations: news.annotations,
@@ -836,7 +837,7 @@ const toCreateBody = (
   binaryAuthorization: news.binaryAuthorization,
   instanceSplits: news.instanceSplits,
   scaling: news.scaling,
-  template: desiredTemplate(news),
+  template,
 });
 
 const listAt = (project: string, location: string) =>
@@ -1011,7 +1012,7 @@ await bootstrap(entrypoint);
           .createProjectsLocationsWorkerPools({
             parent,
             workerPoolId,
-            body: toCreateBody(news, desiredLabels),
+            body: toCreateBody(news, desiredLabels, template),
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         if (created !== undefined) {
