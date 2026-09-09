@@ -21,8 +21,11 @@ import { makeImageSource } from "../ArtifactRegistry/ImageSource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import {
   applyHostBindings,
+  collectHostBindings,
+  defaultComputeServiceAccount,
   deleteHostServiceAccount,
   ensureHostServiceAccount,
+  retryActAs,
   type GcpHostBinding,
 } from "../Host.ts";
 import {
@@ -985,15 +988,27 @@ export const ServiceProvider = () =>
       };
       const desiredAnnotations = news.annotations;
       const template = desiredTemplate(news);
-      const serviceAccount =
+      const preview = collectHostBindings(
+        bindings as ResourceBinding<GcpHostBinding>[],
+      );
+      const userSa =
         template.serviceAccount && template.serviceAccount.length > 0
           ? template.serviceAccount
-          : yield* ensureHostServiceAccount(env.project, serviceId);
+          : undefined;
+      const managed =
+        userSa === undefined &&
+        (news.main !== undefined || preview.iam.length > 0);
+      const serviceAccount =
+        userSa ??
+        (managed
+          ? yield* ensureHostServiceAccount(env.project, serviceId)
+          : yield* defaultComputeServiceAccount(env.project));
       template.serviceAccount = serviceAccount;
       const collected = yield* applyHostBindings({
         project: env.project,
         serviceAccount,
         bindings: bindings as ResourceBinding<GcpHostBinding>[],
+        revoke: managed,
       });
       const runtimeEnv = { ...collected.env, ...news.env };
       if (news.main !== undefined) {
@@ -1063,7 +1078,13 @@ await bootstrap(entrypoint);
             serviceId,
             body: toCreateBody(news, desiredLabels, template),
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(
+            retryActAs,
+            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.tapError(() =>
+              deleteHostServiceAccount(env.project, serviceId),
+            ),
+          );
         if (created !== undefined) {
           yield* waitForOperation(created);
         }

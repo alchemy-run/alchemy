@@ -568,41 +568,49 @@ export const SubscriptionProvider = () =>
         deadLettersChanged ||
         pushConfigChanged
       ) {
-        current = yield* pubsub.patchProjectsSubscriptions({
-          name,
-          body: {
-            subscription: {
-              name,
-              topic: topicName,
-              labels: desiredLabels,
-              ackDeadlineSeconds: desiredAck,
-              retainAckedMessages: desiredRetain,
-              enableExactlyOnceDelivery: desiredExactlyOnce,
-              messageRetentionDuration:
-                news.messageRetentionDuration ??
-                current.messageRetentionDuration,
-              expirationPolicy:
-                news.expirationPolicy ?? current.expirationPolicy,
-              retryPolicy: news.retryPolicy ?? current.retryPolicy,
-              deadLetterPolicy:
-                news.deadLetterPolicy ?? current.deadLetterPolicy,
-              pushConfig: news.pushConfig ?? current.pushConfig,
+        current = yield* pubsub
+          .patchProjectsSubscriptions({
+            name,
+            body: {
+              subscription: {
+                name,
+                topic: topicName,
+                labels: desiredLabels,
+                ackDeadlineSeconds: desiredAck,
+                retainAckedMessages: desiredRetain,
+                enableExactlyOnceDelivery: desiredExactlyOnce,
+                messageRetentionDuration:
+                  news.messageRetentionDuration ??
+                  current.messageRetentionDuration,
+                expirationPolicy:
+                  news.expirationPolicy ?? current.expirationPolicy,
+                retryPolicy: news.retryPolicy ?? current.retryPolicy,
+                deadLetterPolicy:
+                  news.deadLetterPolicy ?? current.deadLetterPolicy,
+                pushConfig: news.pushConfig ?? current.pushConfig,
+              },
+              updateMask: [
+                labelsChanged ? "labels" : undefined,
+                ackChanged ? "ackDeadlineSeconds" : undefined,
+                retainChanged ? "retainAckedMessages" : undefined,
+                exactlyOnceChanged ? "enableExactlyOnceDelivery" : undefined,
+                retentionChanged ? "messageRetentionDuration" : undefined,
+                expChanged ? "expirationPolicy" : undefined,
+                retriesChanged ? "retryPolicy" : undefined,
+                deadLettersChanged ? "deadLetterPolicy" : undefined,
+                pushConfigChanged ? "pushConfig" : undefined,
+              ]
+                .filter((field): field is string => field !== undefined)
+                .join(","),
             },
-            updateMask: [
-              labelsChanged ? "labels" : undefined,
-              ackChanged ? "ackDeadlineSeconds" : undefined,
-              retainChanged ? "retainAckedMessages" : undefined,
-              exactlyOnceChanged ? "enableExactlyOnceDelivery" : undefined,
-              retentionChanged ? "messageRetentionDuration" : undefined,
-              expChanged ? "expirationPolicy" : undefined,
-              retriesChanged ? "retryPolicy" : undefined,
-              deadLettersChanged ? "deadLetterPolicy" : undefined,
-              pushConfigChanged ? "pushConfig" : undefined,
-            ]
-              .filter((field): field is string => field !== undefined)
-              .join(","),
-          },
-        });
+          })
+          .pipe(
+            Effect.retry({
+              while: (error) => error._tag === "NotFound",
+              times: 8,
+              schedule: Schedule.spaced("1 second"),
+            }),
+          );
       }
 
       return toAttrs(current, env.project);

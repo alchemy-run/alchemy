@@ -1,7 +1,12 @@
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as iam from "@distilled.cloud/gcp/unstable/iam_v1";
+import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Option from "effect/Option";
+import * as Schedule from "effect/Schedule";
 import * as Binding from "../Binding.ts";
+import { parseServiceAccountKey } from "./Token.ts";
 import {
   Resource,
   type ResourceBinding,
@@ -20,8 +25,10 @@ export type GcpIamGrant = {
    */
   role: string;
   /**
-   * Resource to bind the role on. Project-level
-   * (`projects/{project}`) when omitted.
+   * Resource name used only to select the **project** for
+   * `projects.setIamPolicy` (`projects/{id}/...`). It is not a
+   * resource-scoped IAM policy (no `topics.setIamPolicy`). `projects/_/...`
+   * (Storage) falls back to the host project.
    */
   resource?: string;
 };
@@ -177,9 +184,52 @@ export const hostServiceAccountId = (resourceId: string): string => {
 export const hostServiceAccountEmail = (project: string, accountId: string) =>
   `${accountId}@${project}.iam.gserviceaccount.com`;
 
+const isSaCreateQuotaError = (error: {
+  _tag: string;
+  message?: string;
+}): boolean =>
+  error._tag === "TooManyRequests" ||
+  (error._tag === "UnknownGCPError" &&
+    (error.message ?? "").includes("Service accounts created per minute"));
+
+const grantActAs = (project: string, saName: string) =>
+  Effect.gen(function* () {
+    const number = yield* projectNumber(project);
+    const members = [
+      `serviceAccount:service-${number}@serverless-robot-prod.iam.gserviceaccount.com`,
+      `serviceAccount:service-${number}@gcf-admin-robot.iam.gserviceaccount.com`,
+    ];
+    const keyFile = yield* Config.option(
+      Config.string("GOOGLE_APPLICATION_CREDENTIALS"),
+    );
+    if (Option.isSome(keyFile)) {
+      const fs = yield* FileSystem.FileSystem;
+      const raw = yield* fs
+        .readFileString(keyFile.value)
+        .pipe(Effect.catch(() => Effect.succeed("")));
+      if (raw.length > 0) {
+        const parsed = yield* parseServiceAccountKey(raw).pipe(
+          Effect.catch(() => Effect.succeed(undefined)),
+        );
+        if (parsed?.client_email) {
+          members.push(`serviceAccount:${parsed.client_email}`);
+        }
+      }
+    }
+    yield* iam.setIamPolicyProjectsServiceAccounts({
+      resource: saName,
+      body: {
+        policy: {
+          bindings: [{ role: "roles/iam.serviceAccountUser", members }],
+        },
+      },
+    });
+  });
+
 /**
- * Create (or adopt) the per-host runtime service account. Conflict/Already
- * exists is a race — continue.
+ * Create (or adopt) the per-host runtime service account and grant
+ * `roles/iam.serviceAccountUser` so Cloud Run / Functions can `actAs` it.
+ * Create retries the per-minute SA quota; Conflict is a race.
  */
 export const ensureHostServiceAccount = (
   project: string,
@@ -192,21 +242,40 @@ export const ensureHostServiceAccount = (
     const existing = yield* iam
       .getProjectsServiceAccounts({ name })
       .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
-    if (existing?.email !== undefined && existing.email.length > 0) {
-      return existing.email;
+    if (existing?.email === undefined || existing.email.length === 0) {
+      yield* iam
+        .createProjectsServiceAccounts({
+          name: `projects/${project}`,
+          body: {
+            accountId,
+            serviceAccount: { displayName: accountId },
+          },
+        })
+        .pipe(
+          Effect.retry({
+            while: isSaCreateQuotaError,
+            times: 6,
+            schedule: Schedule.exponential("2 seconds"),
+          }),
+          Effect.catchTag("Conflict", () => Effect.void),
+        );
     }
-    const created = yield* iam
-      .createProjectsServiceAccounts({
-        name: `projects/${project}`,
-        body: {
-          accountId,
-          serviceAccount: { displayName: accountId },
-        },
-      })
-      .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
-    return created?.email ?? email;
+    yield* grantActAs(project, name);
+    return email;
   });
 };
+
+/** Retry Cloud Run / Functions create while IAM `actAs` is propagating. */
+export const retryActAs = <A, E extends { _tag: string }, R>(
+  effect: Effect.Effect<A, E, R>,
+) =>
+  effect.pipe(
+    Effect.retry({
+      while: (error) => error._tag === "Forbidden",
+      times: 8,
+      schedule: Schedule.spaced("2 seconds"),
+    }),
+  );
 
 /**
  * Grant `roles` to `member` on the GCP project and remove the member from
@@ -260,8 +329,48 @@ export const syncProjectIam = (
   });
 };
 
-/** @deprecated Use {@link syncProjectIam}. Additive-only; kept for callers. */
-export const grantProjectIam = syncProjectIam;
+/**
+ * Grant `roles` to `member` on the GCP project without revoking other
+ * roles (user-supplied runtime SAs).
+ */
+export const grantProjectIam = (
+  project: string,
+  member: string,
+  roles: readonly string[],
+) => {
+  const unique = [...new Set(roles.filter((role) => role.length > 0))];
+  if (unique.length === 0) return Effect.void;
+  const principal = memberOf(member);
+  const resource = `projects/${project}`;
+  return Effect.gen(function* () {
+    const policy = yield* resourcemanager.getIamPolicyProjects({ resource });
+    const bindings = [...(policy.bindings ?? [])];
+    let dirty = false;
+    for (const role of unique) {
+      const existing = bindings.find((binding) => binding.role === role);
+      if (existing === undefined) {
+        bindings.push({ role, members: [principal] });
+        dirty = true;
+        continue;
+      }
+      const members = existing.members ?? [];
+      if (!members.includes(principal)) {
+        existing.members = [...members, principal];
+        dirty = true;
+      }
+    }
+    if (!dirty) return;
+    yield* resourcemanager.setIamPolicyProjects({
+      resource,
+      body: {
+        policy: {
+          ...policy,
+          bindings,
+        },
+      },
+    });
+  });
+};
 
 /**
  * Delete the alchemy-managed host SA (no-op if it does not exist) after
@@ -312,6 +421,11 @@ export const applyHostBindings = Effect.fn(function* (options: {
   project: string;
   serviceAccount: string;
   bindings: readonly ResourceBinding<GcpHostBinding>[];
+  /**
+   * When true (alchemy-managed host SA), revoke roles not in the desired
+   * set. User-supplied SAs stay additive-only.
+   */
+  revoke?: boolean;
 }) {
   const collected = collectHostBindings(options.bindings);
   const rolesByProject = new Map<string, string[]>();
@@ -325,14 +439,20 @@ export const applyHostBindings = Effect.fn(function* (options: {
       roles.push(grant.role);
     }
   }
-  yield* syncProjectIam(
-    options.project,
-    options.serviceAccount,
-    rolesByProject.get(options.project) ?? [],
-  );
+  const apply = options.revoke === true ? syncProjectIam : grantProjectIam;
+  if (
+    options.revoke === true ||
+    (rolesByProject.get(options.project)?.length ?? 0) > 0
+  ) {
+    yield* apply(
+      options.project,
+      options.serviceAccount,
+      rolesByProject.get(options.project) ?? [],
+    );
+  }
   for (const [project, roles] of rolesByProject) {
     if (project === options.project) continue;
-    yield* syncProjectIam(project, options.serviceAccount, roles);
+    yield* apply(project, options.serviceAccount, roles);
   }
   return collected;
 });

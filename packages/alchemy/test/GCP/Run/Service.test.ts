@@ -2,9 +2,12 @@ import * as GCP from "@/GCP";
 import * as Test from "@/Test/Alchemy";
 import * as cloudrun from "@distilled.cloud/gcp/run_v2";
 import { expect } from "alchemy-test";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import BoundService from "./fixtures/service.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -115,4 +118,47 @@ test.provider.skipIf(!hasGcpCreds)(
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
   { timeout: 120_000 },
+);
+
+class ServiceNotReady extends Data.TaggedError("ServiceNotReady")<{
+  status: number;
+}> {}
+
+test.provider.skipIf(!hasGcpCreds)(
+  "effect-native Function with PubSub, Redis, and Storage bindings",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const out = yield* stack.deploy(
+        Effect.gen(function* () {
+          const service = yield* BoundService;
+          return { uri: service.uri };
+        }),
+      );
+
+      expect(out.uri).toEqual(expect.any(String));
+      const client = yield* HttpClient.HttpClient;
+      const res = yield* client.get(out.uri!).pipe(
+        Effect.flatMap((response) =>
+          response.status === 200
+            ? Effect.succeed(response)
+            : Effect.fail(new ServiceNotReady({ status: response.status })),
+        ),
+        Effect.retry({
+          while: (e): e is ServiceNotReady => e._tag === "ServiceNotReady",
+          schedule: Schedule.exponential("500 millis"),
+          times: 10,
+        }),
+      );
+      const body = (yield* res.json) as {
+        redis: string | null;
+        published: boolean;
+      };
+      expect(body.redis).toEqual("ok");
+      expect(body.published).toEqual(true);
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 180_000 },
 );

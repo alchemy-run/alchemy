@@ -19,8 +19,11 @@ import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import { GcpEnvironment } from "../Environment.ts";
 import {
   applyHostBindings,
+  collectHostBindings,
+  defaultComputeServiceAccount,
   deleteHostServiceAccount,
   ensureHostServiceAccount,
+  retryActAs,
   type GcpHostBinding,
 } from "../Host.ts";
 import {
@@ -894,15 +897,25 @@ export const FunctionProvider = () =>
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
       };
-      const serviceAccount =
+      const preview = collectHostBindings(
+        bindings as ResourceBinding<GcpHostBinding>[],
+      );
+      const userSa =
         news.serviceConfig?.serviceAccountEmail &&
         news.serviceConfig.serviceAccountEmail.length > 0
           ? news.serviceConfig.serviceAccountEmail
-          : yield* ensureHostServiceAccount(env.project, functionId);
+          : undefined;
+      const managed = userSa === undefined && preview.iam.length > 0;
+      const serviceAccount =
+        userSa ??
+        (managed
+          ? yield* ensureHostServiceAccount(env.project, functionId)
+          : yield* defaultComputeServiceAccount(env.project));
       const collected = yield* applyHostBindings({
         project: env.project,
         serviceAccount,
         bindings: bindings as ResourceBinding<GcpHostBinding>[],
+        revoke: managed,
       });
       const serviceConfig = {
         ...news.serviceConfig,
@@ -940,7 +953,13 @@ export const FunctionProvider = () =>
               eventTrigger: news.eventTrigger,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(
+            retryActAs,
+            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.tapError(() =>
+              deleteHostServiceAccount(env.project, functionId),
+            ),
+          );
         if (created !== undefined) {
           yield* waitForOperation(created, { alreadyExistsOk: true });
         }

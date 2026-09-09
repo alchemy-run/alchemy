@@ -4,7 +4,8 @@ import * as Redacted from "effect/Redacted";
 import * as redis from "@distilled.cloud/gcp/redis_v1";
 import type { Url } from "../../Redis/index.ts";
 import { UrlMissing as RedisUrlMissing } from "../../Redis/index.ts";
-import { bindGcpHost, defaultRoleFor } from "../Host.ts";
+import * as Output from "../../Output.ts";
+import { bindGcpHost } from "../Host.ts";
 import type { Instance } from "./Instance.ts";
 
 export const REDIS_URL_ENV = "REDIS_URL";
@@ -31,6 +32,9 @@ const readOutput = (value: unknown): Effect.Effect<string | undefined> =>
   Effect.gen(function* () {
     const direct = asPlain(value);
     if (direct !== undefined) return direct;
+    if (Output.isOutput(value)) {
+      return asPlain(yield* value);
+    }
     if (Effect.isEffect(value)) {
       return asPlain(yield* value as Effect.Effect<unknown>);
     }
@@ -73,7 +77,9 @@ export const makeRedisBinding = <Client>(options: {
         const authEnabled = yield* readOutput(instance.authEnabled);
         if (authEnabled === "true") {
           const auth = yield* getAuthString({ name }).pipe(
-            Effect.catch(() => Effect.succeed({ authString: "" as string })),
+            Effect.catchTag("NotFound", () =>
+              Effect.succeed({ authString: "" as string }),
+            ),
           );
           password = auth.authString ?? "";
         }
