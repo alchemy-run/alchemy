@@ -508,12 +508,26 @@ export default defineVideo(
       await slide(
         "dev",
         "Launch `alchemy dev`",
-        "The Worker, KV and R2 run locally, with live reload on every save.",
+        "The Worker, KV and R2 run locally, with live reload on every save. `←/→` flips the widget between the stack's output and the plan.",
       );
       await t.type("alchemy dev");
       await t.enter();
       await t.wait(STARTED, { scope: "screen" });
-      await t.sleep("2.5s");
+      await t.sleep("2s");
+
+      // The widget opens on the stack's output; ←/→ flips it to the plan
+      // that was just applied. Show the plan — three local resources, all
+      // created — then come back to the output.
+      const showDevPlan = async (pattern: RegExp) => {
+        await t.right();
+        await t.wait(/show output/, { scope: "screen" });
+        await t.expect(pattern, { scope: "screen" });
+        await t.sleep("4s");
+        await t.left();
+        await t.wait(/show plan/, { scope: "screen" });
+        await t.sleep("1.5s");
+      };
+      await showDevPlan(/Cloudflare\.KV\.Namespace\).*created/);
 
       // Hit the local worker in a browser — at the URL the CLI actually
       // printed, never a guess (another dev server may own the default port).
@@ -544,6 +558,8 @@ export default defineVideo(
         throw new Error("worker restarted on a different URL");
       }
       await t.sleep("1.5s");
+      // The reload's plan: only the Worker changed, KV and R2 untouched.
+      await showDevPlan(/Cloudflare\.Worker\)/);
 
       await t.browser.reload();
       await t.focus("browser");
