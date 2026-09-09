@@ -14,7 +14,7 @@ export interface StripeEventClass<
   Object = unknown,
 > {
   readonly type: Type;
-  new (object: Object): StripeEventInstance<Type, Object>;
+  new (object: any): StripeEventInstance<Type, Object>;
 }
 
 export interface StripeEventInstance<

@@ -18,15 +18,15 @@ export default class StripeEventSourceWorker extends Cloudflare.Worker<StripeEve
       "Events",
       { events: [Stripe.CustomerCreated] },
       Effect.fn(function* (event) {
-        yield* kv.put("lastCustomerId", event.object.id);
+        yield* kv.put("lastCustomerId", event.object.id).pipe(Effect.orDie);
       }),
-    );
+    ).pipe(Effect.orDie);
 
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
         if (request.url.startsWith("/last")) {
-          const id = yield* kv.get("lastCustomerId");
+          const id = yield* kv.get("lastCustomerId").pipe(Effect.orDie);
           return yield* HttpServerResponse.json({ id: id ?? null });
         }
         if (request.method === "POST" && request.url.startsWith("/customers")) {
