@@ -35,13 +35,15 @@ export default class Api extends Cloudflare.Worker<Api>()(
     const retrieveCoupon = yield* Stripe.RetrieveCoupon(coupon);
     const retrieveCheckout = yield* Stripe.RetrievePaymentLink(checkout);
     const createCustomer = yield* Stripe.CreateCustomer();
+    const fulfillment = yield* Cloudflare.KV.Namespace("Fulfillment");
+    const kv = yield* Cloudflare.KV.ReadWriteNamespace(fulfillment);
     yield* Stripe.consumeEvents(
       "Events",
       {
         events: [Stripe.CustomerCreated, Stripe.CheckoutSessionCompleted],
       },
       Effect.fn(function* (event) {
-        yield* Effect.log(event.type);
+        yield* kv.put(event.object.id, event.type).pipe(Effect.orDie);
       }),
     );
 
@@ -82,6 +84,15 @@ export default class Api extends Cloudflare.Worker<Api>()(
           });
         }
 
+        if (request.method === "GET" && url.pathname.startsWith("/fulfillment/")) {
+          const id = url.pathname.slice("/fulfillment/".length);
+          const type = yield* kv.get(id).pipe(Effect.orDie);
+          if (type == null || type === "") {
+            return yield* HttpServerResponse.json({ id: null, type: null });
+          }
+          return yield* HttpServerResponse.json({ id, type });
+        }
+
         if (request.method === "POST" && url.pathname === "/customers") {
           const body = (yield* request.json) as {
             email?: string;
@@ -111,6 +122,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
     };
   }).pipe(
     Effect.provide([
+      Cloudflare.KV.ReadWriteNamespaceBinding,
       Stripe.CreateCustomerHttp,
       Stripe.RetrieveCouponHttp,
       Stripe.RetrievePaymentLinkHttp,

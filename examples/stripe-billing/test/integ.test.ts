@@ -6,6 +6,7 @@ import { DeleteCustomer } from "@distilled.cloud/stripe/stripe";
 import { expect } from "bun:test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Schedule from "effect/Schedule";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
@@ -81,6 +82,26 @@ test(
     expect(body.email).toEqual("stripe-billing-example@example.com");
     expect(body.name).toEqual("Example Customer");
 
+    const observed = yield* Effect.gen(function* () {
+      const res = yield* HttpClient.execute(
+        HttpClientRequest.get(`${baseUrl}/fulfillment/${body.id}`),
+      );
+      if (res.status !== 200) return null;
+      const json = (yield* res.json) as {
+        id: string | null;
+        type: string | null;
+      };
+      return json;
+    }).pipe(
+      Effect.repeat({
+        schedule: Schedule.spaced("5 seconds"),
+        until: (value) => value?.id === body.id,
+        times: 24,
+      }),
+    );
+    expect(observed?.id).toEqual(body.id);
+    expect(observed?.type).toEqual("customer.created");
+
     yield* DeleteCustomer({ customer: body.id }).pipe(
       Effect.catch(() => Effect.void),
       Effect.provide(
@@ -88,5 +109,5 @@ test(
       ),
     );
   }),
-  { timeout: 120_000 },
+  { timeout: 180_000 },
 );
