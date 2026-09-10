@@ -6,7 +6,7 @@ import type * as Redacted from "effect/Redacted";
 import * as Sql from "effect/unstable/sql/SqlClient";
 import { makeExecutionMemo } from "../Runtime/ExecutionMemo.ts";
 import { proxyChain } from "../Util/proxy-chain.ts";
-import { withServername } from "./PostgresTls.ts";
+import { resolveSsl } from "./PostgresTls.ts";
 
 /**
  * Options for {@link Postgres}: `@effect/sql-pg`'s pool configuration, with
@@ -59,7 +59,7 @@ export const Postgres = <E = never, R = never>(config: PostgresConfig<E, R>) =>
           PgClient.layer({
             ...pool,
             url: resolved,
-            ssl: withServername(resolved, pool.ssl),
+            ssl: resolveSsl(resolved, pool.ssl),
           }),
         );
         return Context.get(pgCtx, PgClient.PgClient);
