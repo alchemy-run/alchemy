@@ -10,6 +10,7 @@ import * as Semaphore from "effect/Semaphore";
 import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
+import * as NodeCrypto from "node:crypto";
 import * as Paths from "../internal/Paths.ts";
 import * as System from "../internal/System.ts";
 import { SystemError } from "../RuntimeError.shared.ts";
@@ -168,9 +169,7 @@ export const RegistryLive = Layer.effect(
           `${encodeURIComponent(entry.scriptName)}.json`,
         );
         return Effect.gen(function* () {
-          const writeId = yield* Effect.sync(() =>
-            globalThis.crypto.randomUUID(),
-          );
+          const writeId = yield* Effect.sync(() => NodeCrypto.randomUUID());
           const persist = (updatedAt: number) =>
             JSON.stringify({ ...entry, writeId, updatedAt }, null, 2);
           const now = yield* DateTime.nowAsDate;
