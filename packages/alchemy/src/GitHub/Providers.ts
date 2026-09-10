@@ -19,6 +19,7 @@ import { Secret, SecretProvider } from "./Secret.ts";
 import { TeamAccess, TeamAccessProvider } from "./TeamAccess.ts";
 import { Variable, VariableProvider } from "./Variable.ts";
 import { Webhook, WebhookProvider } from "./Webhook.ts";
+import { WikiPage, WikiPageProvider } from "./WikiPage.ts";
 
 export { GitHubCredentials } from "./Credentials.ts";
 
@@ -33,7 +34,7 @@ export interface ProvidersOptions extends GitHubAuthOptions {}
 /**
  * GitHub providers (BranchProtection, Collaborator, Comment, Environment,
  * Issue, Label, Milestone, PullRequest, Release, Repository, Ruleset, Secret, TeamAccess, Variable,
- * Webhook) plus the GitHub AuthProvider that the alchemy CLI discovers.
+ * Webhook, WikiPage) plus the GitHub AuthProvider that the alchemy CLI discovers.
  *
  * Pass `baseUrl` to pin every GitHub resource to a GitHub Enterprise host
  * without relying on the auth provider's configuration:
@@ -66,6 +67,7 @@ export const providers = (options?: ProvidersOptions) =>
       TeamAccess,
       Variable,
       Webhook,
+      WikiPage,
     ]),
   ).pipe(
     Layer.provide(
@@ -85,6 +87,7 @@ export const providers = (options?: ProvidersOptions) =>
         TeamAccessProvider(),
         VariableProvider(),
         WebhookProvider(),
+        WikiPageProvider(),
       ),
     ),
     Layer.provideMerge(Credentials.fromAuthProvider(options)),
