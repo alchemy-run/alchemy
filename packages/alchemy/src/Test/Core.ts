@@ -231,9 +231,9 @@ export const makeSidecarHandle = <ROut = any>(
           Effect.orDie,
         );
         return RpcProviderProxy.RpcProviderProxy.of({
-          get: (serverEntryUrl, providerName) =>
+          get: (providersUrl, providerName) =>
             Effect.flatMap(realProxy, (proxy) =>
-              proxy.get(serverEntryUrl, providerName),
+              proxy.get(providersUrl, providerName),
             ),
         });
       }),

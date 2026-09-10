@@ -21,8 +21,13 @@ import type { RpcSpawnPayload } from "./RpcSpawner.ts";
 export class RpcProviderProxy extends Context.Service<
   RpcProviderProxy,
   {
+    /**
+     * The provider for `providerName`, served by the dev sidecar. `providersUrl`
+     * is the URL of the module whose default export is the provider group's
+     * layer (see `Local/Sidecar.ts`); the sidecar imports it on first use.
+     */
     readonly get: <R extends ResourceLike>(
-      serverEntryUrl: string,
+      providersUrl: string,
       providerName: R["Type"],
     ) => Effect.Effect<ProviderService<R>, never, AlchemyContext | Stack>;
   }
@@ -31,23 +36,28 @@ export class RpcProviderProxy extends Context.Service<
 export const SPAWNER_URL_ENV_KEY = "ALCHEMY_RPC_SPAWNER_URL" as const;
 
 /**
- * Separator for the session-cache key. `\u0000` cannot appear in either half:
- * JSON.stringify escapes control characters and URLs cannot carry raw NULs.
+ * The one sidecar entry every RPC-backed provider is served from
+ * (`Local/Sidecar.ts`). `import.meta.url` carries the on-disk extension —
+ * `.ts` from `src/` under Bun or the dev loader, `.js` from `lib/` — which
+ * is what the spawner needs to start it.
  */
-const SESSION_KEY_SEPARATOR = "\u0000";
+export const SIDECAR_ENTRY_URL = import.meta.resolve(
+  import.meta.url.endsWith(".ts") ? "./Sidecar.ts" : "./Sidecar.js",
+  import.meta.url,
+);
 
 const make = Effect.fn(function* (spawnerUrl: string) {
   const client = yield* HttpClient.HttpClient;
 
   const getSession = Effect.fn(
-    function* (serverEntryUrl: string, sessionEnv: string) {
-      const payload: RpcSpawnPayload = { serverEntryUrl };
+    function* (sessionEnv: string) {
+      const payload: RpcSpawnPayload = { serverEntryUrl: SIDECAR_ENTRY_URL };
       const response = yield* client.post(spawnerUrl, {
         body: yield* HttpBody.json(payload),
       });
-      // The spawner returns one shared child per entry URL; the stack-specific
+      // The spawner returns the one shared sidecar; the stack-specific
       // environment rides the session websocket so the child can build (and
-      // memoize) a provider context per stack.
+      // memoize) a provider context per stack and provider group.
       const body = yield* response.text;
       if (response.status !== 200) {
         return yield* Effect.fail(
@@ -76,11 +86,11 @@ const make = Effect.fn(function* (spawnerUrl: string) {
       websocketUrl.searchParams.set(SESSION_ENV_PARAM, sessionEnv);
       return newWebSocketRpcSession<RpcProxyApi>(websocketUrl.toString());
     },
-    (effect, serverEntryUrl) =>
+    (effect) =>
       Effect.catch(effect, (error) =>
         Effect.die(
           new Error(
-            `Failed to create provider RPC session for "${serverEntryUrl}"`,
+            "Failed to create a provider RPC session with the sidecar",
             {
               cause: error,
             },
@@ -97,33 +107,33 @@ const make = Effect.fn(function* (spawnerUrl: string) {
   // died). Assigned after the cache exists; the callback only fires on live
   // sessions, which the cache must already contain.
   let evictBrokenSession: (key: string) => void = () => {};
+  // One session per stack environment, shared by every provider group.
   const cache = yield* Cache.make({
-    lookup: (key: string) => {
-      const separator = key.indexOf(SESSION_KEY_SEPARATOR);
-      return getSession(key.slice(0, separator), key.slice(separator + 1)).pipe(
+    lookup: (sessionEnv: string) =>
+      getSession(sessionEnv).pipe(
         Effect.tap((session) =>
-          Effect.sync(() => session.onRpcBroken(() => evictBrokenSession(key))),
+          Effect.sync(() =>
+            session.onRpcBroken(() => evictBrokenSession(sessionEnv)),
+          ),
         ),
-      );
-    },
+      ),
     capacity: Infinity,
   });
   evictBrokenSession = (key) => Effect.runFork(Cache.invalidate(cache, key));
 
   return RpcProviderProxy.of({
-    get: Effect.fn(function* (mainUrl, providerName) {
+    get: Effect.fn(function* (providersUrl, providerName) {
       const alchemyContext = yield* AlchemyContext;
       const stack = yield* Stack;
-      const sessionEnv = encodeSessionEnvironment({
+      const key = encodeSessionEnvironment({
         alchemyContext,
         stack: { name: stack.name, stage: stack.stage },
       });
-      const key = mainUrl + SESSION_KEY_SEPARATOR + sessionEnv;
       const fetchProvider = Effect.gen(function* () {
         const session = yield* Cache.get(cache, key);
         return yield* Effect.tryPromise(
           () =>
-            session.getProvider(providerName) as ReturnType<
+            session.getProvider(providerName, providersUrl) as ReturnType<
               RpcProxyApi["getProvider"]
             >,
         );
