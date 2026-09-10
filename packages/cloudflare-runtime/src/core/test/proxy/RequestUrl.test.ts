@@ -43,14 +43,14 @@ layer(localRuntimeLayer, { excludeTestServices: true })((it) => {
           const url = new URL(instance.url);
           url.pathname = "//callback/%2F";
           url.search = "?return=%2Fhome&x=1&x=2";
+          // Moving the relay to the replacement resets connections pinned
+          // to the previous worker (see WorkerProxy.test.ts), so no
+          // keep-alive connection may carry over between rounds.
           const result = yield* Effect.promise(() =>
             fetch(url, {
               method: "POST",
               body: "hello",
-              headers: {
-                [HEADER_ORIGINAL_URL]: "https://forged.example/",
-                [HEADER_PROXY_SHARED_SECRET]: "forged",
-              },
+              headers: { connection: "close" },
             }).then((res) => res.json()),
           );
           expect(result).toEqual({
@@ -60,6 +60,19 @@ layer(localRuntimeLayer, { excludeTestServices: true })((it) => {
             original: null,
             secret: null,
           });
+          // The proxy is a transparent relay, not a trusted proxy: it signs
+          // nothing and strips nothing, so a client forging the trusted
+          // headers through it is rejected exactly like a direct request.
+          const forgedViaProxy = yield* Effect.promise(() =>
+            fetch(url, {
+              headers: {
+                connection: "close",
+                [HEADER_ORIGINAL_URL]: "https://forged.example/",
+                [HEADER_PROXY_SHARED_SECRET]: "forged",
+              },
+            }),
+          );
+          expect(forgedViaProxy.status).toBe(400);
 
           const direct = yield* worker.fetchJson("/direct", {
             headers: { [HEADER_ORIGINAL_URL]: "https://forged.example/" },
