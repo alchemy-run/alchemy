@@ -11,7 +11,12 @@ import { CloudflareEnvironment } from "./CloudflareEnvironment.ts";
 import type { Queue } from "./Queues/Queue.ts";
 import type { Consumer } from "./Queues/Consumer.ts";
 
-export const LOCAL_ENTRY_URL = import.meta.resolve(
+/**
+ * The Cloudflare provider group module ([Local.ts](./Local.ts)) every
+ * Cloudflare local provider is registered in; the dev sidecar imports it on
+ * first use (see `Local/Sidecar.ts`).
+ */
+export const LOCAL_PROVIDERS_URL = import.meta.resolve(
   // `import.meta.resolve(<string>)` is a runtime API — TypeScript's
   // `rewriteRelativeImportExtensions` does NOT touch the string literal, so
   // we have to pick the right extension ourselves. `import.meta.url` reflects

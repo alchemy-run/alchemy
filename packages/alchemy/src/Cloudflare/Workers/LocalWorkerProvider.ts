@@ -45,7 +45,7 @@ import { sha256 } from "../../Util/sha256.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import {
   isLiveId,
-  LOCAL_ENTRY_URL,
+  LOCAL_PROVIDERS_URL,
   LocalRuntimeState,
   localStorageDirectory,
 } from "../LocalRuntime.ts";
@@ -135,7 +135,7 @@ const resolveLocalUrls = (serverUrl: URL): Effect.Effect<string[]> =>
 export const LocalWorkerProvider = () =>
   LocalProvider.make(
     Worker,
-    LOCAL_ENTRY_URL,
+    LOCAL_PROVIDERS_URL,
     Effect.gen(function* () {
       const bundler = yield* WorkerBundle;
       const runtime = yield* Runtime;
