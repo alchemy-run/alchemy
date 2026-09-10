@@ -5,7 +5,7 @@ import pr148 from "../fixtures/pr-148.json" with { type: "json" };
 import type {
   ChannelCard,
   ChannelMessage,
-  ThreadDirectoryRow,
+  ThreadListing,
   ThreadState,
 } from "../../ui/lib/channel.ts";
 import type { ChangedFile } from "../../ui/lib/diff.ts";
@@ -94,7 +94,7 @@ export class FakeApi {
 
   /** The log, seq-dense from 1. */
   messages: ChannelMessage[] = [];
-  directory: ThreadDirectoryRow[] = [];
+  directory: ThreadListing[] = [];
   /** Every `POST /api/channel` text, in order. */
   posts: string[] = [];
   /** Every `POST /api/channel` that replied — `{ text, replyTo }`. */
@@ -246,9 +246,17 @@ export class FakeApi {
 
   /** The catalog `GET /api/models` serves — the real one's shape. */
   readonly models = [
-    { id: "claude-sonnet-4-5", label: "Claude Sonnet 4.5", provider: "anthropic" },
+    {
+      id: "claude-sonnet-4-5",
+      label: "Claude Sonnet 4.5",
+      provider: "anthropic",
+    },
     { id: "claude-opus-4-1", label: "Claude Opus 4.1", provider: "anthropic" },
-    { id: "claude-haiku-4-5", label: "Claude Haiku 4.5", provider: "anthropic" },
+    {
+      id: "claude-haiku-4-5",
+      label: "Claude Haiku 4.5",
+      provider: "anthropic",
+    },
     { id: "gpt-5", label: "GPT-5", provider: "openai" },
     { id: "gpt-5-mini", label: "GPT-5 mini", provider: "openai" },
   ];
@@ -829,7 +837,10 @@ export class FakeApi {
     }
 
     if (path === "/api/models") {
-      return this.json(route, { models: this.models, default: this.defaultModel });
+      return this.json(route, {
+        models: this.models,
+        default: this.defaultModel,
+      });
     }
 
     // a session's model: a thread's from its state, an engineer's from
@@ -840,9 +851,9 @@ export class FakeApi {
       const at = session.indexOf(":");
       const term = session.slice(0, at);
       const key = session.slice(at + 1);
-      const body = (
-        method === "PUT" ? (request.postDataJSON() ?? {}) : {}
-      ) as { model?: string | null };
+      const body = (method === "PUT" ? (request.postDataJSON() ?? {}) : {}) as {
+        model?: string | null;
+      };
       if (term === "Thread") {
         const state = this.threads[key];
         if (state === undefined) {

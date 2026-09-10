@@ -250,7 +250,7 @@ test("two calls stay two cards; a different tool between calls breaks the run", 
     reply: "Two worktrees ready.",
   });
   api.seedTools("Thread:t-1", {
-    ask: "now the other three, and check the books between",
+    ask: "now the other three, and check the state between",
     calls: [
       worktreeCall(1523),
       worktreeCall(1524),
@@ -282,7 +282,7 @@ test("two calls stay two cards; a different tool between calls breaks the run", 
   await expect(main(page).locator("[data-tool='read_state']")).toHaveCount(1);
 });
 
-test("read_state renders the books: assigned and agents, counted", async ({
+test("read_state renders the thread state: assigned and agents, counted", async ({
   page,
   api,
 }) => {
@@ -357,7 +357,9 @@ test("a view opened mid-handler sees the in-flight call; the round lands into th
   const card = main(page).getByRole("button", { name: /^Worktree for/ });
   await expect(card).toHaveCount(1);
   await expect(card).toContainText("running…");
-  await expect(main(page).getByRole("button", { name: "Stop", exact: true })).toBeVisible();
+  await expect(
+    main(page).getByRole("button", { name: "Stop", exact: true }),
+  ).toBeVisible();
 
   // the handler returns: the sampling's `assistant` row restates the
   // call, the result lands, the model replies — still ONE card, now
@@ -410,13 +412,13 @@ test("the stop button interrupts the round in flight; the turn ends", async ({
   await expect(card).toContainText("stopped — the round ended");
 });
 
-test("a spawn card reads the books: a stopped or deleted engineer is not 'working', whatever the open call says", async ({
+test("a spawn card reads the thread state: a stopped or deleted engineer is not 'working', whatever the open call says", async ({
   page,
   api,
 }) => {
   seedThread(api);
   // the spawn call is open on the wire (no key yet — the card matches
-  // its agent by the brief), and the books say the engineer is running
+  // its agent by the brief), and the thread state says the engineer is running
   api.seedOpenRound("Thread:t-1", {
     ask: "fix the reconcile bug",
     name: "spawn",
@@ -428,7 +430,7 @@ test("a spawn card reads the books: a stopped or deleted engineer is not 'workin
   await expect(card).toContainText("working");
 
   // the operator stops the engineer: the transcript still owes the
-  // call its result, but the books outrank it — the card says stopped
+  // call its result, but the thread state outranks it — the card says stopped
   await agentRow(page, "engineer-1").click({ button: "right" });
   await page.getByRole("menuitem", { name: "Stop agent" }).click();
   await expect(agentRow(page, "engineer-1")).toHaveAttribute(
@@ -439,7 +441,7 @@ test("a spawn card reads the books: a stopped or deleted engineer is not 'workin
   await expect(card).not.toContainText("working");
   await expect(card.locator("[data-settled]")).toHaveText("stopped");
 
-  // …and deleted: the row is gone from the books, so is the "working"
+  // …and deleted: the row is gone from the thread state, so is the "working"
   page.once("dialog", (dialog) => void dialog.accept());
   await agentRow(page, "engineer-1").click({ button: "right" });
   await page.getByRole("menuitem", { name: "Delete agent" }).click();
@@ -750,7 +752,10 @@ test("the Agents heading's switches act on every agent in ONE request: Stop all,
     .toEqual(["engineer-1", "engineer-3"]);
   expect(api.bulkRequests).toBe(1);
   for (const key of ["engineer-1", "engineer-2", "engineer-3"]) {
-    await expect(agentRow(page, key)).not.toHaveAttribute("data-state", "running");
+    await expect(agentRow(page, key)).not.toHaveAttribute(
+      "data-state",
+      "running",
+    );
   }
 
   // none working: Resume all takes its place and brings every one back
@@ -765,7 +770,7 @@ test("the Agents heading's switches act on every agent in ONE request: Stop all,
     "running",
   );
 
-  // Delete all confirms, then the books are empty
+  // Delete all confirms, then the thread state is empty
   page.once("dialog", (dialog) => void dialog.accept());
   await pane.getByRole("button", { name: "Delete all" }).click();
   await expect(pane).toContainText("No subagents yet.");
@@ -800,7 +805,7 @@ test("+ opens a terminal on the thread's machine; close returns to chat", async 
   await page.getByRole("button", { name: "new terminal" }).click();
   await expect(page).toHaveURL(/\/terminal\//);
   // the viewer's status line proves the socket; the prompt's BYTES
-  // land in ghostty's canvas, not the DOM — assert on the fake's books
+  // land in ghostty's canvas, not the DOM — assert on the fake's record
   await expect(main(page)).toContainText("connected");
   await expect.poll(() => api.terminal.opened.length).toBe(1);
 
@@ -825,9 +830,9 @@ test("the model selector: the thread's pick lands as PUT on its session and the 
   // pick Opus: one PUT on the thread's session, the state push re-renders
   await select.click();
   await page.getByRole("option", { name: /Claude Opus 4.1/ }).click();
-  await expect.poll(() => api.modelPicks).toEqual([
-    { session: "Thread:t-1", model: "claude-opus-4-1" },
-  ]);
+  await expect
+    .poll(() => api.modelPicks)
+    .toEqual([{ session: "Thread:t-1", model: "claude-opus-4-1" }]);
   await expect(select).toHaveAttribute("data-model", "claude-opus-4-1");
   await expect(select).toContainText("Claude Opus 4.1");
   expect(api.threads["t-1"]?.model).toBe("claude-opus-4-1");
@@ -856,9 +861,9 @@ test("an engineer's pane has its own selector: read over GET, written on its ses
 
   await select.click();
   await page.getByRole("option", { name: /^GPT-5 openai/ }).click();
-  await expect.poll(() => api.modelPicks).toEqual([
-    { session: "Engineer:engineer-1", model: "gpt-5" },
-  ]);
+  await expect
+    .poll(() => api.modelPicks)
+    .toEqual([{ session: "Engineer:engineer-1", model: "gpt-5" }]);
   await expect(select).toContainText("GPT-5");
   // the thread's own pick is untouched
   expect(api.threads["t-1"]?.model).toBeUndefined();

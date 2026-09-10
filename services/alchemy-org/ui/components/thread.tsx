@@ -10,7 +10,7 @@ import { SessionModelSelect } from "@/components/model-select";
 import { Rail } from "@/components/rail";
 import { GhosttyTerminal } from "@/components/terminal";
 import {
-  AgentBooksContext,
+  SubagentsContext,
   OpenAgentContext,
   type SpawnTarget,
 } from "@/components/tool-card";
@@ -28,7 +28,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import type { ThreadAgentRow, ThreadState } from "@/lib/channel";
+import type { Subagent, ThreadState } from "@/lib/channel";
 import {
   agentsBulk,
   deleteAgent,
@@ -197,7 +197,7 @@ const HeadingAction = ({
   </button>
 );
 
-/** The thread's books: assigned refs, agents, close, delete. */
+/** The thread's state: assigned refs, agents, close, delete. */
 /** The operator's switches on a thread's agents — each takes the keys
  *  it acts on (a selection, or the one agent in a pane). */
 export interface AgentActions {
@@ -245,7 +245,7 @@ const ThreadPane = ({
   const allSettled = state.agents.filter((agent) => agent.state !== "running");
   const plural = (rows: ReadonlyArray<unknown>) =>
     rows.length > 1 ? `${rows.length} agents` : "agent";
-  const agentRow = (agent: ThreadAgentRow) => {
+  const agentRow = (agent: Subagent) => {
     const busy = agentActions.busy.has(agent.key);
     return (
       <button
@@ -516,19 +516,19 @@ const AGENT_STATE_LABEL: Record<string, string> = {
 };
 
 /** The strip above a subagent's transcript — what it was asked and
- *  where it stands. The row may be missing for a moment while the
+ *  where it stands. The subagent may be missing for a moment while the
  *  thread's state catches up to a fresh spawn. */
 const AgentHeader = ({
   agentKey,
-  row,
+  agent,
   actions,
 }: {
   agentKey: string;
-  row: ThreadAgentRow | undefined;
+  agent: Subagent | undefined;
   actions: AgentActions;
 }) => {
   const busy = actions.busy.has(agentKey);
-  const running = row?.state === "running";
+  const running = agent?.state === "running";
   const control =
     "flex h-6 cursor-pointer items-center gap-1 rounded-md border border-border bg-card px-1.5 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-default disabled:opacity-50";
   return (
@@ -536,11 +536,11 @@ const AgentHeader = ({
       <Bot className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <div className="flex items-center gap-2 text-xs">
-          <span className="font-medium">{row?.kind ?? "agent"}</span>
+          <span className="font-medium">{agent?.kind ?? "agent"}</span>
           <span className="font-mono text-[10px] text-muted-foreground/70">
             {agentKey}
           </span>
-          {row !== undefined && (
+          {agent !== undefined && (
             <span className="ml-auto flex shrink-0 items-center gap-1.5 text-[11px] text-muted-foreground">
               {busy ? (
                 <LoaderCircle className="size-3 animate-spin" />
@@ -548,17 +548,17 @@ const AgentHeader = ({
                 <span
                   className={cn(
                     "size-2 rounded-full",
-                    AGENT_DOT[row.state] ?? "bg-muted-foreground/40",
+                    AGENT_DOT[agent.state] ?? "bg-muted-foreground/40",
                   )}
                 />
               )}
-              {AGENT_STATE_LABEL[row.state] ?? row.state}
+              {AGENT_STATE_LABEL[agent.state] ?? agent.state}
               <span className="text-muted-foreground/70">
-                · {timeAgo(row.settledAt ?? row.startedAt)}
+                · {timeAgo(agent.settledAt ?? agent.startedAt)}
               </span>
             </span>
           )}
-          {row !== undefined && (
+          {agent !== undefined && (
             <span
               role="toolbar"
               aria-label="agent controls"
@@ -609,12 +609,12 @@ const AgentHeader = ({
             </span>
           )}
         </div>
-        {row !== undefined && (
+        {agent !== undefined && (
           <div
-            title={row.brief}
+            title={agent.brief}
             className="line-clamp-2 text-[12px] text-muted-foreground"
           >
-            {row.brief}
+            {agent.brief}
           </div>
         )}
       </div>
@@ -658,21 +658,21 @@ export const ThreadView = ({
   );
   const agents = state?.agents ?? [];
   const openAgent = tab.kind === "agent" ? tab.key : undefined;
-  const openAgentRow = agents.find((agent) => agent.key === openAgent);
+  const openSubagent = agents.find((agent) => agent.key === openAgent);
 
   // a spawn card names its agent by key once settled; while it is
   // still working only the brief is on the wire — match that to the
   // thread's agents, newest first, so the running one wins
   const onOpenSpawn = useCallback(
     (target: SpawnTarget) => {
-      const row =
+      const found =
         (target.key !== undefined
           ? agents.find((agent) => agent.key === target.key)
           : undefined) ??
         [...agents]
           .sort((a, b) => b.startedAt - a.startedAt)
           .find((agent) => agent.brief === target.brief);
-      if (row !== undefined) onTab({ kind: "agent", key: row.key });
+      if (found !== undefined) onTab({ kind: "agent", key: found.key });
     },
     [agents, onTab],
   );
@@ -816,18 +816,18 @@ export const ThreadView = ({
             <span className="flex h-7 items-center gap-0.5 rounded-md border border-border bg-card pl-2 pr-1 text-xs font-medium shadow-xs">
               <span
                 aria-current="page"
-                title={openAgentRow?.brief ?? openAgent}
+                title={openSubagent?.brief ?? openAgent}
                 className="flex items-center gap-1.5"
               >
                 <span
                   className={cn(
                     "size-2 shrink-0 rounded-full",
-                    AGENT_DOT[openAgentRow?.state ?? ""] ??
+                    AGENT_DOT[openSubagent?.state ?? ""] ??
                       "bg-muted-foreground/40",
                   )}
                 />
                 <Bot className="size-3.5" />
-                {openAgentRow?.kind ?? "agent"}
+                {openSubagent?.kind ?? "agent"}
               </span>
               <button
                 type="button"
@@ -921,15 +921,15 @@ export const ThreadView = ({
               )}
             >
               <OpenAgentContext.Provider value={onOpenSpawn}>
-                {/* the books, so a spawn card reads its agent's real
+                {/* the subagents, so a spawn card reads its agent's real
                     state — stopped, deleted — not the open call's */}
-                <AgentBooksContext.Provider value={state?.agents}>
+                <SubagentsContext.Provider value={state?.agents}>
                   <ChatView
                     id={sessionId}
                     active={active && tab.kind === "chat"}
                     placeholder="Talk to the thread…"
                   />
-                </AgentBooksContext.Provider>
+                </SubagentsContext.Provider>
               </OpenAgentContext.Provider>
             </div>
             {openAgent !== undefined && (
@@ -939,7 +939,7 @@ export const ThreadView = ({
               >
                 <AgentHeader
                   agentKey={openAgent}
-                  row={openAgentRow}
+                  agent={openSubagent}
                   actions={agentActions}
                 />
                 <div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -949,7 +949,7 @@ export const ThreadView = ({
                     key={openAgent}
                     id={engineerSessionId(openAgent)}
                     active={active}
-                    readOnly={openAgentRow?.state !== "running"}
+                    readOnly={openSubagent?.state !== "running"}
                     placeholder="Steer the agent…"
                   />
                 </div>

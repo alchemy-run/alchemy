@@ -129,7 +129,7 @@ const IngestWorker = ChannelEvents.pipe(
  * - the channel  → ONE ChannelDO (`main`): the org-wide log, the
  *                  thread directory, webhook dedupe, `/channel` WS
  * - threads      → one session per task (`t-…`), the thread as an
- *                  OBJECT: its conversation AND its books (assigned
+ *                  OBJECT: its conversation AND its state (assigned
  *                  refs, agents, `/thread/:id` WS) in the same DO
  * - sessions     → Durable Objects (`platform/DriverCloudflare.ts`);
  *                  no session management surface — sessions exist only
@@ -147,7 +147,7 @@ const Org = Layer.mergeAll(
   SandboxSession,
   PublishTokenLive,
 ).pipe(
-  // the thread as an OBJECT — its books, its push, its projections
+  // the thread as an OBJECT — its state, its push, its projections
   // are the agent's own methods (ThreadAgent.at); the facade is the
   // outsider's verbs over them
   Layer.provideMerge(ThreadsLive),

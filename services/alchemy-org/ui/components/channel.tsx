@@ -28,7 +28,7 @@ import {
 } from "@/components/ui/context-menu";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
-import type { ChannelMessage, ThreadDirectoryRow } from "@/lib/channel";
+import type { ChannelMessage, ThreadListing } from "@/lib/channel";
 import { deleteChannelMessages, postChannel } from "@/lib/channel";
 import {
   onRowMouseDown,
@@ -145,7 +145,7 @@ const ThreadChip = ({
   onOpenThread,
 }: {
   thread: string;
-  directory: ReadonlyArray<ThreadDirectoryRow>;
+  directory: ReadonlyArray<ThreadListing>;
   onOpenThread: (id: string) => void;
 }) => {
   const row = directory.find((entry) => entry.id === thread);
@@ -170,7 +170,7 @@ const EventRow = memo(
     onOpenThread,
   }: {
     message: ChannelMessage;
-    directory: ReadonlyArray<ThreadDirectoryRow>;
+    directory: ReadonlyArray<ThreadListing>;
     onOpenThread: (id: string) => void;
   }) => {
     const family = eventFamilyOf(message.event ?? "");
@@ -307,7 +307,7 @@ const CardRow = memo(
     onOpenReview,
   }: {
     message: ChannelMessage;
-    directory: ReadonlyArray<ThreadDirectoryRow>;
+    directory: ReadonlyArray<ThreadListing>;
     onOpenThread: (id: string) => void;
     onOpenReview: (
       thread: string,
@@ -458,7 +458,7 @@ export const ChannelView = ({
   onOpenReview,
 }: {
   messages: ReadonlyArray<ChannelMessage>;
-  directory: ReadonlyArray<ThreadDirectoryRow>;
+  directory: ReadonlyArray<ThreadListing>;
   live: boolean;
   active: boolean;
   /** A row to scroll to and flash — the bell's "jump to the card". The
@@ -999,7 +999,7 @@ export const ThreadList = ({
   deleting,
   onDeleteThreads,
 }: {
-  directory: ReadonlyArray<ThreadDirectoryRow>;
+  directory: ReadonlyArray<ThreadListing>;
   selected: string | undefined;
   channelSelected: boolean;
   onOpenChannel: () => void;

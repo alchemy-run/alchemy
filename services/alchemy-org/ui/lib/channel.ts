@@ -44,7 +44,7 @@ export interface ChannelMessage {
 
 export type Turn = "you" | "agents" | "others" | "idle";
 
-export interface ThreadDirectoryRow {
+export interface ThreadListing {
   readonly id: string;
   readonly name: string;
   readonly title: string;
@@ -63,7 +63,7 @@ export interface Assignment {
   readonly worktree?: string;
 }
 
-export interface ThreadAgentRow {
+export interface Subagent {
   readonly key: string;
   readonly kind: "engineer";
   readonly brief: string;
@@ -85,7 +85,7 @@ export interface ThreadState {
   readonly createdAt: number;
   readonly updatedAt: number;
   readonly assigned: ReadonlyArray<Assignment>;
-  readonly agents: ReadonlyArray<ThreadAgentRow>;
+  readonly agents: ReadonlyArray<Subagent>;
   readonly members: ReadonlyArray<string>;
 }
 
@@ -232,7 +232,7 @@ const agentUrl = (threadId: string, key: string) =>
   `/api/threads/${encodeURIComponent(threadId)}/agents/${encodeURIComponent(key)}`;
 
 /** STOP an agent — its session settles, its command in flight is cut;
- *  the row reads stopped. Resumable. */
+ *  it reads stopped. Resumable. */
 export const stopAgent = (threadId: string, key: string): Promise<Response> =>
   fetch(`${agentUrl(threadId, key)}/stop`, { method: "POST" });
 
@@ -244,8 +244,8 @@ export const resumeAgent = (
 ): Promise<Response> =>
   fetch(`${agentUrl(threadId, key)}/resume`, { method: "POST" });
 
-/** DELETE an agent — its session and transcript are erased and its
- *  row leaves the thread. The thread's machine stays. */
+/** DELETE an agent — its session and transcript are erased and it
+ *  leaves the thread. The thread's machine stays. */
 export const deleteAgent = (
   threadId: string,
   key: string,
@@ -280,7 +280,7 @@ export interface SessionModel {
 const chatModelUrl = (sessionId: string) =>
   `/api/chats/${encodeURIComponent(sessionId)}/model`;
 
-/** The session's current pick — a thread's from its books, an
+/** The session's current pick — a thread's from its state, an
  *  engineer's from its own cell. 404 for a session that has none. */
 export const getChatModel = (sessionId: string): Promise<Response> =>
   fetch(chatModelUrl(sessionId));

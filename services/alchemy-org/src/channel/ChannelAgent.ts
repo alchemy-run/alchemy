@@ -83,8 +83,8 @@ const limit = AI.Thing("limit", S.optionalKey(S.Int))`
 const before = AI.Thing("before", S.optionalKey(S.Int))`
   A message seq — only rows at or before it.`;
 
-/** One channel row, as every reading tool answers it. */
-const MessageRow = S.Struct({
+/** One channel message, as every reading tool answers it. */
+const Message = S.Struct({
   id: S.String,
   seq: S.Int,
   at: S.Number,
@@ -97,14 +97,14 @@ const MessageRow = S.Struct({
   thread: S.optionalKey(S.String),
 });
 
-const hits = AI.Thing("hits", S.Array(MessageRow))`
+const hits = AI.Thing("hits", S.Array(Message))`
   The matching channel messages, newest first.`;
 
-const messages = AI.Thing("messages", S.Array(MessageRow))`
+const messages = AI.Thing("messages", S.Array(Message))`
   Channel messages, oldest first.`;
 
 /** A thread, as the directory and the state tools answer it. */
-const ThreadRow = S.Struct({
+const ThreadSummary = S.Struct({
   id: S.String,
   name: S.String,
   title: S.String,
@@ -112,13 +112,13 @@ const ThreadRow = S.Struct({
   turn: S.Literals(["you", "agents", "others", "idle"]),
 });
 
-const threadRows = AI.Thing("threads", S.Array(ThreadRow))`
+const threadSummaries = AI.Thing("threads", S.Array(ThreadSummary))`
   Every thread in the org: id, name, title, status, whose turn.`;
 
 const state = AI.Thing(
   "state",
   S.Struct({
-    ...ThreadRow.fields,
+    ...ThreadSummary.fields,
     assigned: S.Array(
       S.Struct({
         ref: S.String,
@@ -143,7 +143,7 @@ const state = AI.Thing(
   and pulls it governs), its subagents, and the channel message ids placed on it
   (members).`;
 
-const Thread = AI.Thing("thread", ThreadRow)`
+const Thread = AI.Thing("thread", ThreadSummary)`
   A thread: id, name, title, status, whose turn.`;
 
 const issueState = AI.Thing("state", S.Literals(["open", "closed"]))`
@@ -277,7 +277,7 @@ export const ChannelAgentLive = ChannelAgent.make(
     );
 
     const listThreads = yield* AI.Tool("list_threads")`
-      The org's thread directory — answers ${AI.out(threadRows)}.`(
+      The org's thread directory — answers ${AI.out(threadSummaries)}.`(
       Effect.fn(function* () {
         return { threads: yield* channel.directory() };
       }),

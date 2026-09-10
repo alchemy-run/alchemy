@@ -443,7 +443,7 @@ export const routes = Effect.gen(function* () {
     { status: 400 },
   );
 
-  /** Read a session's pick: a thread's from its books, an engineer's
+  /** Read a session's pick: a thread's from its state, an engineer's
    *  from the session object; `null` = the default. */
   const sessionModel = Effect.fn(function* (term: string, key: string) {
     if (term === THREAD_TERM) {

@@ -35,7 +35,7 @@ export interface Assignment {
   readonly worktree?: string;
 }
 
-export interface ThreadAgentRow {
+export interface Subagent {
   /** The full session key (`t-<id>::<slug>`) — attach/terminal address. */
   readonly key: string;
   readonly kind: "engineer";
@@ -72,7 +72,7 @@ export interface ThreadState {
   readonly createdAt: number;
   readonly updatedAt: number;
   readonly assigned: ReadonlyArray<Assignment>;
-  readonly agents: ReadonlyArray<ThreadAgentRow>;
+  readonly agents: ReadonlyArray<Subagent>;
   /** Channel message ids placed into this thread, oldest first. */
   readonly members: ReadonlyArray<string>;
 }
@@ -86,18 +86,18 @@ export interface ThreadSocketFrame {
 
 /**
  * THE THREAD, from OUTSIDE: the one API the channel, the routes and
- * the webhooks use for everything a thread is — its books (assigned
+ * the webhooks use for everything a thread is — its state (assigned
  * refs, worktrees, agents, members, the rail's meta) AND its agent.
  * Callers never hold the agent: they call the thread, and the thread
  * manipulates its agent — `brief` speaks to it, `assign`/`unassign`/
- * `place`/`noteEvent` update the books and put the fact in the agent's
+ * `place`/`noteEvent` update the state and put the fact in the agent's
  * conversation, `agentStop`/`agentResume`/`agentDelete` operate an
- * engineer's session and its row together, `remove` tears the whole
+ * engineer's session and its record together, `remove` tears the whole
  * thing down. Deterministic verbs; the conversation is the record they
  * write into.
  *
  * Physics: a thin facade over the thread OBJECT — `ThreadAgent.at(id)`
- * (ThreadAgent.ts), whose methods own the books, their push to
+ * (ThreadAgent.ts), whose methods own the state, its push to
  * `/thread/:id` and the channel projections. What the facade adds is
  * the outsider's duty: telling the thread's agent what changed (its
  * own tools skip that — the tool call is already in its conversation).
@@ -126,7 +126,7 @@ export class Threads extends Context.Service<
     ) => Effect.Effect<void, never, RuntimeContext>;
     /**
      * TELL the thread's agent something without waking it — context
-     * in its inbox, heard at its next sampling. What the books-verbs
+     * in its inbox, heard at its next sampling. What the state verbs
      * below use to keep the conversation the record.
      */
     readonly tell: (
@@ -165,7 +165,7 @@ export class Threads extends Context.Service<
     ) => Effect.Effect<ThreadState, never, RuntimeContext>;
     /**
      * STOP an agent: the off switch. Its session settles (the round in
-     * flight — a command on the machine — is cut) and the books say
+     * flight — a command on the machine — is cut) and the state says
      * stopped. The thread agent's spawn tool, waiting on the dispatch,
      * is answered with the Stopped outcome and records the same.
      * `undefined` when the thread has no such agent.
@@ -184,8 +184,8 @@ export class Threads extends Context.Service<
       key: string,
     ) => Effect.Effect<ThreadState | undefined, never, RuntimeContext>;
     /** DELETE an agent: its session is erased (round cut, transcript
-     *  purged; the thread's machine is shared and stays) and its row
-     *  leaves the books. */
+     *  purged; the thread's machine is shared and stays) and it
+     *  leaves the state. */
     readonly agentDelete: (
       id: string,
       key: string,
@@ -195,7 +195,7 @@ export class Threads extends Context.Service<
      * selection), or every agent of the thread when omitted. Each is
      * stopped/resumed/deleted as its single verb would — concurrently,
      * a failure on one contained so the rest still land. Answers the
-     * books afterwards; `undefined` when there is no such thread.
+     * state afterwards; `undefined` when there is no such thread.
      */
     readonly agents: (
       id: string,
@@ -224,17 +224,17 @@ export class Threads extends Context.Service<
      * first, trees second, the record last.
      *
      * 1. the thread agent's own session — settled, its round cut (a
-     *    `spawn` mid-await dies here, so no waiter re-books an agent);
+     *    `spawn` mid-await dies here, so no waiter re-records an agent);
      * 2. from INSIDE the thread (`ThreadAgent.teardown`): EVERY
      *    session descended from it, machine spared (they shared the
-     *    thread's) — the engineers its agent rows name AND whatever the
+     *    thread's) — the engineers its subagents name AND whatever the
      *    session index's parent edges reach beyond them, each settled
      *    and its round cut, so an engineer mid-command stops before a
      *    tree it writes into goes; then its pull requests' worktrees on
      *    that machine; then every channel projection — the directory
      *    row, the `ref → thread` ownership of its assigned refs, the
      *    placed tags on its members (the channel rows themselves stay;
-     *    they are the channel's history) — and the books;
+     *    they are the channel's history) — and the state;
      * 3. the session itself, machine and all. Last, so the thread
      *    reads as "deleting" until everything under it is actually
      *    gone.
@@ -272,7 +272,7 @@ const quote = (message: ChannelMessage): string =>
 
 /**
  * The {@link Threads} facade over the thread object: every verb is
- * `ThreadAgent.at(id)` — the method on the books — followed by what
+ * `ThreadAgent.at(id)` — the method on the state — followed by what
  * only an OUTSIDER does: telling the thread's agent what just changed
  * (its own tools skip that; the tool call is already in its
  * conversation). `remove` is the one composite: stop, tear down from
@@ -287,7 +287,7 @@ export const ThreadsLive: Layer.Layer<
   Effect.gen(function* () {
     const agent = yield* ThreadAgent;
     const channel = yield* Channel;
-    // a delivery that fails must never cost the caller its books
+    // a delivery that fails must never cost the caller its state
     // write (already committed) — logged, contained
     const tell = (id: string, input: unknown) =>
       agent
@@ -362,7 +362,7 @@ export const ThreadsLive: Layer.Layer<
       close: (id) => agent.at(id).close(),
       remove: Effect.fn(function* (id) {
         // 1. the thread's own agent: settled, its round cut (a
-        // `spawn` mid-await dies here, so no waiter re-books an
+        // `spawn` mid-await dies here, so no waiter re-records an
         // agent); the object stays for step 2
         yield* agent.at(id).stop();
         // 2. everything under it, from inside — the machine is

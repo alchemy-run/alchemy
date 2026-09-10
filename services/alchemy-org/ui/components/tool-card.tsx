@@ -159,7 +159,7 @@ const WindowedText = ({
 /** What a spawn card knows about its subagent: the session `key`
  *  once the spawn has settled (it rides the tool's output), and the
  *  `brief` from the very first chunk — the thread view matches a
- *  still-running card to its agent row by that. */
+ *  still-running card to its subagent by that. */
 export interface SpawnTarget {
   readonly key?: string;
   readonly brief?: string;
@@ -171,10 +171,10 @@ export const OpenAgentContext = createContext<
   ((target: SpawnTarget) => void) | undefined
 >(undefined);
 
-/** One agent as the thread's BOOKS have it — what a spawn card reads
+/** One agent as the thread's STATE has it — what a spawn card reads
  *  its state from, so the card never says "working" over an agent the
  *  operator stopped or deleted while the spawn call is still open. */
-export interface AgentBook {
+export interface Subagent {
   readonly key: string;
   readonly brief: string;
   readonly state: "running" | "done" | "failed" | "stopped";
@@ -182,35 +182,37 @@ export interface AgentBook {
 }
 
 /** The thread's agents, live — provided by the thread view; `undefined`
- *  anywhere the books are not at hand (the card then trusts the call). */
-export const AgentBooksContext = createContext<
-  ReadonlyArray<AgentBook> | undefined
+ *  anywhere the thread state is not at hand (the card then trusts the
+ *  call). */
+export const SubagentsContext = createContext<
+  ReadonlyArray<Subagent> | undefined
 >(undefined);
 
-/** The book for a spawn target: by key once the call answered; while
+/** The subagent for a spawn target: by key once the call answered; while
  *  it is still working only the brief is on the wire — the newest
  *  agent with that brief. */
-export const findAgentBook = (
-  books: ReadonlyArray<AgentBook>,
+export const findSubagent = (
+  agents: ReadonlyArray<Subagent>,
   target: SpawnTarget,
-): AgentBook | undefined =>
+): Subagent | undefined =>
   (target.key !== undefined
-    ? books.find((agent) => agent.key === target.key)
+    ? agents.find((agent) => agent.key === target.key)
     : undefined) ??
-  [...books]
+  [...agents]
     .sort((a, b) => b.startedAt - a.startedAt)
     .find((agent) => agent.brief === target.brief);
 
-/** What a spawn card shows instead of "working" when the books say the
- *  agent is not running (or no longer exists) while its call is open. */
+/** What a spawn card shows instead of "working" when the thread state
+ *  says the agent is not running (or no longer exists) while its call
+ *  is open. */
 export const spawnSettledLabel = (
-  books: ReadonlyArray<AgentBook> | undefined,
+  agents: ReadonlyArray<Subagent> | undefined,
   target: SpawnTarget,
 ): string | undefined => {
-  if (books === undefined) return undefined;
-  const book = findAgentBook(books, target);
-  if (book === undefined) return "deleted";
-  return book.state === "running" ? undefined : book.state;
+  if (agents === undefined) return undefined;
+  const found = findSubagent(agents, target);
+  if (found === undefined) return "deleted";
+  return found.state === "running" ? undefined : found.state;
 };
 
 const OpenAgentButton = ({ target }: { target: SpawnTarget }) => {
@@ -325,9 +327,9 @@ const outputText = (output: unknown): string | undefined =>
  *  `input` is `any` here; the Engineer's own cards are authored against
  *  their PRECISE input types (see {@link CODER}) and merge in. */
 /** What the transcript's surroundings tell a card — the thread's
- *  books, when the card renders inside a thread. */
+ *  subagents, when the card renders inside a thread. */
 export interface RenderEnv {
-  readonly agents?: ReadonlyArray<AgentBook>;
+  readonly agents?: ReadonlyArray<Subagent>;
 }
 
 type Renderer = (
@@ -384,7 +386,7 @@ const Why = ({ why }: { why: string | undefined }) =>
   ) : null;
 
 /** A thread's state as `read_state` / `read_thread` answer it — the
- *  org's books for one thread, loosely typed off the wire. */
+ *  org's record of one thread, loosely typed off the wire. */
 interface ThreadStateAnswer {
   readonly id?: string;
   readonly name?: string;
@@ -427,7 +429,7 @@ const AGENT_STATE_DOT: Record<string, string> = {
   stopped: "bg-amber-500",
 };
 
-/** The books, laid out: what the thread governs and who is working. */
+/** The state, laid out: what the thread governs and who is working. */
 const ThreadStateBody = ({ state }: { state: ThreadStateAnswer }) => {
   const assigned = state.assigned ?? [];
   const agents = state.agents ?? [];
@@ -656,7 +658,7 @@ const THREAD: {
       (record === undefined ? output : undefined);
     const agentKey =
       typeof record?.agent === "string" ? record.agent : undefined;
-    // the books outrank the open call: an engineer the operator
+    // the thread state outranks the open call: an engineer the operator
     // stopped or deleted mid-spawn is not "working", whatever the
     // transcript still owes
     const settled =
@@ -1364,8 +1366,7 @@ const RUN_LABELS: Record<string, (n: number, running: boolean) => string> = {
   editFile: (n, running) => `${running ? "Editing" : "Edited"} ${n} files`,
   listDirectory: (n, running) =>
     `${running ? "Listing" : "Listed"} ${n} directories`,
-  pushBranch: (n, running) =>
-    `${running ? "Pushing" : "Pushed"} ${n} branches`,
+  pushBranch: (n, running) => `${running ? "Pushing" : "Pushed"} ${n} branches`,
   openPullRequest: (n, running) =>
     `${running ? "Opening" : "Opened"} ${n} pull requests`,
   eval: (n, running) => `${running ? "Evaluating" : "Evaluated"} ${n} programs`,
@@ -1394,7 +1395,7 @@ export interface ToolRunProps {
  * failed card does — the failure is the story.
  */
 export const ToolRun = ({ toolName, calls }: ToolRunProps) => {
-  const agents = useContext(AgentBooksContext);
+  const agents = useContext(SubagentsContext);
   const anchored = useAnchoredToggle();
   const renderer = RENDERERS[toolName];
   const inFlight = calls.filter(
@@ -1493,7 +1494,7 @@ export const ToolCard = ({
   errorText,
 }: ToolCardProps) => {
   const renderer = RENDERERS[toolName];
-  const agents = useContext(AgentBooksContext);
+  const agents = useContext(SubagentsContext);
   const open_ = state === "input-available" || state === "input-streaming";
   const failed = state === "output-error";
   const view = renderer?.(
@@ -1509,7 +1510,7 @@ export const ToolCard = ({
 
   if (renderer === undefined || view === undefined) return null;
 
-  // an open call the card knows to be over (the books say the agent
+  // an open call the card knows to be over (the thread state says the agent
   // stopped) is not running — no pulse, its verdict where "running…" was
   const running = open_ && view.settled === undefined;
 

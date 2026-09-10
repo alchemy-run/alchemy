@@ -72,8 +72,8 @@ export interface ChannelMessage {
   readonly replyTo?: ReadonlyArray<string>;
 }
 
-/** A thread's row in the channel's directory — what the rail lists. */
-export interface ThreadDirectoryRow {
+/** A thread as the channel's directory lists it — what the rail shows. */
+export interface ThreadListing {
   readonly id: string;
   /** Short handle (`do-init`) — the rail's label. */
   readonly name: string;
@@ -163,8 +163,8 @@ export class Channel extends Context.Service<
       ids: ReadonlyArray<string>,
     ) => Effect.Effect<ReadonlyArray<ChannelMessage>>;
     /** The rail's list — projections pushed by the threads. */
-    readonly directory: () => Effect.Effect<ReadonlyArray<ThreadDirectoryRow>>;
-    readonly directoryUpsert: (row: ThreadDirectoryRow) => Effect.Effect<void>;
+    readonly directory: () => Effect.Effect<ReadonlyArray<ThreadListing>>;
+    readonly directoryUpsert: (listing: ThreadListing) => Effect.Effect<void>;
     /** Drop a thread's row (a deleted thread) — the rail forgets it. */
     readonly directoryRemove: (id: string) => Effect.Effect<void>;
     /** `ref → thread` ownership, pushed by the threads on assign/unassign. */

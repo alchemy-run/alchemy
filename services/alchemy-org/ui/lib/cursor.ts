@@ -9,7 +9,7 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import type { ChannelMessage, ThreadDirectoryRow } from "./channel";
+import type { ChannelMessage, ThreadListing } from "./channel";
 
 type ServerFrame =
   | { type: "batch"; items: ChannelMessage[]; head: number }
@@ -17,13 +17,13 @@ type ServerFrame =
   | { type: "item"; item: ChannelMessage }
   | { type: "update"; item: ChannelMessage }
   | { type: "remove"; seqs: number[] }
-  | { type: "directory"; rows: ThreadDirectoryRow[] };
+  | { type: "directory"; rows: ThreadListing[] };
 
 export interface ChannelStream {
   /** The log so far, oldest first (dense seq). */
   readonly messages: ReadonlyArray<ChannelMessage>;
   /** The thread directory, as the socket last pushed it. */
-  readonly directory: ReadonlyArray<ThreadDirectoryRow>;
+  readonly directory: ReadonlyArray<ThreadListing>;
   /** Live = subscribed and caught up. */
   readonly live: boolean;
 }
@@ -37,7 +37,7 @@ const wsUrl = (): string => {
 export const useChannelStream = (): ChannelStream => {
   const [messages, setMessages] = useState<ReadonlyArray<ChannelMessage>>([]);
   const [directory, setDirectory] = useState<
-    ReadonlyArray<ThreadDirectoryRow>
+    ReadonlyArray<ThreadListing>
   >([]);
   const [live, setLive] = useState(false);
 

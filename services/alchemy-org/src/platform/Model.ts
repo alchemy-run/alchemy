@@ -20,7 +20,7 @@ export class Gpt5Mini extends AI.Model<Gpt5Mini>()("alchemy-org/Gpt5Mini") {}
 
 /**
  * The CATALOG the selector shows, in display order: the id the UI
- * writes into a thread's books, its label, and the service it names.
+ * writes into a thread's state, its label, and the service it names.
  * `DEFAULT_MODEL` is what a stance samples with when its thread chose
  * nothing.
  */

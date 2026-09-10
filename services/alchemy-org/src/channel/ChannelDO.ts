@@ -20,7 +20,7 @@ import {
   type ChannelMessage,
   type Delivered,
   type SearchFilter,
-  type ThreadDirectoryRow,
+  type ThreadListing,
 } from "./Channel.ts";
 import { describeEvent } from "./DescribeEvent.ts";
 
@@ -44,7 +44,7 @@ export type ChannelSocketFrame =
   | CursorServerFrame<ChannelMessage>
   | {
       readonly type: "directory";
-      readonly rows: ReadonlyArray<ThreadDirectoryRow>;
+      readonly rows: ReadonlyArray<ThreadListing>;
     }
   | {
       /** Rows the operator deleted — drop them from the view. Their
@@ -140,12 +140,12 @@ const toMessage = (row: MessageRow): ChannelMessage => ({
     : { replyTo: JSON.parse(row.reply_to) as ReadonlyArray<string> }),
 });
 
-const toDirectory = (row: DirectoryRow): ThreadDirectoryRow => ({
+const toDirectory = (row: DirectoryRow): ThreadListing => ({
   id: row.thread_id,
   name: row.name,
   title: row.title,
-  status: row.status as ThreadDirectoryRow["status"],
-  turn: row.turn as ThreadDirectoryRow["turn"],
+  status: row.status as ThreadListing["status"],
+  turn: row.turn as ThreadListing["turn"],
   updatedAt: row.updated_at,
 });
 
@@ -182,12 +182,12 @@ interface ChannelRpc extends MainRpc<Cloudflare.DurableObjectState> {
     ids: ReadonlyArray<string>,
   ) => Effect.Effect<ReadonlyArray<ChannelMessage>, never, RuntimeContext>;
   readonly directory: () => Effect.Effect<
-    ReadonlyArray<ThreadDirectoryRow>,
+    ReadonlyArray<ThreadListing>,
     never,
     RuntimeContext
   >;
   readonly directoryUpsert: (
-    row: ThreadDirectoryRow,
+    row: ThreadListing,
   ) => Effect.Effect<void, never, RuntimeContext>;
   readonly directoryRemove: (
     id: string,

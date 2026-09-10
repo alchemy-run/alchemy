@@ -192,7 +192,9 @@ test("notification: the bell's jump lands on the card, flashed", async ({
   await page.getByRole("button", { name: /notifications, 2 new/ }).click();
   await page
     .getByRole("dialog")
-    .getByRole("button", { name: "Jump to the card: Which base branch for #148?" })
+    .getByRole("button", {
+      name: "Jump to the card: Which base branch for #148?",
+    })
     .click();
   await expect(
     page.getByRole("main").locator("[data-seq][data-flash]"),
@@ -333,7 +335,7 @@ test("thread: an agent's menu in the state pane", async ({ page, api }) => {
   await shot(page, "thread-05-agent-menu");
 });
 
-test("thread: the switches en masse, and a card reading the books", async ({
+test("thread: the switches en masse, and a card reading the thread state", async ({
   page,
   api,
 }) => {
@@ -361,8 +363,8 @@ test("thread: the switches en masse, and a card reading the books", async ({
       },
     ],
   });
-  // the spawn call is still open on the wire, but the books say the
-  // operator stopped that engineer — the card reads the books
+  // the spawn call is still open on the wire, but the thread state says the
+  // operator stopped that engineer — the card reads the thread state
   api.seedOpenRound("Thread:t-1", {
     ask: "cover the fix with a regression test",
     name: "spawn",
@@ -373,9 +375,11 @@ test("thread: the switches en masse, and a card reading the books", async ({
     "stopped",
   );
   await expect(
-    page.getByRole("complementary", { name: "Thread state" }).getByRole("button", {
-      name: "Stop all",
-    }),
+    page
+      .getByRole("complementary", { name: "Thread state" })
+      .getByRole("button", {
+        name: "Stop all",
+      }),
   ).toBeVisible();
   await shot(page, "thread-06-agent-switches");
 });
