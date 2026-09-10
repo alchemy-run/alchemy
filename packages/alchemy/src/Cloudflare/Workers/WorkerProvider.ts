@@ -215,6 +215,63 @@ export const resolveVersionParentName = (
 };
 
 /**
+ * A Worker's `preview` configuration is invalid — combined with
+ * `version.parent`, missing `preview.of`, a bad Preview name, or a
+ * script-level setting that belongs to the parent.
+ */
+export class WorkerPreviewConfigError extends Data.TaggedError(
+  "WorkerPreviewConfigError",
+)<{
+  message: string;
+}> {}
+
+/**
+ * Resolve the parent script *name* from a resolved `preview.of` prop.
+ *
+ * @internal
+ */
+export const resolvePreviewParentName = (
+  preview: WorkerProps["preview"],
+): string | undefined => {
+  const parent = preview?.of;
+  if (parent == null) return undefined;
+  if (typeof parent === "string") return parent;
+  const workerName = (parent as { workerName?: unknown }).workerName;
+  return typeof workerName === "string" ? workerName : undefined;
+};
+
+const toPreviewWireKey = (key: string) =>
+  key.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`);
+
+const toPreviewWire = (value: unknown): unknown => {
+  if (Array.isArray(value)) return value.map(toPreviewWire);
+  if (value !== null && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([k, v]) => [
+        toPreviewWireKey(k),
+        toPreviewWire(v),
+      ]),
+    );
+  }
+  return value;
+};
+
+/** Convert Alchemy's binding array into wrangler's Preview `env` map. */
+const bindingsToPreviewEnv = (
+  bindings: WorkerBinding[],
+): Record<string, unknown> => {
+  const env: Record<string, unknown> = {};
+  for (const binding of bindings) {
+    const { name, ...rest } = binding as unknown as {
+      name?: unknown;
+    } & Record<string, unknown>;
+    if (typeof name !== "string") continue;
+    env[name] = toPreviewWire(rest);
+  }
+  return env;
+};
+
+/**
  * The traffic percentage a *self-owned* Worker's new version should receive,
  * or `undefined` for the default full cutover. Only a `version` prop without
  * a `parent` participates — version workers handle traffic separately.
@@ -477,6 +534,8 @@ export interface ResolvedWorkerDomain {
   redirects: string[];
   /** Pinned zone from props, when the caller set zoneId / zone / zoneName. */
   zone?: ZoneReference;
+  /** Serve Worker Previews on this custom domain. */
+  previews?: boolean;
 }
 
 const isZoneReference = (value: unknown): value is ZoneReference => {
@@ -574,9 +633,15 @@ export const resolveWorkerDomain = (
       );
     }
     const zone = resolveWorkerDomainZone(config);
-    return zone === undefined
-      ? { name, aliases, redirects }
-      : { name, aliases, redirects, zone };
+    const previews =
+      "previews" in config && config.previews === true ? true : undefined;
+    return {
+      name,
+      aliases,
+      redirects,
+      ...(zone === undefined ? {} : { zone }),
+      ...(previews === undefined ? {} : { previews }),
+    };
   });
 
 const isWorkersDevHostname = (hostname: string) =>
@@ -635,6 +700,7 @@ export const stateWorkerDomain = (
           zone?: ZoneReference;
           zoneId?: unknown;
           zoneName?: unknown;
+          previews?: unknown;
         } | null;
         domains?: unknown[];
       }
@@ -651,6 +717,7 @@ export const stateWorkerDomain = (
         (h): h is string => typeof h === "string",
       ),
       ...(zone === undefined ? {} : { zone }),
+      ...(domain.previews === true ? { previews: true } : {}),
     };
   }
   const legacy = stateCustomDomains(state?.domains);
@@ -1141,6 +1208,14 @@ const resolveWorkerMetadataHash = ({
           tag: props.version.tag,
         }
       : undefined,
+    preview: props.preview
+      ? {
+          of: resolvePreviewParentName(props.preview),
+          name: props.preview.name,
+          message: props.preview.message,
+          tag: props.preview.tag,
+        }
+      : undefined,
   }).pipe(Effect.flatMap((metadata) => sha256Object({ metadata })));
 
 export const WorkerProvider = () =>
@@ -1339,6 +1414,7 @@ export const LiveWorkerProvider = () =>
         scriptName: string,
         desired: string[],
         zone?: ZoneReference,
+        previewsEnabled?: boolean,
       ) =>
         Effect.gen(function* () {
           const { accountId } = yield* yield* CloudflareEnvironment;
@@ -1363,6 +1439,7 @@ export const LiveWorkerProvider = () =>
                           hostname: d.hostname,
                           zoneId: d.zoneId,
                           service: d.service ?? undefined,
+                          previewsEnabled: d.previewsEnabled === true,
                         },
                       ]
                     : [],
@@ -1403,7 +1480,11 @@ export const LiveWorkerProvider = () =>
                 : yield* inferZoneIdForHostname(hostname, zoneCache, zone);
             if (
               live &&
-              !shouldRecreateWorkerDomainAttachment(live.zoneId, desiredZoneId)
+              !shouldRecreateWorkerDomainAttachment(
+                live.zoneId,
+                desiredZoneId,
+              ) &&
+              live.previewsEnabled === (previewsEnabled === true)
             ) {
               return {
                 hostname: live.hostname,
@@ -1460,6 +1541,11 @@ export const LiveWorkerProvider = () =>
                 hostname,
                 service: scriptName,
                 zoneId,
+                // Private-beta field — only send it when the user opted
+                // into custom-domain Previews. Omitting it keeps the
+                // public PUT /workers/domains body unchanged for everyone
+                // else.
+                ...(previewsEnabled === true ? { previewsEnabled: true } : {}),
               })
               .pipe(
                 Effect.retry({
@@ -3079,6 +3165,341 @@ export const LiveWorkerProvider = () =>
         } satisfies Worker["Attributes"];
       });
 
+      /**
+       * Reconcile a *Preview Worker*: create/update a first-class Preview of
+       * the parent script and upload this Worker's code + bindings as a
+       * Preview deployment. Isolated same-Worker Durable Object classes
+       * get their own namespace per Preview.
+       */
+      const putWorkerPreview = Effect.fn(function* (
+        id: string,
+        fqn: string,
+        news: WorkerProps,
+        bindings: ResourceBinding<Worker["Binding"]>[],
+        session: ScopedPlanStatusSession,
+        output: Worker["Attributes"] | undefined,
+      ) {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+        const preview = news.preview!;
+        const parentName = resolvePreviewParentName(preview);
+        if (parentName === undefined) {
+          return yield* Effect.fail(
+            new WorkerPreviewConfigError({
+              message: `preview.of did not resolve to a Worker script name. Pass a Worker (e.g. \`yield* Cloudflare.Worker.ref(id, { stage })\`) or a literal script name.`,
+            }),
+          );
+        }
+        if (news.version !== undefined) {
+          return yield* Effect.fail(
+            new WorkerPreviewConfigError({
+              message: `preview and version cannot be set together. Use preview.of for branch/PR Previews; use version.parent / version.traffic for canaries and gradual rollouts.`,
+            }),
+          );
+        }
+        const forbidden = (
+          [
+            ["name", news.name],
+            ["namespace", news.namespace],
+            ["crons", news.crons],
+            ["tailConsumers", news.tailConsumers],
+            ["streamingTailConsumers", news.streamingTailConsumers],
+            ["domain", news.domain],
+            ["routes", news.routes],
+            ["workersDev", news.workersDev],
+            ["access", news.access],
+          ] as const
+        ).flatMap(([key, value]) => (value !== undefined ? [key] : []));
+        if (forbidden.length > 0) {
+          return yield* Effect.fail(
+            new WorkerPreviewConfigError({
+              message:
+                `preview.of creates a Preview of '${parentName}' — script-level settings belong to the parent Worker and cannot be set here: ${forbidden.join(", ")}. ` +
+                `Remove ${forbidden.length === 1 ? "this prop" : "these props"} or configure ${forbidden.length === 1 ? "it" : "them"} on the parent.`,
+            }),
+          );
+        }
+        const cronBindings = getCronBindings(bindings);
+        if (cronBindings.length > 0) {
+          return yield* Effect.fail(
+            new WorkerPreviewConfigError({
+              message: `Cron Triggers are script-level settings and cannot be registered from a Preview of '${parentName}'. Configure crons on the parent Worker.`,
+            }),
+          );
+        }
+
+        const budget = 63 - parentName.length - 1;
+        const userName = preview.name;
+        let previewName: string;
+        if (userName !== undefined) {
+          if (!/^[a-z][a-z0-9-]*$/.test(userName)) {
+            return yield* Effect.fail(
+              new WorkerPreviewConfigError({
+                message: `preview.name '${userName}' is invalid: names must start with a lowercase letter and contain only lowercase letters, digits, and dashes.`,
+              }),
+            );
+          }
+          if (userName.length > budget) {
+            return yield* Effect.fail(
+              new WorkerPreviewConfigError({
+                message: `preview.name '${userName}' is too long: '<name>-${parentName}' must fit in a 63-character DNS label, leaving ${Math.max(budget, 0)} characters for the name.`,
+              }),
+            );
+          }
+          previewName = userName;
+        } else if (budget < 4) {
+          return yield* Effect.fail(
+            new WorkerPreviewConfigError({
+              message: `Cannot derive a Preview name: '<name>-${parentName}' must fit in a 63-character DNS label. Set preview.name to a short value or shorten the parent's name.`,
+            }),
+          );
+        } else {
+          const readable = stack.stage
+            .toLowerCase()
+            .replace(/[^a-z0-9-]+/g, "-")
+            .replace(/^-+|-+$/g, "");
+          const derived = (readable.length > 0 ? readable : `p${id}`)
+            .slice(0, budget)
+            .replace(/-+$/, "");
+          previewName = /^[a-z]/.test(derived)
+            ? derived
+            : `p${derived}`.slice(0, budget);
+        }
+
+        yield* Effect.logInfo(
+          `Cloudflare Worker Preview: ${previewName} of ${parentName} (from ${id})`,
+        );
+
+        const existingPreview = yield* workers
+          .getPreview({
+            accountId,
+            workerId: parentName,
+            previewId: previewName,
+          })
+          .pipe(
+            Effect.catchTag("PreviewNotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("WorkerNotFound", () =>
+              Effect.fail(
+                new WorkerPreviewConfigError({
+                  message: `preview.of script '${parentName}' does not exist. Deploy the parent Worker first (or check the referenced stage/stack).`,
+                }),
+              ),
+            ),
+          );
+
+        const previewResource =
+          existingPreview ??
+          (yield* workers
+            .createPreview({
+              accountId,
+              workerId: parentName,
+              name: previewName,
+              ignoreBaseConfig: true,
+            })
+            .pipe(
+              Effect.catchTag("WorkerNotFound", () =>
+                Effect.fail(
+                  new WorkerPreviewConfigError({
+                    message: `preview.of script '${parentName}' does not exist. Deploy the parent Worker first (or check the referenced stage/stack).`,
+                  }),
+                ),
+              ),
+            ));
+
+        const accountSubdomain = yield* getAccountSubdomain(accountId);
+        const parentAttrs =
+          typeof preview.of === "object" && preview.of !== null
+            ? (preview.of as unknown as Partial<Worker["Attributes"]>)
+            : undefined;
+        const parentDomainName = parentAttrs?.domain?.name;
+        const parentDomainPreviews = parentAttrs?.domain?.previews === true;
+        const constructedUrls = [
+          ...(parentDomainPreviews && parentDomainName
+            ? [`https://${previewResource.slug}.${parentDomainName}`]
+            : []),
+          `https://${previewResource.slug}-${parentName}.${accountSubdomain}.workers.dev`,
+        ];
+        const stableUrl = previewResource.urls?.[0] ?? constructedUrls[0];
+        const selfUrl = hasSelfUrlBinding(bindings) ? stableUrl : undefined;
+
+        yield* Effect.logInfo(
+          `Cloudflare Worker Preview: preparing bundle for ${parentName} (preview ${previewName})`,
+        );
+        const {
+          assets,
+          bundle,
+          hash: preparedHash,
+        } = yield* prepareAssetsAndBundle(id, fqn, parentName, news, {
+          skipAssetsRead: false,
+        });
+        const metadataHash = yield* resolveWorkerMetadataHash({
+          props: news,
+          bindings,
+          accountId,
+          stack: { name: stack.name, stage: stack.stage },
+          selfUrl,
+        });
+        const hash = {
+          ...preparedHash,
+          metadata: metadataHash,
+        } satisfies Worker["Attributes"]["hash"];
+
+        const metadataBindings = bindings.flatMap((b) =>
+          (b.data.bindings ?? []).map((item) =>
+            item.type === "self_url"
+              ? { type: "plain_text" as const, name: item.name, text: selfUrl! }
+              : item.type === "self_service"
+                ? {
+                    type: "service" as const,
+                    name: item.name,
+                    service: parentName,
+                  }
+                : item,
+          ),
+        );
+        let metadataAssets:
+          | workers.CreatePreviewDeploymentMetadata["assets"]
+          | undefined;
+        if (assets) {
+          yield* Effect.logInfo(
+            `Cloudflare Worker Preview: uploading assets for ${parentName}`,
+          );
+          const { jwt } = yield* uploadAssets(
+            accountId,
+            parentName,
+            assets,
+            session,
+          );
+          metadataAssets = {
+            jwt,
+            config: mergeAssetsConfigFiles(assets.config, assets),
+          };
+          metadataBindings.push({ type: "assets", name: "ASSETS" });
+        }
+        appendAlchemyAndEnvBindings(
+          metadataBindings,
+          news,
+          accountId,
+          parentName,
+        );
+
+        const hostedClasses = getDurableObjectBindings(bindings, parentName);
+        const classNames = [...new Set(hostedClasses.map((c) => c.className))];
+        let migrations: unknown = undefined;
+        if (classNames.length > 0) {
+          const latest = yield* workers
+            .getPreviewDeployment({
+              accountId,
+              workerId: parentName,
+              previewId: previewResource.id,
+              deploymentId: "latest",
+            })
+            .pipe(
+              Effect.catchTag(
+                ["PreviewNotFound", "PreviewDeploymentNotFound"],
+                () => Effect.succeed(undefined),
+              ),
+            );
+          const oldTag = latest?.migrationTag ?? undefined;
+          const previous = output?.previewDoClasses ?? [];
+          if (oldTag === undefined) {
+            migrations = {
+              new_tag: "alchemy:v1",
+              new_sqlite_classes: classNames,
+            };
+          } else {
+            const added = classNames.filter((c) => !previous.includes(c));
+            const deleted = previous.filter((c) => !classNames.includes(c));
+            if (added.length > 0 || deleted.length > 0) {
+              migrations = {
+                old_tag: oldTag,
+                new_tag: bumpMigrationTagVersion(oldTag) ?? "alchemy:v1",
+                ...(added.length > 0 ? { new_sqlite_classes: added } : {}),
+                ...(deleted.length > 0 ? { deleted_classes: deleted } : {}),
+              };
+            }
+          }
+        }
+
+        const compatibility = getCompatibility(news);
+        const annotations =
+          preview.message !== undefined || preview.tag !== undefined
+            ? {
+                ...(preview.message !== undefined
+                  ? { "workers/message": preview.message }
+                  : {}),
+                ...(preview.tag !== undefined
+                  ? { "workers/tag": preview.tag }
+                  : {}),
+              }
+            : undefined;
+
+        yield* session.note(
+          `Uploading Preview ${previewName} of ${parentName} ...`,
+          {
+            kind: "status",
+          },
+        );
+        const deployment = yield* workers.createPreviewDeployment({
+          accountId,
+          workerId: parentName,
+          previewId: previewResource.id,
+          metadata: {
+            mainModule: bundle.main!,
+            assets: metadataAssets,
+            compatibilityDate: compatibility.date,
+            compatibilityFlags: compatibility.flags,
+            cacheOptions: news.cache ?? getCacheBinding(bindings),
+            annotations,
+            migrations,
+            env: bindingsToPreviewEnv(metadataBindings),
+          },
+          files: bundle.files,
+        });
+
+        const refreshed = yield* workers
+          .getPreview({
+            accountId,
+            workerId: parentName,
+            previewId: previewResource.id,
+          })
+          .pipe(
+            Effect.catchTag("PreviewNotFound", () =>
+              Effect.succeed(previewResource),
+            ),
+          );
+
+        const urls = [
+          ...new Set([
+            ...(refreshed.urls ?? []),
+            ...constructedUrls,
+            ...(deployment.urls ?? []),
+          ]),
+        ];
+        return {
+          workerId:
+            cachedWorkerId(output?.workerId, parentName) ??
+            (yield* findWorkerId(accountId, parentName)),
+          workerName: parentName,
+          namespace: undefined,
+          logpush: undefined,
+          url: urls[0],
+          urls,
+          domain: undefined,
+          tags: undefined,
+          durableObjectNamespaces: {},
+          accountId,
+          routes: [],
+          crons: [],
+          previewOf: parentName,
+          previewId: previewResource.id,
+          previewName,
+          previewSlug: previewResource.slug,
+          previewDoClasses: classNames.length > 0 ? classNames : undefined,
+          deploymentId: deployment.id,
+          hash,
+        } satisfies Worker["Attributes"];
+      });
+
       const putWorker = Effect.fn(function* (
         id: string,
         fqn: string,
@@ -3926,6 +4347,7 @@ export const LiveWorkerProvider = () =>
             name,
             desiredHostnames,
             domainConfig?.zone,
+            domainConfig?.previews,
           );
           const zoneIdByHostname = new Map([
             ...liveBeforeReconcile,
@@ -4143,19 +4565,25 @@ export const LiveWorkerProvider = () =>
             props.version?.parent != null
               ? (resolveVersionParentName(props.version) ?? output.versionOf)
               : undefined;
+          const previewParent =
+            props.preview?.of != null
+              ? (resolvePreviewParentName(props.preview) ?? output.previewOf)
+              : undefined;
           const selfUrl = hasSelfUrlBinding(bindings)
-            ? versionParent !== undefined
-              ? yield* Effect.gen(function* () {
-                  const alias = yield* resolveVersionAlias(
-                    id,
-                    props,
-                    versionParent,
-                  );
-                  return alias !== undefined
-                    ? `https://${alias}-${versionParent}.${yield* getAccountSubdomain(accountId)}.workers.dev`
-                    : undefined;
-                })
-              : yield* resolveSelfUrl(output.workerName, props, accountId)
+            ? previewParent !== undefined
+              ? output.url
+              : versionParent !== undefined
+                ? yield* Effect.gen(function* () {
+                    const alias = yield* resolveVersionAlias(
+                      id,
+                      props,
+                      versionParent,
+                    );
+                    return alias !== undefined
+                      ? `https://${alias}-${versionParent}.${yield* getAccountSubdomain(accountId)}.workers.dev`
+                      : undefined;
+                  })
+                : yield* resolveSelfUrl(output.workerName, props, accountId)
             : undefined;
           const metadataHash = yield* resolveWorkerMetadataHash({
             props,
@@ -4336,9 +4764,9 @@ export const LiveWorkerProvider = () =>
           if (newNamespace !== oldNamespace) {
             return { action: "replace" };
           }
-          // A version worker (version.parent) and a script-owning Worker are
-          // distinct cloud resources, and a version belongs to exactly one
-          // parent script — switching mode or parent is a replacement.
+          // A version worker (version.parent), a Preview Worker
+          // (preview.of), and a script-owning Worker are distinct cloud
+          // resources — switching mode or parent is a replacement.
           const newIsVersion = news.version?.parent != null;
           const oldIsVersion =
             output?.versionOf !== undefined || olds?.version?.parent != null;
@@ -4349,6 +4777,24 @@ export const LiveWorkerProvider = () =>
             const newParent = resolveVersionParentName(news.version);
             const oldParent =
               output?.versionOf ?? resolveVersionParentName(olds?.version);
+            if (
+              newParent !== undefined &&
+              oldParent !== undefined &&
+              newParent !== oldParent
+            ) {
+              return { action: "replace" };
+            }
+          }
+          const newIsPreview = news.preview?.of != null;
+          const oldIsPreview =
+            output?.previewOf !== undefined || olds?.preview?.of != null;
+          if (newIsPreview !== oldIsPreview) {
+            return { action: "replace" };
+          }
+          if (newIsPreview) {
+            const newParent = resolvePreviewParentName(news.preview);
+            const oldParent =
+              output?.previewOf ?? resolvePreviewParentName(olds?.preview);
             if (
               newParent !== undefined &&
               oldParent !== undefined &&
@@ -4384,6 +4830,7 @@ export const LiveWorkerProvider = () =>
                   d.aliases,
                   [...d.redirects].sort(),
                   d.zone ?? null,
+                  d.previews === true,
                 ]);
           // An omitted `domain` unmanages the surface (#942): reconcile
           // carries previously-observed custom domains forward in state, so
@@ -4562,9 +5009,9 @@ export const LiveWorkerProvider = () =>
           // no placeholder is needed for circular bindings either. (`news`
           // is raw here — `version.parent` may be an unresolved ref, but its
           // *presence* is statically known.)
-          if (news.version?.parent != null) {
+          if (news.version?.parent != null || news.preview?.of != null) {
             yield* Effect.logInfo(
-              `Cloudflare Worker precreate: skipping stub for version worker ${id}`,
+              `Cloudflare Worker precreate: skipping stub for ${news.preview?.of != null ? "Preview" : "version"} worker ${id}`,
             );
             return {
               // Provisional: a version worker resolves its parent's
@@ -4841,6 +5288,23 @@ export const LiveWorkerProvider = () =>
                   ),
                 );
             }
+            if (output?.previewOf !== undefined || olds?.preview?.of != null) {
+              if (output?.previewOf === undefined || !output.previewId) {
+                return undefined;
+              }
+              return yield* workers
+                .getPreview({
+                  accountId,
+                  workerId: output.previewOf,
+                  previewId: output.previewId,
+                })
+                .pipe(
+                  Effect.map(() => output),
+                  Effect.catchTag(["WorkerNotFound", "PreviewNotFound"], () =>
+                    Effect.succeed(undefined),
+                  ),
+                );
+            }
             const workerName =
               output?.workerName ?? (yield* createWorkerName(id, olds?.name));
             const dispatchNamespace =
@@ -5088,11 +5552,28 @@ export const LiveWorkerProvider = () =>
           session,
         }) {
           yield* assertCloudflareTelemetryCompatibility(news, bindings);
+          if (news.preview?.of != null && news.version?.parent != null) {
+            return yield* Effect.fail(
+              new WorkerPreviewConfigError({
+                message: `preview and version cannot be set together. Use preview.of for branch/PR Previews; use version.parent / version.traffic for canaries and gradual rollouts.`,
+              }),
+            );
+          }
           // A version worker uploads an immutable version to its parent's
           // script instead of owning a script of its own — none of the
           // script-level observation below applies.
           if (news.version?.parent != null) {
             return yield* putWorkerVersion(
+              id,
+              fqn,
+              news,
+              bindings,
+              session,
+              output,
+            );
+          }
+          if (news.preview?.of != null) {
+            return yield* putWorkerPreview(
               id,
               fqn,
               news,
@@ -5232,6 +5713,26 @@ export const LiveWorkerProvider = () =>
                 versions: [{ versionId: stable.versionId, percentage: 100 }],
               })
               .pipe(Effect.catchTag("WorkerNotFound", () => Effect.void));
+            return;
+          }
+          if (output.previewOf !== undefined) {
+            const previewId = output.previewId ?? output.previewName;
+            if (!previewId) return;
+            yield* Effect.logInfo(
+              `Cloudflare Worker delete: deleting Preview ${previewId} of ${output.previewOf}`,
+            );
+            yield* workers
+              .deletePreview({
+                accountId: output.accountId,
+                workerId: output.previewOf,
+                previewId,
+              })
+              .pipe(
+                Effect.catchTag(
+                  ["PreviewNotFound", "WorkerNotFound"],
+                  () => Effect.void,
+                ),
+              );
             return;
           }
           yield* Effect.logInfo(
