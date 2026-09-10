@@ -70,6 +70,7 @@ export interface Variable extends Resource<
  * by `GitHub.providers()` (which uses the Alchemy AuthProvider — env,
  * stored PAT, `gh` CLI, or OAuth). The token needs `repo` scope for
  * private repositories or `public_repo` for public ones.
+ *
  * ### Repository Variables
  * Store variables accessible to all GitHub Actions workflows in the
  * repository.
@@ -116,21 +117,71 @@ export interface Variable extends Resource<
  * });
  * ```
  *
- * **Example:** Multiple Variables
+ * **Example:** Wire Infrastructure Outputs
  * ```typescript
- * yield* GitHub.Variable("region", {
- *   owner: "my-org",
- *   repository: "my-repo",
- *   name: "AWS_REGION",
- *   value: "us-east-1",
+ * // Deploy infrastructure
+ * const bucket = yield* AWS.S3.Bucket("assets", {
+ *   bucketName: "my-assets",
  * });
  *
- * yield* GitHub.Variable("stage", {
+ * const distribution = yield* AWS.CloudFront.Distribution("cdn", {
+ *   origins: [{ domainName: bucket.bucketDomainName }],
+ * });
+ *
+ * // Make outputs available to GitHub Actions
+ * yield* GitHub.Variables({
  *   owner: "my-org",
  *   repository: "my-repo",
- *   name: "DEPLOY_STAGE",
- *   value: "production",
+ *   variables: {
+ *     BUCKET_NAME: bucket.bucketName,
+ *     CDN_DOMAIN: distribution.domainName,
+ *     DEPLOY_REGION: "us-east-1",
+ *   },
  * });
+ * ```
+ *
+ * ### Batch Configuration
+ * Use `GitHub.Variables` to configure multiple variables at once.
+ *
+ * **Example:** Multiple Environment Variables
+ * ```typescript
+ * const production = yield* GitHub.Environment("production", {
+ *   owner: "my-org",
+ *   repository: "my-repo",
+ *   name: "production",
+ * });
+ *
+ * yield* GitHub.Variables({
+ *   owner: "my-org",
+ *   repository: "my-repo",
+ *   environment: production,
+ *   variables: {
+ *     AWS_REGION: "us-east-1",
+ *     DEPLOY_STAGE: "production",
+ *     LOG_LEVEL: "info",
+ *     ENABLE_ANALYTICS: "true",
+ *   },
+ * });
+ * ```
+ *
+ * **Example:** Cross-Repository Configuration
+ * ```typescript
+ * // Configure multiple repositories with shared values
+ * const repos = ["api", "web", "worker"];
+ * const sharedVars = {
+ *   AWS_REGION: "us-east-1",
+ *   CDN_URL: cdnUrl,
+ * };
+ *
+ * yield* Effect.all(
+ *   repos.map((repo) =>
+ *     GitHub.Variables({
+ *       owner: "my-org",
+ *       repository: repo,
+ *       variables: sharedVars,
+ *     }),
+ *   ),
+ * );
  * ```
  *
  * @resource

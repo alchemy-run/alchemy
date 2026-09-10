@@ -38,7 +38,12 @@ export interface SecretsProps {
  *
  * Each entry in `secrets` becomes one `GitHub.Secret` resource, using the
  * map key as both the alchemy logical id and the secret name.
- * **Example:** Example
+ *
+ * Plain strings are automatically wrapped with `Redacted.make`;
+ * already-redacted values and `Config` values are passed through.
+ *
+ * ### Basic Usage
+ * **Example:** Repository Secrets
  * ```ts
  * yield* GitHub.Secrets({
  *   owner: "my-org",
@@ -46,6 +51,61 @@ export interface SecretsProps {
  *   secrets: {
  *     AXIOM_INGEST_TOKEN: tokenValue,
  *     AXIOM_DATASET_TRACES: traces.name,
+ *     API_KEY: "sk_live_...", // auto-wrapped with Redacted.make
+ *   },
+ * });
+ * ```
+ *
+ * ### Environment-Scoped Secrets
+ * **Example:** Production Environment Credentials
+ * ```ts
+ * const production = yield* GitHub.Environment("production", {
+ *   owner: "my-org",
+ *   repository: "my-repo",
+ *   name: "production",
+ *   reviewers: { teams: ["platform"] },
+ * });
+ *
+ * yield* GitHub.Secrets({
+ *   owner: "my-org",
+ *   repository: "my-repo",
+ *   environment: production,
+ *   secrets: {
+ *     DATABASE_URL: db.connectionString,
+ *     AWS_ROLE_ARN: role.roleArn,
+ *     STRIPE_SECRET_KEY: Config.secret("STRIPE_SECRET_KEY"),
+ *   },
+ * });
+ * ```
+ *
+ * ### Complete CI/CD Stack
+ * **Example:** Infrastructure with Automatic Secret Wiring
+ * ```ts
+ * // Provision cloud resources
+ * const role = yield* AWS.IAM.Role("deploy-role", {
+ *   assumeRolePolicy: { /* OIDC trust for GitHub Actions */ },
+ * });
+ *
+ * const bucket = yield* AWS.S3.Bucket("artifacts", {});
+ * const table = yield* AWS.DynamoDB.Table("state", {});
+ *
+ * const env = yield* GitHub.Environment("production", {
+ *   owner: "my-org",
+ *   repository: "api",
+ *   name: "production",
+ *   waitTimer: 30,
+ *   preventSelfReview: true,
+ * });
+ *
+ * // Wire outputs into GitHub Actions as secrets
+ * yield* GitHub.Secrets({
+ *   owner: "my-org",
+ *   repository: "api",
+ *   environment: env,
+ *   secrets: {
+ *     AWS_ROLE_ARN: role.roleArn,
+ *     S3_BUCKET: bucket.bucketName,
+ *     DYNAMODB_TABLE: table.tableName,
  *   },
  * });
  * ```

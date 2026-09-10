@@ -36,14 +36,56 @@ export interface VariablesProps {
  * Plural counterpart of {@link import("./Secrets.ts").Secrets}, for
  * non-sensitive values like region names, role ARNs, environment labels,
  * or feature flags.
- * **Example:** Example
+ *
+ * ### Basic Usage
+ * **Example:** Repository Variables
  * ```ts
  * yield* GitHub.Variables({
  *   owner: "my-org",
  *   repository: "my-repo",
  *   variables: {
  *     AWS_ROLE_ARN: role.roleArn,
- *     AWS_REGION: region,
+ *     AWS_REGION: "us-east-1",
+ *     DEPLOY_STAGE: "production",
+ *   },
+ * });
+ * ```
+ *
+ * ### Environment-Scoped Variables
+ * **Example:** Production Environment Configuration
+ * ```ts
+ * const production = yield* GitHub.Environment("production", {
+ *   owner: "my-org",
+ *   repository: "my-repo",
+ *   name: "production",
+ * });
+ *
+ * yield* GitHub.Variables({
+ *   owner: "my-org",
+ *   repository: "my-repo",
+ *   environment: production,
+ *   variables: {
+ *     CDN_URL: distribution.domainName,
+ *     API_URL: worker.url,
+ *     LOG_LEVEL: "info",
+ *   },
+ * });
+ * ```
+ *
+ * ### Wiring Infrastructure Outputs
+ * **Example:** Share Deployed Resource Identifiers
+ * ```ts
+ * const bucket = yield* AWS.S3.Bucket("assets", {});
+ * const table = yield* AWS.DynamoDB.Table("users", {});
+ * const queue = yield* AWS.SQS.Queue("events", {});
+ *
+ * yield* GitHub.Variables({
+ *   owner: "my-org",
+ *   repository: "my-repo",
+ *   variables: {
+ *     S3_BUCKET: bucket.bucketName,
+ *     DYNAMODB_TABLE: table.tableName,
+ *     SQS_QUEUE_URL: queue.queueUrl,
  *   },
  * });
  * ```

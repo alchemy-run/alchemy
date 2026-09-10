@@ -71,6 +71,7 @@ export interface Secret extends Resource<
  * by `GitHub.providers()` (which uses the Alchemy AuthProvider — env,
  * stored PAT, `gh` CLI, or OAuth). The token needs `repo` scope for
  * private repositories or `public_repo` for public ones.
+ *
  * ### Repository Secrets
  * Store secrets accessible to all GitHub Actions workflows in the
  * repository.
@@ -118,23 +119,117 @@ export interface Secret extends Resource<
  * });
  * ```
  *
- * **Example:** Store Multiple Secrets
+ * **Example:** Complete CI/CD Credential Wiring
  * ```typescript
- * yield* GitHub.Secret("db-url", {
- *   owner: "my-org",
- *   repository: "my-repo",
- *   environment: "production",
- *   name: "DATABASE_URL",
- *   value: Redacted.make(database.connectionString),
+ * // Provision infrastructure
+ * const role = yield* AWS.IAM.Role("deploy-role", {
+ *   assumeRolePolicy: { /* OIDC trust for GitHub Actions */ },
+ *   managedPolicyArns: ["arn:aws:iam::aws:policy/PowerUserAccess"],
  * });
  *
- * yield* GitHub.Secret("api-key", {
+ * const bucket = yield* AWS.S3.Bucket("assets", {});
+ *
+ * const table = yield* AWS.DynamoDB.Table("users", {
+ *   attributeDefinitions: [{ attributeName: "id", attributeType: "S" }],
+ *   keySchema: [{ attributeName: "id", keyType: "HASH" }],
+ * });
+ *
+ * // Wire everything into GitHub Actions
+ * yield* GitHub.Secrets({
  *   owner: "my-org",
  *   repository: "my-repo",
  *   environment: "production",
- *   name: "API_KEY",
- *   value: Redacted.make(apiKey),
+ *   secrets: {
+ *     AWS_ROLE_ARN: role.roleArn,
+ *     S3_BUCKET_NAME: bucket.bucketName,
+ *     DYNAMODB_TABLE_NAME: table.tableName,
+ *   },
  * });
+ * ```
+ *
+ * ### Batch Secrets Configuration
+ * Use `GitHub.Secrets` to configure multiple secrets at once. The helper
+ * automatically wraps plain strings with `Redacted.make`.
+ *
+ * **Example:** Multiple Secrets with Different Sources
+ * ```typescript
+ * const production = yield* GitHub.Environment("production", {
+ *   owner: "my-org",
+ *   repository: "my-repo",
+ *   name: "production",
+ * });
+ *
+ * yield* GitHub.Secrets({
+ *   owner: "my-org",
+ *   repository: "my-repo",
+ *   environment: production,
+ *   secrets: {
+ *     // From a Config value
+ *     STRIPE_SECRET_KEY: Config.secret("STRIPE_SECRET_KEY"),
+ *     // From another resource
+ *     DATABASE_URL: database.connectionString,
+ *     // From a plain string (auto-wrapped with Redacted.make)
+ *     API_KEY: "sk_live_...",
+ *   },
+ * });
+ * ```
+ *
+ * **Example:** Multi-Environment Secret Management
+ * ```typescript
+ * // Deploy separate credentials per environment
+ * const staging = yield* GitHub.Environment("staging", {
+ *   owner: "my-org",
+ *   repository: "my-repo",
+ *   name: "staging",
+ * });
+ *
+ * const production = yield* GitHub.Environment("production", {
+ *   owner: "my-org",
+ *   repository: "my-repo",
+ *   name: "production",
+ *   waitTimer: 60,
+ *   reviewers: { teams: ["sre"] },
+ * });
+ *
+ * // Staging secrets
+ * yield* GitHub.Secrets({
+ *   owner: "my-org",
+ *   repository: "my-repo",
+ *   environment: staging,
+ *   secrets: {
+ *     DATABASE_URL: stagingDb.connectionString,
+ *     API_KEY: stagingApiKey,
+ *   },
+ * });
+ *
+ * // Production secrets (protected by environment rules)
+ * yield* GitHub.Secrets({
+ *   owner: "my-org",
+ *   repository: "my-repo",
+ *   environment: production,
+ *   secrets: {
+ *     DATABASE_URL: productionDb.connectionString,
+ *     API_KEY: productionApiKey,
+ *   },
+ * });
+ * ```
+ *
+ * **Example:** Cross-Repository Secret Distribution
+ * ```typescript
+ * // Share a secret across multiple repositories
+ * const token = yield* generateDeployToken();
+ *
+ * const repos = ["api", "web", "worker"];
+ * yield* Effect.all(
+ *   repos.map((repo) =>
+ *     GitHub.Secret(`${repo}-deploy-token`, {
+ *       owner: "my-org",
+ *       repository: repo,
+ *       name: "DEPLOY_TOKEN",
+ *       value: Redacted.make(token),
+ *     }),
+ *   ),
+ * );
  * ```
  *
  * @resource

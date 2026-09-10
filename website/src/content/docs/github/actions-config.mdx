@@ -236,6 +236,89 @@ Writing secrets and variables uses the GitHub credential from
 OAuth (see [Setup](/github/setup)). The token needs the `repo` scope
 for private repositories, or `public_repo` for public ones.
 
+## Batch operations and automation
+
+When managing many repositories or environments, declare your
+configuration as data and loop over it. This works naturally with tools
+like [ghfs](https://github.com/antfu/ghfs) that batch-edit GitHub
+resources:
+
+### Example: Multi-repository configuration
+
+```typescript
+const repos = ["api", "web", "worker", "docs"];
+const sharedSecrets = {
+  AXIOM_INGEST_TOKEN: axiomToken,
+  SENTRY_DSN: sentryDsn,
+};
+
+yield* Effect.all(
+  repos.map((repo) =>
+    GitHub.Secrets({
+      owner: "my-org",
+      repository: repo,
+      secrets: sharedSecrets,
+    }),
+  ),
+);
+```
+
+### Example: Environment matrix
+
+```typescript
+const environments = [
+  { name: "staging", waitTimer: 0, apiKey: stagingKey },
+  { name: "production", waitTimer: 60, apiKey: productionKey },
+];
+
+yield* Effect.all(
+  environments.map((env) =>
+    Effect.gen(function* () {
+      const environment = yield* GitHub.Environment(`env-${env.name}`, {
+        owner: "my-org",
+        repository: "api",
+        name: env.name,
+        waitTimer: env.waitTimer,
+        reviewers: env.name === "production" ? { teams: ["sre"] } : undefined,
+      });
+
+      return yield* GitHub.Secret(`${env.name}-key`, {
+        owner: "my-org",
+        repository: "api",
+        environment,
+        name: "API_KEY",
+        value: Redacted.make(env.apiKey),
+      });
+    }),
+  ),
+);
+```
+
+### Example: Cross-repository credential rotation
+
+```typescript
+// Rotate a token across all repositories in one deploy
+const newToken = yield* generateFreshToken();
+
+const repositories = yield* listOrgRepositories("my-org");
+
+yield* Effect.all(
+  repositories.map((repo) =>
+    GitHub.Secret(`${repo.name}-token`, {
+      owner: "my-org",
+      repository: repo.name,
+      name: "DEPLOY_TOKEN",
+      value: Redacted.make(newToken),
+    }),
+  ),
+  { concurrency: 5 }, // rate-limit concurrent updates
+);
+```
+
+These patterns compose well with declarative issue/PR workflows —
+update your infrastructure stack, deploy it, and the changes flow into
+every repository without manual UI edits.
+
 ## Where next
 
 - [Continuous Integration](/environments/ci) — the full GitHub Actions

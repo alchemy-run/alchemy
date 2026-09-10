@@ -130,6 +130,7 @@ export interface Environment extends Resource<
  * Authentication is resolved via the `GitHubCredentials` service supplied
  * by `GitHub.providers()` (env, stored PAT, `gh` CLI, or OAuth). The token
  * needs `repo` scope.
+ *
  * ### Creating an Environment
  * **Example:** Basic Environment
  * ```typescript
@@ -178,29 +179,83 @@ export interface Environment extends Resource<
  * });
  * ```
  *
- * ### Environment Secrets and Variables
- * **Example:** Scope Secrets and Variables to the Environment
+ * ### Complete CI/CD Setup
+ * **Example:** Production Environment with Scoped Configuration
  * ```typescript
- * const env = yield* GitHub.Environment("production", {
+ * // Create the environment with protection rules
+ * const production = yield* GitHub.Environment("production", {
  *   owner: "my-org",
  *   repository: "my-repo",
  *   name: "production",
+ *   waitTimer: 30,
+ *   preventSelfReview: true,
+ *   reviewers: { teams: ["platform"] },
+ *   deploymentBranchPolicy: { protectedBranches: true },
  * });
  *
- * yield* GitHub.Secret("deploy-key", {
- *   owner: "my-org",
- *   repository: "my-repo",
- *   environment: env,
- *   name: "DEPLOY_KEY",
- *   value: Redacted.make("my-secret-value"),
+ * // Provision infrastructure and wire outputs into environment secrets
+ * const role = yield* AWS.IAM.Role("deploy-role", {
+ *   assumeRolePolicy: { /* ... */ },
  * });
  *
- * yield* GitHub.Variable("region", {
+ * yield* GitHub.Secrets({
  *   owner: "my-org",
  *   repository: "my-repo",
- *   environment: env,
- *   name: "AWS_REGION",
- *   value: "us-east-1",
+ *   environment: production,
+ *   secrets: {
+ *     AWS_ROLE_ARN: role.roleArn,
+ *     DEPLOY_TOKEN: deployToken,
+ *   },
+ * });
+ *
+ * yield* GitHub.Variables({
+ *   owner: "my-org",
+ *   repository: "my-repo",
+ *   environment: production,
+ *   variables: {
+ *     AWS_REGION: "us-east-1",
+ *     DEPLOY_STAGE: "production",
+ *   },
+ * });
+ * ```
+ *
+ * **Example:** Multi-Environment Stack
+ * ```typescript
+ * // Declare multiple environments with different protection levels
+ * const staging = yield* GitHub.Environment("staging", {
+ *   owner: "my-org",
+ *   repository: "my-repo",
+ *   name: "staging",
+ *   deploymentBranchPolicy: {
+ *     customBranchPolicies: ["main", "develop"],
+ *   },
+ * });
+ *
+ * const production = yield* GitHub.Environment("production", {
+ *   owner: "my-org",
+ *   repository: "my-repo",
+ *   name: "production",
+ *   waitTimer: 60,
+ *   preventSelfReview: true,
+ *   reviewers: { teams: ["sre"] },
+ *   deploymentBranchPolicy: { protectedBranches: true },
+ * });
+ *
+ * // Wire environment-specific configuration
+ * yield* GitHub.Secret("api-key", {
+ *   owner: "my-org",
+ *   repository: "my-repo",
+ *   environment: staging,
+ *   name: "API_KEY",
+ *   value: Redacted.make(stagingApiKey),
+ * });
+ *
+ * yield* GitHub.Secret("api-key", {
+ *   owner: "my-org",
+ *   repository: "my-repo",
+ *   environment: production,
+ *   name: "API_KEY",
+ *   value: Redacted.make(productionApiKey),
  * });
  * ```
  *
