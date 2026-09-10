@@ -66,8 +66,8 @@ export const fromProfile = () =>
   Layer.effect(
     PrismaEnvironment,
     Effect.gen(function* () {
-      const baseUrl = yield* Config.string(PRISMA_API_URL_ENV).pipe(
-        Config.orElse(() => Config.string(PRISMA_MANAGEMENT_API_URL_ENV)),
+      const baseUrl = yield* Config.String(PRISMA_API_URL_ENV).pipe(
+        Config.orElse(() => Config.String(PRISMA_MANAGEMENT_API_URL_ENV)),
         Config.withDefault(DEFAULT_BASE_URL),
         Effect.flatMap(normalizeBaseUrl),
       );

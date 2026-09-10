@@ -214,7 +214,7 @@ export const LoggingCli = Layer.effect(
     // (no requirements on the returned Effects).
     const promptContext = yield* Effect.context<Prompt.Environment>();
     const confirm = (options: Prompt.ConfirmOptions) =>
-      Prompt.confirm(options).pipe(
+      Prompt.Confirm(options).pipe(
         Effect.catchTag("QuitError", () => Effect.succeed(false)),
         Effect.provideContext(promptContext),
       );

@@ -28,16 +28,16 @@ import {
 } from "./flows.ts";
 import { profileHub } from "./hub.ts";
 
-const profileName = Argument.string("name").pipe(
+const profileName = Argument.String("name").pipe(
   Argument.withDescription("Profile name"),
 );
 
-const newProfileName = Argument.string("new-name").pipe(
+const newProfileName = Argument.String("new-name").pipe(
   Argument.withDescription("New profile name"),
   Argument.optional,
 );
 
-const refreshProviders = Flag.string("provider").pipe(
+const refreshProviders = Flag.String("provider").pipe(
   Flag.withDescription(
     "Refresh only this connected provider (repeatable; defaults to all)",
   ),
@@ -139,26 +139,26 @@ const renameCommand = Command.make(
   ),
 );
 
-const addProviders = Flag.string("add").pipe(
+const addProviders = Flag.String("add").pipe(
   Flag.withDescription("Connect a provider to the profile (repeatable)"),
   Flag.atLeast(0),
 );
 
-const reconfigureProviders = Flag.string("reconfigure").pipe(
+const reconfigureProviders = Flag.String("reconfigure").pipe(
   Flag.withDescription(
     "Re-run a connected provider's configuration (repeatable)",
   ),
   Flag.atLeast(0),
 );
 
-const removeProviders = Flag.string("remove").pipe(
+const removeProviders = Flag.String("remove").pipe(
   Flag.withDescription(
     "Log out a connected provider and disconnect it (repeatable)",
   ),
   Flag.atLeast(0),
 );
 
-const methodFlag = Flag.string("method").pipe(
+const methodFlag = Flag.String("method").pipe(
   Flag.withDescription(
     "Configure non-interactively using this method (each provider documents its methods and fields in `alchemy profile edit --help`)",
   ),
@@ -166,7 +166,7 @@ const methodFlag = Flag.string("method").pipe(
   Flag.map(Option.getOrUndefined),
 );
 
-const setFlag = Flag.string("set").pipe(
+const setFlag = Flag.String("set").pipe(
   Flag.withDescription(
     "Field for non-interactive configure: name=value, name=env:VAR, or name=- to read the value from stdin (repeatable)",
   ),

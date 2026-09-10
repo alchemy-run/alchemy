@@ -52,7 +52,7 @@ export const scan = Effect.fn("Alchemist.nuke.scan")(function* (
   input: ScanInput,
 ) {
   const report = withSpanEvents(yield* Progress);
-  const debug = yield* Config.string("DEBUG").pipe(
+  const debug = yield* Config.String("DEBUG").pipe(
     Config.withDefault(""),
     Effect.map((value) => value.length > 0),
   );

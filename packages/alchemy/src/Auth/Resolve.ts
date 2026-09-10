@@ -78,7 +78,7 @@ export const resolveProviderConfig = <
         };
       }
     }
-    const ci = yield* Config.boolean("CI").pipe(Config.withDefault(false));
+    const ci = yield* Config.Boolean("CI").pipe(Config.withDefault(false));
     if (ci) {
       if (auth.readEnvironment === undefined) {
         return yield* Effect.fail(

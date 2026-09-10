@@ -10,12 +10,12 @@ import * as Flag from "effect/unstable/cli/Flag";
 import { loadConfigProvider } from "../../Util/ConfigProvider.ts";
 import { UserInputError } from "./errors.ts";
 
-export const USER = Config.string("USER").pipe(
-  Config.orElse(() => Config.string("USERNAME")),
+export const USER = Config.String("USER").pipe(
+  Config.orElse(() => Config.String("USERNAME")),
   Config.withDefault("unknown"),
 );
 
-export const ALCHEMY_STAGE = Config.string("ALCHEMY_STAGE").pipe(
+export const ALCHEMY_STAGE = Config.String("ALCHEMY_STAGE").pipe(
   Config.option,
   Effect.map(Option.getOrUndefined),
 );
@@ -23,7 +23,7 @@ export const ALCHEMY_STAGE = Config.string("ALCHEMY_STAGE").pipe(
 const STAGE_NAME_PATTERN = /^[a-z0-9]+([-_a-z0-9]+)*$/i;
 
 const makeStageFlag = (kind: "live" | "dev") =>
-  Flag.string("stage").pipe(
+  Flag.String("stage").pipe(
     Flag.withSchema(
       Schema.String.check(Schema.isPattern(/^[a-z0-9]+([-_a-z0-9]+)*$/gi)),
     ),
@@ -75,45 +75,45 @@ export const resolveStage = Effect.fn(function* (
   );
 });
 
-export const envFile = Flag.file("env-file").pipe(
+export const envFile = Flag.File("env-file").pipe(
   Flag.optional,
   Flag.withDescription(
     "File to load environment variables from, defaults to .env",
   ),
 );
 
-export const dryRun = Flag.boolean("dry-run").pipe(
+export const dryRun = Flag.Boolean("dry-run").pipe(
   Flag.withDescription("Dry run the deployment, do not actually deploy"),
   Flag.withDefault(false),
 );
 
-export const yes = Flag.boolean("yes").pipe(
+export const yes = Flag.Boolean("yes").pipe(
   Flag.withAlias("y"),
   Flag.withDescription("Yes to all prompts"),
   Flag.withDefault(false),
 );
 
-export const force = Flag.boolean("force").pipe(
+export const force = Flag.Boolean("force").pipe(
   Flag.withDescription(
     "Force updates for resources that would otherwise no-op",
   ),
   Flag.withDefault(false),
 );
 
-export const config = Flag.file("config", { mustExist: true }).pipe(
+export const config = Flag.File("config", { mustExist: true }).pipe(
   Flag.withDescription("Alchemy entrypoint file (default: alchemy.run.ts)"),
   Flag.withAlias("c"),
   Flag.withDefault("alchemy.run.ts"),
 );
 
-export const optionalConfig = Flag.file("config", { mustExist: true }).pipe(
+export const optionalConfig = Flag.File("config", { mustExist: true }).pipe(
   Flag.withDescription("Alchemy entrypoint file (default: alchemy.run.ts)"),
   Flag.withAlias("c"),
   Flag.optional,
   Flag.map(Option.getOrUndefined),
 );
 
-export const configPath = Argument.file("config", { mustExist: true }).pipe(
+export const configPath = Argument.File("config", { mustExist: true }).pipe(
   Argument.withDescription("Alchemy entrypoint file (default: alchemy.run.ts)"),
   Argument.optional,
   Argument.map(Option.getOrUndefined),
@@ -158,7 +158,7 @@ export const resolveStackArgs =
       return { ...resolved, stage };
     });
 
-export const profile = Flag.string("profile").pipe(
+export const profile = Flag.String("profile").pipe(
   Flag.withDescription(
     "Auth profile to use. Defaults to $ALCHEMY_PROFILE or 'default'.",
   ),

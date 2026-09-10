@@ -113,7 +113,7 @@ export const fromDurableObjectState = (
       const context = yield* Effect.context<R>();
       // The failure is typed away as before: a rejected gate is the
       // platform resetting the object, not a value a caller handles.
-      return yield* Effect.tryPromise<T, never>(() =>
+      return yield* Effect.promise(() =>
         state.blockConcurrencyWhile(() =>
           Effect.runPromise(callback().pipe(Effect.provide(context))),
         ),

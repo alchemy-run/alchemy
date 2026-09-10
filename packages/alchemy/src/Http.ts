@@ -129,7 +129,7 @@ const logUnreportedCause = (cause: Cause.Cause<unknown>) => {
 export const resolvePort = (options: { port?: number } | undefined) =>
   options?.port !== undefined
     ? Effect.succeed(options.port)
-    : Config.number("PORT").pipe(Config.withDefault(3000));
+    : Config.Number("PORT").pipe(Config.withDefault(3000));
 
 export interface BunHttpServerOptions {
   /**
