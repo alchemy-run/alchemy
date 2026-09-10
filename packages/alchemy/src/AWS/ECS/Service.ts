@@ -3711,13 +3711,12 @@ export const ServiceProvider = () =>
               desiredCount: 0,
             })
             .pipe(
-              Effect.retry({
-                while: (error) => error._tag === "ServiceNotActiveException",
-                schedule: Schedule.max([
-                  Schedule.spaced("5 seconds"),
-                  Schedule.recurs(8),
-                ]),
-              }),
+              // `ServiceNotActiveException` means the service is DRAINING or
+              // INACTIVE — an earlier, interrupted delete already issued
+              // `deleteService`. Neither status ever returns to ACTIVE, so
+              // there is nothing to scale: fall through to the drain/delete
+              // waits below, which treat both as progress toward "gone".
+              Effect.catchTag("ServiceNotActiveException", () => Effect.void),
               Effect.catchTag("ServiceNotFoundException", () => Effect.void),
               Effect.catchTag("ClusterNotFoundException", () => Effect.void),
             );
