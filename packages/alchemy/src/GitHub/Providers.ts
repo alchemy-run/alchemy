@@ -6,6 +6,7 @@ import { type GitHubAuthOptions, makeGitHubAuth } from "./AuthProvider.ts";
 import { Comment, CommentProvider } from "./Comment.ts";
 import * as Credentials from "./Credentials.ts";
 import { Environment, EnvironmentProvider } from "./Environment.ts";
+import { PullRequest, PullRequestProvider } from "./PullRequest.ts";
 import { Repository, RepositoryProvider } from "./Repository.ts";
 import { Secret, SecretProvider } from "./Secret.ts";
 import { Variable, VariableProvider } from "./Variable.ts";
@@ -22,8 +23,9 @@ export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
 export interface ProvidersOptions extends GitHubAuthOptions {}
 
 /**
- * GitHub providers (Comment, Environment, Repository, Secret, Variable,
- * Webhook) plus the GitHub AuthProvider that the alchemy CLI discovers.
+ * GitHub providers (Comment, Environment, PullRequest, Repository, Secret,
+ * Variable, Webhook) plus the GitHub AuthProvider that the alchemy CLI
+ * discovers.
  *
  * Pass `baseUrl` to pin every GitHub resource to a GitHub Enterprise host
  * without relying on the auth provider's configuration:
@@ -43,6 +45,7 @@ export const providers = (options?: ProvidersOptions) =>
     Provider.collection([
       Comment,
       Environment,
+      PullRequest,
       Repository,
       Secret,
       Variable,
@@ -53,6 +56,7 @@ export const providers = (options?: ProvidersOptions) =>
       Layer.mergeAll(
         CommentProvider(),
         EnvironmentProvider(),
+        PullRequestProvider(),
         RepositoryProvider(),
         SecretProvider(),
         VariableProvider(),

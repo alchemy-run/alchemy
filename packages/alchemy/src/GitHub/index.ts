@@ -4,6 +4,8 @@ export { GitHubCredentials, fromEnv, fromToken } from "./Credentials.ts";
 export * from "./Env.ts";
 export * from "./Environment.ts";
 export * from "./Providers.ts";
+export * from "./PullRequest.ts";
+export * from "./Query.ts";
 export * from "./Repository.ts";
 export * from "./RepositoryEventSource.ts";
 export * from "./Secret.ts";
