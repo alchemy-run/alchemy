@@ -1083,8 +1083,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/alchemy
       effect:
-        specifier: 4.0.0-rc.112
-        version: 4.0.0-rc.112
+        specifier: 4.0.0-rc.113
+        version: 4.0.0-rc.113
       react:
         specifier: catalog:frontend
         version: 19.2.8
@@ -1095,18 +1095,18 @@ importers:
         specifier: catalog:frontend
         version: 19.2.8(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(webpack@5.109.2(cssnano@8.0.5(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26))
       vinext:
-        specifier: ^1.0.0-beta.8
-        version: 1.0.0-beta.8(c27363ec5c1e587bd874e6f61596cc27)
+        specifier: ^1.0.0-beta.9
+        version: 1.0.0-beta.9(c27363ec5c1e587bd874e6f61596cc27)
     devDependencies:
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
         version: link:../../packages/frontend-frameworks
       '@distilled.cloud/aws':
         specifier: workspace:*
-        version: link:../../distilled/packages/aws
+        version: link:../../submodules/distilled/packages/aws
       '@effect/platform-node':
         specifier: catalog:effect
-        version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
+        version: 4.0.0-rc.113(effect@4.0.0-rc.113)(redis@6.2.1)
       '@tailwindcss/vite':
         specifier: catalog:frontend
         version: 4.3.3(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
@@ -1115,7 +1115,7 @@ importers:
         version: 19.2.18
       '@types/react-dom':
         specifier: catalog:frontend
-        version: 19.2.4(@types/react@19.2.18)
+        version: 19.2.7(@types/react@19.2.18)
       '@vitejs/plugin-react':
         specifier: catalog:frontend
         version: 6.0.5(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
@@ -1797,7 +1797,7 @@ importers:
         version: 8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)
       vite-plugin-vue-devtools:
         specifier: ^8.1.1
-        version: 8.2.1(@nuxt/kit@4.5.1(magic-string@1.2.3)(magicast@0.5.4)(oxc-parser@0.141.0)(rolldown@1.2.5)(unplugin@3.3.0(esbuild@0.28.2)(rolldown@1.2.5)(rollup@4.62.4)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))(webpack@5.109.2(cssnano@8.0.5(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26))))(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))(vue@3.6.0-beta.17(typescript@7.0.2))
+        version: 8.2.1(@nuxt/kit@4.5.1(magic-string@1.2.3)(magicast@0.5.4)(oxc-parser@0.141.0)(rolldown@1.2.5)(unplugin@3.3.0(esbuild@0.28.2)(rolldown@1.2.5)(rollup@4.62.4)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))(webpack@5.109.2(cssnano@8.0.5(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26))))(supports-color@10.2.2)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))(vue@3.6.0-beta.17(typescript@7.0.2))
       vue-tsc:
         specifier: ^3.2.6
         version: 3.3.9(typescript@7.0.2)
@@ -2089,8 +2089,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/alchemy
       effect:
-        specifier: 4.0.0-rc.112
-        version: 4.0.0-rc.112
+        specifier: 4.0.0-rc.113
+        version: 4.0.0-rc.113
       react:
         specifier: catalog:frontend
         version: 19.2.8
@@ -2101,7 +2101,7 @@ importers:
         specifier: catalog:frontend
         version: 19.2.8(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(webpack@5.109.2(cssnano@8.0.5(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26))
       vinext:
-        specifier: ^1.0.0-beta.8
+        specifier: ^1.0.0-beta.9
         version: 1.0.0-beta.9(c27363ec5c1e587bd874e6f61596cc27)
     devDependencies:
       '@alchemy.run/frontend-frameworks':
@@ -2795,8 +2795,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/alchemy
       effect:
-        specifier: 4.0.0-rc.112
-        version: 4.0.0-rc.112
+        specifier: 4.0.0-rc.113
+        version: 4.0.0-rc.113
       react:
         specifier: catalog:frontend
         version: 19.2.8
@@ -2807,18 +2807,18 @@ importers:
         specifier: catalog:frontend
         version: 19.2.8(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(webpack@5.109.2(cssnano@8.0.5(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26))
       vinext:
-        specifier: ^1.0.0-beta.8
-        version: 1.0.0-beta.8(c27363ec5c1e587bd874e6f61596cc27)
+        specifier: ^1.0.0-beta.9
+        version: 1.0.0-beta.9(c27363ec5c1e587bd874e6f61596cc27)
     devDependencies:
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
         version: link:../../packages/frontend-frameworks
       '@distilled.cloud/fly-io':
         specifier: workspace:*
-        version: link:../../distilled/packages/fly-io
+        version: link:../../submodules/distilled/packages/fly-io
       '@effect/platform-node':
         specifier: catalog:effect
-        version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
+        version: 4.0.0-rc.113(effect@4.0.0-rc.113)(redis@6.2.1)
       '@tailwindcss/vite':
         specifier: catalog:frontend
         version: 4.3.3(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
@@ -2827,7 +2827,7 @@ importers:
         version: 19.2.18
       '@types/react-dom':
         specifier: catalog:frontend
-        version: 19.2.4(@types/react@19.2.18)
+        version: 19.2.7(@types/react@19.2.18)
       '@vitejs/plugin-react':
         specifier: catalog:frontend
         version: 6.0.5(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
@@ -3386,8 +3386,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/alchemy
       effect:
-        specifier: 4.0.0-rc.112
-        version: 4.0.0-rc.112
+        specifier: 4.0.0-rc.113
+        version: 4.0.0-rc.113
       react:
         specifier: catalog:frontend
         version: 19.2.8
@@ -3398,18 +3398,18 @@ importers:
         specifier: catalog:frontend
         version: 19.2.8(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(webpack@5.109.2(cssnano@8.0.5(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26))
       vinext:
-        specifier: ^1.0.0-beta.8
-        version: 1.0.0-beta.8(c27363ec5c1e587bd874e6f61596cc27)
+        specifier: ^1.0.0-beta.9
+        version: 1.0.0-beta.9(c27363ec5c1e587bd874e6f61596cc27)
     devDependencies:
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
         version: link:../../packages/frontend-frameworks
       '@distilled.cloud/hetzner':
         specifier: workspace:*
-        version: link:../../distilled/packages/hetzner
+        version: link:../../submodules/distilled/packages/hetzner
       '@effect/platform-node':
         specifier: catalog:effect
-        version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
+        version: 4.0.0-rc.113(effect@4.0.0-rc.113)(redis@6.2.1)
       '@tailwindcss/vite':
         specifier: catalog:frontend
         version: 4.3.3(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
@@ -3418,7 +3418,7 @@ importers:
         version: 19.2.18
       '@types/react-dom':
         specifier: catalog:frontend
-        version: 19.2.4(@types/react@19.2.18)
+        version: 19.2.7(@types/react@19.2.18)
       '@vitejs/plugin-react':
         specifier: catalog:frontend
         version: 6.0.5(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
@@ -4166,8 +4166,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/alchemy
       effect:
-        specifier: 4.0.0-rc.112
-        version: 4.0.0-rc.112
+        specifier: 4.0.0-rc.113
+        version: 4.0.0-rc.113
       react:
         specifier: catalog:frontend
         version: 19.2.8
@@ -4178,18 +4178,18 @@ importers:
         specifier: catalog:frontend
         version: 19.2.8(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(webpack@5.109.2(cssnano@8.0.5(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26))
       vinext:
-        specifier: ^1.0.0-beta.8
-        version: 1.0.0-beta.8(c27363ec5c1e587bd874e6f61596cc27)
+        specifier: ^1.0.0-beta.9
+        version: 1.0.0-beta.9(c27363ec5c1e587bd874e6f61596cc27)
     devDependencies:
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
         version: link:../../packages/frontend-frameworks
       '@distilled.cloud/railway':
         specifier: workspace:*
-        version: link:../../distilled/packages/railway
+        version: link:../../submodules/distilled/packages/railway
       '@effect/platform-node':
         specifier: catalog:effect
-        version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
+        version: 4.0.0-rc.113(effect@4.0.0-rc.113)(redis@6.2.1)
       '@tailwindcss/vite':
         specifier: catalog:frontend
         version: 4.3.3(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
@@ -4198,7 +4198,7 @@ importers:
         version: 19.2.18
       '@types/react-dom':
         specifier: catalog:frontend
-        version: 19.2.4(@types/react@19.2.18)
+        version: 19.2.7(@types/react@19.2.18)
       '@vitejs/plugin-react':
         specifier: catalog:frontend
         version: 6.0.5(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
@@ -5716,101 +5716,6 @@ importers:
         specifier: catalog:build
         version: 7.0.2
 
-  submodules/distilled/packages/adyen:
-    dependencies:
-      '@distilled.cloud/core':
-        specifier: workspace:*
-        version: link:../core
-      effect:
-        specifier: 4.0.0-rc.113
-        version: 4.0.0-rc.113
-    devDependencies:
-      '@effect/platform-bun':
-        specifier: catalog:effect
-        version: 4.0.0-rc.113(effect@4.0.0-rc.113)
-      '@types/bun':
-        specifier: catalog:tooling
-        version: 1.3.14
-      '@types/node':
-        specifier: catalog:tooling
-        version: 26.2.0
-
-  submodules/distilled/packages/apache-superset:
-    dependencies:
-      '@distilled.cloud/core':
-        specifier: workspace:*
-        version: link:../core
-      effect:
-        specifier: 4.0.0-rc.113
-        version: 4.0.0-rc.113
-    devDependencies:
-      '@effect/platform-bun':
-        specifier: catalog:effect
-        version: 4.0.0-rc.113(effect@4.0.0-rc.113)
-      '@types/bun':
-        specifier: catalog:tooling
-        version: 1.3.14
-      '@types/node':
-        specifier: catalog:tooling
-        version: 26.2.0
-
-  submodules/distilled/packages/archil:
-    dependencies:
-      '@distilled.cloud/core':
-        specifier: workspace:*
-        version: link:../core
-      effect:
-        specifier: 4.0.0-rc.113
-        version: 4.0.0-rc.113
-    devDependencies:
-      '@effect/platform-bun':
-        specifier: catalog:effect
-        version: 4.0.0-rc.113(effect@4.0.0-rc.113)
-      '@types/bun':
-        specifier: catalog:tooling
-        version: 1.3.14
-      '@types/node':
-        specifier: catalog:tooling
-        version: 26.2.0
-
-  submodules/distilled/packages/argocd:
-    dependencies:
-      '@distilled.cloud/core':
-        specifier: workspace:*
-        version: link:../core
-      effect:
-        specifier: 4.0.0-rc.113
-        version: 4.0.0-rc.113
-    devDependencies:
-      '@effect/platform-bun':
-        specifier: catalog:effect
-        version: 4.0.0-rc.113(effect@4.0.0-rc.113)
-      '@types/bun':
-        specifier: catalog:tooling
-        version: 1.3.14
-      '@types/node':
-        specifier: catalog:tooling
-        version: 26.2.0
-
-  submodules/distilled/packages/auth0:
-    dependencies:
-      '@distilled.cloud/core':
-        specifier: workspace:*
-        version: link:../core
-      effect:
-        specifier: 4.0.0-rc.113
-        version: 4.0.0-rc.113
-    devDependencies:
-      '@effect/platform-bun':
-        specifier: catalog:effect
-        version: 4.0.0-rc.113(effect@4.0.0-rc.113)
-      '@types/bun':
-        specifier: catalog:tooling
-        version: 1.3.14
-      '@types/node':
-        specifier: catalog:tooling
-        version: 26.2.0
-
   submodules/distilled/packages/aws:
     dependencies:
       '@aws-crypto/crc32':
@@ -5901,44 +5806,6 @@ importers:
         specifier: catalog:tooling
         version: 26.2.0
 
-  submodules/distilled/packages/chronosphere:
-    dependencies:
-      '@distilled.cloud/core':
-        specifier: workspace:*
-        version: link:../core
-      effect:
-        specifier: 4.0.0-rc.113
-        version: 4.0.0-rc.113
-    devDependencies:
-      '@effect/platform-bun':
-        specifier: catalog:effect
-        version: 4.0.0-rc.113(effect@4.0.0-rc.113)
-      '@types/bun':
-        specifier: catalog:tooling
-        version: 1.3.14
-      '@types/node':
-        specifier: catalog:tooling
-        version: 26.2.0
-
-  submodules/distilled/packages/clerk:
-    dependencies:
-      '@distilled.cloud/core':
-        specifier: workspace:*
-        version: link:../core
-      effect:
-        specifier: 4.0.0-rc.113
-        version: 4.0.0-rc.113
-    devDependencies:
-      '@effect/platform-bun':
-        specifier: catalog:effect
-        version: 4.0.0-rc.113(effect@4.0.0-rc.113)
-      '@types/bun':
-        specifier: catalog:tooling
-        version: 1.3.14
-      '@types/node':
-        specifier: catalog:tooling
-        version: 26.2.0
-
   submodules/distilled/packages/cloudflare:
     dependencies:
       '@distilled.cloud/core':
@@ -5977,25 +5844,6 @@ importers:
         specifier: catalog:tooling
         version: 26.2.0
 
-  submodules/distilled/packages/coolify:
-    dependencies:
-      '@distilled.cloud/core':
-        specifier: workspace:*
-        version: link:../core
-      effect:
-        specifier: 4.0.0-rc.113
-        version: 4.0.0-rc.113
-    devDependencies:
-      '@effect/platform-bun':
-        specifier: catalog:effect
-        version: 4.0.0-rc.113(effect@4.0.0-rc.113)
-      '@types/bun':
-        specifier: catalog:tooling
-        version: 1.3.14
-      '@types/node':
-        specifier: catalog:tooling
-        version: 26.2.0
-
   submodules/distilled/packages/core:
     devDependencies:
       '@effect/platform-bun':
@@ -6011,121 +5859,7 @@ importers:
         specifier: 4.0.0-rc.113
         version: 4.0.0-rc.113
 
-  submodules/distilled/packages/customerio:
-    dependencies:
-      '@distilled.cloud/core':
-        specifier: workspace:*
-        version: link:../core
-      effect:
-        specifier: 4.0.0-rc.113
-        version: 4.0.0-rc.113
-    devDependencies:
-      '@effect/platform-bun':
-        specifier: catalog:effect
-        version: 4.0.0-rc.113(effect@4.0.0-rc.113)
-      '@types/bun':
-        specifier: catalog:tooling
-        version: 1.3.14
-      '@types/node':
-        specifier: catalog:tooling
-        version: 26.2.0
-
-  submodules/distilled/packages/datadog:
-    dependencies:
-      '@distilled.cloud/core':
-        specifier: workspace:*
-        version: link:../core
-      effect:
-        specifier: 4.0.0-rc.113
-        version: 4.0.0-rc.113
-    devDependencies:
-      '@effect/platform-bun':
-        specifier: catalog:effect
-        version: 4.0.0-rc.113(effect@4.0.0-rc.113)
-      '@types/bun':
-        specifier: catalog:tooling
-        version: 1.3.14
-      '@types/node':
-        specifier: catalog:tooling
-        version: 26.2.0
-
-  submodules/distilled/packages/digitalocean:
-    dependencies:
-      '@distilled.cloud/core':
-        specifier: workspace:*
-        version: link:../core
-      effect:
-        specifier: 4.0.0-rc.113
-        version: 4.0.0-rc.113
-    devDependencies:
-      '@effect/platform-bun':
-        specifier: catalog:effect
-        version: 4.0.0-rc.113(effect@4.0.0-rc.113)
-      '@types/bun':
-        specifier: catalog:tooling
-        version: 1.3.14
-      '@types/node':
-        specifier: catalog:tooling
-        version: 26.2.0
-
   submodules/distilled/packages/discord:
-    dependencies:
-      '@distilled.cloud/core':
-        specifier: workspace:*
-        version: link:../core
-      effect:
-        specifier: 4.0.0-rc.113
-        version: 4.0.0-rc.113
-    devDependencies:
-      '@effect/platform-bun':
-        specifier: catalog:effect
-        version: 4.0.0-rc.113(effect@4.0.0-rc.113)
-      '@types/bun':
-        specifier: catalog:tooling
-        version: 1.3.14
-      '@types/node':
-        specifier: catalog:tooling
-        version: 26.2.0
-
-  submodules/distilled/packages/docker:
-    dependencies:
-      '@distilled.cloud/core':
-        specifier: workspace:*
-        version: link:../core
-      effect:
-        specifier: 4.0.0-rc.113
-        version: 4.0.0-rc.113
-    devDependencies:
-      '@effect/platform-bun':
-        specifier: catalog:effect
-        version: 4.0.0-rc.113(effect@4.0.0-rc.113)
-      '@types/bun':
-        specifier: catalog:tooling
-        version: 1.3.14
-      '@types/node':
-        specifier: catalog:tooling
-        version: 26.2.0
-
-  submodules/distilled/packages/doppler:
-    dependencies:
-      '@distilled.cloud/core':
-        specifier: workspace:*
-        version: link:../core
-      effect:
-        specifier: 4.0.0-rc.113
-        version: 4.0.0-rc.113
-    devDependencies:
-      '@effect/platform-bun':
-        specifier: catalog:effect
-        version: 4.0.0-rc.113(effect@4.0.0-rc.113)
-      '@types/bun':
-        specifier: catalog:tooling
-        version: 1.3.14
-      '@types/node':
-        specifier: catalog:tooling
-        version: 26.2.0
-
-  submodules/distilled/packages/elasticsearch:
     dependencies:
       '@distilled.cloud/core':
         specifier: workspace:*
@@ -6182,25 +5916,6 @@ importers:
         specifier: catalog:tooling
         version: 26.2.0
 
-  submodules/distilled/packages/forgejo:
-    dependencies:
-      '@distilled.cloud/core':
-        specifier: workspace:*
-        version: link:../core
-      effect:
-        specifier: 4.0.0-rc.113
-        version: 4.0.0-rc.113
-    devDependencies:
-      '@effect/platform-bun':
-        specifier: catalog:effect
-        version: 4.0.0-rc.113(effect@4.0.0-rc.113)
-      '@types/bun':
-        specifier: catalog:tooling
-        version: 1.3.14
-      '@types/node':
-        specifier: catalog:tooling
-        version: 26.2.0
-
   submodules/distilled/packages/gcp:
     dependencies:
       '@distilled.cloud/core':
@@ -6239,102 +5954,7 @@ importers:
         specifier: catalog:tooling
         version: 26.2.0
 
-  submodules/distilled/packages/google-workspace:
-    dependencies:
-      '@distilled.cloud/core':
-        specifier: workspace:*
-        version: link:../core
-      effect:
-        specifier: 4.0.0-rc.113
-        version: 4.0.0-rc.113
-    devDependencies:
-      '@effect/platform-bun':
-        specifier: catalog:effect
-        version: 4.0.0-rc.113(effect@4.0.0-rc.113)
-      '@types/bun':
-        specifier: catalog:tooling
-        version: 1.3.14
-      '@types/node':
-        specifier: catalog:tooling
-        version: 26.2.0
-
-  submodules/distilled/packages/grafana:
-    dependencies:
-      '@distilled.cloud/core':
-        specifier: workspace:*
-        version: link:../core
-      effect:
-        specifier: 4.0.0-rc.113
-        version: 4.0.0-rc.113
-    devDependencies:
-      '@effect/platform-bun':
-        specifier: catalog:effect
-        version: 4.0.0-rc.113(effect@4.0.0-rc.113)
-      '@types/bun':
-        specifier: catalog:tooling
-        version: 1.3.14
-      '@types/node':
-        specifier: catalog:tooling
-        version: 26.2.0
-
-  submodules/distilled/packages/growthbook:
-    dependencies:
-      '@distilled.cloud/core':
-        specifier: workspace:*
-        version: link:../core
-      effect:
-        specifier: 4.0.0-rc.113
-        version: 4.0.0-rc.113
-    devDependencies:
-      '@effect/platform-bun':
-        specifier: catalog:effect
-        version: 4.0.0-rc.113(effect@4.0.0-rc.113)
-      '@types/bun':
-        specifier: catalog:tooling
-        version: 1.3.14
-      '@types/node':
-        specifier: catalog:tooling
-        version: 26.2.0
-
-  submodules/distilled/packages/gusto:
-    dependencies:
-      '@distilled.cloud/core':
-        specifier: workspace:*
-        version: link:../core
-      effect:
-        specifier: 4.0.0-rc.113
-        version: 4.0.0-rc.113
-    devDependencies:
-      '@effect/platform-bun':
-        specifier: catalog:effect
-        version: 4.0.0-rc.113(effect@4.0.0-rc.113)
-      '@types/bun':
-        specifier: catalog:tooling
-        version: 1.3.14
-      '@types/node':
-        specifier: catalog:tooling
-        version: 26.2.0
-
   submodules/distilled/packages/hetzner:
-    dependencies:
-      '@distilled.cloud/core':
-        specifier: workspace:*
-        version: link:../core
-      effect:
-        specifier: 4.0.0-rc.113
-        version: 4.0.0-rc.113
-    devDependencies:
-      '@effect/platform-bun':
-        specifier: catalog:effect
-        version: 4.0.0-rc.113(effect@4.0.0-rc.113)
-      '@types/bun':
-        specifier: catalog:tooling
-        version: 1.3.14
-      '@types/node':
-        specifier: catalog:tooling
-        version: 26.2.0
-
-  submodules/distilled/packages/hostinger:
     dependencies:
       '@distilled.cloud/core':
         specifier: workspace:*
@@ -6372,178 +5992,7 @@ importers:
         specifier: catalog:tooling
         version: 26.2.0
 
-  submodules/distilled/packages/infisical:
-    dependencies:
-      '@distilled.cloud/core':
-        specifier: workspace:*
-        version: link:../core
-      effect:
-        specifier: 4.0.0-rc.113
-        version: 4.0.0-rc.113
-    devDependencies:
-      '@effect/platform-bun':
-        specifier: catalog:effect
-        version: 4.0.0-rc.113(effect@4.0.0-rc.113)
-      '@types/bun':
-        specifier: catalog:tooling
-        version: 1.3.14
-      '@types/node':
-        specifier: catalog:tooling
-        version: 26.2.0
-
-  submodules/distilled/packages/inngest:
-    dependencies:
-      '@distilled.cloud/core':
-        specifier: workspace:*
-        version: link:../core
-      effect:
-        specifier: 4.0.0-rc.113
-        version: 4.0.0-rc.113
-    devDependencies:
-      '@effect/platform-bun':
-        specifier: catalog:effect
-        version: 4.0.0-rc.113(effect@4.0.0-rc.113)
-      '@types/bun':
-        specifier: catalog:tooling
-        version: 1.3.14
-      '@types/node':
-        specifier: catalog:tooling
-        version: 26.2.0
-
-  submodules/distilled/packages/intercom:
-    dependencies:
-      '@distilled.cloud/core':
-        specifier: workspace:*
-        version: link:../core
-      effect:
-        specifier: 4.0.0-rc.113
-        version: 4.0.0-rc.113
-    devDependencies:
-      '@effect/platform-bun':
-        specifier: catalog:effect
-        version: 4.0.0-rc.113(effect@4.0.0-rc.113)
-      '@types/bun':
-        specifier: catalog:tooling
-        version: 1.3.14
-      '@types/node':
-        specifier: catalog:tooling
-        version: 26.2.0
-
   submodules/distilled/packages/kubernetes:
-    dependencies:
-      '@distilled.cloud/core':
-        specifier: workspace:*
-        version: link:../core
-      effect:
-        specifier: 4.0.0-rc.113
-        version: 4.0.0-rc.113
-    devDependencies:
-      '@effect/platform-bun':
-        specifier: catalog:effect
-        version: 4.0.0-rc.113(effect@4.0.0-rc.113)
-      '@types/bun':
-        specifier: catalog:tooling
-        version: 1.3.14
-      '@types/node':
-        specifier: catalog:tooling
-        version: 26.2.0
-
-  submodules/distilled/packages/launchdarkly:
-    dependencies:
-      '@distilled.cloud/core':
-        specifier: workspace:*
-        version: link:../core
-      effect:
-        specifier: 4.0.0-rc.113
-        version: 4.0.0-rc.113
-    devDependencies:
-      '@effect/platform-bun':
-        specifier: catalog:effect
-        version: 4.0.0-rc.113(effect@4.0.0-rc.113)
-      '@types/bun':
-        specifier: catalog:tooling
-        version: 1.3.14
-      '@types/node':
-        specifier: catalog:tooling
-        version: 26.2.0
-
-  submodules/distilled/packages/meilisearch:
-    dependencies:
-      '@distilled.cloud/core':
-        specifier: workspace:*
-        version: link:../core
-      effect:
-        specifier: 4.0.0-rc.113
-        version: 4.0.0-rc.113
-    devDependencies:
-      '@effect/platform-bun':
-        specifier: catalog:effect
-        version: 4.0.0-rc.113(effect@4.0.0-rc.113)
-      '@types/bun':
-        specifier: catalog:tooling
-        version: 1.3.14
-      '@types/node':
-        specifier: catalog:tooling
-        version: 26.2.0
-
-  submodules/distilled/packages/mercury:
-    dependencies:
-      '@distilled.cloud/core':
-        specifier: workspace:*
-        version: link:../core
-      effect:
-        specifier: 4.0.0-rc.113
-        version: 4.0.0-rc.113
-    devDependencies:
-      '@effect/platform-bun':
-        specifier: catalog:effect
-        version: 4.0.0-rc.113(effect@4.0.0-rc.113)
-      '@types/bun':
-        specifier: catalog:tooling
-        version: 1.3.14
-      '@types/node':
-        specifier: catalog:tooling
-        version: 26.2.0
-
-  submodules/distilled/packages/metabase:
-    dependencies:
-      '@distilled.cloud/core':
-        specifier: workspace:*
-        version: link:../core
-      effect:
-        specifier: 4.0.0-rc.113
-        version: 4.0.0-rc.113
-    devDependencies:
-      '@effect/platform-bun':
-        specifier: catalog:effect
-        version: 4.0.0-rc.113(effect@4.0.0-rc.113)
-      '@types/bun':
-        specifier: catalog:tooling
-        version: 1.3.14
-      '@types/node':
-        specifier: catalog:tooling
-        version: 26.2.0
-
-  submodules/distilled/packages/modal:
-    dependencies:
-      '@distilled.cloud/core':
-        specifier: workspace:*
-        version: link:../core
-      effect:
-        specifier: 4.0.0-rc.113
-        version: 4.0.0-rc.113
-    devDependencies:
-      '@effect/platform-bun':
-        specifier: catalog:effect
-        version: 4.0.0-rc.113(effect@4.0.0-rc.113)
-      '@types/bun':
-        specifier: catalog:tooling
-        version: 1.3.14
-      '@types/node':
-        specifier: catalog:tooling
-        version: 26.2.0
-
-  submodules/distilled/packages/modrinth:
     dependencies:
       '@distilled.cloud/core':
         specifier: workspace:*
@@ -6600,159 +6049,7 @@ importers:
         specifier: catalog:tooling
         version: 26.2.0
 
-  submodules/distilled/packages/okta:
-    dependencies:
-      '@distilled.cloud/core':
-        specifier: workspace:*
-        version: link:../core
-      effect:
-        specifier: 4.0.0-rc.113
-        version: 4.0.0-rc.113
-    devDependencies:
-      '@effect/platform-bun':
-        specifier: catalog:effect
-        version: 4.0.0-rc.113(effect@4.0.0-rc.113)
-      '@types/bun':
-        specifier: catalog:tooling
-        version: 1.3.14
-      '@types/node':
-        specifier: catalog:tooling
-        version: 26.2.0
-
-  submodules/distilled/packages/onepassword:
-    dependencies:
-      '@distilled.cloud/core':
-        specifier: workspace:*
-        version: link:../core
-      effect:
-        specifier: 4.0.0-rc.113
-        version: 4.0.0-rc.113
-    devDependencies:
-      '@effect/platform-bun':
-        specifier: catalog:effect
-        version: 4.0.0-rc.113(effect@4.0.0-rc.113)
-      '@types/bun':
-        specifier: catalog:tooling
-        version: 1.3.14
-      '@types/node':
-        specifier: catalog:tooling
-        version: 26.2.0
-
-  submodules/distilled/packages/opencode:
-    dependencies:
-      '@distilled.cloud/core':
-        specifier: workspace:*
-        version: link:../core
-      effect:
-        specifier: 4.0.0-rc.113
-        version: 4.0.0-rc.113
-    devDependencies:
-      '@effect/platform-bun':
-        specifier: catalog:effect
-        version: 4.0.0-rc.113(effect@4.0.0-rc.113)
-      '@types/bun':
-        specifier: catalog:tooling
-        version: 1.3.14
-      '@types/node':
-        specifier: catalog:tooling
-        version: 26.2.0
-
-  submodules/distilled/packages/ovh:
-    dependencies:
-      '@distilled.cloud/core':
-        specifier: workspace:*
-        version: link:../core
-      effect:
-        specifier: 4.0.0-rc.113
-        version: 4.0.0-rc.113
-    devDependencies:
-      '@effect/platform-bun':
-        specifier: catalog:effect
-        version: 4.0.0-rc.113(effect@4.0.0-rc.113)
-      '@types/bun':
-        specifier: catalog:tooling
-        version: 1.3.14
-      '@types/node':
-        specifier: catalog:tooling
-        version: 26.2.0
-
-  submodules/distilled/packages/paypal:
-    dependencies:
-      '@distilled.cloud/core':
-        specifier: workspace:*
-        version: link:../core
-      effect:
-        specifier: 4.0.0-rc.113
-        version: 4.0.0-rc.113
-    devDependencies:
-      '@effect/platform-bun':
-        specifier: catalog:effect
-        version: 4.0.0-rc.113(effect@4.0.0-rc.113)
-      '@types/bun':
-        specifier: catalog:tooling
-        version: 1.3.14
-      '@types/node':
-        specifier: catalog:tooling
-        version: 26.2.0
-
-  submodules/distilled/packages/plaid:
-    dependencies:
-      '@distilled.cloud/core':
-        specifier: workspace:*
-        version: link:../core
-      effect:
-        specifier: 4.0.0-rc.113
-        version: 4.0.0-rc.113
-    devDependencies:
-      '@effect/platform-bun':
-        specifier: catalog:effect
-        version: 4.0.0-rc.113(effect@4.0.0-rc.113)
-      '@types/bun':
-        specifier: catalog:tooling
-        version: 1.3.14
-      '@types/node':
-        specifier: catalog:tooling
-        version: 26.2.0
-
   submodules/distilled/packages/planetscale:
-    dependencies:
-      '@distilled.cloud/core':
-        specifier: workspace:*
-        version: link:../core
-      effect:
-        specifier: 4.0.0-rc.113
-        version: 4.0.0-rc.113
-    devDependencies:
-      '@effect/platform-bun':
-        specifier: catalog:effect
-        version: 4.0.0-rc.113(effect@4.0.0-rc.113)
-      '@types/bun':
-        specifier: catalog:tooling
-        version: 1.3.14
-      '@types/node':
-        specifier: catalog:tooling
-        version: 26.2.0
-
-  submodules/distilled/packages/polar:
-    dependencies:
-      '@distilled.cloud/core':
-        specifier: workspace:*
-        version: link:../core
-      effect:
-        specifier: 4.0.0-rc.113
-        version: 4.0.0-rc.113
-    devDependencies:
-      '@effect/platform-bun':
-        specifier: catalog:effect
-        version: 4.0.0-rc.113(effect@4.0.0-rc.113)
-      '@types/bun':
-        specifier: catalog:tooling
-        version: 1.3.14
-      '@types/node':
-        specifier: catalog:tooling
-        version: 26.2.0
-
-  submodules/distilled/packages/porkbun:
     dependencies:
       '@distilled.cloud/core':
         specifier: workspace:*
@@ -6828,158 +6125,6 @@ importers:
         specifier: catalog:tooling
         version: 26.2.0
 
-  submodules/distilled/packages/redis-cloud:
-    dependencies:
-      '@distilled.cloud/core':
-        specifier: workspace:*
-        version: link:../core
-      effect:
-        specifier: 4.0.0-rc.113
-        version: 4.0.0-rc.113
-    devDependencies:
-      '@effect/platform-bun':
-        specifier: catalog:effect
-        version: 4.0.0-rc.113(effect@4.0.0-rc.113)
-      '@types/bun':
-        specifier: catalog:tooling
-        version: 1.3.14
-      '@types/node':
-        specifier: catalog:tooling
-        version: 26.2.0
-
-  submodules/distilled/packages/remote:
-    dependencies:
-      '@distilled.cloud/core':
-        specifier: workspace:*
-        version: link:../core
-      effect:
-        specifier: 4.0.0-rc.113
-        version: 4.0.0-rc.113
-    devDependencies:
-      '@effect/platform-bun':
-        specifier: catalog:effect
-        version: 4.0.0-rc.113(effect@4.0.0-rc.113)
-      '@types/bun':
-        specifier: catalog:tooling
-        version: 1.3.14
-      '@types/node':
-        specifier: catalog:tooling
-        version: 26.2.0
-
-  submodules/distilled/packages/render:
-    dependencies:
-      '@distilled.cloud/core':
-        specifier: workspace:*
-        version: link:../core
-      effect:
-        specifier: 4.0.0-rc.113
-        version: 4.0.0-rc.113
-    devDependencies:
-      '@effect/platform-bun':
-        specifier: catalog:effect
-        version: 4.0.0-rc.113(effect@4.0.0-rc.113)
-      '@types/bun':
-        specifier: catalog:tooling
-        version: 1.3.14
-      '@types/node':
-        specifier: catalog:tooling
-        version: 26.2.0
-
-  submodules/distilled/packages/resend:
-    dependencies:
-      '@distilled.cloud/core':
-        specifier: workspace:*
-        version: link:../core
-      effect:
-        specifier: 4.0.0-rc.113
-        version: 4.0.0-rc.113
-    devDependencies:
-      '@effect/platform-bun':
-        specifier: catalog:effect
-        version: 4.0.0-rc.113(effect@4.0.0-rc.113)
-      '@types/bun':
-        specifier: catalog:tooling
-        version: 1.3.14
-      '@types/node':
-        specifier: catalog:tooling
-        version: 26.2.0
-
-  submodules/distilled/packages/sentry:
-    dependencies:
-      '@distilled.cloud/core':
-        specifier: workspace:*
-        version: link:../core
-      effect:
-        specifier: 4.0.0-rc.113
-        version: 4.0.0-rc.113
-    devDependencies:
-      '@effect/platform-bun':
-        specifier: catalog:effect
-        version: 4.0.0-rc.113(effect@4.0.0-rc.113)
-      '@types/bun':
-        specifier: catalog:tooling
-        version: 1.3.14
-      '@types/node':
-        specifier: catalog:tooling
-        version: 26.2.0
-
-  submodules/distilled/packages/slack:
-    dependencies:
-      '@distilled.cloud/core':
-        specifier: workspace:*
-        version: link:../core
-      effect:
-        specifier: 4.0.0-rc.113
-        version: 4.0.0-rc.113
-    devDependencies:
-      '@effect/platform-bun':
-        specifier: catalog:effect
-        version: 4.0.0-rc.113(effect@4.0.0-rc.113)
-      '@types/bun':
-        specifier: catalog:tooling
-        version: 1.3.14
-      '@types/node':
-        specifier: catalog:tooling
-        version: 26.2.0
-
-  submodules/distilled/packages/spacetimedb:
-    dependencies:
-      '@distilled.cloud/core':
-        specifier: workspace:*
-        version: link:../core
-      effect:
-        specifier: 4.0.0-rc.113
-        version: 4.0.0-rc.113
-    devDependencies:
-      '@effect/platform-bun':
-        specifier: catalog:effect
-        version: 4.0.0-rc.113(effect@4.0.0-rc.113)
-      '@types/bun':
-        specifier: catalog:tooling
-        version: 1.3.14
-      '@types/node':
-        specifier: catalog:tooling
-        version: 26.2.0
-
-  submodules/distilled/packages/squarespace:
-    dependencies:
-      '@distilled.cloud/core':
-        specifier: workspace:*
-        version: link:../core
-      effect:
-        specifier: 4.0.0-rc.113
-        version: 4.0.0-rc.113
-    devDependencies:
-      '@effect/platform-bun':
-        specifier: catalog:effect
-        version: 4.0.0-rc.113(effect@4.0.0-rc.113)
-      '@types/bun':
-        specifier: catalog:tooling
-        version: 1.3.14
-      '@types/node':
-        specifier: catalog:tooling
-        version: 26.2.0
-
   submodules/distilled/packages/stripe:
     dependencies:
       '@distilled.cloud/core':
@@ -7000,82 +6145,6 @@ importers:
         version: 26.2.0
 
   submodules/distilled/packages/supabase:
-    dependencies:
-      '@distilled.cloud/core':
-        specifier: workspace:*
-        version: link:../core
-      effect:
-        specifier: 4.0.0-rc.113
-        version: 4.0.0-rc.113
-    devDependencies:
-      '@effect/platform-bun':
-        specifier: catalog:effect
-        version: 4.0.0-rc.113(effect@4.0.0-rc.113)
-      '@types/bun':
-        specifier: catalog:tooling
-        version: 1.3.14
-      '@types/node':
-        specifier: catalog:tooling
-        version: 26.2.0
-
-  submodules/distilled/packages/surrealdb:
-    dependencies:
-      '@distilled.cloud/core':
-        specifier: workspace:*
-        version: link:../core
-      effect:
-        specifier: 4.0.0-rc.113
-        version: 4.0.0-rc.113
-    devDependencies:
-      '@effect/platform-bun':
-        specifier: catalog:effect
-        version: 4.0.0-rc.113(effect@4.0.0-rc.113)
-      '@types/bun':
-        specifier: catalog:tooling
-        version: 1.3.14
-      '@types/node':
-        specifier: catalog:tooling
-        version: 26.2.0
-
-  submodules/distilled/packages/temporal:
-    dependencies:
-      '@distilled.cloud/core':
-        specifier: workspace:*
-        version: link:../core
-      effect:
-        specifier: 4.0.0-rc.113
-        version: 4.0.0-rc.113
-    devDependencies:
-      '@effect/platform-bun':
-        specifier: catalog:effect
-        version: 4.0.0-rc.113(effect@4.0.0-rc.113)
-      '@types/bun':
-        specifier: catalog:tooling
-        version: 1.3.14
-      '@types/node':
-        specifier: catalog:tooling
-        version: 26.2.0
-
-  submodules/distilled/packages/trigger-dev:
-    dependencies:
-      '@distilled.cloud/core':
-        specifier: workspace:*
-        version: link:../core
-      effect:
-        specifier: 4.0.0-rc.113
-        version: 4.0.0-rc.113
-    devDependencies:
-      '@effect/platform-bun':
-        specifier: catalog:effect
-        version: 4.0.0-rc.113(effect@4.0.0-rc.113)
-      '@types/bun':
-        specifier: catalog:tooling
-        version: 1.3.14
-      '@types/node':
-        specifier: catalog:tooling
-        version: 26.2.0
-
-  submodules/distilled/packages/turbopuffer:
     dependencies:
       '@distilled.cloud/core':
         specifier: workspace:*
@@ -7132,44 +6201,6 @@ importers:
         specifier: catalog:tooling
         version: 26.2.0
 
-  submodules/distilled/packages/unkey:
-    dependencies:
-      '@distilled.cloud/core':
-        specifier: workspace:*
-        version: link:../core
-      effect:
-        specifier: 4.0.0-rc.113
-        version: 4.0.0-rc.113
-    devDependencies:
-      '@effect/platform-bun':
-        specifier: catalog:effect
-        version: 4.0.0-rc.113(effect@4.0.0-rc.113)
-      '@types/bun':
-        specifier: catalog:tooling
-        version: 1.3.14
-      '@types/node':
-        specifier: catalog:tooling
-        version: 26.2.0
-
-  submodules/distilled/packages/vanta:
-    dependencies:
-      '@distilled.cloud/core':
-        specifier: workspace:*
-        version: link:../core
-      effect:
-        specifier: 4.0.0-rc.113
-        version: 4.0.0-rc.113
-    devDependencies:
-      '@effect/platform-bun':
-        specifier: catalog:effect
-        version: 4.0.0-rc.113(effect@4.0.0-rc.113)
-      '@types/bun':
-        specifier: catalog:tooling
-        version: 1.3.14
-      '@types/node':
-        specifier: catalog:tooling
-        version: 26.2.0
-
   submodules/distilled/packages/vercel:
     dependencies:
       '@distilled.cloud/core':
@@ -7189,64 +6220,7 @@ importers:
         specifier: catalog:tooling
         version: 26.2.0
 
-  submodules/distilled/packages/whop:
-    dependencies:
-      '@distilled.cloud/core':
-        specifier: workspace:*
-        version: link:../core
-      effect:
-        specifier: 4.0.0-rc.113
-        version: 4.0.0-rc.113
-    devDependencies:
-      '@effect/platform-bun':
-        specifier: catalog:effect
-        version: 4.0.0-rc.113(effect@4.0.0-rc.113)
-      '@types/bun':
-        specifier: catalog:tooling
-        version: 1.3.14
-      '@types/node':
-        specifier: catalog:tooling
-        version: 26.2.0
-
   submodules/distilled/packages/workos:
-    dependencies:
-      '@distilled.cloud/core':
-        specifier: workspace:*
-        version: link:../core
-      effect:
-        specifier: 4.0.0-rc.113
-        version: 4.0.0-rc.113
-    devDependencies:
-      '@effect/platform-bun':
-        specifier: catalog:effect
-        version: 4.0.0-rc.113(effect@4.0.0-rc.113)
-      '@types/bun':
-        specifier: catalog:tooling
-        version: 1.3.14
-      '@types/node':
-        specifier: catalog:tooling
-        version: 26.2.0
-
-  submodules/distilled/packages/xata:
-    dependencies:
-      '@distilled.cloud/core':
-        specifier: workspace:*
-        version: link:../core
-      effect:
-        specifier: 4.0.0-rc.113
-        version: 4.0.0-rc.113
-    devDependencies:
-      '@effect/platform-bun':
-        specifier: catalog:effect
-        version: 4.0.0-rc.113(effect@4.0.0-rc.113)
-      '@types/bun':
-        specifier: catalog:tooling
-        version: 1.3.14
-      '@types/node':
-        specifier: catalog:tooling
-        version: 26.2.0
-
-  submodules/distilled/packages/zendesk:
     dependencies:
       '@distilled.cloud/core':
         specifier: workspace:*
@@ -21125,19 +20099,6 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@babel/helper-create-class-features-plugin@7.29.7(@babel/core@7.29.7)':
-    dependencies:
-      '@babel/core': 7.29.7
-      '@babel/helper-annotate-as-pure': 7.29.7
-      '@babel/helper-member-expression-to-functions': 7.29.7(supports-color@10.2.2)
-      '@babel/helper-optimise-call-expression': 7.29.7
-      '@babel/helper-replace-supers': 7.29.7(@babel/core@7.29.7)
-      '@babel/helper-skip-transparent-expression-wrappers': 7.29.7(supports-color@10.2.2)
-      '@babel/traverse': 7.29.8(supports-color@10.2.2)
-      semver: 6.3.1
-    transitivePeerDependencies:
-      - supports-color
-
   '@babel/helper-globals@7.29.7': {}
 
   '@babel/helper-member-expression-to-functions@7.29.7(supports-color@10.2.2)':
@@ -21191,15 +20152,6 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@babel/helper-replace-supers@7.29.7(@babel/core@7.29.7)':
-    dependencies:
-      '@babel/core': 7.29.7
-      '@babel/helper-member-expression-to-functions': 7.29.7(supports-color@10.2.2)
-      '@babel/helper-optimise-call-expression': 7.29.7
-      '@babel/traverse': 7.29.8(supports-color@10.2.2)
-    transitivePeerDependencies:
-      - supports-color
-
   '@babel/helper-skip-transparent-expression-wrappers@7.29.7(supports-color@10.2.2)':
     dependencies:
       '@babel/traverse': 7.29.8(supports-color@10.2.2)
@@ -21238,36 +20190,20 @@ snapshots:
       '@babel/plugin-syntax-decorators': 7.29.7(@babel/core@7.29.7(supports-color@10.2.2))
     transitivePeerDependencies:
       - supports-color
-    optional: true
-
-  '@babel/plugin-proposal-decorators@7.29.7(@babel/core@7.29.7)':
-    dependencies:
-      '@babel/core': 7.29.7
-      '@babel/helper-create-class-features-plugin': 7.29.7(@babel/core@7.29.7)
-      '@babel/helper-plugin-utils': 7.29.7
-      '@babel/plugin-syntax-decorators': 7.29.7(@babel/core@7.29.7)
-    transitivePeerDependencies:
-      - supports-color
 
   '@babel/plugin-syntax-decorators@7.29.7(@babel/core@7.29.7(supports-color@10.2.2))':
     dependencies:
       '@babel/core': 7.29.7(supports-color@10.2.2)
       '@babel/helper-plugin-utils': 7.29.7
-    optional: true
 
-  '@babel/plugin-syntax-decorators@7.29.7(@babel/core@7.29.7)':
+  '@babel/plugin-syntax-import-attributes@7.29.7(@babel/core@7.29.7(supports-color@10.2.2))':
     dependencies:
-      '@babel/core': 7.29.7
+      '@babel/core': 7.29.7(supports-color@10.2.2)
       '@babel/helper-plugin-utils': 7.29.7
 
-  '@babel/plugin-syntax-import-attributes@7.29.7(@babel/core@7.29.7)':
+  '@babel/plugin-syntax-import-meta@7.10.4(@babel/core@7.29.7(supports-color@10.2.2))':
     dependencies:
-      '@babel/core': 7.29.7
-      '@babel/helper-plugin-utils': 7.29.7
-
-  '@babel/plugin-syntax-import-meta@7.10.4(@babel/core@7.29.7)':
-    dependencies:
-      '@babel/core': 7.29.7
+      '@babel/core': 7.29.7(supports-color@10.2.2)
       '@babel/helper-plugin-utils': 7.29.7
 
   '@babel/plugin-syntax-jsx@7.29.7(@babel/core@7.29.7(supports-color@10.2.2))':
@@ -21279,15 +20215,11 @@ snapshots:
     dependencies:
       '@babel/core': 7.29.7
       '@babel/helper-plugin-utils': 7.29.7
+    optional: true
 
   '@babel/plugin-syntax-typescript@7.29.7(@babel/core@7.29.7(supports-color@10.2.2))':
     dependencies:
       '@babel/core': 7.29.7(supports-color@10.2.2)
-      '@babel/helper-plugin-utils': 7.29.7
-
-  '@babel/plugin-syntax-typescript@7.29.7(@babel/core@7.29.7)':
-    dependencies:
-      '@babel/core': 7.29.7
       '@babel/helper-plugin-utils': 7.29.7
 
   '@babel/plugin-transform-modules-commonjs@7.29.7(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2)':
@@ -21316,17 +20248,6 @@ snapshots:
       '@babel/helper-plugin-utils': 7.29.7
       '@babel/helper-skip-transparent-expression-wrappers': 7.29.7(supports-color@10.2.2)
       '@babel/plugin-syntax-typescript': 7.29.7(@babel/core@7.29.7(supports-color@10.2.2))
-    transitivePeerDependencies:
-      - supports-color
-
-  '@babel/plugin-transform-typescript@7.29.7(@babel/core@7.29.7)':
-    dependencies:
-      '@babel/core': 7.29.7
-      '@babel/helper-annotate-as-pure': 7.29.7
-      '@babel/helper-create-class-features-plugin': 7.29.7(@babel/core@7.29.7)
-      '@babel/helper-plugin-utils': 7.29.7
-      '@babel/helper-skip-transparent-expression-wrappers': 7.29.7(supports-color@10.2.2)
-      '@babel/plugin-syntax-typescript': 7.29.7(@babel/core@7.29.7)
     transitivePeerDependencies:
       - supports-color
 
@@ -21771,11 +20692,11 @@ snapshots:
   '@dxup/nuxt@0.5.6(esbuild@0.28.2)(magicast@0.5.4)(oxc-parser@0.141.0)(rolldown@1.2.5)(rollup@4.62.4)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))(webpack@5.109.2(cssnano@8.0.5(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26))':
     dependencies:
       '@dxup/unimport': 0.1.2
-      '@nuxt/kit': 4.5.1(magic-string@1.1.1)(magicast@0.5.4)(oxc-parser@0.141.0)(rolldown@1.2.5)(unplugin@3.3.0(esbuild@0.28.2)(rolldown@1.2.5)(rollup@4.62.4)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))(webpack@5.109.2(cssnano@8.0.5(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26)))
+      '@nuxt/kit': 4.5.1(magic-string@1.2.3)(magicast@0.5.4)(oxc-parser@0.141.0)(rolldown@1.2.5)(unplugin@3.3.0(esbuild@0.28.2)(rolldown@1.2.5)(rollup@4.62.4)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))(webpack@5.109.2(cssnano@8.0.5(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26)))
       '@vue/compiler-dom': 3.5.41
       chokidar: 5.0.0
       knitwork: 1.3.0
-      magic-string: 1.1.1
+      magic-string: 1.2.3
       pathe: 2.0.3
       tinyglobby: 0.2.17
       unplugin: 3.3.0(esbuild@0.28.2)(rolldown@1.2.5)(rollup@4.62.4)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))(webpack@5.109.2(cssnano@8.0.5(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26))
@@ -21795,11 +20716,11 @@ snapshots:
   '@dxup/nuxt@0.5.6(esbuild@0.28.2)(magicast@0.5.4)(oxc-parser@0.141.0)(rolldown@1.2.5)(rollup@4.62.4)(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))(webpack@5.109.2(cssnano@8.0.5(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26))':
     dependencies:
       '@dxup/unimport': 0.1.2
-      '@nuxt/kit': 4.5.1(magic-string@1.1.1)(magicast@0.5.4)(oxc-parser@0.141.0)(rolldown@1.2.5)(unplugin@3.3.0(esbuild@0.28.2)(rolldown@1.2.5)(rollup@4.62.4)(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))(webpack@5.109.2(cssnano@8.0.5(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26)))
+      '@nuxt/kit': 4.5.1(magic-string@1.2.3)(magicast@0.5.4)(oxc-parser@0.141.0)(rolldown@1.2.5)(unplugin@3.3.0(esbuild@0.28.2)(rolldown@1.2.5)(rollup@4.62.4)(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))(webpack@5.109.2(cssnano@8.0.5(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26)))
       '@vue/compiler-dom': 3.5.41
       chokidar: 5.0.0
       knitwork: 1.3.0
-      magic-string: 1.1.1
+      magic-string: 1.2.3
       pathe: 2.0.3
       tinyglobby: 0.2.17
       unplugin: 3.3.0(esbuild@0.28.2)(rolldown@1.2.5)(rollup@4.62.4)(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))(webpack@5.109.2(cssnano@8.0.5(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26))
@@ -23514,7 +22435,36 @@ snapshots:
       - oxc-parser
       - rolldown
       - unplugin
-    optional: true
+
+  '@nuxt/kit@4.5.1(magic-string@1.2.3)(magicast@0.5.4)(oxc-parser@0.141.0)(rolldown@1.2.5)(unplugin@3.3.0(esbuild@0.28.2)(rolldown@1.2.5)(rollup@4.62.4)(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))(webpack@5.109.2(cssnano@8.0.5(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26)))':
+    dependencies:
+      c12: 3.3.4(magicast@0.5.4)
+      consola: 3.4.2
+      defu: 6.1.7
+      destr: 2.0.5
+      errx: 0.1.2
+      exsolve: 1.1.1
+      ignore: 7.0.6
+      jiti: 2.7.0
+      klona: 2.0.6
+      mlly: 1.8.2
+      nostics: 1.2.0
+      ohash: 2.0.11
+      pathe: 2.0.3
+      pkg-types: 2.3.1
+      rc9: 3.0.1
+      scule: 1.3.0
+      tinyglobby: 0.2.17
+      ufo: 1.6.4
+      unctx: 3.0.0(magic-string@1.2.3)(oxc-parser@0.141.0)(rolldown@1.2.5)(unplugin@3.3.0(esbuild@0.28.2)(rolldown@1.2.5)(rollup@4.62.4)(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))(webpack@5.109.2(cssnano@8.0.5(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26)))
+      untyped: 2.0.0
+      verkit: 0.2.0
+    transitivePeerDependencies:
+      - magic-string
+      - magicast
+      - oxc-parser
+      - rolldown
+      - unplugin
 
   '@nuxt/nitro-server@4.5.1(419e31df70c861b79b43f043f657c53c)':
     dependencies:
@@ -28356,19 +27306,19 @@ snapshots:
 
   '@vue/babel-helper-vue-transform-on@2.0.1': {}
 
-  '@vue/babel-plugin-jsx@1.5.0(@babel/core@7.29.7)':
+  '@vue/babel-plugin-jsx@1.5.0(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2)':
     dependencies:
       '@babel/helper-module-imports': 7.29.7(supports-color@10.2.2)
       '@babel/helper-plugin-utils': 7.29.7
-      '@babel/plugin-syntax-jsx': 7.29.7(@babel/core@7.29.7)
+      '@babel/plugin-syntax-jsx': 7.29.7(@babel/core@7.29.7(supports-color@10.2.2))
       '@babel/template': 7.29.7
       '@babel/traverse': 7.29.8(supports-color@10.2.2)
       '@babel/types': 7.29.8
       '@vue/babel-helper-vue-transform-on': 1.5.0
-      '@vue/babel-plugin-resolve-type': 1.5.0(@babel/core@7.29.7)
+      '@vue/babel-plugin-resolve-type': 1.5.0(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2)
       '@vue/shared': 3.5.41
     optionalDependencies:
-      '@babel/core': 7.29.7
+      '@babel/core': 7.29.7(supports-color@10.2.2)
     transitivePeerDependencies:
       - supports-color
 
@@ -28388,10 +27338,10 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@vue/babel-plugin-resolve-type@1.5.0(@babel/core@7.29.7)':
+  '@vue/babel-plugin-resolve-type@1.5.0(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2)':
     dependencies:
       '@babel/code-frame': 7.29.7
-      '@babel/core': 7.29.7
+      '@babel/core': 7.29.7(supports-color@10.2.2)
       '@babel/helper-module-imports': 7.29.7(supports-color@10.2.2)
       '@babel/helper-plugin-utils': 7.29.7
       '@babel/parser': 7.29.8
@@ -34292,7 +33242,7 @@ snapshots:
 
   rolldown-string@0.3.1(rolldown@1.2.5):
     dependencies:
-      magic-string: 1.1.1
+      magic-string: 1.2.3
     optionalDependencies:
       rolldown: 1.2.5
 
@@ -35397,7 +34347,13 @@ snapshots:
       oxc-parser: 0.141.0
       rolldown: 1.2.5
       unplugin: 3.3.0(esbuild@0.28.2)(rolldown@1.2.5)(rollup@4.62.4)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))(webpack@5.109.2(cssnano@8.0.5(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26))
-    optional: true
+
+  unctx@3.0.0(magic-string@1.2.3)(oxc-parser@0.141.0)(rolldown@1.2.5)(unplugin@3.3.0(esbuild@0.28.2)(rolldown@1.2.5)(rollup@4.62.4)(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))(webpack@5.109.2(cssnano@8.0.5(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26))):
+    optionalDependencies:
+      magic-string: 1.2.3
+      oxc-parser: 0.141.0
+      rolldown: 1.2.5
+      unplugin: 3.3.0(esbuild@0.28.2)(rolldown@1.2.5)(rollup@4.62.4)(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))(webpack@5.109.2(cssnano@8.0.5(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26))
 
   undici-types@5.26.5: {}
 
@@ -35486,7 +34442,7 @@ snapshots:
       escape-string-regexp: 5.0.0
       estree-walker: 3.0.3
       local-pkg: 1.2.1
-      magic-string: 1.1.1
+      magic-string: 1.2.3
       mlly: 1.8.2
       pathe: 2.0.3
       picomatch: 4.0.5
@@ -35515,7 +34471,7 @@ snapshots:
       escape-string-regexp: 5.0.0
       estree-walker: 3.0.3
       local-pkg: 1.2.1
-      magic-string: 1.1.1
+      magic-string: 1.2.3
       mlly: 1.8.2
       pathe: 2.0.3
       picomatch: 4.0.5
@@ -35544,7 +34500,7 @@ snapshots:
       escape-string-regexp: 5.0.0
       estree-walker: 3.0.3
       local-pkg: 1.2.1
-      magic-string: 1.1.1
+      magic-string: 1.2.3
       mlly: 1.8.2
       pathe: 2.0.3
       picomatch: 4.0.5
@@ -36060,7 +35016,7 @@ snapshots:
       - supports-color
     optional: true
 
-  vite-plugin-vue-devtools@8.2.1(@nuxt/kit@4.5.1(magic-string@1.2.3)(magicast@0.5.4)(oxc-parser@0.141.0)(rolldown@1.2.5)(unplugin@3.3.0(esbuild@0.28.2)(rolldown@1.2.5)(rollup@4.62.4)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))(webpack@5.109.2(cssnano@8.0.5(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26))))(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))(vue@3.6.0-beta.17(typescript@7.0.2)):
+  vite-plugin-vue-devtools@8.2.1(@nuxt/kit@4.5.1(magic-string@1.2.3)(magicast@0.5.4)(oxc-parser@0.141.0)(rolldown@1.2.5)(unplugin@3.3.0(esbuild@0.28.2)(rolldown@1.2.5)(rollup@4.62.4)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))(webpack@5.109.2(cssnano@8.0.5(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26))))(supports-color@10.2.2)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))(vue@3.6.0-beta.17(typescript@7.0.2)):
     dependencies:
       '@vue/devtools-core': 8.2.1(vue@3.6.0-beta.17(typescript@7.0.2))
       '@vue/devtools-kit': 8.2.1
@@ -36068,20 +35024,20 @@ snapshots:
       sirv: 3.0.2
       vite: 8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)
       vite-plugin-inspect: 11.4.1(@nuxt/kit@4.5.1(magic-string@1.2.3)(magicast@0.5.4)(oxc-parser@0.141.0)(rolldown@1.2.5)(unplugin@3.3.0(esbuild@0.28.2)(rolldown@1.2.5)(rollup@4.62.4)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))(webpack@5.109.2(cssnano@8.0.5(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26))))(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
-      vite-plugin-vue-inspector: 6.0.0(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
+      vite-plugin-vue-inspector: 6.0.0(supports-color@10.2.2)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
       vue: 3.6.0-beta.17(typescript@7.0.2)
     transitivePeerDependencies:
       - '@nuxt/kit'
       - supports-color
 
-  vite-plugin-vue-inspector@6.0.0(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)):
+  vite-plugin-vue-inspector@6.0.0(supports-color@10.2.2)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)):
     dependencies:
-      '@babel/core': 7.29.7
-      '@babel/plugin-proposal-decorators': 7.29.7(@babel/core@7.29.7)
-      '@babel/plugin-syntax-import-attributes': 7.29.7(@babel/core@7.29.7)
-      '@babel/plugin-syntax-import-meta': 7.10.4(@babel/core@7.29.7)
-      '@babel/plugin-transform-typescript': 7.29.7(@babel/core@7.29.7)
-      '@vue/babel-plugin-jsx': 1.5.0(@babel/core@7.29.7)
+      '@babel/core': 7.29.7(supports-color@10.2.2)
+      '@babel/plugin-proposal-decorators': 7.29.7(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2)
+      '@babel/plugin-syntax-import-attributes': 7.29.7(@babel/core@7.29.7(supports-color@10.2.2))
+      '@babel/plugin-syntax-import-meta': 7.10.4(@babel/core@7.29.7(supports-color@10.2.2))
+      '@babel/plugin-transform-typescript': 7.29.7(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2)
+      '@vue/babel-plugin-jsx': 1.5.0(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2)
       '@vue/compiler-dom': 3.5.41
       kolorist: 1.8.0
       magic-string: 0.30.21
