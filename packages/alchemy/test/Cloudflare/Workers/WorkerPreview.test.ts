@@ -122,8 +122,8 @@ describe.concurrent("Cloudflare.Worker preview", () => {
               });
               return yield* Cloudflare.Worker("ComboPreview", {
                 script: script("combo-preview"),
-                preview: { of: parent },
-                version: { parent },
+                preview: { of: parent.workerName },
+                version: { parent: parent.workerName },
               });
             }),
           )
