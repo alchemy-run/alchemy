@@ -115,7 +115,7 @@ describe.each(watcherModes)(
           // it now belongs to the replacement.
           yield* Scope.close(oldScope, Exit.void);
           expect(yield* fs.exists(entryPath)).toBe(true);
-          expect(diskEntry(yield* fs.readFileString(entryPath))).toEqual(
+          expect(JSON.parse(yield* fs.readFileString(entryPath))).toEqual(
             replacementEntry,
           );
 
@@ -155,17 +155,8 @@ describe.each(watcherModes)(
           registryServiceMap,
         );
 
-        const stored = JSON.parse(yield* fs.readFileString(entryPath)) as {
-          writeId: string;
-          updatedAt: number;
-        };
-        yield* fs.writeFileString(
-          entryPath,
-          JSON.stringify({
-            ...stored,
-            updatedAt: Date.now() - 10 * 60 * 1000,
-          }),
-        );
+        const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000);
+        yield* fs.utimes(entryPath, tenMinAgo, tenMinAgo);
         yield* waitForRegistryEntry(subscriberEntry, { toBeDefined: false });
 
         expect(yield* registry.read([subscriberEntry])).toEqual({});
@@ -243,18 +234,6 @@ describe.each(watcherModes)(
     );
   },
 );
-
-const diskEntry = (content: string): RegistryEntry => {
-  const {
-    writeId: _writeId,
-    updatedAt: _updatedAt,
-    ...entry
-  } = JSON.parse(content) as RegistryEntry & {
-    writeId?: string;
-    updatedAt?: number;
-  };
-  return entry;
-};
 
 const registryEntry = (scriptName: string): RegistryEntry => ({
   scriptName,
