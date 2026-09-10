@@ -68,7 +68,7 @@ const ThreadPage = ({
   /** The pane's "Delete thread" — the shell confirms and erases. */
   onDeleteThread: () => void;
 }) => {
-  const state = useThreadState<ThreadState>(id);
+  const { state, missing } = useThreadState<ThreadState>(id);
   const onCloseThread = useCallback(() => {
     void fetch(`/api/threads/${encodeURIComponent(id)}/close`, {
       method: "POST",
@@ -78,6 +78,7 @@ const ThreadPage = ({
     <ThreadView
       id={id}
       state={state}
+      missing={missing}
       tab={tab}
       active={active}
       terminals={terminals}

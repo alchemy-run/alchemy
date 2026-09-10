@@ -912,6 +912,38 @@ test("delete thread confirms, erases, and returns to the channel", async ({
   ).toBeVisible();
 });
 
+test("a thread whose state is gone still shows a pane — and can be deleted", async ({
+  page,
+  api,
+}) => {
+  // the rail lists it (its directory row survived) but the server
+  // answers 404 for its state: a thread made under an earlier storage
+  // layout, or one whose state was lost
+  api.seedOrphanRow({
+    id: "t-ghost-9612478f",
+    name: "cloudflare-state-fixes",
+    title: "Cloudflare container & state payload fixes",
+  });
+  api.seedThread({ id: "t-2", name: "w-other", title: "Another task" });
+  await openApp(page, threadPath("t-ghost-9612478f"));
+  const nav = (name: string) =>
+    threadNav(page).getByRole("button", { name, exact: true });
+  await expect(nav("cloudflare-state-fixes")).toBeVisible();
+
+  // the pane is there, saying what happened, with the way out
+  const pane = page.getByRole("complementary", { name: "Thread state" });
+  await expect(pane).toBeVisible();
+  await expect(pane).toContainText("state missing");
+  await expect(pane).toContainText("t-ghost-9612478f");
+
+  page.once("dialog", (dialog) => void dialog.accept());
+  await pane.getByRole("button", { name: "Delete thread" }).click();
+  await expect.poll(() => api.deletedThreads).toEqual(["t-ghost-9612478f"]);
+  await expect(nav("cloudflare-state-fixes")).toHaveCount(0);
+  await expect(nav("w-other")).toBeVisible();
+  await expect(page).toHaveURL(/\/$/);
+});
+
 test("a review URL deep-links straight into the diff", async ({
   page,
   api,

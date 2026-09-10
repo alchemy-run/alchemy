@@ -508,6 +508,56 @@ const ThreadPane = ({
   );
 };
 
+/**
+ * The pane for a thread the server no longer knows: the rail lists it
+ * (its directory row survived) but `/api/threads/:id` is a 404 — the
+ * state is gone, so there is nothing to show but the way out.
+ */
+const MissingPane = ({
+  id,
+  deleting,
+  onDelete,
+}: {
+  id: string;
+  deleting: boolean;
+  onDelete: () => void;
+}) => (
+  <div
+    data-thread-missing=""
+    className="flex h-full min-h-0 flex-col overflow-y-auto text-sm"
+  >
+    <div className="flex flex-col gap-2 border-b border-border px-4 py-3">
+      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <span className="size-2 rounded-full bg-destructive/70" aria-hidden />
+        <span>state missing</span>
+      </div>
+      <p className="text-xs leading-relaxed text-muted-foreground">
+        The thread <code className="text-foreground">{id}</code> is listed but
+        its state is gone — nothing is assigned, running, or recoverable here.
+        Deleting it clears its row from the channel.
+      </p>
+    </div>
+    <div className="mt-auto flex flex-col gap-1 px-2 py-2">
+      <Button
+        size="sm"
+        variant="ghost"
+        onClick={onDelete}
+        disabled={deleting}
+        aria-busy={deleting || undefined}
+        title="Delete the thread — its row leaves the channel"
+        className="text-muted-foreground hover:text-destructive"
+      >
+        {deleting ? (
+          <LoaderCircle className="size-3.5 animate-spin" />
+        ) : (
+          <Trash2 className="size-3.5" />
+        )}
+        {deleting ? "Deleting…" : "Delete thread"}
+      </Button>
+    </div>
+  </div>
+);
+
 const AGENT_STATE_LABEL: Record<string, string> = {
   running: "working",
   done: "done",
@@ -627,6 +677,7 @@ const AgentHeader = ({
 export const ThreadView = ({
   id,
   state,
+  missing = false,
   tab,
   active,
   terminals,
@@ -639,6 +690,9 @@ export const ThreadView = ({
 }: {
   id: string;
   state: ThreadState | undefined;
+  /** The server does not know this thread (its state is gone) though
+   *  the rail still lists it — the pane offers only to delete it. */
+  missing?: boolean;
   tab: ThreadTab;
   active: boolean;
   /** The ptys the operator opened on this thread's machine. */
@@ -970,7 +1024,7 @@ export const ThreadView = ({
                 />
               </div>
             ))}
-            {state !== undefined &&
+            {(state !== undefined || missing) &&
               (tab.kind === "chat" || tab.kind === "agent") && (
                 <Rail
                   label="Thread state"
@@ -978,18 +1032,26 @@ export const ThreadView = ({
                   defaultWidth={320}
                   minWidth={260}
                 >
-                  <ThreadPane
-                    state={state}
-                    selectedAgent={openAgent}
-                    onOpenReview={(owner, repo, number) =>
-                      onTab({ kind: "review", owner, repo, number })
-                    }
-                    onOpenAgent={(key) => onTab({ kind: "agent", key })}
-                    agentActions={agentActions}
-                    onClose={onCloseThread}
-                    deleting={deleting}
-                    onDelete={onDeleteThread}
-                  />
+                  {state !== undefined ? (
+                    <ThreadPane
+                      state={state}
+                      selectedAgent={openAgent}
+                      onOpenReview={(owner, repo, number) =>
+                        onTab({ kind: "review", owner, repo, number })
+                      }
+                      onOpenAgent={(key) => onTab({ kind: "agent", key })}
+                      agentActions={agentActions}
+                      onClose={onCloseThread}
+                      deleting={deleting}
+                      onDelete={onDeleteThread}
+                    />
+                  ) : (
+                    <MissingPane
+                      id={id}
+                      deleting={deleting}
+                      onDelete={onDeleteThread}
+                    />
+                  )}
                 </Rail>
               )}
           </>

@@ -171,14 +171,25 @@ export const useChannelStream = (): ChannelStream => {
   return { messages, directory, live };
 };
 
-/** A thread's state snapshot, pushed whole over `/thread/:id`. */
-export const useThreadState = <T,>(id: string | undefined): T | undefined => {
+/**
+ * A thread's state snapshot, pushed whole over `/thread/:id`.
+ *
+ * `state` is `undefined` until the first paint arrives; `missing`
+ * flips on when the server answers that it does not know the thread
+ * (404) — the row in the rail outlived its state — so the view can
+ * still offer to delete it instead of rendering nothing.
+ */
+export const useThreadState = <T,>(
+  id: string | undefined,
+): { state: T | undefined; missing: boolean } => {
   const [state, setState] = useState<T | undefined>(undefined);
+  const [missing, setMissing] = useState(false);
   const idRef = useRef(id);
   idRef.current = id;
 
   useEffect(() => {
     setState(undefined);
+    setMissing(false);
     if (id === undefined) return;
     let closed = false;
     let retry = 0;
@@ -187,9 +198,16 @@ export const useThreadState = <T,>(id: string | undefined): T | undefined => {
 
     // first paint over GET; the socket pushes every change after
     fetch(`/api/threads/${encodeURIComponent(id)}`)
-      .then((response) => (response.ok ? response.json() : undefined))
+      .then((response) => {
+        if (response.ok) return response.json();
+        if (response.status === 404 && !closed) setMissing(true);
+        return undefined;
+      })
       .then((value) => {
-        if (!closed && value !== undefined) setState(value as T);
+        if (!closed && value !== undefined) {
+          setMissing(false);
+          setState(value as T);
+        }
       })
       .catch(() => {});
 
@@ -210,6 +228,7 @@ export const useThreadState = <T,>(id: string | undefined): T | undefined => {
             state?: T;
           };
           if (frame.type === "state" && frame.state !== undefined) {
+            setMissing(false);
             setState(frame.state);
           }
         } catch {
@@ -232,5 +251,5 @@ export const useThreadState = <T,>(id: string | undefined): T | undefined => {
     };
   }, [id]);
 
-  return state;
+  return { state, missing };
 };

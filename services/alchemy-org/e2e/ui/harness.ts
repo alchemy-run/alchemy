@@ -294,6 +294,28 @@ export class FakeApi {
     return state;
   }
 
+  /**
+   * A directory row whose thread has NO state — the server answers
+   * `/api/threads/:id` with 404 (its state was lost, or it was made
+   * under an earlier storage layout) yet the rail still lists it. The
+   * real server keeps letting it be deleted; so does this one.
+   */
+  seedOrphanRow(row: Partial<ThreadListing> & { id: string }): ThreadListing {
+    const listing: ThreadListing = {
+      name: row.id,
+      title: "",
+      status: "open",
+      turn: "others",
+      updatedAt: NOW.getTime() - 60_000,
+      ...row,
+    };
+    this.directory = [
+      ...this.directory.filter((entry) => entry.id !== listing.id),
+      listing,
+    ];
+    return listing;
+  }
+
   /** Amend a thread's state and push the snapshot to its sockets. */
   updateThread(id: string, patch: Partial<ThreadState>): void {
     const current = this.threads[id];
@@ -891,7 +913,10 @@ export class FakeApi {
     if (thread !== null) {
       const id = decodeURIComponent(thread[1]!);
       const state = this.threads[id];
-      if (state === undefined) {
+      if (
+        state === undefined &&
+        !(method === "DELETE" && thread[3] === undefined)
+      ) {
         return this.json(route, { error: `unknown thread ${id}` }, 404);
       }
       if (thread[3] === "close" && method === "POST") {
@@ -901,7 +926,9 @@ export class FakeApi {
       }
       if (method === "DELETE") {
         // the thread is erased; the rail learns over the directory
-        // frame, the channel rows it placed lose their tag
+        // frame, the channel rows it placed lose their tag. A thread
+        // with no state (an orphan row) is erased the same way — the
+        // server's teardown drops the projections whatever it finds.
         this.deletedThreads.push(id);
         if (this.threadDeleteGate !== undefined) await this.threadDeleteGate;
         const { [id]: _dropped, ...rest } = this.threads;

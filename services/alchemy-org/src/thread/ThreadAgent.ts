@@ -552,8 +552,16 @@ export const ThreadAgentLive = ThreadAgent.make(
 
     const teardown = Effect.fn(function* () {
       const before = yield* threadState;
-      if (before === null) return undefined;
       const id = yield* self;
+      if (before === null) {
+        // No state — the thread never existed, or its state was lost
+        // (created under an earlier storage layout). The channel may
+        // still project it (a directory row, held refs): those are
+        // the thread's and go with it, or the row haunts the rail as
+        // a thread that cannot be opened OR deleted.
+        yield* channel.directoryRemove(id);
+        return undefined;
+      }
       // 1. every session descended from the thread — its
       // subagents, then the index's parent edges walked transitively
       // from the thread's session (a directory: a stale or
