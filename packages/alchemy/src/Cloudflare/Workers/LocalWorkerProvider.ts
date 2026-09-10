@@ -1265,6 +1265,7 @@ export const LocalWorkerProvider = () =>
                     {
                       rootDir: root,
                       publicUrl: proxy.url.toString().replace(/\/$/, ""),
+                      proxySharedSecret: proxy.proxySharedSecret,
                       accountId,
                       storageDirectory,
                       stack: { name: stack.name, stage: stack.stage },
@@ -1409,6 +1410,7 @@ export const LocalWorkerProvider = () =>
           extraOptions: worker.bundleOptions.extraOptions,
           assets: worker.assets,
           worker: {
+            proxySharedSecret: proxy.proxySharedSecret,
             bindings: worker.workerBindings,
             durableObjectNamespaces: worker.durableObjectNamespaces,
             hyperdrives: worker.hyperdrives,
