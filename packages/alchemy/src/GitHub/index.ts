@@ -9,6 +9,7 @@ export * from "./Milestone.ts";
 export * from "./PullRequest.ts";
 export * from "./Providers.ts";
 export * from "./Query.ts";
+export * from "./Release.ts";
 export * from "./Repository.ts";
 export * from "./RepositoryEventSource.ts";
 export * from "./Secret.ts";

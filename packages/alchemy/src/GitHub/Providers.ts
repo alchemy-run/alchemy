@@ -10,6 +10,7 @@ import { Issue, IssueProvider } from "./Issue.ts";
 import { Label, LabelProvider } from "./Label.ts";
 import { Milestone, MilestoneProvider } from "./Milestone.ts";
 import { PullRequest, PullRequestProvider } from "./PullRequest.ts";
+import { Release, ReleaseProvider } from "./Release.ts";
 import { Repository, RepositoryProvider } from "./Repository.ts";
 import { Secret, SecretProvider } from "./Secret.ts";
 import { Variable, VariableProvider } from "./Variable.ts";
@@ -27,7 +28,7 @@ export interface ProvidersOptions extends GitHubAuthOptions {}
 
 /**
  * GitHub providers (Comment, Environment, Issue, Label, Milestone,
- * PullRequest, Repository, Secret, Variable, Webhook) plus the GitHub
+ * PullRequest, Release, Repository, Secret, Variable, Webhook) plus the GitHub
  * AuthProvider that the alchemy CLI discovers.
  *
  * Pass `baseUrl` to pin every GitHub resource to a GitHub Enterprise host
@@ -52,6 +53,7 @@ export const providers = (options?: ProvidersOptions) =>
       Label,
       Milestone,
       PullRequest,
+      Release,
       Repository,
       Secret,
       Variable,
@@ -66,6 +68,7 @@ export const providers = (options?: ProvidersOptions) =>
         LabelProvider(),
         MilestoneProvider(),
         PullRequestProvider(),
+        ReleaseProvider(),
         RepositoryProvider(),
         SecretProvider(),
         VariableProvider(),
