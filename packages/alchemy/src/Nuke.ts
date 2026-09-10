@@ -7,6 +7,7 @@ import picomatch from "picomatch";
 import {
   isProviderCollectionService,
   isProviderService,
+  providerForMode,
   type ProviderService,
 } from "./Provider.ts";
 import type { ProviderMode } from "./ProviderMode.ts";
@@ -108,7 +109,7 @@ export interface Result {
 
 interface DiscoveredProvider {
   readonly id: string;
-  readonly resolve: Effect.Effect<ProviderService>;
+  readonly provider: ProviderService;
 }
 
 const failure = (
@@ -132,40 +133,42 @@ const silent = {
  * Walk the built provider context for everything deletable. A provider opts
  * out with `nuke.skip` (not ours to delete) or `nuke.singleton` (an
  * account-level object that has to survive).
+ *
+ * Dual registrations (`ProviderLayer.dual`) build nothing until asked and
+ * keep their `nuke` metadata on the variants, so each provider is resolved
+ * to the scan mode's variant first — mode-agnostic providers resolve to
+ * themselves in a live scan and are not part of a local one.
  */
-const discover = (
+const discover = Effect.fn(function* (
   context: Context.Context<never>,
   { mode, include, exclude }: DiscoverOptions,
-): ReadonlyArray<DiscoveredProvider> => {
-  const output = new Map<string, ProviderService>();
-  const nukeable = (provider: ProviderService) =>
-    !provider.nuke?.singleton && !provider.nuke?.skip;
+) {
+  const registered = new Map<string, ProviderService>();
   for (const [key, value] of context.mapUnsafe.entries()) {
     if (isProviderCollectionService(value)) {
       for (const [id, provider] of Object.entries(value.providers)) {
-        if (nukeable(provider)) output.set(id, provider);
+        registered.set(id, provider);
       }
     } else if (
       typeof key === "string" &&
       key.includes(".") &&
-      isProviderService(value) &&
-      nukeable(value)
+      isProviderService(value)
     ) {
-      output.set(key, value);
+      registered.set(key, value);
     }
   }
   const included = include?.length ? picomatch([...include]) : () => true;
   const excluded = exclude?.length ? picomatch([...exclude]) : () => false;
-  return [...output.entries()]
-    .flatMap(([id, provider]) => {
-      if (!included(id) || excluded(id)) return [];
-      if (mode === "live") return [{ id, resolve: Effect.succeed(provider) }];
-      return provider.modes?.local
-        ? [{ id, resolve: provider.modes.local }]
-        : [];
-    })
-    .sort((a, b) => a.id.localeCompare(b.id));
-};
+  const output: DiscoveredProvider[] = [];
+  for (const [id, registration] of registered) {
+    if (!included(id) || excluded(id)) continue;
+    if (mode === "local" && registration.modes === undefined) continue;
+    const provider = yield* providerForMode(registration, mode);
+    if (provider.nuke?.singleton || provider.nuke?.skip) continue;
+    output.push({ id, provider });
+  }
+  return output.sort((a, b) => a.id.localeCompare(b.id));
+});
 const nameKeys = [
   "workerName",
   "functionName",
@@ -217,16 +220,17 @@ export const list = (
   Effect.gen(function* () {
     const failures: ProviderFailure[] = [];
     const resources: Target[] = [];
-    const providers = discover(options.context, options);
+    const providers = yield* discover(options.context, options).pipe(
+      Effect.provide(options.context),
+    );
     yield* options.onScan?.(providers.length) ?? Effect.void;
     yield* Effect.forEach(
       providers,
-      ({ id, resolve }) =>
+      ({ id, provider }) =>
         Effect.gen(function* () {
           yield* options.onProviderStarted?.(id) ?? Effect.void;
           const result = yield* Effect.result(
             Effect.gen(function* () {
-              const provider = yield* resolve;
               const listed = yield* provider
                 .list()
                 .pipe(

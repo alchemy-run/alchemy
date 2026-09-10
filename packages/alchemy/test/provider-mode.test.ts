@@ -93,6 +93,26 @@ describe("provider modes", () => {
   );
 
   test.provider(
+    "no variant is built until a resource of the type is planned",
+    (stack) =>
+      Effect.gen(function* () {
+        const bucketOnly = Effect.gen(function* () {
+          yield* Bucket("B", {});
+          return {};
+        });
+        // Registration alone constructs nothing — in either default mode.
+        // (In dev, the local variant is what spawns a provider sidecar, so
+        // a stack without the type must not pay for one.)
+        yield* bucketOnly.pipe(stack.deploy);
+        expect(buildsFor(stack.name)).toHaveLength(0);
+        yield* inDev(bucketOnly.pipe(stack.deploy));
+        expect(buildsFor(stack.name)).toHaveLength(0);
+
+        yield* stack.destroy();
+      }),
+  );
+
+  test.provider(
     "a dev run resolves the local provider; live-only resources stay live",
     (stack) =>
       Effect.gen(function* () {
