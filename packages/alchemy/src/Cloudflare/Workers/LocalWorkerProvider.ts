@@ -842,6 +842,7 @@ export const LocalWorkerProvider = () =>
                   runtime
                     .start({
                       name: worker.name,
+                      proxySharedSecret: proxy.proxySharedSecret,
                       logging: {
                         // `(chunk, stream)` — chunk first; the stream name
                         // indexes the splitters directly.
