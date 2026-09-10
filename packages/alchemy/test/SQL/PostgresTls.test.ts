@@ -1,13 +1,13 @@
-import { withServername } from "@/SQL/PostgresTls.ts";
+import { resolveSsl } from "@/SQL/PostgresTls.ts";
 import { describe, expect, it } from "alchemy-test";
 import * as Redacted from "effect/Redacted";
 
 const url = (s: string) => Redacted.make(s);
 
-describe("SQL/PostgresTls withServername", () => {
+describe("SQL/PostgresTls resolveSsl", () => {
   it("adds servername when the URL requests TLS via sslmode", () => {
     expect(
-      withServername(
+      resolveSsl(
         url(
           "postgresql://admin:tok@abc.dsql.us-west-2.on.aws:5432/postgres?sslmode=require",
         ),
@@ -16,7 +16,7 @@ describe("SQL/PostgresTls withServername", () => {
     ).toEqual({ servername: "abc.dsql.us-west-2.on.aws" });
     for (const mode of ["verify-ca", "verify-full"]) {
       expect(
-        withServername(
+        resolveSsl(
           url(`postgres://u@db.example.com/x?sslmode=${mode}`),
           undefined,
         ),
@@ -25,11 +25,11 @@ describe("SQL/PostgresTls withServername", () => {
   });
 
   it("adds servername when the caller asks for TLS explicitly", () => {
-    expect(withServername(url("postgres://u@db.example.com/x"), true)).toEqual({
+    expect(resolveSsl(url("postgres://u@db.example.com/x"), true)).toEqual({
       servername: "db.example.com",
     });
     expect(
-      withServername(url("postgres://u@db.example.com/x"), {
+      resolveSsl(url("postgres://u@db.example.com/x"), {
         rejectUnauthorized: false,
       }),
     ).toEqual({ rejectUnauthorized: false, servername: "db.example.com" });
@@ -37,7 +37,7 @@ describe("SQL/PostgresTls withServername", () => {
 
   it("keeps a caller-provided servername", () => {
     expect(
-      withServername(url("postgres://u@db.example.com/x?sslmode=require"), {
+      resolveSsl(url("postgres://u@db.example.com/x?sslmode=require"), {
         servername: "override.example.com",
       }),
     ).toEqual({ servername: "override.example.com" });
@@ -45,39 +45,52 @@ describe("SQL/PostgresTls withServername", () => {
 
   it("leaves plaintext URLs alone so sslmode keeps driving @effect/sql-pg", () => {
     expect(
-      withServername(url("postgres://u@db.example.com/x"), undefined),
+      resolveSsl(url("postgres://u@db.example.com/x"), undefined),
     ).toBeUndefined();
     expect(
-      withServername(
+      resolveSsl(
         url("postgres://u@db.example.com/x?sslmode=disable"),
         undefined,
       ),
     ).toBeUndefined();
     expect(
-      withServername(
-        url("postgres://u@db.example.com/x?sslmode=prefer"),
-        undefined,
-      ),
-    ).toBeUndefined();
-    expect(
-      withServername(
-        url("postgres://u@db.example.com/x?sslmode=require"),
-        false,
-      ),
+      resolveSsl(url("postgres://u@db.example.com/x?sslmode=require"), false),
     ).toBe(false);
+  });
+
+  it("resolves sslmode=prefer|allow to TLS on (rc.113 rejects them when ssl is implicit)", () => {
+    for (const mode of ["prefer", "allow"]) {
+      expect(
+        resolveSsl(
+          url(`postgres://u@ep-x.neon.tech/x?sslmode=${mode}`),
+          undefined,
+        ),
+      ).toEqual({ servername: "ep-x.neon.tech" });
+      expect(
+        resolveSsl(
+          url(`postgres://u@127.0.0.1:5432/x?sslmode=${mode}`),
+          undefined,
+        ),
+      ).toBe(true);
+    }
   });
 
   it("never sets an IP literal as servername", () => {
     expect(
-      withServername(url("postgres://u@10.0.0.5/x?sslmode=require"), undefined),
-    ).toBeUndefined();
-    expect(
-      withServername(url("postgres://u@[::1]:5432/x?sslmode=require"), true),
+      resolveSsl(url("postgres://u@10.0.0.5/x?sslmode=require"), undefined),
     ).toBe(true);
+    expect(
+      resolveSsl(url("postgres://u@[::1]:5432/x?sslmode=require"), true),
+    ).toBe(true);
+    expect(
+      resolveSsl(url("postgres://u@[::1]:5432/x?sslmode=require"), {
+        rejectUnauthorized: false,
+      }),
+    ).toEqual({ rejectUnauthorized: false });
   });
 
   it("passes malformed URLs through untouched", () => {
-    expect(withServername(url("not a url"), undefined)).toBeUndefined();
-    expect(withServername(url("not a url"), true)).toBe(true);
+    expect(resolveSsl(url("not a url"), undefined)).toBeUndefined();
+    expect(resolveSsl(url("not a url"), true)).toBe(true);
   });
 });
