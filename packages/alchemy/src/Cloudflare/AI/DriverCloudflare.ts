@@ -44,14 +44,17 @@ import * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import type * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import type { Actor, SessionRef } from "../../AI/Agent.ts";
+import { RpcCallError } from "../../Rpc.ts";
 import { Sandbox, type SandboxPty } from "../../AI/Sandbox.ts";
 import { Thread, type ThreadService } from "../../AI/Thread.ts";
 import { Driver, type Charter, type Interpretable } from "../../AI/Driver.ts";
 import {
+  construct,
   makeSessionEngine,
   reminderInput,
   stoppedByOperator,
   supervised,
+  type SessionShape,
   type SessionEngine,
 } from "../../AI/DriverCore.ts";
 import type { DriverError } from "../../AI/Errors.ts";
@@ -89,7 +92,10 @@ import {
 /** What one `interpret` call recorded — all a DO activation needs to
  *  BECOME a session of its term. */
 interface RegisteredCharter {
-  readonly charter: Charter;
+  /** The charter, run at interpret (once per isolate; see
+   *  `DriverCore.construct`): the turn and the API every session of
+   *  the term shares. */
+  readonly shape: SessionShape;
   /** The charter's own Layer graph, captured at interpret — tools,
    *  doors, and delegates resolve from it as on the resident
    *  placement. */
@@ -149,6 +155,7 @@ const phantomThread = (key: string): ThreadService => ({
   compact: () => Effect.void,
   reply: () => Effect.void,
   remind: () => Effect.void,
+  publish: () => Effect.void,
 });
 
 /** Split a DO name back into its term and key halves. The key may
@@ -186,11 +193,21 @@ export class DriverDurability extends Context.Service<
 interface SessionRpc extends MainRpc<DurableObjectState> {
   readonly deliver: (
     input: unknown,
-    options?: { readonly parent?: SessionRef; readonly wake?: boolean },
+    options?: {
+      readonly parent?: SessionRef;
+      readonly wake?: boolean;
+    },
   ) => Effect.Effect<void, unknown, RuntimeContext>;
   readonly dispatch: (
     input: unknown,
     options?: { readonly parent?: SessionRef },
+  ) => Effect.Effect<unknown, unknown, RuntimeContext>;
+  /** One METHOD of this session's API (`agent.at(key).method(…)`) —
+   *  args and result cross the wire, so they are structured-clonable
+   *  by construction here. */
+  readonly call: (
+    method: string,
+    args: ReadonlyArray<unknown>,
   ) => Effect.Effect<unknown, unknown, RuntimeContext>;
   readonly steer: (
     input: unknown,
@@ -486,66 +503,65 @@ export const DurableObjectHost: Layer.Layer<
          * (closed-pump) one hibernates. A guest-side failure ends the
          * pump and tells the viewer; the next keystroke reopens.
          */
-        const ensurePump = (
+        const ensurePump = Effect.fn(function* (
           socket: WebSocket,
           pty: SandboxPty,
           tag: TerminalAttachment,
           options?: { readonly restart?: boolean },
-        ) =>
-          Effect.gen(function* () {
-            if (pumps.has(socket.ws)) {
-              if (options?.restart !== true) return;
-              yield* haltPump(socket);
-            }
-            const halt = yield* Deferred.make<void>();
-            pumps.set(socket.ws, halt);
-            let chunks = 0;
-            const pump = Effect.raceFirst(
-              pty.stream(tag.id).pipe(
-                Stream.runForEach((chunk) =>
-                  Effect.gen(function* () {
-                    if (chunks++ === 0) {
-                      yield* Effect.logDebug(
-                        `[terminal-debug] pump(${tag.id}): first chunk (${(chunk as Uint8Array).byteLength}b)`,
-                      );
-                    }
-                    yield* socket.send(chunk);
-                  }),
-                ),
-                asSession,
-                Effect.tap(() =>
-                  Effect.logDebug(
-                    `[terminal-debug] pump(${tag.id}): stream ended after ${chunks} chunks`,
-                  ),
-                ),
-                Effect.catch((error) =>
-                  Effect.gen(function* () {
+        ) {
+          if (pumps.has(socket.ws)) {
+            if (options?.restart !== true) return;
+            yield* haltPump(socket);
+          }
+          const halt = yield* Deferred.make<void>();
+          pumps.set(socket.ws, halt);
+          let chunks = 0;
+          const pump = Effect.raceFirst(
+            pty.stream(tag.id).pipe(
+              Stream.runForEach(
+                Effect.fn(function* (chunk) {
+                  if (chunks++ === 0) {
                     yield* Effect.logDebug(
-                      `[terminal-debug] pump(${tag.id}): failed: ${String(error)}`,
+                      `[terminal-debug] pump(${tag.id}): first chunk (${(chunk as Uint8Array).byteLength}b)`,
                     );
-                    yield* notify(socket, String(error));
-                  }),
-                ),
-                Effect.catchDefect((defect) =>
-                  Effect.logDebug(
-                    `[terminal-debug] pump(${tag.id}): died: ${
-                      defect instanceof Error
-                        ? (defect.stack ?? defect.message)
-                        : String(defect)
-                    }`,
-                  ),
-                ),
-              ),
-              Deferred.await(halt),
-            ).pipe(
-              Effect.ensuring(
-                Effect.sync(() => {
-                  if (pumps.get(socket.ws) === halt) pumps.delete(socket.ws);
+                  }
+                  yield* socket.send(chunk);
                 }),
               ),
-            );
-            yield* sealed(state.waitUntil(pump));
-          });
+              asSession,
+              Effect.tap(() =>
+                Effect.logDebug(
+                  `[terminal-debug] pump(${tag.id}): stream ended after ${chunks} chunks`,
+                ),
+              ),
+              Effect.catch(
+                Effect.fn(function* (error) {
+                  yield* Effect.logDebug(
+                    `[terminal-debug] pump(${tag.id}): failed: ${String(error)}`,
+                  );
+                  yield* notify(socket, String(error));
+                }),
+              ),
+              Effect.catchDefect((defect) =>
+                Effect.logDebug(
+                  `[terminal-debug] pump(${tag.id}): died: ${
+                    defect instanceof Error
+                      ? (defect.stack ?? defect.message)
+                      : String(defect)
+                  }`,
+                ),
+              ),
+            ),
+            Deferred.await(halt),
+          ).pipe(
+            Effect.ensuring(
+              Effect.sync(() => {
+                if (pumps.get(socket.ws) === halt) pumps.delete(socket.ws);
+              }),
+            ),
+          );
+          yield* sealed(state.waitUntil(pump));
+        });
 
         /** One write of keystrokes to the PTY, waking the machine if
          *  it has no shell. */
@@ -559,16 +575,19 @@ export const DurableObjectHost: Layer.Layer<
             Effect.andThen(ensurePump(socket, pty, tag)),
             // no shell (fresh machine) or stale pump: reopen at the
             // attachment's dimensions and retry the keystrokes once
-            Effect.catch(() =>
-              Effect.gen(function* () {
-                // the keystroke is the WAKE signal — the machine was
-                // suspended or recycled; the reopen blocks through the
-                // resume, so show the viewer what the wait is
-                yield* notifyStatus(socket, "waking the session's machine");
-                yield* asSession(pty.open(tag.id, tag.cols, tag.rows));
-                yield* ensurePump(socket, pty, tag, { restart: true });
-                yield* asSession(pty.input(tag.id, data));
-              }).pipe(Effect.catch((error) => notify(socket, error))),
+            Effect.catch(
+              Effect.fn(
+                function* () {
+                  // the keystroke is the WAKE signal — the machine was
+                  // suspended or recycled; the reopen blocks through the
+                  // resume, so show the viewer what the wait is
+                  yield* notifyStatus(socket, "waking the session's machine");
+                  yield* asSession(pty.open(tag.id, tag.cols, tag.rows));
+                  yield* ensurePump(socket, pty, tag, { restart: true });
+                  yield* asSession(pty.input(tag.id, data));
+                },
+                Effect.catch((error) => notify(socket, error)),
+              ),
             ),
           );
 
@@ -628,76 +647,75 @@ export const DurableObjectHost: Layer.Layer<
          * attachment's dimensions reopen the shell right here — the
          * viewer just types and the terminal comes back.
          */
-        const terminalFrame = (
+        const terminalFrame = Effect.fn(function* (
           socket: WebSocket,
           tag: TerminalAttachment,
           message: string | ArrayBuffer,
-        ) =>
-          Effect.gen(function* () {
-            const pty = sandboxPty();
-            if (pty === undefined) {
-              yield* notify(
-                socket,
-                "terminal unavailable: this placement's sandbox has no PTY surface",
-              );
-              yield* Effect.ignore(socket.close(1011, "terminal unavailable"));
-              return;
-            }
-            if (typeof message === "string") {
-              const frame = JSON.parse(message) as TerminalClientFrame;
-              if (frame.t === "open") {
-                const next: TerminalAttachment = {
-                  ...tag,
-                  cols: frame.cols,
-                  rows: frame.rows,
-                };
-                socket.serializeAttachment(next);
-                // the machine may be COLD (fresh launch) or SUSPENDED (a
-                // stopped session) — pty.open blocks through the whole
-                // launch/resume, so tell the viewer what the wait is
-                yield* notifyStatus(socket, "starting the session's machine");
-                yield* Effect.logDebug(
-                  `[terminal-debug] pty.open(${next.id}) starting`,
-                );
-                yield* asSession(pty.open(next.id, next.cols, next.rows)).pipe(
-                  // a machine that cannot launch is a DEFECT of the
-                  // sandbox layer (no error channel for it) — the
-                  // viewer must still see WHY, not a frozen "starting"
-                  Effect.catchCause((cause) =>
-                    notify(socket, String(Cause.squash(cause))),
-                  ),
-                );
-                yield* Effect.logDebug(
-                  `[terminal-debug] pty.open(${next.id}) done — starting pump`,
-                );
-                // (re)attach this viewer's pump — the retained tail
-                // repaints the screen
-                yield* ensurePump(socket, pty, next, { restart: true });
-              } else if (frame.t === "resize") {
-                socket.serializeAttachment({
-                  ...tag,
-                  cols: frame.cols,
-                  rows: frame.rows,
-                } satisfies TerminalAttachment);
-                yield* asSession(
-                  pty.resize(tag.id, frame.cols, frame.rows),
-                ).pipe(Effect.catch((error) => notify(socket, error)));
-              } else if (frame.t === "close") {
-                // the tab's × — KILL the shell (a detach is just the
-                // socket dropping); tolerate an already-gone PTY
-                yield* haltPump(socket);
-                yield* asSession(pty.close(tag.id)).pipe(Effect.ignore);
-                yield* Effect.ignore(socket.close(1000, "terminal closed"));
-              }
-              return;
-            }
-            yield* enqueueInput(
+        ) {
+          const pty = sandboxPty();
+          if (pty === undefined) {
+            yield* notify(
               socket,
-              tag,
-              pty,
-              new TextDecoder().decode(message),
+              "terminal unavailable: this placement's sandbox has no PTY surface",
             );
-          });
+            yield* Effect.ignore(socket.close(1011, "terminal unavailable"));
+            return;
+          }
+          if (typeof message === "string") {
+            const frame = JSON.parse(message) as TerminalClientFrame;
+            if (frame.t === "open") {
+              const next: TerminalAttachment = {
+                ...tag,
+                cols: frame.cols,
+                rows: frame.rows,
+              };
+              socket.serializeAttachment(next);
+              // the machine may be COLD (fresh launch) or SUSPENDED (a
+              // stopped session) — pty.open blocks through the whole
+              // launch/resume, so tell the viewer what the wait is
+              yield* notifyStatus(socket, "starting the session's machine");
+              yield* Effect.logDebug(
+                `[terminal-debug] pty.open(${next.id}) starting`,
+              );
+              yield* asSession(pty.open(next.id, next.cols, next.rows)).pipe(
+                // a machine that cannot launch is a DEFECT of the
+                // sandbox layer (no error channel for it) — the
+                // viewer must still see WHY, not a frozen "starting"
+                Effect.catchCause((cause) =>
+                  notify(socket, String(Cause.squash(cause))),
+                ),
+              );
+              yield* Effect.logDebug(
+                `[terminal-debug] pty.open(${next.id}) done — starting pump`,
+              );
+              // (re)attach this viewer's pump — the retained tail
+              // repaints the screen
+              yield* ensurePump(socket, pty, next, { restart: true });
+            } else if (frame.t === "resize") {
+              socket.serializeAttachment({
+                ...tag,
+                cols: frame.cols,
+                rows: frame.rows,
+              } satisfies TerminalAttachment);
+              yield* asSession(pty.resize(tag.id, frame.cols, frame.rows)).pipe(
+                Effect.catch((error) => notify(socket, error)),
+              );
+            } else if (frame.t === "close") {
+              // the tab's × — KILL the shell (a detach is just the
+              // socket dropping); tolerate an already-gone PTY
+              yield* haltPump(socket);
+              yield* asSession(pty.close(tag.id)).pipe(Effect.ignore);
+              yield* Effect.ignore(socket.close(1000, "terminal closed"));
+            }
+            return;
+          }
+          yield* enqueueInput(
+            socket,
+            tag,
+            pty,
+            new TextDecoder().decode(message),
+          );
+        });
 
         /**
          * The engine, built lazily on the first REQUEST-time touch
@@ -708,7 +726,10 @@ export const DurableObjectHost: Layer.Layer<
          */
         let engineRef: SessionEngine | undefined;
         const memoryStore = makeThreadStorageMemory();
-        const stateStore = makeDurableObjectStore(state);
+        // `let`: destroy REPLACES it — `PersistentRef` memoizes its
+        // cells per store object, so a purged session's refs would
+        // otherwise keep answering from RAM under the same key
+        let stateStore = makeDurableObjectStore(state);
         const engine = Effect.sync((): SessionEngine => {
           if (engineRef !== undefined) return engineRef;
           const registration = registrations.get(me.term);
@@ -730,7 +751,7 @@ export const DurableObjectHost: Layer.Layer<
           engineRef = makeSessionEngine({
             driver: "DriverCloudflare",
             term: me.term,
-            charter: registration.charter,
+            shape: registration.shape,
             // the charter's captured context PLUS this instance's own
             // state AND the namespace scope: per-session capabilities
             // (the attached container — `SandboxContainerSession` —
@@ -809,8 +830,8 @@ export const DurableObjectHost: Layer.Layer<
             }
             return response;
           }),
-          webSocketMessage: (socket, message) =>
-            Effect.gen(function* () {
+          webSocketMessage: Effect.fn(
+            function* (socket, message) {
               const attachment = socket.deserializeAttachment<unknown>();
               yield* Effect.logDebug(
                 `[terminal-debug] DO message attachment=${JSON.stringify(attachment)} kind=${typeof message}`,
@@ -828,61 +849,65 @@ export const DurableObjectHost: Layer.Layer<
                     : new TextDecoder().decode(message),
                 ) as SessionSocketClientFrame,
               );
-            }).pipe(
-              // a malformed frame must never kill the socket's DO
-              Effect.catchDefect((defect) =>
-                Effect.logWarning(
-                  `[session-socket] bad frame: ${
-                    defect instanceof Error
-                      ? (defect.stack ?? defect.message)
-                      : String(defect)
-                  }`,
-                ),
+            },
+            // a malformed frame must never kill the socket's DO
+            Effect.catchDefect((defect) =>
+              Effect.logWarning(
+                `[session-socket] bad frame: ${
+                  defect instanceof Error
+                    ? (defect.stack ?? defect.message)
+                    : String(defect)
+                }`,
               ),
-              Effect.provide(RuntimeContext.phantom),
-            ) as Effect.Effect<void>,
-          webSocketClose: (socket, code, reason) =>
-            Effect.gen(function* () {
-              // a departed terminal viewer's pump must not pin the DO
-              yield* haltPump(socket);
-              // 1005/1006/1015 are RESERVED — the runtime reports them
-              // for a peer that vanished without a close frame, and
-              // throws InvalidAccessError if echoed back
-              const echo = code === 1005 || code === 1006 || code === 1015;
-              yield* Effect.ignore(
-                socket.close(echo ? 1000 : code, echo ? "" : reason),
-              );
-            }),
-          deliver: (
+            ),
+            Effect.provide(RuntimeContext.phantom),
+          ) as (
+            socket: WebSocket,
+            message: string | ArrayBuffer,
+          ) => Effect.Effect<void>,
+          webSocketClose: Effect.fn(function* (socket, code, reason) {
+            // a departed terminal viewer's pump must not pin the DO
+            yield* haltPump(socket);
+            // 1005/1006/1015 are RESERVED — the runtime reports them
+            // for a peer that vanished without a close frame, and
+            // throws InvalidAccessError if echoed back
+            const echo = code === 1005 || code === 1006 || code === 1015;
+            yield* Effect.ignore(
+              socket.close(echo ? 1000 : code, echo ? "" : reason),
+            );
+          }),
+          deliver: Effect.fn(function* (
             input: unknown,
             options?: { parent?: SessionRef; wake?: boolean },
-          ) =>
-            Effect.gen(function* () {
-              yield* (yield* engine).send(input, {
-                key: me.key,
-                parent: options?.parent,
-                wake: options?.wake,
-              });
-            }),
-          dispatch: (input: unknown, options?: { parent?: SessionRef }) =>
-            Effect.gen(function* () {
-              return yield* (yield* engine).dispatch(input, {
-                key: me.key,
-                parent: options?.parent,
-              });
-            }),
-          steer: (input: unknown) =>
-            Effect.gen(function* () {
-              yield* (yield* engine).send(input, { key: me.key });
-            }),
-          settle: (
-            outcome: unknown,
-          ): Effect.Effect<void, never, RuntimeContext> =>
-            Effect.gen(function* () {
-              yield* (yield* engine).settle(me.key, outcome, { admit: true });
-              // a settled session's machine snapshots itself away
-              yield* machineLifecycle("suspend");
-            }),
+          ) {
+            yield* (yield* engine).send(input, {
+              key: me.key,
+              parent: options?.parent,
+              wake: options?.wake,
+            });
+          }),
+          dispatch: Effect.fn(function* (
+            input: unknown,
+            options?: { parent?: SessionRef },
+          ) {
+            return yield* (yield* engine).dispatch(input, {
+              key: me.key,
+              parent: options?.parent,
+            });
+          }),
+          // a method runs in THIS isolate, inside the session frame;
+          // its typed failure crosses back as the RPC's failure
+          call: Effect.fn(function* (method, args) {
+            return yield* (yield* engine).call(me.key, method, args);
+          }),
+          steer: Effect.fn(function* (input: unknown) {
+            yield* (yield* engine).send(input, { key: me.key });
+          }),
+          settle: Effect.fn(function* (outcome: unknown) {
+            yield* (yield* engine).settle(me.key, outcome, { admit: true });
+            // a settled session's machine snapshots itself away
+            yield* machineLifecycle("suspend");
+          }),
           // STORAGE-ONLY, like the socket's replay: straight off this
           // instance's rows, never through the engine — reading a
           // transcript must not need the charter, build the shell, or
@@ -891,25 +916,22 @@ export const DurableObjectHost: Layer.Layer<
           // storage-only, like history: redaction never wakes the
           // engine or the machine
           redact: (seqs) => store.handle.deleteObservations(seqs),
-          open: (): Effect.Effect<void, never, RuntimeContext> =>
-            Effect.gen(function* () {
-              yield* (yield* engine).admit(me.key);
-            }),
-          resume: (): Effect.Effect<void, never, RuntimeContext> =>
-            Effect.gen(function* () {
-              yield* (yield* engine).resume(me.key);
-              // eagerly wake the suspended machine (best-effort —
-              // lazily waking on the next sandbox call is the fallback)
-              yield* machineLifecycle("resume");
-            }),
+          open: Effect.fn(function* () {
+            yield* (yield* engine).admit(me.key);
+          }),
+          resume: Effect.fn(function* () {
+            yield* (yield* engine).resume(me.key);
+            // eagerly wake the suspended machine (best-effort —
+            // lazily waking on the next sandbox call is the fallback)
+            yield* machineLifecycle("resume");
+          }),
           // the round runs in THIS isolate (the burst rides waitUntil
           // on this same object), so its fiber is right here to
           // interrupt; a hibernated session has no round in flight
-          abort: (): Effect.Effect<void, never, RuntimeContext> =>
-            Effect.gen(function* () {
-              if (engineRef === undefined) return;
-              yield* engineRef.abort(me.key);
-            }),
+          abort: Effect.fn(function* () {
+            if (engineRef === undefined) return;
+            yield* engineRef.abort(me.key);
+          }),
           /**
            * The ERASER (`Sessions.remove`): settle first (idempotent —
            * children cascade, attached views see the end), close every
@@ -919,59 +941,59 @@ export const DurableObjectHost: Layer.Layer<
            * name admits a FRESH session over empty storage instead of
            * finding a settled tombstone.
            */
-          destroy: (machine = true) =>
-            Effect.gen(function* () {
-              // settle is BEST-EFFORT and NON-ADMITTING: admitting runs
-              // the charter's per-session INIT, whose side effects
-              // (checkouts, machine launches) are the OPPOSITE of an
-              // erase — deleting a hibernated session must not boot a
-              // fresh machine just to settle a tombstone. A RAM-live
-              // session still settles properly (children cascade,
-              // views see the end); a dormant one has nothing to
-              // settle — the purge below is the point of destroy.
-              yield* Effect.catchCause(
-                Effect.gen(function* () {
-                  yield* (yield* engine).settle(me.key, stoppedByOperator);
-                }),
-                (cause) =>
-                  Effect.logWarning(
-                    `DriverCloudflare destroy for '${me.term}/${me.key}': settle failed (contained) — purging anyway`,
-                    cause,
-                  ),
-              );
-              // a round still in flight (a tool mid-call on the
-              // machine) must be CUT before the purge, or the tick
-              // would run on to its end and write into the rows
-              // purged below, resurrecting a deleted session. Settle
-              // already cuts it; this is the belt to that brace for
-              // the path where settle failed above. Settled first,
-              // the abort books nothing and its kick has nowhere to
-              // go; a hibernated session has no round to cut.
-              if (engineRef !== undefined) {
-                yield* engineRef.abort(me.key);
-              }
-              for (const socket of yield* state.getWebSockets()) {
-                yield* Effect.ignore(socket.close(1000, "session removed"));
-              }
-              // a removed session's machine is terminated, not idled
-              // out — unless sibling threads still share it (the
-              // caller's directory decides; the last one out carries
-              // the teardown)
-              if (machine) {
-                yield* machineLifecycle("destroy");
-              }
-              yield* storage.deleteAlarm();
-              yield* storage.deleteAll();
-              engineRef = undefined;
-            }),
+          destroy: Effect.fn(function* (machine = true) {
+            // settle is BEST-EFFORT and NON-ADMITTING: admitting runs
+            // the charter's per-session INIT, whose side effects
+            // (checkouts, machine launches) are the OPPOSITE of an
+            // erase — deleting a hibernated session must not boot a
+            // fresh machine just to settle a tombstone. A RAM-live
+            // session still settles properly (children cascade,
+            // views see the end); a dormant one has nothing to
+            // settle — the purge below is the point of destroy.
+            yield* Effect.catchCause(
+              Effect.gen(function* () {
+                yield* (yield* engine).settle(me.key, stoppedByOperator);
+              }),
+              (cause) =>
+                Effect.logWarning(
+                  `DriverCloudflare destroy for '${me.term}/${me.key}': settle failed (contained) — purging anyway`,
+                  cause,
+                ),
+            );
+            // a round still in flight (a tool mid-call on the
+            // machine) must be CUT before the purge, or the tick
+            // would run on to its end and write into the rows
+            // purged below, resurrecting a deleted session. Settle
+            // already cuts it; this is the belt to that brace for
+            // the path where settle failed above. Settled first,
+            // the abort books nothing and its kick has nowhere to
+            // go; a hibernated session has no round to cut.
+            if (engineRef !== undefined) {
+              yield* engineRef.abort(me.key);
+            }
+            for (const socket of yield* state.getWebSockets()) {
+              yield* Effect.ignore(socket.close(1000, "session removed"));
+            }
+            // a removed session's machine is terminated, not idled
+            // out — unless sibling threads still share it (the
+            // caller's directory decides; the last one out carries
+            // the teardown)
+            if (machine) {
+              yield* machineLifecycle("destroy");
+            }
+            yield* storage.deleteAlarm();
+            yield* storage.deleteAll();
+            engineRef = undefined;
+            stateStore = makeDurableObjectStore(state);
+          }),
           /**
            * The single alarm serves BOTH clocks: due reminders become
            * ordinary inputs, and an open round's recovery deadline
            * re-enters the burst. Re-arming happens AFTER the burst so
            * the alarm reflects the round's final state.
            */
-          alarm: () =>
-            Effect.gen(function* () {
+          alarm: Effect.fn(
+            function* () {
               const now = Date.now();
               const active = yield* engine;
               const rows = yield* store.listRows<string>(REMIND);
@@ -986,76 +1008,111 @@ export const DurableObjectHost: Layer.Layer<
               // a burst never fails)
               yield* active.burst(me.key);
               yield* armAlarm();
-            }).pipe(
-              // a failing alarm event must be CONTAINED: workerd's own
-              // alarm retry would race our bounded one (and a repeated
-              // failure resets the object) — log, best-effort re-arm,
-              // and let our recovery machinery own the re-entry
-              Effect.catchCause((cause) =>
-                Effect.gen(function* () {
-                  yield* Effect.logError(
-                    `DriverCloudflare alarm for '${me.term}/${me.key}' failed (contained)`,
-                    cause,
-                  );
-                  yield* Effect.ignore(armAlarm());
-                }),
-              ),
+            },
+            // a failing alarm event must be CONTAINED: workerd's own
+            // alarm retry would race our bounded one (and a repeated
+            // failure resets the object) — log, best-effort re-arm,
+            // and let our recovery machinery own the re-entry
+            Effect.catchCause(
+              Effect.fn(function* (cause) {
+                yield* Effect.logError(
+                  `DriverCloudflare alarm for '${me.term}/${me.key}' failed (contained)`,
+                  cause,
+                );
+                yield* Effect.ignore(armAlarm());
+              }),
             ),
+          ),
         });
       }),
     );
     let minted = 0;
     const mintPrefix = crypto.randomUUID().slice(0, 8);
 
-    const interpret = (term: Interpretable, charter: Charter) =>
-      Effect.gen(function* () {
-        const termName = term["~alchemy/Name"];
-        registrations.set(termName, {
-          charter,
-          context: yield* Effect.context<never>(),
-          term,
-        });
+    const interpret = Effect.fn(function* (
+      term: Interpretable,
+      charter: Charter,
+    ) {
+      const termName = term["~alchemy/Name"];
+      // the CONSTRUCTION scope runs here — at plan time in the deploy
+      // process (bindings register on the host Worker) and once per
+      // isolate at runtime; the constructor it yields is what every
+      // activation of this term's DO constructs its session with
+      registrations.set(termName, {
+        shape: yield* construct("DriverCloudflare", termName, charter),
+        context: yield* Effect.context<never>(),
+        term,
+      });
 
-        const stub = (key: string) =>
-          sessions.getByName(sessionName(termName, key));
-        const mint = () => `session-${mintPrefix}-${minted++}`;
+      const stub = (key: string) =>
+        sessions.getByName(sessionName(termName, key));
+      const mint = () => `session-${mintPrefix}-${minted++}`;
 
-        // `supervised`: a dispatch made from inside another session's
-        // round (the org's thread agent handing an engineer its brief)
-        // joins that session's cascade — stop the thread, its
-        // engineers' DOs settle too (see DriverCore)
-        return supervised(termName, {
-          send: (item: unknown, options?: Parameters<Actor["send"]>[1]) =>
-            stub(options?.key ?? mint())
-              .deliver(item, { parent: options?.parent, wake: options?.wake })
-              .pipe(Effect.orDie, Effect.asVoid),
-          dispatch: (
-            item: unknown,
-            options?: Parameters<Actor["dispatch"]>[1],
-          ) =>
-            stub(options?.key ?? mint())
-              .dispatch(item, { parent: options?.parent })
-              .pipe(Effect.orDie),
-          steer: ((first: unknown, second?: unknown) =>
-            second === undefined
-              ? Effect.die(
-                  new Error(
-                    "DriverCloudflare: steer requires a key — steer(key, input)",
-                  ),
-                )
-              : stub(first as string)
-                  .steer(second)
-                  .pipe(Effect.orDie, Effect.asVoid)) as Actor["steer"],
-          settle: (sessionKey: string, outcome: unknown) =>
-            stub(sessionKey).settle(outcome).pipe(Effect.orDie, Effect.asVoid),
-          interrupt: () =>
-            Effect.die(
-              new Error(
-                "DriverCloudflare: interrupt() is process-local; settle sessions by key instead",
+      // `supervised`: a dispatch made from inside another session's
+      // round (the org's thread agent handing an engineer its brief)
+      // joins that session's cascade — stop the thread, its
+      // engineers' DOs settle too (see DriverCore)
+      return supervised(termName, {
+        send: (item: unknown, options?: Parameters<Actor["send"]>[1]) =>
+          stub(options?.key ?? mint())
+            .deliver(item, { parent: options?.parent, wake: options?.wake })
+            .pipe(Effect.orDie, Effect.asVoid),
+        dispatch: (item: unknown, options?: Parameters<Actor["dispatch"]>[1]) =>
+          stub(options?.key ?? mint())
+            .dispatch(item, { parent: options?.parent })
+            .pipe(Effect.orDie),
+        // the API hop: the method's typed failure comes back as the
+        // failure (an error envelope, re-failed by the stub); a
+        // DEFECT on the far side (unknown method, a non-cloneable
+        // result) or a transport failure arrives as `RpcCallError` —
+        // a defect here too, so the two placements agree
+        call: (sessionKey: string, method, args) =>
+          stub(sessionKey)
+            .call(method, args)
+            .pipe(
+              Effect.catchIf(
+                (error): error is RpcCallError => error instanceof RpcCallError,
+                (error) => Effect.die(error.cause),
               ),
             ),
-        } as Actor);
-      }) as Effect.Effect<Actor, DriverError, never>;
+        stop: (sessionKey: string) =>
+          stub(sessionKey)
+            .settle(stoppedByOperator)
+            .pipe(Effect.orDie, Effect.asVoid),
+        resume: (sessionKey: string) =>
+          stub(sessionKey).resume().pipe(Effect.orDie, Effect.asVoid),
+        destroy: Effect.fn(function* (sessionKey: string, options) {
+          yield* stub(sessionKey)
+            .destroy(options?.machine ?? true)
+            .pipe(Effect.orDie);
+          yield* Option.match(sessionIndex, {
+            onNone: () => Effect.void,
+            onSome: (index) => index.remove(sessionId(termName, sessionKey)),
+          });
+        }),
+        steer: ((first: unknown, second?: unknown) =>
+          second === undefined
+            ? Effect.die(
+                new Error(
+                  "DriverCloudflare: steer requires a key — steer(key, input)",
+                ),
+              )
+            : stub(first as string)
+                .steer(second)
+                .pipe(Effect.orDie, Effect.asVoid)) as Actor["steer"],
+        settle: (sessionKey: string, outcome: unknown) =>
+          stub(sessionKey).settle(outcome).pipe(Effect.orDie, Effect.asVoid),
+        interrupt: () =>
+          Effect.die(
+            new Error(
+              "DriverCloudflare: interrupt() is process-local; settle sessions by key instead",
+            ),
+          ),
+      } as Actor);
+    }) as unknown as (
+      term: Interpretable,
+      charter: Charter,
+    ) => Effect.Effect<Actor, DriverError, never>;
 
     /** The gateway: route a WebSocket upgrade into the session's own
      *  DO. */
@@ -1119,17 +1176,16 @@ export const DurableObjectHost: Layer.Layer<
             .getByName(sessionName(term, key))
             .abort()
             .pipe(Effect.orDie, Effect.asVoid),
-        remove: (term, key, options) =>
-          Effect.gen(function* () {
-            yield* sessions
-              .getByName(sessionName(term, key))
-              .destroy(options?.machine ?? true)
-              .pipe(Effect.orDie);
-            yield* Option.match(sessionIndex, {
-              onNone: () => Effect.void,
-              onSome: (index) => index.remove(sessionId(term, key)),
-            });
-          }),
+        remove: Effect.fn(function* (term, key, options) {
+          yield* sessions
+            .getByName(sessionName(term, key))
+            .destroy(options?.machine ?? true)
+            .pipe(Effect.orDie);
+          yield* Option.match(sessionIndex, {
+            onNone: () => Effect.void,
+            onSome: (index) => index.remove(sessionId(term, key)),
+          });
+        }),
       }),
     );
   }),

@@ -1,7 +1,7 @@
 import * as AI from "alchemy/AI";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Layer from "effect/Layer";
-import { Model } from "./Model.ts";
+import { Model, ModelsLive } from "./Model.ts";
 import { SessionIndexD1 } from "./SessionIndexD1.ts";
 
 /**
@@ -13,8 +13,10 @@ import { SessionIndexD1 } from "./SessionIndexD1.ts";
  *                  reminders and crash recovery on the DO alarm, live
  *                  views on hibernatable WebSockets — storage and
  *                  PersistentRef come WITH the placement)
- * - the model    → the same Anthropic layer as local (Config rides
- *                  the Worker secrets seam)
+ * - the models   → the catalog (`platform/Model.ts`), the same
+ *                  provider layers as local (Config rides the Worker
+ *                  secrets seam); the driver's default is one of them,
+ *                  and the agents pick per thread
  * - the index    → D1 rows fed by the driver's Events (sessions
  *                  emit from their own DOs; the board lists from any
  *                  Worker instance)
@@ -23,4 +25,5 @@ export const DriverCloudflare = Cloudflare.AI.DriverCloudflare.pipe(
   Layer.provideMerge(AI.SessionIndexStream),
   Layer.provideMerge(SessionIndexD1),
   Layer.provide(Model),
+  Layer.provideMerge(ModelsLive),
 );

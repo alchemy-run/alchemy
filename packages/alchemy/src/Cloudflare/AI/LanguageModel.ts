@@ -69,62 +69,54 @@ export const makeLanguageModelLayer = (
  * Build a {@link AiLanguageModel.Service} that proxies generateText/streamText
  * through the supplied AI Gateway client to a Workers AI model.
  */
-export const makeLanguageModel = ({
+export const makeLanguageModel = Effect.fn(function* ({
   client,
   model,
   parameters,
-}: LanguageModelOptions): Effect.Effect<
-  AiLanguageModel.Service,
-  never,
-  RuntimeContext
-> =>
-  Effect.gen(function* () {
-    const ai = yield* client.raw;
-    const gatewayId = client.id === undefined ? undefined : yield* client.id;
+}: LanguageModelOptions) {
+  const ai = yield* client.raw;
+  const gatewayId = client.id === undefined ? undefined : yield* client.id;
 
-    const callRaw = (
-      body: WorkersAiInputs,
-      method: "generateText" | "streamText",
-    ): Effect.Effect<Response, AiError.AiError> =>
-      Effect.tryPromise({
-        try: () =>
-          ai.run(
-            model as keyof AiModels,
-            body as unknown as AiModels[keyof AiModels]["inputs"],
-            {
-              ...(gatewayId === undefined
-                ? {}
-                : { gateway: { id: gatewayId } }),
-              returnRawResponse: true,
-            },
-          ),
-        catch: (cause) => toAiError(cause, method),
-      });
-
-    return yield* AiLanguageModel.make({
-      generateText: (options) =>
-        Effect.gen(function* () {
-          const body = toRequestBody({ options, parameters, stream: false });
-          const resp = yield* callRaw(body, "generateText");
-          const json = yield* Effect.tryPromise({
-            try: () => resp.json() as Promise<Record<string, unknown>>,
-            catch: (cause) => toAiError(cause, "generateText"),
-          });
-          return yield* parseGenerateText(json);
-        }),
-      streamText: (options) =>
-        Stream.unwrap(
-          Effect.gen(function* () {
-            const idGen = yield* IdGenerator.IdGenerator;
-            const body = toRequestBody({ options, parameters, stream: true });
-            const resp = yield* callRaw(body, "streamText");
-            const hasTools =
-              options.tools.length > 0 && options.toolChoice !== "none";
-            return parseStreamText(resp, idGen, hasTools);
-          }),
+  const callRaw = (
+    body: WorkersAiInputs,
+    method: "generateText" | "streamText",
+  ): Effect.Effect<Response, AiError.AiError> =>
+    Effect.tryPromise({
+      try: () =>
+        ai.run(
+          model as keyof AiModels,
+          body as unknown as AiModels[keyof AiModels]["inputs"],
+          {
+            ...(gatewayId === undefined ? {} : { gateway: { id: gatewayId } }),
+            returnRawResponse: true,
+          },
         ),
+      catch: (cause) => toAiError(cause, method),
     });
+
+  return yield* AiLanguageModel.make({
+    generateText: Effect.fn(function* (options) {
+      const body = toRequestBody({ options, parameters, stream: false });
+      const resp = yield* callRaw(body, "generateText");
+      const json = yield* Effect.tryPromise({
+        try: () => resp.json() as Promise<Record<string, unknown>>,
+        catch: (cause) => toAiError(cause, "generateText"),
+      });
+      return yield* parseGenerateText(json);
+    }),
+    streamText: (options) =>
+      Stream.unwrap(
+        Effect.gen(function* () {
+          const idGen = yield* IdGenerator.IdGenerator;
+          const body = toRequestBody({ options, parameters, stream: true });
+          const resp = yield* callRaw(body, "streamText");
+          const hasTools =
+            options.tools.length > 0 && options.toolChoice !== "none";
+          return parseStreamText(resp, idGen, hasTools);
+        }),
+      ),
   });
+});
 
 // ---------------------------------------------------------------------------
 // Wire format types (Workers AI request)
@@ -526,8 +518,9 @@ const parseGenerateText = Effect.fn(function* (raw: Record<string, unknown>) {
   const idGen = yield* IdGenerator.IdGenerator;
   const decoded = decodeResponse(raw);
 
-  const toolCallParts = yield* Effect.forEach(decoded.toolCalls, (tc) =>
-    Effect.gen(function* () {
+  const toolCallParts = yield* Effect.forEach(
+    decoded.toolCalls,
+    Effect.fn(function* (tc) {
       const id = tc.rawId || (yield* idGen.generateId());
       return {
         type: "tool-call" as const,
@@ -651,101 +644,96 @@ const closeToolCall = (
   return { ...state, closedToolIndices: closed };
 };
 
-const emitTextDelta = (
+const emitTextDelta = Effect.fn(function* (
   state: StreamState,
   delta: string,
   parts: StreamParts,
   idGen: IdGenerator.Service,
-): Effect.Effect<StreamState> =>
-  Effect.gen(function* () {
-    let s = closeReasoning(state, parts);
-    if (s.textId === undefined) {
-      const id = yield* idGen.generateId();
-      parts.push({ type: "text-start", id });
-      s = { ...s, textId: id };
-    }
-    parts.push({ type: "text-delta", id: s.textId!, delta });
-    return s;
-  });
+) {
+  let s = closeReasoning(state, parts);
+  if (s.textId === undefined) {
+    const id = yield* idGen.generateId();
+    parts.push({ type: "text-start", id });
+    s = { ...s, textId: id };
+  }
+  parts.push({ type: "text-delta", id: s.textId!, delta });
+  return s;
+});
 
-const emitReasoningDelta = (
+const emitReasoningDelta = Effect.fn(function* (
   state: StreamState,
   delta: string,
   parts: StreamParts,
   idGen: IdGenerator.Service,
-): Effect.Effect<StreamState> =>
-  Effect.gen(function* () {
-    let s = state;
-    if (s.reasoningId === undefined) {
-      const id = yield* idGen.generateId();
-      parts.push({ type: "reasoning-start", id });
-      s = { ...s, reasoningId: id };
-    }
-    parts.push({ type: "reasoning-delta", id: s.reasoningId!, delta });
-    return s;
-  });
+) {
+  let s = state;
+  if (s.reasoningId === undefined) {
+    const id = yield* idGen.generateId();
+    parts.push({ type: "reasoning-start", id });
+    s = { ...s, reasoningId: id };
+  }
+  parts.push({ type: "reasoning-delta", id: s.reasoningId!, delta });
+  return s;
+});
 
-const handleToolDeltas = (
+const handleToolDeltas = Effect.fn(function* (
   state: StreamState,
   deltas: ReadonlyArray<Record<string, unknown>>,
   parts: StreamParts,
   idGen: IdGenerator.Service,
-): Effect.Effect<StreamState> =>
-  Effect.gen(function* () {
-    let s = state;
-    for (const d of deltas) {
-      if (isNullFinalizationToolCall(d)) {
-        if (s.lastToolIndex !== undefined) {
-          s = closeToolCall(s, s.lastToolIndex, parts);
-        }
-        continue;
+) {
+  let s = state;
+  for (const d of deltas) {
+    if (isNullFinalizationToolCall(d)) {
+      if (s.lastToolIndex !== undefined) {
+        s = closeToolCall(s, s.lastToolIndex, parts);
       }
-      const idx = (d.index as number | undefined) ?? 0;
-      const fn = d.function as
-        | { name?: string; arguments?: string }
-        | undefined;
-      const name = fn?.name ?? (d.name as string | undefined) ?? "";
-      const args = fn?.arguments ?? (d.arguments as string | undefined) ?? "";
-      const rawId = (d.id as string | undefined) ?? "";
+      continue;
+    }
+    const idx = (d.index as number | undefined) ?? 0;
+    const fn = d.function as { name?: string; arguments?: string } | undefined;
+    const name = fn?.name ?? (d.name as string | undefined) ?? "";
+    const args = fn?.arguments ?? (d.arguments as string | undefined) ?? "";
+    const rawId = (d.id as string | undefined) ?? "";
 
-      const existing = s.toolCalls.get(idx);
-      if (existing === undefined) {
-        if (s.lastToolIndex !== undefined && s.lastToolIndex !== idx) {
-          s = closeToolCall(s, s.lastToolIndex, parts);
-        }
-        const id = rawId || (yield* idGen.generateId());
-        const entry = { id, name, arguments: args };
-        const next = new Map(s.toolCalls);
-        next.set(idx, entry);
-        s = { ...s, toolCalls: next, lastToolIndex: idx };
-        parts.push({ type: "tool-params-start", id, name });
-        if (args.length > 0) {
-          parts.push({ type: "tool-params-delta", id, delta: args });
-        }
-      } else {
-        // OpenAI-compatible providers stream argument fragments, while
-        // Workers AI can resend the complete accumulated JSON on every
-        // chunk. Normalize both shapes to incremental deltas.
-        const delta = args.startsWith(existing.arguments)
-          ? args.slice(existing.arguments.length)
-          : args;
-        const accumulated = args.startsWith(existing.arguments)
-          ? args
-          : existing.arguments + args;
-        const next = new Map(s.toolCalls);
-        next.set(idx, { ...existing, arguments: accumulated });
-        s = { ...s, toolCalls: next, lastToolIndex: idx };
-        if (delta.length > 0) {
-          parts.push({
-            type: "tool-params-delta",
-            id: existing.id,
-            delta,
-          });
-        }
+    const existing = s.toolCalls.get(idx);
+    if (existing === undefined) {
+      if (s.lastToolIndex !== undefined && s.lastToolIndex !== idx) {
+        s = closeToolCall(s, s.lastToolIndex, parts);
+      }
+      const id = rawId || (yield* idGen.generateId());
+      const entry = { id, name, arguments: args };
+      const next = new Map(s.toolCalls);
+      next.set(idx, entry);
+      s = { ...s, toolCalls: next, lastToolIndex: idx };
+      parts.push({ type: "tool-params-start", id, name });
+      if (args.length > 0) {
+        parts.push({ type: "tool-params-delta", id, delta: args });
+      }
+    } else {
+      // OpenAI-compatible providers stream argument fragments, while
+      // Workers AI can resend the complete accumulated JSON on every
+      // chunk. Normalize both shapes to incremental deltas.
+      const delta = args.startsWith(existing.arguments)
+        ? args.slice(existing.arguments.length)
+        : args;
+      const accumulated = args.startsWith(existing.arguments)
+        ? args
+        : existing.arguments + args;
+      const next = new Map(s.toolCalls);
+      next.set(idx, { ...existing, arguments: accumulated });
+      s = { ...s, toolCalls: next, lastToolIndex: idx };
+      if (delta.length > 0) {
+        parts.push({
+          type: "tool-params-delta",
+          id: existing.id,
+          delta,
+        });
       }
     }
-    return s;
-  });
+  }
+  return s;
+});
 
 const hasNonZeroUsage = (raw: unknown): boolean => {
   if (raw == null || typeof raw !== "object") return false;
@@ -865,30 +853,27 @@ const handleOpenAiDelta = (
   });
 };
 
-const handleStreamChunk = (
+const handleStreamChunk = Effect.fn(function* (
   state: StreamState,
   data: string,
   idGen: IdGenerator.Service,
   hasTools: boolean,
-): Effect.Effect<
-  readonly [StreamState, ReadonlyArray<Response.StreamPartEncoded>]
-> =>
-  Effect.gen(function* () {
-    if (data === "") return [state, []] as const;
-    if (data === "[DONE]") {
-      return [{ ...state, receivedDone: true }, []] as const;
-    }
-    const chunk = tryParseJson(data);
-    if (chunk === undefined) return [state, []] as const;
+) {
+  if (data === "") return [state, []] as const;
+  if (data === "[DONE]") {
+    return [{ ...state, receivedDone: true }, []] as const;
+  }
+  const chunk = tryParseJson(data);
+  if (chunk === undefined) return [state, []] as const;
 
-    const parts: StreamParts = [];
-    let s: StreamState = { ...state, receivedAnyData: true };
-    s = updateChunkMeta(s, chunk);
-    s = yield* handleNativeText(s, chunk, parts, idGen, hasTools);
-    s = yield* handleNativeToolCalls(s, chunk, parts, idGen);
-    s = yield* handleOpenAiDelta(s, chunk, parts, idGen);
-    return [s, parts] as const;
-  });
+  const parts: StreamParts = [];
+  let s: StreamState = { ...state, receivedAnyData: true };
+  s = updateChunkMeta(s, chunk);
+  s = yield* handleNativeText(s, chunk, parts, idGen, hasTools);
+  s = yield* handleNativeToolCalls(s, chunk, parts, idGen);
+  s = yield* handleOpenAiDelta(s, chunk, parts, idGen);
+  return [s, parts] as const;
+});
 
 /**
  * Decode a buffered native-streaming tool call. Workers AI's native shape

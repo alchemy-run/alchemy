@@ -11,6 +11,7 @@ import { DriverLocal } from "@/AI/DriverLocal.ts";
 import { ThreadStorageMemory } from "@/AI/ThreadStorageMemory.ts";
 
 const InMemoryDriver = DriverLocal.pipe(Layer.provide(ThreadStorageMemory));
+import * as PersistentRef from "@/PersistentRef.ts";
 import { RuntimeContext } from "@/RuntimeContext.ts";
 import * as BunHttpServer from "@effect/platform-bun/BunHttpServer";
 import { describe, expect, it } from "alchemy-test";
@@ -483,17 +484,136 @@ describe("SessionSocket (DriverLocal)", () => {
   );
 
   it.live(
-    "viewing never waits on the charter's INIT: a session whose init dies still replays, and a submit leaves a durable crash",
+    "the object PUBLISHES its view: a method's `Thread.publish` reaches every attached socket as a `state` frame — never a row",
     () => {
-      // an agent whose per-session init cannot complete — the sandboxed
-      // shape (boot the machine, converge the checkout) with the
-      // machine wedged. Before the fix `socketHost` built the session
-      // first, so `subscribe` hung/died behind the init and the viewer
-      // saw an empty transcript.
+      // an object with books: a method rewrites them and pushes the
+      // snapshot; the viewer (a `/thread/:id`-style socket that never
+      // subscribes) takes the push live, and the observation log is
+      // untouched by it
+      class Ledger extends AI.Agent<Ledger>()("Ledger") {}
+      const LedgerCharter = Effect.gen(function* () {
+        const balance = PersistentRef.of("balance", () => 0);
+        return {
+          turn: AI.fragment`You keep a ledger.`,
+          deposit: (amount: number) =>
+            Effect.gen(function* () {
+              const thread = yield* AI.Thread;
+              const next = yield* PersistentRef.modify(balance, (b) => [
+                b + amount,
+                b + amount,
+              ]);
+              yield* thread.publish({ balance: next });
+              return next;
+            }),
+        };
+      });
+      const model = Model.make([() => [Model.text("never"), Model.finish()]]);
+
+      return Effect.gen(function* () {
+        const ledger = yield* Ledger;
+        const gateway = yield* AI.Sessions;
+        const server = yield* BunHttpServer.make({
+          port: 0,
+          gracefulShutdownTimeout: Duration.millis(100),
+        });
+        const port =
+          server.address._tag === "TcpAddress" ? server.address.port : 0;
+        yield* server.serve(
+          Effect.gen(function* () {
+            const request = yield* HttpServerRequest;
+            const url = new URL(request.url, "http://local");
+            const [, , term, ...rest] = url.pathname.split("/");
+            return yield* gateway.attach(term!, rest.join("/"), request);
+          }).pipe(Effect.provide(RuntimeContext.phantom)),
+        );
+        const wsUrl = `ws://localhost:${port}/attach/Ledger/acct`;
+
+        yield* Effect.scoped(
+          Effect.gen(function* () {
+            // two viewers, neither subscribes: live frames only
+            const a = yield* connect(wsUrl);
+            const b = yield* connect(wsUrl);
+            const stub = ledger.at("acct") as AI.Stub<{
+              deposit: (n: number) => Effect.Effect<number>;
+            }>;
+            expect(yield* stub.deposit(40)).toBe(40);
+            expect(yield* stub.deposit(2)).toBe(42);
+            for (const client of [a, b]) {
+              const frames = yield* framesUntil(
+                client,
+                (frame) =>
+                  frame.type === "state" &&
+                  (frame.state as { balance: number }).balance === 42,
+              );
+              const states = frames.filter((frame) => frame.type === "state");
+              expect(states).toEqual([
+                { type: "state", state: { balance: 40 } },
+                { type: "state", state: { balance: 42 } },
+              ]);
+            }
+          }),
+        );
+
+        // view-only: the pushes left no observation behind — the log
+        // holds the admission (the first method admitted the session)
+        // and nothing else
+        yield* Effect.scoped(
+          Effect.gen(function* () {
+            const late = yield* connect(wsUrl);
+            yield* late.send({ type: "subscribe", fromSeq: 0 });
+            const replayed = yield* framesUntil(
+              late,
+              (frame) => frame.type === "live",
+            );
+            expect(
+              replayed.flatMap((frame) =>
+                frame.type === "observation" ? [frame.observation.type] : [],
+              ),
+            ).toEqual(["admitted"]);
+            expect(replayed.some((frame) => frame.type === "state")).toBe(
+              false,
+            );
+          }),
+        );
+      }).pipe(
+        Effect.scoped,
+        Effect.catchCause((cause) =>
+          Cause.hasInterruptsOnly(cause)
+            ? Effect.void
+            : Effect.failCause(cause),
+        ),
+        Effect.provide(
+          Ledger.make(LedgerCharter).pipe(
+            Layer.provideMerge(
+              Layer.mergeAll(
+                InMemoryDriver.pipe(Layer.provide(model.layer)),
+                RuntimeContext.phantom,
+              ),
+            ),
+          ),
+        ),
+        Effect.provide(Socket.layerWebSocketConstructorGlobal),
+      );
+    },
+    { timeout: 30_000 },
+  );
+
+  it.live(
+    "viewing never waits on the session: a session whose turn dies still replays, and a submit leaves a durable crash",
+    () => {
+      // an agent whose turn cannot complete — the sandboxed shape (boot
+      // the machine, converge the checkout) with the machine wedged.
+      // Before the fix `socketHost` built the session first, so
+      // `subscribe` hung/died behind it and the viewer saw an empty
+      // transcript.
       class Wedged extends AI.Agent<Wedged>()("Wedged") {}
       const WedgedCharter = Effect.gen(function* () {
-        yield* AI.Thread;
-        return yield* Effect.die(new Error("machine will not boot"));
+        return {
+          turn: Effect.gen(function* () {
+            yield* AI.Thread;
+            return yield* Effect.die(new Error("machine will not boot"));
+          }),
+        };
       });
       const model = Model.make([() => [Model.text("never"), Model.finish()]]);
 
@@ -528,8 +648,8 @@ describe("SessionSocket (DriverLocal)", () => {
             );
             expect(replayed).toEqual([{ type: "live", seq: 0 }]);
 
-            // the steer builds the session; its init dies — the WHY
-            // lands in the transcript as a fatal crash, not silence
+            // the steer builds the session; its turn dies — the WHY
+            // lands in the transcript as a crash, not silence
             yield* client.send({ type: "submit", input: "hello?" });
             const frames = yield* framesUntil(
               client,
@@ -548,7 +668,6 @@ describe("SessionSocket (DriverLocal)", () => {
               crashed.observation.type === "crashed"
             ) {
               expect(crashed.durable).toBe(true);
-              expect(crashed.observation.fatal).toBe(true);
               expect(AI.renderCrash(crashed.observation.error)).toContain(
                 "machine will not boot",
               );

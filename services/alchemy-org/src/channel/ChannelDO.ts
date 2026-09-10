@@ -5,8 +5,6 @@ import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import type * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import {
   CURSOR_PAGE_LIMIT,
   cursorPage,
@@ -30,7 +28,7 @@ import { describeEvent } from "./DescribeEvent.ts";
  * The CHANNEL's Durable Object — ONE instance (`main`) for the whole
  * org. It owns the channel log (dense `seq`, the cursor protocol's
  * spine), the thread directory and `ref → thread` attachment
- * projections the ThreadDOs push, the delivered-hash dedupe that
+ * projections the threads push (ThreadAgent), the delivered-hash dedupe that
  * replaced the Ledger, and the hibernatable `/channel` WebSocket
  * fan-out.
  *
@@ -210,26 +208,6 @@ const ChannelDOLive = Cloudflare.DurableObject<ChannelRpc>()(
     const state = yield* Cloudflare.DurableObjectState;
     const sql = state.storage.sql;
 
-    // the constructor also runs at PLAN time against a mock state —
-    // tables are ensured lazily, once, on the first call
-    const ensured = yield* Effect.cached(
-      Effect.gen(function* () {
-        yield* Effect.forEach(
-          TABLES,
-          (table) =>
-            sql.exec(table.trim().replaceAll(/\s+/g, " ")).pipe(Effect.asVoid),
-          { discard: true },
-        );
-        const info = yield* sql.exec<
-          { name: string } & Record<string, Cloudflare.SqlStorageValue>
-        >("PRAGMA table_info(messages)");
-        const columns = new Set((yield* info.toArray()).map((c) => c.name));
-        for (const [column, ddl] of MIGRATIONS) {
-          if (!columns.has(column)) yield* sql.exec(ddl);
-        }
-      }),
-    );
-
     // the head is a MONOTONIC counter persisted in meta, not
     // MAX(seq): deleting the tail row must not let the next append
     // re-mint a retired seq (clients watermarked past it would
@@ -250,36 +228,33 @@ const ChannelDOLive = Cloudflare.DurableObject<ChannelRpc>()(
       return Math.max(maxSeq, stored);
     });
 
-    const slice = (after: number, limit: number) =>
-      Effect.gen(function* () {
-        const cursor = yield* sql.exec<MessageRow>(
-          "SELECT * FROM messages WHERE seq > ? ORDER BY seq ASC LIMIT ?",
-          after,
-          limit,
-        );
-        return (yield* cursor.toArray()).map(toMessage);
-      });
+    const slice = Effect.fn(function* (after: number, limit: number) {
+      const cursor = yield* sql.exec<MessageRow>(
+        "SELECT * FROM messages WHERE seq > ? ORDER BY seq ASC LIMIT ?",
+        after,
+        limit,
+      );
+      return (yield* cursor.toArray()).map(toMessage);
+    });
 
-    const byId = (id: string) =>
-      Effect.gen(function* () {
-        const cursor = yield* sql.exec<MessageRow>(
-          "SELECT * FROM messages WHERE id = ?",
-          id,
-        );
-        const rows = yield* cursor.toArray();
-        return rows[0] === undefined ? undefined : toMessage(rows[0]);
-      });
+    const byId = Effect.fn(function* (id: string) {
+      const cursor = yield* sql.exec<MessageRow>(
+        "SELECT * FROM messages WHERE id = ?",
+        id,
+      );
+      const rows = yield* cursor.toArray();
+      return rows[0] === undefined ? undefined : toMessage(rows[0]);
+    });
 
-    const broadcast = (frame: ChannelSocketFrame) =>
-      Effect.gen(function* () {
-        const sockets = yield* state.getWebSockets(TAG);
-        const data = JSON.stringify(frame);
-        yield* Effect.forEach(
-          sockets,
-          (socket) => Effect.ignore(socket.send(data)),
-          { discard: true },
-        );
-      });
+    const broadcast = Effect.fn(function* (frame: ChannelSocketFrame) {
+      const sockets = yield* state.getWebSockets(TAG);
+      const data = JSON.stringify(frame);
+      yield* Effect.forEach(
+        sockets,
+        (socket) => Effect.ignore(socket.send(data)),
+        { discard: true },
+      );
+    });
 
     const readDirectory = Effect.gen(function* () {
       const cursor = yield* sql.exec<DirectoryRow>(
@@ -289,110 +264,113 @@ const ChannelDOLive = Cloudflare.DurableObject<ChannelRpc>()(
     });
 
     /** Insert one message (idempotent on id); the row as stored. */
-    const insert = (input: AppendInput) =>
-      Effect.gen(function* () {
-        yield* ensured;
-        const id = input.id ?? crypto.randomUUID();
-        const existing = yield* byId(id);
-        if (existing !== undefined) return { message: existing, fresh: false };
-        const seq = (yield* head) + 1;
-        // advance the monotonic counter WITH the row (same DO turn) —
-        // a delete of this row later can never roll the head back
-        yield* sql.exec(
-          "INSERT OR REPLACE INTO meta (key, value) VALUES ('head', ?)",
-          String(seq),
-        );
-        const at = yield* Clock.currentTimeMillis;
-        yield* sql.exec(
-          `INSERT INTO messages (id, seq, at, kind, author, text, repo, ref, event, thread, placed, card, reply_to)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-            .trim()
-            .replaceAll(/\s+/g, " "),
-          id,
-          seq,
-          at,
-          input.kind,
-          input.author?.login ?? null,
-          input.text,
-          input.repo ?? null,
-          input.ref ?? null,
-          input.event ?? null,
-          input.thread ?? null,
-          0,
-          input.card === undefined ? null : JSON.stringify(input.card),
-          input.replyTo === undefined || input.replyTo.length === 0
-            ? null
-            : JSON.stringify(input.replyTo),
-        );
-        const message = (yield* byId(id))!;
-        yield* broadcast({ type: "item", item: message });
-        return { message, fresh: true };
-      });
+    const insert = Effect.fn(function* (input: AppendInput) {
+      const id = input.id ?? crypto.randomUUID();
+      const existing = yield* byId(id);
+      if (existing !== undefined) return { message: existing, fresh: false };
+      const seq = (yield* head) + 1;
+      // advance the monotonic counter WITH the row (same DO turn) —
+      // a delete of this row later can never roll the head back
+      yield* sql.exec(
+        "INSERT OR REPLACE INTO meta (key, value) VALUES ('head', ?)",
+        String(seq),
+      );
+      const at = yield* Clock.currentTimeMillis;
+      yield* sql.exec(
+        `INSERT INTO messages (id, seq, at, kind, author, text, repo, ref, event, thread, placed, card, reply_to)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          .trim()
+          .replaceAll(/\s+/g, " "),
+        id,
+        seq,
+        at,
+        input.kind,
+        input.author?.login ?? null,
+        input.text,
+        input.repo ?? null,
+        input.ref ?? null,
+        input.event ?? null,
+        input.thread ?? null,
+        0,
+        input.card === undefined ? null : JSON.stringify(input.card),
+        input.replyTo === undefined || input.replyTo.length === 0
+          ? null
+          : JSON.stringify(input.replyTo),
+      );
+      const message = (yield* byId(id))!;
+      yield* broadcast({ type: "item", item: message });
+      return { message, fresh: true };
+    });
 
-    return Effect.succeed<ChannelRpc>({
-      /**
-       * The `/channel` WebSocket: accept, hibernate freely — there is
-       * no in-memory state; `broadcast` re-reads the attached sockets
-       * from the runtime every time.
-       */
-      fetch: Effect.gen(function* () {
-        yield* HttpServerRequest;
-        const [response] = yield* Cloudflare.upgrade({ tags: [TAG] });
-        return response;
-      }) as Effect.Effect<
-        HttpServerResponse.HttpServerResponse,
-        never,
-        RuntimeContext | Cloudflare.DurableObjectState
-      >,
+    return Effect.gen(function* () {
+      yield* Effect.forEach(
+        TABLES,
+        (table) =>
+          sql.exec(table.trim().replaceAll(/\s+/g, " ")).pipe(Effect.asVoid),
+        { discard: true },
+      );
+      const info = yield* sql.exec<
+        { name: string } & Record<string, Cloudflare.SqlStorageValue>
+      >("PRAGMA table_info(messages)");
+      const columns = new Set((yield* info.toArray()).map((c) => c.name));
+      for (const [column, ddl] of MIGRATIONS) {
+        if (!columns.has(column)) yield* sql.exec(ddl);
+      }
 
-      /**
-       * `subscribe { after }`: replay `after+1 … head` in batches,
-       * mark live, then every append arrives as an `item`. The whole
-       * handler is one DO turn — an append cannot interleave.
-       */
-      webSocketMessage: (socket: Cloudflare.WebSocket, message) =>
-        Effect.gen(function* () {
-          yield* ensured;
-          const frame = JSON.parse(
-            typeof message === "string"
-              ? message
-              : new TextDecoder().decode(message),
-          ) as CursorClientFrame;
-          if (frame.type !== "subscribe") return;
-          const send = (out: ChannelSocketFrame) =>
-            Effect.ignore(socket.send(JSON.stringify(out)));
-          yield* send({ type: "directory", rows: yield* readDirectory });
-          const tail = yield* head;
-          let after = frame.after;
-          while (after < tail) {
-            const items = yield* slice(after, CURSOR_PAGE_LIMIT);
-            if (items.length === 0) break;
-            yield* send({ type: "batch", items, head: tail });
-            after = items[items.length - 1]!.seq;
-          }
-          yield* send({ type: "live", seq: tail });
-        }).pipe(
+      return {
+        /**
+         * The `/channel` WebSocket: accept, hibernate freely — there is
+         * no in-memory state; `broadcast` re-reads the attached sockets
+         * from the runtime every time.
+         */
+        fetch: Effect.gen(function* () {
+          const [response] = yield* Cloudflare.upgrade({ tags: [TAG] });
+          return response;
+        }),
+
+        /**
+         * `subscribe { after }`: replay `after+1 … head` in batches,
+         * mark live, then every append arrives as an `item`. The whole
+         * handler is one DO turn — an append cannot interleave.
+         */
+        webSocketMessage: Effect.fn(
+          function* (socket: Cloudflare.WebSocket, message) {
+            const frame = JSON.parse(
+              typeof message === "string"
+                ? message
+                : new TextDecoder().decode(message),
+            ) as CursorClientFrame;
+            if (frame.type !== "subscribe") return;
+            const send = (out: ChannelSocketFrame) =>
+              Effect.ignore(socket.send(JSON.stringify(out)));
+            yield* send({ type: "directory", rows: yield* readDirectory });
+            const tail = yield* head;
+            let after = frame.after;
+            while (after < tail) {
+              const items = yield* slice(after, CURSOR_PAGE_LIMIT);
+              if (items.length === 0) break;
+              yield* send({ type: "batch", items, head: tail });
+              after = items[items.length - 1]!.seq;
+            }
+            yield* send({ type: "live", seq: tail });
+          },
           Effect.catchDefect((defect) =>
             Effect.logWarning(`[channel-socket] bad frame: ${String(defect)}`),
           ),
-          (effect) => inWorker(effect),
-        ) as Effect.Effect<void>,
+        ),
 
-      webSocketClose: (
-        socket: Cloudflare.WebSocket,
-        code: number,
-        reason: string,
-      ) =>
-        Effect.gen(function* () {
+        webSocketClose: Effect.fn(function* (
+          socket: Cloudflare.WebSocket,
+          code: number,
+          reason: string,
+        ) {
           const echo = code === 1005 || code === 1006 || code === 1015;
           yield* Effect.ignore(
             socket.close(echo ? 1000 : code, echo ? "" : reason),
           );
         }),
 
-      deliver: (event) =>
-        Effect.gen(function* () {
-          yield* ensured;
+        deliver: Effect.fn(function* (event) {
           // dedupe on the delivery's CONTENT — parsed events carry no
           // delivery id; the same JSON is the same delivery (the
           // Ledger keyed the same way)
@@ -431,14 +409,11 @@ const ChannelDOLive = Cloudflare.DurableObject<ChannelRpc>()(
           return { duplicate: false, owner, message } satisfies Delivered;
         }),
 
-      append: (input) =>
-        Effect.gen(function* () {
+        append: Effect.fn(function* (input) {
           return (yield* insert(input)).message;
         }),
 
-      update: (id, patch) =>
-        Effect.gen(function* () {
-          yield* ensured;
+        update: Effect.fn(function* (id, patch) {
           const current = yield* byId(id);
           if (current === undefined) return undefined;
           yield* sql.exec(
@@ -456,9 +431,7 @@ const ChannelDOLive = Cloudflare.DurableObject<ChannelRpc>()(
           return next;
         }),
 
-      tag: (ids, thread, placed) =>
-        Effect.gen(function* () {
-          yield* ensured;
+        tag: Effect.fn(function* (ids, thread, placed) {
           for (const id of ids) {
             yield* sql.exec(
               "UPDATE messages SET thread = ?, placed = ? WHERE id = ?",
@@ -473,9 +446,7 @@ const ChannelDOLive = Cloudflare.DurableObject<ChannelRpc>()(
           }
         }),
 
-      remove: (ids) =>
-        Effect.gen(function* () {
-          yield* ensured;
+        remove: Effect.fn(function* (ids) {
           const seqs: Array<number> = [];
           for (const id of ids) {
             const current = yield* byId(id);
@@ -488,9 +459,7 @@ const ChannelDOLive = Cloudflare.DurableObject<ChannelRpc>()(
           }
         }),
 
-      page: (options) =>
-        Effect.gen(function* () {
-          yield* ensured;
+        page: Effect.fn(function* (options) {
           const limit = Math.min(
             options?.limit ?? CURSOR_PAGE_LIMIT,
             CURSOR_PAGE_LIMIT,
@@ -499,9 +468,7 @@ const ChannelDOLive = Cloudflare.DurableObject<ChannelRpc>()(
           return cursorPage(items, yield* head);
         }),
 
-      search: (filter) =>
-        Effect.gen(function* () {
-          yield* ensured;
+        search: Effect.fn(function* (filter) {
           const where: Array<string> = [];
           const binds: Array<string | number> = [];
           if (filter.q !== undefined && filter.q.length > 0) {
@@ -534,9 +501,7 @@ const ChannelDOLive = Cloudflare.DurableObject<ChannelRpc>()(
           return (yield* cursor.toArray()).map(toMessage);
         }),
 
-      read: (ids) =>
-        Effect.gen(function* () {
-          yield* ensured;
+        read: Effect.fn(function* (ids) {
           if (ids.length === 0) return [];
           const found = new Map<string, ChannelMessage>();
           for (let i = 0; i < ids.length; i += IN_PAGE) {
@@ -555,15 +520,9 @@ const ChannelDOLive = Cloudflare.DurableObject<ChannelRpc>()(
           });
         }),
 
-      directory: () =>
-        Effect.gen(function* () {
-          yield* ensured;
-          return yield* readDirectory;
-        }),
+        directory: () => readDirectory,
 
-      directoryUpsert: (row) =>
-        Effect.gen(function* () {
-          yield* ensured;
+        directoryUpsert: Effect.fn(function* (row) {
           yield* sql.exec(
             `INSERT OR REPLACE INTO directory (thread_id, name, title, status, turn, updated_at)
              VALUES (?, ?, ?, ?, ?, ?)`
@@ -576,21 +535,23 @@ const ChannelDOLive = Cloudflare.DurableObject<ChannelRpc>()(
             row.turn,
             row.updatedAt,
           );
-          yield* broadcast({ type: "directory", rows: yield* readDirectory });
+          yield* broadcast({
+            type: "directory",
+            rows: yield* readDirectory,
+          });
         }),
 
-      directoryRemove: (id) =>
-        Effect.gen(function* () {
-          yield* ensured;
+        directoryRemove: Effect.fn(function* (id) {
           yield* sql.exec("DELETE FROM directory WHERE thread_id = ?", id);
           // a deleted thread owns nothing — its refs are free again
           yield* sql.exec("DELETE FROM attachments WHERE thread_id = ?", id);
-          yield* broadcast({ type: "directory", rows: yield* readDirectory });
+          yield* broadcast({
+            type: "directory",
+            rows: yield* readDirectory,
+          });
         }),
 
-      attachmentsSet: (ref, thread) =>
-        Effect.gen(function* () {
-          yield* ensured;
+        attachmentsSet: Effect.fn(function* (ref, thread) {
           if (thread === null) {
             yield* sql.exec("DELETE FROM attachments WHERE ref = ?", ref);
           } else {
@@ -602,18 +563,14 @@ const ChannelDOLive = Cloudflare.DurableObject<ChannelRpc>()(
           }
         }),
 
-      attachmentOf: (ref) =>
-        Effect.gen(function* () {
-          yield* ensured;
+        attachmentOf: Effect.fn(function* (ref) {
           const cursor = yield* sql.exec<
             { thread_id: string } & Record<string, Cloudflare.SqlStorageValue>
           >("SELECT thread_id FROM attachments WHERE ref = ?", ref);
           return (yield* cursor.toArray())[0]?.thread_id;
         }),
 
-      claimBootstrap: () =>
-        Effect.gen(function* () {
-          yield* ensured;
+        claimBootstrap: Effect.fn(function* () {
           const cursor = yield* sql.exec<
             { n: number } & Record<string, Cloudflare.SqlStorageValue>
           >("SELECT COUNT(*) AS n FROM meta WHERE key = 'bootstrapped'");
@@ -623,6 +580,7 @@ const ChannelDOLive = Cloudflare.DurableObject<ChannelRpc>()(
           );
           return true;
         }),
+      } satisfies ChannelRpc;
     });
   }),
 );

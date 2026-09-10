@@ -70,72 +70,67 @@ export const SessionRepoLive = Layer.effect(
   Effect.gen(function* () {
     const entries = yield* Effect.forEach(
       connected.filter((entry) => entry.sessions),
-      (entry) =>
-        Effect.gen(function* () {
-          const identity = yield* GitHub.resolveRepository(entry.repository);
-          const getPullRequest = yield* GitHub.GetPullRequest(entry.repository);
-          return {
-            full: `${identity.owner}/${identity.repository}`,
-            remote: GitHub.remote(entry.repository),
-            getPullRequest,
-          };
-        }),
+      Effect.fn(function* (entry) {
+        const identity = yield* GitHub.resolveRepository(entry.repository);
+        const getPullRequest = yield* GitHub.GetPullRequest(entry.repository);
+        return {
+          full: `${identity.owner}/${identity.repository}`,
+          remote: GitHub.remote(entry.repository),
+          getPullRequest,
+        };
+      }),
     );
     const resolved = new Map<string, SessionTree | undefined>();
 
-    const derive = (
-      session: string,
-    ): Effect.Effect<SessionTree | undefined, string> =>
-      Effect.gen(function* () {
-        const pullKey = parsePullKey(session);
-        for (const entry of entries) {
-          if (pullKey !== undefined && pullKey.repo === entry.full) {
-            const found = yield* entry
-              .getPullRequest({ pull_number: pullKey.number })
-              .pipe(
-                Effect.mapError(
-                  (error) =>
-                    `could not read pull request #${pullKey.number} of ${entry.full}: ${error.message}`,
-                ),
-              );
-            const ref = pullRequestRef(found);
-            return {
-              repo: entry.full,
-              remote: entry.remote,
+    const derive = Effect.fn(function* (session: string) {
+      const pullKey = parsePullKey(session);
+      for (const entry of entries) {
+        if (pullKey !== undefined && pullKey.repo === entry.full) {
+          const found = yield* entry
+            .getPullRequest({ pull_number: pullKey.number })
+            .pipe(
+              Effect.mapError(
+                (error) =>
+                  `could not read pull request #${pullKey.number} of ${entry.full}: ${error.message}`,
+              ),
+            );
+          const ref = pullRequestRef(found);
+          return {
+            repo: entry.full,
+            remote: entry.remote,
+            ref,
+            fresh: true,
+            pull: {
+              number: found.number,
+              title: found.title,
+              author: found.user?.login ?? "unknown",
+              head: found.head.ref,
+              base: found.base.ref,
               ref,
-              fresh: true,
-              pull: {
-                number: found.number,
-                title: found.title,
-                author: found.user?.login ?? "unknown",
-                head: found.head.ref,
-                base: found.base.ref,
-                ref,
-              },
-            };
-          }
-          if (session.startsWith(`${entry.full}/`)) {
-            return {
-              repo: entry.full,
-              remote: entry.remote,
-              ref: undefined,
-              fresh: false,
-              pull: undefined,
-            };
-          }
+            },
+          };
         }
-        return undefined;
-      });
+        if (session.startsWith(`${entry.full}/`)) {
+          return {
+            repo: entry.full,
+            remote: entry.remote,
+            ref: undefined,
+            fresh: false,
+            pull: undefined,
+          };
+        }
+      }
+      return undefined;
+    });
 
     return {
-      resolve: (threadKey) =>
-        Effect.gen(function* () {
-          const session = sessionOf(threadKey);
-          if (resolved.has(session)) return resolved.get(session);
-          const tree = yield* derive(session);
-          resolved.set(session, tree);
-          return tree;
-        }),
+      resolve: Effect.fn(function* (threadKey) {
+        const session = sessionOf(threadKey);
+        if (resolved.has(session)) return resolved.get(session);
+        const tree = yield* derive(session);
+        resolved.set(session, tree);
+        return tree;
+      }),
     };
   }),
 );

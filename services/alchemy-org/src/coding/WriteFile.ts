@@ -36,45 +36,44 @@ export const WriteFileLive = Layer.effect(
   WriteFile,
   Effect.gen(function* () {
     const sandbox = yield* AI.Sandbox;
-    return ((input: {
+    return Effect.fn(function* (input: {
       path: string;
       content: string;
       mode: "create" | "overwrite";
       expectedDigest?: string;
-    }) =>
-      Effect.gen(function* () {
-        const present = yield* sandbox.exists(input.path);
-        if (input.mode === "create") {
-          if (present) {
-            return yield* Effect.fail(
-              `file already exists: ${input.path} — read it first and use overwrite mode`,
-            );
-          }
-        } else {
-          if (input.expectedDigest === undefined) {
-            return yield* Effect.fail(
-              "expectedDigest is required in overwrite mode — read the file first",
-            );
-          }
-          if (!present) {
-            return yield* Effect.fail(
-              `cannot overwrite missing file: ${input.path} — use create mode`,
-            );
-          }
-          const current = yield* sandbox.readFile(input.path);
-          const digest = yield* sha256Hex(current);
-          if (digest !== input.expectedDigest) {
-            return yield* Effect.fail(
-              `file changed since it was read: ${input.path} — read it again and retry with the new digest`,
-            );
-          }
+    }) {
+      const present = yield* sandbox.exists(input.path);
+      if (input.mode === "create") {
+        if (present) {
+          return yield* Effect.fail(
+            `file already exists: ${input.path} — read it first and use overwrite mode`,
+          );
         }
-        yield* sandbox.writeFile(input.path, input.content);
-        const digest = yield* sha256Hex(input.content);
-        return {
-          bytes: new TextEncoder().encode(input.content).byteLength,
-          digest,
-        };
-      })) as never;
+      } else {
+        if (input.expectedDigest === undefined) {
+          return yield* Effect.fail(
+            "expectedDigest is required in overwrite mode — read the file first",
+          );
+        }
+        if (!present) {
+          return yield* Effect.fail(
+            `cannot overwrite missing file: ${input.path} — use create mode`,
+          );
+        }
+        const current = yield* sandbox.readFile(input.path);
+        const digest = yield* sha256Hex(current);
+        if (digest !== input.expectedDigest) {
+          return yield* Effect.fail(
+            `file changed since it was read: ${input.path} — read it again and retry with the new digest`,
+          );
+        }
+      }
+      yield* sandbox.writeFile(input.path, input.content);
+      const digest = yield* sha256Hex(input.content);
+      return {
+        bytes: new TextEncoder().encode(input.content).byteLength,
+        digest,
+      };
+    }) as never;
   }),
 );

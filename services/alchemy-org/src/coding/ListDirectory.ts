@@ -36,17 +36,16 @@ export const ListDirectoryLive = Layer.effect(
   ListDirectory,
   Effect.gen(function* () {
     const sandbox = yield* AI.Sandbox;
-    return ((input: { path?: string; limit?: number }) =>
-      Effect.gen(function* () {
-        const listed = yield* sandbox.listFiles(input.path ?? ".");
-        const rendered = listed.map((entry) =>
-          entry.type === "directory" ? `${entry.name}/` : entry.name,
-        );
-        const max = input.limit ?? 500;
-        return {
-          entries: rendered.slice(0, max),
-          total: rendered.length,
-        };
-      })) as never;
+    return Effect.fn(function* (input: { path?: string; limit?: number }) {
+      const listed = yield* sandbox.listFiles(input.path ?? ".");
+      const rendered = listed.map((entry) =>
+        entry.type === "directory" ? `${entry.name}/` : entry.name,
+      );
+      const max = input.limit ?? 500;
+      return {
+        entries: rendered.slice(0, max),
+        total: rendered.length,
+      };
+    }) as never;
   }),
 );

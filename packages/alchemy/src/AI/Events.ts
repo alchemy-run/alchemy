@@ -23,6 +23,24 @@ export interface EncodedCrash {
 }
 
 /**
+ * One sampling's TOKEN BILL, flattened from the provider's report —
+ * what a cost fold multiplies by a price table. Every field is a
+ * token count; absent means the provider didn't say.
+ */
+export interface TokenUsage {
+  /** Prompt tokens billed at the full input rate (uncached). */
+  readonly input?: number;
+  /** Prompt tokens served from the provider's prompt cache. */
+  readonly cacheRead?: number;
+  /** Prompt tokens written INTO the prompt cache this sampling. */
+  readonly cacheWrite?: number;
+  /** Response tokens — text and tool calls. */
+  readonly output?: number;
+  /** Of the output, the thinking tokens (when reported separately). */
+  readonly reasoning?: number;
+}
+
+/**
  * A round exhausted its recovery budget (interrupted `attempts` times
  * with no completed sampling) and was abandoned — the typed failure
  * every waiter on that round receives.
@@ -176,6 +194,12 @@ export type SessionObservation = ObservationEnvelope &
           readonly name: string;
           readonly input: unknown;
         }>;
+        /** The model that sampled — the router's resolved id (or the
+         *  session's request when the model doesn't report one). */
+        readonly model?: string;
+        /** The sampling's token bill — the cost fold's input. Absent
+         *  when the provider reported none. */
+        readonly usage?: TokenUsage;
       }
     | {
         readonly type: "tool-result";

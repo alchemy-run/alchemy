@@ -108,8 +108,7 @@ export const Dispatch: {
   };
 } = ((agent: Agent<any, any>, name: string) =>
   (template: TemplateStringsArray, ...refs: any[]) =>
-  (policy: any) =>
-    Effect.gen(function* () {
+    Effect.fn(function* (policy: any) {
       const fn = Effect.isEffect(policy) ? yield* policy : policy;
       return {
         "~alchemy/Kind": "DispatchTool",

@@ -334,10 +334,12 @@ const findByName = (accountId: string, gatewayId: string, name: string) =>
       ),
     );
 
-const createEvaluationName = (id: string, name: string | undefined) =>
-  Effect.gen(function* () {
-    return name ?? (yield* createPhysicalName({ id, lowercase: true }));
-  });
+const createEvaluationName = Effect.fn(function* (
+  id: string,
+  name: string | undefined,
+) {
+  return name ?? (yield* createPhysicalName({ id, lowercase: true }));
+});
 
 const toAttributes = (
   evaluation:

@@ -45,10 +45,10 @@ const HandToEngineer = AI.Dispatch(Engineer, "hand_to_engineer")`
 // 1. static prose
 Engineer.make`You are ...${Grep}...`;
 
-// 2. closure: init (once per run) → constant stance
+// 2. closure: one Effect at build (tools + declared per-session state) → constant stance
 Engineer.make(Effect.gen(function* () {
-  const state = yield* Ref.make(0);
-  const park = yield* AI.Tool("park")`Park this.`(() => Ref.set(state, 1));
+  const state = PersistentRef.of("state", () => 0);
+  const park = yield* AI.Tool("park")`Park this.`(() => PersistentRef.set(state, 1));
   return AI.prose`...${park}...`;
 }));
 

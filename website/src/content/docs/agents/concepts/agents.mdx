@@ -23,14 +23,16 @@ see [Roles & missions](/agents/concepts/roles-and-missions).
 
 ## Charter = init → stance
 
-A charter is an Effect that runs **once per run** (the init) and
-produces the **stance** the kernel renders before every sampling:
+A charter is **one Effect** that runs **once, where the Layer
+builds** (plan time in the deploy process, once per isolate at
+runtime) and produces the **stance** the kernel renders before every
+sampling:
 
 ```typescript
 export const EngineerLive = Engineer.make(
   Effect.gen(function* () {
-    // INIT — once per run: allocate state, define inline tools
-    const attempts = yield* Ref.make(0);
+    // DECLARE — once per build: bindings, inline tools, named state
+    const attempts = PersistentRef.of("attempts", () => 0);
     const openPullRequest = yield* AI.Tool("open_pull_request")`...`(handler);
 
     // STANCE — what the persona knows and holds
@@ -41,9 +43,15 @@ export const EngineerLive = Engineer.make(
 );
 ```
 
-The init closure **is the run's instance**: `Ref`s allocated there,
-and tools closing over them, live exactly as long as that
-conversation. There are no hooks because there is a constructor.
+The charter is the agent, declaratively: everything it reaches for
+(bindings), everything it can do (tools), and everything it answers
+(methods) is visible in one scope before any session exists — the
+deploy reads that graph. There is **no per-session constructor**. A
+session is ambient: turns, tool handlers, and methods run inside the
+session's frame and read `AI.Thread` (its identity, its conversation)
+and its durable cells (`PersistentRef.of` declares one; each session
+gets its own row) from there. Reaching for `AI.Thread` at the top of
+a charter fails the build, loudly.
 
 ## Three tiers, static-first
 
@@ -54,7 +62,7 @@ you mean:
 // 1. STATIC — most agents: prose is the whole behavior
 Reviewer.make`You review each ${pr} against ...`;
 
-// 2. CLOSURE — init allocates state and inline tools, stance stays constant
+// 2. CLOSURE — the charter declares inline tools (and named state), stance stays constant
 Engineer.make(Effect.gen(function* () {
   const openPullRequest = yield* AI.Tool("open_pull_request")`...`(handler);
   return AI.prose`...${openPullRequest}...`;
@@ -63,7 +71,7 @@ Engineer.make(Effect.gen(function* () {
 // 3. GUARD — a function of the tick, for laws the model can't self-enforce
 Engineer.make(Effect.gen(function* () {
   const stance = AI.prose`...`;
-  return Effect.fn(function* (tick: AI.TickEvent) {
+  return (tick: AI.TickEvent) => Effect.gen(function* () {
     if (tick.count >= 60) return yield* Effect.fail(new AI.Refused({ ... }));
     if (tick.count === 45) yield* AI.say`45 of 60 spent — converge.`;
     return yield* stance;

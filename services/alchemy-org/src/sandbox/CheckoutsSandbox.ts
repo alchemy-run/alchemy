@@ -43,31 +43,30 @@ export const CheckoutsSandbox = Layer.effect(
     const sandbox = yield* AI.Sandbox;
 
     /** Run one git command in the tree root; failures become GitError. */
-    const git = (args: ReadonlyArray<string>) =>
-      Effect.gen(function* () {
-        const result = yield* sandbox
-          .exec("git", args, { timeout: 120_000 })
-          .pipe(
-            Effect.mapError(
-              (error) =>
-                new Git.GitError({
-                  command: args.join(" "),
-                  exitCode: -1,
-                  stderr: String(error),
-                }),
-            ),
-          );
-        if (!result.success) {
-          return yield* Effect.fail(
-            new Git.GitError({
-              command: args.join(" "),
-              exitCode: result.exitCode,
-              stderr: result.stderr,
-            }),
-          );
-        }
-        return result.stdout;
-      });
+    const git = Effect.fn(function* (args: ReadonlyArray<string>) {
+      const result = yield* sandbox
+        .exec("git", args, { timeout: 120_000 })
+        .pipe(
+          Effect.mapError(
+            (error) =>
+              new Git.GitError({
+                command: args.join(" "),
+                exitCode: -1,
+                stderr: String(error),
+              }),
+          ),
+        );
+      if (!result.success) {
+        return yield* Effect.fail(
+          new Git.GitError({
+            command: args.join(" "),
+            exitCode: result.exitCode,
+            stderr: result.stderr,
+          }),
+        );
+      }
+      return result.stdout;
+    });
 
     /** The tree's identity, when one has been derived: a missing or
      *  unreadable marker is None — greenfield. */
@@ -155,113 +154,32 @@ export const CheckoutsSandbox = Layer.effect(
     );
 
     return {
-      checkout: (options) =>
-        Effect.gen(function* () {
-          const ref = options.ref ?? Git.defaultBranch(options.remote);
-          const current = Option.getOrUndefined(yield* readMarker);
+      checkout: Effect.fn(function* (options) {
+        const ref = options.ref ?? Git.defaultBranch(options.remote);
+        const current = Option.getOrUndefined(yield* readMarker);
 
-          // Land on the REAL branch (`main` unless the caller pins a
-          // ref), tracking origin — the machine is the session's own
-          // isolated sandbox, so there is no detached-worktree dance:
-          // `git status` in a fresh session reads like a normal clone.
-          const landOnBranch = Effect.gen(function* () {
-            yield* git([
-              "fetch",
-              "--depth",
-              "1",
-              "origin",
-              `+${ref}:refs/remotes/origin/${ref}`,
-            ]);
-            // --force: untracked leftovers from a torn reset must not
-            // abort the checkout; -B (re)points the local branch at
-            // the fetched tip and sets up tracking
-            yield* git(["checkout", "--force", "-B", ref, `origin/${ref}`]);
-            yield* git(["reset", "--hard", `origin/${ref}`]);
-          });
+        // Land on the REAL branch (`main` unless the caller pins a
+        // ref), tracking origin — the machine is the session's own
+        // isolated sandbox, so there is no detached-worktree dance:
+        // `git status` in a fresh session reads like a normal clone.
+        const landOnBranch = Effect.gen(function* () {
+          yield* git([
+            "fetch",
+            "--depth",
+            "1",
+            "origin",
+            `+${ref}:refs/remotes/origin/${ref}`,
+          ]);
+          // --force: untracked leftovers from a torn reset must not
+          // abort the checkout; -B (re)points the local branch at
+          // the fetched tip and sets up tracking
+          yield* git(["checkout", "--force", "-B", ref, `origin/${ref}`]);
+          yield* git(["reset", "--hard", `origin/${ref}`]);
+        });
 
-          if (current !== undefined && current.key === options.key) {
-            if (options.fresh !== true) return checkout(current);
-            // re-derive the SAME tree from the remote as it is now
-            yield* landOnBranch;
-            const marker: Marker = {
-              key: options.key,
-              branch: ref,
-              remote: options.remote,
-            };
-            yield* writeMarker(marker);
-            return checkout(marker);
-          }
-          if (current !== undefined) {
-            // one tree per sandbox — a second key is a composition bug
-            return yield* Effect.fail(
-              new Git.GitError({
-                command: "checkout",
-                exitCode: -1,
-                stderr: `sandbox tree already holds '${current.key}' — one workspace per session sandbox`,
-              }),
-            );
-          }
-
-          // no marker: the tree may still carry the image's BAKED clone
-          const baked = Option.getOrUndefined(yield* bakedOrigin);
-          if (baked !== undefined) {
-            if (sameRemote(baked, options.remote.url)) {
-              // the bake IS the worktree: adopt it in place — full
-              // history, remote intact, node_modules warm. The baked
-              // branch is a build-time snapshot (whatever the host had
-              // checked out); converge onto the requested branch when
-              // it differs (or `fresh` demands the tip).
-              const head = yield* git([
-                "rev-parse",
-                "--abbrev-ref",
-                "HEAD",
-              ]).pipe(Effect.orElseSucceed(() => ""));
-              if (head.trim() !== ref || options.fresh === true) {
-                yield* landOnBranch;
-              }
-              const marker: Marker = {
-                key: options.key,
-                branch: ref,
-                remote: options.remote,
-              };
-              yield* writeMarker(marker);
-              return checkout(marker);
-            }
-            // A bake for a DIFFERENT remote: REPOINT and converge in
-            // place, never wipe. git makes the tracked tree match the
-            // fetched tip whatever remote the objects came from —
-            // `reset --hard` rewrites every path that differs, `clean
-            // -fd` drops the old repo's untracked leftovers while the
-            // ignored prewarm (node_modules, lib/, the pnpm store) stays
-            // warm. The org's connected repos (`alchemy`, its
-            // `test-alchemy` sandbox) share one codebase, so this is a
-            // small delta; for an unrelated repo it is a full rewrite,
-            // which is still correct. The old path — `rm -rf` the
-            // whole 1.2GB bake and re-clone — blew its exec budget
-            // partway through and left the session in a half-deleted
-            // tree with no `.git`.
-            yield* git(["remote", "set-url", "origin", options.remote.url]);
-            yield* landOnBranch;
-            yield* git(["clean", "-fd"]);
-            const marker: Marker = {
-              key: options.key,
-              branch: ref,
-              remote: options.remote,
-            };
-            yield* writeMarker(marker);
-            return checkout(marker);
-          }
-
-          // greenfield: derive the tree in place (shallow — the ref's
-          // tip is what a session starts from). The remote falls back
-          // to set-url so a leftover origin from a torn reset converges
-          // instead of crashing the whole session INIT.
-          yield* git(["init", "."]);
-          yield* git(["remote", "add", "origin", options.remote.url]).pipe(
-            Effect.catch(() =>
-              git(["remote", "set-url", "origin", options.remote.url]),
-            ),
-          );
+        if (current !== undefined && current.key === options.key) {
+          if (options.fresh !== true) return checkout(current);
+          // re-derive the SAME tree from the remote as it is now
           yield* landOnBranch;
           const marker: Marker = {
             key: options.key,
@@ -270,7 +188,85 @@ export const CheckoutsSandbox = Layer.effect(
           };
           yield* writeMarker(marker);
           return checkout(marker);
-        }),
+        }
+        if (current !== undefined) {
+          // one tree per sandbox — a second key is a composition bug
+          return yield* Effect.fail(
+            new Git.GitError({
+              command: "checkout",
+              exitCode: -1,
+              stderr: `sandbox tree already holds '${current.key}' — one workspace per session sandbox`,
+            }),
+          );
+        }
+
+        // no marker: the tree may still carry the image's BAKED clone
+        const baked = Option.getOrUndefined(yield* bakedOrigin);
+        if (baked !== undefined) {
+          if (sameRemote(baked, options.remote.url)) {
+            // the bake IS the worktree: adopt it in place — full
+            // history, remote intact, node_modules warm. The baked
+            // branch is a build-time snapshot (whatever the host had
+            // checked out); converge onto the requested branch when
+            // it differs (or `fresh` demands the tip).
+            const head = yield* git(["rev-parse", "--abbrev-ref", "HEAD"]).pipe(
+              Effect.orElseSucceed(() => ""),
+            );
+            if (head.trim() !== ref || options.fresh === true) {
+              yield* landOnBranch;
+            }
+            const marker: Marker = {
+              key: options.key,
+              branch: ref,
+              remote: options.remote,
+            };
+            yield* writeMarker(marker);
+            return checkout(marker);
+          }
+          // A bake for a DIFFERENT remote: REPOINT and converge in
+          // place, never wipe. git makes the tracked tree match the
+          // fetched tip whatever remote the objects came from —
+          // `reset --hard` rewrites every path that differs, `clean
+          // -fd` drops the old repo's untracked leftovers while the
+          // ignored prewarm (node_modules, lib/, the pnpm store) stays
+          // warm. The org's connected repos (`alchemy`, its
+          // `test-alchemy` sandbox) share one codebase, so this is a
+          // small delta; for an unrelated repo it is a full rewrite,
+          // which is still correct. The old path — `rm -rf` the
+          // whole 1.2GB bake and re-clone — blew its exec budget
+          // partway through and left the session in a half-deleted
+          // tree with no `.git`.
+          yield* git(["remote", "set-url", "origin", options.remote.url]);
+          yield* landOnBranch;
+          yield* git(["clean", "-fd"]);
+          const marker: Marker = {
+            key: options.key,
+            branch: ref,
+            remote: options.remote,
+          };
+          yield* writeMarker(marker);
+          return checkout(marker);
+        }
+
+        // greenfield: derive the tree in place (shallow — the ref's
+        // tip is what a session starts from). The remote falls back
+        // to set-url so a leftover origin from a torn reset converges
+        // instead of crashing the whole session INIT.
+        yield* git(["init", "."]);
+        yield* git(["remote", "add", "origin", options.remote.url]).pipe(
+          Effect.catch(() =>
+            git(["remote", "set-url", "origin", options.remote.url]),
+          ),
+        );
+        yield* landOnBranch;
+        const marker: Marker = {
+          key: options.key,
+          branch: ref,
+          remote: options.remote,
+        };
+        yield* writeMarker(marker);
+        return checkout(marker);
+      }),
 
       get: (key) =>
         readMarker.pipe(

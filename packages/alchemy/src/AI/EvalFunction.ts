@@ -19,8 +19,12 @@ import { Eval, TOOLS_RAW_MODULE } from "./Eval.ts";
  * the isolated substrate behind the same contract.
  */
 export const EvalFunction: Layer.Layer<Eval> = Layer.succeed(Eval, {
-  run: ({ modules, main, tools, timeout }) =>
-    Effect.gen(function* () {
+  run: Effect.fn(
+    function* ({
+      modules,
+      main,
+      tools,
+    }: Parameters<Eval["Service"]["run"]>[0]) {
       const logs: Array<string> = [];
       const record =
         (level: string) =>
@@ -89,17 +93,20 @@ export const EvalFunction: Layer.Layer<Eval> = Layer.succeed(Eval, {
             : `program failed: ${error}`,
       });
       return { output, logs };
-    }).pipe(
-      Effect.timeoutOrElse({
-        duration: timeout,
-        orElse: () =>
-          Effect.fail(
-            `eval timed out after ${Duration.format(
-              Duration.fromInputUnsafe(timeout),
-            )} — split the work into smaller programs`,
-          ),
-      }),
-    ),
+    },
+    (effect, { timeout }) =>
+      effect.pipe(
+        Effect.timeoutOrElse({
+          duration: timeout,
+          orElse: () =>
+            Effect.fail(
+              `eval timed out after ${Duration.format(
+                Duration.fromInputUnsafe(timeout),
+              )} — split the work into smaller programs`,
+            ),
+        }),
+      ),
+  ),
 });
 
 type Namespace = Record<string, unknown>;

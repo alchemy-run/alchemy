@@ -27,23 +27,22 @@ export const ArtifactsLocal = Layer.effect(
     let next = 1;
 
     return {
-      create: (label) =>
-        Effect.gen(function* () {
-          const safe = label.replaceAll(/[^a-zA-Z0-9_-]/g, "-");
-          const id = `output-${next++}-${safe}`;
-          const file = path.join(root, `${id}.log`);
-          yield* fs
-            .writeFileString(file, "")
-            .pipe(Effect.mapError((error) => String(error)));
-          files.set(id, file);
-          return {
-            id,
-            append: (chunk) =>
-              fs
-                .writeFileString(file, chunk, { flag: "a" })
-                .pipe(Effect.mapError((error) => String(error))),
-          };
-        }),
+      create: Effect.fn(function* (label) {
+        const safe = label.replaceAll(/[^a-zA-Z0-9_-]/g, "-");
+        const id = `output-${next++}-${safe}`;
+        const file = path.join(root, `${id}.log`);
+        yield* fs
+          .writeFileString(file, "")
+          .pipe(Effect.mapError((error) => String(error)));
+        files.set(id, file);
+        return {
+          id,
+          append: (chunk) =>
+            fs
+              .writeFileString(file, chunk, { flag: "a" })
+              .pipe(Effect.mapError((error) => String(error))),
+        };
+      }),
       read: (id) => {
         const file = files.get(id);
         return file === undefined

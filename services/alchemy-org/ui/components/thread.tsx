@@ -6,6 +6,7 @@
  */
 
 import { ChatView, timeAgo } from "@/components/chat";
+import { SessionModelSelect } from "@/components/model-select";
 import { Rail } from "@/components/rail";
 import { GhosttyTerminal } from "@/components/terminal";
 import {
@@ -456,6 +457,20 @@ const ThreadPane = ({
           </ContextMenuItem>
         </ContextMenuContent>
       </ContextMenu>
+      <Section
+        title="Model"
+        actions={
+          <SessionModelSelect
+            sessionId={threadSessionId(state.id)}
+            current={state.model ?? null}
+            label="Thread model"
+          />
+        }
+      >
+        <div className="text-[11px] text-muted-foreground">
+          What this thread's agent and its engineers sample with.
+        </div>
+      </Section>
       <div className="flex items-center gap-2 px-3 py-2.5">
         {state.status === "open" && (
           <Button
@@ -587,6 +602,10 @@ const AgentHeader = ({
                   <Trash2 className="size-3" />
                 </button>
               </Hint>
+              <SessionModelSelect
+                sessionId={engineerSessionId(agentKey)}
+                label="Agent model"
+              />
             </span>
           )}
         </div>

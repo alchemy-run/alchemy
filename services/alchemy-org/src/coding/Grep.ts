@@ -84,7 +84,7 @@ export const GrepLive = Layer.effect(
     const sandbox = yield* AI.Sandbox;
     const artifacts = yield* Artifacts;
 
-    return ((input: {
+    return Effect.fn(function* (input: {
       pattern: string;
       path?: string;
       glob?: string;
@@ -95,61 +95,60 @@ export const GrepLive = Layer.effect(
       multiline?: boolean;
       outputMode?: "content" | "files" | "count";
       limit?: number;
-    }) =>
-      Effect.gen(function* () {
-        const mode = input.outputMode ?? "content";
-        const max = input.limit ?? (mode === "content" ? 100 : 500);
-        const args = [
-          "--line-number",
-          "--no-heading",
-          "--color=never",
-          "--hidden",
-          "--glob",
-          "!.git/*",
-          "--max-columns=1000",
-          "--max-columns-preview",
-          ...(mode === "files" ? ["--files-with-matches"] : []),
-          ...(mode === "count" ? ["--count"] : []),
-          ...(input.glob ? ["--glob", input.glob] : []),
-          ...(input.type ? ["--type", input.type] : []),
-          ...(input.ignoreCase ? ["--ignore-case"] : []),
-          ...(input.literal ? ["--fixed-strings"] : []),
-          ...(input.context !== undefined && input.context > 0
-            ? ["--context", String(input.context)]
-            : []),
-          ...(input.multiline ? ["--multiline"] : []),
-          "--regexp",
-          input.pattern,
-          input.path ?? ".",
-        ];
-        const result = yield* sandbox.exec("rg", args, {
-          timeout: (input.multiline ? 60 : 20) * 1000,
-        });
+    }) {
+      const mode = input.outputMode ?? "content";
+      const max = input.limit ?? (mode === "content" ? 100 : 500);
+      const args = [
+        "--line-number",
+        "--no-heading",
+        "--color=never",
+        "--hidden",
+        "--glob",
+        "!.git/*",
+        "--max-columns=1000",
+        "--max-columns-preview",
+        ...(mode === "files" ? ["--files-with-matches"] : []),
+        ...(mode === "count" ? ["--count"] : []),
+        ...(input.glob ? ["--glob", input.glob] : []),
+        ...(input.type ? ["--type", input.type] : []),
+        ...(input.ignoreCase ? ["--ignore-case"] : []),
+        ...(input.literal ? ["--fixed-strings"] : []),
+        ...(input.context !== undefined && input.context > 0
+          ? ["--context", String(input.context)]
+          : []),
+        ...(input.multiline ? ["--multiline"] : []),
+        "--regexp",
+        input.pattern,
+        input.path ?? ".",
+      ];
+      const result = yield* sandbox.exec("rg", args, {
+        timeout: (input.multiline ? 60 : 20) * 1000,
+      });
 
-        // rg exit 1 = no matches; 127 = rg missing; >1 = bad input.
-        if (result.exitCode === 1) return { matches: "no matches" };
-        if (result.exitCode === 127) {
-          return yield* Effect.fail(
-            "ripgrep (rg) is required for grep but was not found on PATH",
-          );
-        }
-        if (result.exitCode > 1) {
-          return yield* Effect.fail(
-            `grep failed (exit ${result.exitCode}): ${result.stderr || "check the pattern and filters"}`,
-          );
-        }
-        const cleaned = result.stdout.replaceAll(/^\.\/+/gm, "").trim();
-        if (cleaned.length === 0) return { matches: "no matches" };
-        const preview = truncateHead(cleaned, {
-          maxLines: max,
-          maxBytes: MAX_BYTES,
-        });
-        if (!preview.truncated) return { matches: preview.text };
-        const artifact = yield* artifacts.create("grep");
-        yield* artifact.append(cleaned);
-        return {
-          matches: `${preview.text}\n[Output truncated: ${preview.shownLines} of ${preview.totalLines} lines shown. Full output: ${artifact.id}]`,
-        };
-      })) as never;
+      // rg exit 1 = no matches; 127 = rg missing; >1 = bad input.
+      if (result.exitCode === 1) return { matches: "no matches" };
+      if (result.exitCode === 127) {
+        return yield* Effect.fail(
+          "ripgrep (rg) is required for grep but was not found on PATH",
+        );
+      }
+      if (result.exitCode > 1) {
+        return yield* Effect.fail(
+          `grep failed (exit ${result.exitCode}): ${result.stderr || "check the pattern and filters"}`,
+        );
+      }
+      const cleaned = result.stdout.replaceAll(/^\.\/+/gm, "").trim();
+      if (cleaned.length === 0) return { matches: "no matches" };
+      const preview = truncateHead(cleaned, {
+        maxLines: max,
+        maxBytes: MAX_BYTES,
+      });
+      if (!preview.truncated) return { matches: preview.text };
+      const artifact = yield* artifacts.create("grep");
+      yield* artifact.append(cleaned);
+      return {
+        matches: `${preview.text}\n[Output truncated: ${preview.shownLines} of ${preview.totalLines} lines shown. Full output: ${artifact.id}]`,
+      };
+    }) as never;
   }),
 );

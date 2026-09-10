@@ -1,5 +1,7 @@
 import type * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import type { ToolImpl } from "./Tool.ts";
 
 /**
@@ -37,6 +39,13 @@ export interface Fragment<
    * `AI.ToolInput` read the wire surface (see Agent.ts).
    */
   readonly refs: Refs;
+  /**
+   * The `LanguageModel` that was in scope when this fragment was
+   * evaluated — the model the stance SAMPLES WITH. Set by providing
+   * one to the fragment (`AI.fragment`…``.pipe(Effect.provide(sonnet))`,
+   * see Model.ts); absent, the driver's own Layer samples.
+   */
+  readonly model?: LanguageModel.Service;
 }
 
 /**
@@ -50,21 +59,27 @@ export interface Fragment<
  * // Effect<Fragment, never, Coding | OpenPullRequest>
  * ```
  *
- * The effect itself performs no I/O — construction is pure; the
- * requirements are phantom, resolved by the driver from the interpret
- * context when the fragment's mentions are compiled. Effect-valued
- * splices (nested `AI.fragment`, component turn values) are evaluated by
- * the driver at render time, every tick.
+ * The effect performs no I/O — construction is pure; the requirements
+ * are phantom, resolved by the driver from the interpret context when
+ * the fragment's mentions are compiled. Effect-valued splices (nested
+ * `AI.fragment`, component turn values) are evaluated by the driver at
+ * render time, every tick. The one thing evaluation READS is the
+ * `LanguageModel` in scope, if any — recorded as the fragment's
+ * `model` (see Model.ts).
  */
 export const fragment = <const Refs extends any[]>(
   template: TemplateStringsArray,
   ...refs: Refs
 ): Effect.Effect<Fragment<Refs>, never, Services<Refs>> =>
-  Effect.succeed({
-    "~alchemy/Kind": "Fragment",
-    template,
-    refs,
-  } satisfies Fragment) as never;
+  Effect.map(
+    Effect.serviceOption(LanguageModel.LanguageModel),
+    (model): Fragment => ({
+      "~alchemy/Kind": "Fragment",
+      template,
+      refs,
+      ...(Option.isSome(model) ? { model: model.value } : {}),
+    }),
+  ) as never;
 
 export const isFragment = (value: unknown): value is Fragment =>
   typeof value === "object" &&

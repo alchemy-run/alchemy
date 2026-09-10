@@ -92,41 +92,34 @@ export const renderSource = (source: Source): string =>
  * `import.meta.url`, or `undefined` where the runtime leaves it unset)
  * resolves to nothing.
  */
-export const resolveSource = (
-  source: Source,
-): Effect.Effect<
-  string | undefined,
-  never,
-  FileSystem.FileSystem | Path.Path
-> =>
-  Effect.gen(function* () {
-    if (source.path !== undefined) return source.path;
-    if (typeof source.url !== "string" || !source.url.startsWith("file:")) {
-      return undefined;
+export const resolveSource = Effect.fn(function* (source: Source) {
+  if (source.path !== undefined) return source.path;
+  if (typeof source.url !== "string" || !source.url.startsWith("file:")) {
+    return undefined;
+  }
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const file = yield* path
+    .fromFileUrl(new URL(source.url))
+    .pipe(Effect.catch(() => Effect.succeed(undefined)));
+  if (file === undefined) return undefined;
+  let dir = path.dirname(file);
+  for (;;) {
+    const isRoot = yield* fs
+      .exists(path.join(dir, "package.json"))
+      .pipe(Effect.catch(() => Effect.succeed(false)));
+    if (isRoot) {
+      source.path = path.relative(dir, file);
+      return source.path;
     }
-    const fs = yield* FileSystem.FileSystem;
-    const path = yield* Path.Path;
-    const file = yield* path
-      .fromFileUrl(new URL(source.url))
-      .pipe(Effect.catch(() => Effect.succeed(undefined)));
-    if (file === undefined) return undefined;
-    let dir = path.dirname(file);
-    for (;;) {
-      const isRoot = yield* fs
-        .exists(path.join(dir, "package.json"))
-        .pipe(Effect.catch(() => Effect.succeed(false)));
-      if (isRoot) {
-        source.path = path.relative(dir, file);
-        return source.path;
-      }
-      const parent = path.dirname(dir);
-      if (parent === dir) {
-        source.path = path.basename(file);
-        return source.path;
-      }
-      dir = parent;
+    const parent = path.dirname(dir);
+    if (parent === dir) {
+      source.path = path.basename(file);
+      return source.path;
     }
-  });
+    dir = parent;
+  }
+});
 
 /** {@link resolveSource} over every source among a template's splices. */
 export const resolveSources = (
@@ -150,25 +143,24 @@ export const resolveSources = (
  * `SessionSocket` → `React`. The platform provides both services
  * together at init, so where one is present the other is.
  */
-export const bindSource = (source: Source): Effect.Effect<void> =>
-  Effect.gen(function* () {
-    const fs = yield* Effect.serviceOption(FileSystem.FileSystem);
-    const path = yield* Effect.serviceOption(Path.Path);
-    if (Option.isSome(fs) && Option.isSome(path)) {
-      yield* resolveSource(source).pipe(
-        Effect.provideService(FileSystem.FileSystem, fs.value),
-        Effect.provideService(Path.Path, path.value),
-      );
-    }
-    const ctx = yield* Effect.serviceOption(RuntimeContext);
-    const literal = yield* Effect.serviceOption(RuntimeLiteral);
-    if (Option.isNone(ctx) || Option.isNone(literal)) return;
-    const key = yield* literal.value(
-      sanitizeKey(`alchemy_source_${source["~alchemy/Name"]}`),
-      source.path ?? source["~alchemy/Name"],
+export const bindSource = Effect.fn(function* (source: Source) {
+  const fs = yield* Effect.serviceOption(FileSystem.FileSystem);
+  const path = yield* Effect.serviceOption(Path.Path);
+  if (Option.isSome(fs) && Option.isSome(path)) {
+    yield* resolveSource(source).pipe(
+      Effect.provideService(FileSystem.FileSystem, fs.value),
+      Effect.provideService(Path.Path, path.value),
     );
-    const bound = yield* ctx.value.get<string>(key);
-    if (typeof bound === "string" && bound.length > 0) {
-      source.path = bound;
-    }
-  });
+  }
+  const ctx = yield* Effect.serviceOption(RuntimeContext);
+  const literal = yield* Effect.serviceOption(RuntimeLiteral);
+  if (Option.isNone(ctx) || Option.isNone(literal)) return;
+  const key = yield* literal.value(
+    sanitizeKey(`alchemy_source_${source["~alchemy/Name"]}`),
+    source.path ?? source["~alchemy/Name"],
+  );
+  const bound = yield* ctx.value.get<string>(key);
+  if (typeof bound === "string" && bound.length > 0) {
+    source.path = bound;
+  }
+});

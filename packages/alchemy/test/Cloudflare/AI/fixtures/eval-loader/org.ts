@@ -122,41 +122,40 @@ export interface SessionFacts {
  * generated signature, what the second model call saw (the tool
  * result), and which tool invocations actually executed.
  */
-export const sessionFacts = (options: {
+export const sessionFacts = Effect.fn(function* (options: {
   readonly code: string;
   readonly codeMode: Layer.Layer<AI.Tools>;
-}) =>
-  Effect.gen(function* () {
-    const model = scriptedModel(options.code);
-    const queries: string[] = [];
-    const searchLayer = Layer.succeed(Search, ((input: { query: string }) =>
-      Effect.sync(() => {
-        queries.push(input.query);
-        return { results: `results for ${input.query}` };
-      })) as never);
-    const readFileLayer = Layer.succeed(ReadFile, ((input: { path: string }) =>
-      Effect.fail(new Missing({ path: input.path }))) as never);
+}) {
+  const model = scriptedModel(options.code);
+  const queries: string[] = [];
+  const searchLayer = Layer.succeed(Search, ((input: { query: string }) =>
+    Effect.sync(() => {
+      queries.push(input.query);
+      return { results: `results for ${input.query}` };
+    })) as never);
+  const readFileLayer = Layer.succeed(ReadFile, ((input: { path: string }) =>
+    Effect.fail(new Missing({ path: input.path }))) as never);
 
-    const stack = Layer.mergeAll(
-      DriverLocal.pipe(
-        Layer.provide(ThreadStorageMemory),
-        Layer.provide(model.layer),
-      ),
-      options.codeMode,
-      searchLayer,
-      readFileLayer,
-    );
+  const stack = Layer.mergeAll(
+    DriverLocal.pipe(
+      Layer.provide(ThreadStorageMemory),
+      Layer.provide(model.layer),
+    ),
+    options.codeMode,
+    searchLayer,
+    readFileLayer,
+  );
 
-    return yield* Effect.gen(function* () {
-      const driver = yield* AI.Driver;
-      const probe = yield* driver.interpret(Probe, ProbeCharter);
-      const answer = yield* probe.dispatch("go");
-      return {
-        answer: String(answer),
-        wireTools: model.calls[0]?.tools.map((tool) => tool.name) ?? [],
-        signature: model.calls[0]?.tools[0]?.description ?? "",
-        resultPrompt: JSON.stringify(model.calls[1]?.prompt.content ?? ""),
-        queries,
-      } satisfies SessionFacts;
-    }).pipe(Effect.scoped, Effect.provide(stack), Effect.orDie);
-  });
+  return yield* Effect.gen(function* () {
+    const driver = yield* AI.Driver;
+    const probe = yield* driver.interpret(Probe, ProbeCharter);
+    const answer = yield* probe.dispatch("go");
+    return {
+      answer: String(answer),
+      wireTools: model.calls[0]?.tools.map((tool) => tool.name) ?? [],
+      signature: model.calls[0]?.tools[0]?.description ?? "",
+      resultPrompt: JSON.stringify(model.calls[1]?.prompt.content ?? ""),
+      queries,
+    } satisfies SessionFacts;
+  }).pipe(Effect.scoped, Effect.provide(stack), Effect.orDie);
+});

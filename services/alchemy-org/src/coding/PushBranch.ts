@@ -34,21 +34,20 @@ export const PushBranchLive = Layer.effect(
     const token = yield* PublishToken;
     const git = gitIn(sandbox);
 
-    return ((input: { branch: string }) =>
-      Effect.gen(function* () {
-        const origin = yield* originOf(git);
-        const value = Redacted.value(yield* token);
-        const pushUrl = `https://x-access-token:${value}@github.com/${origin.owner}/${origin.repository}.git`;
-        yield* git(["push", pushUrl, `HEAD:refs/heads/${input.branch}`], {
-          timeout: 300_000,
-        }).pipe(
-          // the push URL carries the credential — never echo it back
-          Effect.mapError((error) => error.replaceAll(value, "<token>")),
-        );
-        return {
-          remote: `${origin.owner}/${origin.repository}`,
-          pushed: input.branch,
-        };
-      })) as never;
+    return Effect.fn(function* (input: { branch: string }) {
+      const origin = yield* originOf(git);
+      const value = Redacted.value(yield* token);
+      const pushUrl = `https://x-access-token:${value}@github.com/${origin.owner}/${origin.repository}.git`;
+      yield* git(["push", pushUrl, `HEAD:refs/heads/${input.branch}`], {
+        timeout: 300_000,
+      }).pipe(
+        // the push URL carries the credential — never echo it back
+        Effect.mapError((error) => error.replaceAll(value, "<token>")),
+      );
+      return {
+        remote: `${origin.owner}/${origin.repository}`,
+        pushed: input.branch,
+      };
+    }) as never;
   }),
 );

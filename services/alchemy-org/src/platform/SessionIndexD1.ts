@@ -37,161 +37,158 @@ export const SessionIndexD1 = Layer.effect(
     );
 
     return AI.SessionIndex.of({
-      ingest: (observation) =>
-        Effect.gen(function* () {
-          yield* ensured;
-          const id = AI.sessionId(observation.term, observation.key);
-          // Only ADMISSION creates a row; every other observation
-          // updates in place (a no-op when the row is gone). An
-          // unconditional upsert here resurrects deleted sessions:
-          // a remove's own trailing observations (the settle inside
-          // destroy) raced the row's deletion and re-inserted it —
-          // the "deleted session pops back on the board" bug.
-          if (observation.type === "admitted") {
+      ingest: Effect.fn(function* (observation) {
+        yield* ensured;
+        const id = AI.sessionId(observation.term, observation.key);
+        // Only ADMISSION creates a row; every other observation
+        // updates in place (a no-op when the row is gone). An
+        // unconditional upsert here resurrects deleted sessions:
+        // a remove's own trailing observations (the settle inside
+        // destroy) raced the row's deletion and re-inserted it —
+        // the "deleted session pops back on the board" bug.
+        if (observation.type === "admitted") {
+          yield* inWorker(
+            db
+              .prepare(
+                `INSERT INTO session_index (id, term, key, status, ticks, created_at, updated_at)
+                   VALUES (?, ?, ?, 'idle', 0, ?, ?)
+                   ON CONFLICT(id) DO UPDATE SET updated_at = excluded.updated_at`,
+              )
+              .bind(
+                id,
+                observation.term,
+                observation.key,
+                observation.at,
+                observation.at,
+              )
+              .run(),
+          );
+        } else {
+          yield* inWorker(
+            db
+              .prepare("UPDATE session_index SET updated_at = ? WHERE id = ?")
+              .bind(observation.at, id)
+              .run(),
+          );
+        }
+        switch (observation.type) {
+          case "admitted":
+            if (observation.parent !== undefined) {
+              yield* inWorker(
+                db
+                  .prepare("UPDATE session_index SET parent = ? WHERE id = ?")
+                  .bind(
+                    AI.sessionId(
+                      observation.parent.term,
+                      observation.parent.key,
+                    ),
+                    id,
+                  )
+                  .run(),
+              );
+            }
+            return;
+          case "input":
             yield* inWorker(
               db
                 .prepare(
-                  `INSERT INTO session_index (id, term, key, status, ticks, created_at, updated_at)
-                   VALUES (?, ?, ?, 'idle', 0, ?, ?)
-                   ON CONFLICT(id) DO UPDATE SET updated_at = excluded.updated_at`,
+                  `UPDATE session_index SET status = 'running',
+                       first_input = COALESCE(first_input, ?) WHERE id = ?`,
                 )
-                .bind(
-                  id,
-                  observation.term,
-                  observation.key,
-                  observation.at,
-                  observation.at,
-                )
+                .bind(observation.text.slice(0, 4000), id)
                 .run(),
             );
-          } else {
+            return;
+          case "assistant":
             yield* inWorker(
               db
-                .prepare("UPDATE session_index SET updated_at = ? WHERE id = ?")
-                .bind(observation.at, id)
+                .prepare(
+                  "UPDATE session_index SET ticks = ticks + 1 WHERE id = ?",
+                )
+                .bind(id)
                 .run(),
             );
-          }
-          switch (observation.type) {
-            case "admitted":
-              if (observation.parent !== undefined) {
-                yield* inWorker(
-                  db
-                    .prepare("UPDATE session_index SET parent = ? WHERE id = ?")
-                    .bind(
-                      AI.sessionId(
-                        observation.parent.term,
-                        observation.parent.key,
-                      ),
-                      id,
-                    )
-                    .run(),
-                );
-              }
-              return;
-            case "input":
-              yield* inWorker(
-                db
-                  .prepare(
-                    `UPDATE session_index SET status = 'running',
-                       first_input = COALESCE(first_input, ?) WHERE id = ?`,
-                  )
-                  .bind(observation.text.slice(0, 4000), id)
-                  .run(),
-              );
-              return;
-            case "assistant":
-              yield* inWorker(
-                db
-                  .prepare(
-                    "UPDATE session_index SET ticks = ticks + 1 WHERE id = ?",
-                  )
-                  .bind(id)
-                  .run(),
-              );
-              return;
-            case "parked":
-              yield* inWorker(
-                db
-                  .prepare(
-                    "UPDATE session_index SET status = 'idle' WHERE id = ?",
-                  )
-                  .bind(id)
-                  .run(),
-              );
-              return;
-            case "settled":
-              yield* inWorker(
-                db
-                  .prepare(
-                    "UPDATE session_index SET status = 'settled' WHERE id = ?",
-                  )
-                  .bind(id)
-                  .run(),
-              );
-              return;
-            // reopened by the operator: parked until the next input
-            case "resumed":
-              yield* inWorker(
-                db
-                  .prepare(
-                    "UPDATE session_index SET status = 'idle' WHERE id = ?",
-                  )
-                  .bind(id)
-                  .run(),
-              );
-              return;
-            case "crashed":
-              yield* inWorker(
-                db
-                  .prepare(
-                    "UPDATE session_index SET status = 'crashed' WHERE id = ?",
-                  )
-                  .bind(id)
-                  .run(),
-              );
-              return;
-            default:
-              return;
-          }
-        }),
-      remove: (id) =>
-        Effect.gen(function* () {
-          yield* ensured;
-          yield* inWorker(
-            db.prepare("DELETE FROM session_index WHERE id = ?").bind(id).run(),
-          );
-        }),
-      list: () =>
-        Effect.gen(function* () {
-          yield* ensured;
-          const rows = yield* inWorker(
-            db
-              .prepare("SELECT * FROM session_index ORDER BY updated_at DESC")
-              .all<{
-                id: string;
-                term: string;
-                key: string;
-                status: AI.SessionSummary["status"];
-                ticks: number;
-                created_at: number;
-                updated_at: number;
-                parent: string | null;
-                first_input: string | null;
-              }>(),
-          );
-          return rows.results.map((row): AI.SessionSummary => ({
-            id: row.id,
-            term: row.term,
-            key: row.key,
-            status: row.status,
-            ticks: row.ticks,
-            createdAt: row.created_at,
-            updatedAt: row.updated_at,
-            parent: row.parent ?? undefined,
-            firstInput: row.first_input ?? undefined,
-          }));
-        }),
+            return;
+          case "parked":
+            yield* inWorker(
+              db
+                .prepare(
+                  "UPDATE session_index SET status = 'idle' WHERE id = ?",
+                )
+                .bind(id)
+                .run(),
+            );
+            return;
+          case "settled":
+            yield* inWorker(
+              db
+                .prepare(
+                  "UPDATE session_index SET status = 'settled' WHERE id = ?",
+                )
+                .bind(id)
+                .run(),
+            );
+            return;
+          // reopened by the operator: parked until the next input
+          case "resumed":
+            yield* inWorker(
+              db
+                .prepare(
+                  "UPDATE session_index SET status = 'idle' WHERE id = ?",
+                )
+                .bind(id)
+                .run(),
+            );
+            return;
+          case "crashed":
+            yield* inWorker(
+              db
+                .prepare(
+                  "UPDATE session_index SET status = 'crashed' WHERE id = ?",
+                )
+                .bind(id)
+                .run(),
+            );
+            return;
+          default:
+            return;
+        }
+      }),
+      remove: Effect.fn(function* (id) {
+        yield* ensured;
+        yield* inWorker(
+          db.prepare("DELETE FROM session_index WHERE id = ?").bind(id).run(),
+        );
+      }),
+      list: Effect.fn(function* () {
+        yield* ensured;
+        const rows = yield* inWorker(
+          db
+            .prepare("SELECT * FROM session_index ORDER BY updated_at DESC")
+            .all<{
+              id: string;
+              term: string;
+              key: string;
+              status: AI.SessionSummary["status"];
+              ticks: number;
+              created_at: number;
+              updated_at: number;
+              parent: string | null;
+              first_input: string | null;
+            }>(),
+        );
+        return rows.results.map((row): AI.SessionSummary => ({
+          id: row.id,
+          term: row.term,
+          key: row.key,
+          status: row.status,
+          ticks: row.ticks,
+          createdAt: row.created_at,
+          updatedAt: row.updated_at,
+          parent: row.parent ?? undefined,
+          firstInput: row.first_input ?? undefined,
+        }));
+      }),
     });
   }),
 );

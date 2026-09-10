@@ -52,7 +52,7 @@ parking — are covered in [Runs & threads](/agents/concepts/runs).
 deterministic child key namespaced under the calling run —
 `{parent.key}/{agent}/{session}`. Re-dispatching the same agent and
 session **continues the same worker run**: same conversation, same
-init closure, same [workspace](/agents/concepts/workspaces). The
+durable state, same [workspace](/agents/concepts/workspaces). The
 factory's whole review loop is one session:
 
 1. desk dispatches Engineer — it builds, answers with the PR

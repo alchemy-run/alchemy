@@ -1,6 +1,45 @@
 import type { UIMessage, UIMessageChunk, UIMessagePart } from "ai";
 import { renderCrash } from "./DriverCore.ts";
-import type { SessionObservation } from "./Events.ts";
+import type { SessionObservation, TokenUsage } from "./Events.ts";
+
+/**
+ * What an assistant message's metadata says about its samplings: the
+ * model of the LAST one (a burst normally samples with one model) and
+ * the token bill SUMMED over the burst. Clients show the chip and
+ * price the sum; a burst whose samplings reported nothing carries
+ * neither key.
+ */
+export interface SamplingMetadata {
+  readonly model?: string;
+  readonly usage?: TokenUsage;
+}
+
+/** Sum two bills field by field; absent fields stay absent. */
+export const addUsage = (
+  a: TokenUsage | undefined,
+  b: TokenUsage | undefined,
+): TokenUsage | undefined => {
+  if (a === undefined) return b;
+  if (b === undefined) return a;
+  const out: { -readonly [K in keyof TokenUsage]: TokenUsage[K] } = { ...a };
+  for (const k of Object.keys(b) as Array<keyof TokenUsage>) {
+    out[k] = (out[k] ?? 0) + (b[k] ?? 0);
+  }
+  return out;
+};
+
+/** Fold one sampling's `model` + `usage` into the running metadata. */
+const stampSampling = (
+  current: SamplingMetadata,
+  observation: Extract<SessionObservation, { type: "assistant" }>,
+): SamplingMetadata => ({
+  ...current,
+  ...(observation.model === undefined ? {} : { model: observation.model }),
+  ...(() => {
+    const usage = addUsage(current.usage, observation.usage);
+    return usage === undefined ? {} : { usage };
+  })(),
+});
 
 /** The IN-FLIGHT sampling a projection may accumulate from
  *  `assistant-delta` and live `tool-call` observations — transient:
@@ -183,6 +222,11 @@ export const toUIMessages = (
       case "assistant": {
         openAssistant(observation);
         const current = openStep(observation.tick);
+        // what sampled and what it cost — folded over the burst
+        assistant!.message.metadata = stampSampling(
+          (assistant!.message.metadata ?? {}) as SamplingMetadata,
+          observation,
+        );
         // the sampling's prose came BEFORE its calls — ahead of any
         // part its `tool-call` rows already placed in this step
         const prose: Array<UIMessagePart<any, any>> = [];
@@ -399,6 +443,8 @@ export const makeChunkTranslator = () => {
   // announced calls still owed a result — closed as stopped when the
   // round is cut (abort, settle) instead of running forever in the view
   const openCalls = new Set<string>();
+  // the burst's samplings so far — stamped on the message at `finish`
+  let sampling: SamplingMetadata = {};
 
   return (
     observation: SessionObservation,
@@ -477,6 +523,7 @@ export const makeChunkTranslator = () => {
           openStep = true;
         }
         liveStepTick = undefined;
+        sampling = stampSampling(sampling, observation);
         if (
           observation.reasoning !== undefined &&
           observation.reasoning.length > 0
@@ -514,7 +561,7 @@ export const makeChunkTranslator = () => {
         // quiescence ends the burst — the assistant message is complete
         if (observation.toolCalls.length === 0) {
           closeStep();
-          chunks.push({ type: "finish" });
+          chunks.push({ type: "finish", messageMetadata: { ...sampling } });
           done = true;
         }
         break;
@@ -562,7 +609,10 @@ export const makeChunkTranslator = () => {
         if (!started) {
           chunks.push({ type: "start", messageId: `abort-${observation.seq}` });
         }
-        chunks.push({ type: "finish", messageMetadata: { aborted: true } });
+        chunks.push({
+          type: "finish",
+          messageMetadata: { ...sampling, aborted: true },
+        });
         done = true;
         break;
       }

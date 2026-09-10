@@ -99,6 +99,112 @@ test.provider(
 );
 
 test.provider(
+  "(a2) the agent as an object over the DO: at(key), methods, typed failures, stop/destroy",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          const worker = yield* DriverTestWorker;
+          return { url: worker.url };
+        }),
+      );
+      const ledger = (query: string) =>
+        getJsonReady(
+          `${deployed.url}/ledger?key=acct-1&${query}`,
+        ) as Effect.Effect<{
+          value?: unknown;
+          failure?: { _tag?: string; balance?: number; requested?: number };
+          error?: string;
+        }>;
+
+      // a viewer on the session's socket — like `/thread/:id`, it never
+      // subscribes: live frames only, so the object's `publish` is what
+      // it hears
+      expect(deployed.url).toMatch(/^http:\/\/localhost:\d+$/);
+      const wsBase = String(deployed.url).replace(/^http/, "ws");
+      const viewer = yield* Effect.acquireRelease(
+        Effect.callback<
+          { readonly states: Array<unknown>; readonly socket: WebSocket },
+          Error
+        >((resume) => {
+          const socket = new WebSocket(`${wsBase}/attach/Ledger/acct-1`);
+          const states: Array<unknown> = [];
+          socket.addEventListener("message", (event) => {
+            const frame = JSON.parse(String(event.data)) as {
+              type: string;
+              state?: unknown;
+            };
+            if (frame.type === "state") states.push(frame.state);
+          });
+          socket.addEventListener("open", () =>
+            resume(Effect.succeed({ states, socket })),
+          );
+          socket.addEventListener("error", () =>
+            resume(Effect.fail(new Error("viewer socket failed"))),
+          );
+        }),
+        ({ socket }) => Effect.sync(() => socket.close()),
+      );
+
+      // first contact admits the object; a METHOD sets its state
+      // (owner, opening balance 10) — the one place a constructor
+      // argument would have gone
+      const opened = yield* ledger("op=open&owner=ada&opening=10");
+      expect(opened.error).toBeUndefined();
+      const deposit = yield* ledger("op=deposit&amount=5");
+      expect(deposit.error).toBeUndefined();
+      expect(deposit.value).toBe(15);
+      // the deposit PUBLISHED the balance to the attached viewer
+      yield* Effect.succeed(viewer.states).pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("100 millis"),
+          until: (states) => states.length > 0,
+          times: 50,
+        }),
+      );
+      expect(viewer.states).toEqual([{ balance: 15 }]);
+      // a later stub for the same key finds the same object
+      const statement = yield* ledger("op=statement");
+      expect(statement.value).toEqual({
+        key: "acct-1",
+        owner: "ada",
+        balance: 15,
+      });
+      // a method's typed failure crosses the wire as a FAILURE
+      const overdrawn = yield* ledger("op=withdraw&amount=100");
+      expect(overdrawn.error).toBeUndefined();
+      expect(overdrawn.failure?._tag).toBe("Overdrawn");
+      expect(overdrawn.failure?.balance).toBe(15);
+      expect(overdrawn.failure?.requested).toBe(100);
+      // an unknown method is a DEFECT, naming the methods that exist
+      const missing = yield* ledger("op=nope");
+      expect(missing.error).toContain("has no method 'nope'");
+      expect(missing.error).toContain("deposit");
+      // the loop verbs on the same object — the stance reads the state
+      const round = yield* ledger("op=dispatch&input=hello");
+      expect(round.error).toBeUndefined();
+      expect(round.value).toBeDefined();
+      // stopped: the loop is settled, the object still answers
+      yield* ledger("op=stop");
+      const afterStop = yield* ledger("op=statement");
+      expect(afterStop.value).toEqual({
+        key: "acct-1",
+        owner: "ada",
+        balance: 15,
+      });
+      // destroyed: the next contact constructs FRESH, at the initial state
+      yield* ledger("op=destroy");
+      const fresh = yield* ledger("op=statement");
+      expect(fresh.value).toEqual({ key: "acct-1", owner: null, balance: 0 });
+
+      yield* stack.destroy();
+    }).pipe(Effect.scoped, logLevel),
+  { timeout: 240_000 },
+);
+
+test.provider(
   "(b) a session-container attachment does not wedge the worker",
   (stack) =>
     Effect.gen(function* () {

@@ -38,16 +38,15 @@ export const ProbeLive = Layer.effect(
   Probe,
   Effect.gen(function* () {
     const sandbox = yield* AI.Sandbox;
-    return ((input: { cmd: string }) =>
-      Effect.gen(function* () {
-        const result = yield* sandbox
-          .exec(input.cmd, undefined, { timeout: 120_000 })
-          .pipe(Effect.mapError((error) => String(error)));
-        yield* AI.reply({
-          stdout: result.stdout.trim(),
-          exitCode: result.exitCode,
-        });
-      })) as never;
+    return Effect.fn(function* (input: { cmd: string }) {
+      const result = yield* sandbox
+        .exec(input.cmd, undefined, { timeout: 120_000 })
+        .pipe(Effect.mapError((error) => String(error)));
+      yield* AI.reply({
+        stdout: result.stdout.trim(),
+        exitCode: result.exitCode,
+      });
+    }) as never;
   }),
 ).pipe(
   // enableInternet matches the org's SandboxSession: in dev this is the
@@ -103,19 +102,18 @@ export default class DriverContainerTestWorker extends Cloudflare.Worker<DriverC
         const url = new URL(request.url, "http://worker");
         const key = url.searchParams.get("key") ?? "default";
         const input = url.searchParams.get("input") ?? "hello";
-        const dispatch = (actor: typeof scribe) =>
-          Effect.gen(function* () {
-            const result = yield* Effect.exit(actor.dispatch(input, { key }));
-            if (Exit.isSuccess(result)) {
-              return yield* HttpServerResponse.json({ answer: result.value });
-            }
-            const detail = Cause.pretty(result.cause);
-            yield* Effect.logError(`[fixture] dispatch failed: ${detail}`);
-            return yield* HttpServerResponse.json(
-              { error: detail },
-              { status: 500 },
-            );
-          });
+        const dispatch = Effect.fn(function* (actor: typeof scribe) {
+          const result = yield* Effect.exit(actor.dispatch(input, { key }));
+          if (Exit.isSuccess(result)) {
+            return yield* HttpServerResponse.json({ answer: result.value });
+          }
+          const detail = Cause.pretty(result.cause);
+          yield* Effect.logError(`[fixture] dispatch failed: ${detail}`);
+          return yield* HttpServerResponse.json(
+            { error: detail },
+            { status: 500 },
+          );
+        });
 
         switch (url.pathname) {
           case "/health":

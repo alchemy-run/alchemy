@@ -32,8 +32,7 @@ import { SandboxSession } from "./sandbox/SandboxSession.ts";
 import { SessionRepoLive } from "./github/SessionRepo.ts";
 import { SpillingTools } from "./artifacts/SpillingTools.ts";
 import { ThreadAgentLive } from "./thread/ThreadAgent.ts";
-import { ThreadsLive } from "./thread/ThreadDO.ts";
-import { Threads } from "./thread/Threads.ts";
+import { THREAD_TERM, ThreadsLive } from "./thread/Threads.ts";
 
 /** The artifact store on the session's machine. */
 const Store = ArtifactsSandbox;
@@ -129,9 +128,9 @@ const IngestWorker = ChannelEvents.pipe(
  *
  * - the channel  → ONE ChannelDO (`main`): the org-wide log, the
  *                  thread directory, webhook dedupe, `/channel` WS
- * - threads      → one ThreadDO per task (`t-…`): assigned refs, agents,
- *                  `/thread/:id` WS; the thread's CONVERSATION is its
- *                  agent session (DriverCloudflare)
+ * - threads      → one session per task (`t-…`), the thread as an
+ *                  OBJECT: its conversation AND its books (assigned
+ *                  refs, agents, `/thread/:id` WS) in the same DO
  * - sessions     → Durable Objects (`platform/DriverCloudflare.ts`);
  *                  no session management surface — sessions exist only
  *                  as channel runs, thread agents, and subagents
@@ -142,17 +141,17 @@ const IngestWorker = ChannelEvents.pipe(
  *                  a worktree per pull request)
  */
 const Org = Layer.mergeAll(
-  ThreadWorker,
   ChannelWorker,
   IngestWorker,
   EngineerWorker,
   SandboxSession,
   PublishTokenLive,
 ).pipe(
-  // the thread as an object: its books (ThreadDO) and its agent (by
-  // name through AI.Sessions); dropping a deleted thread's worktrees
-  // runs git over the thread's machine, so the seam rides along
-  Layer.provideMerge(ThreadsLive.pipe(Layer.provide(SandboxSession))),
+  // the thread as an OBJECT — its books, its push, its projections
+  // are the agent's own methods (ThreadAgent.at); the facade is the
+  // outsider's verbs over them
+  Layer.provideMerge(ThreadsLive),
+  Layer.provideMerge(ThreadWorker),
   Layer.provideMerge(ChannelLive),
   Layer.provideMerge(DriverCloudflare),
   Layer.provideMerge(GitHubWorker),
@@ -163,9 +162,9 @@ const Org = Layer.mergeAll(
 /**
  * The org, deployed — a Cloudflare Worker whose HTTP surface is the
  * channel (Routes.ts) plus the sockets: `/channel` upgrades into the
- * ChannelDO, `/thread/:id` into that thread's DO, and
- * `/attach/:term/:key` + `/terminal/:term/:key` into the session's
- * own DO exactly as before.
+ * ChannelDO; `/thread/:id` (the thread's state push), `/attach/:term/:key`
+ * (the chat) and `/terminal/:term/:key` (the PTY bridge) into the
+ * session's own DO.
  */
 export default class Worker extends Cloudflare.Worker<Worker>()(
   "Worker",
@@ -182,7 +181,6 @@ export default class Worker extends Cloudflare.Worker<Worker>()(
   Effect.gen(function* () {
     const sessions = yield* AI.Sessions;
     const channelService = yield* Channel;
-    const threadsService = yield* Threads;
     const api = yield* HttpRouter.toHttpEffect(yield* routes);
 
     return {
@@ -193,7 +191,9 @@ export default class Worker extends Cloudflare.Worker<Worker>()(
         if (path === "/channel") {
           return yield* channelService.socket(request);
         }
-        // a thread's state push
+        // a thread's state push: a second view on the thread's own
+        // session — it never subscribes, so it takes only the live
+        // frames, and the thread's methods publish the snapshot there
         if (path.startsWith("/thread/")) {
           const id = decodeURIComponent(path.slice("/thread/".length));
           if (id.length === 0) {
@@ -201,7 +201,7 @@ export default class Worker extends Cloudflare.Worker<Worker>()(
               status: 400,
             });
           }
-          return yield* threadsService.socket(id, request);
+          return yield* sessions.attach(THREAD_TERM, id, request);
         }
         // session sockets: /attach/… is the chat socket, /terminal/…
         // the PTY bridge — the session DO tells them apart by pathname

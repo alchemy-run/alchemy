@@ -15,7 +15,7 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import { Agents, Scribe, Supervisor } from "./DriverAgents.ts";
+import { Agents, Ledger, Scribe, Supervisor } from "./DriverAgents.ts";
 
 export default class KernelTestWorker extends Cloudflare.Worker<KernelTestWorker>()(
   "DriverCloudflareTestWorker",
@@ -25,8 +25,20 @@ export default class KernelTestWorker extends Cloudflare.Worker<KernelTestWorker
   Effect.gen(function* () {
     const scribe = yield* Scribe;
     const supervisor = yield* Supervisor;
+    const ledger = yield* Ledger;
     const gateway = yield* Cloudflare.AI.Sessions;
     const actors = { Scribe: scribe, Supervisor: supervisor };
+
+    /** Surface an Exit as JSON (always 200 — the test reads the shape):
+     *  `value` on success, `failure` for a typed failure, `error` for a
+     *  defect. A deployed test can only be debugged through its
+     *  responses. */
+    const respond = <A, E>(exit: Exit.Exit<A, E>) =>
+      Exit.isSuccess(exit)
+        ? HttpServerResponse.json({ value: exit.value })
+        : Cause.hasFails(exit.cause)
+          ? HttpServerResponse.json({ failure: Cause.squash(exit.cause) })
+          : HttpServerResponse.json({ error: Cause.pretty(exit.cause) });
 
     return {
       fetch: Effect.gen(function* () {
@@ -113,6 +125,50 @@ export default class KernelTestWorker extends Cloudflare.Worker<KernelTestWorker
           // the directory, as the session index has it
           case "/list": {
             return yield* HttpServerResponse.json(yield* gateway.list());
+          }
+          // the agent as an OBJECT: `at(key)` + methods, each an RPC hop
+          // into the session's own DO —
+          //   /ledger?key=k&op=open&owner=ada&opening=10
+          //   /ledger?key=k&op=deposit&amount=5
+          case "/ledger": {
+            const amount = Number(url.searchParams.get("amount") ?? "0");
+            const owner = url.searchParams.get("owner") ?? "nobody";
+            const opening = Number(url.searchParams.get("opening") ?? "0");
+            const account = ledger.at(key);
+            switch (url.searchParams.get("op")) {
+              case "open":
+                return yield* respond(
+                  yield* Effect.exit(account.open({ owner, opening })),
+                );
+              case "deposit":
+                return yield* respond(
+                  yield* Effect.exit(account.deposit(amount)),
+                );
+              case "withdraw":
+                return yield* respond(
+                  yield* Effect.exit(account.withdraw(amount)),
+                );
+              case "statement":
+                return yield* respond(yield* Effect.exit(account.statement()));
+              case "dispatch":
+                return yield* respond(
+                  yield* Effect.exit(account.dispatch(input)),
+                );
+              case "stop":
+                return yield* respond(yield* Effect.exit(account.stop()));
+              case "destroy":
+                return yield* respond(yield* Effect.exit(account.destroy()));
+              default:
+                return yield* respond(
+                  yield* Effect.exit(
+                    (
+                      account as unknown as {
+                        nope: () => Effect.Effect<unknown>;
+                      }
+                    ).nope(),
+                  ),
+                );
+            }
           }
           default:
             return HttpServerResponse.text("ok");

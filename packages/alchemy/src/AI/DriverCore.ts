@@ -24,6 +24,7 @@ import { isDispatchTool, type DispatchTool } from "./Dispatch.ts";
 import type { Charter, Turn, TurnFn } from "./Driver.ts";
 import { Refused } from "./Errors.ts";
 import { isEvent } from "./Event.ts";
+import type { TokenUsage } from "./Events.ts";
 import * as Response from "effect/unstable/ai/Response";
 import {
   isLiveObservation,
@@ -165,6 +166,28 @@ export interface SupervisionService {
   readonly key: string;
   readonly adopt: (agent: string, childKey: string, actor: Actor) => void;
 }
+
+/**
+ * Flatten the provider's usage report onto the observation's
+ * {@link TokenUsage}: only the counts it gave, nothing when it gave
+ * none. `input` is the UNCACHED prompt count when the provider splits
+ * it out (Anthropic), else the total.
+ */
+export const tokenUsage = (
+  usage: Response.Usage | undefined,
+): TokenUsage | undefined => {
+  if (usage === undefined) return undefined;
+  const out: { -readonly [K in keyof TokenUsage]: TokenUsage[K] } = {};
+  const put = (k: keyof TokenUsage, v: number | undefined) => {
+    if (v !== undefined) out[k] = v;
+  };
+  put("input", usage.inputTokens.uncached ?? usage.inputTokens.total);
+  put("cacheRead", usage.inputTokens.cacheRead);
+  put("cacheWrite", usage.inputTokens.cacheWrite);
+  put("output", usage.outputTokens.total);
+  put("reasoning", usage.outputTokens.reasoning);
+  return Object.keys(out).length === 0 ? undefined : out;
+};
 
 export class Supervision extends Context.Service<
   Supervision,
@@ -626,6 +649,9 @@ export type ObservationDraft = DistributiveOmit<
 export interface TickResult {
   readonly system: string;
   readonly toolkit: Toolkit.WithHandler<any> | undefined;
+  /** The model the stance was provided (`Fragment.model`) — this
+   *  sampling's `LanguageModel`; undefined = the driver's Layer. */
+  readonly model?: LanguageModel.Service;
 }
 
 /** The `spawn` intrinsic's parameters. */
@@ -724,38 +750,37 @@ export interface SessionOps {
  * (restorable eviction — nothing is silently rewritten); reset
  * restarts the thread from one summary note.
  */
-export const applyCompactionPlan = (
+export const applyCompactionPlan = Effect.fn(function* (
   handle: ThreadHandle,
   plan: CompactPlan,
-): Effect.Effect<void> =>
-  Effect.gen(function* () {
-    if ("reset" in plan) {
-      yield* handle.replaceMessages([
-        noteMessage(
-          `The thread was compacted; it restarts from this summary of prior work:\n${plan.reset.summary}`,
-        ),
-      ]);
-      return;
-    }
-    const rows = yield* handle.messages;
-    const decoded = Prompt.make([...rows]).content;
-    const kept: Array<Prompt.MessageEncoded> = [];
-    let dropped = 0;
-    for (let index = 0; index < decoded.length; index++) {
-      if (plan.drop(decoded[index]!, index)) {
-        dropped++;
-      } else {
-        kept.push(rows[index]!);
-      }
-    }
-    if (dropped === 0) return;
+) {
+  if ("reset" in plan) {
     yield* handle.replaceMessages([
-      asUserMessage(
-        `[${dropped} earlier message${dropped === 1 ? "" : "s"} archived by compaction]`,
+      noteMessage(
+        `The thread was compacted; it restarts from this summary of prior work:\n${plan.reset.summary}`,
       ),
-      ...kept,
     ]);
-  });
+    return;
+  }
+  const rows = yield* handle.messages;
+  const decoded = Prompt.make([...rows]).content;
+  const kept: Array<Prompt.MessageEncoded> = [];
+  let dropped = 0;
+  for (let index = 0; index < decoded.length; index++) {
+    if (plan.drop(decoded[index]!, index)) {
+      dropped++;
+    } else {
+      kept.push(rows[index]!);
+    }
+  }
+  if (dropped === 0) return;
+  yield* handle.replaceMessages([
+    asUserMessage(
+      `[${dropped} earlier message${dropped === 1 ? "" : "s"} archived by compaction]`,
+    ),
+    ...kept,
+  ]);
+});
 
 /**
  * Capability resolution from the charter's captured context, memoized
@@ -770,83 +795,80 @@ export const makeResolvers = (
     string,
     (params: any) => Effect.Effect<any, any, any>
   >();
-  const resolveHandler = (compiled: CompiledToolRef) =>
-    Effect.gen(function* () {
-      const name = compiled.term["~alchemy/Name"];
-      if (compiled.impl !== undefined) return compiled.impl;
-      const cached = handlerCache.get(name);
-      if (cached !== undefined) return cached;
-      const service = Context.getOption(context, compiled.term as any);
-      if (Option.isNone(service)) {
-        return yield* Effect.die(
-          `${driver}: no implementation provided for tool '${name}' of '${term}' — provide the tool's Layer or splice an inline impl`,
-        );
-      }
-      // the tool contract: the service IS the callable (a Layer
-      // needing runtime setup unwraps inside its own build)
-      const resolved = service.value as (
-        params: any,
-      ) => Effect.Effect<any, any, any>;
-      handlerCache.set(name, resolved);
-      return resolved;
-    });
+  const resolveHandler = Effect.fn(function* (compiled: CompiledToolRef) {
+    const name = compiled.term["~alchemy/Name"];
+    if (compiled.impl !== undefined) return compiled.impl;
+    const cached = handlerCache.get(name);
+    if (cached !== undefined) return cached;
+    const service = Context.getOption(context, compiled.term as any);
+    if (Option.isNone(service)) {
+      return yield* Effect.die(
+        `${driver}: no implementation provided for tool '${name}' of '${term}' — provide the tool's Layer or splice an inline impl`,
+      );
+    }
+    // the tool contract: the service IS the callable (a Layer
+    // needing runtime setup unwraps inside its own build)
+    const resolved = service.value as (
+      params: any,
+    ) => Effect.Effect<any, any, any>;
+    handlerCache.set(name, resolved);
+    return resolved;
+  });
 
   const skillCache = new Map<string, ResolvedSkill>();
-  const resolveSkill = (skill: Skill<string, any>) =>
-    Effect.gen(function* () {
-      const skillName = skill["~alchemy/Name"];
-      const cached = skillCache.get(skillName);
-      if (cached !== undefined) return cached;
-      const service = Context.getOption(context, skill as any);
-      if (Option.isNone(service)) {
+  const resolveSkill = Effect.fn(function* (skill: Skill<string, any>) {
+    const skillName = skill["~alchemy/Name"];
+    const cached = skillCache.get(skillName);
+    if (cached !== undefined) return cached;
+    const service = Context.getOption(context, skill as any);
+    if (Option.isNone(service)) {
+      return yield* Effect.die(
+        `${driver}: no implementation provided for skill '${skillName}' referenced by '${term}'`,
+      );
+    }
+    // the IMPLEMENTATION carries the teaching: prose, spliced
+    // tools, and their physics all come from the resolved
+    // service — the term is only the name
+    const impl = service.value as SkillService;
+    const skillTools = impl.refs.filter(isTool);
+    const handlers: ResolvedSkill["handlers"] = {};
+    for (const tool of skillTools) {
+      const name = tool["~alchemy/Name"];
+      const resolved = impl.tools[name];
+      if (resolved === undefined) {
         return yield* Effect.die(
-          `${driver}: no implementation provided for skill '${skillName}' referenced by '${term}'`,
+          `${driver}: skill '${skillName}' implementation provides no tool '${name}'`,
         );
       }
-      // the IMPLEMENTATION carries the teaching: prose, spliced
-      // tools, and their physics all come from the resolved
-      // service — the term is only the name
-      const impl = service.value as SkillService;
-      const skillTools = impl.refs.filter(isTool);
-      const handlers: ResolvedSkill["handlers"] = {};
-      for (const tool of skillTools) {
-        const name = tool["~alchemy/Name"];
-        const resolved = impl.tools[name];
-        if (resolved === undefined) {
-          return yield* Effect.die(
-            `${driver}: skill '${skillName}' implementation provides no tool '${name}'`,
-          );
-        }
-        handlers[name] = resolved;
-      }
-      const entry: ResolvedSkill = {
-        prose: render(impl.template, impl.refs),
-        tools: skillTools.map(compileTool),
-        handlers,
-        // a teaching may reference DEEPER skills: activating this
-        // one exposes them for activation — the skill GRAPH
-        skills: impl.refs.filter(isSkill),
-      };
-      skillCache.set(skillName, entry);
-      return entry;
-    });
+      handlers[name] = resolved;
+    }
+    const entry: ResolvedSkill = {
+      prose: render(impl.template, impl.refs),
+      tools: skillTools.map(compileTool),
+      handlers,
+      // a teaching may reference DEEPER skills: activating this
+      // one exposes them for activation — the skill GRAPH
+      skills: impl.refs.filter(isSkill),
+    };
+    skillCache.set(skillName, entry);
+    return entry;
+  });
 
   const delegateCache = new Map<string, Actor>();
-  const resolveDelegate = (agent: Agent<any, any>) =>
-    Effect.gen(function* () {
-      const name = agent["~alchemy/Name"];
-      const cached = delegateCache.get(name);
-      if (cached !== undefined) return cached;
-      const service = Context.getOption(context, agent as any);
-      if (Option.isNone(service)) {
-        return yield* Effect.die(
-          `${driver}: no implementation provided for agent '${name}' referenced by '${term}'`,
-        );
-      }
-      const actor = service.value as Actor;
-      delegateCache.set(name, actor);
-      return actor;
-    });
+  const resolveDelegate = Effect.fn(function* (agent: Agent<any, any>) {
+    const name = agent["~alchemy/Name"];
+    const cached = delegateCache.get(name);
+    if (cached !== undefined) return cached;
+    const service = Context.getOption(context, agent as any);
+    if (Option.isNone(service)) {
+      return yield* Effect.die(
+        `${driver}: no implementation provided for agent '${name}' referenced by '${term}'`,
+      );
+    }
+    const actor = service.value as Actor;
+    delegateCache.set(name, actor);
+    return actor;
+  });
 
   return { resolveHandler, resolveSkill, resolveDelegate };
 };
@@ -857,89 +879,89 @@ export type Resolvers = ReturnType<typeof makeResolvers>;
  * Render a stance's fragment tree into blocks + mentions. Effect
  * splices evaluate through `ops.provide` at render time, EVERY tick.
  */
-export const renderStance = (
+export const renderStance = Effect.fn(function* (
   ops: SessionOps,
   root: Fragment,
-): Effect.Effect<Stance> =>
-  Effect.gen(function* () {
-    const blocks: Array<string> = [];
-    const tools = new Map<string, CompiledToolRef>();
-    const skills = new Map<string, Skill<string, any>>();
-    const delegates = new Map<string, Agent<any, any>>();
-    const doors = new Map<string, DispatchTool<string, any[]>>();
-    let buffer = "";
-    const flush = () => {
-      const text = buffer.trim();
-      if (text.length > 0) blocks.push(text);
-      buffer = "";
-    };
-    const walk = (fragment: Fragment): Effect.Effect<void> =>
-      Effect.gen(function* () {
-        const parts = dedentTemplate(fragment.template);
-        buffer += parts[0] ?? "";
-        for (let index = 0; index < fragment.refs.length; index++) {
-          const ref = fragment.refs[index];
-          // term guards FIRST: tags are themselves yieldable
-          // (Effect.isEffect is true for every Service class)
-          if (isDispatchTool(ref)) {
-            // a DOOR: policy-constrained dispatch — renders as
-            // its tool name; the driver builds its handler
-            doors.set(ref["~alchemy/Name"], ref);
-            buffer += `\`${ref["~alchemy/Name"]}\``;
-          } else if (isToolImpl(ref)) {
-            const name = ref.tool["~alchemy/Name"];
-            tools.set(name, { term: ref.tool, impl: ref.impl });
-            buffer += `\`${name}\``;
-          } else if (isTool(ref)) {
-            const name = ref["~alchemy/Name"];
-            if (!tools.has(name)) tools.set(name, { term: ref });
-            buffer += `\`${name}\``;
-          } else if (isSkill(ref)) {
-            skills.set(ref["~alchemy/Name"], ref);
-            buffer += `\`${ref["~alchemy/Name"]}\``;
-          } else if (isAgent(ref)) {
-            delegates.set(ref["~alchemy/Name"], ref as Agent<any, any>);
-            buffer += ref["~alchemy/Name"];
-          } else if (isEvent(ref) || isThing(ref)) {
-            buffer += `\`${ref["~alchemy/Name"]}\``;
-          } else if (isIn(ref) || isOut(ref)) {
-            buffer += ref.things
-              .map((thing) => `\`${thing["~alchemy/Name"]}\``)
-              .join(", ");
-          } else if (isFragment(ref)) {
+) {
+  const blocks: Array<string> = [];
+  const tools = new Map<string, CompiledToolRef>();
+  const skills = new Map<string, Skill<string, any>>();
+  const delegates = new Map<string, Agent<any, any>>();
+  const doors = new Map<string, DispatchTool<string, any[]>>();
+  let buffer = "";
+  const flush = () => {
+    const text = buffer.trim();
+    if (text.length > 0) blocks.push(text);
+    buffer = "";
+  };
+  const walk: (fragment: Fragment) => Effect.Effect<void> = Effect.fn(
+    function* (fragment: Fragment) {
+      const parts = dedentTemplate(fragment.template);
+      buffer += parts[0] ?? "";
+      for (let index = 0; index < fragment.refs.length; index++) {
+        const ref = fragment.refs[index];
+        // term guards FIRST: tags are themselves yieldable
+        // (Effect.isEffect is true for every Service class)
+        if (isDispatchTool(ref)) {
+          // a DOOR: policy-constrained dispatch — renders as
+          // its tool name; the driver builds its handler
+          doors.set(ref["~alchemy/Name"], ref);
+          buffer += `\`${ref["~alchemy/Name"]}\``;
+        } else if (isToolImpl(ref)) {
+          const name = ref.tool["~alchemy/Name"];
+          tools.set(name, { term: ref.tool, impl: ref.impl });
+          buffer += `\`${name}\``;
+        } else if (isTool(ref)) {
+          const name = ref["~alchemy/Name"];
+          if (!tools.has(name)) tools.set(name, { term: ref });
+          buffer += `\`${name}\``;
+        } else if (isSkill(ref)) {
+          skills.set(ref["~alchemy/Name"], ref);
+          buffer += `\`${ref["~alchemy/Name"]}\``;
+        } else if (isAgent(ref)) {
+          delegates.set(ref["~alchemy/Name"], ref as Agent<any, any>);
+          buffer += ref["~alchemy/Name"];
+        } else if (isEvent(ref) || isThing(ref)) {
+          buffer += `\`${ref["~alchemy/Name"]}\``;
+        } else if (isIn(ref) || isOut(ref)) {
+          buffer += ref.things
+            .map((thing) => `\`${thing["~alchemy/Name"]}\``)
+            .join(", ");
+        } else if (isFragment(ref)) {
+          flush();
+          yield* walk(ref);
+          flush();
+        } else if (Effect.isEffect(ref)) {
+          // evaluated at render time, EVERY tick — a nested
+          // AI.fragment, a component's turn value
+          const value = yield* ops.provide(ref as Effect.Effect<unknown>);
+          if (isFragment(value)) {
             flush();
-            yield* walk(ref);
+            yield* walk(value);
             flush();
-          } else if (Effect.isEffect(ref)) {
-            // evaluated at render time, EVERY tick — a nested
-            // AI.fragment, a component's turn value
-            const value = yield* ops.provide(ref as Effect.Effect<unknown>);
-            if (isFragment(value)) {
-              flush();
-              yield* walk(value);
-              flush();
-            } else if (isToolImpl(value)) {
-              // an inline tool spliced without its init yield*
-              // still grants — same as the direct splice
-              const name = value.tool["~alchemy/Name"];
-              tools.set(name, { term: value.tool, impl: value.impl });
-              buffer += `\`${name}\``;
-            } else if (isDispatchTool(value)) {
-              doors.set(value["~alchemy/Name"], value);
-              buffer += `\`${value["~alchemy/Name"]}\``;
-            } else {
-              buffer += renderRef(value);
-            }
+          } else if (isToolImpl(value)) {
+            // an inline tool spliced without its init yield*
+            // still grants — same as the direct splice
+            const name = value.tool["~alchemy/Name"];
+            tools.set(name, { term: value.tool, impl: value.impl });
+            buffer += `\`${name}\``;
+          } else if (isDispatchTool(value)) {
+            doors.set(value["~alchemy/Name"], value);
+            buffer += `\`${value["~alchemy/Name"]}\``;
           } else {
-            buffer += renderRef(ref);
+            buffer += renderRef(value);
           }
-          buffer += parts[index + 1] ?? "";
+        } else {
+          buffer += renderRef(ref);
         }
-      });
-    yield* walk(root);
-    flush();
-    return { blocks, tools, skills, delegates, doors };
-  });
+        buffer += parts[index + 1] ?? "";
+      }
+    },
+  );
+  yield* walk(root);
+  flush();
+  return { blocks, tools, skills, delegates, doors };
+});
 
 /**
  * One TICK, written once for every host: evaluate the session's turn
@@ -948,329 +970,326 @@ export const renderStance = (
  * sampling's system prompt + toolkit — capabilities through the
  * optional `Tools` seam, intrinsics always direct.
  */
-export const compileTick = (
+export const compileTick = Effect.fn(function* (
   ops: SessionOps,
   resolvers: Resolvers,
   inputs: ReadonlyArray<unknown>,
-): Effect.Effect<TickResult> =>
-  Effect.gen(function* () {
-    const result = yield* ops.provide(
-      Effect.suspend(() => {
-        // each ATTEMPT starts with a clean say buffer, so a
-        // retried turn delivers only the successful
-        // evaluation's notes — never a failed attempt's
-        ops.clearNotes();
-        const turn = ops.turn();
-        return typeof turn === "function"
-          ? turn({ count: ops.tick(), inputs })
-          : turn;
-      }).pipe(
-        // transient turn failures (an observation fetch, a
-        // flaky service) retry; a typed Refused is the session
-        // GIVING UP and propagates immediately
-        Effect.retry({
-          while: (error) => !(error instanceof Refused),
-          schedule: Schedule.exponential("1 second"),
-          times: 3,
-        }),
-      ) as Effect.Effect<unknown>,
+) {
+  const result = yield* ops.provide(
+    Effect.suspend(() => {
+      // each ATTEMPT starts with a clean say buffer, so a
+      // retried turn delivers only the successful
+      // evaluation's notes — never a failed attempt's
+      ops.clearNotes();
+      const turn = ops.turn();
+      return typeof turn === "function"
+        ? turn({ count: ops.tick(), inputs })
+        : turn;
+    }).pipe(
+      // transient turn failures (an observation fetch, a
+      // flaky service) retry; a typed Refused is the session
+      // GIVING UP and propagates immediately
+      Effect.retry({
+        while: (error) => !(error instanceof Refused),
+        schedule: Schedule.exponential("1 second"),
+        times: 3,
+      }),
+    ) as Effect.Effect<unknown>,
+  );
+  if (Effect.isEffect(result)) {
+    return yield* Effect.die(
+      `${ops.driver}: the turn of '${ops.term}' (session '${ops.key}') returned an Effect — did you forget to yield* an AI.fragment?`,
     );
-    if (Effect.isEffect(result)) {
-      return yield* Effect.die(
-        `${ops.driver}: the turn of '${ops.term}' (session '${ops.key}') returned an Effect — did you forget to yield* an AI.fragment?`,
-      );
-    }
-    if (!isFragment(result)) {
-      return yield* Effect.die(
-        `${ops.driver}: the turn of '${ops.term}' (session '${ops.key}') returned a non-Fragment value — turns return the stance; answer callers with AI.reply`,
-      );
-    }
-    const stance = yield* renderStance(ops, result);
+  }
+  if (!isFragment(result)) {
+    return yield* Effect.die(
+      `${ops.driver}: the turn of '${ops.term}' (session '${ops.key}') returned a non-Fragment value — turns return the stance; answer callers with AI.reply`,
+    );
+  }
+  const stance = yield* renderStance(ops, result);
 
-    // the SKILL GRAPH: a stance mention is access at the root;
-    // an ACTIVE skill's teaching exposes the skills it
-    // references (access, one level per activation) — walk the
-    // active frontier to a fixpoint so nested doctrine trees
-    // resolve however deep the activations go
-    const active = ops.activeSkills();
-    const effectiveSkills = new Map(stance.skills);
-    {
-      const frontier = [...active];
-      const visited = new Set<string>();
-      while (frontier.length > 0) {
-        const name = frontier.pop()!;
-        if (visited.has(name)) continue;
-        visited.add(name);
-        const term = effectiveSkills.get(name);
-        if (term === undefined) continue; // not reachable now
-        const resolved = yield* resolvers.resolveSkill(term);
-        for (const sub of resolved.skills) {
-          const subName = sub["~alchemy/Name"];
-          if (!effectiveSkills.has(subName)) {
-            effectiveSkills.set(subName, sub);
-          }
-          if (active.has(subName)) frontier.push(subName);
+  // the SKILL GRAPH: a stance mention is access at the root;
+  // an ACTIVE skill's teaching exposes the skills it
+  // references (access, one level per activation) — walk the
+  // active frontier to a fixpoint so nested doctrine trees
+  // resolve however deep the activations go
+  const active = ops.activeSkills();
+  const effectiveSkills = new Map(stance.skills);
+  {
+    const frontier = [...active];
+    const visited = new Set<string>();
+    while (frontier.length > 0) {
+      const name = frontier.pop()!;
+      if (visited.has(name)) continue;
+      visited.add(name);
+      const term = effectiveSkills.get(name);
+      if (term === undefined) continue; // not reachable now
+      const resolved = yield* resolvers.resolveSkill(term);
+      for (const sub of resolved.skills) {
+        const subName = sub["~alchemy/Name"];
+        if (!effectiveSkills.has(subName)) {
+          effectiveSkills.set(subName, sub);
         }
+        if (active.has(subName)) frontier.push(subName);
       }
     }
-    ops.setLastStance({ ...stance, skills: effectiveSkills });
+  }
+  ops.setLastStance({ ...stance, skills: effectiveSkills });
 
-    /**
-     * Wrap a tool handler so its FAILURES are observable in the
-     * process log: a failing tool result is model-visible (the
-     * agent reacts), but without this the operator sees nothing —
-     * a session burning its budget against a broken tool looks
-     * like silence from the outside.
-     */
-    const observedHandler =
-      (name: string, fn: (params: any) => Effect.Effect<any, any, any>) =>
-      (input: any) =>
-        ops
-          .provide(fn(input))
-          .pipe(
-            Effect.tapError((error) =>
-              Effect.logWarning(
-                `Driver session '${ops.key}' of '${ops.term}': tool '${name}' failed: ${String(error).slice(0, 500)}`,
-              ),
+  /**
+   * Wrap a tool handler so its FAILURES are observable in the
+   * process log: a failing tool result is model-visible (the
+   * agent reacts), but without this the operator sees nothing —
+   * a session burning its budget against a broken tool looks
+   * like silence from the outside.
+   */
+  const observedHandler =
+    (name: string, fn: (params: any) => Effect.Effect<any, any, any>) =>
+    (input: any) =>
+      ops
+        .provide(fn(input))
+        .pipe(
+          Effect.tapError((error) =>
+            Effect.logWarning(
+              `Driver session '${ops.key}' of '${ops.term}': tool '${name}' failed: ${String(error).slice(0, 500)}`,
             ),
-          );
+          ),
+        );
 
-    // this tick's CAPABILITIES: mentioned tools + active∩reachable
-    // skills' tools, with their handlers
-    const capabilityHandlers: Record<
-      string,
-      (params: any) => Effect.Effect<any, any>
-    > = {};
-    const charterTools: Array<AiTool.Any> = [];
-    for (const [name, compiled] of stance.tools) {
-      charterTools.push(compileTool(compiled.term));
-      const resolved = yield* resolvers.resolveHandler(compiled);
-      capabilityHandlers[name] = observedHandler(name, resolved);
+  // this tick's CAPABILITIES: mentioned tools + active∩reachable
+  // skills' tools, with their handlers
+  const capabilityHandlers: Record<
+    string,
+    (params: any) => Effect.Effect<any, any>
+  > = {};
+  const charterTools: Array<AiTool.Any> = [];
+  for (const [name, compiled] of stance.tools) {
+    charterTools.push(compileTool(compiled.term));
+    const resolved = yield* resolvers.resolveHandler(compiled);
+    capabilityHandlers[name] = observedHandler(name, resolved);
+  }
+  const activeTools: Array<AiTool.Any> = [];
+  for (const name of active) {
+    const skillTerm = effectiveSkills.get(name);
+    if (skillTerm === undefined) continue; // not reachable now
+    const resolved = yield* resolvers.resolveSkill(skillTerm);
+    activeTools.push(...resolved.tools);
+    for (const [toolName, fn] of Object.entries(resolved.handlers)) {
+      capabilityHandlers[toolName] ??= observedHandler(toolName, fn);
     }
-    const activeTools: Array<AiTool.Any> = [];
-    for (const name of active) {
-      const skillTerm = effectiveSkills.get(name);
-      if (skillTerm === undefined) continue; // not reachable now
-      const resolved = yield* resolvers.resolveSkill(skillTerm);
-      activeTools.push(...resolved.tools);
-      for (const [toolName, fn] of Object.entries(resolved.handlers)) {
-        capabilityHandlers[toolName] ??= observedHandler(toolName, fn);
+  }
+
+  // DOORS: policy-constrained dispatches (`AI.Dispatch`) —
+  // presented as the org's own tools, EXECUTED by the driver:
+  // the policy derives {task, key}, the child registers for
+  // the supervision cascade, the parentage edge is stamped,
+  // and the observation carries the delegation identity.
+  // Deliberately NOT in stance.tools: spawn must never hand a
+  // door to a worker (workers are leaves).
+  const doorTools: Array<AiTool.Any> = [];
+  for (const [name, door] of stance.doors) {
+    doorTools.push(compileTool(door as never));
+    const doorHandler = Effect.fn(function* (params: any) {
+      const derived = yield* door.policy(params, { key: ops.key });
+      const actor = yield* resolvers.resolveDelegate(door.agent);
+      const agentName = door.agent["~alchemy/Name"];
+      if (derived.key !== undefined) {
+        ops.registerChild(agentName, derived.key, actor);
       }
-    }
-
-    // DOORS: policy-constrained dispatches (`AI.Dispatch`) —
-    // presented as the org's own tools, EXECUTED by the driver:
-    // the policy derives {task, key}, the child registers for
-    // the supervision cascade, the parentage edge is stamped,
-    // and the observation carries the delegation identity.
-    // Deliberately NOT in stance.tools: spawn must never hand a
-    // door to a worker (workers are leaves).
-    const doorTools: Array<AiTool.Any> = [];
-    for (const [name, door] of stance.doors) {
-      doorTools.push(compileTool(door as never));
-      const doorHandler = (params: any) =>
-        Effect.gen(function* () {
-          const derived = yield* door.policy(params, { key: ops.key });
-          const actor = yield* resolvers.resolveDelegate(door.agent);
-          const agentName = door.agent["~alchemy/Name"];
-          if (derived.key !== undefined) {
-            ops.registerChild(agentName, derived.key, actor);
-          }
-          yield* ops.observe({
-            type: "dispatched",
-            tick: ops.tick(),
-            toolName: name,
-            agent: agentName,
-            child: derived.key,
-          });
-          return yield* actor
-            .dispatch(derived.task, {
-              key: derived.key,
-              parent: { term: ops.term, key: ops.key },
-            })
-            .pipe(Effect.provide(RuntimeContext.phantom));
-        });
-      capabilityHandlers[name] = observedHandler(name, doorHandler);
-    }
-
-    // the TOOL ENGINE: an optional convention transforms how
-    // the capabilities are PRESENTED (e.g. codemode collapses them
-    // into one `eval` tool) — mention-is-presence unchanged;
-    // absent, every mention is its own provider tool
-    const capabilityTools = dedupeByName([
-      ...charterTools,
-      ...activeTools,
-      ...doorTools,
-    ]);
-    const toolCalling = Context.getOption(ops.context, Tools);
-    let wire: ToolPresentation;
-    if (Option.isSome(toolCalling) && capabilityTools.length > 0) {
-      wire = yield* toolCalling.value.present(
-        capabilityTools.map((tool) => ({
-          name: tool.name,
-          description: AiTool.getDescription(tool) ?? "",
-          parameters: AiTool.getJsonSchema(tool),
-          // a VOID success flattens to `{"type":"null"}` in JSON schema —
-          // hand codemode the honest marker so the generated signature
-          // says `void`, not `null`
-          returns: isVoidToolSuccess((tool as any).successSchema)
-            ? { type: "void" }
-            : AiTool.getJsonSchemaFromSchema((tool as any).successSchema),
-          errors: getToolErrors(tool),
-          tool,
-          handler: capabilityHandlers[tool.name]!,
-        })),
-      );
-    } else {
-      // DIRECT presentation carries the session's UNION of every tool
-      // mentioned so far, in first-mention order — the provider payload
-      // stays byte-stable across phase flips (KV-cache prefix), and a
-      // union tool the CURRENT stance does not mention rejects
-      // model-visibly, so the stance remains the sole grant authority.
-      const union = ops.wireUnion();
-      for (const tool of capabilityTools) union.set(tool.name, tool);
-      const handlers = { ...capabilityHandlers };
-      for (const name of union.keys()) {
-        if (handlers[name] === undefined) {
-          handlers[name] = () =>
-            Effect.fail(
-              `'${name}' is not available in this phase — your current ` +
-                `instructions name the tools that exist right now`,
-            );
-        }
-      }
-      wire = { tools: [...union.values()], handlers };
-    }
-
-    // intrinsics stay DIRECT tools in every convention — they are
-    // conversation control, not capabilities
-    const handlers: Record<string, (params: any) => Effect.Effect<any, any>> = {
-      ...wire.handlers,
-    };
-    const delegates = new Map<string, Actor>();
-    for (const [name, agent] of stance.delegates) {
-      delegates.set(name, yield* resolvers.resolveDelegate(agent));
-    }
-    if (delegates.size > 0) {
-      // stamp the DELEGATION EDGE: the child session's `admitted`
-      // observation records who dispatched it, so observers can
-      // reconstruct the tree (issue desk → engineer → …). A
-      // `session` name derives a DETERMINISTIC child key namespaced
-      // under this session — the call/reply seam: same name,
-      // same worker, same context — and the child is REMEMBERED
-      // for the supervision cascade (settle propagates down).
-      handlers.dispatch ??= (params: {
-        agent: string;
-        task: string;
-        session?: string;
-      }) =>
-        Effect.gen(function* () {
-          const actor = delegates.get(params.agent)!;
-          const key =
-            params.session === undefined
-              ? undefined
-              : `${ops.key}/${params.agent}/${params.session}`;
-          if (key !== undefined) {
-            ops.registerChild(params.agent, key, actor);
-          }
-          yield* ops.observe({
-            type: "dispatched",
-            tick: ops.tick(),
-            toolName: "dispatch",
-            agent: params.agent,
-            child: key,
-          });
-          return yield* actor
-            .dispatch(params.task, {
-              key,
-              parent: { term: ops.term, key: ops.key },
-            })
-            .pipe(Effect.provide(RuntimeContext.phantom));
-        });
-    }
-    // a charter tool of the same name WINS over the intrinsic — the
-    // presentation below keeps the wire tool (first by name), so the
-    // handler must agree, or the model calls the charter's `spawn`
-    // schema into the intrinsic's handler (a `task`-less worker
-    // whose first input is `undefined`)
-    handlers.spawn ??= (params: SpawnParams) =>
-      typeof params.task === "string" && typeof params.instructions === "string"
-        ? ops.spawn(params)
-        : Effect.fail(
-            "spawn needs `instructions` (the worker's role) and `task` (what to do), both strings",
-          );
-    /** The per-session `skill` switch — activation is the session's
-     *  act, persisted by the host. */
-    handlers.skill ??= (params: {
-      action: "activate" | "deactivate";
-      skill: string;
-    }) =>
-      Effect.gen(function* () {
-        if (params.action === "deactivate") {
-          yield* ops.setSkill(params.skill, false);
-          return `deactivated ${params.skill}`;
-        }
-        const skillTerm = ops.lastStance()?.skills.get(params.skill);
-        if (skillTerm === undefined) {
-          // model-visible: the stance no longer mentions it
-          return `no skill named '${params.skill}' is available right now`;
-        }
-        const resolved = yield* resolvers.resolveSkill(skillTerm);
-        yield* ops.setSkill(params.skill, true);
-        return resolved.prose;
+      yield* ops.observe({
+        type: "dispatched",
+        tick: ops.tick(),
+        toolName: name,
+        agent: agentName,
+        child: derived.key,
       });
-
-    const intrinsics: Array<AiTool.Any> = [
-      ...(delegates.size > 0 ? [compileDispatch([...delegates.keys()])] : []),
-      compileSpawn([...stance.tools.keys()], [...effectiveSkills.keys()]),
-      ...(effectiveSkills.size > 0
-        ? [compileSkillTool([...effectiveSkills.keys()])]
-        : []),
-    ];
-    const presented = dedupeByName([...wire.tools, ...intrinsics]);
-    const toolkit = yield* buildToolkit(
-      presented,
-      handlers,
-      ops.wrapHandler === undefined
-        ? undefined
-        : { wrapHandler: ops.wrapHandler },
-    );
-
-    // the render IS the system prompt, verbatim — no diffing,
-    // no derived messages. A static charter is byte-stable
-    // (prompt cache); a changed render simply changes the
-    // system prompt, on the author's head. Everything dynamic
-    // reaches the thread explicitly: says, tool results, steers.
-    const system = stance.blocks.join("\n\n") + NOTE_CODA;
-
-    // MODEL-VISIBLE MEANS LOGGED: the request envelope — the rendered
-    // system prompt and the presented toolkit — is a durable `stance`
-    // observation, so every sampling is reconstructable from storage
-    // alone. The hash is logged every tick; the full snapshot only
-    // when it CHANGED (the envelope is byte-stable across most ticks).
-    const envelopeTools = presented.map((tool) => ({
-      name: tool.name,
-      description: AiTool.getDescription(tool) ?? "",
-      parameters: AiTool.getJsonSchema(tool),
-    }));
-    const envelopeHash = fnv1a64(
-      JSON.stringify({ system, tools: envelopeTools }),
-    );
-    yield* ops.observe({
-      type: "stance",
-      tick: ops.tick(),
-      hash: envelopeHash,
-      ...(envelopeHash === ops.lastEnvelopeHash()
-        ? {}
-        : { prose: system, tools: envelopeTools }),
+      return yield* actor
+        .dispatch(derived.task, {
+          key: derived.key,
+          parent: { term: ops.term, key: ops.key },
+        })
+        .pipe(Effect.provide(RuntimeContext.phantom));
     });
-    ops.setLastEnvelopeHash(envelopeHash);
+    capabilityHandlers[name] = observedHandler(name, doorHandler);
+  }
 
-    return {
-      system,
-      toolkit,
-    };
+  // the TOOL ENGINE: an optional convention transforms how
+  // the capabilities are PRESENTED (e.g. codemode collapses them
+  // into one `eval` tool) — mention-is-presence unchanged;
+  // absent, every mention is its own provider tool
+  const capabilityTools = dedupeByName([
+    ...charterTools,
+    ...activeTools,
+    ...doorTools,
+  ]);
+  const toolCalling = Context.getOption(ops.context, Tools);
+  let wire: ToolPresentation;
+  if (Option.isSome(toolCalling) && capabilityTools.length > 0) {
+    wire = yield* toolCalling.value.present(
+      capabilityTools.map((tool) => ({
+        name: tool.name,
+        description: AiTool.getDescription(tool) ?? "",
+        parameters: AiTool.getJsonSchema(tool),
+        // a VOID success flattens to `{"type":"null"}` in JSON schema —
+        // hand codemode the honest marker so the generated signature
+        // says `void`, not `null`
+        returns: isVoidToolSuccess((tool as any).successSchema)
+          ? { type: "void" }
+          : AiTool.getJsonSchemaFromSchema((tool as any).successSchema),
+        errors: getToolErrors(tool),
+        tool,
+        handler: capabilityHandlers[tool.name]!,
+      })),
+    );
+  } else {
+    // DIRECT presentation carries the session's UNION of every tool
+    // mentioned so far, in first-mention order — the provider payload
+    // stays byte-stable across phase flips (KV-cache prefix), and a
+    // union tool the CURRENT stance does not mention rejects
+    // model-visibly, so the stance remains the sole grant authority.
+    const union = ops.wireUnion();
+    for (const tool of capabilityTools) union.set(tool.name, tool);
+    const handlers = { ...capabilityHandlers };
+    for (const name of union.keys()) {
+      if (handlers[name] === undefined) {
+        handlers[name] = () =>
+          Effect.fail(
+            `'${name}' is not available in this phase — your current ` +
+              `instructions name the tools that exist right now`,
+          );
+      }
+    }
+    wire = { tools: [...union.values()], handlers };
+  }
+
+  // intrinsics stay DIRECT tools in every convention — they are
+  // conversation control, not capabilities
+  const handlers: Record<string, (params: any) => Effect.Effect<any, any>> = {
+    ...wire.handlers,
+  };
+  const delegates = new Map<string, Actor>();
+  for (const [name, agent] of stance.delegates) {
+    delegates.set(name, yield* resolvers.resolveDelegate(agent));
+  }
+  if (delegates.size > 0) {
+    // stamp the DELEGATION EDGE: the child session's `admitted`
+    // observation records who dispatched it, so observers can
+    // reconstruct the tree (issue desk → engineer → …). A
+    // `session` name derives a DETERMINISTIC child key namespaced
+    // under this session — the call/reply seam: same name,
+    // same worker, same context — and the child is REMEMBERED
+    // for the supervision cascade (settle propagates down).
+    handlers.dispatch ??= Effect.fn(function* (params: {
+      agent: string;
+      task: string;
+      session?: string;
+    }) {
+      const actor = delegates.get(params.agent)!;
+      const key =
+        params.session === undefined
+          ? undefined
+          : `${ops.key}/${params.agent}/${params.session}`;
+      if (key !== undefined) {
+        ops.registerChild(params.agent, key, actor);
+      }
+      yield* ops.observe({
+        type: "dispatched",
+        tick: ops.tick(),
+        toolName: "dispatch",
+        agent: params.agent,
+        child: key,
+      });
+      return yield* actor
+        .dispatch(params.task, {
+          key,
+          parent: { term: ops.term, key: ops.key },
+        })
+        .pipe(Effect.provide(RuntimeContext.phantom));
+    });
+  }
+  // a charter tool of the same name WINS over the intrinsic — the
+  // presentation below keeps the wire tool (first by name), so the
+  // handler must agree, or the model calls the charter's `spawn`
+  // schema into the intrinsic's handler (a `task`-less worker
+  // whose first input is `undefined`)
+  handlers.spawn ??= (params: SpawnParams) =>
+    typeof params.task === "string" && typeof params.instructions === "string"
+      ? ops.spawn(params)
+      : Effect.fail(
+          "spawn needs `instructions` (the worker's role) and `task` (what to do), both strings",
+        );
+  /** The per-session `skill` switch — activation is the session's
+   *  act, persisted by the host. */
+  handlers.skill ??= Effect.fn(function* (params: {
+    action: "activate" | "deactivate";
+    skill: string;
+  }) {
+    if (params.action === "deactivate") {
+      yield* ops.setSkill(params.skill, false);
+      return `deactivated ${params.skill}`;
+    }
+    const skillTerm = ops.lastStance()?.skills.get(params.skill);
+    if (skillTerm === undefined) {
+      // model-visible: the stance no longer mentions it
+      return `no skill named '${params.skill}' is available right now`;
+    }
+    const resolved = yield* resolvers.resolveSkill(skillTerm);
+    yield* ops.setSkill(params.skill, true);
+    return resolved.prose;
   });
+
+  const intrinsics: Array<AiTool.Any> = [
+    ...(delegates.size > 0 ? [compileDispatch([...delegates.keys()])] : []),
+    compileSpawn([...stance.tools.keys()], [...effectiveSkills.keys()]),
+    ...(effectiveSkills.size > 0
+      ? [compileSkillTool([...effectiveSkills.keys()])]
+      : []),
+  ];
+  const presented = dedupeByName([...wire.tools, ...intrinsics]);
+  const toolkit = yield* buildToolkit(
+    presented,
+    handlers,
+    ops.wrapHandler === undefined
+      ? undefined
+      : { wrapHandler: ops.wrapHandler },
+  );
+
+  // the render IS the system prompt, verbatim — no diffing,
+  // no derived messages. A static charter is byte-stable
+  // (prompt cache); a changed render simply changes the
+  // system prompt, on the author's head. Everything dynamic
+  // reaches the thread explicitly: says, tool results, steers.
+  const system = stance.blocks.join("\n\n") + NOTE_CODA;
+
+  // MODEL-VISIBLE MEANS LOGGED: the request envelope — the rendered
+  // system prompt and the presented toolkit — is a durable `stance`
+  // observation, so every sampling is reconstructable from storage
+  // alone. The hash is logged every tick; the full snapshot only
+  // when it CHANGED (the envelope is byte-stable across most ticks).
+  const envelopeTools = presented.map((tool) => ({
+    name: tool.name,
+    description: AiTool.getDescription(tool) ?? "",
+    parameters: AiTool.getJsonSchema(tool),
+  }));
+  const envelopeHash = fnv1a64(
+    JSON.stringify({ system, tools: envelopeTools }),
+  );
+  yield* ops.observe({
+    type: "stance",
+    tick: ops.tick(),
+    hash: envelopeHash,
+    ...(envelopeHash === ops.lastEnvelopeHash()
+      ? {}
+      : { prose: system, tools: envelopeTools }),
+  });
+  ops.setLastEnvelopeHash(envelopeHash);
+
+  return {
+    system,
+    toolkit,
+    ...(result.model === undefined ? {} : { model: result.model }),
+  };
+});
 
 /** The provider surface one sampling needs from `LanguageModel`. */
 export interface StreamingLanguageModel {
@@ -1307,16 +1326,17 @@ type LivePart =
  *   itself: wrap it with a Layer; the loop consumes the standard
  *   effect/ai component and adds only this transient-failure default.
  */
-const sampleModel = (
-  languageModel: StreamingLanguageModel,
-  options: {
-    readonly prompt: Prompt.Prompt;
-    readonly toolkit: Toolkit.WithHandler<any> | undefined;
-    readonly onLive: (part: LivePart) => Effect.Effect<void>;
-  },
-): Effect.Effect<LanguageModel.GenerateTextResponse<any>, unknown> =>
-  Effect.gen(function* () {
+const sampleModel = Effect.fn(
+  function* (
+    languageModel: StreamingLanguageModel,
+    options: {
+      readonly prompt: Prompt.Prompt;
+      readonly toolkit: Toolkit.WithHandler<any> | undefined;
+      readonly onLive: (part: LivePart) => Effect.Effect<void>;
+    },
+  ) {
     const parts: Array<unknown> = [];
+    let modelId: string | undefined;
     // open blocks by stream id (providers interleave by index)
     const open = new Map<
       string,
@@ -1328,69 +1348,74 @@ const sampleModel = (
           streamOptions: unknown,
         ) => Stream.Stream<any, unknown>
       )({ prompt: options.prompt, toolkit: options.toolkit }),
-      (part: any) =>
-        Effect.gen(function* () {
-          switch (part.type) {
-            case "text-start":
-            case "reasoning-start": {
-              open.set(part.id, {
-                type: part.type === "text-start" ? "text" : "reasoning",
-                text: "",
-                metadata: { ...part.metadata },
-              });
-              return;
-            }
-            case "text-delta":
-            case "reasoning-delta": {
-              const kind = part.type === "text-delta" ? "text" : "reasoning";
-              const block = open.get(part.id) ?? {
-                type: kind as "text" | "reasoning",
-                text: "",
-                metadata: {},
-              };
-              open.set(part.id, block);
-              block.text += part.delta;
-              Object.assign(block.metadata, part.metadata);
-              if (part.delta.length > 0) {
-                yield* options.onLive({ kind, delta: part.delta });
-              }
-              return;
-            }
-            case "text-end":
-            case "reasoning-end": {
-              const block = open.get(part.id);
-              if (block === undefined) return;
-              open.delete(part.id);
-              Object.assign(block.metadata, part.metadata);
-              parts.push(
-                Response.makePart(block.type, {
-                  text: block.text,
-                  metadata: block.metadata,
-                } as never),
-              );
-              return;
-            }
-            case "tool-call": {
-              parts.push(part);
-              // surface the call NOW — its handler may run for
-              // minutes before the sampling completes
-              yield* options.onLive({
-                kind: "tool-call",
-                id: part.id,
-                name: part.name,
-                params: part.params,
-              });
-              return;
-            }
-            case "tool-result":
-            case "finish": {
-              parts.push(part);
-              return;
-            }
-            default:
-              return;
+      Effect.fn(function* (part: any) {
+        switch (part.type) {
+          case "text-start":
+          case "reasoning-start": {
+            open.set(part.id, {
+              type: part.type === "text-start" ? "text" : "reasoning",
+              text: "",
+              metadata: { ...part.metadata },
+            });
+            return;
           }
-        }),
+          case "text-delta":
+          case "reasoning-delta": {
+            const kind = part.type === "text-delta" ? "text" : "reasoning";
+            const block = open.get(part.id) ?? {
+              type: kind as "text" | "reasoning",
+              text: "",
+              metadata: {},
+            };
+            open.set(part.id, block);
+            block.text += part.delta;
+            Object.assign(block.metadata, part.metadata);
+            if (part.delta.length > 0) {
+              yield* options.onLive({ kind, delta: part.delta });
+            }
+            return;
+          }
+          case "text-end":
+          case "reasoning-end": {
+            const block = open.get(part.id);
+            if (block === undefined) return;
+            open.delete(part.id);
+            Object.assign(block.metadata, part.metadata);
+            parts.push(
+              Response.makePart(block.type, {
+                text: block.text,
+                metadata: block.metadata,
+              } as never),
+            );
+            return;
+          }
+          case "tool-call": {
+            parts.push(part);
+            // surface the call NOW — its handler may run for
+            // minutes before the sampling completes
+            yield* options.onLive({
+              kind: "tool-call",
+              id: part.id,
+              name: part.name,
+              params: part.params,
+            });
+            return;
+          }
+          case "tool-result":
+          case "finish": {
+            parts.push(part);
+            return;
+          }
+          // the wire names the model that answered — the transcript's
+          // `model` stamp, whatever service the stance was provided
+          case "response-metadata": {
+            if (typeof part.modelId === "string") modelId = part.modelId;
+            return;
+          }
+          default:
+            return;
+        }
+      }),
     );
     // a provider that never closed a block still yields its text
     for (const block of open.values()) {
@@ -1401,18 +1426,21 @@ const sampleModel = (
         } as never),
       );
     }
-    return new LanguageModel.GenerateTextResponse<any>(parts as never);
-  }).pipe(
-    Effect.retry({
-      while: (error) =>
-        isAiError(error)
-          ? error.isRetryable &&
-            error.reason._tag !== "ToolParameterValidationError"
-          : true,
-      schedule: Schedule.exponential("1 second"),
-      times: 3,
-    }),
-  );
+    return {
+      response: new LanguageModel.GenerateTextResponse<any>(parts as never),
+      modelId,
+    };
+  },
+  Effect.retry({
+    while: (error) =>
+      isAiError(error)
+        ? error.isRetryable &&
+          error.reason._tag !== "ToolParameterValidationError"
+        : true,
+    schedule: Schedule.exponential("1 second"),
+    times: 3,
+  }),
+);
 
 /**
  * ONE SAMPLING, written once for every host: read the thread from
@@ -1422,7 +1450,7 @@ const sampleModel = (
  * tool call within budget — append the corrective note and report
  * `malformed` so the host comes straight back around.
  */
-export const sampleTick = (options: {
+export const sampleTick = Effect.fn(function* (options: {
   readonly ops: SessionOps;
   readonly languageModel: StreamingLanguageModel;
   readonly handle: ThreadHandle;
@@ -1430,124 +1458,128 @@ export const sampleTick = (options: {
   /** True once the host's malformed streak exceeds the budget — the
    *  validation error then propagates as the round's real failure. */
   readonly exhausted: boolean;
-}): Effect.Effect<
-  | { readonly kind: "malformed" }
-  | {
-      readonly kind: "response";
-      readonly response: LanguageModel.GenerateTextResponse<any>;
-    },
-  unknown
-> =>
-  Effect.gen(function* () {
-    const { ops, languageModel, handle, tick } = options;
-    // persistence must never crash or slow a round — a failed
-    // append costs restart fidelity, not the sampling
-    const append = (
-      messages: ReadonlyArray<Prompt.MessageEncoded>,
-    ): Effect.Effect<void> =>
-      handle
-        .appendMessages(messages)
-        .pipe(
-          Effect.catchCause((cause) =>
-            Effect.logWarning(
-              `ThreadStorage append failed for '${ops.key}' of '${ops.term}'`,
-              cause,
-            ),
+}) {
+  const { ops, languageModel, handle, tick } = options;
+  // persistence must never crash or slow a round — a failed
+  // append costs restart fidelity, not the sampling
+  const append = (
+    messages: ReadonlyArray<Prompt.MessageEncoded>,
+  ): Effect.Effect<void> =>
+    handle
+      .appendMessages(messages)
+      .pipe(
+        Effect.catchCause((cause) =>
+          Effect.logWarning(
+            `ThreadStorage append failed for '${ops.key}' of '${ops.term}'`,
+            cause,
           ),
-        );
-    const startedAt = yield* Effect.sync(() => Date.now());
-    const thread = Prompt.make([...(yield* handle.messages)]);
-    const response = yield* sampleModel(languageModel, {
-      prompt: Prompt.concat(
-        Prompt.make([{ role: "system", content: tick.system }]),
-        thread,
-      ),
-      toolkit: tick.toolkit,
-      onLive: (part) =>
-        part.kind === "tool-call"
-          ? ops.observeLive({
-              type: "tool-call",
-              tick: ops.tick(),
-              toolCallId: part.id,
-              toolName: part.name,
-              input: part.params,
-            })
-          : ops.observeLive({
-              type: "assistant-delta",
-              tick: ops.tick(),
-              channel: part.kind,
-              delta: part.delta,
-            }),
-    }).pipe(
-      // A MALFORMED TOOL CALL is a model-visible fact, not a
-      // crash: nothing was executed, so tell the model what
-      // was wrong and let it re-issue. Bounded — a model that
-      // keeps emitting invalid calls crashes with the real
-      // error after the malformed budget.
-      Effect.catchIf(
-        (error): error is AiError =>
-          isAiError(error) &&
-          error.reason._tag === "ToolParameterValidationError",
-        (error) =>
-          options.exhausted
-            ? Effect.fail(error)
-            : Effect.succeed({ malformed: error.message } as const),
-      ),
-    );
-    if ("malformed" in response) {
-      const text =
-        `your last response included a tool call with INVALID ` +
-        `parameters — NOTHING was executed:\n${response.malformed}\n` +
-        `Re-issue the call with parameters matching the tool's schema.`;
-      yield* append([noteMessage(text)]);
-      yield* ops.observe({
-        type: "input",
-        text: `<note>\n${text}\n</note>`,
-        kind: "note",
-      });
-      return { kind: "malformed" } as const;
-    }
-    // durable response rows FIRST, then the observations that
-    // restate them — a crash between the two loses commentary,
-    // never the thread
-    yield* append(
-      encodeMessages(Prompt.fromResponseParts(response.content).content),
-    );
-    // where the time goes: one line per sampling (model
-    // round-trip INCLUDING the tool handlers that ran
-    // inside it) — the timing profile of every session
-    yield* Effect.logDebug(
-      `Driver session '${ops.key}' of '${ops.term}': sampling #${ops.tick()} took ${Date.now() - startedAt}ms` +
-        (response.toolCalls.length > 0
-          ? ` [${response.toolCalls.map((call) => call.name).join(", ")}]`
-          : " [quiesced]"),
-    );
+        ),
+      );
+  const startedAt = yield* Effect.sync(() => Date.now());
+  const thread = Prompt.make([...(yield* handle.messages)]);
+  // the model the stance was PROVIDED (its fragment recorded the
+  // LanguageModel in scope), else the driver's Layer — and the
+  // sampling runs under the session frame, so a hand-written routing
+  // service sees what a tool handler does (`AI.Thread`, `AI.Tick`)
+  const sampled = yield* sampleModel(tick.model ?? languageModel, {
+    prompt: Prompt.concat(
+      Prompt.make([{ role: "system", content: tick.system }]),
+      thread,
+    ),
+    toolkit: tick.toolkit,
+    onLive: (part) =>
+      part.kind === "tool-call"
+        ? ops.observeLive({
+            type: "tool-call",
+            tick: ops.tick(),
+            toolCallId: part.id,
+            toolName: part.name,
+            input: part.params,
+          })
+        : ops.observeLive({
+            type: "assistant-delta",
+            tick: ops.tick(),
+            channel: part.kind,
+            delta: part.delta,
+          }),
+  }).pipe(
+    (sampling) => ops.provide(sampling),
+    // A MALFORMED TOOL CALL is a model-visible fact, not a
+    // crash: nothing was executed, so tell the model what
+    // was wrong and let it re-issue. Bounded — a model that
+    // keeps emitting invalid calls crashes with the real
+    // error after the malformed budget.
+    Effect.catchIf(
+      (error): error is AiError =>
+        isAiError(error) &&
+        error.reason._tag === "ToolParameterValidationError",
+      (error) =>
+        options.exhausted
+          ? Effect.fail(error)
+          : Effect.succeed({ malformed: error.message } as const),
+    ),
+  );
+  if ("malformed" in sampled) {
+    const text =
+      `your last response included a tool call with INVALID ` +
+      `parameters — NOTHING was executed:\n${sampled.malformed}\n` +
+      `Re-issue the call with parameters matching the tool's schema.`;
+    yield* append([noteMessage(text)]);
     yield* ops.observe({
-      type: "assistant",
-      tick: ops.tick(),
-      ms: Date.now() - startedAt,
-      text: response.text,
-      reasoning: response.reasoningText,
-      toolCalls: response.toolCalls.map((call) => ({
-        id: call.id,
-        name: call.name,
-        input: call.params,
-      })),
+      type: "input",
+      text: `<note>\n${text}\n</note>`,
+      kind: "note",
     });
-    // tool OUTPUTS are not restated by `assistant` — they are
-    // their own durable rows, upgrading the call's state in
-    // any projection that replays this session
-    for (const result of response.toolResults) {
-      yield* ops.observe({
-        type: "tool-result",
-        toolCallId: result.id,
-        toolName: result.name,
-        output: result.result,
-        isFailure: result.isFailure,
-      });
-    }
-    return { kind: "response", response } as const;
+    return { kind: "malformed" } as const;
+  }
+  const { response, modelId } = sampled;
+  // durable response rows FIRST, then the observations that
+  // restate them — a crash between the two loses commentary,
+  // never the thread
+  yield* append(
+    encodeMessages(Prompt.fromResponseParts(response.content).content),
+  );
+  // where the time goes: one line per sampling (model
+  // round-trip INCLUDING the tool handlers that ran
+  // inside it) — the timing profile of every session
+  yield* Effect.logDebug(
+    `Driver session '${ops.key}' of '${ops.term}': sampling #${ops.tick()} took ${Date.now() - startedAt}ms` +
+      (response.toolCalls.length > 0
+        ? ` [${response.toolCalls.map((call) => call.name).join(", ")}]`
+        : " [quiesced]"),
+  );
+  yield* ops.observe({
+    type: "assistant",
+    tick: ops.tick(),
+    ms: Date.now() - startedAt,
+    text: response.text,
+    reasoning: response.reasoningText,
+    toolCalls: response.toolCalls.map((call) => ({
+      id: call.id,
+      name: call.name,
+      input: call.params,
+    })),
+    // what sampled and what it cost — the cost fold's row
+    ...(modelId === undefined ? {} : { model: modelId }),
+    ...(() => {
+      const usage = tokenUsage(response.usage);
+      return usage === undefined ? {} : { usage };
+    })(),
   });
+  // tool OUTPUTS are not restated by `assistant` — they are
+  // their own durable rows, upgrading the call's state in
+  // any projection that replays this session
+  for (const result of response.toolResults) {
+    yield* ops.observe({
+      type: "tool-result",
+      toolCallId: result.id,
+      toolName: result.name,
+      output: result.result,
+      isFailure: result.isFailure,
+    });
+  }
+  return { kind: "response", response } as const;
+});
 
 /**
  * Assemble a toolkit from compiled tools + this tick's handlers —
@@ -1586,12 +1618,137 @@ export const buildToolkit = (
         )) as Toolkit.WithHandler<any>;
       }) as Effect.Effect<Toolkit.WithHandler<any> | undefined>);
 
+/**
+ * A charter, RUN: the agent's turn and its API, shared by every
+ * session of the term. Turns, tool handlers and methods are closures
+ * over the charter's plan-time values (bindings, tools, declared
+ * cells); the session they act for is ambient — `AI.Thread` and the
+ * `PersistentRef.Store` are in the frame the engine runs them in.
+ */
+export interface SessionShape {
+  readonly turn: Turn | TurnFn;
+  readonly api?: Record<string, (...args: ReadonlyArray<unknown>) => unknown>;
+}
+
+/**
+ * Run a charter — ONCE, where the Layer builds (plan time in the deploy
+ * process, once per isolate at runtime) — and yield the shape every
+ * session shares. A charter is one Effect: it declares the agent's
+ * bindings, tools and methods in one scope, so the deploy sees the
+ * whole graph before a session exists. There is no session here:
+ * `AI.Thread`, `AI.Tick`, and the `PersistentRef.Store` are absent by
+ * design, so a charter that reaches for them at the top level fails
+ * the build, loudly, instead of running per session by accident. A
+ * failing charter is a failing Layer build — a defect.
+ */
+export const construct = (
+  driver: string,
+  term: string,
+  charter: Charter,
+): Effect.Effect<SessionShape, never, any> =>
+  typeof charter === "function"
+    ? Effect.die(
+        new Error(
+          `${driver}: the charter of '${term}' is a function — a charter is ONE Effect, run at plan time. Read \`AI.Thread\` inside turns, tools and methods; declare per-session state with \`PersistentRef.of\`.`,
+        ),
+      )
+    : Effect.flatMap(
+        (charter as Effect.Effect<unknown, unknown, any>).pipe(
+          // failure OR defect (a `Service not found` for AI.Thread is a
+          // defect): name the scope so the build error says where
+          Effect.catchCause((cause) =>
+            Cause.hasInterruptsOnly(cause)
+              ? Effect.failCause(cause as Cause.Cause<never>)
+              : Effect.die(
+                  new Error(
+                    `${driver}: the charter of '${term}' failed — ${describeCrash(cause).encoded.message}`,
+                    { cause: Cause.squash(cause) },
+                  ),
+                ),
+          ),
+        ),
+        (result) => shapeOf(driver, term, result),
+      );
+
+/** Normalize a charter's result (or its `turn`) into the turn the loop runs. */
+const turnOf = (value: unknown): Turn | TurnFn | undefined =>
+  isFragment(value)
+    ? Effect.succeed(value)
+    : Effect.isEffect(value)
+      ? (value as Turn)
+      : typeof value === "function"
+        ? (value as TurnFn)
+        : undefined;
+
+/** Read `{ turn, ...methods }` (or a bare turn) off a charter's result. */
+const shapeOf = (
+  driver: string,
+  term: string,
+  result: unknown,
+): Effect.Effect<SessionShape> => {
+  const turn = turnOf(result);
+  if (turn !== undefined) return Effect.succeed({ turn });
+  if (typeof result === "object" && result !== null && "turn" in result) {
+    // `{ turn, ...methods }`: the loop under the reserved key, the API
+    // beside it
+    const { turn: declared, ...methods } = result as Record<string, unknown>;
+    const sessionTurn = turnOf(declared);
+    if (sessionTurn === undefined) {
+      return Effect.die(
+        `${driver}: the charter of '${term}' returned a \`turn\` that is neither prose, a turn effect, nor a turn function`,
+      );
+    }
+    const api: NonNullable<SessionShape["api"]> = {};
+    for (const [name, method] of Object.entries(methods)) {
+      if (typeof method !== "function") {
+        return Effect.die(
+          `${driver}: '${name}' on the charter result of '${term}' is not a method — every key beside \`turn\` must be a function returning an Effect`,
+        );
+      }
+      api[name] = method as (...args: ReadonlyArray<unknown>) => unknown;
+    }
+    return Effect.succeed({ turn: sessionTurn, api });
+  }
+  return Effect.die(
+    `${driver}: the charter of '${term}' returned neither prose, a turn effect, a turn function, nor a \`{ turn, ...methods }\` object`,
+  );
+};
+
+/**
+ * A method result must cross a wire (structured clone into and out of
+ * the session's Durable Object on Cloudflare). The resident placement
+ * has no wire, so it asks the same question explicitly — the two
+ * placements must never drift on what a method may return.
+ */
+export const assertCloneable = (
+  driver: string,
+  term: string,
+  method: string,
+  value: unknown,
+): Effect.Effect<void> =>
+  Effect.suspend(() => {
+    if (value === undefined) return Effect.void;
+    try {
+      structuredClone(value);
+      return Effect.void;
+    } catch (error) {
+      return Effect.die(
+        new Error(
+          `${driver}: method '${method}' of '${term}' returned a value that cannot cross the wire (not structured-clonable): ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        ),
+      );
+    }
+  });
+
 /** What a Driver lends the engine — see {@link makeSessionEngine}. */
 export interface SessionEngineOptions {
   /** The placement's name, for error/log prefixes. */
   readonly driver: string;
   readonly term: string;
-  readonly charter: Charter;
+  /** The charter, run — see {@link construct}. */
+  readonly shape: SessionShape;
   /** The charter's captured Layer context. */
   readonly context: Context.Context<never>;
   readonly storage: ThreadStorageService;
@@ -1672,6 +1829,12 @@ interface EngineSession {
    *  so a reopened session needs a fresh signal to park on). */
   settledSignal: Deferred.Deferred<unknown>;
   turn?: Turn | TurnFn;
+  /** The session's API: the keys beside `turn` on its constructor's
+   *  result, reached through `Actor.call`. */
+  api?: Record<string, (...args: ReadonlyArray<unknown>) => unknown>;
+  /** The model the last tick's stance was provided — what a spawn
+   *  worker inherits. RAM only; every tick sets it again. */
+  model?: LanguageModel.Service;
   /** Spawn workers sample a CONSTANT tick — no charter, no turn. */
   fixedTick?: TickResult;
   pendingCompaction?: CompactPlan;
@@ -1715,6 +1878,18 @@ export interface SessionEngine {
       readonly key?: string;
       readonly parent?: { readonly term: string; readonly key: string };
     },
+  ) => Effect.Effect<unknown, unknown>;
+  /**
+   * Call one METHOD of a session's API inside the session frame —
+   * admitting the key on first contact. The method's
+   * typed failure is the failure; a method the session does not
+   * declare is a defect. Works on a parked OR settled session: the
+   * object outlives its loop, only `forget`/destroy ends it.
+   */
+  readonly call: (
+    key: string,
+    method: string,
+    args: ReadonlyArray<unknown>,
   ) => Effect.Effect<unknown, unknown>;
   /** Input at the sampling boundary. Unkeyed steers go to the last
    *  admitted session; a KEYED steer to an unknown key admits fresh
@@ -1794,7 +1969,7 @@ export const makeSessionEngine = (
   const {
     driver,
     term,
-    charter,
+    shape,
     context,
     storage,
     languageModel,
@@ -1837,46 +2012,45 @@ export const makeSessionEngine = (
         ),
       );
 
-  const observe = (
+  const observe = Effect.fn(function* (
     s: EngineSession,
     observation: ObservationDraft,
-  ): Effect.Effect<void> =>
-    Effect.gen(function* () {
-      // live facts (deltas, in-flight tool calls) never persist and
-      // never advance the cursor
-      const live = isLiveObservation(observation.type);
-      const full = {
-        ...observation,
-        term,
-        key: s.key,
-        seq: live ? s.observed : s.observed++,
-        at: Date.now(),
-      } as SessionObservation;
-      if (!live) {
-        // the durable row and its cursor persist together — a failed
-        // write costs restart fidelity, not the round
-        yield* s.handle
-          .appendObservation(full, metaOf(s))
-          .pipe(
-            Effect.catchCause((cause) =>
-              Effect.logWarning(
-                `ThreadStorage append failed for '${s.key}' of '${term}'`,
-                cause,
-              ),
+  ) {
+    // live facts (deltas, in-flight tool calls) never persist and
+    // never advance the cursor
+    const live = isLiveObservation(observation.type);
+    const full = {
+      ...observation,
+      term,
+      key: s.key,
+      seq: live ? s.observed : s.observed++,
+      at: Date.now(),
+    } as SessionObservation;
+    if (!live) {
+      // the durable row and its cursor persist together — a failed
+      // write costs restart fidelity, not the round
+      yield* s.handle
+        .appendObservation(full, metaOf(s))
+        .pipe(
+          Effect.catchCause((cause) =>
+            Effect.logWarning(
+              `ThreadStorage append failed for '${s.key}' of '${term}'`,
+              cause,
             ),
-          );
-      }
-      yield* Effect.ignore(
-        broadcast(s.key, {
-          type: "observation",
-          durable: !live,
-          observation: full,
-        }),
-      );
-      if (Option.isSome(observer)) {
-        yield* observer.value.emit(full).pipe(Effect.ignore);
-      }
-    });
+          ),
+        );
+    }
+    yield* Effect.ignore(
+      broadcast(s.key, {
+        type: "observation",
+        durable: !live,
+        observation: full,
+      }),
+    );
+    if (Option.isSome(observer)) {
+      yield* observer.value.emit(full).pipe(Effect.ignore);
+    }
+  });
 
   const appendThread = (
     s: EngineSession,
@@ -1924,6 +2098,10 @@ export const makeSessionEngine = (
     // dropped if settled.
     remind: (delay, note) =>
       options.remind(s.key, Date.now() + Duration.toMillis(delay), note),
+    // the object PUSHING its view: one frame to every attached socket,
+    // never a row — a viewer that missed it reads the state back
+    publish: (state) =>
+      Effect.ignore(broadcast(s.key, { type: "state", state })),
   });
 
   /** The round's supervision seam — `supervised` actors register the
@@ -1953,21 +2131,10 @@ export const makeSessionEngine = (
         Effect.provideService(Tick, makeTickService(s)),
         Effect.provideService(Supervision, makeSupervision(s)),
         Effect.provideService(PersistentRef.Store, s.stateStore),
-        // the FRAME: refs are namespaced by the session's identity
-        PersistentRef.within(term, s.key),
-        Effect.provide(RuntimeContext.phantom),
-        Effect.provide(context),
-      ) as Effect.Effect<A, E>;
-
-  /** The INIT evaluation context — `AI.Thread` but deliberately NOT
-   *  `AI.Tick`: no sampling is under way during init. */
-  const provideInit =
-    (s: EngineSession) =>
-    <A, E>(effect: Effect.Effect<A, E, any>): Effect.Effect<A, E> =>
-      effect.pipe(
-        Effect.provideService(Thread, makeThreadService(s)),
-        Effect.provideService(PersistentRef.Store, s.stateStore),
-        PersistentRef.within(term, s.key),
+        // the FRAME: refs are namespaced by the session's identity —
+        // REPLACING any ambient chain (a child dispatched from inside
+        // a parent's round runs in the parent's fiber)
+        PersistentRef.frame(term, s.key),
         Effect.provide(RuntimeContext.phantom),
         Effect.provide(context),
       ) as Effect.Effect<A, E>;
@@ -1987,12 +2154,11 @@ export const makeSessionEngine = (
     observe: (draft) => observe(s, draft),
     observeLive: (draft) => observe(s, draft),
     activeSkills: () => s.active,
-    setSkill: (name, active) =>
-      Effect.gen(function* () {
-        if (active) s.active.add(name);
-        else s.active.delete(name);
-        yield* putMeta(s);
-      }),
+    setSkill: Effect.fn(function* (name, active) {
+      if (active) s.active.add(name);
+      else s.active.delete(name);
+      yield* putMeta(s);
+    }),
     lastStance: () => s.lastStance,
     setLastStance: (stance) => {
       s.lastStance = stance;
@@ -2009,8 +2175,8 @@ export const makeSessionEngine = (
     wrapHandler: options.wrapHandler,
   });
 
-  const makeShell = (key: string): Effect.Effect<EngineSession> =>
-    Effect.gen(function* () {
+  const makeShell: (key: string) => Effect.Effect<EngineSession> = Effect.fn(
+    function* (key: string) {
       return {
         key,
         handle: yield* storage.open(term, key),
@@ -2031,7 +2197,8 @@ export const makeSessionEngine = (
               ? ambientStore.value
               : PersistentRef.makeMemoryStore(),
       };
-    });
+    },
+  );
 
   /**
    * Create-or-restore one session's RAM shell. A persisted meta seeds
@@ -2043,112 +2210,90 @@ export const makeSessionEngine = (
    *  never double-create the shell (double `admitted`, split waiters). */
   const creating = new Map<string, Deferred.Deferred<EngineSession, unknown>>();
 
-  const ensureSession = (
+  const ensureSession: (
     key?: string,
     parent?: { readonly term: string; readonly key: string },
-  ): Effect.Effect<EngineSession> =>
-    Effect.gen(function* () {
-      const sessionKey = key ?? `session-${mintPrefix}-${minted++}`;
-      lastKey = sessionKey;
-      const existing = sessions.get(sessionKey);
-      if (existing !== undefined) return existing;
-      const inflight = creating.get(sessionKey);
-      if (inflight !== undefined) {
-        return yield* Effect.orDie(Deferred.await(inflight));
-      }
-      const gate = yield* Deferred.make<EngineSession, unknown>();
-      creating.set(sessionKey, gate);
-      const built = yield* Effect.exit(buildSession(sessionKey, parent));
-      creating.delete(sessionKey);
-      yield* Deferred.done(gate, built);
-      if (Exit.isFailure(built)) {
-        return yield* Effect.failCause(built.cause);
-      }
-      return built.value;
-    }) as Effect.Effect<EngineSession>;
+  ) => Effect.Effect<EngineSession> = Effect.fn(function* (
+    key?: string,
+    parent?: { readonly term: string; readonly key: string },
+  ) {
+    const sessionKey = key ?? `session-${mintPrefix}-${minted++}`;
+    lastKey = sessionKey;
+    const existing = sessions.get(sessionKey);
+    if (existing !== undefined) return existing;
+    const inflight = creating.get(sessionKey);
+    if (inflight !== undefined) {
+      return yield* Effect.orDie(Deferred.await(inflight));
+    }
+    const gate = yield* Deferred.make<EngineSession, unknown>();
+    creating.set(sessionKey, gate);
+    const built = yield* Effect.exit(buildSession(sessionKey, parent));
+    creating.delete(sessionKey);
+    yield* Deferred.done(gate, built);
+    if (Exit.isFailure(built)) {
+      return yield* Effect.failCause(built.cause);
+    }
+    return built.value;
+  }) as (
+    key?: string,
+    parent?: { readonly term: string; readonly key: string },
+  ) => Effect.Effect<EngineSession>;
 
-  const buildSession = (
+  const buildSession = Effect.fn(function* (
     sessionKey: string,
     parent?: { readonly term: string; readonly key: string },
-  ): Effect.Effect<EngineSession> =>
-    Effect.gen(function* () {
-      let s = sessions.get(sessionKey);
-      if (s === undefined) {
-        s = yield* makeShell(sessionKey);
-        const meta = yield* s.handle.meta.pipe(
-          Effect.catchCause((cause) =>
-            Effect.as(
-              Effect.logWarning(
-                `ThreadStorage meta read failed for '${sessionKey}' of '${term}'`,
-                cause,
-              ),
-              undefined,
+  ) {
+    let s = sessions.get(sessionKey);
+    if (s === undefined) {
+      s = yield* makeShell(sessionKey);
+      const meta = yield* s.handle.meta.pipe(
+        Effect.catchCause((cause) =>
+          Effect.as(
+            Effect.logWarning(
+              `ThreadStorage meta read failed for '${sessionKey}' of '${term}'`,
+              cause,
             ),
+            undefined,
           ),
-        );
-        if (meta === undefined) {
-          yield* observe(s, { type: "admitted", parent });
-        } else {
-          s.tick = meta.tick;
-          s.observed = meta.observed;
-          for (const skill of meta.active) s.active.add(skill);
-          s.busy = meta.busy;
-          s.settledOutcome = meta.settled;
-          if (meta.settled !== undefined) {
-            yield* Deferred.succeed(s.settledSignal, meta.settled.outcome);
-          }
+        ),
+      );
+      if (meta === undefined) {
+        yield* observe(s, { type: "admitted", parent });
+      } else {
+        s.tick = meta.tick;
+        s.observed = meta.observed;
+        for (const skill of meta.active) s.active.add(skill);
+        s.busy = meta.busy;
+        s.settledOutcome = meta.settled;
+        if (meta.settled !== undefined) {
+          yield* Deferred.succeed(s.settledSignal, meta.settled.outcome);
         }
-        // per-session init: the thread exists (Thread in scope for
-        // thread-scoped setup); no sampling yet (no Tick)
-        const shell = s;
-        const initResult = yield* provideInit(shell)(
-          charter as Effect.Effect<unknown, unknown>,
-        ).pipe(
-          // an init that fails (a checkout that cannot converge, a
-          // machine that will not boot) is a session that never
-          // answers — leave the durable WHY in the transcript before
-          // dying, so the viewer sees the crash instead of silence.
-          // The shell is not registered, so the next submit retries.
-          Effect.tapCause((cause) =>
-            observe(shell, {
-              type: "crashed",
-              error: describeCrash(cause).encoded,
-              fatal: true,
-            }),
-          ),
-          Effect.orDie,
-        );
-        s.turn = isFragment(initResult)
-          ? Effect.succeed(initResult)
-          : Effect.isEffect(initResult)
-            ? (initResult as Turn)
-            : typeof initResult === "function"
-              ? (initResult as TurnFn)
-              : yield* Effect.die(
-                  `${driver}: the charter for '${term}' returned neither prose, a turn effect, nor a turn function`,
-                );
-        sessions.set(sessionKey, s);
       }
-      return s;
-    });
+      // the charter's shape, shared: the session it acts for is the
+      // frame (Thread, the store) the engine runs it in
+      s.turn = shape.turn;
+      s.api = shape.api;
+      sessions.set(sessionKey, s);
+    }
+    return s;
+  });
 
   /** Queue one input; pair a dispatch waiter to its inbox seq. */
-  const enqueue = (
+  const enqueue = Effect.fn(function* (
     s: EngineSession,
     input: unknown,
     enqueueOptions?: {
       readonly waiter?: Deferred.Deferred<unknown, unknown>;
       readonly quiet?: boolean;
     },
-  ): Effect.Effect<void> =>
-    Effect.gen(function* () {
-      const seq = yield* s.handle.putInbox(input, {
-        quiet: enqueueOptions?.quiet,
-      });
-      if (enqueueOptions?.waiter !== undefined) {
-        s.pendingWaiters.push({ seq, waiter: enqueueOptions.waiter });
-      }
+  ) {
+    const seq = yield* s.handle.putInbox(input, {
+      quiet: enqueueOptions?.quiet,
     });
+    if (enqueueOptions?.waiter !== undefined) {
+      s.pendingWaiters.push({ seq, waiter: enqueueOptions.waiter });
+    }
+  });
 
   const failAllWaiters = (s: EngineSession, error: unknown) =>
     Effect.forEach(
@@ -2187,60 +2332,65 @@ export const makeSessionEngine = (
   // (workers are leaves). The spawn call itself drives the worker's
   // rounds, so no placement machinery is needed — spawn works on
   // every substrate.
-  const spawn = (
+  const spawn = Effect.fn(function* (
     spawner: EngineSession,
     params: SpawnParams,
-  ): Effect.Effect<unknown, unknown> =>
-    Effect.gen(function* () {
-      const stance = spawner.lastStance!;
-      const worker = yield* makeShell(`spawn-${mintPrefix}-${minted++}`);
-      sessions.set(worker.key, worker);
-      const handlers: Record<string, (params: any) => Effect.Effect<any, any>> =
-        {};
-      const granted: Array<AiTool.Any> = [];
-      const grantedNames = params.tools ?? [...stance.tools.keys()];
-      for (const name of grantedNames) {
-        const compiled = stance.tools.get(name);
-        if (compiled === undefined) continue;
-        granted.push(compileTool(compiled.term));
-        const resolved = yield* resolvers.resolveHandler(compiled);
-        handlers[name] = (input) => provideSession(worker)(resolved(input));
+  ) {
+    const stance = spawner.lastStance!;
+    const worker = yield* makeShell(`spawn-${mintPrefix}-${minted++}`);
+    sessions.set(worker.key, worker);
+    const handlers: Record<string, (params: any) => Effect.Effect<any, any>> =
+      {};
+    const granted: Array<AiTool.Any> = [];
+    const grantedNames = params.tools ?? [...stance.tools.keys()];
+    for (const name of grantedNames) {
+      const compiled = stance.tools.get(name);
+      if (compiled === undefined) continue;
+      granted.push(compileTool(compiled.term));
+      const resolved = yield* resolvers.resolveHandler(compiled);
+      handlers[name] = (input) => provideSession(worker)(resolved(input));
+    }
+    // handed skills arrive PRE-ACTIVATED: prose joins the worker's
+    // instructions, tools join its (fixed) toolkit
+    const handed: Array<{ name: string } & ResolvedSkill> = [];
+    for (const name of params.skills ?? []) {
+      const skillTerm = stance.skills.get(name);
+      if (skillTerm === undefined) continue;
+      const resolved = yield* resolvers.resolveSkill(skillTerm);
+      handed.push({ name, ...resolved });
+      for (const [toolName, fn] of Object.entries(resolved.handlers)) {
+        handlers[toolName] ??= (input) => provideSession(worker)(fn(input));
       }
-      // handed skills arrive PRE-ACTIVATED: prose joins the worker's
-      // instructions, tools join its (fixed) toolkit
-      const handed: Array<{ name: string } & ResolvedSkill> = [];
-      for (const name of params.skills ?? []) {
-        const skillTerm = stance.skills.get(name);
-        if (skillTerm === undefined) continue;
-        const resolved = yield* resolvers.resolveSkill(skillTerm);
-        handed.push({ name, ...resolved });
-        for (const [toolName, fn] of Object.entries(resolved.handlers)) {
-          handlers[toolName] ??= (input) => provideSession(worker)(fn(input));
-        }
-      }
-      const tools = dedupeByName([
-        ...granted,
-        ...handed.flatMap((skill) => [...skill.tools]),
-      ]);
-      const system = [
-        params.instructions,
-        ...handed.map((skill) => `## Skill: ${skill.name}\n\n${skill.prose}`),
-      ].join("\n\n");
-      const toolkit = yield* buildToolkit(
-        tools,
-        handlers,
-        options.wrapHandler === undefined
-          ? undefined
-          : { wrapHandler: options.wrapHandler },
-      );
-      worker.fixedTick = { system, toolkit };
-      const waiter = yield* Deferred.make<unknown, unknown>();
-      yield* enqueue(worker, params.task, { waiter });
-      // the spawn call DRIVES the worker — its rounds run inside this
-      // handler, and the waiter resolves at the worker's quiescence
-      yield* burst(worker.key);
-      return yield* Deferred.await(waiter);
-    });
+    }
+    const tools = dedupeByName([
+      ...granted,
+      ...handed.flatMap((skill) => [...skill.tools]),
+    ]);
+    const system = [
+      params.instructions,
+      ...handed.map((skill) => `## Skill: ${skill.name}\n\n${skill.prose}`),
+    ].join("\n\n");
+    const toolkit = yield* buildToolkit(
+      tools,
+      handlers,
+      options.wrapHandler === undefined
+        ? undefined
+        : { wrapHandler: options.wrapHandler },
+    );
+    // a spawn worker has no stance of its own to be provided a
+    // model — it samples with whatever its spawner last did
+    worker.fixedTick = {
+      system,
+      toolkit,
+      ...(spawner.model === undefined ? {} : { model: spawner.model }),
+    };
+    const waiter = yield* Deferred.make<unknown, unknown>();
+    yield* enqueue(worker, params.task, { waiter });
+    // the spawn call DRIVES the worker — its rounds run inside this
+    // handler, and the waiter resolves at the worker's quiescence
+    yield* burst(worker.key);
+    return yield* Deferred.await(waiter);
+  });
 
   /**
    * ONE BURST: run rounds for a session until it parks or settles —
@@ -2248,8 +2398,8 @@ export const makeSessionEngine = (
    * nothing to do parks immediately). This is the whole execution
    * model on every substrate; placements only decide WHEN to call it.
    */
-  const burst = (key: string): Effect.Effect<void> =>
-    Effect.gen(function* () {
+  const burst: (key: string) => Effect.Effect<void> = Effect.fn(
+    function* (key: string) {
       const s = yield* ensureSession(key);
       // the crash is DELIVERED by onCrash (observation, waiters,
       // re-entry scheduling) — the burst itself never fails, so a
@@ -2290,213 +2440,216 @@ export const makeSessionEngine = (
           }
         }),
       );
-    }).pipe(
-      // TOTAL containment, ensure included: a burst often rides a
-      // host's fire-and-forget channel (workerd's waitUntil), where a
-      // rejected promise RESETS the Durable Object — a burst must
-      // never reject, only log
-      Effect.catchCause((cause) =>
-        Effect.logError(`${driver}: burst for '${key}' failed`, cause),
+    },
+    // TOTAL containment, ensure included: a burst often rides a
+    // host's fire-and-forget channel (workerd's waitUntil), where a
+    // rejected promise RESETS the Durable Object — a burst must
+    // never reject, only log
+    (effect, key) =>
+      effect.pipe(
+        Effect.catchCause((cause) =>
+          Effect.logError(`${driver}: burst for '${key}' failed`, cause),
+        ),
       ),
-    ) as Effect.Effect<void>;
+  ) as (key: string) => Effect.Effect<void>;
 
-  const rounds = (s: EngineSession) =>
-    Effect.gen(function* () {
-      if (s.settledOutcome !== undefined) return;
+  const rounds = Effect.fn(function* (s: EngineSession) {
+    if (s.settledOutcome !== undefined) return;
 
-      // ── recovery: a busy marker on ENTRY means the previous
-      // attempt DIED mid-round — eviction, restart, or crash, all
-      // indistinguishable on disk and all re-entered the same way.
-      // (The gate makes this unambiguous: a healthy predecessor
-      // clears the marker before releasing.) Bounded re-entry:
-      // progress resets the budget; exhaustion abandons the round
-      // VISIBLY and the session keeps serving.
-      let recovering = false;
-      if (s.busy !== undefined) {
-        const attempts = s.busy.attempts + 1;
-        if (attempts > maxAttempts) {
-          yield* appendThread(s, [
-            noteMessage(
-              `This round was interrupted ${maxAttempts} times and has been abandoned — the messages above it may be unanswered. Continuing fresh from here.`,
-            ),
-          ]);
-          yield* observe(s, {
-            type: "input",
-            text: `<note>\nround abandoned after ${maxAttempts} interrupted attempts\n</note>`,
-            kind: "note",
-          });
-          s.busy = undefined;
-          yield* putMeta(s);
-          const abandoned = new RoundAbandoned({
-            term,
-            key: s.key,
-            attempts: maxAttempts,
-          });
-          yield* observe(s, {
-            type: "crashed",
-            error: {
-              _tag: abandoned._tag,
-              message: abandoned.message,
-              retryable: false,
-            },
-            fatal: true,
-          });
-          // exhaustion is the ONE defect-lane crash that answers
-          // waiters — as a TYPED failure the caller can catch
-          yield* failAllWaiters(s, abandoned);
-        } else {
-          s.busy = { attempts, since: Date.now() };
-          yield* putMeta(s);
-          yield* scheduleReentry(
-            s.key,
-            recoverAfter * 2 ** Math.min(attempts, 3),
-          );
-          recovering = true;
-          // INFORMED re-decision, without transcript surgery: the
-          // interrupted attempt's tool calls never persisted (only
-          // complete samplings append), so the re-sample would
-          // otherwise repeat side effects blind.
-          yield* appendThread(s, [
-            noteMessage(
-              `The previous attempt at this work was interrupted mid-sampling (attempt ${attempts} of ${maxAttempts}). Any actions it took may or may not have completed — verify before repeating anything with side effects.`,
-            ),
-          ]);
-          yield* observe(s, {
-            type: "interrupted",
-            attempt: attempts,
-            maxAttempts,
-          });
-          yield* Effect.logInfo(
-            `${driver} session '${term}/${s.key}': recovering an interrupted round (attempt ${attempts}/${maxAttempts})`,
-          );
-        }
-      }
-
-      const ops = makeOps(s);
-      /**
-       * Whether the LAST sampling was quiescent. An empty inbox is
-       * only a park if it is — a sampling that called tools must come
-       * back around to read their results, with no new input at all.
-       * Starts `true` so a burst kicked with nothing to do parks
-       * instead of sampling — unless it is RECOVERING an interrupted
-       * round, whose inputs are already in the thread and owed a
-       * reply.
-       */
-      let quiescent = !recovering;
-      // consecutive malformed-tool-call feedback rounds — resets on
-      // any well-formed sampling
-      let malformed = 0;
-
-      while (true) {
-        if (s.settledOutcome !== undefined) break;
-        const rows = yield* s.handle.listInbox;
-        // QUIET rows never open a round: a parked session with only
-        // quiet inputs queued stays parked — they join whichever
-        // round a WAKING input (or an already-open round) drains
-        const waking = rows.some((row) => row.quiet !== true);
-        if (!waking && quiescent) {
-          // PARKED: the session's work is done until the world moves.
-          // Everything durable is already written through the handle,
-          // so parking is just returning — the placement decides who
-          // waits (a resident fiber) or who returns (a DO event).
-          yield* observe(s, { type: "parked" });
-          break;
-        }
-        // boundary work: requested compaction applies BEFORE the new
-        // inputs join the thread, so nothing fresh is lost
-        yield* Effect.suspend(() => {
-          const plan = s.pendingCompaction;
-          if (plan === undefined) return Effect.void;
-          s.pendingCompaction = undefined;
-          return applyCompactionPlan(s.handle, plan);
+    // ── recovery: a busy marker on ENTRY means the previous
+    // attempt DIED mid-round — eviction, restart, or crash, all
+    // indistinguishable on disk and all re-entered the same way.
+    // (The gate makes this unambiguous: a healthy predecessor
+    // clears the marker before releasing.) Bounded re-entry:
+    // progress resets the budget; exhaustion abandons the round
+    // VISIBLY and the session keeps serving.
+    let recovering = false;
+    if (s.busy !== undefined) {
+      const attempts = s.busy.attempts + 1;
+      if (attempts > maxAttempts) {
+        yield* appendThread(s, [
+          noteMessage(
+            `This round was interrupted ${maxAttempts} times and has been abandoned — the messages above it may be unanswered. Continuing fresh from here.`,
+          ),
+        ]);
+        yield* observe(s, {
+          type: "input",
+          text: `<note>\nround abandoned after ${maxAttempts} interrupted attempts\n</note>`,
+          kind: "note",
         });
-        const drained = rows.map((row) => inputProvenance(row.input));
-        const inputs = drained.map((item) => item.value);
-        if (rows.length > 0) {
-          const maxSeq = rows[rows.length - 1]!.seq;
-          // drained waiters JOIN THE ROUND: only now are they
-          // answerable — by AI.reply, or by quiescence as fallback
-          for (let index = s.pendingWaiters.length - 1; index >= 0; index--) {
-            const entry = s.pendingWaiters[index]!;
-            if (entry.seq <= maxSeq) {
-              s.pendingWaiters.splice(index, 1);
-              s.roundWaiters.push(entry.waiter);
-            }
-          }
-          // the ATOMIC ADMIT: inputs into the thread, watermark past
-          // them, the round OPENED (busy) — one write; every crash
-          // point around it converges
-          s.busy = s.busy ?? { attempts: 0, since: Date.now() };
-          yield* s.handle.admit({
-            messages: drained.map((item) => asUserMessage(item.value)),
-            drainedTo: maxSeq + 1,
-            meta: metaOf(s),
-          });
-          // the round is now OWED: guarantee re-entry even if this
-          // very attempt dies without a crash handler (a hard isolate
-          // death mid-sampling) — a stale re-entry just parks
-          yield* scheduleReentry(s.key, recoverAfter);
-          yield* s.handle
-            .deleteInbox(rows.map((row) => row.seq))
-            .pipe(Effect.ignore);
-          for (const { value, kind } of drained) {
-            yield* observe(s, {
-              type: "input",
-              text: typeof value === "string" ? value : JSON.stringify(value),
-              kind,
-            });
-          }
-        }
-
-        // TICK — the shared algorithm renders this sampling's stance
-        // and assembles its toolkit (spawn workers sample a constant)
-        const tick =
-          s.fixedTick !== undefined
-            ? s.fixedTick
-            : yield* compileTick(ops, resolvers, inputs);
-
-        // deliver collected notes (`AI.say`): a PLAIN append, in
-        // emission order — the author's condition IS the policy
-        for (const note of s.pendingNotes.splice(0)) {
-          const text = render(note.template as TemplateStringsArray, [
-            ...note.refs,
-          ]);
-          if (text.length === 0) continue;
-          yield* appendThread(s, [noteMessage(text)]);
-          yield* observe(s, {
-            type: "input",
-            text: `<note>\n${text}\n</note>`,
-            kind: "note",
-          });
-        }
-
-        const outcome = yield* sampleTick({
-          ops,
-          languageModel,
-          handle: s.handle,
-          tick,
-          exhausted: malformed >= malformedBudget,
-        });
-        if (outcome.kind === "malformed") {
-          malformed++;
-          quiescent = false; // come straight back around and re-sample
-          continue;
-        }
-        malformed = 0;
-        const response = outcome.response;
-        s.tick++;
-        quiescent = response.toolCalls.length === 0;
-        // PROGRESS: a completed sampling resets the recovery budget;
-        // a quiescent one closes the round entirely
-        s.busy = quiescent ? undefined : { attempts: 0, since: Date.now() };
+        s.busy = undefined;
         yield* putMeta(s);
-        if (quiescent) {
-          yield* resolveRoundWaiters(s, response.text);
-        } else {
-          yield* scheduleReentry(s.key, recoverAfter);
+        const abandoned = new RoundAbandoned({
+          term,
+          key: s.key,
+          attempts: maxAttempts,
+        });
+        yield* observe(s, {
+          type: "crashed",
+          error: {
+            _tag: abandoned._tag,
+            message: abandoned.message,
+            retryable: false,
+          },
+          fatal: true,
+        });
+        // exhaustion is the ONE defect-lane crash that answers
+        // waiters — as a TYPED failure the caller can catch
+        yield* failAllWaiters(s, abandoned);
+      } else {
+        s.busy = { attempts, since: Date.now() };
+        yield* putMeta(s);
+        yield* scheduleReentry(
+          s.key,
+          recoverAfter * 2 ** Math.min(attempts, 3),
+        );
+        recovering = true;
+        // INFORMED re-decision, without transcript surgery: the
+        // interrupted attempt's tool calls never persisted (only
+        // complete samplings append), so the re-sample would
+        // otherwise repeat side effects blind.
+        yield* appendThread(s, [
+          noteMessage(
+            `The previous attempt at this work was interrupted mid-sampling (attempt ${attempts} of ${maxAttempts}). Any actions it took may or may not have completed — verify before repeating anything with side effects.`,
+          ),
+        ]);
+        yield* observe(s, {
+          type: "interrupted",
+          attempt: attempts,
+          maxAttempts,
+        });
+        yield* Effect.logInfo(
+          `${driver} session '${term}/${s.key}': recovering an interrupted round (attempt ${attempts}/${maxAttempts})`,
+        );
+      }
+    }
+
+    const ops = makeOps(s);
+    /**
+     * Whether the LAST sampling was quiescent. An empty inbox is
+     * only a park if it is — a sampling that called tools must come
+     * back around to read their results, with no new input at all.
+     * Starts `true` so a burst kicked with nothing to do parks
+     * instead of sampling — unless it is RECOVERING an interrupted
+     * round, whose inputs are already in the thread and owed a
+     * reply.
+     */
+    let quiescent = !recovering;
+    // consecutive malformed-tool-call feedback rounds — resets on
+    // any well-formed sampling
+    let malformed = 0;
+
+    while (true) {
+      if (s.settledOutcome !== undefined) break;
+      const rows = yield* s.handle.listInbox;
+      // QUIET rows never open a round: a parked session with only
+      // quiet inputs queued stays parked — they join whichever
+      // round a WAKING input (or an already-open round) drains
+      const waking = rows.some((row) => row.quiet !== true);
+      if (!waking && quiescent) {
+        // PARKED: the session's work is done until the world moves.
+        // Everything durable is already written through the handle,
+        // so parking is just returning — the placement decides who
+        // waits (a resident fiber) or who returns (a DO event).
+        yield* observe(s, { type: "parked" });
+        break;
+      }
+      // boundary work: requested compaction applies BEFORE the new
+      // inputs join the thread, so nothing fresh is lost
+      yield* Effect.suspend(() => {
+        const plan = s.pendingCompaction;
+        if (plan === undefined) return Effect.void;
+        s.pendingCompaction = undefined;
+        return applyCompactionPlan(s.handle, plan);
+      });
+      const drained = rows.map((row) => inputProvenance(row.input));
+      const inputs = drained.map((item) => item.value);
+      if (rows.length > 0) {
+        const maxSeq = rows[rows.length - 1]!.seq;
+        // drained waiters JOIN THE ROUND: only now are they
+        // answerable — by AI.reply, or by quiescence as fallback
+        for (let index = s.pendingWaiters.length - 1; index >= 0; index--) {
+          const entry = s.pendingWaiters[index]!;
+          if (entry.seq <= maxSeq) {
+            s.pendingWaiters.splice(index, 1);
+            s.roundWaiters.push(entry.waiter);
+          }
+        }
+        // the ATOMIC ADMIT: inputs into the thread, watermark past
+        // them, the round OPENED (busy) — one write; every crash
+        // point around it converges
+        s.busy = s.busy ?? { attempts: 0, since: Date.now() };
+        yield* s.handle.admit({
+          messages: drained.map((item) => asUserMessage(item.value)),
+          drainedTo: maxSeq + 1,
+          meta: metaOf(s),
+        });
+        // the round is now OWED: guarantee re-entry even if this
+        // very attempt dies without a crash handler (a hard isolate
+        // death mid-sampling) — a stale re-entry just parks
+        yield* scheduleReentry(s.key, recoverAfter);
+        yield* s.handle
+          .deleteInbox(rows.map((row) => row.seq))
+          .pipe(Effect.ignore);
+        for (const { value, kind } of drained) {
+          yield* observe(s, {
+            type: "input",
+            text: typeof value === "string" ? value : JSON.stringify(value),
+            kind,
+          });
         }
       }
-    });
+
+      // TICK — the shared algorithm renders this sampling's stance
+      // and assembles its toolkit (spawn workers sample a constant)
+      const tick =
+        s.fixedTick !== undefined
+          ? s.fixedTick
+          : yield* compileTick(ops, resolvers, inputs);
+      s.model = tick.model;
+
+      // deliver collected notes (`AI.say`): a PLAIN append, in
+      // emission order — the author's condition IS the policy
+      for (const note of s.pendingNotes.splice(0)) {
+        const text = render(note.template as TemplateStringsArray, [
+          ...note.refs,
+        ]);
+        if (text.length === 0) continue;
+        yield* appendThread(s, [noteMessage(text)]);
+        yield* observe(s, {
+          type: "input",
+          text: `<note>\n${text}\n</note>`,
+          kind: "note",
+        });
+      }
+
+      const outcome = yield* sampleTick({
+        ops,
+        languageModel,
+        handle: s.handle,
+        tick,
+        exhausted: malformed >= malformedBudget,
+      });
+      if (outcome.kind === "malformed") {
+        malformed++;
+        quiescent = false; // come straight back around and re-sample
+        continue;
+      }
+      malformed = 0;
+      const response = outcome.response;
+      s.tick++;
+      quiescent = response.toolCalls.length === 0;
+      // PROGRESS: a completed sampling resets the recovery budget;
+      // a quiescent one closes the round entirely
+      s.busy = quiescent ? undefined : { attempts: 0, since: Date.now() };
+      yield* putMeta(s);
+      if (quiescent) {
+        yield* resolveRoundWaiters(s, response.text);
+      } else {
+        yield* scheduleReentry(s.key, recoverAfter);
+      }
+    }
+  });
 
   /**
    * A crashed burst never strands its callers, and never ends the
@@ -2506,47 +2659,49 @@ export const makeSessionEngine = (
    * the scheduled re-entry recovers it and answers the waiters at
    * quiescence.
    */
-  const onCrash = (s: EngineSession, cause: Cause.Cause<unknown>) =>
-    Effect.gen(function* () {
-      yield* Effect.logError(
-        `${driver} session '${term}/${s.key}' crashed`,
-        cause,
-      );
-      const crash = describeCrash(cause);
-      yield* observe(s, {
-        type: "crashed",
-        error: crash.encoded,
-        fatal: !crash.encoded.retryable,
-      });
-      if (!crash.encoded.retryable) {
-        const line =
-          crash.encoded._tag !== undefined
-            ? `${crash.encoded._tag}: ${crash.encoded.message}`
-            : crash.encoded.message;
-        yield* appendThread(s, [
-          noteMessage(
-            `The previous round failed with a non-retryable error ` +
-              `(${line}) and was abandoned rather than retried. ` +
-              `The messages above it may be unanswered.`,
-          ),
-        ]);
-        s.busy = undefined;
-        yield* putMeta(s);
-        yield* failAllWaiters(s, crash.error);
-        return;
-      }
-      // the round is still OWED: guarantee the wake is coming — a
-      // crash before the drain opened the round would otherwise
-      // leave no re-entry scheduled and a caller parked forever
-      if (s.busy === undefined && s.settledOutcome === undefined) {
-        s.busy = { attempts: 0, since: Date.now() };
-        yield* putMeta(s);
-      }
-      yield* scheduleReentry(
-        s.key,
-        recoverAfter * 2 ** Math.min(s.busy?.attempts ?? 0, 3),
-      );
+  const onCrash = Effect.fn(function* (
+    s: EngineSession,
+    cause: Cause.Cause<unknown>,
+  ) {
+    yield* Effect.logError(
+      `${driver} session '${term}/${s.key}' crashed`,
+      cause,
+    );
+    const crash = describeCrash(cause);
+    yield* observe(s, {
+      type: "crashed",
+      error: crash.encoded,
+      fatal: !crash.encoded.retryable,
     });
+    if (!crash.encoded.retryable) {
+      const line =
+        crash.encoded._tag !== undefined
+          ? `${crash.encoded._tag}: ${crash.encoded.message}`
+          : crash.encoded.message;
+      yield* appendThread(s, [
+        noteMessage(
+          `The previous round failed with a non-retryable error ` +
+            `(${line}) and was abandoned rather than retried. ` +
+            `The messages above it may be unanswered.`,
+        ),
+      ]);
+      s.busy = undefined;
+      yield* putMeta(s);
+      yield* failAllWaiters(s, crash.error);
+      return;
+    }
+    // the round is still OWED: guarantee the wake is coming — a
+    // crash before the drain opened the round would otherwise
+    // leave no re-entry scheduled and a caller parked forever
+    if (s.busy === undefined && s.settledOutcome === undefined) {
+      s.busy = { attempts: 0, since: Date.now() };
+      yield* putMeta(s);
+    }
+    yield* scheduleReentry(
+      s.key,
+      recoverAfter * 2 ** Math.min(s.busy?.attempts ?? 0, 3),
+    );
+  });
 
   /**
    * The operator ABORTED the round mid-flight (`abort` interrupted the
@@ -2558,93 +2713,89 @@ export const makeSessionEngine = (
    * children it dispatched settle — stopping a thread stops the
    * workers it was waiting on.
    */
-  const onAbort = (s: EngineSession) =>
-    Effect.gen(function* () {
-      if (s.settledOutcome !== undefined) return;
-      s.busy = undefined;
-      yield* putMeta(s);
-      yield* appendThread(s, [
-        noteMessage(
-          `The operator stopped this round while it was in progress. ` +
-            `Any actions it took may or may not have completed — verify ` +
-            `before repeating anything with side effects. The messages ` +
-            `above it may be unanswered; wait for the operator's next input.`,
-        ),
-      ]);
-      yield* observe(s, { type: "aborted", by: "operator" });
-      yield* Effect.forEach(
-        s.roundWaiters.splice(0),
-        (waiter) =>
-          Deferred.fail(waiter, new RoundAborted({ term, key: s.key })),
-        { discard: true },
-      );
-      yield* settleChildren(s);
-      yield* Effect.logInfo(
-        `${driver} session '${term}/${s.key}': round aborted by the operator`,
-      );
-    });
+  const onAbort = Effect.fn(function* (s: EngineSession) {
+    if (s.settledOutcome !== undefined) return;
+    s.busy = undefined;
+    yield* putMeta(s);
+    yield* appendThread(s, [
+      noteMessage(
+        `The operator stopped this round while it was in progress. ` +
+          `Any actions it took may or may not have completed — verify ` +
+          `before repeating anything with side effects. The messages ` +
+          `above it may be unanswered; wait for the operator's next input.`,
+      ),
+    ]);
+    yield* observe(s, { type: "aborted", by: "operator" });
+    yield* Effect.forEach(
+      s.roundWaiters.splice(0),
+      (waiter) => Deferred.fail(waiter, new RoundAborted({ term, key: s.key })),
+      { discard: true },
+    );
+    yield* settleChildren(s);
+    yield* Effect.logInfo(
+      `${driver} session '${term}/${s.key}': round aborted by the operator`,
+    );
+  });
 
-  const abort: SessionEngine["abort"] = (key) =>
-    Effect.gen(function* () {
-      const s = sessions.get(key);
-      const fiber = s?.round;
-      if (s === undefined || fiber === undefined) return false;
-      s.aborting = true;
-      // waits for the fiber to actually end — its handlers' finalizers
-      // included; the burst then books the abort under its gate
-      yield* Fiber.interrupt(fiber);
-      // input that queued during the round opens the next one (a kick
-      // with nothing to do just parks — which the views see). A
-      // SETTLED session is not kicked: the eraser settles before it
-      // cuts the round, and a kick after the purge would re-admit the
-      // key over empty rows — a zombie of the session just removed.
-      if (s.settledOutcome === undefined) yield* kick(s.key);
-      return true;
-    });
+  const abort: SessionEngine["abort"] = Effect.fn(function* (key) {
+    const s = sessions.get(key);
+    const fiber = s?.round;
+    if (s === undefined || fiber === undefined) return false;
+    s.aborting = true;
+    // waits for the fiber to actually end — its handlers' finalizers
+    // included; the burst then books the abort under its gate
+    yield* Fiber.interrupt(fiber);
+    // input that queued during the round opens the next one (a kick
+    // with nothing to do just parks — which the views see). A
+    // SETTLED session is not kicked: the eraser settles before it
+    // cuts the round, and a kick after the purge would re-admit the
+    // key over empty rows — a zombie of the session just removed.
+    if (s.settledOutcome === undefined) yield* kick(s.key);
+    return true;
+  });
 
-  const settle = (
+  const settle = Effect.fn(function* (
     key: string,
     outcomeValue: unknown,
     settleOptions?: { readonly admit?: boolean },
-  ): Effect.Effect<void> =>
-    Effect.gen(function* () {
-      let s = sessions.get(key);
-      if (s === undefined) {
-        if (settleOptions?.admit !== true) return;
-        s = yield* ensureSession(key);
-      }
-      // idempotent: a second settle changes nothing
-      if (s.settledOutcome !== undefined) return;
-      s.settledOutcome = { outcome: outcomeValue };
-      // busy dies with the session — a settled session must not keep
-      // recovery re-entering it
-      s.busy = undefined;
-      // the round is cut FIRST, before the cascade: a parent parked
-      // in its dispatch tool would otherwise be handed the child's
-      // settle as that tool's result and run its round to the end
-      // (an assistant turn, a tool-result row) on a session already
-      // settled — so `s.round` is gone by the time a cut after the
-      // cascade looks for it. Only a session settling ITSELF (from
-      // its own round) cuts last: its cut is forked, and must not
-      // land on this very settle mid-flight.
-      const inside = yield* insideRound(s);
-      if (!inside) yield* cutRound(s, false);
-      yield* putMeta(s);
-      yield* observe(s, { type: "settled" });
-      // anyone still waiting gets the outcome — the current round's
-      // waiters AND undrained arrivals alike
-      yield* Effect.forEach(
-        [
-          ...s.roundWaiters.splice(0),
-          ...s.pendingWaiters.splice(0).map((entry) => entry.waiter),
-        ],
-        (waiter) => Deferred.succeed(waiter, outcomeValue),
-        { discard: true },
-      );
-      yield* Deferred.succeed(s.settledSignal, outcomeValue);
-      yield* settleChildren(s);
-      if (inside) yield* cutRound(s, true);
-    });
+  ) {
+    let s = sessions.get(key);
+    if (s === undefined) {
+      if (settleOptions?.admit !== true) return;
+      s = yield* ensureSession(key);
+    }
+    // idempotent: a second settle changes nothing
+    if (s.settledOutcome !== undefined) return;
+    s.settledOutcome = { outcome: outcomeValue };
+    // busy dies with the session — a settled session must not keep
+    // recovery re-entering it
+    s.busy = undefined;
+    // the round is cut FIRST, before the cascade: a parent parked
+    // in its dispatch tool would otherwise be handed the child's
+    // settle as that tool's result and run its round to the end
+    // (an assistant turn, a tool-result row) on a session already
+    // settled — so `s.round` is gone by the time a cut after the
+    // cascade looks for it. Only a session settling ITSELF (from
+    // its own round) cuts last: its cut is forked, and must not
+    // land on this very settle mid-flight.
+    const inside = yield* insideRound(s);
+    if (!inside) yield* cutRound(s, false);
+    yield* putMeta(s);
+    yield* observe(s, { type: "settled" });
+    // anyone still waiting gets the outcome — the current round's
+    // waiters AND undrained arrivals alike
+    yield* Effect.forEach(
+      [
+        ...s.roundWaiters.splice(0),
+        ...s.pendingWaiters.splice(0).map((entry) => entry.waiter),
+      ],
+      (waiter) => Deferred.succeed(waiter, outcomeValue),
+      { discard: true },
+    );
+    yield* Deferred.succeed(s.settledSignal, outcomeValue);
+    yield* settleChildren(s);
+    if (inside) yield* cutRound(s, true);
+  });
 
   /** Is the current fiber running INSIDE this session's own round (a
    *  session settling itself from its own tool handler)? */
@@ -2667,80 +2818,76 @@ export const makeSessionEngine = (
    * interruption is a self-kill; the cut is forked instead and lands
    * the moment the handler returns.
    */
-  const cutRound = (s: EngineSession, inside: boolean): Effect.Effect<void> =>
-    Effect.gen(function* () {
-      const fiber = s.round;
-      if (fiber === undefined) return;
-      // booked as an abort by the burst (silently — the session is
-      // settled, so `onAbort` has nothing to add)
-      s.aborting = true;
-      if (inside) {
-        yield* Effect.forkDetach(Fiber.interrupt(fiber));
-      } else {
-        yield* Fiber.interrupt(fiber);
-      }
-    });
+  const cutRound = Effect.fn(function* (s: EngineSession, inside: boolean) {
+    const fiber = s.round;
+    if (fiber === undefined) return;
+    // booked as an abort by the burst (silently — the session is
+    // settled, so `onAbort` has nothing to add)
+    s.aborting = true;
+    if (inside) {
+      yield* Effect.forkDetach(Fiber.interrupt(fiber));
+    } else {
+      yield* Fiber.interrupt(fiber);
+    }
+  });
 
-  const resume: SessionEngine["resume"] = (key) =>
-    Effect.gen(function* () {
-      // admit-or-rehydrate: a hibernated placement's RAM shell is
-      // gone but the settled tombstone lives in meta — ensureSession
-      // reads it back before we clear it
-      const s = yield* ensureSession(key);
-      if (s.settledOutcome === undefined) return false;
-      s.settledOutcome = undefined;
-      // a settled session's busy died with it; a resumed one starts
-      // parked, not owing a round
-      s.busy = undefined;
-      // the old signal already fired (one-shot) — resident placements
-      // park their fresh fiber on this new one
-      s.settledSignal = yield* Deferred.make<unknown>();
-      yield* putMeta(s);
-      yield* observe(s, { type: "resumed" });
-      return true;
-    });
+  const resume: SessionEngine["resume"] = Effect.fn(function* (key) {
+    // admit-or-rehydrate: a hibernated placement's RAM shell is
+    // gone but the settled tombstone lives in meta — ensureSession
+    // reads it back before we clear it
+    const s = yield* ensureSession(key);
+    if (s.settledOutcome === undefined) return false;
+    s.settledOutcome = undefined;
+    // a settled session's busy died with it; a resumed one starts
+    // parked, not owing a round
+    s.busy = undefined;
+    // the old signal already fired (one-shot) — resident placements
+    // park their fresh fiber on this new one
+    s.settledSignal = yield* Deferred.make<unknown>();
+    yield* putMeta(s);
+    yield* observe(s, { type: "resumed" });
+    return true;
+  });
 
-  const admit: SessionEngine["admit"] = (key) =>
-    Effect.gen(function* () {
-      if (sessions.has(key) || creating.has(key)) return false;
-      // a throwaway shell: only its storage handle is used — the
-      // durable row + meta land, then the shell is dropped. The
-      // first input's `buildSession` reads that meta and seeds a
-      // fresh shell from it, never re-admitting.
-      const s = yield* makeShell(key);
-      const meta = yield* s.handle.meta.pipe(
-        Effect.catchCause((cause) =>
-          Effect.as(
-            Effect.logWarning(
-              `ThreadStorage meta read failed for '${key}' of '${term}'`,
-              cause,
-            ),
-            undefined,
+  const admit: SessionEngine["admit"] = Effect.fn(function* (key) {
+    if (sessions.has(key) || creating.has(key)) return false;
+    // a throwaway shell: only its storage handle is used — the
+    // durable row + meta land, then the shell is dropped. The
+    // first input's `buildSession` reads that meta and seeds a
+    // fresh shell from it, never re-admitting.
+    const s = yield* makeShell(key);
+    const meta = yield* s.handle.meta.pipe(
+      Effect.catchCause((cause) =>
+        Effect.as(
+          Effect.logWarning(
+            `ThreadStorage meta read failed for '${key}' of '${term}'`,
+            cause,
           ),
+          undefined,
         ),
-      );
-      if (meta !== undefined) return false;
-      yield* observe(s, { type: "admitted" });
-      return true;
-    });
+      ),
+    );
+    if (meta !== undefined) return false;
+    yield* observe(s, { type: "admitted" });
+    return true;
+  });
 
-  const send: SessionEngine["send"] = (input, sendOptions) =>
-    Effect.gen(function* () {
-      const s = yield* ensureSession(sendOptions?.key, sendOptions?.parent);
-      if (s.settledOutcome !== undefined) return;
-      // QUIET delivery (`wake: false`): the row is durable in the
-      // inbox but marked quiet and nothing is kicked — a parked
-      // session stays parked; whatever opens the next round drains
-      // everything accumulated
-      const quiet = sendOptions?.wake === false;
-      yield* enqueue(s, input, { quiet });
-      if (!quiet) {
-        yield* kick(s.key);
-      }
-    });
+  const send: SessionEngine["send"] = Effect.fn(function* (input, sendOptions) {
+    const s = yield* ensureSession(sendOptions?.key, sendOptions?.parent);
+    if (s.settledOutcome !== undefined) return;
+    // QUIET delivery (`wake: false`): the row is durable in the
+    // inbox but marked quiet and nothing is kicked — a parked
+    // session stays parked; whatever opens the next round drains
+    // everything accumulated
+    const quiet = sendOptions?.wake === false;
+    yield* enqueue(s, input, { quiet });
+    if (!quiet) {
+      yield* kick(s.key);
+    }
+  });
 
-  const dispatch: SessionEngine["dispatch"] = (input, dispatchOptions) =>
-    Effect.gen(function* () {
+  const dispatch: SessionEngine["dispatch"] = Effect.fn(
+    function* (input, dispatchOptions) {
       const s = yield* ensureSession(
         dispatchOptions?.key,
         dispatchOptions?.parent,
@@ -2753,26 +2900,64 @@ export const makeSessionEngine = (
       yield* enqueue(s, input, { waiter });
       yield* kick(s.key);
       return yield* Deferred.await(waiter);
-    });
+    },
+  );
 
-  const steer: SessionEngine["steer"] = (key, input) =>
-    Effect.gen(function* () {
-      const target = key ?? lastKey;
-      if (target === undefined) return;
-      const s = sessions.get(target);
-      if (s === undefined) {
-        // crash recovery: a KEYED steer must never be silently
-        // dropped — the session's RAM shell died but the world's
-        // event is real; admit a fresh session
-        if (key !== undefined) {
-          yield* send(input, { key });
-        }
-        return;
+  /**
+   * A METHOD call: the session's API, run inside its frame (the same
+   * context a tool handler gets). Not a round — no input lands, no
+   * sampling happens, waiters are untouched — so it composes with a
+   * round in flight and works on a settled session alike. The result
+   * must survive the wire (structured clone) on every placement, so
+   * the resident one checks it too: a method returning a closure or a
+   * Ref would work locally and die on Cloudflare.
+   */
+  const call: SessionEngine["call"] = Effect.fn(function* (key, method, args) {
+    const s = yield* ensureSession(key);
+    const fn = s.api?.[method];
+    if (fn === undefined) {
+      return yield* Effect.die(
+        new Error(
+          `${driver}: '${term}' has no method '${method}'${
+            s.api === undefined
+              ? " — its constructor returned no API (only a turn)"
+              : ` — it declares: ${Object.keys(s.api).join(", ") || "(none)"}`
+          }`,
+        ),
+      );
+    }
+    const returned = fn(...args);
+    if (!Effect.isEffect(returned)) {
+      return yield* Effect.die(
+        new Error(
+          `${driver}: method '${method}' of '${term}' returned a non-Effect — every method returns an Effect`,
+        ),
+      );
+    }
+    const result = yield* provideSession(s)(
+      returned as Effect.Effect<unknown, unknown, any>,
+    );
+    yield* assertCloneable(driver, term, method, result);
+    return result;
+  });
+
+  const steer: SessionEngine["steer"] = Effect.fn(function* (key, input) {
+    const target = key ?? lastKey;
+    if (target === undefined) return;
+    const s = sessions.get(target);
+    if (s === undefined) {
+      // crash recovery: a KEYED steer must never be silently
+      // dropped — the session's RAM shell died but the world's
+      // event is real; admit a fresh session
+      if (key !== undefined) {
+        yield* send(input, { key });
       }
-      if (s.settledOutcome !== undefined) return;
-      yield* enqueue(s, input);
-      yield* kick(s.key);
-    });
+      return;
+    }
+    if (s.settledOutcome !== undefined) return;
+    yield* enqueue(s, input);
+    yield* kick(s.key);
+  });
 
   const restore: SessionEngine["restore"] = Effect.gen(function* () {
     const persisted = yield* storage
@@ -2805,39 +2990,38 @@ export const makeSessionEngine = (
     return revived;
   });
 
-  const socketHost: SessionEngine["socketHost"] = (key) =>
-    Effect.gen(function* () {
-      // VIEWING is storage-only. Replay and the watermark read the
-      // durable rows directly — never through `ensureSession`, which
-      // builds the shell and runs the charter's per-session INIT (for
-      // a sandboxed agent: boot the machine, converge the checkout).
-      // A transcript must not wait on that, and must not vanish when
-      // it fails: a viewer that attached to a session whose machine
-      // was wedged saw an empty chat for minutes, then nothing. Only
-      // `submit` needs the built session, and builds it lazily.
-      const resident = sessions.get(key);
-      const handle = resident?.handle ?? (yield* storage.open(term, key));
-      return {
-        replay: (fromSeq) => handle.observations(fromSeq),
-        watermark:
-          resident !== undefined
-            ? Effect.sync(() => resident.observed)
-            : Effect.map(handle.meta, (meta) => meta?.observed ?? 0),
-        // the socket's steer: admit input; the answer arrives as
-        // observations, never as a response
-        submit: (input) =>
-          Effect.gen(function* () {
-            const s = yield* ensureSession(key);
-            if (s.settledOutcome !== undefined) return;
-            yield* enqueue(s, input);
-            yield* kick(s.key);
-          }),
-      } satisfies SessionSocketHost;
-    });
+  const socketHost: SessionEngine["socketHost"] = Effect.fn(function* (key) {
+    // VIEWING is storage-only. Replay and the watermark read the
+    // durable rows directly — never through `ensureSession`, which
+    // builds the shell and runs the charter's per-session INIT (for
+    // a sandboxed agent: boot the machine, converge the checkout).
+    // A transcript must not wait on that, and must not vanish when
+    // it fails: a viewer that attached to a session whose machine
+    // was wedged saw an empty chat for minutes, then nothing. Only
+    // `submit` needs the built session, and builds it lazily.
+    const resident = sessions.get(key);
+    const handle = resident?.handle ?? (yield* storage.open(term, key));
+    return {
+      replay: (fromSeq) => handle.observations(fromSeq),
+      watermark:
+        resident !== undefined
+          ? Effect.sync(() => resident.observed)
+          : Effect.map(handle.meta, (meta) => meta?.observed ?? 0),
+      // the socket's steer: admit input; the answer arrives as
+      // observations, never as a response
+      submit: Effect.fn(function* (input) {
+        const s = yield* ensureSession(key);
+        if (s.settledOutcome !== undefined) return;
+        yield* enqueue(s, input);
+        yield* kick(s.key);
+      }),
+    } satisfies SessionSocketHost;
+  });
 
   return {
     send,
     dispatch,
+    call,
     steer,
     settle,
     resume,

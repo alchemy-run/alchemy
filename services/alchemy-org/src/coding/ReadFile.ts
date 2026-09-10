@@ -48,57 +48,60 @@ export const ReadFileLive = Layer.effect(
   ReadFile,
   Effect.gen(function* () {
     const sandbox = yield* AI.Sandbox;
-    return ((input: { path: string; offset?: number; limit?: number }) =>
-      Effect.gen(function* () {
-        if (input.offset === 0 || !Number.isInteger(input.offset ?? 1)) {
-          return yield* Effect.fail("offset must be a non-zero integer");
-        }
-        const content = yield* sandbox.readFile(input.path);
-        const digest = yield* sha256Hex(content);
-        const lines = content.split("\n");
-        const requested = input.offset ?? 1;
-        const start =
-          requested < 0 ? Math.max(1, lines.length + requested + 1) : requested;
-        if (start > lines.length) {
-          return yield* Effect.fail(
-            `offset ${start} is past the end of ${input.path} (${lines.length} lines)`,
-          );
-        }
-        const pageLimit = Math.min(input.limit ?? DEFAULT_LIMIT, DEFAULT_LIMIT);
-        const window: string[] = [];
-        let bytes = 0;
-        let end = start - 1;
-        for (
-          let index = start - 1;
-          index < lines.length && window.length < pageLimit;
-          index++
-        ) {
-          const source = lines[index]!;
-          const shown =
-            source.length > MAX_LINE_CHARS
-              ? `${source.slice(0, MAX_LINE_CHARS)}… [line truncated]`
-              : source;
-          const line = `${index + 1}: ${shown}`;
-          const lineBytes = encoder.encode(`${line}\n`).byteLength;
-          if (bytes + lineBytes > MAX_BYTES) {
-            if (window.length === 0) {
-              window.push(
-                `${index + 1}: ${shown.slice(0, 1000)}… [line exceeds 50KB output budget]`,
-              );
-              end = index + 1;
-            }
-            break;
+    return Effect.fn(function* (input: {
+      path: string;
+      offset?: number;
+      limit?: number;
+    }) {
+      if (input.offset === 0 || !Number.isInteger(input.offset ?? 1)) {
+        return yield* Effect.fail("offset must be a non-zero integer");
+      }
+      const content = yield* sandbox.readFile(input.path);
+      const digest = yield* sha256Hex(content);
+      const lines = content.split("\n");
+      const requested = input.offset ?? 1;
+      const start =
+        requested < 0 ? Math.max(1, lines.length + requested + 1) : requested;
+      if (start > lines.length) {
+        return yield* Effect.fail(
+          `offset ${start} is past the end of ${input.path} (${lines.length} lines)`,
+        );
+      }
+      const pageLimit = Math.min(input.limit ?? DEFAULT_LIMIT, DEFAULT_LIMIT);
+      const window: string[] = [];
+      let bytes = 0;
+      let end = start - 1;
+      for (
+        let index = start - 1;
+        index < lines.length && window.length < pageLimit;
+        index++
+      ) {
+        const source = lines[index]!;
+        const shown =
+          source.length > MAX_LINE_CHARS
+            ? `${source.slice(0, MAX_LINE_CHARS)}… [line truncated]`
+            : source;
+        const line = `${index + 1}: ${shown}`;
+        const lineBytes = encoder.encode(`${line}\n`).byteLength;
+        if (bytes + lineBytes > MAX_BYTES) {
+          if (window.length === 0) {
+            window.push(
+              `${index + 1}: ${shown.slice(0, 1000)}… [line exceeds 50KB output budget]`,
+            );
+            end = index + 1;
           }
-          window.push(line);
-          bytes += lineBytes;
-          end = index + 1;
+          break;
         }
-        const body = window.join("\n");
-        const page =
-          end < lines.length
-            ? `${body}\n[Showing lines ${start}-${end} of ${lines.length}. Use offset=${end + 1} to continue.]`
-            : body;
-        return { content: page, digest };
-      })) as never;
+        window.push(line);
+        bytes += lineBytes;
+        end = index + 1;
+      }
+      const body = window.join("\n");
+      const page =
+        end < lines.length
+          ? `${body}\n[Showing lines ${start}-${end} of ${lines.length}. Use offset=${end + 1} to continue.]`
+          : body;
+      return { content: page, digest };
+    }) as never;
   }),
 );

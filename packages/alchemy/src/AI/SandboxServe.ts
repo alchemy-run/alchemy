@@ -51,71 +51,68 @@ export interface ServeSandboxOptions {
  *
  * Runs until interrupted. Requires Bun (the PTY rides `Bun.Terminal`).
  */
-export const serveSandbox = (
-  options: ServeSandboxOptions,
-): Effect.Effect<never> =>
-  Effect.gen(function* () {
-    // the platform services are a Bun-only peer: resolve them lazily so
-    // this module stays importable from the AI barrel in every runtime
-    const BunServices = yield* Effect.promise(
-      () => import("@effect/platform-bun/BunServices"),
-    );
-    const port =
-      options.port ??
-      (yield* Config.number("PORT").pipe(Config.withDefault(0), Effect.orDie));
-    const hostname = options.hostname ?? "127.0.0.1";
+export const serveSandbox = Effect.fn(function* (options: ServeSandboxOptions) {
+  // the platform services are a Bun-only peer: resolve them lazily so
+  // this module stays importable from the AI barrel in every runtime
+  const BunServices = yield* Effect.promise(
+    () => import("@effect/platform-bun/BunServices"),
+  );
+  const port =
+    options.port ??
+    (yield* Config.number("PORT").pipe(Config.withDefault(0), Effect.orDie));
+  const hostname = options.hostname ?? "127.0.0.1";
 
-    return yield* Effect.gen(function* () {
-      const sandbox = yield* makeSandboxLocal;
-      const pty = yield* makeSandboxPty;
-      const server = yield* HttpServer;
-      const handler = serveRpc(
-        { ...sandbox, ...pty },
-        HttpServerResponse.json({ ok: true, root: options.root }),
-      );
-      // the bind is the only thing that can fail here; once listening
-      // the server runs until interrupted, so a failure past `serve`
-      // is never a port collision
-      const serveOn = (
-        candidate: number,
-        attempt: number,
-      ): Effect.Effect<never> =>
-        server.serve(handler, { port: candidate }).pipe(
-          Effect.andThen(Effect.never),
-          Effect.catchCause((cause) => {
-            if (
-              options.strictPort === true ||
-              candidate === 0 ||
-              !isAddressInUse(cause)
-            ) {
-              return Effect.failCause(cause);
-            }
-            // a few neighbours, then whatever the OS has free
-            const next = attempt < PORT_FALLBACK_ATTEMPTS ? candidate + 1 : 0;
-            return Console.warn(
-              `sandbox: port ${candidate} is in use by another process; trying ${next === 0 ? "an ephemeral port" : next} instead. Stop the other process, or pass strictPort to fail.`,
-            ).pipe(Effect.andThen(serveOn(next, attempt + 1)));
-          }),
-          Effect.scoped,
-        );
-      return yield* serveOn(port, 0);
-    }).pipe(
-      Effect.provide(Workspace.fixed(options.root)),
-      Effect.provide(
-        BunHttpServer({
-          hostname,
-          // idle reaping OFF: `ptyRead` long-polls sit silent for ~7s
-          idleTimeout: 0,
-          onListen: ({ port }) =>
-            Console.log(
-              `sandbox serving ${options.root} at http://localhost:${port}`,
-            ),
-        }),
-      ),
-      Effect.provide(BunServices.layer),
-      Effect.scoped,
+  return yield* Effect.gen(function* () {
+    const sandbox = yield* makeSandboxLocal;
+    const pty = yield* makeSandboxPty;
+    const server = yield* HttpServer;
+    const handler = serveRpc(
+      { ...sandbox, ...pty },
+      HttpServerResponse.json({ ok: true, root: options.root }),
     );
-  });
+    // the bind is the only thing that can fail here; once listening
+    // the server runs until interrupted, so a failure past `serve`
+    // is never a port collision
+    const serveOn = (
+      candidate: number,
+      attempt: number,
+    ): Effect.Effect<never> =>
+      server.serve(handler, { port: candidate }).pipe(
+        Effect.andThen(Effect.never),
+        Effect.catchCause((cause) => {
+          if (
+            options.strictPort === true ||
+            candidate === 0 ||
+            !isAddressInUse(cause)
+          ) {
+            return Effect.failCause(cause);
+          }
+          // a few neighbours, then whatever the OS has free
+          const next = attempt < PORT_FALLBACK_ATTEMPTS ? candidate + 1 : 0;
+          return Console.warn(
+            `sandbox: port ${candidate} is in use by another process; trying ${next === 0 ? "an ephemeral port" : next} instead. Stop the other process, or pass strictPort to fail.`,
+          ).pipe(Effect.andThen(serveOn(next, attempt + 1)));
+        }),
+        Effect.scoped,
+      );
+    return yield* serveOn(port, 0);
+  }).pipe(
+    Effect.provide(Workspace.fixed(options.root)),
+    Effect.provide(
+      BunHttpServer({
+        hostname,
+        // idle reaping OFF: `ptyRead` long-polls sit silent for ~7s
+        idleTimeout: 0,
+        onListen: ({ port }) =>
+          Console.log(
+            `sandbox serving ${options.root} at http://localhost:${port}`,
+          ),
+      }),
+    ),
+    Effect.provide(BunServices.layer),
+    Effect.scoped,
+  );
+});
 
 /** Neighbouring ports tried before asking the OS for any free one. */
 const PORT_FALLBACK_ATTEMPTS = 5;

@@ -21,6 +21,10 @@ export type Step = (
 
 export interface ScriptedModel {
   readonly layer: Layer.Layer<LanguageModel.LanguageModel>;
+  /** The same model as a bare SERVICE — what a charter provides to a
+   *  stance (`AI.Model`/`Effect.provide`) to sample with this script
+   *  instead of the driver's Layer. */
+  readonly service: Effect.Effect<LanguageModel.Service>;
   /** Every model call's options, in order — appended live. */
   readonly calls: Array<LanguageModel.ProviderOptions>;
 }
@@ -33,18 +37,16 @@ export const make = (script: ReadonlyArray<Step>): ScriptedModel => {
     const step = script[Math.min(index, script.length - 1)];
     return step === undefined ? [] : [...step(options, index)];
   };
-  const layer = Layer.effect(
-    LanguageModel.LanguageModel,
-    LanguageModel.make({
-      generateText: (options) => Effect.sync(() => nextStep(options)),
-      // the driver samples over the STREAMING wire: serve the same
-      // script, whole parts re-cut as start/delta/end triples the way
-      // a real provider streams them
-      streamText: (options) =>
-        Stream.fromIterable(nextStep(options).flatMap(streamed)),
-    }),
-  );
-  return { layer, calls };
+  const service = LanguageModel.make({
+    generateText: (options) => Effect.sync(() => nextStep(options)),
+    // the driver samples over the STREAMING wire: serve the same
+    // script, whole parts re-cut as start/delta/end triples the way
+    // a real provider streams them
+    streamText: (options) =>
+      Stream.fromIterable(nextStep(options).flatMap(streamed)),
+  });
+  const layer = Layer.effect(LanguageModel.LanguageModel, service);
+  return { layer, service, calls };
 };
 
 /** Re-cut one whole response part as its streaming part sequence. */
@@ -81,8 +83,20 @@ export const toolCall = (
     params,
   }) as Response.PartEncoded;
 
+/** The provider's `response-metadata` part — how the wire names the
+ *  model that answered (both Anthropic and OpenAI stream one). */
+export const metadata = (modelId: string): Response.PartEncoded =>
+  ({ type: "response-metadata", modelId }) as Response.PartEncoded;
+
 export const finish = (
   reason: "stop" | "tool-calls" = "stop",
+  usage?: {
+    readonly input?: number;
+    readonly cacheRead?: number;
+    readonly cacheWrite?: number;
+    readonly output?: number;
+    readonly reasoning?: number;
+  },
 ): Response.PartEncoded =>
   ({
     type: "finish",
@@ -91,12 +105,21 @@ export const finish = (
     response: undefined,
     usage: {
       inputTokens: {
-        uncached: undefined,
-        total: undefined,
-        cacheRead: undefined,
-        cacheWrite: undefined,
+        uncached: usage?.input,
+        total:
+          usage === undefined
+            ? undefined
+            : (usage.input ?? 0) +
+              (usage.cacheRead ?? 0) +
+              (usage.cacheWrite ?? 0),
+        cacheRead: usage?.cacheRead,
+        cacheWrite: usage?.cacheWrite,
       },
-      outputTokens: { total: undefined, text: undefined, reasoning: undefined },
+      outputTokens: {
+        total: usage?.output,
+        text: undefined,
+        reasoning: usage?.reasoning,
+      },
     },
   }) as unknown as Response.PartEncoded;
 

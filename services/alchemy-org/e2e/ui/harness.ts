@@ -242,6 +242,22 @@ export class FakeApi {
   }
   private threadSockets: Record<string, WebSocketRoute[]> = {};
 
+  /* ── models ── */
+
+  /** The catalog `GET /api/models` serves — the real one's shape. */
+  readonly models = [
+    { id: "claude-sonnet-4-5", label: "Claude Sonnet 4.5", provider: "anthropic" },
+    { id: "claude-opus-4-1", label: "Claude Opus 4.1", provider: "anthropic" },
+    { id: "claude-haiku-4-5", label: "Claude Haiku 4.5", provider: "anthropic" },
+    { id: "gpt-5", label: "GPT-5", provider: "openai" },
+    { id: "gpt-5-mini", label: "GPT-5 mini", provider: "openai" },
+  ];
+  readonly defaultModel = "claude-haiku-4-5";
+  /** An engineer session's own pick (`Engineer:<key>`), `null` = default. */
+  engineerModels: Record<string, string | null> = {};
+  /** Every `PUT /api/chats/:id/model`, in order. */
+  modelPicks: Array<{ session: string; model: string | null }> = [];
+
   seedThread(partial: Partial<ThreadState> & { id: string }): ThreadState {
     const state: ThreadState = {
       name: partial.id,
@@ -810,6 +826,54 @@ export class FakeApi {
         return this.json(route, this.threads[id]);
       }
       return this.json(route, { error: "method not allowed" }, 405);
+    }
+
+    if (path === "/api/models") {
+      return this.json(route, { models: this.models, default: this.defaultModel });
+    }
+
+    // a session's model: a thread's from its state, an engineer's from
+    // its own cell; PUT records the pick and answers the new one
+    const chatModel = path.match(/^\/api\/chats\/([^/]+)\/model$/);
+    if (chatModel !== null) {
+      const session = decodeURIComponent(chatModel[1]!);
+      const at = session.indexOf(":");
+      const term = session.slice(0, at);
+      const key = session.slice(at + 1);
+      const body = (
+        method === "PUT" ? (request.postDataJSON() ?? {}) : {}
+      ) as { model?: string | null };
+      if (term === "Thread") {
+        const state = this.threads[key];
+        if (state === undefined) {
+          return this.json(route, { error: "unknown thread" }, 404);
+        }
+        if (method === "PUT") {
+          this.modelPicks.push({ session, model: body.model ?? null });
+          const { model: _model, ...rest } = state;
+          this.updateThread(
+            key,
+            body.model === null || body.model === undefined
+              ? { ...rest, model: undefined }
+              : { model: body.model },
+          );
+        }
+        return this.json(route, {
+          model: this.threads[key]?.model ?? null,
+          default: this.defaultModel,
+        });
+      }
+      if (term === "Engineer") {
+        if (method === "PUT") {
+          this.modelPicks.push({ session, model: body.model ?? null });
+          this.engineerModels[key] = body.model ?? null;
+        }
+        return this.json(route, {
+          model: this.engineerModels[key] ?? null,
+          default: this.defaultModel,
+        });
+      }
+      return this.json(route, { error: "no model to pick" }, 404);
     }
 
     const thread = path.match(/^\/api\/threads\/([^/]+)(\/(close))?$/);

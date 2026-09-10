@@ -112,14 +112,15 @@ export const makeSandboxLocal: Effect.Effect<
           .kill({ killSignal: "SIGTERM", forceKillAfter: "1 second" })
           .pipe(Effect.catch(() => Effect.void));
 
-        const consume = (stream: Stream.Stream<Uint8Array, unknown>) =>
-          Effect.gen(function* () {
-            const collector = new RetainedOutput(maxRetainedBytes);
-            yield* Stream.runForEach(Stream.decodeText(stream), (chunk) =>
-              Effect.sync(() => collector.add(chunk)),
-            ).pipe(Effect.mapError((error) => String(error)));
-            return collector.finish();
-          });
+        const consume = Effect.fn(function* (
+          stream: Stream.Stream<Uint8Array, unknown>,
+        ) {
+          const collector = new RetainedOutput(maxRetainedBytes);
+          yield* Stream.runForEach(Stream.decodeText(stream), (chunk) =>
+            Effect.sync(() => collector.add(chunk)),
+          ).pipe(Effect.mapError((error) => String(error)));
+          return collector.finish();
+        });
 
         const running = Effect.all(
           [
@@ -156,114 +157,101 @@ export const makeSandboxLocal: Effect.Effect<
       }),
     ).pipe(Effect.provide(environment));
 
-  const readFile = (target: string): Effect.Effect<string, string> =>
-    Effect.gen(function* () {
-      const full = yield* workspace.resolveExisting(target);
-      const info = yield* fs
-        .stat(full)
+  const readFile = Effect.fn(function* (target: string) {
+    const full = yield* workspace.resolveExisting(target);
+    const info = yield* fs
+      .stat(full)
+      .pipe(Effect.mapError((error) => String(error)));
+    if (info.type !== "File") {
+      return yield* Effect.fail(`not a regular file: ${target}`);
+    }
+    const bytes = yield* fs
+      .readFile(full)
+      .pipe(Effect.mapError((error) => String(error)));
+    if (bytes.includes(0)) {
+      return yield* Effect.fail(
+        `cannot read binary file: ${target} (NUL byte detected)`,
+      );
+    }
+    return yield* Effect.try({
+      try: () => new TextDecoder("utf-8", { fatal: true }).decode(bytes),
+      catch: () => `cannot decode ${target} as UTF-8 text`,
+    });
+  });
+
+  const writeFile = Effect.fn(function* (target: string, content: string) {
+    const full = yield* workspace.resolveForCreate(target);
+    const directory = path.dirname(full);
+    yield* fs
+      .makeDirectory(directory, { recursive: true })
+      .pipe(Effect.mapError((error) => String(error)));
+    // atomic: write a sibling temp file, then rename over the target
+    const temp = yield* fs
+      .makeTempFile({ directory, prefix: ".alchemy-sandbox-write-" })
+      .pipe(Effect.mapError((error) => String(error)));
+    yield* fs.writeFileString(temp, content).pipe(
+      Effect.flatMap(() => fs.rename(temp, full)),
+      Effect.mapError((error) => String(error)),
+      Effect.ensuring(
+        fs.remove(temp, { force: true }).pipe(Effect.catch(() => Effect.void)),
+      ),
+    );
+  });
+
+  const deleteFile = Effect.fn(function* (target: string) {
+    const full = yield* workspace.resolveExisting(target);
+    yield* fs.remove(full).pipe(Effect.mapError((error) => String(error)));
+  });
+
+  const mkdir = Effect.fn(function* (target: string) {
+    const full = yield* workspace.resolveForCreate(target);
+    yield* fs
+      .makeDirectory(full, { recursive: true })
+      .pipe(Effect.mapError((error) => String(error)));
+  });
+
+  const listFiles = Effect.fn(function* (target?: string) {
+    const relative = target ?? ".";
+    const full =
+      relative === "."
+        ? yield* workspace.root
+        : yield* workspace.resolveExisting(relative);
+    const info = yield* fs
+      .stat(full)
+      .pipe(Effect.mapError((error) => String(error)));
+    if (info.type !== "Directory") {
+      return yield* Effect.fail(`not a directory: ${relative}`);
+    }
+    const names = yield* fs
+      .readDirectory(full)
+      .pipe(Effect.mapError((error) => String(error)));
+    const entries: SandboxEntry[] = [];
+    for (const name of names) {
+      const child = yield* fs
+        .stat(path.join(full, name))
         .pipe(Effect.mapError((error) => String(error)));
-      if (info.type !== "File") {
-        return yield* Effect.fail(`not a regular file: ${target}`);
-      }
-      const bytes = yield* fs
-        .readFile(full)
-        .pipe(Effect.mapError((error) => String(error)));
-      if (bytes.includes(0)) {
-        return yield* Effect.fail(
-          `cannot read binary file: ${target} (NUL byte detected)`,
-        );
-      }
-      return yield* Effect.try({
-        try: () => new TextDecoder("utf-8", { fatal: true }).decode(bytes),
-        catch: () => `cannot decode ${target} as UTF-8 text`,
+      entries.push({
+        name,
+        type:
+          child.type === "Directory"
+            ? "directory"
+            : child.type === "File"
+              ? "file"
+              : "other",
       });
-    });
+    }
+    entries.sort((a, b) =>
+      a.name.localeCompare(b.name, undefined, { sensitivity: "base" }),
+    );
+    return entries;
+  });
 
-  const writeFile = (
-    target: string,
-    content: string,
-  ): Effect.Effect<void, string> =>
-    Effect.gen(function* () {
-      const full = yield* workspace.resolveForCreate(target);
-      const directory = path.dirname(full);
-      yield* fs
-        .makeDirectory(directory, { recursive: true })
-        .pipe(Effect.mapError((error) => String(error)));
-      // atomic: write a sibling temp file, then rename over the target
-      const temp = yield* fs
-        .makeTempFile({ directory, prefix: ".alchemy-sandbox-write-" })
-        .pipe(Effect.mapError((error) => String(error)));
-      yield* fs.writeFileString(temp, content).pipe(
-        Effect.flatMap(() => fs.rename(temp, full)),
-        Effect.mapError((error) => String(error)),
-        Effect.ensuring(
-          fs
-            .remove(temp, { force: true })
-            .pipe(Effect.catch(() => Effect.void)),
-        ),
-      );
-    });
-
-  const deleteFile = (target: string): Effect.Effect<void, string> =>
-    Effect.gen(function* () {
-      const full = yield* workspace.resolveExisting(target);
-      yield* fs.remove(full).pipe(Effect.mapError((error) => String(error)));
-    });
-
-  const mkdir = (target: string): Effect.Effect<void, string> =>
-    Effect.gen(function* () {
-      const full = yield* workspace.resolveForCreate(target);
-      yield* fs
-        .makeDirectory(full, { recursive: true })
-        .pipe(Effect.mapError((error) => String(error)));
-    });
-
-  const listFiles = (
-    target?: string,
-  ): Effect.Effect<ReadonlyArray<SandboxEntry>, string> =>
-    Effect.gen(function* () {
-      const relative = target ?? ".";
-      const full =
-        relative === "."
-          ? yield* workspace.root
-          : yield* workspace.resolveExisting(relative);
-      const info = yield* fs
-        .stat(full)
-        .pipe(Effect.mapError((error) => String(error)));
-      if (info.type !== "Directory") {
-        return yield* Effect.fail(`not a directory: ${relative}`);
-      }
-      const names = yield* fs
-        .readDirectory(full)
-        .pipe(Effect.mapError((error) => String(error)));
-      const entries: SandboxEntry[] = [];
-      for (const name of names) {
-        const child = yield* fs
-          .stat(path.join(full, name))
-          .pipe(Effect.mapError((error) => String(error)));
-        entries.push({
-          name,
-          type:
-            child.type === "Directory"
-              ? "directory"
-              : child.type === "File"
-                ? "file"
-                : "other",
-        });
-      }
-      entries.sort((a, b) =>
-        a.name.localeCompare(b.name, undefined, { sensitivity: "base" }),
-      );
-      return entries;
-    });
-
-  const exists = (target: string): Effect.Effect<boolean, string> =>
-    Effect.gen(function* () {
-      const full = yield* workspace.resolve(target);
-      return yield* fs
-        .exists(full)
-        .pipe(Effect.mapError((error) => String(error)));
-    });
+  const exists = Effect.fn(function* (target: string) {
+    const full = yield* workspace.resolve(target);
+    return yield* fs
+      .exists(full)
+      .pipe(Effect.mapError((error) => String(error)));
+  });
 
   return { exec, readFile, writeFile, deleteFile, mkdir, listFiles, exists };
 });

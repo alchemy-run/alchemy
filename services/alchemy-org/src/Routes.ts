@@ -1,7 +1,6 @@
 import * as AI from "alchemy/AI";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as GitHub from "alchemy/GitHub";
-import { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -21,8 +20,10 @@ import {
   type PullRequestFilesPage,
   type PullRequestView,
 } from "./github/PullRequest.ts";
+import { Engineer } from "./coding/Engineer.ts";
 import { connected, primary } from "./github/Repos.ts";
-import { Threads, type ThreadState } from "./thread/Threads.ts";
+import { catalog, DEFAULT_MODEL } from "./platform/Model.ts";
+import { THREAD_TERM, Threads, type ThreadState } from "./thread/Threads.ts";
 
 /** `${term}:${key}` → the session it names (the key may contain `:`). */
 const parseSessionId = (id: string): { term: string; key: string } => {
@@ -45,6 +46,7 @@ const phantomThread = (key: string): AI.ThreadService => ({
   compact: () => Effect.void,
   reply: () => Effect.void,
   remind: () => Effect.void,
+  publish: () => Effect.void,
 });
 
 /**
@@ -57,6 +59,9 @@ const phantomThread = (key: string): AI.ThreadService => ({
  * - `/api/threads/:id` — a thread's state snapshot; POST steers its
  *   agent; the conversation itself is the agent session
  *   (`/api/chats/Thread:t-…/messages` + the `/attach` socket).
+ * - `/api/models` — the catalog the selector offers; `PUT
+ *   /api/chats/:id/model` picks one for a session (a thread's pick
+ *   reaches its engineers; an engineer's is its own).
  * - `/api/pulls/:owner/:repo/:n(/files)` — on-demand GitHub reads for
  *   the review view; nothing is mirrored.
  */
@@ -65,6 +70,7 @@ export const routes = Effect.gen(function* () {
   const channel = yield* Channel;
   const threads = yield* Threads;
   const channelAgent = yield* ChannelAgent;
+  const engineer = yield* Engineer;
   // OPTIONAL: the terminal door needs the session machine seam
   const sandbox = yield* Effect.serviceOption(AI.Sandbox);
   const exec = yield* Cloudflare.WorkerExecutionContext;
@@ -273,8 +279,8 @@ export const routes = Effect.gen(function* () {
               .join("\n\n")}\n\n${text}`;
       yield* exec.waitUntil(
         channelAgent.dispatch(prompt, { key: channelRunKey(message.seq) }).pipe(
-          Effect.flatMap((outcome) =>
-            Effect.gen(function* () {
+          Effect.flatMap(
+            Effect.fn(function* (outcome) {
               // The charter's `reply` tool is the intended door into
               // the channel; when the model ends the run with plain
               // text instead (dispatch resolves with the quiescent
@@ -404,6 +410,110 @@ export const routes = Effect.gen(function* () {
     }),
   );
 
+  /* ── models: the catalog, and a session's pick ─────────────────── */
+
+  const listModels = HttpRouter.add(
+    "GET",
+    "/api/models",
+    Effect.gen(function* () {
+      return yield* HttpServerResponse.json({
+        models: catalog,
+        default: DEFAULT_MODEL,
+      });
+    }),
+  );
+
+  /** `{ model }` from the body: a catalog id, or `null` for the
+   *  default; anything else is a 400 (`undefined` result). */
+  const readModel = Effect.gen(function* () {
+    const request = yield* HttpServerRequest;
+    const body = (yield* request.json.pipe(
+      Effect.catch(() => Effect.succeed({})),
+    )) as { model?: unknown };
+    if (body.model === null) return { model: undefined as string | undefined };
+    return typeof body.model === "string" &&
+      catalog.some((entry) => entry.id === body.model)
+      ? { model: body.model }
+      : undefined;
+  });
+  const badModel = HttpServerResponse.json(
+    {
+      error: `model must be one of ${catalog.map((m) => m.id).join(", ")} or null`,
+    },
+    { status: 400 },
+  );
+
+  /** Read a session's pick: a thread's from its books, an engineer's
+   *  from the session object; `null` = the default. */
+  const sessionModel = Effect.fn(function* (term: string, key: string) {
+    if (term === THREAD_TERM) {
+      const state = yield* threads.get(key);
+      return state === undefined
+        ? undefined
+        : { model: state.model ?? null, default: DEFAULT_MODEL };
+    }
+    if (term === Engineer["~alchemy/Name"]) {
+      const model = yield* engineer.at(key).model();
+      return { model: model ?? null, default: DEFAULT_MODEL };
+    }
+    return undefined;
+  });
+
+  const chatModel = HttpRouter.add(
+    "GET",
+    "/api/chats/:id/model",
+    Effect.gen(function* () {
+      const params = yield* HttpRouter.params;
+      const { term, key } = parseSessionId(
+        decodeURIComponent(String(params.id ?? "")),
+      );
+      const found = yield* sessionModel(term, key);
+      return found === undefined
+        ? yield* HttpServerResponse.json(
+            { error: "no model to pick for this session" },
+            { status: 404 },
+          )
+        : yield* HttpServerResponse.json(found);
+    }),
+  );
+
+  /** Choose a session's model — `{ model: id | null }`. A thread's pick
+   *  also reaches its running engineers; nothing in flight is cut. */
+  const chatModelSet = HttpRouter.add(
+    "PUT",
+    "/api/chats/:id/model",
+    Effect.gen(function* () {
+      const params = yield* HttpRouter.params;
+      const { term, key } = parseSessionId(
+        decodeURIComponent(String(params.id ?? "")),
+      );
+      const chosen = yield* readModel;
+      if (chosen === undefined) return yield* badModel;
+      if (term === THREAD_TERM) {
+        if ((yield* threads.get(key)) === undefined) {
+          return yield* HttpServerResponse.json(
+            { error: "unknown thread" },
+            { status: 404 },
+          );
+        }
+        yield* threads.setModel(key, chosen.model);
+      } else if (term === Engineer["~alchemy/Name"]) {
+        yield* engineer.at(key).setModel(chosen.model);
+      } else {
+        return yield* HttpServerResponse.json(
+          { error: "no model to pick for this session" },
+          { status: 404 },
+        );
+      }
+      return yield* HttpServerResponse.json(
+        (yield* sessionModel(term, key)) ?? {
+          model: chosen.model ?? null,
+          default: DEFAULT_MODEL,
+        },
+      );
+    }),
+  );
+
   /* ── a thread's agents: the operator's switches on one engineer ─── */
 
   /** `:id/agents/:key` → the thread and the (decoded) agent key. */
@@ -498,32 +608,31 @@ export const routes = Effect.gen(function* () {
     number,
     { at: number; value: PullRequestView }
   >();
-  const readPullRequestView = (number: number) =>
-    Effect.gen(function* () {
-      const now = Date.now();
-      const cached = pullViewCache.get(number);
-      if (cached !== undefined && now - cached.at < 10_000) {
-        return cached.value;
-      }
-      const [pull, comments, reviews, inline] = yield* Effect.all(
-        [
-          getPullRequest({ pull_number: number }),
-          listIssueComments({ issue_number: number, per_page: 100 }),
-          listReviews({ pull_number: number, per_page: 100 }),
-          listReviewComments({ pull_number: number, per_page: 100 }),
-        ] as const,
-        { concurrency: 4 },
-      );
-      const value = buildPullRequestView(
-        repoName,
-        pull,
-        comments,
-        reviews,
-        inline,
-      );
-      pullViewCache.set(number, { at: now, value });
-      return value;
-    });
+  const readPullRequestView = Effect.fn(function* (number: number) {
+    const now = Date.now();
+    const cached = pullViewCache.get(number);
+    if (cached !== undefined && now - cached.at < 10_000) {
+      return cached.value;
+    }
+    const [pull, comments, reviews, inline] = yield* Effect.all(
+      [
+        getPullRequest({ pull_number: number }),
+        listIssueComments({ issue_number: number, per_page: 100 }),
+        listReviews({ pull_number: number, per_page: 100 }),
+        listReviewComments({ pull_number: number, per_page: 100 }),
+      ] as const,
+      { concurrency: 4 },
+    );
+    const value = buildPullRequestView(
+      repoName,
+      pull,
+      comments,
+      reviews,
+      inline,
+    );
+    pullViewCache.set(number, { at: now, value });
+    return value;
+  });
 
   const pullRequest = HttpRouter.add(
     "GET",
@@ -615,9 +724,7 @@ export const routes = Effect.gen(function* () {
       );
       // an unknown session is an EMPTY one — the conversation exists
       // from the first visit, before any message has been sent
-      const log = yield* sessions
-        .history(term, key)
-        .pipe(Effect.provide(RuntimeContext.phantom));
+      const log = yield* sessions.history(term, key);
       return yield* HttpServerResponse.json(AI.toUIMessages(log));
     }),
   );
@@ -643,9 +750,7 @@ export const routes = Effect.gen(function* () {
           { status: 400 },
         );
       }
-      const log = yield* sessions
-        .history(term, key)
-        .pipe(Effect.provide(RuntimeContext.phantom));
+      const log = yield* sessions.history(term, key);
       const seqs = [
         ...new Set(ids.flatMap((id) => AI.observationSpan(log, id))),
       ];
@@ -655,9 +760,7 @@ export const routes = Effect.gen(function* () {
           { status: 404 },
         );
       }
-      yield* sessions
-        .redact(term, key, seqs)
-        .pipe(Effect.provide(RuntimeContext.phantom));
+      yield* sessions.redact(term, key, seqs);
       return yield* HttpServerResponse.json({ deleted: seqs.length });
     }),
   );
@@ -675,9 +778,7 @@ export const routes = Effect.gen(function* () {
       const { term, key } = parseSessionId(
         decodeURIComponent(String(params.id ?? "")),
       );
-      yield* sessions
-        .interrupt(term, key)
-        .pipe(Effect.provide(RuntimeContext.phantom));
+      yield* sessions.interrupt(term, key);
       return yield* HttpServerResponse.json({ ok: true });
     }),
   );
@@ -695,9 +796,7 @@ export const routes = Effect.gen(function* () {
         "limit",
       );
       const limit = limitRaw === null ? undefined : Number(limitRaw);
-      const log = yield* sessions
-        .history(term, key)
-        .pipe(Effect.provide(RuntimeContext.phantom));
+      const log = yield* sessions.history(term, key);
       const observations =
         limit !== undefined && Number.isFinite(limit) && limit > 0
           ? log.slice(-limit)
@@ -814,6 +913,9 @@ export const routes = Effect.gen(function* () {
     agentDelete,
     pullRequest,
     pullRequestFiles,
+    listModels,
+    chatModel,
+    chatModelSet,
     sessionMessages,
     sessionMessagesDelete,
     sessionInterrupt,

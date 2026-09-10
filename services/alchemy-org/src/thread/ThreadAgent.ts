@@ -1,30 +1,192 @@
 import * as AI from "alchemy/AI";
 import * as Git from "alchemy/Git";
+import type * as GitHub from "alchemy/GitHub";
+import * as PersistentRef from "alchemy/PersistentRef";
 import * as Cause from "effect/Cause";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Predicate from "effect/Predicate";
 import * as S from "effect/Schema";
-import { parseEntityRef } from "../channel/Channel.ts";
+import { Channel, parseEntityRef, refOf } from "../channel/Channel.ts";
 import { Engineer } from "../coding/Engineer.ts";
 import { BadRef, makeEntityLookup } from "../github/Entity.ts";
 import { connected, nameOf, primary } from "../github/Repos.ts";
 import { SessionRepo } from "../github/SessionRepo.ts";
-import { pullWorktreeKey, THREAD_TERM, Threads } from "./Threads.ts";
+import { models } from "../platform/Model.ts";
+import {
+  pullWorktreeKey,
+  type Assignment,
+  type ThreadAgentRow,
+  type ThreadState,
+  type Turn,
+} from "./Threads.ts";
+
+/** The thread agent's session term — `/attach/Thread/<id>`. */
+export const THREAD_TERM = "Thread";
 
 /**
- * The THREAD AGENT — one durable session per thread (`t-<id>`), the
- * task's whole life; the thread's conversation IS this session's
- * transcript. It governs the issues and pulls assigned to it, one machine with a
- * worktree per pull request, and the engineers it kicks off. Its
- * engineers act on GitHub DIRECTLY: they push to the pull requests the
- * thread governs and open new ones to solve issues — there is no
- * approval gate.
+ * The THREAD — one durable session per thread (`t-<id>`), the task's
+ * whole life, as an OBJECT: its conversation IS this session's
+ * transcript, its books ARE this session's state, and its API is the
+ * one way anyone outside touches either.
+ *
+ * The books are everything AROUND the conversation — the channel
+ * messages placed into it, the issues and pulls assigned to it (with
+ * the worktree each pull gets on the thread's one machine), the
+ * engineers it kicked off, the meta the rail shows (name, title,
+ * status, turn, model). They live in a `PersistentRef` on the session
+ * (Durable Object storage on Cloudflare); every mutation is a method
+ * that rewrites them, PUSHES the fresh snapshot to whoever is attached
+ * (`/thread/:id` — the state is small, push it whole) and projects the
+ * change into the channel (directory row, attachment ownership).
+ *
+ * The agent's own tools call the very same methods, in-process — the
+ * conversation is the record they write into. Callers outside reach
+ * them over `ThreadAgent.at(id)`, from wherever the session actually
+ * runs.
+ *
+ * Its engineers act on GitHub DIRECTLY: they push to the pull
+ * requests the thread governs and open new ones to solve issues —
+ * there is no approval gate.
  */
-export class ThreadAgent extends AI.Agent<ThreadAgent>(import.meta)(
+export class ThreadAgent extends AI.Agent<ThreadAgent, ThreadApi>(import.meta)(
   THREAD_TERM,
 ) {}
+
+/** What is written to create a thread; the rest of the books start
+ *  empty. */
+export interface CreateThread {
+  /** Short handle (`do-init`) — the rail's label. */
+  readonly name: string;
+  /** One line — what the thread is about. */
+  readonly title: string;
+  /** The catalog id its agents sample with; absent = the default. */
+  readonly model?: string;
+}
+
+/**
+ * The thread's METHODS — what `ThreadAgent.at(id)` answers. Every
+ * mutation returns the fresh snapshot; one on a thread that was never
+ * `create`d is a defect (the books are not there to write).
+ */
+export interface ThreadApi {
+  /** Write the books' first page. Idempotent: an existing thread keeps
+   *  its own (the caller's name/title are ignored). */
+  readonly create: (input: CreateThread) => Effect.Effect<ThreadState>;
+  /** The snapshot; `undefined` when the thread was never created. */
+  readonly state: () => Effect.Effect<ThreadState | undefined>;
+  /** Place channel messages (the channel tags them; the membership
+   *  lives here). */
+  readonly place: (ids: ReadonlyArray<string>) => Effect.Effect<ThreadState>;
+  /** ASSIGN issues / pull requests — the thread governs them from now
+   *  on: their events route here; the channel's ownership follows. */
+  readonly assign: (
+    assigned: ReadonlyArray<{
+      readonly ref: string;
+      readonly kind: "issue" | "pull";
+      readonly title: string;
+      readonly state?: string;
+    }>,
+  ) => Effect.Effect<ThreadState>;
+  readonly unassign: (ref: string) => Effect.Effect<ThreadState>;
+  /** A GitHub event for an owned ref: the entity's state converges. */
+  readonly noteEvent: (
+    event: GitHub.RepositoryEvent,
+  ) => Effect.Effect<ThreadState>;
+  /** Record a worktree on an assigned pull request. */
+  readonly setWorktree: (
+    ref: string,
+    worktree: string,
+  ) => Effect.Effect<ThreadState>;
+  /**
+   * STOP an engineer: the off switch. Its session settles (the round
+   * in flight — a command on the machine — is cut) and the books say
+   * stopped. `undefined` when the thread has no such agent.
+   */
+  readonly agentStop: (key: string) => Effect.Effect<ThreadState | undefined>;
+  /** RESUME a stopped (or finished) engineer: the tombstone is cleared
+   *  and the session takes input again. Nothing runs until something
+   *  is said to it. */
+  readonly agentResume: (key: string) => Effect.Effect<ThreadState | undefined>;
+  /** DELETE an engineer: its session is erased (round cut, transcript
+   *  purged; the thread's machine is shared and stays) and its row
+   *  leaves the books. */
+  readonly agentDelete: (key: string) => Effect.Effect<ThreadState | undefined>;
+  /** The switches EN MASSE: `keys` names the agents, or every agent
+   *  of the thread when omitted; a failure on one is contained. */
+  readonly agents: (
+    verb: "stop" | "resume" | "delete",
+    keys?: ReadonlyArray<string>,
+  ) => Effect.Effect<ThreadState | undefined>;
+  readonly rename: (input: {
+    readonly name?: string;
+    readonly title?: string;
+  }) => Effect.Effect<ThreadState>;
+  /**
+   * Choose the model the thread's agents sample with — `undefined`
+   * returns to the org's default. The thread's own agent reads it
+   * before every sampling; the engineers still running are told
+   * (`Engineer.setModel`). Nothing in flight is interrupted.
+   */
+  readonly setModel: (model: string | undefined) => Effect.Effect<ThreadState>;
+  readonly close: () => Effect.Effect<ThreadState>;
+  /**
+   * Everything UNDER the thread, gone — the part of a delete that runs
+   * inside the thread (its machine is still up): every engineer and
+   * every session descended from it (machines spared — they shared
+   * this one), the pull requests' worktrees, the channel projections
+   * (directory row, `ref → thread` ownership, placed tags). The books
+   * are wiped last. The session itself is the caller's to destroy
+   * afterwards — an object cannot erase itself from inside a method.
+   * Answers the last snapshot; `undefined` when the thread never
+   * existed. Idempotent.
+   */
+  readonly teardown: () => Effect.Effect<ThreadState | undefined>;
+}
+
+/* ── the books ──────────────────────────────────────────────────── */
+
+/** What the session persists — the snapshot minus what is derived. */
+interface Books {
+  readonly id: string;
+  readonly name: string;
+  readonly title: string;
+  readonly status: "open" | "closed";
+  readonly model?: string;
+  readonly createdAt: number;
+  readonly updatedAt: number;
+  readonly assigned: ReadonlyArray<Assignment>;
+  readonly agents: ReadonlyArray<ThreadAgentRow>;
+  readonly members: ReadonlyArray<string>;
+}
+
+const turnOf = (books: Books): Turn =>
+  books.status === "closed"
+    ? "idle"
+    : books.agents.some((a) => a.state === "running")
+      ? "agents"
+      : books.assigned.some((e) => e.state === "open")
+        ? "others"
+        : "idle";
+
+const snapshotOf = (books: Books): ThreadState => ({
+  ...books,
+  turn: turnOf(books),
+});
+
+/** A thread's row in the channel's directory. */
+const directoryOf = (snap: ThreadState) => ({
+  id: snap.id,
+  name: snap.name,
+  title: snap.title,
+  status: snap.status,
+  turn: snap.turn,
+  updatedAt: snap.updatedAt,
+});
+
+/** The engineers' session term — the thread's agent rows are its keys. */
+const engineerTerm = Engineer["~alchemy/Name"];
 
 /* ── vocabulary ─────────────────────────────────────────────────── */
 
@@ -106,26 +268,378 @@ const shortId = (): string => crypto.randomUUID().slice(0, 8);
 
 export const ThreadAgentLive = ThreadAgent.make(
   Effect.gen(function* () {
-    // ── INIT: once per thread ────────────────────────────────────────
-    const threads = yield* Threads;
+    // ── the CHARTER: one Effect, run once where the Layer builds. The
+    // org around the thread — its channel, the session gateway, the
+    // engineers, the catalog — and the tools below are the agent's,
+    // shared by every thread. There is no thread here: each method and
+    // tool reads the one it acts for from the frame (`AI.Thread`), and
+    // the books are a DECLARED cell that resolves to that thread's row.
+    const channel = yield* Channel;
+    const sessions = yield* AI.Sessions;
     const sessionRepo = yield* SessionRepo;
     const checkouts = yield* Git.Checkouts;
     const engineer = yield* Engineer;
-    const thread = yield* AI.Thread;
-    const id = thread.key;
-    const session = { term: THREAD_TERM, key: id };
-
-    const current = Effect.gen(function* () {
-      const state = yield* threads.get(id);
-      return (
-        state ??
-        (yield* Effect.die(`thread ${id}: the ThreadDO was never initialized`))
-      );
-    });
-
+    const model = yield* models;
     // an assignment is VERIFIED against GitHub, never taken on the model's word
     const lookup = yield* makeEntityLookup;
 
+    // the connected repositories are static code (Repos.ts) — constant
+    // for the deploy, so they belong in the stance
+    const primaryName = nameOf(primary);
+    const repoNames = connected
+      .map((entry) => nameOf(entry.repository))
+      .join(", ");
+
+    // the thread a method or tool acts for — its id, from the frame
+    const self = Effect.map(AI.Thread, (thread) => thread.key);
+
+    // ── the BOOKS: one durable cell per thread, `null` until `create`
+    const books = PersistentRef.of<Books | null>("books", () => null);
+
+    const current = Effect.gen(function* () {
+      const found = yield* books;
+      if (found !== null) return found;
+      const id = yield* self;
+      return yield* Effect.die(`thread ${id}: the books were never created`);
+    });
+
+    /** Every mutation ends here: rewrite, bump, push, project. */
+    const commit = Effect.fn(function* (f: (books: Books) => Books) {
+      const thread = yield* AI.Thread;
+      const before = yield* current;
+      const next: Books = { ...f(before), updatedAt: Date.now() };
+      yield* PersistentRef.set(books, next);
+      const snap = snapshotOf(next);
+      yield* thread.publish(snap);
+      yield* channel.directoryUpsert(directoryOf(snap));
+      return snap;
+    });
+
+    const agentRow = (key: string) =>
+      Effect.map(books, (found) =>
+        found?.agents.find((agent) => agent.key === key),
+      );
+
+    const upsertAgent = (row: ThreadAgentRow) =>
+      commit((b) => ({
+        ...b,
+        agents: [...b.agents.filter((a) => a.key !== row.key), row].sort(
+          (x, y) => x.startedAt - y.startedAt,
+        ),
+      }));
+
+    // ── the single switches on one engineer: its session over its
+    // stub (a cross-DO call on Cloudflare) and its row together
+    const stopAgent = Effect.fn(function* (key: string) {
+      const row = yield* agentRow(key);
+      if (row === undefined) return undefined;
+      yield* engineer.at(key).stop();
+      return yield* upsertAgent({
+        ...row,
+        state: "stopped",
+        settledAt: Date.now(),
+      });
+    });
+    const resumeAgent = Effect.fn(function* (key: string) {
+      const row = yield* agentRow(key);
+      if (row === undefined) return undefined;
+      yield* engineer.at(key).resume();
+      const { settledAt: _settled, ...rest } = row;
+      return yield* upsertAgent({ ...rest, state: "running" });
+    });
+    const deleteAgent = Effect.fn(function* (key: string) {
+      const row = yield* agentRow(key);
+      if (row === undefined) return undefined;
+      // the thread's machine is shared — it stays
+      yield* engineer.at(key).destroy({ machine: false });
+      return yield* commit((b) => ({
+        ...b,
+        agents: b.agents.filter((a) => a.key !== key),
+      }));
+    });
+    const snapshot = Effect.map(books, (found) =>
+      found === null ? undefined : snapshotOf(found),
+    );
+
+    // ── the METHODS — checked against the contract by `make` where
+    // the object below names them; the frame in `R` is the driver's
+    // business
+    const create = Effect.fn(function* (input: CreateThread) {
+      const existing = yield* books;
+      if (existing === null) {
+        const id = yield* self;
+        const now = Date.now();
+        yield* PersistentRef.set(books, {
+          id,
+          name: input.name,
+          title: input.title,
+          status: "open",
+          ...(input.model === undefined ? {} : { model: input.model }),
+          createdAt: now,
+          updatedAt: now,
+          assigned: [],
+          agents: [],
+          members: [],
+        });
+      }
+      return yield* commit((b) => b);
+    });
+
+    const getState = () => snapshot;
+
+    const place = Effect.fn(function* (ids: ReadonlyArray<string>) {
+      const snap = yield* commit((b) => ({
+        ...b,
+        members: [...b.members, ...ids.filter((m) => !b.members.includes(m))],
+      }));
+      yield* channel.tag(ids, yield* self, true);
+      return snap;
+    });
+
+    const assignEntities = Effect.fn(function* (
+      items: ReadonlyArray<{
+        readonly ref: string;
+        readonly kind: "issue" | "pull";
+        readonly title: string;
+        readonly state?: string;
+      }>,
+    ) {
+      const snap = yield* commit((b) => {
+        const assigned = [...b.assigned];
+        for (const entity of items) {
+          const row: Assignment = {
+            ref: entity.ref,
+            kind: entity.kind,
+            state: entity.state ?? "open",
+            title: entity.title,
+          };
+          const at = assigned.findIndex((e) => e.ref === entity.ref);
+          if (at >= 0) {
+            const kept = assigned[at]!;
+            assigned[at] = {
+              ...row,
+              ...(kept.worktree === undefined
+                ? {}
+                : { worktree: kept.worktree }),
+            };
+          } else {
+            assigned.push(row);
+          }
+        }
+        assigned.sort((x, y) => x.ref.localeCompare(y.ref));
+        return { ...b, assigned };
+      });
+      const id = yield* self;
+      yield* Effect.forEach(
+        items,
+        (entity) => channel.attachmentsSet(entity.ref, id),
+        { discard: true },
+      );
+      return snap;
+    });
+
+    const unassignEntity = Effect.fn(function* (ref: string) {
+      const snap = yield* commit((b) => ({
+        ...b,
+        assigned: b.assigned.filter((e) => e.ref !== ref),
+      }));
+      yield* channel.attachmentsSet(ref, null);
+      return snap;
+    });
+
+    const noteEvent = (event: GitHub.RepositoryEvent) => {
+      const ref =
+        event._tag === "Push"
+          ? undefined
+          : "issue" in event
+            ? refOf(
+                `${event.repository.owner.login}/${event.repository.name}`,
+                event.issue.number,
+              )
+            : refOf(
+                `${event.repository.owner.login}/${event.repository.name}`,
+                event.pullRequest.number,
+              );
+      const next =
+        event._tag === "PullRequestMerged"
+          ? "merged"
+          : event._tag === "PullRequestClosed" || event._tag === "IssueClosed"
+            ? "closed"
+            : event._tag === "PullRequestOpened" || event._tag === "IssueOpened"
+              ? "open"
+              : undefined;
+      return commit((b) =>
+        ref === undefined || next === undefined
+          ? b
+          : {
+              ...b,
+              assigned: b.assigned.map((e) =>
+                e.ref === ref ? { ...e, state: next } : e,
+              ),
+            },
+      );
+    };
+
+    const setWorktree = (ref: string, worktree: string) =>
+      commit((b) => ({
+        ...b,
+        assigned: b.assigned.map((e) =>
+          e.ref === ref ? { ...e, worktree } : e,
+        ),
+      }));
+
+    const switchAgents = Effect.fn(function* (
+      verb: "stop" | "resume" | "delete",
+      keys?: ReadonlyArray<string>,
+    ) {
+      const before = yield* books;
+      if (before === null) return undefined;
+      const id = yield* self;
+      const chosen =
+        keys === undefined
+          ? before.agents
+          : before.agents.filter((agent) => keys.includes(agent.key));
+      // the single verbs, each contained: one agent's session
+      // refusing must not leave the others running
+      const one = (key: string) =>
+        (verb === "stop"
+          ? stopAgent(key)
+          : verb === "resume"
+            ? resumeAgent(key)
+            : deleteAgent(key)
+        ).pipe(
+          Effect.asVoid,
+          Effect.catchCause((cause) =>
+            Effect.logWarning(
+              `thread '${id}': ${verb} of agent '${key}' failed (contained)`,
+              cause,
+            ),
+          ),
+        );
+      yield* Effect.forEach(chosen, (agent) => one(agent.key), {
+        discard: true,
+        concurrency: 8,
+      });
+      return yield* snapshot;
+    });
+
+    const rename = (input: {
+      readonly name?: string;
+      readonly title?: string;
+    }) =>
+      commit((b) => ({
+        ...b,
+        ...(input.name === undefined ? {} : { name: input.name }),
+        ...(input.title === undefined ? {} : { title: input.title }),
+      }));
+
+    const setModel = Effect.fn(function* (next: string | undefined) {
+      const snap = yield* commit((b) => {
+        const { model: _model, ...rest } = b;
+        return next === undefined ? rest : { ...rest, model: next };
+      });
+      // the engineers still running sample with the thread's pick
+      // too — each told over its stub, a refusal contained
+      const id = yield* self;
+      yield* Effect.forEach(
+        snap.agents.filter((a) => a.state === "running"),
+        (a) =>
+          engineer
+            .at(a.key)
+            .setModel(next)
+            .pipe(
+              Effect.catchCause((cause) =>
+                Effect.logWarning(
+                  `thread '${id}': relaying the model to '${a.key}' failed (contained)`,
+                  cause,
+                ),
+              ),
+            ),
+        { discard: true, concurrency: 8 },
+      );
+      return snap;
+    });
+
+    const close = () => commit((b) => ({ ...b, status: "closed" }));
+
+    const teardown = Effect.fn(function* () {
+      const before = yield* books;
+      if (before === null) return undefined;
+      const id = yield* self;
+      const snap = snapshotOf(before);
+      // 1. every session descended from the thread — the agent
+      // rows, then the index's parent edges walked transitively
+      // from the thread's session (a directory: a stale or
+      // absent index only means fewer rows here, never a wrong
+      // one). Anonymous `spawn-*` workers are skipped: they ran
+      // inside their spawner's round and died with it.
+      const descendants = new Map<string, { term: string; key: string }>();
+      for (const agent of before.agents) {
+        descendants.set(AI.sessionId(engineerTerm, agent.key), {
+          term: engineerTerm,
+          key: agent.key,
+        });
+      }
+      const listed = yield* sessions.list();
+      const frontier = [AI.sessionId(THREAD_TERM, id), ...descendants.keys()];
+      while (frontier.length > 0) {
+        const parent = frontier.pop()!;
+        for (const row of listed) {
+          if (
+            row.parent !== parent ||
+            descendants.has(row.id) ||
+            row.key.startsWith("spawn-")
+          ) {
+            continue;
+          }
+          descendants.set(row.id, { term: row.term, key: row.key });
+          frontier.push(row.id);
+        }
+      }
+      // machines spared: they shared this thread's, which the
+      // caller takes down with the thread's own session
+      yield* Effect.forEach(
+        descendants.values(),
+        ({ term, key }) => sessions.remove(term, key, { machine: false }),
+        { discard: true, concurrency: 8 },
+      );
+      // 2. the pull requests' worktrees on this machine — git
+      // over the thread's own sandbox, from inside the thread
+      yield* Effect.forEach(
+        before.assigned.flatMap((entity) => {
+          const parsed = parseEntityRef(entity.ref);
+          return entity.worktree === undefined ||
+            entity.worktree === "." ||
+            entity.worktree === "" ||
+            parsed === undefined
+            ? []
+            : [pullWorktreeKey(id, parsed.number)];
+        }),
+        (key) =>
+          checkouts
+            .release(key)
+            .pipe(
+              Effect.catch((error) =>
+                Effect.logWarning(
+                  `deleting thread '${id}': dropping worktree '${key}' failed (contained): ${error.message}`,
+                ),
+              ),
+            ),
+        { discard: true },
+      );
+      // 3. the channel projections (directoryRemove also frees
+      // every attachment the thread held), then the books
+      if (before.members.length > 0) {
+        yield* channel.tag(before.members, null, false);
+      }
+      yield* channel.directoryRemove(id);
+      yield* PersistentRef.set(books, null);
+      return snap;
+    });
+
+    // ── the TOOLS: the agent's hands on its own books — the same
+    // methods, called in-process; the tool call in the conversation
+    // is the record, so nothing is told back to the agent
     const assign = yield* AI.Tool("assign")`
       Assign ${ref} to this thread — you govern it from now on: its
       events arrive here, closing the thread settles it. The ref is
@@ -136,8 +650,7 @@ export const ThreadAgentLive = ThreadAgent.make(
       derive them from an author's login.`(
       Effect.fn(function* (p: { ref: string }) {
         const entity = yield* lookup(p.ref);
-        // by the agent itself: the tool call is already in its conversation
-        yield* threads.assign(id, [entity], { by: "agent" });
+        yield* assignEntities([entity]);
         return { kind: entity.kind, title: entity.title };
       }),
     );
@@ -146,7 +659,7 @@ export const ThreadAgentLive = ThreadAgent.make(
       Unassign ${ref} from this thread — its events stop arriving; the
       issue or pull request itself is untouched.`(
       Effect.fn(function* (p: { ref: string }) {
-        yield* threads.unassign(id, p.ref, { by: "agent" });
+        yield* unassignEntity(p.ref);
       }),
     );
 
@@ -165,8 +678,8 @@ export const ThreadAgentLive = ThreadAgent.make(
             new BadRef({ message: `${p.ref} is not owner/repo#N` }),
           );
         }
-        const state = yield* current;
-        if (!state.assigned.some((e) => e.ref === p.ref)) {
+        const found = yield* current;
+        if (!found.assigned.some((e) => e.ref === p.ref)) {
           return yield* Effect.fail(
             new NotAssigned({
               message: `${p.ref} is not assigned — assign first`,
@@ -183,7 +696,7 @@ export const ThreadAgentLive = ThreadAgent.make(
             }),
           );
         }
-        const key = pullWorktreeKey(id, parsed.number);
+        const key = pullWorktreeKey(yield* self, parsed.number);
         const checkout = yield* checkouts
           .checkout({
             key,
@@ -202,7 +715,7 @@ export const ThreadAgentLive = ThreadAgent.make(
                 }),
             ),
           );
-        yield* threads.setWorktree(id, p.ref, checkout.path);
+        yield* setWorktree(p.ref, checkout.path);
         return { path: checkout.path, branch: checkout.branch };
       }),
     );
@@ -215,9 +728,12 @@ export const ThreadAgentLive = ThreadAgent.make(
       contact. Name the worktree path in the brief when the work
       belongs to one pull request.`(
       Effect.fn(function* (p: { brief: string }) {
+        const id = yield* self;
+        const session = { term: THREAD_TERM, key: id };
         const key = `${id}::e-${shortId()}`;
         const startedAt = Date.now();
-        yield* threads.agentUpsert(id, {
+        const pick = (yield* current).model;
+        yield* upsertAgent({
           key,
           kind: "engineer",
           brief: p.brief,
@@ -226,8 +742,20 @@ export const ThreadAgentLive = ThreadAgent.make(
         });
         // an UPDATE, not an upsert: an agent the operator deleted while
         // this dispatch was in flight must not come back as a row
-        const settle = (state: "done" | "failed" | "stopped") =>
-          threads.agentSettle(id, key, state, Date.now());
+        const settle = Effect.fn(function* (
+          state: "done" | "failed" | "stopped",
+        ) {
+          const row = yield* agentRow(key);
+          if (row === undefined) return;
+          yield* upsertAgent({ ...row, state, settledAt: Date.now() });
+        });
+        // the engineer takes the thread's model BEFORE its brief: the
+        // first contact admits the object, `setModel` writes its own
+        // cell (kept in step by the thread's `setModel` from then on)
+        // — so its first sampling already uses the pick
+        if (pick !== undefined) {
+          yield* engineer.at(key).setModel(pick);
+        }
         // `parent: session` from inside this round puts the engineer
         // under the thread's supervision: the operator stopping the
         // thread (abort, stop, delete) settles the engineer too. This
@@ -258,13 +786,23 @@ export const ThreadAgentLive = ThreadAgent.make(
       }),
     );
 
+    const card = (input: { title: string; text: string }) =>
+      Effect.flatMap(self, (id) =>
+        channel.append({
+          kind: "card",
+          text: input.text,
+          thread: id,
+          card: { thread: id, title: input.title },
+        }),
+      );
+
     const postCard = yield* AI.Tool("post_card")`
       Post a CARD to the main channel — the one sanctioned way to
       reach the operator there: ${cardTitle} and ${text}. Use it when
       the thread needs them (a question only they can answer, work
       that landed and is worth a look), not as a log.`(
       Effect.fn(function* (p: { title: string; text: string }) {
-        yield* threads.postCard(id, { title: p.title, text: p.text });
+        yield* card(p);
       }),
     );
 
@@ -274,11 +812,8 @@ export const ThreadAgentLive = ThreadAgent.make(
       requests opened); closing the thread is bookkeeping, not a
       write.`(
       Effect.fn(function* (p: { why: string }) {
-        yield* threads.postCard(id, {
-          title: `thread closed — ${p.why}`,
-          text: p.why,
-        });
-        yield* threads.close(id);
+        yield* card({ title: `thread closed — ${p.why}`, text: p.why });
+        yield* close();
       }),
     );
 
@@ -287,7 +822,7 @@ export const ThreadAgentLive = ThreadAgent.make(
       The conversation already carries all of it as it happened; call
       this for a snapshot instead of scrolling back.`(
       Effect.fn(function* () {
-        const found = yield* current;
+        const found = snapshotOf(yield* current);
         return {
           state: {
             id: found.id,
@@ -307,56 +842,77 @@ export const ThreadAgentLive = ThreadAgent.make(
       }),
     );
 
-    // the connected repositories are static code (Repos.ts) — constant
-    // for the deploy, so they belong in the stance
-    const primaryName = nameOf(primary);
-    const repoNames = connected
-      .map((entry) => nameOf(entry.repository))
-      .join(", ");
+    // ── the STANCE: STATIC per thread — one prompt for the session's
+    // whole life (its id is the only splice, constant for the
+    // session). Never splice mutable state here: a stance that changes
+    // between samplings busts the provider's prompt cache on every
+    // call. The conversation history carries what happened;
+    // ${readState} answers what is.
 
-    // ── the STANCE: STATIC — one prompt for the session's whole life.
-    // Never splice mutable state here: a stance that changes between
-    // samplings busts the provider's prompt cache on every call. The
-    // conversation history carries what happened; ${readState} answers
-    // what is.
-    return AI.fragment`
-      You govern ONE thread — a task over the issues and pull requests assigned to it
-      (issues, pull requests, possibly across repositories). This
-      session is the thread's whole conversation: the operator
-      speaks to you here, GitHub events for what is assigned arrive
-      here (prefixed by their payload), and your subagents report
-      back here. You OWN the work end to end: your engineers push
-      commits to the pull requests you govern and open new pull
-      requests to solve issues — directly, no approval step. You
-      never post review comments or feedback for humans to act on;
-      you do the work instead.
-
-      This thread is ${id}. The org is connected to ${repoNames};
-      ${primaryName} is the primary repository, and a bare "#N" in a
-      brief or a message means ${primaryName}#N — never ask which
-      repository is meant. The conversation is its record — what you
-      were assigned, spawned, and were told all happened here,
-      including what the channel assigned on your behalf
-      ("[assigned] …" messages). ${readState} answers the current
-      books (what is assigned, worktrees, subagents) when you need a
-      snapshot.
-
-      Your machine is one sandbox for the whole thread. Each pull
-      request you govern gets its OWN worktree (${worktree}); tell
-      every subagent which tree to work in. ${spawn} runs an
-      engineer to completion and hands you its report. ${assign}
-      and ${unassign} change what you govern — the moment an engineer
-      reports a pull request it opened, ${assign} it: an unassigned
-      pull has no review tab and its GitHub events route nowhere.
-      ${postCard} is the one way to reach the operator in the channel
-      — use it when work landed or you are blocked on them, never as
-      a log. ${closeThread} when the task is done.
-
-      Keep replies short and factual; the operator reads this
-      conversation as the thread's record. Name every issue and pull
-      request — in replies and in cards — as a full markdown link to
-      its GitHub URL ("[owner/repo#832](https://github.com/owner/repo/pull/832)",
-      /issues/ for issues), never a bare "#832": the channel renders
-      those links with a hover card.`;
+    // ── the OBJECT: the turn beside the methods. The model is the
+    // one per-tick choice — the thread's pick, read from its own
+    // books and provided to the byte-identical stance.
+    return {
+      create,
+      state: getState,
+      place,
+      assign: assignEntities,
+      unassign: unassignEntity,
+      noteEvent,
+      setWorktree,
+      agentStop: stopAgent,
+      agentResume: resumeAgent,
+      agentDelete: deleteAgent,
+      agents: switchAgents,
+      rename,
+      setModel,
+      close,
+      teardown,
+      turn: Effect.gen(function* () {
+        const id = yield* self;
+        const found = yield* books;
+        return yield* AI.fragment`
+          You govern ONE thread — a task over the issues and pull requests assigned to it
+          (issues, pull requests, possibly across repositories). This
+          session is the thread's whole conversation: the operator
+          speaks to you here, GitHub events for what is assigned arrive
+          here (prefixed by their payload), and your subagents report
+          back here. You OWN the work end to end: your engineers push
+          commits to the pull requests you govern and open new pull
+          requests to solve issues — directly, no approval step. You
+          never post review comments or feedback for humans to act on;
+          you do the work instead.
+  
+          This thread is ${id}. The org is connected to ${repoNames};
+          ${primaryName} is the primary repository, and a bare "#N" in a
+          brief or a message means ${primaryName}#N — never ask which
+          repository is meant. The conversation is its record — what you
+          were assigned, spawned, and were told all happened here,
+          including what the channel assigned on your behalf
+          ("[assigned] …" messages). ${readState} answers the current
+          books (what is assigned, worktrees, subagents) when you need a
+          snapshot.
+  
+          Your machine is one sandbox for the whole thread. Each pull
+          request you govern gets its OWN worktree (${worktree}); tell
+          every subagent which tree to work in. ${spawn} runs an
+          engineer to completion and hands you its report. ${assign}
+          and ${unassign} change what you govern — the moment an engineer
+          reports a pull request it opened, ${assign} it: an unassigned
+          pull has no review tab and its GitHub events route nowhere.
+          ${postCard} is the one way to reach the operator in the channel
+          — use it when work landed or you are blocked on them, never as
+          a log. ${closeThread} when the task is done.
+  
+          Keep replies short and factual; the operator reads this
+          conversation as the thread's record. Name every issue and pull
+          request — in replies and in cards — as a full markdown link to
+          its GitHub URL ("[owner/repo#832](https://github.com/owner/repo/pull/832)",
+          /issues/ for issues), never a bare "#832": the channel renders
+          those links with a hover card.`.pipe(
+          Effect.provide(model(found?.model)),
+        );
+      }),
+    };
   }),
 );

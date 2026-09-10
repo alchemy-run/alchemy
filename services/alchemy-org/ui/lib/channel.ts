@@ -79,6 +79,9 @@ export interface ThreadState {
   readonly title: string;
   readonly status: "open" | "closed";
   readonly turn: Turn;
+  /** The model this thread's agents sample with — a catalog id
+   *  (`/api/models`); absent = the org's default. */
+  readonly model?: string;
   readonly createdAt: number;
   readonly updatedAt: number;
   readonly assigned: ReadonlyArray<Assignment>;
@@ -250,6 +253,51 @@ export const deleteAgent = (
 
 /** The same switch on MANY agents at once — `keys` (a selection), or
  *  every agent of the thread when omitted. One request, one answer. */
+/* ── models: the catalog, and a session's pick ──────────────────── */
+
+export interface ModelEntry {
+  readonly id: string;
+  readonly label: string;
+  readonly provider: string;
+}
+
+/** `GET /api/models` — the catalog the selector offers, in display
+ *  order, and the id the org samples with when nothing is chosen. */
+export interface ModelCatalog {
+  readonly models: ReadonlyArray<ModelEntry>;
+  readonly default: string;
+}
+
+export const fetchModels = (): Promise<ModelCatalog> =>
+  fetch("/api/models").then((response) => response.json() as Promise<ModelCatalog>);
+
+/** A session's pick: `null` = the org's default. */
+export interface SessionModel {
+  readonly model: string | null;
+  readonly default: string;
+}
+
+const chatModelUrl = (sessionId: string) =>
+  `/api/chats/${encodeURIComponent(sessionId)}/model`;
+
+/** The session's current pick — a thread's from its books, an
+ *  engineer's from its own cell. 404 for a session that has none. */
+export const getChatModel = (sessionId: string): Promise<Response> =>
+  fetch(chatModelUrl(sessionId));
+
+/** Choose the session's model (`null` returns to the default). Takes
+ *  effect at its next sampling; a thread's pick reaches its running
+ *  engineers too. */
+export const setChatModel = (
+  sessionId: string,
+  model: string | null,
+): Promise<Response> =>
+  fetch(chatModelUrl(sessionId), {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ model }),
+  });
+
 export const agentsBulk = (
   threadId: string,
   verb: "stop" | "resume" | "delete",

@@ -33,6 +33,7 @@ const codeModeEffect = AI.CodeModeEffect().pipe(Layer.provide(AI.EvalFunction));
 class Missing extends Data.TaggedError("Missing")<{ path: string }> {}
 const path = AI.Thing("path", S.String)`Absolute path to read.`;
 const fileContent = AI.Thing("content", S.String)`The file's contents.`;
+import * as PersistentRef from "@/PersistentRef.ts";
 import { RuntimeContext } from "@/RuntimeContext.ts";
 import { describe, expect, it } from "alchemy-test";
 import * as Deferred from "effect/Deferred";
@@ -1458,9 +1459,10 @@ Note something to your future self.`(() =>
     const model = Model.make([() => [Model.text("one"), Model.finish()]]);
     const events: Array<AI.TickEvent> = [];
     return Effect.gen(function* () {
+      // the charter yields the tick function (or `{ turn: fn }`): the
+      // GUARD tier, a reducer from what-just-happened to how-to-stand —
+      // the stance itself stays constant
       const charter = Effect.gen(function* () {
-        // the GUARD tier: a reducer from what-just-happened to
-        // how-to-stand — the stance itself stays constant
         const stance = AI.fragment`Answer briefly.`;
         return (tick: AI.TickEvent) =>
           Effect.gen(function* () {
@@ -1478,7 +1480,7 @@ Note something to your future self.`(() =>
   });
 
   it.effect(
-    "charter init runs per run: distinct keys get distinct state",
+    "the charter runs ONCE at build; a declared cell is a row per session",
     () => {
       const model = Model.make([
         () => [Model.toolCall("bump", {}), Model.finish("tool-calls")],
@@ -1486,30 +1488,31 @@ Note something to your future self.`(() =>
         () => [Model.text("done"), Model.finish()],
       ]);
       return Effect.gen(function* () {
-        let inits = 0;
-        const initKeys: string[] = [];
+        let builds = 0;
+        const turnKeys: string[] = [];
+        // ONE Effect, run where the Layer builds — no session exists
+        // here. The counter is a DECLARED cell: each turn, tool, or
+        // method resolves it against the session it runs for.
         const charter = Effect.gen(function* () {
-          inits++;
-          // init is per-run: the thread EXISTS at admit, so
-          // thread-scoped setup may read its identity here
-          const { key } = yield* AI.Thread;
-          initKeys.push(key);
-          const count = yield* Ref.make(0);
+          builds++;
+          const count = PersistentRef.of("count", () => 0);
           const bump = yield* AI.Tool("bump")`Increment the counter.`(() =>
-            Ref.update(count, (n) => n + 1),
+            PersistentRef.update(count, (n) => n + 1),
           );
           return Effect.gen(function* () {
+            const { key } = yield* AI.Thread; // the session, at sampling
+            turnKeys.push(key);
             return yield* AI.fragment`
-Counter: ${Ref.get(count)}. Use ${bump} when told.`;
+Counter: ${count}. Use ${bump} when told.`;
           });
         });
         const researcher = yield* interpret(Researcher, charter);
-        yield* researcher.dispatch("bump once", { key: "a" }); // bumps a's ref
+        yield* researcher.dispatch("bump once", { key: "a" }); // bumps a's row
         yield* researcher.dispatch("just answer", { key: "b" });
-        expect(inits).toBe(2); // one instance per run
-        expect(initKeys).toEqual(["a", "b"]); // init saw each run's thread
-        // run b's SECOND tick would show its own counter still at 0 —
-        // check via the prompt each run saw
+        expect(builds).toBe(1); // the charter is the agent's, not a session's
+        expect(turnKeys).toEqual(["a", "a", "b"]); // each turn saw its session
+        // b's counter is its own row, still at 0 — check via the prompt
+        // each session saw
         expect(Model.promptText(model.calls[1]!)).toContain("Counter: 1"); // a, tick 2
         expect(Model.promptText(model.calls[2]!)).toContain("Counter: 0"); // b, tick 1
       }).pipe(Effect.scoped, Effect.provide(testLayer(model, Layer.empty)));
@@ -1984,5 +1987,452 @@ ${Missing} when it does not exist.`(() =>
         testLayer(model, Layer.mergeAll(search.layer, codeModeAsync)),
       ),
     );
+  });
+
+  describe("the stance's model — provided, like anything else", () => {
+    class Picker extends AI.Agent<Picker>()("Picker") {}
+    // the org's way of naming a model: a service holding a ready Layer
+    class Alt extends AI.Model<Alt>()("Alt") {}
+
+    it.live(
+      "a stance provided a model samples with it from that tick; the transcript records the wire's model + usage",
+      () => {
+        // the driver's Layer model (the default) and a second one the
+        // charter can switch to — the same scripted shape, told apart
+        // by what they answer, what they bill, and what they say they are
+        const fallback = Model.make([
+          () => [
+            Model.metadata("default-1"),
+            Model.text("from the default"),
+            Model.finish("stop", { input: 10, output: 5 }),
+          ],
+        ]);
+        const alt = Model.make([
+          () => [
+            Model.metadata("alt-9"),
+            Model.text("from alt"),
+            Model.finish("stop", { input: 7, cacheRead: 3, output: 2 }),
+          ],
+        ]);
+        return Effect.gen(function* () {
+          // the org's state the turn reads — here a plain Ref
+          const pick = yield* Ref.make<"default" | "alt">("default");
+          const charter: AI.Charter = Effect.gen(function* () {
+            const altModel = yield* Alt;
+            const stance = AI.fragment`You answer in one line.`;
+            return Effect.gen(function* () {
+              return (yield* Ref.get(pick)) === "alt"
+                ? yield* stance.pipe(Effect.provide(altModel))
+                : yield* stance;
+            });
+          });
+          const picker = yield* interpret(Picker, charter);
+
+          expect(yield* picker.dispatch("one", { key: "p" })).toBe(
+            "from the default",
+          );
+          expect(fallback.calls).toHaveLength(1);
+          expect(alt.calls).toHaveLength(0);
+
+          yield* Ref.set(pick, "alt");
+          yield* picker.steer("p", "two");
+          yield* Effect.sleep("20 millis").pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("20 millis"),
+              until: () => alt.calls.length === 1,
+              times: 100,
+            }),
+          );
+          // the default was NOT called again — the slot switched
+          expect(fallback.calls).toHaveLength(1);
+          expect(alt.calls).toHaveLength(1);
+
+          // the durable record: the model each wire reported, and each
+          // sampling's token bill flattened
+          const threads = yield* AI.ThreadStorage;
+          const handle = yield* threads.open("Picker", "p");
+          const samplings = (yield* handle.observations(0)).flatMap(
+            (observation) =>
+              observation.type === "assistant" ? [observation] : [],
+          );
+          expect(samplings).toHaveLength(2);
+          expect(samplings[0]!.model).toBe("default-1");
+          expect(samplings[0]!.usage).toEqual({ input: 10, output: 5 });
+          expect(samplings[1]!.model).toBe("alt-9");
+          expect(samplings[1]!.usage).toEqual({
+            input: 7,
+            cacheRead: 3,
+            output: 2,
+          });
+        }).pipe(
+          Effect.scoped,
+          Effect.provide(
+            Layer.mergeAll(
+              DriverLocal.pipe(
+                Layer.provide(ThreadStorageMemory),
+                Layer.provide(fallback.layer),
+              ),
+              ThreadStorageMemory,
+              Alt.layer(alt.service),
+              RuntimeContext.phantom,
+            ),
+          ),
+        );
+      },
+    );
+
+    it.effect(
+      "a spawn worker samples with its spawner's model — provided around a static stance, it holds for the session",
+      () => {
+        const fallback = Model.make([
+          () => [Model.text("never"), Model.finish()],
+        ]);
+        // one script serves the spawner AND its worker: the spawn call,
+        // the worker's answer, the spawner's conclusion
+        const alt = Model.make([
+          () => [
+            Model.toolCall("spawn", {
+              instructions: "You are a checker.",
+              task: "Check it.",
+            }),
+            Model.finish("tool-calls"),
+          ],
+          () => [Model.text("checked"), Model.finish()],
+          () => [Model.text("done: checked"), Model.finish()],
+        ]);
+        return Effect.gen(function* () {
+          const charter: AI.Charter = Effect.gen(function* () {
+            const altModel = yield* Alt;
+            return AI.fragment`You delegate checking to a spawn.`.pipe(
+              Effect.provide(altModel),
+            );
+          });
+          const picker = yield* interpret(Picker, charter);
+          expect(yield* picker.dispatch("go", { key: "s" })).toBe(
+            "done: checked",
+          );
+          expect(fallback.calls).toHaveLength(0);
+          expect(alt.calls).toHaveLength(3);
+          // the worker's sampling is the middle call — its prompt is
+          // the written role, not the spawner's charter
+          expect(Model.promptText(alt.calls[1]!)).toContain("Check it.");
+        }).pipe(
+          Effect.scoped,
+          Effect.provide(testLayer(fallback, Alt.layer(alt.service))),
+          Effect.provide(RuntimeContext.phantom),
+        );
+      },
+    );
+  });
+
+  describe("the agent as an OBJECT: methods, `at`", () => {
+    class Negative extends Data.TaggedError("Negative")<{ value: number }> {}
+
+    /**
+     * The INFERRED inline form: the implementation on the class, the
+     * API read off it — `Counter.Default` is the Layer. The charter is
+     * ONE Effect run at build; a session is not constructed — what
+     * varies per session is STATE in a declared cell, set through a
+     * method (`set`), and the session's identity is read from the
+     * frame (`AI.Thread`) by the method that needs it.
+     */
+    class Counter extends AI.Agent<Counter>()(
+      "Counter",
+      Effect.gen(function* () {
+        const count = PersistentRef.of("count", () => 0);
+        return {
+          turn: Effect.flatMap(
+            count,
+            (n) => AI.fragment`You count. At: ${String(n)}.`,
+          ),
+          set: (to: number) => PersistentRef.set(count, to),
+          bump: (by: number) =>
+            by < 0
+              ? Effect.fail(new Negative({ value: by }))
+              : PersistentRef.modify(count, (n) => [n + by, n + by]),
+          read: () => PersistentRef.get(count),
+          whoami: () => Effect.map(AI.Thread, ({ key }) => ({ key })),
+          // NOT wire-safe: a closure — the resident placement must
+          // refuse it exactly as the Durable Object one would
+          leak: () => Effect.succeed(() => 1),
+        };
+      }),
+    ) {}
+
+    it.effect(
+      "at(key) admits on first contact; methods run in the session frame; typed failures ride the error channel",
+      () => {
+        const model = Model.make([() => [Model.text("ok"), Model.finish()]]);
+        return Effect.gen(function* () {
+          const counter = yield* Counter;
+          const c1 = counter.at("c1");
+          // the first verb admits the session; state is set by a METHOD
+          yield* c1.set(5);
+          expect(yield* c1.bump(2)).toBe(7);
+          // a later stub for the same key finds the same object
+          expect(yield* counter.at("c1").read()).toBe(7);
+          // methods see the session frame (Thread)
+          expect(yield* counter.at("c1").whoami()).toEqual({ key: "c1" });
+          // a method's declared failure is the CALLER's failure, typed
+          const failed = yield* Effect.flip(counter.at("c1").bump(-1));
+          expect(failed).toBeInstanceOf(Negative);
+          expect(failed.value).toBe(-1);
+          // the loop verbs on the same stub — the stance reads the state
+          expect(yield* c1.dispatch("count")).toBe("ok");
+          expect(Model.promptText(model.calls[0]!)).toContain("At: 7");
+          // a second key is a second object, at the initial state
+          expect(yield* counter.at("c2").read()).toBe(0);
+          expect(yield* counter.at("c1").read()).toBe(7);
+        }).pipe(
+          Effect.scoped,
+          Effect.provide(
+            Layer.provideMerge(Counter.Default, testLayer(model, Layer.empty)),
+          ),
+        );
+      },
+    );
+
+    it.effect(
+      "an unknown method and a non-cloneable result are DEFECTS, not failures",
+      () => {
+        const model = Model.make([]);
+        return Effect.gen(function* () {
+          const counter = yield* Counter;
+          const c = counter.at("d1");
+          const missing = yield* Effect.exit(
+            (c as unknown as { nope: () => Effect.Effect<unknown> }).nope(),
+          );
+          expect(Exit.isFailure(missing)).toBe(true);
+          if (Exit.isFailure(missing)) {
+            expect(Cause.squash(missing.cause)).toBeInstanceOf(Error);
+            expect(String(Cause.squash(missing.cause))).toContain(
+              "has no method 'nope'",
+            );
+            expect(String(Cause.squash(missing.cause))).toContain("bump");
+          }
+          const leaked = yield* Effect.exit(c.leak());
+          expect(Exit.isFailure(leaked)).toBe(true);
+          if (Exit.isFailure(leaked)) {
+            expect(String(Cause.squash(leaked.cause))).toContain(
+              "cannot cross the wire",
+            );
+          }
+        }).pipe(
+          Effect.scoped,
+          Effect.provide(
+            Layer.provideMerge(Counter.Default, testLayer(model, Layer.empty)),
+          ),
+        );
+      },
+    );
+
+    it.effect(
+      "state PERSISTS with the session: a re-activation finds the object over its durable state",
+      () => {
+        const model = Model.make([]);
+        return Effect.gen(function* () {
+          const charter = Effect.gen(function* () {
+            const count = PersistentRef.of("count", () => 0);
+            return {
+              turn: AI.fragment`Count.`,
+              set: (to: number) => PersistentRef.set(count, to),
+              read: () => PersistentRef.get(count),
+            };
+          });
+          const first = AI.withStubs<AI.ContractOf<typeof charter>>(
+            yield* interpret(Counter, charter),
+          );
+          yield* first.at("p1").set(9);
+          expect(yield* first.at("p1").read()).toBe(9);
+          // a SECOND interpret of the term over the same storage is a
+          // restart: restore revives the persisted key and the declared
+          // cell resolves to the same row — the object resumes over its
+          // durable state (the ambient store below stands in for the
+          // DO's storage; without one the resident driver gives every
+          // session its own RAM)
+          const second = AI.withStubs<AI.ContractOf<typeof charter>>(
+            yield* interpret(Counter, charter),
+          );
+          expect(yield* second.at("p1").read()).toBe(9);
+        }).pipe(
+          Effect.scoped,
+          Effect.provide(
+            Layer.mergeAll(
+              DriverLocal.pipe(
+                Layer.provide(ThreadStorageMemory),
+                Layer.provide(model.layer),
+              ),
+              ThreadStorageMemory,
+              Layer.succeed(
+                PersistentRef.Store,
+                PersistentRef.makeMemoryStore(),
+              ),
+              RuntimeContext.phantom,
+            ),
+          ),
+        );
+      },
+    );
+
+    it.effect(
+      "the object outlives its loop: methods answer on a STOPPED session; destroy is the end",
+      () => {
+        const model = Model.make([]);
+        return Effect.gen(function* () {
+          const counter = yield* Counter;
+          const c = counter.at("s1");
+          yield* c.set(3);
+          expect(yield* c.bump(1)).toBe(4);
+          yield* c.stop();
+          // stopped: the loop is settled, the state is still there
+          expect(yield* c.read()).toBe(4);
+          // dispatch on a settled session answers with the outcome
+          expect(yield* c.dispatch("anything")).toEqual({
+            _tag: "Stopped",
+            by: "operator",
+          });
+          yield* c.destroy();
+          // gone: the next contact is a FRESH session, at the initial state
+          expect(yield* counter.at("s1").read()).toBe(0);
+        }).pipe(
+          Effect.scoped,
+          Effect.provide(
+            Layer.provideMerge(Counter.Default, testLayer(model, Layer.empty)),
+          ),
+        );
+      },
+    );
+
+    it.effect(
+      "the charter runs once per Layer build: what it constructs is shared; what it DECLARES is per session",
+      () => {
+        const model = Model.make([]);
+        return Effect.gen(function* () {
+          let builds = 0;
+          const charter = Effect.gen(function* () {
+            builds++;
+            // constructed here → the agent's, shared by every session
+            // (a binding client, a tool — or this Ref)
+            const shared = yield* Ref.make(0);
+            // declared here → a row per session
+            const own = PersistentRef.of("own", () => 0);
+            return {
+              turn: Effect.flatMap(
+                AI.Thread,
+                ({ key }) => AI.fragment`Hello ${key}.`,
+              ),
+              touch: () =>
+                Effect.all([
+                  Ref.updateAndGet(shared, (n) => n + 1),
+                  PersistentRef.modify(own, (n) => [n + 1, n + 1]),
+                ]),
+            };
+          });
+          const agent = AI.withStubs<AI.ContractOf<typeof charter>>(
+            yield* interpret(Counter, charter),
+          );
+          expect(builds).toBe(1);
+          expect(yield* agent.at("x").touch()).toEqual([1, 1]);
+          expect(yield* agent.at("y").touch()).toEqual([2, 1]);
+          expect(yield* agent.at("x").touch()).toEqual([3, 2]);
+          expect(builds).toBe(1);
+        }).pipe(Effect.scoped, Effect.provide(testLayer(model, Layer.empty)));
+      },
+    );
+
+    it.effect(
+      "a charter that reaches for the session (AI.Thread) fails the BUILD, loudly",
+      () => {
+        const model = Model.make([]);
+        return Effect.gen(function* () {
+          const charter = Effect.gen(function* () {
+            yield* AI.Thread; // there is no session here
+            return AI.fragment`never`;
+          });
+          const exit = yield* Effect.exit(
+            Effect.flatMap(AI.Driver, (driver) =>
+              driver.interpret(Counter, charter),
+            ),
+          );
+          expect(Exit.isFailure(exit)).toBe(true);
+          if (Exit.isFailure(exit)) {
+            const message = String(Cause.squash(exit.cause));
+            expect(message).toContain("charter of 'Counter' failed");
+            expect(message).toContain("alchemy/AI/Thread");
+          }
+        }).pipe(Effect.scoped, Effect.provide(testLayer(model, Layer.empty)));
+      },
+    );
+
+    /**
+     * The DECLARED form: the contract is the type parameter — the API,
+     * an interface of methods; `make` checks each implementation
+     * against it.
+     */
+    class Greeter extends AI.Agent<
+      Greeter,
+      {
+        setName(name: string): Effect.Effect<void>;
+        greet(punctuation: string): Effect.Effect<string>;
+      }
+    >()("Greeter") {}
+
+    const Polite = Greeter.make(
+      Effect.gen(function* () {
+        const name = PersistentRef.of("name", () => "stranger");
+        return {
+          turn: AI.fragment`You greet.`,
+          setName: (to: string) => PersistentRef.set(name, to),
+          greet: (punctuation: string) =>
+            Effect.map(name, (n) => `Good day, ${n}${punctuation}`),
+        };
+      }),
+    );
+
+    const Casual = Greeter.make(
+      Effect.gen(function* () {
+        const prefix = yield* Effect.succeed("hey");
+        const name = PersistentRef.of("name", () => "you");
+        return {
+          turn: AI.fragment`You greet.`,
+          setName: (to: string) => PersistentRef.set(name, to),
+          greet: (punctuation: string) =>
+            Effect.map(name, (n) => `${prefix} ${n}${punctuation}`),
+        };
+      }),
+    );
+
+    // an implementation that does not satisfy the contract is rejected
+    Greeter.make(
+      // @ts-expect-error — `greet` returns a number, the contract says string
+      Effect.gen(function* () {
+        return {
+          turn: AI.fragment`x`,
+          setName: (_n: string) => Effect.void,
+          greet: (_p: string) => Effect.succeed(1),
+        };
+      }),
+    );
+
+    // a method may not shadow a stub verb
+    AI.Agent<never>()(
+      "Shadow",
+      // @ts-expect-error — `send` is reserved
+      Effect.gen(function* () {
+        return { turn: AI.fragment`x`, send: () => Effect.void };
+      }),
+    );
+
+    it.effect("one contract, two implementations, side by side", () => {
+      const model = Model.make([]);
+      return Effect.gen(function* () {
+        const polite = yield* Effect.provide(Greeter, Polite);
+        const casual = yield* Effect.provide(Greeter, Casual);
+        yield* polite.at("a").setName("Ada");
+        expect(yield* polite.at("a").greet("!")).toBe("Good day, Ada!");
+        yield* casual.at("b").setName("Bob");
+        expect(yield* casual.at("b").greet("?")).toBe("hey Bob?");
+      }).pipe(Effect.scoped, Effect.provide(testLayer(model, Layer.empty)));
+    });
   });
 });

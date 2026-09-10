@@ -34,8 +34,9 @@ export class BadRef extends Data.TaggedError("BadRef")<{ message: string }> {}
  * `pull_request` block), so one call settles kind, title, and state.
  */
 export const makeEntityLookup = Effect.gen(function* () {
-  const repos = yield* Effect.forEach(connected, (entry) =>
-    Effect.gen(function* () {
+  const repos = yield* Effect.forEach(
+    connected,
+    Effect.fn(function* (entry) {
       const identity = yield* GitHub.resolveRepository(entry.repository);
       return {
         full: `${identity.owner}/${identity.repository}`,
@@ -45,8 +46,8 @@ export const makeEntityLookup = Effect.gen(function* () {
   );
   const connectedNames = repos.map((repo) => repo.full).join(", ");
 
-  return (ref: string): Effect.Effect<Entity, BadRef> =>
-    Effect.gen(function* () {
+  const lookup: (ref: string) => Effect.Effect<Entity, BadRef> = Effect.fn(
+    function* (ref: string) {
       const parsed = parseEntityRef(ref);
       if (parsed === undefined) {
         return yield* new BadRef({ message: `${ref} is not owner/repo#N` });
@@ -83,5 +84,7 @@ export const makeEntityLookup = Effect.gen(function* () {
               ? "open"
               : "closed",
       };
-    });
+    },
+  );
+  return lookup;
 });

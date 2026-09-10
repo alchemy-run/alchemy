@@ -7,9 +7,13 @@ import {
   type Charter,
   type CharterServices,
   type Driver,
+  type SessionObject,
+  type SessionResult,
+  type Turn,
+  type TurnFn,
   type TurnServices,
 } from "./Driver.ts";
-import { fragment, type Services } from "./Fragment.ts";
+import { fragment, type Fragment, type Services } from "./Fragment.ts";
 import { makeSource, type Source } from "./Source.ts";
 import type { Tool, ToolParameters } from "./Tool.ts";
 
@@ -110,7 +114,141 @@ export interface Actor<In = unknown> {
   ): Effect.Effect<void, never, RuntimeContext>;
   /** Scope authority: settle in-flight work as interrupted. */
   interrupt(): Effect.Effect<void, never, RuntimeContext>;
+  /**
+   * Call one METHOD of a session's API (the keys beside `turn` on its
+   * charter's result) inside the session frame. Admits the key on
+   * first contact. A method the session does not declare is a defect;
+   * the method's own typed failure rides the error channel. The typed
+   * face of this is the {@link Stub} from `at`.
+   */
+  call(
+    sessionKey: string,
+    method: string,
+    args: ReadonlyArray<unknown>,
+  ): Effect.Effect<unknown, unknown, RuntimeContext>;
+  /** The operator's stop for one session: settle it in place (children
+   *  cascade, the round in flight is cut); the object stays. */
+  stop(sessionKey: string): Effect.Effect<void, never, RuntimeContext>;
+  /** The undo for `stop`: clear the settled tombstone; the next input
+   *  opens a round. */
+  resume(sessionKey: string): Effect.Effect<void, never, RuntimeContext>;
+  /** Erase one session: settle, cut the round, purge its rows, so the
+   *  key can be admitted fresh. `machine` (default true) also takes
+   *  the session's sandbox machine down — false when siblings share it. */
+  destroy(
+    sessionKey: string,
+    options?: { readonly machine?: boolean },
+  ): Effect.Effect<void, never, RuntimeContext>;
 }
+
+// ──────────────────────── the API surface ─────────────────────────
+
+/** The names every session stub carries — an API may not reuse them. */
+export type ReservedVerbs =
+  | "turn"
+  | "dispatch"
+  | "send"
+  | "steer"
+  | "settle"
+  | "stop"
+  | "resume"
+  | "destroy";
+
+/** The METHODS of a charter's result: everything beside `turn`. */
+export type ApiOf<Result> = Result extends SessionObject
+  ? { readonly [K in Exclude<keyof Result, "turn">]: Result[K] }
+  : {};
+
+/**
+ * The CONTRACT an agent class may declare as its second type
+ * parameter — the session's API, an interface of methods — or, when
+ * omitted, the contract INFERRED from the implementation (see
+ * {@link ContractOf}). A session is not constructed: what varies per
+ * session is STATE, set through its methods.
+ */
+export type ContractApi<Contract> = Contract extends object ? Contract : {};
+
+/** The contract inferred from an implementation ({@link Charter}). */
+export type ContractOf<C> =
+  C extends Effect.Effect<infer A, any, any> ? ApiOf<A> : never;
+
+/** Reserved names an API wrongly reuses (`never` when clean). */
+export type ReservedIn<Contract> = Extract<
+  keyof ContractApi<Contract>,
+  ReservedVerbs
+>;
+
+/**
+ * The implementation a DECLARED contract admits: a charter whose
+ * result carries the contract's methods (each checked by arguments,
+ * success, and failure — the frame in `R` is the implementation's
+ * business).
+ */
+export type ImplementationOf<Contract> = unknown extends Contract
+  ? Charter
+  : Effect.Effect<ResultFor<ContractApi<Contract>>, any, any>;
+
+/** The session result a declared API demands. */
+export type ResultFor<Api> = keyof Api extends never
+  ? SessionResult
+  : { readonly turn: Fragment | Turn | TurnFn } & {
+      readonly [K in keyof Api]: Api[K] extends (
+        ...args: infer Args
+      ) => Effect.Effect<infer A, infer E, any>
+        ? (...args: Args) => Effect.Effect<A, E, any>
+        : never;
+    };
+
+/** The loop verbs on a session stub — the {@link Actor} verbs with the
+ *  key bound. */
+export interface StubVerbs<In = unknown> {
+  readonly dispatch: (
+    item: In,
+  ) => Effect.Effect<unknown, never, RuntimeContext>;
+  readonly send: (
+    item: In,
+    options?: { readonly wake?: boolean },
+  ) => Effect.Effect<void, never, RuntimeContext>;
+  readonly steer: (item: In) => Effect.Effect<void, never, RuntimeContext>;
+  readonly settle: (
+    outcome: unknown,
+  ) => Effect.Effect<void, never, RuntimeContext>;
+  readonly stop: () => Effect.Effect<void, never, RuntimeContext>;
+  readonly resume: () => Effect.Effect<void, never, RuntimeContext>;
+  readonly destroy: (options?: {
+    readonly machine?: boolean;
+  }) => Effect.Effect<void, never, RuntimeContext>;
+}
+
+/** The API as callers see it: each method's `R` is the runtime color
+ *  alone — the driver supplies the session frame. */
+export type StubMethods<Api> = {
+  readonly [K in keyof Api]: Api[K] extends (
+    ...args: infer Args
+  ) => Effect.Effect<infer A, infer E, any>
+    ? (...args: Args) => Effect.Effect<A, E, RuntimeContext>
+    : never;
+};
+
+/**
+ * One session, addressed: `engineer.at(key)` — no I/O; the loop verbs
+ * with the key bound, plus the agent's declared methods. Like a
+ * Durable Object stub: the first verb admits the session, every later
+ * one finds it.
+ */
+export type Stub<Contract = unknown, In = unknown> = StubVerbs<In> &
+  StubMethods<ContractApi<Contract>>;
+
+/**
+ * What resolving an {@link Agent} tag yields: the {@link Actor} verbs
+ * (the namespace — mint a session, address one by key) plus `at`, the
+ * typed stub for one session.
+ */
+export type AgentService<Contract = unknown, In = unknown> = Actor<In> & {
+  readonly at: 0 extends 1 & Contract
+    ? (key: string) => Stub<any, In>
+    : (key: string) => Stub<Contract, In>;
+};
 
 /**
  * An `Agent` term is a callable persona — a NAME, declared as a
@@ -153,11 +291,17 @@ export interface Actor<In = unknown> {
  * requirements; no Layer can grant it merge authority. Constitutional
  * constraints are enforced by the type system, not by prose.
  */
-export interface Agent<Name extends string = string, Self = unknown> {
+export interface Agent<
+  Name extends string = string,
+  Self = unknown,
+  Contract = unknown,
+> {
   "~alchemy/Kind": "Agent";
   "~alchemy/Name": Name;
   /** Phantom carrier for the tag identifier (`Self` in the `<Self>()` form). */
   "~alchemy/Self": Self;
+  /** Phantom carrier for the declared (or inferred) contract. */
+  "~alchemy/Contract": Contract;
   /**
    * The file this agent is defined in — present when the term was
    * declared as `AI.Agent<Self>(import.meta)(name)`. Splice
@@ -166,9 +310,12 @@ export interface Agent<Name extends string = string, Self = unknown> {
    */
   readonly source?: Source;
   /**
-   * The driver-default implementation Layer: interpret the CHARTER
-   * (init → turn), publish the resulting actor verbs as this tag's
-   * service.
+   * An implementation Layer for this tag: run the CHARTER once (its
+   * bindings, tools, turn and API), publish the resulting
+   * namespace as this tag's service. One contract can carry many
+   * implementations (`GeneralEngineer = Engineer.make(…)`, a stricter
+   * one for prod); an agent with ONE implementation declares it on
+   * the class instead and gets {@link Agent.Default}.
    *
    * A persona whose stance never changes writes its charter as a
    * TAGGED TEMPLATE directly on `make` — the static shorthand:
@@ -179,16 +326,16 @@ export interface Agent<Name extends string = string, Self = unknown> {
    *   Verdict via ${Approve} or changes via ${Comment}.`;
    * ```
    *
-   * A dynamic persona passes the full init → turn charter:
+   * Otherwise pass a {@link Charter} — one Effect, run at plan time,
+   * declaring the agent's bindings, tools and methods together:
    *
    * ```ts
-   * export const EngineerLive = Engineer.make(Effect.gen(function* () {
-   *   const done = yield* Ref.make(false);        // init: Refs, bindings for tools
-   *   return Effect.gen(function* () {            // turn: every sampling
-   *     const { count } = yield* AI.Tick;         // runtime facts live here
-   *     return yield* AI.fragment`…`;
-   *   });
-   * }));
+   * export const GeneralEngineer = Engineer.make(
+   *   Effect.gen(function* () {
+   *     const model = PersistentRef.of("model", () => DEFAULT);  // a declared cell
+   *     return { turn: stance, setModel: (id) => PersistentRef.set(model, id) };
+   *   }),
+   * );
    * ```
    */
   readonly make: {
@@ -202,30 +349,109 @@ export interface Agent<Name extends string = string, Self = unknown> {
       template: TemplateStringsArray,
       ...refs: Refs
     ): Layer.Layer<Self, never, Driver | Exclude<Services<Refs>, TurnServices>>;
-    <C extends Charter>(
+    <C extends ImplementationOf<Contract>>(
       charter: C,
     ): Layer.Layer<Self, never, Driver | CharterServices<C>>;
   };
   /**
    * Instances are branded with the agent's name so distinct agents
    * remain distinct types (and therefore distinct tags). The instance
-   * shape is always the one agent interface: the actor verbs.
+   * shape is the agent namespace: the actor verbs plus `at`.
    */
-  new (_: never): Actor & { readonly "~alchemy/Name": Name };
+  new (_: never): AgentService<Contract> & { readonly "~alchemy/Name": Name };
 }
 
+/** An agent declared WITH its implementation carries the Layer. */
+export interface AgentWithDefault<
+  Name extends string,
+  Self,
+  Contract,
+  C,
+> extends Agent<Name, Self, Contract> {
+  /** The implementation Layer — `Effect.Service`'s `Default` idiom. */
+  readonly Default: Layer.Layer<Self, never, Driver | CharterServices<C>>;
+}
+
+/** The contract the class ends up with: declared when given, else
+ *  inferred from the implementation. */
+export type ResolvedContract<Contract, C> = unknown extends Contract
+  ? ContractOf<C>
+  : Contract;
+
+/** A compile-time guard: an API may not reuse a stub verb's name. */
+export type NoReserved<Contract> = [ReservedIn<Contract>] extends [never]
+  ? unknown
+  : {
+      readonly "~alchemy/error": `API method name is reserved: ${ReservedIn<Contract> & string}`;
+    };
+
+/**
+ * Declare an agent — a NAME, optionally with its CONTRACT and its
+ * IMPLEMENTATION.
+ *
+ * **Inferred.** No contract in the type parameter; the API comes from
+ * the implementation:
+ *
+ * ```ts
+ * export class Engineer extends AI.Agent<Engineer>(import.meta)(
+ *   "Engineer",
+ *   Effect.gen(function* () {
+ *     const model = PersistentRef.of("model", () => DEFAULT);
+ *     return {
+ *       turn: stance,
+ *       setModel: (id: ModelId) => PersistentRef.set(model, id),
+ *     };
+ *   }),
+ * ) {}
+ * // Engineer.Default : Layer<Engineer, never, Deps>
+ * // engineer.at(key).setModel : (id: ModelId) => Effect<void, never, RuntimeContext>
+ * ```
+ *
+ * **Declared.** The contract is the type parameter — the API, an
+ * interface of methods; the implementation — inline or via `make` —
+ * is checked against it:
+ *
+ * ```ts
+ * export class Engineer extends AI.Agent<Engineer, {
+ *   setModel(id: ModelId): Effect.Effect<void>;
+ * }>(import.meta)("Engineer", Effect.gen(function* () { … })) {}
+ *
+ * // or tag only, implementations elsewhere:
+ * export class Engineer extends AI.Agent<Engineer, EngineerApi>(import.meta)("Engineer") {}
+ * export const GeneralEngineer = Engineer.make(Effect.gen(function* () { … }));
+ * ```
+ *
+ * The charter is ONE Effect, run at plan time (see {@link Charter}):
+ * bindings, tools and methods in one scope. Sessions are not
+ * constructed — everything that varies per session is state in a
+ * declared cell (`PersistentRef.of`), set through a method
+ * (`at(key).setModel(id)` before the first `dispatch`), and read by
+ * turns, tools and methods from the session frame they run in. No
+ * API: return a fragment. An agent whose implementation references its
+ * own class (one that spawns itself) is a circular base expression for
+ * TypeScript — use the declared form there.
+ *
+ * `AI.Agent<Self>(import.meta)` additionally records the defining file
+ * as `source` (see Source.ts).
+ */
 export const Agent: {
-  /**
-   * `AI.Agent<Self>()(name)` declares the tag; `AI.Agent<Self>(import.meta)(name)`
-   * additionally records the defining file as `source` (see Source.ts).
-   */
-  <Self>(meta?: ImportMeta): {
+  <Self, Contract = unknown>(
+    meta?: ImportMeta,
+  ): {
+    /** The tag alone; implementations via `make`. */
     <Name extends string>(
       name: Name,
-    ): Agent<Name, Self> & Context.Service<Self, Actor>;
+    ): Agent<Name, Self, Contract> &
+      Context.Service<Self, AgentService<Contract>>;
+    /** The tag WITH its implementation — `Default` is the Layer. */
+    <Name extends string, const C extends ImplementationOf<Contract>>(
+      name: Name,
+      charter: C & NoReserved<ResolvedContract<Contract, C>>,
+    ): AgentWithDefault<Name, Self, ResolvedContract<Contract, C>, C> &
+      Context.Service<Self, AgentService<ResolvedContract<Contract, C>>>;
   };
-} = ((meta?: ImportMeta) => (name: string) =>
-  makeTerm("Agent", name, undefined, undefined, meta)) as any;
+} = ((meta?: ImportMeta) => (name: string, charter?: Charter) =>
+  makeTerm("Agent", name, undefined, undefined, meta, charter)) as any;
 
 /** Shared constructor for the tag-bearing terms (Agent, Skill). */
 export const makeTerm = (
@@ -234,6 +460,7 @@ export const makeTerm = (
   template?: TemplateStringsArray,
   refs?: any[],
   meta?: ImportMeta,
+  charter?: Charter,
 ) => {
   const cls = class extends (Context.Service<any, any>()(
     `alchemy/AI/${kind}/${name}`,
@@ -243,6 +470,8 @@ export const makeTerm = (
     "~alchemy/Name": name,
     ...(meta !== undefined ? { source: makeSource(meta, kind, name) } : {}),
     ...(template !== undefined ? { template, refs } : {}),
+    // an agent declared WITH its implementation: `Default` is the Layer
+    ...(charter !== undefined ? { Default: layer(cls as any, charter) } : {}),
     // the implementation Layer: `Engineer.make(charter)`, the static
     // tagged-template shorthand `Reviewer.make`…``, or a skill's
     // teaching `Coding.make`…`` — for a Skill the template IS the

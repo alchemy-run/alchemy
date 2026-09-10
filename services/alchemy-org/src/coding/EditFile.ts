@@ -44,7 +44,7 @@ export const EditFileLive = Layer.effect(
   EditFile,
   Effect.gen(function* () {
     const sandbox = yield* AI.Sandbox;
-    return ((input: {
+    return Effect.fn(function* (input: {
       path: string;
       edits: ReadonlyArray<{
         oldString: string;
@@ -52,83 +52,80 @@ export const EditFileLive = Layer.effect(
         replaceAll?: boolean;
       }>;
       expectedDigest: string;
-    }) =>
-      Effect.gen(function* () {
-        const content = yield* sandbox.readFile(input.path);
-        const digest = yield* sha256Hex(content);
-        if (digest !== input.expectedDigest) {
+    }) {
+      const content = yield* sandbox.readFile(input.path);
+      const digest = yield* sha256Hex(content);
+      if (digest !== input.expectedDigest) {
+        return yield* Effect.fail(
+          `file changed since it was read: ${input.path} — read it again and retry with the new digest`,
+        );
+      }
+
+      interface Replacement {
+        readonly start: number;
+        readonly end: number;
+        readonly text: string;
+      }
+      const replacements: Replacement[] = [];
+      for (const edit of input.edits) {
+        if (edit.oldString.length === 0) {
           return yield* Effect.fail(
-            `file changed since it was read: ${input.path} — read it again and retry with the new digest`,
+            "oldString must not be empty — use writeFile to create a new file",
           );
         }
+        if (edit.oldString === edit.newString) {
+          return yield* Effect.fail(
+            "oldString and newString are identical — no change to apply",
+          );
+        }
+        const starts: number[] = [];
+        let cursor = 0;
+        while (true) {
+          const found = content.indexOf(edit.oldString, cursor);
+          if (found === -1) break;
+          starts.push(found);
+          cursor = found + edit.oldString.length;
+        }
+        if (starts.length === 0) {
+          return yield* Effect.fail(
+            `oldString was not found in ${input.path} — re-read the file ` +
+              `and copy the exact text without the "N: " line-number prefix`,
+          );
+        }
+        if (starts.length > 1 && edit.replaceAll !== true) {
+          return yield* Effect.fail(
+            `oldString matches ${starts.length} locations in ${input.path} — ` +
+              `include more surrounding context or set replaceAll`,
+          );
+        }
+        for (const start of edit.replaceAll === true ? starts : [starts[0]!]) {
+          replacements.push({
+            start,
+            end: start + edit.oldString.length,
+            text: edit.newString,
+          });
+        }
+      }
 
-        interface Replacement {
-          readonly start: number;
-          readonly end: number;
-          readonly text: string;
+      replacements.sort((a, b) => a.start - b.start);
+      for (let index = 1; index < replacements.length; index++) {
+        if (replacements[index]!.start < replacements[index - 1]!.end) {
+          return yield* Effect.fail(
+            `edits overlap in ${input.path} — merge nearby changes into one edit`,
+          );
         }
-        const replacements: Replacement[] = [];
-        for (const edit of input.edits) {
-          if (edit.oldString.length === 0) {
-            return yield* Effect.fail(
-              "oldString must not be empty — use writeFile to create a new file",
-            );
-          }
-          if (edit.oldString === edit.newString) {
-            return yield* Effect.fail(
-              "oldString and newString are identical — no change to apply",
-            );
-          }
-          const starts: number[] = [];
-          let cursor = 0;
-          while (true) {
-            const found = content.indexOf(edit.oldString, cursor);
-            if (found === -1) break;
-            starts.push(found);
-            cursor = found + edit.oldString.length;
-          }
-          if (starts.length === 0) {
-            return yield* Effect.fail(
-              `oldString was not found in ${input.path} — re-read the file ` +
-                `and copy the exact text without the "N: " line-number prefix`,
-            );
-          }
-          if (starts.length > 1 && edit.replaceAll !== true) {
-            return yield* Effect.fail(
-              `oldString matches ${starts.length} locations in ${input.path} — ` +
-                `include more surrounding context or set replaceAll`,
-            );
-          }
-          for (const start of edit.replaceAll === true
-            ? starts
-            : [starts[0]!]) {
-            replacements.push({
-              start,
-              end: start + edit.oldString.length,
-              text: edit.newString,
-            });
-          }
-        }
+      }
 
-        replacements.sort((a, b) => a.start - b.start);
-        for (let index = 1; index < replacements.length; index++) {
-          if (replacements[index]!.start < replacements[index - 1]!.end) {
-            return yield* Effect.fail(
-              `edits overlap in ${input.path} — merge nearby changes into one edit`,
-            );
-          }
-        }
-
-        let updated = content;
-        for (const replacement of [...replacements].reverse()) {
-          updated =
-            updated.slice(0, replacement.start) +
-            replacement.text +
-            updated.slice(replacement.end);
-        }
-        yield* sandbox.writeFile(input.path, updated);
-        const next = yield* sha256Hex(updated);
-        return { replaced: replacements.length, digest: next };
-      })) as never;
+      let updated = content;
+      for (const replacement of [...replacements].reverse()) {
+        updated =
+          updated.slice(0, replacement.start) +
+          replacement.text +
+          updated.slice(replacement.end);
+      }
+      yield* sandbox.writeFile(input.path, updated);
+      const next = yield* sha256Hex(updated);
+      return { replaced: replacements.length, digest: next };
+    }) as never;
   }),
 );

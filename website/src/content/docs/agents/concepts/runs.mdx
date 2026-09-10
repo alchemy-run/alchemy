@@ -5,7 +5,7 @@ description: Keyed conversations that park, wake, and settle — the actor verbs
 
 An agent's implementation is one loop, but its *state* is a keyed map
 of **runs** — each run a durable conversation with its own thread,
-its own init closure, and its own lifecycle.
+its own durable cells, and its own lifecycle.
 
 ## Keys are world identity
 

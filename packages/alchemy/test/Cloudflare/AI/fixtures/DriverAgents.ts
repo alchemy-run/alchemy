@@ -12,6 +12,8 @@
  */
 import * as AI from "@/AI/index.ts";
 import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as PersistentRef from "@/PersistentRef.ts";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { MinimumLogLevel } from "effect/References";
@@ -219,11 +221,13 @@ How long to wait, in seconds.`;
 export class Remind extends (AI.Tool<Remind>()("remind")`
 Come back to this in ${seconds} — you will be woken with a note.`) {}
 
-export const RemindLive = Layer.succeed(Remind, ((input: { seconds: number }) =>
-  Effect.gen(function* () {
+export const RemindLive = Layer.succeed(
+  Remind,
+  Effect.fn(function* (input: { seconds: number }) {
     const thread = yield* AI.Thread;
     yield* thread.remind(`${input.seconds} seconds`, "the timer elapsed");
-  })) as never);
+  }) as never,
+);
 
 export const label = AI.Thing("label", S.String)`What is being waited on.`;
 
@@ -279,16 +283,15 @@ export const HandoffLive = Layer.effect(
   Handoff,
   Effect.gen(function* () {
     const scribe = yield* Scribe;
-    return ((input: { task: string }) =>
-      Effect.gen(function* () {
-        const session = yield* AI.Thread;
-        const { key, task } = handoffKey(input.task);
-        const outcome = yield* scribe.dispatch(task, {
-          key,
-          parent: { term: "Supervisor", key: session.key },
-        });
-        return { outcome };
-      })) as never;
+    return Effect.fn(function* (input: { task: string }) {
+      const session = yield* AI.Thread;
+      const { key, task } = handoffKey(input.task);
+      const outcome = yield* scribe.dispatch(task, {
+        key,
+        parent: { term: "Supervisor", key: session.key },
+      });
+      return { outcome };
+    }) as never;
   }),
 );
 
@@ -302,6 +305,72 @@ export const SupervisorLive = Supervisor.make(
     what came back — or ${Handoff} it when asked to.
   `,
 ).pipe(Layer.provide(HandoffLive));
+
+/** A method's DECLARED failure — crosses the DO wire as a failure (a
+ *  plain `{ _tag, ...fields }` on the far side). */
+export class Overdrawn extends Data.TaggedError("Overdrawn")<{
+  balance: number;
+  requested: number;
+}> {}
+
+/**
+ * The agent as an OBJECT on the Durable Object placement: an API
+ * beside the loop, state in DECLARED cells (`PersistentRef.of`) that
+ * resolve over the DO's own storage in whichever method touches them
+ * — set through `open`, so a method call after eviction still sees
+ * the owner and the balance. `Ledger.Default` is the Layer (the
+ * inferred inline form); the charter is one Effect, run at build.
+ */
+export class Ledger extends AI.Agent<Ledger>()(
+  "Ledger",
+  Effect.gen(function* () {
+    const owner = PersistentRef.of<string | null>("owner", () => null);
+    const balance = PersistentRef.of("balance", () => 0);
+    return {
+      turn: Effect.flatMap(
+        owner,
+        (o) =>
+          AI.fragment`You keep ${o ?? "nobody"}'s ledger. Report the thread.`,
+      ),
+      // OPEN the ledger: who it is for, and the opening balance — the
+      // state a constructor argument would have carried, as a method
+      open: Effect.fn(function* (input: { owner: string; opening: number }) {
+        yield* PersistentRef.set(owner, input.owner);
+        yield* PersistentRef.set(balance, input.opening);
+      }),
+      // the object PUBLISHES its view: every attached viewer (the DO's
+      // hibernatable sockets) takes the fresh balance as a `state` frame
+      deposit: Effect.fn(function* (amount: number) {
+        const thread = yield* AI.Thread; // the session, at call time
+        const next = yield* PersistentRef.modify(balance, (b) => [
+          b + amount,
+          b + amount,
+        ]);
+        yield* thread.publish({ balance: next });
+        return next;
+      }),
+      withdraw: Effect.fn(function* (amount: number) {
+        const current = yield* balance;
+        if (amount > current) {
+          return yield* new Overdrawn({
+            balance: current,
+            requested: amount,
+          });
+        }
+        yield* PersistentRef.set(balance, current - amount);
+        return current - amount;
+      }),
+      statement: () =>
+        Effect.all({ thread: AI.Thread, owner, balance }).pipe(
+          Effect.map(({ thread, owner, balance }) => ({
+            key: thread.key,
+            owner,
+            balance,
+          })),
+        ),
+    };
+  }),
+) {}
 
 /**
  * Every driver observation into the Worker's log, which is what makes
@@ -322,6 +391,7 @@ export const LoggingObserver = Layer.succeed(AI.Events, {
  */
 export const Agents = SupervisorLive.pipe(
   Layer.provideMerge(ScribeLive),
+  Layer.provideMerge(Ledger.Default),
   Layer.provideMerge(Cloudflare.AI.DriverCloudflare),
   Layer.provideMerge(
     Layer.mergeAll(

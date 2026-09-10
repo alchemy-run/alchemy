@@ -808,6 +808,62 @@ test("+ opens a terminal on the thread's machine; close returns to chat", async 
   await expect(page).toHaveURL(new RegExp(`${threadPath("t-1")}$`));
 });
 
+test("the model selector: the thread's pick lands as PUT on its session and the pane follows the state", async ({
+  page,
+  api,
+}) => {
+  seedThread(api);
+  await openApp(page, threadPath("t-1"));
+
+  const pane = page.getByRole("complementary", { name: "Thread state" });
+  const select = pane.getByRole("combobox", { name: "Thread model" });
+  // nothing chosen: the default, named
+  await expect(select).toHaveAttribute("data-model", "default");
+  await expect(select).toContainText("Default");
+  await expect(select).toContainText("Claude Haiku 4.5");
+
+  // pick Opus: one PUT on the thread's session, the state push re-renders
+  await select.click();
+  await page.getByRole("option", { name: /Claude Opus 4.1/ }).click();
+  await expect.poll(() => api.modelPicks).toEqual([
+    { session: "Thread:t-1", model: "claude-opus-4-1" },
+  ]);
+  await expect(select).toHaveAttribute("data-model", "claude-opus-4-1");
+  await expect(select).toContainText("Claude Opus 4.1");
+  expect(api.threads["t-1"]?.model).toBe("claude-opus-4-1");
+
+  // back to the default: `null` on the wire, the field leaves the state
+  await select.click();
+  await page.getByRole("option", { name: /^Default/ }).click();
+  await expect.poll(() => api.modelPicks.length).toBe(2);
+  expect(api.modelPicks[1]).toEqual({ session: "Thread:t-1", model: null });
+  await expect(select).toHaveAttribute("data-model", "default");
+  expect(api.threads["t-1"]?.model).toBeUndefined();
+});
+
+test("an engineer's pane has its own selector: read over GET, written on its session", async ({
+  page,
+  api,
+}) => {
+  seedThread(api);
+  api.engineerModels["engineer-1"] = "gpt-5-mini";
+  await openApp(page, threadPath("t-1"));
+  await agentRow(page, "engineer-1").click();
+
+  const select = page.getByRole("combobox", { name: "Agent model" });
+  await expect(select).toHaveAttribute("data-model", "gpt-5-mini");
+  await expect(select).toContainText("GPT-5 mini");
+
+  await select.click();
+  await page.getByRole("option", { name: /^GPT-5 openai/ }).click();
+  await expect.poll(() => api.modelPicks).toEqual([
+    { session: "Engineer:engineer-1", model: "gpt-5" },
+  ]);
+  await expect(select).toContainText("GPT-5");
+  // the thread's own pick is untouched
+  expect(api.threads["t-1"]?.model).toBeUndefined();
+});
+
 test("close thread posts and the header shows closed", async ({
   page,
   api,

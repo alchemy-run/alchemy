@@ -415,10 +415,12 @@ const listProviderConfigs = (accountId: string, gatewayId: string) =>
     .listProviderConfigs({ accountId, gatewayId, perPage: 50 })
     .pipe(Effect.map((page) => page.result));
 
-const createAlias = (id: string, alias: string | undefined) =>
-  Effect.gen(function* () {
-    return alias ?? (yield* createPhysicalName({ id, lowercase: true }));
-  });
+const createAlias = Effect.fn(function* (
+  id: string,
+  alias: string | undefined,
+) {
+  return alias ?? (yield* createPhysicalName({ id, lowercase: true }));
+});
 
 const toAttributes = (
   config:

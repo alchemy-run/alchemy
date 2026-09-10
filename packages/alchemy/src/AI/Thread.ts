@@ -80,6 +80,15 @@ export interface ThreadService {
    * Object alarm on a durable driver.
    */
   readonly remind: (delay: Duration.Input, note: string) => Effect.Effect<void>;
+  /**
+   * PUSH this session's state to everyone attached to it — the object
+   * publishing its view. The value must be structured-clonable (it
+   * crosses the socket as JSON). View-only: the push is not persisted
+   * or replayed; a viewer attaching later reads the current state
+   * through a method and takes pushes from there. Nothing attached is
+   * not an error.
+   */
+  readonly publish: (state: unknown) => Effect.Effect<void>;
 }
 
 export class Thread extends Context.Service<Thread, ThreadService>()(

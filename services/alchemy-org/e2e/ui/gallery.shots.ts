@@ -418,6 +418,32 @@ test("thread: a run of worktrees folded, and another opened", async ({
   await shot(page, "thread-07-tool-run");
 });
 
+test("thread: the model selector open in the state pane", async ({
+  page,
+  api,
+}) => {
+  seedWorld(api);
+  api.updateThread("t-1", { model: "claude-opus-4-1" });
+  api.seedTool("Thread:t-1", {
+    ask: "get a worktree for the PR",
+    name: "worktree",
+    input: { ref: `${REPO}#148` },
+    output: { path: "/workspace/trees/pr-148", branch: "pr-148" },
+    reply: "Worktree ready — the engineer works there.",
+  });
+  await openApp(page, threadPath("t-1"));
+  await expect(page.getByRole("main")).toContainText("Worktree ready");
+  const select = page
+    .getByRole("complementary", { name: "Thread state" })
+    .getByRole("combobox", { name: "Thread model" });
+  await expect(select).toContainText("Claude Opus 4.1");
+  await select.click();
+  const option = page.getByRole("option", { name: /GPT-5 mini/ });
+  await option.hover();
+  await expect(option).toHaveAttribute("data-highlighted", "");
+  await shot(page, "thread-08-model-selector");
+});
+
 test("review: the diff beside the chat", async ({ page, api }) => {
   seedWorld(api);
   api.seedTurn(

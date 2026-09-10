@@ -245,8 +245,8 @@ export const EvalWorkerLoader = (
       const transform = options?.transform ?? ((source: string) => source);
 
       return {
-        run: ({ modules, main, tools, timeout }) =>
-          Effect.gen(function* () {
+        run: Effect.fn(
+          function* ({ modules, main, tools }) {
             // model + convention modules (transformed), the runtime's
             // extra modules (effect.js, untransformed), and the two
             // reserved modules the isolate always carries
@@ -305,17 +305,20 @@ export const EvalWorkerLoader = (
               return yield* Effect.fail(body.error);
             }
             return { output: body.output, logs: body.logs ?? [] };
-          }).pipe(
-            Effect.timeoutOrElse({
-              duration: timeout,
-              orElse: () =>
-                Effect.fail(
-                  `eval timed out after ${Duration.format(
-                    Duration.fromInputUnsafe(timeout),
-                  )} — split the work into smaller programs`,
-                ),
-            }),
-          ),
+          },
+          (effect, { timeout }) =>
+            effect.pipe(
+              Effect.timeoutOrElse({
+                duration: timeout,
+                orElse: () =>
+                  Effect.fail(
+                    `eval timed out after ${Duration.format(
+                      Duration.fromInputUnsafe(timeout),
+                    )} — split the work into smaller programs`,
+                  ),
+              }),
+            ),
+        ),
       };
     }),
   );

@@ -5,12 +5,10 @@ import * as Option from "effect/Option";
 import type * as Scope from "effect/Scope";
 import type * as PersistentRef from "../PersistentRef.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
-import type { Actor } from "./Agent.ts";
-import type { Agent } from "./Agent.ts";
+import type { Actor, Agent, AgentService, Stub, StubVerbs } from "./Agent.ts";
 import type { DriverError } from "./Errors.ts";
 import type { Fragment } from "./Fragment.ts";
 import type { Thread, Tick } from "./Thread.ts";
-import type { Services } from "./Fragment.ts";
 import {
   isSkill,
   type Skill,
@@ -28,7 +26,7 @@ import { isTool } from "./Tool.ts";
  * plain `Context.Service` whose hand-written Layer interprets a
  * PRIVATE agent and wires the world to its verbs.
  */
-export type Interpretable = Agent<any, any>;
+export type Interpretable = Agent<any, any, any>;
 
 /**
  * The TURN half of a charter: re-entrant, evaluated by the driver
@@ -76,87 +74,131 @@ export type TurnFn<In = unknown, E = any, R = any> = (
 ) => Effect.Effect<Fragment, E, R>;
 
 /**
- * A charter is the BEHAVIOR of an Agent or Process: an INIT effect
- * that runs once per SESSION (the closure is the component instance —
- * allocate `Ref`s, resolve bindings for tools, define inline tools
- * over both) and returns the {@link Turn} the driver re-evaluates at
- * every sampling boundary of that session.
+ * What a session's CONSTRUCTOR returns — the session's behavior and,
+ * optionally, its API:
  *
- * Init IS thread-scoped: it runs at admit, when the session's thread
- * already exists, so `AI.Thread` is in scope — set up state FOR the
- * thread there (a workspace checkout keyed by `thread.key`, Refs the
- * turn and tools share). `AI.Tick` is the one runtime fact init never
- * sees: no sampling is under way, so only turns and tool handlers may
- * yield it.
- *
- * The three tiers, static-first:
+ * - a {@link Fragment} — a constant stance (the common case);
+ * - a {@link Turn} — an Effect re-evaluated every sampling;
+ * - a {@link TurnFn} — the guard tier, a function of the tick event;
+ * - a {@link SessionObject} — `{ turn, ...methods }`: the turn under
+ *   the one reserved key, and every other key a METHOD callers reach
+ *   through `agent.at(key).method(...)`.
+ */
+export type SessionResult = Fragment | Turn | TurnFn | SessionObject;
+
+/**
+ * A session with an API: the turn under the reserved `turn` key and
+ * methods beside it. Methods run INSIDE the session frame (the same
+ * context a tool handler gets — `AI.Thread`, the `PersistentRef.Store`
+ * framed by the session, the captured Layer), so a method reads which
+ * session it acts for from the frame, never from a closure. Their
+ * arguments, results, and typed failures must be structured-clonable:
+ * on Cloudflare a method call is one RPC hop into the session's
+ * Durable Object, and the resident placement enforces the same so the
+ * two never drift.
+ */
+export interface SessionObject {
+  readonly turn: Fragment | Turn | TurnFn;
+  readonly [method: string]: unknown;
+}
+
+/**
+ * A charter is the IMPLEMENTATION of an Agent — what `Engineer.make`
+ * takes, or the second argument of the class declaration. ONE Effect,
+ * run ONCE where the Layer builds (plan time in the deploy process,
+ * once per isolate at runtime) — exactly like a Worker body. It
+ * declares, in one scope, everything the agent IS: the resources and
+ * bindings it reaches, the tools it can call, the methods it answers.
+ * The deploy sees that whole graph before any session exists, which
+ * is what lets an agent's capability be read declaratively and tied
+ * to the infrastructure it touches.
  *
  * ```ts
- * // 1. static prose — most agents
- * Reviewer.make`You review each ${pr} against …`;
- *
- * // 2. a closure (tools, refs, bindings) returning a STATIC stance
- * Engineer.make(Effect.gen(function* () {
- *   const openPullRequest = yield* AI.Tool("open_pull_request")`…`(…);
- *   return AI.fragment`…${openPullRequest}…`;      // Fragment → constant turn
- * }));
- *
- * // 3. the GUARD tier — a function of the tick event, for laws the
- * //    model cannot be trusted to enforce on itself
- * Engineer.make(Effect.gen(function* () {
- *   const stance = AI.fragment`…`;
- *   return Effect.fn(function* (tick: AI.TickEvent) {
- *     if (tick.count >= 60) return yield* Effect.fail(new AI.Refused({ … }));
- *     if (tick.count === 45) yield* AI.say`45 of 60 spent — converge.`;
- *     return yield* stance;
- *   });
- * }));
+ * Effect.gen(function* () {
+ *   // bindings — discovered by the planner
+ *   const artifacts = yield* Cloudflare.R2.Bucket("Artifacts", {});
+ *   const store = yield* Cloudflare.R2.ReadWriteBucket(artifacts);
+ *   // per-session STATE, declared: a named cell; resolves against the
+ *   // session's store in whichever frame touches it
+ *   const model = PersistentRef.of("model", () => DEFAULT);
+ *   // tools — minted here, beside the bindings they close over
+ *   const read = yield* AI.Tool("read")`…`(Effect.fn(function* (p) {
+ *     return yield* store.get(p.key);
+ *   }));
+ *   return {
+ *     turn: Effect.gen(function* () {
+ *       const { key } = yield* AI.Thread;           // the session, at sampling
+ *       return yield* AI.fragment`You work on ${key}. ${read}`;
+ *     }),
+ *     setModel: (id: string) => PersistentRef.set(model, id),
+ *   };
+ * })
  * ```
  *
- * A static stance is byte-identical every tick — the prompt cache
- * never busts; the guard tier costs nothing extra when the stance it
- * returns is constant. Re-rendering a DIFFERENT stance mid-session is
- * possible and occasionally right, but it replaces the system prompt
+ * There is NO per-session constructor. The session is ambient: turns,
+ * tool handlers, and methods run inside the session's frame and read
+ * `AI.Thread` (its identity, its conversation) and the
+ * `PersistentRef.Store` (its durable cells) from there. Nothing is
+ * closed over per session, so nothing hides from the plan. The charter
+ * itself has no session — `AI.Thread`, `AI.Tick`, and the store are
+ * absent, and reaching for them at the top level fails the build,
+ * loudly — and nothing disposable may be acquired there (it runs
+ * under planning, with no sessions live).
+ *
+ * A bare {@link Fragment} (the tagged-template shorthand `Reviewer.make`…``
+ * is this) is the constant stance with no API. A static stance is
+ * byte-identical every tick — the prompt cache never busts; the guard
+ * tier costs nothing extra when the stance it returns is constant.
+ * Re-rendering a DIFFERENT stance mid-session is possible and
+ * occasionally right, but it replaces the system prompt
  * (cache-busting) — skills (model-pulled) and messages are the cheap
  * dynamism channels.
  */
-export type Charter = Effect.Effect<Fragment | Turn | TurnFn, any, any>;
+export type Charter = Effect.Effect<SessionResult, any, any>;
 
 /**
  * The services the driver itself provides while evaluating a session's
- * TURN and its tool handlers — excluded from a charter's inferred
- * requirements because no user Layer could ever provide them.
+ * TURN, its tool handlers, and its methods — excluded from a charter's
+ * inferred requirements because no user Layer could ever provide them.
  *
  * These are RUNTIME facts and affordances: `Thread` (the session's
  * identity and conversation), `Tick` (this sampling), and the
  * `PersistentRef.Store` (durable named state, framed by the session's
  * identity — the opt-in named-state capability both drivers provide).
- * Init runs ONCE PER SESSION at admit — the thread already exists, so
- * init MAY read `Thread` for thread-scoped setup (a `PersistentRef`
- * keyed by the session, a workspace checkout addressed by `thread.key`).
- * `Tick` exists only inside the loop: no sampling is under way during
- * init, so only turns and tool handlers see it.
+ * None exists while the charter itself runs (there is no session at
+ * plan time); `Tick` exists only inside the loop, so turns and tool
+ * handlers see it and methods do not.
  */
 export type TurnServices = Thread | Tick | RuntimeContext | PersistentRef.Store;
 
+/** The requirements of one session result, minus the frame. */
+export type ResultServices<A> =
+  A extends Effect.Effect<any, any, infer RTurn>
+    ? Exclude<RTurn, TurnServices>
+    : A extends (tick: any) => Effect.Effect<any, any, infer RTurn>
+      ? Exclude<RTurn, TurnServices>
+      : A extends SessionObject
+        ?
+            | ResultServices<A["turn"]>
+            | {
+                [K in Exclude<keyof A, "turn">]: A[K] extends (
+                  ...args: any
+                ) => Effect.Effect<any, any, infer RMethod>
+                  ? Exclude<RMethod, TurnServices>
+                  : never;
+              }[Exclude<keyof A, "turn">]
+        : never;
+
 /**
- * A charter's requirement union: the init effect's own requirements
- * (`Thread` excluded — init is per-session and the driver provides the
- * thread at admit; `Tick` NOT excluded, so an init that yields it
- * surfaces an unprovideable requirement here and fails to compose)
- * plus everything any turn could mention (splices accumulate through
- * `AI.fragment`'s requirement channel — including branches that did not
- * render this tick), minus the driver-provided {@link TurnServices}.
+ * A charter's requirement union — what its Layer needs: the charter's
+ * own requirements (its bindings and tools), and everything any turn
+ * or method could mention (splices accumulate through `AI.fragment`'s
+ * requirement channel — including branches that did not render this
+ * tick), minus the driver-provided {@link TurnServices}.
  */
 export type CharterServices<C> =
-  C extends Effect.Effect<infer A, any, infer RInit>
-    ?
-        | Exclude<RInit, Thread | RuntimeContext | PersistentRef.Store>
-        | (A extends Effect.Effect<any, any, infer RTurn>
-            ? Exclude<RTurn, TurnServices>
-            : A extends (tick: any) => Effect.Effect<any, any, infer RTurn>
-              ? Exclude<RTurn, TurnServices>
-              : never)
+  C extends Effect.Effect<infer A, any, infer RBuild>
+    ? Exclude<RBuild, TurnServices> | ResultServices<A>
     : never;
 
 /**
@@ -190,6 +232,50 @@ export interface DriverService {
 export class Driver extends Context.Service<Driver, DriverService>()(
   "alchemy/AI/Driver",
 ) {}
+
+const STUB_VERBS: ReadonlySet<string> = new Set([
+  "dispatch",
+  "send",
+  "steer",
+  "settle",
+  "stop",
+  "resume",
+  "destroy",
+]);
+
+/**
+ * Build the session {@link Stub} over an actor — the verbs bound to
+ * the key, every other name a METHOD call through `actor.call`. No
+ * I/O: like a Durable Object stub, the first verb admits the session,
+ * every later one finds it.
+ */
+export const makeStub = (actor: Actor, key: string): Stub<unknown> => {
+  const verbs: StubVerbs = {
+    dispatch: (item) => actor.dispatch(item, { key }),
+    send: (item, options) => actor.send(item, { key, wake: options?.wake }),
+    steer: (item) => actor.steer(key, item),
+    settle: (outcome) => actor.settle(key, outcome),
+    stop: () => actor.stop(key),
+    resume: () => actor.resume(key),
+    destroy: (options) => actor.destroy(key, options),
+  };
+  return new Proxy(verbs as Stub<unknown>, {
+    get: (target, name) =>
+      typeof name === "string" && !STUB_VERBS.has(name) && !(name in target)
+        ? (...args: ReadonlyArray<unknown>) => actor.call(key, name, args)
+        : Reflect.get(target, name),
+  });
+};
+
+/** The agent namespace over an interpreted actor: the verbs plus `at`.
+ *  `Contract` types the stubs (`AI.ContractOf<typeof charter>`) for
+ *  code that interprets directly instead of resolving a tag. */
+export const withStubs = <Contract = unknown>(
+  actor: Actor,
+): AgentService<Contract> =>
+  Object.assign(actor, {
+    at: (key: string) => makeStub(actor, key),
+  }) as AgentService<Contract>;
 
 /**
  * The driver-default implementation Layer for an AGENT term — spelled
@@ -294,8 +380,11 @@ export const layer: {
     : Layer.effect(
         term,
         Effect.orDie(
-          Effect.flatMap(Driver, (driver) =>
-            driver.interpret(term, charterOrTemplate),
+          Effect.map(
+            Effect.flatMap(Driver, (driver) =>
+              driver.interpret(term, charterOrTemplate),
+            ),
+            withStubs,
           ),
         ) as any,
       )) as any;

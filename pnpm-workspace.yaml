@@ -89,6 +89,7 @@ catalogs:
     pg: ^8.22.0
   effect:
     "@effect/ai-anthropic": ">=4.0.0-rc.110 || >=4.0.0"
+    "@effect/ai-openai": ">=4.0.0-rc.110 || >=4.0.0"
     "@effect/atom-react": ">=4.0.0-rc.112 || >=4.0.0"
     "@effect/platform-bun": ">=4.0.0-rc.112 || >=4.0.0"
     "@effect/platform-node": ">=4.0.0-rc.112 || >=4.0.0"

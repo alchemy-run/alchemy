@@ -55,43 +55,45 @@ export const BashLive = Layer.effect(
 
     // Show a bounded preview; retain the complete (sandbox-retained)
     // output as an opaque artifact readable with readOutput.
-    const channel = (label: string, text: string, dropped: boolean) =>
-      Effect.gen(function* () {
-        const preview = truncateTail(text, {
-          maxLines: MAX_LINES,
-          maxBytes: MAX_BYTES,
-        });
-        if (!preview.truncated && !dropped) {
-          return { text: preview.text, note: "" };
-        }
-        const artifact = yield* artifacts.create(label);
-        yield* artifact.append(text);
-        return {
-          text: preview.text,
-          note: `\nFull ${label}: ${artifact.id}`,
-        };
+    const channel = Effect.fn(function* (
+      label: string,
+      text: string,
+      dropped: boolean,
+    ) {
+      const preview = truncateTail(text, {
+        maxLines: MAX_LINES,
+        maxBytes: MAX_BYTES,
       });
+      if (!preview.truncated && !dropped) {
+        return { text: preview.text, note: "" };
+      }
+      const artifact = yield* artifacts.create(label);
+      yield* artifact.append(text);
+      return {
+        text: preview.text,
+        note: `\nFull ${label}: ${artifact.id}`,
+      };
+    });
 
-    return ((input: { command: string; timeout?: number }) =>
-      Effect.gen(function* () {
-        const result = yield* sandbox.exec(input.command, undefined, {
-          timeout: (input.timeout ?? DEFAULT_TIMEOUT_SECONDS) * 1000,
-        });
-        const stdout = yield* channel(
-          "stdout",
-          result.stdout,
-          result.stdoutTruncated,
-        );
-        const stderr = yield* channel(
-          "stderr",
-          result.stderr,
-          result.stderrTruncated,
-        );
-        return {
-          exitCode: result.exitCode,
-          stdout: stdout.text + stdout.note,
-          stderr: stderr.text + stderr.note,
-        };
-      })) as never;
+    return Effect.fn(function* (input: { command: string; timeout?: number }) {
+      const result = yield* sandbox.exec(input.command, undefined, {
+        timeout: (input.timeout ?? DEFAULT_TIMEOUT_SECONDS) * 1000,
+      });
+      const stdout = yield* channel(
+        "stdout",
+        result.stdout,
+        result.stdoutTruncated,
+      );
+      const stderr = yield* channel(
+        "stderr",
+        result.stderr,
+        result.stderrTruncated,
+      );
+      return {
+        exitCode: result.exitCode,
+        stdout: stdout.text + stdout.note,
+        stderr: stderr.text + stderr.note,
+      };
+    }) as never;
   }),
 );

@@ -9,6 +9,7 @@ import { makeProcessScope, runOnHost } from "../Local/Process.ts";
 import type { Actor } from "./Agent.ts";
 import { Driver, type Charter, type Interpretable } from "./Driver.ts";
 import {
+  construct,
   makeSessionEngine,
   reminderInput,
   stoppedByOperator,
@@ -94,129 +95,180 @@ export const DriverLocal: Layer.Layer<
       return set;
     };
 
-    const interpret = (term: Interpretable, charter: Charter) =>
-      Effect.gen(function* () {
-        const context = yield* Effect.context<never>();
-        const termName = term["~alchemy/Name"];
+    // the operator's off switch: settle in place (children cascade,
+    // the round in flight is cut, the fiber loop's settled race ends
+    // it) — a term this process never interpreted has nothing to stop
+    const stop = (term: string, key: string): Effect.Effect<void> => {
+      const engine = engines.get(term);
+      return engine === undefined
+        ? Effect.void
+        : engine.settle(key, stoppedByOperator, { admit: true });
+    };
 
-        // ── the resident machinery: one fiber + one wake queue per
-        // session ─────────────────────────────────────────────────
-        const wakes = new Map<string, Queue.Queue<void>>();
-        const wakeOf = (key: string): Effect.Effect<Queue.Queue<void>> =>
-          Effect.gen(function* () {
-            let wake = wakes.get(key);
-            if (wake === undefined) {
-              wake = yield* Queue.unbounded<void>();
-              wakes.set(key, wake);
-            }
-            return wake;
-          });
+    // the operator's undo for stop: clear the settled tombstone; the
+    // settled resident fiber exited its loop, so drop its start marker
+    // too — the next kick forks a fresh one parked on the fresh
+    // settled signal
+    const resume = Effect.fn(function* (term: string, key: string) {
+      const engine = engines.get(term);
+      if (engine === undefined) return;
+      const reopened = yield* engine.resume(key);
+      if (reopened) residents.get(term)?.(key);
+    });
 
-        const started = new Set<string>();
-        /**
-         * The resident loop: burst until parked, then wait for a wake
-         * or the session's settlement. The engine serializes bursts
-         * internally, so redundant wakes just park again.
-         */
-        const fiberLoop = (key: string) =>
-          Effect.gen(function* () {
-            const wake = yield* wakeOf(key);
-            while (true) {
-              yield* engine.burst(key);
-              const settled = yield* Effect.raceFirst(
-                Effect.map(Queue.take(wake), () => false as const),
-                Effect.map(engine.awaitSettled(key), () => true as const),
-              );
-              if (settled) break;
-            }
-          });
-        const startFiber = (key: string): Effect.Effect<void> =>
-          Effect.suspend(() => {
-            if (started.has(key)) return Effect.void;
-            started.add(key);
-            return Effect.asVoid(process.fork(fiberLoop(key)));
-          });
-
-        const engine: SessionEngine = makeSessionEngine({
-          driver: "DriverLocal",
-          term: termName,
-          charter,
-          context,
-          storage: threadStorage,
-          languageModel,
-          kick: (key) =>
-            Effect.gen(function* () {
-              yield* startFiber(key);
-              yield* Queue.offer(yield* wakeOf(key), undefined as void);
-            }),
-          broadcast: (key, frame) =>
-            Effect.forEach(
-              [...socketsOf(termName, key)],
-              (send) => Effect.ignore(send(frame)),
-              { discard: true },
-            ),
-          // the CLOCK: a sleeping fiber on the process scope, exactly
-          // as durable as the session on this placement. Delivery is
-          // an ordinary send — a wake if parked, queued if busy,
-          // dropped if settled.
-          remind: (key, fireAtMillis, note) =>
-            Effect.asVoid(
-              process.fork(
-                Effect.sleep(
-                  Duration.millis(Math.max(0, fireAtMillis - Date.now())),
-                ).pipe(
-                  Effect.andThen(engine.send(reminderInput(note), { key })),
-                  Effect.asVoid,
-                ),
-              ),
-            ),
-          // recovery re-entry: a forked sleep — a stale re-entry
-          // finds nothing owed and parks instantly
-          scheduleReentry: (key, delayMillis) =>
-            Effect.asVoid(
-              process.fork(
-                Effect.sleep(Duration.millis(delayMillis)).pipe(
-                  Effect.andThen(engine.burst(key)),
-                  Effect.asVoid,
-                ),
-              ),
-            ),
-        });
-        engines.set(termName, engine);
-        residents.set(termName, (key) => {
-          started.delete(key);
-          wakes.delete(key);
-        });
-
-        // ── RESTORE (bootstrap §3): persisted sessions come back
-        // PARKED, threads primed, seq cursor continued. Their fibers
-        // start when the Host program runs — a plan-time build
-        // registers-and-discards, so it can never hang on the Host.
-        const revived = yield* engine.restore;
-        for (const key of revived) {
-          yield* runOnHost(startFiber(key)).pipe(
-            Effect.asVoid,
-          ) as Effect.Effect<void>;
-        }
-
-        // `supervised`: a dispatch made from inside another session's
-        // round joins that session's cascade (see DriverCore)
-        return supervised(termName, {
-          send: (item, options) => engine.send(item, options),
-          // a waiter failed with the session's typed crash surfaces
-          // at the Actor boundary as a defect — same as the RPC
-          // placement's `orDie` (spec §11b: the crash was already
-          // DELIVERED via the `crashed` observation)
-          dispatch: (item, options) =>
-            Effect.orDie(engine.dispatch(item, options)),
-          steer: ((first: unknown, second?: unknown) =>
-            second === undefined
-              ? engine.steer(undefined, first)
-              : engine.steer(first as string, second)) as Actor["steer"],
-          settle: (sessionKey, event) => engine.settle(sessionKey, event),
-          interrupt: () => engine.interrupt,
-        } satisfies Actor);
+    const remove = Effect.fn(function* (term: string, key: string) {
+      yield* stop(term, key);
+      // a round still in flight (a tool mid-call) is CUT, not
+      // awaited: settle only marks the session; the tick would
+      // otherwise run to its end and write into the rows purged
+      // below. Settled first, the abort books nothing and the
+      // kick after it has nowhere to go.
+      yield* engines.get(term)?.abort(key) ?? Effect.void;
+      // forget the RAM shell + resident machinery so the key
+      // can be admitted fresh, then purge the durable rows
+      yield* engines.get(term)?.forget(key) ?? Effect.void;
+      residents.get(term)?.(key);
+      sockets.get(term)?.delete(key);
+      yield* threadStorage.remove(term, key);
+      yield* Option.match(sessionIndex, {
+        onNone: () => Effect.void,
+        onSome: (index) => index.remove(sessionId(term, key)),
       });
+    });
+
+    const interpret = Effect.fn(function* (
+      term: Interpretable,
+      charter: Charter,
+    ) {
+      const context = yield* Effect.context<never>();
+      const termName = term["~alchemy/Name"];
+      // the charter runs here, ONCE, where the Layer builds — its
+      // bindings, tools and methods are the agent's, shared by every
+      // session (see DriverCore.construct)
+      const shape = yield* construct("DriverLocal", termName, charter);
+
+      // ── the resident machinery: one fiber + one wake queue per
+      // session ─────────────────────────────────────────────────
+      const wakes = new Map<string, Queue.Queue<void>>();
+      const wakeOf = Effect.fn(function* (key: string) {
+        let wake = wakes.get(key);
+        if (wake === undefined) {
+          wake = yield* Queue.unbounded<void>();
+          wakes.set(key, wake);
+        }
+        return wake;
+      });
+
+      const started = new Set<string>();
+      /**
+       * The resident loop: burst until parked, then wait for a wake
+       * or the session's settlement. The engine serializes bursts
+       * internally, so redundant wakes just park again.
+       */
+      const fiberLoop = Effect.fn(function* (key: string) {
+        const wake = yield* wakeOf(key);
+        while (true) {
+          yield* engine.burst(key);
+          const settled = yield* Effect.raceFirst(
+            Effect.map(Queue.take(wake), () => false as const),
+            Effect.map(engine.awaitSettled(key), () => true as const),
+          );
+          if (settled) break;
+        }
+      });
+      const startFiber = (key: string): Effect.Effect<void> =>
+        Effect.suspend(() => {
+          if (started.has(key)) return Effect.void;
+          started.add(key);
+          return Effect.asVoid(process.fork(fiberLoop(key)));
+        });
+
+      const engine: SessionEngine = makeSessionEngine({
+        driver: "DriverLocal",
+        term: termName,
+        shape,
+        context,
+        storage: threadStorage,
+        languageModel,
+        kick: Effect.fn(function* (key) {
+          yield* startFiber(key);
+          yield* Queue.offer(yield* wakeOf(key), undefined as void);
+        }),
+        broadcast: (key, frame) =>
+          Effect.forEach(
+            [...socketsOf(termName, key)],
+            (send) => Effect.ignore(send(frame)),
+            { discard: true },
+          ),
+        // the CLOCK: a sleeping fiber on the process scope, exactly
+        // as durable as the session on this placement. Delivery is
+        // an ordinary send — a wake if parked, queued if busy,
+        // dropped if settled.
+        remind: (key, fireAtMillis, note) =>
+          Effect.asVoid(
+            process.fork(
+              Effect.sleep(
+                Duration.millis(Math.max(0, fireAtMillis - Date.now())),
+              ).pipe(
+                Effect.andThen(engine.send(reminderInput(note), { key })),
+                Effect.asVoid,
+              ),
+            ),
+          ),
+        // recovery re-entry: a forked sleep — a stale re-entry
+        // finds nothing owed and parks instantly
+        scheduleReentry: (key, delayMillis) =>
+          Effect.asVoid(
+            process.fork(
+              Effect.sleep(Duration.millis(delayMillis)).pipe(
+                Effect.andThen(engine.burst(key)),
+                Effect.asVoid,
+              ),
+            ),
+          ),
+      });
+      engines.set(termName, engine);
+      residents.set(termName, (key) => {
+        started.delete(key);
+        wakes.delete(key);
+      });
+
+      // ── RESTORE (bootstrap §3): persisted sessions come back
+      // PARKED, threads primed, seq cursor continued. Their fibers
+      // start when the Host program runs — a plan-time build
+      // registers-and-discards, so it can never hang on the Host.
+      const revived = yield* engine.restore;
+      for (const key of revived) {
+        yield* runOnHost(startFiber(key)).pipe(
+          Effect.asVoid,
+        ) as Effect.Effect<void>;
+      }
+
+      // `supervised`: a dispatch made from inside another session's
+      // round joins that session's cascade (see DriverCore)
+      return supervised(termName, {
+        send: (item, options) => engine.send(item, options),
+        // a waiter failed with the session's typed crash surfaces
+        // at the Actor boundary as a defect — same as the RPC
+        // placement's `orDie` (spec §11b: the crash was already
+        // DELIVERED via the `crashed` observation)
+        dispatch: (item, options) =>
+          Effect.orDie(engine.dispatch(item, options)),
+        steer: ((first: unknown, second?: unknown) =>
+          second === undefined
+            ? engine.steer(undefined, first)
+            : engine.steer(first as string, second)) as Actor["steer"],
+        settle: (sessionKey, event) => engine.settle(sessionKey, event),
+        interrupt: () => engine.interrupt,
+        // the API: a method's typed failure is the caller's; a
+        // missing method or a non-cloneable result is a defect
+        call: (sessionKey, method, args) =>
+          engine.call(sessionKey, method, args),
+        stop: (sessionKey) => stop(termName, sessionKey),
+        resume: (sessionKey) => resume(termName, sessionKey),
+        destroy: (sessionKey) => remove(termName, sessionKey),
+      } satisfies Actor);
+    });
 
     /**
      * The local {@link Sessions.attach}: the SAME protocol the Durable
@@ -228,56 +280,45 @@ export const DriverLocal: Layer.Layer<
     // HTTP request that carried the upgrade: Bun counts an unresolved
     // upgraded request as in-flight, and the server's graceful stop
     // would wait its whole 20s budget on it
-    const attach = (
+    const attach = Effect.fn(function* (
       term: string,
       key: string,
       request: HttpServerRequest.HttpServerRequest,
-    ): Effect.Effect<HttpServerResponse.HttpServerResponse, never, never> =>
-      Effect.gen(function* () {
-        const engine = engines.get(term);
-        if (engine === undefined) {
-          return yield* Effect.die(
-            `DriverLocal: no interpreted term '${term}' to attach to — has its Layer been built?`,
-          );
-        }
-        // observing a session must not feed it
-        const host = yield* engine.socketHost(key);
-        const socket = yield* request.upgrade.pipe(Effect.orDie);
-        const serve = Effect.gen(function* () {
-          const write = yield* socket.writer;
-          const send: SendFrame = (frame) =>
-            Effect.asVoid(
-              Effect.ignore(write(JSON.stringify(frame))),
-            ) as Effect.Effect<void>;
-          const handle = handleSessionSocketFrame(host, send);
-          const registry = socketsOf(term, key);
-          registry.add(send);
-          yield* socket
-            .runString((raw: string) =>
-              handle(JSON.parse(raw) as SessionSocketClientFrame).pipe(
-                Effect.catchDefect((defect) =>
-                  Effect.logWarning(`[session-socket] bad frame: ${defect}`),
-                ),
-              ),
-            )
-            .pipe(
-              Effect.ignore,
-              Effect.ensuring(Effect.sync(() => registry.delete(send))),
-            );
-        });
-        yield* process.fork(Effect.scoped(serve).pipe(Effect.asVoid));
-        return HttpServerResponse.empty();
-      });
-
-    // the operator's off switch: settle in place (children cascade,
-    // the round in flight is cut, the fiber loop's settled race ends
-    // it) — a term this process never interpreted has nothing to stop
-    const stop = (term: string, key: string): Effect.Effect<void> => {
+    ) {
       const engine = engines.get(term);
-      return engine === undefined
-        ? Effect.void
-        : engine.settle(key, stoppedByOperator, { admit: true });
-    };
+      if (engine === undefined) {
+        return yield* Effect.die(
+          `DriverLocal: no interpreted term '${term}' to attach to — has its Layer been built?`,
+        );
+      }
+      // observing a session must not feed it
+      const host = yield* engine.socketHost(key);
+      const socket = yield* request.upgrade.pipe(Effect.orDie);
+      const serve = Effect.gen(function* () {
+        const write = yield* socket.writer;
+        const send: SendFrame = (frame) =>
+          Effect.asVoid(
+            Effect.ignore(write(JSON.stringify(frame))),
+          ) as Effect.Effect<void>;
+        const handle = handleSessionSocketFrame(host, send);
+        const registry = socketsOf(term, key);
+        registry.add(send);
+        yield* socket
+          .runString((raw: string) =>
+            handle(JSON.parse(raw) as SessionSocketClientFrame).pipe(
+              Effect.catchDefect((defect) =>
+                Effect.logWarning(`[session-socket] bad frame: ${defect}`),
+              ),
+            ),
+          )
+          .pipe(
+            Effect.ignore,
+            Effect.ensuring(Effect.sync(() => registry.delete(send))),
+          );
+      });
+      yield* process.fork(Effect.scoped(serve).pipe(Effect.asVoid));
+      return HttpServerResponse.empty();
+    });
 
     return Layer.mergeAll(
       Layer.succeed(Driver, { interpret }),
@@ -315,37 +356,8 @@ export const DriverLocal: Layer.Layer<
         send: (term, key, input, options) =>
           engines.get(term)?.send(input, { key, wake: options?.wake }) ??
           Effect.void,
-        // the operator's undo for stop: clear the settled tombstone;
-        // the settled resident fiber exited its loop, so drop its
-        // start marker too — the next kick forks a fresh one parked
-        // on the fresh settled signal
-        resume: (term, key) =>
-          Effect.gen(function* () {
-            const engine = engines.get(term);
-            if (engine === undefined) return;
-            const reopened = yield* engine.resume(key);
-            if (reopened) residents.get(term)?.(key);
-          }),
-        remove: (term, key) =>
-          Effect.gen(function* () {
-            yield* stop(term, key);
-            // a round still in flight (a tool mid-call) is CUT, not
-            // awaited: settle only marks the session; the tick would
-            // otherwise run to its end and write into the rows purged
-            // below. Settled first, the abort books nothing and the
-            // kick after it has nowhere to go.
-            yield* engines.get(term)?.abort(key) ?? Effect.void;
-            // forget the RAM shell + resident machinery so the key
-            // can be admitted fresh, then purge the durable rows
-            yield* engines.get(term)?.forget(key) ?? Effect.void;
-            residents.get(term)?.(key);
-            sockets.get(term)?.delete(key);
-            yield* threadStorage.remove(term, key);
-            yield* Option.match(sessionIndex, {
-              onNone: () => Effect.void,
-              onSome: (index) => index.remove(sessionId(term, key)),
-            });
-          }),
+        resume,
+        remove,
       }),
     );
   }),

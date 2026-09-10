@@ -56,43 +56,42 @@ export const CheckoutsWorktree = Layer.effect(
     const sandbox = yield* AI.Sandbox;
 
     /** Run one verb of the script; parsed JSON stdout. */
-    const worktree = (
+    const worktree = Effect.fn(function* (
       verb: string,
       key: string,
       flags: ReadonlyArray<string>,
-    ) =>
-      Effect.gen(function* () {
-        const args = [SCRIPT, verb, key, ...flags];
-        const command = `bun ${args.join(" ")}`;
-        const result = yield* sandbox
-          .exec("bun", args, { timeout: 600_000 })
-          .pipe(
-            Effect.mapError(
-              (error) =>
-                new Git.GitError({ command, exitCode: -1, stderr: error }),
-            ),
-          );
-        if (!result.success) {
-          return yield* Effect.fail(
-            new Git.GitError({
-              command,
-              exitCode: result.exitCode,
-              stderr: result.stderr.trim() || result.stdout.trim(),
-            }),
-          );
-        }
-        const text = result.stdout.trim();
-        if (text.length === 0) return null;
-        return yield* Effect.try({
-          try: () => JSON.parse(text) as Tree | null,
-          catch: (cause) =>
-            new Git.GitError({
-              command,
-              exitCode: result.exitCode,
-              stderr: `unparseable tree: ${String(cause)}: ${text}`,
-            }),
-        });
+    ) {
+      const args = [SCRIPT, verb, key, ...flags];
+      const command = `bun ${args.join(" ")}`;
+      const result = yield* sandbox
+        .exec("bun", args, { timeout: 600_000 })
+        .pipe(
+          Effect.mapError(
+            (error) =>
+              new Git.GitError({ command, exitCode: -1, stderr: error }),
+          ),
+        );
+      if (!result.success) {
+        return yield* Effect.fail(
+          new Git.GitError({
+            command,
+            exitCode: result.exitCode,
+            stderr: result.stderr.trim() || result.stdout.trim(),
+          }),
+        );
+      }
+      const text = result.stdout.trim();
+      if (text.length === 0) return null;
+      return yield* Effect.try({
+        try: () => JSON.parse(text) as Tree | null,
+        catch: (cause) =>
+          new Git.GitError({
+            command,
+            exitCode: result.exitCode,
+            stderr: `unparseable tree: ${String(cause)}: ${text}`,
+          }),
       });
+    });
 
     /** Whatever `origin` the workspace tracks — the remote a `get`
      *  reports when nobody told us one. */
@@ -117,29 +116,31 @@ export const CheckoutsWorktree = Layer.effect(
     ): Git.Checkout => ({ key, remote, ...tree });
 
     return {
-      checkout: ({ key, remote, ref, fresh }) =>
-        Effect.gen(function* () {
-          const tree = yield* worktree("ensure", key, [
-            ...(ref !== undefined ? ["--ref", ref] : []),
-            ...(fresh === true ? ["--fresh"] : []),
-          ]);
-          if (tree === null) {
-            return yield* Effect.fail(
-              new Git.GitError({
-                command: `${SCRIPT} ensure ${key}`,
-                exitCode: 0,
-                stderr: "the worktree script printed no tree",
-              }),
-            );
-          }
-          return checkout(key, remote, tree);
-        }),
-      get: (key) =>
-        Effect.gen(function* () {
+      checkout: Effect.fn(function* ({ key, remote, ref, fresh }) {
+        const tree = yield* worktree("ensure", key, [
+          ...(ref !== undefined ? ["--ref", ref] : []),
+          ...(fresh === true ? ["--fresh"] : []),
+        ]);
+        if (tree === null) {
+          return yield* Effect.fail(
+            new Git.GitError({
+              command: `${SCRIPT} ensure ${key}`,
+              exitCode: 0,
+              stderr: "the worktree script printed no tree",
+            }),
+          );
+        }
+        return checkout(key, remote, tree);
+      }),
+      get: Effect.fn(
+        function* (key) {
           const tree = yield* worktree("get", key, []);
           if (tree === null) return Option.none();
           return Option.some(checkout(key, yield* originRemote, tree));
-        }).pipe(Effect.option, Effect.map(Option.flatten)),
+        },
+        Effect.option,
+        Effect.map(Option.flatten),
+      ),
       release: (key) => worktree("drop", key, []).pipe(Effect.asVoid),
     } satisfies Git.CheckoutsService;
   }),

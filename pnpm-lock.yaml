@@ -159,6 +159,9 @@ catalogs:
     '@effect/ai-anthropic':
       specifier: '>=4.0.0-rc.110 || >=4.0.0'
       version: 4.0.0-rc.112
+    '@effect/ai-openai':
+      specifier: '>=4.0.0-rc.110 || >=4.0.0'
+      version: 4.0.0-rc.112
     '@effect/atom-react':
       specifier: '>=4.0.0-rc.112 || >=4.0.0'
       version: 4.0.0-rc.112
@@ -5438,6 +5441,9 @@ importers:
       '@effect/ai-anthropic':
         specifier: catalog:effect
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)
+      '@effect/ai-openai':
+        specifier: catalog:effect
+        version: 4.0.0-rc.112(effect@4.0.0-rc.112)
       '@effect/platform-bun':
         specifier: catalog:effect
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)
@@ -7220,6 +7226,11 @@ packages:
 
   '@effect/ai-anthropic@4.0.0-rc.112':
     resolution: {integrity: sha512-2GQKD3IzfCJuS3DgeuBwUjEYk5iyOqgK5etQkYZ3Ho8IuL8BtGR9d8G5AIiRV0xkNy5DD4vGnDGSHxKWsW2TRg==}
+    peerDependencies:
+      effect: 4.0.0-rc.112
+
+  '@effect/ai-openai@4.0.0-rc.112':
+    resolution: {integrity: sha512-j2X86xvgpAtNiusyESADHZn3PUzMVatE1zWXd0No2aybx/euKiVBVWZOtzq7ntJ5KvPHRBOFXTGPADdApQrwug==}
     peerDependencies:
       effect: 4.0.0-rc.112
 
@@ -21922,6 +21933,10 @@ snapshots:
       '@noble/ciphers': 1.3.0
 
   '@effect/ai-anthropic@4.0.0-rc.112(effect@4.0.0-rc.112)':
+    dependencies:
+      effect: 4.0.0-rc.112
+
+  '@effect/ai-openai@4.0.0-rc.112(effect@4.0.0-rc.112)':
     dependencies:
       effect: 4.0.0-rc.112
 

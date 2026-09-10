@@ -59,7 +59,7 @@ export interface ChannelMessage {
   readonly ref?: string;
   /** The event's tag (`IssueOpened`, …) for event rows. */
   readonly event?: string;
-  /** The thread this message belongs to (tagged by the owner ThreadDO). */
+  /** The thread this message belongs to (tagged by the owning thread). */
   readonly thread?: string;
   /** `true` when the channel agent PLACED it into that thread. */
   readonly placed?: boolean;
@@ -162,12 +162,12 @@ export class Channel extends Context.Service<
     readonly read: (
       ids: ReadonlyArray<string>,
     ) => Effect.Effect<ReadonlyArray<ChannelMessage>>;
-    /** The rail's list — projections pushed by ThreadDOs. */
+    /** The rail's list — projections pushed by the threads. */
     readonly directory: () => Effect.Effect<ReadonlyArray<ThreadDirectoryRow>>;
     readonly directoryUpsert: (row: ThreadDirectoryRow) => Effect.Effect<void>;
     /** Drop a thread's row (a deleted thread) — the rail forgets it. */
     readonly directoryRemove: (id: string) => Effect.Effect<void>;
-    /** `ref → thread` ownership, pushed by ThreadDOs on assign/unassign. */
+    /** `ref → thread` ownership, pushed by the threads on assign/unassign. */
     readonly attachmentsSet: (
       ref: string,
       thread: string | null,

@@ -47,8 +47,9 @@ export const OpenPullRequestLive = Layer.effect(
     const sandbox = yield* AI.Sandbox;
     const git = gitIn(sandbox);
 
-    const writers = yield* Effect.forEach(publishTargets, (target) =>
-      Effect.gen(function* () {
+    const writers = yield* Effect.forEach(
+      publishTargets,
+      Effect.fn(function* (target) {
         const identity = yield* GitHub.resolveRepository(target);
         return {
           repo: `${identity.owner}/${identity.repository}`,
@@ -57,39 +58,38 @@ export const OpenPullRequestLive = Layer.effect(
       }),
     );
 
-    return ((input: {
+    return Effect.fn(function* (input: {
       head: string;
       base?: string;
       title: string;
       body: string;
-    }) =>
-      Effect.gen(function* () {
-        const origin = yield* originOf(git);
-        const repo = `${origin.owner}/${origin.repository}`;
-        const writer = writers.find((w) => w.repo === repo);
-        if (writer === undefined) {
-          return yield* Effect.fail(
-            `the tree's origin ${repo} is not a repository this deploy publishes to — targets: ${writers.map((w) => w.repo).join(", ")}`,
-          );
-        }
-        const base =
-          input.base ??
-          (yield* git(["rev-parse", "--abbrev-ref", "HEAD"]).pipe(
-            Effect.orElseSucceed(() => "main"),
-          ));
-        const pull = yield* writer
-          .create({
-            title: input.title,
-            body: input.body,
-            head: input.head,
-            base,
-          })
-          .pipe(
-            Effect.mapError(
-              (error) => `createPullRequest failed: ${error.message}`,
-            ),
-          );
-        return { url: pull.html_url, number: pull.number };
-      })) as never;
+    }) {
+      const origin = yield* originOf(git);
+      const repo = `${origin.owner}/${origin.repository}`;
+      const writer = writers.find((w) => w.repo === repo);
+      if (writer === undefined) {
+        return yield* Effect.fail(
+          `the tree's origin ${repo} is not a repository this deploy publishes to — targets: ${writers.map((w) => w.repo).join(", ")}`,
+        );
+      }
+      const base =
+        input.base ??
+        (yield* git(["rev-parse", "--abbrev-ref", "HEAD"]).pipe(
+          Effect.orElseSucceed(() => "main"),
+        ));
+      const pull = yield* writer
+        .create({
+          title: input.title,
+          body: input.body,
+          head: input.head,
+          base,
+        })
+        .pipe(
+          Effect.mapError(
+            (error) => `createPullRequest failed: ${error.message}`,
+          ),
+        );
+      return { url: pull.html_url, number: pull.number };
+    }) as never;
   }),
 );

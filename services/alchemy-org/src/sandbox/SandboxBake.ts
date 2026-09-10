@@ -41,22 +41,21 @@ class BakeError extends Error {
 
 /** Run one shell command for its EFFECT — only the exit code is
  *  trusted (see {@link REPO_ROOT} on why stdout is not). */
-const sh = (command: string, cwd?: string) =>
-  Effect.gen(function* () {
-    const handle = yield* ChildProcess.make(command, [], {
-      shell: true,
-      ...(cwd !== undefined ? { cwd } : {}),
-    });
-    const [exitCode, stderr] = yield* Effect.all(
-      [handle.exitCode, Stream.mkString(Stream.decodeText(handle.stderr))],
-      { concurrency: 2 },
+const sh = Effect.fn(function* (command: string, cwd?: string) {
+  const handle = yield* ChildProcess.make(command, [], {
+    shell: true,
+    ...(cwd !== undefined ? { cwd } : {}),
+  });
+  const [exitCode, stderr] = yield* Effect.all(
+    [handle.exitCode, Stream.mkString(Stream.decodeText(handle.stderr))],
+    { concurrency: 2 },
+  );
+  if (exitCode !== 0) {
+    return yield* Effect.fail(
+      new BakeError(`${command} (exit ${exitCode}):\n${stderr.trim()}`),
     );
-    if (exitCode !== 0) {
-      return yield* Effect.fail(
-        new BakeError(`${command} (exit ${exitCode}):\n${stderr.trim()}`),
-      );
-    }
-  }).pipe(Effect.scoped);
+  }
+}, Effect.scoped);
 
 const q = (value: string) => `'${value.replaceAll("'", `'\\''`)}'`;
 
@@ -64,36 +63,35 @@ const q = (value: string) => `'${value.replaceAll("'", `'\\''`)}'`;
  * The commit a checkout's HEAD points at, read from the FILESYSTEM
  * (HEAD → loose ref → packed-refs) — no git subprocess involved.
  */
-const readHead = (checkout: string) =>
-  Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const path = yield* Path.Path;
-    const dotGit = path.join(checkout, ".git");
-    const info = yield* fs.stat(dotGit);
-    const gitDir = yield* Effect.gen(function* () {
-      if (info.type === "Directory") return dotGit;
-      // a submodule checkout's .git is a FILE containing `gitdir: <path>`
-      const pointer = (yield* fs.readFileString(dotGit)).trim();
-      const target = pointer.replace(/^gitdir:\s*/, "");
-      return path.isAbsolute(target) ? target : path.resolve(checkout, target);
-    });
-    const head = (yield* fs.readFileString(path.join(gitDir, "HEAD"))).trim();
-    if (!head.startsWith("ref: ")) return head; // detached
-    const ref = head.slice("ref: ".length).trim();
-    const loose = yield* fs
-      .readFileString(path.join(gitDir, ref))
-      .pipe(Effect.option);
-    if (loose._tag === "Some") return loose.value.trim();
-    const packed = yield* fs
-      .readFileString(path.join(gitDir, "packed-refs"))
-      .pipe(Effect.orElseSucceed(() => ""));
-    for (const line of packed.split("\n")) {
-      if (line.endsWith(` ${ref}`)) return line.slice(0, 40);
-    }
-    return yield* Effect.fail(
-      new BakeError(`cannot resolve ${ref} in ${gitDir}`),
-    );
+const readHead = Effect.fn(function* (checkout: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const dotGit = path.join(checkout, ".git");
+  const info = yield* fs.stat(dotGit);
+  const gitDir = yield* Effect.gen(function* () {
+    if (info.type === "Directory") return dotGit;
+    // a submodule checkout's .git is a FILE containing `gitdir: <path>`
+    const pointer = (yield* fs.readFileString(dotGit)).trim();
+    const target = pointer.replace(/^gitdir:\s*/, "");
+    return path.isAbsolute(target) ? target : path.resolve(checkout, target);
   });
+  const head = (yield* fs.readFileString(path.join(gitDir, "HEAD"))).trim();
+  if (!head.startsWith("ref: ")) return head; // detached
+  const ref = head.slice("ref: ".length).trim();
+  const loose = yield* fs
+    .readFileString(path.join(gitDir, ref))
+    .pipe(Effect.option);
+  if (loose._tag === "Some") return loose.value.trim();
+  const packed = yield* fs
+    .readFileString(path.join(gitDir, "packed-refs"))
+    .pipe(Effect.orElseSucceed(() => ""));
+  for (const line of packed.split("\n")) {
+    if (line.endsWith(` ${ref}`)) return line.slice(0, 40);
+  }
+  return yield* Effect.fail(
+    new BakeError(`cannot resolve ${ref} in ${gitDir}`),
+  );
+});
 
 /**
  * A cheap identity for "what would this stage contain?": the HEAD
@@ -102,60 +100,59 @@ const readHead = (checkout: string) =>
  * marker that ships (tsbuildinfo, the floci jar). Written through
  * files, never captured stdout (see {@link REPO_ROOT}).
  */
-const computeFingerprint = (scratchDir: string) =>
-  Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const path = yield* Path.Path;
-    const root = REPO_ROOT;
+const computeFingerprint = Effect.fn(function* (scratchDir: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const root = REPO_ROOT;
 
-    const head = yield* readHead(root);
-    const distilledHead = yield* readHead(
-      path.join(root, "submodules", "distilled"),
+  const head = yield* readHead(root);
+  const distilledHead = yield* readHead(
+    path.join(root, "submodules", "distilled"),
+  );
+
+  // dirty state: the porcelain listing names every changed/untracked
+  // path; stat each so edits to already-dirty files also move the
+  // fingerprint
+  const porcelainFile = path.join(scratchDir, ".porcelain");
+  yield* sh(`git status --porcelain > ${q(porcelainFile)}`, root);
+  const porcelain = yield* fs.readFileString(porcelainFile);
+  const statOf = (rel: string) =>
+    fs.stat(path.join(root, rel)).pipe(
+      Effect.map((info) => {
+        const mtime =
+          info.mtime._tag === "Some" ? info.mtime.value.getTime() : 0;
+        return `${rel}:${mtime}:${String(info.size)}`;
+      }),
+      Effect.orElseSucceed(() => `${rel}:gone`),
     );
+  const dirtyStats: string[] = [];
+  for (const line of porcelain.split("\n")) {
+    if (line.length < 4) continue;
+    // porcelain v1: XY <path>[ -> <path>]
+    const rel = line.slice(3).split(" -> ").pop()!.replace(/^"|"$/g, "");
+    dirtyStats.push(yield* statOf(rel));
+  }
 
-    // dirty state: the porcelain listing names every changed/untracked
-    // path; stat each so edits to already-dirty files also move the
-    // fingerprint
-    const porcelainFile = path.join(scratchDir, ".porcelain");
-    yield* sh(`git status --porcelain > ${q(porcelainFile)}`, root);
-    const porcelain = yield* fs.readFileString(porcelainFile);
-    const statOf = (rel: string) =>
-      fs.stat(path.join(root, rel)).pipe(
-        Effect.map((info) => {
-          const mtime =
-            info.mtime._tag === "Some" ? info.mtime.value.getTime() : 0;
-          return `${rel}:${mtime}:${String(info.size)}`;
-        }),
-        Effect.orElseSucceed(() => `${rel}:gone`),
-      );
-    const dirtyStats: string[] = [];
-    for (const line of porcelain.split("\n")) {
-      if (line.length < 4) continue;
-      // porcelain v1: XY <path>[ -> <path>]
-      const rel = line.slice(3).split(" -> ").pop()!.replace(/^"|"$/g, "");
-      dirtyStats.push(yield* statOf(rel));
-    }
+  // build-artifact identity: tsbuildinfo files move whenever tsc -b
+  // recompiled anything; the floci jar whenever it was repackaged
+  const artifactsFile = path.join(scratchDir, ".artifacts");
+  yield* sh(
+    `{ find . packages services submodules/distilled -maxdepth 4 -name '*.tsbuildinfo' 2>/dev/null; ls submodules/floci/target/quarkus-app/quarkus-run.jar 2>/dev/null; } | ` +
+      `xargs stat -f '%N %m %z' 2>/dev/null | sort > ${q(artifactsFile)} || true`,
+    root,
+  );
+  const artifacts = yield* fs
+    .readFileString(artifactsFile)
+    .pipe(Effect.orElseSucceed(() => ""));
 
-    // build-artifact identity: tsbuildinfo files move whenever tsc -b
-    // recompiled anything; the floci jar whenever it was repackaged
-    const artifactsFile = path.join(scratchDir, ".artifacts");
-    yield* sh(
-      `{ find . packages services submodules/distilled -maxdepth 4 -name '*.tsbuildinfo' 2>/dev/null; ls submodules/floci/target/quarkus-app/quarkus-run.jar 2>/dev/null; } | ` +
-        `xargs stat -f '%N %m %z' 2>/dev/null | sort > ${q(artifactsFile)} || true`,
-      root,
-    );
-    const artifacts = yield* fs
-      .readFileString(artifactsFile)
-      .pipe(Effect.orElseSucceed(() => ""));
-
-    const digest = yield* Effect.sync(() =>
-      new Bun.CryptoHasher("sha256")
-        .update([porcelain, ...dirtyStats, artifacts].join("\u0000"))
-        .digest("hex")
-        .slice(0, 16),
-    );
-    return `${STAGE_VERSION}:${head}:${distilledHead}:${digest}`;
-  });
+  const digest = yield* Effect.sync(() =>
+    new Bun.CryptoHasher("sha256")
+      .update([porcelain, ...dirtyStats, artifacts].join("\u0000"))
+      .digest("hex")
+      .slice(0, 16),
+  );
+  return `${STAGE_VERSION}:${head}:${distilledHead}:${digest}`;
+});
 
 /**
  * Stage the LOCAL repository for the sandbox image bake — a dumb

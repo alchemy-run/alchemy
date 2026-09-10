@@ -64,28 +64,25 @@ export const SandboxCheckout: Layer.Layer<
       Deferred.Deferred<Git.Checkout | undefined, string>
     >();
 
-    const converge = (
-      session: string,
-    ): Effect.Effect<Git.Checkout | undefined, string> =>
-      Effect.gen(function* () {
-        const tree = yield* repo.resolve(session);
-        if (tree === undefined) return undefined;
-        return yield* checkouts
-          .checkout({
-            key: session,
-            remote: tree.remote,
-            ...(tree.ref !== undefined ? { ref: tree.ref } : {}),
-            fresh: tree.fresh,
-          })
-          .pipe(
-            Effect.mapError(
-              (error) =>
-                `the session's tree could not be checked out (${tree.repo}${
-                  tree.ref === undefined ? "" : ` @ ${tree.ref}`
-                }): ${error.message}`,
-            ),
-          );
-      });
+    const converge = Effect.fn(function* (session: string) {
+      const tree = yield* repo.resolve(session);
+      if (tree === undefined) return undefined;
+      return yield* checkouts
+        .checkout({
+          key: session,
+          remote: tree.remote,
+          ...(tree.ref !== undefined ? { ref: tree.ref } : {}),
+          fresh: tree.fresh,
+        })
+        .pipe(
+          Effect.mapError(
+            (error) =>
+              `the session's tree could not be checked out (${tree.repo}${
+                tree.ref === undefined ? "" : ` @ ${tree.ref}`
+              }): ${error.message}`,
+          ),
+        );
+    });
 
     /** The tree is ready for `thread` (and where it is) — or the
      *  reason it is not. */

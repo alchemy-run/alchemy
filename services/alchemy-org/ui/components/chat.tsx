@@ -468,7 +468,7 @@ const TextPart = ({
 
 /**
  * What the thread puts in its agent's conversation on the channel's
- * behalf (`Threads.assign`/`unassign`/`place` — see ThreadDO.ts):
+ * behalf (`Threads.assign`/`unassign`/`place` — see ThreadAgent.ts):
  *
  *   [assigned] owner/repo#N — pull, open — title
  *   [unassigned] owner/repo#N

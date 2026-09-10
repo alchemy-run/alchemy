@@ -1,4 +1,5 @@
 import * as AI from "alchemy/AI";
+import * as PersistentRef from "alchemy/PersistentRef";
 import * as Effect from "effect/Effect";
 import { Distillation } from "../process/Distillation.ts";
 import { AwsEmulation } from "../process/AwsEmulation.ts";
@@ -9,6 +10,7 @@ import { Verification } from "../process/Verification.ts";
 import { OrgGuidance } from "../OrgGuidance.ts";
 import { ReadOutput } from "../artifacts/ReadOutput.ts";
 import { SessionRepo } from "../github/SessionRepo.ts";
+import { models } from "../platform/Model.ts";
 import { Bash } from "./Bash.ts";
 import { EditFile } from "./EditFile.ts";
 import { Glob } from "./Glob.ts";
@@ -32,65 +34,95 @@ export default import.meta.url;
  * the stance is re-rendered every tick — so improving this agent is
  * editing this file and redeploying.
  *
- * - {@link Engineer}     — the agent: a bare tag.
+ * - {@link Engineer}     — the agent: its tag and its CONTRACT — the
+ *   methods every session answers to (`model`/`setModel`: the catalog
+ *   id it samples with, set by the operator's selector or by the
+ *   owning thread handing down its own pick).
  * - {@link GeneralEngineer} — the GENERAL implementation of the agent: the
  *   stance and the toolkit it
  *   mentions (mention-is-presence — these ten tools ARE the agent's
  *   capability envelope; publishing stops at the pull request — there
  *   is no merge button).
  */
-export class Engineer extends AI.Agent<Engineer>(import.meta)("Engineer") {}
+export class Engineer extends AI.Agent<Engineer, EngineerApi>(import.meta)(
+  "Engineer",
+) {}
+
+/** An engineer session's methods — what `engineer.at(key)` answers. */
+export interface EngineerApi {
+  /** The session's current pick; `undefined` = the org's default. */
+  readonly model: () => Effect.Effect<string | undefined>;
+  /** Choose the model the session samples with from its next
+   *  sampling on; `undefined` returns to the org's default. Nothing
+   *  in flight is interrupted. */
+  readonly setModel: (model: string | undefined) => Effect.Effect<void>;
+}
 
 export const GeneralEngineer = Engineer.make(
   Effect.gen(function* () {
-    // ── INIT: once per chat ──────────────────────────────────────────
-    const thread = yield* AI.Thread;
+    // ── the CHARTER: one Effect, run once where the Layer builds. What
+    // it declares — the catalog, the repo resolver, the ten tools the
+    // stance mentions — is the agent's, shared by every session. There
+    // is no session here; turns and methods read theirs from the frame.
+    const model = yield* models;
     const repo = yield* SessionRepo;
 
-    // Session keys are `<owner>/<repo>/<name>` — the prefix picks the
-    // session's repository from the STATIC connected list (Repos.ts);
-    // a PULL REQUEST session is keyed `<owner>/<repo>#<n>` and works in
-    // the PR's head (github/SessionRepo.ts). INIT only READS which
-    // tree that is, for the stance's prose — it touches no machine.
-    // The tree itself lands the first time a tool reaches for it
-    // (sandbox/SandboxCheckout.ts): a reply that needs no tool needs
-    // no machine, and the wait shows on the tool that does. A GitHub
-    // hiccup here costs the PR prose, never the session.
-    const tree = yield* repo
-      .resolve(thread.key)
-      .pipe(
-        Effect.catch((reason) =>
-          Effect.as(
-            Effect.logWarning(`Engineer INIT: tree unresolved — ${reason}`),
-            undefined,
-          ),
-        ),
-      );
-    const workspace = tree?.repo ?? "the alchemy repository";
-    const pull = tree?.pull;
+    // the session's own pick — a DECLARED durable cell, born at the
+    // default, rewritten by `setModel` (the operator's selector, or a
+    // thread handing its engineer its pick before the brief); it
+    // resolves to the calling session's row in whichever turn or method
+    // touches it. `null` is "the default" (a cleared choice must
+    // round-trip through storage, and undefined does not).
+    const chosen = PersistentRef.of<string | null>("model", () => null);
 
-    // the PR clause of the stance — a nested fragment so its PushBranch
-    // mention counts (mention-is-presence rides splices, not strings)
-    const subject =
-      pull === undefined
-        ? AI.fragment``
-        : pull.ref === pull.head
-          ? AI.fragment`
+    // ── the STANCE: re-rendered before every sampling, for the session
+    // sampling. Session keys are `<owner>/<repo>/<name>` — the prefix
+    // picks the session's repository from the STATIC connected list
+    // (Repos.ts); a PULL REQUEST session is keyed `<owner>/<repo>#<n>`
+    // and works in the PR's head (github/SessionRepo.ts). The stance
+    // only READS which tree that is, for its prose — it touches no
+    // machine (the resolver memoizes per session, so this is one
+    // GitHub call per session, not per tick). The tree itself lands the
+    // first time a tool reaches for it (sandbox/SandboxCheckout.ts): a
+    // reply that needs no tool needs no machine, and the wait shows on
+    // the tool that does. A GitHub hiccup here costs the PR prose,
+    // never the session.
+    const stance = Effect.gen(function* () {
+      const thread = yield* AI.Thread;
+      const tree = yield* repo
+        .resolve(thread.key)
+        .pipe(
+          Effect.catch((reason) =>
+            Effect.as(
+              Effect.logWarning(`Engineer: tree unresolved — ${reason}`),
+              undefined,
+            ),
+          ),
+        );
+      const workspace = tree?.repo ?? "the alchemy repository";
+      const pull = tree?.pull;
+
+      // the PR clause of the stance — a nested fragment so its PushBranch
+      // mention counts (mention-is-presence rides splices, not strings)
+      const subject =
+        pull === undefined
+          ? AI.fragment``
+          : pull.ref === pull.head
+            ? AI.fragment`
             This session is about pull request #${pull.number} of
             ${workspace} — "${pull.title}" by ${pull.author}, merging
             ${pull.head} into ${pull.base}. Your tree IS the pull
             request's head, checked out on the branch ${pull.head}:
             commit fixes there and push them back with ${PushBranch} as
             "${pull.head}" so they land in the pull request itself.`
-          : AI.fragment`
+            : AI.fragment`
             This session is about pull request #${pull.number} of
             ${workspace} — "${pull.title}" by ${pull.author}, merging
             ${pull.head} (a fork) into ${pull.base}. Your tree IS the
             pull request's head, checked out read-only as ${pull.ref};
             publish fixes as a new branch and pull request.`;
 
-    // ── the STANCE: re-rendered before every sampling ────────────────
-    return AI.fragment`
+      return yield* AI.fragment`
       You are a coding agent working in a checkout of ${workspace}
       on your own machine — the operator's pair of hands in
       this codebase. The operator reads your work in a chat UI; be
@@ -143,5 +175,23 @@ export const GeneralEngineer = Engineer.make(
       to it across days. When a task completes, say so plainly and
       stop; when you are blocked on a decision only the operator can
       make, ask the question and park.`;
+    });
+
+    // ── the OBJECT: the turn plus the methods. The turn provides the
+    // session's pick to the stance before every sampling (the one
+    // per-tick choice); the methods are how the outside changes it —
+    // over the stub, inside the session's frame.
+    return {
+      turn: Effect.gen(function* () {
+        const pick = yield* chosen;
+        return yield* stance.pipe(
+          Effect.provide(model(pick === null ? undefined : pick)),
+        );
+      }),
+      model: () =>
+        Effect.map(chosen, (pick) => (pick === null ? undefined : pick)),
+      setModel: (next: string | undefined) =>
+        PersistentRef.set(chosen, next ?? null),
+    };
   }),
 );

@@ -50,6 +50,17 @@ export type SessionSocketServerFrame =
        *  next durable cursor. */
       readonly type: "live";
       readonly seq: number;
+    }
+  | {
+      /**
+       * The session's PUBLISHED view (`AI.Thread.publish`) — the object
+       * pushing its state to whoever is attached. View-only: never
+       * replayed; a viewer that attaches later reads the current state
+       * through the object's own API (a method) and takes pushes from
+       * there.
+       */
+      readonly type: "state";
+      readonly state: unknown;
     };
 
 /**

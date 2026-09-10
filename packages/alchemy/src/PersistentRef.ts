@@ -80,39 +80,48 @@ type Ops = typeof Ops;
  * program.pipe(Effect.provide(PersistentRef.layerMemory));
  * ```
  */
-export interface PersistentRef<in out A> extends Effect.Effect<A> {
+export interface PersistentRef<in out A, out R = never> extends Effect.Effect<
+  A,
+  never,
+  R
+> {
   readonly [Ops]: {
-    readonly set: (value: A) => Effect.Effect<void>;
+    readonly set: (value: A) => Effect.Effect<void, never, R>;
     readonly modify: <B>(
       f: (current: A) => readonly [B, A],
-    ) => Effect.Effect<B>;
+    ) => Effect.Effect<B, never, R>;
   };
 }
 
 /** Read the current value — identical to yielding the ref itself. */
-export const get = <A>(ref: PersistentRef<A>): Effect.Effect<A> => ref;
+export const get = <A, R>(
+  ref: PersistentRef<A, R>,
+): Effect.Effect<A, never, R> => ref;
 
 /**
  * Replace the value. Memory updates immediately; the effect settles
  * when the store's write settles (the durability point).
  */
-export const set = <A>(ref: PersistentRef<A>, value: A): Effect.Effect<void> =>
-  ref[Ops].set(value);
+export const set = <A, R>(
+  ref: PersistentRef<A, R>,
+  value: A,
+): Effect.Effect<void, never, R> => ref[Ops].set(value);
 
 /** Transform the value with `f`; same write semantics as `set`. */
-export const update = <A>(
-  ref: PersistentRef<A>,
+export const update = <A, R>(
+  ref: PersistentRef<A, R>,
   f: (current: A) => A,
-): Effect.Effect<void> => ref[Ops].modify((current) => [undefined, f(current)]);
+): Effect.Effect<void, never, R> =>
+  ref[Ops].modify((current) => [undefined, f(current)]);
 
 /**
  * Atomically compute a result and the next value from the current
  * one; returns the result once the write settles.
  */
-export const modify = <A, B>(
-  ref: PersistentRef<A>,
+export const modify = <A, B, R>(
+  ref: PersistentRef<A, R>,
   f: (current: A) => readonly [B, A],
-): Effect.Effect<B> => ref[Ops].modify(f);
+): Effect.Effect<B, never, R> => ref[Ops].modify(f);
 
 // ---------------------------------------------------------------------------
 // Namespacing
@@ -147,6 +156,21 @@ export const within =
     Effect.flatMap(Chain, (chain) =>
       Effect.provideService(effect, Chain, [...chain, ...segments]),
     );
+
+/**
+ * REPLACE the ambient namespace chain — the host's door, as opposed to
+ * {@link within}'s nesting one. A driver frames a session with its
+ * durable identity (`frame(term, key)`) from wherever the session's
+ * code happens to run: a child dispatched from inside a parent's
+ * round runs in the parent's fiber, so `within` would nest the child's
+ * refs under the PARENT's frame — a different row from the one the
+ * child's own rounds read later. Library code never needs this;
+ * isolate private state with `within`.
+ */
+export const frame =
+  (...segments: ReadonlyArray<string>) =>
+  <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
+    Effect.provideService(effect, Chain, segments);
 
 /** A ref's full identity: the ambient chain plus its name. */
 export type StoreKey = ReadonlyArray<string>;
@@ -311,6 +335,52 @@ export const make = <A, I = A, E = never, R = never>(
     refs.set(memoKey, ref);
     return ref;
   });
+
+/**
+ * DECLARE a durable named cell without touching a store — the plan-time
+ * form of {@link make}. `of` does no I/O and needs no `Store`: it is a
+ * description (name, initial value, codec) that an agent's charter can
+ * hold as a plain value where it declares its bindings and tools. Every
+ * read and write on the cell resolves the AMBIENT `Store` and namespace
+ * chain in the frame that runs it — a session's turn, tool handler, or
+ * method — and lands on that session's row (the driver frames each
+ * session with its identity, so one declared cell is a different row
+ * per session). The `Store` requirement rides the operation's `R`.
+ *
+ * ```ts
+ * const chosen = PersistentRef.of<string | null>("model", () => null); // plan time
+ * // … later, in a method (session frame):
+ * setModel: (m) => PersistentRef.set(chosen, m),
+ * ```
+ *
+ * Under the hood each operation is `make` (memoized per store and
+ * identity, so the load happens once per activation) followed by the
+ * operation — so `of` and `make` on the same name see one row.
+ */
+export const of = <A, I = A, R = never>(
+  name: string,
+  initial: LazyArg<A> | Effect.Effect<A, never, R>,
+  options?: MakeOptions<A, I>,
+): PersistentRef<A, Store | R> => {
+  const resolve = make<A, I, never, R>(name, initial, options);
+  return Object.assign(
+    Object.create(
+      Effectable.Prototype({
+        label: "alchemy/PersistentRef/of",
+        // yielding the cell reads it: resolve this frame's ref, then read
+        evaluate: () => Effect.flatMap(resolve, (ref) => ref),
+      }),
+    ),
+    {
+      [Ops]: {
+        set: (value: A) =>
+          Effect.flatMap(resolve, (ref) => ref[Ops].set(value)),
+        modify: <B>(f: (current: A) => readonly [B, A]) =>
+          Effect.flatMap(resolve, (ref) => ref[Ops].modify(f)),
+      },
+    },
+  ) as PersistentRef<A, Store | R>;
+};
 
 /**
  * An in-memory store: durability equals the Layer's lifetime. The

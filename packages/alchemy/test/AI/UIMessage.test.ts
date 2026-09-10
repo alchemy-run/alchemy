@@ -308,3 +308,80 @@ describe("in-flight tool calls", () => {
     expect(end.chunks[0]).toMatchObject({ toolCallId: "call-b" });
   });
 });
+
+describe("model + usage", () => {
+  // one burst, two samplings: the first calls a tool, the second
+  // answers — each with its own bill, both with the same model
+  const billed: Array<SessionObservation> = [
+    { ...base, type: "input", seq: 0, text: "go" },
+    {
+      ...base,
+      type: "assistant",
+      seq: 1,
+      tick: 0,
+      ms: 1,
+      text: "",
+      toolCalls: [{ id: "call-1", name: "search", input: {} }],
+      model: "gpt-5",
+      usage: { input: 100, cacheRead: 40, output: 10 },
+    },
+    {
+      ...base,
+      type: "tool-result",
+      seq: 2,
+      toolCallId: "call-1",
+      toolName: "search",
+      output: "ok",
+      isFailure: false,
+    },
+    {
+      ...base,
+      type: "assistant",
+      seq: 3,
+      tick: 1,
+      ms: 1,
+      text: "done",
+      toolCalls: [],
+      model: "gpt-5",
+      usage: { input: 120, output: 30, reasoning: 5 },
+    },
+    // a burst whose model reported nothing carries neither key
+    { ...base, type: "input", seq: 4, text: "again" },
+    {
+      ...base,
+      type: "assistant",
+      seq: 5,
+      tick: 2,
+      ms: 1,
+      text: "ok",
+      toolCalls: [],
+    },
+  ];
+
+  it("the snapshot stamps the burst's model and its summed bill", () => {
+    const messages = toUIMessages(billed);
+    expect(messages[1]!.metadata).toMatchObject({
+      model: "gpt-5",
+      usage: { input: 220, cacheRead: 40, output: 40, reasoning: 5 },
+    });
+    expect(messages[3]!.metadata).not.toHaveProperty("model");
+    expect(messages[3]!.metadata).not.toHaveProperty("usage");
+  });
+
+  it("live: the finish carries the same metadata", () => {
+    const translate = makeChunkTranslator();
+    let finish: unknown;
+    for (const observation of billed.slice(1, 4)) {
+      for (const chunk of translate(observation).chunks) {
+        if (chunk.type === "finish") finish = chunk;
+      }
+    }
+    expect(finish).toMatchObject({
+      type: "finish",
+      messageMetadata: {
+        model: "gpt-5",
+        usage: { input: 220, cacheRead: 40, output: 40, reasoning: 5 },
+      },
+    });
+  });
+});

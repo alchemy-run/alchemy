@@ -194,28 +194,34 @@ const pinnedOf = (key: string): number => {
   return Number.isFinite(seq) ? seq : Number.MAX_SAFE_INTEGER;
 };
 
-const charter = Effect.gen(function* () {
-  // ── INIT: once per run (a run is one operator message) ───────────
-  const channel = yield* Channel;
-  const threads = yield* Threads;
-  const thread = yield* AI.Thread;
-  const pinned = pinnedOf(thread.key);
+/**
+ * The channel agent over CODEMODE: tools are importable functions, a
+ * tick is one eval in a fresh isolate (`worker_loader`).
+ */
+export const ChannelAgentLive = ChannelAgent.make(
+  Effect.gen(function* () {
+    const channel = yield* Channel;
+    const threads = yield* Threads;
+    // the run's PIN rides in its session key (`main@<seq>`) — read from
+    // the frame by the tool or turn that needs it; the charter itself
+    // runs once at build, for every run
+    const pinned = Effect.map(AI.Thread, (thread) => pinnedOf(thread.key));
 
-  // one GitHub read client per connected repository
-  const repos = yield* Effect.forEach(connected, (entry) =>
-    Effect.gen(function* () {
-      const identity = yield* GitHub.resolveRepository(entry.repository);
-      return {
-        full: `${identity.owner}/${identity.repository}`,
-        getIssue: yield* GitHub.GetIssue(entry.repository),
-        getPullRequest: yield* GitHub.GetPullRequest(entry.repository),
-        listPullFiles: yield* GitHub.ListPullRequestFiles(entry.repository),
-      };
-    }),
-  );
+    // one GitHub read client per connected repository
+    const repos = yield* Effect.forEach(
+      connected,
+      Effect.fn(function* (entry) {
+        const identity = yield* GitHub.resolveRepository(entry.repository);
+        return {
+          full: `${identity.owner}/${identity.repository}`,
+          getIssue: yield* GitHub.GetIssue(entry.repository),
+          getPullRequest: yield* GitHub.GetPullRequest(entry.repository),
+          listPullFiles: yield* GitHub.ListPullRequestFiles(entry.repository),
+        };
+      }),
+    );
 
-  const repoOf = (full: string) =>
-    Effect.gen(function* () {
+    const repoOf = Effect.fn(function* (full: string) {
       const found = repos.find((r) => r.full === full);
       return (
         found ??
@@ -229,288 +235,291 @@ const charter = Effect.gen(function* () {
       );
     });
 
-  const searchMessages = yield* AI.Tool("search_messages")`
-    Search the channel for messages matching ${q} — newest first, at
-    most ${limit}, clamped to what existed when your message was
-    sent. Answers ${AI.out(hits)}.`(
-    Effect.fn(function* (p: { q: string; limit?: number }) {
-      return {
-        hits: yield* channel.search({
-          q: p.q,
-          before: pinned,
-          limit: p.limit,
-        }),
-      };
-    }),
-  );
+    const searchMessages = yield* AI.Tool("search_messages")`
+      Search the channel for messages matching ${q} — newest first, at
+      most ${limit}, clamped to what existed when your message was
+      sent. Answers ${AI.out(hits)}.`(
+      Effect.fn(function* (p: { q: string; limit?: number }) {
+        return {
+          hits: yield* channel.search({
+            q: p.q,
+            before: yield* pinned,
+            limit: p.limit,
+          }),
+        };
+      }),
+    );
 
-  const readHistory = yield* AI.Tool("read_history")`
-    Read the channel BACKWARDS from your pin — answers the most
-    recent ${AI.out(messages)} at or before your own. Use ${before}
-    to page further back, ${limit} to size the page.`(
-    Effect.fn(function* (p: { before?: number; limit?: number }) {
-      const upTo = Math.min(p.before ?? pinned, pinned);
-      const size = Math.min(p.limit ?? 50, 200);
-      const page = yield* channel.page({
-        after: Math.max(0, upTo - size),
-        limit: size,
-      });
-      return { messages: page.items };
-    }),
-  );
+    const readHistory = yield* AI.Tool("read_history")`
+      Read the channel BACKWARDS from your pin — answers the most
+      recent ${AI.out(messages)} at or before your own. Use ${before}
+      to page further back, ${limit} to size the page.`(
+      Effect.fn(function* (p: { before?: number; limit?: number }) {
+        const pin = yield* pinned;
+        const upTo = Math.min(p.before ?? pin, pin);
+        const size = Math.min(p.limit ?? 50, 200);
+        const page = yield* channel.page({
+          after: Math.max(0, upTo - size),
+          limit: size,
+        });
+        return { messages: page.items };
+      }),
+    );
 
-  const readMessages = yield* AI.Tool("read_messages")`
-    Read the messages named by ${ids} — answers ${AI.out(messages)},
-    full rows in that order, clamped to your pin.`(
-    Effect.fn(function* (p: { ids: ReadonlyArray<string> }) {
-      const rows = yield* channel.read(p.ids);
-      return { messages: rows.filter((row) => row.seq <= pinned) };
-    }),
-  );
+    const readMessages = yield* AI.Tool("read_messages")`
+      Read the messages named by ${ids} — answers ${AI.out(messages)},
+      full rows in that order, clamped to your pin.`(
+      Effect.fn(function* (p: { ids: ReadonlyArray<string> }) {
+        const pin = yield* pinned;
+        const rows = yield* channel.read(p.ids);
+        return { messages: rows.filter((row) => row.seq <= pin) };
+      }),
+    );
 
-  const listThreads = yield* AI.Tool("list_threads")`
-    The org's thread directory — answers ${AI.out(threadRows)}.`(
-    Effect.fn(function* () {
-      return { threads: yield* channel.directory() };
-    }),
-  );
+    const listThreads = yield* AI.Tool("list_threads")`
+      The org's thread directory — answers ${AI.out(threadRows)}.`(
+      Effect.fn(function* () {
+        return { threads: yield* channel.directory() };
+      }),
+    );
 
-  const readThread = yield* AI.Tool("read_thread")`
-    Read thread ${threadId} — answers its full ${AI.out(state)}.
-    Fails with ${NotFound} for an id the directory does not know.`(
-    Effect.fn(function* (p: { thread: string }) {
-      const found = yield* threads.get(p.thread);
-      if (found === undefined) {
-        return yield* Effect.fail(
-          new NotFound({ message: `no thread ${p.thread}` }),
-        );
-      }
-      return { state: found };
-    }),
-  );
+    const readThread = yield* AI.Tool("read_thread")`
+      Read thread ${threadId} — answers its full ${AI.out(state)}.
+      Fails with ${NotFound} for an id the directory does not know.`(
+      Effect.fn(function* (p: { thread: string }) {
+        const found = yield* threads.get(p.thread);
+        if (found === undefined) {
+          return yield* Effect.fail(
+            new NotFound({ message: `no thread ${p.thread}` }),
+          );
+        }
+        return { state: found };
+      }),
+    );
 
-  const createThread = yield* AI.Tool("create_thread")`
-    Create a thread — a task with its own agent, sandbox, and
-    conversation: ${name}, ${title}. Answers the ${AI.out(Thread)}.
-    Call it only AFTER you have read what the thread is about
-    (read_pull / read_issue on every reference): the name and title
-    come from what the work actually is, and you cannot know that
-    from event one-liners. A thread is a shell until you fill it: in
-    the same run, assign every issue and pull request it is about
-    (assign), place the channel messages that led to it
-    (place_messages), then brief its agent (brief_thread).`(
-    Effect.fn(function* (p: { name: string; title: string }) {
-      const thread = yield* threads.create({
-        id: mintThreadId(p.name),
-        name: p.name,
-        title: p.title,
-      });
-      return { thread };
-    }),
-  );
+    const createThread = yield* AI.Tool("create_thread")`
+      Create a thread — a task with its own agent, sandbox, and
+      conversation: ${name}, ${title}. Answers the ${AI.out(Thread)}.
+      Call it only AFTER you have read what the thread is about
+      (read_pull / read_issue on every reference): the name and title
+      come from what the work actually is, and you cannot know that
+      from event one-liners. A thread is a shell until you fill it: in
+      the same run, assign every issue and pull request it is about
+      (assign), place the channel messages that led to it
+      (place_messages), then brief its agent (brief_thread).`(
+      Effect.fn(function* (p: { name: string; title: string }) {
+        const thread = yield* threads.create({
+          id: mintThreadId(p.name),
+          name: p.name,
+          title: p.title,
+        });
+        return { thread };
+      }),
+    );
 
-  const placeMessages = yield* AI.Tool("place_messages")`
-    Place channel messages ${ids} into ${threadId} — retroactive
-    curation: the rows stay in the channel, tagged; the thread's view
-    shows them, and the thread's agent hears them as said (author,
-    time, text) — place the operator's words rather than restating
-    them in a brief. Idempotent.`(
-    Effect.fn(function* (p: { thread: string; ids: ReadonlyArray<string> }) {
-      yield* threads.place(p.thread, p.ids);
-    }),
-  );
+    const placeMessages = yield* AI.Tool("place_messages")`
+      Place channel messages ${ids} into ${threadId} — retroactive
+      curation: the rows stay in the channel, tagged; the thread's view
+      shows them, and the thread's agent hears them as said (author,
+      time, text) — place the operator's words rather than restating
+      them in a brief. Idempotent.`(
+      Effect.fn(function* (p: { thread: string; ids: ReadonlyArray<string> }) {
+        yield* threads.place(p.thread, p.ids);
+      }),
+    );
 
-  // an assignment is VERIFIED against GitHub, never taken on the model's word
-  const lookup = yield* makeEntityLookup;
+    // an assignment is VERIFIED against GitHub, never taken on the model's word
+    const lookup = yield* makeEntityLookup;
 
-  const assign = yield* AI.Tool("assign")`
-    Assign ${ref} to ${threadId} — the thread governs it from
-    now on: its events route there. The ref is looked up on GitHub;
-    answers ${AI.out(kind, entityTitle)} as GitHub has them. Fails
-    with ${BadRef} when the ref is not "owner/repo#N", names a
-    repository that is not connected, or does not exist — copy refs
-    from the channel's links, never derive them from an author's
-    login.`(
-    Effect.fn(function* (p: { thread: string; ref: string }) {
-      const entity = yield* lookup(p.ref);
-      // the thread tells its agent (quietly — the brief that follows
-      // wakes it, with the assignment already in its inbox)
-      yield* threads.assign(p.thread, [entity]);
-      return { kind: entity.kind, title: entity.title };
-    }),
-  );
+    const assign = yield* AI.Tool("assign")`
+      Assign ${ref} to ${threadId} — the thread governs it from
+      now on: its events route there. The ref is looked up on GitHub;
+      answers ${AI.out(kind, entityTitle)} as GitHub has them. Fails
+      with ${BadRef} when the ref is not "owner/repo#N", names a
+      repository that is not connected, or does not exist — copy refs
+      from the channel's links, never derive them from an author's login.`(
+      Effect.fn(function* (p: { thread: string; ref: string }) {
+        const entity = yield* lookup(p.ref);
+        // the thread tells its agent (quietly — the brief that follows
+        // wakes it, with the assignment already in its inbox)
+        yield* threads.assign(p.thread, [entity]);
+        return { kind: entity.kind, title: entity.title };
+      }),
+    );
 
-  const unassign = yield* AI.Tool("unassign")`
-    Unassign ${ref} from ${threadId}.`(
-    Effect.fn(function* (p: { thread: string; ref: string }) {
-      yield* threads.unassign(p.thread, p.ref);
-    }),
-  );
+    const unassign = yield* AI.Tool("unassign")`
+      Unassign ${ref} from ${threadId}.`(
+      Effect.fn(function* (p: { thread: string; ref: string }) {
+        yield* threads.unassign(p.thread, p.ref);
+      }),
+    );
 
-  const briefThread = yield* AI.Tool("brief_thread")`
-    Send ${text} to ${threadId}'s agent — the brief that starts its
-    work, a steer, the operator's instruction relayed. Name every
-    issue and pull request in it fully qualified ("owner/repo#832", as
-    assigned),
-    never a bare "#832". Fire and forget; its work shows up in the
-    thread.`(
-    Effect.fn(function* (p: { thread: string; text: string }) {
-      yield* threads.brief(p.thread, p.text);
-    }),
-  );
+    const briefThread = yield* AI.Tool("brief_thread")`
+      Send ${text} to ${threadId}'s agent — the brief that starts its
+      work, a steer, the operator's instruction relayed. Name every
+      issue and pull request in it fully qualified ("owner/repo#832", as
+      assigned),
+      never a bare "#832". Fire and forget; its work shows up in the
+      thread.`(
+      Effect.fn(function* (p: { thread: string; text: string }) {
+        yield* threads.brief(p.thread, p.text);
+      }),
+    );
 
-  const renameThread = yield* AI.Tool("rename_thread")`
-    Rename ${threadId}: a new ${title} (and optionally a new name)
-    when the old one misnames the work.`(
-    Effect.fn(function* (p: { thread: string; title: string; name?: string }) {
-      yield* threads.rename(p.thread, {
-        title: p.title,
-        ...(p.name === undefined ? {} : { name: p.name }),
-      });
-    }),
-  );
+    const renameThread = yield* AI.Tool("rename_thread")`
+      Rename ${threadId}: a new ${title} (and optionally a new name)
+      when the old one misnames the work.`(
+      Effect.fn(function* (p: {
+        thread: string;
+        title: string;
+        name?: string;
+      }) {
+        yield* threads.rename(p.thread, {
+          title: p.title,
+          ...(p.name === undefined ? {} : { name: p.name }),
+        });
+      }),
+    );
 
-  const closeThread = yield* AI.Tool("close_thread")`
-    Close ${threadId} — bookkeeping only; make sure its work already
-    landed on GitHub.`(
-    Effect.fn(function* (p: { thread: string }) {
-      yield* threads.close(p.thread);
-    }),
-  );
+    const closeThread = yield* AI.Tool("close_thread")`
+      Close ${threadId} — bookkeeping only; make sure its work already
+      landed on GitHub.`(
+      Effect.fn(function* (p: { thread: string }) {
+        yield* threads.close(p.thread);
+      }),
+    );
 
-  const readIssue = yield* AI.Tool("read_issue")`
-    Read ${repo}'s issue ${number} fresh from GitHub —
-    answers with ${AI.out(entityTitle, issueState, body, author)}. 
-    Fails with ${UnknownRepo} for a repository the org is not connected to,
+    const readIssue = yield* AI.Tool("read_issue")`
+      Read ${repo}'s issue ${number} fresh from GitHub —
+      answers with ${AI.out(entityTitle, issueState, body, author)}. 
+      Fails with ${UnknownRepo} for a repository the org is not connected to,
     ${NotFound} when the issue does not exist.`(
-    Effect.fn(function* (p: { repo: string; number: number }) {
-      const client = yield* repoOf(p.repo);
-      const issue = yield* client
-        .getIssue({ issue_number: p.number })
-        .pipe(
-          Effect.mapError((error) => new NotFound({ message: String(error) })),
+      Effect.fn(function* (p: { repo: string; number: number }) {
+        const client = yield* repoOf(p.repo);
+        const issue = yield* client
+          .getIssue({ issue_number: p.number })
+          .pipe(
+            Effect.mapError(
+              (error) => new NotFound({ message: String(error) }),
+            ),
+          );
+        return {
+          title: issue.title,
+          state:
+            issue.state === "closed" ? ("closed" as const) : ("open" as const),
+          body: issue.body ?? "",
+          author: issue.user?.login,
+        };
+      }),
+    );
+
+    const readPull = yield* AI.Tool("read_pull")`
+      Read ${repo}'s pull request ${number} fresh from GitHub — answers
+      ${AI.out(entityTitle, issueState, merged, head, base, body, author, files)}.
+      Fails with ${UnknownRepo} for a repository the org is not
+      connected to, ${NotFound} when it does not exist.`(
+      Effect.fn(function* (p: { repo: string; number: number }) {
+        const client = yield* repoOf(p.repo);
+        const notFound = (error: unknown) =>
+          new NotFound({ message: String(error) });
+        const [pull, changed] = yield* Effect.all(
+          [
+            client
+              .getPullRequest({ pull_number: p.number })
+              .pipe(Effect.mapError(notFound)),
+            client
+              .listPullFiles({ pull_number: p.number, per_page: 100 })
+              .pipe(Effect.mapError(notFound)),
+          ],
+          { concurrency: 2 },
         );
-      return {
-        title: issue.title,
-        state:
-          issue.state === "closed" ? ("closed" as const) : ("open" as const),
-        body: issue.body ?? "",
-        author: issue.user?.login,
-      };
-    }),
-  );
+        return {
+          title: pull.title,
+          state:
+            pull.state === "closed" ? ("closed" as const) : ("open" as const),
+          merged: pull.merged === true,
+          head: pull.head?.ref,
+          base: pull.base?.ref,
+          body: pull.body ?? "",
+          author: pull.user?.login,
+          files: changed.map((file) => ({
+            path: file.filename,
+            status: file.status,
+            additions: file.additions,
+            deletions: file.deletions,
+          })),
+        };
+      }),
+    );
 
-  const readPull = yield* AI.Tool("read_pull")`
-    Read ${repo}'s pull request ${number} fresh from GitHub — answers
-    ${AI.out(entityTitle, issueState, merged, head, base, body, author, files)}.
-    Fails with ${UnknownRepo} for a repository the org is not
-    connected to, ${NotFound} when it does not exist.`(
-    Effect.fn(function* (p: { repo: string; number: number }) {
-      const client = yield* repoOf(p.repo);
-      const notFound = (error: unknown) =>
-        new NotFound({ message: String(error) });
-      const [pull, changed] = yield* Effect.all(
-        [
-          client
-            .getPullRequest({ pull_number: p.number })
-            .pipe(Effect.mapError(notFound)),
-          client
-            .listPullFiles({ pull_number: p.number, per_page: 100 })
-            .pipe(Effect.mapError(notFound)),
-        ],
-        { concurrency: 2 },
-      );
-      return {
-        title: pull.title,
-        state:
-          pull.state === "closed" ? ("closed" as const) : ("open" as const),
-        merged: pull.merged === true,
-        head: pull.head?.ref,
-        base: pull.base?.ref,
-        body: pull.body ?? "",
-        author: pull.user?.login,
-        files: changed.map((file) => ({
-          path: file.filename,
-          status: file.status,
-          additions: file.additions,
-          deletions: file.deletions,
-        })),
-      };
-    }),
-  );
+    const sendReply = yield* AI.Tool("send_reply")`
+      Answer the operator in the channel with ${text} — your ONE
+      user-visible output. Call it exactly once per run, last.`(
+      Effect.fn(function* (p: { text: string }) {
+        yield* channel.append({
+          kind: "agent",
+          text: p.text,
+        });
+      }),
+    );
 
-  const sendReply = yield* AI.Tool("send_reply")`
-    Answer the operator in the channel with ${text} — your ONE
-    user-visible output. Call it exactly once per run, last.`(
-    Effect.fn(function* (p: { text: string }) {
-      yield* channel.append({
-        kind: "agent",
-        text: p.text,
-      });
-    }),
-  );
+    // ── the STANCE: STATIC per run — never splice mutable state (the
+    // thread directory, counts, clocks) into it: a stance that changes
+    // between samplings busts the provider's prompt cache on every
+    // call. The pin is the run's constant; ${listThreads} answers the
+    // directory.
+    return AI.fragment`
+      You are the org's CHANNEL — the operator's single point of
+      control over their GitHub repositories. You run with ZERO
+      standing context: this session serves exactly one operator
+      message, pinned at seq ${pinned}; regain whatever you
+      need by reading BACKWARDS (${readHistory}, ${searchMessages},
+      ${readMessages}) — nothing after your pin exists for you.
 
-  // ── the STANCE: STATIC — never splice mutable state (the thread
-  // directory, counts, clocks) into it: a stance that changes between
-  // samplings busts the provider's prompt cache on every call. The
-  // pin is per-session constant; ${listThreads} answers the directory.
-  return AI.fragment`
-    You are the org's CHANNEL — the operator's single point of
-    control over their GitHub repositories. You run with ZERO
-    standing context: this session serves exactly one operator
-    message, pinned at seq ${String(pinned)}; regain whatever you
-    need by reading BACKWARDS (${readHistory}, ${searchMessages},
-    ${readMessages}) — nothing after your pin exists for you.
+      You are a router and librarian, never a worker. Work belongs to
+      THREADS: ${listThreads} is the directory — read it before you
+      route. ${createThread} makes one, ${placeMessages} curates
+      channel messages into it (retroactively — that is normal),
+      ${assign} gives it the issues and pull requests it governs, and
+      ${briefThread} starts or steers its agent. Read the world with
+      ${readThread}, ${readIssue}, ${readPull}. Reshape with
+      ${renameThread}, ${unassign}, ${closeThread}.
 
-    You are a router and librarian, never a worker. Work belongs to
-    THREADS: ${listThreads} is the directory — read it before you
-    route. ${createThread} makes one, ${placeMessages} curates
-    channel messages into it (retroactively — that is normal),
-    ${assign} gives it the issues and pull requests it governs, and
-    ${briefThread} starts or steers its agent. Read the world with
-    ${readThread}, ${readIssue}, ${readPull}. Reshape with
-    ${renameThread}, ${unassign}, ${closeThread}.
+      READ BEFORE YOU ROUTE. A channel event is a one-liner — an
+      author, a verb, a title; it is not the work. Before you name a
+      thread, brief an agent, or answer a question about a pull or an
+      issue, read every one the messages reference, fully, with
+      ${readPull} / ${readIssue}: the body, the branches, the state,
+      what it changes and why. Then read what THOSE reference — a pull
+      that says "fixes #830" means #830 is part of the task too. In
+      codemode this is one program: collect the refs, read them all,
+      then decide. Only once you know what the set of changes is
+      actually about do you choose a name and title — for the substance
+      (five pulls all reworking container image publication are a
+      container thread, whatever their commit prefixes say), never for
+      a surface feature like a shared scope or an author. The brief you
+      send carries that understanding: what each item is, how they
+      relate, what the operator wants done with them.
 
-    READ BEFORE YOU ROUTE. A channel event is a one-liner — an
-    author, a verb, a title; it is not the work. Before you name a
-    thread, brief an agent, or answer a question about a pull or an
-    issue, read every one the messages reference, fully, with
-    ${readPull} / ${readIssue}: the body, the branches, the state,
-    what it changes and why. Then read what THOSE reference — a pull
-    that says "fixes #830" means #830 is part of the task too. In
-    codemode this is one program: collect the refs, read them all,
-    then decide. Only once you know what the set of changes is
-    actually about do you choose a name and title — for the substance
-    (five pulls all reworking container image publication are a
-    container thread, whatever their commit prefixes say), never for
-    a surface feature like a shared scope or an author. The brief you
-    send carries that understanding: what each item is, how they
-    relate, what the operator wants done with them.
+      A thread is NOT DONE until its record is complete. Every issue or
+      pull request the task concerns — the one the operator pointed at,
+      the ones the messages you placed link to — is assigned with
+      ${assign} before you reply; an unassigned issue or pull has no
+      review tab, and its GitHub events route nowhere. Creating a thread
+      without assigning what it is about is the single most common
+      mistake — do not make it.
 
-    A thread is NOT DONE until its record is complete. Every issue or
-    pull request the task concerns — the one the operator pointed at,
-    the ones the messages you placed link to — is assigned with
-    ${assign} before you reply; an unassigned issue or pull has no
-    review tab, and its GitHub events route nowhere. Creating a thread
-    without assigning what it is about is the single most common
-    mistake — do not make it.
-
-    Every run ENDS with exactly one ${sendReply} — short, factual,
-    what you did and where it lives. Name every issue and pull request
-    you mention as a full markdown link to its GitHub URL
-    ("[owner/repo#832](https://github.com/owner/repo/pull/832)" —
-    /issues/ for issues), never a bare "#832" or a plain ref: the
-    channel renders those links with a hover card, and the operator
-    follows them. Name the thread you created or steered by its id.
-    If the ask is ambiguous, reply with the question instead of
-    guessing.`;
-});
-
-/**
- * The channel agent over CODEMODE: tools are importable functions, a
- * tick is one eval in a fresh isolate (`worker_loader`).
- */
-export const ChannelAgentLive = ChannelAgent.make(charter).pipe(
+      Every run ENDS with exactly one ${sendReply} — short, factual,
+      what you did and where it lives. Name every issue and pull request
+      you mention as a full markdown link to its GitHub URL
+      ("[owner/repo#832](https://github.com/owner/repo/pull/832)" —
+      /issues/ for issues), never a bare "#832" or a plain ref: the
+      channel renders those links with a hover card, and the operator
+      follows them. Name the thread you created or steered by its id.
+      If the ask is ambiguous, reply with the question instead of
+      guessing.`;
+  }),
+).pipe(
   Layer.provide(AI.CodeModeAsync()),
   Layer.provide(Cloudflare.AI.EvalWorkerLoader()),
 );
