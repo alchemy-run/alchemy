@@ -7,6 +7,7 @@ import { Comment, CommentProvider } from "./Comment.ts";
 import * as Credentials from "./Credentials.ts";
 import { Environment, EnvironmentProvider } from "./Environment.ts";
 import { Repository, RepositoryProvider } from "./Repository.ts";
+import { Ruleset, RulesetProvider } from "./Ruleset.ts";
 import { Secret, SecretProvider } from "./Secret.ts";
 import { Variable, VariableProvider } from "./Variable.ts";
 import { Webhook, WebhookProvider } from "./Webhook.ts";
@@ -22,7 +23,7 @@ export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
 export interface ProvidersOptions extends GitHubAuthOptions {}
 
 /**
- * GitHub providers (Comment, Environment, Repository, Secret, Variable,
+ * GitHub providers (Comment, Environment, Repository, Ruleset, Secret, Variable,
  * Webhook) plus the GitHub AuthProvider that the alchemy CLI discovers.
  *
  * Pass `baseUrl` to pin every GitHub resource to a GitHub Enterprise host
@@ -44,6 +45,7 @@ export const providers = (options?: ProvidersOptions) =>
       Comment,
       Environment,
       Repository,
+      Ruleset,
       Secret,
       Variable,
       Webhook,
@@ -54,6 +56,7 @@ export const providers = (options?: ProvidersOptions) =>
         CommentProvider(),
         EnvironmentProvider(),
         RepositoryProvider(),
+        RulesetProvider(),
         SecretProvider(),
         VariableProvider(),
         WebhookProvider(),
