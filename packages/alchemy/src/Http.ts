@@ -134,7 +134,15 @@ export const resolvePort = (options: { port?: number } | undefined) =>
 export interface BunHttpServerOptions {
   /**
    * Network interface on which the Bun HTTP server listens.
-   * Omit to use Bun's default.
+   *
+   * Always passed explicitly to `Bun.serve`: when `hostname` is omitted Bun
+   * listens on every interface but reports `server.hostname === "localhost"`,
+   * and `@effect/platform-bun`'s `BunHttpServer.make` (≥ 4.0.0-rc.113)
+   * parses that back as an IP literal — failing with
+   * `ServeError(NetAddressError: expected exactly four decimal octets)`, so
+   * every container bootstrap crash-looped on boot.
+   *
+   * @default "0.0.0.0"
    */
   hostname?: string;
 }
@@ -152,9 +160,7 @@ export const BunHttpServer = (serverOptions?: BunHttpServerOptions) =>
             const port = yield* resolvePort(options);
             const server = yield* BunHttpServerPlatform.make({
               port,
-              ...(serverOptions?.hostname === undefined
-                ? {}
-                : { hostname: serverOptions.hostname }),
+              hostname: serverOptions?.hostname ?? "0.0.0.0",
             });
             yield* server.serve(safeHttpEffect(handler));
           }).pipe(Effect.orDie),
