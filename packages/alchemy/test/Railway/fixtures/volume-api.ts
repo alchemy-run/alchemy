@@ -42,7 +42,10 @@ export default class VolumeApi extends Railway.Service<VolumeApi>()(
         const request = yield* HttpServerRequest;
         const url = new URL(request.url, "http://service");
         if (url.pathname === "/health") {
-          return HttpServerResponse.json({ ok: true, path: mount.path });
+          return yield* HttpServerResponse.json({
+            ok: true,
+            path: mount.path,
+          });
         }
         const file = `${mount.path}${url.pathname}`;
         if (request.method === "PUT") {
