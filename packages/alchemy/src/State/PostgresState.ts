@@ -7,6 +7,7 @@ import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
 import type * as SqlClient from "effect/unstable/sql/SqlClient";
 import type * as SqlError from "effect/unstable/sql/SqlError";
+import { withServername } from "../SQL/PostgresTls.ts";
 import { recordStateStoreInit } from "../Telemetry/Metrics.ts";
 import { STATE_STORE_VERSION } from "./HttpStateApi.ts";
 import type { ReplacedResourceState } from "./ResourceState.ts";
@@ -274,7 +275,10 @@ export const makePostgresState = <E = never, R = never>(
           ? yield* Effect.provideContext(url, context).pipe(stateError)
           : url;
         const built = yield* Layer.build(
-          PgClient.layer({ url: resolved }),
+          PgClient.layer({
+            url: resolved,
+            ssl: withServername(resolved, undefined),
+          }),
         ).pipe(Scope.provide(scope), stateError);
         return Context.get(built, PgClient.PgClient);
       });

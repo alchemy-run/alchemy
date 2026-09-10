@@ -77,7 +77,15 @@ export default DsqlDirectFunction.make(
         // closed when the invocation settles.
         if (request.method === "POST" && pathname === "/roundtrip") {
           const info = yield* conn;
-          const ctx = yield* Layer.build(PgClient.layer({ url: info.url }));
+          // `@effect/sql-pg` ≥ rc.113 upgrades to TLS with
+          // `tls.connect({ host, socket })`, which sends no SNI unless
+          // `servername` is explicit — and DSQL refuses sessions without it
+          // ("sni was not received"). Alchemy's own clients (`SQL.Postgres`,
+          // `Drizzle.Postgres`) derive it via `SQL/PostgresTls.ts`; a direct
+          // `PgClient` consumer has to pass it.
+          const ctx = yield* Layer.build(
+            PgClient.layer({ url: info.url, ssl: { servername: info.host } }),
+          );
           const sqlClient = Context.get(ctx, PgClient.PgClient);
           // DSQL runs DDL as its own autocommit statement (no DDL+DML
           // transactions) — each call below is a separate statement.
