@@ -10,7 +10,6 @@ import * as Semaphore from "effect/Semaphore";
 import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
-import * as NFS from "node:fs";
 import * as Paths from "../internal/Paths.ts";
 import * as System from "../internal/System.ts";
 import { SystemError } from "../RuntimeError.shared.ts";
@@ -50,19 +49,40 @@ export class Registry extends Context.Service<
 const STALE_AFTER_MS = 300_000;
 
 /**
- * Effect's Node `FileSystem.stat` uses `{ bigint: true }` and then converts
- * `ino`/`dev` with `Number()`. NTFS file indexes routinely exceed
- * `Number.MAX_SAFE_INTEGER`, so `stat` fails with `BadArgument` on Windows.
- * The registry then treated live files as missing, wiped the in-memory
- * snapshot, and skipped reap. `node:fs.stat` without bigint still returns a
- * `Date` for `mtime`, which is all we need for the staleness check.
+ * Persist freshness in the file body. Effect's Node `FileSystem.stat` fails
+ * with `BadArgument` when NTFS inodes exceed `Number.MAX_SAFE_INTEGER`, so
+ * `mtime` is not a reliable staleness signal on Windows.
  */
-const readMtime = (entryPath: string) =>
-  Effect.callback<Date | undefined>((resume) => {
-    NFS.stat(entryPath, (error, stats) => {
-      resume(Effect.succeed(error ? undefined : stats.mtime));
-    });
-  });
+const parseStored = (
+  content: string,
+):
+  | { entry: RegistryEntry; writeId?: string; updatedAt?: number }
+  | undefined => {
+  try {
+    const stored = JSON.parse(content) as RegistryEntry & {
+      writeId?: unknown;
+      updatedAt?: unknown;
+    };
+    if (
+      typeof stored !== "object" ||
+      stored === null ||
+      typeof stored.scriptName !== "string"
+    ) {
+      return undefined;
+    }
+    const { writeId, updatedAt, ...entry } = stored;
+    return {
+      entry: entry as RegistryEntry,
+      writeId: typeof writeId === "string" ? writeId : undefined,
+      updatedAt: typeof updatedAt === "number" ? updatedAt : undefined,
+    };
+  } catch {
+    return undefined;
+  }
+};
+
+const isFresh = (updatedAt: number | undefined, now: Date) =>
+  updatedAt === undefined || updatedAt > now.getTime() - STALE_AFTER_MS;
 
 export const RegistryLive = Layer.effect(
   Registry,
@@ -71,34 +91,21 @@ export const RegistryLive = Layer.effect(
     const path = yield* Path.Path;
     const directory = yield* Paths.state("alchemy", "registry");
 
-    const isNonStale = (entryPath: string) =>
-      Effect.zip(readMtime(entryPath), DateTime.nowAsDate, {
-        concurrent: true,
-      }).pipe(
-        Effect.map(
-          ([mtime, now]) =>
-            !!mtime && mtime.getTime() > now.getTime() - STALE_AFTER_MS,
-        ),
-      );
-
     const readEntry = (entry: string) => {
       const entryPath = path.join(directory, entry);
-      return isNonStale(entryPath).pipe(
-        Effect.flatMap((valid) =>
-          valid
-            ? fs
-                .readFileString(entryPath)
-                .pipe(
-                  Effect.map(
-                    (content) =>
-                      [
-                        decodeURIComponent(path.basename(entry, ".json")),
-                        JSON.parse(content),
-                      ] as const,
-                  ),
-                )
-            : fs.remove(entryPath).pipe(Effect.as(undefined)),
-        ),
+      return Effect.zip(fs.readFileString(entryPath), DateTime.nowAsDate, {
+        concurrent: true,
+      }).pipe(
+        Effect.flatMap(([content, now]) => {
+          const parsed = parseStored(content);
+          if (!parsed || !isFresh(parsed.updatedAt, now)) {
+            return fs.remove(entryPath).pipe(Effect.as(undefined));
+          }
+          return Effect.succeed([
+            decodeURIComponent(path.basename(entry, ".json")),
+            parsed.entry,
+          ] as const);
+        }),
         Effect.orElseSucceed(() => undefined),
       );
     };
@@ -160,39 +167,61 @@ export const RegistryLive = Layer.effect(
           directory,
           `${encodeURIComponent(entry.scriptName)}.json`,
         );
-        const serialized = JSON.stringify(entry, null, 2);
-        return fs.writeFileString(entryPath, serialized).pipe(
-          Effect.andThen(
-            // Immediately update the in-memory registry so it's available without waiting on IO.
-            SubscriptionRef.update(ref, (map) =>
-              MutableHashMap.set(map, entry.scriptName, entry),
-            ),
-          ),
-          updateLock.withPermits(1),
-          Effect.tap(() => {
-            // Remove the entry from the filesystem when the scope closes — but
-            // only while the file still holds THIS write's content. A
-            // replacement instance of the same script re-registers under the
-            // same key; a graceful handoff closes the old scope after the new
-            // instance has already overwritten the file, and removing it here
-            // would unregister the live replacement.
-            return Effect.addFinalizer(() =>
-              fs.readFileString(entryPath).pipe(
-                Effect.flatMap((current) =>
-                  current === serialized ? fs.remove(entryPath) : Effect.void,
-                ),
-                Effect.ignore,
+        return Effect.gen(function* () {
+          const writeId = yield* Effect.sync(() =>
+            globalThis.crypto.randomUUID(),
+          );
+          const persist = (updatedAt: number) =>
+            JSON.stringify({ ...entry, writeId, updatedAt }, null, 2);
+          const now = yield* DateTime.nowAsDate;
+          yield* fs.writeFileString(entryPath, persist(now.getTime())).pipe(
+            Effect.andThen(
+              // Immediately update the in-memory registry so it's available without waiting on IO.
+              SubscriptionRef.update(ref, (map) =>
+                MutableHashMap.set(map, entry.scriptName, entry),
               ),
-            );
-          }),
-          Effect.tap(() =>
-            // Update the `mtime` every 30 seconds so the entry is not considered stale.
-            DateTime.nowAsDate.pipe(
-              Effect.flatMap((now) => fs.utimes(entryPath, now, now)),
-              Effect.schedule(Schedule.spaced("30 seconds")),
-              Effect.forkScoped,
             ),
-          ),
+            updateLock.withPermits(1),
+          );
+          // Remove the entry from the filesystem when the scope closes — but
+          // only while the file still holds THIS write's id. A replacement
+          // instance of the same script re-registers under the same key; a
+          // graceful handoff closes the old scope after the new instance has
+          // already overwritten the file, and removing it here would
+          // unregister the live replacement.
+          yield* Effect.addFinalizer(() =>
+            fs.readFileString(entryPath).pipe(
+              Effect.flatMap((current) =>
+                parseStored(current)?.writeId === writeId
+                  ? fs.remove(entryPath)
+                  : Effect.void,
+              ),
+              Effect.ignore,
+            ),
+          );
+          // Rewrite `updatedAt` every 30 seconds so the entry is not
+          // considered stale. Skip if a replacement has taken ownership.
+          yield* DateTime.nowAsDate.pipe(
+            Effect.flatMap((heartbeat) =>
+              fs
+                .readFileString(entryPath)
+                .pipe(
+                  Effect.flatMap((current) =>
+                    parseStored(current)?.writeId === writeId
+                      ? fs.writeFileString(
+                          entryPath,
+                          persist(heartbeat.getTime()),
+                        )
+                      : Effect.void,
+                  ),
+                ),
+            ),
+            updateLock.withPermits(1),
+            Effect.ignore,
+            Effect.schedule(Schedule.spaced("30 seconds")),
+            Effect.forkScoped,
+          );
+        }).pipe(
           Effect.mapError(
             (error) =>
               new SystemError({
