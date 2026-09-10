@@ -1541,7 +1541,11 @@ export const LiveWorkerProvider = () =>
                 hostname,
                 service: scriptName,
                 zoneId,
-                previewsEnabled: previewsEnabled === true,
+                // Private-beta field — only send it when the user opted
+                // into custom-domain Previews. Omitting it keeps the
+                // public PUT /workers/domains body unchanged for everyone
+                // else.
+                ...(previewsEnabled === true ? { previewsEnabled: true } : {}),
               })
               .pipe(
                 Effect.retry({

@@ -408,15 +408,17 @@ export interface WorkerDomainConfig {
    */
   zone?: ZoneReference;
   /**
-   * Serve Worker Previews on this custom domain as
-   * `<preview-name>.<name>` (and a pinned
-   * `<deployment-id>-<preview-name>.<name>` per deploy). Cloudflare
+   * Opt into custom-domain Worker Previews (private beta). When `true`,
+   * Previews of this Worker are served at `<preview-name>.<name>` (and a
+   * pinned `<deployment-id>-<preview-name>.<name>` per deploy). Cloudflare
    * provisions a wildcard DNS record and certificate. Equivalent to
    * Wrangler's `previews_enabled` on a custom-domain route.
    *
-   * This is a **parent** setting — enable it on the production Worker,
-   * not on the Preview Worker. A dedicated Preview hostname
-   * (`previews.example.com`) avoids colliding with existing subdomains.
+   * Unset, the field is not sent to Cloudflare — existing custom-domain
+   * attaches are unchanged. This is a **parent** setting: enable it on
+   * the production Worker, not on the Preview Worker. A dedicated Preview
+   * hostname (`previews.example.com`) avoids colliding with existing
+   * subdomains.
    *
    * @default false
    */
@@ -726,12 +728,12 @@ export interface WorkerProps<
    */
   version?: WorkerVersionOptions;
   /**
-   * Deploy this Worker as a [Preview](https://developers.cloudflare.com/workers/previews/)
-   * of another Worker's script. Set `preview.of` to the parent Worker
-   * (typically `yield* Cloudflare.Worker.ref(id, { stage })`). The
-   * Preview gets its own URL, bindings, and isolated Durable Object
-   * state; the parent's live deployment is untouched. Mutually
-   * exclusive with {@link version.parent}. See
+   * Opt into Cloudflare's [Worker Previews](https://developers.cloudflare.com/workers/previews/)
+   * (private beta). Unset, this Worker deploys as a normal script and none
+   * of the Preview APIs are called. Set `preview.of` to upload this Worker
+   * as a Preview of another Worker's script instead: own URL, bindings,
+   * and isolated Durable Object state; the parent's live deployment is
+   * untouched. Mutually exclusive with {@link version.parent}. See
    * {@link WorkerPreviewOptions}.
    */
   preview?: WorkerPreviewOptions;
