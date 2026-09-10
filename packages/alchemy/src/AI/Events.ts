@@ -237,10 +237,12 @@ export type SessionObservation = ObservationEnvelope &
         /**
          * The in-flight round was ABORTED by the operator
          * (`Sessions.interrupt`): its sampling or tool handlers were
-         * interrupted mid-flight and the round abandoned — the inputs
-         * it was answering may go unanswered (a model-facing note says
-         * so). The session stays alive and parks; the next input opens
-         * a fresh round. Distinct from `interrupted` (an attempt that
+         * interrupted mid-flight and the round abandoned — the calls
+         * the cut sampling had issued land in the thread answered as
+         * interrupted (`tool-result` rows precede this), so the model
+         * reads what was attempted; the inputs it was answering may go
+         * unanswered. The session stays alive and parks; the next
+         * input opens a fresh round. Distinct from `interrupted` (an attempt that
          * DIED and is being recovered) and `settled` (the session
          * ended).
          */
@@ -250,8 +252,10 @@ export type SessionObservation = ObservationEnvelope &
     | {
         /**
          * A settled session was REOPENED by the operator
-         * (`Sessions.resume`) — the tombstone cleared; the next input
-         * opens a round as on a parked session.
+         * (`Sessions.resume`) — the tombstone cleared. A round follows
+         * over the thread as it stands (the stop landed the cut calls,
+         * answered as interrupted) unless the resume asked not to wake
+         * or the thread had already quiesced.
          */
         readonly type: "resumed";
       }

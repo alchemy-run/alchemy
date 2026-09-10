@@ -125,8 +125,10 @@ export class Sessions extends Context.Service<
     ) => Effect.Effect<void, never, RuntimeContext>;
     /**
      * RESUME a stopped session — the operator's undo for `stop`: the
-     * settled tombstone is cleared and the session accepts input
-     * again (its machine, if suspended, wakes on the next call).
+     * settled tombstone is cleared and the session PICKS ITS WORK BACK
+     * UP — a round runs over its thread as it stands (the stop landed
+     * the cut calls, answered as interrupted), with no input to wait
+     * for and nothing written (its machine, if suspended, wakes).
      * Idempotent on a live or never-seen key. Children settled by the
      * stop's cascade stay settled.
      */

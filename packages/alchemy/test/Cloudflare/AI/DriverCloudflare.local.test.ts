@@ -492,7 +492,7 @@ test.provider(
 );
 
 test.provider(
-  "(g) the operator's STOP on the child answers the supervisor's handoff — its round runs on to a conclusion",
+  "(g) the operator's STOP on the child answers the supervisor's handoff — its round runs on to a conclusion; RESUME picks the child's work back up with no input",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -527,9 +527,14 @@ test.provider(
         url,
         "Scribe",
         "handoff-scribe-g",
-        (types) => types.includes("settled"),
+        (types) => types.includes("settled") && types.includes("tool-result"),
       );
       expect(child).toContain("settled");
+      // the stop LANDED the cut stall: its durable `tool-call` row is
+      // answered as interrupted, in the record and in the thread
+      expect(child.indexOf("tool-result")).toBeGreaterThan(
+        child.indexOf("tool-call"),
+      );
 
       // the supervisor's round LANDS: its tool result is a durable row,
       // the model reports, and the session parks — nothing aborted,
@@ -544,6 +549,31 @@ test.provider(
       expect(parent.at(-1)).toBe("parked");
       expect(parent).not.toContain("aborted");
       expect(parent).not.toContain("crashed");
+
+      // the org's agent "resume" switch: NO input is sent and nothing
+      // is written, yet the Scribe's DO reopens the session AND runs a
+      // round over its thread as it stands — the model samples again
+      // and, reading its stall answered as interrupted (the fixture's
+      // model counts tool results against requests), reports and parks
+      const before = child.length;
+      const resumed = yield* getJsonWithin(
+        `${url}/resume?agent=Scribe&key=handoff-scribe-g`,
+        "30 seconds",
+      );
+      expect(resumed).toEqual({ resumed: true });
+      const reopened = yield* historyUntil(
+        url,
+        "Scribe",
+        "handoff-scribe-g",
+        (types) =>
+          types.length > before && types.slice(before).includes("parked"),
+      );
+      const tail = reopened.slice(before);
+      expect(tail).toContain("resumed");
+      expect(tail).toContain("assistant");
+      expect(tail).not.toContain("input");
+      expect(tail).not.toContain("tool-call");
+      expect(tail.indexOf("resumed")).toBeLessThan(tail.indexOf("assistant"));
 
       yield* stack.destroy();
     }).pipe(logLevel),

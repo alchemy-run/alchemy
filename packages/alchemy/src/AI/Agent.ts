@@ -129,8 +129,10 @@ export interface Actor<In = unknown> {
   /** The operator's stop for one session: settle it in place (children
    *  cascade, the round in flight is cut); the object stays. */
   stop(sessionKey: string): Effect.Effect<void, never, RuntimeContext>;
-  /** The undo for `stop`: clear the settled tombstone; the next input
-   *  opens a round. */
+  /** The undo for `stop`: clear the settled tombstone and pick the
+   *  work back up — a round runs over the thread as it stands (the
+   *  stop landed the cut calls, answered as interrupted), no input
+   *  needed, nothing written. */
   resume(sessionKey: string): Effect.Effect<void, never, RuntimeContext>;
   /** Erase one session: settle, cut the round, purge its rows, so the
    *  key can be admitted fresh. `machine` (default true) also takes

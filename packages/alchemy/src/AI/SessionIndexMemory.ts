@@ -92,9 +92,10 @@ export const SessionIndexMemory = (
             case "settled":
               row.status = "settled";
               return;
-            // reopened by the operator: parked until the next input
+            // reopened by the operator: a round follows over the thread
+            // as it stands (its `parked` says idle again)
             case "resumed":
-              row.status = "idle";
+              row.status = "running";
               return;
             // the operator stopped the round: parked, alive
             case "aborted":

@@ -80,6 +80,10 @@ export const DriverLocal: Layer.Layer<
      *  queue) so a removed key can be admitted fresh — registered by
      *  each interpret over its own closures. */
     const residents = new Map<string, (key: string) => void>();
+    /** term → the placement's kick (fork the resident fiber if none,
+     *  wake it) — what a resume runs once its resident state is
+     *  reset, so the reopened session's owed round actually runs. */
+    const kicks = new Map<string, (key: string) => Effect.Effect<void>>();
 
     const socketsOf = (term: string, key: string): Set<SendFrame> => {
       let byKey = sockets.get(term);
@@ -107,13 +111,17 @@ export const DriverLocal: Layer.Layer<
 
     // the operator's undo for stop: clear the settled tombstone; the
     // settled resident fiber exited its loop, so drop its start marker
-    // too — the next kick forks a fresh one parked on the fresh
-    // settled signal
+    // too, then kick — a fresh fiber forks, parked on the fresh
+    // settled signal, and runs the round the resume owes (the engine
+    // raised it; the session picks its work back up without waiting
+    // for input)
     const resume = Effect.fn(function* (term: string, key: string) {
       const engine = engines.get(term);
       if (engine === undefined) return;
       const reopened = yield* engine.resume(key);
-      if (reopened) residents.get(term)?.(key);
+      if (!reopened) return;
+      residents.get(term)?.(key);
+      yield* kicks.get(term)?.(key) ?? Effect.void;
     });
 
     const remove = Effect.fn(function* (term: string, key: string) {
@@ -183,6 +191,11 @@ export const DriverLocal: Layer.Layer<
           return Effect.asVoid(process.fork(fiberLoop(key)));
         });
 
+      const kick = Effect.fn(function* (key: string) {
+        yield* startFiber(key);
+        yield* Queue.offer(yield* wakeOf(key), undefined as void);
+      });
+
       const engine: SessionEngine = makeSessionEngine({
         driver: "DriverLocal",
         term: termName,
@@ -190,10 +203,7 @@ export const DriverLocal: Layer.Layer<
         context,
         storage: threadStorage,
         languageModel,
-        kick: Effect.fn(function* (key) {
-          yield* startFiber(key);
-          yield* Queue.offer(yield* wakeOf(key), undefined as void);
-        }),
+        kick,
         broadcast: (key, frame) =>
           Effect.forEach(
             [...socketsOf(termName, key)],
@@ -228,6 +238,7 @@ export const DriverLocal: Layer.Layer<
           ),
       });
       engines.set(termName, engine);
+      kicks.set(termName, kick);
       residents.set(termName, (key) => {
         started.delete(key);
         wakes.delete(key);

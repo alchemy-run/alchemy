@@ -388,7 +388,7 @@ const ThreadPane = ({
                       <HeadingAction
                         icon={Play}
                         label={`Resume all${allSettled.length > 1 ? ` (${allSettled.length})` : ""}`}
-                        title="Resume every stopped agent — they take input again; nothing runs until told"
+                        title="Resume every stopped agent — each picks its work back up where it was stopped"
                         onClick={() =>
                           agentActions.resume(allSettled.map((a) => a.key))
                         }
@@ -628,7 +628,7 @@ const AgentHeader = ({
                   </button>
                 </Hint>
               ) : (
-                <Hint label="Resume the agent — it takes input again; steer it from the prompt below.">
+                <Hint label="Resume the agent — it picks its work back up where it was stopped; steer it from the prompt below.">
                   <button
                     type="button"
                     disabled={busy}

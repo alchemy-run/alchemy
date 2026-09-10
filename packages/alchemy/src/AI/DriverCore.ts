@@ -575,6 +575,55 @@ export const noteMessage = (body: string): Prompt.MessageEncoded => ({
   content: [{ type: "text", text: `<note>\n${body}\n</note>` }],
 });
 
+/** What a call cut short by the round's end says in place of its
+ *  result — the operator's stop, or the session's settle. The same
+ *  words land in the model's thread (a `tool-result` row) and in the
+ *  views (the projection closes the open call with it). */
+export const STOPPED_TEXT =
+  "stopped — the round ended before this call answered";
+
+/** A call the current sampling issued whose result has not landed —
+ *  what {@link landInflight} writes into the thread when the round is
+ *  cut under it. */
+export interface InflightCall {
+  readonly id: string;
+  readonly name: string;
+  readonly input: unknown;
+}
+
+/**
+ * The thread rows for a sampling cut mid-handler: the assistant turn
+ * with its `tool-call` parts, then one `tool-result` per call saying
+ * the round ended before it answered. The model then reads exactly
+ * what it did and that none of it is known to have completed — the
+ * durable record (`tool-call` observations) restated in its own
+ * thread, in the shape every provider accepts (each `tool_use`
+ * answered), with nothing to narrate in prose.
+ */
+export const interruptedCallMessages = (
+  calls: ReadonlyArray<InflightCall>,
+): ReadonlyArray<Prompt.MessageEncoded> => [
+  {
+    role: "assistant",
+    content: calls.map((call) => ({
+      type: "tool-call",
+      id: call.id,
+      name: call.name,
+      params: call.input,
+    })),
+  },
+  {
+    role: "tool",
+    content: calls.map((call) => ({
+      type: "tool-result",
+      id: call.id,
+      name: call.name,
+      isFailure: true,
+      result: STOPPED_TEXT,
+    })),
+  },
+];
+
 /**
  * Appended to every system prompt: how to read the one driver-authored
  * channel. Constant text — a static charter's system prompt stays
@@ -1824,6 +1873,16 @@ interface EngineSession {
    *  can tell the operator's stop from a fiber dying with its scope
    *  (process shutdown), which must leave the round OWED. */
   aborting?: boolean;
+  /** Raised by `resume`: the next burst OWES a round over the thread
+   *  as it stands even though the inbox is empty — a reopened session
+   *  picks its work back up instead of parking until someone types.
+   *  Consumed on entry. */
+  wakeOwed?: boolean;
+  /** The calls the sampling in flight has issued and not yet landed
+   *  (its `assistant` row appends only once every handler returns).
+   *  Cleared when the sampling lands; a round CUT under it lands them
+   *  itself, answered as interrupted — see {@link landInflight}. */
+  readonly inflight: Array<InflightCall>;
   /** The park race for a resident fiber; late verbs read
    *  `settledOutcome`. Replaced by `resume` (a Deferred is one-shot,
    *  so a reopened session needs a fresh signal to park on). */
@@ -1908,13 +1967,22 @@ export interface SessionEngine {
   ) => Effect.Effect<void>;
   /** REOPEN a settled session — the operator's undo for `stop`. The
    *  settled tombstone is cleared (RAM + persisted meta) and a fresh
-   *  settled signal minted; the next input opens a round exactly as
-   *  on a parked session. Resolves `true` when a tombstone was
-   *  actually cleared — a live or never-seen key is a no-op `false`
-   *  (the latter admits, mirroring `settle`'s `admit` semantics).
-   *  Children settled by the cascade stay settled — resume them
-   *  explicitly. */
-  readonly resume: (key: string) => Effect.Effect<boolean>;
+   *  settled signal minted. By default the session also picks its
+   *  work back up (`wake`, default `true`): the next burst OWES a
+   *  round over the thread as it stands — whose tail is what the stop
+   *  landed (the cut calls, answered as interrupted) — and the
+   *  placement kicks that burst when this resolves `true`. Nothing is
+   *  written to the thread; a thread already ending in the assistant's
+   *  own quiescent turn owes nothing. With `wake: false` the session
+   *  merely accepts input again; the next input opens a round exactly
+   *  as on a parked session. Resolves `true` when a tombstone was actually
+   *  cleared — a live or never-seen key is a no-op `false` (the
+   *  latter admits, mirroring `settle`'s `admit` semantics). Children
+   *  settled by the cascade stay settled — resume them explicitly. */
+  readonly resume: (
+    key: string,
+    options?: { readonly wake?: boolean },
+  ) => Effect.Effect<boolean>;
   /** ADMIT a key durably WITHOUT building its shell or running the
    *  charter's init: the `admitted` observation (and meta) land, so
    *  the session lists for every client. A known key (RAM-resident or
@@ -2152,7 +2220,18 @@ export const makeSessionEngine = (
       s.pendingNotes.length = 0;
     },
     observe: (draft) => observe(s, draft),
-    observeLive: (draft) => observe(s, draft),
+    observeLive: (draft) => {
+      // a call the sampling issued is remembered until its row lands
+      // — a round cut under it lands it as interrupted
+      if (draft.type === "tool-call") {
+        s.inflight.push({
+          id: draft.toolCallId,
+          name: draft.toolName,
+          input: draft.input,
+        });
+      }
+      return observe(s, draft);
+    },
     activeSkills: () => s.active,
     setSkill: Effect.fn(function* (name, active) {
       if (active) s.active.add(name);
@@ -2186,6 +2265,7 @@ export const makeSessionEngine = (
         active: new Set<string>(),
         settledSignal: yield* Deferred.make<unknown>(),
         pendingNotes: [],
+        inflight: [],
         wireUnion: new Map<string, AiTool.Any>(),
         pendingWaiters: [],
         roundWaiters: [],
@@ -2429,13 +2509,18 @@ export const makeSessionEngine = (
             ),
           );
           // the operator's stop, booked while the gate is still ours
-          // so no re-entry can slip in and "recover" the round first
+          // so no re-entry can slip in and "recover" the round first.
+          // Whatever the cut sampling had issued lands FIRST — the
+          // thread then reads what was done and that it never
+          // answered — then the abort's own bookkeeping (a settled
+          // session has none)
           if (
             s.aborting === true &&
             Exit.isFailure(exit) &&
             Cause.hasInterruptsOnly(exit.cause)
           ) {
             s.aborting = false;
+            yield* landInflight(s);
             yield* onAbort(s);
           }
         }),
@@ -2532,9 +2617,13 @@ export const makeSessionEngine = (
      * Starts `true` so a burst kicked with nothing to do parks
      * instead of sampling — unless it is RECOVERING an interrupted
      * round, whose inputs are already in the thread and owed a
-     * reply.
+     * reply, or the operator just RESUMED the session, which owes a
+     * round over its thread the same way (its newest rows are the
+     * stopped sampling's calls, answered as interrupted).
      */
-    let quiescent = !recovering;
+    const resumed = s.wakeOwed === true;
+    s.wakeOwed = undefined;
+    let quiescent = !recovering && !resumed;
     // consecutive malformed-tool-call feedback rounds — resets on
     // any well-formed sampling
     let malformed = 0;
@@ -2598,6 +2687,15 @@ export const makeSessionEngine = (
             kind,
           });
         }
+      } else if (s.busy === undefined) {
+        // a round with nothing to drain — the operator's RESUME — is
+        // still a round OWED: opened (busy) and guaranteed re-entry
+        // exactly like one that drained input, so a death mid-
+        // sampling recovers it instead of leaving the session parked
+        // with the note unanswered
+        s.busy = { attempts: 0, since: Date.now() };
+        yield* putMeta(s);
+        yield* scheduleReentry(s.key, recoverAfter);
       }
 
       // TICK — the shared algorithm renders this sampling's stance
@@ -2630,6 +2728,9 @@ export const makeSessionEngine = (
         tick,
         exhausted: malformed >= malformedBudget,
       });
+      // the sampling LANDED (its rows are in the thread, results
+      // included) — nothing is in flight any more
+      s.inflight.length = 0;
       if (outcome.kind === "malformed") {
         malformed++;
         quiescent = false; // come straight back around and re-sample
@@ -2704,27 +2805,47 @@ export const makeSessionEngine = (
   });
 
   /**
+   * A round CUT under a sampling (the operator's stop or abort, a
+   * settle's cut, the supervision cascade) lands what that sampling
+   * had issued: its calls as the assistant turn, each answered
+   * {@link STOPPED_TEXT}. The `tool-call` observations are durable —
+   * this restates them in the model's own thread, so the next sampling
+   * (a resume, the operator's next word) reads exactly what was
+   * attempted and that none of it is known to have finished, in the
+   * shape every provider accepts. The `tool-result` rows do the same
+   * for the views. Nothing in flight, nothing to land.
+   */
+  const landInflight = Effect.fn(function* (s: EngineSession) {
+    const calls = s.inflight.splice(0);
+    if (calls.length === 0) return;
+    yield* appendThread(s, interruptedCallMessages(calls));
+    for (const call of calls) {
+      yield* observe(s, {
+        type: "tool-result",
+        toolCallId: call.id,
+        toolName: call.name,
+        output: STOPPED_TEXT,
+        isFailure: true,
+      });
+    }
+  });
+
+  /**
    * The operator ABORTED the round mid-flight (`abort` interrupted the
-   * round fiber; this runs under the burst's gate once it is gone).
-   * The round is abandoned, not owed: `busy` clears so no re-entry
-   * recovers it; the model learns the gap exactly as it does on a
-   * recovery (interrupted handlers' effects may or may not have
-   * landed); waiters fail with the typed {@link RoundAborted}; the
-   * children it dispatched settle — stopping a thread stops the
-   * workers it was waiting on.
+   * round fiber; this runs under the burst's gate once it is gone,
+   * after {@link landInflight} wrote what the cut sampling had
+   * issued). The round is abandoned, not owed: `busy` clears so no
+   * re-entry recovers it; waiters fail with the typed
+   * {@link RoundAborted}; the children it dispatched settle — stopping
+   * a thread stops the workers it was waiting on.
    */
   const onAbort = Effect.fn(function* (s: EngineSession) {
     if (s.settledOutcome !== undefined) return;
     s.busy = undefined;
     yield* putMeta(s);
-    yield* appendThread(s, [
-      noteMessage(
-        `The operator stopped this round while it was in progress. ` +
-          `Any actions it took may or may not have completed — verify ` +
-          `before repeating anything with side effects. The messages ` +
-          `above it may be unanswered; wait for the operator's next input.`,
-      ),
-    ]);
+    // no note: what the cut round did — and that it never answered —
+    // is in the thread already (`landInflight`); the next sampling
+    // reads it as any other tool turn
     yield* observe(s, { type: "aborted", by: "operator" });
     yield* Effect.forEach(
       s.roundWaiters.splice(0),
@@ -2831,21 +2952,34 @@ export const makeSessionEngine = (
     }
   });
 
-  const resume: SessionEngine["resume"] = Effect.fn(function* (key) {
+  const resume: SessionEngine["resume"] = Effect.fn(function* (key, options) {
     // admit-or-rehydrate: a hibernated placement's RAM shell is
     // gone but the settled tombstone lives in meta — ensureSession
     // reads it back before we clear it
     const s = yield* ensureSession(key);
     if (s.settledOutcome === undefined) return false;
     s.settledOutcome = undefined;
-    // a settled session's busy died with it; a resumed one starts
-    // parked, not owing a round
+    // a settled session's busy died with it — `busy` is the RECOVERY
+    // marker (an attempt that died), never what a resume owes
     s.busy = undefined;
     // the old signal already fired (one-shot) — resident placements
     // park their fresh fiber on this new one
     s.settledSignal = yield* Deferred.make<unknown>();
     yield* putMeta(s);
     yield* observe(s, { type: "resumed" });
+    // the next burst OWES a round over the thread as it stands, with
+    // no input to wait for — the placement kicks it on our `true`.
+    // Nothing is written: the stop already landed what the cut
+    // sampling did (`landInflight`), so the thread reads as any tool
+    // turn awaiting its next sampling. A thread whose last row is the
+    // assistant's own quiescent turn owes nothing — the work had
+    // finished when it was stopped; sampling again would only
+    // continue a finished turn.
+    if (options?.wake !== false) {
+      const messages = yield* s.handle.messages;
+      const last = messages[messages.length - 1];
+      s.wakeOwed = last !== undefined && last.role !== "assistant";
+    }
     return true;
   });
 

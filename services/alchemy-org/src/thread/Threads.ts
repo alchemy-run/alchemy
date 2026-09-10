@@ -175,9 +175,11 @@ export class Threads extends Context.Service<
       key: string,
     ) => Effect.Effect<ThreadState | undefined, never, RuntimeContext>;
     /**
-     * RESUME a stopped (or finished) agent: the tombstone is cleared
-     * and the session takes input again — the operator steers it from
-     * its pane. Nothing runs until something is said to it.
+     * RESUME a stopped agent: the tombstone is cleared and the agent
+     * picks its work back up — a round runs over its thread as it
+     * stands (the stop landed the cut calls, answered as interrupted),
+     * no input needed. An agent whose work had already finished only
+     * takes input again — steer it from its pane.
      */
     readonly agentResume: (
       id: string,

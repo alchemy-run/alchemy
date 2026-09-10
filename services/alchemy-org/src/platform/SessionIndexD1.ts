@@ -129,12 +129,13 @@ export const SessionIndexD1 = Layer.effect(
                 .run(),
             );
             return;
-          // reopened by the operator: parked until the next input
+          // reopened by the operator: a round follows over the thread
+          // as it stands (the `parked` at its end says idle)
           case "resumed":
             yield* inWorker(
               db
                 .prepare(
-                  "UPDATE session_index SET status = 'idle' WHERE id = ?",
+                  "UPDATE session_index SET status = 'running' WHERE id = ?",
                 )
                 .bind(id)
                 .run(),

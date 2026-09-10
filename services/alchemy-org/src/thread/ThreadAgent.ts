@@ -106,9 +106,11 @@ export interface ThreadApi {
    * stopped. `undefined` when the thread has no such agent.
    */
   readonly agentStop: (key: string) => Effect.Effect<ThreadState | undefined>;
-  /** RESUME a stopped (or finished) engineer: the tombstone is cleared
-   *  and the session takes input again. Nothing runs until something
-   *  is said to it. */
+  /** RESUME a stopped engineer: the tombstone is cleared and the
+   *  engineer PICKS ITS WORK BACK UP — it runs a round over its thread
+   *  as it stands (the stop landed the cut calls, answered as
+   *  interrupted), no input needed. An engineer whose work had already
+   *  finished only takes input again — steer it from its prompt. */
   readonly agentResume: (key: string) => Effect.Effect<ThreadState | undefined>;
   /** DELETE an engineer: its session is erased (round cut, transcript
    *  purged; the thread's machine is shared and stays) and it

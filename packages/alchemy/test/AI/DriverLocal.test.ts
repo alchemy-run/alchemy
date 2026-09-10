@@ -316,20 +316,33 @@ describe("DriverLocal (in-memory)", () => {
           types.indexOf("aborted"),
         );
         expect(model.calls).toHaveLength(1);
+        // the cut call is CLOSED in the record: its `tool-call` row
+        // (durable, written as the sampling issued it) gets a
+        // `tool-result` saying the round ended before it answered,
+        // ahead of the abort itself
+        expect(types.indexOf("tool-result")).toBeGreaterThan(
+          types.indexOf("tool-call"),
+        );
+        expect(types.indexOf("tool-result")).toBeLessThan(
+          types.indexOf("aborted"),
+        );
 
         // an interrupt with nothing in flight is a no-op
         yield* sessions.interrupt("Researcher", "w-abort");
 
         // the session is alive: the next input opens a fresh round,
-        // and the model sees the note about the cut-short work
+        // and the model reads what the cut round DID — the call it
+        // issued, answered as interrupted — as an ordinary tool turn;
+        // no prose about it
         const answer = yield* researcher.dispatch("still there?", {
           key: "w-abort",
         });
         expect(answer).toBe("back");
         expect(model.calls).toHaveLength(2);
-        expect(Model.promptText(model.calls[1]!)).toContain(
-          "operator stopped this round",
-        );
+        const prompt = Model.promptText(model.calls[1]!);
+        expect(prompt).toContain("the void");
+        expect(prompt).toContain(AI.STOPPED_TEXT);
+        expect(prompt).not.toContain("operator");
       }).pipe(Effect.scoped, Effect.provide(layer));
     },
     { timeout: 30_000 },
@@ -521,6 +534,134 @@ Hand ${task} to the researcher yourself and wait for the answer.`(
         expect(model.calls).toHaveLength(1);
         const handle = yield* threads.open("Researcher", "w-erase");
         expect(yield* handle.observations(0)).toEqual([]);
+      }).pipe(Effect.scoped, Effect.provide(layer));
+    },
+    { timeout: 30_000 },
+  );
+
+  it.live(
+    "Sessions.resume picks the work back up: the stop lands the cut call as interrupted, and the resumed session samples again with NO new input and nothing written",
+    () => {
+      const model = Model.make([
+        // call 0: a search that never answers — the operator stops it
+        () => [
+          Model.toolCall("search", { query: "the void" }),
+          Model.finish("tool-calls"),
+        ],
+        // call 1: the RESUMED round — over the thread as it stands,
+        // its newest rows the cut call answered as interrupted; no
+        // input queued, no note
+        () => [Model.text("picked it back up and finished"), Model.finish()],
+        // call 2: stopped while parked, resumed (nothing owed), then
+        // given input — an ordinary round
+        () => [Model.text("still here"), Model.finish()],
+      ]);
+      const entered = Effect.runSync(Deferred.make<void>());
+      let released = false;
+      const search = Layer.succeed(Search, ((_input: { query: string }) =>
+        Effect.andThen(Deferred.succeed(entered, undefined), Effect.never).pipe(
+          Effect.onInterrupt(() =>
+            Effect.sync(() => {
+              released = true;
+            }),
+          ),
+        )) as never);
+      const seen: Array<AI.SessionObservation> = [];
+      const ObserverLive = Layer.succeed(AI.Events, {
+        emit: (observation) => Effect.sync(() => void seen.push(observation)),
+      });
+      const observed = (type: AI.SessionObservation["type"]) =>
+        seen.filter(
+          (observation) =>
+            observation.key === "w-resume" && observation.type === type,
+        );
+      const until = (predicate: () => boolean) =>
+        Effect.sync(predicate).pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("10 millis"),
+            until: (ok) => ok,
+            times: 300,
+          }),
+        );
+      const storage = ThreadStorageMemory;
+      const layer = Layer.mergeAll(
+        DriverLocal.pipe(
+          Layer.provide(storage),
+          Layer.provide(model.layer),
+          Layer.provide(ObserverLive),
+        ),
+        storage,
+        search,
+        ObserverLive,
+        RuntimeContext.phantom,
+      );
+      return Effect.gen(function* () {
+        const researcher = yield* interpret(Researcher, ResearcherCharter);
+        const sessions = yield* AI.Sessions;
+
+        const waiting = yield* Effect.forkChild(
+          researcher.dispatch("look into it", { key: "w-resume" }),
+        );
+        yield* Deferred.await(entered);
+
+        // ── stop: the handler is cut, the dispatch answers Stopped,
+        // and nothing samples while the session is settled
+        yield* sessions.stop("Researcher", "w-resume");
+        const outcome = yield* Fiber.join(waiting);
+        expect(outcome).toEqual({ _tag: "Stopped", by: "operator" });
+        expect(released).toBe(true);
+        yield* Effect.sleep("50 millis");
+        expect(model.calls).toHaveLength(1);
+        expect(observed("settled")).toHaveLength(1);
+
+        // the stop LANDED what the cut sampling did: the call it had
+        // issued, answered as interrupted — a `tool-result` row in the
+        // record, ahead of the settle
+        const types = seen
+          .filter((observation) => observation.key === "w-resume")
+          .map((observation) => observation.type);
+        expect(types.indexOf("tool-result")).toBeGreaterThan(
+          types.indexOf("tool-call"),
+        );
+
+        // ── resume: NO message is sent and NOTHING is written. The
+        // session samples again anyway — the resume owes a round —
+        // over the thread as it stands: the brief, then the cut call
+        // and its interrupted result, as any tool turn awaiting its
+        // next sampling
+        yield* sessions.resume("Researcher", "w-resume");
+        yield* until(() => model.calls.length >= 2);
+        expect(observed("resumed")).toHaveLength(1);
+        const prompt = Model.promptText(model.calls[1]!);
+        expect(prompt).toContain("look into it");
+        expect(prompt).toContain("the void");
+        expect(prompt).toContain(AI.STOPPED_TEXT);
+        expect(prompt).not.toContain("operator");
+
+        // the finished round parks; nothing else samples, and the
+        // session is LIVE again — a stop still bites, even parked
+        yield* until(() => observed("parked").length >= 1);
+        yield* Effect.sleep("50 millis");
+        expect(model.calls).toHaveLength(2);
+        yield* sessions.stop("Researcher", "w-resume");
+        expect(observed("settled")).toHaveLength(2);
+        // resumed again: the thread ends in the assistant's OWN
+        // quiescent turn — the work had finished — so nothing is owed
+        // and nothing samples; a second resume of the now-LIVE key is
+        // a no-op too
+        yield* sessions.resume("Researcher", "w-resume");
+        yield* sessions.resume("Researcher", "w-resume");
+        yield* Effect.sleep("100 millis");
+        expect(observed("resumed")).toHaveLength(2);
+        expect(model.calls).toHaveLength(2);
+        // …but it takes input again, over the whole thread
+        const answer = yield* researcher.dispatch("and now?", {
+          key: "w-resume",
+        });
+        expect(answer).toBe("still here");
+        expect(Model.promptText(model.calls[2]!)).toContain(
+          "picked it back up and finished",
+        );
       }).pipe(Effect.scoped, Effect.provide(layer));
     },
     { timeout: 30_000 },

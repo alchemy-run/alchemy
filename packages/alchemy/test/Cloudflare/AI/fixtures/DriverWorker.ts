@@ -104,6 +104,13 @@ export default class KernelTestWorker extends Cloudflare.Worker<KernelTestWorker
             yield* gateway.interrupt(agent, key);
             return yield* HttpServerResponse.json({ interrupted: true });
           }
+          // the undo for stop: the session reopens AND picks its work
+          // back up — a round runs in its DO with no input sent
+          case "/resume": {
+            const agent = url.searchParams.get("agent") ?? "Scribe";
+            yield* gateway.resume(agent, key);
+            return yield* HttpServerResponse.json({ resumed: true });
+          }
           // the transcript's observation types, in order — what the
           // views project; storage-only, never wakes the session
           case "/history": {

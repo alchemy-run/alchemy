@@ -1,5 +1,5 @@
 import type { UIMessage, UIMessageChunk, UIMessagePart } from "ai";
-import { renderCrash } from "./DriverCore.ts";
+import { renderCrash, STOPPED_TEXT } from "./DriverCore.ts";
 import type { SessionObservation, TokenUsage } from "./Events.ts";
 
 /**
@@ -79,10 +79,7 @@ export const inputToUIMessage = (
  * arrives as its encoded record (`{ _tag, message, … }`), a plain
  * failure as a string. `String(record)` would read `[object Object]`.
  */
-/** What a call cut short by the round's end says in place of its
- *  result — the operator's stop, or the session's settle. */
-export const STOPPED_TEXT =
-  "stopped — the round ended before this call answered";
+export { STOPPED_TEXT } from "./DriverCore.ts";
 
 export const renderToolFailure = (output: unknown): string => {
   if (typeof output === "string") return output;

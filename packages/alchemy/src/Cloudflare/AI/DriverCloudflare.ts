@@ -920,10 +920,18 @@ export const DurableObjectHost: Layer.Layer<
             yield* (yield* engine).admit(me.key);
           }),
           resume: Effect.fn(function* () {
-            yield* (yield* engine).resume(me.key);
+            const live = yield* engine;
+            const reopened = yield* live.resume(me.key);
             // eagerly wake the suspended machine (best-effort —
             // lazily waking on the next sandbox call is the fallback)
             yield* machineLifecycle("resume");
+            // the resume OWES a round (the engine raised it and wrote
+            // the note): run it here, as every kick on this placement
+            // does — the reopened session picks its work back up
+            // without waiting for input
+            if (reopened) {
+              yield* sealed(state.waitUntil(live.burst(me.key)));
+            }
           }),
           // the round runs in THIS isolate (the burst rides waitUntil
           // on this same object), so its fiber is right here to
