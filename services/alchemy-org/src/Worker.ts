@@ -31,6 +31,7 @@ import { ReadOutputLive } from "./artifacts/ReadOutput.ts";
 import { SandboxSession } from "./sandbox/SandboxSession.ts";
 import { SessionRepoLive } from "./github/SessionRepo.ts";
 import { SpillingTools } from "./artifacts/SpillingTools.ts";
+import { MessageLive } from "./thread/Message.ts";
 import { ThreadAgentLive } from "./thread/ThreadAgent.ts";
 import { THREAD_TERM, ThreadsLive } from "./thread/Threads.ts";
 
@@ -77,6 +78,9 @@ const EngineerWorker = GeneralEngineer.pipe(
       Layer.provide(PublishTokenLive),
     ),
   ),
+  // the word between the thread's agents — by session name, so the
+  // engineer holds it without holding the manager's Layer
+  Layer.provide(MessageLive),
   Layer.provide(Editor),
   Layer.provide(Guidance),
   Layer.provide(Toolbox),
@@ -90,6 +94,7 @@ const EngineerWorker = GeneralEngineer.pipe(
  *  conversation; governs its assigned refs, worktrees, subagents. */
 const ThreadWorker = Layer.suspend(() => ThreadAgentLive).pipe(
   Layer.provide(EngineerWorker),
+  Layer.provide(MessageLive),
   Layer.provide(SessionRepoLive),
   Layer.provide(Checkouts),
   Layer.provide(SandboxSession),

@@ -949,6 +949,18 @@ const CHANNEL: {
  * bundle.
  */
 const CODER: Renderers<typeof GeneralEngineer> = {
+  // the word between a thread's agents — the manager holds the same
+  // tool, so this card serves both wires
+  message: (input) => ({
+    icon: MessageSquare,
+    title: (
+      <>
+        Message <span className="text-muted-foreground">→</span>{" "}
+        <span className="font-mono">{String(input.to ?? "")}</span>
+      </>
+    ),
+    body: input.text ? <Prose>{input.text}</Prose> : undefined,
+  }),
   bash: (input, output, running) => {
     const record = parseRecord(output);
     const parsed =
@@ -1346,6 +1358,7 @@ const RUN_LABELS: Record<string, (n: number, running: boolean) => string> = {
   unassign: (n, running) =>
     `${running ? "Unassigning" : "Unassigned"} ${n} refs`,
   spawn: (n, running) => `${running ? "Spawning" : "Spawned"} ${n} agents`,
+  message: (n, running) => `${running ? "Sending" : "Sent"} ${n} messages`,
   read_pull: (n, running) =>
     `${running ? "Reading" : "Read"} ${n} pull requests`,
   read_issue: (n, running) => `${running ? "Reading" : "Read"} ${n} issues`,

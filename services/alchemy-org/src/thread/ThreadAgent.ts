@@ -15,6 +15,8 @@ import { BadRef, makeEntityLookup } from "../github/Entity.ts";
 import { connected, nameOf, primary } from "../github/Repos.ts";
 import { SessionRepo } from "../github/SessionRepo.ts";
 import { models } from "../platform/Model.ts";
+import { Message } from "./Message.ts";
+import { THREAD_TERM } from "./Terms.ts";
 import {
   pullWorktreeKey,
   type Assignment,
@@ -24,7 +26,7 @@ import {
 } from "./Threads.ts";
 
 /** The thread agent's session term — `/attach/Thread/<id>`. */
-export const THREAD_TERM = "Thread";
+export { THREAD_TERM } from "./Terms.ts";
 
 /**
  * The THREAD — one durable session per thread (`t-<id>`), the task's
@@ -186,8 +188,14 @@ const entityTitle = AI.Thing("title", S.String)`
   The entity's title, as GitHub has it.`;
 
 const brief = AI.Thing("brief", S.String)`
-  The subagent's whole world: what to do, where (name the worktree
-  path when one applies), what "done" looks like, what to avoid.`;
+  The engineer's whole world: what to do, what "done" looks like, what
+  to avoid. Where it works is the pull argument, not prose.`;
+
+const pull = AI.Thing("pull", S.optionalKey(S.String))`
+  The assigned pull request — "owner/repo#N" — whose worktree the
+  engineer is rooted in. Omit only for work that belongs to no pull
+  request yet (the engineer then starts in the machine's default tree
+  and opens a new pull request).`;
 
 const cardTitle = AI.Thing("title", S.String)`
   The card's one-line headline — what the operator reads in the channel.`;
@@ -232,6 +240,7 @@ const state = AI.Thing(
         key: S.String,
         kind: S.String,
         brief: S.String,
+        cwd: S.optionalKey(S.String),
         state: S.Literals(["running", "done", "failed", "stopped"]),
       }),
     ),
@@ -660,80 +669,96 @@ export const ThreadAgentLive = ThreadAgent.make(
       }),
     );
 
+    /** The thread's worktree for an assigned pull request — made or
+     *  found (`Git.Checkouts.checkout` is idempotent on the key),
+     *  recorded on the assignment, answered with its key. */
+    const ensureWorktree = Effect.fn(function* (ref: string) {
+      const parsed = parseEntityRef(ref);
+      if (parsed === undefined) {
+        return yield* Effect.fail(
+          new BadRef({ message: `${ref} is not owner/repo#N` }),
+        );
+      }
+      const found = yield* current;
+      if (!found.assigned.some((e) => e.ref === ref)) {
+        return yield* Effect.fail(
+          new NotAssigned({
+            message: `${ref} is not assigned — assign first`,
+          }),
+        );
+      }
+      const tree = yield* sessionRepo
+        .resolve(ref)
+        .pipe(Effect.mapError((message) => new BadRef({ message })));
+      if (tree === undefined || tree.pull === undefined) {
+        return yield* Effect.fail(
+          new BadRef({
+            message: `${ref} is not a pull request of a connected repository`,
+          }),
+        );
+      }
+      const key = pullWorktreeKey(yield* self, parsed.number);
+      const checkout = yield* checkouts
+        .checkout({
+          key,
+          remote: tree.remote,
+          ref: tree.pull.ref,
+          fresh: true,
+        })
+        .pipe(
+          Effect.mapError(
+            (error) =>
+              new CheckoutFailed({
+                message:
+                  error._tag === "Git.GitError" ? error.stderr : String(error),
+              }),
+          ),
+        );
+      yield* setWorktree(ref, checkout.path);
+      return { key, path: checkout.path, branch: checkout.branch };
+    });
+
     const worktree = yield* AI.Tool("worktree")`
       Ensure a WORKTREE for pull request ${ref} on this thread's
       machine — its head branch, fetched fresh, checked out as its own
-      tree. Answers ${AI.out(path, branch)}; subagents you spawn
-      should be told to work there. Fails with ${BadRef} for a ref
-      that is not a pull request of a connected repository,
-      ${NotAssigned} when it is not assigned here, ${CheckoutFailed}
-      when git refuses.`(
+      tree. Answers ${AI.out(path, branch)}. Engineers are placed in
+      it by the spawn tool's pull argument, not by telling them the path.
+      Fails with ${BadRef} for a ref that is not a pull request of a
+      connected repository, ${NotAssigned} when it is not assigned
+      here, ${CheckoutFailed} when git refuses.`(
       Effect.fn(function* (p: { ref: string }) {
-        const parsed = parseEntityRef(p.ref);
-        if (parsed === undefined) {
-          return yield* Effect.fail(
-            new BadRef({ message: `${p.ref} is not owner/repo#N` }),
-          );
-        }
-        const found = yield* current;
-        if (!found.assigned.some((e) => e.ref === p.ref)) {
-          return yield* Effect.fail(
-            new NotAssigned({
-              message: `${p.ref} is not assigned — assign first`,
-            }),
-          );
-        }
-        const tree = yield* sessionRepo
-          .resolve(p.ref)
-          .pipe(Effect.mapError((message) => new BadRef({ message })));
-        if (tree === undefined || tree.pull === undefined) {
-          return yield* Effect.fail(
-            new BadRef({
-              message: `${p.ref} is not a pull request of a connected repository`,
-            }),
-          );
-        }
-        const key = pullWorktreeKey(yield* self, parsed.number);
-        const checkout = yield* checkouts
-          .checkout({
-            key,
-            remote: tree.remote,
-            ref: tree.pull.ref,
-            fresh: true,
-          })
-          .pipe(
-            Effect.mapError(
-              (error) =>
-                new CheckoutFailed({
-                  message:
-                    error._tag === "Git.GitError"
-                      ? error.stderr
-                      : String(error),
-                }),
-            ),
-          );
-        yield* setWorktree(p.ref, checkout.path);
-        return { path: checkout.path, branch: checkout.branch };
+        const made = yield* ensureWorktree(p.ref);
+        return { path: made.path, branch: made.branch };
       }),
     );
 
     const spawn = yield* AI.Tool("spawn")`
-      Kick off an ENGINEER subagent with ${brief} — its own session on
-      this thread's machine, full editor, push and pull-request tools
-      that act on GitHub directly. The call returns when it settles —
-      answers ${AI.out(agentKey, report)}; you stay the point of
-      contact. Name the worktree path in the brief when the work
-      belongs to one pull request.`(
-      Effect.fn(function* (p: { brief: string }) {
+      Kick off an ENGINEER with ${brief} — its own session on this
+      thread's machine, full editor, push and pull-request tools that
+      act on GitHub directly. When the work belongs to one pull
+      request, name it as ${pull}: the engineer's shell, file tools,
+      and terminal are then ROOTED in that pull request's worktree
+      (made if need be) and it cannot reach any other tree — never
+      rely on the brief to keep it there. The call returns when the
+      engineer settles — answers ${AI.out(agentKey, report)}; you stay
+      the point of contact, and the engineer can ${Message} you (and
+      its siblings) while it works. Fails with ${BadRef} for a ${pull}
+      that is not a pull request of a connected repository,
+      ${NotAssigned} when it is not assigned here, ${CheckoutFailed}
+      when git refuses its worktree.`(
+      Effect.fn(function* (p: { brief: string; pull?: string }) {
         const id = yield* self;
         const session = { term: THREAD_TERM, key: id };
         const key = `${id}::e-${shortId()}`;
         const startedAt = Date.now();
         const pick = (yield* current).model;
+        const tree =
+          p.pull === undefined ? undefined : yield* ensureWorktree(p.pull);
         yield* upsertAgent({
           key,
           kind: "engineer",
           brief: p.brief,
+          ...(tree === undefined ? {} : { cwd: tree.path }),
           state: "running",
           startedAt,
         });
@@ -752,6 +777,13 @@ export const ThreadAgentLive = ThreadAgent.make(
         // — so its first sampling already uses the pick
         if (pick !== undefined) {
           yield* engineer.at(key).setModel(pick);
+        }
+        // …and its TREE the same way: the key of this thread's worktree
+        // for the pull request, so its first tool call is already
+        // rooted there (sandbox/SandboxCheckout.ts) — the engineer
+        // never sees the machine's root
+        if (tree !== undefined) {
+          yield* engineer.at(key).setTree(tree.key);
         }
         // `parent: session` from inside this round puts the engineer
         // under the thread's supervision: the operator stopping the
@@ -832,6 +864,7 @@ export const ThreadAgentLive = ThreadAgent.make(
               key: a.key,
               kind: a.kind,
               brief: a.brief,
+              ...(a.cwd === undefined ? {} : { cwd: a.cwd }),
               state: a.state,
             })),
           },
@@ -866,11 +899,11 @@ export const ThreadAgentLive = ThreadAgent.make(
       close,
       teardown,
       turn: AI.fragment`
-        You govern ONE thread — a task over the issues and pull requests assigned to it
-        (issues, pull requests, possibly across repositories). This
-        session is the thread's whole conversation: the operator
+        You are the MANAGER of ONE thread — a task over the issues and
+        pull requests assigned to it (possibly across repositories).
+        This session is the thread's whole conversation: the operator
         speaks to you here, GitHub events for what is assigned arrive
-        here (prefixed by their payload), and your subagents report
+        here (prefixed by their payload), and your engineers report
         back here. You OWN the work end to end: your engineers push
         commits to the pull requests you govern and open new pull
         requests to solve issues — directly, no approval step. You
@@ -888,15 +921,21 @@ export const ThreadAgentLive = ThreadAgent.make(
         snapshot.
 
         Your machine is one sandbox for the whole thread. Each pull
-        request you govern gets its OWN worktree (${worktree}); tell
-        every subagent which tree to work in. ${spawn} runs an
-        engineer to completion and hands you its report. ${assign}
-        and ${unassign} change what you govern — the moment an engineer
-        reports a pull request it opened, ${assign} it: an unassigned
-        pull has no review tab and its GitHub events route nowhere.
-        ${postCard} is the one way to reach the operator in the channel
-        — use it when work landed or you are blocked on them, never as
-        a log. ${closeThread} when the task is done.
+        request you govern gets its OWN worktree (${worktree}), and an
+        engineer is placed in one by ${spawn}'s pull argument — its
+        shell and tools are rooted there and cannot reach another
+        tree. ${spawn} runs the engineer to completion and hands you
+        its report; while it works, it can ${Message} you, and you
+        can ${Message} it or any engineer of this thread by name (the
+        engineers are named in the "[message from …]" lines and in
+        ${readState}). A message arrives in the recipient's own
+        conversation. ${assign} and ${unassign} change what you govern
+        — the moment an engineer reports a pull request it opened,
+        ${assign} it: an unassigned pull has no review tab and its
+        GitHub events route nowhere. ${postCard} is the one way to
+        reach the operator in the channel — use it when work landed or
+        you are blocked on them, never as a log. ${closeThread} when
+        the task is done.
 
         Keep replies short and factual; the operator reads this
         conversation as the thread's record. Name every issue and pull

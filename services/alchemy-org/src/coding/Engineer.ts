@@ -1,6 +1,11 @@
 import * as AI from "alchemy/AI";
+import * as Git from "alchemy/Git";
 import * as PersistentRef from "alchemy/PersistentRef";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import { assignedTree } from "../sandbox/SessionTree.ts";
+import { Message } from "../thread/Message.ts";
+import { threadOf } from "../thread/Terms.ts";
 import { Distillation } from "../process/Distillation.ts";
 import { AwsEmulation } from "../process/AwsEmulation.ts";
 import { CloudflareEmulation } from "../process/CloudflareEmulation.ts";
@@ -56,6 +61,13 @@ export interface EngineerApi {
    *  sampling on; `undefined` returns to the org's default. Nothing
    *  in flight is interrupted. */
   readonly setModel: (model: string | undefined) => Effect.Effect<void>;
+  /** Hand the session an EXISTING tree on its machine — the key of a
+   *  `Git.Checkouts` checkout its owner made (a thread's worktree for
+   *  the pull request the brief is about). From the first tool call
+   *  on, the session's shell, file tools, and terminal are rooted
+   *  there (`SandboxCheckout`); `undefined` returns the session to the
+   *  tree its key derives. Set BEFORE the brief. */
+  readonly setTree: (key: string | undefined) => Effect.Effect<void>;
 }
 
 export const GeneralEngineer = Engineer.make(
@@ -66,6 +78,7 @@ export const GeneralEngineer = Engineer.make(
     // is no session here; turns and methods read theirs from the frame.
     const model = yield* models;
     const repo = yield* SessionRepo;
+    const checkouts = yield* Git.Checkouts;
 
     // the session's own pick — a DECLARED durable cell, born at the
     // default, rewritten by `setModel` (the operator's selector, or a
@@ -102,20 +115,42 @@ export const GeneralEngineer = Engineer.make(
       const workspace = tree?.repo ?? "the alchemy repository";
       const pull = tree?.pull;
 
+      // a tree HANDED to the session (a thread's worktree for one pull
+      // request) — its shell and tools are rooted there; the stance
+      // names it so the model never reaches for another
+      const handedKey = yield* assignedTree;
+      const handedTree =
+        handedKey === null
+          ? undefined
+          : Option.getOrUndefined(yield* checkouts.get(handedKey));
+      const manager = threadOf(thread.key);
+
       // the PR clause of the stance — a nested fragment so its PushBranch
       // mention counts (mention-is-presence rides splices, not strings)
       const subject =
-        pull === undefined
-          ? AI.fragment``
-          : pull.ref === pull.head
-            ? AI.fragment`
+        handedTree !== undefined
+          ? AI.fragment`
+            Your tree is the worktree at ${handedTree.path}, on the
+            branch ${handedTree.branch} — the thread's checkout for the
+            pull request your brief is about. Your shell, your file
+            tools, and your terminal all start THERE, and there is the
+            only place you work: never cd out of it, never touch
+            another checkout or worktree on this machine, never run
+            git checkout / git switch / gh pr checkout — the branch is
+            already the right one. Commit on it and push it back with
+            ${PushBranch} as "${handedTree.branch}" so the work lands
+            in the pull request itself.`
+          : pull === undefined
+            ? AI.fragment``
+            : pull.ref === pull.head
+              ? AI.fragment`
             This session is about pull request #${pull.number} of
             ${workspace} — "${pull.title}" by ${pull.author}, merging
             ${pull.head} into ${pull.base}. Your tree IS the pull
             request's head, checked out on the branch ${pull.head}:
             commit fixes there and push them back with ${PushBranch} as
             "${pull.head}" so they land in the pull request itself.`
-            : AI.fragment`
+              : AI.fragment`
             This session is about pull request #${pull.number} of
             ${workspace} — "${pull.title}" by ${pull.author}, merging
             ${pull.head} (a fork) into ${pull.base}. Your tree IS the
@@ -171,10 +206,23 @@ export const GeneralEngineer = Engineer.make(
       names the domain skills beneath it; it is the same text a human
       coding agent reads in that folder's AGENTS.md.
 
+      ${
+        manager === undefined
+          ? AI.fragment`
       This chat (${thread.key}) is long-lived: the operator returns
       to it across days. When a task completes, say so plainly and
       stop; when you are blocked on a decision only the operator can
-      make, ask the question and park.`;
+      make, ask the question and park.`
+          : AI.fragment`
+      You are one agent of thread ${manager}, working a brief its
+      MANAGER gave you; the manager and your fellow engineers are one
+      ${Message} away — "manager" or an agent's key as the recipient.
+      Message the manager when you are blocked on something only it
+      or the operator can decide, and when a sibling's work bears on
+      yours; a message arrives in the recipient's own conversation.
+      When your brief is done, say so plainly — your final reply IS
+      the report the manager reads — and stop.`
+      }`;
     });
 
     // ── the OBJECT: the turn plus the methods. The turn provides the
@@ -192,6 +240,8 @@ export const GeneralEngineer = Engineer.make(
         Effect.map(chosen, (pick) => (pick === null ? undefined : pick)),
       setModel: (next: string | undefined) =>
         PersistentRef.set(chosen, next ?? null),
+      setTree: (key: string | undefined) =>
+        PersistentRef.set(assignedTree, key ?? null),
     };
   }),
 );

@@ -46,16 +46,7 @@ export interface Subagent {
   readonly settledAt?: number;
 }
 
-/**
- * The thread that kicked off a subagent session, from its key: an
- * engineer a thread spawned is keyed `<thread>::e-<id>`
- * (ThreadAgent.spawn). A standalone session (`owner/repo/name`)
- * belongs to none.
- */
-export const threadOf = (sessionKey: string): string | undefined => {
-  const at = sessionKey.indexOf("::");
-  return at >= 0 ? sessionKey.slice(0, at) : undefined;
-};
+export { threadOf } from "./Terms.ts";
 
 export interface ThreadState {
   readonly id: string;

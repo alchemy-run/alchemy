@@ -6,7 +6,9 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as PersistentRef from "alchemy/PersistentRef";
 import { SessionRepo, sessionOf } from "../github/SessionRepo.ts";
+import { assignedTree } from "./SessionTree.ts";
 
 /**
  * The session's tree, CONVERGED ON FIRST TOUCH — `AI.Sandbox` over the
@@ -37,6 +39,15 @@ import { SessionRepo, sessionOf } from "../github/SessionRepo.ts";
  * whatever the physics. A tree at `.` (the MicroVM, whose whole disk
  * is the tree) passes through untouched.
  *
+ * A session HANDED a tree (`SessionTree.assignedTree` set in its own
+ * state — a thread's engineer, given the key of the thread's worktree
+ * for the pull request its brief is about) converges to THAT existing
+ * checkout instead of deriving one from its key: `Git.Checkouts.get`
+ * finds it or the call fails with the model-visible reason. Such a
+ * tree is someone else's — memoized per SESSION KEY (two engineers of
+ * one thread work in two trees), and never released when the session
+ * goes.
+ *
  * `Git.Checkouts` itself runs over the RAW sandbox (it is the converge)
  * — compose this layer OVER the pair, never under it.
  */
@@ -64,7 +75,35 @@ export const SandboxCheckout: Layer.Layer<
       Deferred.Deferred<Git.Checkout | undefined, string>
     >();
 
-    const converge = Effect.fn(function* (session: string) {
+    /** The tree this session was HANDED (`assignedTree`), when its
+     *  frame carries a store and the cell is set. */
+    const handed: Effect.Effect<string | undefined> = Effect.gen(function* () {
+      const store = yield* Effect.serviceOption(PersistentRef.Store);
+      if (Option.isNone(store)) return undefined;
+      const key = yield* assignedTree.pipe(
+        Effect.provideService(PersistentRef.Store, store.value),
+      );
+      return key ?? undefined;
+    });
+
+    /** A handed tree is looked up, never made: it exists because its
+     *  owner (the thread) ensured it — or it is gone, and the tool
+     *  says so instead of silently working at the machine's root. */
+    const lookup = Effect.fn(function* (treeKey: string) {
+      const found = yield* checkouts.get(treeKey);
+      if (Option.isNone(found)) {
+        return yield* Effect.fail(
+          `the worktree this session was given ('${treeKey}') no longer exists on the machine — ask the thread's manager to recreate it (its worktree tool)`,
+        );
+      }
+      return found.value;
+    });
+
+    const converge = Effect.fn(function* (
+      session: string,
+      treeKey: string | undefined,
+    ) {
+      if (treeKey !== undefined) return yield* lookup(treeKey);
       const tree = yield* repo.resolve(session);
       if (tree === undefined) return undefined;
       return yield* checkouts
@@ -93,7 +132,11 @@ export const SandboxCheckout: Layer.Layer<
         );
         // no session in scope (a worker-level probe): nothing to converge
         if (thread === undefined) return undefined;
-        const session = sessionOf(thread.key);
+        // a handed tree is the SESSION's, not its machine's: keyed by
+        // the whole key so siblings on one machine keep their own
+        const treeKey = yield* handed;
+        const session =
+          treeKey === undefined ? sessionOf(thread.key) : thread.key;
         if (converged.has(session)) return converged.get(session);
         const waiting = inflight.get(session);
         if (waiting !== undefined) {
@@ -118,7 +161,7 @@ export const SandboxCheckout: Layer.Layer<
         }
         const gate = yield* Deferred.make<Git.Checkout | undefined, string>();
         inflight.set(session, gate);
-        return yield* converge(session).pipe(
+        return yield* converge(session, treeKey).pipe(
           Effect.onExit((exit) =>
             Effect.suspend(() => {
               inflight.delete(session);
@@ -182,6 +225,12 @@ export const SandboxCheckout: Layer.Layer<
         yield* Effect.serviceOption(AI.Thread),
       );
       if (thread === undefined) return;
+      // a HANDED tree is its owner's (the thread releases its
+      // worktrees with itself) — forget it here, never drop it
+      if ((yield* handed) !== undefined) {
+        converged.delete(thread.key);
+        return;
+      }
       const session = sessionOf(thread.key);
       const tree = yield* checkouts.get(session);
       if (Option.isSome(tree) && baseOf(tree.value) !== undefined) {

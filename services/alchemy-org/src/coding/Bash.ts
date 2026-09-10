@@ -6,7 +6,7 @@ import { Artifacts } from "../artifacts/Artifacts.ts";
 import { truncateTail } from "../artifacts/Output.ts";
 
 export const command = AI.Thing("command", S.String)`
-  A shell command run with 'sh -c' at the workspace root. Chain steps
+  A shell command run with 'sh -c' at the root of your tree. Chain steps
   with '&&'; quote paths containing spaces.`;
 
 const timeout = AI.Thing(

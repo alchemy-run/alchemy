@@ -108,7 +108,13 @@ const worktreeName = (path: string): string => {
 /** An entity's worktree, as a chip: the short name, the full path on
  *  hover, the path on the clipboard on click — so a long path never
  *  decides the row's layout. */
-const WorktreeChip = ({ path }: { path: string }) => {
+const WorktreeChip = ({
+  path,
+  className,
+}: {
+  path: string;
+  className?: string;
+}) => {
   const [copied, setCopied] = useState(false);
   const copy = useCallback(() => {
     void navigator.clipboard
@@ -125,7 +131,10 @@ const WorktreeChip = ({ path }: { path: string }) => {
         type="button"
         onClick={copy}
         aria-label={`copy worktree path ${path}`}
-        className="ml-auto flex min-w-0 max-w-[60%] cursor-pointer items-center gap-1 rounded border border-border/60 bg-muted/40 px-1.5 py-px font-mono text-[10px] leading-4 text-muted-foreground hover:border-border hover:bg-accent hover:text-foreground"
+        className={cn(
+          "flex min-w-0 cursor-pointer items-center gap-1 rounded border border-border/60 bg-muted/40 px-1.5 py-px font-mono text-[10px] leading-4 text-muted-foreground hover:border-border hover:bg-accent hover:text-foreground",
+          className ?? "ml-auto max-w-[60%]",
+        )}
       >
         {copied ? (
           <Check className="size-3 shrink-0 text-moss" />
@@ -212,8 +221,10 @@ export interface AgentActions {
 const ThreadPane = ({
   state,
   selectedAgent,
+  managerOpen,
   onOpenReview,
   onOpenAgent,
+  onOpenManager,
   agentActions,
   onClose,
   deleting,
@@ -222,8 +233,11 @@ const ThreadPane = ({
   state: ThreadState;
   /** The agent whose session is open in the body, if any. */
   selectedAgent: string | undefined;
+  /** The manager's conversation is what the body shows. */
+  managerOpen: boolean;
   onOpenReview: (owner: string, repo: string, number: number) => void;
   onOpenAgent: (key: string) => void;
+  onOpenManager: () => void;
   agentActions: AgentActions;
   onClose: () => void;
   /** The thread's DELETE is in flight. */
@@ -238,6 +252,32 @@ const ThreadPane = ({
   );
   const pick = useSelection(order, { onDelete: agentActions.remove });
   const [menuKeys, setMenuKeys] = useState<ReadonlyArray<string>>([]);
+  // the WORKTREES on the thread's machine: one per pull request the
+  // manager made a tree for, each with the engineers rooted in it
+  const worktrees = useMemo(() => {
+    const byPath = new Map<
+      string,
+      { path: string; refs: Array<string>; agents: Array<Subagent> }
+    >();
+    const row = (path: string) => {
+      const found = byPath.get(path);
+      if (found !== undefined) return found;
+      const made = { path, refs: [], agents: [] };
+      byPath.set(path, made);
+      return made;
+    };
+    for (const entity of state.assigned) {
+      if (entity.worktree !== undefined && entity.worktree !== "") {
+        row(entity.worktree).refs.push(entity.ref);
+      }
+    }
+    for (const agent of state.agents) {
+      if (agent.cwd !== undefined && agent.cwd !== "") {
+        row(agent.cwd).agents.push(agent);
+      }
+    }
+    return [...byPath.values()];
+  }, [state.assigned, state.agents]);
   const menuRows = state.agents.filter((agent) => menuKeys.includes(agent.key));
   const running = menuRows.filter((agent) => agent.state === "running");
   const settled = menuRows.filter((agent) => agent.state !== "running");
@@ -347,6 +387,74 @@ const ThreadPane = ({
           );
         })}
       </Section>
+      <Section title="Worktrees">
+        {worktrees.length === 0 && (
+          <div className="text-xs text-muted-foreground">
+            No worktrees yet — the manager makes one per pull request it puts an
+            engineer on.
+          </div>
+        )}
+        {worktrees.map((tree) => (
+          <div
+            key={tree.path}
+            data-worktree={tree.path}
+            className="flex flex-col gap-0.5 rounded-md px-1 py-1"
+          >
+            <div className="flex min-w-0 items-center gap-1.5">
+              <FolderGit2 className="size-3.5 shrink-0 text-muted-foreground" />
+              <span
+                className="min-w-0 flex-1 truncate font-mono text-[12px]"
+                title={tree.path}
+              >
+                {worktreeName(tree.path)}
+              </span>
+              {tree.refs.map((ref) => {
+                const parsed = parseEntityRef(ref);
+                return (
+                  <a
+                    key={ref}
+                    href={`https://github.com/${ref.replace("#", "/pull/")}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    title={ref}
+                    className="shrink-0 text-[11px] text-muted-foreground hover:text-foreground hover:underline"
+                  >
+                    {parsed === undefined ? ref : `#${parsed.number}`}
+                  </a>
+                );
+              })}
+              <WorktreeChip path={tree.path} className="max-w-[40%]" />
+            </div>
+            <div
+              className="truncate pl-5 font-mono text-[10px] text-muted-foreground/70"
+              title={tree.path}
+            >
+              {tree.path}
+            </div>
+            {tree.agents.length > 0 && (
+              <div className="flex flex-wrap items-center gap-1 pl-5 text-[11px] text-muted-foreground">
+                {tree.agents.map((agent) => (
+                  <button
+                    key={agent.key}
+                    type="button"
+                    onClick={() => onOpenAgent(agent.key)}
+                    title={agent.brief}
+                    className="flex cursor-pointer items-center gap-1 rounded hover:text-foreground"
+                  >
+                    <span
+                      className={cn(
+                        "size-1.5 rounded-full",
+                        AGENT_DOT[agent.state] ?? "bg-muted-foreground/40",
+                      )}
+                    />
+                    {agent.kind}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+      </Section>
       <ContextMenu
         onOpenChange={(open) => {
           // the menu closing ends the gesture — target and selection go
@@ -407,9 +515,41 @@ const ThreadPane = ({
                 )
               }
             >
+              {/* the MANAGER — the thread's own agent, first among its
+                  agents: its conversation is the thread's record */}
+              <button
+                type="button"
+                data-manager=""
+                data-state={state.turn === "agents" ? "running" : "idle"}
+                onClick={onOpenManager}
+                aria-label="open the manager"
+                aria-current={managerOpen ? "page" : undefined}
+                title={`${state.title}\n\nOpen the manager's conversation — the thread's whole record. It briefs the engineers and hears their reports.`}
+                className={cn(
+                  "flex w-full cursor-pointer items-center gap-2 rounded-md px-1 py-0.5 text-left hover:bg-accent/70",
+                  managerOpen && "bg-accent",
+                )}
+              >
+                <span
+                  className={cn(
+                    "size-2 shrink-0 rounded-full",
+                    state.turn === "agents"
+                      ? AGENT_DOT.running
+                      : "bg-muted-foreground/40",
+                  )}
+                />
+                <Bot className="size-3.5 shrink-0 text-muted-foreground" />
+                <span className="min-w-0 flex-1 truncate text-[12px] text-muted-foreground">
+                  <span className="font-medium text-foreground">manager</span> —{" "}
+                  {state.title}
+                </span>
+                <span className="shrink-0 text-[10px] text-muted-foreground/70">
+                  {timeAgo(state.updatedAt)}
+                </span>
+              </button>
               {state.agents.length === 0 && (
-                <div className="text-xs text-muted-foreground">
-                  No subagents yet.
+                <div className="pl-6 text-xs text-muted-foreground">
+                  No engineers yet.
                 </div>
               )}
               {state.agents.map(agentRow)}
@@ -468,7 +608,7 @@ const ThreadPane = ({
         }
       >
         <div className="text-[11px] text-muted-foreground">
-          What this thread's agent and its engineers sample with.
+          What this thread's manager and its engineers sample with.
         </div>
       </Section>
       <div className="flex items-center gap-2 px-3 py-2.5">
@@ -565,9 +705,11 @@ const AGENT_STATE_LABEL: Record<string, string> = {
   stopped: "stopped",
 };
 
-/** The strip above a subagent's transcript — what it was asked and
- *  where it stands. The subagent may be missing for a moment while the
- *  thread's state catches up to a fresh spawn. */
+/** The strip above a subagent's transcript — the basic controls: what
+ *  kind of agent, where it stands, stop/resume/delete, its model, and
+ *  the worktree it is rooted in. The brief is the transcript's first
+ *  message, so it is not repeated here. The subagent may be missing
+ *  for a moment while the thread's state catches up to a fresh spawn. */
 const AgentHeader = ({
   agentKey,
   agent,
@@ -582,90 +724,80 @@ const AgentHeader = ({
   const control =
     "flex h-6 cursor-pointer items-center gap-1 rounded-md border border-border bg-card px-1.5 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-default disabled:opacity-50";
   return (
-    <div className="flex items-start gap-2 border-b border-border bg-sidebar/60 px-4 py-2">
-      <Bot className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <div className="flex items-center gap-2 text-xs">
-          <span className="font-medium">{agent?.kind ?? "agent"}</span>
-          <span className="font-mono text-[10px] text-muted-foreground/70">
-            {agentKey}
-          </span>
-          {agent !== undefined && (
-            <span className="ml-auto flex shrink-0 items-center gap-1.5 text-[11px] text-muted-foreground">
-              {busy ? (
-                <LoaderCircle className="size-3 animate-spin" />
-              ) : (
-                <span
-                  className={cn(
-                    "size-2 rounded-full",
-                    AGENT_DOT[agent.state] ?? "bg-muted-foreground/40",
-                  )}
-                />
-              )}
-              {AGENT_STATE_LABEL[agent.state] ?? agent.state}
-              <span className="text-muted-foreground/70">
-                · {timeAgo(agent.settledAt ?? agent.startedAt)}
-              </span>
+    <div className="flex items-center gap-2 border-b border-border bg-sidebar/60 px-4 py-2">
+      <Bot className="size-4 shrink-0 text-muted-foreground" />
+      <div className="flex min-w-0 flex-1 items-center gap-2 text-xs">
+        <span className="font-medium">{agent?.kind ?? "agent"}</span>
+        {agent !== undefined && (
+          <span className="flex shrink-0 items-center gap-1.5 text-[11px] text-muted-foreground">
+            {busy ? (
+              <LoaderCircle className="size-3 animate-spin" />
+            ) : (
+              <span
+                className={cn(
+                  "size-2 rounded-full",
+                  AGENT_DOT[agent.state] ?? "bg-muted-foreground/40",
+                )}
+              />
+            )}
+            {AGENT_STATE_LABEL[agent.state] ?? agent.state}
+            <span className="text-muted-foreground/70">
+              · {timeAgo(agent.settledAt ?? agent.startedAt)}
             </span>
-          )}
-          {agent !== undefined && (
-            <span
-              role="toolbar"
-              aria-label="agent controls"
-              className="flex shrink-0 items-center gap-1"
-            >
-              {running ? (
-                <Hint label="Stop the agent — its command in flight is cut and its session settles. You can resume it.">
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => actions.stop([agentKey])}
-                    aria-label="stop agent"
-                    className={control}
-                  >
-                    <Square className="size-3" />
-                    Stop
-                  </button>
-                </Hint>
-              ) : (
-                <Hint label="Resume the agent — it picks its work back up where it was stopped; steer it from the prompt below.">
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => actions.resume([agentKey])}
-                    aria-label="resume agent"
-                    className={control}
-                  >
-                    <Play className="size-3" />
-                    Resume
-                  </button>
-                </Hint>
-              )}
-              <Hint label="Delete the agent — its session and transcript are erased; the thread keeps its machine.">
+          </span>
+        )}
+        {agent?.cwd !== undefined && (
+          <WorktreeChip path={agent.cwd} className="max-w-[40%]" />
+        )}
+        {agent !== undefined && (
+          <span
+            role="toolbar"
+            aria-label="agent controls"
+            className="ml-auto flex shrink-0 items-center gap-1"
+          >
+            {running ? (
+              <Hint label="Stop the agent — its command in flight is cut and its session settles. You can resume it.">
                 <button
                   type="button"
                   disabled={busy}
-                  onClick={() => actions.remove([agentKey])}
-                  aria-label="delete agent"
-                  className={cn(control, "hover:text-destructive")}
+                  onClick={() => actions.stop([agentKey])}
+                  aria-label="stop agent"
+                  className={control}
                 >
-                  <Trash2 className="size-3" />
+                  <Square className="size-3" />
+                  Stop
                 </button>
               </Hint>
-              <SessionModelSelect
-                sessionId={engineerSessionId(agentKey)}
-                label="Agent model"
-              />
-            </span>
-          )}
-        </div>
-        {agent !== undefined && (
-          <div
-            title={agent.brief}
-            className="line-clamp-2 text-[12px] text-muted-foreground"
-          >
-            {agent.brief}
-          </div>
+            ) : (
+              <Hint label="Resume the agent — it picks its work back up where it was stopped; steer it from the prompt below.">
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => actions.resume([agentKey])}
+                  aria-label="resume agent"
+                  className={control}
+                >
+                  <Play className="size-3" />
+                  Resume
+                </button>
+              </Hint>
+            )}
+            <Hint label="Delete the agent — its session and transcript are erased; the thread keeps its machine.">
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => actions.remove([agentKey])}
+                aria-label="delete agent"
+                className={cn(control, "hover:text-destructive")}
+              >
+                <Trash2 className="size-3" />
+              </button>
+            </Hint>
+            <SessionModelSelect
+              sessionId={engineerSessionId(agentKey)}
+              label="Agent model"
+            />
+          </span>
         )}
       </div>
     </div>
@@ -814,7 +946,7 @@ export const ThreadView = ({
           </span>
         )}
         <div className="ml-auto flex items-center gap-1">
-          <Hint label="The conversation — this thread's whole record">
+          <Hint label="The manager — the agent that runs this thread; its conversation is the thread's whole record">
             <button
               type="button"
               onClick={() => onTab({ kind: "chat" })}
@@ -826,8 +958,8 @@ export const ThreadView = ({
                   : "border-transparent text-muted-foreground hover:bg-accent/60 hover:text-foreground",
               )}
             >
-              <MessageSquare className="size-3.5" />
-              Chat
+              <Bot className="size-3.5" />
+              manager
             </button>
           </Hint>
           {reviews.map((entity) => {
@@ -981,7 +1113,7 @@ export const ThreadView = ({
                   <ChatView
                     id={sessionId}
                     active={active && tab.kind === "chat"}
-                    placeholder="Talk to the thread…"
+                    placeholder="Talk to the manager…"
                   />
                 </SubagentsContext.Provider>
               </OpenAgentContext.Provider>
@@ -1036,10 +1168,12 @@ export const ThreadView = ({
                     <ThreadPane
                       state={state}
                       selectedAgent={openAgent}
+                      managerOpen={tab.kind === "chat"}
                       onOpenReview={(owner, repo, number) =>
                         onTab({ kind: "review", owner, repo, number })
                       }
                       onOpenAgent={(key) => onTab({ kind: "agent", key })}
+                      onOpenManager={() => onTab({ kind: "chat" })}
                       agentActions={agentActions}
                       onClose={onCloseThread}
                       deleting={deleting}

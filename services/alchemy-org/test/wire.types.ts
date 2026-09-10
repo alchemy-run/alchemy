@@ -65,6 +65,11 @@ const _complete: Registry<typeof GeneralEngineer> = {
   grep: (input) => (input.pattern satisfies string, 1),
   // optionalKey params surface as OPTIONAL keys (the Tool.ts split)
   listDirectory: (input) => (input.path satisfies string | undefined, 1),
+  message: (input) => (
+    input.to satisfies string,
+    input.text satisfies string,
+    1
+  ),
   openPullRequest: (input) => (
     input.title satisfies string,
     input.base satisfies string | undefined,

@@ -39,6 +39,7 @@ const seedThread = (api: import("./harness.ts").FakeApi) => {
         key: "engineer-1",
         kind: "engineer",
         brief: "Implement the fix in pr-148's worktree",
+        cwd: "/workspace/trees/pr-148",
         state: "running",
         startedAt: NOW.getTime() - 120_000,
       },
@@ -461,11 +462,21 @@ test("the state pane shows assigned refs, agents, and the worktree", async ({
   await expect(pane).toContainText("Bug in reconcile");
   await expect(pane).toContainText("Add sumToN helper");
   await expect(pane).toContainText("pr-148");
+  // the worktree is a chip on the assignment AND a row of its own
+  // section (path, pull request, the engineers rooted in it)
   await expect(
     pane.getByRole("button", {
       name: "copy worktree path /workspace/trees/pr-148",
     }),
-  ).toBeVisible();
+  ).toHaveCount(2);
+  await expect(
+    pane.locator("[data-worktree='/workspace/trees/pr-148']"),
+  ).toContainText("engineer");
+  await expect(
+    pane.locator("[data-worktree='/workspace/trees/pr-148']"),
+  ).toContainText("#148");
+  // the manager leads the agents — the thread's own agent, first
+  await expect(pane.locator("[data-manager]")).toContainText("manager");
   await expect(pane).toContainText("engineer");
   await expect(pane).toMatchAriaSnapshot({ name: "thread-pane.aria.yml" });
 });
@@ -522,9 +533,12 @@ test("the Engineer card's open button jumps to the running agent", async ({
     .getByRole("button", { name: "Open the agent's session", exact: true })
     .click();
   await expect(page).toHaveURL(/\/t-1\/agent\/engineer-1$/);
-  await expect(
-    main(page).locator("[data-agent-session='engineer-1']"),
-  ).toContainText("Implement the fix in pr-148's worktree");
+  // the strip above the session is the basic controls — kind and
+  // state, not the brief (the transcript's first message says that)
+  const session = main(page).locator("[data-agent-session='engineer-1']");
+  await expect(session).toContainText("engineer");
+  await expect(session).toContainText("working");
+  await expect(session).not.toContainText("Implement the fix");
 });
 
 const agentRow = (page: import("@playwright/test").Page, key: string) =>
@@ -642,7 +656,7 @@ test("deleting an agent from its pane confirms, erases it, and returns to the ch
   await expect(page).toHaveURL(new RegExp(`${threadPath("t-1")}$`));
   await expect(
     page.getByRole("complementary", { name: "Thread state" }),
-  ).toContainText("No subagents yet.");
+  ).toContainText("No engineers yet.");
 });
 
 test("⌘-click selects several agents; the menu acts on all of them", async ({
@@ -773,7 +787,7 @@ test("the Agents heading's switches act on every agent in ONE request: Stop all,
   // Delete all confirms, then the thread state is empty
   page.once("dialog", (dialog) => void dialog.accept());
   await pane.getByRole("button", { name: "Delete all" }).click();
-  await expect(pane).toContainText("No subagents yet.");
+  await expect(pane).toContainText("No engineers yet.");
   expect(api.bulkRequests).toBe(3);
   expect(api.agentActions.filter((e) => e.action === "delete")).toHaveLength(3);
 });
