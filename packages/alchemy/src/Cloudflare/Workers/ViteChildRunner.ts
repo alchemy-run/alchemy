@@ -82,9 +82,7 @@ const program = Effect.scoped(
     );
     const source = config.source;
     const viteHost = "127.0.0.1";
-    // `viteDev` resolves `port: 0` per the loaded Vite: a true OS-assigned
-    // random port on Vite >= 8.2.1 (vitejs/vite#23158), a probed ephemeral
-    // port on older Vite.
+    // `port: 0` is a true OS-assigned random port (vitejs/vite#23158).
     const vitePort = source ? undefined : 0;
     const url = source
       ? yield* loadSource(source.descriptor).pipe(

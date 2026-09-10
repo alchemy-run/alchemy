@@ -41,7 +41,7 @@ catalogs:
     rolldown: 1.2.5
     tsdown: ^0.22.4
     typescript: ^7.0.2
-    vite: ^8.0.7
+    vite: ^8.2.2
   cloudflare:
     "@cloudflare/containers": ^0.3.7
     "@cloudflare/puppeteer": ^1.1.0
@@ -73,7 +73,7 @@ catalogs:
     sharp: ^0.35.3
     toucan-js: 4.0.0
     unenv: ^2.0.0-rc.24
-    vite: ^7.0.0 || ^8.0.0
+    vite: ^8.2.2
     workerd: 1.20260901.1
     ws: ^8.21.0
     yauzl: ^3.4.0

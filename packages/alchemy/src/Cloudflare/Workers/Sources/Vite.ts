@@ -13,13 +13,12 @@ import {
   viteBuildOutputPlugin,
   type ViteBuildOutput,
 } from "../../../Bundle/Vite.ts";
-import { viteSupportsPortZero } from "@alchemy.run/cloudflare-runtime/core/internal/Port";
 import {
   makeResourceLogger,
   makeResourceOutput,
 } from "../../../Util/ResourceOutput.ts";
 import { hashDirectory, type MemoOptions } from "../../../Command/Memo.ts";
-import { findAvailablePort, initialCwd } from "../../../Util/Node.ts";
+import { initialCwd } from "../../../Util/Node.ts";
 import { sha256Object } from "../../../Util/sha256.ts";
 import { readAssets } from "../Assets.ts";
 import type { SourceDevHandle, SourceProvider } from "../Source.ts";
@@ -114,23 +113,6 @@ export const viteDev = (
       process.env[ALCHEMY_CLOUDFLARE_VITE_INJECTED] = "1";
     });
     const vite = yield* Effect.promise(() => loadVite(rootDir));
-    // `port: 0` is a true OS-assigned random port on Vite >= 8.2.1
-    // (vitejs/vite#23158); older Vite treats it as "no port given" and
-    // hunts upward from the 5173 default — colliding with (or
-    // IPv6-shadowing) user-facing dev ports. Substitute a probed
-    // ephemeral port there; `strictPort: false` handles the small
-    // probe→bind race by moving to the next ephemeral port.
-    const server =
-      serverOptions.port === 0 && !viteSupportsPortZero(vite.version)
-        ? {
-            ...serverOptions,
-            port: yield* findAvailablePort(
-              typeof serverOptions.host === "string"
-                ? serverOptions.host
-                : undefined,
-            ).pipe(Effect.orDie),
-          }
-        : serverOptions;
     return yield* Effect.acquireRelease(
       ConsoleService.consoleWith((console) =>
         Effect.promise(async () => {
@@ -138,7 +120,9 @@ export const viteDev = (
             root: rootDir,
             define: getDefine(env),
             plugins: [cloudflare(pluginOptions)],
-            server,
+            // `port: 0` is a true OS-assigned random port (vitejs/vite#23158,
+            // Vite 8.2.2+), so the dev server binds race-free.
+            server: serverOptions,
             customLogger: makeViteLogger(console),
           });
           await devServer.listen();
