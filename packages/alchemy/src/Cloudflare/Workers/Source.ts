@@ -121,6 +121,16 @@ export interface SourceContext {
  */
 export interface DevContext extends SourceContext {
   readonly worker: {
+    /**
+     * Shared secret the host's WorkerProxy signs forwarded requests with
+     * (original URL / Host restoration). A server-mode source that exposes
+     * a workerd DIRECTLY behind the proxy must start it with this secret —
+     * the entry worker answers 400 "Invalid proxy shared secret" to a
+     * signed request whose secret it doesn't hold. Sources that front their
+     * workerd with their own server (the vite plugin) re-sign with their
+     * own secret and can ignore this.
+     */
+    readonly proxySharedSecret: string;
     readonly bindings: BindingHook<BindingServices>[];
     readonly durableObjectNamespaces: (RuntimeDurableObject & {
       uniqueKey: string;
