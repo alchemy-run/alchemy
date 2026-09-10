@@ -1,4 +1,4 @@
-import { spawn, spawnSync } from "node:child_process";
+import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import * as path from "node:path";
 
 export type PollOptions = {
@@ -143,6 +143,7 @@ export class DevCli {
       },
     );
     this.#process = child;
+    forwardSignals(child);
     const capture = (chunk: Buffer) => {
       const text = chunk.toString();
       this.#output += text;
@@ -236,3 +237,28 @@ export class DevCli {
     }
   }
 }
+
+/** Forward Ctrl-C to a detached CLI and let it finish its own cleanup. */
+export const forwardSignals = (child: ChildProcess): void => {
+  let interrupted: NodeJS.Signals | undefined;
+  const forward = (signal: NodeJS.Signals) => {
+    if (interrupted !== undefined) return;
+    interrupted = signal;
+    child.kill(signal);
+  };
+  const removeListeners = () => {
+    process.off("SIGINT", forward);
+    process.off("SIGTERM", forward);
+  };
+  process.on("SIGINT", forward);
+  process.on("SIGTERM", forward);
+  child.once("error", removeListeners);
+  child.once("exit", () => {
+    removeListeners();
+    // Bun skips afterAll on Ctrl-C. Exit only after the CLI has shut down,
+    // without resuming the interrupted tests or starting the next command.
+    if (interrupted !== undefined) {
+      process.exit(interrupted === "SIGINT" ? 130 : 143);
+    }
+  });
+};
