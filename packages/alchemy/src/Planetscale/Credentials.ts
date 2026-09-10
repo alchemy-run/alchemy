@@ -68,7 +68,7 @@ export const fromAuthProvider = () =>
   Layer.effect(
     Credentials,
     Effect.gen(function* () {
-      const apiBaseUrl = yield* Config.string("PLANETSCALE_API_BASE_URL").pipe(
+      const apiBaseUrl = yield* Config.String("PLANETSCALE_API_BASE_URL").pipe(
         Config.withDefault(DEFAULT_API_BASE_URL),
       );
       const { profileName, resolve } = yield* resolveProviderConfig<

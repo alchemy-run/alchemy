@@ -35,7 +35,7 @@ export {
 } from "./Paths.ts";
 
 /** Config key selecting a directory under `~/.alchemy/profiles`. */
-export const ALCHEMY_PROFILE = Config.string("ALCHEMY_PROFILE");
+export const ALCHEMY_PROFILE = Config.String("ALCHEMY_PROFILE");
 
 /** Version of the synthesized in-memory manifest returned by readManifest. */
 export const PROFILE_MANIFEST_VERSION = 3;

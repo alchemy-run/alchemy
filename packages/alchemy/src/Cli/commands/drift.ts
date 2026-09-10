@@ -12,7 +12,7 @@ import { config, envFile, profile, resolveStage, stage } from "./flags.ts";
 import { instrumentCommand } from "./instrument.ts";
 import { renderApply, renderPlanning } from "./render.ts";
 
-const repairFlag = Flag.boolean("repair").pipe(
+const repairFlag = Flag.Boolean("repair").pipe(
   Flag.withDescription("Repair detected drift without prompting"),
   Flag.withDefault(false),
 );

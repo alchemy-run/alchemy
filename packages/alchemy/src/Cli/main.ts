@@ -109,8 +109,8 @@ const commands = await Promise.all(
  * (capability detection runs while the service layers are built, before flag
  * parsing); this registration exists so the parser accepts the flag.
  */
-const NoInput = GlobalFlag.setting("no-input")({
-  flag: Flag.boolean("no-input").pipe(
+const NoInput = GlobalFlag.Setting("no-input")({
+  flag: Flag.Boolean("no-input").pipe(
     Flag.withDescription(
       "Disable prompts and the interactive TUI (plain output; commands needing input fail)",
     ),
@@ -226,7 +226,7 @@ const mainEffect = program.pipe(
 );
 
 /** Fully wired CLI program. */
-export const main: Effect.Effect<
+export const main = mainEffect as Effect.Effect<
   void,
   Effect.Error<typeof mainEffect>
-> = mainEffect;
+>;

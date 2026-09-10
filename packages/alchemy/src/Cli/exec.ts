@@ -69,7 +69,7 @@ const services = Layer.mergeAll(
 );
 
 /** `alchemy dev` normally parks forever; set for single-pass runs (tests). */
-const devOnce = Config.string("ALCHEMY_DEV_ONCE").pipe(
+const devOnce = Config.String("ALCHEMY_DEV_ONCE").pipe(
   Config.withDefault(""),
   Effect.map((value) => value === "1" || value === "true"),
 );

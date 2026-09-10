@@ -127,7 +127,7 @@ export const sidecarProxy = (options: { profile?: string }) =>
  * in place. Accepts the usual truthy/falsey strings (`true`/`1`/`yes`/`on`,
  * `false`/`0`/`no`/`off`).
  */
-export const ALCHEMY_TEST_DEV = Config.boolean("ALCHEMY_TEST_DEV").pipe(
+export const ALCHEMY_TEST_DEV = Config.Boolean("ALCHEMY_TEST_DEV").pipe(
   Config.option,
 );
 

@@ -37,7 +37,7 @@ export const GetSecretHttp = Layer.effect(
             // that over getSecret — org tokens still cannot read plaintext
             // from outside the App, and the env is already the source of
             // truth once the secret exists.
-            const fromEnv = yield* Config.redacted(name).pipe(
+            const fromEnv = yield* Config.Redacted(name).pipe(
               Effect.map((value) => ({
                 name,
                 value: Redacted.value(value),

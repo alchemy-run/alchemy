@@ -955,7 +955,7 @@ export const shouldObserveWorkerCrons = (
  * (`<subdomain>` in `https://<script>.<subdomain>.workers.dev`). When set,
  * Worker URL construction skips `GET /accounts/{id}/workers/subdomain`.
  */
-const CLOUDFLARE_WORKERS_SUBDOMAIN = Config.string(
+const CLOUDFLARE_WORKERS_SUBDOMAIN = Config.String(
   "CLOUDFLARE_WORKERS_SUBDOMAIN",
 ).pipe(
   Config.map((value) => value.trim()),

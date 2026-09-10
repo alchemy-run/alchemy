@@ -80,7 +80,7 @@ export type TelemetryLayer = Layer.Layer<never, any, any>;
  * Redacted marker, and a raw string set directly in the environment).
  */
 const readBoundValue = (key: string): Effect.Effect<unknown> =>
-  Config.string(key).pipe(
+  Config.String(key).pipe(
     Config.withDefault(undefined),
     Effect.orElseSucceed(() => undefined),
     Effect.map((raw) => {

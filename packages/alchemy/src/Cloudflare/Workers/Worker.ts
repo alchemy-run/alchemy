@@ -814,8 +814,8 @@ export interface WorkerProps<
    * - Resource references (R2 bucket, KV namespace, D1 database,
    *   another Worker, Durable Object, etc.) — emitted as the
    *   corresponding native binding.
-   * - `effect/Config` values (`Config.redacted`, `Config.string`,
-   *   `Config.number`, …) — resolved at deploy time and bound as
+   * - `effect/Config` values (`Config.Redacted`, `Config.String`,
+   *   `Config.Number`, …) — resolved at deploy time and bound as
    *   `secret_text` on Cloudflare regardless of the `Config`
    *   constructor used. See
    *   [Secrets & env](/cloudflare/security/secrets-env).

@@ -53,7 +53,7 @@ import {
   TokenValue,
 } from "./Token.ts";
 
-const CI = Config.boolean("CI").pipe(Config.withDefault(false));
+const CI = Config.Boolean("CI").pipe(Config.withDefault(false));
 
 export const state = () =>
   Layer.effect(
@@ -1185,7 +1185,7 @@ const annotateAccountHash = (noTrack?: boolean) =>
   Effect.gen(function* () {
     if (noTrack === true) return;
     if (noTrack === undefined) {
-      const fromEnv = yield* Config.boolean("NO_TRACK").pipe(
+      const fromEnv = yield* Config.Boolean("NO_TRACK").pipe(
         Config.withDefault(false),
       );
       if (fromEnv) return;

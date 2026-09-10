@@ -34,7 +34,7 @@ const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
  * Optional GitHub token for PR state lookups on TTL expiry. Bound as a
  * Worker secret when `GITHUB_TOKEN` is set at deploy time.
  */
-export const GitHubToken = Config.redacted("GITHUB_TOKEN").pipe(Config.option);
+export const GitHubToken = Config.Redacted("GITHUB_TOKEN").pipe(Config.option);
 
 export default class PackageStore extends Cloudflare.DurableObject<PackageStore>()(
   "PackageStore",
