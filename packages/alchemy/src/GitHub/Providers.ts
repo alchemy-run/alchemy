@@ -3,6 +3,8 @@ import { CredentialsStoreLive } from "../Auth/Credentials.ts";
 import { ProfileStoreLive } from "../Auth/Profile.ts";
 import * as Provider from "../Provider.ts";
 import { type GitHubAuthOptions, makeGitHubAuth } from "./AuthProvider.ts";
+import { BranchProtection, BranchProtectionProvider } from "./BranchProtection.ts";
+import { Collaborator, CollaboratorProvider } from "./Collaborator.ts";
 import { Comment, CommentProvider } from "./Comment.ts";
 import * as Credentials from "./Credentials.ts";
 import { Environment, EnvironmentProvider } from "./Environment.ts";
@@ -12,7 +14,9 @@ import { Milestone, MilestoneProvider } from "./Milestone.ts";
 import { PullRequest, PullRequestProvider } from "./PullRequest.ts";
 import { Release, ReleaseProvider } from "./Release.ts";
 import { Repository, RepositoryProvider } from "./Repository.ts";
+import { Ruleset, RulesetProvider } from "./Ruleset.ts";
 import { Secret, SecretProvider } from "./Secret.ts";
+import { TeamAccess, TeamAccessProvider } from "./TeamAccess.ts";
 import { Variable, VariableProvider } from "./Variable.ts";
 import { Webhook, WebhookProvider } from "./Webhook.ts";
 
@@ -27,9 +31,9 @@ export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
 export interface ProvidersOptions extends GitHubAuthOptions {}
 
 /**
- * GitHub providers (Comment, Environment, Issue, Label, Milestone,
- * PullRequest, Release, Repository, Secret, Variable, Webhook) plus the GitHub
- * AuthProvider that the alchemy CLI discovers.
+ * GitHub providers (BranchProtection, Collaborator, Comment, Environment,
+ * Issue, Label, Milestone, PullRequest, Release, Repository, Ruleset, Secret, TeamAccess, Variable,
+ * Webhook) plus the GitHub AuthProvider that the alchemy CLI discovers.
  *
  * Pass `baseUrl` to pin every GitHub resource to a GitHub Enterprise host
  * without relying on the auth provider's configuration:
@@ -47,6 +51,8 @@ export const providers = (options?: ProvidersOptions) =>
   Layer.effect(
     Providers,
     Provider.collection([
+      BranchProtection,
+      Collaborator,
       Comment,
       Environment,
       Issue,
@@ -55,13 +61,17 @@ export const providers = (options?: ProvidersOptions) =>
       PullRequest,
       Release,
       Repository,
+      Ruleset,
       Secret,
+      TeamAccess,
       Variable,
       Webhook,
     ]),
   ).pipe(
     Layer.provide(
       Layer.mergeAll(
+        BranchProtectionProvider(),
+        CollaboratorProvider(),
         CommentProvider(),
         EnvironmentProvider(),
         IssueProvider(),
@@ -70,7 +80,9 @@ export const providers = (options?: ProvidersOptions) =>
         PullRequestProvider(),
         ReleaseProvider(),
         RepositoryProvider(),
+        RulesetProvider(),
         SecretProvider(),
+        TeamAccessProvider(),
         VariableProvider(),
         WebhookProvider(),
       ),
