@@ -10,6 +10,15 @@ import { defineConfig } from "vite";
 // the worker entry forwarding /api and /attach to the backend.
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  // Every vite serving this root shares `node_modules/.vite` by default,
+  // and each server re-optimizes deps into it under NEW chunk names. A
+  // second server (the e2e suite's, beside a running `alchemy dev`)
+  // therefore deletes the chunks the first still serves: its lazy
+  // imports (Shiki's grammars) 504 "Outdated Optimize Dep" and code
+  // renders unhighlighted. The e2e web server names its own dir.
+  ...(process.env.VITE_CACHE_DIR === undefined
+    ? {}
+    : { cacheDir: process.env.VITE_CACHE_DIR }),
   resolve: {
     alias: {
       "@": fileURLToPath(new URL(".", import.meta.url)),

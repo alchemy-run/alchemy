@@ -107,6 +107,10 @@ export default defineConfig({
       // the backend is intercepted in-page before it reaches vite
       command: `pnpm exec vite ui --port ${UI_PORT} --strictPort`,
       cwd: PACKAGE_ROOT,
+      // its OWN optimize-deps cache: sharing `node_modules/.vite` with a
+      // running `alchemy dev` clobbers the chunks that server is serving
+      // (see ui/vite.config.ts)
+      env: { VITE_CACHE_DIR: `${PACKAGE_ROOT}/node_modules/.vite-e2e` },
       url: `http://localhost:${UI_PORT}`,
       reuseExistingServer: true,
       timeout: 60_000,
