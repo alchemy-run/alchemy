@@ -240,6 +240,50 @@ const makeTheme = (
       scope: ["invalid", "invalid.illegal"],
       settings: { foreground: p.deletion },
     },
+    // YAML — data, not code: the generic rules would paint every key
+    // tag-orange and every value string-yellow, a wall of warm tones.
+    // Keys take the function blue, quoted text the addition green,
+    // bare words the plain foreground, and numbers/booleans/null the
+    // keyword tone — the same cool spread a program has.
+    {
+      scope: ["entity.name.tag.yaml"],
+      settings: { foreground: p.fn },
+    },
+    {
+      scope: [
+        "string.unquoted.plain.out.yaml",
+        "string.unquoted.plain.in.yaml",
+      ],
+      settings: { foreground: p.foreground },
+    },
+    {
+      scope: [
+        "string.quoted.double.yaml",
+        "string.quoted.single.yaml",
+        "string.unquoted.block.yaml",
+        "punctuation.definition.string.begin.yaml",
+        "punctuation.definition.string.end.yaml",
+      ],
+      settings: { foreground: p.addition },
+    },
+    {
+      scope: [
+        "constant.numeric.integer.yaml",
+        "constant.numeric.float.yaml",
+        "constant.language.boolean.yaml",
+        "constant.language.null.yaml",
+      ],
+      settings: { foreground: p.keyword },
+    },
+    {
+      scope: [
+        "punctuation.definition.block.sequence.item.yaml",
+        "punctuation.separator.key-value.mapping.yaml",
+        "keyword.control.flow.block-scalar.literal.yaml",
+        "keyword.control.flow.block-scalar.folded.yaml",
+      ],
+      settings: { foreground: p.operator },
+    },
   ],
 });
 
