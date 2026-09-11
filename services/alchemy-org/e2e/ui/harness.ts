@@ -468,6 +468,9 @@ export class FakeApi {
       output: unknown;
       isFailure?: boolean;
       reply: string;
+      /** What the agent thought before calling the tool — a reasoning
+       *  trace on the tool-calling tick. */
+      reasoning?: string;
     },
   ): void {
     const at = id.indexOf(":");
@@ -489,6 +492,7 @@ export class FakeApi {
         tick: 0,
         ms: 800,
         text: "",
+        ...(turn.reasoning === undefined ? {} : { reasoning: turn.reasoning }),
         toolCalls: [{ id: callId, name: turn.name, input: turn.input }],
       },
       {

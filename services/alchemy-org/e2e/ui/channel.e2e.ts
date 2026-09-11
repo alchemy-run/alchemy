@@ -94,6 +94,7 @@ test("the run pill opens the run rail; the eval card shows code and output", asy
     },
     output: '{ "total": 3 }\n\n--- logs ---\nsearching the stream…',
     reply: "Looked at the stream — placing it on a thread.",
+    reasoning: "The operator wants a count, so search first and tally.",
   });
   await openApp(page);
 
@@ -105,6 +106,18 @@ test("the run pill opens the run rail; the eval card shows code and output", asy
   // exploration lives there, not in the channel stream
   await pill.click();
   const rail = page.getByRole("complementary", { name: "Run" });
+
+  // the thought trace is one quiet line, no box: its text stays folded
+  // and the chevron only shows on hover; clicking opens the thought
+  const trace = rail.locator("[data-reasoning]");
+  await expect(trace).toContainText("Thought process");
+  await expect(trace).not.toContainText("search first and tally");
+  const chevron = trace.locator("svg");
+  await expect(chevron).toHaveCSS("opacity", "0");
+  await trace.hover();
+  await expect(chevron).toHaveCSS("opacity", "1");
+  await trace.getByRole("button").click();
+  await expect(trace).toContainText("search first and tally");
 
   // the eval card is ONE line: the program's TITLE and, inline, the
   // result's last line; the full result, the logs and the source open

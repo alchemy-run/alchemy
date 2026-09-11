@@ -749,23 +749,36 @@ const ReasoningTrace = ({
   onToggle: () => void;
 }) => {
   const anchored = useAnchoredToggle();
+  // No box: a thought is a muted one-liner in the flow of the reply,
+  // the way an editor renders it — the chevron only appears on hover,
+  // so a trace nobody opens costs one quiet line and nothing else.
   return (
-    <div className="rounded-md border border-border/60 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+    <div
+      data-reasoning=""
+      className="group -mx-1 px-1 text-xs text-muted-foreground/70"
+    >
       <button
         type="button"
         onClick={(event) => anchored(event.currentTarget, onToggle)}
-        className="flex w-full cursor-pointer items-center gap-1.5 text-left font-medium"
+        className="flex cursor-pointer items-center gap-1 py-0.5 text-left hover:text-muted-foreground"
       >
-        <ChevronDown
-          className={cn("size-3.5 transition-transform", !open && "-rotate-90")}
-        />
         {streaming ? (
           <span className="animate-pulse">Thinking…</span>
         ) : (
           "Thought process"
         )}
+        <ChevronDown
+          className={cn(
+            "size-3 transition-[opacity,transform] opacity-0 group-hover:opacity-100",
+            !open && "-rotate-90",
+          )}
+        />
       </button>
-      {open && <div className="mt-2 whitespace-pre-wrap">{text}</div>}
+      {open && (
+        <div className="mt-1 whitespace-pre-wrap border-l border-border/60 pl-3 text-muted-foreground">
+          {text}
+        </div>
+      )}
     </div>
   );
 };
