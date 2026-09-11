@@ -1249,31 +1249,28 @@ const splitEvalOutput = (
       };
 };
 
-type EvalPaneId = "result" | "logs" | "code";
+type EvalPaneId = "output" | "logs" | "code";
 
 /**
  * An eval card's body: ONE pane at a time behind a row of tabs —
- * what happened (`logs`), what ran (`code`), and `result` only when
- * it says more than the header's `→ …` already does (several lines,
- * or one too long to fit). Opening with the most telling pane: a
- * long result, else the logs, else the source. Switching tabs is
- * anchored — the card's height changes under the cursor, the page
- * does not move.
+ * what the program returned (`output`), what it logged (`logs`) and
+ * what ran (`code`). It opens on the output, the answer; the logs
+ * and the source are a tab away. Switching tabs is anchored — the
+ * card's height changes under the cursor, the page does not move.
  */
 const EvalPanes = ({
   code,
   logs,
-  result,
+  output,
 }: {
   code: string;
   logs: string | undefined;
-  /** The result, when it is worth a pane of its own. */
-  result: string | undefined;
+  output: string | undefined;
 }) => {
   const anchored = useAnchoredToggle();
   const panes: Array<{ id: EvalPaneId; count: number }> = [];
-  if (result !== undefined) {
-    panes.push({ id: "result", count: countLines(result) });
+  if (output !== undefined) {
+    panes.push({ id: "output", count: countLines(output) });
   }
   if (logs !== undefined) panes.push({ id: "logs", count: countLines(logs) });
   panes.push({ id: "code", count: countLines(code) });
@@ -1300,7 +1297,7 @@ const EvalPanes = ({
                 anchored(event.currentTarget, () => setActive(pane.id))
               }
               className={cn(
-                "-mb-px flex cursor-pointer items-center gap-1 border-b py-1.5 text-[11px]",
+                "-mb-px flex cursor-pointer items-center border-b py-1.5 text-[11px]",
                 selected
                   ? "border-foreground/70 font-medium text-foreground"
                   : "border-transparent text-muted-foreground hover:text-foreground",
@@ -1316,8 +1313,8 @@ const EvalPanes = ({
         })}
       </div>
       <div role="tabpanel" data-pane={shown}>
-        {shown === "result" && result !== undefined && (
-          <WindowedText text={result} head={20} tail={10} />
+        {shown === "output" && output !== undefined && (
+          <WindowedText text={output} head={20} tail={10} />
         )}
         {shown === "logs" && logs !== undefined && (
           <WindowedText text={logs} head={20} tail={10} />
@@ -1332,12 +1329,6 @@ const EvalPanes = ({
   );
 };
 
-/** Does the result say more than the header's `→ last line` shows? */
-const resultNeedsPane = (result: string): boolean => {
-  const trimmed = result.trim();
-  return trimmed.includes("\n") || trimmed.length > 140;
-};
-
 /**
  * The remainder: driver intrinsics (`eval`, `skill`, `remind_me` —
  * their schemas live in the driver, not on any agent's wire). Unknown
@@ -1345,27 +1336,17 @@ const resultNeedsPane = (result: string): boolean => {
  */
 const EXTRAS: Record<string, Renderer> = {
   /** CODEMODE's one tool — the model writes a whole module and titles
-   *  it. ONE line by default — the title (the intent) and, at its
-   *  right, the last line of the result — and the open card is a row
-   *  of tabs (logs, code, and the result when it is more than that
-   *  line), one pane at a time. A pre-title transcript row falls back
-   *  to "Run code". */
+   *  it. ONE line by default — the title, the intent — and the open
+   *  card is a row of tabs (output, logs, code), one pane at a time.
+   *  A pre-title transcript row falls back to "Run code". */
   eval: (input, output, running) => {
     const code = String(input.code ?? "");
     const title = typeof input.title === "string" ? input.title.trim() : "";
     const parsed = output === undefined ? undefined : splitEvalOutput(output);
-    const verdict = parsed === undefined ? undefined : lastLine(parsed.result);
+    const nonEmpty = (text: string | undefined) =>
+      text !== undefined && text.trim().length > 0 ? text.trim() : undefined;
     return {
       icon: SquareCode,
-      badge:
-        verdict === undefined || running ? undefined : (
-          <span
-            data-verdict=""
-            className="min-w-0 max-w-[45%] shrink truncate font-mono text-[11px] text-muted-foreground"
-          >
-            → {clamp(verdict, 140)}
-          </span>
-        ),
       title:
         title.length > 0 ? (
           title
@@ -1386,16 +1367,8 @@ const EXTRAS: Record<string, Renderer> = {
           )}
           <EvalPanes
             code={code}
-            logs={
-              parsed?.logs !== undefined && parsed.logs.trim().length > 0
-                ? parsed.logs.trim()
-                : undefined
-            }
-            result={
-              parsed !== undefined && resultNeedsPane(parsed.result)
-                ? parsed.result.trim()
-                : undefined
-            }
+            logs={nonEmpty(parsed?.logs)}
+            output={nonEmpty(parsed?.result)}
           />
         </div>
       ),
