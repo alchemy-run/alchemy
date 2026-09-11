@@ -154,12 +154,16 @@ export const CodeCard = memo(
     code,
     language,
     overflow = "wrap",
+    maxHeight,
   }: {
     code: string;
     language: string | undefined;
     /** Long lines: wrapped (prose-like snippets) or scrolled sideways
      *  (data, where a line's shape is the point). */
     overflow?: "wrap" | "scroll";
+    /** Cap the card's height (a Tailwind `max-h-*` class): the code
+     *  scrolls INSIDE the card, so the copy button stays pinned over it. */
+    maxHeight?: string;
   }) => {
     const base = useBaseOptions();
     const contents = code.replace(/\n$/, "");
@@ -182,7 +186,13 @@ export const CodeCard = memo(
     return (
       <CodeBoundary fallback={code}>
         <div className={cn(CARD, "group/code relative my-2")}>
-          <File file={file} options={options} />
+          <div
+            className={cn(
+              maxHeight !== undefined && `overflow-auto ${maxHeight}`,
+            )}
+          >
+            <File file={file} options={options} />
+          </div>
           <CopyButton
             text={contents}
             className="absolute top-1.5 right-1.5 opacity-0 transition-opacity group-hover/code:opacity-100 focus-visible:opacity-100 data-[copied]:opacity-100"

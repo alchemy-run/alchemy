@@ -1421,9 +1421,14 @@ const EvalPanes = ({
           (yaml !== undefined ? (
             <div
               data-format="yaml"
-              className="max-h-96 overflow-auto px-2 py-2 [&_.code-surface]:my-0"
+              className="px-2 py-2 [&_.code-surface]:my-0"
             >
-              <CodeCard code={yaml} language="yaml" overflow="scroll" />
+              <CodeCard
+                code={yaml}
+                language="yaml"
+                overflow="scroll"
+                maxHeight="max-h-96"
+              />
             </div>
           ) : (
             <Mono wrap={false}>{output}</Mono>
@@ -1433,7 +1438,7 @@ const EvalPanes = ({
         )}
         {shown === "code" && (
           <div className="px-2 py-2 [&_.code-surface]:my-0">
-            <CodeCard code={code} language="typescript" />
+            <CodeCard code={code} language="typescript" maxHeight="max-h-96" />
           </div>
         )}
       </div>
