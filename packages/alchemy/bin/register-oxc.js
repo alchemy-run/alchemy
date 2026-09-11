@@ -4,9 +4,10 @@
 // `.js` imports that mean `.ts` source, extensionless and directory imports,
 // JSON without import attributes, and `require()` of TypeScript from `.cts`.
 //
-// Every alchemy Node process — the `alchemy` CLI, the dev exec child, the
-// local-provider sidecar, dev-server runners — is started with `--import`
-// of this file. Alchemy itself and all of its dependencies run their built
+// Every alchemy Node process runs this file first: the `alchemy` CLI
+// imports it before its entry (bin/cli.js), and the dev exec child, the
+// local-provider sidecar and dev-server runners are started with `--import`
+// of it. Alchemy itself and all of its dependencies run their built
 // JavaScript; the hook exists so the USER's `.ts`/`.tsx` (the stack
 // entrypoint and everything it imports from the project) transpiles through
 // Oxc. Alchemy never relies on Node's built-in TypeScript support: it is
