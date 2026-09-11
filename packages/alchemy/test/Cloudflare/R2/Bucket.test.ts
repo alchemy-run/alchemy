@@ -149,7 +149,7 @@ test.provider(
         const state = yield* yield* State;
         yield* state.delete({
           stack: stack.name,
-          stage: "test",
+          stage: stack.stage,
           fqn: "AdoptableBucket",
         });
       }).pipe(Effect.provide(stack.state));
@@ -172,7 +172,7 @@ test.provider(
         const state = yield* yield* State;
         return yield* state.get({
           stack: stack.name,
-          stage: "test",
+          stage: stack.stage,
           fqn: "AdoptableBucket",
         });
       }).pipe(Effect.provide(stack.state));
@@ -668,7 +668,7 @@ test.provider("cors reconciliation converges drift and adoption", (stack) =>
       const state = yield* yield* State;
       yield* state.delete({
         stack: stack.name,
-        stage: "test",
+        stage: stack.stage,
         fqn: "DriftCorsBucket",
       });
     }).pipe(Effect.provide(stack.state));
@@ -726,7 +726,7 @@ test.provider(
 
       const detected = yield* Drift.detect({
         name: stack.name,
-        stage: "test",
+        stage: stack.stage,
       }).pipe(Effect.provide(stack.state));
       expect(detected.resources.DriftRepairBucket).toMatchObject({
         action: "drifted",
@@ -735,7 +735,7 @@ test.provider(
 
       const repaired = yield* Drift.repair({
         name: stack.name,
-        stage: "test",
+        stage: stack.stage,
       }).pipe(Effect.provide(stack.state));
       expect(repaired.resources.DriftRepairBucket).toMatchObject({
         action: "repaired",
@@ -774,7 +774,7 @@ test.provider(
 
       const detected = yield* Drift.detect({
         name: stack.name,
-        stage: "test",
+        stage: stack.stage,
       }).pipe(Effect.provide(stack.state));
       expect(detected.resources.DriftRecreateBucket).toMatchObject({
         action: "missing",
@@ -783,7 +783,7 @@ test.provider(
 
       const repaired = yield* Drift.repair({
         name: stack.name,
-        stage: "test",
+        stage: stack.stage,
       }).pipe(Effect.provide(stack.state));
       expect(repaired.resources.DriftRecreateBucket).toMatchObject({
         action: "recreated",
@@ -988,7 +988,7 @@ test.provider("managed r2.dev domain converges drift and adoption", (stack) =>
       const state = yield* yield* State;
       yield* state.delete({
         stack: stack.name,
-        stage: "test",
+        stage: stack.stage,
         fqn: "DriftPublicBucket",
       });
     }).pipe(Effect.provide(stack.state));
@@ -1145,19 +1145,21 @@ const listKeysWhenReady = Effect.fn(function* (
 class ListLagError extends Data.TaggedError("ListLagError") {}
 
 const stateOf = Effect.fn(function* (
-  stack: { name: string; state: Layer.Layer<State> },
+  stack: { name: string; stage: string; state: Layer.Layer<State> },
   fqn: string,
 ) {
   return yield* Effect.gen(function* () {
     const state = yield* yield* State;
-    return (yield* state.get({ stack: stack.name, stage: "test", fqn })) as
-      | ResourceState
-      | undefined;
+    return (yield* state.get({
+      stack: stack.name,
+      stage: stack.stage,
+      fqn,
+    })) as ResourceState | undefined;
   }).pipe(Effect.provide(stack.state));
 });
 
 const removalPolicyOf = Effect.fn(function* (
-  stack: { name: string; state: Layer.Layer<State> },
+  stack: { name: string; stage: string; state: Layer.Layer<State> },
   fqn: string,
 ) {
   return (yield* stateOf(stack, fqn))?.removalPolicy;
