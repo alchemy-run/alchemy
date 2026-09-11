@@ -1,10 +1,10 @@
-import type * as Credentials from "@distilled.cloud/aws/Credentials";
 import type * as secretsmanager from "@distilled.cloud/aws/secrets-manager";
 import type * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import * as Binding from "../../Binding.ts";
 import type { Input } from "../../Input.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
+import type { DbAuthTokenError } from "../Connection/DbAuthToken.ts";
 import type { SecurityGroupId } from "../EC2/SecurityGroup.ts";
 import type { SubnetId } from "../EC2/Subnet.ts";
 import type { Secret } from "../SecretsManager/Secret.ts";
@@ -38,10 +38,7 @@ export interface ConnectionInfo {
    * new physical connection authenticates with a fresh token instead of a
    * token minted at pool construction.
    */
-  refreshPassword?: Effect.Effect<
-    Redacted.Redacted<string>,
-    Credentials.CredentialsError
-  >;
+  refreshPassword?: Effect.Effect<Redacted.Redacted<string>, DbAuthTokenError>;
 }
 
 interface ConnectOptionsBase {
@@ -163,7 +160,7 @@ export interface Connect extends Binding.Service<
   ) => Effect.Effect<
     Effect.Effect<
       ConnectionInfo,
-      secretsmanager.GetSecretValueError | Credentials.CredentialsError,
+      secretsmanager.GetSecretValueError | DbAuthTokenError,
       RuntimeContext
     >
   >

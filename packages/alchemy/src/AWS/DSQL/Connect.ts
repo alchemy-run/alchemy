@@ -1,7 +1,7 @@
-import type { CredentialsError } from "@distilled.cloud/aws/Credentials";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
+import type { DbAuthTokenError } from "../Connection/DbAuthToken.ts";
 import type { SqlConnectionInfo } from "../Connection/internal.ts";
 import { connectEnvPrefix as makeConnectEnvPrefix } from "../Connection/internal.ts";
 import type { Cluster } from "./Cluster.ts";
@@ -86,7 +86,7 @@ export interface Connect extends Binding.Service<
     cluster: Cluster,
     options?: ConnectOptions,
   ) => Effect.Effect<
-    Effect.Effect<SqlConnectionInfo, CredentialsError, RuntimeContext>
+    Effect.Effect<SqlConnectionInfo, DbAuthTokenError, RuntimeContext>
   >
 > {}
 export const Connect = Binding.Service<Connect>("AWS.DSQL.Connect");

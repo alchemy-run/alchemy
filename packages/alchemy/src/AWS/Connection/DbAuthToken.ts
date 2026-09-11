@@ -1,9 +1,12 @@
-import type * as Credentials from "@distilled.cloud/aws/Credentials";
 import * as Presign from "@distilled.cloud/aws/Presign";
-import type * as Region from "@distilled.cloud/aws/Region";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+
+/** Failures of a token mint: credential resolution or SigV4 signing. */
+export type DbAuthTokenError = Effect.Error<
+  ReturnType<typeof Presign.presignUrl>
+>;
 
 export interface GenerateDbAuthTokenOptions {
   /**
@@ -53,8 +56,8 @@ export const generateDbAuthToken: (
   options: GenerateDbAuthTokenOptions,
 ) => Effect.Effect<
   Redacted.Redacted<string>,
-  Credentials.CredentialsError,
-  Credentials.Credentials | Region.Region
+  DbAuthTokenError,
+  Effect.Services<ReturnType<typeof Presign.presignUrl>>
 > = Effect.fn(function* (options: GenerateDbAuthTokenOptions) {
   const hostAndPort =
     options.port !== undefined
