@@ -8,7 +8,7 @@ import {
   TsconfigCache,
   type TransformOptions,
 } from "rolldown/utils";
-import type { ImportLoaderOptions, TransformContext } from "./import-loader.ts";
+import type { OxcLoaderOptions } from "./register-oxc.ts";
 import { resolveCacheDirectory, TransformCache } from "./transform-cache.ts";
 
 /** Extensions Oxc transpiles; everything else is JavaScript Node can run. */
@@ -116,11 +116,11 @@ export interface TransformedSource {
 }
 
 export class SourceTransformer {
-  readonly #options: ImportLoaderOptions;
+  readonly #options: OxcLoaderOptions;
   readonly #tsconfigCache = new TsconfigCache();
   readonly #cache: TransformCache | undefined;
 
-  constructor(options: ImportLoaderOptions) {
+  constructor(options: OxcLoaderOptions) {
     this.#options = options;
     const directory = resolveCacheDirectory(options.cache);
     this.#cache =
@@ -170,97 +170,77 @@ export class SourceTransformer {
    */
   transform(
     filePath: string,
-    url: string,
     format: string | null | undefined,
   ): TransformedSource | undefined {
     const extension = path.extname(filePath);
-    const transpile = transformExtensions.has(extension);
-    if (!transpile && this.#options.transforms === undefined) return undefined;
+    if (!transformExtensions.has(extension)) return undefined;
 
     let moduleFormat = nodeFormat(format) ?? inferFormat(filePath);
-    let source = readFileSync(filePath, "utf8");
-    // Exactly one of these ends up in the module: a map on disk to point
-    // at, or (cache off, or a user transform's own map) one to inline.
-    let mapFile: string | undefined;
-    let map: string | object | undefined;
-    if (transpile) {
-      const lang = this.#options.transform?.lang ?? language(filePath);
-      const options: TransformOptions = {
-        tsconfig: this.#options.tsconfig ?? true,
-        sourcemap: true,
-        ...this.#options.transform,
-        lang,
+    const source = readFileSync(filePath, "utf8");
+    const lang = language(filePath);
+    const options: TransformOptions = {
+      tsconfig: this.#options.tsconfig ?? true,
+      sourcemap: true,
+      lang,
+    };
+    const key = this.#cacheKey(filePath, source, options, moduleFormat);
+    const cached = key === undefined ? undefined : this.#cache?.get(key);
+    if (cached !== undefined) {
+      return {
+        format: cached.format,
+        source:
+          cached.mapFile === undefined
+            ? cached.code
+            : cached.code + fileSourceMapComment(cached.mapFile),
       };
-      const key = this.#cacheKey(filePath, source, options, moduleFormat);
-      const cached = key === undefined ? undefined : this.#cache?.get(key);
-      if (cached !== undefined) {
-        moduleFormat = cached.format;
-        source = cached.code;
-        mapFile = cached.mapFile;
-      } else {
-        // A `.ts` file in a CommonJS package that uses `import`/`export` runs
-        // as ESM — the same call Node's own module-syntax detection makes for
-        // `.js`. Explicit `.cts` stays CommonJS regardless.
-        if (
-          moduleFormat === "commonjs" &&
-          extension !== ".cts" &&
-          parseSync(filePath, source, { lang, sourceType: "unambiguous" })
-            .module.hasModuleSyntax
-        ) {
-          moduleFormat = "module";
-        }
-        const transformed = transformSync(
-          filePath,
-          source,
-          {
-            ...options,
-            sourceType: this.#options.transform?.sourceType ?? moduleFormat,
-          },
-          this.#tsconfigCache,
-        );
-        if (transformed.errors.length > 0) {
-          const [error] = transformed.errors;
-          throw error instanceof Error
-            ? error
-            : new SyntaxError(
-                `${filePath}: ${(error as { message?: string }).message ?? String(error)}`,
-              );
-        }
-        source = transformed.code;
-        map =
-          transformed.map === undefined
-            ? undefined
-            : JSON.stringify(withoutSourcesContent(transformed.map));
-        if (key !== undefined) {
-          mapFile = this.#cache?.set(key, {
+    }
+    // A `.ts` file in a CommonJS package that uses `import`/`export` runs
+    // as ESM — the same call Node's own module-syntax detection makes for
+    // `.js`. Explicit `.cts` stays CommonJS regardless.
+    if (
+      moduleFormat === "commonjs" &&
+      extension !== ".cts" &&
+      parseSync(filePath, source, { lang, sourceType: "unambiguous" }).module
+        .hasModuleSyntax
+    ) {
+      moduleFormat = "module";
+    }
+    const transformed = transformSync(
+      filePath,
+      source,
+      { ...options, sourceType: moduleFormat },
+      this.#tsconfigCache,
+    );
+    if (transformed.errors.length > 0) {
+      const [error] = transformed.errors;
+      throw error instanceof Error
+        ? error
+        : new SyntaxError(
+            `${filePath}: ${(error as { message?: string }).message ?? String(error)}`,
+          );
+    }
+    const map =
+      transformed.map === undefined
+        ? undefined
+        : JSON.stringify(withoutSourcesContent(transformed.map));
+    // The map ends up in the module exactly one way: on disk next to the
+    // cache entry and referenced by path, or (cache off) inlined.
+    const mapFile =
+      key === undefined || map === undefined
+        ? undefined
+        : this.#cache?.set(key, {
             format: moduleFormat,
-            code: source,
+            code: transformed.code,
             map,
           });
-          if (mapFile !== undefined) map = undefined;
-        }
-      }
-    }
-
-    const context: TransformContext = {
-      url,
-      path: filePath,
+    return {
       format: moduleFormat,
+      source:
+        mapFile !== undefined
+          ? transformed.code + fileSourceMapComment(mapFile)
+          : map !== undefined
+            ? transformed.code + inlineSourceMapComment(map)
+            : transformed.code,
     };
-    for (const transform of this.#options.transforms ?? []) {
-      const result = transform(source, context);
-      if (typeof result === "string") {
-        source = result;
-        map = undefined;
-        mapFile = undefined;
-      } else if (result !== undefined) {
-        source = result.code;
-        map = result.map;
-        mapFile = undefined;
-      }
-    }
-    if (mapFile !== undefined) source += fileSourceMapComment(mapFile);
-    else if (map !== undefined) source += inlineSourceMapComment(map);
-    return { format: moduleFormat, source };
   }
 }

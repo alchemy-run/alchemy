@@ -38,11 +38,6 @@
       "bun": "./src/ignore.ts",
       "import": "./lib/ignore.js"
     },
-    "./import-loader": {
-      "types": "./lib/import-loader.d.ts",
-      "bun": "./src/import-loader.ts",
-      "import": "./lib/import-loader.js"
-    },
     "./register-oxc": {
       "types": "./lib/register-oxc.d.ts",
       "bun": "./src/register-oxc.ts",
