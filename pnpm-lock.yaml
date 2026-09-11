@@ -552,9 +552,9 @@ importers:
 
   .:
     devDependencies:
-      '@alchemy.run/pr-package':
+      '@alchemy.run/pkg':
         specifier: workspace:*
-        version: link:packages/pr-package
+        version: link:packages/pkg
       '@distilled.cloud/aws':
         specifier: workspace:*
         version: link:submodules/distilled/packages/aws
@@ -1720,27 +1720,6 @@ importers:
       drizzle-kit:
         specifier: 1.0.0-rc.5-ab785fc
         version: 1.0.0-rc.5-ab785fc
-
-  examples/cloudflare-pr-package:
-    dependencies:
-      '@alchemy.run/pr-package':
-        specifier: workspace:*
-        version: link:../../packages/pr-package
-      '@cloudflare/workers-types':
-        specifier: 5.20260901.1
-        version: 5.20260901.1
-      '@effect/platform-bun':
-        specifier: 'catalog:'
-        version: 4.0.0-rc.115(effect@4.0.0-rc.115)
-      '@effect/platform-node':
-        specifier: 'catalog:'
-        version: 4.0.0-rc.115(effect@4.0.0-rc.115)(redis@6.2.1)
-      alchemy:
-        specifier: workspace:*
-        version: link:../../packages/alchemy
-      effect:
-        specifier: 4.0.0-rc.115
-        version: 4.0.0-rc.115
 
   examples/cloudflare-secrets-store:
     dependencies:
@@ -5691,15 +5670,30 @@ importers:
         specifier: 'catalog:'
         version: 7.0.2
 
-  packages/pr-package:
+  packages/pkg:
     dependencies:
+      '@distilled.cloud/github':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/github
       alchemy:
         specifier: workspace:*
         version: link:../alchemy
       effect:
         specifier: 4.0.0-rc.115
         version: 4.0.0-rc.115
+      modern-tar:
+        specifier: ^0.8.4
+        version: 0.8.4
     devDependencies:
+      '@effect/platform-bun':
+        specifier: 'catalog:'
+        version: 4.0.0-rc.115(effect@4.0.0-rc.115)
+      '@effect/platform-node':
+        specifier: 'catalog:'
+        version: 4.0.0-rc.115(effect@4.0.0-rc.115)(redis@6.2.1)
+      '@types/bun':
+        specifier: 'catalog:'
+        version: 1.3.14
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
