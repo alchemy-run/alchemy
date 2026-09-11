@@ -542,21 +542,24 @@ test("a crowded thread stays in bounds: sections count and scroll, the tab strip
   await expect(assigned).not.toContainText("small fix number 1");
   await expect(assigned).toContainText("24 pulls");
 
-  // the pulls are NOT tabs: the strip holds the manager (and agents,
-  // terminals) — 24 assignments add nothing up there
-  const strip = page.locator("[data-tabs]");
-  await expect(strip.locator("[data-review-tab]")).toHaveCount(0);
-  await expect(strip.getByRole("button")).toHaveCount(2); // manager, +
+  // no tab strip: the header's right names what is OPEN — the manager
+  // here — and 24 assignments and 30 agents add nothing up there
+  const current = page.locator("[data-current]");
+  await expect(current).toContainText("manager");
+  await expect(current).not.toContainText("engineer");
+  await expect(current.locator("[data-review-tab]")).toHaveCount(0);
+  await expect(current.getByRole("button")).toHaveCount(1); // +
 
   // clicking a pull's ROW opens its review (the diff takes the body);
-  // the strip shows that one pull as a temporary tab, and closing the
-  // tab returns to the manager
+  // the header names that pull, and closing it returns to the manager
   await assigned.getByRole("button", { name: /^Assigned/ }).click();
   await pane.locator(`[data-assigned="${REPO}#1505"]`).click();
   await expect(page).toHaveURL(/\/pull\/1505$/);
-  await expect(strip.locator("[data-review-tab]")).toHaveText(/#1505/);
-  await strip.getByRole("button", { name: "close review" }).click();
-  await expect(strip.locator("[data-review-tab]")).toHaveCount(0);
+  await expect(current.locator("[data-review-tab]")).toHaveText(/#1505/);
+  await expect(current).not.toContainText("manager");
+  await current.getByRole("button", { name: "close review" }).click();
+  await expect(current.locator("[data-review-tab]")).toHaveCount(0);
+  await expect(current).toContainText("manager");
   await expect(page).toHaveURL(/\/t-1$/);
 });
 

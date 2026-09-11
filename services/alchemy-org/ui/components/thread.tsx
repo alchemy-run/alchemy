@@ -1019,8 +1019,8 @@ export const ThreadView = ({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* header: name, tabs — the title lives on the manager row of the
-          state pane, the strip needs the width */}
+      {/* header: the name, and at the right what is open — the title
+          lives on the manager row of the state pane */}
       <div className="flex items-center gap-3 border-b border-border bg-sidebar px-4 py-2">
         <span
           className="shrink-0 text-sm font-semibold"
@@ -1033,35 +1033,25 @@ export const ThreadView = ({
             closed
           </span>
         )}
-        {/* the TAB STRIP: it takes the width the name leaves; a tab is never
-            narrower than its number, so past the edge the strip scrolls
-            sideways — the header never wraps or grows */}
+        {/* WHAT IS OPEN, at the right: the manager (the home view), or
+            the engineer, review, or terminal in the body — one chip, closed
+            back to the manager. Not a tab strip: the ways in are the state
+            pane's rows. */}
         <div
-          data-tabs=""
-          className="ml-auto flex min-w-0 flex-1 items-center gap-1 overflow-x-auto [scrollbar-width:thin]"
+          data-current=""
+          className="ml-auto flex min-w-0 shrink-0 items-center gap-1"
         >
-          {/* right-aligns the tabs while they fit; collapses to nothing
-              once they overflow, so the strip scrolls from its left edge */}
-          <span aria-hidden className="min-w-0 flex-1" />
-          <Hint label="The manager — the agent that runs this thread; its conversation is the thread's whole record">
-            <button
-              type="button"
-              onClick={() => onTab({ kind: "chat" })}
-              aria-current={tab.kind === "chat" ? "page" : undefined}
-              className={cn(
-                "flex h-7 shrink-0 items-center gap-1.5 rounded-md border px-2 text-xs",
-                tab.kind === "chat"
-                  ? "border-border bg-card font-medium shadow-xs"
-                  : "border-transparent text-muted-foreground hover:bg-accent/60 hover:text-foreground",
-              )}
-            >
-              <Crown className="size-3.5 text-primary" />
-              manager
-            </button>
-          </Hint>
-          {/* the OPEN review, while it is open: a temporary tab that says
-              what is selected — the pulls themselves live in the state
-              pane, not up here */}
+          {tab.kind === "chat" && (
+            <Hint label="The manager — the agent that runs this thread; its conversation is the thread's whole record">
+              <span
+                aria-current="page"
+                className="flex h-7 items-center gap-1.5 rounded-md border border-primary/30 bg-primary/10 px-2 text-xs font-medium"
+              >
+                <Crown className="size-3.5 text-primary" />
+                manager
+              </span>
+            </Hint>
+          )}
           {openReview !== undefined && (
             <span
               data-review-tab={openReview.ref}
@@ -1111,39 +1101,42 @@ export const ThreadView = ({
               </button>
             </span>
           )}
-          {terminals.map((pty) => {
-            const selected = tab.kind === "terminal" && tab.pty === pty;
-            return (
+          {tab.kind === "terminal" && (
+            <span className="flex h-7 shrink-0 items-center gap-0.5 rounded-md border border-border bg-card pl-2 pr-1 text-xs font-medium shadow-xs">
               <span
-                key={pty}
-                className={cn(
-                  "flex h-7 shrink-0 items-center gap-0.5 rounded-md border pl-2 pr-1 text-xs",
-                  selected
-                    ? "border-border bg-card font-medium shadow-xs"
-                    : "border-transparent text-muted-foreground hover:bg-accent/60 hover:text-foreground",
-                )}
+                aria-current="page"
+                title="A terminal on this thread's machine"
+                className="flex items-center gap-1.5"
               >
+                <SquareTerminal className="size-3.5" />
+                {tab.pty.slice(0, 6)}
+              </span>
+              <button
+                type="button"
+                onClick={() => onCloseTerminal(tab.pty)}
+                aria-label={`close terminal ${tab.pty}`}
+                className="cursor-pointer rounded p-0.5 hover:bg-accent"
+              >
+                <X className="size-3" />
+              </button>
+            </span>
+          )}
+          {/* other terminals still open on the machine: an icon each,
+              back to them in one click */}
+          {terminals
+            .filter((pty) => tab.kind !== "terminal" || tab.pty !== pty)
+            .map((pty) => (
+              <Hint key={pty} label={`Terminal ${pty.slice(0, 6)}`}>
                 <button
                   type="button"
                   onClick={() => onTab({ kind: "terminal", pty })}
-                  aria-current={selected ? "page" : undefined}
-                  title="A terminal on this thread's machine"
-                  className="flex cursor-pointer items-center gap-1.5"
+                  aria-label={`open terminal ${pty}`}
+                  className="flex h-7 cursor-pointer items-center rounded-md border border-transparent px-1.5 text-muted-foreground hover:bg-accent/60 hover:text-foreground"
                 >
                   <SquareTerminal className="size-3.5" />
-                  {pty.slice(0, 6)}
                 </button>
-                <button
-                  type="button"
-                  onClick={() => onCloseTerminal(pty)}
-                  aria-label={`close terminal ${pty}`}
-                  className="cursor-pointer rounded p-0.5 hover:bg-accent"
-                >
-                  <X className="size-3" />
-                </button>
-              </span>
-            );
-          })}
+              </Hint>
+            ))}
           <Hint label="New terminal on this thread's machine">
             <button
               type="button"
