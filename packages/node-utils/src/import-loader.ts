@@ -47,6 +47,15 @@ export interface ImportLoaderOptions {
    * built JavaScript.
    */
   readonly filter?: ((path: string) => boolean) | undefined;
+  /**
+   * On-disk cache of Oxc output shared by every process on the machine, so
+   * the CLI, its dev exec child and the local-provider sidecars transpile
+   * each source file once between them rather than once each. `false`
+   * disables it, a string names the directory.
+   * @default `$ALCHEMY_TRANSFORM_CACHE` (`0` disables), else a per-user
+   * directory under the OS temp directory
+   */
+  readonly cache?: boolean | string | undefined;
 }
 
 export interface ImportLoaderRegistrationOptions extends ImportLoaderOptions {

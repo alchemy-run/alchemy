@@ -20,7 +20,17 @@
 // Checkout runs use `register-dev-mode.js` instead, which installs the same
 // loader without the filter (alchemy's own source is TypeScript there) and
 // additionally resolves workspace packages onto their `src/`.
-import { registerOxc } from "@alchemy.run/node-utils/register-oxc";
+import { enableCompileCache } from "node:module";
+
+// Node's module compile cache: V8 code cache persisted across processes,
+// keyed by compiled source, so the loader's transformed TypeScript benefits
+// too. Enabled before the loader is imported so the loader's own dependency
+// graph (rolldown) is covered. Honours `NODE_COMPILE_CACHE` (directory) and
+// `NODE_DISABLE_COMPILE_CACHE`; defaults to Node's per-user temp directory.
+// The loader flushes it after lazy imports settle (see register-oxc.ts).
+enableCompileCache();
+
+const { registerOxc } = await import("@alchemy.run/node-utils/register-oxc");
 
 registerOxc({
   filter: (path) => !/[\\/]node_modules[\\/]/.test(path),
