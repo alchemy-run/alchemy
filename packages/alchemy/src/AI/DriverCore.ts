@@ -901,7 +901,7 @@ export const makeResolvers = (
     }
     const entry: ResolvedSkill = {
       prose: render(impl.template, impl.refs),
-      tools: skillTools.map(compileTool),
+      tools: skillTools.map((tool) => compileTool(tool)),
       handlers,
       // a teaching may reference DEEPER skills: activating this
       // one exposes them for activation — the skill GRAPH
