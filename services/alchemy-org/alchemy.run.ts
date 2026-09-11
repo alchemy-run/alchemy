@@ -10,8 +10,10 @@
  *   served as Worker assets, with `/api/*` and `/attach/*` forwarded
  *   to the backend over a service binding (ui/edge.ts).
  *
- * Run with the operator's shell env carrying `ANTHROPIC_API_KEY` (it
- * binds as a Worker secret at deploy):
+ * Run with the operator's shell env carrying the model keys —
+ * `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `DEEPSEEK_API_KEY` (each
+ * binds as a Worker secret at deploy; `pnpm dev` injects them from
+ * Doppler, so restart it after adding a key there):
  *
  * ```sh
  * bun alchemy deploy

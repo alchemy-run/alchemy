@@ -259,6 +259,12 @@ export class FakeApi {
     },
     { id: "gpt-5", label: "GPT-5", provider: "openai" },
     { id: "gpt-5-mini", label: "GPT-5 mini", provider: "openai" },
+    {
+      id: "deepseek-flash",
+      label: "DeepSeek V4.1 Flash",
+      provider: "deepseek",
+    },
+    { id: "deepseek-v4-pro", label: "DeepSeek V4 Pro", provider: "deepseek" },
   ];
   readonly defaultModel = "claude-haiku-4-5";
   /** An engineer session's own pick (`Engineer:<key>`), `null` = default. */

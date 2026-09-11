@@ -17,6 +17,12 @@ export class Opus extends AI.Model<Opus>()("alchemy-org/Opus") {}
 export class Haiku extends AI.Model<Haiku>()("alchemy-org/Haiku") {}
 export class Gpt5 extends AI.Model<Gpt5>()("alchemy-org/Gpt5") {}
 export class Gpt5Mini extends AI.Model<Gpt5Mini>()("alchemy-org/Gpt5Mini") {}
+export class DeepSeekFlash extends AI.Model<DeepSeekFlash>()(
+  "alchemy-org/DeepSeekFlash",
+) {}
+export class DeepSeekPro extends AI.Model<DeepSeekPro>()(
+  "alchemy-org/DeepSeekPro",
+) {}
 
 /**
  * The CATALOG the selector shows, in display order: the id the UI
@@ -50,9 +56,31 @@ export const MODELS = [
     provider: "openai",
     model: Gpt5Mini,
   },
+  {
+    id: "deepseek-flash",
+    label: "DeepSeek V4.1 Flash",
+    provider: "deepseek",
+    model: DeepSeekFlash,
+  },
+  {
+    id: "deepseek-v4-pro",
+    label: "DeepSeek V4 Pro",
+    provider: "deepseek",
+    model: DeepSeekPro,
+  },
 ] as const;
 
 export type ModelId = (typeof MODELS)[number]["id"];
+
+/** The catalog's services — what holding every model requires. */
+export type Catalog =
+  | Sonnet
+  | Opus
+  | Haiku
+  | Gpt5
+  | Gpt5Mini
+  | DeepSeekFlash
+  | DeepSeekPro;
 
 export const DEFAULT_MODEL: ModelId = "claude-haiku-4-5";
 
@@ -72,7 +100,7 @@ export const catalog = MODELS.map(({ id, label, provider }) => ({
 export const models: Effect.Effect<
   (id: string | undefined) => AI.ModelLayer,
   never,
-  Sonnet | Opus | Haiku | Gpt5 | Gpt5Mini
+  Catalog
 > = Effect.gen(function* () {
   const byId = new Map<string, AI.ModelLayer>();
   for (const entry of MODELS) byId.set(entry.id, yield* entry.model);
@@ -96,7 +124,116 @@ const anthropic = (model: string) =>
 const openai = (model: string) => OpenAiLanguageModel.make({ model });
 
 /**
- * Both providers over HTTP, the SAME layer on every substrate:
+ * DeepSeek over its OpenAI-compatible Responses API
+ * (https://api-docs.deepseek.com/guides/responses_api) — the OpenAI
+ * provider, pointed at DeepSeek's address with DeepSeek's key.
+ * Thinking is on by default on both models; tools, parallel calls,
+ * and reasoning items passed back on the next step all work as they
+ * do against OpenAI (probed).
+ *
+ * Its Anthropic-compatible surface was the first choice (same factory
+ * as Claude, thinking blocks and all) but its `message_start` omits
+ * `usage.cache_creation`, which the Anthropic provider's schema
+ * requires — every stream fails to decode.
+ *
+ * One seam remains: DeepSeek streams its chain of thought as
+ * `response.reasoning_text.delta` (the plain-text reasoning event),
+ * where OpenAI streams `response.reasoning_summary_text.delta`; the
+ * provider only knows the latter, so without help the traces are
+ * dropped on the floor. {@link deepseekFetch} renames the event on
+ * the wire, and the thoughts reach the UI as reasoning deltas like
+ * every other model's.
+ */
+const DEEPSEEK_URL = "https://api.deepseek.com";
+
+/** The SSE event DeepSeek emits for reasoning text, and the one the
+ *  OpenAI provider listens for (a summary part at index 0 — the id
+ *  the provider opened on the reasoning item's `output_item.added`). */
+const REASONING_TEXT_DELTA = "response.reasoning_text.delta";
+const REASONING_SUMMARY_DELTA = "response.reasoning_summary_text.delta";
+
+/** Rewrite one SSE line: the `event:` name and the `data:` payload's
+ *  `type`, with the `summary_index` the summary shape requires. Any
+ *  other line passes through byte-for-byte. */
+const rewriteSseLine = (line: string): string => {
+  if (line === `event: ${REASONING_TEXT_DELTA}`) {
+    return `event: ${REASONING_SUMMARY_DELTA}`;
+  }
+  if (line.startsWith("data: ") && line.includes(REASONING_TEXT_DELTA)) {
+    try {
+      const data = JSON.parse(line.slice(6)) as Record<string, unknown>;
+      if (data.type === REASONING_TEXT_DELTA) {
+        return `data: ${JSON.stringify({
+          ...data,
+          type: REASONING_SUMMARY_DELTA,
+          summary_index: 0,
+        })}`;
+      }
+    } catch {
+      // not JSON after all — leave the line alone
+    }
+  }
+  return line;
+};
+
+/** A body transform over an SSE stream: line-buffered, so an event
+ *  split across chunks is still rewritten whole. */
+const rewriteSse = () => {
+  let pending = "";
+  return new TransformStream<string, string>({
+    transform(chunk, controller) {
+      const lines = (pending + chunk).split("\n");
+      pending = lines.pop() ?? "";
+      for (const line of lines) controller.enqueue(`${rewriteSseLine(line)}\n`);
+    },
+    flush(controller) {
+      if (pending.length > 0) controller.enqueue(rewriteSseLine(pending));
+    },
+  });
+};
+
+/** `fetch` with DeepSeek's event stream renamed on the way in; every
+ *  non-SSE response passes through untouched. */
+const deepseekFetch = async (
+  input: RequestInfo | URL,
+  init?: RequestInit,
+): Promise<Response> => {
+  const response = await fetch(input, init);
+  const type = response.headers.get("content-type") ?? "";
+  if (response.body === null || !type.includes("text/event-stream")) {
+    return response;
+  }
+  return new Response(
+    response.body
+      .pipeThrough(new TextDecoderStream())
+      .pipeThrough(rewriteSse())
+      .pipeThrough(new TextEncoderStream()),
+    {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
+    },
+  );
+};
+
+const DeepSeekClient = OpenAiClient.layerConfig({
+  apiKey: Config.redacted("DEEPSEEK_API_KEY"),
+  apiUrl: Config.succeed(DEEPSEEK_URL),
+}).pipe(
+  // `fresh`: the shared `FetchHttpClient.layer` is memoized by reference
+  // across the whole build, and the first build (over the global fetch)
+  // would win — this client needs its own instance over its own fetch
+  Layer.provide(
+    Layer.fresh(FetchHttpClient.layer).pipe(
+      Layer.provide(
+        Layer.succeed(FetchHttpClient.Fetch, deepseekFetch as typeof fetch),
+      ),
+    ),
+  ),
+);
+
+/**
+ * Every provider over HTTP, the SAME layer on every substrate:
  * `Config.redacted` reads each key from the deploying shell locally
  * and rides the secrets seam on Cloudflare (evaluated during the
  * Worker's init, it binds as a `secret_text`; at runtime the same
@@ -112,6 +249,12 @@ export const ModelsLive = Layer.mergeAll(
   Haiku.layer(anthropic("claude-haiku-4-5")),
   Gpt5.layer(openai("gpt-5")),
   Gpt5Mini.layer(openai("gpt-5-mini")),
+  // DeepSeek's two models over ITS client — provided here, before the
+  // merge, so the OpenAI client below never reaches them
+  Layer.mergeAll(
+    DeepSeekFlash.layer(openai("deepseek-flash")),
+    DeepSeekPro.layer(openai("deepseek-v4-pro")),
+  ).pipe(Layer.provide(DeepSeekClient)),
 ).pipe(
   Layer.provide(
     AnthropicClient.layerConfig({
@@ -134,8 +277,5 @@ export const ModelsLive = Layer.mergeAll(
  * always offers what an unconfigured thread runs on. Built over the
  * catalog services ({@link ModelsLive}), which the agents share.
  */
-export const Model: Layer.Layer<
-  LanguageModel.LanguageModel,
-  never,
-  Sonnet | Opus | Haiku | Gpt5 | Gpt5Mini
-> = Layer.unwrap(Effect.map(models, (pick) => pick(undefined)));
+export const Model: Layer.Layer<LanguageModel.LanguageModel, never, Catalog> =
+  Layer.unwrap(Effect.map(models, (pick) => pick(undefined)));
