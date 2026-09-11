@@ -39,6 +39,13 @@ When `CI=true`, profiles are bypassed and Alchemy reads
 See [Profiles](/environments/profiles) for how credentials are stored
 and switched.
 
+## Test mode
+
+Use a `sk_test_…` key for development. Test mode is a full Stripe
+account: it mints real `prod_test_…`, `price_test_…`, and
+`cus_test_…` objects, and webhooks deliver over the real event
+pipeline. It is safe to destroy and recreate.
+
 ## Restricted keys
 
 Bindings attach permissions to a
@@ -51,3 +58,5 @@ you pass as `value`). See [Sell from a Worker](/stripe/guides/sell-from-a-worker
 
 - [Stripe overview](/stripe) — resources and compositions.
 - [Tutorial part 1](/stripe/tutorial/part-1) — first Product.
+- [Catalog](/stripe/guides/catalog) — Product, Price, Coupon, PaymentLink.
+- [Webhooks](/stripe/guides/webhooks) — consume events on a Worker.
