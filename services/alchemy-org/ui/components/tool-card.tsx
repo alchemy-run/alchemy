@@ -32,7 +32,13 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type * as AI from "alchemy/AI";
-import { createContext, useContext, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import type { GeneralEngineer } from "../../src/coding/Engineer.ts";
 import { useAnchoredToggle } from "@/lib/anchor";
 import { Ansi, stripAnsi } from "@/lib/ansi";
@@ -1234,6 +1240,84 @@ const CODER: Renderers<typeof GeneralEngineer> = {
   },
 };
 
+/* ── JSON as YAML ────────────────────────────────────────────── */
+
+/** A scalar YAML can take bare — anything else is quoted so the text
+ *  round-trips: empty, leading/trailing space, YAML punctuation, or a
+ *  value the reader would type as something else (`true`, `12`, `null`). */
+const YAML_BARE = /^[A-Za-z_][\w ./@+-]*$/;
+const YAML_TYPED = /^(true|false|null|yes|no|on|off|~|[-+]?\d[\d_.eE+-]*)$/i;
+const yamlScalar = (value: string): string =>
+  value.length > 0 &&
+  YAML_BARE.test(value) &&
+  !YAML_TYPED.test(value) &&
+  value.trim() === value
+    ? value
+    : JSON.stringify(value);
+
+/** Render a JSON value as YAML — the eval output an operator reads,
+ *  fewer brackets and quotes than the JSON the model reads. Multi-line
+ *  strings become block scalars. */
+const toYaml = (value: unknown, indent = ""): string => {
+  if (value === null || value === undefined) return "null";
+  if (typeof value === "string") {
+    if (value.includes("\n")) {
+      const pad = `${indent}  `;
+      return `|\n${value
+        .replace(/\n$/, "")
+        .split("\n")
+        .map((line) => (line.length === 0 ? "" : pad + line))
+        .join("\n")}`;
+    }
+    return yamlScalar(value);
+  }
+  if (typeof value !== "object") return String(value);
+  if (Array.isArray(value)) {
+    if (value.length === 0) return "[]";
+    return value
+      .map((item) => {
+        const rendered = toYaml(item, `${indent}  `);
+        return isYamlBlock(item)
+          ? `${indent}- ${rendered.trimStart()}`
+          : `${indent}- ${rendered}`;
+      })
+      .join("\n");
+  }
+  const entries = Object.entries(value as Record<string, unknown>);
+  if (entries.length === 0) return "{}";
+  return entries
+    .map(([key, item]) => {
+      const rendered = toYaml(item, `${indent}  `);
+      return isYamlBlock(item)
+        ? `${indent}${yamlScalar(key)}:\n${rendered}`
+        : `${indent}${yamlScalar(key)}: ${rendered}`;
+    })
+    .join("\n");
+};
+
+/** Does this value render as an indented block (non-empty object or
+ *  array) rather than inline after the key? */
+const isYamlBlock = (value: unknown): boolean =>
+  typeof value === "object" &&
+  value !== null &&
+  (Array.isArray(value)
+    ? value.length > 0
+    : Object.keys(value as object).length > 0);
+
+/** The eval output parsed, when CodeMode serialised a structured value
+ *  (an object or array — JSON, pretty-printed). Strings, numbers and
+ *  the like stay as the text they are. */
+const structuredOutput = (text: string): unknown | undefined => {
+  const trimmed = text.trim();
+  if (!/^[[{]/.test(trimmed)) return undefined;
+  try {
+    const parsed: unknown = JSON.parse(trimmed);
+    return typeof parsed === "object" && parsed !== null ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
 /** An eval result as CodeMode renders it: the program's output, then
  *  an optional `--- logs ---` section of captured console output. */
 const EVAL_LOGS_MARKER = "\n\n--- logs ---\n";
@@ -1268,9 +1352,16 @@ const EvalPanes = ({
   output: string | undefined;
 }) => {
   const anchored = useAnchoredToggle();
+  // a structured output (CodeMode's pretty-printed JSON) reads as YAML,
+  // highlighted; its line count is the YAML's
+  const yaml = useMemo(() => {
+    const structured =
+      output === undefined ? undefined : structuredOutput(output);
+    return structured === undefined ? undefined : toYaml(structured);
+  }, [output]);
   const panes: Array<{ id: EvalPaneId; count: number }> = [];
   if (output !== undefined) {
-    panes.push({ id: "output", count: countLines(output) });
+    panes.push({ id: "output", count: countLines(yaml ?? output) });
   }
   if (logs !== undefined) panes.push({ id: "logs", count: countLines(logs) });
   panes.push({ id: "code", count: countLines(code) });
@@ -1313,9 +1404,18 @@ const EvalPanes = ({
         })}
       </div>
       <div role="tabpanel" data-pane={shown}>
-        {shown === "output" && output !== undefined && (
-          <WindowedText text={output} head={20} tail={10} />
-        )}
+        {shown === "output" &&
+          output !== undefined &&
+          (yaml !== undefined ? (
+            <div
+              data-format="yaml"
+              className="max-h-96 overflow-auto px-2 py-2 [&_.code-surface]:my-0"
+            >
+              <CodeCard code={yaml} language="yaml" />
+            </div>
+          ) : (
+            <WindowedText text={output} head={20} tail={10} />
+          ))}
         {shown === "logs" && logs !== undefined && (
           <WindowedText text={logs} head={20} tail={10} />
         )}

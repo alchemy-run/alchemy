@@ -140,7 +140,9 @@ test("the run pill opens the run rail; the eval card shows code and output", asy
     "aria-selected",
     "true",
   );
-  await expect(card).toContainText('{ "total": 3 }');
+  // …a structured output reads as YAML, not the JSON the model saw
+  await expect(card).toContainText("total: 3");
+  await expect(card).not.toContainText('"total"');
   await expect(rail).not.toContainText("searching the stream…");
   await card.getByRole("tab", { name: /^logs/ }).click();
   await expect(rail).toContainText("searching the stream…");
