@@ -1249,35 +1249,84 @@ const splitEvalOutput = (
       };
 };
 
+/** A folded section of an eval card (its source, its logs): the
+ *  operator reads the title and the result first and opens the rest
+ *  only when curious. `label` names it; `count` sizes it. */
+const EvalFold = ({
+  label,
+  count,
+  children,
+}: {
+  label: string;
+  count: number;
+  children: ReactNode;
+}) => {
+  const [open, setOpen] = useState(false);
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => setOpen((current) => !current)}
+        aria-expanded={open}
+        className="flex w-full cursor-pointer items-center gap-1.5 px-2 py-1.5 text-left text-[11px] font-medium text-muted-foreground hover:text-foreground"
+      >
+        <ChevronDown
+          className={cn(
+            "size-3 shrink-0 transition-transform",
+            !open && "-rotate-90",
+          )}
+        />
+        {label}
+        <span className="font-normal">
+          · {count} line{count === 1 ? "" : "s"}
+        </span>
+      </button>
+      {open && children}
+    </div>
+  );
+};
+
 /**
  * The remainder: driver intrinsics (`eval`, `skill`, `remind_me` —
  * their schemas live in the driver, not on any agent's wire). Unknown
  * names fall back to the generic collapsible card.
  */
 const EXTRAS: Record<string, Renderer> = {
-  /** CODEMODE's one tool — the model writes a whole module. The card
-   *  shows the program syntax-highlighted, then what it evaluated to
-   *  and anything it logged. */
+  /** CODEMODE's one tool — the model writes a whole module and titles
+   *  it. ONE line by default — the title (the intent) and, at its
+   *  right, the last line of the result — and the operator opens
+   *  progressively: the card for the full result, then the logs and
+   *  the source behind their own folds. A pre-title transcript row
+   *  falls back to "Run code". */
   eval: (input, output, running) => {
     const code = String(input.code ?? "");
+    const title = typeof input.title === "string" ? input.title.trim() : "";
     const parsed = output === undefined ? undefined : splitEvalOutput(output);
+    const verdict = parsed === undefined ? undefined : lastLine(parsed.result);
     return {
       icon: SquareCode,
-      title: (
-        <>
-          Run code{" "}
-          <span className="text-muted-foreground">
-            · {countLines(code)} line{countLines(code) === 1 ? "" : "s"}
+      badge:
+        verdict === undefined || running ? undefined : (
+          <span
+            data-verdict=""
+            className="min-w-0 max-w-[45%] shrink truncate font-mono text-[11px] text-muted-foreground"
+          >
+            → {clamp(verdict, 140)}
           </span>
-        </>
-      ),
-      summary: parsed === undefined ? undefined : lastLine(parsed.result),
-      defaultOpen: true,
+        ),
+      title:
+        title.length > 0 ? (
+          title
+        ) : (
+          <>
+            Run code{" "}
+            <span className="text-muted-foreground">
+              · {countLines(code)} line{countLines(code) === 1 ? "" : "s"}
+            </span>
+          </>
+        ),
       body: (
         <div className="divide-y divide-border/50">
-          <div className="p-2 [&_.code-surface]:my-0">
-            <CodeCard code={code} language="typescript" />
-          </div>
           {running && (
             <div className="px-3 py-2 text-[11px] text-muted-foreground">
               <span className="animate-pulse">evaluating…</span>
@@ -1292,13 +1341,15 @@ const EXTRAS: Record<string, Renderer> = {
             </div>
           )}
           {parsed?.logs !== undefined && parsed.logs.length > 0 && (
-            <div>
-              <div className="px-2 pt-1.5 text-[11px] font-medium text-muted-foreground">
-                logs
-              </div>
+            <EvalFold label="logs" count={countLines(parsed.logs)}>
               <WindowedText text={parsed.logs} />
-            </div>
+            </EvalFold>
           )}
+          <EvalFold label="code" count={countLines(code)}>
+            <div className="px-2 pb-2 [&_.code-surface]:my-0">
+              <CodeCard code={code} language="typescript" />
+            </div>
+          </EvalFold>
         </div>
       ),
     };

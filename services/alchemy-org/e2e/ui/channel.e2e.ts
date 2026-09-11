@@ -89,6 +89,7 @@ test("the run pill opens the run rail; the eval card shows code and output", asy
     ask: "triage this please",
     name: "eval",
     input: {
+      title: "count the messages about reconcile",
       code: 'const hits = await search_messages({ q: "reconcile" });\nexport default hits;',
     },
     output: '{ "total": 3 }\n\n--- logs ---\nsearching the stream…',
@@ -105,11 +106,21 @@ test("the run pill opens the run rail; the eval card shows code and output", asy
   await pill.click();
   const rail = page.getByRole("complementary", { name: "Run" });
 
-  // the eval card: the program syntax-highlighted, the result, the logs
-  await expect(rail).toContainText("Run code");
-  await expect(rail).toContainText("search_messages");
-  await expect(rail).toContainText('"total": 3');
+  // the eval card is ONE line: the program's TITLE and, inline, the
+  // result's last line; the full result, the logs and the source open
+  // progressively
+  const card = rail.locator("[data-tool=eval]");
+  await expect(card).toContainText("count the messages about reconcile");
+  await expect(card.locator("[data-verdict]")).toHaveText('→ { "total": 3 }');
+  await expect(card).not.toContainText("result");
+  await expect(rail).not.toContainText("searching the stream…");
+  await expect(rail).not.toContainText("search_messages");
+  await card.getByRole("button").first().click();
+  await expect(card).toContainText("result");
+  await rail.getByRole("button", { name: /^logs · 1 line$/ }).click();
   await expect(rail).toContainText("searching the stream…");
+  await rail.getByRole("button", { name: /^code · 2 lines$/ }).click();
+  await expect(rail).toContainText("search_messages");
 
   // the run's FINAL reply belongs to the channel, not the rail
   await expect(rail).not.toContainText(

@@ -1979,6 +1979,7 @@ ${
       // module importing its tools and default-exporting the program
       () => [
         Model.toolCall("eval", {
+          title: "run the program",
           code: `
             import { search } from "./tools.js";
             export default async function () {
@@ -2024,6 +2025,7 @@ ${
     const model = Model.make([
       () => [
         Model.toolCall("eval", {
+          title: "run the program",
           code: `
             import * as Effect from "effect/Effect";
             import { search } from "./tools.js";
@@ -2065,6 +2067,7 @@ ${
       const model = Model.make([
         () => [
           Model.toolCall("eval", {
+            title: "run the program",
             code: `
               import * as Effect from "effect/Effect";
               import { readFile } from "./tools.js";
@@ -2109,6 +2112,7 @@ ${Missing} when it does not exist.`(() =>
     const model = Model.make([
       () => [
         Model.toolCall("eval", {
+          title: "run the program",
           code: `export default async function () { return await nope(); }`,
         }),
         Model.finish("tool-calls"),

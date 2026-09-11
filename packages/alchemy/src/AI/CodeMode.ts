@@ -60,7 +60,9 @@ export const makeCodeMode = (convention: {
           return {
             tools: [compileEvalTool(convention.teach(signatures))],
             handlers: {
-              eval: (input: { code: string }) =>
+              // `title` is for the reader (the card's label) — the
+              // program is what runs
+              eval: (input: { title: string; code: string }) =>
                 evaluator
                   .run({
                     ...convention.program(input.code, toolNames),
@@ -189,10 +191,25 @@ const renderResult = (result: EvalResult): string => {
     : `${output}\n\n--- logs ---\n${result.logs.join("\n")}`;
 };
 
+/** What the model must say about EACH program besides the code — the
+ *  label an operator reads above the (collapsed) source, so a run
+ *  tells its story in titles. */
+const TITLE_TEACHING = `Give every program a \`title\`: ONE short line, in plain words, saying what this particular run is trying to find out or do ("find every open dependabot PR", "read the five pulls before naming the thread"). It labels the run for the operator, who sees the title and the result first and opens the code only when curious — so name the intent, never restate the code.`;
+
 const compileEvalTool = (description: string) =>
   AiTool.make("eval", {
-    description,
-    parameters: S.Struct({ code: S.String }) as any,
+    description: `${description}
+
+${TITLE_TEACHING}`,
+    parameters: S.Struct({
+      title: S.String.annotate({
+        description:
+          "One short line: what this program is trying to find out or do — the label the operator reads above the collapsed code.",
+      }),
+      code: S.String.annotate({
+        description: "The complete module to run.",
+      }),
+    }) as any,
     success: S.Unknown,
     failure: S.Unknown,
     failureMode: "return",
