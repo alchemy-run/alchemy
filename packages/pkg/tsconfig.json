@@ -4,12 +4,15 @@
   "compilerOptions": {
     "composite": true,
     "noEmit": false,
-    "outDir": "./lib",
+    "outDir": "dist",
     "rootDir": "./src"
   },
   "references": [
     {
       "path": "../alchemy/tsconfig.json"
+    },
+    {
+      "path": "../../submodules/distilled/packages/github/tsconfig.json"
     }
   ]
 }
