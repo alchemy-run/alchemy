@@ -42,6 +42,9 @@ interface CodePalette {
   fn: string;
   type: string;
   tag: string;
+  /** Quoted data values — YAML strings: green, so a document of keys
+   *  and values reads in the code's cool spread. */
+  data: string;
 }
 
 export const WALNUT: CodePalette = {
@@ -62,6 +65,7 @@ export const WALNUT: CodePalette = {
   fn: "#7ddfff",
   type: "#7ddfff",
   tag: "#ffb968",
+  data: "#8fb15e",
 };
 
 export const PARCHMENT: CodePalette = {
@@ -74,14 +78,17 @@ export const PARCHMENT: CodePalette = {
   modified: "#3a7a8a",
   lineHighlight: "#ebe3d080",
   selection: "#5c7a3e33",
-  comment: "#85714f",
-  keyword: "#3f5a2a",
+  comment: "#8a7452",
+  // the roles deepened and saturated for paper: the same hues as the
+  // walnut theme's, dark enough to hold their own against #fbf6ea
+  keyword: "#2f6b12",
   operator: "#68573c",
-  string: "#a8781c",
-  literal: "#c56e3c",
-  fn: "#3d6a9a",
-  type: "#3a7a8a",
-  tag: "#b3462e",
+  string: "#8f5a00",
+  literal: "#b8461a",
+  fn: "#1256b0",
+  type: "#0d6e86",
+  tag: "#a8351c",
+  data: "#2f7a1a",
 };
 
 const makeTheme = (
@@ -264,7 +271,7 @@ const makeTheme = (
         "punctuation.definition.string.begin.yaml",
         "punctuation.definition.string.end.yaml",
       ],
-      settings: { foreground: p.addition },
+      settings: { foreground: p.data },
     },
     {
       scope: [
