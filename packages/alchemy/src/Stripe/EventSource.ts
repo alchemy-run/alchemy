@@ -5,13 +5,16 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import { Worker, isWorkerEvent } from "../Cloudflare/Workers/Worker.ts";
+import * as Namespace from "../Namespace.ts";
+import * as Output from "../Output.ts";
 import {
   isRedactedMarker,
+  sanitizeKey,
   unpackEnvValue,
   type RuntimeContext,
 } from "../RuntimeContext.ts";
 import type { StripeEventClass, StripeEventInstance } from "./Events.ts";
-import type { WebhookEndpoint } from "./WebhookEndpoint.ts";
+import { WebhookEndpoint } from "./WebhookEndpoint.ts";
 
 export interface ConsumeEventsProps<
   E extends readonly StripeEventClass[] = readonly StripeEventClass[],
@@ -37,12 +40,20 @@ export const webhookSecretEnvName = (path?: string): string =>
   `STRIPE_WEBHOOK_SECRET_${webhookPath(path).replaceAll(/[^a-zA-Z0-9]/g, "_")}`;
 
 /**
+ * Deterministic logical id for the {@link WebhookEndpoint} created by
+ * {@link consumeEvents} when the caller does not pass an explicit id.
+ * Derived from the delivery path so two subscriptions on different paths
+ * don't collide.
+ */
+export const webhookEndpointLogicalId = (path?: string): string =>
+  `WebhookEndpoint${sanitizeKey(webhookPath(path))}`;
+
+/**
  * Attach a webhook signing secret to a Worker as `secret_text`.
  *
- * Call this from the Stack after both the Worker and the
- * {@link WebhookEndpoint} exist. The Worker init must not depend on the
- * endpoint (that cycles on `worker.url`); this bind is the only edge
- * that carries the minted secret onto the host.
+ * {@link consumeEvents} calls this automatically for the endpoint it
+ * provisions. Declare a {@link WebhookEndpoint} manually only when you need
+ * a URL you already own; then bind the minted secret yourself.
  */
 export const bindWebhookSecret = (
   host: Worker,
@@ -58,9 +69,10 @@ export const bindWebhookSecret = (
 /**
  * Subscribe to Stripe webhook events on the host Worker.
  *
- * `consumeEvents` only listens and verifies — it does not create the
- * {@link WebhookEndpoint}. Declare that resource in the Stack after the
- * Worker (it needs `worker.url`), then {@link bindWebhookSecret}.
+ * `consumeEvents` provisions the {@link WebhookEndpoint} itself: it derives
+ * the delivery URL from the Worker's `url`, enables the selected event
+ * types, and binds the endpoint's minted signing secret onto the Worker so
+ * deliveries are verified. No separate endpoint declaration is needed.
  *
  * Provide {@link ConsumeEventsLive} on the Worker Effect.
  *
@@ -105,27 +117,32 @@ export function consumeEvents(
     event: StripeEventInstance,
   ) => Effect.Effect<void, never, any>,
 ): Effect.Effect<void, never, EventSource> {
-  const [props, process] =
+  const [id, props, process] =
     typeof idOrProps === "string"
       ? [
+          idOrProps,
           propsOrProcess as ConsumeEventsProps,
           maybeProcess as (
             event: StripeEventInstance,
           ) => Effect.Effect<void, never, any>,
         ]
       : [
-          idOrProps,
+          undefined,
+          idOrProps as ConsumeEventsProps,
           propsOrProcess as (
             event: StripeEventInstance,
           ) => Effect.Effect<void, never, any>,
         ];
-  return EventSource.use((source) => source(props, process));
+  return EventSource.use((source) =>
+    source(id ?? webhookEndpointLogicalId(props.path), props, process),
+  );
 }
 
 export type EventSourceService = <
   E extends readonly StripeEventClass[],
   Req = never,
 >(
+  id: string,
   props: ConsumeEventsProps<E>,
   process: (event: SelectedStripeEvent<E>) => Effect.Effect<void, never, Req>,
 ) => Effect.Effect<void, never, never>;
@@ -138,15 +155,22 @@ export class EventSource extends Context.Service<
 /**
  * Cloudflare Worker implementation of {@link consumeEvents}.
  *
+ * Deploy-time: provisions a {@link WebhookEndpoint} pointing at this Worker
+ * (at the subscribed path) and binds its minted signing secret onto the
+ * Worker so deliveries can be verified. Runtime: registers a `fetch`
+ * listener that claims requests on that path, verifies `Stripe-Signature`,
+ * and runs the handler once per event.
+ *
  * @layer
  * @provides Stripe.EventSource
  */
 export const ConsumeEventsLive = Layer.effect(
   EventSource,
   Effect.gen(function* () {
-    const ctx = yield* Worker;
+    const host = yield* Worker;
 
     return Effect.fn(function* (
+      id: string,
       props: ConsumeEventsProps,
       process: (
         event: StripeEventInstance,
@@ -158,7 +182,20 @@ export const ConsumeEventsLive = Layer.effect(
         props.events.map((event) => [event.type, event] as const),
       );
 
-      yield* ctx.listen((event) => {
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        yield* Namespace.push(
+          host.LogicalId,
+          Effect.gen(function* () {
+            const endpoint = yield* WebhookEndpoint(id, {
+              url: Output.interpolate`${host.url}${path}`,
+              enabledEvents: [...props.events],
+            });
+            yield* bindWebhookSecret(host, endpoint.secret, props.path);
+          }),
+        );
+      }
+
+      yield* host.listen((event) => {
         if (!isWorkerEvent(event) || event.type !== "fetch") return;
         const request = event.input as cf.Request;
         let pathname: string;

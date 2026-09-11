@@ -4,9 +4,10 @@ description: Products, prices, coupons, customers, payment links, and webhooks a
 ---
 
 Stripe catalog, customers, and webhooks as Stack resources. Declare
-the Product and Price on the Worker that sells them, bind
-`RetrieveProduct` / `CreateCustomer`, and point a `WebhookEndpoint`
-at that Worker.
+the `Product` and `Price` on the Worker that sells them, bind
+`RetrieveProduct` / `CreateCustomer`, and subscribe to
+`customer.created` with `consumeEvents` — the webhook endpoint is
+provisioned for you.
 
 New here? [Set up credentials](/stripe/setup) first.
 
@@ -57,24 +58,30 @@ export default class Api extends Cloudflare.Worker<Api>()(
 ```
 
 `Coupon`, `PromotionCode`, and `PaymentLink` complete checkout —
-see [Catalog](/stripe/guides/catalog). Point a `WebhookEndpoint` at
-the Worker URL — see [Webhooks](/stripe/guides/webhooks).
+see [Catalog](/stripe/guides/catalog). Webhook events use the same
+Worker:
 
 ```typescript
-// alchemy.run.ts
-const api = yield* Api;
-const webhook = yield* Stripe.WebhookEndpoint("Events", {
-  url: Output.interpolate`${api.url}/webhooks/stripe`,
-  enabledEvents: [Stripe.CustomerCreated, Stripe.CheckoutSessionCompleted],
-});
-yield* Stripe.bindWebhookSecret(api, webhook.secret);
+// src/api.ts
+yield* Stripe.consumeEvents(
+  "Events",
+  {
+    events: [Stripe.CustomerCreated, Stripe.CheckoutSessionCompleted],
+  },
+  Effect.fn(function* (event) {
+    yield* Effect.log(event.type);
+  }),
+);
 ```
+
+`consumeEvents` creates the `WebhookEndpoint` pointing at the Worker
+and binds its signing secret — see [Webhooks](/stripe/guides/webhooks).
 
 ## The Stripe path
 
 1. [Setup](/stripe/setup) — secret key, profile, CI
 2. [Tutorial](/stripe/tutorial/part-1) — Product, Worker, Price,
-   bindings, WebhookEndpoint
+   bindings, webhooks
 3. [Catalog](/stripe/guides/catalog) — Product / Price / Coupon /
    PaymentLink together
 4. [Sell from a Worker](/stripe/guides/sell-from-a-worker) — retrieve

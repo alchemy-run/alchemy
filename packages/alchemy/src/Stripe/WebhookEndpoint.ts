@@ -135,7 +135,7 @@ export type WebhookEndpoint = Resource<
  * });
  * ```
  *
- * **Example:** Event classes (same as consumeEvents)
+ * **Example:** Event classes, for a Worker URL you already have
  * ```typescript
  * const webhook = yield* Stripe.WebhookEndpoint("Events", {
  *   url: Output.interpolate`${api.url}/webhooks/stripe`,
@@ -143,6 +143,9 @@ export type WebhookEndpoint = Resource<
  * });
  * yield* Stripe.bindWebhookSecret(api, webhook.secret);
  * ```
+ *
+ * On a Worker, prefer `consumeEvents` — it provisions this endpoint and
+ * binds the secret for you.
  *
  * **Example:** Description, metadata, and all events
  * ```typescript

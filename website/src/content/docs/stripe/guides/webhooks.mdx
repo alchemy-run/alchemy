@@ -1,23 +1,30 @@
 ---
 title: Handle webhook events
-description: WebhookEndpoint lifecycle plus consumeEvents — one Effect per Stripe delivery.
+description: consumeEvents provisions the WebhookEndpoint and runs one Effect per Stripe delivery.
 ---
 
-Two pieces: a **resource** that owns the Stripe endpoint, and
-**`consumeEvents`** that runs one Effect per POST. That matches
-GitHub `consumeRepositoryEvents` and SQS `consumeQueueMessages`.
+Webhooks are two levels:
 
-The Worker must not depend on the endpoint (Stripe rejects a stub
-`undefined` URL). The endpoint depends on `worker.url`. The signing
-secret is bound onto the Worker afterwards.
+1. **`WebhookEndpoint`** — the lifecycle resource that owns the Stripe
+   endpoint (URL, enabled events, signing secret).
+2. **`consumeEvents`** — the event source. One Effect runs per
+   delivery, keyed by the event class.
+
+For the common case you only write level 2 — `consumeEvents` creates
+the `WebhookEndpoint` pointing at the Worker and binds its minted
+secret. Use a bare `WebhookEndpoint` only when you already have a URL
+you own.
 
 ## Subscribe on the Worker
 
-`consumeEvents` only listens. Pass event **classes** — not
-`"customer.created"` strings.
+Pass event **classes** — not `"customer.created"` strings:
 
 ```typescript
 // src/api.ts
+import * as Stripe from "alchemy/Stripe";
+import * as Effect from "effect/Effect";
+
+// inside a Cloudflare.Worker's Effect.gen
 yield* Stripe.consumeEvents(
   "Events",
   {
@@ -30,6 +37,10 @@ yield* Stripe.consumeEvents(
 );
 ```
 
+The handler is `Effect`-per-event: Stripe POSTs a delivery, the
+listener verifies `Stripe-Signature`, and your handler runs once with
+the typed event.
+
 Provide `Stripe.ConsumeEventsLive` on the Worker Effect:
 
 ```typescript
@@ -41,32 +52,31 @@ Provide `Stripe.ConsumeEventsLive` on the Worker Effect:
 )
 ```
 
-## Endpoint + secret in the Stack
-
-Yield the Worker first, then the endpoint, then bind the minted
-secret:
-
-```typescript
-// alchemy.run.ts
-const api = yield* Api;
-const webhook = yield* Stripe.WebhookEndpoint("Events", {
-  url: Output.interpolate`${api.url}/webhooks/stripe`,
-  enabledEvents: [Stripe.CustomerCreated, Stripe.InvoicePaid],
-});
-yield* Stripe.bindWebhookSecret(api, webhook.secret);
-```
-
-`consumeEvents` verifies `Stripe-Signature` with that secret.
+That is the whole setup. `consumeEvents` derives the delivery URL from
+`worker.url`, enables the selected event types, and stores the signing
+secret on the Worker.
 
 ## Endpoint resource only
 
 Manage the endpoint yourself when you need a URL you already have:
 
 ```typescript
+// alchemy.run.ts
 const webhook = yield* Stripe.WebhookEndpoint("Events", {
   url: "https://example.com/webhooks/stripe",
   enabledEvents: ["customer.created"],
 });
+```
+
+Declare the endpoint, then bind its secret to a Worker:
+
+```typescript
+const api = yield* Api;
+const webhook = yield* Stripe.WebhookEndpoint("Events", {
+  url: Output.interpolate`${api.url}/webhooks/stripe`,
+  enabledEvents: [Stripe.CustomerCreated],
+});
+yield* Stripe.bindWebhookSecret(api, webhook.secret);
 ```
 
 ## Reference
