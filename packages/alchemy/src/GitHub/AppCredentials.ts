@@ -100,8 +100,8 @@ interface TokenState {
  *
  * ```ts
  * const AppCredentials = GitHub.fromApp({
- *   appId: yield* Config.string("GITHUB_APP_ID"),
- *   privateKey: yield* Config.redacted("GITHUB_APP_PRIVATE_KEY"),
+ *   appId: yield* Config.String("GITHUB_APP_ID"),
+ *   privateKey: yield* Config.Redacted("GITHUB_APP_PRIVATE_KEY"),
  *   repository: { owner: "alchemy-run", repository: "test-alchemy" },
  * });
  * ```
