@@ -516,11 +516,15 @@ export const BucketProvider = () =>
         // For us-east-1, BucketAlreadyOwnedByYou is not thrown, so we need to
         // pre-emptively check if the bucket exists for idempotency
         if (region === "us-east-1") {
-          const exists = yield* s3.headBucket({ Bucket: bucketName }).pipe(
-            Effect.map(() => true),
-            Effect.catchTag("NotFound", () => Effect.succeed(false)),
-            Effect.catch(() => Effect.succeed(false)),
-          );
+          const exists = yield* s3
+            .getBucketLocation({
+              Bucket: bucketName,
+              ExpectedBucketOwner: accountId,
+            })
+            .pipe(
+              Effect.map(() => true),
+              Effect.catchTag("NoSuchBucket", () => Effect.succeed(false)),
+            );
 
           yield* Effect.logInfo(
             `S3 Bucket create: us-east-1 existence check for ${bucketName} -> ${exists}`,
@@ -569,10 +573,18 @@ export const BucketProvider = () =>
         }
 
         // Wait for bucket to exist (eventual consistency)
-        yield* Effect.retry(
-          s3.headBucket({ Bucket: bucketName }),
-          Schedule.max([Schedule.exponential(100), Schedule.recurs(10)]),
-        );
+        yield* s3
+          .getBucketLocation({
+            Bucket: bucketName,
+            ExpectedBucketOwner: accountId,
+          })
+          .pipe(
+            Effect.retry({
+              while: (error) => error._tag === "NoSuchBucket",
+              schedule: Schedule.exponential(100),
+              times: 8,
+            }),
+          );
         yield* Effect.logInfo(
           `S3 Bucket create: bucket is available ${bucketName}`,
         );
@@ -1333,10 +1345,10 @@ export const BucketProvider = () =>
 
       return {
         stables: ["bucketName", "bucketArn", "region", "accountId"],
-        // S3 bucket names are globally unique. `headBucket` succeeds only when
-        // the bucket exists in our account, so a successful response is itself
-        // proof of account-level ownership — there is no separate ownership
-        // signal to surface as `Unowned`.
+        // ListBuckets enumerates this account. Read verifies the same ownership
+        // with ExpectedBucketOwner; cross-account access alone is not ownership.
+        // GetBucketLocation needs configuration access, not HeadBucket's
+        // s3:ListBucket permission to enumerate the bucket's objects.
         list: () =>
           Effect.gen(function* () {
             const { accountId, region } = yield* AWSEnvironment.current;
@@ -1373,11 +1385,15 @@ export const BucketProvider = () =>
           const bucketName =
             output?.bucketName ?? (yield* createBucketName(id, olds ?? {}));
           const { accountId, region } = yield* AWSEnvironment.current;
-          const exists = yield* s3.headBucket({ Bucket: bucketName }).pipe(
-            Effect.map(() => true),
-            Effect.catchTag("NotFound", () => Effect.succeed(false)),
-            Effect.catch(() => Effect.succeed(false)),
-          );
+          const exists = yield* s3
+            .getBucketLocation({
+              Bucket: bucketName,
+              ExpectedBucketOwner: accountId,
+            })
+            .pipe(
+              Effect.map(() => true),
+              Effect.catchTag("NoSuchBucket", () => Effect.succeed(false)),
+            );
           if (!exists) return undefined;
           return {
             bucketName,
@@ -1553,10 +1569,10 @@ export const BucketProvider = () =>
           //   operator-confirmed account teardown. Nuke enumerates buckets
           //   straight from the cloud (its `olds` is Attributes, not Props),
           //   so `forceDestroy` is never present there. S3 ownership is
-          //   account-level (see `list`/`read`: buckets are globally unique
-          //   and only enumerable/headable in our own account; this provider
-          //   deliberately does not stamp alchemy tags on buckets), so every
-          //   bucket nuke hands us is one this account owns.
+          //   account-level: list enumerates this account and read verifies
+          //   ExpectedBucketOwner. This provider deliberately does not stamp
+          //   alchemy tags on buckets, so every bucket nuke hands us is one
+          //   this account owns.
           // A normal destroy without `forceDestroy` must NOT empty the
           // bucket — a non-empty bucket fails with BucketNotEmpty, which is
           // the data-protection behavior users rely on.
