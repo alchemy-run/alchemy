@@ -3,6 +3,7 @@ import type { Region } from "@distilled.cloud/aws/Region";
 import * as s3 from "@distilled.cloud/aws/s3";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { HttpClient } from "effect/unstable/http/HttpClient";
@@ -462,13 +463,19 @@ const ensureStateBucket = (
       },
       BucketKeyEnabled: desiredEncryption.bucketKeyEnabled ?? false,
     };
+    // SensitiveString decodes to Redacted; its JSON form hides the key identity.
+    const keyValue = (
+      key: s3.ServerSideEncryptionByDefault["KMSMasterKeyID"],
+    ) => (Redacted.isRedacted(key) ? Redacted.value(key) : key);
     const encryptionFingerprint = (
       rule: s3.ServerSideEncryptionRule | undefined,
     ) =>
       JSON.stringify({
         algorithm:
           rule?.ApplyServerSideEncryptionByDefault?.SSEAlgorithm ?? null,
-        key: rule?.ApplyServerSideEncryptionByDefault?.KMSMasterKeyID ?? null,
+        key:
+          keyValue(rule?.ApplyServerSideEncryptionByDefault?.KMSMasterKeyID) ??
+          null,
         bucketKey: rule?.BucketKeyEnabled ?? false,
       });
     if (
