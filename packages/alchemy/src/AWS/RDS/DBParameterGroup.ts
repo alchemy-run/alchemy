@@ -185,12 +185,15 @@ export const DBParameterGroupProvider = () =>
           );
       });
 
-      const toUserParameterRecord = (
+      const toManagedParameterRecord = (
         parameters: rds.Parameter[],
+        desired: Record<string, string> = {},
       ): Record<string, string> =>
         Object.fromEntries(
           parameters.flatMap((p) =>
-            p.ParameterName !== undefined && p.ParameterValue !== undefined
+            p.ParameterName !== undefined &&
+            p.ParameterValue !== undefined &&
+            (p.Source === "user" || Object.hasOwn(desired, p.ParameterName))
               ? [[p.ParameterName, p.ParameterValue]]
               : [],
           ),
@@ -212,15 +215,25 @@ export const DBParameterGroupProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
-          // Props alone would miss an out-of-band edit: the engine's fallback
-          // compares props, so a console change to a parameter this resource
-          // owns would never schedule the reconcile that corrects it.
-          if (
-            news.parameters !== undefined &&
-            output !== undefined &&
-            !deepEqual(news.parameters, output.parameters)
-          ) {
-            return { action: "update" } as const;
+          // Plans normally use persisted outputs. Read only this managed group's
+          // parameters so out-of-band edits are visible without a separate sync.
+          if (news.parameters !== undefined && output !== undefined) {
+            const parameters = yield* readParameters(
+              output.dbParameterGroupName,
+            ).pipe(
+              Effect.map((parameters) =>
+                toManagedParameterRecord(parameters, news.parameters),
+              ),
+              Effect.catchTag("DBParameterGroupNotFoundFault", () =>
+                Effect.succeed(undefined),
+              ),
+            );
+            if (parameters === undefined) {
+              return { action: "update", stables: [] } as const;
+            }
+            if (!deepEqual(news.parameters, parameters)) {
+              return { action: "update" } as const;
+            }
           }
         }),
         list: () =>
@@ -269,8 +282,9 @@ export const DBParameterGroupProvider = () =>
             return undefined;
           }
           // Unlike tags, parameters come back from the API.
-          const parameters = toUserParameterRecord(
-            yield* readUserParameters(group.DBParameterGroupName),
+          const parameters = toManagedParameterRecord(
+            yield* readParameters(group.DBParameterGroupName),
+            olds?.parameters,
           );
           return {
             dbParameterGroupName: group.DBParameterGroupName,
