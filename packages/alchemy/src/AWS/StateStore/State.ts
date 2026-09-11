@@ -478,7 +478,14 @@ const ensureStateBucket = (
       yield* s3.putBucketEncryption({
         Bucket: bucket,
         ServerSideEncryptionConfiguration: {
-          Rules: [desiredEncryptionRule],
+          // Preserve encryption-type blocks managed outside the state store.
+          Rules: [
+            {
+              ...desiredEncryptionRule,
+              BlockedEncryptionTypes:
+                observedEncryption?.BlockedEncryptionTypes,
+            },
+          ],
         },
       });
     }
