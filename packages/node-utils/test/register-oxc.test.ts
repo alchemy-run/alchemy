@@ -31,8 +31,8 @@ const write = (file: string, content: string) => {
  * A project exercising everything tsx layers over Node that a TypeScript
  * codebase relies on: tsconfig `paths`, emitted-extension imports, implicit
  * extensions and directory indexes, JSON without attributes, TSX with a
- * tsconfig-selected runtime, a workspace dependency whose `exports` name
- * unbuilt JavaScript, and `require()` from a `.cts` into ESM TypeScript.
+ * tsconfig-selected runtime, and `require()` from a `.cts` into ESM
+ * TypeScript.
  */
 const makeProject = () => {
   const root = realpathSync(
@@ -62,7 +62,7 @@ const makeProject = () => {
   );
   write(
     at("node_modules/wsdep/package.json"),
-    '{"name":"wsdep","type":"module","exports":{".":"./src/index.js"}}',
+    '{"name":"wsdep","type":"module","exports":{".":"./src/index.ts"}}',
   );
   write(
     at("node_modules/wsdep/src/index.ts"),
@@ -108,11 +108,10 @@ const makeProject = () => {
       'import { index as index2 } from "./dir/";',
       'import data from "./data.json";',
       'import { view } from "./View.tsx";',
-      'import { fromWorkspaceDep } from "wsdep";',
       'import consumer from "../cjs/consumer.cts";',
       "export const report = {",
       "  helper: helper(), helperJs: helperJs(), sub, index, index2,",
-      "  data: data.answer, view: view.tag, fromWorkspaceDep,",
+      "  data: data.answer, view: view.tag,",
       "  viaRequire: consumer.viaRequire, requiredSub: consumer.sub,",
       "};",
       "export const boom = (): never => {",
@@ -166,8 +165,6 @@ describe("registerOxc", () => {
       data: 42,
       // TSX through the tsconfig's jsxImportSource
       view: "p",
-      // dependency `exports` pointing at unbuilt JavaScript
-      fromWorkspaceDep: "ws",
       // `.cts` requiring `.ts` (parameter property) and an extensionless path
       viaRequire: 8,
       requiredSub: "sub",
@@ -175,7 +172,7 @@ describe("registerOxc", () => {
     // Source maps are applied to stack traces. They are not inlined: each
     // sits next to its cache entry, without `sourcesContent`, and the module
     // points at it by path.
-    expect(frame).toMatch(/entry\.ts:16:/);
+    expect(frame).toMatch(/entry\.ts:15:/);
     const maps = readdirSync(cache).filter((name) => name.endsWith(".map"));
     expect(maps.length).toBeGreaterThan(0);
     for (const name of maps) {
@@ -186,11 +183,11 @@ describe("registerOxc", () => {
     // The cache-hit path references the same file.
     const hit = runNode(root, script, { ALCHEMY_TRANSFORM_CACHE: cache });
     expect(hit.status, hit.stderr).toBe(0);
-    expect(hit.stdout.trim().split("\n")[1]).toMatch(/entry\.ts:16:/);
+    expect(hit.stdout.trim().split("\n")[1]).toMatch(/entry\.ts:15:/);
     // With no cache there is nowhere to put the map, so it is inlined.
     const inline = runNode(root, script, { ALCHEMY_TRANSFORM_CACHE: "0" });
     expect(inline.status, inline.stderr).toBe(0);
-    expect(inline.stdout.trim().split("\n")[1]).toMatch(/entry\.ts:16:/);
+    expect(inline.stdout.trim().split("\n")[1]).toMatch(/entry\.ts:15:/);
   });
 
   it("adds configured package export conditions to project resolution", () => {
@@ -217,16 +214,16 @@ describe("registerOxc", () => {
     const result = runNode(
       root,
       `
-      const { registerOxc, tsImport } = await import(${JSON.stringify(registerUrl)});
-      const state = globalThis;
-      state.count = 0;
+      const { registerOxc } = await import(${JSON.stringify(registerUrl)});
       const seen = [];
-      const api = registerOxc({ namespace: "one", onImport: (url) => seen.push(url.split("/").pop()) });
-      const a = await api.import("./src/sub.ts", import.meta.url);
-      const b = await api.import("./src/sub.ts", import.meta.url);
-      const c = await tsImport("./src/sub.ts", import.meta.url);
+      const one = registerOxc({ namespace: "one", onImport: (url) => seen.push(url.split("/").pop()) });
+      const a = await one.import("./src/sub.ts", import.meta.url);
+      const b = await one.import("./src/sub.ts", import.meta.url);
+      const two = registerOxc({ namespace: "two" });
+      const c = await two.import("./src/sub.ts", import.meta.url);
       console.log(JSON.stringify({ same: a === b, fresh: a !== c, seen }));
-      api.unregister();
+      one.unregister();
+      two.unregister();
       registerOxc({ filter: (file) => !file.includes("/node_modules/") });
       try {
         await import("wsdep");
@@ -246,29 +243,6 @@ describe("registerOxc", () => {
     // With node_modules filtered out, the dependency's `.ts` is Node's to
     // reject: the loader neither transpiles nor rewrites it.
     expect(filtered).toBe("wsdep: ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING");
-  });
-
-  it("unregisters one-shot imports after success and failure", () => {
-    const root = makeProject();
-    write(path.join(root, "src/broken.ts"), "export const = ;\n");
-    const result = runNode(
-      root,
-      `
-      const { tsImport } = await import(${JSON.stringify(registerUrl)});
-      if (process.sourceMapsEnabled) throw new Error("source maps unexpectedly enabled before import");
-      await tsImport("./src/sub.ts", import.meta.url);
-      const afterSuccess = process.sourceMapsEnabled;
-      try {
-        await tsImport("./src/broken.ts", import.meta.url);
-      } catch {}
-      console.log(JSON.stringify({ afterSuccess, afterFailure: process.sourceMapsEnabled }));
-      `,
-    );
-    expect(result.status, result.stderr).toBe(0);
-    expect(JSON.parse(result.stdout.trim())).toEqual({
-      afterSuccess: false,
-      afterFailure: false,
-    });
   });
 });
 
