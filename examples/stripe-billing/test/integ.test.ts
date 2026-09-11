@@ -2,7 +2,10 @@ import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Stripe from "alchemy/Stripe";
 import * as Test from "alchemy/Test/Bun";
-import { DeleteCustomer } from "@distilled.cloud/stripe/stripe";
+import {
+  DeleteCustomer,
+  GetWebhookEndpoints,
+} from "@distilled.cloud/stripe/stripe";
 import { expect } from "bun:test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -28,9 +31,17 @@ afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), {
 test(
   "deploys a worker URL and webhook endpoint",
   Effect.gen(function* () {
-    const { url, webhookId } = yield* stack;
+    const { url } = yield* stack;
     expect(url).toBeString();
-    expect(webhookId).toMatch(/^we_/);
+    const delivery = `${url.replace(/\/+$/, "")}/webhooks/stripe`;
+    const endpoints = yield* GetWebhookEndpoints({ limit: 100 }).pipe(
+      Effect.provide(
+        Layer.mergeAll(Stripe.CredentialsFromEnv, FetchHttpClient.layer),
+      ),
+    );
+    expect(
+      endpoints.data.some((e) => e.url.replace(/\/+$/, "") === delivery),
+    ).toBe(true);
   }),
 );
 

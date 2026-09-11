@@ -107,22 +107,26 @@ it first:
 
 ```diff lang="typescript"
 // src/api.ts
-Effect.gen(function* () {
-  const product = yield* Stripe.Product("Pro", {
-    name: "Pro",
-    description: "Billed monthly",
-  });
-+  const price = yield* Stripe.Price("ProMonthly", {
-+    product,
-+    currency: "usd",
-+    unitAmount: 2000,
-+  });
-  return {
-    fetch: Effect.gen(function* () {
-      return HttpServerResponse.text("ok");
-    }),
-  };
-}),
+export default class Api extends Cloudflare.Worker<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const product = yield* Stripe.Product("Pro", {
+      name: "Pro",
+      description: "Billed monthly",
+    });
++    const price = yield* Stripe.Price("ProMonthly", {
++      product,
++      currency: "usd",
++      unitAmount: 2000,
++    });
+    return {
+      fetch: Effect.gen(function* () {
+        return HttpServerResponse.text("ok");
+      }),
+    };
+  }),
+) {}
 ```
 
 `unitAmount` is in the currency's minor units — `2000` with
@@ -135,12 +139,28 @@ Omit `recurring` for a one-time charge. Add `interval: "month"` for
 a subscription price:
 
 ```diff lang="typescript"
-const price = yield* Stripe.Price("ProMonthly", {
-  product,
-  currency: "usd",
-  unitAmount: 2000,
-+  recurring: { interval: "month" },
-});
+// src/api.ts
+export default class Api extends Cloudflare.Worker<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const product = yield* Stripe.Product("Pro", {
+      name: "Pro",
+      description: "Billed monthly",
+    });
+    const price = yield* Stripe.Price("ProMonthly", {
+      product,
+      currency: "usd",
+      unitAmount: 2000,
++      recurring: { interval: "month" },
+    });
+    return {
+      fetch: Effect.gen(function* () {
+        return HttpServerResponse.text("ok");
+      }),
+    };
+  }),
+) {}
 ```
 
 Destroy deactivates a used Price (`active: false`) because Stripe
@@ -152,22 +172,33 @@ A Coupon is independent of the Product — it discounts invoices and
 Checkout:
 
 ```diff lang="typescript"
-const price = yield* Stripe.Price("ProMonthly", {
-  product,
-  currency: "usd",
-  unitAmount: 2000,
-  recurring: { interval: "month" },
-});
-+const coupon = yield* Stripe.Coupon("Launch20", {
-+  percentOff: 20,
-+  duration: "once",
-+  name: "Launch 20%",
-+});
-return {
-  fetch: Effect.gen(function* () {
-    return HttpServerResponse.text("ok");
+// src/api.ts
+export default class Api extends Cloudflare.Worker<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const product = yield* Stripe.Product("Pro", {
+      name: "Pro",
+      description: "Billed monthly",
+    });
+    const price = yield* Stripe.Price("ProMonthly", {
+      product,
+      currency: "usd",
+      unitAmount: 2000,
+      recurring: { interval: "month" },
+    });
++    const coupon = yield* Stripe.Coupon("Launch20", {
++      percentOff: 20,
++      duration: "once",
++      name: "Launch 20%",
++    });
+    return {
+      fetch: Effect.gen(function* () {
+        return HttpServerResponse.text("ok");
+      }),
+    };
   }),
-};
+) {}
 ```
 
 `percentOff: 20` and `duration: "once"` is 20% off the first

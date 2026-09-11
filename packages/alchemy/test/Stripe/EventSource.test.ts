@@ -1,6 +1,5 @@
 import * as Alchemy from "@/index.ts";
 import * as Cloudflare from "@/Cloudflare";
-import * as Output from "@/Output.ts";
 import * as Stripe from "@/Stripe";
 import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
@@ -30,11 +29,6 @@ const Stack = Alchemy.Stack(
   },
   Effect.gen(function* () {
     const worker = yield* StripeEventSourceWorker;
-    const events = yield* Stripe.WebhookEndpoint("Events", {
-      url: Output.interpolate`${worker.url}/webhooks/stripe`,
-      enabledEvents: [Stripe.CustomerCreated],
-    });
-    yield* Stripe.bindWebhookSecret(worker, events.secret);
     return { url: worker.url.as<string>() };
   }),
 );

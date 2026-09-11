@@ -9,26 +9,26 @@ import Terminal from "../../../../components/Terminal.astro";
 
 In [Part 3](/stripe/tutorial/part-3) `POST /customers` creates a
 Stripe Customer. Handle `customer.created` on the same Worker.
-Declare the WebhookEndpoint **after** the Worker so planning does
-not deadlock on `worker.url`.
+`consumeEvents` provisions the webhook endpoint pointing at the
+Worker and binds its signing secret — there is no separate endpoint
+declaration.
 
 ## Subscribe with consumeEvents
 
-Inside the Worker, pass event **classes**. `consumeEvents` only
-listens — it does not create the endpoint.
+Inside the Worker, pass event **classes**:
 
 ```diff lang="typescript"
 // src/api.ts
-const retrieveProduct = yield* Stripe.RetrieveProduct(product);
-const createCustomer = yield* Stripe.CreateCustomer();
-+yield* Stripe.consumeEvents(
-+  "Events",
-+  { events: [Stripe.CustomerCreated] },
-+  Effect.fn(function* (event) {
-+    yield* Effect.log(event.type);
-+  }),
-+);
-return {
+  const retrieveProduct = yield* Stripe.RetrieveProduct(product);
+  const createCustomer = yield* Stripe.CreateCustomer();
++  yield* Stripe.consumeEvents(
++    "Events",
++    { events: [Stripe.CustomerCreated] },
++    Effect.fn(function* (event) {
++      yield* Effect.log(event.type);
++    }),
++  );
+  return {
 ```
 
 The handler runs once per delivery. `event` is a `CustomerCreated`.
@@ -37,33 +37,15 @@ The handler runs once per delivery. `event` is a `CustomerCreated`.
 
 ```diff lang="typescript"
 // src/api.ts
-+  }).pipe(
-+    Effect.provide([
-+      Stripe.RetrieveProductHttp,
-+      Stripe.CreateCustomerHttp,
+  }).pipe(
+    Effect.provide([
+      Stripe.RetrieveProductHttp,
+      Stripe.CreateCustomerHttp,
 +      Stripe.ConsumeEventsLive,
-+    ]),
-+  ),
+    ]),
+  ),
 ) {}
 ```
-
-## Create the WebhookEndpoint in the Stack
-
-After the Worker exists, point Stripe at its URL and bind the
-signing secret:
-
-```diff lang="typescript"
-// alchemy.run.ts
-const api = yield* Api;
-+const webhook = yield* Stripe.WebhookEndpoint("Events", {
-+  url: Output.interpolate`${api.url}/webhooks/stripe`,
-+  enabledEvents: [Stripe.CustomerCreated],
-+});
-+yield* Stripe.bindWebhookSecret(api, webhook.secret);
-```
-
-`enabledEvents` accepts the same event classes `consumeEvents`
-uses. See [Handle webhook events](/stripe/guides/webhooks).
 
 ## Deploy
 

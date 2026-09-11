@@ -11,12 +11,19 @@ import type { Product } from "./Product.ts";
 export interface RetrieveProductRequest extends Omit<GetProductRequest, "id"> {}
 
 /**
- * Retrieve a bound Stripe Product over HTTP.
+ * Retrieve a bound Stripe Product over HTTP. Pass the Product resource,
+ * a `prod_…` id string, or an Effect resolving to a Product.
  *
  * ### Reading a Product
  * **Example:** Bind and retrieve
  * ```typescript
  * const retrieve = yield* Stripe.RetrieveProduct(product);
+ * const live = yield* retrieve();
+ * ```
+ *
+ * **Example:** By id
+ * ```typescript
+ * const retrieve = yield* Stripe.RetrieveProduct("prod_123");
  * const live = yield* retrieve();
  * ```
  *
@@ -26,7 +33,7 @@ export interface RetrieveProduct extends Binding.Service<
   RetrieveProduct,
   "Stripe.RetrieveProduct",
   (
-    product: Product,
+    product: string | Product,
   ) => Effect.Effect<
     (
       request?: RetrieveProductRequest,

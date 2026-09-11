@@ -1,6 +1,5 @@
 import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
-import * as Output from "alchemy/Output";
 import * as Stripe from "alchemy/Stripe";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -14,14 +13,8 @@ export default Alchemy.Stack(
   },
   Effect.gen(function* () {
     const api = yield* Api;
-    const webhook = yield* Stripe.WebhookEndpoint("Events", {
-      url: Output.interpolate`${api.url}/webhooks/stripe`,
-      enabledEvents: [Stripe.CustomerCreated, Stripe.CheckoutSessionCompleted],
-    });
-    yield* Stripe.bindWebhookSecret(api, webhook.secret);
     return {
       url: api.url.as<string>(),
-      webhookId: webhook.id,
     };
   }),
 );
