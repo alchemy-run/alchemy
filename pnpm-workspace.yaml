@@ -88,15 +88,15 @@ catalogs:
     mongodb: ^6.10.0
     pg: ^8.22.0
   effect:
-    "@effect/atom-react": ">=4.0.0-rc.113 || >=4.0.0"
-    "@effect/platform-bun": ">=4.0.0-rc.113 || >=4.0.0"
-    "@effect/platform-node": ">=4.0.0-rc.113 || >=4.0.0"
-    "@effect/sql-d1": ">=4.0.0-rc.113 || >=4.0.0"
-    "@effect/sql-mysql2": ">=4.0.0-rc.113 || >=4.0.0"
-    "@effect/sql-pg": ">=4.0.0-rc.113 || >=4.0.0"
-    "@effect/sql-sqlite-do": ">=4.0.0-rc.113 || >=4.0.0"
-    "@effect/vitest": ">=4.0.0-rc.113 || >=4.0.0"
-    effect: ">=4.0.0-rc.113 || >=4.0.0"
+    "@effect/atom-react": ">=4.0.0-rc.115 || >=4.0.0"
+    "@effect/platform-bun": ">=4.0.0-rc.115 || >=4.0.0"
+    "@effect/platform-node": ">=4.0.0-rc.115 || >=4.0.0"
+    "@effect/sql-d1": ">=4.0.0-rc.115 || >=4.0.0"
+    "@effect/sql-mysql2": ">=4.0.0-rc.115 || >=4.0.0"
+    "@effect/sql-pg": ">=4.0.0-rc.115 || >=4.0.0"
+    "@effect/sql-sqlite-do": ">=4.0.0-rc.115 || >=4.0.0"
+    "@effect/vitest": ">=4.0.0-rc.115 || >=4.0.0"
+    effect: ">=4.0.0-rc.115 || >=4.0.0"
   frontend:
     "@astrojs/internal-helpers": 0.10.1
     "@astrojs/underscore-redirects": 1.0.3
@@ -173,8 +173,8 @@ catalogs:
 overrides:
   "@cloudflare/workers-types": 5.20260901.1
   workerd: 1.20260901.1
-  effect: 4.0.0-rc.113
-  "@effect/platform-browser": 4.0.0-rc.113
+  effect: 4.0.0-rc.115
+  "@effect/platform-browser": 4.0.0-rc.115
   drizzle-kit: 1.0.0-rc.5-ab785fc
   drizzle-orm: 1.0.0-rc.5-ab785fc
   # Keep drizzle-orm's optional peer graph identical across workspace
@@ -187,17 +187,17 @@ patchedDependencies:
   starlight-blog@0.29.0: patches/starlight-blog@0.29.0.patch
 minimumReleaseAgeExclude:
   - "@alchemy.run/sigil@0.0.0-alpha.10"
-  - "@effect/atom-react@4.0.0-rc.113"
-  - "@effect/platform-bun@4.0.0-rc.113"
-  - "@effect/platform-node-shared@4.0.0-rc.113"
-  - "@effect/platform-node@4.0.0-rc.113"
-  - "@effect/sql-d1@4.0.0-rc.113"
-  - "@effect/sql-mysql2@4.0.0-rc.113"
-  - "@effect/sql-pg@4.0.0-rc.113"
-  - "@effect/sql-sqlite-do@4.0.0-rc.113"
-  - "@effect/vitest@4.0.0-rc.113"
+  - "@effect/atom-react@4.0.0-rc.115"
+  - "@effect/platform-bun@4.0.0-rc.115"
+  - "@effect/platform-node-shared@4.0.0-rc.115"
+  - "@effect/platform-node@4.0.0-rc.115"
+  - "@effect/sql-d1@4.0.0-rc.115"
+  - "@effect/sql-mysql2@4.0.0-rc.115"
+  - "@effect/sql-pg@4.0.0-rc.115"
+  - "@effect/sql-sqlite-do@4.0.0-rc.115"
+  - "@effect/vitest@4.0.0-rc.115"
   - "@foldkit/vite-plugin@0.16.1"
-  - effect@4.0.0-rc.113
+  - effect@4.0.0-rc.115
   - foldkit@0.148.2
   - "@solidjs/start@2.0.4"
   - "@cloudflare/workers-types@5.20260901.1"
