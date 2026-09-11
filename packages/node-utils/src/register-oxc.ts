@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import * as NodeModule from "node:module";
 import {
   registerHooks,
   type LoadFnOutput,
@@ -67,6 +68,29 @@ const parseRequest = (specifier: string): ImportRequest | undefined => {
   if (!specifier.startsWith(protocol)) return undefined;
   return JSON.parse(decodeURIComponent(specifier.slice(protocol.length)));
 };
+
+/**
+ * Node's module compile cache (`module.enableCompileCache`) keeps V8 code
+ * cache for compiled modules — transformed TypeScript included, since it is
+ * keyed by the compiled source — but Node only persists it once after the
+ * entry module evaluated and again on a clean exit. Alchemy processes load
+ * most of their graph lazily after that point (commands, the user's stack,
+ * provider layers) and usually stop on a signal, so without an explicit
+ * flush that code never reaches the cache. Flush once module loading has
+ * gone quiet; a no-op when the cache is off or this Node predates it.
+ */
+const scheduleCompileCacheFlush = (() => {
+  let timer: NodeJS.Timeout | undefined;
+  return () => {
+    if (NodeModule.getCompileCacheDir?.() === undefined) return;
+    if (timer !== undefined) clearTimeout(timer);
+    timer = setTimeout(() => {
+      timer = undefined;
+      NodeModule.flushCompileCache?.();
+    }, 1000);
+    timer.unref();
+  };
+})();
 
 /** Specifiers Node owns outright: builtins, data URLs, remote schemes. */
 const isForeignSpecifier = (specifier: string) =>
@@ -221,8 +245,9 @@ export const registerOxc = (
   });
   const shouldInvalidate = options.shouldInvalidate ?? (() => true);
 
-  // Transformed sources carry inline source maps; Node only applies them to
-  // stack traces once source-map support is on.
+  // Transformed sources reference their source maps (see transform-source);
+  // Node only reads and applies them to stack traces once source-map support
+  // is on.
   const sourceMapsWereEnabled = process.sourceMapsEnabled;
   process.setSourceMapsEnabled(true);
 
@@ -271,6 +296,7 @@ export const registerOxc = (
       return resolved;
     },
     load(url, context, nextLoad): LoadFnOutput {
+      scheduleCompileCacheFlush();
       const namespace = namespaceOf(url);
       if (options.namespace !== undefined && namespace !== options.namespace) {
         return nextLoad(url, context);

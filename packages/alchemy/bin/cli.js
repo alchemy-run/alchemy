@@ -24,6 +24,7 @@
 // messages, and the child's exit status are forwarded.
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
+import * as NodeModule from "node:module";
 import { constants } from "node:os";
 import { fileURLToPath } from "node:url";
 import path from "pathe";
@@ -106,6 +107,10 @@ const foregroundChild = (program, args, stderrFilter) => {
     }
   });
 };
+
+// Namespace access, not a named import: this launcher must still reach the
+// version error below on Nodes that predate the compile cache (< 22.1).
+NodeModule.enableCompileCache?.();
 
 const execpath = (process.env.npm_execpath ?? "").toLowerCase();
 const userAgent = (process.env.npm_config_user_agent ?? "").toLowerCase();
