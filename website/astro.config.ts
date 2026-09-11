@@ -509,6 +509,7 @@ export default defineConfig({
                   link: "/cloudflare/frontend/tanstack-start",
                 },
                 { label: "Vite", link: "/cloudflare/frontend/vite" },
+                { label: "vinext", link: "/cloudflare/frontend/vinext" },
                 { label: "Vue", link: "/cloudflare/frontend/vue" },
                 { label: "Waku", link: "/cloudflare/frontend/waku" },
               ],
@@ -672,6 +673,7 @@ export default defineConfig({
                   link: "/aws/frontend/full-stack-tanstack-rpc-drizzle",
                 },
                 { label: "Next.js", link: "/aws/frontend/nextjs" },
+                { label: "vinext", link: "/aws/frontend/vinext" },
                 { label: "Nuxt", link: "/aws/frontend/nuxt" },
                 { label: "Octane", link: "/aws/frontend/octane" },
                 {
@@ -803,6 +805,7 @@ export default defineConfig({
                 { label: "Astro", link: "/hetzner/frontend/astro" },
                 { label: "Foldkit", link: "/hetzner/frontend/foldkit" },
                 { label: "Next.js", link: "/hetzner/frontend/nextjs" },
+                { label: "vinext", link: "/hetzner/frontend/vinext" },
                 { label: "Nuxt", link: "/hetzner/frontend/nuxt" },
                 { label: "Octane", link: "/hetzner/frontend/octane" },
                 {
@@ -870,6 +873,7 @@ export default defineConfig({
                 { label: "Astro", link: "/fly/frontend/astro" },
                 { label: "Foldkit", link: "/fly/frontend/foldkit" },
                 { label: "Next.js", link: "/fly/frontend/nextjs" },
+                { label: "vinext", link: "/fly/frontend/vinext" },
                 { label: "Nuxt", link: "/fly/frontend/nuxt" },
                 { label: "Octane", link: "/fly/frontend/octane" },
                 {
@@ -943,6 +947,7 @@ export default defineConfig({
                 { label: "Astro", link: "/railway/frontend/astro" },
                 { label: "Foldkit", link: "/railway/frontend/foldkit" },
                 { label: "Next.js", link: "/railway/frontend/nextjs" },
+                { label: "vinext", link: "/railway/frontend/vinext" },
                 { label: "Nuxt", link: "/railway/frontend/nuxt" },
                 { label: "Octane", link: "/railway/frontend/octane" },
                 {

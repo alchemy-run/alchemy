@@ -1,0 +1,127 @@
+---
+title: vinext
+description: "Deploy a vinext app to Railway with Railway.Website.Vinext — vinext build plus a Node startProdServer container, and vinext dev under alchemy dev."
+sidebar:
+  order: 9.6
+---
+
+import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
+
+export const devDeps = "@alchemy.run/frontend-frameworks";
+
+`Railway.Website.Vinext` deploys a [vinext](https://vinext.dev) app
+to Railway as a long-running Node process. It runs `vinext build`,
+then vinext's production server (`startProdServer`) on port 3000:
+
+- one [`Railway.Project`](/railway/compute/projects) (created if
+  `project` is omitted) and a
+  [`Railway.Service`](/railway/compute/services) from a container
+  image
+- `dist/` baked into `/app`; `vinext`, `react`, `react-dom`, and
+  `react-server-dom-webpack` installed with `npm install`
+- `url` is `https://{name}.up.railway.app`
+
+This is **not** OpenNext and **not** `Cloudflare.Website.Vinext`.
+The Worker `fetch-handler` / `worker/index.ts` template is
+Cloudflare-only. On Railway, server components and route handlers
+read `process.env`.
+
+## Install
+
+The build integration is not bundled with alchemy. Install
+`@alchemy.run/frontend-frameworks`; the resource loads the package's
+`/vinext/node` export from your project at deploy time. Your app
+still needs `vinext`, `react`, `react-dom`, `react-server-dom-webpack`,
+and `@vitejs/plugin-rsc`:
+
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun">
+    <Code code={`bun add -d ${devDeps}`} lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code={`npm install -D ${devDeps}`} lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code={`pnpm add -D ${devDeps}`} lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code={`yarn add -D ${devDeps}`} lang="sh" />
+  </TabItem>
+</Tabs>
+
+Register `vinext()` in `vite.config.ts`. Do **not** add
+`@cloudflare/vite-plugin` or `@vinext/cloudflare` adapters — those
+are the Workers path.
+
+ISR / `"use cache"` default to memory under `alchemy dev`. For a
+durable store, pass `Railway.Redis` on the Website — Alchemy writes
+`REDIS_URL` and the Node build bakes the Redis adapter. Do **not**
+put Cloudflare KV adapters in `vite.config.ts`.
+
+```typescript
+import { alchemy } from "@alchemy.run/frontend-frameworks/vinext/cache";
+import { defineConfig } from "vite";
+import vinext from "vinext";
+
+export default defineConfig({
+  plugins: [vinext({ prerender: true, ...alchemy() })],
+});
+```
+
+```typescript
+const project = yield* Railway.Project("Project");
+const redis = yield* Railway.Redis("Cache", { project });
+const site = yield* Railway.Website.Vinext("Website", {
+  project,
+  redis,
+});
+```
+
+## Declare the Website
+
+```typescript
+// alchemy.run.ts
+import * as Railway from "alchemy/Railway";
+
+export const Website = Railway.Website.Vinext("Website", {
+  env: {
+    GREETING: "Hello from vinext on Railway!",
+  },
+});
+```
+
+```typescript
+// app/page.tsx
+export const dynamic = "force-dynamic";
+
+export default function Home() {
+  return <h1>{process.env.GREETING ?? "Hello!"}</h1>;
+}
+```
+
+```typescript
+// app/api/hello/route.ts
+export function GET() {
+  return Response.json({ hello: "world" });
+}
+```
+
+`url` is the Service's `https://{name}.up.railway.app` on deploy.
+`service` and `project` are set then and `undefined` under
+`alchemy dev`.
+
+## Local dev
+
+```sh
+bun alchemy dev
+```
+
+`alchemy dev` runs `vinext dev` instead of deploying; `site.url` is
+the local address and no Railway resources are created.
+
+## Where next
+
+- [`Railway.Website.Vinext` reference](/providers/railway/website/vinext)
+  — every prop and attribute
+- [vinext on Cloudflare](/cloudflare/frontend/vinext) — the Workers
+  path with bindings and KV-backed ISR
