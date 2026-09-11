@@ -235,6 +235,10 @@ export const toUIMessages = (
             type: "reasoning",
             text: observation.reasoning,
             state: "done",
+            // how long the sampling took — the closest thing to "how
+            // long it thought" the transcript records; the UI labels
+            // the folded trace with it ("Thought for 4s")
+            providerMetadata: { alchemy: { ms: observation.ms } },
           });
         }
         if (observation.text.length > 0) {
@@ -532,7 +536,12 @@ export const makeChunkTranslator = () => {
             id: reasoningId,
             delta: observation.reasoning,
           });
-          chunks.push({ type: "reasoning-end", id: reasoningId });
+          chunks.push({
+            type: "reasoning-end",
+            id: reasoningId,
+            // the sampling time, for the folded trace's label
+            providerMetadata: { alchemy: { ms: observation.ms } },
+          });
         }
         if (observation.text.length > 0) {
           const textId = `t-${observation.seq}`;

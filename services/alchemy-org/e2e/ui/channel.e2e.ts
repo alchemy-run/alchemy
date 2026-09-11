@@ -107,10 +107,11 @@ test("the run pill opens the run rail; the eval card shows code and output", asy
   await pill.click();
   const rail = page.getByRole("complementary", { name: "Run" });
 
-  // the thought trace is one quiet line, no box: its text stays folded
-  // and the chevron only shows on hover; clicking opens the thought
+  // the thought trace is one quiet line, no box, labelled by how long
+  // the tick took (800ms here): its text stays folded and the chevron
+  // only shows on hover; clicking opens the thought
   const trace = rail.locator("[data-reasoning]");
-  await expect(trace).toContainText("Thought process");
+  await expect(trace).toContainText("Thought briefly");
   await expect(trace).not.toContainText("search first and tally");
   const chevron = trace.locator("svg");
   await expect(chevron).toHaveCSS("opacity", "0");

@@ -737,25 +737,51 @@ const EventCard = ({ event, raw }: { event: WorldEvent; raw: string }) => {
 
 /** A thought trace — lives INSIDE the Conversation tree, where the
  *  stick-to-bottom context (and thus anchored toggling) is available. */
+/** The sampling time the transcript stamped on a reasoning part. */
+const reasoningMs = (
+  part: Extract<Part, { type: "reasoning" }>,
+): number | undefined => {
+  const ms = part.providerMetadata?.alchemy?.ms;
+  return typeof ms === "number" ? ms : undefined;
+};
+
+/** The folded trace's label: how long the model thought, when the
+ *  transcript knows — "Thought briefly" under a couple of seconds,
+ *  "Thought for 12s" / "Thought for 1m 20s" beyond. */
+export const thoughtLabel = (ms: number | undefined): string => {
+  if (ms === undefined) return "Thought process";
+  if (ms < 2000) return "Thought briefly";
+  const seconds = Math.round(ms / 1000);
+  if (seconds < 60) return `Thought for ${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  const rest = seconds % 60;
+  return rest === 0
+    ? `Thought for ${minutes}m`
+    : `Thought for ${minutes}m ${rest}s`;
+};
+
 const ReasoningTrace = ({
   text,
+  ms,
   streaming,
   open,
   onToggle,
 }: {
   text: string;
+  ms: number | undefined;
   streaming: boolean;
   open: boolean;
   onToggle: () => void;
 }) => {
   const anchored = useAnchoredToggle();
   // No box: a thought is a muted one-liner in the flow of the reply,
-  // the way an editor renders it — the chevron only appears on hover,
-  // so a trace nobody opens costs one quiet line and nothing else.
+  // the way an editor renders it — the chevron only appears on hover
+  // of THIS trace (a named group: the message around it is a `group`
+  // too), so a trace nobody opens costs one quiet line and nothing else.
   return (
     <div
       data-reasoning=""
-      className="group -mx-1 px-1 text-xs text-muted-foreground/70"
+      className="group/trace -mx-1 px-1 text-xs text-muted-foreground/70"
     >
       <button
         type="button"
@@ -765,11 +791,11 @@ const ReasoningTrace = ({
         {streaming ? (
           <span className="animate-pulse">Thinking…</span>
         ) : (
-          "Thought process"
+          thoughtLabel(ms)
         )}
         <ChevronDown
           className={cn(
-            "size-3 transition-[opacity,transform] opacity-0 group-hover:opacity-100",
+            "size-3 transition-[opacity,transform] opacity-0 group-hover/trace:opacity-100",
             !open && "-rotate-90",
           )}
         />
@@ -1219,6 +1245,7 @@ const ChatTranscript = ({
                                   <ReasoningTrace
                                     key={index}
                                     text={part.text}
+                                    ms={reasoningMs(part)}
                                     streaming={part.state === "streaming"}
                                     open={expandedTraces.has(key)}
                                     onToggle={() => toggleTrace(key)}
