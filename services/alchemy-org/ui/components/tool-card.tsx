@@ -129,9 +129,21 @@ const DiffText = ({ text }: { text: string }) => (
   </pre>
 );
 
-/** Plain monospace block; string children render their ANSI colors. */
-const Mono = ({ children }: { children: ReactNode }) => (
-  <pre className="max-h-80 overflow-auto whitespace-pre-wrap p-2 font-mono text-[11px] leading-4">
+/** Plain monospace block; string children render their ANSI colors.
+ *  `wrap: false` keeps every line whole and scrolls sideways instead. */
+const Mono = ({
+  children,
+  wrap = true,
+}: {
+  children: ReactNode;
+  wrap?: boolean;
+}) => (
+  <pre
+    className={cn(
+      "max-h-80 overflow-auto p-2 font-mono text-[11px] leading-4",
+      wrap ? "whitespace-pre-wrap" : "whitespace-pre",
+    )}
+  >
     {typeof children === "string" ? <Ansi text={children} /> : children}
   </pre>
 );
@@ -1411,13 +1423,13 @@ const EvalPanes = ({
               data-format="yaml"
               className="max-h-96 overflow-auto px-2 py-2 [&_.code-surface]:my-0"
             >
-              <CodeCard code={yaml} language="yaml" />
+              <CodeCard code={yaml} language="yaml" overflow="scroll" />
             </div>
           ) : (
-            <WindowedText text={output} head={20} tail={10} />
+            <Mono wrap={false}>{output}</Mono>
           ))}
         {shown === "logs" && logs !== undefined && (
-          <WindowedText text={logs} head={20} tail={10} />
+          <Mono wrap={false}>{logs}</Mono>
         )}
         {shown === "code" && (
           <div className="px-2 py-2 [&_.code-surface]:my-0">

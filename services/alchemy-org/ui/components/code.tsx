@@ -150,7 +150,17 @@ export const CopyButton = ({
 };
 
 export const CodeCard = memo(
-  ({ code, language }: { code: string; language: string | undefined }) => {
+  ({
+    code,
+    language,
+    overflow = "wrap",
+  }: {
+    code: string;
+    language: string | undefined;
+    /** Long lines: wrapped (prose-like snippets) or scrolled sideways
+     *  (data, where a line's shape is the point). */
+    overflow?: "wrap" | "scroll";
+  }) => {
     const base = useBaseOptions();
     const contents = code.replace(/\n$/, "");
     const file = useMemo(
@@ -165,9 +175,9 @@ export const CodeCard = memo(
         ...base,
         disableFileHeader: true,
         disableLineNumbers: true,
-        overflow: "wrap" as const,
+        overflow,
       }),
-      [base],
+      [base, overflow],
     );
     return (
       <CodeBoundary fallback={code}>
