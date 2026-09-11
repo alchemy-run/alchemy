@@ -19,6 +19,7 @@ packages:
   - examples/monorepo-single-stack/*
   - examples/monorepo-multi-stack/*
   - benchmark/*
+  - demos/*
   - submodules/distilled/packages/*
   - fixtures/*
   - services/*
@@ -88,17 +89,17 @@ catalogs:
     mongodb: ^6.10.0
     pg: ^8.22.0
   effect:
-    "@effect/ai-anthropic": ">=4.0.0-rc.110 || >=4.0.0"
-    "@effect/ai-openai": ">=4.0.0-rc.110 || >=4.0.0"
-    "@effect/atom-react": ">=4.0.0-rc.112 || >=4.0.0"
-    "@effect/platform-bun": ">=4.0.0-rc.112 || >=4.0.0"
-    "@effect/platform-node": ">=4.0.0-rc.112 || >=4.0.0"
-    "@effect/sql-d1": ">=4.0.0-rc.112 || >=4.0.0"
-    "@effect/sql-mysql2": ">=4.0.0-rc.112 || >=4.0.0"
-    "@effect/sql-pg": ">=4.0.0-rc.112 || >=4.0.0"
-    "@effect/sql-sqlite-do": ">=4.0.0-rc.112 || >=4.0.0"
-    "@effect/vitest": ">=4.0.0-rc.112 || >=4.0.0"
-    effect: ">=4.0.0-rc.112 || >=4.0.0"
+    "@effect/ai-anthropic": ">=4.0.0-rc.113 || >=4.0.0"
+    "@effect/ai-openai": ">=4.0.0-rc.113 || >=4.0.0"
+    "@effect/atom-react": ">=4.0.0-rc.113 || >=4.0.0"
+    "@effect/platform-bun": ">=4.0.0-rc.113 || >=4.0.0"
+    "@effect/platform-node": ">=4.0.0-rc.113 || >=4.0.0"
+    "@effect/sql-d1": ">=4.0.0-rc.113 || >=4.0.0"
+    "@effect/sql-mysql2": ">=4.0.0-rc.113 || >=4.0.0"
+    "@effect/sql-pg": ">=4.0.0-rc.113 || >=4.0.0"
+    "@effect/sql-sqlite-do": ">=4.0.0-rc.113 || >=4.0.0"
+    "@effect/vitest": ">=4.0.0-rc.113 || >=4.0.0"
+    effect: ">=4.0.0-rc.113 || >=4.0.0"
   frontend:
     "@astrojs/internal-helpers": 0.10.1
     "@astrojs/underscore-redirects": 1.0.3
@@ -181,27 +182,31 @@ overrides:
   "@types/node": 26.2.0
   "@cloudflare/workers-types": 5.20260901.1
   workerd: 1.20260901.1
-  effect: 4.0.0-rc.112
-  "@effect/platform-browser": 4.0.0-rc.112
+  effect: 4.0.0-rc.113
+  "@effect/platform-browser": 4.0.0-rc.113
   drizzle-kit: 1.0.0-rc.5-ab785fc
   drizzle-orm: 1.0.0-rc.5-ab785fc
+  # Keep drizzle-orm's optional peer graph identical across workspace
+  # packages so TypeScript sees one drizzle-orm identity.
+  mysql2: 3.24.2
+  zod: 4.4.3
   rolldown: 1.2.5
 patchedDependencies:
   "@astrojs/starlight@0.42.0": patches/@astrojs%2Fstarlight@0.42.0.patch
   starlight-blog@0.29.0: patches/starlight-blog@0.29.0.patch
 minimumReleaseAgeExclude:
-  - "@alchemy.run/sigil@0.0.0-alpha.9"
-  - "@effect/atom-react@4.0.0-rc.112"
-  - "@effect/platform-bun@4.0.0-rc.112"
-  - "@effect/platform-node-shared@4.0.0-rc.112"
-  - "@effect/platform-node@4.0.0-rc.112"
-  - "@effect/sql-d1@4.0.0-rc.112"
-  - "@effect/sql-mysql2@4.0.0-rc.112"
-  - "@effect/sql-pg@4.0.0-rc.112"
-  - "@effect/sql-sqlite-do@4.0.0-rc.112"
-  - "@effect/vitest@4.0.0-rc.112"
+  - "@alchemy.run/sigil@0.0.0-alpha.10"
+  - "@effect/atom-react@4.0.0-rc.113"
+  - "@effect/platform-bun@4.0.0-rc.113"
+  - "@effect/platform-node-shared@4.0.0-rc.113"
+  - "@effect/platform-node@4.0.0-rc.113"
+  - "@effect/sql-d1@4.0.0-rc.113"
+  - "@effect/sql-mysql2@4.0.0-rc.113"
+  - "@effect/sql-pg@4.0.0-rc.113"
+  - "@effect/sql-sqlite-do@4.0.0-rc.113"
+  - "@effect/vitest@4.0.0-rc.113"
   - "@foldkit/vite-plugin@0.16.1"
-  - effect@4.0.0-rc.112
+  - effect@4.0.0-rc.113
   - foldkit@0.148.2
   - "@solidjs/start@2.0.4"
   - "@cloudflare/workers-types@5.20260901.1"

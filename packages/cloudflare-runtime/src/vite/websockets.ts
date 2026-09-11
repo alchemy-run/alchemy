@@ -2,7 +2,18 @@ import type { IncomingMessage } from "node:http";
 import * as NodeNet from "node:net";
 import type { Duplex } from "node:stream";
 import type * as vite from "vite";
-import { resolveForwardedHost } from "./forwarded-host.ts";
+import {
+  HEADER_ORIGINAL_URL,
+  HEADER_PROXY_SHARED_SECRET,
+} from "../core/proxy/ProxyHeaders.shared.ts";
+import { proxyRequestHeaders, resolveForwardedHost } from "./forwarded-host.ts";
+
+/** The headers the relay sets itself — never taken from the client. */
+const RESERVED_HEADERS = new Set([
+  "host",
+  HEADER_ORIGINAL_URL.toLowerCase(),
+  HEADER_PROXY_SHARED_SECRET.toLowerCase(),
+]);
 
 /**
  * Handles 'upgrade' requests on the Vite HTTP server and forwards the
@@ -22,6 +33,7 @@ import { resolveForwardedHost } from "./forwarded-host.ts";
 export function handleWebSocket(
   httpServer: vite.HttpServer,
   address: string | URL,
+  proxySharedSecret: string,
 ): () => void {
   const upstreamBase = typeof address === "string" ? new URL(address) : address;
 
@@ -77,14 +89,22 @@ export function handleWebSocket(
 
     upstream.on("connect", () => {
       // Relay the client's handshake verbatim (`rawHeaders` preserves
-      // casing and duplicates), rewriting only `Host` so the worker sees
-      // the URL the client requested rather than the local workerd address.
+      // casing and duplicates), except the headers the proxy signs
+      // itself: `Host` (the URL the client requested, not the local
+      // workerd address), the original URL, and the shared secret the
+      // runtime entry worker trusts them by — those come from
+      // `proxyRequestHeaders`, never from the client.
+      const signed = proxyRequestHeaders(request, url, proxySharedSecret);
       const lines = [
         `${request.method ?? "GET"} ${target.pathname}${target.search} HTTP/1.1`,
-        `Host: ${url.host}`,
+        `Host: ${signed.host}`,
+        `${HEADER_ORIGINAL_URL}: ${signed[HEADER_ORIGINAL_URL.toLowerCase()]}`,
+        `${HEADER_PROXY_SHARED_SECRET}: ${proxySharedSecret}`,
       ];
       for (let i = 0; i < request.rawHeaders.length; i += 2) {
-        if (request.rawHeaders[i]!.toLowerCase() === "host") continue;
+        if (RESERVED_HEADERS.has(request.rawHeaders[i]!.toLowerCase())) {
+          continue;
+        }
         lines.push(`${request.rawHeaders[i]}: ${request.rawHeaders[i + 1]}`);
       }
       upstream.write(`${lines.join("\r\n")}\r\n\r\n`);

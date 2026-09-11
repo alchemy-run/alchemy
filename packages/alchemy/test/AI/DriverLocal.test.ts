@@ -409,8 +409,9 @@ describe("DriverLocal (in-memory)", () => {
       const foremanCharter = Effect.gen(function* () {
         const researcher = yield* Researcher;
         const task = AI.Thing("task", S.String)`The work.`;
+        const outcome = AI.Thing("outcome", S.String)`The researcher's answer.`;
         const handoff = yield* AI.Tool("handoff")`
-Hand ${task} to the researcher yourself and wait for the answer.`(
+Hand ${task} to the researcher yourself and wait for ${AI.out(outcome)}.`(
           Effect.fn(function* (p: { task: string }) {
             const self = yield* AI.Thread;
             const outcome = yield* researcher.dispatch(p.task, {
@@ -1214,7 +1215,7 @@ Hand the research to the researcher with ${task}.`((p, thread) => ({
           // INIT — once per run: plain Ref state + an inline tool closing over it
           const sandboxed = yield* Ref.make(false);
           const enter = yield* AI.Tool("enter_sandbox")`
-Enter the sandbox.`(() => Ref.set(sandboxed, true));
+Enter the sandbox.`(() => Effect.asVoid(Ref.set(sandboxed, true)));
           // TURN — before every sampling: the stance follows the state
           return Effect.gen(function* () {
             return yield* (yield* Ref.get(sandboxed))
@@ -1276,7 +1277,7 @@ Enter the sandbox.`(() => Ref.set(sandboxed, true));
         const charter = Effect.gen(function* () {
           const sandboxed = yield* Ref.make(false);
           const enter = yield* AI.Tool("enter_sandbox")`
-Enter the sandbox.`(() => Ref.set(sandboxed, true));
+Enter the sandbox.`(() => Effect.asVoid(Ref.set(sandboxed, true)));
           return Effect.gen(function* () {
             return yield* (yield* Ref.get(sandboxed))
               ? AI.fragment`You are IN the sandbox.`
@@ -1809,7 +1810,7 @@ Summarize progress as ${summary}; your context restarts from it.`((p) =>
           const summary = AI.Thing("summary", S.String)`What happened so far.`;
           const parked = yield* Ref.make(false);
           const park = yield* AI.Tool("park")`Park on the author.`(() =>
-            Ref.set(parked, true),
+            Effect.asVoid(Ref.set(parked, true)),
           );
           const handoff = yield* AI.Tool("handoff")`
 Summarize as ${summary}; the thread restarts.`((p) =>

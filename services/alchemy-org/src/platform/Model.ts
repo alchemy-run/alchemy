@@ -217,7 +217,7 @@ const deepseekFetch = async (
 };
 
 const DeepSeekClient = OpenAiClient.layerConfig({
-  apiKey: Config.redacted("DEEPSEEK_API_KEY"),
+  apiKey: Config.Redacted("DEEPSEEK_API_KEY"),
   apiUrl: Config.succeed(DEEPSEEK_URL),
 }).pipe(
   // `fresh`: the shared `FetchHttpClient.layer` is memoized by reference
@@ -234,7 +234,7 @@ const DeepSeekClient = OpenAiClient.layerConfig({
 
 /**
  * Every provider over HTTP, the SAME layer on every substrate:
- * `Config.redacted` reads each key from the deploying shell locally
+ * `Config.Redacted` reads each key from the deploying shell locally
  * and rides the secrets seam on Cloudflare (evaluated during the
  * Worker's init, it binds as a `secret_text`; at runtime the same
  * Config resolves from the binding — the key never enters the bundle).
@@ -258,12 +258,12 @@ export const ModelsLive = Layer.mergeAll(
 ).pipe(
   Layer.provide(
     AnthropicClient.layerConfig({
-      apiKey: Config.redacted("ANTHROPIC_API_KEY"),
+      apiKey: Config.Redacted("ANTHROPIC_API_KEY"),
     }),
   ),
   Layer.provide(
     OpenAiClient.layerConfig({
-      apiKey: Config.redacted("OPENAI_API_KEY"),
+      apiKey: Config.Redacted("OPENAI_API_KEY"),
     }),
   ),
   Layer.provide(FetchHttpClient.layer),

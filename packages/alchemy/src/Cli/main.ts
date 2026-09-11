@@ -109,8 +109,8 @@ const commands = await Promise.all(
  * (capability detection runs while the service layers are built, before flag
  * parsing); this registration exists so the parser accepts the flag.
  */
-const NoInput = GlobalFlag.setting("no-input")({
-  flag: Flag.boolean("no-input").pipe(
+const NoInput = GlobalFlag.Setting("no-input")({
+  flag: Flag.Boolean("no-input").pipe(
     Flag.withDescription(
       "Disable prompts and the interactive TUI (plain output; commands needing input fail)",
     ),
@@ -180,7 +180,6 @@ const services = Layer.mergeAll(
   Layer.succeed(ArtifactStore, createArtifactStore()),
   FetchHttpClient.layer,
   ConfigProvider.layer(ConfigProvider.fromEnv()),
-  TelemetryLive,
   routeCacheLayer,
   Layer.provide(
     Layer.provideMerge(
@@ -192,7 +191,14 @@ const services = Layer.mergeAll(
   // Debug run log under ~/.alchemy/logs — the console noise floor stays at
   // Info, but full causes and auth-flow breadcrumbs land in the file so
   // support can ask users for it.
-  Layer.provide(GlobalLogLive, PlatformServices),
+  //
+  // Telemetry sits on top of the console/file loggers so its OTLP logger
+  // merges with them. Listed as `mergeAll` siblings, whichever came last
+  // would win the `CurrentLoggers` slot and silently drop the other.
+  Layer.provideMerge(
+    TelemetryLive,
+    Layer.provide(GlobalLogLive, PlatformServices),
+  ),
 );
 
 const program = Effect.gen(function* () {
@@ -220,7 +226,7 @@ const mainEffect = program.pipe(
 );
 
 /** Fully wired CLI program. */
-export const main: Effect.Effect<
+export const main = mainEffect as Effect.Effect<
   void,
   Effect.Error<typeof mainEffect>
-> = mainEffect;
+>;

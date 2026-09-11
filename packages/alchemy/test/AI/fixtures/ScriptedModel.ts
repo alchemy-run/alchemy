@@ -24,7 +24,7 @@ export interface ScriptedModel {
   /** The same model as a bare SERVICE — what a charter provides to a
    *  stance (`AI.Model`/`Effect.provide`) to sample with this script
    *  instead of the driver's Layer. */
-  readonly service: Effect.Effect<LanguageModel.Service>;
+  readonly service: Effect.Effect<LanguageModel.LanguageModel>;
   /** Every model call's options, in order — appended live. */
   readonly calls: Array<LanguageModel.ProviderOptions>;
 }

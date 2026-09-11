@@ -59,7 +59,7 @@ export const serveSandbox = Effect.fn(function* (options: ServeSandboxOptions) {
   );
   const port =
     options.port ??
-    (yield* Config.number("PORT").pipe(Config.withDefault(0), Effect.orDie));
+    (yield* Config.Number("PORT").pipe(Config.withDefault(0), Effect.orDie));
   const hostname = options.hostname ?? "127.0.0.1";
 
   return yield* Effect.gen(function* () {

@@ -71,6 +71,7 @@ const setup = async (): Promise<Harness> => {
   const removeListener = handleWebSocket(
     clientServer,
     `http://127.0.0.1:${upstreamPort}`,
+    "websocket-secret",
   );
   const clientPort = await listen(clientServer);
 
@@ -111,6 +112,8 @@ const makeFakeRequest = (overrides: {
   return Object.assign(readable, {
     url: overrides.url ?? "/",
     method: "GET",
+    // `proxyRequestHeaders` reads `socket.encrypted` for the scheme
+    socket: {},
     headers,
     // Real IncomingMessages always carry rawHeaders; the proxy relays
     // them verbatim, so the fake must provide the [name, value, ...] form.
@@ -312,6 +315,7 @@ describe("handleWebSocket", () => {
     const remove = handleWebSocket(
       server,
       `http://127.0.0.1:${harness.upstreamPort}`,
+      "websocket-secret",
     );
     expect(server.listenerCount("upgrade")).toBe(1);
     remove();

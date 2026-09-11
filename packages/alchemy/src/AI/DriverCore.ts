@@ -366,7 +366,14 @@ export const getToolErrors = (
 // `Tool<any, any>` (not `any[]`): a concrete tool's `impl` is
 // contravariant in its inferred props record, so only `any` in the
 // refs position lets callers pass an un-erased term straight in
-export const compileTool = (term: Tool<any, any>) => {
+export const compileTool = (
+  term: Tool<any, any>,
+  options?: {
+    /** Override the declared return: a DOOR answers with whatever the
+     * delegate answered, which no `${AI.out(…)}` splice describes. */
+    readonly success?: S.Top;
+  },
+) => {
   const fields: Record<string, S.Top> = {};
   // OUTPUT mention-is-presence: `${AI.out(thing)}` splices are the
   // fields of the tool's return record (see ToolReturns in Tool.ts)
@@ -427,9 +434,10 @@ export const compileTool = (term: Tool<any, any>) => {
     // the generated signature the model programs against; on the wire
     // a successful void call reads `"success"` (see VoidToolSuccess).
     success:
-      Object.keys(outFields).length > 0
+      options?.success ??
+      (Object.keys(outFields).length > 0
         ? (S.Struct(outFields) as unknown as S.Top)
-        : VoidToolSuccess,
+        : VoidToolSuccess),
     // the declared failures, when they can describe themselves;
     // `failureMode: "return"` keeps a failure a MODEL-VISIBLE result
     failure:
@@ -700,7 +708,7 @@ export interface TickResult {
   readonly toolkit: Toolkit.WithHandler<any> | undefined;
   /** The model the stance was provided (`Fragment.model`) — this
    *  sampling's `LanguageModel`; undefined = the driver's Layer. */
-  readonly model?: LanguageModel.Service;
+  readonly model?: LanguageModel.LanguageModel;
 }
 
 /** The `spawn` intrinsic's parameters. */
@@ -1137,7 +1145,7 @@ export const compileTick = Effect.fn(function* (
   // door to a worker (workers are leaves).
   const doorTools: Array<AiTool.Any> = [];
   for (const [name, door] of stance.doors) {
-    doorTools.push(compileTool(door as never));
+    doorTools.push(compileTool(door as never, { success: S.Unknown }));
     const doorHandler = Effect.fn(function* (params: any) {
       const derived = yield* door.policy(params, { key: ops.key });
       const actor = yield* resolvers.resolveDelegate(door.agent);
@@ -1893,7 +1901,7 @@ interface EngineSession {
   api?: Record<string, (...args: ReadonlyArray<unknown>) => unknown>;
   /** The model the last tick's stance was provided — what a spawn
    *  worker inherits. RAM only; every tick sets it again. */
-  model?: LanguageModel.Service;
+  model?: LanguageModel.LanguageModel;
   /** Spawn workers sample a CONSTANT tick — no charter, no turn. */
   fixedTick?: TickResult;
   pendingCompaction?: CompactPlan;

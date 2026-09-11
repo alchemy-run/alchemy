@@ -851,7 +851,7 @@ export const make = <A>(
           // here so the concrete value flows into diffing/hashing (an opaque
           // Config hashes the same regardless of the underlying value) and so
           // providers receive a resolved value instead of a Config object.
-          // `Config.redacted` resolves to a `Redacted`, which stays opaque via
+          // `Config.Redacted` resolves to a `Redacted`, which stays opaque via
           // the branch below.
           return yield* resolveInput(yield* input, ancestors);
         } else if (isResource(input)) {

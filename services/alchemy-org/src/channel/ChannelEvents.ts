@@ -30,7 +30,7 @@ export const ChannelEvents = Layer.effectDiscard(
     const channel = yield* Channel;
     const threads = yield* Threads;
     const secret = yield* Config.option(
-      Config.redacted("GITHUB_WEBHOOK_SECRET"),
+      Config.Redacted("GITHUB_WEBHOOK_SECRET"),
     );
     if (Option.isNone(secret)) {
       yield* Effect.logWarning(

@@ -448,14 +448,14 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * whoever deploys and writes it onto the Machine. Do not pass
  * `env: { ... }` on a Service.
  *
- * `Config.redacted("API_KEY")` is `Redacted<string>`. Unwrap with
+ * `Config.Redacted("API_KEY")` is `Redacted<string>`. Unwrap with
  * `Redacted.value` only where you need the raw string.
  *
  * Alchemy also injects `PORT` (when `port` is set) and stack metadata.
  * For a secret Fly should own and inject into every Machine on the
  * App, use {@link Secret}.
  *
- * **Example:** Config.redacted
+ * **Example:** Config.Redacted
  * ```typescript
  * import * as Config from "effect/Config";
  * import * as Redacted from "effect/Redacted";
@@ -464,7 +464,7 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  *   "Api",
  *   { app: Site, main: import.meta.url, port: 3000 },
  *   Effect.gen(function* () {
- *     const apiKey = yield* Config.redacted("API_KEY");
+ *     const apiKey = yield* Config.Redacted("API_KEY");
  *
  *     return {
  *       fetch: Effect.gen(function* () {

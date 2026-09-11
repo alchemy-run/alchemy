@@ -9,13 +9,13 @@ import { confirmOrDecline } from "./confirm.ts";
 import { envFile, yes } from "./flags.ts";
 import { instrumentCommand } from "./instrument.ts";
 
-const awsProfile = Flag.string("aws-profile").pipe(
+const awsProfile = Flag.String("aws-profile").pipe(
   Flag.withDescription("AWS CLI/SSO profile to use for bootstrap credentials"),
   Flag.optional,
   Flag.map(Option.getOrElse(() => "default")),
 );
 
-const awsRegion = Flag.string("region").pipe(
+const awsRegion = Flag.String("region").pipe(
   Flag.withDescription(
     "AWS region to bootstrap (defaults to AWS_REGION env var)",
   ),

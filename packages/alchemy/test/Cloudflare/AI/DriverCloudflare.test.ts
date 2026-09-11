@@ -29,6 +29,7 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as Socket from "effect/unstable/socket/Socket";
+import { runString } from "@/SocketFrames.ts";
 import KernelTestWorker from "./fixtures/DriverWorker.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
@@ -330,11 +331,12 @@ const connect = (url: string) =>
   Effect.gen(function* () {
     const socket = yield* Socket.makeWebSocket(url);
     const frames = yield* Queue.unbounded<AI.SessionSocketServerFrame>();
-    const write = yield* socket.writer;
+    const writer = yield* socket.writer;
     const opened = yield* Deferred.make<void>();
 
     yield* Effect.forkScoped(
-      socket.runString(
+      runString(
+        socket,
         (message) =>
           Queue.offer(
             frames,
@@ -347,7 +349,7 @@ const connect = (url: string) =>
 
     return {
       send: (frame: AI.SessionSocketClientFrame) =>
-        write(JSON.stringify(frame)),
+        writer.write(JSON.stringify(frame)),
       next: Queue.take(frames),
     };
   });

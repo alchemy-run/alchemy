@@ -842,6 +842,7 @@ export const LocalWorkerProvider = () =>
                   runtime
                     .start({
                       name: worker.name,
+                      proxySharedSecret: proxy.proxySharedSecret,
                       logging: {
                         // `(chunk, stream)` — chunk first; the stream name
                         // indexes the splitters directly.
@@ -1264,6 +1265,7 @@ export const LocalWorkerProvider = () =>
                     {
                       rootDir: root,
                       publicUrl: proxy.url.toString().replace(/\/$/, ""),
+                      proxySharedSecret: proxy.proxySharedSecret,
                       accountId,
                       storageDirectory,
                       stack: { name: stack.name, stage: stack.stage },
@@ -1408,6 +1410,7 @@ export const LocalWorkerProvider = () =>
           extraOptions: worker.bundleOptions.extraOptions,
           assets: worker.assets,
           worker: {
+            proxySharedSecret: proxy.proxySharedSecret,
             bindings: worker.workerBindings,
             durableObjectNamespaces: worker.durableObjectNamespaces,
             hyperdrives: worker.hyperdrives,

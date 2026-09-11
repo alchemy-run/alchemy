@@ -129,7 +129,7 @@ const logUnreportedCause = (cause: Cause.Cause<unknown>) => {
 export const resolvePort = (options: { port?: number } | undefined) =>
   options?.port !== undefined
     ? Effect.succeed(options.port)
-    : Config.number("PORT").pipe(Config.withDefault(3000));
+    : Config.Number("PORT").pipe(Config.withDefault(3000));
 
 export interface HttpServerFactoryOptions {
   /**
@@ -141,7 +141,15 @@ export interface HttpServerFactoryOptions {
   onListen?: (address: { port: number }) => Effect.Effect<void>;
   /**
    * Network interface on which the Bun HTTP server listens.
-   * Omit to use Bun's default.
+   *
+   * Always passed explicitly to `Bun.serve`: when `hostname` is omitted Bun
+   * listens on every interface but reports `server.hostname === "localhost"`,
+   * and `@effect/platform-bun`'s `BunHttpServer.make` (≥ 4.0.0-rc.113)
+   * parses that back as an IP literal — failing with
+   * `ServeError(NetAddressError: expected exactly four decimal octets)`, so
+   * every container bootstrap crash-looped on boot.
+   *
+   * @default "0.0.0.0"
    */
   hostname?: string;
   /**
@@ -166,16 +174,14 @@ export const BunHttpServer = (factoryOptions?: HttpServerFactoryOptions) =>
             const port = yield* resolvePort(options);
             const server = yield* BunHttpServerPlatform.make({
               port,
-              ...(factoryOptions?.hostname === undefined
-                ? {}
-                : { hostname: factoryOptions.hostname }),
+              hostname: factoryOptions?.hostname ?? "0.0.0.0",
               ...(factoryOptions?.idleTimeout === undefined
                 ? {}
                 : { idleTimeout: factoryOptions.idleTimeout }),
             });
             if (
               factoryOptions?.onListen &&
-              server.address._tag === "TcpAddress"
+              server.address._tag !== "UnixPathAddress"
             ) {
               yield* factoryOptions.onListen({ port: server.address.port });
             }
@@ -206,7 +212,7 @@ export const NodeHttpServer = (factoryOptions?: HttpServerFactoryOptions) =>
             );
             if (
               factoryOptions?.onListen &&
-              server.address._tag === "TcpAddress"
+              server.address._tag !== "UnixPathAddress"
             ) {
               yield* factoryOptions.onListen({ port: server.address.port });
             }

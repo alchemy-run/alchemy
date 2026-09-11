@@ -42,7 +42,6 @@ const services = Layer.mergeAll(
     Layer.mergeAll(selectCliServices(), CliKit.CliKitInteraction),
     CliKit.layer(),
   ),
-  ConsoleLogLive,
   RpcProviderProxy.fromEnv(),
   Layer.succeed(ArtifactStore, createArtifactStore()),
   // Dev runs live in this exec child, not the `alchemy` CLI process, so
@@ -50,7 +49,13 @@ const services = Layer.mergeAll(
   // `cli.dev` span though: dev remains alive across reloads, so a wrapping
   // span would not end (and export) until shutdown — plan/apply spans are the
   // trace roots instead.
-  TelemetryLive,
+  //
+  // Telemetry is layered *on top of* the console logger so the OTLP logger
+  // merges with it. As `mergeAll` siblings the last `CurrentLoggers` wins,
+  // and telemetry would replace the console logger — every `Effect.log*`
+  // (plan, apply progress, stack outputs) silently vanished from the
+  // terminal whenever telemetry was enabled.
+  Layer.provideMerge(TelemetryLive, ConsoleLogLive),
 ).pipe(
   Layer.provideMerge(
     Layer.mergeAll(AlchemyContextLive, ProfileStoreLive, CredentialsStoreLive),
@@ -67,7 +72,7 @@ const services = Layer.mergeAll(
 );
 
 /** `alchemy dev` normally parks forever; set for single-pass runs (tests). */
-const devOnce = Config.string("ALCHEMY_DEV_ONCE").pipe(
+const devOnce = Config.String("ALCHEMY_DEV_ONCE").pipe(
   Config.withDefault(""),
   Effect.map((value) => value === "1" || value === "true"),
 );

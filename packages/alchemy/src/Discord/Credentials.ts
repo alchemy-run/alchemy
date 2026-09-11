@@ -35,7 +35,7 @@ export const fromEnv = () =>
   Layer.succeed(
     DiscordCredentials,
     Effect.gen(function* () {
-      const token = yield* Config.redacted("DISCORD_BOT_TOKEN").pipe(
+      const token = yield* Config.Redacted("DISCORD_BOT_TOKEN").pipe(
         Config.option,
       );
       if (token._tag === "None") {

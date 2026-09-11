@@ -108,6 +108,7 @@ const program = Effect.scoped(
               extraOptions: undefined,
               assets: source.assets,
               worker: {
+                proxySharedSecret: config.proxySharedSecret,
                 bindings,
                 durableObjectNamespaces: config.worker.durableObjectNamespaces,
                 hyperdrives: config.worker.hyperdrives,

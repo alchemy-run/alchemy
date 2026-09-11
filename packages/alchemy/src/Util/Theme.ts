@@ -41,7 +41,14 @@ export const theme = {
   },
   glyph: {
     section: "●",
-    active: "›",
+    /**
+     * Marks the step currently being answered — the same "active one" glyph
+     * the profile tabs use. Deliberately not a chevron so the list cursor
+     * (`pointer`) is the only chevron on screen.
+     */
+    active: "◆",
+    /** List cursor: the one focus glyph shared by every prompt and dashboard row. */
+    pointer: "❯",
     success: "✓",
     warning: "!",
     error: "×",
@@ -87,7 +94,8 @@ export type GlyphName = keyof typeof theme.glyph;
 
 export const asciiGlyphs: { readonly [Key in GlyphName]: string } = {
   section: "@",
-  active: ">",
+  active: "*",
+  pointer: ">",
   success: "+",
   warning: "!",
   error: "x",

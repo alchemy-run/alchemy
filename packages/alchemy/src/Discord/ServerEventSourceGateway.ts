@@ -7,6 +7,7 @@ import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as Socket from "effect/unstable/socket/Socket";
+import { runString } from "../SocketFrames.ts";
 import { DiscordCredentials } from "./Credentials.ts";
 import type { GatewayDispatch, GatewayMessage } from "./Events.ts";
 import {
@@ -162,10 +163,10 @@ export const ServerEventSourceGateway = (
         const socket = yield* Socket.makeWebSocket(
           `${gatewayUrl}/?v=10&encoding=json`,
         );
-        const write = yield* socket.writer;
+        const writer = yield* socket.writer;
         const sequence = yield* Ref.make<number | null>(null);
 
-        const send = (frame: object) => write(JSON.stringify(frame));
+        const send = (frame: object) => writer.write(JSON.stringify(frame));
         const heartbeat = Effect.gen(function* () {
           yield* send({ op: 1, d: yield* Ref.get(sequence) });
         });
@@ -234,7 +235,7 @@ export const ServerEventSourceGateway = (
             }
           });
 
-        yield* socket.runString(handle);
+        yield* runString(socket, handle);
         // a clean close still means the session is gone — reconnect
         return yield* Effect.fail(new Error("gateway connection closed"));
       }).pipe(

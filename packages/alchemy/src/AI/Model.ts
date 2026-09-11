@@ -51,11 +51,11 @@ export interface Model<Self> extends Context.ServiceClass<
   ModelLayer
 > {
   /**
-   * The implementation Layer: build the `LanguageModel.Service` (a
+   * The implementation Layer: build the `LanguageModel.LanguageModel` (a
    * provider's `make`) and hold it as this model's ready Layer.
    */
   readonly layer: <E, R>(
-    service: Effect.Effect<LanguageModel.Service, E, R>,
+    service: Effect.Effect<LanguageModel.LanguageModel, E, R>,
   ) => Layer.Layer<Self, E, R>;
 }
 
@@ -70,10 +70,10 @@ export const Model: {
   };
 } = (() => (name: string) => {
   const cls = class extends (Context.Service<any, any>()(name) as any) {};
-  const ready = (service: LanguageModel.Service): ModelLayer =>
+  const ready = (service: LanguageModel.LanguageModel): ModelLayer =>
     Layer.succeed(LanguageModel.LanguageModel, service);
   return Object.assign(cls, {
-    layer: (service: Effect.Effect<LanguageModel.Service, any, any>) =>
+    layer: (service: Effect.Effect<LanguageModel.LanguageModel, any, any>) =>
       Layer.effect(cls as any, Effect.map(service, ready)),
   });
 }) as any;

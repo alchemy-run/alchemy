@@ -45,7 +45,7 @@ export interface Fragment<
    * one to the fragment (`AI.fragment`…``.pipe(Effect.provide(sonnet))`,
    * see Model.ts); absent, the driver's own Layer samples.
    */
-  readonly model?: LanguageModel.Service;
+  readonly model?: LanguageModel.LanguageModel;
 }
 
 /**

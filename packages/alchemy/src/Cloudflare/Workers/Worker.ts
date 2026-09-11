@@ -407,6 +407,22 @@ export interface WorkerDomainConfig {
    * Alternative to {@link zoneId} / {@link zoneName}.
    */
   zone?: ZoneReference;
+  /**
+   * Opt into custom-domain Worker Previews (private beta). When `true`,
+   * Previews of this Worker are served at `<preview-name>.<name>` (and a
+   * pinned `<deployment-id>-<preview-name>.<name>` per deploy). Cloudflare
+   * provisions a wildcard DNS record and certificate. Equivalent to
+   * Wrangler's `previews_enabled` on a custom-domain route.
+   *
+   * Unset, the field is not sent to Cloudflare — existing custom-domain
+   * attaches are unchanged. This is a **parent** setting: enable it on
+   * the production Worker, not on the Preview Worker. A dedicated Preview
+   * hostname (`previews.example.com`) avoids colliding with existing
+   * subdomains.
+   *
+   * @default false
+   */
+  previews?: boolean;
 }
 
 export interface WorkerRouteConfig {
@@ -611,6 +627,62 @@ export interface WorkerVersionOptions {
   tag?: string;
 }
 
+/**
+ * Worker Preview configuration — uploads this Worker as a first-class
+ * [Preview](https://developers.cloudflare.com/workers/previews/) of
+ * another Worker's script instead of creating a script of its own.
+ *
+ * Distinct from {@link WorkerVersionOptions}: a version is an immutable
+ * upload onto the parent script (gradual rollouts, canaries, Version
+ * URLs). A Preview is a named copy with its own variables, secrets,
+ * bindings, and isolated same-Worker Durable Object / Container state.
+ * Cloudflare recommends Previews for branch and pull-request testing.
+ *
+ * Mutually exclusive with {@link WorkerVersionOptions.parent}.
+ */
+export interface WorkerPreviewOptions {
+  /**
+   * The Worker this Preview belongs to. Accepts a Worker reference —
+   * typically `yield* Cloudflare.Worker.ref(id, { stage, stack })` for
+   * a Worker deployed in another stage/stack, or a locally-declared
+   * Worker — or a literal script name as an escape hatch.
+   *
+   * When set, this resource does not create a script of its own: it
+   * creates (or updates) a Preview of the parent's script and deploys
+   * this Worker's code, assets, and bindings to it. Script-level
+   * settings that belong to the parent — `name`, `namespace`, `crons`,
+   * `domain`, `routes`, `workersDev`, `access` — cannot be set on a
+   * Preview Worker. Locally-hosted Durable Object and Workflow classes
+   * *are* allowed: each Preview gets its own isolated namespace.
+   *
+   * Changing the parent replaces the resource (a Preview belongs to
+   * exactly one script).
+   */
+  of: string | Worker;
+  /**
+   * Preview name. Defaults to a DNS-safe form of the stack stage
+   * (`pr-123`, `feat-login`). Appears in Preview URLs:
+   * `https://<name>-<worker>.<subdomain>.workers.dev` and, when the
+   * parent has {@link WorkerDomainConfig.previews} enabled,
+   * `https://<name>.<domain>`.
+   *
+   * Must start with a lowercase letter, contain only lowercase letters,
+   * digits, and dashes, and `<name>-<worker-name>` must fit in 63
+   * characters (a DNS label).
+   */
+  name?: string;
+  /**
+   * Human-readable annotation attached to the Preview deployment,
+   * shown in the Cloudflare dashboard.
+   */
+  message?: string;
+  /**
+   * Machine-readable tag annotation attached to the Preview deployment
+   * (e.g. a git commit SHA or PR number).
+   */
+  tag?: string;
+}
+
 export interface WorkerProps<
   // PERF: unconstrained for the same reason as `Worker<Bindings>` above —
   // the `extends WorkerBindingProps` proof is expensive for generic mapped
@@ -648,12 +720,23 @@ export interface WorkerProps<
   namespace?: string | DispatchNamespace;
   /**
    * Worker versions & gradual deployments. Set `version.parent` to upload
-   * this Worker as a preview/canary *version* of another Worker's script
+   * this Worker as a canary *version* of another Worker's script
    * instead of creating its own; set `version.traffic` below 100 to
-   * gradually roll out a deploy of this Worker's own script. See
+   * gradually roll out a deploy of this Worker's own script. For branch
+   * and pull-request testing, use {@link preview} instead. See
    * {@link WorkerVersionOptions}.
    */
   version?: WorkerVersionOptions;
+  /**
+   * Opt into Cloudflare's [Worker Previews](https://developers.cloudflare.com/workers/previews/)
+   * (private beta). Unset, this Worker deploys as a normal script and none
+   * of the Preview APIs are called. Set `preview.of` to upload this Worker
+   * as a Preview of another Worker's script instead: own URL, bindings,
+   * and isolated Durable Object state; the parent's live deployment is
+   * untouched. Mutually exclusive with {@link version.parent}. See
+   * {@link WorkerPreviewOptions}.
+   */
+  preview?: WorkerPreviewOptions;
   /**
    * Controls the Worker's `workers.dev` surface.
    *
@@ -814,8 +897,8 @@ export interface WorkerProps<
    * - Resource references (R2 bucket, KV namespace, D1 database,
    *   another Worker, Durable Object, etc.) — emitted as the
    *   corresponding native binding.
-   * - `effect/Config` values (`Config.redacted`, `Config.string`,
-   *   `Config.number`, …) — resolved at deploy time and bound as
+   * - `effect/Config` values (`Config.Redacted`, `Config.String`,
+   *   `Config.Number`, …) — resolved at deploy time and bound as
    *   `secret_text` on Cloudflare regardless of the `Config`
    *   constructor used. See
    *   [Secrets & env](/cloudflare/security/secrets-env).
@@ -1219,6 +1302,7 @@ export type Worker<Bindings = any> = Resource<
           aliases: string[];
           redirects: string[];
           zone?: ZoneReference;
+          previews?: boolean;
         }
       | undefined;
     tags: string[] | undefined;
@@ -1251,6 +1335,34 @@ export type Worker<Bindings = any> = Resource<
      * avoid treating the parent's script as this resource's own.
      */
     versionOf?: string | undefined;
+    /**
+     * The parent script name this Worker is a Preview of, when this
+     * resource is a Preview Worker (`preview.of` set). `undefined` for
+     * a Worker that owns its own script. Discriminator `read`/`delete`
+     * use so they never treat the parent's script as this resource's own.
+     */
+    previewOf?: string | undefined;
+    /**
+     * Cloudflare's immutable Preview id. Set when this resource is a
+     * Preview Worker (`preview.of`).
+     */
+    previewId?: string | undefined;
+    /**
+     * The Preview name as created — the user-provided `preview.name`, or
+     * the auto-derived name from the stack stage.
+     */
+    previewName?: string | undefined;
+    /**
+     * DNS-safe slug Cloudflare assigned to this Preview. Used in Preview
+     * URLs (`<slug>-<worker>.<subdomain>.workers.dev` and
+     * `<slug>.<domain>` when the parent has custom-domain Previews).
+     */
+    previewSlug?: string | undefined;
+    /**
+     * Same-Worker Durable Object class names hosted on the last Preview
+     * deploy — the baseline for the next Preview's class migrations.
+     */
+    previewDoClasses?: string[] | undefined;
     /**
      * The id of the version uploaded by the most recent deploy. Only set
      * when versioning is in play: always for a version worker
@@ -1908,15 +2020,49 @@ export const isSelf = (value: unknown): value is Self =>
  * });
  * ```
  *
+ * ### Worker Previews
+ * The `preview` prop maps Cloudflare's
+ * [Worker Previews](https://developers.cloudflare.com/workers/previews/) —
+ * a named copy of a Worker with its own URL, variables, secrets, bindings,
+ * and isolated same-Worker Durable Object state. Use it for branch and
+ * pull-request testing. Distinct from {@link version}: a version is an
+ * immutable upload onto the parent script (gradual rollouts, canaries);
+ * a Preview does not take production traffic.
+ *
+ * A Preview Worker's `url` is its stable Preview URL
+ * (`<name>-<parent>.<subdomain>.workers.dev`, or
+ * `<name>.<domain>` when the parent has `domain.previews`). The name
+ * defaults to the stack stage (override with `preview.name`). Destroying
+ * the Preview Worker deletes the Preview; the parent is untouched.
+ *
+ * **Example:** PR preview of another stage's Worker
+ * ```typescript
+ * const parent = yield* Cloudflare.Worker.ref("Api", { stage: "prod" });
+ * const preview = yield* Cloudflare.Worker("Api", {
+ *   main: "./src/api.ts",
+ *   preview: { of: parent, message: `PR #${process.env.PR_NUMBER}` },
+ * });
+ * // preview.url -> https://<stage>-<name>.<subdomain>.workers.dev
+ * ```
+ *
+ * **Example:** Custom-domain Preview URLs
+ * ```typescript
+ * // On the production Worker:
+ * yield* Cloudflare.Worker("Api", {
+ *   main: "./src/api.ts",
+ *   domain: { name: "app.example.com", previews: true },
+ * });
+ * // A Preview of that Worker is then at https://<preview-name>.app.example.com
+ * ```
+ *
  * ### Versions & Gradual Deployments
  * The `version` prop maps Cloudflare's
  * [versions and gradual deployments](https://developers.cloudflare.com/workers/configuration/versions-and-deployments/)
  * onto Alchemy stages. A Worker with `version.parent` set uploads an
  * immutable *version* to the parent Worker's script instead of creating its
- * own — by default with no traffic, reachable only at its preview URL
- * (`worker.url`), which is the PR-preview workflow. Give it `traffic` to
- * run it as a canary, or use `version.traffic` on a normal Worker to roll
- * out its own deploys gradually.
+ * own — give it `traffic` to run it as a canary, or use `version.traffic`
+ * on a normal Worker to roll out its own deploys gradually. For branch
+ * and pull-request testing, use {@link preview} instead.
  *
  * A version worker's `url` is its *aliased* preview URL
  * (`<alias>-<name>.<subdomain>.workers.dev`) — the alias is derived from
@@ -1932,20 +2078,14 @@ export const isSelf = (value: unknown): value is Self =>
  * as are locally-hosted Durable Object or Workflow classes. Preview URLs
  * require the parent's workers.dev subdomain to be enabled (the default).
  *
- * **Example:** PR preview: a version of another stage's Worker
+ * **Example:** Upload a version without routing traffic
  * ```typescript
- * // The staging stage deploys the real Worker; a PR stage uploads its
- * // code as a zero-traffic version of staging's script and gets back a
- * // stable preview URL.
- * const parent = yield* Cloudflare.Worker.ref("MyWorker", {
- *   stage: "staging",
- * });
- * const preview = yield* Cloudflare.Worker("MyWorker", {
+ * // Inspect this upload at its Version URL before a gradual rollout.
+ * // For branch/PR testing, use `preview.of` instead.
+ * yield* Cloudflare.Worker("MyWorker", {
  *   main: "./src/worker.ts",
- *   version: { parent, message: `PR #${process.env.PR_NUMBER}` },
+ *   version: { traffic: 0, tag: process.env.GITHUB_SHA },
  * });
- * // preview.url -> https://<alias>-<name>.<subdomain>.workers.dev
- * // (stable across deploys; re-points at each newly uploaded version)
  * ```
  *
  * **Example:** Canary: send 10% of the parent's traffic to a version

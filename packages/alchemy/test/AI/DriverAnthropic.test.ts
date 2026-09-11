@@ -26,7 +26,7 @@ const Anthropic = AnthropicLanguageModel.layer({
 }).pipe(
   Layer.provide(
     AnthropicClient.layerConfig({
-      apiKey: Config.redacted("ANTHROPIC_API_KEY").pipe(
+      apiKey: Config.Redacted("ANTHROPIC_API_KEY").pipe(
         Config.option,
         Config.map((o) => (o._tag === "Some" ? o.value : undefined)),
       ),

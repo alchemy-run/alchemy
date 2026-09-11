@@ -5,7 +5,6 @@ import stringWidth from "string-width";
 import {
   spinnerFramesFor,
   statusColor,
-  statusPaint,
   theme,
   type StatusVariant,
 } from "../../../Util/Theme.ts";
@@ -38,23 +37,16 @@ export function Status({ variant = "info", children, detail }: StatusProps) {
 
 export type ToastProps = StatusProps;
 
-/** Compact application notice, distinguished by its semantic rail. */
+/**
+ * Compact application notice. Severity is carried by the status glyph and
+ * its colour alone — the same vocabulary as transcript lines — so a notice
+ * row never needs a rail of its own.
+ */
 export function Toast({ variant = "info", children, detail }: ToastProps) {
-  const borderStyle = useBorderStyle();
   return (
-    <Box
-      paddingLeft={1}
-      borderStyle={borderStyle}
-      borderLeft
-      borderRight={false}
-      borderTop={false}
-      borderBottom={false}
-      borderColor={statusPaint(variant)}
-    >
-      <Status variant={variant} detail={detail}>
-        {children}
-      </Status>
-    </Box>
+    <Status variant={variant} detail={detail}>
+      {children}
+    </Status>
   );
 }
 
@@ -62,34 +54,25 @@ export interface AlertProps extends StatusProps {
   readonly title?: ReactNode;
 }
 
+/** Glyph + bold title on one row, body indented beneath it. */
 export function Alert({
   variant = "info",
   title,
   children,
   detail,
 }: AlertProps) {
-  const borderStyle = useBorderStyle();
   const glyphs = useGlyphs();
   return (
-    <Box
-      flexDirection="column"
-      borderStyle={borderStyle}
-      borderLeft
-      borderRight={false}
-      borderTop={false}
-      borderBottom={false}
-      borderColor={statusPaint(variant)}
-      paddingLeft={1}
-    >
+    <Box flexDirection="column">
       <Box gap={1} alignItems="center">
         <Text bold color={statusColor(variant)}>
-          {glyphs[variant]} {variant.toUpperCase()}
+          {glyphs[variant]}
         </Text>
         {title === undefined ? null : <Text bold>{title}</Text>}
         {detail === undefined ? null : <Text tone="muted">· {detail}</Text>}
       </Box>
-      <Box paddingLeft={1}>
-        <Text>{children}</Text>
+      <Box paddingLeft={theme.space.indent}>
+        <Text tone="muted">{children}</Text>
       </Box>
     </Box>
   );

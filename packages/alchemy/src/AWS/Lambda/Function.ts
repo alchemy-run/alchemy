@@ -1012,7 +1012,7 @@ export const Function: Platform<
       get: <T>(key: string) =>
         // Key is already canonical (see RuntimeContext.sanitizeKey). Read
         // straight from `process.env` — see `unpackEnvValue` for why this
-        // must never resolve through `Config.string`.
+        // must never resolve through `Config.String`.
         Effect.sync(() => unpackEnvValue<T>(process.env[key])),
       serve: (handler: HttpEffect) =>
         // @ts-ignore

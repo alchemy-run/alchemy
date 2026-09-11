@@ -6,6 +6,7 @@ import * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import type * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { makeProcessScope, runOnHost } from "../Local/Process.ts";
+import { runString } from "../SocketFrames.ts";
 import type { Actor } from "./Agent.ts";
 import { Driver, type Charter, type Interpretable } from "./Driver.ts";
 import {
@@ -306,26 +307,22 @@ export const DriverLocal: Layer.Layer<
       const host = yield* engine.socketHost(key);
       const socket = yield* request.upgrade.pipe(Effect.orDie);
       const serve = Effect.gen(function* () {
-        const write = yield* socket.writer;
+        const writer = yield* socket.writer;
         const send: SendFrame = (frame) =>
-          Effect.asVoid(
-            Effect.ignore(write(JSON.stringify(frame))),
-          ) as Effect.Effect<void>;
+          Effect.ignore(writer.write(JSON.stringify(frame)));
         const handle = handleSessionSocketFrame(host, send);
         const registry = socketsOf(term, key);
         registry.add(send);
-        yield* socket
-          .runString((raw: string) =>
-            handle(JSON.parse(raw) as SessionSocketClientFrame).pipe(
-              Effect.catchDefect((defect) =>
-                Effect.logWarning(`[session-socket] bad frame: ${defect}`),
-              ),
+        yield* runString(socket, (raw) =>
+          handle(JSON.parse(raw) as SessionSocketClientFrame).pipe(
+            Effect.catchDefect((defect) =>
+              Effect.logWarning(`[session-socket] bad frame: ${defect}`),
             ),
-          )
-          .pipe(
-            Effect.ignore,
-            Effect.ensuring(Effect.sync(() => registry.delete(send))),
-          );
+          ),
+        ).pipe(
+          Effect.ignore,
+          Effect.ensuring(Effect.sync(() => registry.delete(send))),
+        );
       });
       yield* process.fork(Effect.scoped(serve).pipe(Effect.asVoid));
       return HttpServerResponse.empty();

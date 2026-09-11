@@ -116,7 +116,7 @@ export const ContainerPlatform: Platform<
           }),
         get: <T>(key: string) =>
           // Read straight from `process.env` — see `unpackEnvValue` for why
-          // this must never resolve through `Config.string`.
+          // this must never resolve through `Config.String`.
           Effect.sync(() => unpackEnvValue<T>(process.env[key]) as T),
         // plan-phase only: binding impls contribute Dockerfile fragments
         // inside their `!__ALCHEMY_RUNTIME__` guard (see Docker.Host)

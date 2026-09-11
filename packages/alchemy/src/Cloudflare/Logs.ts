@@ -170,58 +170,66 @@ export const CloudflareLogs = Effect.gen(function* () {
 
       const queue = yield* Queue.make<LogLine, Cause.Done>();
 
-      yield* socket
-        .runRaw((raw) => {
-          const text =
-            typeof raw === "string" ? raw : new TextDecoder().decode(raw);
-          const data: TailEventMessage = JSON.parse(text);
-          const eventTs = new Date(data.eventTimestamp ?? Date.now());
+      const decoder = new TextDecoder();
+      const offerTailMessage = (raw: Uint8Array) => {
+        const data: TailEventMessage = JSON.parse(decoder.decode(raw));
+        const eventTs = new Date(data.eventTimestamp ?? Date.now());
 
-          if (data.event && "request" in data.event) {
-            const reqEvent = data.event;
-            const pathname = (() => {
-              try {
-                return new URL(reqEvent.request.url).pathname;
-              } catch {
-                return reqEvent.request.url;
-              }
-            })();
-            const status = reqEvent.response?.status ?? 500;
-            Queue.offerUnsafe(queue, {
-              timestamp: eventTs,
-              message: `${reqEvent.request.method} ${pathname} > ${status} (cpu: ${Math.round(data.cpuTime)}ms, wall: ${Math.round(data.wallTime)}ms)`,
-            });
-          }
+        if (data.event && "request" in data.event) {
+          const reqEvent = data.event;
+          const pathname = (() => {
+            try {
+              return new URL(reqEvent.request.url).pathname;
+            } catch {
+              return reqEvent.request.url;
+            }
+          })();
+          const status = reqEvent.response?.status ?? 500;
+          Queue.offerUnsafe(queue, {
+            timestamp: eventTs,
+            message: `${reqEvent.request.method} ${pathname} > ${status} (cpu: ${Math.round(data.cpuTime)}ms, wall: ${Math.round(data.wallTime)}ms)`,
+          });
+        }
 
-          for (const log of data.logs) {
-            const msg = log.message.join(" ");
-            Queue.offerUnsafe(queue, {
-              timestamp: new Date(log.timestamp),
-              message: log.level === "log" ? msg : `${log.level}: ${msg}`,
-            });
-          }
+        for (const log of data.logs) {
+          const msg = log.message.join(" ");
+          Queue.offerUnsafe(queue, {
+            timestamp: new Date(log.timestamp),
+            message: log.level === "log" ? msg : `${log.level}: ${msg}`,
+          });
+        }
 
-          for (const exception of data.exceptions) {
-            Queue.offerUnsafe(queue, {
-              timestamp: new Date(exception.timestamp),
-              message: `${exception.name} ${exception.message}\n${exception.stack}`,
-            });
-          }
-        })
-        .pipe(
-          Effect.ensuring(
-            Effect.all([
-              deleteScriptTail({
-                scriptName: opts.scriptName,
-                id: tailId,
-                accountId: opts.accountId,
-              }).pipe(Effect.ignore),
-              Queue.end(queue),
-            ]),
-          ),
-          Effect.ignore,
-          Effect.forkChild(),
-        );
+        for (const exception of data.exceptions) {
+          Queue.offerUnsafe(queue, {
+            timestamp: new Date(exception.timestamp),
+            message: `${exception.name} ${exception.message}\n${exception.stack}`,
+          });
+        }
+      };
+
+      yield* Socket.toStream(socket).pipe(
+        Stream.runForEach((raw) => Effect.sync(() => offerTailMessage(raw))),
+        Effect.catchIf(
+          (error) =>
+            Socket.isSocketError(error) &&
+            error.reason._tag === "SocketCloseError" &&
+            (error.reason.code === 1000 || error.reason.code === 1006),
+          () => Effect.void,
+        ),
+        Effect.ensuring(
+          Effect.all([
+            deleteScriptTail({
+              scriptName: opts.scriptName,
+              id: tailId,
+              accountId: opts.accountId,
+            }).pipe(Effect.ignore),
+            Queue.end(queue),
+          ]),
+        ),
+        Effect.scoped,
+        Effect.ignore,
+        Effect.forkChild(),
+      );
 
       return Stream.fromQueue(queue);
     });

@@ -1,11 +1,11 @@
-import * as DistilledAuth from "@distilled.cloud/aws/Auth";
 import * as Floci from "@alchemy.run/floci";
+import * as DistilledAuth from "@distilled.cloud/aws/Auth";
+import type { CredentialsError } from "@distilled.cloud/aws/Credentials";
 import {
   Credentials,
   ExpiredSSOToken,
   InvalidSSOToken,
 } from "@distilled.cloud/aws/Credentials";
-import type { CredentialsError } from "@distilled.cloud/aws/Credentials";
 import * as STS from "@distilled.cloud/aws/sts";
 import * as EffectConsole from "effect/Console";
 import * as Deferred from "effect/Deferred";
@@ -20,9 +20,9 @@ import * as Redacted from "effect/Redacted";
 import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
+import type * as HttpClient from "effect/unstable/http/HttpClient";
 import { ChildProcess } from "effect/unstable/process";
 import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
-import type * as HttpClient from "effect/unstable/http/HttpClient";
 import * as NodeCrypto from "node:crypto";
 import * as NodeOs from "node:os";
 import {

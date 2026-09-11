@@ -23,6 +23,7 @@ import * as Layer from "effect/Layer";
 import * as Queue from "effect/Queue";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as Socket from "effect/unstable/socket/Socket";
+import { runString } from "@/SocketFrames.ts";
 import * as Model from "./fixtures/ScriptedModel.ts";
 import {
   Researcher,
@@ -35,11 +36,12 @@ const connect = (url: string) =>
   Effect.gen(function* () {
     const socket = yield* Socket.makeWebSocket(url);
     const frames = yield* Queue.unbounded<AI.SessionSocketServerFrame>();
-    const write = yield* socket.writer;
+    const writer = yield* socket.writer;
     const opened = yield* Deferred.make<void>();
 
     yield* Effect.forkScoped(
-      socket.runString(
+      runString(
+        socket,
         (message) =>
           Queue.offer(
             frames,
@@ -52,7 +54,7 @@ const connect = (url: string) =>
 
     return {
       send: (frame: AI.SessionSocketClientFrame) =>
-        write(JSON.stringify(frame)),
+        writer.write(JSON.stringify(frame)),
       next: Queue.take(frames),
     };
   });
@@ -103,11 +105,12 @@ describe("SessionSocket (DriverLocal)", () => {
         // resolves for a connection that carried a WebSocket upgrade,
         // so the default would hold teardown for its full 20 seconds.
         const server = yield* BunHttpServer.make({
+          hostname: "127.0.0.1",
           port: 0,
           gracefulShutdownTimeout: Duration.millis(100),
         });
         const port =
-          server.address._tag === "TcpAddress" ? server.address.port : 0;
+          server.address._tag !== "UnixPathAddress" ? server.address.port : 0;
         yield* server.serve(
           Effect.gen(function* () {
             const request = yield* HttpServerRequest;
@@ -116,7 +119,7 @@ describe("SessionSocket (DriverLocal)", () => {
             return yield* gateway.attach(term!, rest.join("/"), request);
           }).pipe(Effect.provide(RuntimeContext.phantom)),
         );
-        const wsUrl = `ws://localhost:${port}/attach/Researcher/w1`;
+        const wsUrl = `ws://127.0.0.1:${port}/attach/Researcher/w1`;
 
         // ── round 1: attach, submit, watch the round stream (a fresh
         // run parks once on creation, so wait for the park AFTER the
@@ -244,11 +247,12 @@ describe("SessionSocket (DriverLocal)", () => {
         yield* Researcher;
         const gateway = yield* AI.Sessions;
         const server = yield* BunHttpServer.make({
+          hostname: "127.0.0.1",
           port: 0,
           gracefulShutdownTimeout: Duration.millis(100),
         });
         const port =
-          server.address._tag === "TcpAddress" ? server.address.port : 0;
+          server.address._tag !== "UnixPathAddress" ? server.address.port : 0;
         yield* server.serve(
           Effect.gen(function* () {
             const request = yield* HttpServerRequest;
@@ -257,7 +261,7 @@ describe("SessionSocket (DriverLocal)", () => {
             return yield* gateway.attach(term!, rest.join("/"), request);
           }).pipe(Effect.provide(RuntimeContext.phantom)),
         );
-        const wsUrl = `ws://localhost:${port}/attach/Researcher/t1`;
+        const wsUrl = `ws://127.0.0.1:${port}/attach/Researcher/t1`;
 
         yield* Effect.scoped(
           Effect.gen(function* () {
@@ -362,11 +366,12 @@ describe("SessionSocket (DriverLocal)", () => {
         yield* Researcher;
         const gateway = yield* AI.Sessions;
         const server = yield* BunHttpServer.make({
+          hostname: "127.0.0.1",
           port: 0,
           gracefulShutdownTimeout: Duration.millis(100),
         });
         const port =
-          server.address._tag === "TcpAddress" ? server.address.port : 0;
+          server.address._tag !== "UnixPathAddress" ? server.address.port : 0;
         yield* server.serve(
           Effect.gen(function* () {
             const request = yield* HttpServerRequest;
@@ -375,7 +380,7 @@ describe("SessionSocket (DriverLocal)", () => {
             return yield* gateway.attach(term!, rest.join("/"), request);
           }).pipe(Effect.provide(RuntimeContext.phantom)),
         );
-        const wsUrl = `ws://localhost:${port}/attach/Researcher/s1`;
+        const wsUrl = `ws://127.0.0.1:${port}/attach/Researcher/s1`;
 
         // ── exactly what `useChat({ resume: true })` does: hold a
         // resume stream open for the tail, THEN submit. Before the
@@ -513,11 +518,12 @@ describe("SessionSocket (DriverLocal)", () => {
         const ledger = yield* Ledger;
         const gateway = yield* AI.Sessions;
         const server = yield* BunHttpServer.make({
+          hostname: "127.0.0.1",
           port: 0,
           gracefulShutdownTimeout: Duration.millis(100),
         });
         const port =
-          server.address._tag === "TcpAddress" ? server.address.port : 0;
+          server.address._tag !== "UnixPathAddress" ? server.address.port : 0;
         yield* server.serve(
           Effect.gen(function* () {
             const request = yield* HttpServerRequest;
@@ -526,7 +532,7 @@ describe("SessionSocket (DriverLocal)", () => {
             return yield* gateway.attach(term!, rest.join("/"), request);
           }).pipe(Effect.provide(RuntimeContext.phantom)),
         );
-        const wsUrl = `ws://localhost:${port}/attach/Ledger/acct`;
+        const wsUrl = `ws://127.0.0.1:${port}/attach/Ledger/acct`;
 
         yield* Effect.scoped(
           Effect.gen(function* () {
@@ -621,11 +627,12 @@ describe("SessionSocket (DriverLocal)", () => {
         yield* Wedged;
         const gateway = yield* AI.Sessions;
         const server = yield* BunHttpServer.make({
+          hostname: "127.0.0.1",
           port: 0,
           gracefulShutdownTimeout: Duration.millis(100),
         });
         const port =
-          server.address._tag === "TcpAddress" ? server.address.port : 0;
+          server.address._tag !== "UnixPathAddress" ? server.address.port : 0;
         yield* server.serve(
           Effect.gen(function* () {
             const request = yield* HttpServerRequest;
@@ -634,7 +641,7 @@ describe("SessionSocket (DriverLocal)", () => {
             return yield* gateway.attach(term!, rest.join("/"), request);
           }).pipe(Effect.provide(RuntimeContext.phantom)),
         );
-        const wsUrl = `ws://localhost:${port}/attach/Wedged/w1`;
+        const wsUrl = `ws://127.0.0.1:${port}/attach/Wedged/w1`;
 
         yield* Effect.scoped(
           Effect.gen(function* () {

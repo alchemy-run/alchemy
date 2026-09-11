@@ -9,11 +9,14 @@
  *
  * The AWS auth method is normally chosen by the profile entry in
  * `~/.alchemy/profiles.json` (written by `alchemy profile edit`). Tests
- * must not depend on the developer's on-disk profiles. Local AWS providers
- * carry their own floci-scoped environment, which resolves dummy credentials
- * (`test`/`test`), accountId `000000000000`, and endpoint
- * `http://localhost:4566`, and `ensureFloci()` guarantees the emulator is
- * serving (starting the `alchemy-floci` container if needed).
+ * must not depend on the developer's on-disk profiles. `Test.make({ dev:
+ * true })` runs the stack the way `alchemy dev` does, so the local AWS
+ * providers are selected; they carry their own floci-scoped environment,
+ * which resolves dummy credentials (`test`/`test`), accountId
+ * `000000000000`, and endpoint `http://localhost:4566`, and `ensureFloci()`
+ * guarantees the emulator is serving (starting the `alchemy-floci`
+ * container if needed). Without `dev: true` the live providers run against
+ * whatever account the profile resolves — the real cloud.
  *
  * ## Why no real-AWS calls can happen
  *
@@ -55,7 +58,9 @@ const dockerAvailable = (() => {
 
 const providers = AWS.providers();
 
-const { test } = Test.make({ providers });
+// `dev: true` runs the same topology as the real `alchemy dev` command
+// (including the RPC sidecar default for RPC-backed providers).
+const { test } = Test.make({ providers, dev: true });
 
 /**
  * Raw (non-distilled) call against the emulator gateway — out-of-band proof

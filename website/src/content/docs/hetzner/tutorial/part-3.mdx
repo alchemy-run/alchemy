@@ -132,7 +132,7 @@ if (request.method === "PUT") {
 
 +if (request.method === "GET") {
 +  const text = yield* fs.readFileString(file).pipe(
-+    Effect.catchAll(() => Effect.succeed(undefined)),
++    Effect.catch(() => Effect.succeed(undefined)),
 +  );
 +  if (text === undefined) {
 +    return HttpServerResponse.text("Not found", { status: 404 });

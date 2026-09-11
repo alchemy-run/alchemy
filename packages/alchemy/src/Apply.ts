@@ -665,13 +665,28 @@ const executeNode = (
       //    the persisted row, see `Plan.ts`'s delete node) would act on the
       //    stale one — destroying a resource the user had marked `retain`.
       //    See https://github.com/alchemy-run/alchemy/issues/1248.
+      // 3. `downstream` — a dependent that repins from resource A to B
+      //    (e.g. a HostnameAssociation switching certificates) updates
+      //    *itself*, while A and B are both noops. Delete ordering reads the
+      //    persisted `downstream` of the resource being deleted, so without
+      //    this commit a later destroy deletes B concurrently with the
+      //    dependent that still references it (and needlessly waits on A).
       const policyChanged =
         node.state.removalPolicy !== node.resource.RemovalPolicy;
-      if (node.state.resourceType !== node.resource.Type || policyChanged) {
+      const downstreamChanged = !sameSet(
+        node.state.downstream ?? [],
+        node.downstream,
+      );
+      if (
+        node.state.resourceType !== node.resource.Type ||
+        policyChanged ||
+        downstreamChanged
+      ) {
         yield* commit({
           ...node.state,
           resourceType: node.resource.Type,
           removalPolicy: node.resource.RemovalPolicy,
+          downstream: node.downstream,
         });
       }
       // A policy flip is otherwise invisible (the row is a noop), and it is
@@ -2394,3 +2409,9 @@ const instrumentLifecycle =
         },
       }),
     );
+
+/** Order-insensitive equality of two FQN lists. */
+const sameSet = (a: ReadonlyArray<string>, b: ReadonlyArray<string>) => {
+  const sa = new Set(a);
+  return sa.size === new Set(b).size && b.every((fqn) => sa.has(fqn));
+};

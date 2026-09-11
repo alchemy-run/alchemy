@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { forwardSignals } from "../packages/alchemy-test/src/DevCli.ts";
 
 const example = process.argv[2];
 if (example === undefined) {
@@ -13,24 +14,36 @@ const devOnly = process.argv.includes("--dev-only");
 
 const repositoryRoot = path.resolve(import.meta.dirname, "..");
 const exampleRoot = path.resolve(repositoryRoot, example);
+// The real launcher, not `bin/alchemy.ts`: it pins bun's tsconfig to
+// alchemy's own, so the CLI's .tsx files are not transpiled with the
+// example's JSX settings (solid-js examples otherwise crash the CLI).
 const alchemyBin = path.join(
   repositoryRoot,
   "packages",
   "alchemy",
   "bin",
-  "alchemy.ts",
+  "cli.js",
 );
 const stage = "cli-example-test";
+// The summary line the CLI prints once a run converges. In non-TTY mode every
+// line carries a `[time] LEVEL (#fiber): ` prefix, so anchor on the text.
+const DONE = /Done: \d+ succeeded/;
 const timeoutMs = 4 * 60_000;
-const alchemyHome = fs.mkdtempSync(
-  path.join(os.tmpdir(), "alchemy-example-cli-"),
-);
+// With a profile (`bun test:examples --profile testing`) the CLI must see the
+// real ALCHEMY_HOME (where the profile's credentials live) and must NOT run
+// as CI, which makes auth resolution skip profiles for env credentials.
+// Without a profile, run against an empty home as CI so the CLI can only
+// authenticate from env vars, the way a fresh CI runner would.
+const profile = process.env.ALCHEMY_PROFILE;
+const alchemyHome =
+  profile === undefined
+    ? fs.mkdtempSync(path.join(os.tmpdir(), "alchemy-example-cli-"))
+    : undefined;
 const childEnv = {
   ...process.env,
-  ALCHEMY_HOME: alchemyHome,
-  ALCHEMY_PROFILE: undefined,
-  AWS_PROFILE: undefined,
-  CI: "true",
+  ...(alchemyHome === undefined
+    ? {}
+    : { ALCHEMY_HOME: alchemyHome, AWS_PROFILE: undefined, CI: "true" }),
   NO_COLOR: "1",
 };
 
@@ -60,6 +73,7 @@ const run = (
       env: childEnv,
       stdio: ["ignore", "pipe", "pipe"],
     });
+    forwardSignals(child);
     let output = "";
     const killGroup = () => {
       if (child.pid === undefined) return;
@@ -95,6 +109,7 @@ const runDev = (): Promise<CommandResult> =>
       env: childEnv,
       stdio: ["ignore", "pipe", "pipe"],
     });
+    forwardSignals(child);
     let output = "";
     let settled = false;
     let ready = false;
@@ -117,10 +132,15 @@ const runDev = (): Promise<CommandResult> =>
       const text = chunk.toString();
       output += text;
       if (process.env.DEBUG) process.stderr.write(text);
-      if (!ready && output.includes("\nDone:") && /https?:\/\//.test(output)) {
+      if (!ready && DONE.test(output) && /https?:\/\//.test(output)) {
         ready = true;
         killGroup("SIGINT");
         setTimeout(() => killGroup("SIGKILL"), 15_000).unref();
+      }
+      // A failed run leaves `dev` waiting for a file change that never
+      // comes; fail now instead of at the timeout.
+      if (!ready && output.includes("alchemy dev: run failed")) {
+        killGroup("SIGKILL");
       }
     };
 
@@ -163,18 +183,14 @@ let primaryFailure: unknown;
 try {
   const dev = await runDev();
   assertSuccess("dev", dev);
-  assertOutput("dev", dev, [
-    new RegExp(`Dev · ${stage}`),
-    /\nDone:/,
-    /https?:\/\//,
-  ]);
+  assertOutput("dev", dev, [new RegExp(`Dev · ${stage}`), DONE, /https?:\/\//]);
 
   if (!devOnly) {
     const deployed = await run("deploy");
     assertSuccess("deploy", deployed);
     assertOutput("deploy", deployed, [
       new RegExp(`Deploy · ${stage}`),
-      /\nDone:/,
+      DONE,
       /https?:\/\//,
     ]);
   }
@@ -194,14 +210,16 @@ try {
     } else if (primaryFailure === undefined) {
       assertOutput("destroy", destroyed, [
         new RegExp(`Destroy · ${stage}`),
-        /\nDone:/,
+        DONE,
       ]);
     }
   } catch (error) {
     if (primaryFailure === undefined) primaryFailure = error;
     else console.error(`${example}: cleanup destroy failed`, error);
   } finally {
-    fs.rmSync(alchemyHome, { recursive: true, force: true });
+    if (alchemyHome !== undefined) {
+      fs.rmSync(alchemyHome, { recursive: true, force: true });
+    }
   }
 }
 
