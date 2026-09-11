@@ -8,7 +8,8 @@ import {
   type PlatformServices,
 } from "../../Platform.ts";
 import { Resource } from "../../Resource.ts";
-import * as Server from "../../Server/index.ts";
+// Process.ts directly, not the Server barrel (see ContainerPlatform.ts).
+import type { ProcessServices } from "../../Server/Process.ts";
 import type { Providers } from "../Providers.ts";
 import type { InlineDockerfile } from "../../Docker/Dockerfile.ts";
 import { ContainerTypeId } from "./Container.ts";
@@ -344,7 +345,7 @@ export interface AnyContainerApplicationProps extends ContainerApplicationPropsB
 export type ContainerServices =
   | ContainerApplication
   | PlatformServices
-  | Server.ProcessServices;
+  | ProcessServices;
 
 export type ContainerShape = Main<ContainerServices>;
 

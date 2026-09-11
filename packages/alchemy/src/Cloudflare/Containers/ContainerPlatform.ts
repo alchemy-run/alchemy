@@ -8,7 +8,10 @@ import {
   packEnvValueKeepRedacted,
   unpackEnvValue,
 } from "../../RuntimeContext.ts";
-import * as Server from "../../Server/index.ts";
+// Process.ts directly, not the Server barrel: that also re-exports the S3
+// and SQS event sources, which would load the AWS SDK into every Cloudflare
+// process.
+import type { ProcessContext } from "../../Server/Process.ts";
 import type { Fetcher } from "../Fetcher.ts";
 import { fromCloudflareFetcher, toCloudflareFetcher } from "../Fetcher.ts";
 import { DurableObject } from "../Workers/DurableObject.ts";
@@ -53,12 +56,12 @@ export const ContainerPlatform: Platform<
   ContainerApplication,
   ContainerServices,
   ContainerShape,
-  Server.ProcessContext,
+  ProcessContext,
   Container
 > = Platform(
   "Cloudflare.Container",
   {
-    createRuntimeContext: (id: string): Server.ProcessContext => {
+    createRuntimeContext: (id: string): ProcessContext => {
       const runners: Effect.Effect<void, never, any>[] = [];
       const env: Record<string, any> = {};
 
@@ -116,7 +119,7 @@ export const ContainerPlatform: Platform<
         run: ((effect: Effect.Effect<void, never, any>) =>
           Effect.sync(() => {
             runners.push(effect);
-          })) as unknown as Server.ProcessContext["run"],
+          })) as unknown as ProcessContext["run"],
         serve,
         exports: Effect.sync(() => ({
           default: Effect.all(
@@ -136,7 +139,7 @@ export const ContainerPlatform: Platform<
             },
           ),
         })),
-      } as Server.ProcessContext;
+      } as ProcessContext;
     },
   },
   {
