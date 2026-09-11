@@ -7,14 +7,12 @@ import * as Effect from "effect/Effect";
 import * as Order from "effect/Order";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import type { HttpClient } from "effect/unstable/http";
 import type { ScopedPlanStatusSession } from "../../Report.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
 import { diffTags } from "../../Tags.ts";
-import type { Credentials } from "../Credentials.ts";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
 import { durationToDays } from "../IAM/common.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
@@ -588,19 +586,12 @@ export const BucketProvider = () =>
         };
       });
 
-      const fetchBucketTags = (
-        bucketName: string,
-      ): Effect.Effect<
-        Record<string, string>,
-        never,
-        Credentials | HttpClient.HttpClient | Region
-      > =>
+      const fetchBucketTags = (bucketName: string) =>
         s3.getBucketTagging({ Bucket: bucketName }).pipe(
           Effect.map((r) =>
             Object.fromEntries((r.TagSet ?? []).map((t) => [t.Key!, t.Value!])),
           ),
           Effect.catchTag("NoSuchTagSet", () => Effect.succeed({})),
-          Effect.catch(() => Effect.succeed({})),
         );
 
       const syncBucketTags = Effect.fn(function* ({
@@ -854,13 +845,6 @@ export const BucketProvider = () =>
           .getBucketEncryption({ Bucket: bucketName })
           .pipe(
             Effect.map((r) => r.ServerSideEncryptionConfiguration?.Rules?.[0]),
-            // Some partitions return 404 with no default config; treat any
-            // not-configured read as "no rule" so we converge by writing.
-            Effect.catch(() =>
-              Effect.succeed<s3.ServerSideEncryptionRule | undefined>(
-                undefined,
-              ),
-            ),
           );
         const canon = (r: s3.ServerSideEncryptionRule | undefined) =>
           JSON.stringify({
