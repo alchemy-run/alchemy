@@ -23,7 +23,7 @@ import { Stack } from "../Stack.ts";
 import { createRailwayName, matchesAlchemyPhysicalName } from "./Metadata.ts";
 import { assertHostDisk, type MountSpec } from "./MountVolume.ts";
 import { ownedProjects } from "./Project.ts";
-import { listServiceVolumes } from "./Volume.ts";
+import { attachVolumeToService, listServiceVolumes } from "./Volume.ts";
 import {
   deleteOwnedServiceDomain,
   ensureServiceDomain,
@@ -574,6 +574,59 @@ const waitForDeployment = (environmentId: string, serviceId: string) =>
     }),
   );
 
+type DeployRef = {
+  id: string;
+  status: string | undefined;
+};
+
+const asDeployRef = (
+  row: { id: string; status?: string | null } | undefined,
+): DeployRef | undefined =>
+  row === undefined
+    ? undefined
+    : { id: row.id, status: row.status ?? undefined };
+
+const matchUploadedDeployment = (
+  instance: ServiceInstanceResponse | undefined,
+  deploymentId: string,
+): DeployRef | undefined => {
+  const latest = instance?.latestDeployment;
+  if (latest?.id === deploymentId) return asDeployRef(latest);
+  return asDeployRef(
+    (instance?.activeDeployments ?? []).find(
+      (deployment) => deployment.id === deploymentId,
+    ),
+  );
+};
+
+const listUploadedDeployment = (input: {
+  deploymentId: string;
+  serviceId: string;
+  environmentId: string;
+}) =>
+  railway.deployments
+    .items({
+      first: 10,
+      input: {
+        serviceId: input.serviceId,
+        environmentId: input.environmentId,
+      },
+    })
+    .pipe(
+      Stream.filter((row) => row.id === input.deploymentId),
+      Stream.take(1),
+      Stream.runCollect,
+      Effect.map((chunk) => Array.from(chunk)[0]),
+      Effect.timeoutOrElse({
+        duration: "8 seconds",
+        orElse: () => Effect.succeed(undefined),
+      }),
+      Effect.catchTag(
+        ["NotFound", "UnknownRailwayError", "RailwayParseError"],
+        () => Effect.succeed(undefined),
+      ),
+    );
+
 const waitForDeploymentById = (input: {
   deploymentId: string;
   serviceId: string;
@@ -583,23 +636,17 @@ const waitForDeploymentById = (input: {
     // Poll the instance, not `deployment(id)`. Distilled's deployment
     // query is a huge nested selection that 404s/times out for /up ids;
     // `serviceInstance.latestDeployment` is the same record the rest of
-    // reconcile already uses.
+    // reconcile already uses. The placeholder `hashicorp/http-echo`
+    // deploy often FAILED (wrong port / no `/health`) before `railway up`
+    // replaces it — do not inherit that FAILED onto this wait.
     const instance = yield* getInstance(input.environmentId, input.serviceId);
-    const latest = instance?.latestDeployment;
     const match =
-      latest?.id === input.deploymentId
-        ? latest
-        : (instance?.activeDeployments ?? []).find(
-            (deployment) => deployment.id === input.deploymentId,
-          );
-    // Hosted `main` creates the service with a public-image placeholder
-    // (`hashicorp/http-echo`). That first deploy often FAILED (wrong
-    // port / no `/health`) before `railway up` replaces it. Do not
-    // inherit `latest` — only the upload we queued can fail this wait.
+      matchUploadedDeployment(instance, input.deploymentId) ??
+      asDeployRef(yield* listUploadedDeployment(input));
     if (match === undefined) {
       return yield* new ServiceDeployPending({
         serviceId: input.serviceId,
-        status: latest?.status ?? "pending",
+        status: "pending",
       });
     }
     const status = match.status;
@@ -625,6 +672,32 @@ const waitForDeploymentById = (input: {
       times: 90,
       schedule: Schedule.spaced("5 seconds"),
     }),
+    Effect.catchTag("Railway.ServiceDeployPending", (pending) =>
+      Effect.gen(function* () {
+        const instance = yield* getInstance(
+          input.environmentId,
+          input.serviceId,
+        );
+        const match =
+          matchUploadedDeployment(instance, input.deploymentId) ??
+          asDeployRef(yield* listUploadedDeployment(input));
+        const status = match?.status;
+        if (
+          match !== undefined &&
+          status !== undefined &&
+          deployFailed(status)
+        ) {
+          const logs = yield* fetchDeployLogs(match.id);
+          return yield* new ServiceDeployFailed({
+            serviceId: input.serviceId,
+            status,
+            deploymentId: match.id,
+            logs,
+          });
+        }
+        return yield* pending;
+      }),
+    ),
   );
 
 const upsertVariable = (input: {
@@ -707,23 +780,18 @@ const syncEnv = Effect.fn(function* (input: {
 
 const syncMounts = Effect.fn(function* (input: {
   environmentId: string;
+  projectId: string;
   serviceId: string;
   mounts: MountSpec[];
 }) {
   for (const mount of input.mounts) {
-    if (mount.volumeId.length === 0) continue;
-    yield* railway
-      .updateVolumeInstance({
-        volumeId: mount.volumeId,
-        environmentId: input.environmentId,
-        input: {
-          serviceId: input.serviceId,
-          mountPath: mount.path,
-        },
-      })
-      .pipe(
-        Effect.catchTag(["RailwayNotFound", "NotFound"], () => Effect.void),
-      );
+    yield* attachVolumeToService({
+      environmentId: input.environmentId,
+      projectId: input.projectId,
+      serviceId: input.serviceId,
+      volumeId: mount.volumeId,
+      mountPath: mount.path,
+    });
   }
 });
 
@@ -1249,6 +1317,7 @@ export const ServiceProvider = () =>
 
           yield* syncMounts({
             environmentId,
+            projectId,
             serviceId: current.id,
             mounts: bound.mounts,
           });

@@ -26,11 +26,14 @@ export const Site = Railway.Project("Site");
 +export const Data = Railway.Volume("Data", {
 +  project: Site,
 +  mountPath: "/data",
++  region: "us-west2",
 +});
 ```
 
 The volume is disconnected until a Service mounts it. `mountPath` is
-the path in the container.
+the path in the container. `region` must match the Service from
+Part 2 — a Volume cannot move, and attaching across regions fails
+the deploy.
 
 ## Mount a disk into the Service
 
@@ -141,7 +144,7 @@ if (request.method === "PUT") {
 
 +if (request.method === "GET") {
 +  const text = yield* fs.readFileString(file).pipe(
-+    Effect.catchAll(() => Effect.succeed(undefined)),
++    Effect.catch(() => Effect.succeed(undefined)),
 +  );
 +  if (text === undefined) {
 +    return HttpServerResponse.text("Not found", { status: 404 });
