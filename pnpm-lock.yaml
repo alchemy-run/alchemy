@@ -420,7 +420,7 @@ importers:
         version: link:packages/alchemy
       changelogithub:
         specifier: ^13.16.1
-        version: 13.16.1
+        version: 13.16.1(magicast@0.5.4)
       effect:
         specifier: 4.0.0-rc.115
         version: 4.0.0-rc.115
@@ -5559,9 +5559,6 @@ importers:
       '@smithy/util-base64':
         specifier: catalog:aws
         version: 4.6.0
-      aws4fetch:
-        specifier: catalog:aws
-        version: 1.0.20
       effect:
         specifier: 4.0.0-rc.115
         version: 4.0.0-rc.115
@@ -28289,7 +28286,7 @@ snapshots:
     transitivePeerDependencies:
       - magicast
 
-  changelogithub@13.16.1:
+  changelogithub@13.16.1(magicast@0.5.4):
     dependencies:
       ansis: 4.3.1
       c12: 3.3.4(magicast@0.5.4)
