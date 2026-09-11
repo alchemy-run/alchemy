@@ -499,12 +499,33 @@ test("a crowded thread stays in bounds: sections count and scroll, the tab strip
       { ref: `${REPO}#12`, kind: "issue", state: "open", title: "Tracking" },
       ...pulls,
     ],
-    agents: [],
+    agents: Array.from({ length: 30 }, (_, i) => ({
+      key: `engineer-${i + 1}`,
+      kind: "engineer",
+      brief: `Review pull ${1500 + i}`,
+      cwd: `/workspace/trees/pr-${1500 + i}`,
+      state: "done" as const,
+      startedAt: NOW.getTime() - 120_000,
+    })),
   });
   await openApp(page, threadPath("t-1"));
 
   // the summary says how much without reading the list
   const pane = page.getByRole("complementary", { name: "Thread state" });
+
+  // the manager is pinned: scroll the agents list to its end and the
+  // manager row still sits at the top of the section, above the rest
+  const agentsSection = pane.locator("[data-section=agents]");
+  const manager = agentsSection.locator("[data-manager]");
+  const last = agentsSection.getByRole("button", {
+    name: "open agent engineer-30",
+  });
+  await last.scrollIntoViewIfNeeded();
+  await expect(last).toBeInViewport();
+  await expect(manager).toBeInViewport();
+  const managerBox = (await manager.boundingBox())!;
+  const lastBox = (await last.boundingBox())!;
+  expect(managerBox.y).toBeLessThan(lastBox.y);
   const assigned = pane.locator("[data-section=assigned]");
   await expect(
     assigned.getByRole("button", { name: "Assigned · 24 pulls · 1 issue" }),

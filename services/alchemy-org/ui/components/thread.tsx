@@ -46,6 +46,7 @@ import {
   Check,
   ChevronDown,
   CircleDot,
+  Crown,
   FileDiff,
   FolderGit2,
   GitMerge,
@@ -596,38 +597,41 @@ const ThreadPane = ({
                 )
               }
             >
-              {/* the MANAGER — the thread's own agent, first among its
-                  agents: its conversation is the thread's record */}
-              <button
-                type="button"
-                data-manager=""
-                data-state={state.turn === "agents" ? "running" : "idle"}
-                onClick={onOpenManager}
-                aria-label="open the manager"
-                aria-current={managerOpen ? "page" : undefined}
-                title={`${state.title}\n\nOpen the manager's conversation — the thread's whole record. It briefs the engineers and hears their reports.`}
-                className={cn(
-                  "flex w-full cursor-pointer items-center gap-2 rounded-md px-1 py-0.5 text-left hover:bg-accent/70",
-                  managerOpen && "bg-accent",
-                )}
-              >
-                <span
+              {/* the MANAGER — the thread's own agent, set apart from the
+                  engineers it briefs: its own colour, and pinned to the
+                  top of the list however far it scrolls */}
+              <div className="sticky -top-px z-10 -mx-3 -mt-px bg-sidebar px-3 pb-1 pt-px">
+                <button
+                  type="button"
+                  data-manager=""
+                  data-state={state.turn === "agents" ? "running" : "idle"}
+                  onClick={onOpenManager}
+                  aria-label="open the manager"
+                  aria-current={managerOpen ? "page" : undefined}
+                  title={`${state.title}\n\nOpen the manager's conversation — the thread's whole record. It briefs the engineers and hears their reports.`}
                   className={cn(
-                    "size-2 shrink-0 rounded-full",
-                    state.turn === "agents"
-                      ? AGENT_DOT.running
-                      : "bg-muted-foreground/40",
+                    "flex w-full cursor-pointer items-center gap-2 rounded-md border border-primary/20 bg-primary/5 px-1 py-0.5 text-left hover:bg-primary/10",
+                    managerOpen && "border-primary/40 bg-primary/15",
                   )}
-                />
-                <Bot className="size-3.5 shrink-0 text-muted-foreground" />
-                <span className="min-w-0 flex-1 truncate text-[12px] text-muted-foreground">
-                  <span className="font-medium text-foreground">manager</span> —{" "}
-                  {state.title}
-                </span>
-                <span className="shrink-0 text-[10px] text-muted-foreground/70">
-                  {timeAgo(state.updatedAt)}
-                </span>
-              </button>
+                >
+                  <span
+                    className={cn(
+                      "size-2 shrink-0 rounded-full",
+                      state.turn === "agents"
+                        ? AGENT_DOT.running
+                        : "bg-primary/40",
+                    )}
+                  />
+                  <Crown className="size-3.5 shrink-0 text-primary" />
+                  <span className="min-w-0 flex-1 truncate text-[12px] text-muted-foreground">
+                    <span className="font-medium text-primary">manager</span> —{" "}
+                    {state.title}
+                  </span>
+                  <span className="shrink-0 text-[10px] text-muted-foreground/70">
+                    {timeAgo(state.updatedAt)}
+                  </span>
+                </button>
+              </div>
               {state.agents.length === 0 && (
                 <div className="pl-6 text-xs text-muted-foreground">
                   No engineers yet.
@@ -1051,7 +1055,7 @@ export const ThreadView = ({
                   : "border-transparent text-muted-foreground hover:bg-accent/60 hover:text-foreground",
               )}
             >
-              <Bot className="size-3.5" />
+              <Crown className="size-3.5 text-primary" />
               manager
             </button>
           </Hint>
