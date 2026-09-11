@@ -200,6 +200,15 @@ interface ChannelRpc extends MainRpc<Cloudflare.DurableObjectState> {
     ref: string,
   ) => Effect.Effect<string | undefined, never, RuntimeContext>;
   readonly claimBootstrap: () => Effect.Effect<boolean, never, RuntimeContext>;
+  /** The channel agent's model pick — a catalog id; absent = default. */
+  readonly model: () => Effect.Effect<
+    string | undefined,
+    never,
+    RuntimeContext
+  >;
+  readonly setModel: (
+    model: string | undefined,
+  ) => Effect.Effect<void, never, RuntimeContext>;
 }
 
 const ChannelDOLive = Cloudflare.DurableObject<ChannelRpc>()(
@@ -580,6 +589,25 @@ const ChannelDOLive = Cloudflare.DurableObject<ChannelRpc>()(
           );
           return true;
         }),
+
+        // the channel agent's model rides in meta: every run is a fresh
+        // session, so the pick has to live on the one thing that persists
+        model: Effect.fn(function* () {
+          const cursor = yield* sql.exec<
+            { value: string } & Record<string, Cloudflare.SqlStorageValue>
+          >("SELECT value FROM meta WHERE key = 'model'");
+          return (yield* cursor.toArray())[0]?.value;
+        }),
+        setModel: Effect.fn(function* (model) {
+          if (model === undefined) {
+            yield* sql.exec("DELETE FROM meta WHERE key = 'model'");
+          } else {
+            yield* sql.exec(
+              "INSERT OR REPLACE INTO meta (key, value) VALUES ('model', ?)",
+              model,
+            );
+          }
+        }),
       } satisfies ChannelRpc;
     });
   }),
@@ -616,6 +644,8 @@ export const ChannelLive: Layer.Layer<Channel, never, Cloudflare.Worker> =
           inWorker(stub().attachmentsSet(ref, thread)),
         attachmentOf: (ref) => inWorker(stub().attachmentOf(ref)),
         claimBootstrap: () => inWorker(stub().claimBootstrap()),
+        model: () => inWorker(stub().model()),
+        setModel: (model) => inWorker(stub().setModel(model)),
         socket: (request) => inWorker(stub().fetch(request).pipe(Effect.orDie)),
       });
     }),

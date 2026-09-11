@@ -62,6 +62,7 @@ import {
   type ReactNode,
 } from "react";
 import { AlchemyMark } from "@/components/app-header";
+import { SessionModelSelect } from "@/components/model-select";
 import { Answered, AnswerBox } from "@/components/notification";
 
 /* ── replies ──────────────────────────────────────────────────────── */
@@ -915,22 +916,33 @@ export const ChannelView = ({
                   : "Message the channel — the agent routes, you decide…"
               }
               aria-label="Message the channel"
-              className="min-h-12 resize-none border-0 bg-transparent pr-12 shadow-none focus-visible:ring-0"
+              className="min-h-12 resize-none border-0 bg-transparent shadow-none focus-visible:ring-0 dark:bg-transparent"
             />
-            <Button
-              size="icon"
-              variant="ghost"
-              disabled={draft.trim().length === 0 || sending}
-              onClick={send}
-              aria-label="Send"
-              className="absolute right-2 bottom-2 size-7 text-muted-foreground"
-            >
-              {sending ? (
-                <Spinner className="size-4" />
-              ) : (
-                <ArrowUp className="size-4" />
-              )}
-            </Button>
+            {/* the controls, bottom right, flat on the card: the channel
+                agent's model (every message runs a fresh session, so the
+                pick lives on the channel and governs the NEXT run) and
+                Send */}
+            <div className="flex items-center justify-end gap-1 px-2 pb-1.5">
+              <SessionModelSelect
+                sessionId="Channel:main"
+                label="The channel agent's model"
+                className="border-0 bg-transparent shadow-none dark:bg-transparent dark:hover:bg-accent"
+              />
+              <Button
+                size="icon"
+                variant="ghost"
+                disabled={draft.trim().length === 0 || sending}
+                onClick={send}
+                aria-label="Send"
+                className="size-7 text-muted-foreground"
+              >
+                {sending ? (
+                  <Spinner className="size-4" />
+                ) : (
+                  <ArrowUp className="size-4" />
+                )}
+              </Button>
+            </div>
           </div>
         </div>
       </div>

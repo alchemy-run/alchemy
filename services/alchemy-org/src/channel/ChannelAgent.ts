@@ -7,6 +7,7 @@ import * as Layer from "effect/Layer";
 import * as S from "effect/Schema";
 import { BadRef, makeEntityLookup } from "../github/Entity.ts";
 import { connected } from "../github/Repos.ts";
+import { models } from "../platform/Model.ts";
 import { mintThreadId, Threads } from "../thread/Threads.ts";
 import { Channel } from "./Channel.ts";
 
@@ -186,8 +187,14 @@ class UnknownRepo extends Data.TaggedError("UnknownRepo")<{
 }> {}
 class NotFound extends Data.TaggedError("NotFound")<{ message: string }> {}
 
+/** The channel's session name as the API addresses it — the standing
+ *  identity behind every `main@<seq>` run (`Channel:main`): what the
+ *  model selector picks for. */
+export const CHANNEL_SESSION_KEY = "main";
+
 /** `main@<seq>` — the run's pin rides in its session key. */
-export const channelRunKey = (seq: number): string => `main@${seq}`;
+export const channelRunKey = (seq: number): string =>
+  `${CHANNEL_SESSION_KEY}@${seq}`;
 
 const pinnedOf = (key: string): number => {
   const seq = Number(key.split("@")[1]);
@@ -206,6 +213,10 @@ export const ChannelAgentLive = ChannelAgent.make(
     // the frame by the tool or turn that needs it; the charter itself
     // runs once at build, for every run
     const pinned = Effect.map(AI.Thread, (thread) => pinnedOf(thread.key));
+    // the operator's model pick lives on the channel (the one thing a
+    // run does not start fresh from) — read once as the run's stance is
+    // provided, so a pick made between runs governs the next one
+    const getModel = yield* models;
 
     // one GitHub read client per connected repository
     const repos = yield* Effect.forEach(
@@ -517,7 +528,18 @@ export const ChannelAgentLive = ChannelAgent.make(
       channel renders those links with a hover card, and the operator
       follows them. Name the thread you created or steered by its id.
       If the ask is ambiguous, reply with the question instead of
-      guessing.`;
+      guessing.`.pipe(
+      Effect.provide(
+        // suspended: the facade resolves the DO stub as the call is
+        // made, and the charter runs at plan time where no binding exists
+        Layer.unwrap(
+          Effect.map(
+            Effect.suspend(() => channel.model()),
+            (pick) => getModel(pick),
+          ),
+        ),
+      ),
+    );
   }),
 ).pipe(
   Layer.provide(AI.CodeModeAsync()),

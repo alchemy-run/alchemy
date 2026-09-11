@@ -175,6 +175,14 @@ export class Channel extends Context.Service<
     readonly attachmentOf: (ref: string) => Effect.Effect<string | undefined>;
     /** Claim the one-time bootstrap; `true` exactly once. */
     readonly claimBootstrap: () => Effect.Effect<boolean>;
+    /**
+     * The model the CHANNEL AGENT samples with — a catalog id, or
+     * `undefined` for the org's default. Every channel run is a fresh
+     * session, so the pick persists here, on the channel, and each run
+     * reads it as it starts.
+     */
+    readonly model: () => Effect.Effect<string | undefined>;
+    readonly setModel: (model: string | undefined) => Effect.Effect<void>;
     /** Route the `/channel` WebSocket upgrade into the DO. */
     readonly socket: (
       request: HttpServerRequest,

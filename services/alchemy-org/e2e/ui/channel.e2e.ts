@@ -47,6 +47,37 @@ test("the composer posts to the channel and the echo lands live", async ({
   await expect(main(page)).toContainText("hello channel");
 });
 
+test("the composer's model selector picks the channel agent's model on `Channel:main`", async ({
+  page,
+  api,
+}) => {
+  api.channelModel = "gpt-5";
+  await openApp(page);
+  const select = page.getByRole("combobox", {
+    name: "The channel agent's model",
+  });
+  // the pick is read from the channel, not the default
+  await expect(select).toHaveAttribute("data-model", "gpt-5");
+  await expect(select).toContainText("GPT-5");
+
+  // pick DeepSeek: one PUT on the channel's session
+  await select.click();
+  await page.getByRole("option", { name: /DeepSeek V4.1 Flash/ }).click();
+  await expect
+    .poll(() => api.modelPicks)
+    .toEqual([{ session: "Channel:main", model: "deepseek-flash" }]);
+  await expect(select).toHaveAttribute("data-model", "deepseek-flash");
+  expect(api.channelModel).toBe("deepseek-flash");
+
+  // back to the default: `null` on the wire
+  await select.click();
+  await page.getByRole("option", { name: /^Default/ }).click();
+  await expect.poll(() => api.modelPicks.length).toBe(2);
+  expect(api.modelPicks[1]).toEqual({ session: "Channel:main", model: null });
+  await expect(select).toHaveAttribute("data-model", "default");
+  await expect(select).toContainText("Claude Haiku 4.5");
+});
+
 test("the run pill opens the run rail; the eval card shows code and output", async ({
   page,
   api,
@@ -583,7 +614,9 @@ test("a card is answered on the card: the words reach the thread's agent, quotin
 
   const card = main(page).locator("[data-card]");
   await expect(card).toContainText("Which base branch?");
-  await card.getByRole("button", { name: "Answer: Which base branch?" }).click();
+  await card
+    .getByRole("button", { name: "Answer: Which base branch?" })
+    .click();
   // the box takes focus; the card row underneath did not get selected
   const box = card.getByLabel("Your answer");
   await expect(box).toBeFocused();
@@ -592,12 +625,14 @@ test("a card is answered on the card: the words reach the thread's agent, quotin
   await box.press("ControlOrMeta+Enter");
 
   // ONE steer, to the card's thread, the card's headline quoted first
-  await expect.poll(() => api.steered).toEqual([
-    {
-      thread: "t-1",
-      text: "> Which base branch?\n\nmain — release/2.x is frozen",
-    },
-  ]);
+  await expect
+    .poll(() => api.steered)
+    .toEqual([
+      {
+        thread: "t-1",
+        text: "> Which base branch?\n\nmain — release/2.x is frozen",
+      },
+    ]);
   // the card now says so, and links into the thread
   await expect(card.locator("[data-answered]")).toContainText("Answered");
   await expect(card.getByLabel("Your answer")).toHaveCount(0);
@@ -613,15 +648,21 @@ test("Escape drops an answer being typed; Cancel too — nothing is sent", async
   await openApp(page);
 
   const card = main(page).locator("[data-card]");
-  await card.getByRole("button", { name: "Answer: Which base branch?" }).click();
+  await card
+    .getByRole("button", { name: "Answer: Which base branch?" })
+    .click();
   await card.getByLabel("Your answer").fill("hmm");
   await card.getByLabel("Your answer").press("Escape");
   await expect(card.getByLabel("Your answer")).toHaveCount(0);
-  await card.getByRole("button", { name: "Answer: Which base branch?" }).click();
+  await card
+    .getByRole("button", { name: "Answer: Which base branch?" })
+    .click();
   await card.getByRole("button", { name: "Cancel" }).click();
   await expect(card.getByLabel("Your answer")).toHaveCount(0);
   // Send stays off for an empty answer
-  await card.getByRole("button", { name: "Answer: Which base branch?" }).click();
+  await card
+    .getByRole("button", { name: "Answer: Which base branch?" })
+    .click();
   await expect(card.getByRole("button", { name: "Send" })).toBeDisabled();
   expect(api.steered).toEqual([]);
 });
@@ -645,9 +686,9 @@ test("the bell answers inline too — from any page, without leaving it", async 
   await box.fill("main");
   await dialog.getByRole("button", { name: "Send" }).click();
 
-  await expect.poll(() => api.steered).toEqual([
-    { thread: "t-1", text: "> Which base branch?\n\nmain" },
-  ]);
+  await expect
+    .poll(() => api.steered)
+    .toEqual([{ thread: "t-1", text: "> Which base branch?\n\nmain" }]);
   await expect(dialog.locator("[data-answered]")).toContainText("Answered");
   // still where they were
   await expect(page).toHaveURL(new RegExp(`${threadPath("t-2")}$`));

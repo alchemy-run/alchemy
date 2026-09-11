@@ -11,7 +11,11 @@ import * as HttpRouter from "effect/unstable/http/HttpRouter";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { Channel } from "./channel/Channel.ts";
-import { ChannelAgent, channelRunKey } from "./channel/ChannelAgent.ts";
+import {
+  CHANNEL_SESSION_KEY,
+  ChannelAgent,
+  channelRunKey,
+} from "./channel/ChannelAgent.ts";
 import { PublishToken } from "./github/PublishToken.ts";
 import {
   buildPullRequestFilesPage,
@@ -443,9 +447,19 @@ export const routes = Effect.gen(function* () {
     { status: 400 },
   );
 
+  /** The channel agent's pick is addressed as the session `Channel:main`
+   *  — the one channel, whichever `main@<seq>` run serves next. */
+  const isChannelSession = (term: string, key: string) =>
+    term === ChannelAgent["~alchemy/Name"] && key === CHANNEL_SESSION_KEY;
+
   /** Read a session's pick: a thread's from its state, an engineer's
-   *  from the session object; `null` = the default. */
+   *  from the session object, the channel's from the channel itself;
+   *  `null` = the default. */
   const sessionModel = Effect.fn(function* (term: string, key: string) {
+    if (isChannelSession(term, key)) {
+      const model = yield* channel.model();
+      return { model: model ?? null, default: DEFAULT_MODEL };
+    }
     if (term === THREAD_TERM) {
       const state = yield* threads.get(key);
       return state === undefined
@@ -489,7 +503,9 @@ export const routes = Effect.gen(function* () {
       );
       const chosen = yield* readModel;
       if (chosen === undefined) return yield* badModel;
-      if (term === THREAD_TERM) {
+      if (isChannelSession(term, key)) {
+        yield* channel.setModel(chosen.model);
+      } else if (term === THREAD_TERM) {
         if ((yield* threads.get(key)) === undefined) {
           return yield* HttpServerResponse.json(
             { error: "unknown thread" },

@@ -269,6 +269,8 @@ export class FakeApi {
   readonly defaultModel = "claude-haiku-4-5";
   /** An engineer session's own pick (`Engineer:<key>`), `null` = default. */
   engineerModels: Record<string, string | null> = {};
+  /** The channel agent's pick (`Channel:main`), `null` = default. */
+  channelModel: string | null = null;
   /** Every `PUT /api/chats/:id/model`, in order. */
   modelPicks: Array<{ session: string; model: string | null }> = [];
 
@@ -899,6 +901,16 @@ export class FakeApi {
         }
         return this.json(route, {
           model: this.threads[key]?.model ?? null,
+          default: this.defaultModel,
+        });
+      }
+      if (term === "Channel" && key === "main") {
+        if (method === "PUT") {
+          this.modelPicks.push({ session, model: body.model ?? null });
+          this.channelModel = body.model ?? null;
+        }
+        return this.json(route, {
+          model: this.channelModel,
           default: this.defaultModel,
         });
       }
