@@ -44,6 +44,7 @@ import { cn } from "@/lib/utils";
 import {
   Bot,
   Check,
+  ChevronDown,
   CircleDot,
   FileDiff,
   FolderGit2,
@@ -154,26 +155,79 @@ const AGENT_DOT: Record<string, string> = {
   stopped: "bg-muted-foreground/40",
 };
 
+/**
+ * A pane section: a heading that folds it, a one-line summary of what
+ * is in it (so a folded section — or one too long to read — still
+ * answers "how much?"), and a body that scrolls INSIDE a bounded
+ * height. A thread with twenty pulls assigned must not push its
+ * worktrees and agents off the bottom of the pane.
+ */
 const Section = ({
   title,
+  summary,
   actions,
   children,
 }: {
   title: string;
+  /** The count line beside the title — "19 pulls · 1 issue". */
+  summary?: string;
   /** Controls on the heading's right — the section-wide switches. */
   actions?: ReactNode;
   children: ReactNode;
-}) => (
-  <div className="flex flex-col gap-1 border-b border-border/60 px-3 py-2.5">
-    <div className="flex items-center gap-2">
-      <div className="min-w-0 flex-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/70">
-        {title}
+}) => {
+  const [open, setOpen] = useState(true);
+  return (
+    <div
+      data-section={title.toLowerCase()}
+      className="flex shrink-0 flex-col border-b border-border/60"
+    >
+      <div className="flex items-center gap-2 px-3 pt-2.5 pb-1">
+        <button
+          type="button"
+          onClick={() => setOpen((value) => !value)}
+          aria-expanded={open}
+          title={open ? `Fold ${title}` : `Unfold ${title}`}
+          className="group/section flex min-w-0 flex-1 cursor-pointer items-center gap-1 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/70 hover:text-muted-foreground"
+        >
+          <ChevronDown
+            className={cn(
+              "size-3 shrink-0 transition-transform",
+              !open && "-rotate-90",
+            )}
+          />
+          {title}
+          {summary !== undefined && (
+            <span className="min-w-0 truncate font-normal normal-case tracking-normal tabular-nums text-muted-foreground/60">
+              · {summary}
+            </span>
+          )}
+        </button>
+        {open && actions}
       </div>
-      {actions}
+      {open && (
+        <div className="flex max-h-[40vh] flex-col gap-1 overflow-y-auto px-3 pb-2.5">
+          {children}
+        </div>
+      )}
     </div>
-    {children}
-  </div>
-);
+  );
+};
+
+/** "19 pulls · 1 issue" — the count line over a thread's assignments. */
+export const assignedSummary = (
+  assigned: ReadonlyArray<{ readonly kind: "issue" | "pull" }>,
+): string | undefined => {
+  if (assigned.length === 0) return undefined;
+  const pulls = assigned.filter((entity) => entity.kind === "pull").length;
+  const issues = assigned.length - pulls;
+  const parts: Array<string> = [];
+  if (pulls > 0) parts.push(`${pulls} ${pulls === 1 ? "pull" : "pulls"}`);
+  if (issues > 0) parts.push(`${issues} ${issues === 1 ? "issue" : "issues"}`);
+  return parts.join(" · ");
+};
+
+const countOf = (n: number, noun: string): string =>
+  `${n} ${n === 1 ? noun : `${noun}s`}`;
 
 /** A section heading's switch: tiny, quiet, labelled by what it does. */
 const HeadingAction = ({
@@ -333,7 +387,7 @@ const ThreadPane = ({
   };
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-      <Section title="Assigned">
+      <Section title="Assigned" summary={assignedSummary(state.assigned)}>
         {state.assigned.length === 0 && (
           <div className="text-xs text-muted-foreground">
             Nothing assigned yet.
@@ -341,29 +395,39 @@ const ThreadPane = ({
         )}
         {state.assigned.map((entity) => {
           const parsed = parseEntityRef(entity.ref);
+          // a pull's row IS the way into its review: click anywhere on
+          // it; the tab strip names the open one while it is open
+          const opensReview = entity.kind === "pull" && parsed !== undefined;
+          const open = () => {
+            if (parsed !== undefined) {
+              onOpenReview(parsed.owner, parsed.repo, parsed.number);
+            }
+          };
           return (
             <div
               key={entity.ref}
-              className="flex flex-col gap-0.5 rounded-md px-1 py-1"
+              data-assigned={entity.ref}
+              onClick={opensReview ? open : undefined}
+              className={cn(
+                "flex flex-col gap-0.5 rounded-md px-1 py-1",
+                opensReview && "cursor-pointer hover:bg-accent/60",
+              )}
             >
               <div className="flex items-center gap-1.5">
                 {entityIcon(entity.kind, entity.state)}
-                <span className="min-w-0 flex-1 truncate text-[13px]">
-                  {entity.title}
-                </span>
-                {entity.kind === "pull" && parsed !== undefined && (
-                  <Hint label="Open the review — the diff beside this conversation">
-                    <button
-                      type="button"
-                      aria-label={`open review for ${entity.ref}`}
-                      onClick={() =>
-                        onOpenReview(parsed.owner, parsed.repo, parsed.number)
-                      }
-                      className="cursor-pointer rounded border border-border p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
-                    >
-                      <FileDiff className="size-3.5" />
-                    </button>
-                  </Hint>
+                {opensReview ? (
+                  <button
+                    type="button"
+                    aria-label={`open review for ${entity.ref}`}
+                    title="Open the review — the diff beside this conversation"
+                    className="min-w-0 flex-1 cursor-pointer truncate text-left text-[13px]"
+                  >
+                    {entity.title}
+                  </button>
+                ) : (
+                  <span className="min-w-0 flex-1 truncate text-[13px]">
+                    {entity.title}
+                  </span>
                 )}
               </div>
               <div className="flex min-w-0 items-center gap-x-2 pl-5 text-[11px] text-muted-foreground">
@@ -372,6 +436,7 @@ const ThreadPane = ({
                   target="_blank"
                   rel="noreferrer"
                   title={entity.ref}
+                  onClick={(event) => event.stopPropagation()}
                   className="shrink-0 whitespace-nowrap hover:text-foreground hover:underline"
                 >
                   {/* the number alone: a thread's assigned refs live in the one
@@ -380,14 +445,23 @@ const ThreadPane = ({
                 </a>
                 <span className="shrink-0">{entity.state}</span>
                 {entity.worktree !== undefined && (
-                  <WorktreeChip path={entity.worktree} />
+                  <span onClick={(event) => event.stopPropagation()}>
+                    <WorktreeChip path={entity.worktree} />
+                  </span>
                 )}
               </div>
             </div>
           );
         })}
       </Section>
-      <Section title="Worktrees">
+      <Section
+        title="Worktrees"
+        summary={
+          worktrees.length === 0
+            ? undefined
+            : countOf(worktrees.length, "worktree")
+        }
+      >
         {worktrees.length === 0 && (
           <div className="text-xs text-muted-foreground">
             No worktrees yet — the manager makes one per pull request it puts an
@@ -478,6 +552,13 @@ const ThreadPane = ({
           >
             <Section
               title="Agents"
+              summary={
+                state.agents.length === 0
+                  ? undefined
+                  : allRunning.length > 0
+                    ? `${countOf(state.agents.length, "agent")} · ${allRunning.length} running`
+                    : countOf(state.agents.length, "agent")
+              }
               actions={
                 state.agents.length > 0 && (
                   <>
@@ -839,9 +920,13 @@ export const ThreadView = ({
   onDeleteThread: () => void;
 }) => {
   const sessionId = threadSessionId(id);
-  const reviews = (state?.assigned ?? []).filter(
-    (entity) => entity.kind === "pull",
-  );
+  // the review in the body, resolved to its assignment (title, ref)
+  const openReview = useMemo(() => {
+    if (tab.kind !== "review") return undefined;
+    const ref = `${tab.owner}/${tab.repo}#${tab.number}`;
+    const entity = (state?.assigned ?? []).find((e) => e.ref === ref);
+    return { ref, number: tab.number, title: entity?.title ?? ref };
+  }, [tab, state?.assigned]);
   const agents = state?.agents ?? [];
   const openAgent = tab.kind === "agent" ? tab.key : undefined;
   const openSubagent = agents.find((agent) => agent.key === openAgent);
@@ -930,29 +1015,37 @@ export const ThreadView = ({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* header: name, title, tabs */}
+      {/* header: name, tabs — the title lives on the manager row of the
+          state pane, the strip needs the width */}
       <div className="flex items-center gap-3 border-b border-border bg-sidebar px-4 py-2">
-        <div className="flex min-w-0 items-baseline gap-2">
-          <span className="shrink-0 text-sm font-semibold">
-            {state?.name ?? id}
-          </span>
-          <span className="truncate text-xs text-muted-foreground">
-            {state?.title ?? ""}
-          </span>
-        </div>
+        <span
+          className="shrink-0 text-sm font-semibold"
+          title={state?.title ?? undefined}
+        >
+          {state?.name ?? id}
+        </span>
         {state?.status === "closed" && (
           <span className="shrink-0 rounded-full border border-border bg-muted px-2 py-0 text-[10px] text-muted-foreground">
             closed
           </span>
         )}
-        <div className="ml-auto flex items-center gap-1">
+        {/* the TAB STRIP: it takes the width the name leaves; a tab is never
+            narrower than its number, so past the edge the strip scrolls
+            sideways — the header never wraps or grows */}
+        <div
+          data-tabs=""
+          className="ml-auto flex min-w-0 flex-1 items-center gap-1 overflow-x-auto [scrollbar-width:thin]"
+        >
+          {/* right-aligns the tabs while they fit; collapses to nothing
+              once they overflow, so the strip scrolls from its left edge */}
+          <span aria-hidden className="min-w-0 flex-1" />
           <Hint label="The manager — the agent that runs this thread; its conversation is the thread's whole record">
             <button
               type="button"
               onClick={() => onTab({ kind: "chat" })}
               aria-current={tab.kind === "chat" ? "page" : undefined}
               className={cn(
-                "flex h-7 items-center gap-1.5 rounded-md border px-2 text-xs",
+                "flex h-7 shrink-0 items-center gap-1.5 rounded-md border px-2 text-xs",
                 tab.kind === "chat"
                   ? "border-border bg-card font-medium shadow-xs"
                   : "border-transparent text-muted-foreground hover:bg-accent/60 hover:text-foreground",
@@ -962,44 +1055,33 @@ export const ThreadView = ({
               manager
             </button>
           </Hint>
-          {reviews.map((entity) => {
-            const parsed = parseEntityRef(entity.ref);
-            if (parsed === undefined) return null;
-            const selected =
-              tab.kind === "review" &&
-              tab.owner === parsed.owner &&
-              tab.repo === parsed.repo &&
-              tab.number === parsed.number;
-            return (
-              <Hint
-                key={entity.ref}
-                label={`Review ${entity.ref} — the diff beside the conversation`}
+          {/* the OPEN review, while it is open: a temporary tab that says
+              what is selected — the pulls themselves live in the state
+              pane, not up here */}
+          {openReview !== undefined && (
+            <span
+              data-review-tab={openReview.ref}
+              className="flex h-7 shrink-0 items-center gap-0.5 rounded-md border border-border bg-card pl-2 pr-1 text-xs font-medium shadow-xs"
+            >
+              <span
+                aria-current="page"
+                title={openReview.title}
+                className="flex items-center gap-1.5"
               >
-                <button
-                  type="button"
-                  onClick={() =>
-                    onTab({
-                      kind: "review",
-                      owner: parsed.owner,
-                      repo: parsed.repo,
-                      number: parsed.number,
-                    })
-                  }
-                  aria-current={selected ? "page" : undefined}
-                  className={cn(
-                    "flex h-7 items-center gap-1.5 rounded-md border px-2 text-xs",
-                    selected
-                      ? "border-border bg-card font-medium shadow-xs"
-                      : "border-transparent text-muted-foreground hover:bg-accent/60 hover:text-foreground",
-                  )}
-                >
-                  <FileDiff className="size-3.5" />#{parsed.number}
-                </button>
-              </Hint>
-            );
-          })}
+                <FileDiff className="size-3.5" />#{openReview.number}
+              </span>
+              <button
+                type="button"
+                onClick={() => onTab({ kind: "chat" })}
+                aria-label="close review"
+                className="cursor-pointer rounded p-0.5 hover:bg-accent"
+              >
+                <X className="size-3" />
+              </button>
+            </span>
+          )}
           {openAgent !== undefined && (
-            <span className="flex h-7 items-center gap-0.5 rounded-md border border-border bg-card pl-2 pr-1 text-xs font-medium shadow-xs">
+            <span className="flex h-7 shrink-0 items-center gap-0.5 rounded-md border border-border bg-card pl-2 pr-1 text-xs font-medium shadow-xs">
               <span
                 aria-current="page"
                 title={openSubagent?.brief ?? openAgent}
@@ -1031,7 +1113,7 @@ export const ThreadView = ({
               <span
                 key={pty}
                 className={cn(
-                  "flex h-7 items-center gap-0.5 rounded-md border pl-2 pr-1 text-xs",
+                  "flex h-7 shrink-0 items-center gap-0.5 rounded-md border pl-2 pr-1 text-xs",
                   selected
                     ? "border-border bg-card font-medium shadow-xs"
                     : "border-transparent text-muted-foreground hover:bg-accent/60 hover:text-foreground",

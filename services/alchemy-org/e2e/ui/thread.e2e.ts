@@ -481,6 +481,64 @@ test("the state pane shows assigned refs, agents, and the worktree", async ({
   await expect(pane).toMatchAriaSnapshot({ name: "thread-pane.aria.yml" });
 });
 
+test("a crowded thread stays in bounds: sections count and scroll, the tab strip never grows the header", async ({
+  page,
+  api,
+}) => {
+  const pulls = Array.from({ length: 24 }, (_, i) => ({
+    ref: `${REPO}#${1500 + i}`,
+    kind: "pull" as const,
+    state: "open",
+    title: `fix(aws): small fix number ${i + 1} with a title long enough to truncate`,
+  }));
+  api.seedThread({
+    id: "t-1",
+    name: "aws-small-fixes",
+    title: "Small AWS provider fixes — recent sweep",
+    assigned: [
+      { ref: `${REPO}#12`, kind: "issue", state: "open", title: "Tracking" },
+      ...pulls,
+    ],
+    agents: [],
+  });
+  await openApp(page, threadPath("t-1"));
+
+  // the summary says how much without reading the list
+  const pane = page.getByRole("complementary", { name: "Thread state" });
+  const assigned = pane.locator("[data-section=assigned]");
+  await expect(
+    assigned.getByRole("button", { name: "Assigned · 24 pulls · 1 issue" }),
+  ).toBeVisible();
+  // …and the list scrolls INSIDE its section: Worktrees and Agents are
+  // still on screen below it
+  const box = (await assigned.boundingBox())!;
+  const viewport = page.viewportSize()!;
+  expect(box.height).toBeLessThan(viewport.height * 0.6);
+  await expect(pane.locator("[data-section=worktrees]")).toBeInViewport();
+  await expect(pane.locator("[data-section=agents]")).toBeInViewport();
+  // folding the section leaves the summary
+  await assigned.getByRole("button", { name: /^Assigned/ }).click();
+  await expect(assigned).not.toContainText("small fix number 1");
+  await expect(assigned).toContainText("24 pulls");
+
+  // the pulls are NOT tabs: the strip holds the manager (and agents,
+  // terminals) — 24 assignments add nothing up there
+  const strip = page.locator("[data-tabs]");
+  await expect(strip.locator("[data-review-tab]")).toHaveCount(0);
+  await expect(strip.getByRole("button")).toHaveCount(2); // manager, +
+
+  // clicking a pull's ROW opens its review (the diff takes the body);
+  // the strip shows that one pull as a temporary tab, and closing the
+  // tab returns to the manager
+  await assigned.getByRole("button", { name: /^Assigned/ }).click();
+  await pane.locator(`[data-assigned="${REPO}#1505"]`).click();
+  await expect(page).toHaveURL(/\/pull\/1505$/);
+  await expect(strip.locator("[data-review-tab]")).toHaveText(/#1505/);
+  await strip.getByRole("button", { name: "close review" }).click();
+  await expect(strip.locator("[data-review-tab]")).toHaveCount(0);
+  await expect(page).toHaveURL(/\/t-1$/);
+});
+
 test("an agent row opens the subagent's session; close returns to chat", async ({
   page,
   api,
