@@ -121,20 +121,33 @@ test("the run pill opens the run rail; the eval card shows code and output", asy
   await expect(trace).toContainText("search first and tally");
 
   // the eval card is ONE line: the program's TITLE and, inline, the
-  // result's last line; the full result, the logs and the source open
-  // progressively
+  // result's last line; open, it is a row of tabs — one pane at a time
   const card = rail.locator("[data-tool=eval]");
   await expect(card).toContainText("count the messages about reconcile");
   await expect(card.locator("[data-verdict]")).toHaveText('→ { "total": 3 }');
-  await expect(card).not.toContainText("result");
+  await expect(card.getByRole("tab")).toHaveCount(0);
   await expect(rail).not.toContainText("searching the stream…");
   await expect(rail).not.toContainText("search_messages");
   await card.getByRole("button").first().click();
-  await expect(card).toContainText("result");
-  await rail.getByRole("button", { name: /^logs · 1 line$/ }).click();
+  // a one-line result is already in the header — no result tab; the
+  // logs open first, the source is a tab away, never both at once
+  await expect(card.getByRole("tab")).toHaveText([
+    /^logs · 1 line$/,
+    /^code · 2 lines$/,
+  ]);
+  await expect(card.getByRole("tab", { name: /^logs/ })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
   await expect(rail).toContainText("searching the stream…");
-  await rail.getByRole("button", { name: /^code · 2 lines$/ }).click();
+  await expect(rail).not.toContainText("search_messages");
+  // switching tabs does not move the page: the tab stays put
+  const codeTab = card.getByRole("tab", { name: /^code/ });
+  const before = (await codeTab.boundingBox())!.y;
+  await codeTab.click();
   await expect(rail).toContainText("search_messages");
+  await expect(rail).not.toContainText("searching the stream…");
+  expect((await codeTab.boundingBox())!.y).toBeCloseTo(before, 0);
 
   // the run's FINAL reply belongs to the channel, not the rail
   await expect(rail).not.toContainText(

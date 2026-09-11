@@ -1249,41 +1249,93 @@ const splitEvalOutput = (
       };
 };
 
-/** A folded section of an eval card (its source, its logs): the
- *  operator reads the title and the result first and opens the rest
- *  only when curious. `label` names it; `count` sizes it. */
-const EvalFold = ({
-  label,
-  count,
-  children,
+type EvalPaneId = "result" | "logs" | "code";
+
+/**
+ * An eval card's body: ONE pane at a time behind a row of tabs —
+ * what happened (`logs`), what ran (`code`), and `result` only when
+ * it says more than the header's `→ …` already does (several lines,
+ * or one too long to fit). Opening with the most telling pane: a
+ * long result, else the logs, else the source. Switching tabs is
+ * anchored — the card's height changes under the cursor, the page
+ * does not move.
+ */
+const EvalPanes = ({
+  code,
+  logs,
+  result,
 }: {
-  label: string;
-  count: number;
-  children: ReactNode;
+  code: string;
+  logs: string | undefined;
+  /** The result, when it is worth a pane of its own. */
+  result: string | undefined;
 }) => {
-  const [open, setOpen] = useState(false);
+  const anchored = useAnchoredToggle();
+  const panes: Array<{ id: EvalPaneId; count: number }> = [];
+  if (result !== undefined) {
+    panes.push({ id: "result", count: countLines(result) });
+  }
+  if (logs !== undefined) panes.push({ id: "logs", count: countLines(logs) });
+  panes.push({ id: "code", count: countLines(code) });
+  const [active, setActive] = useState<EvalPaneId>(panes[0]!.id);
+  const shown = panes.some((pane) => pane.id === active)
+    ? active
+    : panes[0]!.id;
   return (
     <div>
-      <button
-        type="button"
-        onClick={() => setOpen((current) => !current)}
-        aria-expanded={open}
-        className="flex w-full cursor-pointer items-center gap-1.5 px-2 py-1.5 text-left text-[11px] font-medium text-muted-foreground hover:text-foreground"
+      <div
+        role="tablist"
+        className="flex items-center gap-3 border-b border-border/50 px-2.5"
       >
-        <ChevronDown
-          className={cn(
-            "size-3 shrink-0 transition-transform",
-            !open && "-rotate-90",
-          )}
-        />
-        {label}
-        <span className="font-normal">
-          · {count} line{count === 1 ? "" : "s"}
-        </span>
-      </button>
-      {open && children}
+        {panes.map((pane) => {
+          const selected = pane.id === shown;
+          return (
+            <button
+              key={pane.id}
+              type="button"
+              role="tab"
+              aria-selected={selected}
+              data-pane={pane.id}
+              onClick={(event) =>
+                anchored(event.currentTarget, () => setActive(pane.id))
+              }
+              className={cn(
+                "-mb-px flex cursor-pointer items-center gap-1 border-b py-1.5 text-[11px]",
+                selected
+                  ? "border-foreground/70 font-medium text-foreground"
+                  : "border-transparent text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {pane.id}
+              <span className="font-normal text-muted-foreground/70">
+                {" "}
+                · {pane.count} line{pane.count === 1 ? "" : "s"}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      <div role="tabpanel" data-pane={shown}>
+        {shown === "result" && result !== undefined && (
+          <WindowedText text={result} head={20} tail={10} />
+        )}
+        {shown === "logs" && logs !== undefined && (
+          <WindowedText text={logs} head={20} tail={10} />
+        )}
+        {shown === "code" && (
+          <div className="px-2 py-2 [&_.code-surface]:my-0">
+            <CodeCard code={code} language="typescript" />
+          </div>
+        )}
+      </div>
     </div>
   );
+};
+
+/** Does the result say more than the header's `→ last line` shows? */
+const resultNeedsPane = (result: string): boolean => {
+  const trimmed = result.trim();
+  return trimmed.includes("\n") || trimmed.length > 140;
 };
 
 /**
@@ -1294,10 +1346,10 @@ const EvalFold = ({
 const EXTRAS: Record<string, Renderer> = {
   /** CODEMODE's one tool — the model writes a whole module and titles
    *  it. ONE line by default — the title (the intent) and, at its
-   *  right, the last line of the result — and the operator opens
-   *  progressively: the card for the full result, then the logs and
-   *  the source behind their own folds. A pre-title transcript row
-   *  falls back to "Run code". */
+   *  right, the last line of the result — and the open card is a row
+   *  of tabs (logs, code, and the result when it is more than that
+   *  line), one pane at a time. A pre-title transcript row falls back
+   *  to "Run code". */
   eval: (input, output, running) => {
     const code = String(input.code ?? "");
     const title = typeof input.title === "string" ? input.title.trim() : "";
@@ -1326,30 +1378,25 @@ const EXTRAS: Record<string, Renderer> = {
           </>
         ),
       body: (
-        <div className="divide-y divide-border/50">
+        <div>
           {running && (
-            <div className="px-3 py-2 text-[11px] text-muted-foreground">
+            <div className="border-b border-border/50 px-3 py-1.5 text-[11px] text-muted-foreground">
               <span className="animate-pulse">evaluating…</span>
             </div>
           )}
-          {parsed !== undefined && parsed.result.length > 0 && (
-            <div>
-              <div className="px-2 pt-1.5 text-[11px] font-medium text-muted-foreground">
-                result
-              </div>
-              <WindowedText text={parsed.result} />
-            </div>
-          )}
-          {parsed?.logs !== undefined && parsed.logs.length > 0 && (
-            <EvalFold label="logs" count={countLines(parsed.logs)}>
-              <WindowedText text={parsed.logs} />
-            </EvalFold>
-          )}
-          <EvalFold label="code" count={countLines(code)}>
-            <div className="px-2 pb-2 [&_.code-surface]:my-0">
-              <CodeCard code={code} language="typescript" />
-            </div>
-          </EvalFold>
+          <EvalPanes
+            code={code}
+            logs={
+              parsed?.logs !== undefined && parsed.logs.trim().length > 0
+                ? parsed.logs.trim()
+                : undefined
+            }
+            result={
+              parsed !== undefined && resultNeedsPane(parsed.result)
+                ? parsed.result.trim()
+                : undefined
+            }
+          />
         </div>
       ),
     };
