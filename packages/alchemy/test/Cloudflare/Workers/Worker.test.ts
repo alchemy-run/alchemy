@@ -1264,6 +1264,72 @@ describe.concurrent("Cloudflare.Worker", () => {
     { timeout: 360_000 },
   );
 
+  test.provider(
+    "circular Worker URL bindings deploy and converge",
+    (stack) =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+
+        yield* stack.destroy();
+
+        const program = () =>
+          Effect.gen(function* () {
+            const a = yield* Cloudflare.Worker("CircularUrlA", { main });
+            const b = yield* Cloudflare.Worker("CircularUrlB", { main });
+            yield* a.bind`B_URL`({
+              bindings: [
+                {
+                  type: "plain_text",
+                  name: "B_URL",
+                  text: b.url.as<string>(),
+                },
+              ],
+            });
+            yield* b.bind`A_URL`({
+              bindings: [
+                {
+                  type: "plain_text",
+                  name: "A_URL",
+                  text: a.url.as<string>(),
+                },
+              ],
+            });
+            return { a, b };
+          });
+
+        const deployed = yield* stack.deploy(program());
+        for (const [worker, name, peerUrl] of [
+          [deployed.a, "B_URL", deployed.b.url],
+          [deployed.b, "A_URL", deployed.a.url],
+        ] as const) {
+          const settings = yield* workers.getScriptScriptAndVersionSetting({
+            accountId,
+            scriptName: worker.workerName,
+          });
+          expect(settings.bindings).toContainEqual(
+            expect.objectContaining({
+              type: "plain_text",
+              name,
+              text: peerUrl,
+            }),
+          );
+        }
+
+        const settled = yield* stack.plan(program());
+        for (const logicalId of ["CircularUrlA", "CircularUrlB"]) {
+          const node = (Object.values(settled.resources) as any[]).find(
+            (candidate) => candidate.resource.LogicalId === logicalId,
+          );
+          expect(node?.action).toBe("noop");
+        }
+
+        yield* stack.destroy();
+        yield* waitForWorkerToBeDeleted(deployed.a.workerName, accountId);
+        yield* waitForWorkerToBeDeleted(deployed.b.workerName, accountId);
+      }).pipe(logLevel),
+    { timeout: 360_000 },
+  );
+
   // Effect-valued env entries are stripped from the props comparison (#874),
   // so change detection for them rides entirely on the evaluated binding
   // data. This test guards that channel: when only the VALUE an env Effect
