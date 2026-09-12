@@ -59,6 +59,12 @@
       "worker": "./src/*.ts",
       "import": "./lib/*.js"
     },
+    "./UI/UIProvider": {
+      "types": "./lib/UI/UIProvider.d.ts",
+      "bun": "./src/UI/UIProvider.ts",
+      "worker": "./src/UI/UIProvider.ts",
+      "import": "./lib/UI/UIProvider.js"
+    },
     "./AI": {
       "types": "./lib/AI/index.d.ts",
       "bun": "./src/AI/index.ts",
@@ -106,6 +112,12 @@
       "bun": "./src/AWS/Lambda/*.ts",
       "worker": "./src/AWS/Lambda/*.ts",
       "import": "./lib/AWS/Lambda/*.js"
+    },
+    "./AWS/UI": {
+      "types": "./lib/AWS/UI.d.ts",
+      "bun": "./src/AWS/UI.ts",
+      "worker": "./src/AWS/UI.ts",
+      "import": "./lib/AWS/UI.js"
     },
     "./Command": {
       "types": "./lib/Command/index.d.ts",
@@ -173,6 +185,12 @@
       "worker": "./src/Cloudflare/Live.ts",
       "import": "./lib/Cloudflare/Live.js"
     },
+    "./Cloudflare/UI": {
+      "types": "./lib/Cloudflare/UI.d.ts",
+      "bun": "./src/Cloudflare/UI.ts",
+      "worker": "./src/Cloudflare/UI.ts",
+      "import": "./lib/Cloudflare/UI.js"
+    },
     "./Cloudflare/*": {
       "types": "./lib/Cloudflare/*/index.d.ts",
       "bun": "./src/Cloudflare/*/index.ts",
@@ -220,6 +238,12 @@
       "bun": "./src/Neon/*/index.ts",
       "worker": "./src/Neon/*/index.ts",
       "import": "./lib/Neon/*/index.js"
+    },
+    "./Neon/UI": {
+      "types": "./lib/Neon/UI.d.ts",
+      "bun": "./src/Neon/UI.ts",
+      "worker": "./src/Neon/UI.ts",
+      "import": "./lib/Neon/UI.js"
     },
     "./Hetzner": {
       "types": "./lib/Hetzner/index.d.ts",
@@ -306,6 +330,12 @@
       "bun": "./src/Planetscale/*/index.ts",
       "worker": "./src/Planetscale/*/index.ts",
       "import": "./lib/Planetscale/*/index.js"
+    },
+    "./Planetscale/UI": {
+      "types": "./lib/Planetscale/UI.d.ts",
+      "bun": "./src/Planetscale/UI.ts",
+      "worker": "./src/Planetscale/UI.ts",
+      "import": "./lib/Planetscale/UI.js"
     },
     "./Runtime": {
       "types": "./lib/Runtime.d.ts",
