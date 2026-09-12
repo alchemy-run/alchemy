@@ -172,9 +172,6 @@ const findByName = (projectId: string, name: string) =>
     Effect.map((services) => services.find((service) => service.name === name)),
   );
 
-const alreadyExists = (message: string) =>
-  /already exists|already in use|duplicate/i.test(message);
-
 const sameImage = (observed: string | null | undefined, desired: string) => {
   if (observed == null || observed.length === 0) return false;
   if (observed === desired) return true;
@@ -617,13 +614,18 @@ const listUploadedDeployment = (input: {
       Stream.take(1),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)[0]),
-      Effect.timeoutOrElse({
-        duration: "8 seconds",
-        orElse: () => Effect.succeed(undefined),
+      // Bounded pacing for the surrounding poll loop; a persistent timeout
+      // bubbles as TimeoutError instead of masquerading as "pending".
+      Effect.timeout("8 seconds"),
+      Effect.retry({
+        while: (e) => e._tag === "TimeoutError",
+        times: 2,
+        schedule: Schedule.spaced("1 second"),
       }),
-      Effect.catchTag(
-        ["NotFound", "UnknownRailwayError", "RailwayParseError"],
-        () => Effect.succeed(undefined),
+      // The deployment record lags the upload; absence means "not visible
+      // yet" and the caller treats it as pending. Anything else bubbles.
+      Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+        Effect.succeed(undefined),
       ),
     );
 
@@ -1141,12 +1143,13 @@ export const ServiceProvider = () =>
                 },
               })
               .pipe(
-                Effect.catchTag("RailwayValidationError", (e) =>
-                  alreadyExists(e.message)
-                    ? Effect.succeed(undefined)
-                    : Effect.fail(e),
+                // Create race: another reconcile won; re-read by name below.
+                // Railway reports name collisions as INTERNAL_SERVER_ERROR
+                // with `already exists` — typed as RailwayAlreadyExists in
+                // distilled (observed 2026-09-11).
+                Effect.catchTag(["RailwayAlreadyExists", "Conflict"], () =>
+                  Effect.succeed(undefined),
                 ),
-                Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
               );
             current = created ?? (yield* findByName(projectId, name));
           }
@@ -1374,28 +1377,20 @@ export const ServiceProvider = () =>
             !uploadSource &&
             (needsDeploy || instance?.latestDeployment == null)
           ) {
-            yield* railway
-              .serviceInstanceDeployV2({
-                environmentId,
-                serviceId: current.id,
-              })
-              .pipe(
-                Effect.catchTag("RailwayValidationError", () => Effect.void),
-              );
+            yield* railway.serviceInstanceDeployV2({
+              environmentId,
+              serviceId: current.id,
+            });
             instance =
               sourceRepo !== undefined
                 ? ((yield* getInstance(environmentId, current.id)) ?? instance)
                 : ((yield* waitForDeployment(environmentId, current.id)) ??
                   instance);
           } else if (uploadSource && needsDeploy) {
-            yield* railway
-              .serviceInstanceDeployV2({
-                environmentId,
-                serviceId: current.id,
-              })
-              .pipe(
-                Effect.catchTag("RailwayValidationError", () => Effect.void),
-              );
+            yield* railway.serviceInstanceDeployV2({
+              environmentId,
+              serviceId: current.id,
+            });
             instance =
               (yield* waitForDeployment(environmentId, current.id)) ?? instance;
           }
