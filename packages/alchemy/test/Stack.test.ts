@@ -44,6 +44,32 @@ describe("Alchemy.Stack error channel", () => {
       Effect.succeed({ value: "ok" }),
     );
 
+    const _stackName: string = stack.stackName;
+    expect(_stackName).toBe("InfallibleStack");
     expect(typeof stack).toBe("object");
+  });
+});
+
+describe("Alchemy.Stack runtime metadata", () => {
+  it("exposes stackName, providers, and state on a configured stack", () => {
+    const providers = Layer.empty as any;
+    const state = Layer.empty as any;
+    const stack = Alchemy.Stack(
+      "MetaStack",
+      { providers, state },
+      Effect.succeed({ value: "ok" }),
+    );
+
+    expect(stack.stackName).toBe("MetaStack");
+    expect(stack.providers).toBe(providers);
+    expect(stack.state).toBe(state);
+  });
+
+  it("exposes stackName on a class reference", () => {
+    class NamedStack extends Alchemy.Stack<NamedStack, { value: string }>()(
+      "NamedStack",
+    ) {}
+
+    expect(NamedStack.stackName).toBe("NamedStack");
   });
 });
