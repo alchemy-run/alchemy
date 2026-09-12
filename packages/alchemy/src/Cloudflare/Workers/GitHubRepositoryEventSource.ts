@@ -10,6 +10,7 @@ import {
   type RepositoryEventSourceProps,
   type RepositoryEventSourceService,
   type WebhookEvent,
+  type WebhookEventName,
 } from "../../GitHub/RepositoryEventSource.ts";
 import { Webhook } from "../../GitHub/Webhook.ts";
 import * as Namespace from "../../Namespace.ts";
@@ -53,6 +54,9 @@ export const GitHubRepositoryEventSourceLive = Layer.effect(
       // Namespaced under the host so the webhook's logical identity matches the
       // previous Binding.Policy.
       if (!globalThis.__ALCHEMY_RUNTIME__) {
+        const events = props.events.map((event) =>
+          event === "*" ? event : Webhooks.getEventName(event),
+        );
         yield* Namespace.push(
           ctx.LogicalId,
           Effect.gen(function* () {
@@ -60,7 +64,7 @@ export const GitHubRepositoryEventSourceLive = Layer.effect(
               owner: props.owner,
               repository: props.repository,
               url: Output.interpolate`${ctx.url}${path}`,
-              events: [...props.events],
+              events: events.includes("*") ? ["*"] : [...new Set(events)],
               secret: props.secret,
               contentType: "json",
             });
@@ -103,7 +107,7 @@ export const GitHubRepositoryEventSourceLive = Layer.effect(
 const handleDelivery = <Req>(
   request: cf.Request,
   secret: Effect.Effect<Redacted.Redacted<string> | undefined> | undefined,
-  events: ReadonlyArray<string>,
+  events: ReadonlyArray<WebhookEventName>,
   process: (event: WebhookEvent) => Effect.Effect<void, never, Req>,
 ): Effect.Effect<Response, never, Req> =>
   Effect.gen(function* () {
@@ -145,7 +149,11 @@ const handleDelivery = <Req>(
 
     // GitHub sends ping deliveries even for subscriptions to specific events.
     // Acknowledge them without passing an unselected event to a narrowed handler.
-    if (events.includes("*") || events.includes(delivery.name)) {
+    if (
+      events.some(
+        (event) => event === "*" || Webhooks.matchesEvent(delivery, event),
+      )
+    ) {
       yield* process(delivery).pipe(Effect.orDie);
     }
     return new Response(null, { status: 202 });

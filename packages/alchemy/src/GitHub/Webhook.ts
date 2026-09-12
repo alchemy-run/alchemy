@@ -8,7 +8,7 @@ import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { gitHubBaseUrlChanged, githubFor } from "./Client.ts";
 import type * as GitHub from "./Providers.ts";
-import type { WebhookEventName } from "./RepositoryEventSource.ts";
+import type { GitHubEventName } from "./RepositoryEventSource.ts";
 
 export interface WebhookProps {
   /**
@@ -33,7 +33,7 @@ export interface WebhookProps {
    * Use `["*"]` to receive every event GitHub emits.
    * @default ["push"]
    */
-  events?: WebhookEventName[];
+  events?: (GitHubEventName | "*")[];
 
   /**
    * Secret used to sign each delivery with `HMAC-SHA256`. The signature is
