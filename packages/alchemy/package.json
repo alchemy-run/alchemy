@@ -443,7 +443,6 @@
     "@types/aws-lambda": "catalog:aws",
     "aws4fetch": "catalog:aws",
     "capnweb": "^0.6.1",
-    "fast-glob": "catalog:cloudflare-runtime",
     "fflate": "^0.8.3",
     "libsodium-wrappers": "^0.8.3",
     "pathe": "catalog:tooling",
@@ -451,6 +450,7 @@
     "react": "catalog:frontend",
     "rolldown": "catalog:build",
     "string-width": "^8.2.2",
+    "tinyglobby": "catalog:cloudflare-runtime",
     "undici": "^7.16.0",
     "yaml": "catalog:shared"
   },

@@ -53,8 +53,8 @@
     "@distilled.cloud/cloudflare": "workspace:*",
     "@effect/platform-node": "catalog:effect",
     "esbuild": "catalog:cloudflare-runtime",
-    "fast-glob": "catalog:cloudflare-runtime",
-    "rolldown": "catalog:build"
+    "rolldown": "catalog:build",
+    "tinyglobby": "catalog:cloudflare-runtime"
   },
   "devDependencies": {
     "@astrojs/internal-helpers": "catalog:frontend",
