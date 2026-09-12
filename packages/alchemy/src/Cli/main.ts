@@ -13,7 +13,6 @@ import { AlchemyContextLive } from "alchemy/AlchemyContext";
 import { ArtifactStore, createArtifactStore } from "alchemy/Artifacts";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import { ProfileStoreLive } from "alchemy/Auth/Profile";
-import { routeCacheLayer } from "alchemy/Alchemist/Session";
 import { TelemetryLive } from "alchemy/Telemetry/Layer";
 import { PlatformServices } from "alchemy/Util/PlatformServices";
 import packageJson from "../../package.json" with { type: "json" };
@@ -180,7 +179,6 @@ const services = Layer.mergeAll(
   Layer.succeed(ArtifactStore, createArtifactStore()),
   FetchHttpClient.layer,
   ConfigProvider.layer(ConfigProvider.fromEnv()),
-  routeCacheLayer,
   Layer.provide(
     Layer.provideMerge(
       Layer.mergeAll(selectCliServices(), CliKit.CliKitInteraction),
