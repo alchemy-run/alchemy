@@ -14,17 +14,17 @@
     "pretest": "playwright install chromium"
   },
   "dependencies": {
-    "@solidjs/router": "^0.15.1",
-    "solid-js": "catalog:frontend"
+    "@solidjs/router": "catalog:solid-v1",
+    "solid-js": "catalog:"
   },
   "devDependencies": {
     "@alchemy.run/cloudflare-test-tools": "workspace:*",
-    "@playwright/test": "catalog:testing",
-    "@tailwindcss/postcss": "catalog:frontend",
-    "postcss": "catalog:frontend",
-    "solid-devtools": "catalog:frontend",
-    "tailwindcss": "catalog:frontend",
-    "vite": "^7.1.4",
-    "vite-plugin-solid": "catalog:frontend"
+    "@playwright/test": "catalog:",
+    "@tailwindcss/postcss": "catalog:",
+    "postcss": "catalog:",
+    "solid-devtools": "catalog:",
+    "tailwindcss": "catalog:",
+    "vite": "catalog:solid-v1",
+    "vite-plugin-solid": "catalog:"
   }
 }

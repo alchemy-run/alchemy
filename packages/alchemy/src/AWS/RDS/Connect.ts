@@ -1,4 +1,5 @@
 import type * as Credentials from "@distilled.cloud/aws/Credentials";
+import type * as Presign from "@distilled.cloud/aws/Presign";
 import type * as secretsmanager from "@distilled.cloud/aws/secrets-manager";
 import type * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
@@ -40,7 +41,7 @@ export interface ConnectionInfo {
    */
   refreshPassword?: Effect.Effect<
     Redacted.Redacted<string>,
-    Credentials.CredentialsError
+    Presign.PresignError
   >;
 }
 
@@ -163,7 +164,9 @@ export interface Connect extends Binding.Service<
   ) => Effect.Effect<
     Effect.Effect<
       ConnectionInfo,
-      secretsmanager.GetSecretValueError | Credentials.CredentialsError,
+      | secretsmanager.GetSecretValueError
+      | Credentials.CredentialsError
+      | Presign.PresignError,
       RuntimeContext
     >
   >

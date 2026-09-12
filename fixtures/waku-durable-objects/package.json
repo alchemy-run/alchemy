@@ -11,21 +11,21 @@
     "test:update-snapshots": "playwright test --update-snapshots"
   },
   "dependencies": {
-    "hono": "catalog:frontend",
-    "react": "catalog:frontend-rsc",
-    "react-dom": "catalog:frontend-rsc",
-    "react-server-dom-webpack": "catalog:frontend",
-    "waku": "catalog:frontend"
+    "hono": "catalog:",
+    "react": "catalog:react-rsc",
+    "react-dom": "catalog:react-rsc",
+    "react-server-dom-webpack": "catalog:",
+    "waku": "catalog:"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "catalog:cloudflare-runtime",
+    "@cloudflare/workers-types": "catalog:",
     "@alchemy.run/cloudflare-runtime": "workspace:*",
     "@alchemy.run/cloudflare-test-tools": "workspace:*",
     "@alchemy.run/frontend-frameworks": "workspace:*",
-    "@playwright/test": "catalog:testing",
+    "@playwright/test": "catalog:",
     "@types/node": "catalog:node24",
-    "@types/react": "catalog:frontend",
-    "@types/react-dom": "catalog:frontend",
-    "vite": "catalog:build"
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "vite": "catalog:"
   }
 }

@@ -14,30 +14,30 @@
     "pretest": "playwright install chromium"
   },
   "dependencies": {
-    "@effect/sql-pg": "catalog:effect",
-    "@tailwindcss/vite": "catalog:frontend",
-    "@tanstack/react-devtools": "latest",
-    "@tanstack/react-router": "catalog:frontend",
-    "@tanstack/react-router-devtools": "latest",
-    "@tanstack/react-start": "catalog:frontend",
-    "react": "catalog:frontend",
-    "react-dom": "catalog:frontend",
-    "tailwindcss": "catalog:frontend"
+    "@effect/sql-pg": "catalog:",
+    "@tailwindcss/vite": "catalog:",
+    "@tanstack/react-devtools": "catalog:",
+    "@tanstack/react-router": "catalog:",
+    "@tanstack/react-router-devtools": "catalog:",
+    "@tanstack/react-start": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "tailwindcss": "catalog:"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "catalog:cloudflare-runtime",
+    "@cloudflare/workers-types": "catalog:",
     "@alchemy.run/cloudflare-runtime": "workspace:*",
     "@alchemy.run/cloudflare-test-tools": "workspace:*",
-    "@effect/platform-node": "catalog:effect",
-    "@playwright/test": "catalog:testing",
-    "@tailwindcss/typography": "^0.5.16",
-    "@tanstack/devtools-vite": "latest",
-    "@types/node": "^22.10.2",
-    "@types/react": "catalog:frontend",
-    "@types/react-dom": "catalog:frontend",
-    "@vitejs/plugin-react": "^5.1.4",
-    "effect": "catalog:effect",
-    "vite": "catalog:build"
+    "@effect/platform-node": "catalog:",
+    "@playwright/test": "catalog:",
+    "@tailwindcss/typography": "catalog:",
+    "@tanstack/devtools-vite": "catalog:",
+    "@types/node": "catalog:tanstack-start-legacy",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@vitejs/plugin-react": "catalog:tanstack-start-legacy",
+    "effect": "catalog:",
+    "vite": "catalog:"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
