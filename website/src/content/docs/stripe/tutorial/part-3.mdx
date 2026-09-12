@@ -1,0 +1,206 @@
+---
+title: "Part 3: Worker Bindings"
+description: Retrieve the Product over HTTP and create Customers from the Worker.
+sidebar:
+  order: 3
+---
+
+import Terminal from "../../../../components/Terminal.astro";
+
+In [Part 2](/stripe/tutorial/part-2) the catalog lives on the Worker
+but `fetch` still returns `"ok"`. Bindings read Stripe back over
+HTTP — there is no native Stripe Worker binding.
+
+## Bind RetrieveProduct
+
+Pass the Product to `Stripe.RetrieveProduct`. That registers
+`products_read` on the host token and returns a callable. You can
+also pass a `prod_…` id string or an `Effect<Product>`:
+
+```diff lang="typescript"
+// src/api.ts
+export default class Api extends Cloudflare.Worker<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const product = yield* Stripe.Product("Pro", {
+      name: "Pro",
+      description: "Billed monthly",
+    });
+    const price = yield* Stripe.Price("ProMonthly", {
+      product,
+      currency: "usd",
+      unitAmount: 2000,
+      recurring: { interval: "month" },
+    });
+    const coupon = yield* Stripe.Coupon("Launch20", {
+      percentOff: 20,
+      duration: "once",
+      name: "Launch 20%",
+    });
++    const retrieveProduct = yield* Stripe.RetrieveProduct(product);
+    return {
+      fetch: Effect.gen(function* () {
+        return HttpServerResponse.text("ok");
+      }),
+    };
+  }),
+) {}
+```
+
+The callable requires `RuntimeContext` — it only runs inside the
+deployed Worker.
+
+## Handle GET /product
+
+Add the request handler, then call `retrieveProduct()` from `fetch`:
+
+```diff lang="typescript"
+// src/api.ts
++import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+
+export default class Api extends Cloudflare.Worker<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const product = yield* Stripe.Product("Pro", {
+      name: "Pro",
+      description: "Billed monthly",
+    });
+    const retrieveProduct = yield* Stripe.RetrieveProduct(product);
+    return {
+      fetch: Effect.gen(function* () {
++        const request = yield* HttpServerRequest;
++        if (request.url.startsWith("/product")) {
++          const live = yield* retrieveProduct().pipe(Effect.orDie);
++          return yield* HttpServerResponse.json({
++            id: live.id,
++            name: live.name,
++          });
++        }
+        return HttpServerResponse.text("ok");
+      }),
+    };
+  }),
+) {}
+```
+
+`Effect.orDie` turns a Stripe error into a 500 for this tutorial.
+
+## Provide RetrieveProductHttp
+
+The HTTP implementation is a Layer on the **Worker Effect**, not the
+Stack:
+
+```diff lang="typescript"
+// src/api.ts
+    return {
+      fetch: Effect.gen(function* () {
+        // ...
+      }),
+    };
+-  }),
++  }).pipe(Effect.provide(Stripe.RetrieveProductHttp)),
+) {}
+```
+
+## Deploy and fetch
+
+```sh
+bun alchemy deploy
+```
+
+<Terminal content={`[u]Plan[/u]: [g]1 to create[/g]
+
+[g]+[/g] [b]ApiStripeToken[/b] [d](Stripe.RestrictedApiKey)[/d]
+
+Proceed?
+◉ Yes ○ No`} />
+
+The RestrictedApiKey is the host token Bindings attach permissions
+to — see [Sell from a Worker](/stripe/guides/sell-from-a-worker). Then:
+
+```sh
+curl "$(bun alchemy stack output url)/product"
+```
+
+You get `{ "id": "prod_…", "name": "Pro" }`.
+
+## Bind CreateCustomer
+
+`CreateCustomer` is account-scoped — no resource argument. Yield it
+next to `RetrieveProduct`:
+
+```diff lang="typescript"
+// src/api.ts
+    const retrieveProduct = yield* Stripe.RetrieveProduct(product);
++    const createCustomer = yield* Stripe.CreateCustomer();
+    return {
+```
+
+## Provide CreateCustomerHttp
+
+```diff lang="typescript"
+// src/api.ts
+-  }).pipe(Effect.provide(Stripe.RetrieveProductHttp)),
++  }).pipe(
++    Effect.provide([
++      Stripe.RetrieveProductHttp,
++      Stripe.CreateCustomerHttp,
++    ]),
++  ),
+) {}
+```
+
+## Handle POST /customers
+
+```diff lang="typescript"
+// src/api.ts
+  fetch: Effect.gen(function* () {
+    const request = yield* HttpServerRequest;
+    if (request.url.startsWith("/product")) {
+      const live = yield* retrieveProduct().pipe(Effect.orDie);
+      return yield* HttpServerResponse.json({
+        id: live.id,
+        name: live.name,
+      });
+    }
++    if (request.method === "POST" && request.url.startsWith("/customers")) {
++      const body = (yield* request.json) as {
++        email?: string;
++        name?: string;
++      };
++      if (!body.email) {
++        return yield* HttpServerResponse.json(
++          { error: "email is required" },
++          { status: 400 },
++        );
++      }
++      const customer = yield* createCustomer({
++        email: body.email,
++        ...(body.name !== undefined ? { name: body.name } : {}),
++      }).pipe(Effect.orDie);
++      return yield* HttpServerResponse.json(
++        { id: customer.id, email: customer.email },
++        { status: 201 },
++      );
++    }
+    return HttpServerResponse.text("ok");
+  }),
+```
+
+Redeploy, then:
+
+```sh
+curl -X POST "$(bun alchemy stack output url)/customers" \
+  -H "content-type: application/json" \
+  -d '{"email":"ada@example.com"}'
+```
+
+## Recap
+
+The Worker retrieves the bound Product and creates Customers at
+runtime. Each capability is its own `Binding.Service` plus `*Http`
+layer. In [Part 4](/stripe/tutorial/part-4) you'll add webhooks to
+this Worker.

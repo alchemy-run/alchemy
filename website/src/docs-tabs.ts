@@ -103,6 +103,14 @@ export const DOCS_TABS: DocsTab[] = [
     hint: "repos · secrets · events",
   },
   {
+    label: "Stripe",
+    href: "/stripe",
+    prefixes: ["/stripe", "/providers/stripe"],
+    slot: "more",
+    category: "Payments",
+    hint: "products · prices · webhooks",
+  },
+  {
     label: "Docker",
     href: "/docker",
     prefixes: ["/docker", "/providers/docker"],

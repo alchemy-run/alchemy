@@ -1,0 +1,62 @@
+---
+title: Setup
+description: Connect alchemy to Stripe — secret key, profiles, and CI.
+---
+
+Sign up at [stripe.com](https://stripe.com) and copy a secret key
+from the [API keys](https://dashboard.stripe.com/apikeys) page
+(`sk_test_…` for test mode). Register the provider next to your
+cloud's:
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Stripe from "alchemy/Stripe";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+
+export default Alchemy.Stack(
+  "MyApp",
+  {
+    providers: Layer.mergeAll(Cloudflare.providers(), Stripe.providers()),
+    state: Alchemy.localState(),
+  },
+  Effect.gen(function* () {
+    // resources go here
+  }),
+);
+```
+
+Run `alchemy profile edit --add Stripe`. The secret key is entered
+interactively and saved under
+`~/.alchemy/credentials/<profile>/`. An optional API base URL
+overrides the default `https://api.stripe.com`.
+
+When `CI=true`, profiles are bypassed and Alchemy reads
+`STRIPE_API_KEY` directly. `STRIPE_API_BASE_URL` is optional.
+
+See [Profiles](/environments/profiles) for how credentials are stored
+and switched.
+
+## Test mode
+
+Use a `sk_test_…` key for development. Test mode is a full Stripe
+account: it mints real `prod_test_…`, `price_test_…`, and
+`cus_test_…` objects, and webhooks deliver over the real event
+pipeline. It is safe to destroy and recreate.
+
+## Restricted keys
+
+Bindings attach permissions to a
+[`RestrictedApiKey`](/providers/stripe/restrictedapikey) the same way
+Cloudflare HTTP bindings use `AccountApiToken`. Stripe has no public
+mint API, so the token is your secret key (or a Dashboard `rk_…`
+you pass as `value`). See [Sell from a Worker](/stripe/guides/sell-from-a-worker).
+
+## Next steps
+
+- [Stripe overview](/stripe) — resources and compositions.
+- [Tutorial part 1](/stripe/tutorial/part-1) — first Product.
+- [Catalog](/stripe/guides/catalog) — Product, Price, Coupon, PaymentLink.
+- [Webhooks](/stripe/guides/webhooks) — consume events on a Worker.

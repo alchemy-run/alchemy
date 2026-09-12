@@ -418,6 +418,21 @@ Repos, secrets, variables, and repository event sources as Stack resources; the 
 - [Actions secrets & variables](https://alchemy.run/github/actions-config) — Manage GitHub Actions secrets and variables as Stack resources — encrypted secrets, plain-text variables, bulk helpers, and CI credentials provisioned as code.
 - [Webhooks & events](https://alchemy.run/github/events) — Provision GitHub repository webhooks as resources, or subscribe a Cloudflare Worker to repository events with typed payloads and verified deliveries.
 
+## Stripe
+
+Products, prices, coupons, customers, payment links, and webhooks as Stack resources. HTTP bindings run inside a Worker or Lambda.
+
+- [Stripe](https://alchemy.run/stripe) — Products, prices, coupons, customers, payment links, and webhooks as Stack resources — catalog and billing next to the Worker that serves them.
+- [Setup](https://alchemy.run/stripe/setup) — Connect alchemy to Stripe — secret key, profiles, and CI.
+- [Part 1: Your First Product](https://alchemy.run/stripe/tutorial/part-1) — Install Alchemy, create a Stack with a Stripe Product, and deploy it.
+- [Part 2: Price on a Worker](https://alchemy.run/stripe/tutorial/part-2) — Put the Product on a Cloudflare Worker, attach a recurring Price and a Coupon, and deploy.
+- [Part 3: Worker Bindings](https://alchemy.run/stripe/tutorial/part-3) — Retrieve the Product over HTTP and create Customers from the Worker.
+- [Part 4: Webhooks](https://alchemy.run/stripe/tutorial/part-4) — Handle customer.created on the Worker with consumeEvents.
+- [Sell from a Worker](https://alchemy.run/stripe/guides/sell-from-a-worker) — Read the catalog and create customers over HTTP from a Cloudflare Worker.
+- [Catalog](https://alchemy.run/stripe/guides/catalog) — Product, Price, Coupon, PromotionCode, and PaymentLink as one checkout catalog.
+- [Handle webhook events](https://alchemy.run/stripe/guides/webhooks) — WebhookEndpoint lifecycle plus consumeEvents — one Effect per Stripe delivery.
+- [Connect](https://alchemy.run/stripe/guides/connect) — Connected accounts, persons, and external accounts — implemented, live-gated on STRIPE_TEST_CONNECT.
+
 ## Docker
 
 Local and CI Docker as Stack resources — images, containers, networks, and volumes driven through the active Docker CLI context; cloud container runtimes (Cloudflare Containers, ECS) consume the pushed image refs from their own hubs.
@@ -452,4 +467,4 @@ Cloud-agnostic local process primitives — memoized builds, one-off commands, a
 
 Per-resource API reference, generated from JSDoc on the source `.ts` files via `bun generate:api-reference`. Each page documents the resource's input properties (with types, defaults, and constraints), output attributes, and Quick Reference / Examples sections derived from `@section` / `@example` JSDoc tags.
 
-The per-resource pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per resource. Warning: it is large (~911 KB) — only fetch it when you need to locate a specific resource's reference page.
+The per-resource pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per resource. Warning: it is large (~941 KB) — only fetch it when you need to locate a specific resource's reference page.
