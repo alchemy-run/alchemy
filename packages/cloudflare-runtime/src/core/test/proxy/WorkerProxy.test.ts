@@ -369,6 +369,44 @@ layer(services, { excludeTestServices: true })((it) => {
   );
 
   it.effect(
+    "fail answers parked connections with the message at once, and new ones until the next set",
+    () =>
+      Effect.gen(function* () {
+        const proxy = yield* WorkerProxy.WorkerProxy;
+        const upstream = yield* serveUpstream(HTTP_WORKER);
+        const instance = yield* proxy.serve();
+        const get = (path: string) =>
+          Effect.promise(() =>
+            fetch(new URL(path, instance.url)).then(async (res) => ({
+              status: res.status,
+              body: (await res.json().catch(() => undefined)) as
+                | { error: { message: string } }
+                | undefined,
+            })),
+          );
+
+        // Parked: nothing is set. `fail` must release it immediately, well
+        // inside the default pending timeout.
+        const parked = yield* Effect.forkChild(get("/"));
+        yield* Effect.sleep("50 millis");
+        yield* instance.fail("bundle exploded");
+        const first = yield* Fiber.join(parked);
+        expect(first.status).toBe(502);
+        expect(first.body?.error.message).toBe("bundle exploded");
+
+        // Still failed: a new connection is answered the same way.
+        const second = yield* get("/");
+        expect(second.status).toBe(502);
+        expect(second.body?.error.message).toBe("bundle exploded");
+
+        // `set` clears the failure.
+        yield* instance.set(upstream);
+        const third = yield* get("/echo");
+        expect(third.status).toBe(200);
+      }),
+  );
+
+  it.effect(
     "answers 502 immediately when nothing listens at the upstream",
     () =>
       Effect.gen(function* () {

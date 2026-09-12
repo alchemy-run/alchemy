@@ -6,7 +6,6 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
 import * as Scope from "effect/Scope";
 import * as NodeNet from "node:net";
 import * as Port from "../internal/Port.ts";
@@ -92,6 +91,13 @@ export interface WorkerProxyInstance {
   readonly set: (upstream: URL) => Effect.Effect<void>;
   /** Park new connections until the next `set`. Spliced connections are left alone. */
   readonly unset: () => Effect.Effect<void>;
+  /**
+   * Answer parked connections, and new ones until the next `set`, with a 502
+   * carrying `message` right away: the upstream is not coming (a bundle
+   * error, a dead dev server), so waiting out the pending timeout would
+   * only hide the cause.
+   */
+  readonly fail: (message: string) => Effect.Effect<void>;
 }
 
 /**
@@ -168,18 +174,22 @@ interface Relay {
   readonly accept: (socket: NodeNet.Socket) => void;
   readonly set: (upstream: Upstream) => Effect.Effect<void>;
   readonly unset: Effect.Effect<void>;
+  readonly fail: (message: string) => Effect.Effect<void>;
   /** Interrupts every connection, destroying its sockets. */
   readonly close: Effect.Effect<void>;
 }
 
 /**
- * The relay state: the current target, a `Deferred` that parked connections
- * wait on until the next `set`, and every connection that is spliced to an
- * upstream, so a `set` elsewhere can reset it.
+ * The relay state: the current target or failure message, a `Deferred` that
+ * parked connections wait on until the next `set` or `fail`, and every
+ * connection that is spliced to an upstream, so a `set` elsewhere can reset
+ * it.
  */
 const makeRelay = (pendingTimeout: Duration.Duration): Relay => {
   let target: Upstream | undefined;
-  let next = Deferred.makeUnsafe<Upstream>();
+  let failure: string | undefined;
+  // Failed with the 502 message when the upstream is not coming.
+  let next = Deferred.makeUnsafe<Upstream, string>();
   const connections = new Set<Fiber.Fiber<void>>();
   const pinned = new Set<{
     readonly target: Upstream;
@@ -250,18 +260,25 @@ const makeRelay = (pendingTimeout: Duration.Duration): Relay => {
         upstream.on("close", () => socket.destroy());
       });
 
-    const arrived =
-      target !== undefined
-        ? Option.some(target)
-        : yield* Deferred.await(next).pipe(
-            Effect.timeoutOption(pendingTimeout),
-          );
-    if (Option.isSome(arrived)) {
-      yield* splice(arrived.value);
+    const arrival = yield* Effect.result(
+      failure !== undefined
+        ? Effect.fail(failure)
+        : target !== undefined
+          ? Effect.succeed(target)
+          : Deferred.await(next).pipe(
+              Effect.timeoutOrElse({
+                duration: pendingTimeout,
+                orElse: () =>
+                  Effect.fail(
+                    `No upstream configured for the worker proxy after ${Duration.format(pendingTimeout)}`,
+                  ),
+              }),
+            ),
+    );
+    if (arrival._tag === "Success") {
+      yield* splice(arrival.success);
     } else {
-      yield* reject(
-        `No upstream configured for the worker proxy after ${Duration.format(pendingTimeout)}`,
-      );
+      yield* reject(arrival.failure);
     }
     // From here the socket does the talking; the client closing ends the
     // fiber (see `accept`), and the finalizers destroy both ends.
@@ -282,8 +299,9 @@ const makeRelay = (pendingTimeout: Duration.Duration): Relay => {
     set: (to) =>
       Effect.gen(function* () {
         target = to;
+        failure = undefined;
         const waiting = next;
-        next = Deferred.makeUnsafe<Upstream>();
+        next = Deferred.makeUnsafe<Upstream, string>();
         yield* Deferred.succeed(waiting, to);
         // Whatever is still pinned to another upstream is about to be torn down.
         for (const pin of pinned) {
@@ -292,7 +310,16 @@ const makeRelay = (pendingTimeout: Duration.Duration): Relay => {
       }),
     unset: Effect.sync(() => {
       target = undefined;
+      failure = undefined;
     }),
+    fail: (message) =>
+      Effect.gen(function* () {
+        target = undefined;
+        failure = message;
+        const waiting = next;
+        next = Deferred.makeUnsafe<Upstream, string>();
+        yield* Deferred.fail(waiting, message);
+      }),
     close: Fiber.interruptAll(connections),
   };
 };
@@ -466,6 +493,7 @@ export const WorkerProxyLive = Layer.effect(
           proxySharedSecret: resolved.proxySharedSecret,
           set: (upstream) => relay.set(upstreamOf(upstream)),
           unset: () => relay.unset,
+          fail: relay.fail,
         } satisfies WorkerProxyInstance;
       }),
     });

@@ -1052,10 +1052,13 @@ export const LocalWorkerProvider = () =>
                 ]);
               }
             } else if (event._tag === "Error") {
-              return Effect.logError(
-                `[${worker.fqn}] Bundle error`,
-                event.error,
-              );
+              return Effect.all([
+                Effect.logError(`[${worker.fqn}] Bundle error`, event.error),
+                // No updated worker is coming from this build: answer
+                // parked requests with the error now instead of after the
+                // pending timeout.
+                Effect.forkChild(proxy.fail(event.error.message)),
+              ]);
             }
             return Effect.void;
           }),
@@ -1084,10 +1087,13 @@ export const LocalWorkerProvider = () =>
                   status = "update";
                   return message;
                 } else {
-                  return Effect.logError(
-                    `[${worker.fqn}] Error`,
-                    Cause.squash(exit.cause),
-                  );
+                  return Effect.all([
+                    Effect.logError(
+                      `[${worker.fqn}] Error`,
+                      Cause.squash(exit.cause),
+                    ),
+                    proxy.fail(Cause.pretty(exit.cause)),
+                  ]);
                 }
               }),
             ),
@@ -1310,17 +1316,19 @@ export const LocalWorkerProvider = () =>
                 );
                 workerdScopes.set(worker.fqn, scope);
                 latestViteServes.set(worker.fqn, args);
-                // Unexpected child death: log, park the proxy, and mark the
-                // instance for update on the next plan. Forked into the
-                // child's scope so a deliberate restart or teardown
-                // interrupts the watcher before the process is killed.
+                // Unexpected child death: log, fail the proxy so requests
+                // see why instead of parking, and mark the instance for
+                // update on the next plan. Forked into the child's scope so
+                // a deliberate restart or teardown interrupts the watcher
+                // before the process is killed.
                 yield* child.exitCode.pipe(
-                  Effect.flatMap((exitCode) =>
-                    Effect.logWarning(
-                      `[${worker.fqn}] Dev server child exited unexpectedly with code ${exitCode}`,
-                    ),
-                  ),
-                  Effect.andThen(proxy.unset().pipe(Effect.ignore)),
+                  Effect.flatMap((exitCode) => {
+                    const message = `[${worker.fqn}] Dev server child exited unexpectedly with code ${exitCode}`;
+                    return Effect.all([
+                      Effect.logWarning(message),
+                      proxy.fail(message),
+                    ]);
+                  }),
                   Effect.andThen(invalidate),
                   Effect.forkIn(scope),
                 );
