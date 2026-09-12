@@ -43,7 +43,8 @@ export interface DBInstanceProps {
    */
   dbName?: string;
   /**
-   * Allocated storage in GiB (standalone instances). In-place modify.
+   * Minimum allocated storage in GiB (standalone instances). RDS cannot
+   * shrink storage; increases made by storage autoscaling are preserved.
    * @default undefined
    */
   allocatedStorage?: number;
@@ -852,7 +853,15 @@ export const DBInstanceProvider = () =>
             };
             setIf("DBInstanceClass", news.dbInstanceClass, observed.DBInstanceClass); // prettier-ignore
             setIf("EngineVersion", news.engineVersion, observed.EngineVersion);
-            setIf("AllocatedStorage", news.allocatedStorage, observed.AllocatedStorage); // prettier-ignore
+            // RDS cannot shrink storage, including allocation added by autoscaling.
+            if (
+              news.allocatedStorage !== undefined &&
+              (observed.AllocatedStorage === undefined ||
+                news.allocatedStorage > observed.AllocatedStorage)
+            ) {
+              core.AllocatedStorage = news.allocatedStorage;
+              coreDirty = true;
+            }
             setIf("MaxAllocatedStorage", news.maxAllocatedStorage, observed.MaxAllocatedStorage); // prettier-ignore
             setIf("StorageType", news.storageType, observed.StorageType);
             setIf("Iops", news.iops, observed.Iops);
