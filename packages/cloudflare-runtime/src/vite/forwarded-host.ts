@@ -1,7 +1,7 @@
 import {
   HEADER_ORIGINAL_URL,
   HEADER_PROXY_SHARED_SECRET,
-} from "../core/proxy/ProxyHeaders.shared.ts";
+} from "../core/globals/ProxyHeaders.shared.ts";
 import type { IncomingMessage } from "node:http";
 import type { TLSSocket } from "node:tls";
 import type { IncomingHttpHeaders } from "node:http";

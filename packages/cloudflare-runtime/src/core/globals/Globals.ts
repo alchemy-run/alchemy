@@ -21,7 +21,7 @@ import * as Plugin from "../Plugin.ts";
 import { PluginContext } from "../PluginContext.ts";
 import { ConfigError } from "../RuntimeError.shared.ts";
 import type * as WorkerdConfig from "../workerd/Config.ts";
-import { BINDING_PROXY_SHARED_SECRET } from "../proxy/ProxyHeaders.shared.ts";
+import { BINDING_PROXY_SHARED_SECRET } from "./ProxyHeaders.shared.ts";
 import * as Cf from "./Cf.ts";
 import {
   BINDING_EMAIL_DIRECTORY,

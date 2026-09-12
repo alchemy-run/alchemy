@@ -4,7 +4,7 @@ import * as WorkerProxy from "../../proxy/WorkerProxy.ts";
 import {
   HEADER_ORIGINAL_URL,
   HEADER_PROXY_SHARED_SECRET,
-} from "../../proxy/ProxyHeaders.shared.ts";
+} from "../../globals/ProxyHeaders.shared.ts";
 import { localRuntimeLayer, startTestWorker } from "../helpers/runtime.ts";
 
 layer(localRuntimeLayer, { excludeTestServices: true })((it) => {
