@@ -1,2 +1,9 @@
 #!/usr/bin/env sh
-node scripts/bootstrap-distilled.mjs "$@"
+# Git resolves core.hooksPath in the repository that ran the command, then runs
+# the hook with cwd at the root of the just-checked-out working tree — for
+# `git worktree add` that is the new worktree, whose tree may predate this
+# script. Resolve the script next to this hook (its own repository's copy) and
+# let it take the checkout root from cwd.
+script="$(dirname "$0")/../scripts/bootstrap-distilled.mjs"
+[ -f "$script" ] || exit 0
+node "$script" "$@"

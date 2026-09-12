@@ -38,9 +38,14 @@ interface Tree {
  * script) — a worktree of `.git/modules/distilled` at the commit the
  * parent records, sharing the primary checkout's objects. The vendor
  * submodules (`update = none`) stay absent, as in a fresh clone.
- * `node_modules` is NOT installed — a tree is ready in seconds, and
- * `pnpm install` (hardlinks from the shared store) is the session's
- * first build step, not the checkout's.
+ * `node_modules` is SEEDED, not installed: every package dir the tree
+ * tracks gets the workspace's own node_modules as an APFS
+ * copy-on-write clone (one `clonefile(2)` each — seconds, ~2% of the
+ * apparent size on disk, writes stay private). The session starts
+ * from the same installed-and-built state as the developer's
+ * workspace; its `pnpm install` reconciles only the branch's lockfile
+ * delta. On non-APFS hosts seeding is skipped and `pnpm install`
+ * (hardlinks from the shared store) is the session's first build step.
  *
  * Every verb is ONE `exec` of `scripts/worktree.ts` on the host, which
  * serializes itself with a lock directory. Nothing is locked or

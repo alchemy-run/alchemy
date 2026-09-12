@@ -30,7 +30,10 @@ function tryGit(args, cwd) {
 export function bootstrap(root, previousHead) {
   const checkout = resolve(root, "submodules/distilled");
   // Use the index, just like `git submodule update`, including a staged pin.
-  const pin = git(["rev-parse", ":submodules/distilled"], root);
+  // A checkout of a tree that predates the distilled submodule has no pin and
+  // nothing to bootstrap.
+  const pin = tryGit(["rev-parse", ":submodules/distilled"], root);
+  if (pin === undefined) return;
   const commonDir = git(
     ["rev-parse", "--path-format=absolute", "--git-common-dir"],
     root,
@@ -175,9 +178,10 @@ function ensureCommit(checkout, pin) {
 
 // Run only for post-checkout branch/worktree checkouts, not file checkouts.
 // Hook arguments are old HEAD, new HEAD, and the branch-checkout flag.
+// Git runs hooks with cwd at the root of the checked-out working tree; for
+// `git worktree add` that is the NEW worktree while the executed hook (and
+// this script) belong to the repository that ran the command, so the root must
+// come from cwd, never from this file's location.
 if (import.meta.main && process.argv[4] === "1") {
-  bootstrap(
-    resolve(import.meta.dirname, ".."),
-    process.argv[2],
-  );
+  bootstrap(process.cwd(), process.argv[2]);
 }
