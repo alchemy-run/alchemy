@@ -55,6 +55,11 @@ export interface WorkerBundleOptions {
       };
   stack: { name: string; stage: string };
   extraOptions: WorkerBuildOptions | undefined;
+  /**
+   * Named export to load from `main`. `"default"` is a default import.
+   * @default "default"
+   */
+  handler?: string;
 }
 
 /**
@@ -139,7 +144,11 @@ export const WorkerBundle = Effect.gen(function* () {
         options.entry.kind === "effect"
           ? [
               virtualEntryPlugin(
-                makeEffectVirtualEntry(options.entry.exports, options.stack),
+                makeEffectVirtualEntry(
+                  options.entry.exports,
+                  options.stack,
+                  options.handler ?? "default",
+                ),
               ),
             ]
           : undefined,
@@ -208,9 +217,12 @@ export const WorkerBundle = Effect.gen(function* () {
   };
 });
 
+const HANDLER_IDENT = /^[A-Za-z_$][\w$]*$/;
+
 export const makeEffectVirtualEntry = (
   exports: Record<string, DurableObjectExport | WorkflowExport>,
   stack: { name: string; stage: string },
+  handler = "default",
 ) => {
   const doClasses: string[] = [];
   const wfClasses: string[] = [];
@@ -223,14 +235,24 @@ export const makeEffectVirtualEntry = (
   }
   const hasDoClasses = doClasses.length > 0;
   const hasWfClasses = wfClasses.length > 0;
-  return (importPath: string) => `
+  if (!HANDLER_IDENT.test(handler)) {
+    throw new Error(
+      `Worker handler ${JSON.stringify(handler)} is not a valid JavaScript identifier`,
+    );
+  }
+  return (importPath: string) => {
+    const entryImport =
+      handler === "default"
+        ? `import entrypoint from ${JSON.stringify(importPath)};`
+        : `import { ${handler} as entrypoint } from ${JSON.stringify(importPath)};`;
+    return `
 import * as Effect from "effect/Effect";
 
 import { env, DurableObject, WorkerEntrypoint${hasWfClasses ? ", WorkflowEntrypoint" : ""} } from "cloudflare:workers";
 import { makeDurableObjectBridge, makeWorkerBridge${hasWfClasses ? ", makeWorkflowBridge" : ""} } from "alchemy/Cloudflare";
 import { makeEntrypointLayer } from "alchemy/Runtime";
 
-import entrypoint from ${JSON.stringify(importPath)};
+${entryImport}
 
 const meta = {
   entrypoint,
@@ -262,6 +284,7 @@ ${[
     : []),
 ].join("\n")}
 `;
+  };
 };
 
 /**
@@ -283,6 +306,7 @@ export const makeRolldownSource = (options: {
     entry: ctx.entry,
     stack: ctx.stack,
     extraOptions: ctx.extraOptions,
+    handler: ctx.handler,
   });
   return bundleSource({
     build: (ctx) =>

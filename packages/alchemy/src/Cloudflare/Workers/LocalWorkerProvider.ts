@@ -545,6 +545,7 @@ export const LocalWorkerProvider = () =>
                 },
             stack: { name: stack.name, stage: stack.stage },
             extraOptions: props.build,
+            handler: props.handler ?? "default",
           } satisfies WorkerBundleOptions,
           assets: props.assets,
           dev,

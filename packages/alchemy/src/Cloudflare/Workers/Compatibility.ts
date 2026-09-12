@@ -80,10 +80,19 @@ export const getCompatibility = (props: WorkerProps) => {
     );
   }
   const date = props.compatibility?.date ?? DEFAULT_COMPATIBILITY_DATE;
+  // workerd rejects a redundant positive `nodejs_compat` once the date
+  // supplies that behavior (#1443: "does not need to be specified anymore").
+  // `getToolingCompatibility` re-materializes the flag for bundlers.
+  const flagsForDate =
+    date >= NODEJS_COMPAT_DEFAULT_ON
+      ? userFlags.filter(
+          (flag) => flag !== "nodejs_compat" && flag !== "nodejs_compat_v2",
+        )
+      : userFlags;
   return {
     date,
     flags: [
-      ...userFlags,
+      ...flagsForDate,
       // Required while Python Workers are in open beta — the upload API
       // rejects Python modules without it.
       ...(python ? ["python_workers"] : []),
@@ -99,7 +108,7 @@ export const getCompatibility = (props: WorkerProps) => {
       // `nodejs_compat` alongside it would send Cloudflare a contradictory
       // flag pair.
       ...(python ||
-      userFlags.includes("no_nodejs_compat") ||
+      flagsForDate.includes("no_nodejs_compat") ||
       date >= NODEJS_COMPAT_DEFAULT_ON
         ? []
         : props.isExternal

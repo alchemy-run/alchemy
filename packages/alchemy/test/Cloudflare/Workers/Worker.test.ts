@@ -30,6 +30,7 @@ import {
 } from "../Utils/Worker.ts";
 import type { Counter, Meter } from "./fixtures/do-counter-worker.ts";
 import InternalWorker from "./fixtures/internal-worker.ts";
+import { api as RateLimitCompatWorker } from "./fixtures/rate-limit-compat-worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 const { test: devTest } = Test.make({
@@ -799,6 +800,31 @@ describe.concurrent("Cloudflare.Worker", () => {
 
       yield* stack.destroy();
     }).pipe(logLevel),
+  );
+
+  // #1443: Worker is a named export in the same file as a default-exported
+  // Stack. `handler: "api"` plucks that export instead of the Stack.
+  devTest.provider(
+    "dev mode: RateLimit worker with default compatibility serves locally",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        const worker = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* RateLimitCompatWorker;
+          }),
+        );
+
+        expect(worker.url).toMatch(/^http:\/\/localhost:\d+$/);
+        yield* expectUrlContains(`${worker.url}/`, "ok", {
+          timeout: "30 seconds",
+          label: "local rate-limit worker",
+        });
+
+        yield* stack.destroy();
+      }).pipe(logLevel),
+    { timeout: 120_000 },
   );
 
   // Drift regression: if something external (a previous failed deploy,
