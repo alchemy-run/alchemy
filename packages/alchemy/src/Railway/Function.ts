@@ -13,6 +13,7 @@ import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import * as FileSystem from "effect/FileSystem";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import { Unowned } from "../AdoptPolicy.ts";
 import * as Bundle from "../Bundle/Bundle.ts";
 import { isResolved } from "../Diff.ts";
@@ -655,9 +656,6 @@ const deployReady = (status: string | undefined) =>
 const deployFailed = (status: string | undefined) =>
   status === "FAILED" || status === "CRASHED" || status === "REMOVED";
 
-const alreadyExists = (message: string) =>
-  /already exists|already in use|duplicate/i.test(message);
-
 const getById = (serviceId: string) =>
   railway.service({ id: serviceId }).pipe(
     Effect.map((service) => (isGoneService(service) ? undefined : service)),
@@ -699,29 +697,27 @@ const waitForInstance = (environmentId: string, serviceId: string) =>
     }),
     Effect.retry({
       while: (e) => e._tag === "Railway.FunctionPending",
-      times: 20,
+      times: 10,
       schedule: Schedule.spaced("2 seconds"),
     }),
-    Effect.catchTag("Railway.FunctionPending", () =>
-      getInstance(environmentId, serviceId),
-    ),
   );
 
 const fetchDeployLogs = (deploymentId: string | undefined) =>
   deploymentId === undefined || deploymentId.length === 0
     ? Effect.succeed("")
-    : railway.deploymentLogs({ deploymentId, limit: 80 }).pipe(
-        Effect.map((rows) =>
-          rows
-            .map((row) =>
-              row.severity != null
-                ? `[${row.severity}] ${row.message}`
-                : row.message,
-            )
-            .join("\n"),
-        ),
-        Effect.orElseSucceed(() => ""),
-      );
+    : railway
+        .deploymentLogs({ deploymentId, limit: 80 })
+        .pipe(
+          Effect.map((rows) =>
+            rows
+              .map((row) =>
+                row.severity != null
+                  ? `[${row.severity}] ${row.message}`
+                  : row.message,
+              )
+              .join("\n"),
+          ),
+        );
 
 const waitForDeployment = (environmentId: string, serviceId: string) =>
   Effect.gen(function* () {
@@ -747,8 +743,7 @@ const waitForDeployment = (environmentId: string, serviceId: string) =>
   }).pipe(
     Effect.retry({
       while: (e) => e._tag === "Railway.FunctionDeployPending",
-      // Queued builds under full-suite load can exceed 3 minutes — allow ~8.
-      times: 96,
+      times: 10,
       schedule: Schedule.spaced("5 seconds"),
     }),
   );
@@ -1038,21 +1033,35 @@ export const FunctionProvider = () =>
           const projects = yield* ownedProjects();
           const rows = yield* Effect.forEach(projects, (project) =>
             Effect.gen(function* () {
-              const services = yield* listProjectServices(project.projectId);
               const envIds = yield* projectEnvironmentIds(project);
-              const items = yield* Effect.forEach(
-                services.filter((service) =>
-                  matchesAlchemyPhysicalName(service.name),
-                ),
-                (service) =>
-                  Effect.gen(function* () {
-                    for (const environmentId of envIds) {
+              const items = yield* Effect.forEach(envIds, (environmentId) =>
+                Effect.gen(function* () {
+                  const candidates =
+                    yield* railway.listEnvironmentServiceInstances
+                      .items({ environmentId, first: 50 })
+                      .pipe(
+                        Stream.filter(
+                          (row) =>
+                            row.deletedAt == null &&
+                            isFunctionImage(row.source?.image ?? undefined),
+                        ),
+                        Stream.runCollect,
+                      );
+                  return yield* Effect.forEach(candidates, (candidate) =>
+                    Effect.gen(function* () {
+                      const service = yield* getById(candidate.serviceId);
+                      if (
+                        service === undefined ||
+                        !matchesAlchemyPhysicalName(service.name)
+                      )
+                        return undefined;
                       const instance = yield* getInstance(
                         environmentId,
                         service.id,
                       );
                       const image = instance?.source?.image ?? undefined;
-                      if (!isFunctionImage(image)) continue;
+                      if (instance === undefined || !isFunctionImage(image))
+                        return undefined;
                       return toAttrs({
                         service,
                         instance,
@@ -1064,11 +1073,11 @@ export const FunctionProvider = () =>
                         codeHash: "",
                         rpcToken: "",
                       });
-                    }
-                    return undefined;
-                  }),
+                    }),
+                  );
+                }),
               );
-              return items.filter((item) => item !== undefined);
+              return items.flat().filter((item) => item !== undefined);
             }),
           );
           return rows.flat();
@@ -1180,12 +1189,9 @@ export const FunctionProvider = () =>
                 },
               })
               .pipe(
-                Effect.catchTag("RailwayValidationError", (e) =>
-                  alreadyExists(e.message)
-                    ? Effect.succeed(undefined)
-                    : Effect.fail(e),
+                Effect.catchTag(["RailwayAlreadyExists", "Conflict"], () =>
+                  Effect.succeed(undefined),
                 ),
-                Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
               );
             current = created ?? (yield* findByName(projectId, name));
           }
@@ -1258,14 +1264,10 @@ export const FunctionProvider = () =>
           });
 
           if (needsDeploy || instance?.latestDeployment == null) {
-            yield* railway
-              .serviceInstanceDeployV2({
-                environmentId,
-                serviceId: current.id,
-              })
-              .pipe(
-                Effect.catchTag("RailwayValidationError", () => Effect.void),
-              );
+            yield* railway.serviceInstanceDeployV2({
+              environmentId,
+              serviceId: current.id,
+            });
           }
 
           // Cron-only Functions sleep until the schedule. Waiting for

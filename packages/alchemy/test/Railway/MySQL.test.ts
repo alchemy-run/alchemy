@@ -59,12 +59,10 @@ const selectOne = (url: string) =>
       }
     },
     catch: (cause) => new Error(String(cause)),
-    // A fresh MySQL behind a freshly created TCP proxy can take minutes to
-    // accept connections under full-suite load (cold volume init + proxy
-    // port propagation) — the proxy accepts and immediately closes until
-    // the upstream is ready ("Connection lost: The server closed the
-    // connection"). Keep retrying, bounded to ~4 minutes.
-  }).pipe(Effect.retry({ schedule: Schedule.spaced("5 seconds"), times: 48 }));
+  }).pipe(
+    Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 10 }),
+    Effect.timeout("45 seconds"),
+  );
 
 const asVariableMap = (value: unknown): Record<string, string> => {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
@@ -143,31 +141,10 @@ const FixtureStack = Alchemy.Stack(
   }),
 );
 
-/**
- * HTTP fixture gated: full-suite `beforeAll` died with
- * `RailwayServiceDomainCreateFailed` ("Failed to create service domain,
- * please try again") and took the CRUD test with it. Flip to `true` to
- * retry the ConnectMySQL HTTP path. See `src/Railway/TODO.md`.
- */
-const MYSQL_HTTP_FIXTURE = false;
-
-const fixture = MYSQL_HTTP_FIXTURE
-  ? beforeAll(deploy(FixtureStack), {
-      timeout: 3_600_000,
-    })
-  : Effect.succeed({
-      projectId: "",
-      environmentId: "",
-      serviceId: "",
-      url: undefined as string | undefined,
-      publicConnectionUri: "",
-      mode: "effect" as const,
-    });
-if (MYSQL_HTTP_FIXTURE) {
-  afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(FixtureStack), {
-    timeout: 3_600_000,
-  });
-}
+const fixture = beforeAll(deploy(FixtureStack), { timeout: 120_000 });
+afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(FixtureStack), {
+  timeout: 120_000,
+});
 
 test.provider(
   "create, select 1, update, list, and delete mysql",
@@ -312,10 +289,10 @@ test.provider(
       );
       expect(volumeGone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 3_600_000 },
+  { timeout: 120_000 },
 );
 
-test.skipIf(!MYSQL_HTTP_FIXTURE)(
+test(
   "a Service connects and SELECTs through ConnectMySQL",
   Effect.gen(function* () {
     const out = yield* fixture;
@@ -402,5 +379,5 @@ test.skipIf(!MYSQL_HTTP_FIXTURE)(
     const rows = yield* selectOne(out.publicConnectionUri);
     expect(firstOk(rows)).toEqual(1);
   }).pipe(logLevel),
-  { timeout: 3_600_000 },
+  { timeout: 120_000 },
 );

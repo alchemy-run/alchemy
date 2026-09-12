@@ -495,14 +495,12 @@ const waitForWorkflow = (
       schedule: Schedule.spaced("2 seconds"),
     }),
     Effect.catchTag("Railway.VolumeBackupPending", () =>
-      mode === "delete"
-        ? Effect.void
-        : Effect.fail(
-            new VolumeBackupWorkflowFailed({
-              workflowId,
-              error: "timed out waiting for backup workflow",
-            }),
-          ),
+      Effect.fail(
+        new VolumeBackupWorkflowFailed({
+          workflowId,
+          error: `timed out waiting for backup ${mode} workflow`,
+        }),
+      ),
     ),
   );
 
@@ -530,9 +528,6 @@ const waitUntilReady = (volumeInstanceId: string) =>
       times: 10,
       schedule: Schedule.spaced("2 seconds"),
     }),
-    Effect.catchTag("Railway.VolumeBackupPending", () =>
-      getByInstanceId(volumeInstanceId),
-    ),
   );
 
 const waitForBackup = (input: {
@@ -561,15 +556,6 @@ const waitForBackup = (input: {
       times: 10,
       schedule: Schedule.spaced("2 seconds"),
     }),
-    Effect.catchTag("Railway.VolumeBackupPending", () =>
-      listBackups(input.volumeInstanceId).pipe(
-        Effect.map(
-          (backups) =>
-            findBackup(backups, { id: input.id, name: input.name }) ??
-            backups.find((backup) => !input.previousIds.has(backup.id)),
-        ),
-      ),
-    ),
   );
 
 const waitUntilGone = (
@@ -581,9 +567,16 @@ const waitUntilGone = (
       (backups) =>
         !backups.some((backup) => backup.id === volumeInstanceBackupId),
     ),
-    Effect.repeat({
+    Effect.flatMap((gone) =>
+      gone
+        ? Effect.void
+        : Effect.fail(
+            new VolumeBackupPending({ volumeInstanceId, state: "deleting" }),
+          ),
+    ),
+    Effect.retry({
       schedule: Schedule.spaced("1 second"),
-      until: (gone) => gone,
+      while: (error) => error._tag === "Railway.VolumeBackupPending",
       times: 8,
     }),
   );

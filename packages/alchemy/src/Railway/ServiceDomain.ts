@@ -154,7 +154,7 @@ export const deleteOwnedServiceDomain = Effect.fn(function* (input: {
         },
       },
     }),
-  ).pipe(Effect.ignore);
+  );
 
   for (const row of owned) {
     if (row.syncStatus === "DELETING") continue;
@@ -247,7 +247,7 @@ const createViaEnvironmentPatch = (input: {
           },
         },
       }),
-    ).pipe(Effect.ignore);
+    );
     return domainKey;
   });
 
@@ -446,7 +446,7 @@ const syncDomain = (input: {
         ...(retarget ? { targetPort: input.targetPort } : {}),
       },
     }),
-  ).pipe(Effect.ignore);
+  );
 };
 
 /**

@@ -146,13 +146,10 @@ const GroupResource = Resource<Group>("Railway.Group");
  * A Railway.Group organizes services, databases, volumes, and buckets on
  * the project canvas. IaC parity with `group("Backend", [api, worker, db])`.
  *
- * Groups have no dedicated create/delete mutation. Alchemy writes
- * `EnvironmentConfig.groups` (and `services[id].groupId`) via
- * `environmentPatchCommit`, matching Railway's own IaC compiler. Volume
- * membership is observed from `environment.canvasGroupRefs`. When Railway
- * does not persist a first-class Group id, the resource still records
- * member service/volume/bucket ids. `canvasViewMerge` /
- * `canvasViewMergePreview` copy canvas layout between environments.
+ * Alchemy creates groups through `environmentApplyChangeSet`, then updates
+ * membership and deletes groups by ID through `environmentPatchCommit`.
+ * It waits for the commit workflow and verifies persisted state before
+ * returning. Volume membership is observed from `environment.canvasGroupRefs`.
  *
  * @see https://docs.railway.com/infrastructure-as-code/reference
  *
@@ -242,6 +239,13 @@ export const Group: typeof GroupResource = Object.assign(
   ) => GroupResource(id, resolveGroupProps(props)),
   GroupResource,
 );
+
+export class GroupNotCreated extends Data.TaggedError(
+  "Railway.GroupNotCreated",
+)<{
+  groupId: string;
+  environmentId: string;
+}> {}
 
 export class GroupProjectRequired extends Data.TaggedError(
   "Railway.GroupProjectRequired",
@@ -557,22 +561,143 @@ const listEnvironmentIds = (project: {
     ),
   );
 
+export class GroupWorkflowFailed extends Data.TaggedError(
+  "Railway.GroupWorkflowFailed",
+)<{
+  workflowId: string;
+  status: string;
+  error: string | null;
+}> {}
+
+class GroupWorkflowPending extends Data.TaggedError(
+  "Railway.GroupWorkflowPending",
+)<{
+  workflowId: string;
+}> {}
+
+export class GroupApplyFailed extends Data.TaggedError(
+  "Railway.GroupApplyFailed",
+)<{
+  environmentId: string;
+  result: railway.EnvironmentApplyChangeSetResponse;
+}> {}
+
 const commitPatch = (input: {
+  projectId: string;
   environmentId: string;
   commitMessage: string;
-  patch: Record<string, unknown>;
+  patch: EnvironmentConfigShape;
 }) =>
   withEnvironmentConfigLock(
     input.environmentId,
-    railway.environmentPatchCommit({
-      environmentId: input.environmentId,
-      commitMessage: input.commitMessage,
-      patch: input.patch,
+    Effect.gen(function* () {
+      const creates = Object.entries(input.patch.groups ?? {}).flatMap(
+        ([id, group]) => {
+          if (group == null || !group.isCreated) return [];
+          const address = `group.${group.name ?? id}`;
+          const { isCreated, isDeleted, ...resource } = group;
+          return [
+            {
+              kind: "resource.create",
+              address,
+              resource: { type: "group", ...resource },
+              path: `resources.${address}`,
+              summary: input.commitMessage,
+              severity: "safe",
+              deployEffect: "none",
+            },
+          ];
+        },
+      );
+      // Legacy patches create no group; intent-level deletion reports noop.
+      if (creates.length > 0) {
+        const result = yield* railway.environmentApplyChangeSet({
+          environmentId: input.environmentId,
+          commitMessage: input.commitMessage,
+          waitForCompletion: true,
+          input: { version: 1, diagnostics: [], changes: creates },
+        });
+        if (result.status !== "applied") {
+          return yield* new GroupApplyFailed({
+            environmentId: input.environmentId,
+            result,
+          });
+        }
+      }
+      const config = yield* getEnvironmentConfig(
+        input.environmentId,
+        input.projectId,
+      );
+      const resolveGroupId = (id: string | null | undefined) => {
+        if (id == null || config.groups?.[id] != null) return id;
+        return (
+          Object.entries(config.groups ?? {}).find(
+            ([, row]) => row?.name === id,
+          )?.[0] ?? id
+        );
+      };
+      const groups: Record<string, GroupConfig> = {};
+      for (const [id, group] of Object.entries(input.patch.groups ?? {})) {
+        if (group == null) continue;
+        const resolvedId = resolveGroupId(id)!;
+        if (group.isCreated && config.groups?.[resolvedId] == null) {
+          return yield* new GroupNotCreated({
+            groupId: id,
+            environmentId: input.environmentId,
+          });
+        }
+        const { isCreated, ...properties } = group;
+        groups[resolvedId] = properties;
+      }
+      const patch: EnvironmentConfigShape = {
+        ...input.patch,
+        groups,
+        services: Object.fromEntries(
+          Object.entries(input.patch.services ?? {}).map(([id, row]) => [
+            id,
+            row == null
+              ? row
+              : { ...row, groupId: resolveGroupId(row.groupId) },
+          ]),
+        ),
+        buckets: Object.fromEntries(
+          Object.entries(input.patch.buckets ?? {}).map(([id, row]) => [
+            id,
+            row == null
+              ? row
+              : { ...row, groupId: resolveGroupId(row.groupId) },
+          ]),
+        ),
+      };
+      const workflowId = yield* railway.environmentPatchCommit({
+        environmentId: input.environmentId,
+        commitMessage: input.commitMessage,
+        patch,
+      });
+      yield* railway.workflowStatus({ workflowId }).pipe(
+        Effect.flatMap((result) =>
+          result.status === "Running"
+            ? Effect.fail(new GroupWorkflowPending({ workflowId }))
+            : Effect.succeed(result),
+        ),
+        Effect.retry({
+          while: (error) => error._tag === "Railway.GroupWorkflowPending",
+          times: 10,
+          schedule: Schedule.spaced("2 seconds"),
+        }),
+        Effect.flatMap((result) =>
+          result.status === "Complete" && result.error == null
+            ? Effect.void
+            : Effect.fail(
+                new GroupWorkflowFailed({
+                  workflowId,
+                  status: result.status,
+                  error: result.error,
+                }),
+              ),
+        ),
+      );
     }),
-  ).pipe(
-    Effect.catchTag(["RailwayValidationError", "RailwayInternalError"], () =>
-      Effect.succeed(""),
-    ),
   );
 
 const previewCanvas = (environmentId: string) =>
@@ -581,28 +706,16 @@ const previewCanvas = (environmentId: string) =>
       sourceEnvironmentId: environmentId,
       targetEnvironmentId: environmentId,
     })
-    .pipe(
-      Effect.catchTag(
-        ["NotFound", "RailwayValidationError", "RailwayInternalError"],
-        () => Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const mergeCanvas = (
   sourceEnvironmentId: string,
   targetEnvironmentId: string,
 ) =>
-  railway
-    .mergeCanvasView({
-      sourceEnvironmentId,
-      targetEnvironmentId,
-    })
-    .pipe(
-      Effect.catchTag(
-        ["NotFound", "RailwayValidationError", "RailwayInternalError"],
-        () => Effect.succeed(false),
-      ),
-    );
+  railway.mergeCanvasView({
+    sourceEnvironmentId,
+    targetEnvironmentId,
+  });
 
 const projectGroups = (project: ProjectResponse | undefined) =>
   project?.groups.edges.map((edge) => edge.node) ?? [];
@@ -741,18 +854,9 @@ const waitUntilPresent = (input: {
     }),
     Effect.retry({
       while: (e) => e._tag === "Railway.GroupPending",
-      times: 4,
+      times: 10,
       schedule: Schedule.spaced("1 second"),
     }),
-    Effect.catchTag("Railway.GroupPending", () =>
-      observe({
-        projectId: input.projectId,
-        environmentId: input.environmentId,
-        groupId: input.groupId,
-        name: input.name,
-        volumeIds: input.volumeIds,
-      }),
-    ),
   );
 
 const waitUntilGone = (input: {
@@ -767,11 +871,17 @@ const waitUntilGone = (input: {
     groupId: input.groupId,
     name: input.name,
   }).pipe(
-    Effect.map((group) => group === undefined),
-    Effect.repeat({
+    Effect.flatMap((group) =>
+      group === undefined
+        ? Effect.void
+        : Effect.fail(
+            new GroupPending({ groupId: input.groupId, state: "deleting" }),
+          ),
+    ),
+    Effect.retry({
       schedule: Schedule.spaced("1 second"),
-      until: (gone) => gone,
-      times: 4,
+      while: (error) => error._tag === "Railway.GroupPending",
+      times: 10,
     }),
   );
 
@@ -825,8 +935,8 @@ const membershipPatch = (input: {
   remove?: boolean;
   services?: ReadonlyArray<{ serviceId: string; groupId: string | null }>;
   buckets?: ReadonlyArray<{ bucketId: string; groupId: string | null }>;
-}): Record<string, unknown> => {
-  const patch: Record<string, unknown> = {
+}): EnvironmentConfigShape => {
+  const patch: EnvironmentConfigShape = {
     groups: groupPatch(input),
   };
   if (input.services !== undefined && input.services.length > 0) {
@@ -837,26 +947,6 @@ const membershipPatch = (input: {
   }
   return patch;
 };
-
-const fallbackGroup = (input: {
-  groupId: string;
-  name: string;
-  color?: string;
-  icon?: string;
-  collapsed: boolean;
-  serviceIds: readonly string[];
-  volumeIds: readonly string[];
-  bucketIds: readonly string[];
-}): CloudGroup => ({
-  groupId: input.groupId,
-  name: input.name,
-  color: input.color,
-  icon: input.icon,
-  collapsed: input.collapsed,
-  serviceIds: uniqueSorted(input.serviceIds),
-  volumeIds: uniqueSorted(input.volumeIds),
-  bucketIds: uniqueSorted(input.bucketIds),
-});
 
 export const GroupProvider = () =>
   Provider.succeed(Group, {
@@ -910,36 +1000,53 @@ export const GroupProvider = () =>
     list: Effect.fn(function* () {
       const projects = yield* ownedProjects();
       const rows = yield* Effect.forEach(projects, (project) =>
-        railway.project({ id: project.projectId }).pipe(
-          Effect.map((live) =>
-            live.groups.edges.flatMap((edge) => {
-              const group = edge.node;
-              const name = group.name ?? "";
-              if (!matchesAlchemyPhysicalName(name)) return [];
-              return [
-                toAttrs(
-                  {
-                    groupId: group.id,
-                    name,
-                    color: group.color ?? undefined,
-                    icon: group.icon ?? undefined,
-                    collapsed: group.isCollapsed === true,
-                    serviceIds: [] as string[],
-                    volumeIds: [] as string[],
-                    bucketIds: [] as string[],
-                  },
-                  {
-                    projectId: project.projectId,
-                    environmentId: project.environmentId,
-                  },
-                ),
-              ];
-            }),
-          ),
-          Effect.catchTag("NotFound", () =>
-            Effect.succeed([] as Group["Attributes"][]),
-          ),
-        ),
+        Effect.gen(function* () {
+          const environmentIds = yield* listEnvironmentIds(project);
+          const groups = yield* Effect.forEach(
+            environmentIds,
+            (environmentId) =>
+              Effect.gen(function* () {
+                const env = yield* getEnvironment(
+                  environmentId,
+                  project.projectId,
+                );
+                if (env === undefined) return [];
+                const config = parseEnvironmentConfig(env.config);
+                const refs = parseCanvasGroupRefs(env.canvasGroupRefs);
+                const volumeIds = new Set(volumeIdsOf(env));
+                const found: Group["Attributes"][] = [];
+                for (const [groupId, row] of Object.entries(
+                  config.groups ?? {},
+                )) {
+                  if (
+                    row == null ||
+                    row.isDeleted ||
+                    !matchesAlchemyPhysicalName(row.name ?? "")
+                  )
+                    continue;
+                  found.push(
+                    toAttrs(
+                      {
+                        groupId,
+                        name: row.name!,
+                        color: optionalString(row.color),
+                        icon: optionalString(row.icon),
+                        collapsed: row.isCollapsed === true,
+                        serviceIds: servicesForGroup(config, groupId),
+                        bucketIds: bucketsForGroup(config, groupId),
+                        volumeIds: idsForGroup(refs, groupId).filter((id) =>
+                          volumeIds.has(id),
+                        ),
+                      },
+                      { projectId: project.projectId, environmentId },
+                    ),
+                  );
+                }
+                return found;
+              }),
+          );
+          return groups.flat();
+        }),
       );
       const seen = new Set<string>();
       const unique: Group["Attributes"][] = [];
@@ -989,6 +1096,7 @@ export const GroupProvider = () =>
 
       if (current === undefined) {
         yield* commitPatch({
+          projectId,
           environmentId,
           commitMessage: `Alchemy: create group ${name}`,
           patch: membershipPatch({
@@ -1006,6 +1114,7 @@ export const GroupProvider = () =>
         });
         if (desired.bucketIds.length > 0) {
           yield* commitPatch({
+            projectId,
             environmentId,
             commitMessage: `Alchemy: assign buckets to group ${name}`,
             patch: {
@@ -1078,6 +1187,7 @@ export const GroupProvider = () =>
               })),
           ];
           yield* commitPatch({
+            projectId,
             environmentId,
             commitMessage: `Alchemy: update group ${name}`,
             patch: membershipPatch({
@@ -1115,29 +1225,10 @@ export const GroupProvider = () =>
         volumeIds: desired.volumeIds,
       });
 
-      const resolved = observed ?? current;
-      return toAttrs(
-        fallbackGroup({
-          groupId: resolved?.groupId ?? groupId,
-          name: resolved?.name || name,
-          color: props.color ?? resolved?.color,
-          icon: props.icon ?? resolved?.icon,
-          collapsed: resolved?.collapsed ?? collapsed,
-          serviceIds:
-            resolved !== undefined && resolved.serviceIds.length > 0
-              ? resolved.serviceIds
-              : desired.serviceIds,
-          volumeIds: uniqueSorted([
-            ...(resolved?.volumeIds ?? []),
-            ...desired.volumeIds,
-          ]),
-          bucketIds: uniqueSorted([
-            ...(resolved?.bucketIds ?? []),
-            ...desired.bucketIds,
-          ]),
-        }),
-        { projectId, environmentId },
-      );
+      if (observed === undefined) {
+        return yield* new GroupNotCreated({ groupId, environmentId });
+      }
+      return toAttrs(observed, { projectId, environmentId });
     }),
 
     delete: Effect.fn(function* ({ output }) {
@@ -1154,6 +1245,7 @@ export const GroupProvider = () =>
       });
       if (current === undefined) return;
       yield* commitPatch({
+        projectId,
         environmentId,
         commitMessage: `Alchemy: delete group ${output.name}`,
         patch: membershipPatch({

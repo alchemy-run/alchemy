@@ -167,7 +167,7 @@ test.provider(
       );
       expect(domainGone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 3_600_000 },
+  { timeout: 120_000 },
 );
 
 test.provider.skipIf(!TEST_DOMAIN)(
@@ -217,5 +217,5 @@ test.provider.skipIf(!TEST_DOMAIN)(
       );
       expect(domainGone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 3_600_000 },
+  { timeout: 120_000 },
 );

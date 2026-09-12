@@ -395,9 +395,6 @@ const isGoneProxy = (proxy: CloudProxy | undefined) =>
 
 const normalizeDomain = (domain: string) => domain.replace(/\.+$/, "");
 
-const alreadyExists = (message: string) =>
-  /already exists|already in use|duplicate/i.test(message);
-
 const sameImage = (observed: string | null | undefined, desired: string) => {
   if (observed == null || observed.length === 0) return false;
   if (observed === desired) return true;
@@ -608,7 +605,7 @@ const deleteProxy = (id: string) =>
         e._tag === "RailwayInternalError" &&
         e.message.includes("operation is already in progress"),
       schedule: Schedule.spaced("3 seconds"),
-      times: 20,
+      times: 10,
     }),
     Effect.catchTag("NotFound", () => Effect.void),
     Effect.asVoid,
@@ -703,40 +700,34 @@ const waitForInstance = (environmentId: string, serviceId: string) =>
     }),
     Effect.retry({
       while: (e) => e._tag === "Railway.PostgresPending",
-      // serviceCreate fans the instance out to each environment
-      // asynchronously; under full-suite load the fan-out can take minutes.
-      times: 60,
+      times: 10,
       schedule: Schedule.spaced("2 seconds"),
     }),
-    Effect.catchTag("Railway.PostgresPending", () =>
-      getInstance(environmentId, serviceId),
-    ),
   );
 
 const waitForDeployment = (environmentId: string, serviceId: string) =>
-  getInstance(environmentId, serviceId).pipe(
-    Effect.flatMap((instance) => {
-      const latest = instance?.latestDeployment;
-      const status = latest?.status;
-      if (instance !== undefined && deployReady(status)) {
-        return Effect.succeed(instance);
-      }
-      return Effect.fail(
-        new PostgresDeployPending({
-          serviceId,
-          status: status ?? "pending",
-        }),
-      );
-    }),
+  Effect.gen(function* () {
+    const instance = yield* getInstance(environmentId, serviceId);
+    const latest = instance?.latestDeployment;
+    const status = latest?.status;
+    if (instance !== undefined && deployReady(status)) return instance;
+    if (status !== undefined && deployFailed(status)) {
+      return yield* new PostgresDeployFailed({
+        serviceId,
+        status,
+        deploymentId: latest?.id,
+      });
+    }
+    return yield* new PostgresDeployPending({
+      serviceId,
+      status: status ?? "pending",
+    });
+  }).pipe(
     Effect.retry({
       while: (e) => e._tag === "Railway.PostgresDeployPending",
-      // Queued builds under full-suite load can exceed 3 minutes — allow ~8.
-      times: 96,
+      times: 10,
       schedule: Schedule.spaced("5 seconds"),
     }),
-    Effect.catchTag("Railway.PostgresDeployPending", () =>
-      getInstance(environmentId, serviceId),
-    ),
   );
 
 const waitForVolume = (
@@ -770,7 +761,6 @@ const waitForVolume = (
       times: 10,
       schedule: Schedule.spaced("3 seconds"),
     }),
-    Effect.catchTag("Railway.PostgresVolumePending", () => observe),
   );
 };
 
@@ -874,7 +864,6 @@ export const PostgresProvider = () =>
       const projects = yield* ownedProjects();
       const rows = yield* Effect.forEach(projects, (project) =>
         Effect.gen(function* () {
-          const services = yield* listProjectServices(project.projectId);
           const envRows = yield* railway.environments
             .items({ projectId: project.projectId, first: 50 })
             .pipe(
@@ -886,44 +875,33 @@ export const PostgresProvider = () =>
           const volumes = envRows.flatMap((env) =>
             env.volumeInstances.edges.map((edge) => edge.node),
           );
-          const items = yield* Effect.forEach(
-            services.filter((service) =>
-              matchesAlchemyPhysicalName(service.name),
-            ),
-            (service) =>
-              Effect.gen(function* () {
-                const volume = volumes.find(
-                  (row) => (row.serviceId ?? undefined) === service.id,
-                );
-                const envIds =
-                  volume !== undefined
-                    ? [volume.environmentId]
-                    : envRows.map((env) => env.id);
-                let instance: ServiceInstanceResponse | undefined;
-                let environmentId = project.environmentId;
-                for (const id of envIds) {
-                  const candidate = yield* getInstance(id, service.id);
-                  if (isPostgresImage(candidate?.source?.image)) {
-                    instance = candidate;
-                    environmentId = id;
-                    break;
-                  }
-                }
-                if (!isPostgresImage(instance?.source?.image)) {
-                  return undefined;
-                }
-                return toAttrs({
-                  service,
-                  instance,
-                  volume,
-                  proxy: undefined,
-                  projectId: project.projectId,
-                  environmentId,
-                  user: DEFAULT_POSTGRES_USER,
-                  password: "",
-                  database: DEFAULT_POSTGRES_DATABASE,
-                });
-              }),
+          const items = yield* Effect.forEach(volumes, (volume) =>
+            Effect.gen(function* () {
+              if (volume.serviceId == null) return undefined;
+              const environmentId = volume.environmentId;
+              const instance = yield* getInstance(
+                environmentId,
+                volume.serviceId,
+              );
+              if (!isPostgresImage(instance?.source?.image)) return undefined;
+              const service = yield* getById(volume.serviceId);
+              if (
+                service === undefined ||
+                !matchesAlchemyPhysicalName(service.name)
+              )
+                return undefined;
+              return toAttrs({
+                service,
+                instance,
+                volume,
+                proxy: undefined,
+                projectId: project.projectId,
+                environmentId,
+                user: DEFAULT_POSTGRES_USER,
+                password: "",
+                database: DEFAULT_POSTGRES_DATABASE,
+              });
+            }),
           );
           return items.filter((item) => item !== undefined);
         }),
@@ -990,12 +968,9 @@ export const PostgresProvider = () =>
             },
           })
           .pipe(
-            Effect.catchTag("RailwayValidationError", (e) =>
-              alreadyExists(e.message)
-                ? Effect.succeed(undefined)
-                : Effect.fail(e),
+            Effect.catchTag(["RailwayAlreadyExists", "Conflict"], () =>
+              Effect.succeed(undefined),
             ),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
           );
         current = created ?? (yield* findByName(projectId, name));
       }
@@ -1123,19 +1098,13 @@ export const PostgresProvider = () =>
 
       let proxy = yield* findProxy(environmentId, current.id, POSTGRES_PORT);
       if (wantPublic && proxy === undefined) {
-        const created = yield* railway
-          .createTcpProxy({
-            input: {
-              applicationPort: POSTGRES_PORT,
-              environmentId,
-              serviceId: current.id,
-            },
-          })
-          .pipe(
-            Effect.catchTag("RailwayValidationError", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+        const created = yield* railway.createTcpProxy({
+          input: {
+            applicationPort: POSTGRES_PORT,
+            environmentId,
+            serviceId: current.id,
+          },
+        });
         proxy =
           created !== undefined && !isGoneProxy(created)
             ? created
@@ -1147,40 +1116,13 @@ export const PostgresProvider = () =>
       }
 
       if (needsDeploy || instance?.latestDeployment == null) {
-        yield* railway
-          .serviceInstanceDeployV2({
-            environmentId,
-            serviceId: current.id,
-          })
-          .pipe(Effect.catchTag("RailwayValidationError", () => Effect.void));
-      }
-
-      instance =
-        (yield* waitForDeployment(environmentId, current.id)) ?? instance;
-      let finalStatus = instance?.latestDeployment?.status;
-      // A deployment can wedge in DEPLOYING and never reach SUCCESS — the
-      // container may serve, but Railway keeps its per-environment operation
-      // lock and the TCP proxy's routing is not committed. Converge: cancel
-      // the wedged deployment, redeploy once, and insist on SUCCESS.
-      if (!deployFailed(finalStatus) && !deployReady(finalStatus)) {
-        const wedged = instance?.latestDeployment?.id;
-        if (wedged != null && wedged.length > 0) {
-          yield* railway.cancelDeployment({ id: wedged }).pipe(Effect.ignore);
-        }
-        yield* railway
-          .serviceInstanceDeployV2({ environmentId, serviceId: current.id })
-          .pipe(Effect.catchTag("RailwayValidationError", () => Effect.void));
-        instance =
-          (yield* waitForDeployment(environmentId, current.id)) ?? instance;
-        finalStatus = instance?.latestDeployment?.status;
-      }
-      if (deployFailed(finalStatus) || !deployReady(finalStatus)) {
-        return yield* new PostgresDeployFailed({
+        yield* railway.serviceInstanceDeployV2({
+          environmentId,
           serviceId: current.id,
-          status: finalStatus ?? "failed",
-          deploymentId: instance?.latestDeployment?.id,
         });
       }
+
+      instance = yield* waitForDeployment(environmentId, current.id);
 
       return toAttrs({
         service: current,
@@ -1213,7 +1155,7 @@ export const PostgresProvider = () =>
         ) {
           yield* railway
             .cancelDeployment({ id: latest.id })
-            .pipe(Effect.ignore);
+            .pipe(Effect.catchTag("NotFound", () => Effect.void));
         }
       }
       // Delete the SERVICE next — its teardown cascades onto the proxies.
@@ -1241,7 +1183,7 @@ export const PostgresProvider = () =>
           Effect.repeat({
             schedule: Schedule.spaced("3 seconds"),
             until: (rows) => rows.length === 0,
-            times: 20,
+            times: 10,
           }),
         );
         yield* Effect.forEach(leftover, (proxy) => deleteProxy(proxy.id), {

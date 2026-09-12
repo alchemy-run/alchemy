@@ -377,7 +377,7 @@ export const ProjectProvider = () =>
             ? { defaultEnvironmentName: props.defaultEnvironmentName }
             : {}),
         }).pipe(
-          Effect.catchTag("RailwayValidationError", () =>
+          Effect.catchTag("RailwayAlreadyExists", () =>
             Effect.succeed(undefined),
           ),
         );

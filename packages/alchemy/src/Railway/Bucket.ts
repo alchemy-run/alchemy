@@ -513,11 +513,6 @@ const ensureDeployed = Effect.fn(function* (input: {
       times: 8,
       schedule: Schedule.spaced("1 second"),
     }),
-    Effect.catchTag("Railway.BucketDeployPending", () =>
-      getEnvironmentConfig(input.environmentId, input.projectId).pipe(
-        Effect.map((next) => instanceOf(next, input.bucketId)),
-      ),
-    ),
   );
   return synced;
 });
@@ -551,10 +546,13 @@ const fetchCredentials = (input: {
         times: 8,
         schedule: Schedule.spaced("2 seconds"),
       }),
-      Effect.catchTag("Railway.BucketCredentialsPending", () =>
-        Effect.succeed(undefined),
-      ),
     );
+
+class BucketDeletionPending extends Data.TaggedError(
+  "Railway.BucketDeletionPending",
+)<{
+  bucketId: string;
+}> {}
 
 const waitUntilGone = (input: {
   bucketId: string;
@@ -563,9 +561,14 @@ const waitUntilGone = (input: {
 }) =>
   getEnvironmentConfig(input.environmentId, input.projectId).pipe(
     Effect.map((config) => !isDeployed(config, input.bucketId)),
-    Effect.repeat({
+    Effect.flatMap((gone) =>
+      gone
+        ? Effect.void
+        : Effect.fail(new BucketDeletionPending({ bucketId: input.bucketId })),
+    ),
+    Effect.retry({
       schedule: Schedule.spaced("1 second"),
-      until: (gone) => gone,
+      while: (error) => error._tag === "Railway.BucketDeletionPending",
       times: 8,
     }),
   );
@@ -720,7 +723,7 @@ export const BucketProvider = () =>
               times: 8,
               schedule: Schedule.spaced("1 second"),
             }),
-            Effect.catchTag("RailwayValidationError", () =>
+            Effect.catchTag(["RailwayAlreadyExists", "Conflict"], () =>
               Effect.succeed(undefined),
             ),
           );

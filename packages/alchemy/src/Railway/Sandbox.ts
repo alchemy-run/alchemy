@@ -369,9 +369,8 @@ const listSandboxes = (environmentId: string) =>
     Stream.filter((sandbox) => !isGone(sandbox)),
     Stream.runCollect,
     Effect.map((chunk) => Array.from(chunk)),
-    Effect.catchTag(
-      ["NotFound", "RailwayForbidden", "Forbidden", "RailwayPlanLimitExceeded"],
-      () => Effect.succeed([] as SandboxesResponseEdgesItemNode[]),
+    Effect.catchTag("NotFound", () =>
+      Effect.succeed([] as SandboxesResponseEdgesItemNode[]),
     ),
   );
 
@@ -422,19 +421,22 @@ const waitUntilRunning = (environmentId: string, sandboxId: string) =>
       times: 10,
       schedule: Schedule.spaced("3 seconds"),
     }),
-    Effect.catchTag("Railway.SandboxPending", () =>
-      getById(environmentId, sandboxId),
-    ),
   );
 
 const waitUntilGone = (environmentId: string, sandboxId: string) =>
-  getById(environmentId, sandboxId).pipe(
-    Effect.map((sandbox) => sandbox === undefined),
+  railway.sandbox({ environmentId, id: sandboxId }).pipe(
+    Effect.map((sandbox) => sandbox.status === "DESTROYED"),
+    Effect.catchTag("NotFound", () => Effect.succeed(true)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (gone) => gone,
       times: 10,
     }),
+    Effect.flatMap((gone) =>
+      gone
+        ? Effect.void
+        : Effect.fail(new SandboxPending({ sandboxId, status: "destroying" })),
+    ),
   );
 
 /**

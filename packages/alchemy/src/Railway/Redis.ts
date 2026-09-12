@@ -11,6 +11,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import { Unowned } from "../AdoptPolicy.ts";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
@@ -360,9 +361,6 @@ const deployReady = (status: string | undefined) =>
 const deployFailed = (status: string | undefined) =>
   status === "FAILED" || status === "CRASHED" || status === "REMOVED";
 
-const alreadyExists = (message: string) =>
-  /already exists|already in use|duplicate/i.test(message);
-
 const getById = (serviceId: string) =>
   railway.service({ id: serviceId }).pipe(
     Effect.map((service) => (isGoneService(service) ? undefined : service)),
@@ -402,14 +400,9 @@ const waitForInstance = (environmentId: string, serviceId: string) =>
     }),
     Effect.retry({
       while: (e) => e._tag === "Railway.RedisPending",
-      // serviceCreate fans the instance out to each environment
-      // asynchronously; under full-suite load the fan-out can take minutes.
-      times: 60,
+      times: 10,
       schedule: Schedule.spaced("2 seconds"),
     }),
-    Effect.catchTag("Railway.RedisPending", () =>
-      getInstance(environmentId, serviceId),
-    ),
   );
 
 const waitForDeployment = (environmentId: string, serviceId: string) =>
@@ -434,13 +427,9 @@ const waitForDeployment = (environmentId: string, serviceId: string) =>
   }).pipe(
     Effect.retry({
       while: (e) => e._tag === "Railway.RedisDeployPending",
-      // Queued builds under full-suite load can exceed 3 minutes — allow ~8.
-      times: 96,
+      times: 10,
       schedule: Schedule.spaced("5 seconds"),
     }),
-    Effect.catchTag("Railway.RedisDeployPending", () =>
-      getInstance(environmentId, serviceId),
-    ),
   );
 
 const asVariableMap = (value: unknown): Record<string, string> => {
@@ -621,33 +610,47 @@ export const RedisProvider = () =>
       const projects = yield* ownedProjects();
       const rows = yield* Effect.forEach(projects, (project) =>
         Effect.gen(function* () {
-          const services = yield* listProjectServices(project.projectId);
           const envIds = yield* projectEnvironmentIds(project);
-          const items = yield* Effect.forEach(
-            services.filter((service) =>
-              matchesAlchemyPhysicalName(service.name),
-            ),
-            (service) =>
-              Effect.gen(function* () {
-                for (const environmentId of envIds) {
+          const items = yield* Effect.forEach(envIds, (environmentId) =>
+            Effect.gen(function* () {
+              const candidates = yield* railway.listEnvironmentServiceInstances
+                .items({ environmentId, first: 50 })
+                .pipe(
+                  Stream.filter(
+                    (row) =>
+                      row.deletedAt == null && isRedisImage(row.source?.image),
+                  ),
+                  Stream.runCollect,
+                );
+              return yield* Effect.forEach(candidates, (candidate) =>
+                Effect.gen(function* () {
+                  const service = yield* getById(candidate.serviceId);
+                  if (
+                    service === undefined ||
+                    !matchesAlchemyPhysicalName(service.name)
+                  )
+                    return undefined;
                   const instance = yield* getInstance(
                     environmentId,
                     service.id,
                   );
-                  const image = instance?.source?.image ?? undefined;
-                  if (!isRedisImage(image)) continue;
+                  if (
+                    instance === undefined ||
+                    !isRedisImage(instance.source?.image)
+                  )
+                    return undefined;
                   return toAttrs({
                     service,
                     instance,
                     projectId: project.projectId,
                     environmentId,
-                    image: image ?? DEFAULT_REDIS_IMAGE,
+                    image: instance.source?.image ?? DEFAULT_REDIS_IMAGE,
                   });
-                }
-                return undefined;
-              }),
+                }),
+              );
+            }),
           );
-          return items.filter((item) => item !== undefined);
+          return items.flat().filter((item) => item !== undefined);
         }),
       );
       return rows.flat();
@@ -709,12 +712,9 @@ export const RedisProvider = () =>
             },
           })
           .pipe(
-            Effect.catchTag("RailwayValidationError", (e) =>
-              alreadyExists(e.message)
-                ? Effect.succeed(undefined)
-                : Effect.fail(e),
+            Effect.catchTag(["RailwayAlreadyExists", "Conflict"], () =>
+              Effect.succeed(undefined),
             ),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
           );
         current = created ?? (yield* findByName(projectId, name));
       }
@@ -763,16 +763,13 @@ export const RedisProvider = () =>
       if (envChanged) needsDeploy = true;
 
       if (needsDeploy || instance?.latestDeployment == null) {
-        yield* railway
-          .serviceInstanceDeployV2({
-            environmentId,
-            serviceId: current.id,
-          })
-          .pipe(Effect.catchTag("RailwayValidationError", () => Effect.void));
+        yield* railway.serviceInstanceDeployV2({
+          environmentId,
+          serviceId: current.id,
+        });
       }
 
-      instance =
-        (yield* waitForDeployment(environmentId, current.id)) ?? instance;
+      instance = yield* waitForDeployment(environmentId, current.id);
 
       return toAttrs({
         service: current,

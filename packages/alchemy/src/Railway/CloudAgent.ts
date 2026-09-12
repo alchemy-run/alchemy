@@ -244,9 +244,8 @@ const listAgents = (environmentId: string) =>
   railway
     .cloudAgents({ environmentId, mine: true })
     .pipe(
-      Effect.catchTag(
-        ["NotFound", "RailwayForbidden", "RailwayPlanLimitExceeded"],
-        () => Effect.succeed([] as CloudAgentsResultItem[]),
+      Effect.catchTag("NotFound", () =>
+        Effect.succeed([] as CloudAgentsResultItem[]),
       ),
     );
 
@@ -430,7 +429,7 @@ export const CloudAgentProvider = () =>
             },
           })
           .pipe(
-            Effect.catchTag("RailwayValidationError", () =>
+            Effect.catchTag("RailwayAlreadyExists", () =>
               Effect.succeed(undefined),
             ),
           );

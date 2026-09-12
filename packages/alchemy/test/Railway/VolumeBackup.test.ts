@@ -16,11 +16,10 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-// Volume backups are Pro-plan gated. Railway rejects Hobby/unentitled
-// workspaces with GraphQL `Not Authorized`, already typed as
-// RailwayForbidden. The probe always runs and pins that tag. The
-// create+list+delete lifecycle is opt-in via RAILWAY_TEST_VOLUME_BACKUP=1.
-const backupEntitled = !!process.env.RAILWAY_TEST_VOLUME_BACKUP;
+// This workspace accepts backup creation but workflowStatus returns
+// RailwayForbidden: Not Authorized. Full lifecycle requires
+// RAILWAY_TEST_VOLUME_BACKUP=1 and a token with backup workflow access.
+const backupEntitled = process.env.RAILWAY_TEST_VOLUME_BACKUP === "1";
 
 const VolumeStack = Effect.gen(function* () {
   const { project, environment } = yield* suitePartition;
@@ -41,11 +40,7 @@ const VolumeStack = Effect.gen(function* () {
 const listLive = (volumeInstanceId: string) =>
   railway
     .listVolumeInstanceBackup({ volumeInstanceId })
-    .pipe(
-      Effect.catchTag(["NotFound", "RailwayForbidden"], () =>
-        Effect.succeed([]),
-      ),
-    );
+    .pipe(Effect.catchTag("NotFound", () => Effect.succeed([])));
 
 const waitUntilReady = (volumeInstanceId: string) =>
   railway.volumeInstance({ id: volumeInstanceId }).pipe(
@@ -87,7 +82,7 @@ const waitUntilBackupGone = (
   );
 
 test.provider(
-  "volume backup create surfaces a typed entitlement error",
+  "backup creation and workflow access surface typed authorization errors",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -102,31 +97,48 @@ test.provider(
       );
       if (Result.isSuccess(result)) {
         yield* Effect.logInfo(
-          "volume backups are entitled on this token; probe is a no-op",
+          "backup creation was accepted; checking workflow and backup access",
         );
         if (
           result.success.workflowId != null &&
           result.success.workflowId.length > 0
         ) {
-          yield* railway
-            .workflowStatus({
-              workflowId: result.success.workflowId,
-            })
-            .pipe(Effect.catchTag(["RailwayForbidden"], () => Effect.void));
+          const workflow = yield* railway
+            .workflowStatus({ workflowId: result.success.workflowId })
+            .pipe(
+              Effect.repeat({
+                schedule: Schedule.spaced("2 seconds"),
+                times: 10,
+                until: (row) => row.status !== "Running",
+              }),
+              Effect.result,
+            );
+          if (Result.isFailure(workflow)) {
+            expect(workflow.failure._tag).toBe("RailwayForbidden");
+            expect(workflow.failure.message).toBe("Not Authorized");
+            yield* Effect.logInfo(
+              "workflowStatus rejects backup access: RailwayForbidden: Not Authorized",
+            );
+            yield* stack.destroy();
+            return;
+          }
+          expect(workflow.success.status).toBe("Complete");
+          expect(workflow.success.error).toBeNull();
         }
-        const extras = yield* listLive(created.volume.volumeInstanceId);
+        const extras = yield* listLive(created.volume.volumeInstanceId).pipe(
+          Effect.tapError((error) =>
+            Effect.logError(
+              `listVolumeInstanceBackup: ${error._tag}: ${error.message}`,
+            ),
+          ),
+        );
         for (const extra of extras) {
           yield* railway
             .deleteVolumeInstanceBackup({
               volumeInstanceBackupId: extra.id,
               volumeInstanceId: created.volume.volumeInstanceId,
             })
-            .pipe(
-              Effect.catchTag(
-                ["NotFound", "RailwayForbidden"],
-                () => Effect.void,
-              ),
-            );
+            .pipe(Effect.catchTag("NotFound", () => Effect.void));
         }
         yield* stack.destroy();
         return;
@@ -136,7 +148,7 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 3_600_000 },
+  { timeout: 120_000 },
 );
 
 test.provider.skipIf(!backupEntitled)(
@@ -211,5 +223,5 @@ test.provider.skipIf(!backupEntitled)(
       );
       expect(backupGone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 3_600_000 },
+  { timeout: 120_000 },
 );

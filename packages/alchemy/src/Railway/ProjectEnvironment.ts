@@ -329,7 +329,7 @@ export const EnvironmentProvider = () =>
             },
           }),
         ).pipe(
-          Effect.catchTag("RailwayValidationError", () =>
+          Effect.catchTag("RailwayAlreadyExists", () =>
             Effect.succeed(undefined),
           ),
         );

@@ -3,6 +3,24 @@ import * as Redacted from "effect/Redacted";
 
 type PgSsl = PgClient.PgPoolConfig["ssl"];
 
+/** Translate node-postgres's `no-verify` URL mode into explicit TLS options. */
+export const resolvePostgresConnection = (
+  url: Redacted.Redacted<string>,
+  ssl?: PgSsl,
+) => {
+  const resolvedSsl = resolveSsl(url, ssl);
+  try {
+    const parsed = new URL(Redacted.value(url));
+    if (parsed.searchParams.get("sslmode") === "no-verify") {
+      parsed.searchParams.delete("sslmode");
+      return { url: Redacted.make(parsed.toString()), ssl: resolvedSsl };
+    }
+  } catch {
+    // Let the driver report invalid connection URLs.
+  }
+  return { url, ssl: resolvedSsl };
+};
+
 /**
  * `sslmode` values that `@effect/sql-pg`'s URL parser reads as "use TLS"
  * on its own.
@@ -69,6 +87,9 @@ export const resolveSsl = (
   }
 
   const sslmode = parsed.searchParams.get("sslmode");
+  if (sslmode === "no-verify" && ssl === undefined) {
+    ssl = { rejectUnauthorized: false };
+  }
   const tlsRequested =
     ssl === true ||
     typeof ssl === "object" ||

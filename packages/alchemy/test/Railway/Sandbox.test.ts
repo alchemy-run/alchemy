@@ -16,8 +16,7 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const isGoneStatus = (status: string | undefined) =>
-  status === "DESTROYED" || status === "DESTROYING";
+const isGoneStatus = (status: string | undefined) => status === "DESTROYED";
 
 const waitUntilGone = (environmentId: string, sandboxId: string) =>
   railway.sandbox({ environmentId, id: sandboxId }).pipe(
@@ -73,7 +72,7 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 3_600_000 },
+  { timeout: 120_000 },
 );
 
 test.provider(
@@ -141,5 +140,5 @@ test.provider(
       );
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 3_600_000 },
+  { timeout: 120_000 },
 );

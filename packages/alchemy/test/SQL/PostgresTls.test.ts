@@ -1,10 +1,46 @@
-import { resolveSsl } from "@/SQL/PostgresTls.ts";
+import { resolvePostgresConnection, resolveSsl } from "@/SQL/PostgresTls.ts";
 import { describe, expect, it } from "alchemy-test";
 import * as Redacted from "effect/Redacted";
 
 const url = (s: string) => Redacted.make(s);
 
 describe("SQL/PostgresTls resolveSsl", () => {
+  it("translates no-verify without changing credentials or other URL options", () => {
+    const input = url(
+      "postgresql://u:p%40ss@db.railway.internal:5432/railway?sslmode=no-verify&application_name=test",
+    );
+    const config = resolvePostgresConnection(input);
+    expect(Redacted.value(config.url)).toBe(
+      "postgresql://u:p%40ss@db.railway.internal:5432/railway?application_name=test",
+    );
+    expect(config.ssl).toEqual({
+      rejectUnauthorized: false,
+      servername: "db.railway.internal",
+    });
+    expect(Redacted.value(input)).toContain("sslmode=no-verify");
+  });
+
+  it("honors explicit TLS settings over no-verify", () => {
+    const input = url("postgres://u@db.example.com/x?sslmode=no-verify");
+    expect(resolvePostgresConnection(input, false).ssl).toBe(false);
+    expect(resolvePostgresConnection(input, true).ssl).toEqual({
+      servername: "db.example.com",
+    });
+    expect(
+      resolvePostgresConnection(input, { rejectUnauthorized: true }).ssl,
+    ).toEqual({ rejectUnauthorized: true, servername: "db.example.com" });
+  });
+
+  it("keeps supported and invalid URLs unchanged", () => {
+    for (const text of [
+      "postgres://u@db.example.com/x?sslmode=require",
+      "not a url",
+    ]) {
+      const input = url(text);
+      expect(resolvePostgresConnection(input).url).toBe(input);
+    }
+  });
+
   it("adds servername when the URL requests TLS via sslmode", () => {
     expect(
       resolveSsl(

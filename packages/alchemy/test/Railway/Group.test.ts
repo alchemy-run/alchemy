@@ -136,7 +136,8 @@ test.provider(
         fromConfig !== undefined ||
         fromProject !== undefined ||
         apiLive?.groupId === created.backend.groupId;
-      expect(persisted || created.backend.serviceIds.length === 1).toBe(true);
+      expect(persisted).toBe(true);
+      expect(apiLive?.groupId).toBe(created.backend.groupId);
       if (fromConfig !== undefined) {
         expect(fromConfig.name).toEqual(created.backend.name);
       }
@@ -151,10 +152,8 @@ test.provider(
           group.groupId === created.backend.groupId &&
           group.environmentId === created.backend.environmentId,
       );
-      if (fromConfig !== undefined || fromProject !== undefined) {
-        expect(found).toBeDefined();
-        expect(found?.name).toEqual(created.backend.name);
-      }
+      expect(found).toBeDefined();
+      expect(found?.name).toEqual(created.backend.name);
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
@@ -184,6 +183,36 @@ test.provider(
         created.backend.serviceIds.sort(),
       );
 
+      const changed = yield* stack.deploy(
+        Effect.gen(function* () {
+          const { project, environment } = yield* suitePartition;
+          const api = yield* Railway.Service("Api", {
+            project,
+            environment,
+            image: "hashicorp/http-echo",
+            port: 5678,
+          });
+          const backend = yield* Railway.Group("Backend", {
+            project,
+            environment,
+            resources: [],
+            collapsed: true,
+            color: "#00ff00",
+          });
+          return { project, environment, api, backend };
+        }),
+      );
+      expect(changed.backend.groupId).toEqual(created.backend.groupId);
+      expect(changed.backend.collapsed).toBe(true);
+      expect(changed.backend.color).toBe("#00ff00");
+      expect(changed.backend.serviceIds).toEqual([]);
+      expect((yield* readService(created.api.serviceId))?.groupId).toBeNull();
+      const changedGroups = yield* readProjectGroups(changed.backend.projectId);
+      expect(
+        changedGroups.find((group) => group.id === changed.backend.groupId)
+          ?.isCollapsed,
+      ).toBe(true);
+
       yield* stack.destroy();
 
       const groupGone = yield* waitUntilGroupGone(
@@ -194,5 +223,5 @@ test.provider(
       );
       expect(groupGone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 3_600_000 },
+  { timeout: 120_000 },
 );

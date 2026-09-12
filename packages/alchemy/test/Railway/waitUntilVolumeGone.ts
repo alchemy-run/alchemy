@@ -6,11 +6,7 @@ const isGoneInstance = (instance: {
   deletedAt: string | null;
   isPendingDeletion: boolean;
   state: string | null;
-}) =>
-  instance.deletedAt != null ||
-  instance.isPendingDeletion ||
-  instance.state === "DELETED" ||
-  instance.state === "DELETING";
+}) => instance.deletedAt != null || instance.state === "DELETED";
 
 /** Poll `volumeInstance({id})` until Railway reports the instance gone. */
 export const waitUntilVolumeGone = (volumeInstanceId: string) =>

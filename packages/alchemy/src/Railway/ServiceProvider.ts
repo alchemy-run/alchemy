@@ -507,20 +507,20 @@ const waitForInstance = (environmentId: string, serviceId: string) =>
     }),
     Effect.retry({
       while: (e) => e._tag === "Railway.ServicePending",
-      // serviceCreate fans the instance out to each environment
-      // asynchronously; under full-suite load the fan-out can take minutes.
-      times: 60,
+      times: 10,
       schedule: Schedule.spaced("2 seconds"),
     }),
-    Effect.catchTag("Railway.ServicePending", () =>
-      getInstance(environmentId, serviceId),
-    ),
   );
 
 const fetchDeployLogs = (deploymentId: string | undefined) =>
   deploymentId === undefined || deploymentId.length === 0
     ? Effect.succeed("")
     : railway.deploymentLogs({ deploymentId, limit: 80 }).pipe(
+        Effect.flatMap((rows) =>
+          rows.length > 0
+            ? Effect.succeed(rows)
+            : railway.buildLogs({ deploymentId, limit: 80 }),
+        ),
         Effect.map((rows) =>
           rows
             .map((row) =>
@@ -530,7 +530,6 @@ const fetchDeployLogs = (deploymentId: string | undefined) =>
             )
             .join("\n"),
         ),
-        Effect.orElseSucceed(() => ""),
       );
 
 const waitForDeployment = (environmentId: string, serviceId: string) =>
@@ -557,8 +556,7 @@ const waitForDeployment = (environmentId: string, serviceId: string) =>
   }).pipe(
     Effect.retry({
       while: (e) => e._tag === "Railway.ServiceDeployPending",
-      // Queued builds under full-suite load can exceed 3 minutes — allow ~8.
-      times: 96,
+      times: 10,
       schedule: Schedule.spaced("5 seconds"),
     }),
   );
@@ -661,7 +659,7 @@ const waitForDeploymentById = (input: {
   }).pipe(
     Effect.retry({
       while: (e) => e._tag === "Railway.ServiceDeployPending",
-      times: 90,
+      times: 10,
       schedule: Schedule.spaced("5 seconds"),
     }),
     Effect.catchTag("Railway.ServiceDeployPending", (pending) =>

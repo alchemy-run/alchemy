@@ -719,14 +719,53 @@ const waitUntilEndpointGone = (input: {
   privateNetworkId: string;
   serviceId: string;
 }) =>
-  getEndpoint(input).pipe(
-    Effect.map((endpoint) => endpoint === undefined),
-    Effect.repeat({
+  railway.privateNetworkEndpoint(input).pipe(
+    Effect.map(
+      (endpoint) =>
+        endpoint == null ||
+        endpoint.deletedAt != null ||
+        endpoint.syncStatus === "DELETED",
+    ),
+    Effect.catchTag("NotFound", () => Effect.succeed(true)),
+    Effect.flatMap((gone) =>
+      gone
+        ? Effect.void
+        : Effect.fail(
+            new PrivateNetworkEndpointPending({ serviceId: input.serviceId }),
+          ),
+    ),
+    Effect.retry({
       schedule: Schedule.spaced("1 second"),
-      until: (gone) => gone,
+      while: (error) => error._tag === "Railway.PrivateNetworkEndpointPending",
       times: 8,
     }),
   );
+
+class PrivateNetworkEndpointPending extends Data.TaggedError(
+  "Railway.PrivateNetworkEndpointPending",
+)<{
+  serviceId: string;
+}> {}
+
+export class PrivateNetworkEndpointNameUnavailable extends Data.TaggedError(
+  "Railway.PrivateNetworkEndpointNameUnavailable",
+)<{
+  privateNetworkId: string;
+  prefix: string;
+}> {}
+
+class PrivateNetworkEndpointNamePending extends Data.TaggedError(
+  "Railway.PrivateNetworkEndpointNamePending",
+)<{
+  prefix: string;
+  dnsName: string | undefined;
+  newDnsName: string | null | undefined;
+  syncStatus: string | undefined;
+}> {
+  get message() {
+    return `Expected DNS prefix ${this.prefix}, observed ${this.dnsName} (pending ${this.newDnsName}, status ${this.syncStatus})`;
+  }
+}
 
 const waitUntilEndpointNamed = (input: {
   environmentId: string;
@@ -738,22 +777,21 @@ const waitUntilEndpointNamed = (input: {
     Effect.flatMap((endpoint) => {
       if (endpoint == null || dnsPrefix(endpoint.dnsName) !== input.prefix) {
         return Effect.fail(
-          new PrivateNetworkEndpointNotCreated({
-            privateNetworkId: input.privateNetworkId,
-            serviceId: input.serviceId,
+          new PrivateNetworkEndpointNamePending({
+            prefix: input.prefix,
+            dnsName: endpoint?.dnsName,
+            newDnsName: endpoint?.newDnsName,
+            syncStatus: endpoint?.syncStatus,
           }),
         );
       }
       return Effect.succeed(endpoint);
     }),
     Effect.retry({
-      while: (e) => e._tag === "Railway.PrivateNetworkEndpointNotCreated",
+      while: (e) => e._tag === "Railway.PrivateNetworkEndpointNamePending",
       times: 8,
       schedule: Schedule.spaced("1 second"),
     }),
-    Effect.catchTag("Railway.PrivateNetworkEndpointNotCreated", () =>
-      getEndpoint(input),
-    ),
   );
 
 export const PrivateNetworkEndpointProvider = () =>
@@ -936,20 +974,23 @@ export const PrivateNetworkEndpointProvider = () =>
           privateNetworkId,
           prefix: desiredPrefix,
         });
-        if (available) {
-          yield* railway.renamePrivateNetworkEndpoint({
-            dnsName: desiredPrefix,
-            id: current.publicId,
+        if (!available) {
+          return yield* new PrivateNetworkEndpointNameUnavailable({
             privateNetworkId,
+            prefix: desiredPrefix,
           });
-          current =
-            (yield* waitUntilEndpointNamed({
-              environmentId,
-              privateNetworkId,
-              serviceId,
-              prefix: desiredPrefix,
-            })) ?? current;
         }
+        yield* railway.renamePrivateNetworkEndpoint({
+          dnsName: desiredPrefix,
+          id: current.publicId,
+          privateNetworkId,
+        });
+        current = yield* waitUntilEndpointNamed({
+          environmentId,
+          privateNetworkId,
+          serviceId,
+          prefix: desiredPrefix,
+        });
       }
 
       return toEndpointAttrs(current, {

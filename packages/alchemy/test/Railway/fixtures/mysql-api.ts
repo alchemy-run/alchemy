@@ -1,5 +1,6 @@
 import * as Drizzle from "@/Drizzle/MySQL.ts";
 import * as Railway from "@/Railway";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
@@ -25,7 +26,8 @@ export default class MySQLApi extends Railway.Service<MySQLApi>()(
     environment: Partition,
     main: import.meta.url,
     port: MYSQL_API_PORT,
-    build: { install: ["mysql2"] },
+    healthcheckTimeout: 30,
+    build: { install: { mysql2: "3.24.2" } },
   },
   Effect.gen(function* () {
     const conn = yield* Railway.ConnectMySQL(Db);
@@ -44,6 +46,9 @@ export default class MySQLApi extends Railway.Service<MySQLApi>()(
         }
         return yield* HttpServerResponse.json({ rows }, { status: 404 });
       }).pipe(
+        Effect.tapError((error) =>
+          Effect.logError(Cause.pretty(Cause.fail(error))),
+        ),
         Effect.catch((error) =>
           HttpServerResponse.json(
             { ok: false, error: String(error) },

@@ -69,6 +69,7 @@ test.provider(
         }),
       );
       if (Result.isFailure(probe)) {
+        yield* Effect.logInfo(probe.failure);
         expect(
           ["RailwayForbidden", "RailwayPlanLimitExceeded"].includes(
             probe.failure._tag,
@@ -143,5 +144,5 @@ test.provider(
       );
       expect(agentGone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 3_600_000 },
+  { timeout: 120_000 },
 );

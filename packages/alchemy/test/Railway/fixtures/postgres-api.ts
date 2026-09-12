@@ -1,5 +1,6 @@
 import * as Drizzle from "@/Drizzle/Postgres.ts";
 import * as Railway from "@/Railway";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
@@ -21,6 +22,7 @@ export default class PostgresApi extends Railway.Service<PostgresApi>()(
     environment: Partition,
     main: import.meta.url,
     port: POSTGRES_PORT,
+    healthcheckTimeout: 30,
     build: { install: ["pg"] },
   },
   Effect.gen(function* () {
@@ -40,6 +42,9 @@ export default class PostgresApi extends Railway.Service<PostgresApi>()(
         }
         return yield* HttpServerResponse.json({ rows }, { status: 404 });
       }).pipe(
+        Effect.tapError((error) =>
+          Effect.logError(Cause.pretty(Cause.fail(error))),
+        ),
         Effect.catch((error) =>
           HttpServerResponse.json(
             { ok: false, error: String(error) },

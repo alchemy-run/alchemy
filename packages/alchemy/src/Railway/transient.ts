@@ -40,24 +40,18 @@ const retryCreateRateLimit = <A, E, R>(
   effect: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R> =>
   effect.pipe(
-    Effect.catch((error) =>
-      error instanceof railway.RailwayRateLimited
-        ? Effect.sleep(
-            Duration.sum(
-              error.retryAfter ?? createRateLimitWait,
-              jitterUpTo(Duration.seconds(30)),
-            ),
-          ).pipe(Effect.andThen(retryCreateRateLimit(effect)))
-        : Effect.fail(error),
-    ),
+    railway.Retry.none,
+    Effect.retry({
+      while: (error) => error instanceof railway.RailwayRateLimited,
+      schedule: Schedule.spaced(createRateLimitWait),
+      times: 1,
+    }),
   );
 
 /**
  * Railway meters project and environment creates at 1 per 30s per user.
- * Distilled tags those as `RailwayRateLimited`. Sleep the hinted delay
- * (or 31s) plus 0–30s jitter and retry until the cap opens. Unbounded.
- * The gate is held across the sleep so the next waiter does not fire
- * another create into a closed window.
+ * Retry once after that window, with nested SDK retries disabled.
+ * Hold the gate across the sleep so another create cannot race the retry.
  */
 export const waitOutCreateRateLimit = <A, E, R>(
   effect: Effect.Effect<A, E, R>,

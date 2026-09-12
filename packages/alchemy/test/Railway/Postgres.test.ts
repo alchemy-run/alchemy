@@ -66,12 +66,10 @@ const selectOne = (url: string) =>
       }
     },
     catch: (cause) => new Error(String(cause)),
-    // A fresh Postgres behind a freshly created TCP proxy can take minutes
-    // to accept connections under full-suite load (cold volume init + proxy
-    // port propagation) — the proxy accepts and immediately closes until
-    // the upstream is ready ("Connection terminated unexpectedly"). Keep
-    // retrying, bounded to ~4 minutes.
-  }).pipe(Effect.retry({ schedule: Schedule.spaced("5 seconds"), times: 48 }));
+  }).pipe(
+    Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 10 }),
+    Effect.timeout("45 seconds"),
+  );
 
 const asVariableMap = (value: unknown): Record<string, string> => {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
@@ -154,10 +152,10 @@ const FixtureStack = Alchemy.Stack(
 );
 
 const fixture = beforeAll(deploy(FixtureStack), {
-  timeout: 3_600_000,
+  timeout: 120_000,
 });
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(FixtureStack), {
-  timeout: 3_600_000,
+  timeout: 120_000,
 });
 
 test.provider(
@@ -287,7 +285,7 @@ test.provider(
       );
       expect(volumeGone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 3_600_000 },
+  { timeout: 120_000 },
 );
 
 test(
@@ -381,7 +379,7 @@ test(
     const rows = yield* selectOne(out.publicConnectionUri);
     expect(firstOk(rows)).toEqual(1);
   }).pipe(logLevel),
-  { timeout: 3_600_000 },
+  { timeout: 120_000 },
 );
 
 test(
@@ -433,5 +431,5 @@ test(
     const health = (yield* get("/")) as { rows?: unknown };
     expect(firstOk(health.rows)).toEqual(1);
   }).pipe(logLevel),
-  { timeout: 3_600_000 },
+  { timeout: 120_000 },
 );

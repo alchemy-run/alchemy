@@ -529,9 +529,6 @@ const waitUntilSynced = (
       times: 10,
       schedule: Schedule.spaced("3 seconds"),
     }),
-    Effect.catchTag("Railway.VolumePending", () =>
-      getByInstanceId(volumeInstanceId),
-    ),
   );
 
 const waitForInstance = (
@@ -560,13 +557,6 @@ const waitForInstance = (
       times: 10,
       schedule: Schedule.spaced("3 seconds"),
     }),
-    Effect.catchTag("Railway.VolumePending", () =>
-      findInEnvironment(
-        environmentId,
-        projectId,
-        (instance) => instance.volumeId === volumeId,
-      ),
-    ),
   );
 
 /**
@@ -603,7 +593,13 @@ export const attachVolumeToService = Effect.fn(function* (input: {
           mountPath: input.mountPath,
         },
       })
-      .pipe(Effect.catchTag("NotFound", () => Effect.void));
+      .pipe(
+        Effect.retry({
+          while: (error) => error._tag === "NotFound",
+          times: 8,
+          schedule: Schedule.spaced("2 seconds"),
+        }),
+      );
   }
   const instance =
     observed ??
@@ -625,20 +621,41 @@ const waitUntilGone = (input: {
   environmentId: string;
   projectId: string;
 }) => {
+  // Railway retains deleted volumes for 48 hours; deletedAt confirms scheduling.
   const check =
     input.volumeInstanceId !== undefined && input.volumeInstanceId.length > 0
-      ? getByInstanceId(input.volumeInstanceId).pipe(
-          Effect.map((instance) => instance === undefined),
+      ? railway.volumeInstance({ id: input.volumeInstanceId }).pipe(
+          Effect.map(
+            (instance) =>
+              instance.deletedAt != null || instance.state === "DELETED",
+          ),
+          Effect.catchTag("NotFound", () => Effect.succeed(true)),
         )
-      : findInEnvironment(
-          input.environmentId,
-          input.projectId,
-          (instance) => instance.volumeId === input.volumeId,
-        ).pipe(Effect.map((instance) => instance === undefined));
+      : railway
+          .environment({ id: input.environmentId, projectId: input.projectId })
+          .pipe(
+            Effect.map(
+              (env) =>
+                !env.volumeInstances.edges.some(
+                  ({ node }) =>
+                    node.volumeId === input.volumeId &&
+                    node.deletedAt == null &&
+                    node.state !== "DELETED",
+                ),
+            ),
+            Effect.catchTag("NotFound", () => Effect.succeed(true)),
+          );
   return check.pipe(
-    Effect.repeat({
+    Effect.flatMap((gone) =>
+      gone
+        ? Effect.void
+        : Effect.fail(
+            new VolumePending({ volumeId: input.volumeId, state: "deleting" }),
+          ),
+    ),
+    Effect.retry({
       schedule: Schedule.spaced("1 second"),
-      until: (gone) => gone,
+      while: (error) => error._tag === "Railway.VolumePending",
       times: 8,
     }),
   );

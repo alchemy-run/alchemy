@@ -1,4 +1,5 @@
 import * as Railway from "@/Railway";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
@@ -25,6 +26,7 @@ export default class MongoApi extends Railway.Service<MongoApi>()(
     environment: Partition,
     main: import.meta.url,
     port: MONGO_HTTP_PORT,
+    healthcheckTimeout: 30,
     build: { install: ["mongodb"] },
   },
   Effect.gen(function* () {
@@ -44,6 +46,9 @@ export default class MongoApi extends Railway.Service<MongoApi>()(
         }
         return yield* HttpServerResponse.json(ping, { status: 404 });
       }).pipe(
+        Effect.tapError((error) =>
+          Effect.logError(Cause.pretty(Cause.fail(error))),
+        ),
         Effect.catch((error) =>
           HttpServerResponse.json(
             { ok: false, error: String(error) },

@@ -172,9 +172,9 @@ const Stack = Alchemy.Stack(
   }),
 );
 
-const stack = beforeAll(deploy(Stack), { timeout: 3_600_000 });
+const stack = beforeAll(deploy(Stack), { timeout: 120_000 });
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), {
-  timeout: 3_600_000,
+  timeout: 120_000,
 });
 
 const retryTransient = {
@@ -267,7 +267,7 @@ describe("Railway Bindings", () => {
         expect(bucketBody.length).toBeGreaterThan(0);
       }
     }).pipe(logLevel),
-    { timeout: 3_600_000 },
+    { timeout: 120_000 },
   );
 
   describe("ReadWriteRedis", () => {
@@ -318,7 +318,7 @@ describe("Railway Bindings", () => {
         const got = yield* Railway.runRedisCommand(url, "GET", ["marker"]);
         expect(got).toEqual(REDIS_VALUE);
       }).pipe(logLevel),
-      { timeout: 3_600_000 },
+      { timeout: 120_000 },
     );
   });
 
@@ -383,7 +383,7 @@ describe("Railway Bindings", () => {
             : yield* Stream.mkString(Stream.decodeText(got.Body));
         expect(text).toEqual(OBJECT_BODY);
       }).pipe(logLevel),
-      { timeout: 3_600_000 },
+      { timeout: 120_000 },
     );
   });
 });
