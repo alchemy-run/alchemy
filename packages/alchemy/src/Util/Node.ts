@@ -15,6 +15,15 @@ import * as NodeNet from "node:net";
 export const initialCwd: string = process.cwd();
 
 /**
+ * The extension of alchemy's own modules next to `importMetaUrl`: `.ts`
+ * when running from `src/` (Bun, or Node under the dev loader), `.js`
+ * from the compiled `lib/`. The dev loader namespaces file URLs with a
+ * query, so only the pathname is consulted.
+ */
+export const moduleExtension = (importMetaUrl: string) =>
+  new URL(importMetaUrl).pathname.endsWith(".ts") ? ".ts" : ".js";
+
+/**
  * Opt out of cross-spawn's temporary `process.chdir` dance.
  *
  * cross-spawn (bundled inside vite, wrangler, next, tinyexec, playwright,

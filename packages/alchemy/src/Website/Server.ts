@@ -10,7 +10,7 @@ import * as LocalProvider from "../Local/LocalProvider.ts";
 import * as ProviderLayer from "../Local/ProviderLayer.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import { initialCwd } from "../Util/Node.ts";
+import { initialCwd, moduleExtension } from "../Util/Node.ts";
 import { sha256Object } from "../Util/sha256.ts";
 
 /**
@@ -481,7 +481,7 @@ export const ServerProviderLocal = () =>
   LocalProvider.make(
     Server,
     import.meta.resolve(
-      import.meta.url.endsWith(".ts") ? "./ServerLocal.ts" : "./ServerLocal.js",
+      `./ServerLocal${moduleExtension(import.meta.url)}`,
       import.meta.url,
     ),
     Effect.gen(function* () {

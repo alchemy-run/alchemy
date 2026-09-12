@@ -20,6 +20,7 @@ import {
   resolveStackArgs,
 } from "./flags.ts";
 import { suppressInterruptMessages } from "./errors.ts";
+import { moduleExtension } from "alchemy/Util/Node";
 
 /**
  * Trust the Floci emulator CA in `alchemy dev` so cross-cloud data planes
@@ -84,9 +85,7 @@ export const devCommand = Command.make(
         // second import of the same URL hits the module cache.
         const entry = fileURLToPath(
           import.meta.resolve(
-            import.meta.url.endsWith(".ts")
-              ? "alchemy/bin/exec.ts"
-              : "alchemy/bin/exec.js",
+            `alchemy/bin/exec${moduleExtension(import.meta.url)}`,
           ),
         );
         command = [

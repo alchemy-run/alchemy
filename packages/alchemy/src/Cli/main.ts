@@ -16,6 +16,7 @@ import { ProfileStoreLive } from "alchemy/Auth/Profile";
 import { routeCacheLayer } from "alchemy/Alchemist/Session";
 import { TelemetryLive } from "alchemy/Telemetry/Layer";
 import { PlatformServices } from "alchemy/Util/PlatformServices";
+import { moduleExtension } from "alchemy/Util/Node";
 import packageJson from "../../package.json" with { type: "json" };
 
 import * as CliKit from "./CliKit/index.ts";
@@ -153,7 +154,7 @@ const devRunMode = import.meta.url.includes("/node_modules/")
       typeof globalThis.Bun !== "undefined"
         ? `bun ${globalThis.Bun.version}`
         : `node ${process.versions.node}`
-    }, ${import.meta.url.endsWith(".ts") ? "src" : "lib"}`;
+    }, ${moduleExtension(import.meta.url) === ".ts" ? "src" : "lib"}`;
 
 const cli = Command.run(root, {
   version:
