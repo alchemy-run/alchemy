@@ -76,3 +76,6 @@ examples/cloudflare-worker/src/scratch.ts
 .ai-workspace/
 /processes/
 .probe
+
+# pkg pack output (CI artifact hand-off)
+.pkg

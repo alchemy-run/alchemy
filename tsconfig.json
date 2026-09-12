@@ -29,6 +29,9 @@
     {
       "path": "./submodules/distilled/packages/fly-io/tsconfig.json"
     },
+    {
+      "path": "./submodules/distilled/packages/github/tsconfig.json"
+    },
     // Consolidated Cloudflare runtime, framework, and test-tool projects.
     {
       "path": "./packages/node-utils/tsconfig.json"
@@ -64,7 +67,7 @@
       "path": "./packages/better-auth/tsconfig.json"
     },
     {
-      "path": "./packages/pr-package/tsconfig.json"
+      "path": "./packages/pkg/tsconfig.json"
     },
     // TODO(sam): fix by upgrading starlight to ^0.39.2
     // {
@@ -120,9 +123,6 @@
     },
     {
       "path": "./examples/cloudflare-worker/tsconfig.json"
-    },
-    {
-      "path": "./examples/cloudflare-pr-package/tsconfig.json"
     },
     {
       "path": "./examples/cloudflare-email/tsconfig.json"
