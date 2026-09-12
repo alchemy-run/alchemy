@@ -1,0 +1,512 @@
+import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
+import * as iam from "@distilled.cloud/gcp/unstable/iam_v1";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Option from "effect/Option";
+import * as Schedule from "effect/Schedule";
+import * as Binding from "../Binding.ts";
+import { parseServiceAccountKey } from "./Token.ts";
+import {
+  Resource,
+  type ResourceBinding,
+  type ResourceLike,
+} from "../Resource.ts";
+
+/**
+ * IAM grant attached to a GCP runtime host (Cloud Run Service/Job or
+ * Cloud Function) the way AWS bindings attach `policyStatements` and
+ * Cloudflare HTTP bindings mint a scoped `AccountApiToken`.
+ */
+export type GcpIamGrant = {
+  /**
+   * Predefined or custom role, e.g. `roles/redis.editor` or
+   * `roles/aiplatform.user`.
+   */
+  role: string;
+  /**
+   * Resource name used only to select the **project** for
+   * `projects.setIamPolicy` (`projects/{id}/...`). It is not a
+   * resource-scoped IAM policy (no `topics.setIamPolicy`). `projects/_/...`
+   * (Storage) falls back to the host project.
+   */
+  resource?: string;
+};
+
+/**
+ * Binding contract for GCP effectful hosts. Capability implementations
+ * call `host.bind` with env (packed into the container/function) and IAM
+ * grants (applied to the runtime service account).
+ */
+export type GcpHostBinding = {
+  env?: Record<string, any>;
+  iam?: GcpIamGrant[];
+};
+
+const GCP_HOST_TYPES = new Set([
+  "GCP.Run.Service",
+  "GCP.Run.Job",
+  "GCP.Run.WorkerPool",
+  "GCP.CloudFunctions.Function",
+]);
+
+/**
+ * Default IAM role for a binding tag (`GCP.KMS.Decrypt` → KMS).
+ * Bindings may override with an explicit `role`.
+ */
+const ROLE_BY_SERVICE: Record<string, string> = {
+  aiplatform: "roles/aiplatform.user",
+  alloydb: "roles/alloydb.client",
+  apikeys: "roles/serviceusage.apiKeysViewer",
+  artifactregistry: "roles/artifactregistry.reader",
+  bigquery: "roles/bigquery.user",
+  bigqueryconnection: "roles/bigquery.connectionUser",
+  bigquerydatatransfer: "roles/bigquery.admin",
+  bigtable: "roles/bigtable.user",
+  binaryauthorization: "roles/binaryauthorization.attestorsViewer",
+  cloudbuild: "roles/cloudbuild.builds.editor",
+  cloudfunctions: "roles/cloudfunctions.developer",
+  cloudscheduler: "roles/cloudscheduler.jobRunner",
+  cloudtasks: "roles/cloudtasks.enqueuer",
+  composer: "roles/composer.user",
+  compute: "roles/compute.instanceAdmin.v1",
+  connectors: "roles/connectors.viewer",
+  container: "roles/container.developer",
+  containeranalysis: "roles/containeranalysis.occurrences.viewer",
+  contentwarehouse: "roles/contentwarehouse.documentAdmin",
+  datapipelines: "roles/datapipelines.viewer",
+  dataproc: "roles/dataproc.editor",
+  datastore: "roles/datastore.user",
+  documentai: "roles/documentai.apiUser",
+  drive: "roles/drive.readonly",
+  filestore: "roles/file.editor",
+  firebaseappcheck: "roles/firebaseappcheck.admin",
+  firebasedataconnect: "roles/firebasedataconnect.cloudSqlClient",
+  firebaserules: "roles/firebaserules.system",
+  firestore: "roles/datastore.user",
+  kms: "roles/cloudkms.cryptoOperator",
+  licensing: "roles/licensing.user",
+  managedkafka: "roles/managedkafka.client",
+  memcache: "roles/memcache.editor",
+  ml: "roles/ml.developer",
+  oracledatabase: "roles/oracledatabase.admin",
+  parametermanager: "roles/parametermanager.parameterAccessor",
+  privateca: "roles/privateca.certificateManager",
+  pubsub: "roles/pubsub.editor",
+  pubsublite: "roles/pubsublite.publisher",
+  recaptchaenterprise: "roles/recaptchaenterprise.agent",
+  redis: "roles/redis.editor",
+  retail: "roles/retail.admin",
+  run: "roles/run.developer",
+  secretmanager: "roles/secretmanager.secretAccessor",
+  servicedirectory: "roles/servicedirectory.editor",
+  spanner: "roles/spanner.databaseUser",
+  speech: "roles/speech.client",
+  sql: "roles/cloudsql.client",
+  storage: "roles/storage.objectAdmin",
+  storagetransfer: "roles/storagetransfer.user",
+  tpu: "roles/tpu.admin",
+  translate: "roles/cloudtranslate.user",
+  transcoder: "roles/transcoder.admin",
+  workflows: "roles/workflows.invoker",
+  workstations: "roles/workstations.user",
+};
+
+export const defaultRoleFor = (tag: string): string => {
+  const service = tag.split(".")[1]?.toLowerCase() ?? "";
+  return ROLE_BY_SERVICE[service] ?? "roles/viewer";
+};
+
+/**
+ * True for any Alchemy GCP host that accepts {@link GcpHostBinding}.
+ * HTTP `Binding.Service` implementations guard `host.bind` with this
+ * before granting IAM / injecting env.
+ */
+export const isGcpHost = (
+  value: ResourceLike | undefined,
+): value is Resource<string, object, object, GcpHostBinding> =>
+  typeof value === "object" &&
+  value !== null &&
+  "Type" in value &&
+  GCP_HOST_TYPES.has((value as { Type: string }).Type);
+
+export const collectHostBindings = (
+  bindings: readonly (ResourceBinding<GcpHostBinding> & {
+    action?: string;
+  })[],
+): { env: Record<string, any>; iam: GcpIamGrant[] } => {
+  const active = bindings.filter((binding) => binding.action !== "delete");
+  const env = active
+    .map((binding) => binding.data?.env)
+    .reduce<Record<string, any>>((acc, next) => ({ ...acc, ...next }), {});
+  const iam = active.flatMap((binding) => binding.data?.iam ?? []);
+  return { env, iam };
+};
+
+const lastSegment = (value: string) => {
+  const trimmed = value.replace(/\/+$/, "");
+  const parts = trimmed.split("/");
+  return parts[parts.length - 1] || trimmed;
+};
+
+/**
+ * Project number for the default Compute Engine service account
+ * (`{number}-compute@developer.gserviceaccount.com`).
+ */
+export const projectNumber = (project: string) =>
+  resourcemanager
+    .getProjects({ name: `projects/${project}` })
+    .pipe(Effect.map((resource) => lastSegment(resource.name ?? "")));
+
+export const defaultComputeServiceAccount = (project: string) =>
+  projectNumber(project).pipe(
+    Effect.map((number) => `${number}-compute@developer.gserviceaccount.com`),
+  );
+
+const memberOf = (email: string) =>
+  email.startsWith("serviceAccount:") ? email : `serviceAccount:${email}`;
+
+/**
+ * RFC1035 account id for a per-host runtime SA (`6-30` chars).
+ */
+export const hostServiceAccountId = (resourceId: string): string => {
+  const base = resourceId
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  let id = `alch-${base}`.slice(0, 30).replace(/-+$/g, "");
+  if (!/^[a-z]/.test(id)) id = `a${id}`.slice(0, 30);
+  if (id.length < 6) id = `${id}xxxxxx`.slice(0, 6);
+  return id;
+};
+
+export const hostServiceAccountEmail = (project: string, accountId: string) =>
+  `${accountId}@${project}.iam.gserviceaccount.com`;
+
+/** Display name stamped on Alchemy-minted host SAs so nuke can list them. */
+export const ALCHEMY_HOST_SA_DISPLAY_NAME = "alchemy-host";
+
+const isSaCreateQuotaError = (error: {
+  _tag: string;
+  message?: string;
+}): boolean =>
+  error._tag === "TooManyRequests" ||
+  error._tag === "ServiceAccountQuotaExceeded" ||
+  (error._tag === "UnknownGCPError" &&
+    (error.message ?? "").includes("Service accounts created per minute"));
+
+const grantActAs = (project: string, saName: string) =>
+  Effect.gen(function* () {
+    const number = yield* projectNumber(project);
+    const members = [
+      `serviceAccount:service-${number}@serverless-robot-prod.iam.gserviceaccount.com`,
+      `serviceAccount:service-${number}@gcf-admin-robot.iam.gserviceaccount.com`,
+    ];
+    const keyFile = yield* Config.option(
+      Config.String("GOOGLE_APPLICATION_CREDENTIALS"),
+    );
+    if (Option.isSome(keyFile)) {
+      const fs = yield* FileSystem.FileSystem;
+      const raw = yield* fs
+        .readFileString(keyFile.value)
+        .pipe(
+          Effect.catchReason("PlatformError", "NotFound", () =>
+            Effect.succeed(""),
+          ),
+        );
+      if (raw.length > 0) {
+        const parsed = yield* parseServiceAccountKey(raw).pipe(
+          Effect.catchTag("AuthError", () => Effect.succeed(undefined)),
+        );
+        if (parsed?.client_email) {
+          members.push(`serviceAccount:${parsed.client_email}`);
+        }
+      }
+    }
+    const policy = yield* iam
+      .getIamPolicyProjectsServiceAccounts({ resource: saName })
+      .pipe(
+        Effect.catchTag("NotFound", () =>
+          Effect.succeed({ bindings: [] } as iam.Policy),
+        ),
+      );
+    const bindings = [...(policy.bindings ?? [])];
+    const role = "roles/iam.serviceAccountUser";
+    let dirty = false;
+    const existing = bindings.find((binding) => binding.role === role);
+    if (existing === undefined) {
+      bindings.push({ role, members });
+      dirty = true;
+    } else {
+      const current = existing.members ?? [];
+      for (const member of members) {
+        if (!current.includes(member)) {
+          existing.members = [...current, member];
+          dirty = true;
+        }
+      }
+    }
+    if (!dirty) return;
+    yield* iam.setIamPolicyProjectsServiceAccounts({
+      resource: saName,
+      body: {
+        policy: {
+          ...policy,
+          etag: policy.etag,
+          bindings,
+        },
+      },
+    });
+  });
+
+/**
+ * Create (or adopt) the per-host runtime service account and grant
+ * `roles/iam.serviceAccountUser` so Cloud Run / Functions can `actAs` it.
+ * Create retries the per-minute SA quota; Conflict is a race.
+ */
+export const ensureHostServiceAccount = (
+  project: string,
+  resourceId: string,
+) => {
+  const accountId = hostServiceAccountId(resourceId);
+  const email = hostServiceAccountEmail(project, accountId);
+  const name = `projects/${project}/serviceAccounts/${email}`;
+  return Effect.gen(function* () {
+    const existing = yield* iam
+      .getProjectsServiceAccounts({ name })
+      .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    if (existing?.email === undefined || existing.email.length === 0) {
+      yield* iam
+        .createProjectsServiceAccounts({
+          name: `projects/${project}`,
+          body: {
+            accountId,
+            serviceAccount: { displayName: ALCHEMY_HOST_SA_DISPLAY_NAME },
+          },
+        })
+        .pipe(
+          Effect.retry({
+            while: isSaCreateQuotaError,
+            times: 6,
+            schedule: Schedule.exponential("2 seconds"),
+          }),
+          Effect.catchTag("Conflict", () => Effect.void),
+        );
+    }
+    yield* grantActAs(project, name);
+    return email;
+  });
+};
+
+/** Retry Cloud Run / Functions create while IAM `actAs` is propagating. */
+export const retryActAs = <A, E extends { _tag: string }, R>(
+  effect: Effect.Effect<A, E, R>,
+) =>
+  effect.pipe(
+    Effect.retry({
+      while: (error) => error._tag === "Forbidden",
+      times: 8,
+      schedule: Schedule.spaced("2 seconds"),
+    }),
+  );
+
+/**
+ * Grant `roles` to `member` on the GCP project and remove the member from
+ * every other role (read-modify-write of `projects.setIamPolicy`). Empty
+ * `roles` revokes the member from all project roles.
+ */
+export const syncProjectIam = (
+  project: string,
+  member: string,
+  roles: readonly string[],
+) => {
+  const unique = [...new Set(roles.filter((role) => role.length > 0))];
+  const principal = memberOf(member);
+  const resource = `projects/${project}`;
+  return Effect.gen(function* () {
+    const policy = yield* resourcemanager.getIamPolicyProjects({ resource });
+    const bindings = [...(policy.bindings ?? [])];
+    let dirty = false;
+    for (const role of unique) {
+      const existing = bindings.find((binding) => binding.role === role);
+      if (existing === undefined) {
+        bindings.push({ role, members: [principal] });
+        dirty = true;
+        continue;
+      }
+      const members = existing.members ?? [];
+      if (!members.includes(principal)) {
+        existing.members = [...members, principal];
+        dirty = true;
+      }
+    }
+    for (const binding of bindings) {
+      if (binding.role !== undefined && unique.includes(binding.role)) continue;
+      const members = binding.members ?? [];
+      if (!members.includes(principal)) continue;
+      binding.members = members.filter((item) => item !== principal);
+      dirty = true;
+    }
+    if (!dirty) return;
+    yield* resourcemanager.setIamPolicyProjects({
+      resource,
+      body: {
+        policy: {
+          ...policy,
+          bindings: bindings.filter(
+            (binding) => (binding.members?.length ?? 0) > 0,
+          ),
+        },
+      },
+    });
+  });
+};
+
+/**
+ * Grant `roles` to `member` on the GCP project without revoking other
+ * roles (user-supplied runtime SAs).
+ */
+export const grantProjectIam = (
+  project: string,
+  member: string,
+  roles: readonly string[],
+) => {
+  const unique = [...new Set(roles.filter((role) => role.length > 0))];
+  if (unique.length === 0) return Effect.void;
+  const principal = memberOf(member);
+  const resource = `projects/${project}`;
+  return Effect.gen(function* () {
+    const policy = yield* resourcemanager.getIamPolicyProjects({ resource });
+    const bindings = [...(policy.bindings ?? [])];
+    let dirty = false;
+    for (const role of unique) {
+      const existing = bindings.find((binding) => binding.role === role);
+      if (existing === undefined) {
+        bindings.push({ role, members: [principal] });
+        dirty = true;
+        continue;
+      }
+      const members = existing.members ?? [];
+      if (!members.includes(principal)) {
+        existing.members = [...members, principal];
+        dirty = true;
+      }
+    }
+    if (!dirty) return;
+    yield* resourcemanager.setIamPolicyProjects({
+      resource,
+      body: {
+        policy: {
+          ...policy,
+          bindings,
+        },
+      },
+    });
+  });
+};
+
+/**
+ * Delete the alchemy-managed host SA (no-op if it does not exist) after
+ * revoking its project IAM.
+ */
+export const deleteHostServiceAccount = (
+  project: string,
+  resourceId: string,
+) => {
+  const accountId = hostServiceAccountId(resourceId);
+  const email = hostServiceAccountEmail(project, accountId);
+  const name = `projects/${project}/serviceAccounts/${email}`;
+  return Effect.gen(function* () {
+    yield* syncProjectIam(project, email, []);
+    yield* iam
+      .deleteProjectsServiceAccounts({ name })
+      .pipe(Effect.catchTag("NotFound", () => Effect.void));
+  });
+};
+
+/**
+ * Project id a grant applies to. `projects/{id}/...` resource names
+ * (and bare `projects/{id}`) pin a project; anything else falls back
+ * to the host project. HTTP bindings grant on the project (the runtime
+ * SA analog of AWS `policyStatements`) — resource-scoped IAM APIs
+ * differ per service.
+ */
+const projectFromResource = (
+  resource: string | undefined,
+  fallback: string,
+): string => {
+  if (resource === undefined || resource.length === 0) return fallback;
+  const match = /^projects\/([^/]+)/.exec(resource);
+  const project = match?.[1];
+  // Storage uses `projects/_/buckets/{name}`; `_` is not a project id.
+  if (project === undefined || project.length === 0 || project === "_") {
+    return fallback;
+  }
+  return project;
+};
+
+/**
+ * Apply collected host bindings: merge env, grant IAM to the runtime
+ * service account. Grants are grouped by `grant.resource`'s project
+ * (default: the host project).
+ */
+export const applyHostBindings = Effect.fn(function* (options: {
+  project: string;
+  serviceAccount: string;
+  bindings: readonly ResourceBinding<GcpHostBinding>[];
+  /**
+   * When true (alchemy-managed host SA), revoke roles not in the desired
+   * set. User-supplied SAs stay additive-only.
+   */
+  revoke?: boolean;
+}) {
+  const collected = collectHostBindings(options.bindings);
+  const rolesByProject = new Map<string, string[]>();
+  for (const grant of collected.iam) {
+    if (grant.role.length === 0) continue;
+    const project = projectFromResource(grant.resource, options.project);
+    const roles = rolesByProject.get(project);
+    if (roles === undefined) {
+      rolesByProject.set(project, [grant.role]);
+    } else {
+      roles.push(grant.role);
+    }
+  }
+  const apply = options.revoke === true ? syncProjectIam : grantProjectIam;
+  if (
+    options.revoke === true ||
+    (rolesByProject.get(options.project)?.length ?? 0) > 0
+  ) {
+    yield* apply(
+      options.project,
+      options.serviceAccount,
+      rolesByProject.get(options.project) ?? [],
+    );
+  }
+  for (const [project, roles] of rolesByProject) {
+    if (project === options.project) continue;
+    yield* apply(project, options.serviceAccount, roles);
+  }
+  return collected;
+});
+
+/**
+ * Bind IAM (+ optional env) onto the ambient GCP host at deploy time.
+ * No-op inside the deployed runtime (`__ALCHEMY_RUNTIME__`).
+ */
+export const bindGcpHost = (options: {
+  tag: string;
+  resource: { readonly LogicalId: string };
+  iam: GcpIamGrant[];
+  env?: Record<string, any>;
+}): Effect.Effect<void> =>
+  Effect.gen(function* () {
+    if (globalThis.__ALCHEMY_RUNTIME__) return;
+    const host = yield* Binding.Host;
+    if (!isGcpHost(host)) return;
+    yield* host.bind`Allow(${host}, ${options.tag}(${options.resource}))`({
+      iam: options.iam,
+      env: options.env,
+    });
+  }) as Effect.Effect<void>;

@@ -1,0 +1,28 @@
+---
+title: Publish and subscribe with Pub/Sub
+description: Publish from a Function and create a pull Subscription.
+---
+
+## Publish
+
+```typescript
+const topic = yield* GCP.PubSub.Topic("events", {});
+const publish = yield* GCP.PubSub.Publish(topic);
+yield* publish({
+  body: { messages: [{ data: btoa("hello") }] },
+});
+```
+
+Provide `GCP.PubSub.PublishHttp` on the Function.
+
+## Subscribe
+
+Point a `Subscription` at a topic. Push to a Function URL is a
+follow-up (`consumeMessages`); today set `pushConfig.pushEndpoint`
+yourself or pull with `GCP.PubSub.Pull`.
+
+```typescript
+const sub = yield* GCP.PubSub.Subscription("events-sub", {
+  topic: topic.name,
+});
+```

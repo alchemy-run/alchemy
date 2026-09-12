@@ -233,6 +233,24 @@
       "worker": "./src/Hetzner/*.ts",
       "import": "./lib/Hetzner/*.js"
     },
+    "./Redis": {
+      "types": "./lib/Redis/index.d.ts",
+      "bun": "./src/Redis/index.ts",
+      "worker": "./src/Redis/index.ts",
+      "import": "./lib/Redis/index.js"
+    },
+    "./GCP": {
+      "types": "./lib/GCP/index.d.ts",
+      "bun": "./src/GCP/index.ts",
+      "worker": "./src/GCP/index.ts",
+      "import": "./lib/GCP/index.js"
+    },
+    "./GCP/*": {
+      "types": "./lib/GCP/*/index.d.ts",
+      "bun": "./src/GCP/*/index.ts",
+      "worker": "./src/GCP/*/index.ts",
+      "import": "./lib/GCP/*/index.js"
+    },
     "./Fly": {
       "types": "./lib/Fly/index.d.ts",
       "bun": "./src/Fly/index.ts",
@@ -326,12 +344,6 @@
       "bun": "./src/Process/index.ts",
       "worker": "./src/Process/index.ts",
       "import": "./lib/Process/index.js"
-    },
-    "./Redis": {
-      "types": "./lib/Redis/index.d.ts",
-      "bun": "./src/Redis/index.ts",
-      "worker": "./src/Redis/index.ts",
-      "import": "./lib/Redis/index.js"
     },
     "./SQL/*": {
       "types": "./lib/SQL/*.d.ts",
@@ -429,6 +441,7 @@
     "@distilled.cloud/cloudflare": "workspace:*",
     "@distilled.cloud/core": "workspace:*",
     "@distilled.cloud/fly-io": "workspace:*",
+    "@distilled.cloud/gcp": "workspace:*",
     "@distilled.cloud/hetzner": "workspace:*",
     "@distilled.cloud/neon": "workspace:*",
     "@distilled.cloud/planetscale": "workspace:*",

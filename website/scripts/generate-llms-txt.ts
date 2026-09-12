@@ -288,6 +288,24 @@ const SECTIONS: Section[] = [
     pages: { directory: "aws/networking" },
   },
   {
+    heading: "GCP",
+    intro:
+      "Google Cloud as Stack resources — Cloud Run Functions, Storage, Pub/Sub, Memorystore. Bindings grant IAM onto a per-host service account.",
+    pages: {
+      slugs: [
+        "gcp/index",
+        "gcp/setup",
+        "gcp/tutorial/part-1",
+        "gcp/tutorial/part-2",
+        "gcp/tutorial/part-3",
+        "gcp/tutorial/part-4",
+        "gcp/guides/cloud-run-api",
+        "gcp/guides/pubsub",
+        "gcp/guides/memorystore",
+      ],
+    },
+  },
+  {
     heading: "Fly — start here",
     intro:
       "The Fly hub: overview (Apps, Machines, Services, Sprites) and setup (org, API token, profile).",
