@@ -325,11 +325,7 @@ const makeRelay = (pendingTimeout: Duration.Duration): Relay => {
   };
 };
 
-const listen = (
-  relay: Relay,
-  host: string,
-  port: number,
-): Effect.Effect<NodeNet.Server, ConfigError | SystemError, Scope.Scope> =>
+const listen = (relay: Relay, host: string, port: number) =>
   Effect.acquireRelease(
     Effect.callback<NodeNet.Server, ConfigError | SystemError>((resume) => {
       const server = NodeNet.createServer(relay.accept);
