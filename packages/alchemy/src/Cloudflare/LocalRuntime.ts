@@ -10,6 +10,7 @@ import { LOCAL_ID_PREFIX } from "../ProviderMode.ts";
 import { CloudflareEnvironment } from "./CloudflareEnvironment.ts";
 import type { Queue } from "./Queues/Queue.ts";
 import type { Consumer } from "./Queues/Consumer.ts";
+import { moduleExtension } from "../Util/Node.ts";
 
 /**
  * The Cloudflare provider group module ([Local.ts](./Local.ts)) every
@@ -23,7 +24,7 @@ export const LOCAL_PROVIDERS_URL = import.meta.resolve(
   // the actual on-disk extension of *this* file (`.ts` when loaded from
   // `src/` under Bun or vitest, `.js` when loaded from the compiled `lib/`
   // under Node), which is exactly the signal we need.
-  import.meta.url.endsWith(".ts") ? "./Local.ts" : "./Local.js",
+  `./Local${moduleExtension(import.meta.url)}`,
   import.meta.url,
 );
 

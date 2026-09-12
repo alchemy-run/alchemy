@@ -47,6 +47,7 @@ import type { ProviderService } from "../../Provider.ts";
 import type { ResourceClassLike, ResourceLike } from "../../Resource.ts";
 import { flociServices } from "./FlociServices.ts";
 import { withProviderContext } from "./ProviderContext.ts";
+import { moduleExtension } from "../../Util/Node.ts";
 
 /**
  * The AWS provider group module ([Local.ts](./Local.ts)) — every
@@ -55,7 +56,7 @@ import { withProviderContext } from "./ProviderContext.ts";
  */
 export const flociProvidersUrl = () =>
   import.meta.resolve(
-    import.meta.url.endsWith(".ts") ? "./Local.ts" : "./Local.js",
+    `./Local${moduleExtension(import.meta.url)}`,
     import.meta.url,
   );
 

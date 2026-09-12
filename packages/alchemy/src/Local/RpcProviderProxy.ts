@@ -17,6 +17,7 @@ import {
   SESSION_ENV_PARAM,
 } from "./RpcServerEnvironment.ts";
 import type { RpcSpawnPayload } from "./RpcSpawner.ts";
+import { moduleExtension } from "../Util/Node.ts";
 
 export class RpcProviderProxy extends Context.Service<
   RpcProviderProxy,
@@ -42,7 +43,7 @@ export const SPAWNER_URL_ENV_KEY = "ALCHEMY_RPC_SPAWNER_URL" as const;
  * is what the spawner needs to start it.
  */
 export const SIDECAR_ENTRY_URL = import.meta.resolve(
-  import.meta.url.endsWith(".ts") ? "./Sidecar.ts" : "./Sidecar.js",
+  `./Sidecar${moduleExtension(import.meta.url)}`,
   import.meta.url,
 );
 
