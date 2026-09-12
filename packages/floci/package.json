@@ -44,11 +44,11 @@
     "access": "public"
   },
   "peerDependencies": {
-    "effect": "catalog:effect"
+    "effect": "catalog:"
   },
   "devDependencies": {
-    "@types/node": "catalog:tooling",
-    "effect": "catalog:effect",
-    "typescript": "catalog:build"
+    "@types/node": "catalog:",
+    "effect": "catalog:",
+    "typescript": "catalog:"
   }
 }

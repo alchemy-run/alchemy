@@ -40,12 +40,12 @@
   },
   "dependencies": {
     "alchemy": "workspace:*",
-    "effect": "catalog:effect"
+    "effect": "catalog:"
   },
   "publishConfig": {
     "access": "public"
   },
   "devDependencies": {
-    "typescript": "catalog:build"
+    "typescript": "catalog:"
   }
 }
