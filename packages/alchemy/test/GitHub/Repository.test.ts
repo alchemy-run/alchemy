@@ -1,6 +1,7 @@
+import * as Repos from "@distilled.cloud/github/repos";
 import { adopt } from "@/AdoptPolicy";
 import * as GitHub from "@/GitHub";
-import { Octokit } from "@/GitHub/Octokit.ts";
+import { githubFor } from "@/GitHub/Client.ts";
 import * as Provider from "@/Provider";
 import { destroy } from "@/RemovalPolicy";
 import * as Test from "@/Test/Alchemy";
@@ -33,22 +34,11 @@ const canDeleteRepos = !!process.env.GITHUB_TEST_DELETE_REPO;
 
 const getRepo = (repo: string, repoOwner: string = owner) =>
   Effect.gen(function* () {
-    const octokit = yield* Octokit;
-    return yield* Effect.tryPromise({
-      try: async () => {
-        try {
-          const { data } = await octokit.rest.repos.get({
-            owner: repoOwner,
-            repo,
-          });
-          return data;
-        } catch (error: any) {
-          if (error.status === 404) return undefined;
-          throw error;
-        }
-      },
-      catch: (e) => e as Error,
-    });
+    const github = yield* githubFor();
+    return yield* Repos.get({ owner: repoOwner, repo }).pipe(
+      github,
+      Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    );
   });
 
 test.provider.skipIf(!owner || !canDeleteRepos)(
@@ -130,7 +120,7 @@ test.provider.skipIf(!owner || !canDeleteRepos)(
       const afterRename = yield* getRepo(renamed);
       expect(afterRename?.id).toEqual(created.repoId);
       // GitHub keeps a permanent redirect from a renamed repository's old
-      // name, and Octokit follows the 301 — so fetching the old name returns
+      // name, and the HTTP client follows the 301 — so fetching the old name returns
       // the SAME repository under its new name rather than a 404.
       const oldName = yield* getRepo(name);
       expect(oldName?.id).toEqual(created.repoId);

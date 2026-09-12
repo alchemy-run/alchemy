@@ -1,11 +1,12 @@
+import { Credentials } from "@distilled.cloud/github/Credentials";
 import { readEnvCredentials } from "@/GitHub/AuthProvider";
-import { GitHubCredentials, fromToken } from "@/GitHub/Credentials";
+import { fromToken } from "@/GitHub/Credentials";
 import {
   githubHostname,
   normalizeGitHubBaseUrl,
   resolveGitHubBaseUrlFromEnv,
 } from "@/GitHub/BaseUrl";
-import { gitHubBaseUrlChanged, octokitFor } from "@/GitHub/Octokit";
+import { gitHubBaseUrlChanged, githubFor } from "@/GitHub/Client";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
@@ -15,7 +16,7 @@ const normalize = (input: string) =>
   Effect.runSync(normalizeGitHubBaseUrl(input));
 
 describe("normalizeGitHubBaseUrl", () => {
-  test("github.com hosts normalize to undefined (Octokit default)", () => {
+  test("github.com hosts normalize to undefined (SDK default)", () => {
     expect(normalize("github.com")).toBeUndefined();
     expect(normalize("https://github.com")).toBeUndefined();
     expect(normalize("https://www.github.com/")).toBeUndefined();
@@ -238,13 +239,18 @@ describe("gitHubBaseUrlChanged", () => {
   });
 });
 
-describe("octokitFor", () => {
-  const octokitOf = (
+describe("githubFor", () => {
+  const credentialsOf = (
     credsBaseUrl: string | undefined,
     resourceBaseUrl: string | undefined,
   ) =>
     Effect.runSync(
-      octokitFor(resourceBaseUrl).pipe(
+      githubFor(resourceBaseUrl).pipe(
+        Effect.flatMap((provide) =>
+          Effect.gen(function* () {
+            return yield* yield* Credentials;
+          }).pipe(provide),
+        ),
         Effect.provide(
           fromToken(
             "test-token",
@@ -255,47 +261,42 @@ describe("octokitFor", () => {
     );
 
   test("falls back to the credentials' host when no override is given", () => {
-    const octokit = octokitOf("github.example.com", undefined);
-    expect(octokit.request.endpoint.DEFAULTS.baseUrl).toBe(
-      "https://github.example.com/api/v3",
-    );
+    const credentials = credentialsOf("github.example.com", undefined);
+    expect(credentials.apiBaseUrl).toBe("https://github.example.com/api/v3");
   });
 
   test("a per-resource baseUrl overrides the credentials' host", () => {
-    const octokit = octokitOf("github.example.com", "other.example.com");
-    expect(octokit.request.endpoint.DEFAULTS.baseUrl).toBe(
-      "https://other.example.com/api/v3",
+    const credentials = credentialsOf(
+      "github.example.com",
+      "other.example.com",
     );
+    expect(credentials.apiBaseUrl).toBe("https://other.example.com/api/v3");
   });
 
   test("an explicit github.com override wins over an enterprise credential host", () => {
-    const octokit = octokitOf("github.example.com", "github.com");
-    expect(octokit.request.endpoint.DEFAULTS.baseUrl).toBe(
-      "https://api.github.com",
-    );
+    const credentials = credentialsOf("github.example.com", "github.com");
+    expect(credentials.apiBaseUrl).toBe("https://api.github.com");
   });
 });
 
 describe("fromToken", () => {
-  const octokitOf = (options?: { baseUrl?: string }) =>
+  const credentialsOf = (options?: { baseUrl?: string }) =>
     Effect.runSync(
       Effect.gen(function* () {
-        const creds = yield* yield* GitHubCredentials;
-        return creds.octokit();
+        const provide = yield* githubFor();
+        return yield* Effect.gen(function* () {
+          return yield* yield* Credentials;
+        }).pipe(provide);
       }).pipe(Effect.provide(fromToken("test-token", options))),
     );
 
   test("defaults to api.github.com", () => {
-    const octokit = octokitOf();
-    expect(octokit.request.endpoint.DEFAULTS.baseUrl).toBe(
-      "https://api.github.com",
-    );
+    const credentials = credentialsOf();
+    expect(credentials.apiBaseUrl).toBe("https://api.github.com");
   });
 
-  test("passes the normalized enterprise base URL to Octokit", () => {
-    const octokit = octokitOf({ baseUrl: "github.example.com" });
-    expect(octokit.request.endpoint.DEFAULTS.baseUrl).toBe(
-      "https://github.example.com/api/v3",
-    );
+  test("passes the normalized enterprise base URL to distilled", () => {
+    const credentials = credentialsOf({ baseUrl: "github.example.com" });
+    expect(credentials.apiBaseUrl).toBe("https://github.example.com/api/v3");
   });
 });

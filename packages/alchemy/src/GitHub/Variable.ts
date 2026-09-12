@@ -1,9 +1,12 @@
+import * as Actions from "@distilled.cloud/github/actions";
+import * as Repos from "@distilled.cloud/github/repos";
+import * as Stream from "effect/Stream";
 import * as Effect from "effect/Effect";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { type Environment, resolveEnvironmentName } from "./Environment.ts";
-import { gitHubBaseUrlChanged, Octokit, octokitFor } from "./Octokit.ts";
+import { gitHubBaseUrlChanged, githubFor } from "./Client.ts";
 import type * as GitHub from "./Providers.ts";
 
 export interface VariableProps {
@@ -202,48 +205,27 @@ export const VariableProvider = () =>
     // (unlike secrets), but the resource's `Attributes` only exposes
     // `updatedAt`, so that's all we surface here.
     list: Effect.fn(function* () {
-      const octokit = yield* Octokit;
-
-      // `octokit.paginate` walks every page and flattens to a single array.
-      const repos = yield* Effect.tryPromise({
-        try: () =>
-          octokit.paginate(octokit.rest.repos.listForAuthenticatedUser, {
-            per_page: 100,
-          }),
-        catch: (e) => e as Error,
-      });
-
+      const github = yield* githubFor();
+      const repos = yield* Repos.listForAuthenticatedUser
+        .items({ per_page: 100 })
+        .pipe(Stream.runCollect, github);
       const perRepo = yield* Effect.forEach(
         repos,
         (repo) =>
-          Effect.tryPromise({
-            try: async () => {
-              try {
-                const variables = await octokit.paginate(
-                  octokit.rest.actions.listRepoVariables,
-                  {
-                    owner: repo.owner.login,
-                    repo: repo.name,
-                    per_page: 100,
-                  },
-                );
-                return variables.map((v) => ({ updatedAt: v.updated_at }));
-              } catch (error: any) {
-                // Repos with Actions disabled, or where the token lacks the
-                // `repo`/`actions` scope, reject the variables endpoint with
-                // 403/404 — skip them per the per-item not-found rule rather
-                // than failing the whole enumeration.
-                if (error.status === 403 || error.status === 404) {
-                  return [];
-                }
-                throw error;
-              }
-            },
-            catch: (e) => e as Error,
-          }),
+          Actions.listRepoVariables
+            .items({ owner: repo.owner.login, repo: repo.name, per_page: 100 })
+            .pipe(
+              Stream.runCollect,
+              github,
+              Effect.map((variables) =>
+                variables.map((v) => ({ updatedAt: v.updated_at })),
+              ),
+              Effect.catchTag(["Forbidden", "NotFound"], () =>
+                Effect.succeed([]),
+              ),
+            ),
         { concurrency: 10 },
       );
-
       return perRepo.flat();
     }),
 
@@ -253,104 +235,81 @@ export const VariableProvider = () =>
   });
 
 const getVariable = Effect.fn(function* (props: VariableProps) {
-  const octokit = yield* octokitFor(props.baseUrl);
+  const github = yield* githubFor(props.baseUrl);
   const environment = resolveEnvironmentName(props.environment);
-  return yield* Effect.tryPromise({
-    try: async () => {
-      try {
-        if (environment !== undefined) {
-          const { data } = await octokit.rest.actions.getEnvironmentVariable({
-            owner: props.owner,
-            repo: props.repository,
-            environment_name: environment,
-            name: props.name,
-          });
-          return data;
-        }
-        const { data } = await octokit.rest.actions.getRepoVariable({
-          owner: props.owner,
-          repo: props.repository,
-          name: props.name,
-        });
-        return data;
-      } catch (error: any) {
-        if (error.status === 404) return undefined;
-        throw error;
-      }
-    },
-    catch: (e) => e as Error,
-  });
+  const input = {
+    owner: props.owner,
+    repo: props.repository,
+    name: props.name,
+  };
+  return yield* (
+    environment === undefined
+      ? Actions.getRepoVariable(input)
+      : Actions.getEnvironmentVariable({
+          ...input,
+          environment_name: environment,
+        })
+  ).pipe(
+    github,
+    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+  );
 });
 
 const createVariable = Effect.fn(function* (props: VariableProps) {
-  const octokit = yield* octokitFor(props.baseUrl);
+  const github = yield* githubFor(props.baseUrl);
   const environment = resolveEnvironmentName(props.environment);
-  yield* Effect.tryPromise(async () => {
-    if (environment !== undefined) {
-      await octokit.rest.actions.createEnvironmentVariable({
-        owner: props.owner,
-        repo: props.repository,
-        environment_name: environment,
-        name: props.name,
-        value: props.value,
-      });
-    } else {
-      await octokit.rest.actions.createRepoVariable({
-        owner: props.owner,
-        repo: props.repository,
-        name: props.name,
-        value: props.value,
-      });
-    }
-  });
+  const input = {
+    owner: props.owner,
+    repo: props.repository,
+    name: props.name,
+    value: props.value,
+  };
+  return yield* (
+    environment === undefined
+      ? Actions.createRepoVariable(input)
+      : Actions.createEnvironmentVariable({
+          ...input,
+          environment_name: environment,
+        })
+  ).pipe(github);
 });
 
 const updateVariable = Effect.fn(function* (props: VariableProps) {
-  const octokit = yield* octokitFor(props.baseUrl);
+  const github = yield* githubFor(props.baseUrl);
   const environment = resolveEnvironmentName(props.environment);
-  yield* Effect.tryPromise(async () => {
-    if (environment !== undefined) {
-      await octokit.rest.actions.updateEnvironmentVariable({
-        owner: props.owner,
-        repo: props.repository,
-        environment_name: environment,
-        name: props.name,
-        value: props.value,
-      });
-    } else {
-      await octokit.rest.actions.updateRepoVariable({
-        owner: props.owner,
-        repo: props.repository,
-        name: props.name,
-        value: props.value,
-      });
-    }
-  });
+  const input = {
+    owner: props.owner,
+    repo: props.repository,
+    name: props.name,
+    value: props.value,
+  };
+  return yield* (
+    environment === undefined
+      ? Actions.updateRepoVariable(input)
+      : Actions.updateEnvironmentVariable({
+          ...input,
+          environment_name: environment,
+        })
+  ).pipe(github);
 });
 
 const deleteVariable = Effect.fn(function* (props: VariableProps) {
-  const octokit = yield* octokitFor(props.baseUrl);
+  const github = yield* githubFor(props.baseUrl);
   const environment = resolveEnvironmentName(props.environment);
-  yield* Effect.tryPromise(async () => {
-    try {
-      if (environment !== undefined) {
-        await octokit.rest.actions.deleteEnvironmentVariable({
-          owner: props.owner,
-          repo: props.repository,
+  const input = {
+    owner: props.owner,
+    repo: props.repository,
+    name: props.name,
+  };
+  return yield* (
+    environment === undefined
+      ? Actions.deleteRepoVariable(input)
+      : Actions.deleteEnvironmentVariable({
+          ...input,
           environment_name: environment,
-          name: props.name,
-        });
-      } else {
-        await octokit.rest.actions.deleteRepoVariable({
-          owner: props.owner,
-          repo: props.repository,
-          name: props.name,
-        });
-      }
-    } catch (error: any) {
-      if (error.status !== 404) {
-        throw error;
-      }
-    }
-  });
+        })
+  ).pipe(
+    github,
+    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+  );
 });
