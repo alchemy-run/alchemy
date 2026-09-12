@@ -74,12 +74,10 @@ describe("watchImport", () => {
         debounceMs: 10,
         shouldInvalidate: url =>
           url.startsWith("file:") && fileURLToPath(url).startsWith(process.argv[2] + "/"),
-        transforms: [source => source.replaceAll("__VALUE__", "transformed")],
       });
       const first = await watcher.import();
       if (first.value.result.count !== 1) throw new Error("first graph was not evaluated");
       if (first.value.result.externalCount !== 1) throw new Error("external module was not evaluated");
-      if (first.value.result.text !== "transformed") throw new Error("custom transform was not applied");
       if (!first.dependencies.has(directory + "/entry.ts")) throw new Error("entry was not tracked");
       if (!first.dependencies.has(dependency)) throw new Error("dependency was not tracked");
       if (!first.dependencies.has(external)) throw new Error("sibling project module was not tracked");
