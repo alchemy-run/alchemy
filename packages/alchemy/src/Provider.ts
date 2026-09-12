@@ -264,6 +264,12 @@ export interface ProviderService<
     fqn: string;
     instanceId: string;
     olds: Props<Res>;
+    /**
+     * The engine is resuming a persisted create with no attributes, using
+     * the same instance ID and provider mode. This is recovery intent, not
+     * proof of ownership: providers must still verify the physical identity.
+     */
+    recovery?: "interrupted-create";
     // what is the ARN?
     output: Res["Attributes"] | undefined; // current state -> synced state
   }): Effect.Effect<Res["Attributes"] | undefined, any, ReadReq>;
