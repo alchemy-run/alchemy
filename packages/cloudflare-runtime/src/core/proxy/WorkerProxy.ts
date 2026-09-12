@@ -1,4 +1,6 @@
+import * as ByteSize from "effect/ByteSize";
 import * as Context from "effect/Context";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
@@ -63,22 +65,22 @@ export interface ServeOptions {
   /**
    * How long a connection accepted while no upstream is set waits for one
    * before it is answered with a 502.
-   * @default 120_000
+   * @default "5 seconds"
    */
-  readonly pendingTimeoutMs?: number;
+  readonly pendingTimeout?: Duration.Input;
 }
 
 /** Maximum number of port-collision retries for a single `serve` call. */
 const MAX_SERVE_ATTEMPTS = 8;
 
-const DEFAULT_PENDING_TIMEOUT_MS = 120_000;
+const DEFAULT_PENDING_TIMEOUT = Duration.seconds(5);
 
 /**
  * Bytes held for a client whose upstream is not connected yet, before the
  * proxy stops reading from it. A request head is a few KB; a body this
  * large arriving before the worker is up simply waits in the kernel.
  */
-const HOLD_LIMIT_BYTES = 1024 * 1024;
+const HOLD_LIMIT = ByteSize.toNumberUnsafe(ByteSize.mebibytes(1));
 
 export interface WorkerProxyInstance {
   readonly proxySharedSecret: string;
@@ -88,19 +90,6 @@ export interface WorkerProxyInstance {
   /** Park new connections until the next `set`. Spliced connections are left alone. */
   readonly unset: () => Effect.Effect<void>;
 }
-
-const ADDRESS_IN_USE_CODES: ReadonlySet<string> = new Set([
-  "EADDRINUSE",
-  "EACCES",
-]);
-
-const errorCode = (error: unknown): string | undefined =>
-  typeof error === "object" &&
-  error !== null &&
-  "code" in error &&
-  typeof error.code === "string"
-    ? error.code
-    : undefined;
 
 const isAddressInUse = (error: ConfigError | SystemError) =>
   error._tag === "ConfigError" && error.subtag === "AddressInUse";
@@ -140,23 +129,34 @@ interface Client {
   readonly collect: (chunk: Buffer) => void;
 }
 
+/** A parked connection and the timer after which it is answered with a 502. */
+interface Parked {
+  readonly client: Client;
+  readonly timer: NodeJS.Timeout;
+}
+
+/** A connection spliced to an upstream, remembered by the upstream it went to. */
+interface Spliced {
+  readonly client: NodeNet.Socket;
+  readonly upstream: NodeNet.Socket;
+  readonly target: URL;
+}
+
 interface Relay {
   target: URL | undefined;
-  readonly pendingTimeoutMs: number;
+  readonly pendingTimeout: Duration.Duration;
   /** Every live socket, client and upstream, so teardown can destroy them all. */
   readonly sockets: Set<NodeNet.Socket>;
-  /** Connections waiting for an upstream, with their give-up timers. */
-  readonly parked: Set<{
-    readonly client: Client;
-    readonly timer: NodeJS.Timeout;
-  }>;
-  /** Connections spliced to an upstream, by the upstream they were spliced to. */
-  readonly spliced: Set<{
-    readonly client: NodeNet.Socket;
-    readonly upstream: NodeNet.Socket;
-    readonly target: URL;
-  }>;
+  readonly parked: Set<Parked>;
+  readonly spliced: Set<Spliced>;
 }
+
+/** Remember a socket until it closes, so `closeRelay` can reach it. */
+const track = (relay: Relay, socket: NodeNet.Socket) => {
+  relay.sockets.add(socket);
+  socket.once("close", () => relay.sockets.delete(socket));
+  return socket;
+};
 
 const reject = (client: Client, message: string) => {
   const { socket } = client;
@@ -171,10 +171,8 @@ const reject = (client: Client, message: string) => {
 
 const splice = (relay: Relay, client: Client, target: URL) => {
   const { socket } = client;
-  const upstream = NodeNet.connect(connectOptions(target));
-  relay.sockets.add(upstream);
-  upstream.once("close", () => relay.sockets.delete(upstream));
-  const pair = { client: socket, upstream, target };
+  const upstream = track(relay, NodeNet.connect(connectOptions(target)));
+  const pair: Spliced = { client: socket, upstream, target };
   let connected = false;
   upstream.once("connect", () => {
     connected = true;
@@ -216,15 +214,15 @@ const splice = (relay: Relay, client: Client, target: URL) => {
 };
 
 const park = (relay: Relay, client: Client) => {
-  const entry = {
+  const entry: Parked = {
     client,
     timer: setTimeout(() => {
       relay.parked.delete(entry);
       reject(
         client,
-        `No worker was available within ${relay.pendingTimeoutMs}ms (the proxy has no upstream)`,
+        `No upstream configured for the worker proxy after ${Duration.format(relay.pendingTimeout)}`,
       );
-    }, relay.pendingTimeoutMs),
+    }, Duration.toMillis(relay.pendingTimeout)),
   };
   entry.timer.unref();
   relay.parked.add(entry);
@@ -235,8 +233,7 @@ const park = (relay: Relay, client: Client) => {
 };
 
 const accept = (relay: Relay) => (socket: NodeNet.Socket) => {
-  relay.sockets.add(socket);
-  socket.once("close", () => relay.sockets.delete(socket));
+  track(relay, socket);
   // A client that goes away is not an event anyone else needs to hear about.
   socket.on("error", () => {});
   const client: Client = {
@@ -246,7 +243,7 @@ const accept = (relay: Relay) => (socket: NodeNet.Socket) => {
     collect: (chunk) => {
       client.held.push(chunk);
       client.heldBytes += chunk.length;
-      if (client.heldBytes > HOLD_LIMIT_BYTES) socket.pause();
+      if (client.heldBytes > HOLD_LIMIT) socket.pause();
     },
   };
   // Read from the very first tick — see the module doc on Bun.
@@ -259,21 +256,18 @@ const accept = (relay: Relay) => (socket: NodeNet.Socket) => {
 };
 
 const setTarget = (relay: Relay, upstream: URL) => {
-  const previous = relay.target;
   relay.target = upstream;
   for (const entry of relay.parked) {
     relay.parked.delete(entry);
     clearTimeout(entry.timer);
     splice(relay, entry.client, upstream);
   }
-  if (previous !== undefined && previous.href !== upstream.href) {
-    for (const pair of relay.spliced) {
-      if (pair.target.href !== upstream.href) {
-        relay.spliced.delete(pair);
-        pair.client.destroy();
-        pair.upstream.destroy();
-      }
-    }
+  // Whatever is still pinned to another upstream is about to be torn down.
+  for (const pair of relay.spliced) {
+    if (pair.target.href === upstream.href) continue;
+    relay.spliced.delete(pair);
+    pair.client.destroy();
+    pair.upstream.destroy();
   }
 };
 
@@ -294,11 +288,10 @@ const listen = (
   Effect.acquireRelease(
     Effect.callback<NodeNet.Server, ConfigError | SystemError>((resume) => {
       const server = NodeNet.createServer(accept(relay));
-      server.once("error", (error) => {
-        const code = errorCode(error);
+      server.once("error", (error: NodeJS.ErrnoException) => {
         resume(
           Effect.fail(
-            code !== undefined && ADDRESS_IN_USE_CODES.has(code)
+            error.code === "EADDRINUSE" || error.code === "EACCES"
               ? new ConfigError({
                   subtag: "AddressInUse",
                   message: `Address ${host}:${port} is already in use.`,
@@ -370,8 +363,9 @@ export const WorkerProxyLive = Layer.effect(
         // Dual-bind only for the loopback default — an explicit host is
         // served verbatim.
         ipv6: options.host === undefined && ipv6Loopback,
-        pendingTimeoutMs:
-          options.pendingTimeoutMs ?? DEFAULT_PENDING_TIMEOUT_MS,
+        pendingTimeout: Duration.fromInputUnsafe(
+          options.pendingTimeout ?? DEFAULT_PENDING_TIMEOUT,
+        ),
         proxySharedSecret: crypto.randomUUID(),
       };
     });
@@ -381,11 +375,11 @@ export const WorkerProxyLive = Layer.effect(
       host,
       port,
       ipv6,
-      pendingTimeoutMs,
+      pendingTimeout,
     }: ResolvedOptions) {
       const relay: Relay = {
         target: undefined,
-        pendingTimeoutMs,
+        pendingTimeout,
         sockets: new Set(),
         parked: new Set(),
         spliced: new Set(),

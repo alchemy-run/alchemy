@@ -322,7 +322,7 @@ layer(services, { excludeTestServices: true })((it) => {
     () =>
       Effect.gen(function* () {
         const proxy = yield* WorkerProxy.WorkerProxy;
-        const instance = yield* proxy.serve({ pendingTimeoutMs: 300 });
+        const instance = yield* proxy.serve({ pendingTimeout: "300 millis" });
         const result = yield* Effect.promise(() =>
           fetch(new URL("/", instance.url)).then(async (res) => ({
             status: res.status,
