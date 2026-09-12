@@ -13,6 +13,8 @@ import type { DurableObjectExport } from "./DurableObject.ts";
 import { makeRequestHandler } from "./HttpServer.ts";
 import {
   ExportedHandlerMethods,
+  isExportedHandlerMethod,
+  isWorkerEvent,
   WorkerEnvironment,
   WorkerExecutionContext,
   WorkerTypeId,
@@ -59,11 +61,48 @@ export const makeWorkerRuntimeContext = (id: string): WorkerRuntimeContext => {
       handler: HttpEffect<Req> | Effect.Effect<HttpEffect<Req>>,
       options?: { shape?: Record<string, unknown> },
     ) => {
-      // Capture the user's full default-export shape so `exports` can
-      // expose any non-handler methods on it as RPC methods on the
-      // deployed `WorkerEntrypoint` subclass — see `__rpc__` below.
-      if (options?.shape) userShape = options.shape;
-      return ctx.listen(makeRequestHandler(handler));
+      // Capture the user's default-export shape for RPC, omitting
+      // ExportedHandler methods (`fetch`, `scheduled`, `email`, `queue`,
+      // …). Those are event listeners, not WorkerEntrypoint RPC methods.
+      const shape = options?.shape;
+      if (shape) {
+        userShape = Object.fromEntries(
+          Object.entries(shape).filter(
+            ([key]) => !isExportedHandlerMethod(key),
+          ),
+        );
+      }
+      const registerFetch = ctx.listen(makeRequestHandler(handler));
+
+      const nonFetchMethods = ExportedHandlerMethods.filter(
+        (method) => method !== "fetch" && shape?.[method] != null,
+      );
+      if (nonFetchMethods.length === 0) return registerFetch;
+
+      return Effect.all(
+        [
+          registerFetch,
+          ...nonFetchMethods.map((method) =>
+            ctx.listen(((event: any) => {
+              if (!isWorkerEvent(event) || event.type !== method) return;
+              const methodHandler = shape![method];
+              if (typeof methodHandler === "function") {
+                // A failing handler Effect rejects the WorkerEntrypoint
+                // promise (Cloudflare may retry scheduled/queue).
+                return methodHandler(event.input) as Effect.Effect<
+                  unknown,
+                  never,
+                  never
+                >;
+              }
+              if (Effect.isEffect(methodHandler)) {
+                return methodHandler as Effect.Effect<unknown, never, never>;
+              }
+            }) as Serverless.FunctionListener),
+          ),
+        ],
+        { discard: true },
+      );
     },
     listen: ((
       handler:

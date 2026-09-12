@@ -13,6 +13,7 @@ import type * as RpcClientError from "effect/unstable/rpc/RpcClientError";
 import { asEffectOrStream, decodeRpcResult, RpcCallError } from "../../Rpc.ts";
 import { isYieldableEffect } from "../../Util/effect.ts";
 import { fromCloudflareFetcher } from "../Fetcher.ts";
+import { isExportedHandlerMethod } from "./Worker.ts";
 
 // The transport-agnostic RPC wire protocol (envelopes, error types, stream
 // encode/decode, `asEffectOrStream`, and the plain-`fetch` client/server) now
@@ -46,6 +47,10 @@ export const makeRpcStub = <Shape>(
       if (!isLazy && prop in target) return target[prop];
       if (typeof prop !== "string" && typeof prop !== "symbol") {
         return target[prop];
+      }
+      // ExportedHandler methods are event listeners, not RPC methods.
+      if (typeof prop === "string" && isExportedHandlerMethod(prop)) {
+        return undefined;
       }
       return (...args: any[]) =>
         asEffectOrStream(

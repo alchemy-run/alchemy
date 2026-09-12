@@ -2,21 +2,28 @@ import type * as Effect from "effect/Effect";
 import type * as Stream from "effect/Stream";
 import type { Rpc } from "../../Rpc.ts";
 import { isRpcErrorEnvelope, isRpcStreamEnvelope } from "../Bridge.ts";
+import {
+  isExportedHandlerMethod,
+  type ExportedHandlerMethod,
+  type RpcMethods,
+} from "./Worker.ts";
 
 export type RpcAsync<Shape> = {
-  [K in keyof Shape as K extends "fetch" ? never : K]: Shape[K] extends (
+  [K in keyof RpcMethods<Shape>]: RpcMethods<Shape>[K] extends (
     ...args: infer A
   ) => Effect.Effect<infer T, any, any>
     ? (...args: A) => Promise<T>
-    : Shape[K] extends (...args: infer A) => Stream.Stream<any, any, any>
+    : RpcMethods<Shape>[K] extends (
+          ...args: infer A
+        ) => Stream.Stream<any, any, any>
       ? (...args: A) => Promise<ReadableStream<Uint8Array>>
-      : Shape[K] extends Effect.Effect<infer T, any, any>
+      : RpcMethods<Shape>[K] extends Effect.Effect<infer T, any, any>
         ? Promise<T>
-        : Shape[K] extends Stream.Stream<any, any, any>
+        : RpcMethods<Shape>[K] extends Stream.Stream<any, any, any>
           ? Promise<ReadableStream<Uint8Array>>
-          : Shape[K] extends (...args: infer A) => infer R
+          : RpcMethods<Shape>[K] extends (...args: infer A) => infer R
             ? (...args: A) => Promise<Awaited<R>>
-            : Promise<Shape[K]>;
+            : Promise<RpcMethods<Shape>[K]>;
 };
 
 /**
@@ -25,8 +32,9 @@ export type RpcAsync<Shape> = {
  * test code) can `await` RPC methods directly.
  *
  * The proxy:
- * - leaves `fetch` / `connect` / `Symbol.dispose` and other non-string keys
- *   passing through to the underlying binding unchanged,
+ * - leaves `fetch` / other {@link ExportedHandlerMethod}s / `connect` /
+ *   `Symbol.dispose` and other non-string keys passing through to the
+ *   underlying binding unchanged (event handlers are not RPC methods),
  * - turns each `Effect<T>` / `Stream<T>` method into a `Promise<T>` /
  *   `Promise<ReadableStream<Uint8Array>>`,
  * - unwraps the wire envelopes produced by the Effect-side RPC bridge:
@@ -77,9 +85,14 @@ export type RpcAsync<Shape> = {
 export const toRpcAsync = <W>(stub: any): RpcAsync<Rpc.Shape<W>> & Service =>
   new Proxy(stub, {
     get: (target, prop) => {
-      // `Service` methods (fetch/connect) and any non-string keys (Symbol.dispose, etc.)
-      // pass through to the underlying Cloudflare binding unchanged.
-      if (typeof prop !== "string" || prop === "fetch" || prop === "connect") {
+      // `Service` methods (fetch/connect), ExportedHandler event methods
+      // (scheduled/email/queue/…), and any non-string keys (Symbol.dispose,
+      // etc.) pass through to the underlying Cloudflare binding unchanged.
+      if (
+        typeof prop !== "string" ||
+        prop === "connect" ||
+        isExportedHandlerMethod(prop)
+      ) {
         const value = (target as any)[prop];
         return typeof value === "function" ? value.bind(target) : value;
       }
