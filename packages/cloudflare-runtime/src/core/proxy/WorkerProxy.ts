@@ -187,9 +187,9 @@ interface Relay {
  */
 const makeRelay = (pendingTimeout: Duration.Duration): Relay => {
   let target: Upstream | undefined;
-  let failure: string | undefined;
-  // Failed with the 502 message when the upstream is not coming.
-  let next = Deferred.makeUnsafe<Upstream, string>();
+  let failure: SystemError | undefined;
+  // Failed when the upstream is not coming; the message becomes the 502.
+  let next = Deferred.makeUnsafe<Upstream, SystemError>();
   const connections = new Set<Fiber.Fiber<void>>();
   const pinned = new Set<{
     readonly target: Upstream;
@@ -224,43 +224,44 @@ const makeRelay = (pendingTimeout: Duration.Duration): Relay => {
         socket.end(badGateway(message));
       });
 
-    const splice: (to: Upstream) => Effect.Effect<void, never, Scope.Scope> =
-      Effect.fnUntraced(function* (to: Upstream) {
-        const result = yield* Effect.result(connect(to));
-        if (result._tag === "Failure") {
-          // Nothing has been forwarded yet, so retrying is safe for every
-          // method: if the upstream moved while we were connecting (a
-          // restart landed between accept and connect), follow it.
-          // Otherwise the Worker is gone.
-          if (target !== undefined && target.url.href !== to.url.href) {
-            return yield* splice(target);
-          }
-          return yield* reject(result.failure.message);
-        }
-        const upstream = result.success;
-        yield* Effect.addFinalizer(() => Effect.sync(() => upstream.destroy()));
-        const pin = { target: to, socket };
-        pinned.add(pin);
-        yield* Effect.addFinalizer(() =>
-          Effect.sync(() => {
-            pinned.delete(pin);
-          }),
-        );
-        // Hand over what the client already sent, then let the pipe take
-        // the rest. Detaching the collector and attaching the pipe happen
-        // in one synchronous step, so no chunk can slip between them.
-        socket.off("data", collect);
-        for (const chunk of held) upstream.write(chunk);
-        held.length = 0;
-        socket.pipe(upstream);
-        socket.resume();
-        upstream.pipe(socket);
-        // The upstream going away ends the client; the finalizers do the rest.
-        upstream.on("error", () => socket.destroy());
-        upstream.on("close", () => socket.destroy());
-      });
+    const splice = Effect.fnUntraced(function* (to: Upstream) {
+      // Nothing has been forwarded yet, so a refused connect is safe to
+      // retry for every method: if the upstream moved while we were
+      // connecting (a restart landed between accept and connect), follow
+      // it. Otherwise the Worker is gone and the failure is the 502.
+      let attempted = to;
+      const upstream = yield* Effect.suspend(() => {
+        attempted = target ?? attempted;
+        return connect(attempted);
+      }).pipe(
+        Effect.retry({
+          while: () =>
+            target !== undefined && target.url.href !== attempted.url.href,
+        }),
+      );
+      yield* Effect.addFinalizer(() => Effect.sync(() => upstream.destroy()));
+      const pin = { target: attempted, socket };
+      pinned.add(pin);
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          pinned.delete(pin);
+        }),
+      );
+      // Hand over what the client already sent, then let the pipe take
+      // the rest. Detaching the collector and attaching the pipe happen
+      // in one synchronous step, so no chunk can slip between them.
+      socket.off("data", collect);
+      for (const chunk of held) upstream.write(chunk);
+      held.length = 0;
+      socket.pipe(upstream);
+      socket.resume();
+      upstream.pipe(socket);
+      // The upstream going away ends the client; the finalizers do the rest.
+      upstream.on("error", () => socket.destroy());
+      upstream.on("close", () => socket.destroy());
+    });
 
-    const arrival = yield* Effect.result(
+    const awaitUpstream: Effect.Effect<Upstream, SystemError> =
       failure !== undefined
         ? Effect.fail(failure)
         : target !== undefined
@@ -270,16 +271,17 @@ const makeRelay = (pendingTimeout: Duration.Duration): Relay => {
                 duration: pendingTimeout,
                 orElse: () =>
                   Effect.fail(
-                    `No upstream configured for the worker proxy after ${Duration.format(pendingTimeout)}`,
+                    new SystemError({
+                      subtag: "WorkerProxyUpstream",
+                      message: `No upstream configured for the worker proxy after ${Duration.format(pendingTimeout)}`,
+                    }),
                   ),
               }),
-            ),
+            );
+    yield* awaitUpstream.pipe(
+      Effect.flatMap(splice),
+      Effect.catch((error) => reject(error.message)),
     );
-    if (arrival._tag === "Success") {
-      yield* splice(arrival.success);
-    } else {
-      yield* reject(arrival.failure);
-    }
     // From here the socket does the talking; the client closing ends the
     // fiber (see `accept`), and the finalizers destroy both ends.
     yield* Effect.never;
@@ -301,7 +303,7 @@ const makeRelay = (pendingTimeout: Duration.Duration): Relay => {
         target = to;
         failure = undefined;
         const waiting = next;
-        next = Deferred.makeUnsafe<Upstream, string>();
+        next = Deferred.makeUnsafe<Upstream, SystemError>();
         yield* Deferred.succeed(waiting, to);
         // Whatever is still pinned to another upstream is about to be torn down.
         for (const pin of pinned) {
@@ -315,10 +317,10 @@ const makeRelay = (pendingTimeout: Duration.Duration): Relay => {
     fail: (message) =>
       Effect.gen(function* () {
         target = undefined;
-        failure = message;
+        failure = new SystemError({ subtag: "WorkerProxyUpstream", message });
         const waiting = next;
-        next = Deferred.makeUnsafe<Upstream, string>();
-        yield* Deferred.fail(waiting, message);
+        next = Deferred.makeUnsafe<Upstream, SystemError>();
+        yield* Deferred.fail(waiting, failure);
       }),
     close: Fiber.interruptAll(connections),
   };
@@ -447,32 +449,29 @@ export const WorkerProxyLive = Layer.effect(
     // caller's. Every attempt is a plain bind, so retrying is cheap, but it
     // MUST stay bounded: an environmental failure that keeps reporting the
     // port as taken would otherwise scan forever.
-    const serveWithRetry: (
+    const serveWithRetry = Effect.fnUntraced(function* (
       options: ResolvedOptions,
-      attempt?: number,
-    ) => Effect.Effect<
-      Effect.Success<ReturnType<typeof serve>>,
-      ConfigError | SystemError,
-      Scope.Scope
-    > = Effect.fnUntraced(function* (options: ResolvedOptions, attempt = 1) {
+    ) {
       const parent = yield* Effect.scope;
-      const child = yield* Scope.fork(parent);
-      const result = yield* Effect.result(
-        serve(options).pipe(Scope.provide(child)),
+      let port: number | undefined;
+      return yield* Effect.gen(function* () {
+        port = port === undefined ? options.port : yield* ports.find(port + 1);
+        const child = yield* Scope.fork(parent);
+        return yield* serve({ ...options, port }).pipe(
+          Scope.provide(child),
+          Effect.tapError(() => Scope.close(child, Exit.void)),
+        );
+      }).pipe(
+        Effect.retry({
+          while: (error) =>
+            error._tag === "ConfigError" &&
+            error.subtag === "AddressInUse" &&
+            !options.strictPort &&
+            port !== undefined &&
+            port <= Port.MAX_PORT,
+          times: MAX_SERVE_ATTEMPTS - 1,
+        }),
       );
-      if (result._tag === "Success") return result.success;
-      yield* Scope.close(child, Exit.void);
-      if (
-        result.failure._tag === "ConfigError" &&
-        result.failure.subtag === "AddressInUse" &&
-        !options.strictPort &&
-        options.port <= Port.MAX_PORT &&
-        attempt < MAX_SERVE_ATTEMPTS
-      ) {
-        const port = yield* ports.find(options.port + 1);
-        return yield* serveWithRetry({ ...options, port }, attempt + 1);
-      }
-      return yield* Effect.fail(result.failure);
     });
 
     return WorkerProxy.of({
