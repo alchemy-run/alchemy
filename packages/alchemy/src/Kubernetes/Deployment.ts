@@ -45,6 +45,7 @@ import {
   connectionIdentity,
   connectionOfOutput,
   deepMerge,
+  imageSourceKind,
   imagePlatformOf,
   makeServerBootstrap,
   resolveWorkloadImage,
@@ -200,6 +201,13 @@ export interface ImageDeploymentProps extends DeploymentPropsBase {
    * reference is used verbatim.
    */
   image: string;
+  /**
+   * How the image is delivered on clusters with a managed registry.
+   * `"mirror"` copies it into that registry; `"direct"` uses the supplied
+   * reference verbatim and requires the cluster to be able to pull it.
+   * @default "mirror"
+   */
+  imageStrategy?: "mirror" | "direct";
 }
 
 export type DeploymentProps =
@@ -437,6 +445,37 @@ const retryUntilServiceReady = <A, E, R>(
 const isNotFound = (error: unknown): error is KubernetesApiError =>
   error instanceof KubernetesApiError && error.statusCode === 404;
 
+interface ObservedDeployment {
+  metadata?: { generation?: number };
+  spec?: { replicas?: number; progressDeadlineSeconds?: number };
+  status?: {
+    observedGeneration?: number;
+    replicas?: number;
+    updatedReplicas?: number;
+    availableReplicas?: number;
+  };
+}
+
+/** Kubernetes' completed-rollout conditions, exposed for unit testing. */
+export const isDeploymentRolloutComplete = (
+  deployment: ObservedDeployment,
+): boolean => {
+  const generation = deployment.metadata?.generation;
+  const desired = deployment.spec?.replicas ?? 1;
+  const status = deployment.status;
+  return (
+    generation !== undefined &&
+    (status?.observedGeneration ?? -1) >= generation &&
+    (status?.updatedReplicas ?? 0) === desired &&
+    (status?.replicas ?? 0) === desired &&
+    (status?.availableReplicas ?? 0) === desired
+  );
+};
+
+class DeploymentRolloutPending extends Data.TaggedError(
+  "Kubernetes.DeploymentRolloutPending",
+) {}
+
 export const DeploymentProvider = () =>
   Provider.effect(
     Deployment,
@@ -455,6 +494,42 @@ export const DeploymentProvider = () =>
           : createPhysicalName({ id, maxLength: 200, lowercase: true }).pipe(
               Effect.map((name) => name.replaceAll(/[^a-z0-9-]/g, "-")),
             );
+
+      const stableAttributes: Array<keyof Deployment["Attributes"]> = [
+        "connection",
+        "namespace",
+        "serviceAccountName",
+        "deploymentName",
+        "serviceName",
+        "identity",
+        "registry",
+      ];
+
+      const waitForDeploymentRollout = (
+        transport: ClusterTransport,
+        deployment: KubernetesObjectDefinition,
+      ) => {
+        const deadlineSeconds =
+          (deployment.spec as { progressDeadlineSeconds?: number })
+            .progressDeadlineSeconds ?? 600;
+        return readObject({
+          transport,
+          object: toKubernetesObjectRef(deployment),
+        }).pipe(
+          Effect.flatMap((observed) =>
+            isDeploymentRolloutComplete(observed as ObservedDeployment)
+              ? Effect.succeed(observed)
+              : Effect.fail(new DeploymentRolloutPending()),
+          ),
+          Effect.retry({
+            while: (error) => error instanceof DeploymentRolloutPending,
+            schedule: Schedule.max([
+              Schedule.spaced("5 seconds"),
+              Schedule.recurs(Math.ceil(deadlineSeconds / 5)),
+            ]),
+          }),
+        );
+      };
 
       // Read a LoadBalancer Service's assigned hostname (bounded wait).
       const waitForLoadBalancer = (
@@ -486,15 +561,7 @@ export const DeploymentProvider = () =>
         );
 
       return {
-        stables: [
-          "connection",
-          "namespace",
-          "serviceAccountName",
-          "deploymentName",
-          "serviceName",
-          "identity",
-          "registry",
-        ],
+        stables: stableAttributes,
         // A Deployment's identity spans in-cluster Kubernetes objects plus
         // adapter-owned cloud resources (identity role, image repository).
         // There is no single enumeration that faithfully reconstructs that
@@ -526,6 +593,25 @@ export const DeploymentProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
+          const oldSource = olds as WorkloadImageSource;
+          const newSource = news as WorkloadImageSource;
+          const oldImageStrategy =
+            imageSourceKind(oldSource) === "image"
+              ? ((olds as ImageDeploymentProps).imageStrategy ?? "mirror")
+              : undefined;
+          const newImageStrategy =
+            imageSourceKind(newSource) === "image"
+              ? ((news as ImageDeploymentProps).imageStrategy ?? "mirror")
+              : undefined;
+          if (oldImageStrategy !== newImageStrategy) {
+            return {
+              action: "update",
+              // Registry ownership changes across direct/mirror transitions.
+              stables: stableAttributes.filter(
+                (attribute) => attribute !== "registry",
+              ),
+            } as const;
+          }
           // Content drift: the props don't change when files under a build
           // context (or the bundled program) do, so surface hash drift as
           // an update.
@@ -536,6 +622,10 @@ export const DeploymentProvider = () =>
             const hash = yield* workloadImageHash({
               adapter,
               source,
+              imageStrategy:
+                imageSourceKind(source) === "image"
+                  ? (news as ImageDeploymentProps).imageStrategy
+                  : undefined,
               platform: imagePlatformOf(news.architecture),
               port: news.port ?? 3000,
               isExternal: news.isExternal,
@@ -634,10 +724,20 @@ export const DeploymentProvider = () =>
           // registry adapter (pre-built `image` refs pass through verbatim
           // on registry-less clusters).
           const source = news as WorkloadImageSource;
+          const previousRegistryState =
+            (output?.registry as Record<string, unknown> | undefined) ??
+            (typeof (output as Record<string, unknown> | undefined)
+              ?.repositoryName === "string"
+              ? (output as unknown as Record<string, unknown>)
+              : undefined);
           const resolved = yield* resolveWorkloadImage({
             adapter,
             id,
             source,
+            imageStrategy:
+              imageSourceKind(source) === "image"
+                ? (news as ImageDeploymentProps).imageStrategy
+                : undefined,
             platform: imagePlatformOf(news.architecture),
             port,
             isExternal: news.isExternal,
@@ -645,9 +745,7 @@ export const DeploymentProvider = () =>
               source.handler ?? "default",
             ),
             tags,
-            state:
-              (output?.registry as Record<string, unknown> | undefined) ??
-              (output as Record<string, unknown> | undefined),
+            state: previousRegistryState,
             session,
           });
 
@@ -765,6 +863,14 @@ export const DeploymentProvider = () =>
           yield* session.note(
             `Applied Kubernetes Deployment ${namespace}/${baseName}`,
           );
+
+          if (resolved.cleanupState !== undefined && adapter.registry) {
+            yield* waitForDeploymentRollout(transport, deploymentObject);
+            yield* adapter.registry.delete({ state: resolved.cleanupState });
+            yield* session.note(
+              `Removed previous managed image registry for ${namespace}/${baseName}`,
+            );
+          }
 
           // Resolve the LoadBalancer URL if applicable. The cloud listener
           // is the Service `port` (Kubernetes maps `spec.ports[].port` 1:1
