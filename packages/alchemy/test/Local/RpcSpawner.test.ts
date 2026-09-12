@@ -340,7 +340,7 @@ const echoWebSocket = (
       const stub = newWebSocketRpcSession(
         sessionUrl.toString(),
       ) as unknown as RpcStub<RpcProxyApi>;
-      const provider = await stub.getProvider("Test.Echo");
+      const provider = await stub.getProvider("Test.Echo", FIXTURE_TS_URL);
       const handlers = unwrapRpcHandlers(provider as any) as {
         echo: (m: string) => Effect.Effect<string>;
       };
