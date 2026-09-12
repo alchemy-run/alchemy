@@ -42,4 +42,8 @@ export * from "./WorkerBinding.ts";
 export * from "./WorkerBridge.ts";
 export * from "./WorkerEntrypoint.ts";
 export * from "./WorkerLoader.ts";
+// Types only — this module is re-exported flat from `Cloudflare/index.ts`, so
+// a bare `lookup` export would surface as `Cloudflare.lookup`. It is reachable
+// as `Cloudflare.Worker.lookup(...)`.
+export type { WorkerLookup, WorkerLookupProps } from "./WorkerLookup.ts";
 export * from "./WorkerProvider.ts";
