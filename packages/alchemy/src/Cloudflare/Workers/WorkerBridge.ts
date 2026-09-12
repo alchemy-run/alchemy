@@ -152,23 +152,6 @@ export const makeWorkerBridge = (
     ) {
       super(ctx, env);
 
-      for (const methodName of ExportedHandlerMethods) {
-        (this as any)[methodName] = async (input: any) =>
-          processEvent(
-            (built) =>
-              built.export[methodName](input, this.env, this.ctx) as [
-                Effect.Effect<any>,
-                Context.Context<never>,
-              ],
-            this.ctx,
-            this.env,
-            (exit) =>
-              exit._tag === "Success"
-                ? Promise.resolve(exit.value)
-                : Promise.reject(Cause.squash(exit.cause)),
-          );
-      }
-
       return new Proxy(this, {
         get: (target, prop) => {
           if (typeof prop !== "string") return (target as any)[prop];
@@ -213,14 +196,40 @@ export const makeWorkerBridge = (
     }
   }
 
-  // Stub prototype methods so Cloudflare's script-validate detects the
-  // standard handler set; per-instance overrides above are what actually
-  // run.
+  // The standard handler set lives on the *prototype*, never as own
+  // properties of the instance. Two things depend on that:
+  //
+  //  - Cloudflare's script-validate reads the prototype to detect which
+  //    handlers a class entrypoint implements.
+  //  - workerd's JSRPC method lookup only resolves methods found on the
+  //    prototype chain. An own instance property of the same name *shadows*
+  //    the prototype entry and makes the lookup fail outright with
+  //    `The RPC receiver does not implement the method "..."` — it does not
+  //    fall back to the shadowed prototype method.
+  //
+  // Most handlers never exercise the JSRPC path: workerd dispatches
+  // `fetch`/`scheduled`/`queue` as built-in events, and Cloudflare's mail
+  // pipeline delivers `email` as an event too. The local runtime is the
+  // exception — its entry worker forwards the `/cdn-cgi/handler/email`
+  // trigger route to the user worker as `env[USER_WORKER].email(message)`,
+  // a plain JSRPC call — so assigning the handlers in the constructor made
+  // inbound email the one handler that worked deployed but not in
+  // `alchemy dev`. See `EmailEventSource.local.test.ts`.
   for (const method of ExportedHandlerMethods) {
     Object.defineProperty(WorkerBridge.prototype, method, {
-      value: function () {
-        throw new Error(
-          `Bridge method '${method}' was called before instance setup`,
+      value: function (this: any, input: any) {
+        return processEvent(
+          (built) =>
+            built.export[method](input, this.env, this.ctx) as [
+              Effect.Effect<any>,
+              Context.Context<never>,
+            ],
+          this.ctx,
+          this.env,
+          (exit) =>
+            exit._tag === "Success"
+              ? Promise.resolve(exit.value)
+              : Promise.reject(Cause.squash(exit.cause)),
         );
       },
       writable: true,
