@@ -99,39 +99,12 @@ export interface WorkerProxyInstance {
   readonly fail: (message: string) => Effect.Effect<void>;
 }
 
-/**
- * The one piece of HTTP the proxy speaks: a connection that will never reach
- * a Worker gets a fixed `502` and is closed. Written onto the raw socket, so
- * it stays clear of any HTTP implementation.
- */
-const badGateway = (message: string) => {
-  const body = JSON.stringify({
-    ok: false,
-    error: { _tag: "ProxyError", message, status: 502 },
-  });
-  return [
-    "HTTP/1.1 502 Bad Gateway",
-    "Content-Type: application/json",
-    `Content-Length: ${Buffer.byteLength(body)}`,
-    "Connection: close",
-    "",
-    body,
-  ].join("\r\n");
-};
-
 /** A `set` URL, resolved once into what `net.connect` needs. */
 interface Upstream {
   readonly url: URL;
   readonly host: string;
   readonly port: number;
 }
-
-const upstreamOf = (url: URL) => ({
-  url,
-  // `URL.hostname` keeps the brackets on IPv6 literals; `net.connect` does not want them.
-  host: url.hostname.replace(/^\[(.*)\]$/, "$1"),
-  port: Number(url.port),
-});
 
 /** Resolves once the socket has emitted `close`; interruption stops waiting. */
 const closed = (socket: NodeNet.Socket) =>
@@ -179,21 +152,36 @@ interface Relay {
 }
 
 /**
- * The relay state: the current target or failure message, a `Deferred` that
- * parked connections wait on until the next `set` or `fail`, and every
- * connection that is spliced to an upstream, so a `set` elsewhere can reset
- * it.
+ * The relay's whole state is one `Deferred`: pending while no upstream is
+ * set (connections park on it), succeeded with the upstream once `set`, and
+ * failed with the 502 once `fail`. Each `set`/`fail` settles the deferred
+ * parked connections are waiting on and installs a fresh, already-settled
+ * one for those that follow, so a new object means the upstream moved.
  */
 const makeRelay = (pendingTimeout: Duration.Duration): Relay => {
-  let target: Upstream | undefined;
-  let failure: SystemError | undefined;
-  // Failed when the upstream is not coming; the message becomes the 502.
-  let next = Deferred.makeUnsafe<Upstream, SystemError>();
+  let current = Deferred.makeUnsafe<Upstream, SystemError>();
+  const timedOut = new SystemError({
+    subtag: "WorkerProxyUpstream",
+    message: `No upstream configured for the worker proxy after ${Duration.format(pendingTimeout)}`,
+  });
   const connections = new Set<Fiber.Fiber<void>>();
+  /** Connections spliced to an upstream, so a `set` elsewhere can reset them. */
   const pinned = new Set<{
     readonly target: Upstream;
     readonly socket: NodeNet.Socket;
   }>();
+
+  const settle = (
+    complete: (
+      deferred: Deferred.Deferred<Upstream, SystemError>,
+    ) => Effect.Effect<boolean>,
+  ) =>
+    Effect.gen(function* () {
+      const waiting = current;
+      current = Deferred.makeUnsafe<Upstream, SystemError>();
+      yield* complete(current);
+      yield* complete(waiting);
+    });
 
   const connection = Effect.fnUntraced(function* (socket: NodeNet.Socket) {
     yield* Effect.addFinalizer(() => Effect.sync(() => socket.destroy()));
@@ -212,34 +200,57 @@ const makeRelay = (pendingTimeout: Duration.Duration): Relay => {
     };
     socket.on("data", collect);
 
-    const reject = (message: string) =>
-      Effect.sync(() => {
-        // The collector keeps consuming so no unread inbound bytes are left
-        // on the socket at close (that would make the kernel send RST
-        // instead of FIN and could discard the response before the client
-        // reads it).
-        held.length = 0;
-        socket.resume();
-        socket.end(badGateway(message));
-      });
-
-    const splice = Effect.fnUntraced(function* (to: Upstream) {
-      // Nothing has been forwarded yet, so a refused connect is safe to
-      // retry for every method: if the upstream moved while we were
-      // connecting (a restart landed between accept and connect), follow
-      // it. Otherwise the Worker is gone and the failure is the 502.
-      let attempted = to;
-      const upstream = yield* Effect.suspend(() => {
-        attempted = target ?? attempted;
-        return connect(attempted);
-      }).pipe(
-        Effect.retry({
-          while: () =>
-            target !== undefined && target.url.href !== attempted.url.href,
+    // Wait for an upstream (immediate when one is set), then connect to it.
+    // Nothing has been forwarded yet, so a refused connect is safe to retry
+    // for every method: if the upstream moved meanwhile (a restart landed
+    // between accept and connect), follow it. Otherwise the failure, or
+    // the timeout, or the message from `fail`, becomes the 502.
+    let awaited = current;
+    const spliced = yield* Effect.suspend(() => {
+      awaited = current;
+      return Deferred.await(awaited).pipe(
+        Effect.timeoutOrElse({
+          duration: pendingTimeout,
+          orElse: () => Effect.fail(timedOut),
         }),
+        Effect.flatMap((target) =>
+          Effect.map(connect(target), (upstream) => ({ target, upstream })),
+        ),
       );
+    }).pipe(
+      Effect.retry({ while: () => awaited !== current }),
+      Effect.catch((error) =>
+        Effect.sync(() => {
+          // The one piece of HTTP the proxy speaks: a fixed 502 on the raw
+          // socket. The collector keeps consuming so no unread inbound
+          // bytes are left at close (that would make the kernel send RST
+          // instead of FIN and could discard the response before the
+          // client reads it).
+          const body = JSON.stringify({
+            ok: false,
+            error: { _tag: "ProxyError", message: error.message, status: 502 },
+          });
+          held.length = 0;
+          socket.resume();
+          socket.end(
+            [
+              "HTTP/1.1 502 Bad Gateway",
+              "Content-Type: application/json",
+              `Content-Length: ${Buffer.byteLength(body)}`,
+              "Connection: close",
+              "",
+              body,
+            ].join("\r\n"),
+          );
+          return undefined;
+        }),
+      ),
+    );
+
+    if (spliced !== undefined) {
+      const { target, upstream } = spliced;
       yield* Effect.addFinalizer(() => Effect.sync(() => upstream.destroy()));
-      const pin = { target: attempted, socket };
+      const pin = { target, socket };
       pinned.add(pin);
       yield* Effect.addFinalizer(() =>
         Effect.sync(() => {
@@ -258,29 +269,7 @@ const makeRelay = (pendingTimeout: Duration.Duration): Relay => {
       // The upstream going away ends the client; the finalizers do the rest.
       upstream.on("error", () => socket.destroy());
       upstream.on("close", () => socket.destroy());
-    });
-
-    const awaitUpstream =
-      failure !== undefined
-        ? Effect.fail(failure)
-        : target !== undefined
-          ? Effect.succeed(target)
-          : Deferred.await(next).pipe(
-              Effect.timeoutOrElse({
-                duration: pendingTimeout,
-                orElse: () =>
-                  Effect.fail(
-                    new SystemError({
-                      subtag: "WorkerProxyUpstream",
-                      message: `No upstream configured for the worker proxy after ${Duration.format(pendingTimeout)}`,
-                    }),
-                  ),
-              }),
-            );
-    yield* awaitUpstream.pipe(
-      Effect.flatMap(splice),
-      Effect.catch((error) => reject(error.message)),
-    );
+    }
     // From here the socket does the talking; the client closing ends the
     // fiber (see `accept`), and the finalizers destroy both ends.
     yield* Effect.never;
@@ -298,29 +287,29 @@ const makeRelay = (pendingTimeout: Duration.Duration): Relay => {
       fiber.addObserver(() => connections.delete(fiber));
     },
     set: (to) =>
-      Effect.gen(function* () {
-        target = to;
-        failure = undefined;
-        const waiting = next;
-        next = Deferred.makeUnsafe<Upstream, SystemError>();
-        yield* Deferred.succeed(waiting, to);
-        // Whatever is still pinned to another upstream is about to be torn down.
-        for (const pin of pinned) {
-          if (pin.target.url.href !== to.url.href) pin.socket.destroy();
-        }
-      }),
+      settle((deferred) => Deferred.succeed(deferred, to)).pipe(
+        Effect.andThen(
+          Effect.sync(() => {
+            // Whatever is still pinned to another upstream is about to be torn down.
+            for (const pin of pinned) {
+              if (pin.target.url.href !== to.url.href) pin.socket.destroy();
+            }
+          }),
+        ),
+      ),
+    // Back to pending, unless nothing is set (parked connections keep waiting).
     unset: Effect.sync(() => {
-      target = undefined;
-      failure = undefined;
+      if (Deferred.isDoneUnsafe(current)) {
+        current = Deferred.makeUnsafe<Upstream, SystemError>();
+      }
     }),
     fail: (message) =>
-      Effect.gen(function* () {
-        target = undefined;
-        failure = new SystemError({ subtag: "WorkerProxyUpstream", message });
-        const waiting = next;
-        next = Deferred.makeUnsafe<Upstream, SystemError>();
-        yield* Deferred.fail(waiting, failure);
-      }),
+      settle((deferred) =>
+        Deferred.fail(
+          deferred,
+          new SystemError({ subtag: "WorkerProxyUpstream", message }),
+        ),
+      ),
     close: Fiber.interruptAll(connections),
   };
 };
@@ -483,7 +472,13 @@ export const WorkerProxyLive = Layer.effect(
         }
         return {
           url,
-          set: (upstream) => relay.set(upstreamOf(upstream)),
+          set: (upstream) =>
+            relay.set({
+              url: upstream,
+              // `URL.hostname` keeps the brackets on IPv6 literals; `net.connect` does not want them.
+              host: upstream.hostname.replace(/^\[(.*)\]$/, "$1"),
+              port: Number(upstream.port),
+            }),
           unset: () => relay.unset,
           fail: relay.fail,
         } satisfies WorkerProxyInstance;
