@@ -10,6 +10,8 @@ export interface BaseRuntimeContext {
   Type: string;
   id: string;
   env: Record<string, any>;
+  /** Outputs used only to order this runtime after upstream graph nodes. */
+  dependencies?: Output[];
   /**
    * Read a value by its (already-canonical) key. The key is used verbatim;
    * callers must {@link sanitizeKey} first. See {@link sanitizeKey}.
@@ -36,6 +38,15 @@ export interface BaseRuntimeContext {
    */
   telemetry?: Layer.Layer<never, any, any>;
 }
+
+/** Register an ordering-only dependency without exposing it at runtime. */
+export const addDependency = (
+  context: BaseRuntimeContext,
+  output: Output,
+): Effect.Effect<void> =>
+  Effect.sync(() => {
+    (context.dependencies ??= []).push(output);
+  });
 
 /**
  * Canonicalize a logical key into a key that is safe to use as the name of an

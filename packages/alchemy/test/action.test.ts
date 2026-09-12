@@ -255,6 +255,27 @@ describe("Plan", () => {
   );
 
   test(
+    "ordering-only dependency keeps task upstream without changing props",
+    Effect.gen(function* () {
+      const Migrate = Action("Migrate", (_: {}) =>
+        Effect.succeed({ migrated: true }),
+      );
+
+      const plan = yield* Effect.gen(function* () {
+        const migration = yield* Migrate({});
+        const bucket = yield* Bucket("MyBucket", { name: "static" });
+        bucket.Dependencies = [migration];
+        return bucket;
+      }).pipe(makePlan);
+
+      expect(plan.actions.Migrate.downstream).toContain("MyBucket");
+      expect((plan.resources.MyBucket as Plan.Create).props).toEqual({
+        name: "static",
+      });
+    }),
+  );
+
+  test(
     "task depends on resource: resource is upstream of task",
     Effect.gen(function* () {
       const Sync = Action("Sync", (_: { name: string }) =>
@@ -295,6 +316,28 @@ describe("Plan", () => {
 // ── Apply tests ───────────────────────────────────────────────────────────
 
 describe("Apply", () => {
+  test.provider(
+    "ordering-only Action dependency converges to a noop plan",
+    (stack) =>
+      Effect.gen(function* () {
+        const Migrate = Action("Migrate", (_: {}) =>
+          Effect.succeed({ migrated: true }),
+        );
+        const program = Effect.gen(function* () {
+          const migration = yield* Migrate({});
+          const bucket = yield* Bucket("MyBucket", { name: "static" });
+          bucket.Dependencies = [migration];
+          return bucket;
+        });
+
+        yield* stack.deploy(program);
+        const settled = yield* stack.plan(program);
+
+        expect(settled.actions.Migrate.action).toBe("noop");
+        expect(settled.resources.MyBucket.action).toBe("noop");
+      }),
+  );
+
   test.provider("first run invokes body and persists ran state", (stack) =>
     Effect.gen(function* () {
       const counter = yield* Ref.make(0);

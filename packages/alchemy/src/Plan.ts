@@ -1024,13 +1024,21 @@ export const make = <A>(
     const newUpstreamDependencies: {
       [fqn: string]: string[];
     } = Object.fromEntries([
-      ...resources.map(
-        (resource) =>
-          [
-            resource.FQN,
-            Object.values(Output.upstreamAny(resource.Props)).map((r) => r.FQN),
-          ] as const,
-      ),
+      ...resources.map((resource) => {
+        // Resource proxies synthesize attribute Outputs for missing keys, so
+        // only read explicit dependencies when the resource owns the field.
+        const explicitDependencies = Object.hasOwn(resource, "Dependencies")
+          ? resource.Dependencies
+          : [];
+        const dependencies = [
+          ...Object.values(Output.upstreamAny(resource.Props)),
+          ...Object.values(Output.upstreamAny(explicitDependencies ?? [])),
+        ];
+        return [
+          resource.FQN,
+          Array.from(new Set(dependencies.map((resource) => resource.FQN))),
+        ] as const;
+      }),
       ...actions.map(
         (action) =>
           [

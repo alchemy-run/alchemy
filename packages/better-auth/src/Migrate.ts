@@ -1,6 +1,6 @@
 import { Action, Stack, type Output } from "alchemy";
 import { sha256Object } from "alchemy/Util/sha256";
-import { CurrentRuntimeContext, sanitizeKey } from "alchemy/RuntimeContext";
+import { addDependency, CurrentRuntimeContext } from "alchemy/RuntimeContext";
 import type { BetterAuthOptions } from "better-auth";
 import { getSchema } from "better-auth/db";
 import * as Effect from "effect/Effect";
@@ -105,13 +105,11 @@ export const registerMigration = ({
       (effect) => effect as unknown as Effect.Effect<Output<MigrateOutput>>,
     );
 
-    // Bind the migration result into the host environment (when there is a
-    // host): the host's env then depends on the Action's output, giving the
-    // engine a Worker/Function → Migration dependency edge so first-deploy
-    // traffic cannot race the schema.
+    // Order the host after the migration without exposing the Action result
+    // as runtime input.
     const rc = yield* CurrentRuntimeContext;
     if (rc !== undefined) {
-      yield* rc.set(sanitizeKey(`${id}Migration`), result as never);
+      yield* addDependency(rc, result as never);
     }
   }) as Effect.Effect<void>;
 
