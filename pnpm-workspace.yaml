@@ -60,7 +60,6 @@ catalogs:
     capnp-es: ^0.0.16
     capnweb: ^0.12.0
     esbuild: ^0.28.1
-    fast-glob: ^3.3.2
     heap-js: ^2.5.0
     http-cache-semantics: ^4.2.0
     itty-time: ^2.0.2
@@ -71,6 +70,7 @@ catalogs:
     nuxt: ">=4.5.0"
     postal-mime: ^2.4.3
     sharp: ^0.35.3
+    tinyglobby: ^0.2.17
     toucan-js: 4.0.0
     unenv: ^2.0.0-rc.24
     vite: ^7.0.0 || ^8.0.0
