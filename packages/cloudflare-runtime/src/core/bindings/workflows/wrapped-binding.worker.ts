@@ -1,6 +1,7 @@
 import type {
   WorkflowBinding,
   WorkflowInstanceRestartOptions,
+  WorkflowInstanceTerminateOptions,
 } from "../../../internal/workflows-shared/binding.ts";
 import type { WorkflowIntrospectionOperation } from "../../../internal/workflows-shared/types.ts";
 
@@ -110,9 +111,11 @@ class InstanceImpl implements WorkflowInstance {
     await instance.resume();
   }
 
-  public async terminate(): Promise<void> {
+  public async terminate(
+    options?: WorkflowInstanceTerminateOptions,
+  ): Promise<void> {
     using instance = await this.getInstance();
-    await instance.terminate();
+    await instance.terminate(options);
   }
 
   public async restart(

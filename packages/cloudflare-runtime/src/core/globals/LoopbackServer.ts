@@ -1,6 +1,7 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Scope from "effect/Scope";
 import * as MutableHashMap from "effect/MutableHashMap";
 import * as HttpServerError from "effect/unstable/http/HttpServerError";
 import type * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
@@ -20,6 +21,7 @@ export class LoopbackServer extends Context.Service<
     readonly route: (
       name: string,
       handler: RouteHandler,
+      ownerScope?: Scope.Scope,
     ) => Effect.Effect<void>;
   }
 >()("cloudflare-runtime/LoopbackServer") {}
@@ -147,18 +149,24 @@ export const LoopbackServerLive = Layer.effect(
     return LoopbackServer.of({
       address,
       secret,
-      route: (name, handler) =>
-        Effect.isEffect(handler)
-          ? makeHandler(handler, { scope }).pipe(
-              Effect.map((handler) => {
-                MutableHashMap.set(routes, name, handler);
-                return Effect.void;
+      route: (name, handler, ownerScope) =>
+        Effect.gen(function* () {
+          const resolved = Effect.isEffect(handler)
+            ? yield* makeHandler(handler, { scope: ownerScope ?? scope })
+            : handler;
+          MutableHashMap.set(routes, name, resolved);
+          if (ownerScope) {
+            yield* Scope.addFinalizer(
+              ownerScope,
+              Effect.sync(() => {
+                const current = MutableHashMap.get(routes, name);
+                if (current._tag === "Some" && current.value === resolved) {
+                  MutableHashMap.remove(routes, name);
+                }
               }),
-            )
-          : Effect.sync(() => {
-              MutableHashMap.set(routes, name, handler);
-              return Effect.void;
-            }),
+            );
+          }
+        }),
     });
   }),
 );

@@ -1,3 +1,4 @@
+import type * as Scope from "effect/Scope";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { DEFAULT_COMPATIBILITY_DATE } from "../internal/constants.ts";
@@ -12,6 +13,7 @@ export class Loopback extends Plugin.Service<
     readonly route: (
       target: string,
       handler: LoopbackServer.RouteHandler,
+      scope?: Scope.Scope,
     ) => Effect.Effect<WorkerdConfig.ServiceDesignator>;
   }
 >()("cloudflare-runtime/plugin/Loopback") {}
@@ -65,8 +67,8 @@ export const LoopbackLive = Layer.effect(
         },
       ],
       api: {
-        route: (target, handler) =>
-          loopbackServer.route(target, handler).pipe(
+        route: (target, handler, scope) =>
+          loopbackServer.route(target, handler, scope).pipe(
             Effect.map(() => ({
               name: "loopback:fetcher",
               props: { json: JSON.stringify({ target }) },

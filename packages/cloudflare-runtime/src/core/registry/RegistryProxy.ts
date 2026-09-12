@@ -22,14 +22,22 @@ import { PluginContext } from "../PluginContext.ts";
 import { SystemError } from "../RuntimeError.shared.ts";
 import * as WorkerdConfig from "../workerd/Config.ts";
 import * as Registry from "./Registry.ts";
-import type { ResolvedTargetMap, Subscriber } from "./RegistryTypes.shared.ts";
+import type {
+  RegistryEntry,
+  ResolvedTargetMap,
+  Subscriber,
+} from "./RegistryTypes.shared.ts";
 
 export class RegistryProxy extends Plugin.Service<
   RegistryProxy,
   {
-    /**
-     * Declares a service, belonging to the current worker, that will be published to the registry proxy.
-     */
+    /** Publish this worker's Explorer instance and storage scope for peer discovery. */
+    readonly configureLocalExplorer: (
+      metadata: NonNullable<RegistryEntry["localExplorer"]>,
+    ) => Effect.Effect<void>;
+    /** Snapshot of registered local workers, filtered by the Explorer adapter. */
+    readonly localExplorerEntries: Effect.Effect<ReadonlyArray<RegistryEntry>>;
+    /** Declares a service hosted by this worker for the dev registry. */
     readonly publish: (service: PublishedService) => Effect.Effect<void>;
     /**
      * Declares an external service that will be consumed by the current worker.
@@ -76,6 +84,7 @@ export const RegistryProxyLive = Layer.effect(
               defaultDurableObjectUniqueKey(worker.name, namespace.className),
           })) ?? [];
         const subscribed: Array<Subscriber> = [];
+        let localExplorer: RegistryEntry["localExplorer"];
 
         return {
           defer: Effect.gen(function* () {
@@ -138,6 +147,7 @@ export const RegistryProxyLive = Layer.effect(
                   }
                   yield* registry.write({
                     scriptName: worker.name,
+                    localExplorer,
                     debugPortAddress: `127.0.0.1:${debugPort}`,
                     services: [
                       {
@@ -181,6 +191,11 @@ export const RegistryProxyLive = Layer.effect(
               { concurrency: "unbounded" },
             ),
           api: {
+            configureLocalExplorer: (metadata) =>
+              Effect.sync(() => {
+                localExplorer = metadata;
+              }),
+            localExplorerEntries: registry.entries,
             publish: (entry) =>
               Effect.sync(() => {
                 published.push(entry);
