@@ -5,6 +5,7 @@ import * as Arr from "effect/Array";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Order from "effect/Order";
+import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { HttpClient } from "effect/unstable/http";
@@ -862,10 +863,16 @@ export const BucketProvider = () =>
               ),
             ),
           );
+        // SensitiveString decodes to Redacted; its JSON form hides the key identity.
+        const keyValue = (
+          key: s3.ServerSideEncryptionByDefault["KMSMasterKeyID"],
+        ) => (Redacted.isRedacted(key) ? Redacted.value(key) : key);
         const canon = (r: s3.ServerSideEncryptionRule | undefined) =>
           JSON.stringify({
             alg: r?.ApplyServerSideEncryptionByDefault?.SSEAlgorithm ?? null,
-            key: r?.ApplyServerSideEncryptionByDefault?.KMSMasterKeyID ?? null,
+            key:
+              keyValue(r?.ApplyServerSideEncryptionByDefault?.KMSMasterKeyID) ??
+              null,
             bucketKey: r?.BucketKeyEnabled ?? false,
           });
         if (canon(current) === canon(desiredRule)) return;
