@@ -196,7 +196,7 @@ export interface Platform<
       const Id extends string,
       Shape extends MainShape,
       PropsReq = never,
-      InitReq extends Services | PlatformServices | Resource = never,
+      InitReq = never,
     >(
       id: Id,
       props:
@@ -224,10 +224,7 @@ export interface Platform<
       id: Id,
     ): Effect.Effect<Resource & Rpc<Self>, never, Resource["Providers"]> &
       Named<Id> & {
-        make<
-          PropsReq = never,
-          InitReq extends Services | PlatformServices | Resource = never,
-        >(
+        make<PropsReq = never, InitReq = never>(
           props:
             | InputProps<InlineProps>
             | Effect.Effect<
@@ -245,7 +242,7 @@ export interface Platform<
         new (_: never): BaseShape & Named<Id> & Tag<Resource["Type"]>;
       };
   };
-  <PropsReq = never, InitReq extends Services | PlatformServices = never>(
+  <PropsReq = never, InitReq = never>(
     id: string,
     props:
       | InputProps<Resource["Props"]>
@@ -261,7 +258,7 @@ export interface Platform<
     const Id extends string,
     Shape extends MainShape,
     PropsReq = never,
-    InitReq extends Services | PlatformServices = never,
+    InitReq = never,
   >(
     id: Id,
     props:
