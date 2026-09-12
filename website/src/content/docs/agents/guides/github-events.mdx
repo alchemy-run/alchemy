@@ -1,0 +1,122 @@
+---
+title: GitHub events
+description: Wire a repository's events to keyed agent runs — the router pattern, delivery dedupe, and the world closing runs.
+---
+
+Agents don't poll the world; deterministic **routers** do, and
+address agents by key. This guide shows the pattern the alchemy-org
+factory uses to run a GitHub repository — the same shape works for
+any event source.
+
+## Subscribe to events
+
+The [GitHub provider](/github) ships typed repository events and a
+consumer that delivers them (REST polling locally; a webhook layer is
+the Cloudflare-shaped variant):
+
+```typescript
+import * as GitHub from "alchemy/GitHub";
+
+yield* GitHub.consumeRepositoryEvents(
+  repo,
+  {
+    events: [
+      GitHub.IssueOpened,
+      GitHub.IssueCommented,
+      GitHub.IssueClosed,
+      GitHub.PullRequestOpened,
+      GitHub.PullRequestMerged,
+    ],
+  },
+  (event) => route(event),
+);
+```
+
+Selection is the first policy decision: events you don't subscribe to
+can never reach an agent.
+
+## Dedupe deliveries
+
+Polling re-observes and webhooks redeliver, so the router's first
+move is a content-keyed dedupe against a ledger (SQLite locally):
+
+```typescript
+(event) =>
+  Effect.gen(function* () {
+    const { status } = yield* ledger.offer(
+      "issues",
+      JSON.stringify(event),   // delivery identity: the content itself
+      event,
+    );
+    if (status === "duplicate") return;
+    // ...route
+  })
+```
+
+The ledger dedupes *deliveries*; it never gates admission — a fresh
+process re-admits runs from world state naturally.
+
+## Address runs by world entity
+
+Routing is a switch from event to actor verb, with the key derived
+from the entity the event concerns:
+
+```typescript
+const repo = `${event.repository.owner.login}/${event.repository.name}`;
+
+switch (event._tag) {
+  case "IssueOpened":
+    return yield* owner.send(event, { key: `${repo}#${event.issue.number}` });
+  case "IssueClosed":
+    return yield* owner.settle(`${repo}#${event.issue.number}`, event);
+  case "IssueCommented":
+    return yield* owner.send(event, { key: `${repo}#${event.issue.number}` });
+}
+```
+
+Three facts do all the work:
+
+- `send` **admits on first sight** of a key and enqueues thereafter —
+  the router never distinguishes new issues from ongoing ones.
+- The same key means the same conversation: every comment lands in
+  the issue's one thread, waking the run if it was parked.
+- `settle` is the world ending the run — the issue closed — and the
+  supervision cascade settles the workers it dispatched.
+
+## Route relations through recorded links
+
+Events about *related* entities (a PR's lifecycle belongs to the
+issue it resolves) route through structured links, recorded where the
+relation is born rather than parsed from prose:
+
+```typescript
+// when the engineer's tool opens the PR:
+yield* ledger.put(prLinkKey(repo, pull.number), issue.number);
+
+// when a PR event arrives:
+const linked = yield* ledger.get(prLinkKey(repo, pr));
+if (linked !== undefined) {
+  return yield* owner.send(event, { key: `${repo}#${linked}` });
+}
+```
+
+The factory falls back to parsing `"Closes #N"` from the body exactly
+once — for foreign PRs it didn't open — and records the result.
+
+## Keep judgment out of the router
+
+The router is deliberately deterministic: dedupe, derive key,
+deliver. *What to do about* an event is the agent's job — triage
+judgment lives in the owner's charter, not in routing code. When
+deterministic code must act on an agent's answer (the factory merges
+unlinked PRs after its reviewer approves), it `dispatch`es and awaits
+like any other caller, keeping the two-key ceremony intact.
+
+## Crash recovery for free
+
+Keys make recovery boring: if the process dies mid-conversation, the
+next event for `repo#95` admits a fresh run that reads current world
+state (the issue, its comments, the PR) through its tools. The
+factory's supervised-mode demo exercised exactly this — an approval
+comment woke a *fresh* owner run after a redeploy, which re-read the
+state and completed the merge.

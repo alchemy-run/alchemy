@@ -110,9 +110,6 @@
       "path": "./examples/aws-website-vite/tsconfig.json"
     },
     {
-      "path": "./examples/cloudflare-agent/tsconfig.json"
-    },
-    {
       "path": "./examples/cloudflare-static-site/tsconfig.json"
     },
     {
@@ -306,6 +303,9 @@
     },
     {
       "path": "./examples/monorepo-multi-stack/tsconfig.json"
+    },
+    {
+      "path": "./services/alchemy-org/tsconfig.json"
     },
     {
       "path": "./benchmark/container/tsconfig.json"

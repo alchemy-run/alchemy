@@ -1,9 +1,13 @@
 import type { NonEmptyArray } from "effect/Array";
 import * as Cause from "effect/Cause";
+import type * as ConsoleService from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
+import { createRequire } from "node:module";
+import nodePath from "node:path";
+import { pathToFileURL } from "node:url";
 import type * as vite from "vite";
 import { cachedFunction } from "../Util/cached-function.ts";
 import { sha256 } from "../Util/index.ts";
@@ -14,6 +18,62 @@ import {
   type BundleFile,
   type BundleOutput,
 } from "./Bundle.ts";
+
+/**
+ * Route Vite's logger through the ambient Effect `Console` service instead of
+ * its default stdout logger. Under the CLI this is the global console
+ * (identical output); under environments that override the Console — e.g.
+ * alchemy-test's per-test buffering console — the build output is captured
+ * with the test instead of leaking to the terminal.
+ */
+export const makeViteLogger = (
+  console: ConsoleService.Console,
+): vite.Logger => {
+  const loggedErrors = new WeakSet<object>();
+  let hasWarned = false;
+  return {
+    info: (msg) => console.log(msg),
+    warn: (msg) => {
+      hasWarned = true;
+      console.warn(msg);
+    },
+    warnOnce: (msg) => {
+      hasWarned = true;
+      console.warn(msg);
+    },
+    error: (msg, options) => {
+      if (options?.error != null) loggedErrors.add(options.error);
+      console.error(msg);
+    },
+    clearScreen: () => {},
+    hasErrorLogged: (error) => loggedErrors.has(error),
+    get hasWarned() {
+      return hasWarned;
+    },
+  };
+};
+
+type ViteModule = typeof import("vite");
+
+/**
+ * Dynamically load Vite from the project root. Falls back to the bundled
+ * copy if the project doesn't have its own Vite installation.
+ */
+export async function loadVite(
+  projectRoot: string = process.cwd(),
+): Promise<ViteModule> {
+  try {
+    const require = createRequire(nodePath.join(projectRoot, "package.json"));
+    const vitePath = require.resolve("vite");
+    // On Windows, absolute paths must be file:// URLs for ESM import().
+    const viteUrl = pathToFileURL(vitePath);
+    return await import(/* @vite-ignore */ viteUrl.href);
+  } catch {
+    // Fallback: try to import vite from the global node_modules (works for non-linked installs)
+    // The fallback is a bare specifier and works as-is.
+    return await import("vite");
+  }
+}
 
 export interface ViteBuildOutput {
   readonly clientDirectory: string | undefined;

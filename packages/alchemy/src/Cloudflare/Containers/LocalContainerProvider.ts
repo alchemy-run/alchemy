@@ -5,8 +5,8 @@ import * as Redacted from "effect/Redacted";
 import * as Artifacts from "../../Artifacts.ts";
 import { hashDirectory } from "../../Command/Memo.ts";
 import { isResolved } from "../../Diff.ts";
+import * as RpcProvider from "../../Dev/RpcProvider.ts";
 import type { ResourceBinding } from "../../Resource.ts";
-import * as RpcProvider from "../../Local/RpcProvider.ts";
 import { sha256Object } from "../../Util/sha256.ts";
 import { normalizeNulls } from "../../Util/stable.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -16,6 +16,7 @@ import type {
   ContainerApplication,
   DevContainerImage,
 } from "./ContainerApplication.ts";
+import { hostArchitecture } from "../../Docker/Host.ts";
 import { isInlineDockerfile } from "../../Docker/Dockerfile.ts";
 import {
   createContainerApplicationName,
@@ -69,12 +70,23 @@ export const LocalContainerProvider = () =>
           // point `dev` at both. The build-context materialization is shared
           // with the live provider (see `prepareContainerBuildContext`).
           if (news.main) {
+            // Effect-native dev images build for the HOST architecture by
+            // default — on Apple Silicon this avoids amd64 emulation (a
+            // Dockerfile with apt installs takes minutes under emulation,
+            // seconds native). Safe because the generated Dockerfile and
+            // binding-contributed fragments are arch-parameterized; pin
+            // `dev: { platform: "linux/amd64" }` for production parity.
+            const arch =
+              news.dev?.platform === "linux/amd64"
+                ? "amd64"
+                : hostArchitecture();
             const { context, dockerfile, hash } =
-              yield* prepareContainerBuildContext(id, news);
+              yield* prepareContainerBuildContext(id, news, arch);
             return {
               dev: {
                 context: path.relative(process.cwd(), context),
                 dockerfile: path.relative(context, dockerfile),
+                platform: `linux/${arch}`,
               } as DevContainerImage,
               hash,
             };

@@ -1,0 +1,278 @@
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Path from "effect/Path";
+import * as Result from "effect/Result";
+import { Thread } from "../AI/Thread.ts";
+import * as Git from "../Git/index.ts";
+
+/**
+ * The Workspace — the PLACE tool physics work in, sandboxed: a
+ * containment root plus escape-proof path resolution (relative-only
+ * paths, symlink containment). Tool implementations only ever
+ * `yield* Workspace`; which place is a Layer decision:
+ *
+ * - {@link fixed}: one static containment root — a desk that works
+ *   the same checkout for every run.
+ * - {@link perRun}: the root IS the current run's {@link Git.Checkouts}
+ *   checkout, derived from `AI.Thread` at CALL time — the coding-agent
+ *   shape. Tools physically cannot write outside the run's own
+ *   worktree, so path discipline needs no prose, and concurrent runs
+ *   cannot see each other.
+ */
+export class Workspace extends Context.Service<
+  Workspace,
+  {
+    /**
+     * Absolute path of the containment root — resolved per CALL (the
+     * per-run layer derives it from the current thread's checkout).
+     */
+    readonly root: Effect.Effect<string, string>;
+    /**
+     * Resolve a workspace-relative path INSIDE the root; a path that
+     * escapes fails model-visibly (the agent reacts, the loop
+     * survives).
+     */
+    readonly resolve: (relative: string) => Effect.Effect<string, string>;
+    /** Resolve an existing target and contain symlinks inside the root. */
+    readonly resolveExisting: (
+      relative: string,
+    ) => Effect.Effect<string, string>;
+    /**
+     * Resolve a target that may not exist by containing its nearest
+     * existing parent inside the root.
+     */
+    readonly resolveForCreate: (
+      relative: string,
+    ) => Effect.Effect<string, string>;
+  }
+>()("alchemy/Workspace") {}
+
+/** The containment resolvers over one canonical root. */
+const makeContainment = (
+  canonicalRoot: string,
+  fs: FileSystem.FileSystem,
+  path: Path.Path,
+) => {
+  const validateRelative = (
+    relative: string,
+  ): Effect.Effect<string, string> => {
+    if (relative.length === 0 || path.isAbsolute(relative)) {
+      return Effect.fail(
+        `[policy denial] path must be workspace-relative: ${JSON.stringify(relative)} — containment working as intended, not a bug; use a relative path`,
+      );
+    }
+    const candidate = path.resolve(canonicalRoot, relative);
+    const fromRoot = path.relative(canonicalRoot, candidate);
+    return fromRoot === "" ||
+      (!fromRoot.startsWith(`..${path.sep}`) &&
+        fromRoot !== ".." &&
+        !path.isAbsolute(fromRoot))
+      ? Effect.succeed(candidate)
+      : Effect.fail(
+          `[policy denial] path escapes the workspace: ${JSON.stringify(relative)} — containment working as intended, not a bug; do not retry another way`,
+        );
+  };
+
+  const containCanonical = (
+    relative: string,
+    canonical: string,
+  ): Effect.Effect<string, string> => {
+    const fromRoot = path.relative(canonicalRoot, canonical);
+    return fromRoot === "" ||
+      (!fromRoot.startsWith(`..${path.sep}`) &&
+        fromRoot !== ".." &&
+        !path.isAbsolute(fromRoot))
+      ? Effect.succeed(canonical)
+      : Effect.fail(
+          `[policy denial] path escapes the workspace through a symlink: ${JSON.stringify(relative)} — containment working as intended, not a bug; do not retry another way`,
+        );
+  };
+
+  const resolveExisting = (relative: string) =>
+    Effect.gen(function* () {
+      const candidate = yield* validateRelative(relative);
+      const canonical = yield* fs
+        .realPath(candidate)
+        .pipe(Effect.mapError((error) => String(error)));
+      return yield* containCanonical(relative, canonical);
+    });
+
+  const resolveForCreate = (relative: string) =>
+    Effect.gen(function* () {
+      const candidate = yield* validateRelative(relative);
+      const existing = yield* fs.stat(candidate).pipe(Effect.result);
+      if (Result.isSuccess(existing)) {
+        return yield* resolveExisting(relative);
+      }
+
+      const missing: string[] = [];
+      let parent = candidate;
+      while (true) {
+        const status = yield* fs.stat(parent).pipe(Effect.result);
+        if (Result.isSuccess(status)) break;
+        const next = path.dirname(parent);
+        if (next === parent) {
+          return yield* Effect.fail(
+            `could not resolve a parent for ${JSON.stringify(relative)}`,
+          );
+        }
+        missing.unshift(path.basename(parent));
+        parent = next;
+      }
+      const canonicalParent = yield* fs
+        .realPath(parent)
+        .pipe(Effect.mapError((error) => String(error)));
+      yield* containCanonical(relative, canonicalParent);
+      return path.join(canonicalParent, ...missing);
+    });
+
+  return { resolveExisting, resolveForCreate };
+};
+
+/**
+ * A FIXED containment root, created if missing.
+ *
+ * Provisioning is LAZY — the directory is created (and canonicalized)
+ * on first use, memoized, not at layer build. Layer construction must
+ * stay filesystem-free because a layer can be built somewhere the root
+ * does not belong: a Cloudflare container's `.make()` impl builds at
+ * PLAN time on the developer's machine, where eagerly `mkdir`-ing the
+ * guest's `/workspace` fails (`EROFS`) long before any container runs.
+ */
+export const fixed = (
+  root: string,
+): Layer.Layer<Workspace, never, Path.Path | FileSystem.FileSystem> =>
+  Layer.effect(
+    Workspace,
+    Effect.gen(function* () {
+      const path = yield* Path.Path;
+      const fs = yield* FileSystem.FileSystem;
+
+      // self-provisioning on first use: checkouts land under it later —
+      // Git.Checkouts populates, we contain
+      const canonicalRoot = yield* Effect.cached(
+        Effect.gen(function* () {
+          const resolved = path.resolve(root);
+          yield* fs
+            .makeDirectory(resolved, { recursive: true })
+            .pipe(Effect.orDie);
+          return yield* fs.realPath(resolved).pipe(Effect.orDie);
+        }),
+      );
+
+      const within = <A>(
+        use: (
+          containment: ReturnType<typeof makeContainment>,
+        ) => Effect.Effect<A, string>,
+      ) =>
+        Effect.flatMap(canonicalRoot, (resolved) =>
+          use(makeContainment(resolved, fs, path)),
+        );
+
+      return {
+        root: canonicalRoot,
+        resolve: (relative) =>
+          within((containment) => containment.resolveForCreate(relative)),
+        resolveExisting: (relative) =>
+          within((containment) => containment.resolveExisting(relative)),
+        resolveForCreate: (relative) =>
+          within((containment) => containment.resolveForCreate(relative)),
+      };
+    }),
+  );
+
+/**
+ * The PER-RUN containment root: the current thread's
+ * {@link Git.Checkouts} checkout. Every resolution derives the root
+ * from `AI.Thread` at call time (tool handlers run with the thread
+ * provided), so an agent's tools are physically confined to its own
+ * worktree — "which directory am I in" is not a fact the model can
+ * get wrong.
+ */
+export const perRun = (options?: {
+  /**
+   * Check the run's worktree out LAZILY on first use, from this
+   * remote — making this layer the ONE place that binds run key →
+   * worktree (`Git.Checkouts.checkout` is memoized by key, so any
+   * other holder of the same key — a PR tool committing the work —
+   * lands in the same tree). Without a remote, the charter's init
+   * must have acquired the checkout itself.
+   */
+  readonly remote?: Git.Remote;
+  /**
+   * The FIXED containment root for sessions with no checkout —
+   * mixed-agent processes share one Workspace layer this way: a
+   * reviewer's session resolves its PR worktree, the resident
+   * engineer's session (no checkout) falls back to this desk.
+   * Created (and canonicalized) lazily on first use, like
+   * {@link fixed}. Without it, a session with no checkout fails
+   * model-visibly.
+   */
+  readonly fallback?: string;
+}): Layer.Layer<
+  Workspace,
+  never,
+  Path.Path | FileSystem.FileSystem | Git.Checkouts
+> =>
+  Layer.effect(
+    Workspace,
+    Effect.gen(function* () {
+      const path = yield* Path.Path;
+      const fs = yield* FileSystem.FileSystem;
+      const checkouts = yield* Git.Checkouts;
+
+      const fallbackRoot =
+        options?.fallback === undefined
+          ? undefined
+          : yield* Effect.cached(
+              Effect.gen(function* () {
+                const resolved = path.resolve(options.fallback!);
+                yield* fs
+                  .makeDirectory(resolved, { recursive: true })
+                  .pipe(Effect.orDie);
+                return yield* fs.realPath(resolved).pipe(Effect.orDie);
+              }),
+            );
+
+      // AI.Thread is a runtime fact the driver provides to handlers;
+      // the Workspace interface deliberately hides the requirement
+      // (the same doctrine as tool handlers reading AI.Thread).
+      const root = Effect.gen(function* () {
+        const { key } = yield* Thread;
+        const found = yield* checkouts.get(key);
+        if (Option.isSome(found)) return found.value.root;
+        if (options?.remote !== undefined) {
+          const checkout = yield* checkouts
+            .checkout({ key, remote: options.remote })
+            .pipe(Effect.mapError((error) => error.message));
+          return checkout.root;
+        }
+        if (fallbackRoot !== undefined) return yield* fallbackRoot;
+        return yield* Effect.fail(
+          `no checkout for run '${key}' — the charter acquires one in init`,
+        );
+      }) as unknown as Effect.Effect<string, string>;
+
+      const within = <A>(
+        use: (
+          containment: ReturnType<typeof makeContainment>,
+        ) => Effect.Effect<A, string>,
+      ) =>
+        Effect.flatMap(root, (canonicalRoot) =>
+          use(makeContainment(canonicalRoot, fs, path)),
+        );
+
+      return {
+        root,
+        resolve: (relative) =>
+          within((containment) => containment.resolveForCreate(relative)),
+        resolveExisting: (relative) =>
+          within((containment) => containment.resolveExisting(relative)),
+        resolveForCreate: (relative) =>
+          within((containment) => containment.resolveForCreate(relative)),
+      };
+    }),
+  );

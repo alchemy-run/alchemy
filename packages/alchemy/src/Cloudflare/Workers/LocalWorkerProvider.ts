@@ -36,9 +36,9 @@ import {
   makeResourceLogger,
   makeResourceOutput,
 } from "../../Util/ResourceOutput.ts";
-import { makeDevLogDirectory, makeDevLogOpener } from "../../Local/DevLog.ts";
+import * as LocalProvider from "../../Dev/LocalProvider.ts";
 import { FQN_SEPARATOR } from "../../FQN.ts";
-import * as LocalProvider from "../../Local/LocalProvider.ts";
+import { makeDevLogDirectory, makeDevLogOpener } from "../../Local/DevLog.ts";
 import { Stack } from "../../Stack.ts";
 import { unwrapRedacted } from "../../Util/index.ts";
 import { sha256 } from "../../Util/sha256.ts";

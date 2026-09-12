@@ -18,7 +18,7 @@
  */
 import { Cli } from "@/Report.ts";
 import type { ResourceAnnotated, ResourceStatusChanged } from "@/Report.ts";
-import * as LocalProvider from "@/Local/LocalProvider.ts";
+import * as LocalProvider from "@/Dev/LocalProvider.ts";
 import * as Provider from "@/Provider.ts";
 import { remote, type ProviderMode } from "@/ProviderMode.ts";
 import { Resource } from "@/Resource";

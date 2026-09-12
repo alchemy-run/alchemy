@@ -25,7 +25,7 @@ import {
 } from "../Platform.ts";
 import * as Provider from "../Provider.ts";
 import type { Resource } from "../Resource.ts";
-import type { ServerHost } from "../Server/Process.ts";
+import type { Host as ServerHost } from "../Local/Process.ts";
 import { Stack } from "../Stack.ts";
 import { createRailwayName, matchesAlchemyPhysicalName } from "./Metadata.ts";
 import {

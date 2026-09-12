@@ -14,6 +14,7 @@ import {
 import * as Binding from "../../Binding.ts";
 import type { ConverseRequest } from "./Converse.ts";
 import type { ConverseStreamRequest } from "./ConverseStream.ts";
+import { fromBase64 } from "../../Util/bytes.ts";
 
 /**
  * Inference parameters applied to every request made through the
@@ -310,13 +311,6 @@ const IMAGE_FORMATS: Record<string, bedrock.ImageFormat> = {
   "image/webp": "webp",
 };
 
-const base64ToUint8Array = (data: string): Uint8Array => {
-  const binary = atob(data);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return bytes;
-};
-
 const fileToImageBlock = (
   data: string | Uint8Array | URL,
   mediaType: string,
@@ -328,7 +322,7 @@ const fileToImageBlock = (
   const bytes =
     data instanceof Uint8Array
       ? data
-      : base64ToUint8Array(
+      : fromBase64(
           data.startsWith("data:") ? data.slice(data.indexOf(",") + 1) : data,
         );
   return { image: { format, source: { bytes } } };

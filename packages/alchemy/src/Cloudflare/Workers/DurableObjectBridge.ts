@@ -19,6 +19,7 @@ import {
   fromDurableObjectState,
 } from "./DurableObjectState.ts";
 import { isScopeEjected, makeRequestEffect } from "./HttpServer.ts";
+import { IoContextScheduler } from "./IoContextScheduler.ts";
 import { fromWebSocket } from "./WebSocket.ts";
 import { getWorkerExport, handleRpcExit } from "./WorkerBridge.ts";
 
@@ -57,9 +58,19 @@ export const makeDurableObjectBridge =
     return class DurableObjectBridge extends DurableObject {
       #state;
       #instance;
+      /**
+       * Every fiber this actor runs is pinned to the actor's own IoContext
+       * through this scheduler: a fiber woken inside another actor's task
+       * (shared `Effect.cached` / Semaphore / Deferred from the isolate-wide
+       * layer build) yields and resumes at home before touching storage.
+       * Constructed here, inside the actor's context, so the trampoline is
+       * armed at home.
+       */
+      readonly #scheduler: IoContextScheduler;
       constructor(state: cf.DurableObjectState, env: any) {
         super(state as any, env);
         this.#state = state;
+        this.#scheduler = new IoContextScheduler();
 
         this.#instance = state.blockConcurrencyWhile(() =>
           build((promise) => void (state as any).waitUntil?.(promise)).then(
@@ -72,18 +83,21 @@ export const makeDurableObjectBridge =
                 Layer.provideMerge(Layer.succeedContext(services)),
                 Layer.provideMerge(Layer.succeedContext(context)),
               );
-              return constructor.pipe(
-                Effect.provide(doContext),
-                Effect.flatMap((instance) =>
-                  instance.pipe(Effect.provide(doContext)),
+              return this.#scheduler.enter(() =>
+                constructor.pipe(
+                  Effect.provide(doContext),
+                  Effect.flatMap((instance) =>
+                    instance.pipe(Effect.provide(doContext)),
+                  ),
+                  Effect.map((instance) => ({
+                    instance,
+                    services,
+                    context,
+                    telemetry,
+                  })),
+                  (effect) =>
+                    Effect.runPromise(effect, { scheduler: this.#scheduler }),
                 ),
-                Effect.map((instance) => ({
-                  instance,
-                  services,
-                  context,
-                  telemetry,
-                })),
-                Effect.runPromise,
               );
             },
           ),
@@ -132,28 +146,31 @@ export const makeDurableObjectBridge =
 
         const { instance, services, context, telemetry } = await this.#instance;
 
-        return fn(instance)
-          .pipe(
-            Effect.provide(
-              Layer.mergeAll(
-                Layer.succeed(
-                  DurableObjectState,
-                  fromDurableObjectState(this.#state),
+        return this.#scheduler
+          .enter(() =>
+            fn(instance).pipe(
+              Effect.provide(
+                Layer.mergeAll(
+                  Layer.succeed(
+                    DurableObjectState,
+                    fromDurableObjectState(this.#state),
+                  ),
+                  Layer.succeed(Scope.Scope, scope),
+                  // The configured telemetry exporters, attached to the *call*
+                  // scope by `buildEventTelemetry` so buffered telemetry
+                  // flushes when the scope closes into `waitUntil` below (the
+                  // isolate scope never finalizes on workerd).
+                  Layer.effectContext(
+                    buildEventTelemetry(context, scope, telemetry()),
+                  ),
+                ).pipe(
+                  Layer.provideMerge(Layer.succeedContext(services)),
+                  Layer.provideMerge(Layer.succeedContext(context)),
                 ),
-                Layer.succeed(Scope.Scope, scope),
-                // The configured telemetry exporters, attached to the *call*
-                // scope by `buildEventTelemetry` so buffered telemetry
-                // flushes when the scope closes into `waitUntil` below (the
-                // isolate scope never finalizes on workerd).
-                Layer.effectContext(
-                  buildEventTelemetry(context, scope, telemetry()),
-                ),
-              ).pipe(
-                Layer.provideMerge(Layer.succeedContext(services)),
-                Layer.provideMerge(Layer.succeedContext(context)),
               ),
+              (effect) =>
+                Effect.runPromiseExit(effect, { scheduler: this.#scheduler }),
             ),
-            Effect.runPromiseExit,
           )
           .then((exit) =>
             onExit

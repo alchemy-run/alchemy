@@ -1,5 +1,5 @@
 import * as Fly from "@/Fly";
-import { ServerHost } from "@/Server/Process.ts";
+import { Host } from "@/Local/Process.ts";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import { MARKER, MARKER_FILE, Site, VOLUME_PATH } from "./shared.ts";
@@ -19,7 +19,7 @@ export default class Worker extends Fly.Service<Worker>()(
   },
   Effect.gen(function* () {
     const mount = yield* Fly.MountVolume({ path: VOLUME_PATH, sizeGb: 1 });
-    const host = yield* ServerHost;
+    const host = yield* Host;
     const fs = yield* FileSystem.FileSystem;
 
     yield* host.run(

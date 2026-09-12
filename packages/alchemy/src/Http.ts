@@ -131,7 +131,14 @@ export const resolvePort = (options: { port?: number } | undefined) =>
     ? Effect.succeed(options.port)
     : Config.Number("PORT").pipe(Config.withDefault(3000));
 
-export interface BunHttpServerOptions {
+export interface HttpServerFactoryOptions {
+  /**
+   * Called once the server is listening, with the BOUND address — the
+   * driver-assigned port when `PORT=0` requested an ephemeral one. Host
+   * entrypoints use this to report the actual port back to whoever
+   * launched the process (e.g. `Local.Service`'s ready file).
+   */
+  onListen?: (address: { port: number }) => Effect.Effect<void>;
   /**
    * Network interface on which the Bun HTTP server listens.
    *
@@ -145,9 +152,16 @@ export interface BunHttpServerOptions {
    * @default "0.0.0.0"
    */
   hostname?: string;
+  /**
+   * Bun's per-request idle timeout, in SECONDS (`0` disables). Bun
+   * reaps requests idle for 10s by default — long-lived streaming
+   * responses (a sandbox PTY between keystrokes) need it disabled.
+   * Bun-only (Node's server has no such default).
+   */
+  idleTimeout?: number;
 }
 
-export const BunHttpServer = (serverOptions?: BunHttpServerOptions) =>
+export const BunHttpServer = (factoryOptions?: HttpServerFactoryOptions) =>
   Layer.effect(
     HttpServer,
     Effect.gen(function* () {
@@ -160,24 +174,24 @@ export const BunHttpServer = (serverOptions?: BunHttpServerOptions) =>
             const port = yield* resolvePort(options);
             const server = yield* BunHttpServerPlatform.make({
               port,
-              hostname: serverOptions?.hostname ?? "0.0.0.0",
+              hostname: factoryOptions?.hostname ?? "0.0.0.0",
+              ...(factoryOptions?.idleTimeout === undefined
+                ? {}
+                : { idleTimeout: factoryOptions.idleTimeout }),
             });
+            if (
+              factoryOptions?.onListen &&
+              server.address._tag !== "UnixPathAddress"
+            ) {
+              yield* factoryOptions.onListen({ port: server.address.port });
+            }
             yield* server.serve(safeHttpEffect(handler));
           }).pipe(Effect.orDie),
       };
     }),
   );
 
-export interface NodeHttpServerOptions {
-  /**
-   * Address the Node HTTP server binds. Fly / Hetzner / Railway machines
-   * need `0.0.0.0`; omit to use that default.
-   * @default "0.0.0.0"
-   */
-  hostname?: string;
-}
-
-export const NodeHttpServer = (serverOptions?: NodeHttpServerOptions) =>
+export const NodeHttpServer = (factoryOptions?: HttpServerFactoryOptions) =>
   Layer.effect(
     HttpServer,
     Effect.gen(function* () {
@@ -193,9 +207,15 @@ export const NodeHttpServer = (serverOptions?: NodeHttpServerOptions) =>
               NodeHttp.createServer,
               {
                 port,
-                host: serverOptions?.hostname ?? "0.0.0.0",
+                host: factoryOptions?.hostname ?? "0.0.0.0",
               },
             );
+            if (
+              factoryOptions?.onListen &&
+              server.address._tag !== "UnixPathAddress"
+            ) {
+              yield* factoryOptions.onListen({ port: server.address.port });
+            }
             yield* server.serve(safeHttpEffect(handler));
           }).pipe(Effect.orDie),
       };

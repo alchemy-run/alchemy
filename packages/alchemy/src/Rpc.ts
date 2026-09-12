@@ -10,6 +10,7 @@ import type * as HttpClientResponse from "effect/unstable/http/HttpClientRespons
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import * as Socket from "effect/unstable/socket/Socket";
+import { fromBase64, toBase64 } from "./Util/bytes.ts";
 import type { HttpEffect } from "./Http.ts";
 
 export type Rpc<Shape> = {
@@ -325,19 +326,6 @@ const isRpcBytesChunk = (value: unknown): value is RpcBytesChunk =>
   "_tag" in value &&
   value._tag === BytesTag &&
   "b64" in value;
-
-const toBase64 = (bytes: Uint8Array): string => {
-  let binary = "";
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary);
-};
-
-const fromBase64 = (b64: string): Uint8Array => {
-  const binary = atob(b64);
-  const out = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
-  return out;
-};
 
 /**
  * Encode a `Stream` as a lazy NDJSON byte stream for an HTTP response body.

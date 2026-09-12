@@ -1,4 +1,4 @@
-import { RpcProviderProxy } from "@/Local/RpcProviderProxy";
+import { RpcProviderProxy } from "@/Dev/RpcProviderProxy";
 import { Stack, type StackSpec } from "@/Stack";
 import * as Core from "@/Test/Core.ts";
 import { expect, it } from "alchemy-test";

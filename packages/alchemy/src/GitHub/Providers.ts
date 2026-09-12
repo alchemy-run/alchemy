@@ -1,11 +1,17 @@
 import * as Layer from "effect/Layer";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
 import { ProfileStoreLive } from "../Auth/Profile.ts";
+import * as ProviderLayer from "../Dev/ProviderLayer.ts";
 import * as Provider from "../Provider.ts";
 import { type GitHubAuthOptions, makeGitHubAuth } from "./AuthProvider.ts";
 import { Comment, CommentProvider } from "./Comment.ts";
 import * as Credentials from "./Credentials.ts";
 import { Environment, EnvironmentProvider } from "./Environment.ts";
+import { LocalWebhookProvider } from "./LocalWebhookProvider.ts";
+import {
+  PersonalAccessToken,
+  PersonalAccessTokenProvider,
+} from "./PersonalAccessToken.ts";
 import { Repository, RepositoryProvider } from "./Repository.ts";
 import { Secret, SecretProvider } from "./Secret.ts";
 import { Variable, VariableProvider } from "./Variable.ts";
@@ -22,8 +28,9 @@ export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
 export interface ProvidersOptions extends GitHubAuthOptions {}
 
 /**
- * GitHub providers (Comment, Environment, Repository, Secret, Variable,
- * Webhook) plus the GitHub AuthProvider that the alchemy CLI discovers.
+ * GitHub providers (Comment, Environment, PersonalAccessToken, Repository,
+ * Secret, Variable, Webhook) plus the GitHub AuthProvider that the alchemy
+ * CLI discovers.
  *
  * Pass `baseUrl` to pin every GitHub resource to a GitHub Enterprise host
  * without relying on the auth provider's configuration:
@@ -43,6 +50,7 @@ export const providers = (options?: ProvidersOptions) =>
     Provider.collection([
       Comment,
       Environment,
+      PersonalAccessToken,
       Repository,
       Secret,
       Variable,
@@ -53,10 +61,16 @@ export const providers = (options?: ProvidersOptions) =>
       Layer.mergeAll(
         CommentProvider(),
         EnvironmentProvider(),
+        PersonalAccessTokenProvider(),
         RepositoryProvider(),
         SecretProvider(),
         VariableProvider(),
-        WebhookProvider(),
+        // GitHub refuses localhost delivery URLs, so dev runs emulate
+        // the webhook by polling in the sidecar (LocalWebhookProvider)
+        ProviderLayer.dual(Webhook, {
+          live: WebhookProvider,
+          local: LocalWebhookProvider,
+        }),
       ),
     ),
     Layer.provideMerge(Credentials.fromAuthProvider(options)),

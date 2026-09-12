@@ -30,6 +30,7 @@ const c = (name: string): string | undefined => custom[name];
 export const TAB_ICONS: Record<string, string | undefined> = {
   Core: l("book-open"),
   CLI: l("square-terminal"),
+  Agents: l("bot"),
   Cloudflare: b("cloudflare"),
   AWS: b("amazonwebservices"),
   Hetzner: b("hetzner"),

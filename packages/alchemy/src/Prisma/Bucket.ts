@@ -8,7 +8,7 @@ import {
   devId,
   devProvider,
 } from "./Internal/DevStub.ts";
-import * as ProviderLayer from "../Local/ProviderLayer.ts";
+import * as ProviderLayer from "../Dev/ProviderLayer.ts";
 import { Resource } from "../Resource.ts";
 import { PrismaClient, isNotFound } from "./Client.ts";
 import type { Project } from "./Project.ts";

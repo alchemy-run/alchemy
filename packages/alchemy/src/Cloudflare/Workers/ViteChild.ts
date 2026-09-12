@@ -16,7 +16,7 @@ import {
   fromProcessEnv,
   RPC_SERVER_ENVIRONMENT_KEY,
   type RpcServerEnvironment,
-} from "../../Local/RpcServerEnvironment.ts";
+} from "../../Dev/RpcServerEnvironment.ts";
 import { Stack } from "../../Stack.ts";
 import { unwrapRedacted } from "../../Util/index.ts";
 import { nodeLoaderArgs } from "../../Util/Node.ts";
@@ -54,13 +54,18 @@ export const startViteChild = (
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const runner = resolveRunner("ViteChildRunner");
     const isBun = typeof globalThis.Bun !== "undefined";
-    // A source provider can pin the dev child to node (e.g. `next dev`
-    // cold-starts broken under bun). Honored only when node is installed;
-    // otherwise fall back to the engine's own runtime.
-    const nodeExecPath =
-      isBun && config.source?.descriptor.runtime === "node"
-        ? (globalThis.Bun.which("node") ?? undefined)
-        : undefined;
+    // The dev child ALWAYS prefers node when it is installed (falling back
+    // to the engine's own runtime otherwise):
+    // - the WebSocket relay (cloudflare-runtime's `websockets.ts`) cannot
+    //   work on bun's `node:http` shim — it neither emits the client
+    //   `upgrade` event (a 101 arrives as a plain `response`) nor flushes
+    //   writes made to a server upgrade socket (verified on bun 1.3.13),
+    //   so under bun every WebSocket proxied through the vite chain dies;
+    // - source providers may require node anyway (e.g. `next dev`
+    //   cold-starts broken under bun).
+    const nodeExecPath = isBun
+      ? (globalThis.Bun.which("node") ?? undefined)
+      : undefined;
     // Redacted values can't cross the process boundary — the config is
     // plain data once unwrapped. bun's `v8.serialize` output is not
     // readable by real V8 (and vice versa), so a cross-runtime spawn

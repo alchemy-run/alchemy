@@ -11,8 +11,8 @@ import type { Resource } from "../Resource.ts";
 import {
   createContainerRuntimeContext,
   type HostRuntimeContext,
-  type ServerHost,
-} from "../Server/Process.ts";
+  type Host,
+} from "../Local/Process.ts";
 import { Stack } from "../Stack.ts";
 import { createInternalTags, hasAlchemyTags } from "../Tags.ts";
 import {
@@ -305,7 +305,7 @@ export interface Service extends Resource<
 > {}
 
 /** Services available to an effectful `Service` impl at init time. */
-export type ServiceServices = ServerHost;
+export type ServiceServices = Host;
 
 /**
  * The impl shape for an effectful `Service`: a long-running server returning
@@ -333,7 +333,7 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  *   / `Docker.RemoteImage` resource).
  * - `main` — bundle an inline Effect program into a generated bun image,
  *   built directly against the service's Docker context. The impl returns
- *   `{ fetch }` and may register background loops via `ServerHost.run` —
+ *   `{ fetch }` and may register background loops via `Host.run` —
  *   the same effectful platform shape as `AWS.ECS.Service`.
  *
  * The bundled image is content-addressed and only rebuilt when the program
@@ -392,7 +392,7 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  * );
  * ```
  *
- * **Example:** Background Loops with ServerHost
+ * **Example:** Background Loops with Host
  * ```typescript
  * // Class props may be an Effect, so the service can yield the swarm it
  * // deploys into (declared once at module level).
@@ -405,7 +405,7 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  *     return { context: swarm, main: import.meta.url, port: 3000 };
  *   }),
  *   Effect.gen(function* () {
- *     const host = yield* ServerHost;
+ *     const host = yield* Host;
  *     yield* host.run(
  *       pollQueue.pipe(Effect.repeat(Schedule.spaced("5 seconds")), Effect.asVoid),
  *     );

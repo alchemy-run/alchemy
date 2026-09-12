@@ -33,8 +33,8 @@ import type { RuntimeContext } from "../../RuntimeContext.ts";
 import {
   createHostRuntimeContext,
   type HostRuntimeContext,
-  type ServerHost,
-} from "../../Server/Process.ts";
+  type Host,
+} from "../../Local/Process.ts";
 import { Stack } from "../../Stack.ts";
 import {
   createInternalTags,
@@ -239,7 +239,7 @@ export interface JobDefinition extends Resource<
 export type JobDefinitionServices =
   | Credentials
   | Region
-  | ServerHost
+  | Host
   | AWSEnvironment;
 
 /**

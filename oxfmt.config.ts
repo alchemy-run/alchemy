@@ -25,5 +25,6 @@ export default defineConfig({
     "**/package.json",
     "./submodules",
     "**/fixtures/chart/templates/**",
+    "**/*.generated.ts",
   ],
 });

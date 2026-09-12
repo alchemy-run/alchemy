@@ -1,0 +1,2584 @@
+/**
+ * The minimal in-memory agent loop, driven entirely by a SCRIPTED
+ * LanguageModel (no network) and one tiny org (Researcher + Search).
+ *
+ * What the loop must do (the consensus of pi / codex / opencode /
+ * vercel-ai, built on effect AI's single-shot `generateText`):
+ *
+ * - `dispatch` admits one work item and resolves at the run's next
+ *   QUIESCENCE (the model stops calling tools);
+ * - the charter renders as the system prompt; spliced tools compile
+ *   into the model's toolkit; tool handlers resolve from Layers;
+ * - tool calls loop: results append to the conversation and the model
+ *   is called again until it stops;
+ * - `steer` splices at the SAMPLING BOUNDARY: delivered mid-run, it
+ *   becomes a user message BEFORE the next model call, never aborting
+ *   the in-flight step;
+ * - a quiesced run PARKS: `steer` wakes it for another round;
+ * - `settle` ends a run from the outside, idempotently — a settled
+ *   run ignores further input.
+ */
+import * as AI from "@/AI/index.ts";
+import { DriverLocal } from "@/AI/DriverLocal.ts";
+import { ThreadStorageMemory } from "@/AI/ThreadStorageMemory.ts";
+
+const InMemoryDriver = DriverLocal.pipe(Layer.provide(ThreadStorageMemory));
+
+/** The two codemode Tools implementations, over the in-process evaluator. */
+const codeModeAsync = AI.CodeModeAsync().pipe(Layer.provide(AI.EvalFunction));
+const codeModeEffect = AI.CodeModeEffect().pipe(Layer.provide(AI.EvalFunction));
+
+/** A tool's DECLARED failure — mentioned in its prose, so it lands in
+ *  the generated signature's error channel. */
+class Missing extends Data.TaggedError("Missing")<{ path: string }> {}
+const path = AI.Thing("path", S.String)`Absolute path to read.`;
+const fileContent = AI.Thing("content", S.String)`The file's contents.`;
+import * as PersistentRef from "@/PersistentRef.ts";
+import { RuntimeContext } from "@/RuntimeContext.ts";
+import { describe, expect, it } from "alchemy-test";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
+import * as Layer from "effect/Layer";
+import * as Cause from "effect/Cause";
+import * as Exit from "effect/Exit";
+import * as Data from "effect/Data";
+import * as Ref from "effect/Ref";
+import * as S from "effect/Schema";
+import * as AiTool from "effect/unstable/ai/Tool";
+import * as Schedule from "effect/Schedule";
+import {
+  ArchivesLive,
+  DeepArchives,
+  DeepArchivesLive,
+  PaleographyLive,
+  Researcher,
+  ResearcherCharter,
+  Scholar,
+  ScholarCharter,
+  Search,
+} from "./fixtures/researcher.ts";
+import * as Model from "./fixtures/ScriptedModel.ts";
+import {
+  Engineer,
+  EngineerCharter,
+  Lead,
+  LeadCharter,
+} from "./fixtures/team.ts";
+
+/** Search physics that records every invocation. */
+const recordingSearch = () => {
+  const queries: string[] = [];
+  const layer = Layer.succeed(Search, ((input: { query: string }) =>
+    Effect.sync(() => {
+      queries.push(input.query);
+      return { results: `results for ${input.query}: alchemy is IaE` };
+    })) as never);
+  return { queries, layer };
+};
+
+const testLayer = (
+  model: Model.ScriptedModel,
+  capabilities: Layer.Layer<never, any, any>,
+) =>
+  Layer.mergeAll(
+    InMemoryDriver.pipe(Layer.provide(model.layer)),
+    capabilities,
+    RuntimeContext.phantom,
+  );
+
+/**
+ * These tests exercise the KERNEL CONTRACT directly —
+ * `Driver.interpret(term, charter)` — the primitive that
+ * `Agent.make(charter)` packages as a Layer. Application code never
+ * calls this; it resolves the agent's tag.
+ */
+const interpret = (term: AI.Interpretable, charter: AI.Charter) =>
+  Effect.orDie(
+    Effect.flatMap(AI.Driver, (driver) => driver.interpret(term, charter)),
+  );
+
+describe("DriverLocal (in-memory)", () => {
+  it.effect("dispatch admits one item and resolves at quiescence", () => {
+    const model = Model.make([
+      () => [
+        Model.text("Alchemy is Infrastructure-as-Effects."),
+        Model.finish(),
+      ],
+    ]);
+    const search = recordingSearch();
+    return Effect.gen(function* () {
+      const researcher = yield* interpret(Researcher, ResearcherCharter);
+      const answer = yield* researcher.dispatch("What is alchemy?");
+      expect(answer).toBe("Alchemy is Infrastructure-as-Effects.");
+
+      // the charter rendered as the system prompt…
+      const call = model.calls[0]!;
+      const prompt = Model.promptText(call);
+      expect(prompt).toContain("careful researcher");
+      // …the work item arrived as a user message…
+      expect(prompt).toContain("What is alchemy?");
+      // …and the spliced tool was offered to the model, compiled from
+      // its own prose and parameter splices (spawn is intrinsic)
+      expect(call.tools.map((tool) => tool.name)).toEqual(["search", "spawn"]);
+    }).pipe(Effect.scoped, Effect.provide(testLayer(model, search.layer)));
+  });
+
+  it.effect("tool calls loop until the model stops", () => {
+    const model = Model.make([
+      // round 1: the model wants the tool
+      () => [
+        Model.toolCall("search", { query: "alchemy" }),
+        Model.finish("tool-calls"),
+      ],
+      // round 2: it saw the result and answers
+      () => [Model.text("It is IaE."), Model.finish()],
+    ]);
+    const search = recordingSearch();
+    return Effect.gen(function* () {
+      const researcher = yield* interpret(Researcher, ResearcherCharter);
+      const answer = yield* researcher.dispatch("What is alchemy?");
+      expect(answer).toBe("It is IaE.");
+
+      // the handler ran with the model's typed params
+      expect(search.queries).toEqual(["alchemy"]);
+      // and the SECOND model call saw the tool result in-conversation
+      expect(model.calls).toHaveLength(2);
+      expect(Model.promptText(model.calls[1]!)).toContain(
+        "results for alchemy",
+      );
+    }).pipe(Effect.scoped, Effect.provide(testLayer(model, search.layer)));
+  });
+
+  it.effect("steer splices at the sampling boundary, mid-run", () => {
+    const model = Model.make([
+      () => [
+        Model.toolCall("search", { query: "sources" }),
+        Model.finish("tool-calls"),
+      ],
+      () => [Model.text("Done, with primary sources."), Model.finish()],
+    ]);
+    return Effect.gen(function* () {
+      // tool physics we can HOLD OPEN: the run is provably mid-step
+      // when the steer arrives
+      const started = yield* Deferred.make<void>();
+      const release = yield* Deferred.make<void>();
+      const search = Layer.succeed(Search, ((_: { query: string }) =>
+        Effect.gen(function* () {
+          yield* Deferred.succeed(started, void 0);
+          yield* Deferred.await(release);
+          return { results: "raw results" };
+        })) as never);
+
+      const answer = yield* Effect.gen(function* () {
+        const researcher = yield* interpret(Researcher, ResearcherCharter);
+        const fiber = yield* Effect.forkChild(
+          researcher.dispatch("Research alchemy"),
+        );
+        // the model called the tool and is blocked inside it
+        yield* Deferred.await(started);
+        // steer NOW — mid-step; must not abort the in-flight tool
+        yield* researcher.steer("Prefer primary sources.");
+        yield* Deferred.succeed(release, void 0);
+        return yield* Fiber.join(fiber);
+      }).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            InMemoryDriver.pipe(Layer.provide(model.layer)),
+            search,
+            RuntimeContext.phantom,
+          ),
+        ),
+      );
+
+      expect(answer).toBe("Done, with primary sources.");
+      // the steer arrived BEFORE the second sampling, as a user message
+      expect(model.calls).toHaveLength(2);
+      expect(Model.promptText(model.calls[1]!)).toContain(
+        "Prefer primary sources.",
+      );
+      // and the first call never saw it
+      expect(Model.promptText(model.calls[0]!)).not.toContain(
+        "Prefer primary sources.",
+      );
+    }).pipe(Effect.scoped);
+  });
+
+  it.live("a parked run wakes on steer and dies on settle", () => {
+    const model = Model.make([
+      () => [Model.text("noted"), Model.finish()],
+      () => [Model.text("updated"), Model.finish()],
+    ]);
+    const search = recordingSearch();
+    const calls = (count: number) =>
+      Effect.sync(() => model.calls.length).pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("10 millis"),
+          until: (length) => length >= count,
+          times: 200,
+        }),
+      );
+    return Effect.gen(function* () {
+      const researcher = yield* interpret(Researcher, ResearcherCharter);
+
+      // keyed admission — the run is addressable by world identity
+      const first = yield* researcher.dispatch("issue opened", {
+        key: "repo#7",
+      });
+      expect(first).toBe("noted");
+
+      // quiesced ⇒ parked; steer wakes it for another round
+      yield* researcher.steer("repo#7", "the author replied");
+      yield* calls(2);
+      expect(Model.promptText(model.calls[1]!)).toContain("the author replied");
+
+      // the world closes the work: settle ends the run
+      yield* researcher.settle("repo#7", { closed: true });
+      // …and a settled run ignores further input (no third call)
+      yield* researcher.steer("repo#7", "anyone home?");
+      yield* Effect.sleep("100 millis");
+      expect(model.calls).toHaveLength(2);
+
+      // dispatch on a settled key resolves immediately with the outcome
+      const late = yield* researcher.dispatch("hello?", { key: "repo#7" });
+      expect(late).toEqual({ closed: true });
+
+      // settle is idempotent — a second settle is a no-op
+      yield* researcher.settle("repo#7", { closed: "again" });
+    }).pipe(Effect.scoped, Effect.provide(testLayer(model, search.layer)));
+  });
+
+  it.live(
+    "Sessions.interrupt aborts the round in flight; the session lives on",
+    () => {
+      const model = Model.make([
+        // round 1: the model reaches for a tool that never returns
+        () => [
+          Model.toolCall("search", { query: "the void" }),
+          Model.finish("tool-calls"),
+        ],
+        // round 2 (after the abort): a fresh input, a plain answer
+        () => [Model.text("back"), Model.finish()],
+      ]);
+      const entered = Effect.runSync(Deferred.make<void>());
+      const search = Layer.succeed(Search, ((_input: { query: string }) =>
+        Effect.andThen(
+          Deferred.succeed(entered, undefined),
+          Effect.never,
+        )) as never);
+      const storage = ThreadStorageMemory;
+      const layer = Layer.mergeAll(
+        DriverLocal.pipe(Layer.provide(storage), Layer.provide(model.layer)),
+        storage,
+        search,
+        RuntimeContext.phantom,
+      );
+      return Effect.gen(function* () {
+        const researcher = yield* interpret(Researcher, ResearcherCharter);
+        const sessions = yield* AI.Sessions;
+        const threads = yield* AI.ThreadStorage;
+
+        // the round opens and blocks inside the tool handler
+        const waiting = yield* Effect.forkChild(
+          researcher.dispatch("look into it", { key: "w-abort" }),
+        );
+        yield* Deferred.await(entered);
+
+        // the operator's stop: the awaiting caller fails with the
+        // typed RoundAborted (a defect at the Actor boundary, like
+        // every delivered crash — the log is the record)
+        yield* sessions.interrupt("Researcher", "w-abort");
+        const outcome = yield* Fiber.await(waiting);
+        expect(Exit.isFailure(outcome)).toBe(true);
+        if (Exit.isFailure(outcome)) {
+          expect((Cause.squash(outcome.cause) as { _tag: string })._tag).toBe(
+            "RoundAborted",
+          );
+        }
+
+        // …the log records the abort and then parks (the kick that
+        // follows an abort runs on the resident fiber — poll for it);
+        // no crash, no recovery, and the model was called exactly once
+        const handle = yield* threads.open("Researcher", "w-abort");
+        const types = yield* handle.observations(0).pipe(
+          Effect.map((log) => log.map((observation) => observation.type)),
+          Effect.repeat({
+            schedule: Schedule.spaced("10 millis"),
+            until: (list) =>
+              list.lastIndexOf("parked") > list.indexOf("aborted"),
+            times: 200,
+          }),
+        );
+        expect(types).toContain("aborted");
+        expect(types).not.toContain("crashed");
+        expect(types).not.toContain("interrupted");
+        expect(types.lastIndexOf("parked")).toBeGreaterThan(
+          types.indexOf("aborted"),
+        );
+        expect(model.calls).toHaveLength(1);
+        // the cut call is CLOSED in the record: its `tool-call` row
+        // (durable, written as the sampling issued it) gets a
+        // `tool-result` saying the round ended before it answered,
+        // ahead of the abort itself
+        expect(types.indexOf("tool-result")).toBeGreaterThan(
+          types.indexOf("tool-call"),
+        );
+        expect(types.indexOf("tool-result")).toBeLessThan(
+          types.indexOf("aborted"),
+        );
+
+        // an interrupt with nothing in flight is a no-op
+        yield* sessions.interrupt("Researcher", "w-abort");
+
+        // the session is alive: the next input opens a fresh round,
+        // and the model reads what the cut round DID — the call it
+        // issued, answered as interrupted — as an ordinary tool turn;
+        // no prose about it
+        const answer = yield* researcher.dispatch("still there?", {
+          key: "w-abort",
+        });
+        expect(answer).toBe("back");
+        expect(model.calls).toHaveLength(2);
+        const prompt = Model.promptText(model.calls[1]!);
+        expect(prompt).toContain("the void");
+        expect(prompt).toContain(AI.STOPPED_TEXT);
+        expect(prompt).not.toContain("operator");
+      }).pipe(Effect.scoped, Effect.provide(layer));
+    },
+    { timeout: 30_000 },
+  );
+
+  /**
+   * The org's thread→engineer shape: a charter's OWN tool dispatches a
+   * named agent directly (not through a door or the dispatch
+   * intrinsic), naming its session as the child's `parent`. That
+   * child is under the parent's supervision like any other: abort the
+   * parent's round and the child's stalled round is cut; stop the child
+   * and the parent's tool is answered with the Stopped outcome.
+   */
+  it.live(
+    "a charter tool's direct dispatch joins the cascade: abort the parent → the child stops; stop the child → the parent is answered",
+    () => {
+      const model = Model.make([
+        // call 0: foreman #1 hands off
+        () => [
+          Model.toolCall("handoff", { task: "dig" }),
+          Model.finish("tool-calls"),
+        ],
+        // call 1: researcher #1 — a search that never answers
+        () => [
+          Model.toolCall("search", { query: "the void" }),
+          Model.finish("tool-calls"),
+        ],
+        // call 2: foreman #2 hands off
+        () => [
+          Model.toolCall("handoff", { task: "dig again" }),
+          Model.finish("tool-calls"),
+        ],
+        // call 3: researcher #2 — stalls too
+        () => [
+          Model.toolCall("search", { query: "the void" }),
+          Model.finish("tool-calls"),
+        ],
+        // call 4: foreman #2 hears its tool answered (the child was
+        // stopped) and concludes
+        () => [Model.text("the researcher was stopped"), Model.finish()],
+      ]);
+      const entered: Array<Deferred.Deferred<void>> = [
+        Effect.runSync(Deferred.make<void>()),
+        Effect.runSync(Deferred.make<void>()),
+      ];
+      let stalls = 0;
+      const released: Array<number> = [];
+      const search = Layer.succeed(Search, ((_input: { query: string }) =>
+        Effect.suspend(() => {
+          const mine = stalls++;
+          return Effect.andThen(
+            Deferred.succeed(entered[mine]!, undefined),
+            Effect.never,
+          ).pipe(
+            Effect.onInterrupt(() => Effect.sync(() => released.push(mine))),
+          );
+        })) as never);
+      const seen: Array<AI.SessionObservation> = [];
+      const ObserverLive = Layer.succeed(AI.Events, {
+        emit: (observation) => Effect.sync(() => void seen.push(observation)),
+      });
+      const driver = InMemoryDriver.pipe(Layer.provide(model.layer));
+      class Foreman extends AI.Agent<Foreman>()("Foreman") {}
+      const foremanCharter = Effect.gen(function* () {
+        const researcher = yield* Researcher;
+        const task = AI.Thing("task", S.String)`The work.`;
+        const outcome = AI.Thing("outcome", S.String)`The researcher's answer.`;
+        const handoff = yield* AI.Tool("handoff")`
+Hand ${task} to the researcher yourself and wait for ${AI.out(outcome)}.`(
+          Effect.fn(function* (p: { task: string }) {
+            const self = yield* AI.Thread;
+            const outcome = yield* researcher.dispatch(p.task, {
+              key: `${self.key}::child`,
+              parent: { term: "Foreman", key: self.key },
+            });
+            return { outcome: JSON.stringify(outcome) };
+          }),
+        );
+        return AI.fragment`Route every request through ${handoff}.`;
+      });
+      const observed = (key: string, type: AI.SessionObservation["type"]) =>
+        seen.some(
+          (observation) => observation.key === key && observation.type === type,
+        );
+      const until = (predicate: () => boolean) =>
+        Effect.sync(predicate).pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("10 millis"),
+            until: (ok) => ok,
+            times: 300,
+          }),
+        );
+      return Effect.gen(function* () {
+        const foreman = yield* interpret(Foreman, foremanCharter);
+        const sessions = yield* AI.Sessions;
+
+        // ── (1) abort the parent: the child it dispatched is settled
+        // and its stalled handler interrupted
+        const first = yield* Effect.forkChild(
+          foreman.dispatch("Widget needed", { key: "f-1" }),
+        );
+        yield* Deferred.await(entered[0]!);
+        yield* sessions.interrupt("Foreman", "f-1");
+        yield* Fiber.await(first);
+        yield* until(() => observed("f-1::child", "settled"));
+        expect(released).toContain(0);
+        expect(observed("f-1", "aborted")).toBe(true);
+
+        // ── (2) stop the child: its handler is cut, and the parent's
+        // tool is answered with the Stopped outcome — its round runs on
+        // to a conclusion instead of waiting forever
+        const second = yield* Effect.forkChild(
+          foreman.dispatch("Widget needed", { key: "f-2" }),
+        );
+        yield* Deferred.await(entered[1]!);
+        yield* sessions.stop("Researcher", "f-2::child");
+        expect(released).toContain(1);
+        const answer = yield* Fiber.join(second);
+        expect(answer).toBe("the researcher was stopped");
+        // the tool's result carried the Stopped outcome to the model
+        expect(Model.promptText(model.calls[4]!)).toContain("Stopped");
+        expect(model.calls).toHaveLength(5);
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(
+          Layer.mergeAll(
+            driver,
+            Researcher.make(ResearcherCharter).pipe(
+              Layer.provide(driver),
+              Layer.provide(search),
+              Layer.provide(ObserverLive),
+            ),
+            search,
+            ObserverLive,
+            RuntimeContext.phantom,
+          ),
+        ),
+      );
+    },
+    { timeout: 30_000 },
+  );
+
+  it.live(
+    "Sessions.remove cuts the round in flight — the tool's finalizer runs, nothing resurrects the rows",
+    () => {
+      const model = Model.make([
+        () => [
+          Model.toolCall("search", { query: "the void" }),
+          Model.finish("tool-calls"),
+        ],
+        // never reached: the tick is cut, not finished
+        () => [Model.text("should not run"), Model.finish()],
+      ]);
+      const entered = Effect.runSync(Deferred.make<void>());
+      let released = false;
+      const search = Layer.succeed(Search, ((_input: { query: string }) =>
+        Effect.andThen(Deferred.succeed(entered, undefined), Effect.never).pipe(
+          Effect.onInterrupt(() =>
+            Effect.sync(() => {
+              released = true;
+            }),
+          ),
+        )) as never);
+      const storage = ThreadStorageMemory;
+      const layer = Layer.mergeAll(
+        DriverLocal.pipe(Layer.provide(storage), Layer.provide(model.layer)),
+        storage,
+        search,
+        RuntimeContext.phantom,
+      );
+      return Effect.gen(function* () {
+        const researcher = yield* interpret(Researcher, ResearcherCharter);
+        const sessions = yield* AI.Sessions;
+        const threads = yield* AI.ThreadStorage;
+
+        const waiting = yield* Effect.forkChild(
+          researcher.dispatch("look into it", { key: "w-erase" }),
+        );
+        yield* Deferred.await(entered);
+
+        // the eraser: the blocked handler is interrupted (its
+        // finalizer ran) and the dispatch resolves with the settle
+        yield* sessions.remove("Researcher", "w-erase");
+        yield* Fiber.await(waiting);
+        expect(released).toBe(true);
+
+        // nothing lingers: no second model call, and the purged
+        // transcript stays purged — a cut tick writes nothing after
+        yield* Effect.sleep("50 millis");
+        expect(model.calls).toHaveLength(1);
+        const handle = yield* threads.open("Researcher", "w-erase");
+        expect(yield* handle.observations(0)).toEqual([]);
+      }).pipe(Effect.scoped, Effect.provide(layer));
+    },
+    { timeout: 30_000 },
+  );
+
+  it.live(
+    "Sessions.resume picks the work back up: the stop lands the cut call as interrupted, and the resumed session samples again with NO new input and nothing written",
+    () => {
+      const model = Model.make([
+        // call 0: a search that never answers — the operator stops it
+        () => [
+          Model.toolCall("search", { query: "the void" }),
+          Model.finish("tool-calls"),
+        ],
+        // call 1: the RESUMED round — over the thread as it stands,
+        // its newest rows the cut call answered as interrupted; no
+        // input queued, no note
+        () => [Model.text("picked it back up and finished"), Model.finish()],
+        // call 2: stopped while parked, resumed (nothing owed), then
+        // given input — an ordinary round
+        () => [Model.text("still here"), Model.finish()],
+      ]);
+      const entered = Effect.runSync(Deferred.make<void>());
+      let released = false;
+      const search = Layer.succeed(Search, ((_input: { query: string }) =>
+        Effect.andThen(Deferred.succeed(entered, undefined), Effect.never).pipe(
+          Effect.onInterrupt(() =>
+            Effect.sync(() => {
+              released = true;
+            }),
+          ),
+        )) as never);
+      const seen: Array<AI.SessionObservation> = [];
+      const ObserverLive = Layer.succeed(AI.Events, {
+        emit: (observation) => Effect.sync(() => void seen.push(observation)),
+      });
+      const observed = (type: AI.SessionObservation["type"]) =>
+        seen.filter(
+          (observation) =>
+            observation.key === "w-resume" && observation.type === type,
+        );
+      const until = (predicate: () => boolean) =>
+        Effect.sync(predicate).pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("10 millis"),
+            until: (ok) => ok,
+            times: 300,
+          }),
+        );
+      const storage = ThreadStorageMemory;
+      const layer = Layer.mergeAll(
+        DriverLocal.pipe(
+          Layer.provide(storage),
+          Layer.provide(model.layer),
+          Layer.provide(ObserverLive),
+        ),
+        storage,
+        search,
+        ObserverLive,
+        RuntimeContext.phantom,
+      );
+      return Effect.gen(function* () {
+        const researcher = yield* interpret(Researcher, ResearcherCharter);
+        const sessions = yield* AI.Sessions;
+
+        const waiting = yield* Effect.forkChild(
+          researcher.dispatch("look into it", { key: "w-resume" }),
+        );
+        yield* Deferred.await(entered);
+
+        // ── stop: the handler is cut, the dispatch answers Stopped,
+        // and nothing samples while the session is settled
+        yield* sessions.stop("Researcher", "w-resume");
+        const outcome = yield* Fiber.join(waiting);
+        expect(outcome).toEqual({ _tag: "Stopped", by: "operator" });
+        expect(released).toBe(true);
+        yield* Effect.sleep("50 millis");
+        expect(model.calls).toHaveLength(1);
+        expect(observed("settled")).toHaveLength(1);
+
+        // the stop LANDED what the cut sampling did: the call it had
+        // issued, answered as interrupted — a `tool-result` row in the
+        // record, ahead of the settle
+        const types = seen
+          .filter((observation) => observation.key === "w-resume")
+          .map((observation) => observation.type);
+        expect(types.indexOf("tool-result")).toBeGreaterThan(
+          types.indexOf("tool-call"),
+        );
+
+        // ── resume: NO message is sent and NOTHING is written. The
+        // session samples again anyway — the resume owes a round —
+        // over the thread as it stands: the brief, then the cut call
+        // and its interrupted result, as any tool turn awaiting its
+        // next sampling
+        yield* sessions.resume("Researcher", "w-resume");
+        yield* until(() => model.calls.length >= 2);
+        expect(observed("resumed")).toHaveLength(1);
+        const prompt = Model.promptText(model.calls[1]!);
+        expect(prompt).toContain("look into it");
+        expect(prompt).toContain("the void");
+        expect(prompt).toContain(AI.STOPPED_TEXT);
+        expect(prompt).not.toContain("operator");
+
+        // the finished round parks; nothing else samples, and the
+        // session is LIVE again — a stop still bites, even parked
+        yield* until(() => observed("parked").length >= 1);
+        yield* Effect.sleep("50 millis");
+        expect(model.calls).toHaveLength(2);
+        yield* sessions.stop("Researcher", "w-resume");
+        expect(observed("settled")).toHaveLength(2);
+        // resumed again: the thread ends in the assistant's OWN
+        // quiescent turn — the work had finished — so nothing is owed
+        // and nothing samples; a second resume of the now-LIVE key is
+        // a no-op too
+        yield* sessions.resume("Researcher", "w-resume");
+        yield* sessions.resume("Researcher", "w-resume");
+        yield* Effect.sleep("100 millis");
+        expect(observed("resumed")).toHaveLength(2);
+        expect(model.calls).toHaveLength(2);
+        // …but it takes input again, over the whole thread
+        const answer = yield* researcher.dispatch("and now?", {
+          key: "w-resume",
+        });
+        expect(answer).toBe("still here");
+        expect(Model.promptText(model.calls[2]!)).toContain(
+          "picked it back up and finished",
+        );
+      }).pipe(Effect.scoped, Effect.provide(layer));
+    },
+    { timeout: 30_000 },
+  );
+
+  it.live(
+    "Sessions.stop cuts the round in flight — and the cascade cuts the child's, not just marks it",
+    () => {
+      const model = Model.make([
+        // call 0: the lead hands the work through the door
+        () => [
+          Model.toolCall("hand_to_researcher", { task: "dig into it" }),
+          Model.finish("tool-calls"),
+        ],
+        // call 1: the researcher's round — a search that never answers
+        () => [
+          Model.toolCall("search", { query: "the void" }),
+          Model.finish("tool-calls"),
+        ],
+        // never reached on either side: both rounds are cut
+        () => [Model.text("should not run"), Model.finish()],
+      ]);
+      const entered = Effect.runSync(Deferred.make<void>());
+      let released = false;
+      const search = Layer.succeed(Search, ((_input: { query: string }) =>
+        Effect.andThen(Deferred.succeed(entered, undefined), Effect.never).pipe(
+          Effect.onInterrupt(() =>
+            Effect.sync(() => {
+              released = true;
+            }),
+          ),
+        )) as never);
+      const seen: Array<AI.SessionObservation> = [];
+      const ObserverLive = Layer.succeed(AI.Events, {
+        emit: (observation) => Effect.sync(() => void seen.push(observation)),
+      });
+      const driver = InMemoryDriver.pipe(Layer.provide(model.layer));
+      const doorCharter = Effect.gen(function* () {
+        const task = AI.Thing("task", S.String)`The work, standing alone.`;
+        const door = yield* AI.Dispatch(Researcher, "hand_to_researcher")`
+Hand the research to the researcher with ${task}.`((p, thread) => ({
+          task: p.task,
+          key: `${thread.key}/Researcher`,
+        }));
+        return AI.fragment`Route every request through ${door}.`;
+      });
+      return Effect.gen(function* () {
+        const lead = yield* interpret(Lead, doorCharter);
+        const sessions = yield* AI.Sessions;
+
+        const waiting = yield* Effect.forkChild(
+          lead.dispatch("Widget needed", { key: "job#stop" }),
+        );
+        // the child is inside its tool handler now
+        yield* Deferred.await(entered);
+        expect(released).toBe(false);
+
+        // the operator stops the LEAD: when this returns, the child's
+        // blocked handler has been interrupted (finalizer ran) — a
+        // settled session does not keep working
+        yield* sessions.stop("Lead", "job#stop");
+        expect(released).toBe(true);
+        yield* Fiber.await(waiting);
+
+        const childKey = "job#stop/Researcher";
+        expect(
+          seen.some(
+            (observation) =>
+              observation.key === childKey && observation.type === "settled",
+          ),
+        ).toBe(true);
+        // no third sampling on either side
+        yield* Effect.sleep("50 millis");
+        expect(model.calls).toHaveLength(2);
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(
+          Layer.mergeAll(
+            driver,
+            Researcher.make(ResearcherCharter).pipe(
+              Layer.provide(driver),
+              Layer.provide(search),
+              Layer.provide(ObserverLive),
+            ),
+            search,
+            ObserverLive,
+            RuntimeContext.phantom,
+          ),
+        ),
+      );
+    },
+    { timeout: 30_000 },
+  );
+
+  it.live(
+    "quiet send (wake: false) accumulates without waking a parked run",
+    () => {
+      const model = Model.make([
+        () => [Model.text("noted"), Model.finish()],
+        () => [Model.text("caught up"), Model.finish()],
+      ]);
+      const search = recordingSearch();
+      const calls = (count: number) =>
+        Effect.sync(() => model.calls.length).pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("10 millis"),
+            until: (length) => length >= count,
+            times: 200,
+          }),
+        );
+      return Effect.gen(function* () {
+        const researcher = yield* interpret(Researcher, ResearcherCharter);
+        const first = yield* researcher.dispatch("issue opened", {
+          key: "repo#9",
+        });
+        expect(first).toBe("noted");
+
+        // news lands QUIETLY while parked — no sampling happens at all
+        yield* researcher.send("PR #1 opened", { key: "repo#9", wake: false });
+        yield* researcher.send("PR #1 merged", { key: "repo#9", wake: false });
+        yield* Effect.sleep("150 millis");
+        expect(model.calls).toHaveLength(1);
+
+        // the next REAL wake reads everything that accumulated, in order,
+        // ahead of the waking input itself
+        yield* researcher.steer("repo#9", "what happened while I was away?");
+        yield* calls(2);
+        const prompt = Model.promptText(model.calls[1]!);
+        expect(prompt).toContain("PR #1 opened");
+        expect(prompt).toContain("PR #1 merged");
+        expect(prompt).toContain("what happened while I was away?");
+        expect(prompt.indexOf("PR #1 opened")).toBeLessThan(
+          prompt.indexOf("what happened while I was away?"),
+        );
+      }).pipe(Effect.scoped, Effect.provide(testLayer(model, search.layer)));
+    },
+  );
+
+  it.live("Sessions.send delivers by name — no agent service in hand", () => {
+    const model = Model.make([
+      () => [Model.text("noted"), Model.finish()],
+      () => [Model.text("caught up"), Model.finish()],
+      () => [Model.text("on it"), Model.finish()],
+    ]);
+    const search = recordingSearch();
+    const calls = (count: number) =>
+      Effect.sync(() => model.calls.length).pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("10 millis"),
+          until: (length) => length >= count,
+          times: 200,
+        }),
+      );
+    return Effect.gen(function* () {
+      const researcher = yield* interpret(Researcher, ResearcherCharter);
+      const sessions = yield* AI.Sessions;
+      const term = Researcher["~alchemy/Name"];
+      expect(yield* researcher.dispatch("issue opened", { key: "t-1" })).toBe(
+        "noted",
+      );
+
+      // a QUIET by-name delivery: in the inbox, no sampling
+      yield* sessions.send(term, "t-1", "[attached] owner/repo#7 — pull", {
+        wake: false,
+      });
+      yield* Effect.sleep("100 millis");
+      expect(model.calls).toHaveLength(1);
+
+      // a WAKING one: the round runs, and hears the quiet one first
+      yield* sessions.send(term, "t-1", "brief: fix #7");
+      yield* calls(2);
+      const prompt = Model.promptText(model.calls[1]!);
+      expect(prompt).toContain("[attached] owner/repo#7");
+      expect(prompt).toContain("brief: fix #7");
+      expect(prompt.indexOf("[attached]")).toBeLessThan(
+        prompt.indexOf("brief: fix #7"),
+      );
+
+      // a term this driver never interpreted has nothing to hear
+      yield* sessions.send("Nobody", "t-1", "hello");
+      yield* Effect.sleep("50 millis");
+      expect(model.calls).toHaveLength(2);
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(testLayer(model, search.layer)),
+      Effect.provide(RuntimeContext.phantom),
+    );
+  });
+
+  it.effect("agent references compile into ONE dispatch tool", () => {
+    const model = Model.make([
+      // call 0: the LEAD delegates
+      () => [
+        Model.toolCall("dispatch", {
+          agent: "Engineer",
+          task: "patch the parser",
+        }),
+        Model.finish("tool-calls"),
+      ],
+      // call 1: the ENGINEER's own run answers
+      () => [Model.text("patched the parser"), Model.finish()],
+      // call 2: the lead reports
+      () => [Model.text("Engineer patched the parser."), Model.finish()],
+    ]);
+    const driver = InMemoryDriver.pipe(Layer.provide(model.layer));
+    return Effect.gen(function* () {
+      const lead = yield* interpret(Lead, LeadCharter);
+      const answer = yield* lead.dispatch("The parser is broken");
+      expect(answer).toBe("Engineer patched the parser.");
+      expect(model.calls).toHaveLength(3);
+
+      // ONE dispatch tool, not one tool per agent; its description
+      // names the closed set of delegates the charter hired
+      const tools = model.calls[0]!.tools;
+      expect(tools.map((tool) => tool.name)).toEqual(["dispatch", "spawn"]);
+      expect(tools[0]!.description).toContain("Engineer");
+
+      // the engineer's call is its OWN conversation: its charter, the
+      // handed task, and nothing of the lead's transcript
+      const engineerPrompt = Model.promptText(model.calls[1]!);
+      expect(engineerPrompt).toContain("exactly the task you are handed");
+      expect(engineerPrompt).toContain("patch the parser");
+      expect(engineerPrompt).not.toContain("The parser is broken");
+      expect(engineerPrompt).not.toContain("You run engineering");
+
+      // the delegate's answer came back to the lead as a tool result
+      expect(Model.promptText(model.calls[2]!)).toContain("patched the parser");
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(
+        Layer.mergeAll(
+          driver,
+          // the Engineer is an ordinary Layer — the driver-default
+          // implementation over the same driver
+          Engineer.make(EngineerCharter).pipe(Layer.provide(driver)),
+          RuntimeContext.phantom,
+        ),
+      ),
+    );
+  });
+
+  it.live(
+    "parallel fan-out: two dispatches in one sampling run concurrently",
+    () => {
+      const model = Model.make([
+        // call 0: the lead fans out TWO sessions in ONE sampling —
+        // the driver executes the handlers concurrently
+        () => [
+          Model.toolCall(
+            "dispatch",
+            { agent: "Engineer", task: "build widget A", session: "a" },
+            "call-a",
+          ),
+          Model.toolCall(
+            "dispatch",
+            { agent: "Engineer", task: "build widget B", session: "b" },
+            "call-b",
+          ),
+          Model.finish("tool-calls"),
+        ],
+        // calls 1..2: the two engineer runs (concurrent — order unknown,
+        // so ONE step answers by reading its own task from the prompt;
+        // calls beyond the script replay the last step)
+        (options) => [
+          Model.text(
+            Model.promptText(options).includes("widget A")
+              ? "A built"
+              : "B built",
+          ),
+          Model.finish(),
+        ],
+        // call 3: the lead concludes — REPLAYED step must handle it too
+      ]);
+      const seen: Array<AI.SessionObservation> = [];
+      const ObserverLive = Layer.succeed(AI.Events, {
+        emit: (observation) => Effect.sync(() => void seen.push(observation)),
+      });
+      const driver = InMemoryDriver.pipe(Layer.provide(model.layer));
+      return Effect.gen(function* () {
+        const lead = yield* interpret(Lead, LeadCharter);
+        // the lead's final sampling is the replayed engineer step — its
+        // text quiesces the lead, resolving the dispatch
+        const answer = yield* lead.dispatch("Two widgets please", {
+          key: "job#2",
+        });
+        expect(typeof answer).toBe("string");
+        expect(model.calls).toHaveLength(4);
+
+        // both workers were admitted under deterministic session keys
+        for (const childKey of ["job#2/Engineer/a", "job#2/Engineer/b"]) {
+          expect(
+            seen.filter(
+              (observation) =>
+                observation.key === childKey && observation.type === "admitted",
+            ),
+          ).toHaveLength(1);
+        }
+        // both answers returned to the LEAD's conversation as tool results
+        const leadFinal = Model.promptText(model.calls[3]!);
+        expect(leadFinal).toContain("A built");
+        expect(leadFinal).toContain("B built");
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(
+          Layer.mergeAll(
+            driver,
+            Engineer.make(EngineerCharter).pipe(
+              Layer.provide(driver),
+              Layer.provide(ObserverLive),
+            ),
+            ObserverLive,
+            RuntimeContext.phantom,
+          ),
+        ),
+      );
+    },
+  );
+
+  it.effect("spawn conjures an anonymous worker with a tool subset", () => {
+    const model = Model.make([
+      // call 0: the researcher spawns a fact-checker
+      () => [
+        Model.toolCall("spawn", {
+          instructions: "You are a meticulous fact checker.",
+          task: "Verify the claim about alchemy.",
+          tools: ["search"],
+        }),
+        Model.finish("tool-calls"),
+      ],
+      // call 1: the WORKER uses its granted tool
+      () => [
+        Model.toolCall("search", { query: "alchemy claim" }),
+        Model.finish("tool-calls"),
+      ],
+      // call 2: the worker answers
+      () => [Model.text("verified"), Model.finish()],
+      // call 3: the spawner concludes
+      () => [Model.text("The claim is verified."), Model.finish()],
+    ]);
+    const search = recordingSearch();
+    return Effect.gen(function* () {
+      const researcher = yield* interpret(Researcher, ResearcherCharter);
+      const answer = yield* researcher.dispatch("Check the claim");
+      expect(answer).toBe("The claim is verified.");
+      expect(model.calls).toHaveLength(4);
+
+      // the worker's conversation: the WRITTEN role as its system
+      // prompt (not the spawner's charter), the task, and ONLY the
+      // granted subset — no spawn, no dispatch (workers are leaves)
+      const worker = model.calls[1]!;
+      const workerPrompt = Model.promptText(worker);
+      expect(workerPrompt).toContain("meticulous fact checker");
+      expect(workerPrompt).toContain("Verify the claim");
+      expect(workerPrompt).not.toContain("careful researcher");
+      expect(worker.tools.map((tool) => tool.name)).toEqual(["search"]);
+
+      // the granted tool really executed in the worker's run
+      expect(search.queries).toEqual(["alchemy claim"]);
+
+      // the worker's answer returned to the spawner as a tool result
+      expect(Model.promptText(model.calls[3]!)).toContain("verified");
+    }).pipe(Effect.scoped, Effect.provide(testLayer(model, search.layer)));
+  });
+
+  it.effect(
+    "skills are dormant until activated, and retire on deactivate",
+    () => {
+      const model = Model.make([
+        // call 0: no skill tools yet — the model activates Archives
+        () => [
+          Model.toolCall("skill", { action: "activate", skill: "Archives" }),
+          Model.finish("tool-calls"),
+        ],
+        // call 1: the skill's tools are live — use one
+        () => [
+          Model.toolCall("search", { query: "fall of Rome" }),
+          Model.finish("tool-calls"),
+        ],
+        // call 2: done with the archives — deactivate
+        () => [
+          Model.toolCall("skill", { action: "deactivate", skill: "Archives" }),
+          Model.finish("tool-calls"),
+        ],
+        // call 3: answer (skill tools gone again)
+        () => [Model.text("Rome fell in 476."), Model.finish()],
+      ]);
+      const search = recordingSearch();
+      return Effect.gen(function* () {
+        const scholar = yield* interpret(Scholar, ScholarCharter);
+        const answer = yield* scholar.dispatch("When did Rome fall?");
+        expect(answer).toBe("Rome fell in 476.");
+        expect(model.calls).toHaveLength(4);
+
+        const names = (index: number) =>
+          model.calls[index]!.tools.map((tool) => tool.name);
+
+        // DORMANT: access granted, tools absent — only the intrinsics
+        expect(names(0)).toEqual(["spawn", "skill"]);
+        // activation returned the skill's PROSE as the tool result…
+        expect(Model.promptText(model.calls[1]!)).toContain(
+          "one fact per query",
+        );
+        // …and enabled its tools for the run
+        expect(names(1)).toEqual(["search", "spawn", "skill"]);
+        expect(search.queries).toEqual(["fall of Rome"]);
+        // deactivation retires the CAPABILITY, not the payload slot:
+        // the wire keeps the union of every tool ever presented
+        // (byte-stable payload = stable provider prompt cache), and a
+        // retired name rejects model-visibly on call
+        expect(names(3)).toEqual(["search", "spawn", "skill"]);
+      }).pipe(
+        Effect.scoped,
+        // the charter requires the SKILL's tag; the skill's Layer is
+        // what pulls in the tool physics — nominal and encapsulated
+        Effect.provide(
+          testLayer(model, ArchivesLive.pipe(Layer.provide(search.layer))),
+        ),
+      );
+    },
+  );
+
+  it.effect(
+    "the skill graph: activating a parent exposes its referenced skills",
+    () => {
+      const model = Model.make([
+        // call 0: only the parent is visible — activate it
+        () => [
+          Model.toolCall("skill", {
+            action: "activate",
+            skill: "DeepArchives",
+          }),
+          Model.finish("tool-calls"),
+        ],
+        // call 1: the child surfaced in the teaching — descend
+        () => [
+          Model.toolCall("skill", {
+            action: "activate",
+            skill: "Paleography",
+          }),
+          Model.finish("tool-calls"),
+        ],
+        // call 2: both teachings in hand — answer
+        () => [
+          Model.text("Tenth century, by the letterforms."),
+          Model.finish(),
+        ],
+      ]);
+      const search = recordingSearch();
+      return Effect.gen(function* () {
+        const scholar = yield* interpret(
+          Scholar,
+          AI.fragment`
+            You date manuscripts. The stacks are ${DeepArchives}.`,
+        );
+        const answer = yield* scholar.dispatch("Date this manuscript.");
+        expect(answer).toBe("Tenth century, by the letterforms.");
+        expect(model.calls).toHaveLength(3);
+
+        const skillTool = (index: number) =>
+          model.calls[index]!.tools.find((tool) => tool.name === "skill")!;
+        // depth-2 skills stay HIDDEN until their parent activates —
+        // the intrinsic's available list is the reachable set
+        expect(skillTool(0).description).toContain("DeepArchives");
+        expect(skillTool(0).description).not.toContain("Paleography");
+        expect(skillTool(1).description).toContain("Paleography");
+        // each activation returned its teaching as the tool result
+        expect(Model.promptText(model.calls[1]!)).toContain(
+          "call numbers first",
+        );
+        expect(Model.promptText(model.calls[2]!)).toContain("letterforms");
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(
+          testLayer(
+            model,
+            Layer.mergeAll(DeepArchivesLive, PaleographyLive).pipe(
+              Layer.provide(search.layer),
+            ),
+          ),
+        ),
+      );
+    },
+  );
+
+  it.effect("spawn hands skills over pre-activated", () => {
+    const model = Model.make([
+      // call 0: the scholar spawns an archivist WITH the skill
+      () => [
+        Model.toolCall("spawn", {
+          instructions: "You are an archivist.",
+          task: "Find the date Rome fell.",
+          skills: ["Archives"],
+        }),
+        Model.finish("tool-calls"),
+      ],
+      // call 1: the WORKER — skill prose in its system, tool live
+      () => [
+        Model.toolCall("search", { query: "Rome 476" }),
+        Model.finish("tool-calls"),
+      ],
+      // call 2: the worker answers
+      () => [Model.text("476 AD"), Model.finish()],
+      // call 3: the scholar concludes
+      () => [Model.text("Rome fell in 476 AD."), Model.finish()],
+    ]);
+    const search = recordingSearch();
+    return Effect.gen(function* () {
+      const scholar = yield* interpret(Scholar, ScholarCharter);
+      const answer = yield* scholar.dispatch("When did Rome fall?");
+      expect(answer).toBe("Rome fell in 476 AD.");
+      expect(model.calls).toHaveLength(4);
+
+      // the worker got the skill ACTIVATED: prose in its system
+      // prompt, the skill's tool in its (fixed) toolkit — and no
+      // intrinsics of its own (workers are leaves)
+      const worker = model.calls[1]!;
+      expect(Model.promptText(worker)).toContain("You are an archivist.");
+      expect(Model.promptText(worker)).toContain("one fact per query");
+      expect(worker.tools.map((tool) => tool.name)).toEqual(["search"]);
+      expect(search.queries).toEqual(["Rome 476"]);
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(
+        testLayer(model, ArchivesLive.pipe(Layer.provide(search.layer))),
+      ),
+    );
+  });
+
+  it.live(
+    "a dynamic charter re-renders per tick: an inline tool flips the stance",
+    () => {
+      const model = Model.make([
+        // tick 1: read-only stance — the model enters the sandbox
+        () => [Model.toolCall("enter_sandbox", {}), Model.finish("tool-calls")],
+        // tick 2: the SYSTEM PROMPT is the flipped stance — answer
+        () => [Model.text("done, sandboxed"), Model.finish()],
+        // tick 3 (steered awake): stance unchanged — answer again
+        () => [Model.text("still sandboxed"), Model.finish()],
+      ]);
+      const calls = (count: number) =>
+        Effect.sync(() => model.calls.length).pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("10 millis"),
+            until: (length) => length >= count,
+            times: 200,
+          }),
+        );
+      return Effect.gen(function* () {
+        const charter = Effect.gen(function* () {
+          // INIT — once per run: plain Ref state + an inline tool closing over it
+          const sandboxed = yield* Ref.make(false);
+          const enter = yield* AI.Tool("enter_sandbox")`
+Enter the sandbox.`(() => Effect.asVoid(Ref.set(sandboxed, true)));
+          // TURN — before every sampling: the stance follows the state
+          return Effect.gen(function* () {
+            return yield* (yield* Ref.get(sandboxed))
+              ? AI.fragment`You are IN the sandbox; nothing you run is real.`
+              : AI.fragment`You are read-only until you ${enter}.`;
+          });
+        });
+        const researcher = yield* interpret(Researcher, charter);
+        const answer = yield* researcher.dispatch("try the sandbox");
+        expect(answer).toBe("done, sandboxed");
+
+        // tick 1: the render IS the system prompt; the inline tool
+        // (closure over the local) was offered
+        const first = Model.promptText(model.calls[0]!);
+        expect(first).toContain("read-only until");
+        expect(model.calls[0]!.tools.map((tool) => tool.name)).toEqual([
+          "enter_sandbox",
+          "spawn",
+        ]);
+
+        // tick 2: the flipped render REPLACED the system prompt —
+        // no diffing, no derived messages. The retired tool KEEPS its
+        // payload slot (the wire carries the session's union, so the
+        // provider prompt cache survives the flip) — the STANCE is
+        // what no longer grants it, and a call would reject
+        // model-visibly.
+        const second = Model.promptText(model.calls[1]!);
+        expect(second).toContain("You are IN the sandbox");
+        expect(second).not.toContain("read-only until");
+        expect(second).not.toContain("<situation>");
+        expect(model.calls[1]!.tools.map((tool) => tool.name)).toEqual([
+          "enter_sandbox",
+          "spawn",
+        ]);
+
+        // tick 3: the parked run steered awake — the stance is
+        // unchanged, so the system prompt is byte-identical (once)
+        yield* researcher.steer("still there?");
+        yield* calls(3);
+        const third = Model.promptText(model.calls[2]!);
+        expect(third.match(/nothing you run is real/g)).toHaveLength(1);
+      }).pipe(Effect.scoped, Effect.provide(testLayer(model, Layer.empty)));
+    },
+  );
+
+  it.effect(
+    "a union tool called while unmentioned rejects model-visibly",
+    () => {
+      const model = Model.make([
+        // tick 0: the stance grants enter_sandbox — use it (flips state)
+        () => [Model.toolCall("enter_sandbox", {}), Model.finish("tool-calls")],
+        // tick 1: the flipped stance no longer MENTIONS it, but the
+        // payload slot survives (union) — call it anyway
+        () => [Model.toolCall("enter_sandbox", {}), Model.finish("tool-calls")],
+        // tick 2: read the rejection, answer
+        () => [Model.text("understood"), Model.finish()],
+      ]);
+      return Effect.gen(function* () {
+        const charter = Effect.gen(function* () {
+          const sandboxed = yield* Ref.make(false);
+          const enter = yield* AI.Tool("enter_sandbox")`
+Enter the sandbox.`(() => Effect.asVoid(Ref.set(sandboxed, true)));
+          return Effect.gen(function* () {
+            return yield* (yield* Ref.get(sandboxed))
+              ? AI.fragment`You are IN the sandbox.`
+              : AI.fragment`You are read-only until you ${enter}.`;
+          });
+        });
+        const researcher = yield* interpret(Researcher, charter);
+        const answer = yield* researcher.dispatch("go");
+        expect(answer).toBe("understood");
+
+        // the retired slot is still on the wire (cache-stable union)…
+        expect(model.calls[1]!.tools.map((tool) => tool.name)).toContain(
+          "enter_sandbox",
+        );
+        // …but calling it fails MODEL-VISIBLY: the stance is the sole
+        // grant authority; the rejection is a tool result, not a crash
+        expect(Model.promptText(model.calls[2]!)).toContain(
+          "not available in this phase",
+        );
+      }).pipe(Effect.scoped, Effect.provide(testLayer(model, Layer.empty)));
+    },
+  );
+
+  it.effect(
+    "effect splices render at every tick: the run's key in prose",
+    () => {
+      const model = Model.make([() => [Model.text("ack"), Model.finish()]]);
+      return Effect.gen(function* () {
+        // a STATIC charter whose splice is still dynamic — an effect
+        // reading AI.Thread, evaluated at render time with the run provided
+        const charter = AI.fragment`
+You are working ${Effect.map(AI.Thread, (thread) => thread.key)}. Answer briefly.`;
+        const researcher = yield* interpret(Researcher, charter);
+        yield* researcher.dispatch("hello", { key: "repo#9" });
+        expect(Model.promptText(model.calls[0]!)).toContain(
+          "You are working repo#9.",
+        );
+      }).pipe(Effect.scoped, Effect.provide(testLayer(model, Layer.empty)));
+    },
+  );
+
+  it.live(
+    "AI.reply answers the round from a tool handler; the run parks",
+    () => {
+      const model = Model.make([
+        // tick 1: the model produces the answer via the inline tool —
+        // AI.reply answers the caller FROM THE HANDLER, then the model
+        // may keep working (here: it wraps up with text and quiesces)
+        () => [
+          Model.toolCall("mark_done", { result: 42 }),
+          Model.finish("tool-calls"),
+        ],
+        () => [Model.text("all wrapped up"), Model.finish()],
+        // a later round: the run parked, a new dispatch wakes it
+        () => [
+          Model.toolCall("mark_done", { result: 43 }),
+          Model.finish("tool-calls"),
+        ],
+        () => [Model.text("done again"), Model.finish()],
+      ]);
+      return Effect.gen(function* () {
+        const charter = Effect.gen(function* () {
+          const result = AI.Thing("result", S.Number)`The final result.`;
+          const markDone = yield* AI.Tool("mark_done")`
+Record the final ${result}.`((p) => AI.reply({ answer: p.result }));
+          return AI.fragment`Compute the answer, then ${markDone}.`;
+        });
+        const researcher = yield* interpret(Researcher, charter);
+        // dispatch resolves with the TYPED reply, not the model's text —
+        // and the reply lands BEFORE the run finishes its epilogue
+        const outcome = yield* researcher.dispatch("go", { key: "job#1" });
+        expect(outcome).toEqual({ answer: 42 });
+        // let round 1's epilogue finish (the reply resolved mid-round)
+        yield* Effect.repeat(
+          Effect.sync(() => model.calls.length),
+          {
+            until: (calls) => calls >= 2,
+            schedule: Schedule.spaced("10 millis"),
+            times: 200,
+          },
+        );
+        // ANSWER ≠ SETTLE: the run parked — a follow-up dispatch wakes
+        // the SAME run (context intact)
+        const late = yield* researcher.dispatch("again", { key: "job#1" });
+        expect(late).toEqual({ answer: 43 });
+        // round 2 saw round 1's whole conversation
+        expect(Model.promptText(model.calls[2]!)).toContain("all wrapped up");
+        // ending remains the owner's act
+        yield* researcher.settle("job#1", { closed: true });
+        const settled = yield* researcher.dispatch("hello?", { key: "job#1" });
+        expect(settled).toEqual({ closed: true });
+      }).pipe(Effect.scoped, Effect.provide(testLayer(model, Layer.empty)));
+    },
+  );
+
+  it.live("dispatch sessions resume the same worker; settle cascades", () => {
+    const model = Model.make([
+      // call 0: the lead hires the engineer in session "fix"
+      () => [
+        Model.toolCall("dispatch", {
+          agent: "Engineer",
+          task: "build the widget",
+          session: "fix",
+        }),
+        Model.finish("tool-calls"),
+      ],
+      // call 1: the engineer's round 1
+      () => [Model.text("built it"), Model.finish()],
+      // call 2: the lead follows up IN THE SAME SESSION
+      () => [
+        Model.toolCall("dispatch", {
+          agent: "Engineer",
+          task: "now polish it",
+          session: "fix",
+        }),
+        Model.finish("tool-calls"),
+      ],
+      // call 3: the engineer's round 2 — the SAME conversation
+      () => [Model.text("polished"), Model.finish()],
+      // call 4: the lead concludes
+      () => [Model.text("All done."), Model.finish()],
+    ]);
+    const seen: Array<AI.SessionObservation> = [];
+    const ObserverLive = Layer.succeed(AI.Events, {
+      emit: (observation) => Effect.sync(() => void seen.push(observation)),
+    });
+    const driver = InMemoryDriver.pipe(Layer.provide(model.layer));
+    return Effect.gen(function* () {
+      const lead = yield* interpret(Lead, LeadCharter);
+      const answer = yield* lead.dispatch("Widget needed", { key: "job#1" });
+      expect(answer).toBe("All done.");
+      expect(model.calls).toHaveLength(5);
+
+      // round 2 continued round 1's conversation — the worker kept
+      // its context across the call/reply boundary
+      const round2 = Model.promptText(model.calls[3]!);
+      expect(round2).toContain("build the widget");
+      expect(round2).toContain("built it");
+      expect(round2).toContain("now polish it");
+
+      // the session key is DETERMINISTIC, namespaced under the lead's
+      // run — and both dispatches hit ONE run (one admission)
+      const childKey = "job#1/Engineer/fix";
+      expect(
+        seen.filter(
+          (observation) =>
+            observation.key === childKey && observation.type === "admitted",
+        ),
+      ).toHaveLength(1);
+
+      // SUPERVISION: settling the lead settles its session worker
+      yield* lead.settle("job#1", { done: true });
+      yield* Effect.sync(() =>
+        seen.some(
+          (observation) =>
+            observation.key === childKey && observation.type === "settled",
+        ),
+      ).pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("10 millis"),
+          until: (cascaded) => cascaded,
+          times: 200,
+        }),
+      );
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(
+        Layer.mergeAll(
+          driver,
+          Engineer.make(EngineerCharter).pipe(
+            Layer.provide(driver),
+            Layer.provide(ObserverLive),
+          ),
+          ObserverLive,
+          RuntimeContext.phantom,
+        ),
+      ),
+    );
+  });
+
+  it.live("AI.Dispatch doors: the policy derives the session key", () => {
+    const model = Model.make([
+      // call 0: the lead goes through the DOOR — no session parameter
+      // exists at the wire; the policy derives the child key in code
+      () => [
+        Model.toolCall("hand_to_engineer", { task: "build the widget" }),
+        Model.finish("tool-calls"),
+      ],
+      // call 1: the engineer's round 1
+      () => [Model.text("built it"), Model.finish()],
+      // call 2: the lead goes through the door AGAIN — same worker
+      () => [
+        Model.toolCall("hand_to_engineer", { task: "now polish it" }),
+        Model.finish("tool-calls"),
+      ],
+      // call 3: the engineer's round 2 — the SAME conversation
+      () => [Model.text("polished"), Model.finish()],
+      // call 4: the lead concludes
+      () => [Model.text("All done."), Model.finish()],
+    ]);
+    const seen: Array<AI.SessionObservation> = [];
+    const ObserverLive = Layer.succeed(AI.Events, {
+      emit: (observation) => Effect.sync(() => void seen.push(observation)),
+    });
+    const driver = InMemoryDriver.pipe(Layer.provide(model.layer));
+    const doorCharter = Effect.gen(function* () {
+      const task = AI.Thing("task", S.String)`The work, standing alone.`;
+      const handToEngineer = yield* AI.Dispatch(Engineer, "hand_to_engineer")`
+Hand one round of work to the engineer with ${task}.`((p, thread) => ({
+        task: p.task,
+        key: `${thread.key}/Engineer/build`,
+      }));
+      return AI.fragment`
+Route every request through ${handToEngineer}; report when done.`;
+    });
+    return Effect.gen(function* () {
+      const lead = yield* interpret(Lead, doorCharter);
+      const answer = yield* lead.dispatch("Widget needed", { key: "job#1" });
+      expect(answer).toBe("All done.");
+
+      // the door is the org's OWN tool; the generic dispatch intrinsic
+      // is absent (the charter mentions no bare agent)
+      const toolNames = model.calls[0]!.tools.map((tool) => tool.name);
+      expect(toolNames).toContain("hand_to_engineer");
+      expect(toolNames).not.toContain("dispatch");
+
+      // both rounds hit ONE worker run under the policy's key
+      const childKey = "job#1/Engineer/build";
+      expect(
+        seen.filter(
+          (observation) =>
+            observation.key === childKey && observation.type === "admitted",
+        ),
+      ).toHaveLength(1);
+      const round2 = Model.promptText(model.calls[3]!);
+      expect(round2).toContain("built it");
+      expect(round2).toContain("now polish it");
+
+      // the delegation is observable with its identity: tool, agent,
+      // child key — the UI's worker card needs no heuristics
+      const dispatched = seen.filter(
+        (observation) => observation.type === "dispatched",
+      );
+      expect(dispatched).toHaveLength(2);
+      expect(dispatched[0]).toMatchObject({
+        toolName: "hand_to_engineer",
+        agent: "Engineer",
+        child: childKey,
+      });
+
+      // SUPERVISION: the door registered the child — settling the
+      // lead settles the session worker
+      yield* lead.settle("job#1", { done: true });
+      yield* Effect.sync(() =>
+        seen.some(
+          (observation) =>
+            observation.key === childKey && observation.type === "settled",
+        ),
+      ).pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("10 millis"),
+          until: (cascaded) => cascaded,
+          times: 200,
+        }),
+      );
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(
+        Layer.mergeAll(
+          driver,
+          Engineer.make(EngineerCharter).pipe(
+            Layer.provide(driver),
+            Layer.provide(ObserverLive),
+          ),
+          ObserverLive,
+          RuntimeContext.phantom,
+        ),
+      ),
+    );
+  });
+
+  it.live("Thread.remind wakes a parked run", () => {
+    const model = Model.make([
+      // tick 1: set the reminder, then quiesce (the run parks)
+      () => [Model.toolCall("remind_me", {}), Model.finish("tool-calls")],
+      () => [Model.text("waiting for the oven"), Model.finish()],
+      // tick 3: the reminder arrived as an ordinary message
+      () => [Model.text("woke up and checked"), Model.finish()],
+    ]);
+    return Effect.gen(function* () {
+      const charter = Effect.gen(function* () {
+        const remindMe = yield* AI.Tool("remind_me")`
+Note something to your future self.`(() =>
+          Effect.flatMap(AI.Thread, (thread) =>
+            thread.remind("50 millis", "check the oven"),
+          ),
+        );
+        return AI.fragment`Use ${remindMe} when asked to wait, then park.`;
+      });
+      const researcher = yield* interpret(Researcher, charter);
+      const answer = yield* researcher.dispatch("wait for the oven", {
+        key: "kitchen",
+      });
+      expect(answer).toBe("waiting for the oven");
+      // the reminder fires while the run is PARKED — delivery is an
+      // ordinary inbox message, so it wakes the run like any input
+      yield* Effect.sync(() => model.calls.length).pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("10 millis"),
+          until: (calls) => calls >= 3,
+          times: 300,
+        }),
+      );
+      expect(Model.promptText(model.calls[2]!)).toContain(
+        "[reminder] check the oven",
+      );
+    }).pipe(Effect.scoped, Effect.provide(testLayer(model, Layer.empty)));
+  });
+
+  it.effect("function turns receive the tick event (count + inputs)", () => {
+    const model = Model.make([() => [Model.text("one"), Model.finish()]]);
+    const events: Array<AI.TickEvent> = [];
+    return Effect.gen(function* () {
+      // the charter yields the tick function (or `{ turn: fn }`): the
+      // GUARD tier, a reducer from what-just-happened to how-to-stand —
+      // the stance itself stays constant
+      const charter = Effect.gen(function* () {
+        const stance = AI.fragment`Answer briefly.`;
+        return (tick: AI.TickEvent) =>
+          Effect.gen(function* () {
+            events.push(tick);
+            return yield* stance;
+          });
+      });
+      const researcher = yield* interpret(Researcher, charter);
+      const answer = yield* researcher.dispatch("what gives?", { key: "t" });
+      expect(answer).toBe("one");
+      expect(events).toHaveLength(1);
+      expect(events[0]!.count).toBe(0);
+      expect(events[0]!.inputs).toEqual(["what gives?"]);
+    }).pipe(Effect.scoped, Effect.provide(testLayer(model, Layer.empty)));
+  });
+
+  it.effect(
+    "the charter runs ONCE at build; a declared cell is a row per session",
+    () => {
+      const model = Model.make([
+        () => [Model.toolCall("bump", {}), Model.finish("tool-calls")],
+        () => [Model.text("done"), Model.finish()],
+        () => [Model.text("done"), Model.finish()],
+      ]);
+      return Effect.gen(function* () {
+        let builds = 0;
+        const turnKeys: string[] = [];
+        // ONE Effect, run where the Layer builds — no session exists
+        // here. The counter is a DECLARED cell: each turn, tool, or
+        // method resolves it against the session it runs for.
+        const charter = Effect.gen(function* () {
+          builds++;
+          const count = PersistentRef.of("count", () => 0);
+          const bump = yield* AI.Tool("bump")`Increment the counter.`(() =>
+            PersistentRef.update(count, (n) => n + 1),
+          );
+          return Effect.gen(function* () {
+            const { key } = yield* AI.Thread; // the session, at sampling
+            turnKeys.push(key);
+            return yield* AI.fragment`
+Counter: ${count}. Use ${bump} when told.`;
+          });
+        });
+        const researcher = yield* interpret(Researcher, charter);
+        yield* researcher.dispatch("bump once", { key: "a" }); // bumps a's row
+        yield* researcher.dispatch("just answer", { key: "b" });
+        expect(builds).toBe(1); // the charter is the agent's, not a session's
+        expect(turnKeys).toEqual(["a", "a", "b"]); // each turn saw its session
+        // b's counter is its own row, still at 0 — check via the prompt
+        // each session saw
+        expect(Model.promptText(model.calls[1]!)).toContain("Counter: 1"); // a, tick 2
+        expect(Model.promptText(model.calls[2]!)).toContain("Counter: 0"); // b, tick 1
+      }).pipe(Effect.scoped, Effect.provide(testLayer(model, Layer.empty)));
+    },
+  );
+
+  it.effect("prose margins are stripped; relative indentation survives", () => {
+    const model = Model.make([() => [Model.text("ok"), Model.finish()]]);
+    return Effect.gen(function* () {
+      const charter = AI.fragment`
+        You follow the checklist:
+          - search first
+          - answer second
+      `;
+      const researcher = yield* interpret(Researcher, charter);
+      yield* researcher.dispatch("hi");
+      const prompt = Model.promptText(model.calls[0]!);
+      expect(prompt).toContain("You follow the checklist:");
+      expect(prompt).toContain("\\n  - search first"); // margin gone, nesting kept
+    }).pipe(Effect.scoped, Effect.provide(testLayer(model, Layer.empty)));
+  });
+
+  it.effect(
+    "a charter tool named like an intrinsic wins both schema and handler",
+    () => {
+      const model = Model.make([
+        // the model calls the CHARTER's spawn schema ({ brief })
+        () => [
+          Model.toolCall("spawn", { brief: "fix the flaky test" }),
+          Model.finish("tool-calls"),
+        ],
+        () => [Model.text("delegated"), Model.finish()],
+      ]);
+      return Effect.gen(function* () {
+        const briefs: string[] = [];
+        const charter = Effect.gen(function* () {
+          const brief = AI.Thing("brief", S.String)`what to do`;
+          const spawn = yield* AI.Tool("spawn")`
+          Hand ${brief} to an engineer.`((p: { brief: string }) =>
+            Effect.sync(() => {
+              briefs.push(p.brief);
+            }),
+          );
+          return AI.fragment`Use ${spawn} to delegate.`;
+        });
+        const researcher = yield* interpret(Researcher, charter);
+        const answer = yield* researcher.dispatch("delegate this");
+        expect(answer).toBe("delegated");
+        // ONE spawn on the wire — the charter's, with its own schema…
+        const spawns = model.calls[0]!.tools.filter((t) => t.name === "spawn");
+        expect(spawns).toHaveLength(1);
+        const schema = JSON.stringify(AiTool.getJsonSchema(spawns[0]!));
+        expect(schema).toContain('"brief"');
+        expect(schema).not.toContain('"task"');
+        // …and its handler ran, NOT the intrinsic's (which would have
+        // enqueued a worker whose first input is `undefined`)
+        expect(briefs).toEqual(["fix the flaky test"]);
+      }).pipe(Effect.scoped, Effect.provide(testLayer(model, Layer.empty)));
+    },
+  );
+
+  it.effect(
+    "compaction: a handoff tool resets the thread at the boundary",
+    () => {
+      const model = Model.make([
+        // tick 1: burn some history, then hand off
+        () => [
+          Model.toolCall("handoff", { summary: "tried A; B is next" }),
+          Model.finish("tool-calls"),
+        ],
+        // tick 2: thread was reset — answer
+        () => [Model.text("continuing from summary"), Model.finish()],
+      ]);
+      return Effect.gen(function* () {
+        const charter = Effect.gen(function* () {
+          const summary = AI.Thing("summary", S.String)`
+Decisions made, open threads, blockers.`;
+          // the run is a RUNTIME fact: the handler yields AI.Thread when
+          // it fires — init never sees it
+          const handoff = yield* AI.Tool("handoff")`
+Summarize progress as ${summary}; your context restarts from it.`((p) =>
+            AI.Thread.pipe(
+              Effect.flatMap((thread) =>
+                thread.compact({ reset: { summary: p.summary } }),
+              ),
+            ),
+          );
+          return Effect.gen(function* () {
+            return yield* AI.fragment`Work the task. ${handoff} when the thread grows stale.`;
+          });
+        });
+        const researcher = yield* interpret(Researcher, charter);
+        const answer = yield* researcher.dispatch("start the work", {
+          key: "c#1",
+        });
+        expect(answer).toBe("continuing from summary");
+        const second = Model.promptText(model.calls[1]!);
+        // the reset thread carries the summary…
+        expect(second).toContain("tried A; B is next");
+        // …and no longer carries the original work item or the tool call
+        expect(second).not.toContain("start the work");
+        expect(second).not.toContain("call-handoff");
+      }).pipe(Effect.scoped, Effect.provide(testLayer(model, Layer.empty)));
+    },
+  );
+
+  it.effect("say is a plain append: the author's guard IS the policy", () => {
+    const model = Model.make([
+      () => [Model.toolCall("bump", {}), Model.finish("tool-calls")], // tick 1
+      () => [Model.toolCall("bump", {}), Model.finish("tool-calls")], // tick 2
+      () => [Model.text("done"), Model.finish()], // tick 3
+    ]);
+    return Effect.gen(function* () {
+      const charter = Effect.gen(function* () {
+        const bump = yield* AI.Tool("bump")`Keep working.`(() => Effect.void);
+        return Effect.gen(function* () {
+          const { count } = yield* AI.Tick;
+          // UNGUARDED: delivers every tick — no dedupe, no memory
+          yield* AI.say`Status check.`;
+          // GUARDED: the `===` condition delivers exactly once
+          if (count === 1) yield* AI.say`One sampling done — settle in.`;
+          return yield* AI.fragment`Work the task with ${bump}.`;
+        });
+      });
+      const researcher = yield* interpret(Researcher, charter);
+      yield* researcher.dispatch("go", { key: "s#1" });
+
+      // the unguarded say accumulated one note PER TICK
+      const third = Model.promptText(model.calls[2]!);
+      expect(third.match(/Status check\./g)).toHaveLength(3);
+      // the guarded say fired exactly once (count===1, before tick 2)
+      expect(Model.promptText(model.calls[0]!)).not.toContain("settle in");
+      expect(third.match(/One sampling done — settle in\./g)).toHaveLength(1);
+    }).pipe(Effect.scoped, Effect.provide(testLayer(model, Layer.empty)));
+  });
+
+  it.effect(
+    "a compaction reset restates standing state into the fresh thread",
+    () => {
+      const model = Model.make([
+        // tick 1: enter the parked stance
+        () => [Model.toolCall("park", {}), Model.finish("tool-calls")],
+        // tick 2: the system prompt now carries the parked stance; hands off
+        () => [
+          Model.toolCall("handoff", { summary: "asked the author about X" }),
+          Model.finish("tool-calls"),
+        ],
+        // tick 3: fresh thread — must still know it is parked
+        () => [Model.text("waiting"), Model.finish()],
+      ]);
+      return Effect.gen(function* () {
+        const charter = Effect.gen(function* () {
+          const summary = AI.Thing("summary", S.String)`What happened so far.`;
+          const parked = yield* Ref.make(false);
+          const park = yield* AI.Tool("park")`Park on the author.`(() =>
+            Effect.asVoid(Ref.set(parked, true)),
+          );
+          const handoff = yield* AI.Tool("handoff")`
+Summarize as ${summary}; the thread restarts.`((p) =>
+            AI.Thread.pipe(
+              Effect.flatMap((thread) =>
+                thread.compact({ reset: { summary: p.summary } }),
+              ),
+            ),
+          );
+          return Effect.gen(function* () {
+            return yield* AI.fragment`
+Triage the issue; ${park} when blocked. ${handoff} to compact.
+
+${
+  (yield* Ref.get(parked))
+    ? AI.fragment`You are parked on the author; judge their next reply.`
+    : AI.fragment``
+}`;
+          });
+        });
+        const researcher = yield* interpret(Researcher, charter);
+        yield* researcher.dispatch("start", { key: "r#1" });
+
+        const third = Model.promptText(model.calls[2]!);
+        // the fresh thread carries the summary, and the SYSTEM PROMPT
+        // still states the parked stance (the render is the prompt)…
+        expect(third).toContain("asked the author about X");
+        expect(third).toContain("parked on the author");
+        // …and none of the pre-reset traffic
+        expect(third).not.toContain("call-park");
+      }).pipe(Effect.scoped, Effect.provide(testLayer(model, Layer.empty)));
+    },
+  );
+
+  it.effect(
+    "distinct keys are distinct runs with separate conversations",
+    () => {
+      const model = Model.make([
+        (options) => [
+          // echo which conversation the model saw
+          Model.text(
+            Model.promptText(options).includes("first issue") ? "one" : "two",
+          ),
+          Model.finish(),
+        ],
+      ]);
+      const search = recordingSearch();
+      return Effect.gen(function* () {
+        const researcher = yield* interpret(Researcher, ResearcherCharter);
+        const [one, two] = yield* Effect.all([
+          researcher.dispatch("first issue", { key: "repo#1" }),
+          researcher.dispatch("second issue", { key: "repo#2" }),
+        ]);
+        expect(one).toBe("one");
+        expect(two).toBe("two");
+        // neither conversation leaked into the other
+        expect(Model.promptText(model.calls[0]!)).not.toContain("second issue");
+        expect(Model.promptText(model.calls[1]!)).not.toContain("first issue");
+      }).pipe(Effect.scoped, Effect.provide(testLayer(model, search.layer)));
+    },
+  );
+
+  it.effect(
+    "the observer seam: run lifecycle facts flow out, seq-ordered",
+    () => {
+      const model = Model.make([
+        () => [
+          Model.toolCall("search", { query: "x" }),
+          Model.finish("tool-calls"),
+        ],
+        () => [Model.text("answer"), Model.finish()],
+      ]);
+      return Effect.gen(function* () {
+        const seen: Array<AI.SessionObservation> = [];
+        const ObserverLive = Layer.succeed(AI.Events, {
+          emit: (observation) => Effect.sync(() => void seen.push(observation)),
+        });
+        const search = recordingSearch();
+        const researcher = yield* interpret(
+          Researcher,
+          AI.fragment`Search with ${Search}, then answer.`,
+        ).pipe(Effect.provide([ObserverLive, search.layer]));
+        yield* researcher.dispatch("find x", { key: "o#1" });
+
+        // token slices + live tool calls stream while a sampling is in
+        // flight — the canonical record is everything else
+        const deltas = seen.filter(
+          (observation) => observation.type === "assistant-delta",
+        );
+        expect(
+          deltas.map(
+            (delta) => delta.type === "assistant-delta" && delta.delta,
+          ),
+        ).toEqual(["answer"]); // tick 1's streamed text
+        const liveCalls = seen.filter(
+          (observation) => observation.type === "tool-call",
+        );
+        expect(
+          liveCalls.map((call) => call.type === "tool-call" && call.toolName),
+        ).toEqual(["search"]); // tick 0's call, surfaced live
+        // `parked` races the dispatch resolution (the loop emits it
+        // right after quiescence) — exclude the live-view facts and
+        // the park from the canonical-record assertion
+        const record = seen.filter(
+          (observation) =>
+            observation.type !== "assistant-delta" &&
+            observation.type !== "tool-call" &&
+            observation.type !== "parked",
+        );
+        expect(record.map((observation) => observation.type)).toEqual([
+          "admitted",
+          "input", // the dispatched task
+          "stance", // tick 0's request envelope — full snapshot (first)
+          "assistant", // tick 0: calls search
+          "tool-result",
+          "stance", // tick 1's envelope — unchanged, so hash-only
+          "assistant", // tick 1: quiesces with the answer
+        ]);
+        // the envelope law: first sighting snapshots prose + toolkit;
+        // an unchanged envelope logs its hash alone
+        const stances = record.filter(
+          (observation) => observation.type === "stance",
+        );
+        const [firstStance, secondStance] = stances as [
+          Extract<AI.SessionObservation, { type: "stance" }>,
+          Extract<AI.SessionObservation, { type: "stance" }>,
+        ];
+        expect(firstStance.prose).toContain("Search with");
+        expect(firstStance.tools!.map((tool) => tool.name)).toContain("search");
+        expect(secondStance.hash).toBe(firstStance.hash);
+        expect(secondStance.prose).toBeUndefined();
+        expect(secondStance.tools).toBeUndefined();
+        // every observation carries the run identity; DURABLE ones
+        // carry a strictly monotonic seq (the resume cursor), while
+        // live facts (deltas, in-flight tool calls) repeat the current
+        // watermark instead of advancing it
+        expect(seen.every((observation) => observation.key === "o#1")).toBe(
+          true,
+        );
+        const durable = seen.filter(
+          (observation) =>
+            observation.type !== "assistant-delta" &&
+            observation.type !== "tool-call",
+        );
+        expect(
+          durable.every(
+            (observation, index) =>
+              index === 0 || observation.seq > durable[index - 1]!.seq,
+          ),
+        ).toBe(true);
+        const second = record[3]!;
+        if (second.type === "assistant") {
+          expect(second.toolCalls[0]!.name).toBe("search");
+        }
+        const result = record[4]!;
+        if (result.type === "tool-result") {
+          expect(result.toolName).toBe("search");
+          expect(result.isFailure).toBe(false);
+        }
+      }).pipe(Effect.scoped, Effect.provide(testLayer(model, Layer.empty)));
+    },
+  );
+
+  it.effect("codemode(async): grants collapse into one eval tool", () => {
+    const model = Model.make([
+      // the model programs against the granted capability — a COMPLETE
+      // module importing its tools and default-exporting the program
+      () => [
+        Model.toolCall("eval", {
+          title: "run the program",
+          code: `
+            import { search } from "./tools.js";
+            export default async function () {
+              const first = await search({ query: "alchemy" });
+              const second = await search({ query: "effect" });
+              return first.results + " // " + second.results;
+            }`,
+        }),
+        Model.finish("tool-calls"),
+      ],
+      () => [Model.text("composed"), Model.finish()],
+    ]);
+    const search = recordingSearch();
+    return Effect.gen(function* () {
+      const researcher = yield* interpret(Researcher, ResearcherCharter);
+      const answer = yield* researcher.dispatch("What is alchemy?");
+      expect(answer).toBe("composed");
+
+      // ONE eval tool on the wire (spawn stays — intrinsics are direct)
+      const tools = model.calls[0]!.tools.map((tool) => tool.name);
+      expect(tools).toEqual(["eval", "spawn"]);
+      // the eval tool's description carries the generated signature
+      const evalTool = model.calls[0]!.tools[0]!;
+      expect(evalTool.description).toContain(
+        "declare function search(input: { query: string }): Promise<{ results: string }>",
+      );
+
+      // BOTH calls ran in one round trip, in code
+      expect(search.queries).toEqual(["alchemy", "effect"]);
+      // and the composed result came back as the tool result
+      expect(Model.promptText(model.calls[1]!)).toContain(
+        "results for alchemy: alchemy is IaE // results for effect: alchemy is IaE",
+      );
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(
+        testLayer(model, Layer.mergeAll(search.layer, codeModeAsync)),
+      ),
+    );
+  });
+
+  it.effect("codemode(effect): the model writes an Effect program", () => {
+    const model = Model.make([
+      () => [
+        Model.toolCall("eval", {
+          title: "run the program",
+          code: `
+            import * as Effect from "effect/Effect";
+            import { search } from "./tools.js";
+            export default Effect.gen(function* () {
+              const result = yield* search({ query: "alchemy" });
+              return "wrapped:" + result.results;
+            });`,
+        }),
+        Model.finish("tool-calls"),
+      ],
+      () => [Model.text("done"), Model.finish()],
+    ]);
+    const search = recordingSearch();
+    return Effect.gen(function* () {
+      const researcher = yield* interpret(Researcher, ResearcherCharter);
+      yield* researcher.dispatch("go");
+
+      const evalTool = model.calls[0]!.tools[0]!;
+      // the error channel is explicit: a tool that declares no errors
+      // can only fail with a DEFECT, and the signature says so
+      expect(evalTool.description).toContain(
+        "declare function search(input: { query: string }): Effect<{ results: string }, never>",
+      );
+      expect(search.queries).toEqual(["alchemy"]);
+      expect(Model.promptText(model.calls[1]!)).toContain(
+        "wrapped:results for alchemy",
+      );
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(
+        testLayer(model, Layer.mergeAll(search.layer, codeModeEffect)),
+      ),
+    );
+  });
+
+  it.effect(
+    "codemode(effect): a mentioned error IS the signature's error channel",
+    () => {
+      const model = Model.make([
+        () => [
+          Model.toolCall("eval", {
+            title: "run the program",
+            code: `
+              import * as Effect from "effect/Effect";
+              import { readFile } from "./tools.js";
+              export default Effect.gen(function* () {
+                return yield* readFile({ path: "/tmp/x" });
+              }).pipe(Effect.catchTag("Missing", (e) => Effect.succeed("caught:" + e.path)));`,
+          }),
+          Model.finish("tool-calls"),
+        ],
+        () => [Model.text("done"), Model.finish()],
+      ]);
+      return Effect.gen(function* () {
+        const charter = Effect.gen(function* () {
+          const readFile = yield* AI.Tool("readFile")`
+Read the file at ${path} — answers ${AI.out(fileContent)}. Fails with
+${Missing} when it does not exist.`(() =>
+            Effect.fail(new Missing({ path: "/tmp/x" })),
+          );
+          return AI.fragment`Read things with ${readFile}.`;
+        });
+        const researcher = yield* interpret(Researcher, charter);
+        yield* researcher.dispatch("go");
+
+        const evalTool = model.calls[0]!.tools[0]!;
+        // the MENTIONED error is the error channel — and it is
+        // documented, so the model knows what it may catch
+        // a Data.TaggedError renders as its tagged shape (the tag is
+        // all it can describe; a Schema.TaggedError carries fields too)
+        expect(evalTool.description).toContain(
+          'declare function readFile(input: { path: string }): Effect<{ content: string }, { _tag: "Missing" }>',
+        );
+        expect(evalTool.description).toContain('@throws { _tag: "Missing" }');
+        // the program caught it by tag: the CONCATENATED value can only
+        // exist if the catch handler ran (the echoed program source
+        // contains `"caught:" + e.path`, never the joined string)
+        expect(Model.promptText(model.calls[1]!)).toContain("caught:/tmp/x");
+      }).pipe(Effect.scoped, Effect.provide(testLayer(model, codeModeEffect)));
+    },
+  );
+
+  it.effect("codemode: a broken program fails model-visibly", () => {
+    const model = Model.make([
+      () => [
+        Model.toolCall("eval", {
+          title: "run the program",
+          code: `export default async function () { return await nope(); }`,
+        }),
+        Model.finish("tool-calls"),
+      ],
+      () => [Model.text("recovered"), Model.finish()],
+    ]);
+    const search = recordingSearch();
+    return Effect.gen(function* () {
+      const researcher = yield* interpret(Researcher, ResearcherCharter);
+      const answer = yield* researcher.dispatch("go");
+      // the loop survived: the failure came back as a tool result
+      expect(answer).toBe("recovered");
+      expect(Model.promptText(model.calls[1]!)).toContain("program failed");
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(
+        testLayer(model, Layer.mergeAll(search.layer, codeModeAsync)),
+      ),
+    );
+  });
+
+  describe("the stance's model — provided, like anything else", () => {
+    class Picker extends AI.Agent<Picker>()("Picker") {}
+    // the org's way of naming a model: a service holding a ready Layer
+    class Alt extends AI.Model<Alt>()("Alt") {}
+
+    it.live(
+      "a stance provided a model samples with it from that tick; the transcript records the wire's model + usage",
+      () => {
+        // the driver's Layer model (the default) and a second one the
+        // charter can switch to — the same scripted shape, told apart
+        // by what they answer, what they bill, and what they say they are
+        const fallback = Model.make([
+          () => [
+            Model.metadata("default-1"),
+            Model.text("from the default"),
+            Model.finish("stop", { input: 10, output: 5 }),
+          ],
+        ]);
+        const alt = Model.make([
+          () => [
+            Model.metadata("alt-9"),
+            Model.text("from alt"),
+            Model.finish("stop", { input: 7, cacheRead: 3, output: 2 }),
+          ],
+        ]);
+        return Effect.gen(function* () {
+          // the org's state the turn reads — here a plain Ref
+          const pick = yield* Ref.make<"default" | "alt">("default");
+          const charter: AI.Charter = Effect.gen(function* () {
+            const altModel = yield* Alt;
+            const stance = AI.fragment`You answer in one line.`;
+            return Effect.gen(function* () {
+              return (yield* Ref.get(pick)) === "alt"
+                ? yield* stance.pipe(Effect.provide(altModel))
+                : yield* stance;
+            });
+          });
+          const picker = yield* interpret(Picker, charter);
+
+          expect(yield* picker.dispatch("one", { key: "p" })).toBe(
+            "from the default",
+          );
+          expect(fallback.calls).toHaveLength(1);
+          expect(alt.calls).toHaveLength(0);
+
+          yield* Ref.set(pick, "alt");
+          yield* picker.steer("p", "two");
+          yield* Effect.sleep("20 millis").pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("20 millis"),
+              until: () => alt.calls.length === 1,
+              times: 100,
+            }),
+          );
+          // the default was NOT called again — the slot switched
+          expect(fallback.calls).toHaveLength(1);
+          expect(alt.calls).toHaveLength(1);
+
+          // the durable record: the model each wire reported, and each
+          // sampling's token bill flattened
+          const threads = yield* AI.ThreadStorage;
+          const handle = yield* threads.open("Picker", "p");
+          const samplings = (yield* handle.observations(0)).flatMap(
+            (observation) =>
+              observation.type === "assistant" ? [observation] : [],
+          );
+          expect(samplings).toHaveLength(2);
+          expect(samplings[0]!.model).toBe("default-1");
+          expect(samplings[0]!.usage).toEqual({ input: 10, output: 5 });
+          expect(samplings[1]!.model).toBe("alt-9");
+          expect(samplings[1]!.usage).toEqual({
+            input: 7,
+            cacheRead: 3,
+            output: 2,
+          });
+        }).pipe(
+          Effect.scoped,
+          Effect.provide(
+            Layer.mergeAll(
+              DriverLocal.pipe(
+                Layer.provide(ThreadStorageMemory),
+                Layer.provide(fallback.layer),
+              ),
+              ThreadStorageMemory,
+              Alt.layer(alt.service),
+              RuntimeContext.phantom,
+            ),
+          ),
+        );
+      },
+    );
+
+    it.effect(
+      "a spawn worker samples with its spawner's model — provided around a static stance, it holds for the session",
+      () => {
+        const fallback = Model.make([
+          () => [Model.text("never"), Model.finish()],
+        ]);
+        // one script serves the spawner AND its worker: the spawn call,
+        // the worker's answer, the spawner's conclusion
+        const alt = Model.make([
+          () => [
+            Model.toolCall("spawn", {
+              instructions: "You are a checker.",
+              task: "Check it.",
+            }),
+            Model.finish("tool-calls"),
+          ],
+          () => [Model.text("checked"), Model.finish()],
+          () => [Model.text("done: checked"), Model.finish()],
+        ]);
+        return Effect.gen(function* () {
+          const charter: AI.Charter = Effect.gen(function* () {
+            const altModel = yield* Alt;
+            return AI.fragment`You delegate checking to a spawn.`.pipe(
+              Effect.provide(altModel),
+            );
+          });
+          const picker = yield* interpret(Picker, charter);
+          expect(yield* picker.dispatch("go", { key: "s" })).toBe(
+            "done: checked",
+          );
+          expect(fallback.calls).toHaveLength(0);
+          expect(alt.calls).toHaveLength(3);
+          // the worker's sampling is the middle call — its prompt is
+          // the written role, not the spawner's charter
+          expect(Model.promptText(alt.calls[1]!)).toContain("Check it.");
+        }).pipe(
+          Effect.scoped,
+          Effect.provide(testLayer(fallback, Alt.layer(alt.service))),
+          Effect.provide(RuntimeContext.phantom),
+        );
+      },
+    );
+  });
+
+  describe("the agent as an OBJECT: methods, `at`", () => {
+    class Negative extends Data.TaggedError("Negative")<{ value: number }> {}
+
+    /**
+     * The INFERRED inline form: the implementation on the class, the
+     * API read off it — `Counter.Default` is the Layer. The charter is
+     * ONE Effect run at build; a session is not constructed — what
+     * varies per session is STATE in a declared cell, set through a
+     * method (`set`), and the session's identity is read from the
+     * frame (`AI.Thread`) by the method that needs it.
+     */
+    class Counter extends AI.Agent<Counter>()(
+      "Counter",
+      Effect.gen(function* () {
+        const count = PersistentRef.of("count", () => 0);
+        return {
+          turn: Effect.flatMap(
+            count,
+            (n) => AI.fragment`You count. At: ${String(n)}.`,
+          ),
+          set: (to: number) => PersistentRef.set(count, to),
+          bump: (by: number) =>
+            by < 0
+              ? Effect.fail(new Negative({ value: by }))
+              : PersistentRef.modify(count, (n) => [n + by, n + by]),
+          read: () => PersistentRef.get(count),
+          whoami: () => Effect.map(AI.Thread, ({ key }) => ({ key })),
+          // NOT wire-safe: a closure — the resident placement must
+          // refuse it exactly as the Durable Object one would
+          leak: () => Effect.succeed(() => 1),
+        };
+      }),
+    ) {}
+
+    it.effect(
+      "at(key) admits on first contact; methods run in the session frame; typed failures ride the error channel",
+      () => {
+        const model = Model.make([() => [Model.text("ok"), Model.finish()]]);
+        return Effect.gen(function* () {
+          const counter = yield* Counter;
+          const c1 = counter.at("c1");
+          // the first verb admits the session; state is set by a METHOD
+          yield* c1.set(5);
+          expect(yield* c1.bump(2)).toBe(7);
+          // a later stub for the same key finds the same object
+          expect(yield* counter.at("c1").read()).toBe(7);
+          // methods see the session frame (Thread)
+          expect(yield* counter.at("c1").whoami()).toEqual({ key: "c1" });
+          // a method's declared failure is the CALLER's failure, typed
+          const failed = yield* Effect.flip(counter.at("c1").bump(-1));
+          expect(failed).toBeInstanceOf(Negative);
+          expect(failed.value).toBe(-1);
+          // the loop verbs on the same stub — the stance reads the state
+          expect(yield* c1.dispatch("count")).toBe("ok");
+          expect(Model.promptText(model.calls[0]!)).toContain("At: 7");
+          // a second key is a second object, at the initial state
+          expect(yield* counter.at("c2").read()).toBe(0);
+          expect(yield* counter.at("c1").read()).toBe(7);
+        }).pipe(
+          Effect.scoped,
+          Effect.provide(
+            Layer.provideMerge(Counter.Default, testLayer(model, Layer.empty)),
+          ),
+        );
+      },
+    );
+
+    it.effect(
+      "an unknown method and a non-cloneable result are DEFECTS, not failures",
+      () => {
+        const model = Model.make([]);
+        return Effect.gen(function* () {
+          const counter = yield* Counter;
+          const c = counter.at("d1");
+          const missing = yield* Effect.exit(
+            (c as unknown as { nope: () => Effect.Effect<unknown> }).nope(),
+          );
+          expect(Exit.isFailure(missing)).toBe(true);
+          if (Exit.isFailure(missing)) {
+            expect(Cause.squash(missing.cause)).toBeInstanceOf(Error);
+            expect(String(Cause.squash(missing.cause))).toContain(
+              "has no method 'nope'",
+            );
+            expect(String(Cause.squash(missing.cause))).toContain("bump");
+          }
+          const leaked = yield* Effect.exit(c.leak());
+          expect(Exit.isFailure(leaked)).toBe(true);
+          if (Exit.isFailure(leaked)) {
+            expect(String(Cause.squash(leaked.cause))).toContain(
+              "cannot cross the wire",
+            );
+          }
+        }).pipe(
+          Effect.scoped,
+          Effect.provide(
+            Layer.provideMerge(Counter.Default, testLayer(model, Layer.empty)),
+          ),
+        );
+      },
+    );
+
+    it.effect(
+      "state PERSISTS with the session: a re-activation finds the object over its durable state",
+      () => {
+        const model = Model.make([]);
+        return Effect.gen(function* () {
+          const charter = Effect.gen(function* () {
+            const count = PersistentRef.of("count", () => 0);
+            return {
+              turn: AI.fragment`Count.`,
+              set: (to: number) => PersistentRef.set(count, to),
+              read: () => PersistentRef.get(count),
+            };
+          });
+          const first = AI.withStubs<AI.ContractOf<typeof charter>>(
+            yield* interpret(Counter, charter),
+          );
+          yield* first.at("p1").set(9);
+          expect(yield* first.at("p1").read()).toBe(9);
+          // a SECOND interpret of the term over the same storage is a
+          // restart: restore revives the persisted key and the declared
+          // cell resolves to the same row — the object resumes over its
+          // durable state (the ambient store below stands in for the
+          // DO's storage; without one the resident driver gives every
+          // session its own RAM)
+          const second = AI.withStubs<AI.ContractOf<typeof charter>>(
+            yield* interpret(Counter, charter),
+          );
+          expect(yield* second.at("p1").read()).toBe(9);
+        }).pipe(
+          Effect.scoped,
+          Effect.provide(
+            Layer.mergeAll(
+              DriverLocal.pipe(
+                Layer.provide(ThreadStorageMemory),
+                Layer.provide(model.layer),
+              ),
+              ThreadStorageMemory,
+              Layer.succeed(
+                PersistentRef.Store,
+                PersistentRef.makeMemoryStore(),
+              ),
+              RuntimeContext.phantom,
+            ),
+          ),
+        );
+      },
+    );
+
+    it.effect(
+      "the object outlives its loop: methods answer on a STOPPED session; destroy is the end",
+      () => {
+        const model = Model.make([]);
+        return Effect.gen(function* () {
+          const counter = yield* Counter;
+          const c = counter.at("s1");
+          yield* c.set(3);
+          expect(yield* c.bump(1)).toBe(4);
+          yield* c.stop();
+          // stopped: the loop is settled, the state is still there
+          expect(yield* c.read()).toBe(4);
+          // dispatch on a settled session answers with the outcome
+          expect(yield* c.dispatch("anything")).toEqual({
+            _tag: "Stopped",
+            by: "operator",
+          });
+          yield* c.destroy();
+          // gone: the next contact is a FRESH session, at the initial state
+          expect(yield* counter.at("s1").read()).toBe(0);
+        }).pipe(
+          Effect.scoped,
+          Effect.provide(
+            Layer.provideMerge(Counter.Default, testLayer(model, Layer.empty)),
+          ),
+        );
+      },
+    );
+
+    it.effect(
+      "the charter runs once per Layer build: what it constructs is shared; what it DECLARES is per session",
+      () => {
+        const model = Model.make([]);
+        return Effect.gen(function* () {
+          let builds = 0;
+          const charter = Effect.gen(function* () {
+            builds++;
+            // constructed here → the agent's, shared by every session
+            // (a binding client, a tool — or this Ref)
+            const shared = yield* Ref.make(0);
+            // declared here → a row per session
+            const own = PersistentRef.of("own", () => 0);
+            return {
+              turn: Effect.flatMap(
+                AI.Thread,
+                ({ key }) => AI.fragment`Hello ${key}.`,
+              ),
+              touch: () =>
+                Effect.all([
+                  Ref.updateAndGet(shared, (n) => n + 1),
+                  PersistentRef.modify(own, (n) => [n + 1, n + 1]),
+                ]),
+            };
+          });
+          const agent = AI.withStubs<AI.ContractOf<typeof charter>>(
+            yield* interpret(Counter, charter),
+          );
+          expect(builds).toBe(1);
+          expect(yield* agent.at("x").touch()).toEqual([1, 1]);
+          expect(yield* agent.at("y").touch()).toEqual([2, 1]);
+          expect(yield* agent.at("x").touch()).toEqual([3, 2]);
+          expect(builds).toBe(1);
+        }).pipe(Effect.scoped, Effect.provide(testLayer(model, Layer.empty)));
+      },
+    );
+
+    it.effect(
+      "a charter that reaches for the session (AI.Thread) fails the BUILD, loudly",
+      () => {
+        const model = Model.make([]);
+        return Effect.gen(function* () {
+          const charter = Effect.gen(function* () {
+            yield* AI.Thread; // there is no session here
+            return AI.fragment`never`;
+          });
+          const exit = yield* Effect.exit(
+            Effect.flatMap(AI.Driver, (driver) =>
+              driver.interpret(Counter, charter),
+            ),
+          );
+          expect(Exit.isFailure(exit)).toBe(true);
+          if (Exit.isFailure(exit)) {
+            const message = String(Cause.squash(exit.cause));
+            expect(message).toContain("charter of 'Counter' failed");
+            expect(message).toContain("alchemy/AI/Thread");
+          }
+        }).pipe(Effect.scoped, Effect.provide(testLayer(model, Layer.empty)));
+      },
+    );
+
+    /**
+     * The DECLARED form: the contract is the type parameter — the API,
+     * an interface of methods; `make` checks each implementation
+     * against it.
+     */
+    class Greeter extends AI.Agent<
+      Greeter,
+      {
+        setName(name: string): Effect.Effect<void>;
+        greet(punctuation: string): Effect.Effect<string>;
+      }
+    >()("Greeter") {}
+
+    const Polite = Greeter.make(
+      Effect.gen(function* () {
+        const name = PersistentRef.of("name", () => "stranger");
+        return {
+          turn: AI.fragment`You greet.`,
+          setName: (to: string) => PersistentRef.set(name, to),
+          greet: (punctuation: string) =>
+            Effect.map(name, (n) => `Good day, ${n}${punctuation}`),
+        };
+      }),
+    );
+
+    const Casual = Greeter.make(
+      Effect.gen(function* () {
+        const prefix = yield* Effect.succeed("hey");
+        const name = PersistentRef.of("name", () => "you");
+        return {
+          turn: AI.fragment`You greet.`,
+          setName: (to: string) => PersistentRef.set(name, to),
+          greet: (punctuation: string) =>
+            Effect.map(name, (n) => `${prefix} ${n}${punctuation}`),
+        };
+      }),
+    );
+
+    // an implementation that does not satisfy the contract is rejected
+    Greeter.make(
+      // @ts-expect-error — `greet` returns a number, the contract says string
+      Effect.gen(function* () {
+        return {
+          turn: AI.fragment`x`,
+          setName: (_n: string) => Effect.void,
+          greet: (_p: string) => Effect.succeed(1),
+        };
+      }),
+    );
+
+    // a method may not shadow a stub verb
+    AI.Agent<never>()(
+      "Shadow",
+      // @ts-expect-error — `send` is reserved
+      Effect.gen(function* () {
+        return { turn: AI.fragment`x`, send: () => Effect.void };
+      }),
+    );
+
+    it.effect("one contract, two implementations, side by side", () => {
+      const model = Model.make([]);
+      return Effect.gen(function* () {
+        const polite = yield* Effect.provide(Greeter, Polite);
+        const casual = yield* Effect.provide(Greeter, Casual);
+        yield* polite.at("a").setName("Ada");
+        expect(yield* polite.at("a").greet("!")).toBe("Good day, Ada!");
+        yield* casual.at("b").setName("Bob");
+        expect(yield* casual.at("b").greet("?")).toBe("hey Bob?");
+      }).pipe(Effect.scoped, Effect.provide(testLayer(model, Layer.empty)));
+    });
+  });
+});

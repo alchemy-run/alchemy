@@ -1,5 +1,5 @@
 import * as Docker from "@/Docker";
-import { ServerHost } from "@/Server/Process.ts";
+import { Host } from "@/Local/Process.ts";
 import * as Effect from "effect/Effect";
 import * as Ref from "effect/Ref";
 import * as Schedule from "effect/Schedule";
@@ -18,7 +18,7 @@ export const SERVICE_EXTERNAL_PORT = 43117;
  * long-running server bundled from this module and deployed to the local
  * swarm.
  *
- * - `yield* ServerHost` + `host.run(...)` registers a background loop that
+ * - `yield* Host` + `host.run(...)` registers a background loop that
  *   increments a counter once a second.
  * - the returned `{ fetch }` handler is served over HTTP by the container's
  *   Bun HTTP server. `/ticks` reports the counter so the test can prove the
@@ -33,7 +33,7 @@ export default class TestService extends Docker.Service<TestService>()(
     replicas: 1,
   },
   Effect.gen(function* () {
-    const host = yield* ServerHost;
+    const host = yield* Host;
     const ticks = yield* Ref.make(0);
 
     // Long-running background loop (the `host.run` pattern).

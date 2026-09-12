@@ -17,6 +17,7 @@ const modulePromise: Promise<typeof import("cloudflare:workers")> =
       ({
         env: {},
         DurableObject: class {},
+        RpcTarget: class {},
         WorkflowEntrypoint: class {
           async run() {}
         },

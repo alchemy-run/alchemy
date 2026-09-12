@@ -2,6 +2,7 @@ export * from "./Container.ts";
 export * from "./Context.ts";
 export * from "./Docker.ts";
 export * as Dockerfile from "./Dockerfile.ts";
+export * from "./Host.ts";
 export * from "./Image.ts";
 export * from "./Network.ts";
 export * from "./Providers.ts";

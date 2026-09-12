@@ -2,12 +2,13 @@
   "extends": "../../tsconfig.base.json",
   "include": ["package.json", "test"],
   "exclude": [
+    "test/Dev/fixtures/rpc-server-entry.ts",
+    "test/Dev/fixtures/rpc-server-entry-b.ts",
+    "test/Dev/fixtures/rpc-server-logs.ts",
+    "test/Dev/fixtures/rpc-spawner-parent.ts",
+    "test/Dev/fixtures/rpc-spawner-devserver-parent.ts",
     "test/Cli/fixtures/shutdown-feedback-fixture.ts",
-    "test/Local/fixtures/rpc-server-entry.ts",
-    "test/Local/fixtures/rpc-server-entry-b.ts",
-    "test/Local/fixtures/rpc-server-logs.ts",
-    "test/Local/fixtures/rpc-spawner-parent.ts",
-    "test/Local/fixtures/rpc-spawner-devserver-parent.ts",
+    "test/Cli/fixtures/node-clikit-layer.ts",
     // Nuxt fixtures: server routes use nitro's auto-imported globals
     // (`defineEventHandler`), which only type-check against the `.nuxt/`
     // types a nuxt build generates.

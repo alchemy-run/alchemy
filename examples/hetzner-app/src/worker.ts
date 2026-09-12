@@ -1,5 +1,5 @@
 import * as Hetzner from "alchemy/Hetzner";
-import { ServerHost } from "alchemy/Server";
+import { Host } from "alchemy/Local";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import { Box, Data, MARKER, MARKER_FILE, VOLUME_PATH } from "./shared.ts";
@@ -17,7 +17,7 @@ export default class Worker extends Hetzner.Service<Worker>()(
   Effect.gen(function* () {
     const volume = yield* Data;
     const mount = yield* Hetzner.MountVolume(volume, { path: VOLUME_PATH });
-    const host = yield* ServerHost;
+    const host = yield* Host;
 
     yield* host.run(
       Effect.gen(function* () {

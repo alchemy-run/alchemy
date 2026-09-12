@@ -1,5 +1,5 @@
 import * as AWS from "@/AWS";
-import { ServerHost } from "@/Server/Process.ts";
+import { Host } from "@/Local/Process.ts";
 import * as Effect from "effect/Effect";
 import * as Ref from "effect/Ref";
 import * as Schedule from "effect/Schedule";
@@ -11,7 +11,7 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
  * inline Effect HTTP program bundled + containerized + pushed to a managed
  * ECR repository and deployed as an App Runner service.
  *
- * - `yield* ServerHost` + `host.run(...)` registers a background loop that
+ * - `yield* Host` + `host.run(...)` registers a background loop that
  *   increments a counter once a second.
  * - the returned `{ fetch }` handler is served over HTTP by the container's
  *   Bun HTTP server on the App Runner-injected `PORT`. `/ticks` reports the
@@ -31,7 +31,7 @@ export default class TestService extends AWS.AppRunner.Service<TestService>()(
     docker: { base: "oven/bun:1" },
   },
   Effect.gen(function* () {
-    const host = yield* ServerHost;
+    const host = yield* Host;
     const ticks = yield* Ref.make(0);
 
     // Long-running background loop (the `host.run` pattern).

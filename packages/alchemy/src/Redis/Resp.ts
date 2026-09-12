@@ -8,6 +8,7 @@
  * so alchemy does not take a Redis client dependency.
  */
 import { ProtocolError, ReplyError } from "./Errors.ts";
+import { concatBytes } from "../Util/bytes.ts";
 
 export type Arg = string | number | Uint8Array;
 
@@ -66,18 +67,6 @@ export const Incomplete: Extract<ParseResult, { _tag: "Incomplete" }> = {
   _tag: "Incomplete",
 };
 
-const concat = (parts: readonly Uint8Array[]): Uint8Array => {
-  let total = 0;
-  for (const part of parts) total += part.length;
-  const out = new Uint8Array(total);
-  let offset = 0;
-  for (const part of parts) {
-    out.set(part, offset);
-    offset += part.length;
-  }
-  return out;
-};
-
 const bytesOf = (value: string): Uint8Array => encoder.encode(value);
 
 const argBytes = (arg: Arg): Uint8Array => {
@@ -87,13 +76,13 @@ const argBytes = (arg: Arg): Uint8Array => {
 };
 
 export const encodeSimpleString = (value: string): Uint8Array =>
-  concat([bytesOf(`+${value}`), CRLF]);
+  concatBytes([bytesOf(`+${value}`), CRLF]);
 
 export const encodeError = (value: string): Uint8Array =>
-  concat([bytesOf(`-${value}`), CRLF]);
+  concatBytes([bytesOf(`-${value}`), CRLF]);
 
 export const encodeInteger = (value: number | bigint): Uint8Array =>
-  concat([bytesOf(`:${value}`), CRLF]);
+  concatBytes([bytesOf(`:${value}`), CRLF]);
 
 export const encodeBoolean = (value: boolean): Uint8Array =>
   bytesOf(value ? "#t\r\n" : "#f\r\n");
@@ -102,11 +91,11 @@ export const encodeDouble = (value: number): Uint8Array => {
   if (Number.isNaN(value)) return bytesOf(",nan\r\n");
   if (value === Infinity) return bytesOf(",inf\r\n");
   if (value === -Infinity) return bytesOf(",-inf\r\n");
-  return concat([bytesOf(`,${value}`), CRLF]);
+  return concatBytes([bytesOf(`,${value}`), CRLF]);
 };
 
 export const encodeBigNumber = (value: bigint): Uint8Array =>
-  concat([bytesOf(`(${value}`), CRLF]);
+  concatBytes([bytesOf(`(${value}`), CRLF]);
 
 export const encodeNull = (): Uint8Array => bytesOf("$-1\r\n");
 
@@ -114,11 +103,11 @@ export const encodeNullArray = (): Uint8Array => bytesOf("*-1\r\n");
 
 export const encodeBulk = (value: string | Uint8Array): Uint8Array => {
   const payload = typeof value === "string" ? bytesOf(value) : value;
-  return concat([bytesOf(`$${payload.length}\r\n`), payload, CRLF]);
+  return concatBytes([bytesOf(`$${payload.length}\r\n`), payload, CRLF]);
 };
 
 export const encodeArray = (items: readonly Uint8Array[]): Uint8Array =>
-  concat([bytesOf(`*${items.length}\r\n`), ...items]);
+  concatBytes([bytesOf(`*${items.length}\r\n`), ...items]);
 
 /** Encode a client command as a RESP array of bulk strings. */
 export const encodeCommand = (
@@ -130,7 +119,7 @@ export const encodeCommand = (
   for (const part of parts) {
     chunks.push(bytesOf(`$${part.length}\r\n`), part, CRLF);
   }
-  return concat(chunks);
+  return concatBytes(chunks);
 };
 
 export const encodeReply = (value: Reply): Uint8Array => {
@@ -158,7 +147,7 @@ export const encodeReply = (value: Reply): Uint8Array => {
   for (const [key, item] of entries) {
     encoded.push(encodeSimpleString(key), encodeReply(item));
   }
-  return concat(encoded);
+  return concatBytes(encoded);
 };
 
 type Line = {
@@ -296,7 +285,7 @@ const parseStreamedString = (buf: Uint8Array, offset: number): Outcome => {
     if (count.kind !== "n") return fail("invalid streamed string chunk length");
     if (count.n === 0) {
       return ok(
-        { _tag: "Reply", value: decoder.decode(concat(chunks)) },
+        { _tag: "Reply", value: decoder.decode(concatBytes(chunks)) },
         count.next,
       );
     }

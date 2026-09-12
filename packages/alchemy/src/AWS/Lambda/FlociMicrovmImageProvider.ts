@@ -35,11 +35,13 @@
  * outside-context Dockerfile).
  */
 
+import * as microvms from "@distilled.cloud/aws/lambda-microvms";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Artifacts from "../../Artifacts.ts";
 import * as Path from "effect/Path";
 import * as Stream from "effect/Stream";
+import type { ScopedPlanStatusSession } from "../../Report.ts";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import { getStableContextDir } from "../../Bundle/TempRoot.ts";
 import { Docker, DockerLive } from "../../Docker/Docker.ts";
@@ -52,6 +54,7 @@ import {
 } from "../Local/DevWatchProvider.ts";
 import { imageSourceTrigger } from "../Local/ImageSourceTrigger.ts";
 import type { ImageSourceLike } from "../ECR/ImageSource.ts";
+import { hostStatementsFor } from "../../Docker/Host.ts";
 import {
   buildMicrovmDockerfile,
   bundleMicrovmProgram,
@@ -59,7 +62,10 @@ import {
   MICROVM_BASE_DOCKER_IMAGE,
 } from "./MicrovmBundle.ts";
 import { MicrovmImage, type MicrovmImageProps } from "./MicrovmImage.ts";
-import { MicrovmImageProvider } from "./MicrovmProvider.ts";
+import {
+  MicrovmImageProvider,
+  resolveImageArchitecture,
+} from "./MicrovmProvider.ts";
 
 /**
  * The AWS-managed MicroVM base is not publicly pullable; the floci fork
@@ -86,6 +92,80 @@ const rewriteBaseImage = (dockerfile: string): string =>
       return `FROM ${LOCAL_MICROVM_BASE_IMAGE}${suffix}`;
     })
     .join("\n");
+
+/** MicroVM states that still hold a container in the local emulator. */
+const ACTIVE_STATES = new Set<string>([
+  "PENDING",
+  "RUNNING",
+  "SUSPENDING",
+  "SUSPENDED",
+]);
+
+/**
+ * Terminate ORPHANED MicroVMs in the local emulator — VMs whose image no
+ * longer EXISTS. Dev state loss (a run killed mid-create, a cleared state
+ * store) re-creates the image resource under a fresh physical name and
+ * orphans the previous image's VMs: recycle and delete are image-scoped,
+ * so nothing ever lists the old image's machines again and they
+ * accumulate as zombie containers across reloads. Swept once per watch
+ * start (every `alchemy dev` boot). VMs of images that still exist —
+ * this resource's or any other stack's — are never touched.
+ */
+const sweepOrphanMicrovms = Effect.fn(function* (
+  id: string,
+  currentImageArn: string,
+) {
+  const all = yield* microvms.listMicrovms.items({}).pipe(Stream.runCollect);
+  const foreign = Array.from(all).filter(
+    (m) => m.imageArn !== currentImageArn && ACTIVE_STATES.has(m.state),
+  );
+  if (foreign.length === 0) return;
+  const byImage = new Map<string, Array<microvms.MicrovmItem>>();
+  for (const m of foreign) {
+    byImage.set(m.imageArn, [...(byImage.get(m.imageArn) ?? []), m]);
+  }
+  for (const [imageArn, vms] of byImage) {
+    const exists = yield* microvms
+      .getMicrovmImage({ imageIdentifier: imageArn })
+      .pipe(
+        Effect.as(true),
+        Effect.catchTag("ResourceNotFoundException", () =>
+          Effect.succeed(false),
+        ),
+      );
+    if (exists) continue;
+    yield* Effect.logInfo(
+      `[alchemy dev] ${id}: sweeping ${vms.length} orphaned microvm(s) of deleted image ${imageArn}`,
+    );
+    yield* Effect.forEach(
+      vms,
+      (m) =>
+        microvms.terminateMicrovm({ microvmIdentifier: m.microvmId }).pipe(
+          // already gone or mid-transition — either way it converges
+          Effect.catchTag(
+            [
+              "ResourceNotFoundException",
+              "ConflictException",
+              "ValidationException",
+            ],
+            () => Effect.void,
+          ),
+        ),
+      { concurrency: 5, discard: true },
+    );
+  }
+});
+
+/**
+ * A dev-terminal session for `docker.image.build`: BuildKit's progress
+ * stream is line-tapped into the dev log, so a long cold build shows the
+ * layers going by instead of a silent hang.
+ */
+const buildLogSession = (id: string): ScopedPlanStatusSession => ({
+  emit: () => Effect.void,
+  done: () => Effect.void,
+  note: (line) => Effect.logInfo(`[alchemy dev] ${id}: docker: ${line}`),
+});
 
 /**
  * Build the image on the host daemon and return the content-addressed
@@ -118,9 +198,36 @@ const buildLocalImage = Effect.fn(function* (
         ? (news.dockerfile.content as string)
         : news.dockerfile;
     const dockerfile = rewriteBaseImage(
-      buildMicrovmDockerfile(userDockerfile, runtime, port),
+      buildMicrovmDockerfile(
+        userDockerfile,
+        runtime,
+        port,
+        hostStatementsFor(news, yield* resolveImageArchitecture(news)),
+      ),
     );
-    const contentHash = yield* sha256(`${bundleHash}:${dockerfile}`);
+    // `contextInclude` directories ride the build context under their `to`
+    // prefixes, exactly as the live artifact carries them. A declared
+    // fingerprint IS the include's identity (no directory read); a
+    // fingerprint-less include hashes the directory.
+    const includes = yield* Effect.forEach(
+      news.contextInclude ?? [],
+      (include) =>
+        Effect.map(
+          include.fingerprint !== undefined
+            ? Effect.succeed(include.fingerprint)
+            : hashDirectory({ cwd: include.from }),
+          (fingerprint) => ({ ...include, fingerprint }),
+        ),
+    );
+    const includeId = includes
+      .map((i) => `${i.to}:${i.fingerprint}`)
+      .sort()
+      .join("|");
+    const contentHash = yield* sha256(
+      includes.length === 0
+        ? `${bundleHash}:${dockerfile}`
+        : `${bundleHash}:${dockerfile}:${includeId}`,
+    );
     const context = yield* getStableContextDir(
       process.cwd(),
       dotAlchemy,
@@ -131,8 +238,25 @@ const buildLocalImage = Effect.fn(function* (
       dockerfile,
       files: files.map((f) => ({ path: f.path, content: f.content })),
     });
+    // Sync each include into the staging context, guarded by a fingerprint
+    // marker — a baked repo include can be ~1GB, so only a changed
+    // fingerprint pays the copy.
+    for (const include of includes) {
+      const dest = path.join(context, include.to);
+      const marker = path.join(
+        context,
+        `.alchemy-include-${include.to.replaceAll("/", "__")}`,
+      );
+      const have = yield* fs
+        .readFileString(marker)
+        .pipe(Effect.orElseSucceed(() => ""));
+      if (have === include.fingerprint && (yield* fs.exists(dest))) continue;
+      yield* fs.remove(dest, { recursive: true, force: true });
+      yield* fs.copy(include.from, dest);
+      yield* fs.writeFileString(marker, include.fingerprint);
+    }
     const tag = `alchemy-dev/microvm-${id.toLowerCase()}:${contentHash.slice(0, 16)}`;
-    yield* docker.image.build({ context, tag });
+    yield* docker.image.build({ context, tag }, buildLogSession(id));
     return tag;
   }
 
@@ -156,7 +280,10 @@ const buildLocalImage = Effect.fn(function* (
     const rewrittenPath = path.join(staging, "Dockerfile");
     yield* fs.writeFileString(rewrittenPath, rewritten);
     const tag = `alchemy-dev/microvm-${id.toLowerCase()}:${contentHash.slice(0, 16)}`;
-    yield* docker.image.build({ context, file: rewrittenPath, tag });
+    yield* docker.image.build(
+      { context, file: rewrittenPath, tag },
+      buildLogSession(id),
+    );
     return tag;
   }
 
@@ -186,6 +313,10 @@ export const FlociMicrovmImageProvider = () =>
         isExternal: news.isExternal,
         external: news.external,
         build: news.build,
+        contextInclude: (news.contextInclude ?? []).map((include) => ({
+          to: include.to,
+          fingerprint: include.fingerprint ?? null,
+        })),
       };
     },
     // Mirrors the live diff: the image name is the identity.
@@ -219,6 +350,16 @@ export const FlociMicrovmImageProvider = () =>
       }),
     startWatch: (ctx) =>
       Effect.gen(function* () {
+        // reload hygiene: reap zombie machines left by dev state loss
+        // (best-effort — a failed sweep must never kill the watch loop)
+        yield* sweepOrphanMicrovms(ctx.id, ctx.attrs.imageArn).pipe(
+          Effect.catchCause((cause) =>
+            Effect.logWarning(
+              `[alchemy dev] ${ctx.id}: orphaned-microvm sweep failed (contained)`,
+              cause,
+            ),
+          ),
+        );
         const trigger = yield* imageSourceTrigger({
           id: ctx.id,
           source: ctx.news as ImageSourceLike,

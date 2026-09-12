@@ -11,7 +11,7 @@ import {
   killPid,
   pidListeningOn,
   waitForExit,
-} from "./fixtures/process-effect.ts";
+} from "../Dev/fixtures/process-effect.ts";
 
 const FIXTURE_DIR = fileURLToPath(
   new URL("./fixtures/dev-cli/", import.meta.url),

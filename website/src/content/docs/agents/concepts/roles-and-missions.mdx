@@ -1,0 +1,84 @@
+---
+title: Roles & missions
+description: One agent tag, many charters — missions are Layer bindings staffed per desk, and the authority envelope is the line bindings must not cross.
+---
+
+A difference between two agents can live in three places, and putting
+it in the wrong one is how a cast of characters bloats. The decision
+rule:
+
+| place | answers | example |
+|---|---|---|
+| the **contract** (the tag) | what is this role's authority and reply shape? | Engineer: coding tools in, a PR out; never merge |
+| a **binding** (`Layer<Role>`) | what is a round of work *here*? | issue work vs. submodule maintenance |
+| a **skill** | how is this craft done? | the reconciler pattern; live-testing discipline |
+
+## Roles
+
+Mint a named agent only when at least one of these holds: it needs
+**authority its callers must not hold** (the reviewer records
+approvals; the owner merges — never both), its charter is **fixed
+doctrine** that must not vary per dispatch, it carries **its own
+physics** callers can't hand over, or callers depend on a **typed
+result** from it. Everything else is a `spawn` with skills — task
+flavor is what skills are for.
+
+## Missions are bindings
+
+One role can be staffed with different **missions** — the same
+contract, different standing situations — because charters live on
+Layers:
+
+```typescript
+// the ROLE — one tag, one authority envelope
+export class Engineer extends AI.Agent<Engineer>()("Engineer") {}
+
+// two MISSIONS of it, defined with the desks that staff them
+export const IssueEngineer = Engineer.make(/* one issue's thread */);
+export const DistilledEngineer = Engineer.make(/* track upstream specs */);
+```
+
+Composition staffs each desk, and the kernel resolves a charter's
+`${Engineer}` mention from **that charter's own Layer graph** — so
+the issue owner's subtree provides `IssueEngineer` while another
+process provides `DistilledEngineer`, and both engineers coexist in
+one runtime:
+
+```typescript
+// services/alchemy-org/src/processes/Distilled.ts
+export const DistilledLive = Layer.effect(Distilled, /* wiring */).pipe(
+  Layer.provide(DistilledEngineer),   // staffed HERE, for this desk only
+);
+```
+
+This is the same principle as everything else in alchemy — behavior
+is a property of the binding, not the declaration — extended from
+*which model* and *which physics* to *which mission*. It also scales
+down rule density: a mission bound to a small model may carry tighter
+rules than the same role bound to a frontier one.
+
+## The authority envelope
+
+The guardrail that keeps bindings honest: **a binding may vary
+mission, skills, and model — never the authority envelope.** A
+`Layer<Engineer>` that splices `${Approve}` has betrayed the role;
+callers reasoned about "an engineer" and got a reviewer. Nothing
+type-level prevents it, but the audit still works because authority
+is visible in prose: grep the charters, per binding.
+
+## Sharing role plumbing
+
+What genuinely belongs to the role — the reply-on-evidence tool shape,
+the artifact type — lives with the tag; each mission wraps shared
+physics in its **own** inline tool, because tool prose is
+mission-specific even when the mechanics aren't:
+
+```typescript
+// the issue mission's PR tool cites "Closes #N";
+// the maintenance mission's PR tool summarizes the sync pass —
+// same OpenPullRequest physics underneath, different prose, both
+// calling AI.reply(created.pr) the moment the artifact exists.
+```
+
+Resist abstracting that duplication away: the three shared lines are
+cheaper than a false universal.

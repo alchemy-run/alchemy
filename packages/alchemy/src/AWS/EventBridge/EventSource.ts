@@ -46,7 +46,7 @@ interface EventDescriptor {
 
 /**
  * Event source connecting an EventBridge {@link EventBus} to the hosting
- * compute (Lambda function or ServerHost process). Matching events invoke
+ * compute (Lambda function or Host process). Matching events invoke
  * the host with a stream of {@link EventRecord}s.
  *
  * Use it through the {@link consumeBusEvents} helper; the host-specific

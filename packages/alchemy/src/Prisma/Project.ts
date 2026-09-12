@@ -6,7 +6,7 @@ import { Unowned } from "../AdoptPolicy.ts";
 import { createPhysicalName } from "../PhysicalName.ts";
 import * as Provider from "../Provider.ts";
 import { DEV_TIMESTAMP, devId, devProvider } from "./Internal/DevStub.ts";
-import * as ProviderLayer from "../Local/ProviderLayer.ts";
+import * as ProviderLayer from "../Dev/ProviderLayer.ts";
 import { Resource } from "../Resource.ts";
 import {
   PrismaClient,

@@ -591,42 +591,46 @@ export const GatewayResourceProvider = () =>
     }),
   });
 
-const createGatewayId = (id: string, gatewayId: string | undefined) =>
-  Effect.gen(function* () {
-    if (gatewayId) return gatewayId;
-    return yield* createPhysicalName({
-      id,
-      maxLength: 64,
-      lowercase: true,
-    });
+const createGatewayId = Effect.fn(function* (
+  id: string,
+  gatewayId: string | undefined,
+) {
+  if (gatewayId) return gatewayId;
+  return yield* createPhysicalName({
+    id,
+    maxLength: 64,
+    lowercase: true,
   });
-const desired = (id: string, props: GatewayProps | undefined) =>
-  Effect.gen(function* () {
-    return {
-      gatewayId: yield* createGatewayId(id, props?.id),
-      cacheInvalidateOnUpdate: props?.cacheInvalidateOnUpdate ?? false,
-      cacheTtl: props?.cacheTtl ?? null,
-      collectLogs: props?.collectLogs ?? true,
-      rateLimitingInterval: props?.rateLimitingInterval ?? null,
-      rateLimitingLimit: props?.rateLimitingLimit ?? null,
-      rateLimitingTechnique: props?.rateLimitingTechnique ?? "fixed",
-      // Defaults align with what Cloudflare's API returns for an
-      // unconfigured gateway, so the reconciler converges to noop
-      // when the user didn't explicitly set the field.
-      authentication: props?.authentication ?? false,
-      dlp: props?.dlp ?? undefined,
-      isDefault: props?.isDefault ?? false,
-      logManagement: props?.logManagement ?? 100_000,
-      logManagementStrategy: props?.logManagementStrategy ?? "STOP_INSERTING",
-      logpush: props?.logpush ?? false,
-      logpushPublicKey: props?.logpushPublicKey ?? undefined,
-      otel: props?.otel ?? undefined,
-      storeId: props?.storeId ?? "",
-      stripe: props?.stripe ?? undefined,
-      spendLimits: resolveSpendLimits(props?.spendLimits),
-      zdr: props?.zdr ?? false,
-    };
-  });
+});
+const desired = Effect.fn(function* (
+  id: string,
+  props: GatewayProps | undefined,
+) {
+  return {
+    gatewayId: yield* createGatewayId(id, props?.id),
+    cacheInvalidateOnUpdate: props?.cacheInvalidateOnUpdate ?? false,
+    cacheTtl: props?.cacheTtl ?? null,
+    collectLogs: props?.collectLogs ?? true,
+    rateLimitingInterval: props?.rateLimitingInterval ?? null,
+    rateLimitingLimit: props?.rateLimitingLimit ?? null,
+    rateLimitingTechnique: props?.rateLimitingTechnique ?? "fixed",
+    // Defaults align with what Cloudflare's API returns for an
+    // unconfigured gateway, so the reconciler converges to noop
+    // when the user didn't explicitly set the field.
+    authentication: props?.authentication ?? false,
+    dlp: props?.dlp ?? undefined,
+    isDefault: props?.isDefault ?? false,
+    logManagement: props?.logManagement ?? 100_000,
+    logManagementStrategy: props?.logManagementStrategy ?? "STOP_INSERTING",
+    logpush: props?.logpush ?? false,
+    logpushPublicKey: props?.logpushPublicKey ?? undefined,
+    otel: props?.otel ?? undefined,
+    storeId: props?.storeId ?? "",
+    stripe: props?.stripe ?? undefined,
+    spendLimits: resolveSpendLimits(props?.spendLimits),
+    zdr: props?.zdr ?? false,
+  };
+});
 
 // Resolve the user-facing spend limits into the API request shape: each rule's
 // `window` is decoded from an Effect `Duration.Input` (e.g. `"1 day"`) into

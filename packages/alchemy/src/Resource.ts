@@ -185,6 +185,39 @@ export const isResource = (value: any): value is ResourceLike => {
 };
 
 /**
+ * Static identity carried by an UN-YIELDED resource constructor Effect
+ * (the deferred form — `export const repo = GitHub.Repository("repo",
+ * {...})`). The Effect exposes nothing through the Effect protocol, but
+ * consumers that only need the resource's declared identity (event
+ * catalogs deriving display names, bindings resolving plain-string
+ * identity props) can read it synchronously here instead of yielding —
+ * yielding is only required to obtain the live instance.
+ */
+export interface DeferredResourceMeta<
+  Type extends string = string,
+  Props = unknown,
+> {
+  readonly Type: Type;
+  readonly LogicalId: string;
+  /** The constructor's input props — possibly unresolved `Input`s. */
+  readonly Props: Props;
+}
+
+const DeferredMeta = Symbol.for("alchemy/Resource/DeferredMeta");
+
+/**
+ * Read the {@link DeferredResourceMeta} off an un-yielded resource
+ * constructor Effect. `undefined` for anything else (a resolved
+ * instance, an arbitrary Effect, a `.ref()` Effect).
+ */
+export const deferredResourceMeta = (
+  value: unknown,
+): DeferredResourceMeta | undefined =>
+  (typeof value === "object" || typeof value === "function") && value !== null
+    ? (value as { [DeferredMeta]?: DeferredResourceMeta })[DeferredMeta]
+    : undefined;
+
+/**
  * Does `value` reference an instance of the resource type `type` —
  * either a locally-declared resource or a `Resource.ref(...)` to one?
  *
@@ -351,6 +384,17 @@ export function Resource<R extends ResourceLike>(
   type Props = Input<R["Props"]>;
   const self = Self<R>(type);
   const constructor = (
+    id: string,
+    props: Props | Effect.Effect<Props> | undefined,
+    // the returned Effect ALSO carries its static identity (see
+    // DeferredResourceMeta): the deferred form is a legal module-scope
+    // export, and catalogs/bindings can read Type/LogicalId/Props off it
+    // without yielding
+  ) =>
+    Object.assign(makeConstructorEffect(id, props), {
+      [DeferredMeta]: { Type: type, LogicalId: id, Props: props },
+    });
+  const makeConstructorEffect = (
     id: string,
     props: Props | Effect.Effect<Props> | undefined,
   ) =>
