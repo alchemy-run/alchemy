@@ -8,28 +8,31 @@ import * as S from "effect/Schema";
 import { BadRef, makeEntityLookup } from "../github/Entity.ts";
 import { connected } from "../github/Repos.ts";
 import { models } from "../platform/Model.ts";
+import { Registry } from "../registry/Registry.ts";
+import { makeSyncGitHub } from "../registry/Sync.ts";
 import { mintThreadId, Threads } from "../thread/Threads.ts";
 import { Channel } from "./Channel.ts";
 
 /**
- * The CHANNEL AGENT — the operator's hand on the control plane. It
- * runs on nothing but the operator's messages: `POST /api/channel`
- * appends the message (which mints its `seq`), then dispatches a
- * FRESH session keyed `main@<seq>` — zero standing context. The agent
- * regains whatever it needs by exploring BACKWARDS through the
- * channel with tools clamped to its pin: nothing later than the
- * message it serves exists for it.
+ * The CHANNEL AGENT — ONE persistent codemode session (`Channel:main`)
+ * for the whole org, the operator's chief of staff. Its problem is
+ * volume: more issues and pull requests than one human can track. Its
+ * memory is the REGISTRY — a durable database of entity snapshots,
+ * groups, relations, and tasks — not the event stream and not its own
+ * transcript: it syncs GitHub into the Registry, organizes there
+ * (pure bookkeeping, no side effects), DISPATCHES tasks to threads as
+ * a separate explicit act, tracks those task forces, and surfaces
+ * everything needing the human into the one channel conversation.
  *
- * It is a ROUTER and a LIBRARIAN, never a worker: it reads the
- * channel, creates and shapes threads (place messages, assign
- * issues and pulls, brief the thread's agent), and answers the operator. The
- * work itself belongs to thread agents.
+ * It never writes to the outside world. External acts — commenting,
+ * merging, closing — are PROPOSED: staged in the Registry and
+ * surfaced as approval cards the operator decides in the channel.
  *
  * CODEMODE: its tools are presented as importable functions and a
  * tick is one `eval` of the module the model writes
  * (`AI.CodeModeAsync` over the isolate loader), so a sweep like
- * "find every open dependabot PR and thread them" is one program,
- * not thirty tool calls.
+ * "sync, group the S3 fixes, and make tasks per group" is one
+ * program, not thirty tool calls.
  */
 export class ChannelAgent extends AI.Agent<ChannelAgent>(import.meta)(
   "Channel",
@@ -37,34 +40,25 @@ export class ChannelAgent extends AI.Agent<ChannelAgent>(import.meta)(
 
 /* ── vocabulary: the ontology the tools are expressions over ────── */
 
-const q = AI.Thing("q", S.String)`
-  Substring to search message text for (case-insensitive).`;
-
-const ids = AI.Thing("ids", S.Array(S.String))`
-  Channel message ids.`;
-
 const threadId = AI.Thing("thread", S.String)`
   A thread id (t-…).`;
 
 const name = AI.Thing("name", S.String)`
   The thread's short handle for the rail — lowercase, hyphenated,
   2-4 words, and CONTEXTUAL: it names the substance of the work as
-  you found it by reading, not the surface of one reference. Five
-  pulls whose commit prefix says "fix(cloudflare)" but whose bodies
-  are all about container images are "container-image-fixes", not
-  "cloudflare-fixes"; one issue about a Durable Object hanging on
-  init is "do-init-hang". Never a generic bucket ("misc-fixes",
-  "pr-review"), never an author's login, never a bare number.`;
+  you found it by reading, not the surface of one reference.`;
 
 const title = AI.Thing("title", S.String)`
-  One line — what the task is about, in plain words, specific enough
-  that someone reading only the rail knows what the thread does.`;
+  One line — what it is about, in plain words.`;
 
 const text = AI.Thing("text", S.String)`
   The text, complete and self-contained. Markdown.`;
 
 const ref = AI.Thing("ref", S.String)`
   A GitHub issue or pull request, fully qualified — "owner/repo#832".`;
+
+const refs = AI.Thing("refs", S.Array(S.String))`
+  GitHub refs, each fully qualified ("owner/repo#N").`;
 
 const kind = AI.Thing("kind", S.Literals(["issue", "pull"]))`
   What the ref is.`;
@@ -78,31 +72,102 @@ const repo = AI.Thing("repo", S.String)`
 const number = AI.Thing("number", S.Int)`
   An issue or pull request number.`;
 
-const limit = AI.Thing("limit", S.optionalKey(S.Int))`
-  Most rows to answer (default 50).`;
-
-const before = AI.Thing("before", S.optionalKey(S.Int))`
-  A message seq — only rows at or before it.`;
-
-/** One channel message, as every reading tool answers it. */
-const Message = S.Struct({
-  id: S.String,
-  seq: S.Int,
-  at: S.Number,
-  kind: S.Literals(["event", "user", "agent", "card"]),
-  author: S.UndefinedOr(S.Struct({ login: S.String })),
-  text: S.String,
-  repo: S.optionalKey(S.String),
-  ref: S.optionalKey(S.String),
-  event: S.optionalKey(S.String),
-  thread: S.optionalKey(S.String),
+/** One Registry entity snapshot, as query_entities answers it. */
+const Entity = S.Struct({
+  ref: S.String,
+  kind: S.Literals(["issue", "pull"]),
+  state: S.Literals(["open", "closed", "merged", "draft"]),
+  title: S.String,
+  author: S.optionalKey(S.String),
+  labels: S.Array(S.String),
+  headRef: S.optionalKey(S.String),
+  baseRef: S.optionalKey(S.String),
+  updatedAt: S.Number,
 });
 
-const hits = AI.Thing("hits", S.Array(Message))`
-  The matching channel messages, newest first.`;
+const entities = AI.Thing("entities", S.Array(Entity))`
+  Registry snapshots of GitHub entities, most recently updated first.`;
 
-const messages = AI.Thing("messages", S.Array(Message))`
-  Channel messages, oldest first.`;
+const entityFilter = AI.Thing(
+  "filter",
+  S.Struct({
+    kind: S.optionalKey(S.Literals(["issue", "pull"])),
+    state: S.optionalKey(S.Literals(["open", "closed", "merged", "draft"])),
+    label: S.optionalKey(S.String),
+    group: S.optionalKey(S.String),
+    unorganized: S.optionalKey(S.Boolean),
+    q: S.optionalKey(S.String),
+    limit: S.optionalKey(S.Int),
+  }),
+)`
+  What to select: by kind, state, label, group (id or name),
+  unorganized (in NO group and NO task — the triage tray), or a
+  substring over ref+title.`;
+
+const groupName = AI.Thing("group", S.String)`
+  A group, by id (g-…) or by its unique name.`;
+
+const purpose = AI.Thing("purpose", S.optionalKey(S.String))`
+  Why the group exists — one line.`;
+
+const Group = S.Struct({
+  id: S.String,
+  name: S.String,
+  purpose: S.optionalKey(S.String),
+  refs: S.Array(S.String),
+});
+
+const group = AI.Thing("group", Group)`
+  The group: id, name, purpose, member refs.`;
+
+const relationKind = AI.Thing(
+  "kind",
+  S.Literals(["fixes", "duplicates", "depends_on", "relates_to", "supersedes"]),
+)`
+  How src relates to dst.`;
+
+const src = AI.Thing("src", S.String)`
+  The relation's source ref ("owner/repo#N").`;
+
+const dst = AI.Thing("dst", S.String)`
+  The relation's destination ref ("owner/repo#N").`;
+
+const note = AI.Thing("note", S.optionalKey(S.String))`
+  Why — one line, optional.`;
+
+const taskId = AI.Thing("task", S.String)`
+  A task id (task-…).`;
+
+const taskGroup = AI.Thing("group", S.optionalKey(S.String))`
+  The group (id or name) the task belongs to, optional.`;
+
+const optStatus = AI.Thing(
+  "status",
+  S.optionalKey(S.Literals(["todo", "dispatched", "in_review", "blocked", "done"])),
+)`
+  Move the task to this kanban column, optional.`;
+
+const optTitle = AI.Thing("title", S.optionalKey(S.String))`
+  A new title, optional.`;
+
+const optRefs = AI.Thing("refs", S.optionalKey(S.Array(S.String)))`
+  Replacement refs (the full new set), optional.`;
+
+const Task = S.Struct({
+  id: S.String,
+  title: S.String,
+  status: S.Literals(["todo", "dispatched", "in_review", "blocked", "done"]),
+  groupId: S.optionalKey(S.String),
+  threadId: S.optionalKey(S.String),
+  note: S.optionalKey(S.String),
+  refs: S.Array(S.String),
+});
+
+const task = AI.Thing("task", Task)`
+  The task: id, title, status, refs, its group and thread when linked.`;
+
+const tasks = AI.Thing("tasks", S.Array(Task))`
+  Tasks, most recently updated first.`;
 
 /** A thread, as the directory and the state tools answer it. */
 const ThreadSummary = S.Struct({
@@ -140,9 +205,8 @@ const state = AI.Thing(
     members: S.Array(S.String),
   }),
 )`
-  One thread's full state: what is assigned to it (the GitHub issues
-  and pulls it governs), its subagents, and the channel message ids placed on it
-  (members).`;
+  One thread's full state: what is assigned to it, its subagents, and
+  the channel message ids placed on it (members).`;
 
 const Thread = AI.Thing("thread", ThreadSummary)`
   A thread: id, name, title, status, whose turn.`;
@@ -176,9 +240,31 @@ const files = AI.Thing(
     }),
   ),
 )`
-  The files the pull request changes (first 100): path, status
-  (added/modified/removed/renamed), +/− line counts. The paths are
-  what a pull is ABOUT — read them before you name its thread.`;
+  The files the pull request changes (first 100): path, status,
+  +/− line counts. The paths are what a pull is ABOUT.`;
+
+const synced = AI.Thing(
+  "synced",
+  S.Struct({ pulls: S.Int, issues: S.Int, closedOut: S.Int }),
+)`
+  What the sweep reconciled: open pulls, open issues, and rows GitHub
+  no longer lists as open (flipped closed in the Registry).`;
+
+const approvalId = AI.Thing("approval", S.String)`
+  The staged approval's id (appr-…) — the operator decides it on the
+  card in the channel.`;
+
+const gatedFlag = AI.Thing("gated", S.Boolean)`
+  true = the kind stages an approval; false = it acts directly.`;
+
+const policyKind = AI.Thing(
+  "kind",
+  S.Literals(["comment", "push", "open_pull", "merge", "close"]),
+)`
+  The action kind the policy governs.`;
+
+const reason = AI.Thing("reason", S.optionalKey(S.String))`
+  Why — one line, optional.`;
 
 /* ── declared failures ──────────────────────────────────────────── */
 
@@ -186,20 +272,10 @@ class UnknownRepo extends Data.TaggedError("UnknownRepo")<{
   message: string;
 }> {}
 class NotFound extends Data.TaggedError("NotFound")<{ message: string }> {}
+class SyncFailed extends Data.TaggedError("SyncFailed")<{ message: string }> {}
 
-/** The channel's session name as the API addresses it — the standing
- *  identity behind every `main@<seq>` run (`Channel:main`): what the
- *  model selector picks for. */
+/** The one persistent session's key — `Channel:main`. */
 export const CHANNEL_SESSION_KEY = "main";
-
-/** `main@<seq>` — the run's pin rides in its session key. */
-export const channelRunKey = (seq: number): string =>
-  `${CHANNEL_SESSION_KEY}@${seq}`;
-
-const pinnedOf = (key: string): number => {
-  const seq = Number(key.split("@")[1]);
-  return Number.isFinite(seq) ? seq : Number.MAX_SAFE_INTEGER;
-};
 
 /**
  * The channel agent over CODEMODE: tools are importable functions, a
@@ -209,13 +285,10 @@ export const ChannelAgentLive = ChannelAgent.make(
   Effect.gen(function* () {
     const channel = yield* Channel;
     const threads = yield* Threads;
-    // the run's PIN rides in its session key (`main@<seq>`) — read from
-    // the frame by the tool or turn that needs it; the charter itself
-    // runs once at build, for every run
-    const pinned = Effect.map(AI.Thread, (thread) => pinnedOf(thread.key));
-    // the operator's model pick lives on the channel (the one thing a
-    // run does not start fresh from) — read once as the run's stance is
-    // provided, so a pick made between runs governs the next one
+    const registry = yield* Registry;
+    const syncGitHub = yield* makeSyncGitHub;
+    // the operator's model pick lives on the channel; read as the
+    // stance is provided, so a pick governs the next sampling
     const getModel = yield* models;
 
     // one GitHub read client per connected repository
@@ -246,165 +319,52 @@ export const ChannelAgentLive = ChannelAgent.make(
       );
     });
 
-    const searchMessages = yield* AI.Tool("search_messages")`
-      Search the channel for messages matching ${q} — newest first, at
-      most ${limit}, clamped to what existed when your message was
-      sent. Answers ${AI.out(hits)}.`(
-      Effect.fn(function* (p: { q: string; limit?: number }) {
+    /* ── GitHub: sync + fresh reads ─────────────────────────────── */
+
+    const syncTool = yield* AI.Tool("sync_github")`
+      Reconcile the Registry with GitHub: every open pull and issue of
+      the connected repositories is upserted, rows GitHub no longer
+      lists as open are closed out. Answers ${AI.out(synced)}; fails
+      with ${SyncFailed} when GitHub does. Run it when the operator
+      asks for a sweep, when the Registry looks stale, and before
+      organizing work you have not looked at recently — queries read
+      the Registry, and the Registry only knows what was synced.`(
+      Effect.fn(function* () {
         return {
-          hits: yield* channel.search({
-            q: p.q,
-            before: yield* pinned,
-            limit: p.limit,
-          }),
+          synced: yield* syncGitHub().pipe(
+            Effect.mapError(
+              (error) => new SyncFailed({ message: String(error) }),
+            ),
+          ),
         };
       }),
     );
 
-    const readHistory = yield* AI.Tool("read_history")`
-      Read the channel BACKWARDS from your pin — answers the most
-      recent ${AI.out(messages)} at or before your own. Use ${before}
-      to page further back, ${limit} to size the page.`(
-      Effect.fn(function* (p: { before?: number; limit?: number }) {
-        const pin = yield* pinned;
-        const upTo = Math.min(p.before ?? pin, pin);
-        const size = Math.min(p.limit ?? 50, 200);
-        const page = yield* channel.page({
-          after: Math.max(0, upTo - size),
-          limit: size,
-        });
-        return { messages: page.items };
-      }),
-    );
-
-    const readMessages = yield* AI.Tool("read_messages")`
-      Read the messages named by ${ids} — answers ${AI.out(messages)},
-      full rows in that order, clamped to your pin.`(
-      Effect.fn(function* (p: { ids: ReadonlyArray<string> }) {
-        const pin = yield* pinned;
-        const rows = yield* channel.read(p.ids);
-        return { messages: rows.filter((row) => row.seq <= pin) };
-      }),
-    );
-
-    const listThreads = yield* AI.Tool("list_threads")`
-      The org's thread directory — answers ${AI.out(threadSummaries)}.`(
-      Effect.fn(function* () {
-        return { threads: yield* channel.directory() };
-      }),
-    );
-
-    const readThread = yield* AI.Tool("read_thread")`
-      Read thread ${threadId} — answers its full ${AI.out(state)}.
-      Fails with ${NotFound} for an id the directory does not know.`(
-      Effect.fn(function* (p: { thread: string }) {
-        const found = yield* threads.get(p.thread);
-        if (found === undefined) {
-          return yield* Effect.fail(
-            new NotFound({ message: `no thread ${p.thread}` }),
-          );
-        }
-        return { state: found };
-      }),
-    );
-
-    const createThread = yield* AI.Tool("create_thread")`
-      Create a thread — a task with its own agent, sandbox, and
-      conversation: ${name}, ${title}. Answers the ${AI.out(Thread)}.
-      Call it only AFTER you have read what the thread is about
-      (read_pull / read_issue on every reference): the name and title
-      come from what the work actually is, and you cannot know that
-      from event one-liners. A thread is a shell until you fill it: in
-      the same run, assign every issue and pull request it is about
-      (assign), place the channel messages that led to it
-      (place_messages), then brief its agent (brief_thread).`(
-      Effect.fn(function* (p: { name: string; title: string }) {
-        const thread = yield* threads.create({
-          id: mintThreadId(p.name),
-          name: p.name,
-          title: p.title,
-        });
-        return { thread };
-      }),
-    );
-
-    const placeMessages = yield* AI.Tool("place_messages")`
-      Place channel messages ${ids} into ${threadId} — retroactive
-      curation: the rows stay in the channel, tagged; the thread's view
-      shows them, and the thread's agent hears them as said (author,
-      time, text) — place the operator's words rather than restating
-      them in a brief. Idempotent.`(
-      Effect.fn(function* (p: { thread: string; ids: ReadonlyArray<string> }) {
-        yield* threads.place(p.thread, p.ids);
-      }),
-    );
-
-    // an assignment is VERIFIED against GitHub, never taken on the model's word
-    const lookup = yield* makeEntityLookup;
-
-    const assign = yield* AI.Tool("assign")`
-      Assign ${ref} to ${threadId} — the thread governs it from
-      now on: its events route there. The ref is looked up on GitHub;
-      answers ${AI.out(kind, entityTitle)} as GitHub has them. Fails
-      with ${BadRef} when the ref is not "owner/repo#N", names a
-      repository that is not connected, or does not exist — copy refs
-      from the channel's links, never derive them from an author's login.`(
-      Effect.fn(function* (p: { thread: string; ref: string }) {
-        const entity = yield* lookup(p.ref);
-        // the thread tells its agent (quietly — the brief that follows
-        // wakes it, with the assignment already in its inbox)
-        yield* threads.assign(p.thread, [entity]);
-        return { kind: entity.kind, title: entity.title };
-      }),
-    );
-
-    const unassign = yield* AI.Tool("unassign")`
-      Unassign ${ref} from ${threadId}.`(
-      Effect.fn(function* (p: { thread: string; ref: string }) {
-        yield* threads.unassign(p.thread, p.ref);
-      }),
-    );
-
-    const briefThread = yield* AI.Tool("brief_thread")`
-      Send ${text} to ${threadId}'s agent — the brief that starts its
-      work, a steer, the operator's instruction relayed. Name every
-      issue and pull request in it fully qualified ("owner/repo#832", as
-      assigned),
-      never a bare "#832". Fire and forget; its work shows up in the
-      thread.`(
-      Effect.fn(function* (p: { thread: string; text: string }) {
-        yield* threads.brief(p.thread, p.text);
-      }),
-    );
-
-    const renameThread = yield* AI.Tool("rename_thread")`
-      Rename ${threadId}: a new ${title} (and optionally a new name)
-      when the old one misnames the work.`(
+    const queryEntities = yield* AI.Tool("query_entities")`
+      Query the Registry's entity snapshots by ${entityFilter} —
+      answers ${AI.out(entities)}. This is YOUR view of GitHub: cheap,
+      local, as fresh as the last sync. \`unorganized: true\` is the
+      triage tray — everything not yet in any group or task.`(
       Effect.fn(function* (p: {
-        thread: string;
-        title: string;
-        name?: string;
+        filter: {
+          kind?: "issue" | "pull";
+          state?: "open" | "closed" | "merged" | "draft";
+          label?: string;
+          group?: string;
+          unorganized?: boolean;
+          q?: string;
+          limit?: number;
+        };
       }) {
-        yield* threads.rename(p.thread, {
-          title: p.title,
-          ...(p.name === undefined ? {} : { name: p.name }),
-        });
-      }),
-    );
-
-    const closeThread = yield* AI.Tool("close_thread")`
-      Close ${threadId} — bookkeeping only; make sure its work already
-      landed on GitHub.`(
-      Effect.fn(function* (p: { thread: string }) {
-        yield* threads.close(p.thread);
+        return { entities: yield* registry.queryEntities(p.filter) };
       }),
     );
 
     const readIssue = yield* AI.Tool("read_issue")`
       Read ${repo}'s issue ${number} fresh from GitHub —
-      answers with ${AI.out(entityTitle, issueState, body, author)}. 
-      Fails with ${UnknownRepo} for a repository the org is not connected to,
-    ${NotFound} when the issue does not exist.`(
+      answers with ${AI.out(entityTitle, issueState, body, author)}.
+      Fails with ${UnknownRepo} for a repository the org is not
+      connected to, ${NotFound} when the issue does not exist.`(
       Effect.fn(function* (p: { repo: string; number: number }) {
         const client = yield* repoOf(p.repo);
         const issue = yield* client
@@ -463,9 +423,324 @@ export const ChannelAgentLive = ChannelAgent.make(
       }),
     );
 
+    /* ── organize: pure Registry writes, NO side effects ────────── */
+
+    const createGroup = yield* AI.Tool("create_group")`
+      Create a group named ${name} (${purpose}), optionally seeded
+      with ${refs} — answers the ${AI.out(group)}. Groups are pure
+      organization: nothing on GitHub or in any thread changes.
+      Idempotent on the name.`(
+      Effect.fn(function* (p: {
+        name: string;
+        purpose?: string;
+        refs?: ReadonlyArray<string>;
+      }) {
+        return { group: yield* registry.createGroup(p) };
+      }),
+    );
+
+    const addToGroup = yield* AI.Tool("add_to_group")`
+      Add ${refs} to ${groupName} — answers the ${AI.out(group)}.
+      Fails with ${NotFound} for a group the Registry does not know.`(
+      Effect.fn(function* (p: { group: string; refs: ReadonlyArray<string> }) {
+        const next = yield* registry.addToGroup(p.group, p.refs);
+        if (next === undefined) {
+          return yield* Effect.fail(
+            new NotFound({ message: `no group ${p.group}` }),
+          );
+        }
+        return { group: next };
+      }),
+    );
+
+    const removeFromGroup = yield* AI.Tool("remove_from_group")`
+      Remove ${refs} from ${groupName} — answers the ${AI.out(group)}.
+      Fails with ${NotFound} for a group the Registry does not know.`(
+      Effect.fn(function* (p: { group: string; refs: ReadonlyArray<string> }) {
+        const next = yield* registry.removeFromGroup(p.group, p.refs);
+        if (next === undefined) {
+          return yield* Effect.fail(
+            new NotFound({ message: `no group ${p.group}` }),
+          );
+        }
+        return { group: next };
+      }),
+    );
+
+    const relate = yield* AI.Tool("relate")`
+      Record that ${src} ${relationKind} ${dst} (${note}) — a typed
+      edge in the Registry, how cross-references are remembered
+      ("fixes #830" in a pull's body becomes pull fixes issue).
+      Idempotent.`(
+      Effect.fn(function* (p: {
+        src: string;
+        kind: "fixes" | "duplicates" | "depends_on" | "relates_to" | "supersedes";
+        dst: string;
+        note?: string;
+      }) {
+        yield* registry.relate(p);
+      }),
+    );
+
+    const createTask = yield* AI.Tool("create_task")`
+      Create a task titled ${title} covering ${refs} (optionally in
+      ${taskGroup}, with ${note}) — answers the ${AI.out(task)}. A
+      task is a unit of dispatchable work on the board; creating one
+      dispatches NOTHING.`(
+      Effect.fn(function* (p: {
+        title: string;
+        refs?: ReadonlyArray<string>;
+        group?: string;
+        note?: string;
+      }) {
+        return {
+          task: yield* registry.createTask({
+            title: p.title,
+            ...(p.refs === undefined ? {} : { refs: p.refs }),
+            ...(p.group === undefined ? {} : { groupId: p.group }),
+            ...(p.note === undefined ? {} : { note: p.note }),
+          }),
+        };
+      }),
+    );
+
+    const updateTask = yield* AI.Tool("update_task")`
+      Update ${taskId}: ${optStatus}, a new ${optTitle}, ${note}, or
+      replacement ${optRefs}. Answers the ${AI.out(task)}. Fails with
+      ${NotFound} for an unknown task.`(
+      Effect.fn(function* (p: {
+        task: string;
+        status?: "todo" | "dispatched" | "in_review" | "blocked" | "done";
+        title?: string;
+        note?: string;
+        refs?: ReadonlyArray<string>;
+      }) {
+        const next = yield* registry.updateTask(p.task, p);
+        if (next === undefined) {
+          return yield* Effect.fail(
+            new NotFound({ message: `no task ${p.task}` }),
+          );
+        }
+        return { task: next };
+      }),
+    );
+
+    const listTasks = yield* AI.Tool("list_tasks")`
+      The board's tasks — answers ${AI.out(tasks)}.`(
+      Effect.fn(function* () {
+        const board = yield* registry.board();
+        return { tasks: board.tasks };
+      }),
+    );
+
+    /* ── dispatch: the explicit, separate act ───────────────────── */
+
+    // an assignment is VERIFIED against GitHub, never taken on the
+    // model's word
+    const lookup = yield* makeEntityLookup;
+
+    const dispatchTask = yield* AI.Tool("dispatch_task")`
+      DISPATCH ${taskId}: create a thread (${name}, ${title}), assign
+      the task's refs to it (each verified against GitHub), brief its
+      agent with ${text}, and link the thread back onto the task
+      (status becomes dispatched). Answers the ${AI.out(Thread)}.
+      Fails with ${NotFound} for an unknown task, ${BadRef} when a
+      ref does not resolve on GitHub. Dispatch is the ONLY way
+      organizing turns into work — never dispatch what the operator
+      has not asked (or agreed) to start.`(
+      Effect.fn(function* (p: {
+        task: string;
+        name: string;
+        title: string;
+        text: string;
+      }) {
+        const found = yield* registry
+          .board()
+          .pipe(
+            Effect.map((board) =>
+              board.tasks.find((entry) => entry.id === p.task),
+            ),
+          );
+        if (found === undefined) {
+          return yield* Effect.fail(
+            new NotFound({ message: `no task ${p.task}` }),
+          );
+        }
+        const thread = yield* threads.create({
+          id: mintThreadId(p.name),
+          name: p.name,
+          title: p.title,
+        });
+        for (const taskRef of found.refs) {
+          const entity = yield* lookup(taskRef);
+          yield* threads.assign(thread.id, [entity]);
+        }
+        yield* threads.brief(thread.id, p.text);
+        yield* registry.linkThread(p.task, thread.id);
+        return {
+          thread: {
+            id: thread.id,
+            name: thread.name,
+            title: thread.title,
+            status: thread.status,
+            turn: thread.turn,
+          },
+        };
+      }),
+    );
+
+    /* ── threads: the task forces ───────────────────────────────── */
+
+    const listThreads = yield* AI.Tool("list_threads")`
+      The org's thread directory — answers ${AI.out(threadSummaries)}.`(
+      Effect.fn(function* () {
+        return { threads: yield* channel.directory() };
+      }),
+    );
+
+    const readThread = yield* AI.Tool("read_thread")`
+      Read thread ${threadId} — answers its full ${AI.out(state)}.
+      Fails with ${NotFound} for an id the directory does not know.`(
+      Effect.fn(function* (p: { thread: string }) {
+        const found = yield* threads.get(p.thread);
+        if (found === undefined) {
+          return yield* Effect.fail(
+            new NotFound({ message: `no thread ${p.thread}` }),
+          );
+        }
+        return { state: found };
+      }),
+    );
+
+    const assign = yield* AI.Tool("assign")`
+      Assign ${ref} to ${threadId} — the thread governs it from now
+      on. The ref is looked up on GitHub; answers
+      ${AI.out(kind, entityTitle)} as GitHub has them. Fails with
+      ${BadRef} when the ref is not "owner/repo#N", names a repository
+      that is not connected, or does not exist.`(
+      Effect.fn(function* (p: { thread: string; ref: string }) {
+        const entity = yield* lookup(p.ref);
+        yield* threads.assign(p.thread, [entity]);
+        return { kind: entity.kind, title: entity.title };
+      }),
+    );
+
+    const unassign = yield* AI.Tool("unassign")`
+      Unassign ${ref} from ${threadId}.`(
+      Effect.fn(function* (p: { thread: string; ref: string }) {
+        yield* threads.unassign(p.thread, p.ref);
+      }),
+    );
+
+    const briefThread = yield* AI.Tool("brief_thread")`
+      Send ${text} to ${threadId}'s agent — a steer, the operator's
+      instruction relayed, or your follow-up on its progress. Name
+      every issue and pull request fully qualified ("owner/repo#832"),
+      never a bare "#832". Fire and forget.`(
+      Effect.fn(function* (p: { thread: string; text: string }) {
+        yield* threads.brief(p.thread, p.text);
+      }),
+    );
+
+    const closeThread = yield* AI.Tool("close_thread")`
+      Close ${threadId} — bookkeeping only; make sure its work already
+      landed on GitHub. Move its task to done first (update_task).`(
+      Effect.fn(function* (p: { thread: string }) {
+        yield* threads.close(p.thread);
+      }),
+    );
+
+    /* ── proposals: external writes, staged for the human ───────── */
+
+    const proposeComment = yield* AI.Tool("propose_comment")`
+      PROPOSE commenting on ${ref} with ${body} — stages an approval
+      card in the channel; nothing lands on GitHub until the operator
+      approves it there. Answers ${AI.out(approvalId)}.`(
+      Effect.fn(function* (p: { ref: string; body: string }) {
+        const approval = yield* registry.stageApproval({
+          kind: "comment",
+          summary: `comment on ${p.ref}`,
+          payload: { kind: "comment", ref: p.ref, body: p.body },
+          stager: { term: "Channel", key: CHANNEL_SESSION_KEY },
+        });
+        const card = yield* channel.append({
+          kind: "card",
+          text: p.body,
+          card: {
+            title: `Approve: comment on ${p.ref}`,
+            approval: { id: approval.id, kind: "comment" },
+          },
+        });
+        yield* registry.attachApprovalCard(approval.id, card.id);
+        return { approval: approval.id };
+      }),
+    );
+
+    const proposeMerge = yield* AI.Tool("propose_merge")`
+      PROPOSE merging pull request ${ref} — stages an approval card;
+      the merge happens only when the operator approves it. Answers
+      ${AI.out(approvalId)}. Propose a merge only when the pull is
+      green and reviewed, and say why in the card.`(
+      Effect.fn(function* (p: { ref: string; reason?: string }) {
+        const approval = yield* registry.stageApproval({
+          kind: "merge",
+          summary: `merge ${p.ref}`,
+          payload: { kind: "merge", ref: p.ref },
+          stager: { term: "Channel", key: CHANNEL_SESSION_KEY },
+        });
+        const card = yield* channel.append({
+          kind: "card",
+          text: p.reason ?? `Merge ${p.ref}.`,
+          card: {
+            title: `Approve: merge ${p.ref}`,
+            approval: { id: approval.id, kind: "merge" },
+          },
+        });
+        yield* registry.attachApprovalCard(approval.id, card.id);
+        return { approval: approval.id };
+      }),
+    );
+
+    const proposeClose = yield* AI.Tool("propose_close")`
+      PROPOSE closing ${ref} (${reason}) — stages an approval card;
+      the close happens only when the operator approves it. Answers
+      ${AI.out(approvalId)}.`(
+      Effect.fn(function* (p: { ref: string; reason?: string }) {
+        const approval = yield* registry.stageApproval({
+          kind: "close",
+          summary: `close ${p.ref}`,
+          payload: { kind: "close", ref: p.ref, ...(p.reason === undefined ? {} : { reason: p.reason }) },
+          stager: { term: "Channel", key: CHANNEL_SESSION_KEY },
+        });
+        const card = yield* channel.append({
+          kind: "card",
+          text: p.reason ?? `Close ${p.ref}.`,
+          card: {
+            title: `Approve: close ${p.ref}`,
+            approval: { id: approval.id, kind: "close" },
+          },
+        });
+        yield* registry.attachApprovalCard(approval.id, card.id);
+        return { approval: approval.id };
+      }),
+    );
+
+    const setPolicy = yield* AI.Tool("set_policy")`
+      Set the gate for ${policyKind} to ${gatedFlag} — the policy
+      governing whether that action kind stages an approval (true) or
+      acts directly (false). Change it ONLY when the operator says so,
+      and repeat back what you changed.`(
+      Effect.fn(function* (p: {
+        kind: "comment" | "push" | "open_pull" | "merge" | "close";
+        gated: boolean;
+      }) {
+        yield* registry.setPolicy(p.kind, p.gated);
+      }),
+    );
+
     const sendReply = yield* AI.Tool("send_reply")`
       Answer the operator in the channel with ${text} — your ONE
-      user-visible output. Call it exactly once per run, last.`(
+      user-visible output. Call it exactly once per round, last.`(
       Effect.fn(function* (p: { text: string }) {
         yield* channel.append({
           kind: "agent",
@@ -474,61 +749,61 @@ export const ChannelAgentLive = ChannelAgent.make(
       }),
     );
 
-    // ── the STANCE: STATIC per run — never splice mutable state (the
-    // thread directory, counts, clocks) into it: a stance that changes
-    // between samplings busts the provider's prompt cache on every
-    // call. The pin is the run's constant; ${listThreads} answers the
-    // directory.
+    // ── the STANCE: STATIC — never splice mutable state (counts,
+    // clocks, directories) into it: a stance that changes between
+    // samplings busts the provider's prompt cache on every call.
     return AI.fragment`
-      You are the org's CHANNEL — the operator's single point of
-      control over their GitHub repositories. You run with ZERO
-      standing context: this session serves exactly one operator
-      message, pinned at seq ${pinned}; regain whatever you
-      need by reading BACKWARDS (${readHistory}, ${searchMessages},
-      ${readMessages}) — nothing after your pin exists for you.
+      You are the org's CHANNEL AGENT — one persistent session, the
+      operator's chief of staff over their GitHub repositories. The
+      operator's problem is VOLUME: more issues and pull requests than
+      one person can track. Your job: keep the whole picture organized
+      in the REGISTRY, dispatch task forces, track them, and surface
+      exactly what needs the human — so the operator never has to
+      leave this conversation.
 
-      You are a router and librarian, never a worker. Work belongs to
-      THREADS: ${listThreads} is the directory — read it before you
-      route. ${createThread} makes one, ${placeMessages} curates
-      channel messages into it (retroactively — that is normal),
-      ${assign} gives it the issues and pull requests it governs, and
-      ${briefThread} starts or steers its agent. Read the world with
-      ${readThread}, ${readIssue}, ${readPull}. Reshape with
-      ${renameThread}, ${unassign}, ${closeThread}.
+      THE REGISTRY IS YOUR MEMORY, not your transcript and not the
+      event stream. ${syncTool} reconciles it with GitHub (GitHub is
+      the source of truth for entities; sync before organizing
+      anything you have not looked at recently). ${queryEntities} is
+      how you see: filters over the snapshots, including the triage
+      tray (unorganized: true) of everything not yet organized. For
+      depth on one entity, read it fresh: ${readIssue}, ${readPull}.
 
-      READ BEFORE YOU ROUTE. A channel event is a one-liner — an
-      author, a verb, a title; it is not the work. Before you name a
-      thread, brief an agent, or answer a question about a pull or an
-      issue, read every one the messages reference, fully, with
-      ${readPull} / ${readIssue}: the body, the branches, the state,
-      what it changes and why. Then read what THOSE reference — a pull
-      that says "fixes #830" means #830 is part of the task too. In
-      codemode this is one program: collect the refs, read them all,
-      then decide. Only once you know what the set of changes is
-      actually about do you choose a name and title — for the substance
-      (five pulls all reworking container image publication are a
-      container thread, whatever their commit prefixes say), never for
-      a surface feature like a shared scope or an author. The brief you
-      send carries that understanding: what each item is, how they
-      relate, what the operator wants done with them.
+      ORGANIZE in the Registry — ${createGroup}, ${addToGroup},
+      ${removeFromGroup}, ${relate}, ${createTask}, ${updateTask},
+      ${listTasks}. Organizing is pure bookkeeping: it never touches
+      GitHub, never starts work, and the operator sees it on the
+      board. Do it continuously and confidently — this is how you keep
+      up with the volume on the operator's behalf.
 
-      A thread is NOT DONE until its record is complete. Every issue or
-      pull request the task concerns — the one the operator pointed at,
-      the ones the messages you placed link to — is assigned with
-      ${assign} before you reply; an unassigned issue or pull has no
-      review tab, and its GitHub events route nowhere. Creating a thread
-      without assigning what it is about is the single most common
-      mistake — do not make it.
+      DISPATCH is the separate, explicit act: ${dispatchTask} turns
+      ONE task into ONE thread (a task force with its own agent,
+      machine, and conversation) and links them. Never dispatch work
+      the operator has not asked for or agreed to. Steer and track
+      the forces with ${listThreads}, ${readThread}, ${briefThread},
+      ${assign}, ${unassign}, ${closeThread}. Their questions arrive
+      in your context as [card] notes — relay what matters to the
+      operator, answer what you can yourself.
 
-      Every run ENDS with exactly one ${sendReply} — short, factual,
-      what you did and where it lives. Name every issue and pull request
-      you mention as a full markdown link to its GitHub URL
+      YOU NEVER WRITE TO THE OUTSIDE WORLD. Commenting on GitHub,
+      merging, closing — you PROPOSE (${proposeComment},
+      ${proposeMerge}, ${proposeClose}): each stages an approval card
+      in this channel that the operator decides. The decision comes
+      back to you as a note; act on the outcome. ${setPolicy} loosens
+      or tightens the gates, only on the operator's word.
+
+      Every round that the operator's message started ENDS with
+      exactly one ${sendReply} — short, factual, what you did and
+      what needs them. Name every issue and pull request as a full
+      markdown link to its GitHub URL
       ("[owner/repo#832](https://github.com/owner/repo/pull/832)" —
-      /issues/ for issues), never a bare "#832" or a plain ref: the
-      channel renders those links with a hover card, and the operator
-      follows them. Name the thread you created or steered by its id.
-      If the ask is ambiguous, reply with the question instead of
-      guessing.`.pipe(
+      /issues/ for issues), never a bare "#832". If the ask is
+      ambiguous, reply with the question instead of guessing.
+
+      Your transcript grows forever; the Registry does not forget.
+      After a large sweep, prefer compacting your own context over
+      re-reading it — anything worth remembering belongs in the
+      Registry, not in the transcript.`.pipe(
       Effect.provide(
         // suspended: the facade resolves the DO stub as the call is
         // made, and the charter runs at plan time where no binding exists

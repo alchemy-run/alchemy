@@ -1,9 +1,12 @@
 import * as GitHub from "alchemy/GitHub";
+import * as Clock from "effect/Clock";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import { connected } from "../github/Repos.ts";
+import { Registry } from "../registry/Registry.ts";
+import { entityOfEvent } from "../registry/Sync.ts";
 import { Threads } from "../thread/Threads.ts";
 import { Channel } from "./Channel.ts";
 
@@ -29,6 +32,7 @@ export const ChannelEvents = Layer.effectDiscard(
   Effect.gen(function* () {
     const channel = yield* Channel;
     const threads = yield* Threads;
+    const registry = yield* Registry;
     const secret = yield* Config.option(
       Config.Redacted("GITHUB_WEBHOOK_SECRET"),
     );
@@ -59,7 +63,23 @@ export const ChannelEvents = Layer.effectDiscard(
           },
           Effect.fn(function* (event) {
             const { duplicate, owner } = yield* channel.deliver(event);
-            if (duplicate || owner === undefined) return;
+            if (duplicate) return;
+            // the Registry stays warm from the same delivery — the
+            // incremental sync path (a full sweep is the agent's act)
+            const entity = entityOfEvent(
+              event,
+              yield* Clock.currentTimeMillis,
+            );
+            if (entity !== undefined) {
+              yield* registry
+                .upsertEntities([entity])
+                .pipe(
+                  Effect.catchCause((cause) =>
+                    Effect.logWarning("registry upsert failed", cause),
+                  ),
+                );
+            }
+            if (owner === undefined) return;
             // the owning thread: entity state converges and its agent
             // hears the event (the thread tells it) — a routing failure
             // never costs the channel its row (deliver already committed)

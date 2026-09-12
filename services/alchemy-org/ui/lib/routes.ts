@@ -20,6 +20,7 @@ export type ThreadTab =
 
 export type Route =
   | { kind: "channel" }
+  | { kind: "board" }
   | { kind: "thread"; id: string; tab: ThreadTab };
 
 /** A path segment — only characters a path can't carry get escaped,
@@ -36,6 +37,8 @@ const decode = (part: string): string => {
 };
 
 export const CHANNEL_PATH = "/";
+
+export const BOARD_PATH = "/board";
 
 export const threadPath = (id: string): string => `/threads/${segment(id)}`;
 
@@ -55,6 +58,7 @@ export const agentPath = (id: string, key: string): string =>
 
 export const pathOf = (route: Route): string => {
   if (route.kind === "channel") return CHANNEL_PATH;
+  if (route.kind === "board") return BOARD_PATH;
   switch (route.tab.kind) {
     case "chat":
       return threadPath(route.id);
@@ -75,6 +79,7 @@ export const pathOf = (route: Route): string => {
 /** The route a path names. Junk routes home (the channel). */
 export const routeOf = (pathname: string): Route => {
   const parts = pathname.split("/").filter(Boolean).map(decode);
+  if (parts[0] === "board") return { kind: "board" };
   if (parts[0] !== "threads" || parts[1] === undefined) {
     return { kind: "channel" };
   }

@@ -21,6 +21,8 @@ import { ChannelAgentLive } from "./channel/ChannelAgent.ts";
 import { Channel } from "./channel/Channel.ts";
 import { ChannelLive } from "./channel/ChannelDO.ts";
 import { ChannelEvents } from "./channel/ChannelEvents.ts";
+import { Registry } from "./registry/Registry.ts";
+import { RegistryLive } from "./registry/RegistryDO.ts";
 import { GitHubWorker } from "./github/GitHubWorker.ts";
 import { PublishTokenLive } from "./github/PublishToken.ts";
 import { OrgDoctrine } from "./OrgGuidance.ts";
@@ -158,6 +160,9 @@ const Org = Layer.mergeAll(
   Layer.provideMerge(ThreadsLive),
   Layer.provideMerge(ThreadWorker),
   Layer.provideMerge(ChannelLive),
+  // the org's memory of organization — entities, groups, tasks,
+  // approvals, policy; the `/board` socket pushes its view
+  Layer.provideMerge(RegistryLive),
   Layer.provideMerge(DriverCloudflare),
   Layer.provideMerge(GitHubWorker),
   Layer.provide(Cloudflare.D1.QueryDatabaseBinding),
@@ -186,6 +191,7 @@ export default class Worker extends Cloudflare.Worker<Worker>()(
   Effect.gen(function* () {
     const sessions = yield* AI.Sessions;
     const channelService = yield* Channel;
+    const registryService = yield* Registry;
     const api = yield* HttpRouter.toHttpEffect(yield* routes);
 
     return {
@@ -195,6 +201,10 @@ export default class Worker extends Cloudflare.Worker<Worker>()(
         // the channel's live tail
         if (path === "/channel") {
           return yield* channelService.socket(request);
+        }
+        // the board's live view (`/board` itself is the SPA's page)
+        if (path === "/board/live") {
+          return yield* registryService.socket(request);
         }
         // a thread's state push: a second view on the thread's own
         // session — it never subscribes, so it takes only the live

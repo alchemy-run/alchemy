@@ -483,7 +483,11 @@ export const makeChunkTranslator = () => {
         if (!started) {
           chunks.push({
             type: "start",
-            messageId: `a-live-${observation.tick}`,
+            // the DURABLE id, exactly as a snapshot names this burst
+            // (`toUIMessages`/`observationSpan` id it by the row that
+            // OPENED it) — so a client can address the message later
+            // (redaction resolves `a-<seq>`), live or hydrated alike
+            messageId: `a-${observation.seq}`,
             // the wall clock, as a snapshot's message would carry it —
             // the view's day dividers read it
             messageMetadata: { at: observation.at },
@@ -624,7 +628,10 @@ export const makeChunkTranslator = () => {
       }
       case "crashed": {
         closeStep();
-        if (!started) chunks.push({ type: "start" });
+        // the snapshot's id for a crash row — addressable like any row
+        if (!started) {
+          chunks.push({ type: "start", messageId: `crash-${observation.seq}` });
+        }
         chunks.push({
           type: "error",
           errorText: renderCrash(observation.error),

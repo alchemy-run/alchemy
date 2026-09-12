@@ -19,10 +19,13 @@ import {
 import {
   PromptInput,
   PromptInputBody,
+  PromptInputFooter,
   PromptInputSubmit,
   PromptInputTextarea,
   type PromptInputMessage,
 } from "@/components/ai-elements/prompt-input";
+import { confirm } from "@/components/confirm";
+import { SessionModelSelect } from "@/components/model-select";
 import {
   Tool,
   ToolContent,
@@ -79,6 +82,7 @@ import {
   GitPullRequestClosed,
   Hash,
   Link2,
+  LoaderCircle,
   MessageSquare,
   Square,
   Trash2,
@@ -988,7 +992,7 @@ const ChatTranscript = ({
   // durable rows delete — a `live-*` streaming sample isn't a row
   // yet. The snapshot on the next mount won't contain deleted rows.
   // Deferred a tick so the menu that asked has closed before the
-  // confirm blocks.
+  // confirm dialog takes focus.
   const [deleted, setDeleted] = useState<Set<string>>(() => new Set());
   const removeMessages = useCallback(
     (ids: ReadonlyArray<string>) => {
@@ -997,21 +1001,19 @@ const ChatTranscript = ({
       );
       if (durable.length === 0) return;
       setTimeout(() => {
-        if (
-          !window.confirm(
-            durable.length === 1
-              ? "Delete this message from the transcript?"
-              : `Delete ${durable.length} messages from the transcript?`,
-          )
-        ) {
-          return;
-        }
-        setDeleted((current) => {
-          const next = new Set(current);
-          for (const messageId of durable) next.add(messageId);
-          return next;
+        void confirm(
+          durable.length === 1
+            ? "Delete this message from the transcript?"
+            : `Delete ${durable.length} messages from the transcript?`,
+        ).then((confirmed) => {
+          if (!confirmed) return;
+          setDeleted((current) => {
+            const next = new Set(current);
+            for (const messageId of durable) next.add(messageId);
+            return next;
+          });
+          void deleteChatMessages(id, durable).catch(() => {});
         });
-        void deleteChatMessages(id, durable).catch(() => {});
       }, 0);
     },
     [id],
@@ -1028,6 +1030,21 @@ const ChatTranscript = ({
   );
   const selection = useSelection(order, { onDelete: removeMessages });
   const [menuIds, setMenuIds] = useState<ReadonlyArray<string>>([]);
+
+  // The agent is WORKING on a response: chunks are still arriving
+  // (`streaming` — the round is open; between bursts a tool handler or
+  // the next sampling is running), or a prompt was admitted and the
+  // first sampling hasn't landed yet (`submitted` with an unanswered
+  // prompt at the tail — streaming is step-granular, so that window is
+  // the whole first sampling). `submitted` alone means nothing: the
+  // persistent live tail parks the SDK there while the session idles.
+  const lastTurn = messages.filter((m) => !deleted.has(m.id)).at(-1);
+  const working =
+    status === "streaming" ||
+    (status === "submitted" &&
+      lastTurn !== undefined &&
+      lastTurn.role === "user" &&
+      !isBare(lastTurn));
   const many = menuIds.length > 1 ? `${menuIds.length} messages` : undefined;
   const textOf = (messageId: string) =>
     messages
@@ -1352,6 +1369,23 @@ const ChatTranscript = ({
               </ContextMenuItem>
             </ContextMenuContent>
           </ContextMenu>
+          {/* the agent at work — a quiet row at the tail so the
+              operator never faces a silent transcript while the first
+              sampling (or a long tool run) is in flight */}
+          {working && (
+            <div
+              data-working=""
+              role="status"
+              aria-label="the agent is working"
+              className="-mx-2 flex items-start gap-2 px-1.5 py-1.5"
+            >
+              <div className="w-12 shrink-0" />
+              <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <LoaderCircle className="size-3.5 animate-spin" />
+                <span className="animate-pulse">Working…</span>
+              </span>
+            </div>
+          )}
         </ConversationContent>
         <ConversationScrollButton />
       </Conversation>
@@ -1360,23 +1394,29 @@ const ChatTranscript = ({
           <PromptInput onSubmit={onSubmit}>
             <PromptInputBody>
               {composerExtra}
-              {/* pr-12 keeps typed text clear of the submit button */}
-              <PromptInputTextarea
-                placeholder={placeholder ?? "Say something…"}
-                className="pr-12"
-              />
+              <PromptInputTextarea placeholder={placeholder ?? "Say something…"} />
             </PromptInputBody>
-            {/* while the agent works the button is STOP: abort the
-                round on the server (the session lives on); the turn's
-                end arrives over the socket and the button turns back */}
-            <PromptInputSubmit
-              status={status === "streaming" ? "streaming" : undefined}
-              onStop={() => {
-                void interruptChat(id).catch(() => {});
-              }}
-              variant="ghost"
-              className="absolute right-2 bottom-2 text-muted-foreground"
-            />
+            {/* the controls, bottom right, flat on the card: the model
+                THIS session samples with (the agent you are talking to
+                — a thread's pick still reaches its engineers on the
+                server), and send/stop */}
+            <PromptInputFooter className="justify-end">
+              <SessionModelSelect sessionId={id} label="The agent's model" />
+              {/* while the agent works the button is STOP: abort the
+                  round on the server (the session lives on); the turn's
+                  end arrives over the socket and the button turns back.
+                  `working`, not raw status — the idle tail parks the SDK
+                  on "submitted", and the pre-first-sampling window must
+                  already offer the stop */}
+              <PromptInputSubmit
+                status={working ? "streaming" : undefined}
+                onStop={() => {
+                  void interruptChat(id).catch(() => {});
+                }}
+                variant="ghost"
+                className="text-muted-foreground"
+              />
+            </PromptInputFooter>
           </PromptInput>
         </div>
       )}

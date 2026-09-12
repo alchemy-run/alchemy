@@ -68,6 +68,7 @@ export default Alchemy.Stack(
           "/attach/*",
           "/terminal/*",
           "/channel",
+          "/board/live",
           "/thread/*",
         ],
       },

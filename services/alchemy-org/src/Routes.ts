@@ -11,11 +11,10 @@ import * as HttpRouter from "effect/unstable/http/HttpRouter";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { Channel } from "./channel/Channel.ts";
-import {
-  CHANNEL_SESSION_KEY,
-  ChannelAgent,
-  channelRunKey,
-} from "./channel/ChannelAgent.ts";
+import { CHANNEL_SESSION_KEY, ChannelAgent } from "./channel/ChannelAgent.ts";
+import { makeDecideApproval } from "./registry/Approvals.ts";
+import { Registry } from "./registry/Registry.ts";
+import { makeSyncGitHub } from "./registry/Sync.ts";
 import { PublishToken } from "./github/PublishToken.ts";
 import {
   buildPullRequestFilesPage,
@@ -74,6 +73,9 @@ export const routes = Effect.gen(function* () {
   const channel = yield* Channel;
   const threads = yield* Threads;
   const channelAgent = yield* ChannelAgent;
+  const registry = yield* Registry;
+  const syncGitHub = yield* makeSyncGitHub;
+  const decideApproval = yield* makeDecideApproval;
   const engineer = yield* Engineer;
   // OPTIONAL: the terminal door needs the session machine seam
   const sandbox = yield* Effect.serviceOption(AI.Sandbox);
@@ -201,6 +203,12 @@ export const routes = Effect.gen(function* () {
         ),
       { discard: true },
     );
+    // the Registry starts warm too — the same first touch
+    yield* syncGitHub().pipe(
+      Effect.catch((error) =>
+        Effect.logWarning(`registry bootstrap sync failed: ${String(error)}`),
+      ),
+    );
   }).pipe(
     Effect.catchCause((cause) =>
       Effect.logWarning("channel bootstrap failed", cause),
@@ -262,11 +270,11 @@ export const routes = Effect.gen(function* () {
           ? {}
           : { replyTo: originals.map((row) => row.id) }),
       });
-      // the ONE trigger of the channel agent: a fresh session pinned
-      // to this message's seq; the request answers immediately, the
-      // run's reply lands in the channel when it lands. A reply hands
-      // the agent the quoted originals — it reads what was answered
-      // without having to search for it.
+      // ONE persistent session: the message wakes `Channel:main` (a
+      // steer if a round is already running); the request answers
+      // immediately and the agent's reply lands via its send_reply.
+      // A reply hands the agent the quoted originals — it reads what
+      // was answered without having to search for it.
       const prompt =
         originals.length === 0
           ? text
@@ -282,26 +290,29 @@ export const routes = Effect.gen(function* () {
               )
               .join("\n\n")}\n\n${text}`;
       yield* exec.waitUntil(
-        channelAgent.dispatch(prompt, { key: channelRunKey(message.seq) }).pipe(
-          Effect.flatMap(
-            Effect.fn(function* (outcome) {
-              // The charter's `reply` tool is the intended door into
-              // the channel; when the model ends the run with plain
-              // text instead (dispatch resolves with the quiescent
-              // text), land that text so the operator never faces
-              // silence.
-              const since = yield* channel.page({ after: message.seq });
-              const replied = since.items.some((row) => row.kind === "agent");
-              if (
-                !replied &&
-                typeof outcome === "string" &&
-                outcome.trim().length > 0
-              ) {
-                yield* channel.append({ kind: "agent", text: outcome });
-              }
-            }),
+        channelAgent
+          .dispatch(prompt, { key: CHANNEL_SESSION_KEY })
+          .pipe(
+            Effect.flatMap(
+              Effect.fn(function* (outcome) {
+                // send_reply is the intended door; when the round ends
+                // with plain quiescent text instead, land that text so
+                // the operator never faces silence
+                const since = yield* channel.page({ after: message.seq });
+                const replied = since.items.some(
+                  (row) => row.kind === "agent",
+                );
+                if (
+                  !replied &&
+                  typeof outcome === "string" &&
+                  outcome.trim().length > 0
+                ) {
+                  yield* channel.append({ kind: "agent", text: outcome });
+                }
+              }),
+            ),
+            Effect.ignore,
           ),
-        ),
       );
       return yield* HttpServerResponse.json(message);
     }),
@@ -346,6 +357,68 @@ export const routes = Effect.gen(function* () {
     "/api/channel/directory",
     Effect.gen(function* () {
       return yield* HttpServerResponse.json(yield* channel.directory());
+    }),
+  );
+
+  /* ── the Registry: the board, approvals ─────────────────────────── */
+
+  const boardGet = HttpRouter.add(
+    "GET",
+    "/api/board",
+    Effect.gen(function* () {
+      return yield* HttpServerResponse.json(yield* registry.board());
+    }),
+  );
+
+  /** The kanban's writes: move a task, relink refs — the UI's drag. */
+  const boardTaskPatch = HttpRouter.add(
+    "POST",
+    "/api/board/tasks/:id",
+    Effect.gen(function* () {
+      const params = yield* HttpRouter.params;
+      const id = decodeURIComponent(String(params.id ?? ""));
+      const request = yield* HttpServerRequest;
+      const body = (yield* request.json.pipe(
+        Effect.catch(() => Effect.succeed({})),
+      )) as {
+        status?: "todo" | "dispatched" | "in_review" | "blocked" | "done";
+        title?: string;
+        note?: string;
+      };
+      const next = yield* registry.updateTask(id, body);
+      return next === undefined
+        ? yield* HttpServerResponse.json(
+            { error: `unknown task ${id}` },
+            { status: 404 },
+          )
+        : yield* HttpServerResponse.json(next);
+    }),
+  );
+
+  /** The human's decision on an approval card. */
+  const approvalDecide = HttpRouter.add(
+    "POST",
+    "/api/approvals/:id",
+    Effect.gen(function* () {
+      const params = yield* HttpRouter.params;
+      const id = decodeURIComponent(String(params.id ?? ""));
+      const request = yield* HttpServerRequest;
+      const body = (yield* request.json.pipe(
+        Effect.catch(() => Effect.succeed({})),
+      )) as { decision?: string; reason?: string };
+      if (body.decision !== "approve" && body.decision !== "deny") {
+        return yield* HttpServerResponse.json(
+          { error: 'decision must be "approve" or "deny"' },
+          { status: 400 },
+        );
+      }
+      const next = yield* decideApproval(id, body.decision, body.reason);
+      return next === undefined
+        ? yield* HttpServerResponse.json(
+            { error: `unknown approval ${id}` },
+            { status: 404 },
+          )
+        : yield* HttpServerResponse.json(next);
     }),
   );
 
@@ -400,6 +473,15 @@ export const routes = Effect.gen(function* () {
     Effect.gen(function* () {
       const id = yield* threadId;
       return yield* HttpServerResponse.json(yield* threads.close(id));
+    }),
+  );
+
+  const threadReopen = HttpRouter.add(
+    "POST",
+    "/api/threads/:id/reopen",
+    Effect.gen(function* () {
+      const id = yield* threadId;
+      return yield* HttpServerResponse.json(yield* threads.reopen(id));
     }),
   );
 
@@ -795,6 +877,12 @@ export const routes = Effect.gen(function* () {
         decodeURIComponent(String(params.id ?? "")),
       );
       yield* sessions.interrupt(term, key);
+      // stopping CONTROL leaves a row in the conversation — the
+      // operator sees the stop, and the working indicator (no agent
+      // row after the last user row) clears
+      if (isChannelSession(term, key)) {
+        yield* channel.append({ kind: "agent", text: "_(stopped)_" });
+      }
       return yield* HttpServerResponse.json({ ok: true });
     }),
   );
@@ -915,9 +1003,13 @@ export const routes = Effect.gen(function* () {
     channelPost,
     channelMessagesDelete,
     channelDirectory,
+    boardGet,
+    boardTaskPatch,
+    approvalDecide,
     threadState,
     threadSteer,
     threadClose,
+    threadReopen,
     threadDelete,
     // the bulk routes BEFORE the keyed ones: `agents/stop` must not
     // match `agents/:key`

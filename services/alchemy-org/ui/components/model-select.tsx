@@ -49,15 +49,16 @@ const useModelCatalog = (): ModelCatalog | undefined => {
   return catalog;
 };
 
-/** The default's marker in the select — an id no catalog entry has. */
-const DEFAULT_VALUE = "__default__";
 /** "Not known yet" — keeps the select CONTROLLED (a string value from
  *  the first render) while the pick is still being read; never an item. */
 const PENDING_VALUE = "__pending__";
 
 /**
- * The control itself, given the current pick. `value === null` is the
- * default; `undefined` is "not known yet" (renders disabled).
+ * The control itself, given the current pick. There is no "default"
+ * entry: a session that never chose (`value === null`) simply reads
+ * as the org's default model, and picking any entry — that one
+ * included — makes the choice explicit on the session. `undefined`
+ * is "not known yet" (renders disabled).
  */
 export const ModelSelect = ({
   value,
@@ -68,7 +69,7 @@ export const ModelSelect = ({
   label,
 }: {
   value: string | null | undefined;
-  onChange: (model: string | null) => void;
+  onChange: (model: string) => void;
   busy?: boolean;
   size?: "sm" | "default";
   className?: string;
@@ -76,23 +77,22 @@ export const ModelSelect = ({
   label: string;
 }) => {
   const catalog = useModelCatalog();
-  const fallback = catalog?.models.find((m) => m.id === catalog.default);
+  // what the session actually samples with: its pick, else the org's
+  // default
+  const effective =
+    value === null || value === undefined ? catalog?.default : value;
   const known =
-    value === null || value === undefined
+    effective === undefined
       ? undefined
-      : catalog?.models.find((m) => m.id === value);
+      : catalog?.models.find((m) => m.id === effective);
   return (
     <Select
-      value={
-        value === undefined
-          ? PENDING_VALUE
-          : value === null
-            ? DEFAULT_VALUE
-            : value
-      }
+      value={effective ?? PENDING_VALUE}
       onValueChange={(next) => {
-        if (next === PENDING_VALUE) return;
-        onChange(next === DEFAULT_VALUE ? null : next);
+        // "" is Radix echoing a FORM RESET (a composer resets after
+        // every send, and React can reset a form on mount) — never a
+        // user's pick; the controlled value keeps rendering the truth
+        if (next !== PENDING_VALUE && next !== "") onChange(next);
       }}
       disabled={catalog === undefined || value === undefined || busy}
     >
@@ -103,28 +103,18 @@ export const ModelSelect = ({
         data-model={value === null ? "default" : value}
         title={`${label} — takes effect at its next sampling; nothing in flight is interrupted`}
         className={cn(
-          "gap-1.5 border-border bg-card px-2 text-[11px] text-muted-foreground shadow-none hover:bg-accent hover:text-foreground data-[size=sm]:h-6",
+          // a CONTROL-sized chip (the composer's buttons are 32px):
+          // the whole box is the target, not just the label inside it
+          "gap-1.5 border-border bg-card px-3 text-[11px] text-muted-foreground shadow-none hover:bg-accent hover:text-foreground data-[size=sm]:h-8",
           className,
         )}
       >
         <Cpu className="size-3" />
         <SelectValue placeholder="model…">
-          {value === null
-            ? `Default${fallback === undefined ? "" : ` · ${fallback.label}`}`
-            : (known?.label ?? value)}
+          {known?.label ?? effective}
         </SelectValue>
       </SelectTrigger>
       <SelectContent position="popper" align="end">
-        <SelectItem value={DEFAULT_VALUE}>
-          <span className="flex flex-col">
-            <span>Default</span>
-            {fallback !== undefined && (
-              <span className="text-[10px] text-muted-foreground">
-                {fallback.label} — the org's choice
-              </span>
-            )}
-          </span>
-        </SelectItem>
         {catalog?.models.map((entry) => (
           <SelectItem key={entry.id} value={entry.id}>
             <span className="flex flex-col">
@@ -141,35 +131,25 @@ export const ModelSelect = ({
 };
 
 /**
- * The selector bound to a SESSION: reads the pick over GET on mount
- * (unless `current` is already known — a thread's state carries it),
+ * The selector bound to a SESSION: reads the pick over GET on mount,
  * writes it over PUT. Hides itself for a session that has no model to
  * pick (404).
  */
 export const SessionModelSelect = ({
   sessionId,
-  current,
   label,
   size,
   className,
 }: {
   sessionId: string;
-  /** The pick when the caller already knows it (a thread's state);
-   *  `null` = default. Omit to read it over GET. */
-  current?: string | null;
   label: string;
   size?: "sm" | "default";
   className?: string;
 }) => {
-  const [read, setRead] = useState<string | null | undefined>(current);
+  const [read, setRead] = useState<string | null | undefined>(undefined);
   const [hidden, setHidden] = useState(false);
   const [busy, setBusy] = useState(false);
-  // a caller-known pick always wins; otherwise read once per session
   useEffect(() => {
-    if (current !== undefined) {
-      setRead(current);
-      return;
-    }
     let live = true;
     setRead(undefined);
     getChatModel(sessionId)
@@ -186,7 +166,7 @@ export const SessionModelSelect = ({
     return () => {
       live = false;
     };
-  }, [sessionId, current]);
+  }, [sessionId]);
 
   if (hidden) return null;
   return (

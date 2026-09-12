@@ -1,18 +1,12 @@
 /**
- * The REVIEW — a pull request's diff beside the thread's conversation.
- * Review is CHAT: no comment lives in the diff; you select lines,
- * they become an ANCHOR PILL in the composer, and the message carries
- * them as `[label](anchor://…)` links the agent (and everyone after)
- * can resolve. Clicking a pill in the transcript focuses those lines
- * here.
+ * The REVIEW — a pull request's diff: the header (state, branches,
+ * size), one collapsible card per changed file, paged in from GitHub
+ * with large files gated behind a click, and a refresh. The page is
+ * the diff alone — a review conversation is a later concern.
  */
 
-import { AnchorActionContext, ChatView } from "@/components/chat";
 import { FileDiffCard } from "@/components/code";
-import { Rail } from "@/components/rail";
 import { Spinner } from "@/components/ui/spinner";
-import type { Anchor } from "@/lib/channel";
-import { anchorLabel, formatAnchor, parseAnchor } from "@/lib/channel";
 import {
   fetchChangedFiles,
   LARGE_FILE_LINES,
@@ -20,21 +14,19 @@ import {
   type ChangedFile,
 } from "@/lib/diff";
 import { cn } from "@/lib/utils";
-import type { FileDiffMetadata, SelectedLineRange } from "@pierre/diffs";
+import type { FileDiffMetadata } from "@pierre/diffs";
 import { parsePatchFiles } from "@pierre/diffs";
 import {
   ChevronDown,
-  FileCode2,
   GitMerge,
   GitPullRequestArrow,
   GitPullRequestClosed,
   RefreshCw,
-  X,
 } from "lucide-react";
 import {
-  useCallback,
+  memo,
+  startTransition,
   useEffect,
-  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -78,18 +70,12 @@ const toRenderable = (file: ChangedFile): RenderableFile => {
 const NearViewport = ({
   placeholder,
   children,
-  forceNear,
 }: {
   placeholder: ReactNode;
   children: ReactNode;
-  /** Mount immediately (a focused anchor needs the lines rendered). */
-  forceNear?: boolean;
 }) => {
   const ref = useRef<HTMLDivElement>(null);
   const [near, setNear] = useState(false);
-  useEffect(() => {
-    if (forceNear) setNear(true);
-  }, [forceNear]);
   useEffect(() => {
     const node = ref.current;
     if (node === null || near) return;
@@ -115,31 +101,13 @@ const NearViewport = ({
   return <div ref={ref}>{near ? children : placeholder}</div>;
 };
 
-const FileCard = ({
-  renderable,
-  focus,
-  onSelect,
-}: {
-  renderable: RenderableFile;
-  /** Lines to highlight (a clicked pill). */
-  focus: { start: number; end: number } | undefined;
-  onSelect: (path: string, range: SelectedLineRange | null) => void;
-}) => {
+const FileCard = memo(({ renderable }: { renderable: RenderableFile }) => {
   const { file, meta, raw } = renderable;
   const [collapsed, setCollapsed] = useState(false);
   const [wanted, setWanted] = useState(
     file.additions + file.deletions <= LARGE_FILE_LINES,
   );
   const path = file.filename;
-
-  const options = useMemo(
-    () => ({
-      enableLineSelection: true,
-      onLineSelected: (range: SelectedLineRange | null) =>
-        onSelect(path, range),
-    }),
-    [path, onSelect],
-  );
 
   return (
     <div
@@ -183,29 +151,19 @@ const FileCard = ({
           </button>
         ) : (
           <NearViewport
-            forceNear={focus !== undefined}
             placeholder={
               <div className="flex items-center justify-center py-8 text-muted-foreground">
                 <Spinner className="size-4" />
               </div>
             }
           >
-            <FileDiffCard
-              file={meta}
-              fallback={raw ?? ""}
-              bare
-              options={options}
-              selectedLines={
-                focus === undefined
-                  ? undefined
-                  : { start: focus.start, end: focus.end }
-              }
-            />
+            <FileDiffCard file={meta} fallback={raw ?? ""} bare />
           </NearViewport>
         ))}
     </div>
   );
-};
+});
+FileCard.displayName = "FileCard";
 
 /* ── the view ─────────────────────────────────────────────────────── */
 
@@ -239,237 +197,200 @@ export const ReviewView = ({
   owner,
   repo,
   number,
-  threadId,
-  active,
 }: {
   owner: string;
   repo: string;
   number: number;
-  threadId: string;
-  active: boolean;
 }) => {
   const [header, setHeader] = useState<PullHeader | undefined>(undefined);
   const [files, setFiles] = useState<RenderableFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | undefined>(undefined);
   const [generation, setGeneration] = useState(0);
-
-  // the pills being composed (selected but not yet sent)
-  const [pills, setPills] = useState<Anchor[]>([]);
-  // the focused anchor (a clicked pill in the transcript)
-  const [focus, setFocus] = useState<Anchor | undefined>(undefined);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
+  // ONE commit per load: the header and every file page are buffered
+  // and land together — content filling in card by card re-lays the
+  // page out step by step, and each partial commit re-renders what is
+  // already showing. A refresh keeps the old diff up until the new one
+  // is whole; the transition keeps the heavy first render of a big
+  // diff interruptible, so tab clicks stay responsive under it.
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
     setError(undefined);
-    setFiles([]);
-    fetch(
+    const header = fetch(
       `/api/pulls/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${number}`,
-      {
-        signal: controller.signal,
-      },
+      { signal: controller.signal },
     )
       .then(async (response) =>
         response.ok ? ((await response.json()) as PullHeader) : undefined,
       )
-      .then((view) => setHeader(view))
-      .catch(() => {});
-    fetchChangedFiles(
+      .catch(() => undefined);
+    const collected: RenderableFile[] = [];
+    const pages = fetchChangedFiles(
       owner,
       repo,
       number,
-      (page) =>
-        setFiles((current) => [...current, ...page.files.map(toRenderable)]),
+      (page) => collected.push(...page.files.map(toRenderable)),
       controller.signal,
-    )
-      .then(() => setLoading(false))
-      .catch((thrown: unknown) => {
-        if (!controller.signal.aborted) {
-          setError(thrown instanceof Error ? thrown.message : String(thrown));
+    );
+    void Promise.all([header, pages]).then(
+      ([view]) => {
+        if (controller.signal.aborted) return;
+        startTransition(() => {
+          if (view !== undefined) setHeader(view);
+          setFiles(collected);
           setLoading(false);
-        }
-      });
+        });
+      },
+      (thrown: unknown) => {
+        if (controller.signal.aborted) return;
+        setError(thrown instanceof Error ? thrown.message : String(thrown));
+        setLoading(false);
+      },
+    );
     return () => controller.abort();
   }, [owner, repo, number, generation]);
 
-  /** A completed selection becomes a pill (replacing a same-file one
-   *  still pending — drags re-fire). */
-  const onSelect = useCallback(
-    (path: string, range: SelectedLineRange | null) => {
-      if (range === null) return;
-      const anchor: Anchor = {
-        owner,
-        repo,
-        number,
-        path,
-        start: Math.min(range.start, range.end),
-        end: Math.max(range.start, range.end),
-        ...(headerRef.current?.head.sha === undefined
-          ? {}
-          : { sha: headerRef.current.head.sha }),
-      };
-      setPills((current) => [
-        ...current.filter((pill) => pill.path !== path),
-        anchor,
-      ]);
-    },
-    [owner, repo, number],
-  );
-  const headerRef = useRef<PullHeader | undefined>(undefined);
-  headerRef.current = header;
-
-  /** A pill in the transcript clicked: scroll its file here, light
-   *  its lines. */
-  const onAnchorAction = useCallback((href: string) => {
-    const anchor = parseAnchor(href);
-    if (anchor === undefined) return;
-    setFocus(anchor);
-    // scroll once the card exists (forceNear mounts it)
-    requestAnimationFrame(() => {
-      scrollRef.current
-        ?.querySelector(`[data-review-file="${CSS.escape(anchor.path)}"]`)
-        ?.scrollIntoView({ behavior: "smooth", block: "start" });
-    });
+  // WHEEL ROUTING — the pane scrolls vertically, each file's code
+  // area horizontally (`overflow-x` only, in the renderer's shadow
+  // DOM). Chromium latches a whole gesture — momentum included — to
+  // whichever scroller consumed its first event, so a flick that
+  // starts with a horizontal component swallows every vertical delta
+  // until the momentum dies (and vice versa): the pane feels stuck on
+  // one axis. Route each gesture by its dominant axis instead —
+  // vertical deltas move the pane, horizontal deltas move the code
+  // scroller under the cursor.
+  useEffect(() => {
+    const node = scrollRef.current;
+    if (node === null) return;
+    let axis: "x" | "y" = "y";
+    let last = 0;
+    const scroller = (
+      event: WheelEvent,
+      can: (element: HTMLElement) => boolean,
+    ): HTMLElement | undefined => {
+      // composedPath reaches through the renderer's open shadow roots
+      for (const target of event.composedPath()) {
+        if (target === node) return undefined;
+        if (target instanceof HTMLElement && can(target)) return target;
+      }
+      return undefined;
+    };
+    const onWheel = (event: WheelEvent) => {
+      if (event.ctrlKey) return; // pinch-zoom
+      const scale =
+        event.deltaMode === WheelEvent.DOM_DELTA_LINE
+          ? 16
+          : event.deltaMode === WheelEvent.DOM_DELTA_PAGE
+            ? node.clientHeight
+            : 1;
+      const dx = event.deltaX * scale;
+      const dy = event.deltaY * scale;
+      // a pause ends the gesture — the next event picks the axis anew
+      if (event.timeStamp - last > 150) {
+        axis = Math.abs(dx) > Math.abs(dy) ? "x" : "y";
+      }
+      last = event.timeStamp;
+      if (axis === "y") {
+        // a nested vertical scroller (none today) keeps native wheel
+        const nested = scroller(
+          event,
+          (element) =>
+            element.scrollHeight > element.clientHeight &&
+            /^(auto|scroll)$/.test(getComputedStyle(element).overflowY),
+        );
+        if (nested !== undefined) return;
+        node.scrollTop += dy;
+        event.preventDefault();
+        return;
+      }
+      const sideways = scroller(
+        event,
+        (element) =>
+          element.scrollWidth > element.clientWidth &&
+          /^(auto|scroll)$/.test(getComputedStyle(element).overflowX),
+      );
+      if (sideways !== undefined) {
+        sideways.scrollLeft += dx;
+        event.preventDefault();
+      }
+    };
+    node.addEventListener("wheel", onWheel, { passive: false });
+    return () => node.removeEventListener("wheel", onWheel);
   }, []);
-
-  /** Serialize the pills into the outgoing message. */
-  const transformSubmit = useCallback(
-    (text: string): string => {
-      if (pills.length === 0) return text;
-      const links = pills
-        .map((pill) => `[${anchorLabel(pill)}](${formatAnchor(pill)})`)
-        .join(" ");
-      setPills([]);
-      return `${text}\n\n${links}`;
-    },
-    [pills],
-  );
 
   const badge = header === undefined ? undefined : STATE_BADGE[header.state];
 
   return (
-    <AnchorActionContext.Provider value={onAnchorAction}>
-      <div className="flex min-h-0 min-w-0 flex-1">
-        {/* the diff column */}
-        <div ref={scrollRef} className="min-h-0 min-w-0 flex-1 overflow-y-auto">
-          <div className="flex flex-col gap-3 px-4 py-4">
-            <div className="flex items-center gap-2">
-              {badge !== undefined && (
-                <span
-                  className={cn(
-                    "flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium",
-                    badge.className,
-                  )}
-                >
-                  <badge.icon className="size-3" />
-                  {badge.label}
-                </span>
-              )}
-              <span className="min-w-0 flex-1 truncate text-sm font-semibold">
-                {header?.title ?? `${owner}/${repo}#${number}`}
+    <div className="flex min-h-0 min-w-0 flex-1">
+      <div
+        ref={scrollRef}
+        data-review-scroll=""
+        className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden"
+      >
+        <div className="flex flex-col gap-3 px-4 py-4">
+          <div className="flex items-center gap-2">
+            {badge !== undefined && (
+              <span
+                className={cn(
+                  "flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium",
+                  badge.className,
+                )}
+              >
+                <badge.icon className="size-3" />
+                {badge.label}
               </span>
-              <a
-                href={`https://github.com/${owner}/${repo}/pull/${number}`}
-                target="_blank"
-                rel="noreferrer"
-                className="shrink-0 text-xs text-muted-foreground hover:text-foreground hover:underline"
-              >
-                #{number}
-              </a>
-              <button
-                type="button"
-                onClick={() => setGeneration((current) => current + 1)}
-                title="Refresh the diff from GitHub"
-                className="shrink-0 cursor-pointer rounded border border-border p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
-              >
-                <RefreshCw className="size-3.5" />
-              </button>
-            </div>
-            {header !== undefined && (
-              <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                <span className="font-mono">
-                  {header.head.ref} → {header.base.ref}
-                </span>
-                <span className="font-mono tabular-nums">
-                  <span className="text-moss">+{header.additions}</span>{" "}
-                  <span className="text-brick">−{header.deletions}</span>
-                </span>
-                <span>{header.changedFiles} files</span>
-                <span className="ml-auto">
-                  Select lines in the diff to pin them to your next message.
-                </span>
-              </div>
             )}
-            {error !== undefined && (
-              <div className="rounded-md border border-brick/40 bg-brick/10 px-3 py-2 text-xs text-brick">
-                diff failed: {error}
-              </div>
-            )}
-            {files.map((renderable) => (
-              <FileCard
-                key={renderable.file.filename}
-                renderable={renderable}
-                focus={
-                  focus?.path === renderable.file.filename
-                    ? { start: focus.start, end: focus.end }
-                    : undefined
-                }
-                onSelect={onSelect}
-              />
-            ))}
-            {loading && (
-              <div className="flex items-center justify-center gap-2 py-6 text-muted-foreground">
-                <Spinner className="size-4" />
-                <span className="text-xs">Loading the diff…</span>
-              </div>
-            )}
+            <span className="min-w-0 flex-1 truncate text-sm font-semibold">
+              {header?.title ?? `${owner}/${repo}#${number}`}
+            </span>
+            <a
+              href={`https://github.com/${owner}/${repo}/pull/${number}`}
+              target="_blank"
+              rel="noreferrer"
+              className="shrink-0 text-xs text-muted-foreground hover:text-foreground hover:underline"
+            >
+              #{number}
+            </a>
+            <button
+              type="button"
+              onClick={() => setGeneration((current) => current + 1)}
+              title="Refresh the diff from GitHub"
+              className="shrink-0 cursor-pointer rounded border border-border p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+            >
+              <RefreshCw className="size-3.5" />
+            </button>
           </div>
+          {header !== undefined && (
+            <div className="flex items-center gap-3 text-xs text-muted-foreground">
+              <span className="font-mono">
+                {header.head.ref} → {header.base.ref}
+              </span>
+              <span className="font-mono tabular-nums">
+                <span className="text-moss">+{header.additions}</span>{" "}
+                <span className="text-brick">−{header.deletions}</span>
+              </span>
+              <span>{header.changedFiles} files</span>
+            </div>
+          )}
+          {error !== undefined && (
+            <div className="rounded-md border border-brick/40 bg-brick/10 px-3 py-2 text-xs text-brick">
+              diff failed: {error}
+            </div>
+          )}
+          {files.map((renderable) => (
+            <FileCard key={renderable.file.filename} renderable={renderable} />
+          ))}
+          {loading && (
+            <div className="flex items-center justify-center gap-2 py-6 text-muted-foreground">
+              <Spinner className="size-4" />
+              <span className="text-xs">Loading the diff…</span>
+            </div>
+          )}
         </div>
-
-        {/* the conversation — the SAME thread chat, with the pill row */}
-        <Rail
-          label="Review chat"
-          storageKey="review-chat-width"
-          defaultWidth={480}
-          minWidth={360}
-        >
-          <ChatView
-            id={`Thread:${threadId}`}
-            active={active}
-            placeholder="Chat with the review…"
-            transformSubmit={transformSubmit}
-            composerExtra={
-              pills.length > 0 ? (
-                <div className="flex flex-wrap gap-1 px-3 pt-2">
-                  {pills.map((pill) => (
-                    <span
-                      key={formatAnchor(pill)}
-                      className="flex items-center gap-1 rounded-md border border-border bg-muted/40 px-1.5 py-0.5 font-mono text-[11px]"
-                    >
-                      <FileCode2 className="size-3 text-mist" />
-                      {anchorLabel(pill)}
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setPills((current) =>
-                            current.filter((entry) => entry !== pill),
-                          )
-                        }
-                        aria-label={`remove ${anchorLabel(pill)}`}
-                        className="cursor-pointer rounded p-0.5 hover:bg-accent"
-                      >
-                        <X className="size-3" />
-                      </button>
-                    </span>
-                  ))}
-                </div>
-              ) : undefined
-            }
-          />
-        </Rail>
       </div>
-    </AnchorActionContext.Provider>
+    </div>
   );
 };

@@ -1,15 +1,15 @@
 /**
- * The CHANNEL — the org's one stream: world events as timeline rows,
- * the operator's control messages (each with its collapsed run),
- * agent replies, and cards from threads. Full-width, chronological,
- * a composer at the bottom. The data arrives streamed (lib/cursor.ts);
- * this component only draws.
+ * The CHANNEL — the operator's one conversation with the channel
+ * agent: their messages, its replies, and the cards (thread
+ * questions, staged APPROVALS the operator decides inline). GitHub's
+ * event stream rides a dockable rail at the right — context, never
+ * the conversation. The data arrives streamed (lib/cursor.ts); this
+ * component only draws.
  */
 
 import {
   AtTooltip,
   authorAvatarUrl,
-  ChatView,
   dayOf,
   eventFamilyOf,
   formatAt,
@@ -28,8 +28,19 @@ import {
 } from "@/components/ui/context-menu";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import type { ChannelMessage, ThreadListing } from "@/lib/channel";
-import { deleteChannelMessages, postChannel } from "@/lib/channel";
+import {
+  decideApproval,
+  deleteChannelMessages,
+  interruptChat,
+  postChannel,
+} from "@/lib/channel";
 import {
   onRowMouseDown,
   skipRowClick,
@@ -39,6 +50,7 @@ import {
 import { cn } from "@/lib/utils";
 import {
   ArrowUp,
+  Check,
   ChevronDown,
   Copy,
   CornerUpLeft,
@@ -46,8 +58,10 @@ import {
   LoaderCircle,
   MessageCircle,
   Reply,
+  ShieldCheck,
+  Square,
   SquareArrowOutUpRight,
-  Terminal,
+  SquareKanban,
   Trash2,
   X,
 } from "lucide-react";
@@ -62,6 +76,7 @@ import {
   type ReactNode,
 } from "react";
 import { AlchemyMark } from "@/components/app-header";
+import { confirm } from "@/components/confirm";
 import { SessionModelSelect } from "@/components/model-select";
 import { Answered, AnswerBox } from "@/components/notification";
 
@@ -163,7 +178,12 @@ const ThreadChip = ({
   );
 };
 
-/** An event from the outside world: one line, family icon, markdown. */
+/** Markdown, flattened for a tooltip: links keep their labels. */
+const plainText = (text: string): string =>
+  text.replace(/\[([^\]]*)\]\([^)]*\)/g, "$1").replaceAll("`", "");
+
+/** An event from the outside world: ONE line, never wrapped — the
+ *  family icon, who, what (elided); the whole text rides a tooltip. */
 const EventRow = memo(
   ({
     message,
@@ -177,29 +197,42 @@ const EventRow = memo(
     const family = eventFamilyOf(message.event ?? "");
     const FamilyIcon = family.icon;
     return (
-      <div className="flex items-start gap-2 px-1 py-0.5 text-[13px]">
-        <Gutter at={message.at} />
-        <FamilyIcon
-          className={cn("mt-1 size-3.5 shrink-0", family.className)}
-        />
-        <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-1.5">
-          {message.author !== undefined && (
-            <span className="shrink-0 font-medium text-foreground">
-              {message.author.login}
-            </span>
-          )}
-          <span className="min-w-0 text-muted-foreground [&_p]:m-0 [&_p]:inline">
-            <MarkdownText text={message.text} repo={message.repo} />
-          </span>
-          {message.thread !== undefined && (
-            <ThreadChip
-              thread={message.thread}
-              directory={directory}
-              onOpenThread={onOpenThread}
-            />
-          )}
-        </div>
-      </div>
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div className="flex items-center gap-2 px-1 py-0.5 text-[13px]">
+              <Gutter at={message.at} />
+              <FamilyIcon
+                className={cn("size-3.5 shrink-0", family.className)}
+              />
+              <div className="flex min-w-0 flex-1 items-baseline gap-x-1.5 overflow-hidden">
+                {message.author !== undefined && (
+                  <span className="shrink-0 font-medium text-foreground">
+                    {message.author.login}
+                  </span>
+                )}
+                <span className="min-w-0 flex-1 truncate text-muted-foreground [&_p]:m-0 [&_p]:inline">
+                  <MarkdownText text={message.text} repo={message.repo} />
+                </span>
+                {message.thread !== undefined && (
+                  <ThreadChip
+                    thread={message.thread}
+                    directory={directory}
+                    onOpenThread={onOpenThread}
+                  />
+                )}
+              </div>
+            </div>
+          </TooltipTrigger>
+          <TooltipContent
+            side="left"
+            className="max-w-96 text-xs whitespace-pre-line"
+          >
+            {message.author === undefined ? "" : `${message.author.login} `}
+            {plainText(message.text)}
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
     );
   },
 );
@@ -213,15 +246,9 @@ EventRow.displayName = "EventRow";
 const UserRow = memo(
   ({
     message,
-    working,
-    runOpen,
-    onToggleRun,
     quotes,
   }: {
     message: ChannelMessage;
-    working: boolean;
-    runOpen: boolean;
-    onToggleRun: () => void;
     /** The originals this message replies to, rendered above it. */
     quotes?: ReactNode;
   }) => {
@@ -239,37 +266,7 @@ const UserRow = memo(
         </Avatar>
         <div className="min-w-0 flex-1">
           {quotes}
-          <div className="flex items-baseline gap-2">
-            <span className="text-[13px] font-semibold">{login ?? "you"}</span>
-            <button
-              type="button"
-              onClick={onToggleRun}
-              className={cn(
-                "inline-flex cursor-pointer items-center gap-1 rounded-full border px-2 py-0 text-[11px]",
-                runOpen
-                  ? "border-primary/50 bg-accent text-foreground"
-                  : working
-                    ? "border-moss/40 bg-moss/10 text-foreground"
-                    : "border-border text-muted-foreground hover:bg-accent hover:text-foreground",
-              )}
-              title={
-                working
-                  ? "The channel agent is answering — click to watch"
-                  : "The channel agent's run on this message"
-              }
-            >
-              {working && (
-                <span className="size-1.5 animate-pulse rounded-full bg-moss" />
-              )}
-              {working ? "working" : "ran"}
-              <ChevronDown
-                className={cn(
-                  "size-3 transition-transform",
-                  !runOpen && "-rotate-90",
-                )}
-              />
-            </button>
-          </div>
+          <div className="text-[13px] font-semibold">{login ?? "you"}</div>
           <div className="text-[13px]">
             <MarkdownText text={message.text} />
           </div>
@@ -297,9 +294,80 @@ const AgentRow = memo(({ message }: { message: ChannelMessage }) => (
 ));
 AgentRow.displayName = "AgentRow";
 
-/** A CARD — a thread reaching the control plane with a notification.
- *  Click the header to jump to the thread (or its review when the
- *  card names one). */
+/** A denial's reason, typed on the card. */
+const DenyBox = ({
+  approvalId,
+  onDecided,
+  onCancel,
+}: {
+  approvalId: string;
+  onDecided: () => void;
+  onCancel: () => void;
+}) => {
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const send = () => {
+    if (busy) return;
+    setBusy(true);
+    void decideApproval(approvalId, "deny", reason.trim() || undefined)
+      .then((response) => {
+        if (response.ok) onDecided();
+      })
+      .finally(() => setBusy(false));
+  };
+  return (
+    <div className="flex items-center gap-1.5">
+      <Textarea
+        autoFocus
+        value={reason}
+        onChange={(event) => setReason(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" && !event.shiftKey) {
+            event.preventDefault();
+            send();
+          } else if (event.key === "Escape") {
+            event.preventDefault();
+            onCancel();
+          }
+        }}
+        placeholder="Why not? (optional — Enter denies)"
+        aria-label="Deny with a reason"
+        className="min-h-8 flex-1 resize-none text-[12px]"
+      />
+      <Button
+        type="button"
+        size="sm"
+        variant="destructive"
+        disabled={busy}
+        onClick={send}
+        className="h-7 text-[11px]"
+      >
+        Deny
+      </Button>
+      <Button
+        type="button"
+        size="sm"
+        variant="ghost"
+        onClick={onCancel}
+        className="h-7 text-[11px] text-muted-foreground"
+      >
+        Cancel
+      </Button>
+    </div>
+  );
+};
+
+/** How a decided approval reads on its card. */
+const APPROVAL_DECIDED: Record<string, { label: string; className: string }> = {
+  approved: { label: "Approved", className: "text-moss" },
+  executed: { label: "Approved — done", className: "text-moss" },
+  denied: { label: "Denied", className: "text-brick" },
+  failed: { label: "Approved, but FAILED", className: "text-brick" },
+};
+
+/** A CARD — a thread (or the channel agent) reaching the control
+ *  plane: a notification, a question, or a staged APPROVAL the
+ *  operator decides right here. */
 const CardRow = memo(
   ({
     message,
@@ -318,61 +386,150 @@ const CardRow = memo(
     ) => void;
   }) => {
     const card = message.card!;
-    const row = directory.find((entry) => entry.id === card.thread);
+    const thread = card.thread;
+    const row = directory.find((entry) => entry.id === thread);
     // the operator's answer, typed on the card itself; once sent it
     // lives in the thread and the card says so
     const [answering, setAnswering] = useState(false);
     const [answered, setAnswered] = useState(false);
+    // an approval decided from THIS view flips instantly; the card's
+    // own update frame carries the durable state for every other view
+    const [denying, setDenying] = useState(false);
+    const [decidedLocal, setDecidedLocal] = useState<string | undefined>(
+      undefined,
+    );
+    const [deciding, setDeciding] = useState(false);
+    const decided = card.approval?.decided ?? decidedLocal;
+    const approve = () => {
+      if (card.approval === undefined || deciding) return;
+      setDeciding(true);
+      void decideApproval(card.approval.id, "approve")
+        .then((response) => {
+          if (response.ok) setDecidedLocal("approved");
+        })
+        .finally(() => setDeciding(false));
+    };
     const open = () =>
-      card.review !== undefined
+      card.review !== undefined && thread !== undefined
         ? onOpenReview(
-            card.thread,
+            thread,
             card.review.owner,
             card.review.repo,
             card.review.number,
           )
-        : onOpenThread(card.thread);
+        : thread !== undefined
+          ? onOpenThread(thread)
+          : undefined;
 
     return (
       <div className="flex items-start gap-2 px-1 py-1.5">
         <Gutter at={message.at} />
         <div
           data-card={message.id}
+          data-approval={card.approval?.id}
           className="min-w-0 flex-1 rounded-lg border border-border bg-card shadow-xs"
         >
           <div className="flex items-center gap-2 border-b border-border/60 px-3 py-1.5">
-            <button
-              type="button"
-              onClick={open}
-              className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 text-left"
-              title={
-                card.review !== undefined
-                  ? "Open the review"
-                  : "Open the thread"
-              }
-            >
-              {card.review !== undefined ? (
-                <FileDiff className="size-3.5 shrink-0 text-mist" />
-              ) : (
-                <MessageCircle className="size-3.5 shrink-0 text-mist" />
-              )}
-              <span className="truncate text-[13px] font-medium hover:underline">
-                {card.title}
+            {thread !== undefined ? (
+              <button
+                type="button"
+                onClick={open}
+                className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 text-left"
+                title={
+                  card.review !== undefined
+                    ? "Open the review"
+                    : "Open the thread"
+                }
+              >
+                {card.review !== undefined ? (
+                  <FileDiff className="size-3.5 shrink-0 text-mist" />
+                ) : (
+                  <MessageCircle className="size-3.5 shrink-0 text-mist" />
+                )}
+                <span className="truncate text-[13px] font-medium hover:underline">
+                  {card.title}
+                </span>
+              </button>
+            ) : (
+              <span className="flex min-w-0 flex-1 items-center gap-2">
+                <ShieldCheck className="size-3.5 shrink-0 text-mist" />
+                <span className="truncate text-[13px] font-medium">
+                  {card.title}
+                </span>
               </span>
-            </button>
+            )}
             <span className="shrink-0 text-[11px] text-muted-foreground">
-              {row?.name ?? card.thread}
+              {row?.name ?? thread ?? "channel"}
             </span>
           </div>
           <div className="px-3 py-2 text-[13px]">
             <MarkdownText text={message.text} repo={message.repo} />
           </div>
           <div className="border-t border-border/60 px-3 py-1.5">
-            {answered ? (
-              <Answered onOpenThread={() => onOpenThread(card.thread)} />
-            ) : answering ? (
+            {card.approval !== undefined ? (
+              /* an APPROVAL: the human's decision, right here */
+              decided !== undefined ? (
+                <span
+                  data-decided={decided}
+                  className={cn(
+                    "text-[11px] font-medium",
+                    APPROVAL_DECIDED[decided]?.className ??
+                      "text-muted-foreground",
+                  )}
+                >
+                  {APPROVAL_DECIDED[decided]?.label ?? decided}
+                </span>
+              ) : denying ? (
+                <DenyBox
+                  approvalId={card.approval.id}
+                  onDecided={() => {
+                    setDenying(false);
+                    setDecidedLocal("denied");
+                  }}
+                  onCancel={() => setDenying(false)}
+                />
+              ) : (
+                <div className="flex items-center gap-1">
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={deciding}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      approve();
+                    }}
+                    aria-label={`Approve: ${card.title}`}
+                    className="h-6 gap-1 px-2 text-[11px]"
+                  >
+                    <Check className="size-3" />
+                    Approve
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled={deciding}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setDenying(true);
+                    }}
+                    aria-label={`Deny: ${card.title}`}
+                    className="h-6 gap-1 px-2 text-[11px] text-muted-foreground"
+                  >
+                    <X className="size-3" />
+                    Deny
+                  </Button>
+                </div>
+              )
+            ) : answered ? (
+              <Answered
+                onOpenThread={
+                  thread === undefined ? undefined : () => onOpenThread(thread)
+                }
+              />
+            ) : answering && thread !== undefined ? (
               <AnswerBox
-                thread={card.thread}
+                thread={thread}
                 title={card.title}
                 onAnswered={() => {
                   setAnswering(false);
@@ -382,38 +539,42 @@ const CardRow = memo(
               />
             ) : (
               <div className="flex items-center gap-1">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 gap-1 px-1.5 text-[11px] text-muted-foreground"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    setAnswering(true);
-                  }}
-                  aria-label={`Answer: ${card.title}`}
-                >
-                  <Reply className="size-3" />
-                  Answer
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 gap-1 px-1.5 text-[11px] text-muted-foreground"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    open();
-                  }}
-                  aria-label={
-                    card.review !== undefined
-                      ? `Open the review: ${card.title}`
-                      : `Open the thread: ${card.title}`
-                  }
-                >
-                  <SquareArrowOutUpRight className="size-3" />
-                  {card.review !== undefined ? "Review" : "Thread"}
-                </Button>
+                {thread !== undefined && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 gap-1 px-1.5 text-[11px] text-muted-foreground"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setAnswering(true);
+                    }}
+                    aria-label={`Answer: ${card.title}`}
+                  >
+                    <Reply className="size-3" />
+                    Answer
+                  </Button>
+                )}
+                {thread !== undefined && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 gap-1 px-1.5 text-[11px] text-muted-foreground"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      open();
+                    }}
+                    aria-label={
+                      card.review !== undefined
+                        ? `Open the review: ${card.title}`
+                        : `Open the thread: ${card.title}`
+                    }
+                  >
+                    <SquareArrowOutUpRight className="size-3" />
+                    {card.review !== undefined ? "Review" : "Thread"}
+                  </Button>
+                )}
               </div>
             )}
           </div>
@@ -424,21 +585,22 @@ const CardRow = memo(
 );
 CardRow.displayName = "CardRow";
 
+/** The events rail's dock preference survives reloads. */
+const EVENTS_OPEN_KEY = "alchemy:events-open";
+
 /** Confirm, then delete — the DO broadcasts the removal so the rows
  *  vanish from every open view at once. Deferred a tick so the menu
- *  that asked has closed before the confirm blocks. */
+ *  that asked has closed before the confirm dialog takes focus. */
 const confirmDeleteMessages = (ids: ReadonlyArray<string>) => {
   if (ids.length === 0) return;
   setTimeout(() => {
-    if (
-      window.confirm(
-        ids.length === 1
-          ? "Delete this message from the channel?"
-          : `Delete ${ids.length} messages from the channel?`,
-      )
-    ) {
-      void deleteChannelMessages(ids);
-    }
+    void confirm(
+      ids.length === 1
+        ? "Delete this message from the channel?"
+        : `Delete ${ids.length} messages from the channel?`,
+    ).then((confirmed) => {
+      if (confirmed) void deleteChannelMessages(ids);
+    });
   }, 0);
 };
 
@@ -475,17 +637,21 @@ export const ChannelView = ({
 }) => {
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
-  // the run rail: the seq of the user message whose run is open
-  const [runSeq, setRunSeq] = useState<number | undefined>(undefined);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const stickRef = useRef(true);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
-  // SELECTION over the stream (click / ⌘ / ⇧), the ids the open
+  // the CONVERSATION is user | agent | card; events ride EventsRail
+  const conversation = useMemo(
+    () => messages.filter((message) => message.kind !== "event"),
+    [messages],
+  );
+
+  // SELECTION over the conversation (click / ⌘ / ⇧), the ids the open
   // context menu acts on, and the inline reply being composed
   const order = useMemo(
-    () => messages.map((message) => message.id),
-    [messages],
+    () => conversation.map((message) => message.id),
+    [conversation],
   );
   const byId = useMemo(
     () => new Map(messages.map((message) => [message.id, message] as const)),
@@ -569,22 +735,27 @@ export const ChannelView = ({
     if (active) textareaRef.current?.focus();
   }, [active]);
 
-  // a user message's run is WORKING until the agent's reply lands —
-  // every run ends with exactly one agent row (Routes.ts falls back to
-  // the run's final text), so "no agent message after mine" is the
-  // in-flight signal
-  const lastAnswered = useMemo(() => {
-    let last = 0;
-    for (const message of messages) {
-      if (message.kind === "agent" && message.seq > last) last = message.seq;
+  // the agent is WORKING while the newest operator message has no
+  // agent reply after it (its round ends with send_reply) — the
+  // conversation's quiet indicator
+  const working = useMemo(() => {
+    let lastUser = 0;
+    let lastAgent = 0;
+    for (const message of conversation) {
+      if (message.kind === "user" && message.seq > lastUser) {
+        lastUser = message.seq;
+      }
+      if (message.kind === "agent" && message.seq > lastAgent) {
+        lastAgent = message.seq;
+      }
     }
-    return last;
-  }, [messages]);
+    return live && lastUser > lastAgent;
+  }, [conversation, live]);
 
   const rows = useMemo(() => {
     const out: ReactNode[] = [];
     let lastDay: string | undefined;
-    for (const message of messages) {
+    for (const message of conversation) {
       const day = dayOf(message.at);
       if (day !== undefined && day !== lastDay) {
         lastDay = day;
@@ -643,28 +814,12 @@ export const ChannelView = ({
       );
       switch (message.kind) {
         case "event":
-          out.push(
-            wrap(
-              <EventRow
-                message={message}
-                directory={directory}
-                onOpenThread={onOpenThread}
-              />,
-            ),
-          );
           break;
         case "user":
           out.push(
             wrap(
               <UserRow
                 message={message}
-                working={live && message.seq > lastAnswered}
-                runOpen={runSeq === message.seq}
-                onToggleRun={() =>
-                  setRunSeq((current) =>
-                    current === message.seq ? undefined : message.seq,
-                  )
-                }
                 quotes={
                   message.replyTo !== undefined &&
                   message.replyTo.length > 0 ? (
@@ -698,11 +853,8 @@ export const ChannelView = ({
     }
     return out;
   }, [
-    messages,
+    conversation,
     directory,
-    live,
-    lastAnswered,
-    runSeq,
     onOpenThread,
     onOpenReview,
     selection,
@@ -784,6 +936,21 @@ export const ChannelView = ({
                   </div>
                 )}
                 {rows}
+                {/* the agent at work — the reply lands as its own row */}
+                {working && (
+                  <div
+                    data-working=""
+                    role="status"
+                    aria-label="the channel agent is working"
+                    className="flex items-center gap-2 px-1 py-1.5"
+                  >
+                    <div className="w-10 shrink-0" />
+                    <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <LoaderCircle className="size-3.5 animate-spin" />
+                      <span className="animate-pulse">Working…</span>
+                    </span>
+                  </div>
+                )}
               </div>
             </ContextMenuTrigger>
             <ContextMenuContent>
@@ -913,75 +1080,152 @@ export const ChannelView = ({
               placeholder={
                 replyTo.length > 0
                   ? "Reply…"
-                  : "Message the channel — the agent routes, you decide…"
+                  : "Message Control — it organizes, you decide…"
               }
-              aria-label="Message the channel"
+              aria-label="Message Control"
               className="min-h-12 resize-none border-0 bg-transparent shadow-none focus-visible:ring-0 dark:bg-transparent"
             />
-            {/* the controls, bottom right, flat on the card: the channel
-                agent's model (every message runs a fresh session, so the
-                pick lives on the channel and governs the NEXT run) and
-                Send */}
+            {/* the controls, bottom right: the channel agent's model
+                (one persistent session — the pick governs its next
+                sampling) — a bordered chip whose whole box is the
+                target — and Send. While the agent WORKS the button is
+                STOP: abort the round (the session lives on); typing +
+                Enter still steers mid-round */}
             <div className="flex items-center justify-end gap-1 px-2 pb-1.5">
               <SessionModelSelect
                 sessionId="Channel:main"
                 label="The channel agent's model"
-                className="border-0 bg-transparent shadow-none dark:bg-transparent dark:hover:bg-accent"
               />
-              <Button
-                size="icon"
-                variant="ghost"
-                disabled={draft.trim().length === 0 || sending}
-                onClick={send}
-                aria-label="Send"
-                className="size-7 text-muted-foreground"
-              >
-                {sending ? (
-                  <Spinner className="size-4" />
-                ) : (
-                  <ArrowUp className="size-4" />
-                )}
-              </Button>
+              {working && draft.trim().length === 0 ? (
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  onClick={() => {
+                    void interruptChat("Channel:main").catch(() => {});
+                  }}
+                  aria-label="Stop"
+                  title="Stop the agent's round — the session lives on"
+                  className="size-7 text-muted-foreground"
+                >
+                  <Square className="size-3.5 fill-current" />
+                </Button>
+              ) : (
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  disabled={draft.trim().length === 0 || sending}
+                  onClick={send}
+                  aria-label="Send"
+                  className="size-7 text-muted-foreground"
+                >
+                  {sending ? (
+                    <Spinner className="size-4" />
+                  ) : (
+                    <ArrowUp className="size-4" />
+                  )}
+                </Button>
+              )}
             </div>
           </div>
         </div>
       </div>
-      {/* the run rail — the agent's session on one message, beside the
-          stream (the exploration never streams into the channel) */}
-      {runSeq !== undefined && (
-        <Rail
-          label="Run"
-          side="right"
-          storageKey="run-rail-width"
-          defaultWidth={480}
-          minWidth={360}
-          className="bg-background"
+    </div>
+  );
+};
+
+/**
+ * The EVENTS rail — GitHub's stream as CONTEXT beside the board,
+ * never the source of truth; dockable to a slim strip.
+ */
+export const EventsRail = ({
+  messages,
+  directory,
+  onOpenThread,
+}: {
+  messages: ReadonlyArray<ChannelMessage>;
+  directory: ReadonlyArray<ThreadListing>;
+  onOpenThread: (id: string) => void;
+}) => {
+  const [open, setOpen] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(EVENTS_OPEN_KEY) !== "0";
+    } catch {
+      return true;
+    }
+  });
+  const toggle = useCallback(() => {
+    setOpen((current) => {
+      const next = !current;
+      try {
+        localStorage.setItem(EVENTS_OPEN_KEY, next ? "1" : "0");
+      } catch {
+        // storage disabled — the preference just won't survive
+      }
+      return next;
+    });
+  }, []);
+  const events = useMemo(
+    () => messages.filter((message) => message.kind === "event"),
+    [messages],
+  );
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={toggle}
+        aria-label="show the events pane"
+        title="Events — the GitHub stream"
+        className="flex w-6 shrink-0 cursor-pointer items-center justify-center border-l border-border text-muted-foreground hover:bg-accent hover:text-foreground"
+      >
+        <span
+          className="text-[10px] tracking-widest"
+          style={{ writingMode: "vertical-rl" }}
         >
-          <div className="flex items-center gap-2 border-b border-border px-3 py-2">
-            <span className="min-w-0 flex-1 truncate text-[13px] font-medium">
-              The agent's run
-            </span>
-            <button
-              type="button"
-              onClick={() => setRunSeq(undefined)}
-              aria-label="Close the run pane"
-              className="flex size-6 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
-            >
-              <X className="size-4" />
-            </button>
+          EVENTS
+        </span>
+      </button>
+    );
+  }
+  return (
+    <Rail
+      label="Events"
+      side="right"
+      storageKey="events-rail-width"
+      defaultWidth={380}
+      minWidth={300}
+      className="bg-background"
+    >
+      <div className="flex items-center gap-2 border-b border-border px-3 py-2">
+        <span className="min-w-0 flex-1 truncate text-[13px] font-medium">
+          Events
+        </span>
+        <button
+          type="button"
+          onClick={toggle}
+          aria-label="hide the events pane"
+          className="flex size-6 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+        >
+          <X className="size-4" />
+        </button>
+      </div>
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto px-2 py-2">
+        {events.length === 0 && (
+          <div className="px-2 py-8 text-center text-xs text-muted-foreground">
+            No events yet — GitHub deliveries land here.
           </div>
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-            <ChatView
-              key={runSeq}
-              id={`Channel:main@${runSeq}`}
-              active={false}
-              readOnly
-              hideFinalReply
+        )}
+        {events.slice(-500).map((message) => (
+          <div key={message.seq} data-seq={message.seq} className="px-0.5">
+            <EventRow
+              message={message}
+              directory={directory}
+              onOpenThread={onOpenThread}
             />
           </div>
-        </Rail>
-      )}
-    </div>
+        ))}
+      </div>
+    </Rail>
   );
 };
 
@@ -1005,16 +1249,17 @@ const TURN_DOT: Record<string, string> = {
 export const ThreadList = ({
   directory,
   selected,
-  channelSelected,
-  onOpenChannel,
+  boardSelected,
+  onOpenBoard,
   onOpenThread,
   deleting,
   onDeleteThreads,
 }: {
   directory: ReadonlyArray<ThreadListing>;
   selected: string | undefined;
-  channelSelected: boolean;
-  onOpenChannel: () => void;
+  /** The home surface (the board + Control chat) is what shows. */
+  boardSelected: boolean;
+  onOpenBoard: () => void;
   onOpenThread: (id: string) => void;
   /** Threads whose DELETE is in flight — the server is stopping their
    *  agents and dropping their worktrees; the row stays until it is
@@ -1076,17 +1321,17 @@ export const ThreadList = ({
         >
           <button
             type="button"
-            onClick={onOpenChannel}
-            aria-current={channelSelected ? "page" : undefined}
+            onClick={onOpenBoard}
+            aria-current={boardSelected ? "page" : undefined}
             className={cn(
               "flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm",
-              channelSelected
+              boardSelected
                 ? "bg-accent font-medium text-foreground"
                 : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
             )}
           >
-            <Terminal className="size-4 shrink-0" />
-            <span className="truncate"># channel</span>
+            <SquareKanban className="size-4 shrink-0" />
+            <span className="truncate">Board</span>
           </button>
           {groups.map(([turn, rows]) => (
             <div key={turn} className="mt-2 flex flex-col gap-0.5">

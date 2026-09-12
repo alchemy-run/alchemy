@@ -212,6 +212,10 @@ export class Threads extends Context.Service<
     readonly close: (
       id: string,
     ) => Effect.Effect<ThreadState, never, RuntimeContext>;
+    /** Reopen a closed thread — the operator picking the task back up. */
+    readonly reopen: (
+      id: string,
+    ) => Effect.Effect<ThreadState, never, RuntimeContext>;
     /**
      * DELETE the thread — everything it is, in THE ORDER: agents
      * first, trees second, the record last.
@@ -353,6 +357,7 @@ export const ThreadsLive: Layer.Layer<
       rename: (id, input) => agent.at(id).rename(input),
       setModel: (id, model) => agent.at(id).setModel(model),
       close: (id) => agent.at(id).close(),
+      reopen: (id) => agent.at(id).reopen(),
       remove: Effect.fn(function* (id) {
         // 1. the thread's own agent: settled, its round cut (a
         // `spawn` mid-await dies here, so no waiter re-records an

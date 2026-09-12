@@ -174,7 +174,12 @@ interface Turn {
  * note the driver appended) are surfaced through {@link onInput}
  * instead, as the `UIMessage` a snapshot would have produced (same
  * `u-${seq}` id, so the two dedupe). The echo of THIS client's own
- * submit is swallowed — `useChat` already appended it.
+ * submit is delivered the same way: `useChat` appended the message
+ * under a transient SDK id, and the durable echo is how the client
+ * learns the row's real `u-${seq}` — `alchemy/AI/React` reconciles
+ * by re-identifying that message, not appending a duplicate. Without
+ * it, a row born on the socket cannot be addressed later (redaction
+ * resolves observation spans by durable id).
  */
 export class SessionSocketTransport<
   M extends UIMessage = UIMessage,
@@ -184,8 +189,6 @@ export class SessionSocketTransport<
   private subscribed = false;
   private readonly options: SessionSocketTransportOptions;
   private turns: Turn[] = [];
-  /** Text of the submit whose `input` echo hasn't come back yet. */
-  private pendingSubmit: string | undefined;
   /** Inputs that landed mid-burst — delivered when the burst ends. */
   private heldInputs: UIMessage[] = [];
   /**
@@ -271,14 +274,9 @@ export class SessionSocketTransport<
     }
     const observation = frame.observation;
     if (observation.type === "input") {
-      if (
-        this.pendingSubmit !== undefined &&
-        observation.text === this.pendingSubmit &&
-        observation.kind === undefined
-      ) {
-        this.pendingSubmit = undefined;
-        return;
-      }
+      // every input is delivered — the echo of this client's own
+      // submit included, so the optimistic message can adopt its
+      // durable id (see the class doc)
       const message = inputToUIMessage(observation);
       if (sink.started) this.heldInputs.push(message);
       else this.onInput?.(message);
@@ -343,7 +341,6 @@ export class SessionSocketTransport<
             .flatMap((part) => (part.type === "text" ? [part.text] : []))
             .join("\n");
     const stream = this.stream("submit");
-    this.pendingSubmit = text;
     socket.send(
       JSON.stringify({
         type: "submit",

@@ -136,6 +136,8 @@ export interface ThreadApi {
    */
   readonly setModel: (model: string | undefined) => Effect.Effect<ThreadState>;
   readonly close: () => Effect.Effect<ThreadState>;
+  /** Reopen a closed thread — the work resumed; `turn` re-derives. */
+  readonly reopen: () => Effect.Effect<ThreadState>;
   /**
    * Everything UNDER the thread, gone — the part of a delete that runs
    * inside the thread (its machine is still up): every engineer and
@@ -560,6 +562,7 @@ export const ThreadAgentLive = ThreadAgent.make(
     });
 
     const close = () => commit((b) => ({ ...b, status: "closed" }));
+    const reopen = () => commit((b) => ({ ...b, status: "open" }));
 
     const teardown = Effect.fn(function* () {
       const before = yield* threadState;
@@ -817,12 +820,27 @@ export const ThreadAgentLive = ThreadAgent.make(
 
     const card = (input: { title: string; text: string }) =>
       Effect.flatMap(self, (id) =>
-        channel.append({
-          kind: "card",
-          text: input.text,
-          thread: id,
-          card: { thread: id, title: input.title },
-        }),
+        channel
+          .append({
+            kind: "card",
+            text: input.text,
+            thread: id,
+            card: { thread: id, title: input.title },
+          })
+          .pipe(
+            // the channel agent hears its task forces' cards as
+            // CONTEXT (non-waking) — it tracks them without running
+            Effect.tap(() =>
+              sessions
+                .send(
+                  "Channel",
+                  "main",
+                  `[card from ${id}] ${input.title}\n${input.text}`,
+                  { wake: false },
+                )
+                .pipe(Effect.ignore),
+            ),
+          ),
       );
 
     const postCard = yield* AI.Tool("post_card")`
@@ -897,6 +915,7 @@ export const ThreadAgentLive = ThreadAgent.make(
       rename,
       setModel,
       close,
+      reopen,
       teardown,
       turn: AI.fragment`
         You are the MANAGER of ONE thread — a task over the issues and

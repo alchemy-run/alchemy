@@ -6,7 +6,7 @@
  */
 
 import { ChatView, timeAgo } from "@/components/chat";
-import { SessionModelSelect } from "@/components/model-select";
+import { confirm } from "@/components/confirm";
 import { Rail } from "@/components/rail";
 import { GhosttyTerminal } from "@/components/terminal";
 import {
@@ -48,6 +48,8 @@ import {
   CircleDot,
   Crown,
   FileDiff,
+  PanelRightClose,
+  PanelRightOpen,
   FolderGit2,
   GitMerge,
   LoaderCircle,
@@ -63,7 +65,13 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
-import { useCallback, useMemo, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import { ReviewView } from "@/components/review";
 
 const Hint = ({ label, children }: { label: string; children: ReactNode }) => (
@@ -282,6 +290,7 @@ const ThreadPane = ({
   onOpenManager,
   agentActions,
   onClose,
+  onReopen,
   deleting,
   onDelete,
 }: {
@@ -295,6 +304,8 @@ const ThreadPane = ({
   onOpenManager: () => void;
   agentActions: AgentActions;
   onClose: () => void;
+  /** Reopen a closed thread — the operator picking it back up. */
+  onReopen: () => void;
   /** The thread's DELETE is in flight. */
   deleting: boolean;
   onDelete: () => void;
@@ -359,10 +370,19 @@ const ThreadPane = ({
         aria-current={selectedAgent === agent.key ? "page" : undefined}
         title={`${agent.brief}\n\nOpen the agent's session — every tool call, as it happens. Right-click to stop, resume, or delete.`}
         className={cn(
-          "flex w-full cursor-pointer items-center gap-2 rounded-md px-1 py-0.5 text-left hover:bg-accent/70",
-          selectedAgent === agent.key && "bg-accent",
+          // four DISTINCT states: plain · hovered (accent/70) ·
+          // selected (full accent) · selected+hovered (full accent +
+          // border). The base border is transparent so rows never
+          // shift; the selected row re-pins its full background or
+          // the hover variant would dim it back to accent/70.
+          "flex w-full cursor-pointer items-center gap-2 rounded-md border border-transparent px-1 py-0.5 text-left hover:bg-accent/70",
+          selectedAgent === agent.key &&
+            "bg-accent hover:border-muted-foreground/40 hover:bg-accent",
+          // ⌘/⇧-selection (and the open menu's target) reads like the
+          // channel's: a PRIMARY border + lifted background — the old
+          // 10% tint vanished under hover, so the gestures looked dead
           (pick.has(agent.key) || menuKeys.includes(agent.key)) &&
-            "bg-primary/10",
+            "border-primary/60 bg-accent/60 hover:border-primary/60",
         )}
       >
         {busy ? (
@@ -388,6 +408,163 @@ const ThreadPane = ({
   };
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+      <ContextMenu
+        onOpenChange={(open) => {
+          // the menu closing ends the gesture — target and selection go
+          if (!open) {
+            setMenuKeys([]);
+            pick.clear();
+          }
+        }}
+      >
+        <ContextMenuTrigger asChild>
+          <div
+            onContextMenu={(event) => {
+              // off a row there is nothing to act on — no menu
+              if (
+                !(event.target instanceof Element) ||
+                event.target.closest("[data-agent]") === null
+              ) {
+                event.preventDefault();
+              }
+            }}
+          >
+            <Section
+              title="Agents"
+              summary={
+                state.agents.length === 0
+                  ? undefined
+                  : allRunning.length > 0
+                    ? `${countOf(state.agents.length, "agent")} · ${allRunning.length} running`
+                    : countOf(state.agents.length, "agent")
+              }
+              actions={
+                state.agents.length > 0 && (
+                  <>
+                    {allRunning.length > 0 && (
+                      <HeadingAction
+                        icon={Square}
+                        label={`Stop all${allRunning.length > 1 ? ` (${allRunning.length})` : ""}`}
+                        title="Stop every working agent — their commands in flight are cut"
+                        onClick={() =>
+                          agentActions.stop(allRunning.map((a) => a.key))
+                        }
+                        disabled={agentActions.busy.size > 0}
+                      />
+                    )}
+                    {allRunning.length === 0 && allSettled.length > 0 && (
+                      <HeadingAction
+                        icon={Play}
+                        label={`Resume all${allSettled.length > 1 ? ` (${allSettled.length})` : ""}`}
+                        title="Resume every stopped agent — each picks its work back up where it was stopped"
+                        onClick={() =>
+                          agentActions.resume(allSettled.map((a) => a.key))
+                        }
+                        disabled={agentActions.busy.size > 0}
+                      />
+                    )}
+                    <HeadingAction
+                      icon={Trash2}
+                      label="Delete all"
+                      title="Delete every agent — sessions and transcripts erased"
+                      onClick={() => agentActions.remove(order)}
+                      disabled={agentActions.busy.size > 0}
+                      destructive
+                    />
+                  </>
+                )
+              }
+            >
+              {/* the MANAGER — the thread's own agent, set apart from the
+                  engineers it briefs: its own colour, and pinned to the
+                  top of the list however far it scrolls */}
+              <div className="sticky -top-px z-10 -mx-3 -mt-px bg-sidebar px-3 pb-1 pt-px">
+                <button
+                  type="button"
+                  data-manager=""
+                  data-state={state.turn === "agents" ? "running" : "idle"}
+                  onClick={onOpenManager}
+                  aria-label="open the manager"
+                  aria-current={managerOpen ? "page" : undefined}
+                  title={`${state.title}\n\nOpen the manager's conversation — the thread's whole record. It briefs the engineers and hears their reports.`}
+                  className={cn(
+                    // styled like the agent rows — the crown and the
+                    // primary-coloured name set it apart; a standing
+                    // tint reads as "selected" when it isn't. Same
+                    // four states as the agent rows (see agentRow).
+                    "flex w-full cursor-pointer items-center gap-2 rounded-md border border-transparent px-1 py-0.5 text-left hover:bg-accent/70",
+                    managerOpen &&
+                      "bg-accent hover:border-muted-foreground/40 hover:bg-accent",
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "size-2 shrink-0 rounded-full",
+                      state.turn === "agents"
+                        ? AGENT_DOT.running
+                        : "bg-primary/40",
+                    )}
+                  />
+                  <Crown className="size-3.5 shrink-0 text-primary" />
+                  <span className="min-w-0 flex-1 truncate text-[12px] text-muted-foreground">
+                    <span className="font-medium text-primary">manager</span> —{" "}
+                    {state.title}
+                  </span>
+                  <span className="shrink-0 text-[10px] text-muted-foreground/70">
+                    {timeAgo(state.updatedAt)}
+                  </span>
+                </button>
+              </div>
+              {state.agents.length === 0 && (
+                <div className="pl-6 text-xs text-muted-foreground">
+                  No engineers yet.
+                </div>
+              )}
+              {state.agents.map(agentRow)}
+            </Section>
+          </div>
+        </ContextMenuTrigger>
+        <ContextMenuContent>
+          {menuKeys.length === 1 && (
+            <>
+              <ContextMenuItem onSelect={() => onOpenAgent(menuKeys[0]!)}>
+                <SquareArrowOutUpRight />
+                Open
+              </ContextMenuItem>
+              <ContextMenuSeparator />
+            </>
+          )}
+          {running.length > 0 && (
+            <ContextMenuItem
+              onSelect={() =>
+                agentActions.stop(running.map((agent) => agent.key))
+              }
+            >
+              <Square />
+              Stop {plural(running)}
+            </ContextMenuItem>
+          )}
+          {settled.length > 0 && (
+            <ContextMenuItem
+              onSelect={() =>
+                agentActions.resume(settled.map((agent) => agent.key))
+              }
+            >
+              <Play />
+              Resume {plural(settled)}
+            </ContextMenuItem>
+          )}
+          <ContextMenuSeparator />
+          <ContextMenuItem
+            variant="destructive"
+            // deferred a tick so the menu has closed before the confirm
+            onSelect={() => setTimeout(() => agentActions.remove(menuKeys), 0)}
+          >
+            <Trash2 />
+            Delete {plural(menuKeys)}
+          </ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenu>
       <Section title="Assigned" summary={assignedSummary(state.assigned)}>
         {state.assigned.length === 0 && (
           <div className="text-xs text-muted-foreground">
@@ -530,174 +707,8 @@ const ThreadPane = ({
           </div>
         ))}
       </Section>
-      <ContextMenu
-        onOpenChange={(open) => {
-          // the menu closing ends the gesture — target and selection go
-          if (!open) {
-            setMenuKeys([]);
-            pick.clear();
-          }
-        }}
-      >
-        <ContextMenuTrigger asChild>
-          <div
-            onContextMenu={(event) => {
-              // off a row there is nothing to act on — no menu
-              if (
-                !(event.target instanceof Element) ||
-                event.target.closest("[data-agent]") === null
-              ) {
-                event.preventDefault();
-              }
-            }}
-          >
-            <Section
-              title="Agents"
-              summary={
-                state.agents.length === 0
-                  ? undefined
-                  : allRunning.length > 0
-                    ? `${countOf(state.agents.length, "agent")} · ${allRunning.length} running`
-                    : countOf(state.agents.length, "agent")
-              }
-              actions={
-                state.agents.length > 0 && (
-                  <>
-                    {allRunning.length > 0 && (
-                      <HeadingAction
-                        icon={Square}
-                        label={`Stop all${allRunning.length > 1 ? ` (${allRunning.length})` : ""}`}
-                        title="Stop every working agent — their commands in flight are cut"
-                        onClick={() =>
-                          agentActions.stop(allRunning.map((a) => a.key))
-                        }
-                        disabled={agentActions.busy.size > 0}
-                      />
-                    )}
-                    {allRunning.length === 0 && allSettled.length > 0 && (
-                      <HeadingAction
-                        icon={Play}
-                        label={`Resume all${allSettled.length > 1 ? ` (${allSettled.length})` : ""}`}
-                        title="Resume every stopped agent — each picks its work back up where it was stopped"
-                        onClick={() =>
-                          agentActions.resume(allSettled.map((a) => a.key))
-                        }
-                        disabled={agentActions.busy.size > 0}
-                      />
-                    )}
-                    <HeadingAction
-                      icon={Trash2}
-                      label="Delete all"
-                      title="Delete every agent — sessions and transcripts erased"
-                      onClick={() => agentActions.remove(order)}
-                      disabled={agentActions.busy.size > 0}
-                      destructive
-                    />
-                  </>
-                )
-              }
-            >
-              {/* the MANAGER — the thread's own agent, set apart from the
-                  engineers it briefs: its own colour, and pinned to the
-                  top of the list however far it scrolls */}
-              <div className="sticky -top-px z-10 -mx-3 -mt-px bg-sidebar px-3 pb-1 pt-px">
-                <button
-                  type="button"
-                  data-manager=""
-                  data-state={state.turn === "agents" ? "running" : "idle"}
-                  onClick={onOpenManager}
-                  aria-label="open the manager"
-                  aria-current={managerOpen ? "page" : undefined}
-                  title={`${state.title}\n\nOpen the manager's conversation — the thread's whole record. It briefs the engineers and hears their reports.`}
-                  className={cn(
-                    "flex w-full cursor-pointer items-center gap-2 rounded-md border border-primary/20 bg-primary/5 px-1 py-0.5 text-left hover:bg-primary/10",
-                    managerOpen && "border-primary/40 bg-primary/15",
-                  )}
-                >
-                  <span
-                    className={cn(
-                      "size-2 shrink-0 rounded-full",
-                      state.turn === "agents"
-                        ? AGENT_DOT.running
-                        : "bg-primary/40",
-                    )}
-                  />
-                  <Crown className="size-3.5 shrink-0 text-primary" />
-                  <span className="min-w-0 flex-1 truncate text-[12px] text-muted-foreground">
-                    <span className="font-medium text-primary">manager</span> —{" "}
-                    {state.title}
-                  </span>
-                  <span className="shrink-0 text-[10px] text-muted-foreground/70">
-                    {timeAgo(state.updatedAt)}
-                  </span>
-                </button>
-              </div>
-              {state.agents.length === 0 && (
-                <div className="pl-6 text-xs text-muted-foreground">
-                  No engineers yet.
-                </div>
-              )}
-              {state.agents.map(agentRow)}
-            </Section>
-          </div>
-        </ContextMenuTrigger>
-        <ContextMenuContent>
-          {menuKeys.length === 1 && (
-            <>
-              <ContextMenuItem onSelect={() => onOpenAgent(menuKeys[0]!)}>
-                <SquareArrowOutUpRight />
-                Open
-              </ContextMenuItem>
-              <ContextMenuSeparator />
-            </>
-          )}
-          {running.length > 0 && (
-            <ContextMenuItem
-              onSelect={() =>
-                agentActions.stop(running.map((agent) => agent.key))
-              }
-            >
-              <Square />
-              Stop {plural(running)}
-            </ContextMenuItem>
-          )}
-          {settled.length > 0 && (
-            <ContextMenuItem
-              onSelect={() =>
-                agentActions.resume(settled.map((agent) => agent.key))
-              }
-            >
-              <Play />
-              Resume {plural(settled)}
-            </ContextMenuItem>
-          )}
-          <ContextMenuSeparator />
-          <ContextMenuItem
-            variant="destructive"
-            // deferred a tick so the menu has closed before the confirm
-            onSelect={() => setTimeout(() => agentActions.remove(menuKeys), 0)}
-          >
-            <Trash2 />
-            Delete {plural(menuKeys)}
-          </ContextMenuItem>
-        </ContextMenuContent>
-      </ContextMenu>
-      <Section
-        title="Model"
-        actions={
-          <SessionModelSelect
-            sessionId={threadSessionId(state.id)}
-            current={state.model ?? null}
-            label="Thread model"
-          />
-        }
-      >
-        <div className="text-[11px] text-muted-foreground">
-          What this thread's manager and its engineers sample with.
-        </div>
-      </Section>
       <div className="flex items-center gap-2 px-3 py-2.5">
-        {state.status === "open" && (
+        {state.status === "open" ? (
           <Button
             size="sm"
             variant="outline"
@@ -706,6 +717,16 @@ const ThreadPane = ({
             className="text-muted-foreground"
           >
             Close thread
+          </Button>
+        ) : (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={onReopen}
+            title="Reopen the thread — the task is back on; its agents and worktrees are as it left them"
+            className="text-muted-foreground"
+          >
+            Reopen thread
           </Button>
         )}
         <Button
@@ -878,16 +899,84 @@ const AgentHeader = ({
                 <Trash2 className="size-3" />
               </button>
             </Hint>
-            <SessionModelSelect
-              sessionId={engineerSessionId(agentKey)}
-              label="Agent model"
-            />
           </span>
         )}
       </div>
     </div>
   );
 };
+
+/* ── the tabs ─────────────────────────────────────────────────────── */
+
+/** A tab's identity — what "already open" and "the active one" mean. */
+const tabKey = (tab: ThreadTab): string =>
+  tab.kind === "chat"
+    ? "chat"
+    : tab.kind === "agent"
+      ? `agent:${tab.key}`
+      : tab.kind === "review"
+        ? `review:${tab.owner}/${tab.repo}#${tab.number}`
+        : `pty:${tab.pty}`;
+
+/** One tab in the strip — browser-style: click to activate, × to
+ *  close (the manager's has none; it is permanent). */
+const TabChip = ({
+  active,
+  onOpen,
+  onClose,
+  closeLabel,
+  icon: Icon,
+  iconClass,
+  label,
+  title,
+  dataReviewTab,
+}: {
+  active: boolean;
+  onOpen: () => void;
+  onClose?: () => void;
+  closeLabel?: string;
+  icon: LucideIcon;
+  iconClass?: string;
+  label: string;
+  title?: string;
+  dataReviewTab?: string;
+}) => (
+  <span
+    data-review-tab={dataReviewTab}
+    className={cn(
+      "-mb-px flex h-8 shrink-0 items-center gap-0.5 rounded-t-md border border-b-0 pl-2.5 text-xs",
+      active
+        ? "border-border bg-background font-medium"
+        : "border-transparent text-muted-foreground hover:bg-accent/60 hover:text-foreground",
+      onClose === undefined ? "pr-2.5" : "pr-1",
+    )}
+  >
+    <button
+      type="button"
+      role="tab"
+      aria-selected={active}
+      onClick={onOpen}
+      title={title}
+      className="flex cursor-pointer items-center gap-1.5"
+    >
+      <Icon className={cn("size-3.5 shrink-0", iconClass)} />
+      {label}
+    </button>
+    {onClose !== undefined && (
+      <button
+        type="button"
+        onClick={onClose}
+        aria-label={closeLabel}
+        className="cursor-pointer rounded p-0.5 hover:bg-accent"
+      >
+        <X className="size-3" />
+      </button>
+    )}
+  </span>
+);
+
+/** The dock preference survives reloads — one key for the app. */
+const PANE_OPEN_KEY = "alchemy:thread-pane-open";
 
 /* ── the page ─────────────────────────────────────────────────────── */
 
@@ -902,6 +991,7 @@ export const ThreadView = ({
   onNewTerminal,
   onCloseTerminal,
   onCloseThread,
+  onReopenThread,
   deleting,
   onDeleteThread,
 }: {
@@ -918,22 +1008,88 @@ export const ThreadView = ({
   onNewTerminal: () => void;
   onCloseTerminal: (pty: string) => void;
   onCloseThread: () => void;
+  /** Reopen a closed thread — the pane's button posts it. */
+  onReopenThread: () => void;
   /** The thread's DELETE is in flight — the server is stopping its
    *  agents, dropping its worktrees, and erasing its machine. */
   deleting: boolean;
   onDeleteThread: () => void;
 }) => {
   const sessionId = threadSessionId(id);
-  // the review in the body, resolved to its assignment (title, ref)
-  const openReview = useMemo(() => {
-    if (tab.kind !== "review") return undefined;
-    const ref = `${tab.owner}/${tab.repo}#${tab.number}`;
-    const entity = (state?.assigned ?? []).find((e) => e.ref === ref);
-    return { ref, number: tab.number, title: entity?.title ?? ref };
-  }, [tab, state?.assigned]);
   const agents = state?.agents ?? [];
   const openAgent = tab.kind === "agent" ? tab.key : undefined;
   const openSubagent = agents.find((agent) => agent.key === openAgent);
+
+  // BROWSER-STYLE TABS: the manager's conversation is the permanent
+  // first tab; every agent or review OPENED stays a tab until its ×
+  // (a deep link seeds one); terminals ride the `terminals` list the
+  // same way. The sidebar names the thread — the strip owns the top.
+  const [opened, setOpened] = useState<ReadonlyArray<ThreadTab>>([]);
+  useEffect(() => {
+    if (tab.kind !== "agent" && tab.kind !== "review") return;
+    setOpened((current) =>
+      current.some((entry) => tabKey(entry) === tabKey(tab))
+        ? current
+        : [...current, tab],
+    );
+  }, [tab]);
+  // an agent DELETED under its tab takes the tab with it
+  useEffect(() => {
+    if (state === undefined) return;
+    const alive = new Set(state.agents.map((agent) => agent.key));
+    setOpened((current) => {
+      const next = current.filter(
+        (entry) => entry.kind !== "agent" || alive.has(entry.key),
+      );
+      return next.length === current.length ? current : next;
+    });
+  }, [state]);
+  const closeTab = useCallback(
+    (entry: ThreadTab) => {
+      setOpened((current) =>
+        current.filter((open) => tabKey(open) !== tabKey(entry)),
+      );
+      if (tabKey(entry) === tabKey(tab)) onTab({ kind: "chat" });
+    },
+    [tab, onTab],
+  );
+
+  // every opened review stays MOUNTED behind its tab (hidden, not
+  // unmounted) — switching back must not refetch and re-render the
+  // whole diff. A deep link's review renders before the effect above
+  // has added it to `opened`.
+  const reviews = useMemo(() => {
+    const entries = opened.filter(
+      (entry): entry is Extract<ThreadTab, { kind: "review" }> =>
+        entry.kind === "review",
+    );
+    return tab.kind === "review" &&
+      !entries.some((entry) => tabKey(entry) === tabKey(tab))
+      ? [...entries, tab]
+      : entries;
+  }, [opened, tab]);
+
+  // the STATE PANE rides every tab (review included) — dockable: the
+  // strip's toggle collapses it to the right edge, remembered across
+  // reloads
+  const [paneOpen, setPaneOpen] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(PANE_OPEN_KEY) !== "0";
+    } catch {
+      return true;
+    }
+  });
+  const togglePane = useCallback(() => {
+    setPaneOpen((current) => {
+      const next = !current;
+      try {
+        localStorage.setItem(PANE_OPEN_KEY, next ? "1" : "0");
+      } catch {
+        // storage disabled — the preference just won't survive
+      }
+      return next;
+    });
+  }, []);
 
   // a spawn card names its agent by key once settled; while it is
   // still working only the brief is on the wire — match that to the
@@ -1001,16 +1157,14 @@ export const ThreadView = ({
         if (keys.length === 0) return;
         const what =
           keys.length === 1 ? "this agent" : `these ${keys.length} agents`;
-        if (
-          !window.confirm(
-            `Delete ${what}? The session and its transcript are erased. This can't be undone.`,
-          )
-        ) {
-          return;
-        }
-        act(keys, "delete", (key) => {
-          // the pane that showed it has nothing to show
-          if (openAgent === key) onTab({ kind: "chat" });
+        void confirm(
+          `Delete ${what}? The session and its transcript are erased. This can't be undone.`,
+        ).then((confirmed) => {
+          if (!confirmed) return;
+          act(keys, "delete", (key) => {
+            // the pane that showed it has nothing to show
+            if (openAgent === key) onTab({ kind: "chat" });
+          });
         });
       },
     }),
@@ -1019,124 +1173,83 @@ export const ThreadView = ({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* header: the name, and at the right what is open — the title
-          lives on the manager row of the state pane */}
-      <div className="flex items-center gap-3 border-b border-border bg-sidebar px-4 py-2">
-        <span
-          className="shrink-0 text-sm font-semibold"
-          title={state?.title ?? undefined}
-        >
-          {state?.name ?? id}
-        </span>
-        {state?.status === "closed" && (
-          <span className="shrink-0 rounded-full border border-border bg-muted px-2 py-0 text-[10px] text-muted-foreground">
-            closed
-          </span>
+      {/* the TAB STRIP — browser-style, left-aligned: the manager's
+          permanent tab, then one tab per opened agent, review, and
+          terminal, each held until its ×. No thread title here — the
+          sidebar's selected row names it. */}
+      <div
+        role="tablist"
+        aria-label="Open views"
+        className="flex items-end gap-1 overflow-x-auto border-b border-border bg-sidebar px-2 pt-1.5"
+      >
+        <TabChip
+          active={tab.kind === "chat"}
+          onOpen={() => onTab({ kind: "chat" })}
+          icon={Crown}
+          iconClass="text-primary"
+          label="manager"
+          title="The thread's conversation — its whole record"
+        />
+        {opened.map((entry) =>
+          entry.kind === "agent" ? (
+            <TabChip
+              key={tabKey(entry)}
+              active={openAgent === entry.key}
+              onOpen={() => onTab(entry)}
+              onClose={() => closeTab(entry)}
+              closeLabel="close agent"
+              icon={Bot}
+              label={
+                agents.find((agent) => agent.key === entry.key)?.kind ??
+                "agent"
+              }
+              title={
+                agents.find((agent) => agent.key === entry.key)?.brief ??
+                entry.key
+              }
+            />
+          ) : entry.kind === "review" ? (
+            <TabChip
+              key={tabKey(entry)}
+              active={
+                tab.kind === "review" &&
+                `${tab.owner}/${tab.repo}#${tab.number}` ===
+                  `${entry.owner}/${entry.repo}#${entry.number}`
+              }
+              onOpen={() => onTab(entry)}
+              onClose={() => closeTab(entry)}
+              closeLabel="close review"
+              icon={FileDiff}
+              label={`#${entry.number}`}
+              title={
+                (state?.assigned ?? []).find(
+                  (assigned) =>
+                    assigned.ref ===
+                    `${entry.owner}/${entry.repo}#${entry.number}`,
+                )?.title ?? `${entry.owner}/${entry.repo}#${entry.number}`
+              }
+              dataReviewTab={`${entry.owner}/${entry.repo}#${entry.number}`}
+            />
+          ) : null,
         )}
-        {/* WHAT IS OPEN, at the right: the manager (the home view), or
-            the engineer, review, or terminal in the body — one chip, closed
-            back to the manager. Not a tab strip: the ways in are the state
-            pane's rows. */}
-        <div
-          data-current=""
-          className="ml-auto flex min-w-0 shrink-0 items-center gap-1"
-        >
-          {tab.kind === "chat" && (
-            <Hint label="The manager — the agent that runs this thread; its conversation is the thread's whole record">
-              <span
-                aria-current="page"
-                className="flex h-7 items-center gap-1.5 rounded-md border border-primary/30 bg-primary/10 px-2 text-xs font-medium"
-              >
-                <Crown className="size-3.5 text-primary" />
-                manager
-              </span>
-            </Hint>
-          )}
-          {openReview !== undefined && (
-            <span
-              data-review-tab={openReview.ref}
-              className="flex h-7 shrink-0 items-center gap-0.5 rounded-md border border-border bg-card pl-2 pr-1 text-xs font-medium shadow-xs"
-            >
-              <span
-                aria-current="page"
-                title={openReview.title}
-                className="flex items-center gap-1.5"
-              >
-                <FileDiff className="size-3.5" />#{openReview.number}
-              </span>
-              <button
-                type="button"
-                onClick={() => onTab({ kind: "chat" })}
-                aria-label="close review"
-                className="cursor-pointer rounded p-0.5 hover:bg-accent"
-              >
-                <X className="size-3" />
-              </button>
+        {terminals.map((pty) => (
+          <TabChip
+            key={`pty:${pty}`}
+            active={tab.kind === "terminal" && tab.pty === pty}
+            onOpen={() => onTab({ kind: "terminal", pty })}
+            onClose={() => onCloseTerminal(pty)}
+            closeLabel={`close terminal ${pty}`}
+            icon={SquareTerminal}
+            label={pty.slice(0, 6)}
+            title="A terminal on this thread's machine"
+          />
+        ))}
+        <div className="ml-auto flex shrink-0 items-center gap-1 self-center pl-2 pb-1">
+          {state?.status === "closed" && (
+            <span className="shrink-0 rounded-full border border-border bg-muted px-2 py-0 text-[10px] text-muted-foreground">
+              closed
             </span>
           )}
-          {openAgent !== undefined && (
-            <span className="flex h-7 shrink-0 items-center gap-0.5 rounded-md border border-border bg-card pl-2 pr-1 text-xs font-medium shadow-xs">
-              <span
-                aria-current="page"
-                title={openSubagent?.brief ?? openAgent}
-                className="flex items-center gap-1.5"
-              >
-                <span
-                  className={cn(
-                    "size-2 shrink-0 rounded-full",
-                    AGENT_DOT[openSubagent?.state ?? ""] ??
-                      "bg-muted-foreground/40",
-                  )}
-                />
-                <Bot className="size-3.5" />
-                {openSubagent?.kind ?? "agent"}
-              </span>
-              <button
-                type="button"
-                onClick={() => onTab({ kind: "chat" })}
-                aria-label="close agent"
-                className="cursor-pointer rounded p-0.5 hover:bg-accent"
-              >
-                <X className="size-3" />
-              </button>
-            </span>
-          )}
-          {tab.kind === "terminal" && (
-            <span className="flex h-7 shrink-0 items-center gap-0.5 rounded-md border border-border bg-card pl-2 pr-1 text-xs font-medium shadow-xs">
-              <span
-                aria-current="page"
-                title="A terminal on this thread's machine"
-                className="flex items-center gap-1.5"
-              >
-                <SquareTerminal className="size-3.5" />
-                {tab.pty.slice(0, 6)}
-              </span>
-              <button
-                type="button"
-                onClick={() => onCloseTerminal(tab.pty)}
-                aria-label={`close terminal ${tab.pty}`}
-                className="cursor-pointer rounded p-0.5 hover:bg-accent"
-              >
-                <X className="size-3" />
-              </button>
-            </span>
-          )}
-          {/* other terminals still open on the machine: an icon each,
-              back to them in one click */}
-          {terminals
-            .filter((pty) => tab.kind !== "terminal" || tab.pty !== pty)
-            .map((pty) => (
-              <Hint key={pty} label={`Terminal ${pty.slice(0, 6)}`}>
-                <button
-                  type="button"
-                  onClick={() => onTab({ kind: "terminal", pty })}
-                  aria-label={`open terminal ${pty}`}
-                  className="flex h-7 cursor-pointer items-center rounded-md border border-transparent px-1.5 text-muted-foreground hover:bg-accent/60 hover:text-foreground"
-                >
-                  <SquareTerminal className="size-3.5" />
-                </button>
-              </Hint>
-            ))}
           <Hint label="New terminal on this thread's machine">
             <button
               type="button"
@@ -1145,6 +1258,28 @@ export const ThreadView = ({
               className="flex h-7 cursor-pointer items-center rounded-md border border-transparent px-1.5 text-muted-foreground hover:bg-accent/60 hover:text-foreground"
             >
               <Plus className="size-3.5" />
+            </button>
+          </Hint>
+          <Hint
+            label={
+              paneOpen
+                ? "Hide the thread pane"
+                : "Show the thread pane — docked at the right"
+            }
+          >
+            <button
+              type="button"
+              onClick={togglePane}
+              aria-label={
+                paneOpen ? "hide the thread pane" : "show the thread pane"
+              }
+              className="flex h-7 cursor-pointer items-center rounded-md border border-transparent px-1.5 text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+            >
+              {paneOpen ? (
+                <PanelRightClose className="size-3.5" />
+              ) : (
+                <PanelRightOpen className="size-3.5" />
+              )}
             </button>
           </Hint>
         </div>
@@ -1166,18 +1301,26 @@ export const ThreadView = ({
         </div>
       )}
 
-      {/* body */}
+      {/* body — the active tab's view, and the state pane at the
+          right on EVERY tab (review included) unless undocked */}
       <div className="flex min-h-0 flex-1">
-        {tab.kind === "review" ? (
-          <ReviewView
-            key={`${tab.owner}/${tab.repo}#${tab.number}`}
-            owner={tab.owner}
-            repo={tab.repo}
-            number={tab.number}
-            threadId={id}
-            active={active}
-          />
-        ) : (
+        {reviews.map((entry) => (
+          <div
+            key={tabKey(entry)}
+            className={cn(
+              "flex min-h-0 min-w-0 flex-1",
+              !(tab.kind === "review" && tabKey(tab) === tabKey(entry)) &&
+                "hidden",
+            )}
+          >
+            <ReviewView
+              owner={entry.owner}
+              repo={entry.repo}
+              number={entry.number}
+            />
+          </div>
+        ))}
+        {
           <>
             <div
               className={cn(
@@ -1235,8 +1378,7 @@ export const ThreadView = ({
                 />
               </div>
             ))}
-            {(state !== undefined || missing) &&
-              (tab.kind === "chat" || tab.kind === "agent") && (
+            {(state !== undefined || missing) && paneOpen && (
                 <Rail
                   label="Thread state"
                   storageKey="thread-pane-width"
@@ -1255,6 +1397,7 @@ export const ThreadView = ({
                       onOpenManager={() => onTab({ kind: "chat" })}
                       agentActions={agentActions}
                       onClose={onCloseThread}
+                      onReopen={onReopenThread}
                       deleting={deleting}
                       onDelete={onDeleteThread}
                     />
@@ -1268,7 +1411,7 @@ export const ThreadView = ({
                 </Rail>
               )}
           </>
-        )}
+        }
       </div>
     </div>
   );

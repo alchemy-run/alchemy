@@ -7,7 +7,9 @@
  */
 
 import { AppHeader } from "@/components/app-header";
-import { ChannelView, ThreadList } from "@/components/channel";
+import { BoardPage } from "@/components/board";
+import { ChannelView, EventsRail, ThreadList } from "@/components/channel";
+import { confirm, Confirmer } from "@/components/confirm";
 import { Rail } from "@/components/rail";
 import { ThreadView } from "@/components/thread";
 import { deleteThread, type ChannelMessage } from "@/lib/channel";
@@ -74,6 +76,11 @@ const ThreadPage = ({
       method: "POST",
     });
   }, [id]);
+  const onReopenThread = useCallback(() => {
+    void fetch(`/api/threads/${encodeURIComponent(id)}/reopen`, {
+      method: "POST",
+    });
+  }, [id]);
   return (
     <ThreadView
       id={id}
@@ -86,6 +93,7 @@ const ThreadPage = ({
       onNewTerminal={onNewTerminal}
       onCloseTerminal={onCloseTerminal}
       onCloseThread={onCloseThread}
+      onReopenThread={onReopenThread}
       deleting={deleting}
       onDeleteThread={onDeleteThread}
     />
@@ -160,44 +168,42 @@ export const App = () => {
         ids.length === 1
           ? `thread "${nameOf(ids[0]!)}"? Its`
           : `${ids.length} threads (${ids.map(nameOf).join(", ")})? Their`;
-      if (
-        !window.confirm(
-          `Delete ${what} conversation, subagents, and machine are erased. The channel keeps its messages.`,
-        )
-      ) {
-        return;
-      }
-      setDeleting((current) => new Set([...current, ...ids]));
-      const done = (id: string) =>
-        setDeleting((current) => {
-          const next = new Set(current);
-          next.delete(id);
-          return next;
-        });
-      for (const id of ids) {
-        void deleteThread(id)
-          .then(
-            (response) => response.ok,
-            () => false,
-          )
-          .then((ok) => {
-            done(id);
-            if (!ok) return;
-            setVisited((current) => current.filter((entry) => entry !== id));
-            setTerminals((current) => {
-              const { [id]: _dropped, ...rest } = current;
-              try {
-                localStorage.setItem(TERMINALS_KEY, JSON.stringify(rest));
-              } catch {
-                // storage disabled — nothing to forget
-              }
-              return rest;
-            });
-            if (route.kind === "thread" && route.id === id) {
-              navigate(pathOf({ kind: "channel" }));
-            }
+      void confirm(
+        `Delete ${what} conversation, subagents, and machine are erased. The channel keeps its messages.`,
+      ).then((confirmed) => {
+        if (!confirmed) return;
+        setDeleting((current) => new Set([...current, ...ids]));
+        const done = (id: string) =>
+          setDeleting((current) => {
+            const next = new Set(current);
+            next.delete(id);
+            return next;
           });
-      }
+        for (const id of ids) {
+          void deleteThread(id)
+            .then(
+              (response) => response.ok,
+              () => false,
+            )
+            .then((ok) => {
+              done(id);
+              if (!ok) return;
+              setVisited((current) => current.filter((entry) => entry !== id));
+              setTerminals((current) => {
+                const { [id]: _dropped, ...rest } = current;
+                try {
+                  localStorage.setItem(TERMINALS_KEY, JSON.stringify(rest));
+                } catch {
+                  // storage disabled — nothing to forget
+                }
+                return rest;
+              });
+              if (route.kind === "thread" && route.id === id) {
+                navigate(pathOf({ kind: "channel" }));
+              }
+            });
+        }
+      });
     },
     [deleting, directory, route],
   );
@@ -307,7 +313,9 @@ export const App = () => {
                 message={message}
                 threadName={
                   directory.find((row) => row.id === message.card.thread)
-                    ?.name ?? message.card.thread
+                    ?.name ??
+                  message.card.thread ??
+                  "channel"
                 }
                 // "new" is judged against the seen mark the bell had when
                 // it opened — the mark moves on open, the dots stay for
@@ -330,29 +338,46 @@ export const App = () => {
           <ThreadList
             directory={directory}
             selected={selectedThread}
-            channelSelected={route.kind === "channel"}
-            onOpenChannel={() => navigate(pathOf({ kind: "channel" }))}
+            boardSelected={route.kind !== "thread"}
+            onOpenBoard={() => navigate(pathOf({ kind: "channel" }))}
             onOpenThread={openThread}
             deleting={deleting}
             onDeleteThreads={removeThreads}
           />
         </Rail>
         <main className="relative flex min-w-0 flex-1 flex-col">
-          {/* the channel — always mounted */}
+          {/* HOME — the board, the Control chat right of Done, and
+              the events strip beyond it; always mounted (sockets and
+              scroll survive thread visits) */}
           <div
             className={cn(
-              "flex min-h-0 flex-1 flex-col",
-              route.kind !== "channel" && "hidden",
+              "flex min-h-0 flex-1",
+              route.kind === "thread" && "hidden",
             )}
           >
-            <ChannelView
+            <BoardPage onOpenThread={openThread} />
+            <Rail
+              label="Control"
+              side="right"
+              storageKey="control-rail-width"
+              defaultWidth={440}
+              minWidth={340}
+              className="bg-background"
+            >
+              <ChannelView
+                messages={messages}
+                directory={directory}
+                live={live}
+                active={route.kind !== "thread"}
+                focus={focus}
+                onOpenThread={openThread}
+                onOpenReview={openReview}
+              />
+            </Rail>
+            <EventsRail
               messages={messages}
               directory={directory}
-              live={live}
-              active={route.kind === "channel"}
-              focus={focus}
               onOpenThread={openThread}
-              onOpenReview={openReview}
             />
           </div>
           {/* visited threads stay mounted */}
@@ -402,11 +427,13 @@ export const App = () => {
                         (entry) => entry !== pty,
                       ),
                     });
-                    setTabs((current) => ({
-                      ...current,
-                      [id]: { kind: "chat" },
-                    }));
-                    navigate(threadPath(id));
+                    // closing a BACKGROUND terminal tab keeps the view
+                    // where it is; only the active one falls back
+                    const current = tabs[id];
+                    if (current?.kind === "terminal" && current.pty === pty) {
+                      setTabs((state) => ({ ...state, [id]: { kind: "chat" } }));
+                      navigate(threadPath(id));
+                    }
                   }}
                   deleting={deleting.has(id)}
                   onDeleteThread={() => removeThreads([id])}
@@ -416,6 +443,9 @@ export const App = () => {
           })}
         </main>
       </div>
+      {/* the app's confirm — in-page, because window.confirm renders
+          nowhere the app doesn't */}
+      <Confirmer />
     </div>
   );
 };

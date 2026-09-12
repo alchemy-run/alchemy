@@ -1,5 +1,10 @@
 - complementary "Thread state":
   - separator "Resize the Thread state rail"
+  - button "Agents · 1 agent · 1 running" [expanded]
+  - button "Stop all"
+  - button "Delete all"
+  - button "open the manager": /manager — Fix the reconcile bug [\d,.]+[bkmBKM]+/
+  - button "open agent engineer-1": /engineer — Implement the fix in pr-\d+'s worktree [\d,.]+[bkmBKM]+/
   - button "Assigned · 1 pull · 1 issue" [expanded]
   - text: Bug in reconcile
   - link /#\d+/:
@@ -17,13 +22,5 @@
   - button /copy worktree path \/workspace\/trees\/pr-\d+/
   - text: /\/workspace\/trees\/pr-\d+/
   - button "engineer"
-  - button "Agents · 1 agent · 1 running" [expanded]
-  - button "Stop all"
-  - button "Delete all"
-  - button "open the manager": /manager — Fix the reconcile bug [\d,.]+[bkmBKM]+/
-  - button "open agent engineer-1": /engineer — Implement the fix in pr-\d+'s worktree [\d,.]+[bkmBKM]+/
-  - button "Model" [expanded]
-  - combobox "Thread model": Default · Claude Haiku 4.5
-  - text: What this thread's manager and its engineers sample with.
   - button "Close thread"
   - button "Delete thread"

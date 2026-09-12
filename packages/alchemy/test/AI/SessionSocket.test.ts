@@ -388,13 +388,14 @@ describe("SessionSocket (DriverLocal)", () => {
         // and the resume (registered first) consumed the burst — the
         // submit's stream never saw its answer.
         const transport = new AI.SessionSocketTransport({ url: wsUrl });
-        const echoes: Array<string> = [];
+        const echoes: Array<{ id: string; text: string }> = [];
         transport.onInput = (message) =>
-          echoes.push(
-            message.parts
+          echoes.push({
+            id: message.id,
+            text: message.parts
               .flatMap((part) => (part.type === "text" ? [part.text] : []))
               .join(""),
-          );
+          });
         const tail = yield* Effect.promise(() =>
           transport.reconnectToStream({
             chatId: "s1",
@@ -424,8 +425,12 @@ describe("SessionSocket (DriverLocal)", () => {
           "first answer",
         );
         // the tail is still pending, unfed — the SDK cancels it on its
-        // next resume; and our OWN submit's echo was swallowed
-        expect(echoes).toEqual([]);
+        // next resume. Our OWN submit's echo is DELIVERED under its
+        // durable id — the client re-identifies its optimistic message
+        // with it, so the row can be addressed later (redaction
+        // resolves observation spans by `u-<seq>`)
+        expect(echoes.map((echo) => echo.text)).toEqual(["first question"]);
+        expect(echoes[0]!.id).toMatch(/^u-\d+$/);
         yield* Effect.promise(() => tail!.cancel());
 
         // ── a FRESH client with no snapshot replays the history: the

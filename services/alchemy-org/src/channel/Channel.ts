@@ -29,10 +29,11 @@ export type ChannelMessageKind =
   /** A thread reaching the control plane: a notification. */
   | "card";
 
-/** What a card offers beyond its text: one place to go. */
+/** What a card offers beyond its text: one place to go, one act. */
 export interface ChannelCard {
-  /** The thread that posted it. */
-  readonly thread: string;
+  /** The thread that posted it — absent for the channel agent's own
+   *  cards (approvals). */
+  readonly thread?: string;
   /** One line — the card's headline. */
   readonly title: string;
   /** When the card concerns a reviewable entity: jump to its review. */
@@ -40,6 +41,16 @@ export interface ChannelCard {
     readonly owner: string;
     readonly repo: string;
     readonly number: number;
+  };
+  /**
+   * A staged APPROVAL — the card renders Approve/Deny and the
+   * decision executes (or refuses) the staged external write. Once
+   * decided, `decided` says how (the card is flipped in place).
+   */
+  readonly approval?: {
+    readonly id: string;
+    readonly kind: string;
+    readonly decided?: "approved" | "denied" | "executed" | "failed";
   };
 }
 

@@ -5,6 +5,8 @@
  */
 import type { Page } from "@playwright/test";
 import {
+  acceptConfirm,
+  declineConfirm,
   expect,
   main,
   openApp,
@@ -51,14 +53,14 @@ test("the composer's model selector picks the channel agent's model on `Channel:
   page,
   api,
 }) => {
-  api.channelModel = "gpt-5";
+  api.channelModel = "gpt-6-astra";
   await openApp(page);
   const select = page.getByRole("combobox", {
     name: "The channel agent's model",
   });
   // the pick is read from the channel, not the default
-  await expect(select).toHaveAttribute("data-model", "gpt-5");
-  await expect(select).toContainText("GPT-5");
+  await expect(select).toHaveAttribute("data-model", "gpt-6-astra");
+  await expect(select).toContainText("GPT-6 Astra");
 
   // pick DeepSeek: one PUT on the channel's session
   await select.click();
@@ -69,13 +71,12 @@ test("the composer's model selector picks the channel agent's model on `Channel:
   await expect(select).toHaveAttribute("data-model", "deepseek-flash");
   expect(api.channelModel).toBe("deepseek-flash");
 
-  // back to the default: `null` on the wire
+  // there is no "default" entry to return to — the list is the
+  // catalog alone; a pick is only ever replaced by another pick
   await select.click();
-  await page.getByRole("option", { name: /^Default/ }).click();
-  await expect.poll(() => api.modelPicks.length).toBe(2);
-  expect(api.modelPicks[1]).toEqual({ session: "Channel:main", model: null });
-  await expect(select).toHaveAttribute("data-model", "default");
-  await expect(select).toContainText("Claude Haiku 4.5");
+  await expect(page.getByRole("option", { name: /DeepSeek V4 Pro/ })).toBeVisible();
+  await expect(page.getByRole("option", { name: /^Default/ })).toHaveCount(0);
+  await page.keyboard.press("Escape");
 });
 
 test("the run pill opens the run rail; the eval card shows code and output", async ({
@@ -187,16 +188,16 @@ test("right-click a message: Delete asks, then drops the row live", async ({
   // the menu opens on the row; Delete asks first — a dismissed confirm
   // deletes nothing
   await rowOf(page, "delete me please").click({ button: "right" });
-  page.once("dialog", (dialog) => void dialog.dismiss());
   await page.getByRole("menuitem", { name: "Delete" }).click();
+  await declineConfirm(page);
   await expect.poll(() => api.deletedMessages).toEqual([]);
   await expect(main(page)).toContainText("delete me please");
 
   // confirmed: the DELETE lands and the socket's remove frame drops
   // the row from the view
   await rowOf(page, "delete me please").click({ button: "right" });
-  page.once("dialog", (dialog) => void dialog.accept());
   await page.getByRole("menuitem", { name: "Delete" }).click();
+  await acceptConfirm(page);
   await expect.poll(() => api.deletedMessages).toEqual([doomed.id]);
   await expect(main(page)).not.toContainText("delete me please");
   // the neighbors survive
@@ -281,8 +282,8 @@ test("click, ⇧-click and ⌘-click build a selection; the menu acts on all of 
 
   // right-click INSIDE the selection keeps it — the menu counts it
   await rowOf(page, "event two").click({ button: "right" });
-  page.once("dialog", (dialog) => void dialog.accept());
   await page.getByRole("menuitem", { name: "Delete 4 messages" }).click();
+  await acceptConfirm(page);
   await expect
     .poll(() => api.deletedMessages)
     .toEqual([one.id, two.id, three.id, five.id]);
@@ -510,16 +511,16 @@ test("right-click a sidebar row: Delete thread asks, then erases it", async ({
 
   // dismissed: nothing happens
   await row.click({ button: "right" });
-  page.once("dialog", (dialog) => void dialog.dismiss());
   await page.getByRole("menuitem", { name: "Delete thread" }).click();
+  await declineConfirm(page);
   await expect.poll(() => api.deletedThreads).toEqual([]);
   await expect(row).toBeVisible();
 
   // confirmed: the DELETE lands and the directory frame drops the row;
   // the view was on the channel and stays there
   await row.click({ button: "right" });
-  page.once("dialog", (dialog) => void dialog.accept());
   await page.getByRole("menuitem", { name: "Delete thread" }).click();
+  await acceptConfirm(page);
   await expect.poll(() => api.deletedThreads).toEqual(["t-old"]);
   await expect(threadNav(page)).not.toContainText("container-fixes");
   await expect(threadNav(page)).toContainText("w-reconcile");
@@ -536,11 +537,11 @@ test("a thread being deleted shows as deleting until the server has torn it down
   const release = api.holdThreadDelete();
   await openApp(page, threadPath("t-slow"));
 
-  page.once("dialog", (dialog) => void dialog.accept());
   await page
     .getByRole("complementary", { name: "Thread state" })
     .getByRole("button", { name: "Delete thread" })
     .click();
+  await acceptConfirm(page);
   await expect.poll(() => api.deletedThreads).toEqual(["t-slow"]);
 
   // the DELETE is in flight: the row stays, spinning; the pane's
@@ -581,8 +582,8 @@ test("⌘-click selects sidebar rows without opening them; the menu deletes the 
   await expect(nav.locator("[data-thread][data-selected]")).toHaveCount(2);
 
   await rowOf("w-gamma").click({ button: "right" });
-  page.once("dialog", (dialog) => void dialog.accept());
   await page.getByRole("menuitem", { name: "Delete 2 threads" }).click();
+  await acceptConfirm(page);
   await expect
     .poll(() => [...api.deletedThreads].sort())
     .toEqual(["t-a", "t-c"]);

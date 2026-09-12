@@ -4,6 +4,8 @@
  * (chat, per-pull review, terminals on the thread's machine).
  */
 import {
+  acceptConfirm,
+  declineConfirm,
   expect,
   main,
   NOW,
@@ -124,8 +126,8 @@ test("right-click a chat message: Delete redacts it from the transcript", async 
     .locator("[data-message-id]", { hasText: "delete this one" })
     .first();
   await row.click({ button: "right" });
-  page.once("dialog", (dialog) => void dialog.accept());
   await page.getByRole("menuitem", { name: "Delete" }).click();
+  await acceptConfirm(page);
 
   await expect
     .poll(() => api.deletedChatMessages)
@@ -134,6 +136,69 @@ test("right-click a chat message: Delete redacts it from the transcript", async 
   // the rest of the conversation survives
   await expect(main(page)).toContainText("first question");
   await expect(main(page)).toContainText("second answer");
+});
+
+test("a message sent live carries its durable id — deletable without a reload", async ({
+  page,
+  api,
+}) => {
+  seedThread(api);
+  api.seedTurn("Thread:t-1", "warmup", "ready");
+  await openApp(page, threadPath("t-1"));
+
+  // send: the SDK appends the message optimistically under a
+  // transient id; the socket's durable echo re-identifies it as
+  // `u-<seq>` — without that, deletion has no row to name and
+  // silently does nothing until a reload re-ids the transcript
+  const composer = main(page).getByPlaceholder("Talk to the manager…");
+  await composer.fill("delete me before any reload");
+  await composer.press("Enter");
+  const row = main(page)
+    .locator("[data-message-id]", { hasText: "delete me before any reload" })
+    .first();
+  await expect(row).toHaveAttribute("data-message-id", /^u-\d+$/);
+
+  await row.click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Delete" }).click();
+  await acceptConfirm(page);
+  await expect
+    .poll(() => api.deletedChatMessages)
+    .toEqual([{ id: "Thread:t-1", messageId: "u-2" }]);
+  await expect(main(page)).not.toContainText("delete me before any reload");
+});
+
+test("a burst streamed mid-handler wears the snapshot's id — deletable once it lands", async ({
+  page,
+  api,
+}) => {
+  seedThread(api);
+  const callId = api.seedOpenRound("Thread:t-1", {
+    ask: "get a worktree for the PR",
+    name: "worktree",
+    input: { ref: `${REPO}#148` },
+  });
+  await openApp(page, threadPath("t-1"));
+
+  // the live burst is named by the row that OPENED it (the tool-call,
+  // seq 1) — the same id a snapshot would mint, never a view-local one
+  const burst = main(page).locator("[data-message-id='a-1']");
+  await expect(burst).toBeVisible();
+
+  api.landOpenRound("Thread:t-1", callId, {
+    name: "worktree",
+    input: { ref: `${REPO}#148` },
+    output: { path: "/workspace/trees/pr-148", branch: "pr-148" },
+    reply: "Worktree ready.",
+  });
+  await expect(burst).toContainText("Worktree ready.");
+
+  await burst.click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Delete" }).click();
+  await acceptConfirm(page);
+  await expect
+    .poll(() => api.deletedChatMessages)
+    .toEqual([{ id: "Thread:t-1", messageId: "a-1" }]);
+  await expect(main(page)).not.toContainText("Worktree ready.");
 });
 
 test("a tool call renders as its card", async ({ page, api }) => {
@@ -413,6 +478,75 @@ test("the stop button interrupts the round in flight; the turn ends", async ({
   await expect(card).toContainText("stopped — the round ended");
 });
 
+test("a working row shows while the agent produces the reply", async ({
+  page,
+  api,
+}) => {
+  seedThread(api);
+  api.seedTurn(
+    "Thread:t-1",
+    "how is the fix going?",
+    "The engineer is mid-way; tests pass locally.",
+  );
+  await openApp(page, threadPath("t-1"));
+
+  // an idle transcript shows no working row (the live tail alone is
+  // not "working")
+  const working = main(page).locator("[data-working]");
+  await expect(main(page)).toContainText("tests pass locally");
+  await expect(working).toBeHidden();
+
+  // the operator asks: the round is admitted, and until the first
+  // sampling lands the transcript would otherwise sit silent —
+  // streaming is step-granular, so that window is the whole sampling
+  const composer = main(page).getByPlaceholder("Talk to the manager…");
+  await composer.fill("and the full suite?");
+  await composer.press("Enter");
+  await expect(working).toBeVisible();
+  await expect(working).toContainText("Working…");
+  // the composer's button already offers the stop
+  await expect(
+    main(page).getByRole("button", { name: "Stop", exact: true }),
+  ).toBeVisible();
+
+  // the sampling lands and quiesces: the reply takes the row's place
+  api.pushObservation("Thread:t-1", {
+    type: "assistant",
+    tick: 0,
+    ms: 500,
+    text: "Green — 3 passed.",
+    toolCalls: [],
+  });
+  await expect(main(page)).toContainText("Green — 3 passed.");
+  await expect(working).toBeHidden();
+});
+
+test("the working row rides an open round too: visible mid-handler, gone when it lands", async ({
+  page,
+  api,
+}) => {
+  seedThread(api);
+  const callId = api.seedOpenRound("Thread:t-1", {
+    ask: "get a worktree for the PR",
+    name: "worktree",
+    input: { ref: `${REPO}#148` },
+  });
+  await openApp(page, threadPath("t-1"));
+
+  // the handler is still running — the round is open, the row shows
+  const working = main(page).locator("[data-working]");
+  await expect(working).toBeVisible();
+
+  api.landOpenRound("Thread:t-1", callId, {
+    name: "worktree",
+    input: { ref: `${REPO}#148` },
+    output: { path: "/workspace/trees/pr-148", branch: "pr-148" },
+    reply: "Worktree ready.",
+  });
+  await expect(main(page)).toContainText("Worktree ready.");
+  await expect(working).toBeHidden();
+});
+
 test("a spawn card reads the thread state: a stopped or deleted engineer is not 'working', whatever the open call says", async ({
   page,
   api,
@@ -443,9 +577,9 @@ test("a spawn card reads the thread state: a stopped or deleted engineer is not 
   await expect(card.locator("[data-settled]")).toHaveText("stopped");
 
   // …and deleted: the row is gone from the thread state, so is the "working"
-  page.once("dialog", (dialog) => void dialog.accept());
   await agentRow(page, "engineer-1").click({ button: "right" });
   await page.getByRole("menuitem", { name: "Delete agent" }).click();
+  await acceptConfirm(page);
   await expect(agentRow(page, "engineer-1")).toHaveCount(0);
   await expect(card.locator("[data-settled]")).toHaveText("deleted");
   await expect(card).not.toContainText("working");
@@ -542,25 +676,61 @@ test("a crowded thread stays in bounds: sections count and scroll, the tab strip
   await expect(assigned).not.toContainText("small fix number 1");
   await expect(assigned).toContainText("24 pulls");
 
-  // no tab strip: the header's right names what is OPEN — the manager
-  // here — and 24 assignments and 30 agents add nothing up there
-  const current = page.locator("[data-current]");
-  await expect(current).toContainText("manager");
-  await expect(current).not.toContainText("engineer");
-  await expect(current.locator("[data-review-tab]")).toHaveCount(0);
-  await expect(current.getByRole("button")).toHaveCount(1); // +
+  // the strip holds only the manager's permanent tab — 24 assignments
+  // and 30 agents open nothing on their own, and no title rides here
+  const strip = page.getByRole("tablist", { name: "Open views" });
+  await expect(strip.getByRole("tab", { name: "manager" })).toBeVisible();
+  await expect(strip.getByRole("tab")).toHaveCount(1);
+  await expect(strip.locator("[data-review-tab]")).toHaveCount(0);
 
-  // clicking a pull's ROW opens its review (the diff takes the body);
-  // the header names that pull, and closing it returns to the manager
+  // clicking a pull's ROW opens its review as a TAB (the diff takes
+  // the body); its × closes it and the view falls back to the manager
   await assigned.getByRole("button", { name: /^Assigned/ }).click();
   await pane.locator(`[data-assigned="${REPO}#1505"]`).click();
   await expect(page).toHaveURL(/\/pull\/1505$/);
-  await expect(current.locator("[data-review-tab]")).toHaveText(/#1505/);
-  await expect(current).not.toContainText("manager");
-  await current.getByRole("button", { name: "close review" }).click();
-  await expect(current.locator("[data-review-tab]")).toHaveCount(0);
-  await expect(current).toContainText("manager");
+  await expect(strip.locator("[data-review-tab]")).toHaveText(/#1505/);
+  await strip.getByRole("button", { name: "close review" }).click();
+  await expect(strip.locator("[data-review-tab]")).toHaveCount(0);
   await expect(page).toHaveURL(/\/t-1$/);
+});
+
+test("tabs persist like a browser's: opened items stay until their ×", async ({
+  page,
+  api,
+}) => {
+  seedThread(api);
+  await openApp(page, threadPath("t-1"));
+  const strip = page.getByRole("tablist", { name: "Open views" });
+  const pane = page.getByRole("complementary", { name: "Thread state" });
+
+  // open the engineer, then the pull's review — BOTH tabs stay
+  await pane.getByRole("button", { name: "open agent engineer-1" }).click();
+  await expect(page).toHaveURL(/\/agent\/engineer-1$/);
+  await pane
+    .getByRole("button", { name: `open review for ${REPO}#148` })
+    .click();
+  await expect(page).toHaveURL(/\/pull\/148$/);
+  await expect(strip.getByRole("tab", { name: "engineer" })).toBeVisible();
+  await expect(strip.locator("[data-review-tab]")).toHaveText(/#148/);
+
+  // the state pane rides the review tab too, and can be undocked
+  await expect(pane).toBeVisible();
+  await page.getByRole("button", { name: "hide the thread pane" }).click();
+  await expect(pane).toBeHidden();
+  await page.getByRole("button", { name: "show the thread pane" }).click();
+  await expect(pane).toBeVisible();
+
+  // switch back to the engineer via its TAB — the review tab stays
+  await strip.getByRole("tab", { name: "engineer" }).click();
+  await expect(page).toHaveURL(/\/agent\/engineer-1$/);
+  await expect(strip.locator("[data-review-tab]")).toHaveText(/#148/);
+
+  // × the engineer's tab while it is active: back to the manager,
+  // and only the review tab remains
+  await strip.getByRole("button", { name: "close agent" }).click();
+  await expect(page).toHaveURL(new RegExp(`${threadPath("t-1")}$`));
+  await expect(strip.getByRole("tab", { name: "engineer" })).toHaveCount(0);
+  await expect(strip.locator("[data-review-tab]")).toHaveText(/#148/);
 });
 
 test("an agent row opens the subagent's session; close returns to chat", async ({
@@ -592,7 +762,9 @@ test("an agent row opens the subagent's session; close returns to chat", async (
   await expect(session).toContainText("Tests are green in the worktree.");
   await expect(session.getByRole("button", { name: "Submit" })).toBeVisible();
 
-  await page.getByRole("button", { name: "close agent" }).click();
+  // back to the chat via the pane's manager row — the header repeats
+  // no agent chip
+  await page.getByRole("button", { name: "open the manager" }).click();
   await expect(page).toHaveURL(new RegExp(`${threadPath("t-1")}$`));
   await expect(main(page)).not.toContainText("pnpm test test/reconcile");
 });
@@ -723,14 +895,14 @@ test("deleting an agent from its pane confirms, erases it, and returns to the ch
     .getByRole("toolbar", { name: "agent controls" });
 
   // dismissed: nothing happens
-  page.once("dialog", (dialog) => void dialog.dismiss());
   await controls.getByRole("button", { name: "delete agent" }).click();
+  await declineConfirm(page);
   await expect(agentRow(page, "engineer-1")).toBeVisible();
   expect(api.agentActions).toEqual([]);
 
   // accepted: the row goes, the pane closes onto the conversation
-  page.once("dialog", (dialog) => void dialog.accept());
   await controls.getByRole("button", { name: "delete agent" }).click();
+  await acceptConfirm(page);
   await expect
     .poll(() => api.agentActions)
     .toEqual([{ thread: "t-1", key: "engineer-1", action: "delete" }]);
@@ -867,8 +1039,8 @@ test("the Agents heading's switches act on every agent in ONE request: Stop all,
   );
 
   // Delete all confirms, then the thread state is empty
-  page.once("dialog", (dialog) => void dialog.accept());
   await pane.getByRole("button", { name: "Delete all" }).click();
+  await acceptConfirm(page);
   await expect(pane).toContainText("No engineers yet.");
   expect(api.bulkRequests).toBe(3);
   expect(api.agentActions.filter((e) => e.action === "delete")).toHaveLength(3);
@@ -909,63 +1081,67 @@ test("+ opens a terminal on the thread's machine; close returns to chat", async 
   await expect(page).toHaveURL(new RegExp(`${threadPath("t-1")}$`));
 });
 
-test("the model selector: the thread's pick lands as PUT on its session and the pane follows the state", async ({
+test("the model is picked in the composer of the agent you talk to: PUT on the thread's session", async ({
   page,
   api,
 }) => {
   seedThread(api);
   await openApp(page, threadPath("t-1"));
 
+  // the pane has NO model section — the pick lives in the chat input
   const pane = page.getByRole("complementary", { name: "Thread state" });
-  const select = pane.getByRole("combobox", { name: "Thread model" });
-  // nothing chosen: the default, named
-  await expect(select).toHaveAttribute("data-model", "default");
-  await expect(select).toContainText("Default");
-  await expect(select).toContainText("Claude Haiku 4.5");
+  await expect(pane).not.toContainText("Model");
+  await expect(pane).not.toContainText("sample with");
 
-  // pick Opus: one PUT on the thread's session, the state push re-renders
+  // nothing chosen: the selector reads as the org's default model,
+  // plainly — there is no "Default" concept in the control
+  const select = main(page).getByRole("combobox", {
+    name: "The agent's model",
+  });
+  await expect(select).toHaveAttribute("data-model", "default");
+  await expect(select).toContainText("Claude Haiku 4.5");
+  await expect(select).not.toContainText("Default");
+
+  // pick Opus: one PUT on the thread's session
   await select.click();
-  await page.getByRole("option", { name: /Claude Opus 4.1/ }).click();
+  await expect(page.getByRole("option", { name: /^Default/ })).toHaveCount(0);
+  await page.getByRole("option", { name: /Claude Opus 5/ }).click();
   await expect
     .poll(() => api.modelPicks)
-    .toEqual([{ session: "Thread:t-1", model: "claude-opus-4-1" }]);
-  await expect(select).toHaveAttribute("data-model", "claude-opus-4-1");
-  await expect(select).toContainText("Claude Opus 4.1");
-  expect(api.threads["t-1"]?.model).toBe("claude-opus-4-1");
-
-  // back to the default: `null` on the wire, the field leaves the state
-  await select.click();
-  await page.getByRole("option", { name: /^Default/ }).click();
-  await expect.poll(() => api.modelPicks.length).toBe(2);
-  expect(api.modelPicks[1]).toEqual({ session: "Thread:t-1", model: null });
-  await expect(select).toHaveAttribute("data-model", "default");
-  expect(api.threads["t-1"]?.model).toBeUndefined();
+    .toEqual([{ session: "Thread:t-1", model: "claude-opus-5" }]);
+  await expect(select).toHaveAttribute("data-model", "claude-opus-5");
+  await expect(select).toContainText("Claude Opus 5");
+  expect(api.threads["t-1"]?.model).toBe("claude-opus-5");
 });
 
-test("an engineer's pane has its own selector: read over GET, written on its session", async ({
+test("an engineer's composer has its own selector: read over GET, written on its session", async ({
   page,
   api,
 }) => {
   seedThread(api);
-  api.engineerModels["engineer-1"] = "gpt-5-mini";
+  api.engineerModels["engineer-1"] = "claude-fable-5-1";
   await openApp(page, threadPath("t-1"));
   await agentRow(page, "engineer-1").click();
 
-  const select = page.getByRole("combobox", { name: "Agent model" });
-  await expect(select).toHaveAttribute("data-model", "gpt-5-mini");
-  await expect(select).toContainText("GPT-5 mini");
+  // scoped to the agent's pane — the manager's composer (hidden, not
+  // unmounted) carries its own selector under the same name
+  const select = page
+    .locator("[data-agent-session]")
+    .getByRole("combobox", { name: "The agent's model" });
+  await expect(select).toHaveAttribute("data-model", "claude-fable-5-1");
+  await expect(select).toContainText("Claude Fable 5.1");
 
   await select.click();
-  await page.getByRole("option", { name: /^GPT-5 openai/ }).click();
+  await page.getByRole("option", { name: /GPT-6 Astra/ }).click();
   await expect
     .poll(() => api.modelPicks)
-    .toEqual([{ session: "Engineer:engineer-1", model: "gpt-5" }]);
-  await expect(select).toContainText("GPT-5");
+    .toEqual([{ session: "Engineer:engineer-1", model: "gpt-6-astra" }]);
+  await expect(select).toContainText("GPT-6 Astra");
   // the thread's own pick is untouched
   expect(api.threads["t-1"]?.model).toBeUndefined();
 });
 
-test("close thread posts and the header shows closed", async ({
+test("close thread posts and the header shows closed; reopen brings it back", async ({
   page,
   api,
 }) => {
@@ -976,6 +1152,18 @@ test("close thread posts and the header shows closed", async ({
   await expect.poll(() => api.closedThreads).toEqual(["t-1"]);
   // the fake pushes the closed state over the thread socket
   await expect(main(page)).toContainText("closed");
+
+  // closed: the pane's button flips to Reopen — posting it brings the
+  // thread back and the chip leaves the header
+  await expect(
+    page.getByRole("button", { name: "Close thread" }),
+  ).toBeHidden();
+  await page.getByRole("button", { name: "Reopen thread" }).click();
+  await expect.poll(() => api.reopenedThreads).toEqual(["t-1"]);
+  await expect(main(page)).not.toContainText("closed");
+  await expect(
+    page.getByRole("button", { name: "Close thread" }),
+  ).toBeVisible();
 });
 
 test("delete thread confirms, erases, and returns to the channel", async ({
@@ -990,15 +1178,15 @@ test("delete thread confirms, erases, and returns to the channel", async ({
   await expect(nav("w-reconcile")).toBeVisible();
 
   // a dismissed confirm deletes nothing
-  page.once("dialog", (dialog) => void dialog.dismiss());
   await main(page).getByRole("button", { name: "Delete thread" }).click();
+  await declineConfirm(page);
   await expect.poll(() => api.deletedThreads).toEqual([]);
   await expect(nav("w-reconcile")).toBeVisible();
 
   // accepted: the DELETE lands, the rail forgets the thread, and the
   // view falls back to the channel
-  page.once("dialog", (dialog) => void dialog.accept());
   await main(page).getByRole("button", { name: "Delete thread" }).click();
+  await acceptConfirm(page);
   await expect.poll(() => api.deletedThreads).toEqual(["t-1"]);
   await expect(nav("w-reconcile")).toHaveCount(0);
   await expect(nav("w-other")).toBeVisible();
@@ -1032,8 +1220,8 @@ test("a thread whose state is gone still shows a pane — and can be deleted", a
   await expect(pane).toContainText("state missing");
   await expect(pane).toContainText("t-ghost-9612478f");
 
-  page.once("dialog", (dialog) => void dialog.accept());
   await pane.getByRole("button", { name: "Delete thread" }).click();
+  await acceptConfirm(page);
   await expect.poll(() => api.deletedThreads).toEqual(["t-ghost-9612478f"]);
   await expect(nav("cloudflare-state-fixes")).toHaveCount(0);
   await expect(nav("w-other")).toBeVisible();

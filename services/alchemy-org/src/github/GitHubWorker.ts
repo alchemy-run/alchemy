@@ -1,4 +1,5 @@
 import {
+  CreateIssueCommentHttp,
   CreatePullRequestHttp,
   GetIssueHttp,
   GetPullRequestHttp,
@@ -8,6 +9,8 @@ import {
   ListPullRequestReviewCommentsHttp,
   ListPullRequestReviewsHttp,
   ListPullRequestsHttp,
+  MergePullRequestHttp,
+  UpdateIssueHttp,
 } from "alchemy/GitHub";
 import * as Layer from "effect/Layer";
 
@@ -33,4 +36,9 @@ export const GitHubWorker = Layer.mergeAll(
   ListPullRequestReviewCommentsHttp,
   ListPullRequestReviewsHttp,
   ListPullRequestsHttp,
+  // the APPROVED external writes (registry/Approvals.ts executes
+  // them on the operator's click): comment, merge, close
+  CreateIssueCommentHttp,
+  MergePullRequestHttp,
+  UpdateIssueHttp,
 );

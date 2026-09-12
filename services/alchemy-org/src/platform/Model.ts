@@ -10,13 +10,14 @@ import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 /**
  * The org's MODELS — each a named service holding a ready
  * `LanguageModel` Layer (`AI.Model`). A charter picks one by providing
- * it to its stance: `AI.fragment`…``.pipe(Effect.provide(sonnet))`.
+ * it to its stance: `AI.fragment`…``.pipe(Effect.provide(opus))`.
  */
-export class Sonnet extends AI.Model<Sonnet>()("alchemy-org/Sonnet") {}
 export class Opus extends AI.Model<Opus>()("alchemy-org/Opus") {}
+export class Fable extends AI.Model<Fable>()("alchemy-org/Fable") {}
 export class Haiku extends AI.Model<Haiku>()("alchemy-org/Haiku") {}
-export class Gpt5 extends AI.Model<Gpt5>()("alchemy-org/Gpt5") {}
-export class Gpt5Mini extends AI.Model<Gpt5Mini>()("alchemy-org/Gpt5Mini") {}
+export class Gpt6Astra extends AI.Model<Gpt6Astra>()(
+  "alchemy-org/Gpt6Astra",
+) {}
 export class DeepSeekFlash extends AI.Model<DeepSeekFlash>()(
   "alchemy-org/DeepSeekFlash",
 ) {}
@@ -32,16 +33,16 @@ export class DeepSeekPro extends AI.Model<DeepSeekPro>()(
  */
 export const MODELS = [
   {
-    id: "claude-sonnet-4-5",
-    label: "Claude Sonnet 4.5",
-    provider: "anthropic",
-    model: Sonnet,
-  },
-  {
-    id: "claude-opus-4-1",
-    label: "Claude Opus 4.1",
+    id: "claude-opus-5",
+    label: "Claude Opus 5",
     provider: "anthropic",
     model: Opus,
+  },
+  {
+    id: "claude-fable-5-1",
+    label: "Claude Fable 5.1",
+    provider: "anthropic",
+    model: Fable,
   },
   {
     id: "claude-haiku-4-5",
@@ -49,12 +50,11 @@ export const MODELS = [
     provider: "anthropic",
     model: Haiku,
   },
-  { id: "gpt-5", label: "GPT-5", provider: "openai", model: Gpt5 },
   {
-    id: "gpt-5-mini",
-    label: "GPT-5 mini",
+    id: "gpt-6-astra",
+    label: "GPT-6 Astra",
     provider: "openai",
-    model: Gpt5Mini,
+    model: Gpt6Astra,
   },
   {
     id: "deepseek-flash",
@@ -74,11 +74,10 @@ export type ModelId = (typeof MODELS)[number]["id"];
 
 /** The catalog's services — what holding every model requires. */
 export type Catalog =
-  | Sonnet
   | Opus
+  | Fable
   | Haiku
-  | Gpt5
-  | Gpt5Mini
+  | Gpt6Astra
   | DeepSeekFlash
   | DeepSeekPro;
 
@@ -110,13 +109,22 @@ export const models: Effect.Effect<
 
 /* ── implementations ────────────────────────────────────────────── */
 
-const anthropic = (model: string) =>
+/**
+ * Claude over the Messages API. The thinking dialect is GENERATIONAL:
+ * Opus 5 and Fable 5.1 only take `adaptive` (the API rejects
+ * `enabled` + budget on them — probed), while Haiku 4.5 still takes
+ * the explicit enabled+budget shape. Either way the traces stream to
+ * the UI as reasoning deltas and land on the transcript as reasoning
+ * parts.
+ */
+const anthropic = (model: string, thinking: "adaptive" | "enabled") =>
   AnthropicLanguageModel.make({
     model,
     config: {
-      // extended thinking: the traces stream to the UI as reasoning
-      // deltas and land on the transcript as reasoning parts
-      thinking: { type: "enabled", budget_tokens: 4096 },
+      thinking:
+        thinking === "adaptive"
+          ? { type: "adaptive" }
+          : { type: "enabled", budget_tokens: 4096 },
       max_tokens: 16384,
     },
   });
@@ -244,11 +252,10 @@ const DeepSeekClient = OpenAiClient.layerConfig({
  * per request and a real toolkit cannot fit (DriverCore.compileTool).
  */
 export const ModelsLive = Layer.mergeAll(
-  Sonnet.layer(anthropic("claude-sonnet-4-5")),
-  Opus.layer(anthropic("claude-opus-4-1")),
-  Haiku.layer(anthropic("claude-haiku-4-5")),
-  Gpt5.layer(openai("gpt-5")),
-  Gpt5Mini.layer(openai("gpt-5-mini")),
+  Opus.layer(anthropic("claude-opus-5", "adaptive")),
+  Fable.layer(anthropic("claude-fable-5-1", "adaptive")),
+  Haiku.layer(anthropic("claude-haiku-4-5", "enabled")),
+  Gpt6Astra.layer(openai("gpt-6-astra")),
   // DeepSeek's two models over ITS client — provided here, before the
   // merge, so the OpenAI client below never reaches them
   Layer.mergeAll(

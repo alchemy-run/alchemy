@@ -13,12 +13,20 @@ export interface ChannelAuthor {
 export type ChannelMessageKind = "event" | "user" | "agent" | "card";
 
 export interface ChannelCard {
-  readonly thread: string;
+  /** The thread that posted it — absent for the channel agent's own
+   *  cards (approvals). */
+  readonly thread?: string;
   readonly title: string;
   readonly review?: {
     readonly owner: string;
     readonly repo: string;
     readonly number: number;
+  };
+  /** A staged APPROVAL the operator decides on the card. */
+  readonly approval?: {
+    readonly id: string;
+    readonly kind: string;
+    readonly decided?: "approved" | "denied" | "executed" | "failed";
   };
 }
 
@@ -188,6 +196,20 @@ export const steerThread = (id: string, text: string): Promise<Response> =>
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ text }),
+  });
+
+/** The human's decision on a staged approval card. */
+export const decideApproval = (
+  id: string,
+  decision: "approve" | "deny",
+  reason?: string,
+): Promise<Response> =>
+  fetch(`/api/approvals/${encodeURIComponent(id)}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(
+      reason === undefined ? { decision } : { decision, reason },
+    ),
   });
 
 /** Delete a thread — its state, its agent sessions, its machine. The

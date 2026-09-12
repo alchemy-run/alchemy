@@ -153,7 +153,7 @@ export const Answered = ({
   onOpenThread,
   compact = false,
 }: {
-  onOpenThread: () => void;
+  onOpenThread?: () => void;
   compact?: boolean;
 }) => (
   <div
@@ -165,16 +165,18 @@ export const Answered = ({
   >
     <Check className="size-3.5 text-primary" />
     Answered
-    <button
-      type="button"
-      onClick={(event) => {
-        event.stopPropagation();
-        onOpenThread();
-      }}
-      className="cursor-pointer text-mist hover:underline"
-    >
-      see the thread
-    </button>
+    {onOpenThread !== undefined && (
+      <button
+        type="button"
+        onClick={(event) => {
+          event.stopPropagation();
+          onOpenThread();
+        }}
+        className="cursor-pointer text-mist hover:underline"
+      >
+        see the thread
+      </button>
+    )}
   </div>
 );
 
@@ -191,12 +193,15 @@ export interface NotificationActions {
   ) => void;
 }
 
-/** Into the thread — its review when the card names one. */
+/** Into the thread — its review when the card names one. A card
+ *  without a thread (a channel-agent approval) has nowhere to open;
+ *  the jump-to-card action covers it. */
 export const openCardTarget = (
   message: ChannelMessage & { card: NonNullable<ChannelMessage["card"]> },
   actions: Pick<NotificationActions, "onOpenThread" | "onOpenReview">,
 ): void => {
   const { card } = message;
+  if (card.thread === undefined) return;
   if (card.review !== undefined) {
     actions.onOpenReview(
       card.thread,
@@ -267,9 +272,13 @@ export const NotificationRow = ({
       {answered ? (
         <Answered
           compact
-          onOpenThread={() => actions.onOpenThread(card.thread)}
+          onOpenThread={
+            card.thread === undefined
+              ? undefined
+              : () => actions.onOpenThread(card.thread!)
+          }
         />
-      ) : answering ? (
+      ) : answering && card.thread !== undefined ? (
         <AnswerBox
           compact
           thread={card.thread}
@@ -282,17 +291,19 @@ export const NotificationRow = ({
         />
       ) : (
         <div className="flex items-center gap-1 pl-5.5">
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="h-6 gap-1 px-1.5 text-[11px] text-muted-foreground"
-            onClick={() => setAnswering(true)}
-            aria-label={`Answer: ${card.title}`}
-          >
-            <Reply className="size-3" />
-            Answer
-          </Button>
+          {card.thread !== undefined && card.approval === undefined && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-6 gap-1 px-1.5 text-[11px] text-muted-foreground"
+              onClick={() => setAnswering(true)}
+              aria-label={`Answer: ${card.title}`}
+            >
+              <Reply className="size-3" />
+              Answer
+            </Button>
+          )}
           <Button
             type="button"
             variant="ghost"
@@ -304,21 +315,23 @@ export const NotificationRow = ({
             <Locate className="size-3" />
             Card
           </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="h-6 gap-1 px-1.5 text-[11px] text-muted-foreground"
-            onClick={() => openCardTarget(message, actions)}
-            aria-label={
-              card.review !== undefined
-                ? `Open the review: ${card.title}`
-                : `Open the thread: ${card.title}`
-            }
-          >
-            <SquareArrowOutUpRight className="size-3" />
-            {card.review !== undefined ? "Review" : "Thread"}
-          </Button>
+          {card.thread !== undefined && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-6 gap-1 px-1.5 text-[11px] text-muted-foreground"
+              onClick={() => openCardTarget(message, actions)}
+              aria-label={
+                card.review !== undefined
+                  ? `Open the review: ${card.title}`
+                  : `Open the thread: ${card.title}`
+              }
+            >
+              <SquareArrowOutUpRight className="size-3" />
+              {card.review !== undefined ? "Review" : "Thread"}
+            </Button>
+          )}
         </div>
       )}
     </div>

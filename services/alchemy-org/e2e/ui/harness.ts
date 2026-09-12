@@ -206,6 +206,8 @@ export class FakeApi {
   steered: Array<{ thread: string; text: string }> = [];
   /** Every `POST /api/threads/:id/close`, in order. */
   closedThreads: string[] = [];
+  /** Every `POST /api/threads/:id/reopen`, in order. */
+  reopenedThreads: string[] = [];
   /** Every `DELETE /api/threads/:id`, in order. */
   deletedThreads: string[] = [];
   /** When set, thread DELETEs answer only once this resolves — the
@@ -246,19 +248,18 @@ export class FakeApi {
 
   /** The catalog `GET /api/models` serves — the real one's shape. */
   readonly models = [
+    { id: "claude-opus-5", label: "Claude Opus 5", provider: "anthropic" },
     {
-      id: "claude-sonnet-4-5",
-      label: "Claude Sonnet 4.5",
+      id: "claude-fable-5-1",
+      label: "Claude Fable 5.1",
       provider: "anthropic",
     },
-    { id: "claude-opus-4-1", label: "Claude Opus 4.1", provider: "anthropic" },
     {
       id: "claude-haiku-4-5",
       label: "Claude Haiku 4.5",
       provider: "anthropic",
     },
-    { id: "gpt-5", label: "GPT-5", provider: "openai" },
-    { id: "gpt-5-mini", label: "GPT-5 mini", provider: "openai" },
+    { id: "gpt-6-astra", label: "GPT-6 Astra", provider: "openai" },
     {
       id: "deepseek-flash",
       label: "DeepSeek V4.1 Flash",
@@ -712,7 +713,20 @@ export class FakeApi {
     const id = `${term}:${rest.join("/")}`;
     this.chatSockets[id] = [...(this.chatSockets[id] ?? []), ws];
     ws.onMessage((raw) => {
-      const frame = JSON.parse(String(raw)) as { type: string };
+      const frame = JSON.parse(String(raw)) as {
+        type: string;
+        input?: unknown;
+      };
+      // a submit is admitted as a durable input row and broadcast —
+      // the durable echo is how the sender's optimistic message
+      // learns its `u-<seq>` id (exactly what the Worker does)
+      if (frame.type === "submit") {
+        this.pushObservation(id, {
+          type: "input",
+          text: String(frame.input ?? ""),
+        });
+        return;
+      }
       if (frame.type !== "subscribe") return;
       const rows = this.transcripts[id] ?? [];
       for (const observation of rows) {
@@ -931,7 +945,7 @@ export class FakeApi {
       return this.json(route, { error: "no model to pick" }, 404);
     }
 
-    const thread = path.match(/^\/api\/threads\/([^/]+)(\/(close))?$/);
+    const thread = path.match(/^\/api\/threads\/([^/]+)(\/(close|reopen))?$/);
     if (thread !== null) {
       const id = decodeURIComponent(thread[1]!);
       const state = this.threads[id];
@@ -944,6 +958,11 @@ export class FakeApi {
       if (thread[3] === "close" && method === "POST") {
         this.closedThreads.push(id);
         this.updateThread(id, { status: "closed" });
+        return this.json(route, {});
+      }
+      if (thread[3] === "reopen" && method === "POST") {
+        this.reopenedThreads.push(id);
+        this.updateThread(id, { status: "open" });
         return this.json(route, {});
       }
       if (method === "DELETE") {
@@ -1137,3 +1156,18 @@ export const sidebar = (page: Page) => page.getByRole("complementary");
 export const main = (page: Page) => page.getByRole("main");
 export const threadNav = (page: Page) =>
   page.getByRole("navigation", { name: "Threads" });
+
+/** Answer the app's confirm dialog — the app asks IN PAGE (the native
+ *  `window.confirm` renders nowhere the app doesn't; see
+ *  ui/components/confirm.tsx). Click the destructive action first,
+ *  then accept or decline. */
+export const acceptConfirm = (page: Page) =>
+  page
+    .locator("[data-confirm]")
+    .getByRole("button", { name: "Delete" })
+    .click();
+export const declineConfirm = (page: Page) =>
+  page
+    .locator("[data-confirm]")
+    .getByRole("button", { name: "Cancel" })
+    .click();

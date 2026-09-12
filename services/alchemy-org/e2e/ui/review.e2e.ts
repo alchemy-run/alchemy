@@ -1,6 +1,6 @@
 /**
- * The REVIEW — the diff column (paged files, large-file gating, the
- * refresh) beside the thread's chat.
+ * The REVIEW — the diff alone: paged files, large-file gating, the
+ * refresh. No conversation rides here (a later concern).
  */
 import { expect, main, openApp, REPO, test, threadPath } from "./harness.ts";
 
@@ -32,6 +32,10 @@ test("the header carries the pull's state, branches, and size", async ({
   await expect(main(page)).toContainText("Add array helpers: chunk and unique");
   await expect(main(page)).toContainText("Open");
   await expect(main(page)).toContainText("→ main");
+
+  // the way out is the tab strip: the manager's tab is always there
+  await main(page).getByRole("tab", { name: /manager/ }).click();
+  await expect(page).toHaveURL(new RegExp(`${threadPath("t-1")}$`));
 });
 
 test("files page in one by one until the last page", async ({ page, api }) => {
@@ -83,6 +87,45 @@ test("a file card collapses to its header", async ({ page, api }) => {
   await expect(header).toBeVisible();
 });
 
+test("switching tabs keeps the review mounted — no refetch", async ({
+  page,
+  api,
+}) => {
+  seed(api);
+  await openApp(page, REVIEW_PATH);
+  await expect(main(page)).toContainText("src/arrays.ts");
+  const loads = api.pullLoads.length;
+  const pages = api.filePages.length;
+
+  // away to the manager and back — the diff must still be there
+  // without a single new fetch (the view stayed mounted behind its tab)
+  await main(page).getByRole("tab", { name: /manager/ }).click();
+  await expect(page).toHaveURL(new RegExp(`${threadPath("t-1")}$`));
+  await main(page).getByRole("tab", { name: "#147" }).click();
+  await expect(main(page)).toContainText("src/arrays.ts");
+  expect(api.pullLoads.length).toBe(loads);
+  expect(api.filePages.length).toBe(pages);
+});
+
+test("a diagonal wheel gesture over the code scrolls the pane", async ({
+  page,
+  api,
+}) => {
+  seed(api);
+  await openApp(page, REVIEW_PATH);
+  const card = main(page).locator("[data-review-file]").first();
+  await expect(card).toBeVisible();
+
+  // vertical-dominant with a horizontal component — the gesture must
+  // move the pane, not latch onto the code area's horizontal scroller
+  await card.hover();
+  await page.mouse.wheel(40, 300);
+  const pane = main(page).locator("[data-review-scroll]");
+  await expect
+    .poll(() => pane.evaluate((element) => element.scrollTop))
+    .toBeGreaterThan(0);
+});
+
 test("refresh re-fetches the diff", async ({ page, api }) => {
   seed(api);
   await openApp(page, REVIEW_PATH);
@@ -93,7 +136,10 @@ test("refresh re-fetches the diff", async ({ page, api }) => {
   await expect.poll(() => api.filePages.length).toBeGreaterThan(before);
 });
 
-test("the thread's chat rides beside the diff", async ({ page, api }) => {
+test("the review is the diff alone — no chat rides beside it", async ({
+  page,
+  api,
+}) => {
   seed(api);
   api.seedTurn(
     "Thread:t-1",
@@ -101,11 +147,16 @@ test("the thread's chat rides beside the diff", async ({ page, api }) => {
     "Looking at the renderer's bounds checks now.",
   );
   await openApp(page, REVIEW_PATH);
+  await expect(main(page)).toContainText("src/arrays.ts");
 
-  const rail = page.getByRole("complementary", { name: "Review chat" });
-  await expect(rail).toContainText("review the error handling");
-  await expect(rail).toContainText(
-    "Looking at the renderer's bounds checks now.",
-  );
-  await expect(rail.getByPlaceholder("Chat with the review…")).toBeVisible();
+  // the thread's conversation stays on the thread's chat tab — the
+  // review page shows no transcript and no review composer (the
+  // manager's chat is mounted but hidden behind its own tab)
+  await expect(
+    page.getByRole("complementary", { name: "Review chat" }),
+  ).toHaveCount(0);
+  await expect(
+    main(page).getByText("review the error handling"),
+  ).toBeHidden();
+  await expect(page.getByPlaceholder("Chat with the review…")).toHaveCount(0);
 });

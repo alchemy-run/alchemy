@@ -159,17 +159,38 @@ export const useChat = ({
   // User messages the WIRE carried — the AI SDK's stream protocol has
   // no user role, so the transport hands them over here: a replayed
   // history for a client without a snapshot, a steer from another
-  // client, a note the driver appended. Ids are the durable seq, so
-  // a message the snapshot already delivered is skipped.
+  // client, a note the driver appended, and the durable echo of THIS
+  // client's own submit. Ids are the durable seq, so a message the
+  // snapshot already delivered is skipped — and the echo re-IDENTIFIES
+  // the optimistic message the SDK appended (same user text under a
+  // transient id) instead of duplicating it, so every row in the view
+  // is addressable by its durable id (redaction resolves `u-<seq>`).
   const { setMessages } = chat;
   useEffect(() => {
     const transport = agent.transport;
     transport.onInput = (message) =>
-      setMessages((messages) =>
-        messages.some((existing) => existing.id === message.id)
-          ? messages
-          : [...messages, message],
-      );
+      setMessages((messages) => {
+        if (messages.some((existing) => existing.id === message.id)) {
+          return messages;
+        }
+        const text = inputText(message);
+        const optimistic = messages.findLastIndex(
+          (existing) =>
+            existing.role === "user" &&
+            !DURABLE_INPUT_ID.test(existing.id) &&
+            inputText(existing) === text,
+        );
+        if (optimistic >= 0) {
+          const next = [...messages];
+          next[optimistic] = {
+            ...next[optimistic]!,
+            id: message.id,
+            metadata: message.metadata,
+          };
+          return next;
+        }
+        return [...messages, message];
+      });
     return () => {
       if (transport.onInput !== undefined) transport.onInput = undefined;
     };
@@ -179,5 +200,14 @@ export const useChat = ({
 };
 
 const RECONNECT_DELAY_MS = 3_000;
+
+/** A durable input row's id (`u-<seq>`) — what the driver mints. */
+const DURABLE_INPUT_ID = /^u-\d+$/;
+
+/** A message's text, joined exactly as the transport submits it. */
+const inputText = (message: UIMessage): string =>
+  message.parts
+    .flatMap((part) => (part.type === "text" ? [part.text] : []))
+    .join("\n");
 
 export { makeChatId as chatId };

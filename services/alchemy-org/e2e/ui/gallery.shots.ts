@@ -6,6 +6,7 @@
  */
 import type { Page } from "@playwright/test";
 import {
+  acceptConfirm,
   expect,
   NOW,
   openApp,
@@ -206,11 +207,11 @@ test("channel: a thread being deleted", async ({ page, api }) => {
   seedWorld(api);
   const release = api.holdThreadDelete();
   await openApp(page, threadPath("t-2"));
-  page.once("dialog", (dialog) => void dialog.accept());
   await page
     .getByRole("complementary", { name: "Thread state" })
     .getByRole("button", { name: "Delete thread" })
     .click();
+  await acceptConfirm(page);
   await expect(page.getByRole("status")).toContainText("Deleting this thread");
   await shot(page, "channel-06-thread-deleting");
   release();
@@ -422,12 +423,12 @@ test("thread: a run of worktrees folded, and another opened", async ({
   await shot(page, "thread-07-tool-run");
 });
 
-test("thread: the model selector open in the state pane", async ({
+test("thread: the model selector open in the composer", async ({
   page,
   api,
 }) => {
   seedWorld(api);
-  api.updateThread("t-1", { model: "claude-opus-4-1" });
+  api.updateThread("t-1", { model: "claude-opus-5" });
   api.seedTool("Thread:t-1", {
     ask: "get a worktree for the PR",
     name: "worktree",
@@ -437,24 +438,80 @@ test("thread: the model selector open in the state pane", async ({
   });
   await openApp(page, threadPath("t-1"));
   await expect(page.getByRole("main")).toContainText("Worktree ready");
+  // the pick rides the chat input of the agent being talked to
   const select = page
-    .getByRole("complementary", { name: "Thread state" })
-    .getByRole("combobox", { name: "Thread model" });
-  await expect(select).toContainText("Claude Opus 4.1");
+    .getByRole("main")
+    .getByRole("combobox", { name: "The agent's model" });
+  await expect(select).toContainText("Claude Opus 5");
   await select.click();
-  const option = page.getByRole("option", { name: /GPT-5 mini/ });
+  const option = page.getByRole("option", { name: /GPT-6 Astra/ });
   await option.hover();
   await expect(option).toHaveAttribute("data-highlighted", "");
   await shot(page, "thread-08-model-selector");
 });
 
-test("review: the diff beside the chat", async ({ page, api }) => {
+test("thread: the manager working on a reply", async ({ page, api }) => {
   seedWorld(api);
   api.seedTurn(
     "Thread:t-1",
-    "review the helper",
-    "The loop bound is off by one — see the selection.",
+    "how is the fix going?",
+    "The engineer is mid-way; tests pass locally.",
   );
+  await openApp(page, threadPath("t-1"));
+  // the operator asks; nothing has streamed back yet — the working
+  // row holds the tail until the first sampling lands
+  const composer = page.getByPlaceholder("Talk to the manager…");
+  await composer.fill("run the full suite and report");
+  await composer.press("Enter");
+  await expect(page.getByRole("main").locator("[data-working]")).toBeVisible();
+  await shot(page, "thread-09-working");
+});
+
+test("thread: the delete confirm — the app asks in page", async ({
+  page,
+  api,
+}) => {
+  seedWorld(api);
+  await openApp(page, threadPath("t-1"));
+  await page
+    .getByRole("complementary", { name: "Thread state" })
+    .getByRole("button", { name: "Delete thread" })
+    .click();
+  await expect(page.locator("[data-confirm]")).toBeVisible();
+  await shot(page, "thread-10-confirm-delete");
+});
+
+test("thread: closed — the pane offers Reopen", async ({ page, api }) => {
+  seedWorld(api);
+  api.seedThread({
+    id: "t-1",
+    name: "w-reconcile",
+    title: "Fix the reconcile bug",
+    status: "closed",
+    turn: "idle",
+  });
+  await openApp(page, threadPath("t-1"));
+  await expect(
+    page.getByRole("button", { name: "Reopen thread" }),
+  ).toBeVisible();
+  await shot(page, "thread-11-closed");
+});
+
+test("thread: hovering the selected agent row adds the border", async ({
+  page,
+  api,
+}) => {
+  seedWorld(api);
+  await openApp(page, threadPath("t-1"));
+  const pane = page.getByRole("complementary", { name: "Thread state" });
+  await pane.getByRole("button", { name: "open agent engineer-1" }).click();
+  // selected + hovered — the fourth state: full accent AND a border
+  await pane.getByRole("button", { name: "open agent engineer-1" }).hover();
+  await shot(page, "thread-12-agent-hover");
+});
+
+test("review: the diff", async ({ page, api }) => {
+  seedWorld(api);
   await openApp(page, `${threadPath("t-1")}/alchemy-run/test-alchemy/pull/148`);
   await expect(page.getByRole("main")).toContainText("flow-test/sum.ts");
   await shot(page, "review-01-diff");
