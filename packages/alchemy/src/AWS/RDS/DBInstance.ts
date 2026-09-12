@@ -1,4 +1,5 @@
 import * as rds from "@distilled.cloud/aws/rds";
+import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
@@ -587,6 +588,48 @@ const logExportDelta = (
   };
 };
 
+class DBInstancePending extends Data.TaggedError("DBInstancePending")<{
+  instanceId: string;
+  status: string | undefined;
+}> {
+  override get message() {
+    return `DB instance '${this.instanceId}' is not available (status: ${this.status ?? "not yet visible"})`;
+  }
+}
+
+class DBInstanceReadinessBlocked extends Data.TaggedError(
+  "DBInstanceReadinessBlocked",
+)<{
+  instanceId: string;
+  status: string;
+}> {
+  override get message() {
+    return `DB instance '${this.instanceId}' requires intervention (status: ${this.status})`;
+  }
+}
+
+/**
+ * These states require intervention and cannot become available by polling.
+ * Includes the terminal states used by the AWS DBInstanceAvailable waiter.
+ * https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/accessing-monitoring.html
+ */
+const blockedStatuses = new Set([
+  "deleted",
+  "deleting",
+  "failed",
+  "inaccessible-encryption-credentials",
+  "inaccessible-encryption-credentials-recoverable",
+  "incompatible-create",
+  "incompatible-network",
+  "incompatible-option-group",
+  "incompatible-parameters",
+  "incompatible-restore",
+  "insufficient-capacity",
+  "restore-error",
+  "storage-full",
+  "upgrade-failed",
+]);
+
 export const DBInstanceProvider = () =>
   Provider.effect(
     DBInstance,
@@ -609,43 +652,30 @@ export const DBInstanceProvider = () =>
         return response?.DBInstances?.[0];
       });
 
-      // Bounded readiness wait. Gate on `DBInstanceStatus === "available"` so a
-      // follow-on `modifyDBInstance` doesn't hit `InvalidDBInstanceStateFault`.
-      // `waitForAvailable` budgets ~10 min (60 * 10s) for slow provisioning;
-      // `requireAvailable: false` only waits for the ARN to appear.
-      const waitForInstance = Effect.fn(function* (
-        instanceId: string,
-        { requireAvailable = true }: { requireAvailable?: boolean } = {},
-      ) {
-        const readinessPolicy = Schedule.max([
-          Schedule.fixed("10 seconds"),
-          Schedule.recurs(60),
-        ]);
-        return yield* readInstance(instanceId).pipe(
-          Effect.flatMap((instance) => {
-            if (!instance?.DBInstanceArn) {
-              return Effect.fail(
-                new Error(`DB instance '${instanceId}' not found`),
-              );
-            }
-            // Statuses that will never settle on their own — surface instead of
-            // spinning until the bound is hit.
-            const status = instance.DBInstanceStatus;
-            if (
-              requireAvailable &&
-              status !== "available" &&
-              status !== "incompatible-parameters" &&
-              status !== "incompatible-restore"
-            ) {
-              return Effect.fail(
-                new Error(
-                  `DB instance '${instanceId}' not available (status: ${status})`,
-                ),
-              );
-            }
-            return Effect.succeed(instance);
+      // Preserve the provisioning budget: RDS creation routinely takes minutes.
+      // Only pending observations are retried; API failures keep their typed errors.
+      const waitForInstance = Effect.fn(function* (instanceId: string) {
+        return yield* Effect.gen(function* () {
+          const instance = yield* readInstance(instanceId);
+          const status = instance?.DBInstanceStatus;
+          if (status !== undefined && blockedStatuses.has(status)) {
+            return yield* new DBInstanceReadinessBlocked({
+              instanceId,
+              status,
+            });
+          }
+          if (instance?.DBInstanceArn && status === "available") {
+            return instance;
+          }
+          return yield* new DBInstancePending({ instanceId, status });
+        }).pipe(
+          Effect.retry({
+            while: (error) => error._tag === "DBInstancePending",
+            schedule: Schedule.max([
+              Schedule.fixed("10 seconds"),
+              Schedule.recurs(60),
+            ]),
           }),
-          Effect.retry({ schedule: readinessPolicy }),
         );
       });
 
