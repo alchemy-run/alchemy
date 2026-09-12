@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { resolveTsconfig } from "rolldown/experimental";
@@ -129,20 +129,26 @@ export class SourceTransformer {
 
   /**
    * Cache key for one transform, or `undefined` when the result must not be
-   * cached. Every input Oxc's output depends on is part of it: the source
-   * and its path (source maps name it), the effective transform options,
-   * Node's module format, and the tsconfig that would be discovered for the
-   * file — resolved through the same cache `transformSync` uses, with the
-   * `extends` chain already merged, so editing any tsconfig in the chain is
-   * a new key.
+   * cached. Every input Oxc's output depends on is part of it: the file's
+   * path (source maps name it), its size and mtime standing in for its
+   * contents — a stat instead of a read plus a hash per module on the warm
+   * path — the effective transform options, Node's module format, and the
+   * tsconfig that would be discovered for the file, resolved through the
+   * same cache `transformSync` uses with the `extends` chain already
+   * merged, so editing any tsconfig in the chain is a new key.
    */
   #cacheKey(
     filePath: string,
-    source: string,
     options: TransformOptions,
     format: ModuleFormat,
   ): string | undefined {
     if (this.#cache === undefined) return undefined;
+    let stat: { size: bigint; mtimeNs: bigint };
+    try {
+      stat = statSync(filePath, { bigint: true });
+    } catch {
+      return undefined;
+    }
     let tsconfig: unknown = null;
     try {
       if (options.tsconfig === true) {
@@ -156,7 +162,7 @@ export class SourceTransformer {
     }
     return this.#cache.key([
       filePath,
-      source,
+      `${stat.size}:${stat.mtimeNs}`,
       JSON.stringify(options),
       JSON.stringify(tsconfig ?? null),
       format,
@@ -176,14 +182,15 @@ export class SourceTransformer {
     if (!transformExtensions.has(extension)) return undefined;
 
     let moduleFormat = nodeFormat(format) ?? inferFormat(filePath);
-    const source = readFileSync(filePath, "utf8");
     const lang = language(filePath);
     const options: TransformOptions = {
       tsconfig: this.#options.tsconfig ?? true,
       sourcemap: true,
       lang,
     };
-    const key = this.#cacheKey(filePath, source, options, moduleFormat);
+    // The key is taken before the source is read so a hit costs one stat
+    // and one cache read, never the source itself.
+    const key = this.#cacheKey(filePath, options, moduleFormat);
     const cached = key === undefined ? undefined : this.#cache?.get(key);
     if (cached !== undefined) {
       return {
@@ -194,6 +201,7 @@ export class SourceTransformer {
             : cached.code + fileSourceMapComment(cached.mapFile),
       };
     }
+    const source = readFileSync(filePath, "utf8");
     // A `.ts` file in a CommonJS package that uses `import`/`export` runs
     // as ESM — the same call Node's own module-syntax detection makes for
     // `.js`. Explicit `.cts` stays CommonJS regardless.

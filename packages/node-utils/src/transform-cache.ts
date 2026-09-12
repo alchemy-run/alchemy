@@ -72,9 +72,11 @@ export interface CachedTransform {
  * sidecars and dev-server runners all load the same source files, and
  * without this each of them transpiles the whole graph again.
  *
- * Modelled on tsx's file cache: entries are keyed by a hash of the source,
- * its path, the transform options and the resolved tsconfig, so a change to
- * any input is simply a different key; nothing is ever invalidated in place.
+ * Modelled on tsx's file cache: entries are keyed by a hash of the source
+ * file's path, size and mtime, the transform options and the resolved
+ * tsconfig, so a change to any input is simply a different key; nothing is
+ * ever invalidated in place. Size plus nanosecond mtime stands in for the
+ * contents so a hit never reads the source.
  *
  * An entry is two files: `<key>.json` with the code, and `<key>.map` with
  * the source map. The map stays on disk and is referenced from the module
