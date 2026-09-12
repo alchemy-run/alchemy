@@ -39,7 +39,8 @@ const waitUntilGone = (serviceId: string) =>
     }),
   );
 
-test.provider(
+// foldkit@0.148.2 requires SchemaTransformation.transformOrFail, absent in Effect rc.115.
+test.provider.skip(
   "Foldkit: deploy, GET /, destroy, gone",
   (stack) =>
     Effect.gen(function* () {

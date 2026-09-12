@@ -96,7 +96,40 @@ check pass.
 
 These results were recorded on Effect rc.113 before rebasing onto the rc.115
 upgrade in main. The rebase preserves upstream removal of the SNI shim and
-adapts the no-verify normalization tests. No tests were rerun after that rebase.
+adapts the no-verify normalization tests. The rc.115 results below supersede
+that earlier validation record.
+
+## Single-invocation verification on Effect rc.115
+
+Both Foldkit tests are explicitly skipped for the fixture's incompatible Effect
+API. The complete Railway directory was then selected in one invocation:
+
+```sh
+timeout -k 5 240 doppler run --project alchemy-v2 --config dev -- \
+  env ALCHEMY_TEST_STAGE=test_graphql_whole \
+  RAILWAY_TEST_PROJECT_NAME=alchsuite-graphqlwhole \
+  pnpm test test/Railway --profile testing --retry 0 --concurrency 8 --sequential
+```
+
+The runner collected 55 files / 85 tests. At the 240-second deadline it had
+recorded **64 passed, 5 failed, 9 skipped, and 7 unfinished**; the command
+exited 124. This was not a complete run or a passing suite.
+
+- Group creation and the canvas Function lifecycle failed on
+  `GraphQLTransportError` with HTTP 503 and a non-GraphQL response.
+- The bindings fixture's `beforeAll` failed on the same HTTP 503, preventing
+  its three tests from running; the runner counted them as failures.
+- Template deployment/list/delete passed in the shared single-process run.
+- SolidStart, StaticSite, SvelteKit, TanStackStart, Vite, Vocs, and Waku cloud
+  tests were still running at the deadline; they have no final outcome.
+- Nine skips comprise both Foldkit tests and the seven pre-existing gates
+  described below. No additional tests were disabled.
+
+The preceding complete rc.115 run in separate batches recorded 74 passed,
+4 failed, and 7 skipped. Those failures were both Foldkit tests, template
+service discovery, and StaticSite domain creation. Its separate SDK and TLS
+checks passed 64 and 9 tests respectively. The workspace type-check reported
+three AWS SigningError contract mismatches in DbAuthToken and S3 presigning.
 
 ## Explicit coverage limits
 
@@ -105,11 +138,10 @@ adapts the no-verify normalization tests. No tests were rerun after that rebase.
   cases above are exercised.
 - Backup entitlement, connected GitHub repositories, and external ACME DNS
   require their documented test environment variables.
-- Foldkit's cloud test currently fails before a Railway API call: installed
-  `foldkit@0.148.2` expects an Effect API removed by the workspace's
-  `effect@4.0.0-rc.113` override (`SchemaTransformation.transformOrFail`).
-  The test remains active; no dependency upgrade or silent skip is included
-  in this GraphQL migration.
+- Foldkit's local and cloud tests explicitly use `test.provider.skip`:
+  installed `foldkit@0.148.2` requires `SchemaTransformation.transformOrFail`,
+  which is unavailable in the workspace's Effect rc.115. Re-enable both
+  when the fixture is compatible with the workspace Effect version.
 - The existing Vocs local test remains skipped for its fixture cwd issue.
 
 These limits must not be reported as passing live coverage.
