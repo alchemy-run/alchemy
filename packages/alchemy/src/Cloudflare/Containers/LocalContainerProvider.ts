@@ -187,6 +187,7 @@ export const LocalContainerProvider = () =>
           secrets: props.secrets,
           vcpu: props.vcpu,
           memory: props.memory,
+          memoryMib: props.memoryMib,
           disk: props.disk,
           environmentVariables: Object.entries(env).map(([name, value]) => ({
             name,

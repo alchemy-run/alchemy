@@ -108,7 +108,7 @@ export interface ContainerApplicationPropsBase extends PlatformProps {
   /**
    * Instance type for each deployment. Defaults to wrangler's `"lite"` tier
    * (1/16 vCPU, 256 MiB, 2 GB disk) when no explicit {@link vcpu}/{@link memory}/
-   * {@link disk} is set. (`"dev"` is wrangler's deprecated alias for `"lite"`.)
+   * {@link memoryMib}/{@link disk} is set. (`"dev"` is wrangler's deprecated alias for `"lite"`.)
    * @default "lite"
    */
   instanceType?: ContainerApplication.InstanceType;
@@ -132,6 +132,10 @@ export interface ContainerApplicationPropsBase extends PlatformProps {
    * Memory allocation override for each deployment.
    */
   memory?: string;
+  /**
+   * Memory allocation override for each deployment, in MiB.
+   */
+  memoryMib?: number;
   /**
    * Disk allocation override for each deployment.
    */
