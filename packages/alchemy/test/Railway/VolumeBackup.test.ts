@@ -42,7 +42,7 @@ const listLive = (volumeInstanceId: string) =>
   railway
     .listVolumeInstanceBackup({ volumeInstanceId })
     .pipe(
-      Effect.catchTag(["RailwayNotFound", "NotFound", "RailwayForbidden"], () =>
+      Effect.catchTag(["NotFound", "RailwayForbidden"], () =>
         Effect.succeed([]),
       ),
     );
@@ -61,9 +61,7 @@ const waitUntilReady = (volumeInstanceId: string) =>
         ? ("ready" as const)
         : ("pending" as const),
     ),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-      Effect.succeed("pending" as const),
-    ),
+    Effect.catchTag("NotFound", () => Effect.succeed("pending" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("2 seconds"),
       until: (status) => status === "ready",
@@ -125,7 +123,7 @@ test.provider(
             })
             .pipe(
               Effect.catchTag(
-                ["RailwayNotFound", "NotFound", "RailwayForbidden"],
+                ["NotFound", "RailwayForbidden"],
                 () => Effect.void,
               ),
             );

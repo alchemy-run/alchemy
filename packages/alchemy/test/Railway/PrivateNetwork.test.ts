@@ -18,7 +18,7 @@ const logLevel = Effect.provideService(
 const listLive = (environmentId: string) =>
   railway.privateNetworks({ environmentId }).pipe(
     Effect.map((items) => items.filter((network) => network.deletedAt == null)),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () => Effect.succeed([])),
+    Effect.catchTag("NotFound", () => Effect.succeed([])),
   );
 
 const waitUntilEndpointGone = (input: {
@@ -35,9 +35,7 @@ const waitUntilEndpointGone = (input: {
         ? ("gone" as const)
         : ("found" as const),
     ),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-      Effect.succeed("gone" as const),
-    ),
+    Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",

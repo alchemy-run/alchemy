@@ -395,9 +395,7 @@ const resolveName = (id: string, existing?: string) =>
 const getByInstanceId = (volumeInstanceId: string) =>
   railway.volumeInstance({ id: volumeInstanceId }).pipe(
     Effect.map((instance) => (isGone(instance) ? undefined : instance)),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
   );
 
 const listVolumeInstances = (environmentId: string, projectId: string) =>
@@ -409,7 +407,7 @@ const listVolumeInstances = (environmentId: string, projectId: string) =>
             .map((edge) => edge.node)
             .filter((node) => !isGone(node)),
     ),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+    Effect.catchTag("NotFound", () =>
       Effect.succeed([] as EnvironmentResponseVolumeInstancesEdgesItemNode[]),
     ),
   );
@@ -491,7 +489,7 @@ const listEnvironmentIds = (project: {
       }
       return Array.from(set);
     }),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+    Effect.catchTag("NotFound", () =>
       Effect.succeed(
         project.environmentId.length > 0 ? [project.environmentId] : [],
       ),
@@ -605,9 +603,7 @@ export const attachVolumeToService = Effect.fn(function* (input: {
           mountPath: input.mountPath,
         },
       })
-      .pipe(
-        Effect.catchTag(["RailwayNotFound", "NotFound"], () => Effect.void),
-      );
+      .pipe(Effect.catchTag("NotFound", () => Effect.void));
   }
   const instance =
     observed ??
@@ -742,7 +738,7 @@ export const VolumeProvider = () =>
                   .map((instance) => toAttrs(instance)),
               ),
             ),
-            Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+            Effect.catchTag("NotFound", () =>
               Effect.succeed([] as Volume["Attributes"][]),
             ),
           ),
@@ -913,9 +909,7 @@ export const VolumeProvider = () =>
       if (volumeId.length === 0) return;
       yield* railway
         .deleteVolume({ volumeId })
-        .pipe(
-          Effect.catchTag(["RailwayNotFound", "NotFound"], () => Effect.void),
-        );
+        .pipe(Effect.catchTag("NotFound", () => Effect.void));
       yield* waitUntilGone({
         volumeInstanceId: output.volumeInstanceId,
         volumeId,

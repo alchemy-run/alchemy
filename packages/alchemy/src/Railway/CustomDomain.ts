@@ -242,9 +242,7 @@ const toAttrs = (
 const getById = (customDomainId: string, projectId: string) =>
   railway.customDomain({ id: customDomainId, projectId }).pipe(
     Effect.map((domain) => (isGone(domain) ? undefined : domain)),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
   );
 
 const listServiceDomains = (
@@ -256,7 +254,7 @@ const listServiceDomains = (
     Effect.map((result) =>
       result.customDomains.filter((domain) => !isGone(domain)),
     ),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+    Effect.catchTag("NotFound", () =>
       Effect.succeed([] as DomainsResponseCustomDomainsItem[]),
     ),
   );
@@ -334,11 +332,7 @@ export const CustomDomainProvider = () =>
         Effect.gen(function* () {
           const live = yield* railway
             .project({ id: project.projectId })
-            .pipe(
-              Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
           const services = (
             live?.services.edges.map((edge) => edge.node) ?? []
           ).filter(
@@ -517,9 +511,7 @@ export const CustomDomainProvider = () =>
       if (customDomainId.length === 0) return;
       yield* railway
         .deleteCustomDomain({ id: customDomainId })
-        .pipe(
-          Effect.catchTag(["RailwayNotFound", "NotFound"], () => Effect.void),
-        );
+        .pipe(Effect.catchTag("NotFound", () => Effect.void));
       if (projectId.length > 0) {
         yield* waitUntilGone(customDomainId, projectId);
       }

@@ -231,7 +231,7 @@ const targetOf = (
 const listProxies = (environmentId: string, serviceId: string) =>
   railway.tcpProxies({ environmentId, serviceId }).pipe(
     Effect.map((items) => items.filter((proxy) => !isGone(proxy))),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+    Effect.catchTag("NotFound", () =>
       Effect.succeed([] as TcpProxiesResultItem[]),
     ),
   );
@@ -297,11 +297,7 @@ export const TcpProxyProvider = () =>
         Effect.gen(function* () {
           const live = yield* railway
             .project({ id: project.projectId })
-            .pipe(
-              Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
           const services = (
             live?.services.edges.map((edge) => edge.node) ?? []
           ).filter(
@@ -433,7 +429,7 @@ export const TcpProxyProvider = () =>
           schedule: Schedule.spaced("3 seconds"),
           times: 20,
         }),
-        Effect.catchTag(["RailwayNotFound", "NotFound"], () => Effect.void),
+        Effect.catchTag("NotFound", () => Effect.void),
       );
       if (output.environmentId.length > 0 && output.serviceId.length > 0) {
         yield* waitUntilGone(output.environmentId, output.serviceId, id);

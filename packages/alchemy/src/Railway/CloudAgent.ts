@@ -245,12 +245,7 @@ const listAgents = (environmentId: string) =>
     .cloudAgents({ environmentId, mine: true })
     .pipe(
       Effect.catchTag(
-        [
-          "RailwayNotFound",
-          "NotFound",
-          "RailwayForbidden",
-          "RailwayPlanLimitExceeded",
-        ],
+        ["NotFound", "RailwayForbidden", "RailwayPlanLimitExceeded"],
         () => Effect.succeed([] as CloudAgentsResultItem[]),
       ),
     );
@@ -282,7 +277,7 @@ const listEnvironmentIds = (project: {
       }
       return Array.from(set);
     }),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+    Effect.catchTag("NotFound", () =>
       Effect.succeed(
         project.environmentId.length > 0 ? [project.environmentId] : [],
       ),
@@ -457,9 +452,7 @@ export const CloudAgentProvider = () =>
       if (cloudAgentId.length === 0) return;
       yield* railway
         .deleteCloudAgent({ id: cloudAgentId })
-        .pipe(
-          Effect.catchTag(["RailwayNotFound", "NotFound"], () => Effect.void),
-        );
+        .pipe(Effect.catchTag("NotFound", () => Effect.void));
       if (output.environmentId.length > 0) {
         yield* waitUntilGone(output.environmentId, cloudAgentId);
       }

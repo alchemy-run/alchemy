@@ -214,9 +214,7 @@ const getById = (environmentId: string, projectId?: string) =>
     })
     .pipe(
       Effect.map((env) => (isGone(env) ? undefined : env)),
-      Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-        Effect.succeed(undefined),
-      ),
+      Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
     );
 
 const findByName = (projectId: string, name: string) =>
@@ -225,16 +223,14 @@ const findByName = (projectId: string, name: string) =>
     Stream.take(1),
     Stream.runHead,
     Effect.map((option) => (option._tag === "Some" ? option.value : undefined)),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
   );
 
 const listProjectEnvironments = (projectId: string) =>
   railway.environments.items({ projectId, first: 50 }).pipe(
     Stream.runCollect,
     Effect.map((envs) => Array.from(envs)),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+    Effect.catchTag("NotFound", () =>
       Effect.succeed([] as EnvironmentsResponseEdgesItemNode[]),
     ),
   );
@@ -295,7 +291,7 @@ export const EnvironmentProvider = () =>
                 };
               }),
             ),
-            Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+            Effect.catchTag("NotFound", () =>
               Effect.succeed([] as Environment["Attributes"][]),
             ),
           ),
@@ -359,9 +355,7 @@ export const EnvironmentProvider = () =>
       if (environmentId.length === 0) return;
       yield* railway
         .deleteEnvironment({ id: environmentId })
-        .pipe(
-          Effect.catchTag(["RailwayNotFound", "NotFound"], () => Effect.void),
-        );
+        .pipe(Effect.catchTag("NotFound", () => Effect.void));
       yield* getById(environmentId, output.projectId).pipe(
         Effect.map((env) => env === undefined),
         Effect.repeat({

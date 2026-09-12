@@ -361,9 +361,7 @@ const templateKey = (template: SandboxTemplate | undefined) => {
 const getById = (environmentId: string, sandboxId: string) =>
   railway.sandbox({ environmentId, id: sandboxId }).pipe(
     Effect.map((sandbox) => (isGone(sandbox) ? undefined : sandbox)),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
   );
 
 const listSandboxes = (environmentId: string) =>
@@ -372,13 +370,7 @@ const listSandboxes = (environmentId: string) =>
     Stream.runCollect,
     Effect.map((chunk) => Array.from(chunk)),
     Effect.catchTag(
-      [
-        "RailwayNotFound",
-        "NotFound",
-        "RailwayForbidden",
-        "Forbidden",
-        "RailwayPlanLimitExceeded",
-      ],
+      ["NotFound", "RailwayForbidden", "Forbidden", "RailwayPlanLimitExceeded"],
       () => Effect.succeed([] as SandboxesResponseEdgesItemNode[]),
     ),
   );
@@ -398,7 +390,7 @@ const listEnvironmentIds = (project: {
       }
       return Array.from(set);
     }),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+    Effect.catchTag("NotFound", () =>
       Effect.succeed(
         project.environmentId.length > 0 ? [project.environmentId] : [],
       ),
@@ -551,7 +543,7 @@ export const deleteSandboxCheckpoint = Effect.fn(function* (input: {
       environmentId: input.environmentId,
       id: found.id,
     })
-    .pipe(Effect.catchTag(["RailwayNotFound", "NotFound"], () => Effect.void));
+    .pipe(Effect.catchTag("NotFound", () => Effect.void));
 });
 
 export type ExecRequest = {
@@ -764,9 +756,7 @@ export const SandboxProvider = () =>
       if (sandboxId.length === 0 || environmentId.length === 0) return;
       yield* railway
         .sandboxDestroy({ environmentId, id: sandboxId })
-        .pipe(
-          Effect.catchTag(["RailwayNotFound", "NotFound"], () => Effect.void),
-        );
+        .pipe(Effect.catchTag("NotFound", () => Effect.void));
       yield* waitUntilGone(environmentId, sandboxId);
     }),
   });

@@ -142,17 +142,13 @@ const resolveName = (id: string, name: string | undefined, existing?: string) =>
 const getById = (serviceId: string) =>
   railway.service({ id: serviceId }).pipe(
     Effect.map((service) => (isGoneService(service) ? undefined : service)),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
   );
 
 const getInstance = (environmentId: string, serviceId: string) =>
   railway.serviceInstance({ environmentId, serviceId }).pipe(
     Effect.map((instance) => (isGoneInstance(instance) ? undefined : instance)),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
   );
 
 const listProjectServices = (projectId: string) =>
@@ -162,7 +158,7 @@ const listProjectServices = (projectId: string) =>
         .map((edge) => edge.node)
         .filter((node) => !isGoneService(node)),
     ),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+    Effect.catchTag("NotFound", () =>
       Effect.succeed([] as ProjectResponseServicesEdgesItemNode[]),
     ),
   );
@@ -412,7 +408,7 @@ const listDeploymentTriggers = (
     .pipe(
       Stream.runCollect,
       Effect.map((triggers) => Array.from(triggers)),
-      Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+      Effect.catchTag("NotFound", () =>
         Effect.succeed([] as DeploymentTriggersResponseEdgesItemNode[]),
       ),
     );
@@ -487,11 +483,7 @@ const syncAutoUpdates = Effect.fn(function* (input: {
       projectId: input.projectId,
       serviceId: input.serviceId,
     })
-    .pipe(
-      Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
   if (status?.enabled === input.enabled) return;
   yield* railway.serviceInstanceAutoDeployUpdate({
     input: {
@@ -624,9 +616,7 @@ const listUploadedDeployment = (input: {
       }),
       // The deployment record lags the upload; absence means "not visible
       // yet" and the caller treats it as pending. Anything else bubbles.
-      Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-        Effect.succeed(undefined),
-      ),
+      Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
     );
 
 const waitForDeploymentById = (input: {
@@ -747,7 +737,7 @@ const listVariableMap = (
     })
     .pipe(
       Effect.map(asVariableMap),
-      Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+      Effect.catchTag("NotFound", () =>
         Effect.succeed({} as Record<string, string>),
       ),
     );
@@ -1417,12 +1407,7 @@ export const ServiceProvider = () =>
                 ? { environmentId: output.environmentId }
                 : {}),
             })
-            .pipe(
-              Effect.catchTag(
-                ["RailwayNotFound", "NotFound"],
-                () => Effect.void,
-              ),
-            );
+            .pipe(Effect.catchTag(["NotFound"], () => Effect.void));
           yield* getById(serviceId).pipe(
             Effect.map((service) => service === undefined),
             Effect.repeat({

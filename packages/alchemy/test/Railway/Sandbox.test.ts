@@ -24,9 +24,7 @@ const waitUntilGone = (environmentId: string, sandboxId: string) =>
     Effect.map((sandbox) =>
       isGoneStatus(sandbox.status) ? ("gone" as const) : ("found" as const),
     ),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-      Effect.succeed("gone" as const),
-    ),
+    Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",
@@ -36,7 +34,7 @@ const waitUntilGone = (environmentId: string, sandboxId: string) =>
 
 const destroyLive = (environmentId: string, sandboxId: string) =>
   railway.sandboxDestroy({ environmentId, id: sandboxId }).pipe(
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () => Effect.void),
+    Effect.catchTag("NotFound", () => Effect.void),
     Effect.flatMap(() => waitUntilGone(environmentId, sandboxId)),
   );
 

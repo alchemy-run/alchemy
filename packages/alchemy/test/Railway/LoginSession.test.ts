@@ -12,7 +12,7 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const missingSession = ["RailwayNotFound", "NotFound"] as const;
+const missingSession = ["NotFound"] as const;
 
 test.provider(
   "create, verify, and cancel a login session",

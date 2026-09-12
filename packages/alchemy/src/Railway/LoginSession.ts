@@ -78,7 +78,7 @@ const LOGIN_POLL_TIMES = 300;
  * Exhaustion returns `undefined` (not a failure) so the AuthProvider can
  * surface a timeout rather than a poll error.
  */
-const missingSession = ["RailwayNotFound", "NotFound"] as const;
+const missingSession = ["NotFound"] as const;
 
 export const pollLoginSessionToken = (
   code: string,

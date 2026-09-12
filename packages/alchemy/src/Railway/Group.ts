@@ -516,7 +516,7 @@ const resolveName = (id: string, name: string | undefined, existing?: string) =>
 const getProject = (projectId: string) =>
   railway.project({ id: projectId }).pipe(
     Effect.map((project) => (project.deletedAt != null ? undefined : project)),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+    Effect.catchTag("NotFound", () =>
       Effect.succeed(undefined as ProjectResponse | undefined),
     ),
   );
@@ -524,11 +524,7 @@ const getProject = (projectId: string) =>
 const getEnvironment = (environmentId: string, projectId: string) =>
   railway
     .environment({ id: environmentId, projectId })
-    .pipe(
-      Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const getEnvironmentConfig = (environmentId: string, projectId: string) =>
   getEnvironment(environmentId, projectId).pipe(
@@ -554,7 +550,7 @@ const listEnvironmentIds = (project: {
       }
       return Array.from(set);
     }),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+    Effect.catchTag("NotFound", () =>
       Effect.succeed(
         project.environmentId.length > 0 ? [project.environmentId] : [],
       ),
@@ -587,12 +583,7 @@ const previewCanvas = (environmentId: string) =>
     })
     .pipe(
       Effect.catchTag(
-        [
-          "RailwayNotFound",
-          "NotFound",
-          "RailwayValidationError",
-          "RailwayInternalError",
-        ],
+        ["NotFound", "RailwayValidationError", "RailwayInternalError"],
         () => Effect.succeed(undefined),
       ),
     );
@@ -608,12 +599,7 @@ const mergeCanvas = (
     })
     .pipe(
       Effect.catchTag(
-        [
-          "RailwayNotFound",
-          "NotFound",
-          "RailwayValidationError",
-          "RailwayInternalError",
-        ],
+        ["NotFound", "RailwayValidationError", "RailwayInternalError"],
         () => Effect.succeed(false),
       ),
     );
@@ -950,7 +936,7 @@ export const GroupProvider = () =>
               ];
             }),
           ),
-          Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+          Effect.catchTag("NotFound", () =>
             Effect.succeed([] as Group["Attributes"][]),
           ),
         ),
@@ -1185,11 +1171,7 @@ export const GroupProvider = () =>
             groupId: null,
           })),
         }),
-      }).pipe(
-        Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-          Effect.succeed(""),
-        ),
-      );
+      }).pipe(Effect.catchTag("NotFound", () => Effect.succeed("")));
       if (projectId.length > 0) {
         yield* waitUntilGone({
           projectId,

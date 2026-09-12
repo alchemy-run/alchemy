@@ -24,11 +24,7 @@ const logLevel = Effect.provideService(
 const listLive = (environmentId: string) =>
   railway
     .cloudAgents({ environmentId, mine: true })
-    .pipe(
-      Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-        Effect.succeed([]),
-      ),
-    );
+    .pipe(Effect.catchTag("NotFound", () => Effect.succeed([])));
 
 const waitUntilAgentGone = (environmentId: string, cloudAgentId: string) =>
   listLive(environmentId).pipe(
@@ -49,7 +45,7 @@ const waitUntilAgentGone = (environmentId: string, cloudAgentId: string) =>
 const deleteAgent = (id: string) =>
   railway
     .deleteCloudAgent({ id })
-    .pipe(Effect.catchTag(["RailwayNotFound", "NotFound"], () => Effect.void));
+    .pipe(Effect.catchTag("NotFound", () => Effect.void));
 
 test.provider(
   "create, list, and delete a cloud agent",
