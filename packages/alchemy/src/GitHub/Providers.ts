@@ -1,4 +1,5 @@
 import * as Layer from "effect/Layer";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
 import { ProfileStoreLive } from "../Auth/Profile.ts";
 import * as Provider from "../Provider.ts";
@@ -63,5 +64,6 @@ export const providers = (options?: ProvidersOptions) =>
     Layer.provideMerge(makeGitHubAuth(options)),
     Layer.provideMerge(ProfileStoreLive),
     Layer.provideMerge(CredentialsStoreLive),
+    Layer.provideMerge(FetchHttpClient.layer),
     Layer.orDie,
   );

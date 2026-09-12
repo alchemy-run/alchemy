@@ -1,9 +1,10 @@
+import * as Issues from "@distilled.cloud/github/issues";
 import * as Effect from "effect/Effect";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { dedent } from "../Util/dedent.ts";
-import { gitHubBaseUrlChanged, octokitFor } from "./Octokit.ts";
+import { gitHubBaseUrlChanged, githubFor } from "./Client.ts";
 import * as GitHub from "./Providers.ts";
 
 export interface CommentProps {
@@ -184,86 +185,49 @@ export const CommentProvider = () =>
     }),
 
     reconcile: Effect.fn(function* ({ news, output }) {
-      const octokit = yield* octokitFor(news.baseUrl);
+      const github = yield* githubFor(news.baseUrl);
       const body = dedent(news.body);
-
-      // Observe — GitHub assigns `comment_id` server-side. Probe for live
-      // state via the cached id; a 404 (deleted out-of-band, or never
-      // created) collapses to "no observed comment" so we converge by
-      // posting a fresh one.
-      const observedId = output?.commentId
-        ? yield* Effect.tryPromise({
-            try: async () => {
-              try {
-                const { data } = await octokit.rest.issues.getComment({
-                  owner: news.owner,
-                  repo: news.repository,
-                  comment_id: output.commentId,
-                });
-                return data.id;
-              } catch (error: any) {
-                if (error.status === 404) return undefined;
-                throw error;
-              }
-            },
-            catch: (e) => e as Error,
-          })
-        : undefined;
-
-      // Ensure — when no live comment exists, POST creates one.
-      if (observedId === undefined) {
-        const { data } = yield* Effect.tryPromise(() =>
-          octokit.rest.issues.createComment({
+      const observed = output?.commentId
+        ? yield* Issues.getComment({
             owner: news.owner,
             repo: news.repository,
-            issue_number: news.issueNumber,
-            body,
-          }),
-        );
-        return {
-          commentId: data.id,
-          htmlUrl: data.html_url,
-          updatedAt: data.updated_at,
-        };
-      }
-
-      // Sync — PATCH the existing comment with the desired body. GitHub's
-      // updateComment is idempotent for identical bodies (returns same
-      // updatedAt), so we always issue the call rather than diffing.
-      const { data } = yield* Effect.tryPromise(() =>
-        octokit.rest.issues.updateComment({
-          owner: news.owner,
-          repo: news.repository,
-          comment_id: observedId,
-          body,
-        }),
-      );
+            comment_id: output.commentId,
+          }).pipe(
+            github,
+            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          )
+        : undefined;
+      const data = yield* (
+        observed === undefined
+          ? Issues.createComment({
+              owner: news.owner,
+              repo: news.repository,
+              issue_number: news.issueNumber,
+              body,
+            })
+          : Issues.updateComment({
+              owner: news.owner,
+              repo: news.repository,
+              comment_id: observed.id,
+              body,
+            })
+      ).pipe(github);
       return {
         commentId: data.id,
         htmlUrl: data.html_url,
         updatedAt: data.updated_at,
       };
     }),
-
     delete: Effect.fn(function* ({ olds, output }) {
-      if (!olds.allowDelete) {
-        return;
-      }
-
-      const octokit = yield* octokitFor(olds.baseUrl);
-
-      yield* Effect.tryPromise(async () => {
-        try {
-          await octokit.rest.issues.deleteComment({
-            owner: olds.owner,
-            repo: olds.repository,
-            comment_id: output.commentId,
-          });
-        } catch (error: any) {
-          if (error.status !== 404) {
-            throw error;
-          }
-        }
-      });
+      if (!olds.allowDelete) return;
+      const github = yield* githubFor(olds.baseUrl);
+      yield* Issues.deleteComment({
+        owner: olds.owner,
+        repo: olds.repository,
+        comment_id: output.commentId,
+      }).pipe(
+        github,
+        Effect.catchTag("NotFound", () => Effect.void),
+      );
     }),
   });

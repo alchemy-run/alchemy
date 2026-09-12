@@ -131,7 +131,7 @@ export const readEnvCredentials = (
  * GitHub Enterprise (Server or Cloud with data residency) is supported by
  * every method: `alchemy profile edit --reconfigure GitHub` prompts for the host, or set
  * `GITHUB_BASE_URL` / `GITHUB_API_URL` / `GH_HOST` in the environment. The
- * host is normalized into the REST API base URL passed to Octokit, and
+ * host is normalized into the REST API base URL passed to distilled, and
  * `gh auth token` is invoked with `--hostname` so the CLI returns the token
  * for the right host.
  *

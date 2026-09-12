@@ -35,7 +35,7 @@ export default Cloudflare.Worker(
       {
         owner: "my-org",
         repository: "my-repo",
-        events: ["push"],
+        events: [GitHub.WebhookEvents.Push],
       },
       (event) => Effect.log(`received ${event.name} (${event.id})`),
     );
@@ -49,7 +49,7 @@ export default Cloudflare.Worker(
 );
 ```
 
-`events` defaults to `["push"]`; pass `["*"]` to receive everything
+`events` is required; pass `[GitHub.WebhookEvents.All]` to receive everything
 GitHub emits. The handler receives each delivery as a typed
 `WebhookEvent` and returns an `Effect` — more on the payload types
 below.
@@ -125,7 +125,7 @@ events. Pass one and alchemy rejects any delivery whose
        {
          owner: "my-org",
          repository: "my-repo",
-         events: ["push"],
+         events: [GitHub.WebhookEvents.Push],
 +        secret,
        },
        (event) => Effect.log(`received ${event.name} (${event.id})`),
@@ -135,7 +135,11 @@ events. Pass one and alchemy rejects any delivery whose
 The webhook is provisioned with the secret, so GitHub signs every
 delivery with `HMAC-SHA256`; the Worker recomputes the signature over
 the raw body and compares in constant time, answering `401` on a
-mismatch. `Config.Redacted` reads the value from your `.env` at
+mismatch. Malformed delivery headers or payloads return `400`; handler failures remain
+server errors. Unselected events, including automatic `ping` deliveries, are
+acknowledged without invoking your handler.
+
+`Config.Redacted` reads the value from your `.env` at
 deploy time and binds it as a Worker secret — see
 [Secrets & env](/cloudflare/security/secrets-env).
 
@@ -171,7 +175,7 @@ plumbing:
 
 ## Typed payloads
 
-`event` is Octokit's `EmitterWebhookEvent` — a discriminated union of
+`event` is distilled's generated `WebhookEvent` — a discriminated union of
 `{ id, name, payload }` keyed on `name`, narrowed to the events you
 selected. A `switch` on `event.name` narrows `payload` exhaustively:
 
@@ -180,7 +184,7 @@ yield* GitHub.consumeRepositoryEvents(
   {
     owner: "my-org",
     repository: "my-repo",
-    events: ["push", "pull_request"],
+    events: [GitHub.WebhookEvents.Push, GitHub.WebhookEvents.PullRequest],
   },
   (event) => {
     switch (event.name) {
@@ -193,7 +197,7 @@ yield* GitHub.consumeRepositoryEvents(
 );
 ```
 
-Selecting `["*"]` (or omitting `events`) widens the union back to
+Selecting `[GitHub.WebhookEvents.All]` widens the union back to
 every GitHub event name.
 
 ## Case study: a release-blogging agent
@@ -212,7 +216,7 @@ yield* GitHub.consumeRepositoryEvents(
   {
     owner: "alchemy-run",
     repository: "alchemy",
-    events: ["push"],
+    events: [GitHub.WebhookEvents.Push],
   },
   (event) => {
     const title = event.payload.head_commit?.message.split("\n")[0] ?? "";
