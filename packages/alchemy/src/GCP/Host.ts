@@ -204,7 +204,7 @@ const grantActAs = (project: string, saName: string) =>
       `serviceAccount:service-${number}@gcf-admin-robot.iam.gserviceaccount.com`,
     ];
     const keyFile = yield* Config.option(
-      Config.string("GOOGLE_APPLICATION_CREDENTIALS"),
+      Config.String("GOOGLE_APPLICATION_CREDENTIALS"),
     );
     if (Option.isSome(keyFile)) {
       const fs = yield* FileSystem.FileSystem;

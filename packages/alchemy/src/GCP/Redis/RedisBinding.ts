@@ -29,7 +29,7 @@ const asString = (value: unknown): string => {
   return value == null ? "" : String(value);
 };
 
-const redisUrlFromEnv = Config.redacted(REDIS_URL_ENV).pipe(
+const redisUrlFromEnv = Config.Redacted(REDIS_URL_ENV).pipe(
   Effect.map((value) => Redacted.value(value)),
 );
 

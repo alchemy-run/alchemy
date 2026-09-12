@@ -1,5 +1,6 @@
 import * as GCP from "@/GCP";
 import * as Test from "@/Test/Alchemy";
+import { unzipFiles } from "@/Util/zip.ts";
 import * as apigee from "@distilled.cloud/gcp/apigee_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -41,18 +42,15 @@ const descriptionFromBundle = (body: apigee.GoogleApiHttpBody) =>
   Effect.gen(function* () {
     const data = body.data;
     if (data === undefined || data.length === 0) return "";
-    const JSZip = (yield* Effect.promise(() => import("jszip"))).default;
     const bytes = yield* Effect.sync(() => Buffer.from(data, "base64"));
-    const zip = yield* Effect.promise(() => JSZip.loadAsync(bytes));
-    const xmlPath = Object.keys(zip.files).find(
-      (path) =>
-        /^sharedflowbundle\/[^/]+\.xml$/i.test(path) &&
-        zip.files[path]?.dir !== true,
+    const entries = yield* unzipFiles(bytes);
+    const xmlPath = Object.keys(entries).find((path) =>
+      /^sharedflowbundle\/[^/]+\.xml$/i.test(path),
     );
     if (xmlPath === undefined) return "";
-    const file = zip.file(xmlPath);
-    if (!file) return "";
-    return yield* Effect.promise(() => file.async("string"));
+    return yield* Effect.sync(() =>
+      Buffer.from(entries[xmlPath]!).toString("utf8"),
+    );
   });
 
 test.provider.skipIf(!hasGcpCreds)(

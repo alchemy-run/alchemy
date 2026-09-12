@@ -151,11 +151,11 @@ export const fromChain = () =>
       const http = yield* HttpClient.HttpClient;
       return Effect.gen(function* () {
         const envToken = yield* Config.option(
-          Config.string("GOOGLE_ACCESS_TOKEN"),
+          Config.String("GOOGLE_ACCESS_TOKEN"),
         );
         const envProject = yield* Config.option(
-          Config.string("GOOGLE_PROJECT_ID").pipe(
-            Config.orElse(() => Config.string("GOOGLE_CLOUD_PROJECT")),
+          Config.String("GOOGLE_PROJECT_ID").pipe(
+            Config.orElse(() => Config.String("GOOGLE_CLOUD_PROJECT")),
           ),
         );
         if (Option.isSome(envToken)) {
@@ -166,7 +166,7 @@ export const fromChain = () =>
         }
 
         const keyFile = yield* Config.option(
-          Config.string("GOOGLE_APPLICATION_CREDENTIALS"),
+          Config.String("GOOGLE_APPLICATION_CREDENTIALS"),
         );
         if (Option.isSome(keyFile)) {
           const raw = yield* fs.readFileString(keyFile.value).pipe(

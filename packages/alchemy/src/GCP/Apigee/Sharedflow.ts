@@ -8,7 +8,7 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import { zipFiles } from "../../Util/zip.ts";
+import { unzipFiles, zipFiles } from "../../Util/zip.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -25,7 +25,6 @@ import {
 } from "./ownership.ts";
 
 const MAX_ID_LENGTH = 255;
-const archiveDate = new Date("1980-01-01T00:00:00.000Z");
 
 export type SharedflowProps = {
   /**
@@ -208,41 +207,31 @@ const makeEmptyBundle = (sharedflowId: string, description: string) =>
     },
   ]).pipe(Effect.flatMap(toBase64));
 
+const bundleXmlPath = (paths: ReadonlyArray<string>) =>
+  paths.find((path) => /^sharedflowbundle\/[^/]+\.xml$/i.test(path));
+
 const stampBundle = (base64: string, description: string) =>
   Effect.gen(function* () {
-    const JSZip = (yield* Effect.promise(() => import("jszip"))).default;
     const bytes = yield* Effect.sync(() => Buffer.from(base64, "base64"));
-    const zip = yield* Effect.promise(() => JSZip.loadAsync(bytes));
-    const xmlPath = Object.keys(zip.files).find(
-      (path) =>
-        /^sharedflowbundle\/[^/]+\.xml$/i.test(path) &&
-        zip.files[path]?.dir !== true,
-    );
+    const entries = yield* unzipFiles(bytes);
+    const xmlPath = bundleXmlPath(Object.keys(entries));
     if (xmlPath !== undefined) {
-      const file = zip.file(xmlPath);
-      if (file) {
-        const xml = yield* Effect.promise(() => file.async("string"));
-        const escaped = `<Description>${xmlEscape(description)}</Description>`;
-        const next = xml.includes("<Description>")
-          ? xml.replace(/<Description>[\s\S]*?<\/Description>/, escaped)
-          : xml.replace(
-              /<\/SharedFlowBundle>/,
-              `  ${escaped}\n</SharedFlowBundle>`,
-            );
-        zip.file(xmlPath, next, { date: archiveDate });
-      }
+      const xml = yield* Effect.sync(() =>
+        Buffer.from(entries[xmlPath]!).toString("utf8"),
+      );
+      const escaped = `<Description>${xmlEscape(description)}</Description>`;
+      const next = xml.includes("<Description>")
+        ? xml.replace(/<Description>[\s\S]*?<\/Description>/, escaped)
+        : xml.replace(
+            /<\/SharedFlowBundle>/,
+            `  ${escaped}\n</SharedFlowBundle>`,
+          );
+      entries[xmlPath] = yield* Effect.sync(() => Buffer.from(next, "utf8"));
     }
-    yield* Effect.sync(() => {
-      for (const entry of Object.values(zip.files)) {
-        entry.date = archiveDate;
-      }
-    });
-    const archive = yield* Effect.promise(() =>
-      zip.generateAsync({
-        type: "nodebuffer",
-        compression: "DEFLATE",
-        platform: "UNIX",
-      }),
+    // zipFiles sorts entries and stamps a fixed timestamp, so restamping the
+    // bundle is byte-identical for identical content.
+    const archive = yield* zipFiles(
+      Object.entries(entries).map(([path, content]) => ({ path, content })),
     );
     return yield* toBase64(archive);
   });
@@ -298,18 +287,13 @@ const descriptionFromBundle = (body: apigee.GoogleApiHttpBody | undefined) =>
   Effect.gen(function* () {
     const data = body?.data;
     if (data === undefined || data.length === 0) return undefined;
-    const JSZip = (yield* Effect.promise(() => import("jszip"))).default;
     const bytes = yield* Effect.sync(() => Buffer.from(data, "base64"));
-    const zip = yield* Effect.promise(() => JSZip.loadAsync(bytes));
-    const xmlPath = Object.keys(zip.files).find(
-      (path) =>
-        /^sharedflowbundle\/[^/]+\.xml$/i.test(path) &&
-        zip.files[path]?.dir !== true,
-    );
+    const entries = yield* unzipFiles(bytes);
+    const xmlPath = bundleXmlPath(Object.keys(entries));
     if (xmlPath === undefined) return undefined;
-    const file = zip.file(xmlPath);
-    if (!file) return undefined;
-    const xml = yield* Effect.promise(() => file.async("string"));
+    const xml = yield* Effect.sync(() =>
+      Buffer.from(entries[xmlPath]!).toString("utf8"),
+    );
     const match = xml.match(/<Description>([\s\S]*?)<\/Description>/);
     if (match?.[1] === undefined) return undefined;
     return xmlUnescape(match[1]);
