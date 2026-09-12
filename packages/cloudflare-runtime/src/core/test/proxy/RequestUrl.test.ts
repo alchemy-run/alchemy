@@ -14,14 +14,13 @@ layer(localRuntimeLayer, { excludeTestServices: true })((it) => {
       Effect.gen(function* () {
         const proxy = yield* WorkerProxy.WorkerProxy;
         const instance = yield* proxy.serve();
-        const otherInstance = yield* proxy.serve();
-        expect(instance.proxySharedSecret).not.toBe(
-          otherInstance.proxySharedSecret,
-        );
+        // A server that fronts workerd itself (the vite plugin) signs its
+        // forwarded requests with a secret of its own; the relay sends none.
+        const proxySharedSecret = "test-proxy-secret";
         for (const name of ["first", "replacement"]) {
           const worker = yield* startTestWorker({
             name,
-            proxySharedSecret: instance.proxySharedSecret,
+            proxySharedSecret,
             compatibilityDate: "2026-03-10",
             compatibilityFlags: [],
             bindings: [],
@@ -85,7 +84,7 @@ layer(localRuntimeLayer, { excludeTestServices: true })((it) => {
           const trusted = yield* worker.fetchJson("/callback", {
             headers: {
               [HEADER_ORIGINAL_URL]: "https://public.example:8443/callback?x=1",
-              [HEADER_PROXY_SHARED_SECRET]: instance.proxySharedSecret,
+              [HEADER_PROXY_SHARED_SECRET]: proxySharedSecret,
             },
           });
           expect(trusted).toMatchObject({
@@ -101,12 +100,6 @@ layer(localRuntimeLayer, { excludeTestServices: true })((it) => {
             },
           });
           expect(forged.status).toBe(400);
-          const otherProxy = yield* worker.fetch("/direct", {
-            headers: {
-              [HEADER_PROXY_SHARED_SECRET]: otherInstance.proxySharedSecret,
-            },
-          });
-          expect(otherProxy.status).toBe(400);
         }
       }),
   );

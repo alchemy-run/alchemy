@@ -842,7 +842,6 @@ export const LocalWorkerProvider = () =>
                   runtime
                     .start({
                       name: worker.name,
-                      proxySharedSecret: proxy.proxySharedSecret,
                       logging: {
                         // `(chunk, stream)` — chunk first; the stream name
                         // indexes the splitters directly.
@@ -1048,7 +1047,7 @@ export const LocalWorkerProvider = () =>
                   Effect.log(`[${worker.fqn}] Rebuilding`),
                   // Tells the proxy to queue requests until the updated
                   // worker is ready.
-                  Effect.forkChild(proxy.unset()),
+                  proxy.unset(),
                 ]);
               }
             } else if (event._tag === "Error") {
@@ -1057,7 +1056,7 @@ export const LocalWorkerProvider = () =>
                 // No updated worker is coming from this build: answer
                 // parked requests with the error now instead of after the
                 // pending timeout.
-                Effect.forkChild(proxy.fail(event.error.message)),
+                proxy.fail(event.error.message),
               ]);
             }
             return Effect.void;
@@ -1245,7 +1244,7 @@ export const LocalWorkerProvider = () =>
                 }
               }
               // Queue requests while the child is (re)starting.
-              yield* proxy.unset().pipe(Effect.forkChild);
+              yield* proxy.unset();
               // The dev server and its workerd run in a child process rooted
               // at the app.
               const root = path.resolve(rootDir ?? process.cwd());
@@ -1271,7 +1270,6 @@ export const LocalWorkerProvider = () =>
                     {
                       rootDir: root,
                       publicUrl: proxy.url.toString().replace(/\/$/, ""),
-                      proxySharedSecret: proxy.proxySharedSecret,
                       accountId,
                       storageDirectory,
                       stack: { name: stack.name, stage: stack.stage },
@@ -1396,7 +1394,7 @@ export const LocalWorkerProvider = () =>
         // Queue requests until the source's first output is served —
         // whether that's the first workerd serve (bundle mode) or the dev
         // server URL (server mode).
-        yield* proxy.unset().pipe(Effect.forkChild);
+        yield* proxy.unset();
         // `loadSource` is typed against the full `SourceServices` union
         // (which includes the per-run Artifacts cache the live provider
         // supplies); local dev has no run-scoped cache, so hand the
@@ -1418,7 +1416,6 @@ export const LocalWorkerProvider = () =>
           extraOptions: worker.bundleOptions.extraOptions,
           assets: worker.assets,
           worker: {
-            proxySharedSecret: proxy.proxySharedSecret,
             bindings: worker.workerBindings,
             durableObjectNamespaces: worker.durableObjectNamespaces,
             hyperdrives: worker.hyperdrives,

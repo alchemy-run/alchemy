@@ -85,7 +85,6 @@ const DEFAULT_PENDING_TIMEOUT = Duration.minutes(2);
 const HOLD_LIMIT = ByteSize.mebibytes(1);
 
 export interface WorkerProxyInstance {
-  readonly proxySharedSecret: string;
   readonly url: URL;
   /** Route new connections to `upstream` (plain HTTP); release parked ones. */
   readonly set: (upstream: URL) => Effect.Effect<void>;
@@ -412,7 +411,6 @@ export const WorkerProxyLive = Layer.effect(
         pendingTimeout: Duration.fromInputUnsafe(
           options.pendingTimeout ?? DEFAULT_PENDING_TIMEOUT,
         ),
-        proxySharedSecret: crypto.randomUUID(),
       };
     });
     type ResolvedOptions = Effect.Success<ReturnType<typeof normalizeOptions>>;
@@ -489,7 +487,6 @@ export const WorkerProxyLive = Layer.effect(
         }
         return {
           url,
-          proxySharedSecret: resolved.proxySharedSecret,
           set: (upstream) => relay.set(upstreamOf(upstream)),
           unset: () => relay.unset,
           fail: relay.fail,
