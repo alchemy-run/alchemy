@@ -52,7 +52,7 @@ export interface RpcProxyApi {
    * Retrieves a provider from the RPC server context.
    * The consumer must unwrap the provider using {@link RpcSerialization.unwrapRpcHandlers} before using it.
    *
-   * `group` names the provider group the type belongs to — for a server
+   * `group` names the provider group the type belongs to: for a server
    * launched with a group loader (the dev sidecar, see `Local/Sidecar.ts`)
    * it is the URL of the module whose default export is that group's
    * provider layer, imported and built on first use per session. A server
@@ -60,7 +60,7 @@ export interface RpcProxyApi {
    */
   readonly getProvider: <R extends ResourceLike>(
     type: R["Type"],
-    group?: string,
+    group: string,
   ) => Promise<RpcSerialization.RpcWrapped<RpcProviderService<R>>>;
 }
 
@@ -109,18 +109,12 @@ export class SessionProviders extends Context.Service<
     readonly get: (
       sessionEnv: string | undefined,
       type: string,
-      group: string | undefined,
+      group: string,
     ) => Promise<RpcSerialization.RpcWrapped<RpcProviderService<any>>>;
   }
 >()("alchemy/Local/SessionProviders") {}
 
-/** Cache key: `\0` cannot appear in the JSON session env or in a URL. */
-const buildKey = (sessionEnv: string | undefined, group: string | undefined) =>
-  `${sessionEnv ?? ""}\0${group ?? ""}`;
-
-const sessionProviders = (
-  resolve: (group: string | undefined) => Effect.Effect<ProviderLayer, unknown>,
-) =>
+const sessionProviders = (resolve: ProviderGroupLoader) =>
   Layer.effect(
     SessionProviders,
     Effect.gen(function* () {
@@ -132,14 +126,19 @@ const sessionProviders = (
       const base = yield* RpcServerEnvironment.fromProcessEnv.pipe(
         Effect.orDie,
       );
-      const builds = new Map<string, Promise<Context.Context<any>>>();
+      // Built contexts by session environment, then by provider group.
+      const builds = new Map<
+        string | undefined,
+        Map<string, Promise<Context.Context<any>>>
+      >();
 
       const contextFor = (
         sessionEnv: string | undefined,
-        group: string | undefined,
+        group: string,
       ): Promise<Context.Context<any>> => {
-        const key = buildKey(sessionEnv, group);
-        const existing = builds.get(key);
+        const session = builds.get(sessionEnv) ?? new Map();
+        builds.set(sessionEnv, session);
+        const existing = session.get(group);
         if (existing !== undefined) {
           return existing;
         }
@@ -175,12 +174,12 @@ const sessionProviders = (
             Effect.provideContext(ambient as Context.Context<any>),
           ) as Effect.Effect<Context.Context<any>>,
         );
-        builds.set(key, build);
+        session.set(group, build);
         // Don't poison the memo with a transient build failure — the next
         // session for this stack retries.
         build.catch(() => {
-          if (builds.get(key) === build) {
-            builds.delete(key);
+          if (session.get(group) === build) {
+            session.delete(group);
           }
         });
         return build;
@@ -194,9 +193,7 @@ const sessionProviders = (
             | undefined;
           if (!provider) {
             throw new Error(
-              group === undefined
-                ? `Provider "${type}" not found`
-                : `Provider "${type}" not found in provider group ${group}`,
+              `Provider "${type}" not found in provider group ${group}`,
             );
           }
           // Strip the process-local variant machinery (see
@@ -239,16 +236,7 @@ export const launch = (providers: ProviderLayer | ProviderGroupLoader) =>
   serverPlatformLayer.pipe(
     Layer.provide(
       sessionProviders(
-        Layer.isLayer(providers)
-          ? () => Effect.succeed(providers)
-          : (group) =>
-              group === undefined
-                ? Effect.fail(
-                    new Error(
-                      "This RPC server serves provider groups; getProvider needs a group",
-                    ),
-                  )
-                : providers(group),
+        Layer.isLayer(providers) ? () => Effect.succeed(providers) : providers,
       ),
     ),
     Layer.provide(
@@ -305,7 +293,7 @@ export const layerServer = (
           makeServerRpcSession<RpcProxyApi>(ws, {
             getProvider: (<R extends ResourceLike>(
               type: R["Type"],
-              group?: string,
+              group: string,
             ) =>
               providers.get(
                 sessionEnv,
