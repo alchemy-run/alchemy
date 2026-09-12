@@ -82,6 +82,13 @@ export interface DurableObject<
   Shape = unknown,
 > extends DurableObjectLike<Shape> {
   Type: TypeId;
+  /**
+   * The resource's logical id, as every alchemy resource carries (see
+   * {@link Self}). Declared because the namespace really does carry one —
+   * leaving it off the interface is what made the whole value un-annotatable,
+   * and an un-annotatable literal is one nothing checks.
+   */
+  LogicalId: string;
   name: string;
   namespaceId: Output.Output<string>;
   getByName: (
@@ -1229,29 +1236,58 @@ export const DurableObject: DurableObjectClass = taggedFunction(
           }),
         );
 
-        return {
+        const namespaceId = worker.durableObjectNamespaces.pipe(
+          Output.map(
+            (durableObjectNamespaces) => durableObjectNamespaces?.[namespace],
+          ),
+        );
+
+        // Wrap a raw Cloudflare namespace as the alchemy-side one. A function
+        // rather than a literal because `jurisdiction` hands back another one
+        // of these, over the sub-namespace it returns.
+        //
+        // The `: DurableObject<any>` annotation is load-bearing: it is the only
+        // thing that checks this object against the interface it claims to be.
+        // Without it the literal's type was merely inferred and then cast, so
+        // `get` / `idFromName` / `idFromString` / `newUniqueId` could sit here
+        // commented out while TypeScript told every caller they existed — a
+        // `TypeError` in production and nothing at build time. Add a method to
+        // `DurableObject` and forget it here, and this now fails to compile.
+        const makeNamespace = (
+          ns: cf.DurableObjectNamespace,
+        ): DurableObject<any> => ({
+          // Really is a `DurableObjectLike`, which the interface has always
+          // claimed — carrying `kind` (plus the `scriptName`/`transferredFrom`
+          // this binding was built with) is what makes the claim true, so a
+          // live namespace handed to a Worker's `env` binds to the class it
+          // actually points at.
+          kind: TypeId,
+          scriptName,
+          transferredFrom,
           Type: TypeId,
           LogicalId: namespace,
           name: namespace,
-          namespaceId: worker.durableObjectNamespaces.pipe(
-            Output.map(
-              (durableObjectNamespaces) => durableObjectNamespaces?.[namespace],
-            ),
-          ),
+          namespaceId,
           getByName: (
             name: string,
             options?: DurableObjectGetDurableObjectOptions,
-          ) => makeRpcStub(binding.getByName(name, options)),
-          // newUniqueId: () => use((ns) => ns.newUniqueId()),
-          // idFromName: (name: string) => use((ns) => ns.idFromName(name)),
-          // idFromString: (id: string) => use((ns) => ns.idFromString(id)),
-          // get: (
-          //   id: cf.DurableObjectId,
-          //   options?: cf.DurableObjectNamespaceGetDurableObjectOptions,
-          // ) => use((ns) => makeRpcStub(ns.get(id, options))),
-          // jurisdiction: (jurisdiction: cf.DurableObjectJurisdiction) =>
-          //   use((ns) => ns.jurisdiction(jurisdiction) as any),
-        };
+          ) => makeRpcStub(ns.getByName(name, options)),
+          // `get(id, options)` is the other way onto an instance — and the one
+          // Cloudflare's docs reach for to pass a `locationHint`. It, and the
+          // three id constructors that are the only way to obtain an `id` to
+          // hand it, are plain pass-throughs to the underlying namespace.
+          newUniqueId: () => ns.newUniqueId(),
+          idFromName: (name: string) => ns.idFromName(name),
+          idFromString: (id: string) => ns.idFromString(id),
+          get: (
+            id: DurableObjectId,
+            options?: DurableObjectGetDurableObjectOptions,
+          ) => makeRpcStub(ns.get(id, options)),
+          jurisdiction: (jurisdiction: DurableObjectJurisdiction) =>
+            makeNamespace(ns.jurisdiction(jurisdiction)),
+        });
+
+        return makeNamespace(binding);
       });
 
     // Class-form declarations (`DurableObject<Self>()("Name", props?)`) can
