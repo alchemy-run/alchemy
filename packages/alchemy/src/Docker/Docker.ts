@@ -1,6 +1,7 @@
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as Encoding from "effect/Encoding";
 import * as FileSystem from "effect/FileSystem";
 import { flow } from "effect/Function";
 import * as Layer from "effect/Layer";
@@ -11,12 +12,24 @@ import {
   type SystemErrorTag,
 } from "effect/PlatformError";
 import * as Redacted from "effect/Redacted";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
 import type { ScopedPlanStatusSession } from "../Report.ts";
 import { createPhysicalName } from "../PhysicalName.ts";
+
+/** Credentials for a single image registry, scoped to a Docker command. */
+export interface RegistryCredentials {
+  /** Registry hostname, without a URL scheme. */
+  server: string;
+  /** Registry authentication username. */
+  username: string;
+  /** Registry password or access token. */
+  password: string | Redacted.Redacted<string>;
+}
 
 export class Docker extends Context.Service<
   Docker,
@@ -80,7 +93,11 @@ export class Docker extends Context.Service<
       ) => Effect.Effect<CommandOutput, PlatformError>;
     };
     readonly image: {
-      /** Builds a new image. If a session is provided, build logs will be emitted as session notes. */
+      /**
+       * Builds locally, or exports directly to a registry when credentials are
+       * supplied. Registry exports require Buildx 0.26.0 or newer. If a session
+       * is provided, build logs will be emitted as session notes.
+       */
       readonly build: (
         options: {
           context: string;
@@ -95,6 +112,7 @@ export class Docker extends Context.Service<
           engineContext?: string;
         },
         session?: ScopedPlanStatusSession,
+        registry?: RegistryCredentials,
       ) => Effect.Effect<CommandOutput, PlatformError>;
       /** Pulls an image. */
       readonly pull: (
@@ -113,11 +131,7 @@ export class Docker extends Context.Service<
        */
       readonly push: (
         ref: string,
-        credentials: {
-          server: string;
-          username: string;
-          password: string | Redacted.Redacted<string>;
-        },
+        credentials: RegistryCredentials,
         platform?: string,
         context?: string,
       ) => Effect.Effect<CommandOutput, PlatformError>;
@@ -560,6 +574,93 @@ export const DockerLive = Layer.effect(
         }),
       );
 
+    const registryEnvironment = Effect.fn("registryEnvironment")(function* (
+      credentials: RegistryCredentials,
+    ) {
+      const current = yield* Config.redacted("DOCKER_AUTH_CONFIG").pipe(
+        Config.withDefault(Redacted.make("{}")),
+        Effect.flatMap((value) =>
+          Schema.decodeEffect(
+            Schema.fromJsonString(
+              Schema.Struct({
+                auths: Schema.optional(
+                  Schema.NullOr(
+                    Schema.Record(
+                      Schema.String,
+                      Schema.Struct({
+                        auth: Schema.String.check(
+                          Schema.makeFilter((value) => {
+                            const decoded = Encoding.decodeBase64(value);
+                            // Docker requires a nonempty username followed by
+                            // a colon. Retain the original encoded credentials.
+                            return (
+                              Result.isSuccess(decoded) &&
+                              decoded.success.indexOf(58) > 0
+                            );
+                          }),
+                        ),
+                      }),
+                    ),
+                  ),
+                ),
+              }),
+            ),
+            { onExcessProperty: "error" },
+          )(Redacted.value(value) || "{}"),
+        ),
+        // Schema diagnostics may include credential input. Do not retain them.
+        Effect.mapError(() =>
+          systemError({
+            _tag: "InvalidData",
+            args: ["buildx", "build"],
+            description: "Invalid DOCKER_AUTH_CONFIG; expected an auths map.",
+          }),
+        ),
+      );
+      return yield* Effect.sync(() => {
+        const password = Redacted.isRedacted(credentials.password)
+          ? Redacted.value(credentials.password)
+          : credentials.password;
+        const auth = Buffer.from(
+          `${credentials.username}:${password}`,
+        ).toString("base64");
+        // The in-memory credential store retains file/helper fallback. Leave
+        // DOCKER_CONFIG intact so contexts, builders and source auth still work.
+        return {
+          DOCKER_AUTH_CONFIG: JSON.stringify({
+            auths: { ...current.auths, [credentials.server]: { auth } },
+          }),
+        };
+      });
+    });
+
+    const requireRegistryExporter = Effect.gen(function* () {
+      const unsupported = () =>
+        systemError({
+          _tag: "InvalidData",
+          args: ["buildx", "version"],
+          description:
+            "Registry builds require Buildx 0.26.0 or newer; upgrade the Docker Buildx plugin to support DOCKER_AUTH_CONFIG.",
+        });
+      const version = yield* run(["buildx", "version"]).pipe(
+        Effect.mapError(unsupported),
+      );
+      const [, major, , minor] = yield* Schema.decodeUnknownEffect(
+        Schema.TemplateLiteralParser([
+          "github.com/docker/buildx v",
+          Schema.NumberFromString,
+          ".",
+          Schema.NumberFromString,
+          ".",
+          Schema.NumberFromString,
+          Schema.String,
+        ]),
+      )(version.stdout).pipe(Effect.mapError(unsupported));
+      // Buildx 0.26 is the first release embedding Docker CLI 28.3's
+      // DOCKER_AUTH_CONFIG credential store. Older plugins ignore it.
+      if (major < 1 && minor < 26) return yield* unsupported();
+    });
+
     return Docker.of({
       run,
       materialize: Effect.fn((options) =>
@@ -623,20 +724,26 @@ export const DockerLive = Layer.effect(
           run([...formatArgs({ context }), "container", "stop", name]),
       },
       image: {
-        build: (
+        build: Effect.fn("Docker.image.build")(function* (
           { context: buildContext, engineContext, args, ...options },
           session,
-        ) =>
-          run(
+          registry,
+        ) {
+          const env = registry
+            ? yield* registryEnvironment(registry)
+            : undefined;
+          if (registry) yield* requireRegistryExporter;
+          return yield* run(
             [
               ...formatArgs({ context: engineContext }),
-              "image",
-              "build",
+              ...(registry
+                ? ["buildx", "build", "--push"]
+                : ["image", "build"]),
               buildContext,
               ...formatArgs(options),
               ...(args ?? []),
             ],
-            undefined,
+            env,
             session
               ? Stream.tapSink(
                   Sink.make<string>()(
@@ -649,7 +756,8 @@ export const DockerLive = Layer.effect(
                   ),
                 )
               : undefined,
-          ),
+          );
+        }),
         pull: (ref, platform, context) =>
           run([
             ...formatArgs({ context }),

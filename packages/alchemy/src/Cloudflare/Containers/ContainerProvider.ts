@@ -2,6 +2,7 @@ import * as Containers from "@distilled.cloud/cloudflare/containers";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import type { PlatformError } from "effect/PlatformError";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import * as Schedule from "effect/Schedule";
@@ -320,7 +321,7 @@ export const LiveContainerProvider = () =>
             ),
             HttpClientRequest.setHeader(
               "Accept",
-              "application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json",
+              "application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.docker.distribution.manifest.v2+json",
             ),
           );
           const response = yield* http.execute(request).pipe(
@@ -546,6 +547,27 @@ export const LiveContainerProvider = () =>
           };
         }
 
+        const credentials = yield* registryCredentials(props, ["pull", "push"]);
+        // Registry blob HEAD probes can transiently fail during publication.
+        // Retry both BuildKit exports and Engine pushes with the same bound.
+        const retryPublication = <A, R>(
+          publication: Effect.Effect<A, PlatformError, R>,
+        ) =>
+          Effect.retry(publication, {
+            while: (error) => {
+              const message = String(error).toLowerCase();
+              return (
+                message.includes("500") ||
+                message.includes("internal server error") ||
+                message.includes("unexpected status")
+              );
+            },
+            schedule: Schedule.max([
+              Schedule.spaced("3 seconds"),
+              Schedule.recurs(5),
+            ]),
+          });
+
         if (build.kind === "remote") {
           // Pull the pre-built image and re-tag it to the Cloudflare registry
           // reference; nothing is built locally.
@@ -557,6 +579,17 @@ export const LiveContainerProvider = () =>
           }
           yield* docker.image.pull(build.image, platform);
           yield* docker.image.tag(build.image, imageRef);
+          yield* Effect.logInfo(
+            `Cloudflare Container image: pushing ${imageRef}`,
+          );
+          if (session) {
+            yield* session.note(`Pushing container image ${imageRef}...`);
+          }
+          // Push the same platform that was pulled. A containerd image store
+          // may also hold a host-architecture variant under this tag.
+          yield* docker.image
+            .push(imageRef, credentials, platform)
+            .pipe(retryPublication);
         } else if (build.kind === "external") {
           // Build the user's Dockerfile directly against their context dir so
           // relative `COPY`/`ADD` paths resolve as the author intended.
@@ -566,12 +599,18 @@ export const LiveContainerProvider = () =>
           if (session) {
             yield* session.note(`Building container image ${imageRef}...`);
           }
-          yield* docker.image.build({
-            tag: imageRef,
-            context: build.context,
-            platform,
-            file: build.dockerfile,
-          });
+          yield* docker.image
+            .build(
+              {
+                tag: imageRef,
+                context: build.context,
+                platform,
+                file: build.dockerfile,
+              },
+              undefined,
+              credentials,
+            )
+            .pipe(retryPublication);
         } else {
           // Effect-native program: materialize the generated Dockerfile and
           // bundled chunks into a stable staging dir, then build.
@@ -601,57 +640,19 @@ export const LiveContainerProvider = () =>
               content: f.content,
             })),
           });
-          yield* docker.image.build({
-            tag: imageRef,
-            context: contextDir,
-            platform,
-          });
-        }
-
-        yield* Effect.logInfo(
-          `Cloudflare Container image: pushing ${imageRef}`,
-        );
-        if (session) {
-          yield* session.note(`Pushing container image ${imageRef}...`);
-        }
-
-        const credentials = yield* registryCredentials(props, ["pull", "push"]);
-
-        // Cloudflare's container registry intermittently answers blob HEAD
-        // probes with 500 under concurrent suite push load. Ride that out
-        // with a bounded retry rather than failing the whole deploy.
-        //
-        // Push the SAME platform we pulled/built. With Docker's containerd
-        // image store a tag can hold several platform variants (e.g. a stray
-        // host-arch `docker pull` adds arm64 next to our amd64), and an
-        // un-scoped push then ships the wrong variant — Cloudflare's amd64
-        // hosts never boot it and the app 503s "provisioning" forever.
-        yield* docker.image
-          .push(
-            imageRef,
-            {
-              username: credentials.username,
-              password: credentials.password,
-              server: credentials.server,
-            },
-            platform,
-          )
-          .pipe(
-            Effect.retry({
-              while: (e) => {
-                const msg = String(e).toLowerCase();
-                return (
-                  msg.includes("500") ||
-                  msg.includes("internal server error") ||
-                  msg.includes("unexpected status")
-                );
+          yield* docker.image
+            .build(
+              {
+                tag: imageRef,
+                context: contextDir,
+                platform,
               },
-              schedule: Schedule.max([
-                Schedule.spaced("3 seconds"),
-                Schedule.recurs(5),
-              ]),
-            }),
-          );
+              undefined,
+              credentials,
+            )
+            .pipe(retryPublication);
+        }
+
         // Resolve the pushed manifest digest from the registry itself rather
         // than scraping `docker push` output: one mechanism for every image
         // source (local build, remote re-push, pre-pushed tag), and the
