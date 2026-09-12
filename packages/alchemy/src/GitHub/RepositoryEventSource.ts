@@ -1,6 +1,7 @@
 import type {
   WebhookEvent as DistilledWebhookEvent,
   WebhookEventName as DistilledWebhookEventName,
+  WebhookEventSelector,
 } from "@distilled.cloud/github/Webhooks";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -30,11 +31,11 @@ export type GitHubEventName = DistilledWebhookEventName;
 
 /**
  * Names selectable in {@link RepositoryEventSourceProps.events}: every bare
- * GitHub event name plus `"*"` to subscribe to all of them.
+ * GitHub event name, dotted action selector, or `"*"` to subscribe to all of them.
  *
  * @see {@link https://docs.github.com/en/webhooks/webhook-events-and-payloads | GitHub webhook events and payloads}
  */
-export type WebhookEventName = GitHubEventName | "*";
+export type WebhookEventName = WebhookEventSelector | "*";
 
 /**
  * A single GitHub webhook delivery — distilled's generated
@@ -43,7 +44,7 @@ export type WebhookEventName = GitHubEventName | "*";
  * events the subscriber selected, so `switch (event.name)` exhaustively
  * narrows `event.payload`.
  */
-export type WebhookEvent<Name extends GitHubEventName = GitHubEventName> =
+export type WebhookEvent<Name extends WebhookEventSelector = GitHubEventName> =
   DistilledWebhookEvent<Name>;
 
 /**
@@ -58,7 +59,8 @@ export interface RepositoryEventSourceProps<
   E extends readonly WebhookEventName[] = readonly WebhookEventName[],
 > extends RepositoryRef {
   /**
-   * Events to subscribe to (e.g. `[GitHub.WebhookEvents.Push]`).
+   * Events to subscribe to (e.g. `[GitHub.WebhookEvents.Push, GitHub.WebhookEvents.IssuesOpened]`).
+   * Dotted selectors filter by action and narrow the handler payload.
    * Use `["*"]` to receive every event GitHub emits.
    */
   events: E;
@@ -97,12 +99,12 @@ export interface RepositoryEventSourceProps<
  * implementation.
  * **Example:** Example
  * ```typescript
- * // `event.name` is narrowed to "push" | "pull_request"
+ * // `event.name` is "issues" and `event.payload.action` is "opened"
  * yield* GitHub.consumeRepositoryEvents(
  *   {
  *     owner: "my-org",
  *     repository: "my-repo",
- *     events: [GitHub.WebhookEvents.Push, GitHub.WebhookEvents.PullRequest],
+ *     events: [GitHub.WebhookEvents.IssuesOpened],
  *     secret,
  *   },
  *   (event) => Effect.log(`received ${event.name} (${event.id})`),
