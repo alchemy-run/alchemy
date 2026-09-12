@@ -309,12 +309,18 @@ export const ImageProvider = () =>
         // the build inputs and request an update when the hash drifts from
         // the pushed tag. Replacement is never needed — a new hash is just a
         // new tag + digest on the same resource.
-        diff: Effect.fn(function* ({ news, output }) {
+        diff: Effect.fn(function* ({ news, output, olds }) {
           if (!isResolved(news) || !output) return undefined;
           const hash = yield* hashBuildInputs(news);
-          if (hash !== output.imageTag) {
+          if (
+            hash !== output.imageTag ||
+            olds.repositoryUri !== news.repositoryUri
+          ) {
             return { action: "update" } as const;
           }
+          // Build paths may move without changing the image. All build options
+          // participate in the hash; repository ownership is compared above.
+          return { action: "noop" } as const;
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           // Resolve the target repository: user-supplied URI, or an
