@@ -1,6 +1,6 @@
 import type * as Credentials from "@distilled.cloud/aws/Credentials";
-import * as Presign from "@distilled.cloud/aws/Presign";
 import type * as Region from "@distilled.cloud/aws/Region";
+import * as Presign from "@distilled.cloud/aws/Presign";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
@@ -53,7 +53,7 @@ export const generateDbAuthToken: (
   options: GenerateDbAuthTokenOptions,
 ) => Effect.Effect<
   Redacted.Redacted<string>,
-  Credentials.CredentialsError,
+  Effect.Error<ReturnType<typeof Presign.presignUrl>>,
   Credentials.Credentials | Region.Region
 > = Effect.fn(function* (options: GenerateDbAuthTokenOptions) {
   const hostAndPort =
