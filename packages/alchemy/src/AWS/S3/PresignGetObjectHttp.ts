@@ -28,7 +28,7 @@ export const PresignGetObjectHttp = Layer.effect(
             policyStatements: [
               {
                 Effect: "Allow",
-                Action: ["s3:GetObject", "s3:GetObjectVersion"],
+                Action: ["s3:GetObject"],
                 Resource: [Output.interpolate`${bucket.bucketArn}/*`],
               },
             ],

@@ -26,7 +26,8 @@ export interface PresignGetObjectRequest {
  * Presigning is a pure SigV4 computation performed client-side with the
  * Function's own credentials — no S3 API call is made. Because the URL
  * inherits the signer's IAM permissions, the binding grants `s3:GetObject`
- * on the bucket's objects to the host Function.
+ * on the bucket's objects to the host Function. See the [S3 presigned URL
+ * guide](https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-presigned-url.html).
  *
  * ### Presigning Download URLs
  * **Example:** Mint a presigned GET URL
@@ -44,6 +45,8 @@ export interface PresignGetObjectRequest {
  *   contentType: "application/pdf",
  * });
  * ```
+ *
+ * @see https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-presigned-url.html
  *
  * @binding
  */
