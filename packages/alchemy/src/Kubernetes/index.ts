@@ -6,3 +6,4 @@ export * from "./HelmChart.ts";
 export * from "./Job.ts";
 export * from "./Manifest.ts";
 export * from "./Providers.ts";
+export * from "./Secret.ts";
