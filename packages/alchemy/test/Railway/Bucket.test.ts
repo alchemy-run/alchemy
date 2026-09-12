@@ -27,7 +27,7 @@ const OBJECT_BODY = "hello-from-railway";
 const listProjectBuckets = (projectId: string) =>
   railway.project({ id: projectId }).pipe(
     Effect.map((project) => project.buckets.edges.map((edge) => edge.node)),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () => Effect.succeed([])),
+    Effect.catchTag("NotFound", () => Effect.succeed([])),
   );
 
 const findBucket = (projectId: string, bucketId: string, name: string) =>
@@ -85,9 +85,7 @@ const waitUntilBucketGone = (
         ? ("gone" as const)
         : ("found" as const);
     }),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-      Effect.succeed("gone" as const),
-    ),
+    Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("2 seconds"),
       until: (status) => status === "gone",

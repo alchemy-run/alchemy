@@ -100,7 +100,7 @@ const readServiceVariables = (
     })
     .pipe(
       Effect.map(asVariableMap),
-      Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+      Effect.catchTag("NotFound", () =>
         Effect.succeed({} as Record<string, string>),
       ),
     );
@@ -110,9 +110,7 @@ const waitUntilServiceGone = (serviceId: string) =>
     Effect.map((service) =>
       service.deletedAt != null ? ("gone" as const) : ("found" as const),
     ),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-      Effect.succeed("gone" as const),
-    ),
+    Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",

@@ -522,17 +522,13 @@ const toAttrs = (input: {
 const getById = (serviceId: string) =>
   railway.service({ id: serviceId }).pipe(
     Effect.map((service) => (isGoneService(service) ? undefined : service)),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
   );
 
 const getInstance = (environmentId: string, serviceId: string) =>
   railway.serviceInstance({ environmentId, serviceId }).pipe(
     Effect.map((instance) => (isGoneInstance(instance) ? undefined : instance)),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
   );
 
 const listProjectServices = (projectId: string) =>
@@ -542,7 +538,7 @@ const listProjectServices = (projectId: string) =>
         .map((edge) => edge.node)
         .filter((node) => !isGoneService(node)),
     ),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+    Effect.catchTag("NotFound", () =>
       Effect.succeed([] as ProjectResponseServicesEdgesItemNode[]),
     ),
   );
@@ -555,9 +551,7 @@ const findByName = (projectId: string, name: string) =>
 const getVolumeByInstanceId = (volumeInstanceId: string) =>
   railway.volumeInstance({ id: volumeInstanceId }).pipe(
     Effect.map((instance) => (isGoneVolume(instance) ? undefined : instance)),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
   );
 
 const listVolumeInstances = (environmentId: string, projectId: string) =>
@@ -569,7 +563,7 @@ const listVolumeInstances = (environmentId: string, projectId: string) =>
             .map((edge) => edge.node)
             .filter((node) => !isGoneVolume(node)),
     ),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+    Effect.catchTag("NotFound", () =>
       Effect.succeed([] as EnvironmentResponseVolumeInstancesEdgesItemNode[]),
     ),
   );
@@ -586,7 +580,7 @@ const findVolume = (
 const listProxies = (environmentId: string, serviceId: string) =>
   railway.tcpProxies({ environmentId, serviceId }).pipe(
     Effect.map((items) => items.filter((proxy) => !isGoneProxy(proxy))),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+    Effect.catchTag("NotFound", () =>
       Effect.succeed([] as TcpProxiesResultItem[]),
     ),
   );
@@ -616,7 +610,7 @@ const deleteProxy = (id: string) =>
       schedule: Schedule.spaced("3 seconds"),
       times: 20,
     }),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () => Effect.void),
+    Effect.catchTag("NotFound", () => Effect.void),
     Effect.asVoid,
   );
 
@@ -647,7 +641,7 @@ const listVariableMap = (
     })
     .pipe(
       Effect.map(asVariableMap),
-      Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+      Effect.catchTag("NotFound", () =>
         Effect.succeed({} as Record<string, string>),
       ),
     );
@@ -887,9 +881,7 @@ export const PostgresProvider = () =>
               Stream.filter((env) => env.deletedAt == null),
               Stream.runCollect,
               Effect.map((chunk) => Array.from(chunk)),
-              Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-                Effect.succeed([]),
-              ),
+              Effect.catchTag("NotFound", () => Effect.succeed([])),
             );
           const volumes = envRows.flatMap((env) =>
             env.volumeInstances.edges.map((edge) => edge.node),
@@ -1231,9 +1223,7 @@ export const PostgresProvider = () =>
             id: serviceId,
             ...(environmentId.length > 0 ? { environmentId } : {}),
           })
-          .pipe(
-            Effect.catchTag(["RailwayNotFound", "NotFound"], () => Effect.void),
-          );
+          .pipe(Effect.catchTag("NotFound", () => Effect.void));
         yield* getById(serviceId).pipe(
           Effect.map((service) => service === undefined),
           Effect.repeat({
@@ -1266,9 +1256,7 @@ export const PostgresProvider = () =>
       if (output.volumeId.length > 0) {
         yield* railway
           .deleteVolume({ volumeId: output.volumeId })
-          .pipe(
-            Effect.catchTag(["RailwayNotFound", "NotFound"], () => Effect.void),
-          );
+          .pipe(Effect.catchTag("NotFound", () => Effect.void));
         const check =
           output.volumeInstanceId.length > 0
             ? getVolumeByInstanceId(output.volumeInstanceId).pipe(

@@ -354,28 +354,18 @@ const toAttrs = (input: {
 const getProject = (projectId: string) =>
   railway.project({ id: projectId }).pipe(
     Effect.map((project) => (isGoneProject(project) ? undefined : project)),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
   );
 
 const getTemplateById = (id: string) =>
   railway
     .template({ id })
-    .pipe(
-      Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const getTemplateByCode = (code: string) =>
   railway
     .template({ code })
-    .pipe(
-      Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const findPublished = (needle: string) =>
   railway.templates.items({ first: 50 }).pipe(
@@ -385,9 +375,7 @@ const findPublished = (needle: string) =>
     Stream.take(1),
     Stream.runHead,
     Effect.map((option) => (option._tag === "Some" ? option.value : undefined)),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
   );
 
 const resolveMarketplaceTemplate = (templateId: string) =>
@@ -407,7 +395,7 @@ const sourceForProject = (projectId: string) =>
   railway
     .templateSourceForProject({ projectId })
     .pipe(
-      Effect.catchTag(["RailwayNotFound", "NotFound", "RailwayForbidden"], () =>
+      Effect.catchTag(["NotFound", "RailwayForbidden"], () =>
         Effect.succeed(undefined),
       ),
     );
@@ -419,7 +407,7 @@ const listProjectServices = (projectId: string) =>
         .map((edge) => edge.node)
         .filter((node) => !isGoneService(node)),
     ),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+    Effect.catchTag("NotFound", () =>
       Effect.succeed([] as ProjectResponseServicesEdgesItemNode[]),
     ),
   );
@@ -427,9 +415,7 @@ const listProjectServices = (projectId: string) =>
 const hydrateService = (serviceId: string) =>
   railway.service({ id: serviceId }).pipe(
     Effect.map((service) => (isGoneService(service) ? undefined : service)),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
   );
 
 const hydrateServices = (services: readonly CloudService[]) =>
@@ -505,7 +491,7 @@ const normalizeConfig = (config: unknown): unknown => {
 const waitForWorkflow = (workflowId: string, projectId: string) =>
   Effect.gen(function* () {
     const result = yield* railway.workflowStatus({ workflowId }).pipe(
-      Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+      Effect.catchTag("NotFound", () =>
         Effect.succeed({
           status: "NotFound",
           error: null,
@@ -694,11 +680,7 @@ export const TemplateProvider = () =>
         Effect.gen(function* () {
           const live = yield* railway
             .project({ id: project.projectId })
-            .pipe(
-              Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
           if (live === undefined || live.deletedAt != null) {
             return [] as Template["Attributes"][];
           }
@@ -874,9 +856,7 @@ export const TemplateProvider = () =>
               ? { environmentId: output.environmentId }
               : {}),
           })
-          .pipe(
-            Effect.catchTag(["RailwayNotFound", "NotFound"], () => Effect.void),
-          );
+          .pipe(Effect.catchTag("NotFound", () => Effect.void));
         yield* waitUntilServiceGone(serviceId);
       }
       if (!output.ownsProject) return;
@@ -884,9 +864,7 @@ export const TemplateProvider = () =>
       if (projectId.length === 0) return;
       yield* railway
         .deleteProject({ id: projectId })
-        .pipe(
-          Effect.catchTag(["RailwayNotFound", "NotFound"], () => Effect.void),
-        );
+        .pipe(Effect.catchTag("NotFound", () => Effect.void));
       yield* waitUntilProjectGone(projectId);
     }),
   });

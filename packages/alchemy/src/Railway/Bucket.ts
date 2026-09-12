@@ -402,7 +402,7 @@ const resolveName = (id: string, name: string | undefined, existing?: string) =>
 const listProjectBuckets = (projectId: string) =>
   railway.project({ id: projectId }).pipe(
     Effect.map((project) => project.buckets.edges.map((edge) => edge.node)),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+    Effect.catchTag("NotFound", () =>
       Effect.succeed([] as ProjectResponseBucketsEdgesItemNode[]),
     ),
   );
@@ -419,11 +419,11 @@ const getEnvironmentConfig = (environmentId: string, projectId: string) =>
   railway.environment({ id: environmentId, projectId }).pipe(
     Effect.map((env) => parseEnvironmentConfig(env.config)),
     Effect.retry({
-      while: (e) => e._tag === "RailwayNotFound" || e._tag === "NotFound",
+      while: (e) => e._tag === "NotFound",
       times: 8,
       schedule: Schedule.spaced("1 second"),
     }),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+    Effect.catchTag("NotFound", () =>
       Effect.succeed({} as EnvironmentConfigShape),
     ),
   );
@@ -443,7 +443,7 @@ const environmentIdsOf = (project: {
       }
       return Array.from(set);
     }),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+    Effect.catchTag("NotFound", () =>
       Effect.succeed(
         project.environmentId.length > 0 ? [project.environmentId] : [],
       ),
@@ -491,7 +491,7 @@ const ensureDeployed = Effect.fn(function* (input: {
     },
   }).pipe(
     Effect.retry({
-      while: (e) => e._tag === "RailwayNotFound" || e._tag === "NotFound",
+      while: (e) => e._tag === "NotFound",
       times: 8,
       schedule: Schedule.spaced("1 second"),
     }),
@@ -543,7 +543,7 @@ const fetchCredentials = (input: {
         }
         return Effect.succeed(first);
       }),
-      Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+      Effect.catchTag("NotFound", () =>
         Effect.fail(new BucketCredentialsPending({ bucketId: input.bucketId })),
       ),
       Effect.retry({
@@ -716,8 +716,7 @@ export const BucketProvider = () =>
           })
           .pipe(
             Effect.retry({
-              while: (e) =>
-                e._tag === "RailwayNotFound" || e._tag === "NotFound",
+              while: (e) => e._tag === "NotFound",
               times: 8,
               schedule: Schedule.spaced("1 second"),
             }),
@@ -776,9 +775,7 @@ export const BucketProvider = () =>
             [bucketId]: { isDeleted: true },
           },
         },
-      }).pipe(
-        Effect.catchTag(["RailwayNotFound", "NotFound"], () => Effect.void),
-      );
+      }).pipe(Effect.catchTag("NotFound", () => Effect.void));
       if (projectId.length > 0) {
         yield* waitUntilGone({ bucketId, projectId, environmentId });
       }

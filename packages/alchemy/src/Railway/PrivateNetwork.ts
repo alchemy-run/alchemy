@@ -261,7 +261,7 @@ const resolveNetworkName = (
 const listNetworks = (environmentId: string) =>
   railway.privateNetworks({ environmentId }).pipe(
     Effect.map((items) => items.filter((network) => !isGoneNetwork(network))),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+    Effect.catchTag("NotFound", () =>
       Effect.succeed([] as PrivateNetworksResultItem[]),
     ),
   );
@@ -289,7 +289,7 @@ const listEnvironmentIds = (project: {
       }
       return Array.from(set);
     }),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+    Effect.catchTag("NotFound", () =>
       Effect.succeed(
         project.environmentId.length > 0 ? [project.environmentId] : [],
       ),
@@ -689,9 +689,7 @@ const getEndpoint = (input: {
     Effect.map((endpoint) =>
       endpoint == null || isGoneEndpoint(endpoint) ? undefined : endpoint,
     ),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
   );
 
 const resolveServiceName = (serviceId: string, hint?: string) =>
@@ -699,7 +697,7 @@ const resolveServiceName = (serviceId: string, hint?: string) =>
     ? Effect.succeed(hint)
     : railway.service({ id: serviceId }).pipe(
         Effect.map((service) => service.name),
-        Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+        Effect.catchTag("NotFound", () =>
           Effect.succeed(sanitizeRailwayName(serviceId)),
         ),
       );
@@ -711,7 +709,7 @@ const listProjectServices = (projectId: string) =>
         .map((edge) => edge.node)
         .filter((node) => node.deletedAt == null),
     ),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+    Effect.catchTag("NotFound", () =>
       Effect.succeed([] as ProjectResponseServicesEdgesItemNode[]),
     ),
   );
@@ -829,11 +827,7 @@ export const PrivateNetworkEndpointProvider = () =>
           );
           const live = yield* railway
             .project({ id: project.projectId })
-            .pipe(
-              Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
           const services = (
             live?.services.edges.map((edge) => edge.node) ?? []
           ).filter((service) => service.deletedAt == null);
@@ -971,9 +965,7 @@ export const PrivateNetworkEndpointProvider = () =>
       if (id.length === 0) return;
       yield* railway
         .deletePrivateNetworkEndpoint({ id })
-        .pipe(
-          Effect.catchTag(["RailwayNotFound", "NotFound"], () => Effect.void),
-        );
+        .pipe(Effect.catchTag("NotFound", () => Effect.void));
       if (
         output.environmentId.length > 0 &&
         output.privateNetworkId.length > 0 &&

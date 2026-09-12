@@ -25,9 +25,7 @@ const waitUntilLimitGone = (workspaceId: string, usageLimitId: string) =>
       if (limit == null) return "gone" as const;
       return limit.id === usageLimitId ? ("found" as const) : ("gone" as const);
     }),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-      Effect.succeed("gone" as const),
-    ),
+    Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",
@@ -95,9 +93,7 @@ test.provider(
 
       yield* railway
         .removeUsageLimit({ input: { customerId } })
-        .pipe(
-          Effect.catchTag(["RailwayNotFound", "NotFound"], () => Effect.void),
-        );
+        .pipe(Effect.catchTag("NotFound", () => Effect.void));
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {

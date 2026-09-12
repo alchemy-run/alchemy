@@ -61,7 +61,7 @@ export const listServiceDomains = (
     Effect.map((result) =>
       result.serviceDomains.filter((domain) => !isGone(domain)),
     ),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+    Effect.catchTag("NotFound", () =>
       Effect.succeed([] as DomainsResponseServiceDomainsItem[]),
     ),
   );
@@ -84,9 +84,7 @@ const findCloudDomainById = (input: {
           (candidate) => candidate.id === input.domainId,
         ),
       ),
-      Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-        Effect.succeed(undefined),
-      ),
+      Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
     );
 
 export const findServiceDomainById = Effect.fn(function* (input: {
@@ -164,7 +162,7 @@ export const deleteOwnedServiceDomain = Effect.fn(function* (input: {
       input.environmentId,
       railway.deleteServiceDomain({ id: row.id }),
     ).pipe(
-      Effect.catchTag(["RailwayNotFound", "NotFound"], () => Effect.void),
+      Effect.catchTag("NotFound", () => Effect.void),
       Effect.asVoid,
     );
   }
@@ -369,7 +367,7 @@ const createViaMutation = (input: {
       Effect.catchTag("RailwayServiceDomainCreateFailed", (error) =>
         listedOrFail(error),
       ),
-      Effect.catchTag("RailwayNotFound", (error) =>
+      Effect.catchTag("NotFound", (error) =>
         input.domainId !== undefined &&
         error.message.includes("ServiceInstance not found")
           ? listedOrFail(error)
@@ -388,7 +386,7 @@ const createViaMutation = (input: {
       while: (error) =>
         (input.domainId === undefined &&
           error._tag === "RailwayServiceDomainCreateFailed") ||
-        (error._tag === "RailwayNotFound" &&
+        (error._tag === "NotFound" &&
           error.message.includes("ServiceInstance not found")),
       times: 12,
       schedule: Schedule.spaced("5 seconds"),

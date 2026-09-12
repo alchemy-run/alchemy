@@ -368,7 +368,7 @@ const listBackups = (volumeInstanceId: string) =>
   railway
     .listVolumeInstanceBackup({ volumeInstanceId })
     .pipe(
-      Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+      Effect.catchTag("NotFound", () =>
         Effect.succeed([] as ListVolumeInstanceBackupResultItem[]),
       ),
     );
@@ -376,7 +376,7 @@ const listBackups = (volumeInstanceId: string) =>
 const listSchedules = (volumeInstanceId: string) =>
   railway.listVolumeInstanceBackupSchedule({ volumeInstanceId }).pipe(
     Effect.map((items) => uniqueKinds(items.map((item) => item.kind))),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+    Effect.catchTag("NotFound", () =>
       Effect.succeed([] as VolumeBackupScheduleKind[]),
     ),
   );
@@ -424,9 +424,7 @@ const findBackup = (
 const getByInstanceId = (volumeInstanceId: string) =>
   railway.volumeInstance({ id: volumeInstanceId }).pipe(
     Effect.map((instance) => (isGoneInstance(instance) ? undefined : instance)),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
   );
 
 const listVolumeInstances = (environmentId: string, projectId: string) =>
@@ -438,7 +436,7 @@ const listVolumeInstances = (environmentId: string, projectId: string) =>
             .map((edge) => edge.node)
             .filter((node) => !isGoneInstance(node)),
     ),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+    Effect.catchTag("NotFound", () =>
       Effect.succeed([] as EnvironmentResponseVolumeInstancesEdgesItemNode[]),
     ),
   );
@@ -458,7 +456,7 @@ const listEnvironmentIds = (project: {
       }
       return Array.from(set);
     }),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+    Effect.catchTag("NotFound", () =>
       Effect.succeed(
         project.environmentId.length > 0 ? [project.environmentId] : [],
       ),
@@ -472,7 +470,7 @@ const waitForWorkflow = (
 ) =>
   Effect.gen(function* () {
     const result = yield* railway.workflowStatus({ workflowId }).pipe(
-      Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+      Effect.catchTag("NotFound", () =>
         Effect.succeed({
           status: "NotFound",
           error: null,
@@ -750,9 +748,7 @@ export const VolumeBackupProvider = () =>
               Stream.filter((env) => env.deletedAt == null),
               Stream.runCollect,
               Effect.map((chunk) => Array.from(chunk)),
-              Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-                Effect.succeed([]),
-              ),
+              Effect.catchTag("NotFound", () => Effect.succeed([])),
             );
           const instances = envRows.flatMap((env) =>
             env.volumeInstances.edges
@@ -913,7 +909,7 @@ export const VolumeBackupProvider = () =>
           volumeInstanceId,
         })
         .pipe(
-          Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+          Effect.catchTag("NotFound", () =>
             Effect.succeed({ workflowId: null as string | null }),
           ),
         );

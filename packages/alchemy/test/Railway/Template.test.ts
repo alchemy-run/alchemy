@@ -22,9 +22,7 @@ const waitUntilServiceGone = (serviceId: string) =>
     Effect.map((service) =>
       service.deletedAt != null ? ("gone" as const) : ("found" as const),
     ),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-      Effect.succeed("gone" as const),
-    ),
+    Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",
@@ -97,9 +95,8 @@ test.provider.skip(
           projectId: created.project.projectId,
         })
         .pipe(
-          Effect.catchTag(
-            ["RailwayNotFound", "NotFound", "RailwayForbidden"],
-            () => Effect.succeed(undefined),
+          Effect.catchTag(["NotFound", "RailwayForbidden"], () =>
+            Effect.succeed(undefined),
           ),
         );
       if (source !== undefined) {

@@ -192,7 +192,7 @@ export const AuditLog = Effect.fn(function* (options?: ListAuditLogsOptions) {
       ...(filter !== undefined ? { filter } : {}),
     })
     .pipe(
-      Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+      Effect.catchTag("NotFound", () =>
         Effect.succeed({
           edges: [] as { node: AuditLogsResponseEdgesItemNode }[],
         }),

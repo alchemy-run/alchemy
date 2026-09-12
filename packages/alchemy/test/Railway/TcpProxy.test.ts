@@ -26,7 +26,7 @@ const listLive = (environmentId: string, serviceId: string) =>
           domain: proxy.domain.replace(/\.+$/, ""),
         })),
     ),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () => Effect.succeed([])),
+    Effect.catchTag("NotFound", () => Effect.succeed([])),
   );
 
 const waitUntilProxyGone = (

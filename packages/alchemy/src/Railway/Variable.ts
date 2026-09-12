@@ -381,7 +381,7 @@ const listVariableMap = (
     })
     .pipe(
       Effect.map(asVariableMap),
-      Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+      Effect.catchTag("NotFound", () =>
         Effect.succeed({} as Record<string, string>),
       ),
     );
@@ -429,7 +429,7 @@ const listEnvironmentIds = (project: {
       }
       return Array.from(set);
     }),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+    Effect.catchTag("NotFound", () =>
       Effect.succeed(
         project.environmentId.length > 0 ? [project.environmentId] : [],
       ),
@@ -645,9 +645,7 @@ export const VariableProvider = () =>
               : {}),
           },
         })
-        .pipe(
-          Effect.catchTag(["RailwayNotFound", "NotFound"], () => Effect.void),
-        );
+        .pipe(Effect.catchTag("NotFound", () => Effect.void));
       yield* getValue(
         output.projectId,
         output.environmentId,

@@ -208,9 +208,7 @@ const fillEnvironmentId = (attrs: Project["Attributes"]) => {
           ? { ...attrs, environmentId: option.value.id }
           : attrs,
       ),
-      Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-        Effect.succeed(attrs),
-      ),
+      Effect.catchTag("NotFound", () => Effect.succeed(attrs)),
     );
 };
 
@@ -227,9 +225,7 @@ const isGone = (project: CloudProject | undefined) =>
 const getById = (projectId: string) =>
   railway.project({ id: projectId }).pipe(
     Effect.map((project) => (isGone(project) ? undefined : project)),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
   );
 
 const currentWorkspaceId = Effect.fn(function* () {
@@ -307,7 +303,7 @@ export const projectEnvironmentIds = (project: {
       }
       return Array.from(set);
     }),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+    Effect.catchTag("NotFound", () =>
       Effect.succeed(
         project.environmentId.length > 0 ? [project.environmentId] : [],
       ),
@@ -421,9 +417,7 @@ export const ProjectProvider = () =>
       if (projectId.length === 0) return;
       yield* railway
         .deleteProject({ id: projectId })
-        .pipe(
-          Effect.catchTag(["RailwayNotFound", "NotFound"], () => Effect.void),
-        );
+        .pipe(Effect.catchTag("NotFound", () => Effect.void));
       yield* getById(projectId).pipe(
         Effect.map((project) => project === undefined),
         Effect.repeat({

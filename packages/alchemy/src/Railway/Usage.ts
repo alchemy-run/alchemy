@@ -382,11 +382,7 @@ const currentWorkspaceId = Effect.fn(function* () {
 const getWorkspace = (workspaceId: string) =>
   railway
     .workspace({ workspaceId })
-    .pipe(
-      Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const toAttrs = (
   limit: CloudLimit,
@@ -559,9 +555,7 @@ export const UsageLimitProvider = () =>
       if (customerId.length === 0) return;
       yield* railway
         .removeUsageLimit({ input: { customerId } })
-        .pipe(
-          Effect.catchTag(["RailwayNotFound", "NotFound"], () => Effect.void),
-        );
+        .pipe(Effect.catchTag("NotFound", () => Effect.void));
       if (workspaceId.length > 0 && output.usageLimitId.length > 0) {
         yield* waitUntilGone(workspaceId, output.usageLimitId);
       }

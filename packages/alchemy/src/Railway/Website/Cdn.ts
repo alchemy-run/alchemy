@@ -133,14 +133,11 @@ export const CdnProvider = () =>
         });
       }
       const config = { caching: cachingInput(news) };
-      const retryTransient = {
-        while: (e: { _tag: string }) =>
-          e._tag === "RailwayInternalError" ||
-          e._tag === "TimeoutError" ||
-          isRailwayTransient(e),
-        times: 2 as const,
-        schedule: Schedule.spaced("1 second"),
-      };
+      // enableServiceCdn is an upsert of the edge config. Transient
+      // failures (`Problem processing request` is typed retryable and
+      // absorbed by the SDK retry policy) get a bounded outer retry;
+      // anything persistent bubbles typed instead of faking success
+      // with stale output.
       const enabled = yield* railway
         .enableServiceCdn({
           input: {
@@ -150,25 +147,15 @@ export const CdnProvider = () =>
           },
         })
         .pipe(
-          Effect.timeout("5 seconds"),
-          Effect.retry(retryTransient),
-          Effect.catchTag("UnknownRailwayError", () =>
-            railway
-              .updateServiceEdgeConfig({
-                input: {
-                  serviceId,
-                  environmentId,
-                  config,
-                },
-              })
-              .pipe(Effect.timeout("5 seconds"), Effect.retry(retryTransient)),
-          ),
-          Effect.catchTag(["TimeoutError", "RailwayInternalError"], () =>
-            Effect.succeed({
-              id: output?.edgeConfigId ?? "",
-              enabled: output?.enabled ?? false,
-            }),
-          ),
+          Effect.timeout("30 seconds"),
+          Effect.retry({
+            while: (e) =>
+              e._tag === "RailwayInternalError" ||
+              e._tag === "TimeoutError" ||
+              isRailwayTransient(e),
+            times: 2,
+            schedule: Schedule.spaced("1 second"),
+          }),
         );
       return {
         serviceId,
@@ -181,6 +168,8 @@ export const CdnProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       if (output === undefined) return;
       if (output.edgeConfigId.length === 0) return;
+      // disableServiceCdn is idempotent (verified live); only a missing
+      // service maps to "already gone".
       yield* railway
         .disableServiceCdn({
           input: {
@@ -188,11 +177,6 @@ export const CdnProvider = () =>
             serviceId: output.serviceId,
           },
         })
-        .pipe(
-          Effect.catchTag(
-            ["UnknownRailwayError", "RailwayValidationError"],
-            () => Effect.void,
-          ),
-        );
+        .pipe(Effect.catchTag("NotFound", () => Effect.void));
     }),
   });

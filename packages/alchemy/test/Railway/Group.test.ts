@@ -38,7 +38,7 @@ const asGroupMap = (value: unknown): Record<string, { name?: string }> => {
 const readConfigGroups = (environmentId: string, projectId: string) =>
   railway.environment({ id: environmentId, projectId }).pipe(
     Effect.map((env) => asGroupMap(env.config)),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+    Effect.catchTag("NotFound", () =>
       Effect.succeed({} as Record<string, { name?: string }>),
     ),
   );
@@ -50,17 +50,13 @@ const readProjectGroups = (projectId: string) =>
         .map((edge) => edge.node)
         .filter((group) => group.name != null && group.name.length > 0),
     ),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () => Effect.succeed([])),
+    Effect.catchTag("NotFound", () => Effect.succeed([])),
   );
 
 const readService = (serviceId: string) =>
   railway
     .service({ id: serviceId })
-    .pipe(
-      Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const waitUntilGroupGone = (
   projectId: string,
