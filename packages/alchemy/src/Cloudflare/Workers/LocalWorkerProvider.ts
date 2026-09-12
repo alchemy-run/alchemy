@@ -842,7 +842,6 @@ export const LocalWorkerProvider = () =>
                   runtime
                     .start({
                       name: worker.name,
-                      proxySharedSecret: proxy.proxySharedSecret,
                       logging: {
                         // `(chunk, stream)` — chunk first; the stream name
                         // indexes the splitters directly.
@@ -1048,14 +1047,17 @@ export const LocalWorkerProvider = () =>
                   Effect.log(`[${worker.fqn}] Rebuilding`),
                   // Tells the proxy to queue requests until the updated
                   // worker is ready.
-                  Effect.forkChild(proxy.unset()),
+                  proxy.unset(),
                 ]);
               }
             } else if (event._tag === "Error") {
-              return Effect.logError(
-                `[${worker.fqn}] Bundle error`,
-                event.error,
-              );
+              return Effect.all([
+                Effect.logError(`[${worker.fqn}] Bundle error`, event.error),
+                // No updated worker is coming from this build: answer
+                // parked requests with the error now instead of after the
+                // pending timeout.
+                proxy.fail(event.error.message),
+              ]);
             }
             return Effect.void;
           }),
@@ -1084,10 +1086,13 @@ export const LocalWorkerProvider = () =>
                   status = "update";
                   return message;
                 } else {
-                  return Effect.logError(
-                    `[${worker.fqn}] Error`,
-                    Cause.squash(exit.cause),
-                  );
+                  return Effect.all([
+                    Effect.logError(
+                      `[${worker.fqn}] Error`,
+                      Cause.squash(exit.cause),
+                    ),
+                    proxy.fail(Cause.pretty(exit.cause)),
+                  ]);
                 }
               }),
             ),
@@ -1239,7 +1244,7 @@ export const LocalWorkerProvider = () =>
                 }
               }
               // Queue requests while the child is (re)starting.
-              yield* proxy.unset().pipe(Effect.forkChild);
+              yield* proxy.unset();
               // The dev server and its workerd run in a child process rooted
               // at the app.
               const root = path.resolve(rootDir ?? process.cwd());
@@ -1265,7 +1270,6 @@ export const LocalWorkerProvider = () =>
                     {
                       rootDir: root,
                       publicUrl: proxy.url.toString().replace(/\/$/, ""),
-                      proxySharedSecret: proxy.proxySharedSecret,
                       accountId,
                       storageDirectory,
                       stack: { name: stack.name, stage: stack.stage },
@@ -1310,17 +1314,19 @@ export const LocalWorkerProvider = () =>
                 );
                 workerdScopes.set(worker.fqn, scope);
                 latestViteServes.set(worker.fqn, args);
-                // Unexpected child death: log, park the proxy, and mark the
-                // instance for update on the next plan. Forked into the
-                // child's scope so a deliberate restart or teardown
-                // interrupts the watcher before the process is killed.
+                // Unexpected child death: log, fail the proxy so requests
+                // see why instead of parking, and mark the instance for
+                // update on the next plan. Forked into the child's scope so
+                // a deliberate restart or teardown interrupts the watcher
+                // before the process is killed.
                 yield* child.exitCode.pipe(
-                  Effect.flatMap((exitCode) =>
-                    Effect.logWarning(
-                      `[${worker.fqn}] Dev server child exited unexpectedly with code ${exitCode}`,
-                    ),
-                  ),
-                  Effect.andThen(proxy.unset().pipe(Effect.ignore)),
+                  Effect.flatMap((exitCode) => {
+                    const message = `[${worker.fqn}] Dev server child exited unexpectedly with code ${exitCode}`;
+                    return Effect.all([
+                      Effect.logWarning(message),
+                      proxy.fail(message),
+                    ]);
+                  }),
                   Effect.andThen(invalidate),
                   Effect.forkIn(scope),
                 );
@@ -1388,7 +1394,7 @@ export const LocalWorkerProvider = () =>
         // Queue requests until the source's first output is served —
         // whether that's the first workerd serve (bundle mode) or the dev
         // server URL (server mode).
-        yield* proxy.unset().pipe(Effect.forkChild);
+        yield* proxy.unset();
         // `loadSource` is typed against the full `SourceServices` union
         // (which includes the per-run Artifacts cache the live provider
         // supplies); local dev has no run-scoped cache, so hand the
@@ -1410,7 +1416,6 @@ export const LocalWorkerProvider = () =>
           extraOptions: worker.bundleOptions.extraOptions,
           assets: worker.assets,
           worker: {
-            proxySharedSecret: proxy.proxySharedSecret,
             bindings: worker.workerBindings,
             durableObjectNamespaces: worker.durableObjectNamespaces,
             hyperdrives: worker.hyperdrives,
