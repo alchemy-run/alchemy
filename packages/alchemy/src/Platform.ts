@@ -43,6 +43,12 @@ export interface PlatformProps {
   isExternal?: boolean;
 }
 
+/** Synthetic Config nodes such as an absent `Config.option` have nothing to bind. */
+const isBindableRuntimeConfigNode = (
+  path: ReadonlyArray<unknown>,
+  value: unknown,
+): boolean => path.length > 0 && value !== undefined;
+
 /**
  * Provide the platform class's layer (`cls.make(props, impl)`) with a
  * lifetime that matches the phase.
@@ -569,14 +575,22 @@ export const Platform = <
                             path.map((p) => p.toString()).join("_"),
                           );
                           const node = yield* configProvider.load(path);
-                          if (phase === "plan" && node) {
+                          if (
+                            phase === "plan" &&
+                            node &&
+                            isBindableRuntimeConfigNode(path, node.value)
+                          ) {
                             // bind it to the RuntimeContext if running in plan phase
                             const output = Output.literal(
                               Redacted.make(node.value),
                             );
                             yield* ctx?.set(key, output) ?? Effect.void;
                             return node;
-                          } else if (phase === "runtime" && ctx) {
+                          } else if (
+                            phase === "runtime" &&
+                            ctx &&
+                            key.length > 0
+                          ) {
                             // retrieve from the RuntimeContext if running in runtime phase
                             const value =
                               yield* ctx.get<Redacted.Redacted<string>>(key);
