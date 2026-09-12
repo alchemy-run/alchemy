@@ -177,6 +177,26 @@ export type Subscription = Resource<
  * });
  * ```
  *
+ * **Example:** Workflow lifecycle events, from a Workflow bound in this stack
+ * The Workflow's physical name is an `Output` on the host Worker's
+ * `env`, resolved in the same deploy, so the subscription works on the
+ * Workflow's first deployment.
+ * ```typescript
+ * const worker = yield* Cloudflare.Worker("Worker", {
+ *   main: "./src/worker.ts",
+ *   env: { INGESTION: Cloudflare.Workflow("Ingestion", { className: "IngestionWorkflow" }) },
+ * });
+ *
+ * const subscription = yield* Cloudflare.Queues.Subscription("WorkflowEvents", {
+ *   source: {
+ *     type: "workflows.workflow",
+ *     workflowName: worker.env.INGESTION.workflowName,
+ *   },
+ *   events: ["instance.completed", "instance.errored"],
+ *   queueId: queue.queueId,
+ * });
+ * ```
+ *
  * ### Pausing delivery
  * **Example:** Disable a subscription without deleting it
  * ```typescript
