@@ -857,6 +857,37 @@ export const DBInstanceProvider = () =>
             setIf("StorageType", news.storageType, observed.StorageType);
             setIf("Iops", news.iops, observed.Iops);
             setIf("StorageThroughput", news.storageThroughput, observed.StorageThroughput); // prettier-ignore
+            // Increasing provisioned storage also requires the IOPS value,
+            // even when the provisioned rate itself has not changed.
+            if (
+              core.AllocatedStorage !== undefined &&
+              (observed.AllocatedStorage === undefined ||
+                core.AllocatedStorage > observed.AllocatedStorage) &&
+              ["gp3", "io1", "io2"].includes(
+                news.storageType ?? observed.StorageType ?? "",
+              )
+            ) {
+              core.Iops ??= news.iops ?? observed.Iops;
+            }
+            // ModifyDBInstance requires IOPS alongside gp3 throughput, and
+            // allocated storage alongside an IOPS change. Reuse live values
+            // for unchanged fields so autoscaling is never rolled back.
+            // https://docs.aws.amazon.com/AmazonRDS/latest/APIReference/API_ModifyDBInstance.html
+            if (
+              core.StorageThroughput !== undefined &&
+              (news.storageType ?? observed.StorageType) === "gp3"
+            ) {
+              core.Iops = news.iops ?? observed.Iops;
+            }
+            if (core.Iops !== undefined) {
+              core.AllocatedStorage =
+                observed.AllocatedStorage === undefined
+                  ? core.AllocatedStorage
+                  : Math.max(
+                      core.AllocatedStorage ?? observed.AllocatedStorage,
+                      observed.AllocatedStorage,
+                    );
+            }
             setIf("MultiAZ", news.multiAZ, observed.MultiAZ);
             setIf("BackupRetentionPeriod", backupRetentionDays, observed.BackupRetentionPeriod); // prettier-ignore
             setIf("PreferredBackupWindow", news.preferredBackupWindow, observed.PreferredBackupWindow); // prettier-ignore
