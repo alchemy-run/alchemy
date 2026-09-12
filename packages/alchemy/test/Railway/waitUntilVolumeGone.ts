@@ -1,4 +1,4 @@
-import * as railway from "@distilled.cloud/railway";
+import * as railway from "@distilled.cloud/railway/graphql";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
@@ -14,16 +14,21 @@ const isGoneInstance = (instance: {
 
 /** Poll `volumeInstance({id})` until Railway reports the instance gone. */
 export const waitUntilVolumeGone = (volumeInstanceId: string) =>
-  railway.volumeInstance({ id: volumeInstanceId }).pipe(
-    Effect.map((instance) =>
-      isGoneInstance(instance) ? ("gone" as const) : ("found" as const),
-    ),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-      Effect.succeed("gone" as const),
-    ),
-    Effect.repeat({
-      schedule: Schedule.spaced("1 second"),
-      until: (status) => status === "gone",
-      times: 10,
-    }),
-  );
+  railway
+    .volumeInstance(
+      { id: volumeInstanceId },
+      { deletedAt: true, isPendingDeletion: true, state: true },
+    )
+    .pipe(
+      Effect.map((instance) =>
+        isGoneInstance(instance) ? ("gone" as const) : ("found" as const),
+      ),
+      railway.catchTags(["RailwayNotFound"], () =>
+        Effect.succeed("gone" as const),
+      ),
+      Effect.repeat({
+        schedule: Schedule.spaced("1 second"),
+        until: (status) => status === "gone",
+        times: 10,
+      }),
+    );

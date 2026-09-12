@@ -5559,9 +5559,6 @@ importers:
       '@smithy/util-base64':
         specifier: catalog:aws
         version: 4.6.0
-      aws4fetch:
-        specifier: catalog:aws
-        version: 1.0.20
       effect:
         specifier: 4.0.0-rc.115
         version: 4.0.0-rc.115
@@ -5719,6 +5716,10 @@ importers:
         version: 26.2.0
 
   submodules/distilled/packages/core:
+    dependencies:
+      graphql:
+        specifier: 16.11.0
+        version: 16.11.0
     devDependencies:
       '@effect/platform-bun':
         specifier: catalog:effect
@@ -15394,6 +15395,10 @@ packages:
 
   graphmatch@1.1.1:
     resolution: {integrity: sha512-5ykVn/EXM1hF0XCaWh05VbYvEiOL2lY1kBxZtaYsyvjp7cmWOU1XsAdfQBwClraEofXDT197lFbXOEVMHpvQOg==}
+
+  graphql@16.11.0:
+    resolution: {integrity: sha512-mS1lbMsxgQj6hge1XZ6p7GPhbrtFwUFYi3wRzXAC/FmYnyXMTvvI3td3rjmQ2u8ewXueaSvRPWaEcgVVOT9Jnw==}
+    engines: {node: ^12.22.0 || ^14.16.0 || ^16.0.0 || >=17.0.0}
 
   gzip-size@6.0.0:
     resolution: {integrity: sha512-ax7ZYomf6jqPTQ4+XCpUGyXKHk5WweS+e05MBO4/y3WJ5RkmPXNKvX+bx1behVILVwr6JSQvZAku021CHPXG3Q==}
@@ -30134,6 +30139,8 @@ snapshots:
   grammex@3.1.13: {}
 
   graphmatch@1.1.1: {}
+
+  graphql@16.11.0: {}
 
   gzip-size@6.0.0:
     dependencies:

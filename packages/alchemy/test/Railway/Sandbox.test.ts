@@ -1,4 +1,4 @@
-import * as railway from "@distilled.cloud/railway";
+import * as railway from "@distilled.cloud/railway/graphql";
 import * as Provider from "@/Provider";
 import * as Railway from "@/Railway";
 import { suitePartition } from "./suiteProject.ts";
@@ -20,11 +20,13 @@ const isGoneStatus = (status: string | undefined) =>
   status === "DESTROYED" || status === "DESTROYING";
 
 const waitUntilGone = (environmentId: string, sandboxId: string) =>
-  railway.sandbox({ environmentId, id: sandboxId }).pipe(
+  railway.sandbox({ environmentId, id: sandboxId }, { status: true }).pipe(
     Effect.map((sandbox) =>
-      isGoneStatus(sandbox.status) ? ("gone" as const) : ("found" as const),
+      sandbox === null || isGoneStatus(sandbox.status)
+        ? ("gone" as const)
+        : ("found" as const),
     ),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+    railway.catchTags(["RailwayNotFound"], () =>
       Effect.succeed("gone" as const),
     ),
     Effect.repeat({
@@ -35,8 +37,8 @@ const waitUntilGone = (environmentId: string, sandboxId: string) =>
   );
 
 const destroyLive = (environmentId: string, sandboxId: string) =>
-  railway.sandboxDestroy({ environmentId, id: sandboxId }).pipe(
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () => Effect.void),
+  railway.sandboxDestroy({ environmentId, id: sandboxId }, { id: true }).pipe(
+    railway.catchTags(["RailwayNotFound"], () => Effect.void),
     Effect.flatMap(() => waitUntilGone(environmentId, sandboxId)),
   );
 
@@ -54,12 +56,15 @@ test.provider(
       );
 
       const result = yield* Effect.result(
-        railway.createSandbox({
-          input: {
-            environmentId: created.environment.environmentId,
-            idleTimeoutMinutes: 5,
+        railway.createSandbox(
+          {
+            input: {
+              environmentId: created.environment.environmentId,
+              idleTimeoutMinutes: 5,
+            },
           },
-        }),
+          { environmentId: true, id: true },
+        ),
       );
 
       if (Result.isSuccess(result)) {
@@ -71,11 +76,11 @@ test.provider(
         return;
       }
 
-      expect(result.failure._tag).toEqual("RailwayForbidden");
+      expect(railway.isErrorTag(result.failure, "RailwayForbidden")).toBe(true);
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 3_600_000 },
+  { timeout: 120_000 },
 );
 
 test.provider(
@@ -107,10 +112,23 @@ test.provider(
       expect(created.box.createdAt).toEqual(expect.any(String));
       expect(created.box.idleTimeoutMinutes).toEqual(5);
 
-      const fetched = yield* railway.sandbox({
-        environmentId: created.box.environmentId,
-        id: created.box.sandboxId,
-      });
+      const fetched = yield* railway.sandbox(
+        {
+          environmentId: created.box.environmentId,
+          id: created.box.sandboxId,
+        },
+        {
+          id: true,
+          environmentId: true,
+          status: true,
+          idleTimeoutMinutes: true,
+        },
+      );
+      if (fetched === null) {
+        return yield* Effect.fail(
+          new Error("Deployed Railway sandbox was not found"),
+        );
+      }
       expect(fetched.id).toEqual(created.box.sandboxId);
       expect(fetched.environmentId).toEqual(created.box.environmentId);
       expect(fetched.status).toEqual("RUNNING");
@@ -143,5 +161,5 @@ test.provider(
       );
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 3_600_000 },
+  { timeout: 120_000 },
 );
