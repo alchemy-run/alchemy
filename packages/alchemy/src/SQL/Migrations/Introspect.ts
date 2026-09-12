@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import type { SqlExecutor } from "./Format.ts";
+import type { MigrationError, SqlExecutor } from "./Format.ts";
 import { quoteIdentifier, sqlLiteral } from "./Records.ts";
 
 export interface TableColumn {
@@ -16,7 +16,7 @@ export const tableColumns = (
   executor: SqlExecutor,
   table: string,
   schema?: string,
-): Effect.Effect<TableColumn[], never, never> => {
+): Effect.Effect<TableColumn[], MigrationError, never> => {
   switch (executor.dialect) {
     case "sqlite":
       return executor
@@ -48,7 +48,6 @@ export const tableColumns = (
               type: String(row.type ?? "").toUpperCase(),
             })),
           ),
-          Effect.catch(() => Effect.succeed([])),
         );
     case "mysql":
       return executor
