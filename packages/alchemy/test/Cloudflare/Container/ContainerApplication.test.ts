@@ -111,6 +111,36 @@ describe("ContainerApplication", () => {
     }).pipe(logLevel),
   );
 
+  // Placement constraints are a typed pass-through: `constraints.regions`
+  // and `constraints.jurisdiction` are forwarded verbatim to
+  // `createContainerApplication` and read back unchanged. This does not
+  // assert an instance actually lands in the requested region/jurisdiction
+  // (capacity is account/plan-dependent) — only that the Alchemy API
+  // boundary threads the fields through without dropping or renaming them.
+  test.provider("placement constraints round-trip", (scratch) =>
+    Effect.gen(function* () {
+      yield* scratch.destroy();
+
+      const deployed = yield* scratch.deploy(
+        Effect.gen(function* () {
+          return {
+            app: yield* Cloudflare.Container("ConstrainedPlacement", {
+              image: "mendhak/http-https-echo:latest",
+              constraints: { regions: ["WEUR", "EEUR"], jurisdiction: "eu" },
+            }).Application,
+          };
+        }),
+      );
+
+      expect(deployed.app.constraints).toEqual({
+        regions: ["WEUR", "EEUR"],
+        jurisdiction: "eu",
+      });
+
+      yield* scratch.destroy();
+    }).pipe(logLevel),
+  );
+
   // Issue #953 (2): an `image` that already references the target registry
   // (e.g. pushed by CI) is deployed as-is — no docker pull/tag/push
   // round-trip. The first deploy pushes a public image into the account
