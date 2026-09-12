@@ -105,7 +105,7 @@ export interface WorkerProxyInstance {
  * a Worker gets a fixed `502` and is closed. Written onto the raw socket, so
  * it stays clear of any HTTP implementation.
  */
-const badGateway = (message: string): string => {
+const badGateway = (message: string) => {
   const body = JSON.stringify({
     ok: false,
     error: { _tag: "ProxyError", message, status: 502 },
@@ -127,7 +127,7 @@ interface Upstream {
   readonly port: number;
 }
 
-const upstreamOf = (url: URL): Upstream => ({
+const upstreamOf = (url: URL) => ({
   url,
   // `URL.hostname` keeps the brackets on IPv6 literals; `net.connect` does not want them.
   host: url.hostname.replace(/^\[(.*)\]$/, "$1"),
@@ -135,7 +135,7 @@ const upstreamOf = (url: URL): Upstream => ({
 });
 
 /** Resolves once the socket has emitted `close`; interruption stops waiting. */
-const closed = (socket: NodeNet.Socket): Effect.Effect<void> =>
+const closed = (socket: NodeNet.Socket) =>
   Effect.callback<void>((resume) => {
     if (socket.destroyed) return resume(Effect.void);
     const done = () => resume(Effect.void);
@@ -146,7 +146,7 @@ const closed = (socket: NodeNet.Socket): Effect.Effect<void> =>
   });
 
 /** A connected upstream socket, or the connect failure. Interruption destroys it. */
-const connect = (to: Upstream): Effect.Effect<NodeNet.Socket, SystemError> =>
+const connect = (to: Upstream) =>
   Effect.callback<NodeNet.Socket, SystemError>((resume) => {
     const socket = NodeNet.connect({ host: to.host, port: to.port });
     // Errors after the connect phase are the pipe's business; never unhandled.
@@ -261,7 +261,7 @@ const makeRelay = (pendingTimeout: Duration.Duration): Relay => {
       upstream.on("close", () => socket.destroy());
     });
 
-    const awaitUpstream: Effect.Effect<Upstream, SystemError> =
+    const awaitUpstream =
       failure !== undefined
         ? Effect.fail(failure)
         : target !== undefined
