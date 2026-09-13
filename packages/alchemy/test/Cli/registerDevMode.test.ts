@@ -52,7 +52,13 @@ it.live.skipIf(!nodeSupportsDevMode)(
         ],
         {
           cwd: exampleDir,
-          env: { NO_COLOR: "1" },
+          env: {
+            NO_COLOR: "1",
+            // The Bun test runner's markers must not select Bun for this
+            // explicitly Node/pnpm invocation.
+            npm_execpath: "",
+            npm_config_user_agent: "",
+          },
           extendEnv: true,
           stdin: "ignore",
           stdout: "pipe",
@@ -87,7 +93,13 @@ it.live.skipIf(!nodeSupportsDevMode)(
       expect(pnpm).not.toBeNull();
       const cli = yield* ChildProcess.make(pnpm!, ["alchemy", "--version"], {
         cwd: repoDir,
-        env: { NO_COLOR: "1" },
+        env: {
+          NO_COLOR: "1",
+          // The Bun test runner's markers must not select Bun for this
+          // explicitly Node/pnpm invocation.
+          npm_execpath: "",
+          npm_config_user_agent: "",
+        },
         extendEnv: true,
         stdin: "ignore",
         stdout: "pipe",

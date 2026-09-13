@@ -155,7 +155,7 @@ export const RailwayAuth = AuthProviderLayer<
         effect: Effect.Effect<A, E, railway.RailwayOpContext>,
       ) => provideAnonymousRailway(effect, apiBaseUrl);
 
-      const code = yield* withAnonymous(railway.loginSessionCreate({})).pipe(
+      const code = yield* withAnonymous(railway.createLoginSession({})).pipe(
         Effect.mapError(
           (e) =>
             new AuthError({
@@ -178,7 +178,7 @@ export const RailwayAuth = AuthProviderLayer<
         Effect.catch(() => Effect.succeed(true)),
       );
 
-      const cancel = withAnonymous(railway.loginSessionCancel({ code })).pipe(
+      const cancel = withAnonymous(railway.cancelLoginSession({ code })).pipe(
         Effect.catch(() => Effect.void),
       );
 

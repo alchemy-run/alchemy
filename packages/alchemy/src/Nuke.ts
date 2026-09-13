@@ -1,6 +1,7 @@
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Formatter from "effect/Formatter";
 import * as Schedule from "effect/Schedule";
 import picomatch from "picomatch";
 import {
@@ -44,6 +45,10 @@ export interface ListOptions extends DiscoverOptions {
   readonly context: Context.Context<never>;
   readonly concurrency?: number | "unbounded";
   readonly timeoutSeconds?: number;
+  /** Called once with the selected provider count before enumeration starts. */
+  readonly onScan?: (total: number) => Effect.Effect<void>;
+  /** Called when a provider starts resolving/listing, to identify slow scans. */
+  readonly onProviderStarted?: (provider: string) => Effect.Effect<void>;
   /**
    * Called as each provider's listing settles (0 resources when it failed),
    * for progress reporting — scans across many providers are the slowest
@@ -52,6 +57,7 @@ export interface ListOptions extends DiscoverOptions {
   readonly onProvider?: (
     provider: string,
     resources: number,
+    error?: string,
   ) => Effect.Effect<void>;
 }
 
@@ -67,6 +73,15 @@ export interface DestroyOptions {
   readonly strategy: Strategy;
   readonly concurrency?: number | "unbounded";
   readonly timeoutSeconds?: number;
+  /** Called before each coordinated pass, or once for independent deletion. */
+  readonly onPass?: (pass: number) => Effect.Effect<void>;
+  /** Called before each deletion attempt. */
+  readonly onDeleting?: (resource: Target) => Effect.Effect<void>;
+  /** Called when dependency failures prevent a resource from being attempted. */
+  readonly onHeld?: (
+    resource: Target,
+    blockedBy: ReadonlyArray<string>,
+  ) => Effect.Effect<void>;
   /** Called as each object is confirmed gone, for progress reporting. */
   readonly onDeleted?: (resource: Target) => Effect.Effect<void>;
   /** Called as a deletion attempt fails permanently (the run keeps going). */
@@ -100,7 +115,11 @@ const failure = (
   provider: string,
   operation: ProviderFailure["operation"],
   cause: unknown,
-): ProviderFailure => ({ provider, operation, message: String(cause) });
+): ProviderFailure => ({
+  provider,
+  operation,
+  message: typeof cause === "string" ? cause : Formatter.format(cause),
+});
 
 /** Deletions here run out-of-band, so nothing reports through an apply session. */
 const silent = {
@@ -198,10 +217,13 @@ export const list = (
   Effect.gen(function* () {
     const failures: ProviderFailure[] = [];
     const resources: Target[] = [];
+    const providers = discover(options.context, options);
+    yield* options.onScan?.(providers.length) ?? Effect.void;
     yield* Effect.forEach(
-      discover(options.context, options),
+      providers,
       ({ id, resolve }) =>
         Effect.gen(function* () {
+          yield* options.onProviderStarted?.(id) ?? Effect.void;
           const result = yield* Effect.result(
             Effect.gen(function* () {
               const provider = yield* resolve;
@@ -216,8 +238,9 @@ export const list = (
             }).pipe(Effect.provide(options.context)),
           );
           if (result._tag === "Failure") {
-            failures.push(failure(id, "list", result.failure));
-            yield* options.onProvider?.(id, 0) ?? Effect.void;
+            const error = failure(id, "list", result.failure);
+            failures.push(error);
+            yield* options.onProvider?.(id, 0, error.message) ?? Effect.void;
             return;
           }
           for (const raw of result.success.listed) {
@@ -248,6 +271,9 @@ export const destroy = ({
   timeoutSeconds = 120,
   onDeleted = () => Effect.void,
   onFailed = () => Effect.void,
+  onPass = () => Effect.void,
+  onDeleting = () => Effect.void,
+  onHeld = () => Effect.void,
 }: DestroyOptions): Effect.Effect<Result> =>
   Effect.gen(function* () {
     const deleted: Target[] = [];
@@ -257,24 +283,28 @@ export const destroy = ({
     // Account-wide scans have no state rows: delete must derive identity from
     // `output` alone — `olds` just mirrors it and `instanceId` is unavailable.
     const attempt = (resource: Target) =>
-      resource.provider
-        .delete({
-          id: resource.displayName,
-          fqn: resource.displayName,
-          instanceId: "",
-          olds: resource.attributes as never,
-          output: resource.attributes as never,
-          session: silent,
-          bindings: [],
-          force: true,
-        })
-        .pipe(
-          Effect.timeout(Duration.seconds(timeoutSeconds)),
-          Effect.provide(context),
-        );
+      Effect.gen(function* () {
+        yield* onDeleting(resource);
+        return yield* resource.provider
+          .delete({
+            id: resource.displayName,
+            fqn: resource.displayName,
+            instanceId: "",
+            olds: resource.attributes as never,
+            output: resource.attributes as never,
+            session: silent,
+            bindings: [],
+            force: true,
+          })
+          .pipe(
+            Effect.timeout(Duration.seconds(timeoutSeconds)),
+            Effect.provide(context),
+          );
+      });
 
     if (strategy._tag === "independent") {
       passes = 1;
+      yield* onPass(passes);
       yield* Effect.forEach(
         targets,
         (resource) =>
@@ -364,6 +394,9 @@ export const destroy = ({
           );
           if (blockers.length > 0) {
             heldTypes.add(typeId);
+            yield* Effect.forEach(resources, (resource) =>
+              onHeld(resource, blockers),
+            );
             held.push(
               ...resources.map((resource) => ({
                 resource,
@@ -375,27 +408,31 @@ export const destroy = ({
         let remaining = runnable;
         while (remaining.length > 0) {
           passes += 1;
+          yield* onPass(passes);
           const results = yield* Effect.forEach(
             remaining,
             (resource) =>
-              Effect.result(attempt(resource)).pipe(
-                Effect.map((result) => ({ resource, result })),
-              ),
+              Effect.gen(function* () {
+                const result = yield* Effect.result(attempt(resource));
+                if (result._tag === "Success") {
+                  deleted.push(resource);
+                  yield* onDeleted(resource);
+                }
+                return { resource, result };
+              }),
             { concurrency: concurrency },
           );
           const next: Target[] = [];
           for (const { resource, result } of results) {
-            if (result._tag === "Success") {
-              deleted.push(resource);
-              yield* onDeleted(resource);
-            } else next.push(resource);
+            if (result._tag === "Failure") next.push(resource);
           }
           if (next.length === remaining.length) {
-            for (const resource of next) {
+            for (const { resource, result } of results) {
+              if (result._tag !== "Failure") continue;
               const why = failure(
                 resource.providerId,
                 "delete",
-                "no progress after coordinated pass",
+                result.failure,
               );
               failed.push({ resource, failure: why });
               yield* onFailed(resource, why.message);

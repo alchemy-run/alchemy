@@ -1,5 +1,6 @@
 import {
   AuthError,
+  AuthProvider,
   AuthProviderLayer,
   AuthProviders,
   getAuthProvider,
@@ -13,6 +14,7 @@ import {
   ProfileError,
   ProfileStore,
   ProfileStoreLive,
+  SuppressMissingProviderConfig,
   validateProfileName,
 } from "@/Auth/Profile.ts";
 import { resolveProfileName, resolveProviderConfig } from "@/Auth/Resolve.ts";
@@ -22,6 +24,7 @@ import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import path from "pathe";
@@ -517,6 +520,55 @@ it.effect("resolves the profile from env files and --profile overrides", () =>
       "from-cli",
     );
   }).pipe(Effect.scoped, Effect.provide(makeTestLayer())),
+);
+
+it.live(
+  "environment notices share a provider cache and reset when its layer is rebuilt",
+  () => {
+    const messages: unknown[] = [];
+    const run = withTempHome(
+      Effect.gen(function* () {
+        const auth = yield* getAuthProvider(ENV_PROVIDER);
+        yield* AuthProvider()("OtherNoticeProvider", auth);
+        const resolve = resolveProviderConfig(ENV_PROVIDER);
+        yield* resolve.pipe(
+          Effect.provideService(SuppressMissingProviderConfig, true),
+        );
+        expect(messages).toEqual([]);
+        const results = yield* Effect.all(
+          Array.from({ length: 10 }, () => resolve),
+          { concurrency: "unbounded" },
+        );
+        for (const result of results) {
+          expect(yield* result.resolve).toBe("environment-credentials");
+        }
+        yield* resolveProviderConfig("OtherNoticeProvider");
+        expect(messages).toEqual([
+          [
+            "FakeEnvAuthProvider: using environment variables (FAKE_ENV_TOKEN) instead of the profile.",
+          ],
+          [
+            "OtherNoticeProvider: using environment variables (FAKE_ENV_TOKEN) instead of the profile.",
+          ],
+        ]);
+      }),
+      { FAKE_ENV_TOKEN: "from-env" },
+    );
+    return Effect.gen(function* () {
+      yield* run;
+      messages.length = 0;
+      yield* run;
+    }).pipe(
+      Effect.provide(
+        Logger.layer([
+          Logger.make<unknown, void>((options) => {
+            messages.push(options.message);
+          }),
+        ]),
+      ),
+    );
+  },
+  { exclusive: true },
 );
 
 it.live(

@@ -12,7 +12,6 @@ import type {
   SelectOptions,
   TextInputOptions,
 } from "../types.ts";
-import { theme } from "../../../Util/Theme.ts";
 import { useGlyphs, useKeyGlyphs } from "../ui/Environment.tsx";
 import { Alert } from "../ui/Feedback.tsx";
 import {
@@ -149,6 +148,37 @@ const useChoiceList = ({
   );
   return { cursor, setCursor, handleKey } as const;
 };
+
+/**
+ * fzf-style query row for searchable lists: a `/` prefix, the typed text
+ * with a block cursor, and a right-hand annotation (match count, selection
+ * count). The row is always present so the list does not jump when the first
+ * character is typed.
+ */
+function FilterLine({
+  query,
+  annotation,
+}: {
+  readonly query: string;
+  readonly annotation: string;
+}) {
+  return (
+    <Box gap={2}>
+      <Text>
+        <Text tone="muted">/ </Text>
+        {query === "" ? (
+          <Text tone="muted">type to filter</Text>
+        ) : (
+          <>
+            {query}
+            <Text inverse> </Text>
+          </>
+        )}
+      </Text>
+      <Text tone="muted">{annotation}</Text>
+    </Box>
+  );
+}
 
 type TextPromptProps = {
   readonly options: TextInputOptions | PasswordInputOptions;
@@ -308,11 +338,16 @@ function SelectPrompt<Value>({
           [keys.escape, query === "" ? escapeLabel : "clear filter"],
         ]}
       >
-        <Box flexDirection="column" gap={searchable ? 1 : 0}>
+        <Box flexDirection="column">
           {searchable ? (
-            <Text tone="muted">
-              filter · <Text color={theme.color.info}>{query || "all"}</Text>
-            </Text>
+            <FilterLine
+              query={query}
+              annotation={
+                query === ""
+                  ? `${options.options.length} choices`
+                  : `${filtered.length} of ${options.options.length}`
+              }
+            />
           ) : null}
           <Menu
             choices={filtered.map(({ choice }) => choice)}
@@ -553,13 +588,16 @@ function MultiSelectPrompt<Value>({
         [keys.escape, query === "" ? "cancel" : "clear filter"],
       ]}
     >
-      <Box flexDirection="column" gap={searchable ? 1 : 0}>
+      <Box flexDirection="column">
         {searchable ? (
-          <Text tone="muted">
-            filter · <Text color={theme.color.info}>{query || "all"}</Text>
-            {" · "}
-            {selected.size} selected
-          </Text>
+          <FilterLine
+            query={query}
+            annotation={
+              query === ""
+                ? `${selected.size} selected`
+                : `${filtered.length} of ${options.options.length} · ${selected.size} selected`
+            }
+          />
         ) : (
           <Text tone="muted">{selected.size} selected</Text>
         )}

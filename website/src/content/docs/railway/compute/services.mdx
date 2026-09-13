@@ -263,7 +263,7 @@ export default class Api extends Railway.Service<Api>()(
     port: 3000,
   },
   Effect.gen(function* () {
-    const apiKey = yield* Config.redacted("API_KEY");
+    const apiKey = yield* Config.Redacted("API_KEY");
 
     return {
       fetch: Effect.gen(function* () {
@@ -275,7 +275,7 @@ export default class Api extends Railway.Service<Api>()(
 ) {}
 ```
 
-`Config.redacted("API_KEY")` is `Redacted<string>`. Unwrap with
+`Config.Redacted("API_KEY")` is `Redacted<string>`. Unwrap with
 `Redacted.value` only where you need the raw string.
 
 Alchemy also injects `PORT` (when `port` is set) and stack metadata.
@@ -352,7 +352,7 @@ and canvas Functions, including [schemaless RPC](/railway/compute/functions#sche
 same shape.
 [Redis](/railway/data/redis) binds with `ReadWriteRedis`.
 [Buckets](/railway/data/buckets) bind with `PutObject` / `GetObject`.
-[Variables](/railway/data/variables) covers `Config.redacted`,
+[Variables](/railway/data/variables) covers `Config.Redacted`,
 `Railway.Variable`, and `Railway.ref`.
 The [`Service` reference](/providers/railway/service) lists every
 prop.

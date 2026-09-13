@@ -3,6 +3,7 @@ import { ArtifactStore, createArtifactStore } from "@/Artifacts.ts";
 import { AuthProviders } from "@/Auth/AuthProvider.ts";
 import { ProfileStoreLive } from "@/Auth/Profile.ts";
 import * as AWS from "@/AWS";
+import { AWSEnvironment } from "@/AWS/Environment.ts";
 import { Stack } from "@/Stack.ts";
 import { Stage } from "@/Stage.ts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
@@ -13,12 +14,18 @@ import * as Layer from "effect/Layer";
 import * as Result from "effect/Result";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import { v4 as uuidv4 } from "uuid";
+
 it.live(
   "building the AWS provider layers rejects an unknown explicit profile",
   () =>
     Effect.gen(function* () {
+      // AWSEnvironment is constructed lazily so `alchemy dev` can build
+      // provider layers without credentials. The unknown-profile rejection
+      // surfaces on first use, not at `Layer.build`.
       const result = yield* Effect.result(
-        Effect.sandbox(Layer.build(AWS.providers())),
+        Effect.sandbox(
+          AWSEnvironment.current.pipe(Effect.provide(AWS.providers())),
+        ),
       );
       expect(Result.isFailure(result)).toBe(true);
       if (Result.isFailure(result)) {
@@ -43,8 +50,7 @@ it.live(
             adopt: false,
             dotAlchemy: ".alchemy",
           }),
-          Layer.succeed(
-            ConfigProvider.ConfigProvider,
+          ConfigProvider.layer(
             ConfigProvider.fromUnknown({
               ALCHEMY_PROFILE: `non-existent-${uuidv4()}`,
             }),

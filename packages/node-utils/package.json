@@ -1,6 +1,6 @@
 {
   "name": "@alchemy.run/node-utils",
-  "version": "2.0.0-beta.76",
+  "version": "2.0.0-beta.77",
   "description": "Runtime utilities for Alchemy packages.",
   "homepage": "https://alchemy.run",
   "author": "Sam Goodwin <sam@alchemy.run>",
@@ -60,14 +60,14 @@
     }
   },
   "dependencies": {
-    "chokidar": "^5.0.0",
-    "rolldown": "catalog:build"
+    "chokidar": "catalog:",
+    "rolldown": "catalog:"
   },
   "publishConfig": {
     "access": "public"
   },
   "devDependencies": {
-    "@types/bun": "catalog:tooling",
-    "typescript": "catalog:build"
+    "@types/bun": "catalog:",
+    "typescript": "catalog:"
   }
 }

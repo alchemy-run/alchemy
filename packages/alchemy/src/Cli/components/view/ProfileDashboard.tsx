@@ -23,9 +23,11 @@ import {
   Alert,
   Box,
   CycleList,
+  Gutter,
   InlineConfirm,
   KeyBar,
   LiveStore,
+  Pointer,
   PromptFrame,
   Spinner,
   Stack,
@@ -34,12 +36,13 @@ import {
   Text,
   TextField,
   Toast,
-  useBorderStyle,
   useCycleNavigation,
   useGlyphs,
   useKeyGlyphs,
   useLiveStore,
   useTerminalInput,
+  useTerminalSize,
+  VirtualList,
 } from "../ui/index.ts";
 import {
   CliKit,
@@ -49,7 +52,9 @@ import {
 import {
   type EditState,
   editStateStyle,
-  ProfileDetailsBody,
+  ProviderBlock,
+  providerBlockHeight,
+  providerColumnWidths,
   type ProfileProviderDisplay,
 } from "./Profile.tsx";
 
@@ -128,7 +133,7 @@ interface DashState {
  * the mounted dashboard. The resolver bridge and the notice auto-dismiss
  * timer live outside the snapshot — they carry no visual state.
  */
-class DashStore extends LiveStore<DashState> {
+export class DashStore extends LiveStore<DashState> {
   private resolver: ((action: PureAction | ExternalAction) => void) | null =
     null;
 
@@ -193,13 +198,14 @@ class DashStore extends LiveStore<DashState> {
 type DetailsPaneProps = {
   details: Details;
   refreshingProvider?: string;
-  focusedProvider?: string;
+  /** Index into `details.providers` the up/down cursor rests on. */
+  focusedIndex: number;
 };
 
 function DetailsPane({
   details,
   refreshingProvider,
-  focusedProvider,
+  focusedIndex,
 }: DetailsPaneProps): JSX.Element {
   if (details.state === "loading") {
     return <Spinner label="resolving credentials…" />;
@@ -212,16 +218,37 @@ function DetailsPane({
       <Text tone="muted">No accounts connected — press e to add one.</Text>
     );
   }
-  // Same body as `profile show`, so the dashboard's detail pane and the
-  // non-interactive command render identically.
+  const { providers } = details;
+  const { nameWidth, methodWidth } = providerColumnWidths(providers);
+  const focusedProvider = providers[focusedIndex]?.name;
+  const reauthHint = "press r to re-login";
+  // The same blocks `profile show` prints, windowed to the rows the terminal
+  // leaves the pane: the list shrinks to fit (see the root layout in
+  // `Dashboard`) and scrolls just enough to keep the focused provider in view.
+  // The profile-level slot (no focused provider) shows the list from the top.
   return (
-    <ProfileDetailsBody
-      providers={details.providers}
-      reauthHint="press r to re-login"
-      refreshingProvider={refreshingProvider}
-      focusedProvider={focusedProvider}
-      showFocusRail
-    />
+    <Box flexDirection="column" minHeight={0}>
+      <VirtualList
+        items={providers}
+        getKey={(provider) => provider.name}
+        itemHeight={(provider, index) =>
+          providerBlockHeight(provider, index === 0)
+        }
+        focusedIndex={Math.max(0, focusedIndex)}
+        renderItem={(provider, index) => (
+          <ProviderBlock
+            provider={provider}
+            first={index === 0}
+            nameWidth={nameWidth}
+            methodWidth={methodWidth}
+            reauthHint={reauthHint}
+            refreshingProvider={refreshingProvider}
+            focusedProvider={focusedProvider}
+            focusColumn
+          />
+        )}
+      />
+    </Box>
   );
 }
 
@@ -418,10 +445,13 @@ type DashboardProps = {
   initialSelected: number;
 };
 
-function Dashboard({ store, initialSelected }: DashboardProps): JSX.Element {
+export function Dashboard({
+  store,
+  initialSelected,
+}: DashboardProps): JSX.Element {
   const state = useLiveStore(store);
   const keyGlyphs = useKeyGlyphs();
-  const borderStyle = useBorderStyle();
+  const { rows } = useTerminalSize();
   const [selected, setSelected] = useState(initialSelected);
   // -1 is the profile-level slot: no provider is focused and profile actions
   // are shown. Up/down cycles through this slot and every connected provider.
@@ -605,42 +635,53 @@ function Dashboard({ store, initialSelected }: DashboardProps): JSX.Element {
           ["q", "quit"],
         ];
 
+  // The frame never exceeds the terminal: the provider list is the only part
+  // allowed to shrink (a `VirtualList` windows it to whatever rows are left),
+  // so every other row of chrome opts out of shrinking. Short lists keep the
+  // compact layout because the cap is a maximum, not a fixed height.
   return (
-    <Stack>
-      <Tabs
-        tabs={entries.map((e) => ({
-          id: e.name,
-          label: e.name,
-          marked: e.isActive,
-        }))}
-        active={entry?.name ?? ""}
-      />
-      <Stack gap={1}>
+    <Stack maxHeight={rows}>
+      <Stack flexShrink={0}>
+        <Tabs
+          tabs={entries.map((e) => ({
+            id: e.name,
+            label: e.name,
+            marked: e.isActive,
+          }))}
+          active={entry?.name ?? ""}
+        />
+      </Stack>
+      <Stack gap={1} minHeight={0}>
         {entry === undefined ? (
           <Text tone="muted">No profiles yet — press n to create one.</Text>
         ) : (
           <>
-            <Box
-              flexDirection="row"
-              paddingLeft={provider === undefined ? 0 : 1}
-              borderStyle={borderStyle}
-              borderLeft={provider === undefined}
-              borderRight={false}
-              borderTop={false}
-              borderBottom={false}
-              borderColor={theme.color.brand}
-            >
-              <Text bold color={theme.color.accent}>
-                {entry.name}
-              </Text>
-              {annotation === "" ? null : (
-                <Text tone="muted"> · {annotation}</Text>
-              )}
+            {/* The profile row is the first focus slot. It sits in the same
+                gutter as the provider rows and shares their cursor column, so
+                the pointer moves in a straight line as focus travels. */}
+            <Box flexShrink={0}>
+              <Gutter>
+                <Box flexDirection="row">
+                  <Pointer focused={provider === undefined} />
+                  <Text> </Text>
+                  <Text
+                    bold
+                    color={
+                      provider === undefined ? theme.paint.focus : undefined
+                    }
+                  >
+                    {entry.name}
+                  </Text>
+                  {annotation === "" ? null : (
+                    <Text tone="muted"> · {annotation}</Text>
+                  )}
+                </Box>
+              </Gutter>
             </Box>
-            <Box>
+            <Box flexDirection="column" minHeight={0}>
               <DetailsPane
                 details={details ?? { state: "loading" }}
-                focusedProvider={provider?.name}
+                focusedIndex={focusedProvider}
                 refreshingProvider={
                   flow?.kind === "refresh" ? flow.provider : undefined
                 }
@@ -649,15 +690,16 @@ function Dashboard({ store, initialSelected }: DashboardProps): JSX.Element {
           </>
         )}
       </Stack>
-      {/* Keep one stable status row so notices do not push the controls around. */}
-      <Box minHeight={1}>
+      {/* Keep one stable status row so notices do not push the controls around.
+          It shares the gutter with the profile/provider rows above it. */}
+      <Box minHeight={1} flexShrink={0} paddingLeft={theme.space.indent}>
         {busy && flow === undefined ? (
           <Spinner label="working…" />
         ) : notice !== undefined ? (
           <Toast variant={notice.ok ? "info" : "error"}>{notice.message}</Toast>
         ) : null}
       </Box>
-      <Stack>
+      <Stack flexShrink={0}>
         <DashboardControls
           mode={mode}
           busy={busy}

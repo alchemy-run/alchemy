@@ -58,7 +58,6 @@
   "files.watcherExclude": {
     "**/submodules/**": true,
     "**/.claude/**": true,
-    "**/.vendor/**": true,
     "**/.alchemy/**": true,
     "**/node_modules/**": true,
     "**/.git/**": true
@@ -66,7 +65,6 @@
   "search.exclude": {
     "**/submodules/**": true,
     "**/.claude/**": true,
-    "**/.vendor/**": true,
     "**/.alchemy/**": true
   },
   // Keep the 200MB generated distilled surface out of the auto-import index.

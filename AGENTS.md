@@ -53,8 +53,6 @@ First-class sibling repositories we maintain live in `submodules/`:
 - `submodules/distilled` — generated Effect SDKs (workspace packages). Initialized by `git submodule update --init`.
 - `submodules/floci` — our fork of the local AWS emulator. Skipped by default; fetch with `git submodule update --init --checkout -- submodules/floci`.
 
-Reference-only upstream checkouts stay in `.vendor/` and are skipped by `git submodule update --init`.
-
 Each Service's Resources follow the same pattern. Resource contract and provider are co-located in the same file. Each Capability lives in its own file(s) named after the capability and access level (`Binding.Service` contract + the `*Binding` / `*Http` implementations).
 
 ```sh
@@ -190,7 +188,7 @@ pnpm docs:gen   # -> website/src/content/docs/providers/{Cloud}/{Resource}.md
 This is the only doc generator that produces user-facing output. ([scripts/generate-api-reference.ts](./scripts/generate-api-reference.ts)) does the following:
 
 1. Discovers documented files across its configured source roots — `packages/alchemy/src/{Cloud}/{Service}/` plus flat single-provider packages like `packages/better-auth/src/` (mapped onto a synthetic provider directory, e.g. `BetterAuth/`)
-2. Parses TypeScript with `ts-morph`
+2. Parses TypeScript with the native TypeScript API (`typescript-api` tooling alias)
 3. Extracts the page-level summary plus Markdown section/example blocks from JSDoc on the export tagged `@resource`, `@binding`, or `@layer`
 4. Writes one markdown file per page at `website/src/content/docs/providers/{Provider}/{Name}.md`
 

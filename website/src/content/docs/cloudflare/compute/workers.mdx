@@ -541,10 +541,13 @@ yield* Cloudflare.Worker("Api", {
 });
 ```
 
-Set `version.parent` to upload the code as a preview version or
-canary of another stage's Worker instead. Ramping, rollback, smoke
-testing with version overrides, and pinning users to a version are
-covered in [Gradual deployments](/cloudflare/compute/gradual-deployments).
+Set `preview.of` to deploy this Worker as a
+[Preview](/cloudflare/compute/previews) of another stage's Worker
+(branch and pull-request testing, isolated Durable Objects). Set
+`version.parent` to upload a canary version of another stage's
+Worker. Ramping, rollback, smoke testing with version overrides, and
+pinning users to a version are covered in
+[Gradual deployments](/cloudflare/compute/gradual-deployments).
 
 The `version_metadata` binding tells a running Worker which version
 it is, so responses and logs can say exactly which deploy produced

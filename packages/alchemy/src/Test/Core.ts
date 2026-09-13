@@ -24,6 +24,7 @@ import { CredentialsStoreLive } from "../Auth/Credentials.ts";
 import { ProfileStoreLive } from "../Auth/Profile.ts";
 import { withProfileOverride } from "../Auth/Resolve.ts";
 import * as Interaction from "../Interaction.ts";
+import { userStage } from "../Cli/commands/flags.ts";
 import { LoggingCli } from "../Cli/LoggingCli.ts";
 import { deploy as _deploy } from "../Deploy.ts";
 import { destroy as _destroy } from "../Destroy.ts";
@@ -55,7 +56,12 @@ export interface MakeOptions<ROut = any> {
   state?: Layer.Layer<State.State, never, StackServices>;
   /** Override the current profile; otherwise resolved from env or the built-in `default`. */
   profile?: string;
-  /** Default stage for deploy/destroy (default `"test"`). */
+  /**
+   * Default stage for deploy/destroy. Defaults to `test_$USER` (or
+   * `test_$USERNAME` on Windows, `test_unknown` if neither is set) so two
+   * people running the same suite against one account don't collide.
+   * Does **not** read `$ALCHEMY_STAGE` — that is the CLI deploy/dev stage.
+   */
   stage?: string;
   /**
    * Engine-level adoption policy for this test run. When `true`, resources
@@ -127,7 +133,7 @@ export const sidecarProxy = (options: { profile?: string }) =>
  * in place. Accepts the usual truthy/falsey strings (`true`/`1`/`yes`/`on`,
  * `false`/`0`/`no`/`off`).
  */
-export const ALCHEMY_TEST_DEV = Config.boolean("ALCHEMY_TEST_DEV").pipe(
+export const ALCHEMY_TEST_DEV = Config.Boolean("ALCHEMY_TEST_DEV").pipe(
   Config.option,
 );
 
@@ -146,6 +152,16 @@ export const resolveDev = (options: { dev?: boolean }): boolean => {
 /** Resolve the effective `sidecar` flag: defaults to the resolved `dev` flag. */
 export const resolveSidecar = (options: MakeOptions): boolean =>
   options.sidecar ?? resolveDev(options);
+
+/**
+ * Default test stage: `test_$USER` (or `test_$USERNAME` / `test_unknown`).
+ * Matches the CLI's `live_$USER` / `dev_$USER` per-developer isolation.
+ */
+export const defaultStage = (): string => Effect.runSync(userStage("test"));
+
+/** File-level stage: `options.stage` if set, otherwise {@link defaultStage}. */
+export const resolveStage = (options: { stage?: string }): string =>
+  options.stage ?? defaultStage();
 
 /**
  * The sidecar runtime handed to each adapter's `make(...)`.
@@ -409,19 +425,20 @@ export const withProviders = <A, E, R, ROut>(
     Option.getOrElse(alchemyTestDevOverride(), () => false) === true
       ? Effect.provide(effect, flociServices())
       : effect;
+  const stage = resolveStage(options);
   return body.pipe(
     Effect.provide(
       (options.providers as Layer.Layer<any, never, any>).pipe(
         Layer.provideMerge(
           Layer.succeed(Stack, {
             name: stackName,
-            stage: options.stage ?? "test",
+            stage,
             resources: {},
             bindings: {},
             actions: {},
           }),
         ),
-        Layer.provideMerge(Layer.succeed(Stage, options.stage ?? "test")),
+        Layer.provideMerge(Layer.succeed(Stage, stage)),
       ),
     ),
   ) as Effect.Effect<A, E, Exclude<R, ROut | Stack | Stage>>;
@@ -444,7 +461,7 @@ export const deploy = <A>(
 ) =>
   _deploy({
     stack: stack as Effect.Effect<CompiledStack<A>, never, any>,
-    stage: callOptions?.stage ?? options.stage ?? "test",
+    stage: callOptions?.stage ?? resolveStage(options),
     dev: resolveDev(options),
     scope: callOptions?.scope,
   }).pipe(Effect.provide(TelemetryLive));
@@ -456,7 +473,7 @@ export const destroy = (
 ) =>
   _destroy({
     stack: stack as Effect.Effect<CompiledStack, never, any>,
-    stage: callOptions?.stage ?? options.stage ?? "test",
+    stage: callOptions?.stage ?? resolveStage(options),
     dev: resolveDev(options),
     scope: callOptions?.scope,
   }).pipe(Effect.provide(TelemetryLive));
@@ -482,6 +499,8 @@ export const destroy = (
  */
 export interface ScratchStack<ROut = any> {
   readonly name: string;
+  /** Stage this scratch deploys to ({@link resolveStage} of the file options). */
+  readonly stage: string;
   /** The shared in-memory state Layer for this scratch. @internal */
   readonly state: Layer.Layer<State.State, never, never>;
   deploy<A, E, R>(
@@ -532,7 +551,7 @@ export const scratchStack = <ROut>(
   name: string,
   file?: string,
 ): ScratchStack<ROut> => {
-  const stage = options.stage ?? "test";
+  const stage = resolveStage(options);
   const stackName = sanitizeStackName(
     file === undefined ? name : `${scratchNamespace(file)}-${name}`,
   );
@@ -587,6 +606,7 @@ export const scratchStack = <ROut>(
 
   return {
     name: stackName,
+    stage,
     state: stateLayer,
     deploy: ((effect: Effect.Effect<any, any, any>) =>
       buildAndApply(effect)) as ScratchStack<ROut>["deploy"],

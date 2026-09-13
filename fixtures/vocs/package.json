@@ -10,27 +10,27 @@
     "pretest": "playwright install chromium && bun run build"
   },
   "dependencies": {
-    "hono": "catalog:frontend",
-    "react": "~19.2.6",
-    "react-dom": "~19.2.6",
-    "react-server-dom-webpack": "catalog:frontend",
-    "vocs": "catalog:frontend",
-    "waku": "catalog:frontend"
+    "hono": "catalog:",
+    "react": "catalog:react-rsc",
+    "react-dom": "catalog:react-rsc",
+    "react-server-dom-webpack": "catalog:",
+    "vocs": "catalog:",
+    "waku": "catalog:"
   },
   "devDependencies": {
-    "@cloudflare/unenv-preset": "catalog:cloudflare-runtime",
-    "@cloudflare/workers-types": "catalog:cloudflare-runtime",
+    "@cloudflare/unenv-preset": "catalog:",
+    "@cloudflare/workers-types": "catalog:",
     "@alchemy.run/cloudflare-runtime": "workspace:*",
     "@alchemy.run/cloudflare-test-tools": "workspace:*",
     "@alchemy.run/frontend-frameworks": "workspace:*",
-    "@playwright/test": "catalog:testing",
-    "@types/node": "^24.12.0",
-    "@types/react": "^19.2.17",
-    "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "catalog:frontend",
-    "@vitejs/plugin-rsc": "catalog:frontend",
-    "effect": "catalog:effect",
-    "unenv": "catalog:cloudflare-runtime",
-    "vite": "catalog:build"
+    "@playwright/test": "catalog:",
+    "@types/node": "catalog:node24",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@vitejs/plugin-react": "catalog:",
+    "@vitejs/plugin-rsc": "catalog:",
+    "effect": "catalog:",
+    "unenv": "catalog:",
+    "vite": "catalog:"
   }
 }
