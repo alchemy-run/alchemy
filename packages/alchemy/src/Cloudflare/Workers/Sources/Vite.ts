@@ -190,6 +190,7 @@ export const viteBuild = (
     );
     return {
       clientDirectory: result.clientDirectory,
+      serverDirectory: result.serverDirectory,
       base: result.base,
       serverBundle: Effect.succeed(result.serverBundle),
       externalWorkspaces: Effect.succeed(new Set(result.externalWorkspaces)),
@@ -383,25 +384,41 @@ export const makeViteSource = (vite: ViteOptions): SourceProvider => ({
   build: Effect.fn(function* (ctx) {
     const path = yield* Path.Path;
     const env = yield* resolveViteEnv(ctx.env ?? {});
-    const { clientDirectory, serverBundle, externalWorkspaces } =
-      yield* viteBuild(
-        vite.rootDir,
-        env,
-        {
-          main: vite.main,
-          compatibilityDate: ctx.compatibility.date,
-          compatibilityFlags: ctx.compatibility.flags,
-          viteEnvironments: vite.viteEnvironments,
-        },
-        ctx.fqn,
-      );
+    const {
+      clientDirectory,
+      serverDirectory,
+      serverBundle,
+      externalWorkspaces,
+    } = yield* viteBuild(
+      vite.rootDir,
+      env,
+      {
+        main: vite.main,
+        compatibilityDate: ctx.compatibility.date,
+        compatibilityFlags: ctx.compatibility.flags,
+        viteEnvironments: vite.viteEnvironments,
+      },
+      ctx.fqn,
+    );
+    const declaredAssets =
+      ctx.assets && typeof ctx.assets !== "string" ? ctx.assets : undefined;
+    // What the build itself says about its assets, filled in under what
+    // the resource declared: a framework that records which pages it
+    // prerendered knows the routing better than a default would, and the
+    // resource's own `assets` still has the last word.
+    const derivedAssets =
+      clientDirectory && vite.deriveAssets
+        ? yield* vite.deriveAssets(
+            { clientDirectory, serverDirectory },
+            declaredAssets,
+          )
+        : undefined;
     const [assets, bundle, input] = yield* Effect.all(
       [
         clientDirectory
           ? readAssets({
-              ...(ctx.assets && typeof ctx.assets !== "string"
-                ? ctx.assets
-                : undefined),
+              ...derivedAssets,
+              ...declaredAssets,
               // `clientDirectory` from the build child is absolute; the
               // base only matters for the in-process legacy shape.
               directory: path.resolve(

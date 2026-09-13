@@ -10,6 +10,7 @@
     "test": "bun test"
   },
   "dependencies": {
+    "@effect/platform-browser": "catalog:",
     "effect": "catalog:",
     "foldkit": "catalog:"
   },

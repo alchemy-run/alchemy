@@ -5,7 +5,7 @@ A [Foldkit](https://foldkit.dev) counter app deployed to Cloudflare with
 
 ```sh
 bun alchemy deploy   # build and deploy
-bun alchemy dev      # local dev with Vite HMR
+bun alchemy dev      # local dev with Foldkit's live reload
 bun alchemy destroy  # tear down
 ```
 

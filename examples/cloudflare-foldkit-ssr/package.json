@@ -11,6 +11,7 @@
     "test": "bun test test/integ.test.ts"
   },
   "dependencies": {
+    "@effect/platform-browser": "catalog:",
     "effect": "catalog:",
     "foldkit": "catalog:"
   },

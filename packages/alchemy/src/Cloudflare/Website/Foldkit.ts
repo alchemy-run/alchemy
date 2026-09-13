@@ -4,6 +4,7 @@ import type { InputProps } from "../../Input.ts";
 import { effectClass } from "../../Util/effect.ts";
 import type { Providers } from "../Providers.ts";
 import type { AssetsConfig } from "../Workers/Assets.ts";
+import { deriveFoldkitAssets } from "./FoldkitBuild.ts";
 import {
   Worker,
   type NormalizedBindings,
@@ -19,14 +20,11 @@ export interface FoldkitProps<
   "vite" | "main" | "assets" | "source" | "script" | "bundle"
 > {
   /**
-   * Overrides the module that becomes the deployed Worker entry. Relative
-   * paths resolve from {@link rootDir}.
-   *
-   * A Foldkit deployment is assets-only by default — no Worker code runs
-   * at request time. Point `main` at a custom module when the deployment
-   * needs code at the edge — API routes, error reporting, Durable Object
-   * classes. The entry serves the client build through its `ASSETS`
-   * binding:
+   * A Worker entry of your own, for a client-only app that must also do
+   * something at the edge — serve an API route, wrap the app in error
+   * reporting, export Durable Object classes. Relative paths resolve from
+   * {@link rootDir}. The entry serves the client build through its
+   * `ASSETS` binding:
    *
    * ```typescript
    * // src/worker.ts
@@ -40,6 +38,11 @@ export interface FoldkitProps<
    *   },
    * };
    * ```
+   *
+   * A server-rendered or prerendered app needs none: its Worker is the
+   * `fetch` handler the app's own build emits (`ssr.build` in
+   * `vite.config.ts`), and that build owns the server entry — a `main`
+   * alongside it fails the build.
    */
   main?: string;
   /**
@@ -66,12 +69,19 @@ export interface FoldkitProps<
    * Optional configuration for static asset routing behavior.
    * Supports `runWorkerFirst`, `htmlHandling`, `notFoundHandling`, etc.
    *
-   * Foldkit apps route on the client, so `notFoundHandling` defaults to
-   * `"single-page-application"` — unmatched paths serve `index.html` and
-   * the app's router takes over. Set `notFoundHandling` explicitly to
-   * override (e.g. `"404-page"` to serve the built `404.html`).
+   * A server-rendered or prerendered app needs nothing here. Its build
+   * writes `foldkit.build.json` beside the server bundle, recording which
+   * paths it prerendered, and the routing follows from that: a prerendered
+   * route is a file the asset layer serves, and every other page request
+   * reaches the `fetch` handler. When `/` itself was not prerendered, the
+   * unfilled `index.html` the build emits is left out of the upload, so the
+   * front page reaches the handler too instead of being answered with an
+   * empty template at 200. Anything set here wins over what is derived.
    *
-   * @default { notFoundHandling: "single-page-application" }
+   * A client-only app has no server and no manifest, so it gets
+   * `notFoundHandling: "single-page-application"`: a deep link serves the
+   * template and the app's router resolves it. An app that ships a real
+   * 404 page declares `"404-page"` instead.
    */
   assets?: AssetsConfig;
 }
@@ -79,23 +89,23 @@ export interface FoldkitProps<
 /**
  * A Cloudflare Worker deployed from a [Foldkit](https://foldkit.dev) app.
  *
- * Foldkit apps are client-only Vite projects, so `Foldkit` drives the
- * project's own `vite build` — the Foldkit Vite plugin in the app's
- * `vite.config.ts` composes with the injected Cloudflare plugin — and
- * deploys the client output as static assets. No Wrangler configuration,
- * build command, or output directory required.
+ * Foldkit apps are Vite projects, so `Foldkit` drives the project's own
+ * `vite build` — the Foldkit Vite plugin in the app's `vite.config.ts`
+ * composes with the injected Cloudflare plugin — and deploys what it
+ * emits. The client output becomes the Worker's static assets. With
+ * `ssr.build` set in the app's config, the same build also emits
+ * `dist/server/fetch.js`, a Web `fetch` handler with the built shell
+ * embedded, and that handler is the Worker — exactly as a TanStack Start
+ * server bundle is. No Wrangler configuration, build command, output
+ * directory, adapter, or Worker entry of your own.
  *
  * Input files are content-hashed (respecting `.gitignore` by default) so
  * unchanged projects skip the build and deploy entirely.
  *
- * Foldkit apps route on the client, so `assets.notFoundHandling`
- * defaults to `"single-page-application"` — deep links serve
- * `index.html` and the Foldkit router takes over.
- *
- *
  * ### Deploying a Foldkit App
- * A single call builds the project and deploys the client output as
- * static assets — no configuration required.
+ * A single call builds the project and deploys it. Whether the result is
+ * client-only, server-rendered, or prerendered is decided by the app's
+ * `vite.config.ts`, not by the declaration.
  *
  * **Example:** Foldkit app
  * ```typescript
@@ -109,12 +119,46 @@ export interface FoldkitProps<
  * });
  * ```
  *
- * ### Single-Page Application Routing
- * Unmatched paths serve `index.html` by default so deep links boot the
- * app and the Foldkit router resolves the route. A site that ships real
- * 404 content overrides the default with `notFoundHandling: "404-page"`.
+ * ### Server Rendering and Prerendering
+ * The app's own config declares its server entry and asks the build to
+ * emit the handler; `prerender` additionally writes every path the entry
+ * lists as a static page. The declaration above does not change.
  *
- * **Example:** Serving a real 404 page
+ * **Example:** vite.config.ts for a server-rendered app
+ * ```typescript
+ * import { foldkit } from "@foldkit/vite-plugin";
+ * import { defineConfig } from "vite";
+ *
+ * export default defineConfig({
+ *   plugins: [
+ *     foldkit({
+ *       buildId: process.env.FOLDKIT_BUILD_ID,
+ *       ssr: { serverEntry: "/src/entry.server.ts", build: true },
+ *     }),
+ *   ],
+ * });
+ * ```
+ *
+ * **Example:** vite.config.ts for a prerendered app
+ * ```typescript
+ * foldkit({
+ *   buildId: process.env.FOLDKIT_BUILD_ID,
+ *   ssr: {
+ *     serverEntry: "/src/entry.server.ts",
+ *     build: { prerender: true },
+ *   },
+ * });
+ * ```
+ *
+ * ### Choosing Asset Routing
+ * No `assets` config is needed for any shape. A server-rendered or
+ * prerendered app's build records what it prerendered in
+ * `foldkit.build.json` and the routing follows from it; a client-only
+ * app gets the single-page-application fallback, so deep links serve the
+ * template and the app's own router resolves them (see
+ * {@link FoldkitProps.assets}). Anything declared wins.
+ *
+ * **Example:** A client-only app that ships its own 404 page
  * ```typescript
  * const site = yield* Cloudflare.Website.Foldkit("Website", {
  *   assets: {
@@ -124,13 +168,12 @@ export interface FoldkitProps<
  * ```
  *
  * ### Custom Worker Entry
- * By default the deployment is assets-only. When code must run at the
- * edge — API routes, error reporting, Durable Object classes — point
- * `main` at your own module that serves the client build through the
- * `ASSETS` binding (see {@link FoldkitProps.main}). Bindings passed in
- * `env` are reachable from the entry (and from cron handlers), not from
- * browser code — a Foldkit app runs on the client, so anything it needs
- * must come from a route the Worker serves.
+ * A client-only app that must also run code at the edge — API routes,
+ * error reporting, Durable Object classes — points `main` at its own
+ * module, which serves the client build through the `ASSETS` binding
+ * (see {@link FoldkitProps.main}). Bindings passed in `env` are reachable
+ * from that entry (and from cron handlers), not from browser code, so
+ * anything the browser needs must come from a route the Worker serves.
  *
  * **Example:** Custom entry serving an API route from a KV namespace
  * ```typescript
@@ -140,6 +183,9 @@ export interface FoldkitProps<
  *   main: "src/worker.ts",
  *   env: {
  *     TICKER: ticker,
+ *   },
+ *   assets: {
+ *     runWorkerFirst: ["/api/*"],
  *   },
  * });
  * ```
@@ -213,18 +259,20 @@ export const Foldkit: {
           Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff),
           (props) => ({
             ...props,
-            // Foldkit routes on the client; serve index.html for unmatched
-            // paths so deep links boot the app instead of 404ing. An
-            // explicit `assets.notFoundHandling` wins over the default.
-            assets: {
-              notFoundHandling: "single-page-application" as const,
-              ...props?.assets,
-            },
+            // No `assets` default of its own: the routing is derived from
+            // the build (below), which is what tells a client-only app —
+            // single-page-application fallback — apart from a
+            // server-rendered one, where that fallback served the unrendered
+            // template for every deep link at 200. See `FoldkitProps.assets`.
             main: undefined!,
             vite: {
               main: props?.main,
               rootDir: props?.rootDir,
               memo: props?.memo,
+              // The build's own `foldkit.build.json` settles the routing a
+              // server-rendered or prerendered app needs; see
+              // `FoldkitProps.assets`.
+              deriveAssets: deriveFoldkitAssets,
             },
           }),
         ),

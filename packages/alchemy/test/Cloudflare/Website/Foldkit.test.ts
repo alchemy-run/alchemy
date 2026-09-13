@@ -62,13 +62,12 @@ const htmlPage = (marker: string) => `<!doctype html>
 `;
 
 describe.concurrent("Foldkit", () => {
-  // The resource's reason to exist: a Foldkit app routes on the client, so
-  // `notFoundHandling` defaults to `single-page-application` and deep links
-  // boot the app without the caller configuring anything. The same project
-  // through `Website.Vite` 404s on `/counter/42` unless `assets` is passed
-  // by hand.
+  // A client-only build writes no `foldkit.build.json`, and that absence is
+  // what gives it the single-page-application fallback: a deep link serves
+  // the template and the app's router resolves it. A server-rendered build
+  // records itself and gets the opposite — see FoldkitBuild.ts.
   test.provider(
-    "Foldkit: deploys with SPA fallback by default",
+    "Foldkit: a client-only app gets the single-page-application fallback",
     (stack) =>
       Effect.gen(function* () {
         const { accountId } = yield* yield* CloudflareEnvironment;
@@ -83,7 +82,8 @@ describe.concurrent("Foldkit", () => {
 
         const site = yield* stack.deploy(
           Effect.gen(function* () {
-            // Deliberately no `assets` — the default is what's under test.
+            // Deliberately no `assets` — the derived default is what is
+            // under test.
             return yield* Cloudflare.Website.Foldkit(
               "FixFoldkitDefault",
               foldkitProps(rootDir),
@@ -99,10 +99,12 @@ describe.concurrent("Foldkit", () => {
           timeout: "120 seconds",
           label: "foldkit index",
         });
-        // Deep link falls back to index.html so client-side routing can boot.
+        // The deep link matches no file; the fallback answers it with the
+        // template and the app boots. A declaration still wins over the
+        // default; see the next case.
         yield* expectUrlContains(`${site.url!}/counter/42`, "Foldkit Fixture", {
           timeout: "60 seconds",
-          label: "foldkit spa fallback",
+          label: "foldkit deep link fallback",
         });
 
         yield* stack.destroy();
@@ -111,11 +113,9 @@ describe.concurrent("Foldkit", () => {
     { timeout: 360_000 },
   );
 
-  // An explicit `assets` must win over the built-in default rather than be
-  // overridden by it — a spread in the wrong order would silently ignore
-  // whatever the caller passed.
+  // An explicit `assets` wins over the derived default.
   test.provider(
-    "Foldkit: an explicit assets config overrides the SPA default",
+    "Foldkit: an explicit assets config is passed through",
     (stack) =>
       Effect.gen(function* () {
         const { accountId } = yield* yield* CloudflareEnvironment;
@@ -160,10 +160,10 @@ describe.concurrent("Foldkit", () => {
     { timeout: 360_000 },
   );
 
-  // A Foldkit deployment may carry a Worker entry in front of the assets
-  // (API routes, error reporting, Durable Objects). The client build still
-  // serves through the ASSETS binding, and the SPA fallback still applies
-  // behind it.
+  // A client-only Foldkit deployment may carry a Worker entry in front of
+  // the assets (API routes, error reporting, Durable Objects). The client
+  // build still serves through the ASSETS binding, and the derived
+  // single-page-application fallback still applies behind it.
   test.provider(
     "Foldkit: a custom main entry serves API routes alongside the app",
     (stack) =>
@@ -207,8 +207,8 @@ describe.concurrent("Foldkit", () => {
           timeout: "60 seconds",
           label: "foldkit worker index",
         });
-        // `runWorkerFirst` is merged over the SPA default, not instead of
-        // it — the deep link still falls back through `env.ASSETS.fetch`.
+        // The derived fallback still answers the deep link through
+        // `env.ASSETS.fetch`.
         yield* expectUrlContains(`${site.url!}/counter/42`, "Foldkit Fixture", {
           timeout: "60 seconds",
           label: "foldkit worker spa fallback",

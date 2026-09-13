@@ -1141,7 +1141,7 @@ const workerAssetConfigForHash = (assets: WorkerProps["assets"]) => {
   if (!assets || typeof assets === "string") {
     return undefined;
   }
-  const { directory: _directory, ...config } = assets;
+  const { directory: _directory, ignore: _ignore, ...config } = assets;
   if (Predicate.hasProperty(config, "hash")) {
     const { hash: _hash, ...configWithoutHash } = config;
     return configWithoutHash;
@@ -2590,7 +2590,7 @@ export const LiveWorkerProvider = () =>
         }
         // `base` shapes the uploaded manifest paths (see `readAssets`); it
         // is alchemy-only and must not leak into the API's asset config.
-        const { directory, hash, base, ...config } = assets;
+        const { directory, hash, base, ignore: _ignore, ...config } = assets;
         // `base` re-keys the manifest without changing the build output, so
         // a caller-supplied hash alone would let the skip path carry a
         // stale root-keyed manifest forward across a `base` change. Salt

@@ -5,6 +5,9 @@ import type { ConfigError } from "effect/Config";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import type * as FileSystem from "effect/FileSystem";
+import type * as Path from "effect/Path";
+import type { PlatformError } from "effect/PlatformError";
 import type * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import { type MemoOptions } from "../../Command/Memo.ts";
@@ -37,7 +40,7 @@ import type { Providers } from "../Providers.ts";
 import type { DispatchNamespace } from "../WorkersForPlatforms/DispatchNamespace.ts";
 import type { WorkflowExport } from "../Workflows/Workflow.ts";
 import type { Reference as ZoneReference } from "../Zone/lookup.ts";
-import { type Assets, type AssetsProps } from "./Assets.ts";
+import { type Assets, type AssetsConfig, type AssetsProps } from "./Assets.ts";
 import {
   resolveAccessContext,
   type WorkerAccessConfig,
@@ -1171,6 +1174,26 @@ export interface WorkerSourceDescriptor {
   readonly options?: unknown;
 }
 
+/** The output directories a Vite build resolved, for {@link ViteOptions.deriveAssets}. */
+export interface ViteBuildDirectories {
+  /** Absolute path of the client environment's output. */
+  readonly clientDirectory: string;
+  /**
+   * Absolute path of the entry environment's output, or `undefined` when
+   * the build emitted no server bundle.
+   */
+  readonly serverDirectory: string | undefined;
+}
+
+/** What {@link ViteOptions.deriveAssets} may adjust on the asset upload. */
+export interface ViteDerivedAssets extends AssetsConfig {
+  /**
+   * Files to leave out of the upload, as `.assetsignore` patterns relative
+   * to the client output directory.
+   */
+  readonly ignore?: ReadonlyArray<string>;
+}
+
 export interface ViteOptions {
   /**
    * Overrides the module that becomes the deployed Worker entry, forwarded
@@ -1219,6 +1242,28 @@ export interface ViteOptions {
           }
         >;
   };
+  /**
+   * Adjusts the asset upload from what the build produced, once it has.
+   *
+   * A framework can leave a description of its build beside the server
+   * bundle — which paths it prerendered, say — and the right asset routing
+   * follows from that rather than from configuration. This hook reads it:
+   * it receives the resolved output directories and returns asset config
+   * to fill in, plus files to leave out of the upload. It also receives
+   * what the resource's own `assets` declared, which wins over anything
+   * the hook returns and which the hook may take into account.
+   *
+   * `Website.Foldkit` uses it to read `foldkit.build.json`. A plain Vite
+   * project has nothing to derive and leaves it unset.
+   */
+  deriveAssets?: (
+    build: ViteBuildDirectories,
+    declared: AssetsConfig | undefined,
+  ) => Effect.Effect<
+    ViteDerivedAssets | undefined,
+    PlatformError,
+    FileSystem.FileSystem | Path.Path
+  >;
   /**
    * Selects which Vite environments make up the deployed Worker, for
    * frameworks that build more than one (e.g. React Server Components).
