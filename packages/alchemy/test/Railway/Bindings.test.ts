@@ -3,10 +3,9 @@ import * as AwsEndpoint from "@distilled.cloud/aws/Endpoint";
 import type { RegionName } from "@distilled.cloud/aws/Region";
 import * as S3 from "@distilled.cloud/aws/s3";
 import { CredentialsFromEnv } from "@distilled.cloud/railway";
-import * as railway from "@distilled.cloud/railway/graphql";
+import * as railway from "@distilled.cloud/railway";
 import * as Alchemy from "@/index.ts";
 import * as Railway from "@/Railway";
-import { RailwayRetryPolicy } from "@/Railway/RetryPolicy.ts";
 import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
@@ -37,13 +36,7 @@ const logLevel = Effect.provideService(
 
 const distilled = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
-    Effect.provide(
-      Layer.mergeAll(
-        RailwayRetryPolicy,
-        CredentialsFromEnv,
-        FetchHttpClient.layer,
-      ),
-    ),
+    Effect.provide(Layer.mergeAll(CredentialsFromEnv, FetchHttpClient.layer)),
   );
 
 class NotReady extends Data.TaggedError("NotReady")<{

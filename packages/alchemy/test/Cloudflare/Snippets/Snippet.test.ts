@@ -226,17 +226,15 @@ test.provider(
         }).pipe(adopt(true)),
       );
       const content = () =>
-        snippets
-          .getContent({ zoneId, snippetName: initial.name })
-          .pipe(
-            Effect.flatMap((download) =>
-              Effect.tryPromise(() =>
-                new Response(download.body, {
-                  headers: { "Content-Type": download.contentType! },
-                }).formData(),
-              ),
+        snippets.getContent({ zoneId, snippetName: initial.name }).pipe(
+          Effect.flatMap((download) =>
+            Effect.tryPromise(() =>
+              new Response(download.body, {
+                headers: { "Content-Type": download.contentType! },
+              }).formData(),
             ),
-          );
+          ),
+        );
       const uploaded = yield* content();
       expect([...uploaded.keys()].sort()).toEqual(["helper.js", "snippet.js"]);
       expect(

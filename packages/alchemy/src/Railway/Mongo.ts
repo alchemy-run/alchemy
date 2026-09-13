@@ -5,8 +5,7 @@ import {
   environmentVolumes,
 } from "./GraphQL.ts";
 import { randomBytes } from "node:crypto";
-import type { VolumeState } from "@distilled.cloud/railway";
-import * as railway from "@distilled.cloud/railway/graphql";
+import * as railway from "@distilled.cloud/railway";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
@@ -19,6 +18,8 @@ import { Resource } from "../Resource.ts";
 import { createRailwayName, matchesAlchemyPhysicalName } from "./Metadata.ts";
 import { ownedProjects, type Project } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
+
+type VolumeState = railway.Scalars["VolumeState"];
 
 const serviceSelection = {
   id: true,

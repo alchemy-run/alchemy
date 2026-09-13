@@ -1,6 +1,5 @@
 import { environmentVolumes, waitUntilDeleted } from "./GraphQL.ts";
-import type { VolumeState } from "@distilled.cloud/railway";
-import * as railway from "@distilled.cloud/railway/graphql";
+import * as railway from "@distilled.cloud/railway";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -14,6 +13,8 @@ import { createRailwayName, matchesAlchemyPhysicalName } from "./Metadata.ts";
 import { MultipleVolumes } from "./MountVolume.ts";
 import { ownedProjects, type Project } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
+
+type VolumeState = railway.Scalars["VolumeState"];
 
 const volumeSelection = {
   id: true,

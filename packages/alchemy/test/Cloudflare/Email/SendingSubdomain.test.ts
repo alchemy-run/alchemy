@@ -50,7 +50,10 @@ const resolveZoneId = Effect.gen(function* () {
 // own out-of-band verification calls by retrying the typed `Forbidden`
 // error (part of each email-sending operation's error union via distilled
 // patches).
-const forbiddenRetrySchedule = Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("4 seconds")]);
+const forbiddenRetrySchedule = Schedule.min([
+  Schedule.exponential("500 millis"),
+  Schedule.spaced("4 seconds"),
+]);
 
 const findByName = (zoneId: string, name: string) =>
   emailSending.listSubdomains.items({ zoneId }).pipe(

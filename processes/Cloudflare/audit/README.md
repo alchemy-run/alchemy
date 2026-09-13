@@ -38,7 +38,7 @@ Plan-gated resources retain typed rejection probes and opt-in deployment fixture
 
 ## SDK maintenance
 
-Request/response mismatches and precise API error tags are fixed in distilled's maintained Smithy patches or the Containers manual specification. The parent change pins supporting SDK commit `955f965fd` on `alchemy-run/distilled` branch `codex/cloudflare-completeness-audit`. For patched generated services, apply `bun scripts/spec-to-smithy.ts --resource SERVICE` and then `bun scripts/generate.ts --resource SERVICE` from the Cloudflare SDK package. Running the generator alone does not apply the patch input. Consumers retain typed SDK requests/errors instead of compensating with untyped response casts or generic error suppression.
+Request/response mismatches and precise API error tags are fixed in distilled's maintained Smithy patches or the Containers manual specification. The parent change pins supporting SDK commit `e6d5e8ffa` on `alchemy-run/distilled` branch `codex/cloudflare-completeness-audit`. For patched generated services, apply `bun scripts/spec-to-smithy.ts --resource SERVICE` and then `bun scripts/generate.ts --resource SERVICE` from the Cloudflare SDK package. Running the generator alone does not apply the patch input. Consumers retain typed SDK requests/errors instead of compensating with untyped response casts or generic error suppression.
 
 ## Final workspace checks
 

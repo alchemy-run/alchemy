@@ -1,6 +1,5 @@
 import { waitUntilDeleted } from "./GraphQL.ts";
-import type { MetricMeasurement, MetricTag } from "@distilled.cloud/railway";
-import * as railway from "@distilled.cloud/railway/graphql";
+import * as railway from "@distilled.cloud/railway";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { isResolved } from "../Diff.ts";
@@ -9,6 +8,9 @@ import { Resource } from "../Resource.ts";
 import { RailwayEnvironment, resolveWorkspace } from "./Environment.ts";
 
 import type { Providers } from "./Providers.ts";
+
+type MetricMeasurement = railway.Scalars["MetricMeasurement"];
+type MetricTag = railway.Scalars["MetricTag"];
 
 const selection = {
   id: true,

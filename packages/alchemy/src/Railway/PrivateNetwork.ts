@@ -2,8 +2,7 @@ import {
   waitUntilDeleted,
   projectServices as fetchProjectServices,
 } from "./GraphQL.ts";
-import type { PrivateNetworkEndpointSyncStatus } from "@distilled.cloud/railway";
-import * as railway from "@distilled.cloud/railway/graphql";
+import * as railway from "@distilled.cloud/railway";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -19,6 +18,9 @@ import {
 } from "./Metadata.ts";
 import { ownedProjects, projectEnvironmentIds } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
+
+type PrivateNetworkEndpointSyncStatus =
+  railway.Scalars["PrivateNetworkEndpointSyncStatus"];
 
 const selection = {
   createdAt: true,

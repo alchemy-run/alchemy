@@ -1,4 +1,4 @@
-import * as railway from "@distilled.cloud/railway/graphql";
+import * as railway from "@distilled.cloud/railway";
 import * as Provider from "@/Provider";
 import * as Railway from "@/Railway";
 import { projectGroups } from "@/Railway/GraphQL.ts";

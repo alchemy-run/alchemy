@@ -1932,5 +1932,5 @@
       "notes": "Reviewed account/name/type identity, live create/get/activation/deletion and paginated cold name lookup. Typed InvalidZoneIdentifier alone maps absence; prior blanket catch removed. Account-global zone ownership and asynchronousactivation cannot be emulated by metadata CRUD. Domain delegation remains external."
     }
   ],
-  "sdkCommit": "955f965fd"
+  "sdkCommit": "e6d5e8ffa"
 }
