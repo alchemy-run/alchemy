@@ -10,7 +10,7 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { ALCHEMY_PHASE } from "../../Phase.ts";
 import { makeFetchRpcStub } from "../../Rpc.ts";
 import { type Fetcher } from "../Fetcher.ts";
-import { DurableObjectState } from "../Workers/DurableObjectState.ts";
+import { DurableObjectState } from "../../Workers/DurableObject.ts";
 import {
   ContainerCrashedError,
   ContainerError,

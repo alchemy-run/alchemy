@@ -4,7 +4,7 @@ import * as SQLiteDoDrizzle from "drizzle-orm/effect-sqlite-do";
 import { migrate } from "drizzle-orm/effect-sqlite-do/migrator";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { DurableObjectState } from "../Cloudflare/Workers/DurableObjectState.ts";
+import { DurableObjectState } from "../Workers/DurableObject.ts";
 
 /**
  * Migrations for {@link DurableObject} — the shape of the `migrations.js`

@@ -1,7 +1,7 @@
 import {
   fromDurableObjectState,
   type DurableObjectAbortOptions,
-} from "@/Cloudflare/Workers/DurableObjectState.ts";
+} from "@/Workers/DurableObject.ts";
 import { RuntimeContext } from "@/RuntimeContext.ts";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";

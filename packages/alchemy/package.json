@@ -325,6 +325,18 @@
       "worker": "./src/Planetscale/*/index.ts",
       "import": "./lib/Planetscale/*/index.js"
     },
+    "./Celld": {
+      "types": "./lib/Celld/index.d.ts",
+      "bun": "./src/Celld/index.ts",
+      "worker": "./src/Celld/index.ts",
+      "import": "./lib/Celld/index.js"
+    },
+    "./Rivet": {
+      "types": "./lib/Rivet/index.d.ts",
+      "bun": "./src/Rivet/index.ts",
+      "worker": "./src/Rivet/index.ts",
+      "import": "./lib/Rivet/index.js"
+    },
     "./Runtime": {
       "types": "./lib/Runtime.d.ts",
       "bun": "./src/Runtime.ts",
@@ -511,6 +523,7 @@
     "alchemy-test": "workspace:*",
     "astro": "catalog:",
     "effect": "catalog:",
+    "esbuild": "catalog:",
     "foldkit": "catalog:",
     "hono": "catalog:",
     "iovalkey": "catalog:",
@@ -526,6 +539,7 @@
     "react-dom": "catalog:",
     "react-router": "catalog:",
     "react-server-dom-webpack": "catalog:",
+    "rivetkit": "2.3.10",
     "solid-js": "catalog:",
     "svelte": "catalog:",
     "tsdown": "catalog:",
@@ -551,9 +565,11 @@
     "drizzle-kit": "catalog:",
     "drizzle-orm": "catalog:",
     "effect": "catalog:",
+    "esbuild": "catalog:",
     "mongodb": "catalog:",
     "mysql2": "catalog:",
     "pg": "catalog:",
+    "rivetkit": "^2.3.10",
     "vite": "catalog:",
     "ws": "catalog:"
   },
@@ -585,6 +601,9 @@
     "drizzle-orm": {
       "optional": true
     },
+    "esbuild": {
+      "optional": true
+    },
     "mongodb": {
       "optional": true
     },
@@ -592,6 +611,9 @@
       "optional": true
     },
     "pg": {
+      "optional": true
+    },
+    "rivetkit": {
       "optional": true
     },
     "vite": {

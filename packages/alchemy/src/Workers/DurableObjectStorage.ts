@@ -1,7 +1,7 @@
 import type * as cf from "@cloudflare/workers-types";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
-import type { RuntimeContext } from "../../RuntimeContext.ts";
+import type { RuntimeContext } from "../RuntimeContext.ts";
 
 // ---------------------------------------------------------------------------
 // SqlStorage — Effect-native wrapper around cf.SqlStorage

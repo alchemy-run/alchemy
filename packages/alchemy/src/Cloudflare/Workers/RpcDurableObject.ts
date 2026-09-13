@@ -18,7 +18,7 @@ import {
   type DurableObject as DurableObjectType,
   type DurableObjectServices,
 } from "./DurableObject.ts";
-import type { DurableObjectState } from "./DurableObjectState.ts";
+import type { DurableObjectState } from "../../Workers/DurableObject.ts";
 import { bindEffectRpc } from "./Rpc.ts";
 import type { Worker as WorkerService } from "./Worker.ts";
 

@@ -9,7 +9,7 @@ import type {
 import { encodeState } from "../../State/StateEncoding.ts";
 import * as Secret from "../SecretsStore/index.ts";
 import { DurableObject } from "../Workers/DurableObject.ts";
-import { DurableObjectState } from "../Workers/DurableObjectState.ts";
+import { DurableObjectState } from "../../Workers/DurableObject.ts";
 import { EncryptionKey } from "./Token.ts";
 
 export default class Store extends DurableObject<Store>()(

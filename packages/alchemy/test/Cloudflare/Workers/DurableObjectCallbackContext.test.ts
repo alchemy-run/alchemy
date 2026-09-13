@@ -1,5 +1,5 @@
-import { fromDurableObjectState } from "@/Cloudflare/Workers/DurableObjectState.ts";
-import { fromDurableObjectStorage } from "@/Cloudflare/Workers/DurableObjectStorage.ts";
+import { fromDurableObjectState } from "@/Workers/DurableObject.ts";
+import { fromDurableObjectStorage } from "@/Workers/DurableObjectStorage.ts";
 import { RuntimeContext } from "@/RuntimeContext.ts";
 import { describe, expect, it } from "alchemy-test";
 import * as Context from "effect/Context";
