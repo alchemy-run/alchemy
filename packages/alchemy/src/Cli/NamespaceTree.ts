@@ -16,11 +16,6 @@ import {
 export type ActionTreeItem = ActionApply | ActionDelete;
 export type ActionVerb = ActionTreeItem["action"]; // "run" | "noop" | "delete"
 
-/** A resource belongs in a review/progress view only when it or a binding changes. */
-export const resourceHasPlannedWork = (item: CRUD): boolean =>
-  item.action !== "noop" ||
-  item.bindings.some((binding) => binding.action !== "noop");
-
 /** No-op actions are dependency markers, not work the user needs to review. */
 export const actionHasPlannedWork = (item: ActionTreeItem): boolean =>
   item.action !== "noop";
@@ -40,7 +35,7 @@ export interface PlanSummaryCounts {
   readonly bindingChanges: number;
 }
 
-/** Count the reviewable work in a plan — one tally behind every summary line. */
+/** Count every resource and task, plus binding changes, for the Plan summary. */
 export const buildPlanSummary = (plan: Plan): PlanSummaryCounts => {
   const allItems = [
     ...Object.values(plan.resources),
@@ -55,16 +50,14 @@ export const buildPlanSummary = (plan: Plan): PlanSummaryCounts => {
     noop: 0,
     replace: 0,
   };
-  for (const item of allItems.filter(resourceHasPlannedWork)) {
+  for (const item of allItems) {
     counts[item.action]++;
   }
   const taskCounts = { run: 0, noop: 0, delete: 0 };
   for (const item of [
     ...Object.values(plan.actions ?? {}),
     ...Object.values(plan.actionDeletions ?? {}),
-  ]
-    .filter((task): task is ActionTreeItem => task !== undefined)
-    .filter(actionHasPlannedWork)) {
+  ].filter((task): task is ActionTreeItem => task !== undefined)) {
     taskCounts[item.action]++;
   }
   const bindingChanges = allItems.reduce(

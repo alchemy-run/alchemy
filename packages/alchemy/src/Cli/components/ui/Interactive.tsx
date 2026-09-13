@@ -19,12 +19,7 @@ import stringWidth from "string-width";
 import type { AwaitExternalOptions, Choice, CycleChoice } from "../types.ts";
 import { theme } from "../../../Util/Theme.ts";
 import { copyToClipboard, truncate } from "../../../Util/Terminal.ts";
-import {
-  useBorderStyle,
-  useCliEnvironment,
-  useGlyphs,
-  useKeyGlyphs,
-} from "./Environment.tsx";
+import { useCliEnvironment, useGlyphs, useKeyGlyphs } from "./Environment.tsx";
 import { KeyBar, Spinner } from "./Feedback.tsx";
 import { Box, overflowListWindow } from "./Layout.tsx";
 import { Link, Text } from "./Typography.tsx";
@@ -168,6 +163,43 @@ function OverflowRow({
   );
 }
 
+/**
+ * List-cursor column shared by every focusable row (prompt lists, the
+ * edit-accounts list, the profile dashboard): the focused row carries the
+ * pointer glyph, every other row a same-width blank so labels stay aligned.
+ * Focus is a shape, not a tint, so it survives ASCII and no-colour terminals.
+ */
+export function Pointer({ focused }: { readonly focused: boolean }) {
+  const glyphs = useGlyphs();
+  return (
+    <Text color={theme.paint.focus} bold>
+      {focused ? glyphs.pointer : " "}
+    </Text>
+  );
+}
+
+/**
+ * Focused rows paint their label in the same brand colour as the pointer so
+ * the cursor reads as one block; unfocused labels stay the plain foreground,
+ * leaving green to status glyphs alone.
+ */
+const focusedLabelColor = (focused: boolean): string | undefined =>
+  focused ? theme.paint.focus : undefined;
+
+/**
+ * Width of the label column when descriptions sit beside labels: the widest
+ * label plus one cell, so every description starts in the same column
+ * (labels and descriptions read as two columns rather than a ragged sentence).
+ * Sticky/heading rows are excluded — they never carry a description.
+ */
+const labelColumnWidth = (
+  labels: ReadonlyArray<{ readonly label: string; readonly sticky?: boolean }>,
+): number =>
+  Math.max(
+    0,
+    ...labels.map(({ label, sticky }) => (sticky ? 0 : stringWidth(label))),
+  ) + 1;
+
 export interface MenuProps<Value> {
   readonly choices: ReadonlyArray<Choice<Value>>;
   readonly cursor: number;
@@ -187,7 +219,6 @@ export function Menu<Value>({
   descriptionPlacement = "inline",
 }: MenuProps<Value>): JSX.Element {
   const glyphs = useGlyphs();
-  const borderStyle = useBorderStyle();
   if (choices.length === 0) return <Text tone="muted">{empty}</Text>;
   // A sticky heading renders outside the window, in addition to the overflow
   // rows the shared windowing already reserves.
@@ -206,6 +237,10 @@ export function Menu<Value>({
     ...(stickyIndex === -1 ? [] : [stickyIndex]),
     ...Array.from({ length: end - start }, (_, offset) => start + offset),
   ];
+  const alignDescriptions =
+    descriptionPlacement === "inline" &&
+    choices.some((choice) => choice.description !== undefined);
+  const labelWidth = alignDescriptions ? labelColumnWidth(choices) : undefined;
   return (
     <Box
       flexDirection="column"
@@ -240,13 +275,7 @@ export function Menu<Value>({
             <Box
               gap={1}
               paddingRight={1}
-              paddingLeft={(choice.indent ?? 0) + (focused ? 1 : 2)}
-              borderStyle={borderStyle}
-              borderLeft={focused}
-              borderRight={false}
-              borderTop={false}
-              borderBottom={false}
-              borderColor={theme.paint.focus}
+              paddingLeft={choice.indent ?? 0}
               aria-role="option"
               aria-label={choice.label}
               aria-state={{
@@ -254,6 +283,7 @@ export function Menu<Value>({
                 selected: selected === undefined ? focused : checked,
               }}
             >
+              <Pointer focused={focused} />
               {selected === undefined ? null : (
                 <Text
                   color={checked ? theme.color.success : theme.color.muted}
@@ -269,22 +299,23 @@ export function Menu<Value>({
                 flexGrow={1}
                 gap={descriptionPlacement === "inline" ? 1 : 0}
               >
-                <Text
-                  bold={focused || choice.sticky || checked}
-                  color={
-                    focused
-                      ? theme.color.accentBright
-                      : choice.tone === "info"
-                        ? theme.color.info
-                        : undefined
-                  }
-                  dimColor={disabled}
+                <Box
+                  width={choice.sticky ? undefined : labelWidth}
+                  flexShrink={0}
                 >
-                  {choice.label}
-                </Text>
+                  <Text
+                    bold={focused || choice.sticky || checked}
+                    color={
+                      focusedLabelColor(focused) ??
+                      (choice.tone === "info" ? theme.color.info : undefined)
+                    }
+                    dimColor={disabled}
+                  >
+                    {choice.label}
+                  </Text>
+                </Box>
                 {choice.description === undefined ? null : (
                   <Text tone="muted" wrap="truncate-end">
-                    {descriptionPlacement === "inline" ? "· " : ""}
                     {choice.description}
                   </Text>
                 )}
@@ -556,11 +587,21 @@ export function CycleList<State>({
   visibleCount = 12,
 }: CycleListProps<State>) {
   const glyphs = useGlyphs();
-  const borderStyle = useBorderStyle();
   const { start, end } = overflowListWindow(
     choices.length,
     cursor,
     visibleCount,
+  );
+  const labelWidth = labelColumnWidth(choices);
+  // The state word ("add", "remove", …) gets its own column too, so the
+  // descriptions line up whether or not a row's current state carries one.
+  const stateWidth = Math.max(
+    0,
+    ...choices.flatMap((choice) =>
+      choice.states.map((state) =>
+        state.label === undefined ? 0 : stringWidth(state.label),
+      ),
+    ),
   );
   return (
     <Box flexDirection="column">
@@ -571,32 +612,25 @@ export function CycleList<State>({
         const focused = index === cursor;
         const color = stateColor(state?.variant);
         return (
-          <Box
-            key={index}
-            gap={1}
-            paddingRight={1}
-            paddingLeft={focused ? 1 : 2}
-            borderStyle={borderStyle}
-            borderLeft={focused}
-            borderRight={false}
-            borderTop={false}
-            borderBottom={false}
-            borderColor={theme.paint.focus}
-          >
+          <Box key={index} gap={1} paddingRight={1}>
+            <Pointer focused={focused} />
             <Text color={color} dimColor={color === undefined}>
               {state?.icon ?? glyphs.bullet}
             </Text>
-            <Text
-              bold={focused}
-              color={focused ? theme.color.accentBright : undefined}
-            >
-              {choice.label}
-            </Text>
-            {state?.label === undefined ? null : (
-              <Text color={color}>{state.label}</Text>
+            <Box width={labelWidth} flexShrink={0}>
+              <Text bold color={focusedLabelColor(focused)}>
+                {choice.label}
+              </Text>
+            </Box>
+            {stateWidth === 0 ? null : (
+              <Box width={stateWidth} flexShrink={0}>
+                {state?.label === undefined ? null : (
+                  <Text color={color}>{state.label}</Text>
+                )}
+              </Box>
             )}
             {choice.description === undefined ? null : (
-              <Text tone="muted">· {choice.description}</Text>
+              <Text tone="muted">{choice.description}</Text>
             )}
           </Box>
         );
@@ -944,12 +978,13 @@ export function PromptFrame({
   keys,
 }: PromptFrameProps) {
   const glyphs = useGlyphs();
-  const borderStyle = useBorderStyle();
-  const heading = (
+  // The active-step glyph shares the heading's brand colour: `◆ question` is
+  // the step being answered, `✓ question` (AnsweredPrompt) one that is done.
+  const heading = (suffix = "") => (
     <Text>
-      <Text color={theme.color.accent}>{glyphs.active}</Text>{" "}
       <Text bold color={theme.color.brand}>
-        {message}
+        {glyphs.active} {message}
+        {suffix}
       </Text>
     </Text>
   );
@@ -958,39 +993,27 @@ export function PromptFrame({
       {layout === "inline" ? (
         <Box flexDirection="column">
           <Box gap={1}>
-            <Text>
-              <Text color={theme.color.accent}>{glyphs.active}</Text>{" "}
-              <Text bold color={theme.color.brand}>
-                {message}:
-              </Text>
-            </Text>
+            {heading(":")}
             <Box flexGrow={1}>{children}</Box>
           </Box>
           {description === undefined ? null : (
-            <Box paddingLeft={2}>
+            <Box paddingLeft={theme.space.indent}>
               <Text tone="muted">{description}</Text>
             </Box>
           )}
         </Box>
       ) : (
         <>
-          {heading}
+          {heading()}
           {description === undefined ? null : (
-            <Box paddingLeft={2}>
+            <Box paddingLeft={theme.space.indent}>
               <Text tone="muted">{description}</Text>
             </Box>
           )}
-          <Box
-            marginTop={1}
-            paddingLeft={1}
-            flexDirection="column"
-            borderStyle={borderStyle}
-            borderLeft
-            borderRight={false}
-            borderTop={false}
-            borderBottom={false}
-            borderColor={theme.paint.focus}
-          >
+          {/* Children sit directly under the heading, indented like the
+              answered lines' text; grouping is carried by indentation, not
+              by a rail. */}
+          <Box paddingLeft={theme.space.indent} flexDirection="column">
             {children}
           </Box>
         </>

@@ -12,6 +12,7 @@ import type * as Serverless from "../../Serverless/index.ts";
 import type {
   DurableObjectBindingDeclaration,
   DurableObjectExport,
+  DurableObjectStubOptions,
 } from "../../Workers/DurableObject.ts";
 import { WorkerEnvironment } from "../../Workers/Worker.ts";
 import { makeRequestHandler } from "./HttpServer.ts";
@@ -46,7 +47,7 @@ export const makeWorkerRuntimeContext = (id: string): WorkerRuntimeContext => {
         Effect.map(Option.getOrUndefined),
         // Key is already canonical (see RuntimeContext.sanitizeKey). Read
         // straight from `WorkerEnvironment` — see `unpackEnvValue` for why
-        // this must never resolve through `Config.string`.
+        // this must never resolve through `Config.String`.
         Effect.map((env) => unpackEnvValue(env?.[key])),
       ) as any,
     set: (key: string, output: Output.Output) =>
@@ -97,7 +98,11 @@ export const makeWorkerRuntimeContext = (id: string): WorkerRuntimeContext => {
         },
       ],
     }),
-    durableObjectStub: (nativeStub: unknown) => makeRpcStub(nativeStub),
+    durableObjectStub: (
+      nativeStub: unknown,
+      _namespace: string,
+      options: DurableObjectStubOptions,
+    ) => makeRpcStub(nativeStub, { errors: options.errors }),
     planServices: Layer.mergeAll(
       Layer.succeed(WorkerEnvironment, {}),
       // Lets the init closure `yield*` WorkerExecutionContext during plan;

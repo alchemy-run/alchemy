@@ -169,7 +169,7 @@ export type Container<Id extends string = string> = Named<Id> & {
  * runtime. Keeping them separate ensures the bundler only includes
  * the tiny class in the DO's output.
  *
- * See the [Platform concept](/infrastructure-as-effects/functions-and-servers)
+ * See the [Runtime concept](/infrastructure-as-effects/runtime)
  * page for how this fits into the async / effect / layer
  * progression.
  * ### Container Layer

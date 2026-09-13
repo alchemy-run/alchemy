@@ -82,7 +82,7 @@ const releaseTriple = Effect.sync(() => {
  */
 export const resolveEsbuild: Effect.Effect<string, EsbuildNotFoundError> =
   Effect.gen(function* () {
-    const custom = yield* Config.option(Config.string("CELLD_ESBUILD")).pipe(
+    const custom = yield* Config.option(Config.String("CELLD_ESBUILD")).pipe(
       Effect.orElseSucceed(() => Option.none<string>()),
     );
     if (Option.isSome(custom)) {
@@ -124,8 +124,8 @@ export const acquireCelld = (
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    const home = yield* Config.string("HOME").pipe(
-      Config.orElse(() => Config.string("USERPROFILE")),
+    const home = yield* Config.String("HOME").pipe(
+      Config.orElse(() => Config.String("USERPROFILE")),
       Effect.orElseSucceed(() => "."),
     );
     const dir = path.join(home, ".alchemy", "bin", "celld", version);
@@ -231,7 +231,7 @@ export const celldDeploy = (
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const bin = yield* acquireCelld(options.version);
     const esbuild = yield* resolveEsbuild;
-    const pathEnv = yield* Config.option(Config.string("PATH")).pipe(
+    const pathEnv = yield* Config.option(Config.String("PATH")).pipe(
       Effect.orElseSucceed(() => Option.none<string>()),
     );
 

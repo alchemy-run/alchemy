@@ -1,0 +1,186 @@
+---
+title: Auth
+description: The engine holds no users, no credentials, and no policy. The middleware of the API that mounts the routes decides who may call them, and Git.Hooks decides which refs may move.
+---
+
+Authentication and authorization happen outside the engine, in the
+`HttpApi` middleware you own. The engine's routes declare no
+middleware and no auth errors; `Git.Api.middleware(Yours)` puts one in
+front of every git route, and the engine never sees a credential. The
+one decision a middleware cannot make, which refs a push may move, is
+git's pre-receive hook, and `Git.Hooks` is that hook as a service.
+
+| | Decides | Runs |
+| --- | --- | --- |
+| your middleware | who may call which route | in front of the route, once per request |
+| `Git.Hooks` | which refs may move, and for whom | after the pack is parsed, before any ref moves |
+
+## The middleware
+
+An `HttpApiMiddleware.Service`, declared and implemented by you, put
+on the API you derive from `Git.Api`:
+
+```typescript
+export class Authenticated extends HttpApiMiddleware.Service<
+  Authenticated,
+  { provides: Session; requires: Alchemy.RuntimeContext }
+>()("app/Authenticated", { error: Unauthorized }) {}
+
+export class AppApi extends Git.Api.middleware(Authenticated) {}
+```
+
+`provides` is what the middleware puts in context for the routes
+behind it, your own service. `requires: Alchemy.RuntimeContext` lets
+the middleware use the Worker's bindings and resources. `error` is
+what it may answer with, so the typed client sees a `401` as
+`Unauthorized`.
+
+The implementation is a Layer. It runs once, when the Worker starts,
+and that is where resources and services are yielded; what it returns
+runs once per request:
+
+```typescript
+export const AuthenticatedLive = Layer.effect(
+  Authenticated,
+  Effect.gen(function* () {
+    const auth = yield* Auth; // Better Auth, or whatever knows your users
+    return (httpEffect, { endpoint }) =>
+      Effect.gen(function* () {
+        const user = yield* resolve; // a user, or undefined
+        if (user !== undefined) {
+          return yield* Effect.provideService(httpEffect, Session, { user });
+        }
+        return unauthorized;
+      });
+  }),
+);
+```
+
+Every question about who may do what to a repository is answered
+here: the tutorial's middleware lets a signed-in user act under their
+own owner name (`HttpRouter.params` has `owner` on every repository
+route), a team member too, and refuses the rest. A `git` client sends
+HTTP Basic with the credential in the password field;
+`HttpApiBuilder.securityDecode(HttpApiSecurity.basic)` reads it. A refusal that carries `WWW-Authenticate` makes `git` ask for a
+password:
+
+```typescript
+const unauthorized = HttpServerResponse.jsonUnsafe(
+  { _tag: "Unauthorized" },
+  { status: 401, headers: { "www-authenticate": 'Basic realm="git"' } },
+);
+```
+
+[Getting Started](/git/getting-started) is the whole thing with one
+shared secret; [Part 3](/git/tutorial/part-3) builds it with Better
+Auth sessions and API keys.
+
+## Public repositories
+
+`public` is a flag the engine stores on a repository and reports. What
+it grants is the middleware's decision. `Git.isRead` says whether a
+request to one of the engine's routes only reads: the REST and raw
+reads, the GitHub facade's `GET`s, the ref advertisement for a fetch,
+and `git-upload-pack`. The Registry says whether the repository is
+public:
+
+```typescript
+const registry = yield* Git.RegistryStore; // in the Layer
+
+// per request
+const request = yield* HttpServerRequest;
+const { owner = "", repo = "" } = yield* HttpRouter.params;
+const entry = yield* registry
+  .resolve(owner.toLowerCase(), repo.toLowerCase().replace(/\.git$/, ""))
+  .pipe(Effect.catchTag("StoreError", () => Effect.succeed(undefined)));
+if (Git.isRead(endpoint, request) && (entry === undefined || entry.public)) {
+  return yield* Effect.provideService(httpEffect, Session, { user: null });
+}
+```
+
+Letting an anonymous read of a repository that does not exist reach
+the route means its `404` confirms nothing about private ones, which
+answer `401`.
+
+## Your routes
+
+A route of your own declares the middleware it relies on, and its
+handler reads what the middleware provided:
+
+```typescript
+export class Me extends Http.get<Me>()("me", "/api/v1/me", {
+  success: User,
+  error: Unauthorized,
+  middleware: [Authenticated],
+}) {}
+
+export const MeLive = Me.make(
+  Effect.succeed(() =>
+    Effect.gen(function* () {
+      const { user } = yield* Session;
+      if (user === null) return yield* new Unauthorized();
+      return user;
+    }),
+  ),
+);
+```
+
+The engine's route classes do not declare your middleware. A handler
+that replaces one of them, or a hook, reads your service as an option:
+
+```typescript
+const session = yield* Effect.serviceOption(Session);
+const user = Option.isSome(session) ? session.value.user : null;
+```
+
+## Hooks
+
+```typescript
+interface HooksShape {
+  preReceive(input: {
+    repo: RepoMetaData;
+    updates: ReadonlyArray<{ ref: string; oldOid: string; newOid: string }>;
+  }): Effect<ReadonlyArray<{ ref: string; reason: string }>>;
+}
+```
+
+`preReceive` runs on `git push`, on the REST ref writes, and on a pull
+request merge, with the parsed updates: `oldOid` is all zeros for a
+create, `newOid` all zeros for a delete. It returns the refs to refuse
+with a reason; an empty array accepts. A push with any refused ref is
+rejected as a whole, and git reports the reason per ref. REST and a
+merge answer a typed `403`, `HookRejected`. It runs in the Worker,
+inside the request, so whatever your middleware provided is in
+context:
+
+```typescript
+export const ProtectedMain = Layer.succeed(Git.Hooks, {
+  preReceive: ({ repo, updates }) =>
+    Effect.gen(function* () {
+      const session = yield* Effect.serviceOption(Session);
+      const user = Option.isSome(session) ? session.value.user : null;
+      return updates.flatMap((update) =>
+        update.ref === "refs/heads/main" && user?.id !== repo.owner
+          ? [{ ref: update.ref, reason: "only the owner moves main" }]
+          : [],
+      );
+    }),
+});
+```
+
+`Git.Hooks` is optional; without it every update is accepted, and
+`Git.HooksNone` says so explicitly. A hook may be a `Layer.effect` that
+reads your own data. Who may write to a repository at all is the
+middleware's question, as the team rule in [Part 4](/git/tutorial/part-4)
+shows. A hook that must see the commit a merge writes, or react after a
+push, decorates `Git.RepoStore` instead; [Repository](/git/blocks/repositories)
+shows it.
+
+## What the engine keeps
+
+The push pipeline's internal hash route is not part of `Git.Api`. It
+is `Git.InternalApi`, which `Git.Server` mounts beside your API and
+outside your middleware, and it authenticates with a deploy-time
+random secret no user holds. There is no tokens table, no admin key,
+and no principal. Credentials are your authentication's, and only your
+authentication ever sees them.

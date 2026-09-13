@@ -7,13 +7,14 @@ import * as Schema from "effect/Schema";
 export const makeFakeProfileStore = (
   overrides?: Partial<ProfileStore["Service"]>,
 ): ProfileStore["Service"] => ({
-  readManifest: Effect.succeed({ version: 2, profiles: {} }),
+  readManifest: Effect.succeed({ version: 3, profiles: {} }),
   getProfile: () => Effect.succeed(undefined),
   ensureProfile: () => Effect.succeed({ id: "fake", providers: {} }),
   createProfile: () => Effect.void,
   renameProfile: () => Effect.void,
   current: Effect.succeed({ name: "default", source: "configuration" }),
-  setProfile: () => Effect.void,
+  setProviderConfig: () => Effect.void,
+  deleteProviderConfig: () => Effect.succeed(false),
   deleteProfile: () => Effect.succeed(false),
   loadProviderConfig: <Config extends { method: string }>() =>
     Effect.succeed({ method: "stored" } as Config),

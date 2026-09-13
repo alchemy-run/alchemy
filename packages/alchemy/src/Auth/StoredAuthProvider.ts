@@ -5,13 +5,11 @@ import * as Interaction from "../Interaction.ts";
 import {
   AuthError,
   AuthProviderLayer,
-  NeedsReauth,
-  refreshHint,
   type ConfigureField,
   type ConfigureMethod,
   type EnvironmentVariable,
 } from "./AuthProvider.ts";
-import { CredentialsStore, displayRedacted } from "./Credentials.ts";
+import { displayRedacted } from "./Credentials.ts";
 import { mapPromptCancellation } from "./Env.ts";
 
 /**
@@ -41,8 +39,8 @@ export const storedSecret = (value: StoredValue | undefined) =>
  * Everything needed to generate a complete single-method ("stored")
  * {@link AuthProviderImpl} for a provider whose credential is a token (or a
  * small set of fields) the user pastes once: prompts, flag-driven
- * configuration, schema-validated persistence, login/logout, structured
- * details, and typed {@link NeedsReauth} failures.
+ * configuration, schema-validated inline values, login/logout, and
+ * structured details.
  *
  * Providers with several auth methods (browser OAuth, SSO) don't fit this
  * factory — they hand-roll the impl and may still reuse
@@ -51,8 +49,6 @@ export const storedSecret = (value: StoredValue | undefined) =>
 export interface StoredAuthProviderConfig<Resolved> {
   /** Registry name, e.g. `"Neon"`. */
   readonly provider: string;
-  /** Credential file key, e.g. `"neon-stored"`. */
-  readonly storageKey: string;
   /** The fields collected interactively or via `--set`. */
   readonly fields: ReadonlyArray<ConfigureField>;
   /**
@@ -73,13 +69,11 @@ export interface StoredAuthProviderConfig<Resolved> {
   readonly environment?: ReadonlyArray<EnvironmentVariable>;
 }
 
-/** Manifest-entry schema for factory-made stored credential providers. */
-export const StoredAuthConfigSchema = Schema.Struct({
-  method: Schema.Literal("stored"),
-});
-
-/** The config shape every factory-made provider persists in the manifest. */
-export type StoredAuthConfig = typeof StoredAuthConfigSchema.Type;
+/** Inline-values type for factory-made static-token providers. */
+export type StoredAuthConfig = {
+  readonly method: "stored";
+  readonly [key: string]: StoredValue | undefined;
+};
 
 /**
  * Validate flag-provided values against the field specs: unknown keys,
@@ -173,14 +167,13 @@ export const collectFieldValues = (
   });
 
 /**
- * Build a registration Layer (plus the derived stored-credentials schema)
+ * Build a registration Layer (plus the derived inline-values schema)
  * for a single-method stored-credential provider.
  *
  * ```ts
  * export const { layer: NeonAuth, storedSchema: NeonStoredCredentials } =
  *   makeStoredAuthProvider({
  *     provider: "Neon",
- *     storageKey: "neon-stored",
  *     fields: [{ name: "apiKey", label: "Neon API Key", secret: true }],
  *     toResolved: (values, source) => ({ ... }),
  *     readEnvironment: ...,
@@ -191,40 +184,44 @@ export const collectFieldValues = (
 export const makeStoredAuthProvider = <Resolved>(
   config: StoredAuthProviderConfig<Resolved>,
 ) => {
-  const { provider, storageKey, fields } = config;
+  const { provider, fields } = config;
+
+  const fieldSchemas = Object.fromEntries(
+    fields.map((field) => [
+      field.name,
+      field.optional ? Schema.optional(Schema.String) : Schema.String,
+    ]),
+  );
 
   const storedSchema = Schema.Struct(
-    Object.fromEntries(
-      fields.map((field) => [
-        field.name,
-        field.optional
-          ? Schema.optional(
-              field.secret
-                ? Schema.RedactedFromValue(Schema.String)
-                : Schema.String,
-            )
-          : field.secret
-            ? Schema.RedactedFromValue(Schema.String)
-            : Schema.String,
-      ]),
-    ),
+    fieldSchemas,
     // SAFETY: each generated property schema corresponds exactly to the
     // ConfigureField entry used to construct StoredValues above.
-  ) as Schema.Codec<StoredValues, Record<string, string | undefined>>;
+  ) as Schema.Codec<StoredValues>;
+
+  const configSchema = Schema.Struct({
+    method: Schema.Literal("stored"),
+    ...fieldSchemas,
+  }) as Schema.Codec<StoredAuthConfig>;
 
   const layer = AuthProviderLayer<StoredAuthConfig, Resolved>()(
     provider,
     Effect.gen(function* () {
       const interaction = Interaction.accessors;
-      const store = yield* CredentialsStore;
-
-      const persist = (profileName: string, values: StoredValues) =>
+      const persist = (_profileName: string, values: StoredValues) =>
         Effect.gen(function* () {
           const complete = config.complete?.(values) ?? Effect.succeed(values);
           const completed = yield* complete;
-          yield* store.write(profileName, storageKey, storedSchema, completed);
           yield* interaction.output.success(`${provider}: credentials saved.`);
-          return { method: "stored" as const };
+          return {
+            method: "stored" as const,
+            ...Object.fromEntries(
+              Object.entries(completed).map(([key, value]) => [
+                key,
+                storedValueText(value),
+              ]),
+            ),
+          };
         });
 
       const configure = (profileName: string) =>
@@ -242,77 +239,41 @@ export const makeStoredAuthProvider = <Resolved>(
             )
           : Effect.fail(
               new AuthError({
-                message: `${provider}: unknown method '${input.method}'. Only 'stored' is supported.`,
+                message: `${provider}: unknown method '${input.method}'. Valid methods: stored.`,
               }),
             );
 
-      const readStored = (profileName: string) =>
-        store.read(profileName, storageKey, storedSchema).pipe(
-          Effect.flatMap(
-            Effect.fn(function* (values) {
-              if (values != null) return values;
-              return yield* Effect.fail(
-                new NeedsReauth({
-                  provider,
-                  profile: profileName,
-                  message: `${provider} stored credentials not found. ${refreshHint(provider, profileName)}`,
-                }),
-              );
-            }),
-          ),
-        );
+      const read = (_profileName: string, values: StoredAuthConfig) =>
+        Effect.succeed(config.toResolved(values, "stored"));
 
-      const read = (profileName: string, _config: StoredAuthConfig) =>
-        readStored(profileName).pipe(
-          Effect.map((values) => config.toResolved(values, "stored")),
-        );
+      const login = (_profileName: string, values: StoredAuthConfig) =>
+        Effect.succeed(values);
 
-      const login = (profileName: string, _config: StoredAuthConfig) =>
-        store
-          .read(profileName, storageKey, storedSchema)
-          .pipe(
-            Effect.flatMap((values) =>
-              values == null
-                ? configure(profileName).pipe(Effect.asVoid)
-                : Effect.void,
-            ),
-          );
+      const logout = (_profileName: string, _config: StoredAuthConfig) =>
+        Effect.void;
 
-      const logout = (profileName: string, _config: StoredAuthConfig) =>
-        store
-          .delete(profileName, storageKey)
-          .pipe(
-            Effect.andThen(
-              interaction.output.success(
-                `${provider}: stored credentials removed`,
-              ),
-            ),
-          );
-
-      const details = (profileName: string, _config: StoredAuthConfig) =>
-        readStored(profileName).pipe(
-          Effect.map((values) => ({
-            lines: fields.flatMap((field) => {
-              const value = values[field.name];
-              if (value === undefined) return [];
-              return [
-                {
-                  key: field.name,
-                  value: field.secret
-                    ? displayRedacted(storedSecret(value) ?? Redacted.make(""))
-                    : (storedValueText(value) ?? ""),
-                },
-              ];
-            }),
-          })),
-        );
+      const details = (_profileName: string, values: StoredAuthConfig) =>
+        Effect.succeed({
+          lines: fields.flatMap((field) => {
+            const value = values[field.name];
+            if (value === undefined) return [];
+            return [
+              {
+                key: field.name,
+                value: field.secret
+                  ? displayRedacted(storedSecret(value) ?? Redacted.make(""))
+                  : (storedValueText(value) ?? ""),
+              },
+            ];
+          }),
+        });
 
       const configureMethods: ReadonlyArray<ConfigureMethod> = [
         { method: "stored", fields },
       ];
 
       return {
-        configSchema: StoredAuthConfigSchema,
+        configSchema,
         configure,
         configureWith,
         configureMethods,

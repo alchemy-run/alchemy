@@ -12,10 +12,11 @@ import type * as cf from "@cloudflare/workers-types";
 import type * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import type * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import { fromCloudflareFetcher } from "../Cloudflare/Fetcher.ts";
-import { makeFetchRpcStub } from "../Rpc.ts";
+import { makeFetchRpcStub, reviveRpcStubErrors } from "../Rpc.ts";
 import type {
   DurableObjectBindingDeclaration,
   DurableObjectStubLike,
+  DurableObjectStubOptions,
 } from "../Workers/DurableObject.ts";
 
 export {
@@ -46,14 +47,21 @@ export const durableObjectBinding = (
  * JSRPC dispatch stalls on Proxy-returning constructors), and the cell's
  * bridge serves the RPC protocol on its own `fetch`.
  */
-export const durableObjectStub = (nativeStub: DurableObjectStubLike) => {
+export const durableObjectStub = (
+  nativeStub: DurableObjectStubLike,
+  _namespace: string,
+  options: DurableObjectStubOptions,
+) => {
   const fetcher = fromCloudflareFetcher(nativeStub as unknown as cf.Fetcher);
-  return makeFetchRpcStub<Record<string, unknown>>({
-    fetch: (request: HttpClientRequest.HttpClientRequest) =>
-      fetcher.fetch(request),
-    base: {
-      fetch: (request: HttpServerRequest.HttpServerRequest) =>
+  return reviveRpcStubErrors(
+    makeFetchRpcStub<Record<string, unknown>>({
+      fetch: (request: HttpClientRequest.HttpClientRequest) =>
         fetcher.fetch(request),
-    },
-  });
+      base: {
+        fetch: (request: HttpServerRequest.HttpServerRequest) =>
+          fetcher.fetch(request),
+      },
+    }),
+    options.errors,
+  );
 };

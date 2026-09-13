@@ -1,9 +1,7 @@
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
-import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import * as Result from "effect/Result";
 import {
   AuthError,
   getAuthProvider,
@@ -51,8 +49,11 @@ export const resolveProfileName = Effect.fn(function* (
 
 /**
  * The shared preamble of every per-cloud `fromAuthProvider` /
- * `fromEnvironment` layer. Precedence remains CI environment, explicitly
- * exported local environment credentials, then the selected profile.
+ * `fromEnvironment` layer. Precedence: environment credentials (process
+ * environment plus `.env` / `--env-file`) whenever the provider's declared
+ * contract is fully present — CI or not, selected profile or not — then, in
+ * CI, the provider's environment resolution alone (profiles do not exist
+ * there), otherwise the selected profile.
  */
 export const resolveProviderConfig = <
   C extends { method: string } = any,
@@ -62,61 +63,12 @@ export const resolveProviderConfig = <
 ) =>
   Effect.gen(function* () {
     const auth = yield* getAuthProvider<C, Credentials>(providerName);
-    const ci = yield* Config.boolean("CI").pipe(Config.withDefault(false));
-    const explicitProfile = yield* Config.option(ALCHEMY_PROFILE).pipe(
-      Effect.mapError(
-        (cause) =>
-          new ProfileError({
-            message: "Could not resolve ALCHEMY_PROFILE.",
-            cause,
-          }),
-      ),
-    );
-    if (ci) {
-      // In CI, environment credentials come FIRST: a satisfied env
-      // contract wins even when ALCHEMY_PROFILE is set (CI must never
-      // read local profile state on the strength of a leaked variable).
-      // But env-first is not env-ONLY: the alchemy-test runner defaults
-      // CI to "true" locally (to force tools down non-interactive
-      // paths), so when the env contract is NOT satisfied and a profile
-      // was explicitly selected, fall through to that profile.
-      // Probe by ATTEMPTING the env read (through Config, so provided
-      // ConfigProviders are honored — process.env alone is not the
-      // contract's source of truth).
-      const envSatisfied =
-        auth.readEnvironment !== undefined &&
-        Result.isSuccess(yield* Effect.result(auth.readEnvironment));
-      if (envSatisfied) {
-        return {
-          auth,
-          profileName: undefined,
-          config: undefined,
-          resolve: auth.readEnvironment!,
-          source: "environment" as const,
-        };
-      }
-      if (Option.isNone(explicitProfile)) {
-        return yield* Effect.fail(
-          new AuthError({
-            message:
-              auth.readEnvironment === undefined
-                ? `Auth provider '${providerName}' does not support environment credentials in CI.`
-                : `Auth provider '${providerName}' has no environment credentials in CI (and no explicit profile was selected).`,
-          }),
-        );
-      }
-    }
-    const profile = yield* ProfileStore;
-    const configuredProfile = explicitProfile;
-    if (
-      Option.isNone(configuredProfile) &&
-      auth.readEnvironment !== undefined
-    ) {
-      const used = yield* Effect.sync(() =>
-        presentEnvironment(auth.environment, process.env),
-      );
+    if (auth.readEnvironment !== undefined) {
+      const used = yield* presentEnvironment(auth.environment);
       if (used !== undefined) {
-        yield* warnEnvironmentCredentials(providerName, used);
+        if (!(yield* SuppressMissingProviderConfig)) {
+          yield* auth.logEnvironmentCredentials(used);
+        }
         return {
           auth,
           profileName: undefined,
@@ -126,6 +78,24 @@ export const resolveProviderConfig = <
         };
       }
     }
+    const ci = yield* Config.Boolean("CI").pipe(Config.withDefault(false));
+    if (ci) {
+      if (auth.readEnvironment === undefined) {
+        return yield* Effect.fail(
+          new AuthError({
+            message: `Auth provider '${providerName}' does not support environment credentials in CI.`,
+          }),
+        );
+      }
+      return {
+        auth,
+        profileName: undefined,
+        config: undefined,
+        resolve: auth.readEnvironment,
+        source: "environment" as const,
+      };
+    }
+    const profile = yield* ProfileStore;
     const selection = yield* profile.current;
     const profileName = selection.name;
     const config = yield* profile.loadProviderConfig(auth, profileName);
@@ -133,22 +103,19 @@ export const resolveProviderConfig = <
       auth,
       profileName,
       config,
-      resolve: auth.read(profileName, config),
+      resolve: auth.read(profileName, config, (updated) =>
+        profile.setProviderConfig(profileName, providerName, updated).pipe(
+          Effect.mapError(
+            (cause) =>
+              new AuthError({
+                message: `${providerName}: could not persist refreshed credentials for profile '${profileName}'.`,
+                cause,
+              }),
+          ),
+        ),
+      ),
       source: "profile" as const,
     };
-  });
-
-const warnEnvironmentCredentials = (
-  provider: string,
-  used: ReadonlyArray<string>,
-) =>
-  Effect.gen(function* () {
-    if (yield* SuppressMissingProviderConfig) return;
-    yield* Console.warn(
-      `${provider}: using credentials from environment variables (${used.join(", ")}) — ` +
-        `the '${DEFAULT_PROFILE_NAME}' profile was not used. Pass --profile <name> (or unset ` +
-        "the variables) to use stored profile credentials.",
-    );
   });
 
 /** Let an explicit profile override configured selection without disturbing other keys. */

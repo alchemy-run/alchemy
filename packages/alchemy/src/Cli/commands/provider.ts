@@ -12,7 +12,7 @@ import { config, envFile, profile } from "./flags.ts";
 import { instrumentCommand } from "./instrument.ts";
 
 /** Optional repeatable filter for checking a subset of registered providers. */
-const checkedProviders = Flag.string("provider").pipe(
+const checkedProviders = Flag.String("provider").pipe(
   Flag.withDescription(
     "Check only this provider (repeatable; defaults to every provider the stack registers)",
   ),

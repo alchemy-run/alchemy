@@ -23,6 +23,7 @@ import {
 import { WorkerEnvironment } from "../../Workers/Worker.ts";
 import type { Container } from "../Containers/Container.ts";
 import { isWorker, type Worker, type WorkerServices } from "./Worker.ts";
+import { type RpcErrorClass } from "./Rpc.ts";
 
 // The engine-invariant Durable Object core (state contract, export record,
 // hosting seam) lives in `src/Workers/DurableObject.ts`; re-exported here so
@@ -41,6 +42,7 @@ export {
   type DurableObjectNamespaceLike,
   type DurableObjectShape,
   type DurableObjectStubLike,
+  type DurableObjectAbortOptions,
 } from "../../Workers/DurableObject.ts";
 
 export type DurableObjectId = cf.DurableObjectId;
@@ -100,6 +102,7 @@ export interface DurableObject<
 export type DurableObjectServices =
   | DurableObject
   | DurableObjectState
+  | DurableObjectScope
   | WorkerServices
   | WorkerEnvironment
   | PlatformServices;
@@ -233,6 +236,24 @@ export interface DurableObjectProps {
     | DurableObjectTransferSource
     | DurableObjectTransferSource[]
     | undefined;
+  /**
+   * Tagged-error classes this Durable Object's RPC methods can fail with.
+   *
+   * Effect failures crossing the Worker↔DO RPC boundary are serialized to
+   * plain `{ _tag, ...fields }` objects; declaring the classes here lets
+   * the calling side reconstruct real instances (both sides import this
+   * same class declaration, so the schema is shared by construction) —
+   * `Effect.catchTag`, `instanceof`, and schema encoders (e.g. HttpApi
+   * error responses) then all see the class the DO actually failed with.
+   *
+   * ```typescript
+   * export class Repo extends Cloudflare.DurableObject<Repo, RepoShape>()(
+   *   "Repo",
+   *   { errors: [RepoNotFound, StoreError] },
+   * ) {}
+   * ```
+   */
+  errors?: ReadonlyArray<RpcErrorClass> | undefined;
   // environment?: string | undefined;
   // sqlite?: boolean | undefined;
   // namespaceId?: string | undefined;
@@ -246,7 +267,7 @@ export interface DurableObjectClass extends Effect.Effect<
   <Self, Shape>(): {
     <Name extends string>(
       name: Name,
-      props?: Pick<DurableObjectProps, "transferredFrom">,
+      props?: Pick<DurableObjectProps, "transferredFrom" | "errors">,
     ): Effect.Effect<DurableObject<Self>, never, Worker | Self> & {
       new (_: never): Shape & {
         /** @internal */
@@ -268,8 +289,12 @@ export interface DurableObjectClass extends Effect.Effect<
             RuntimeContext | DurableObjectState | Scope
           >,
           never,
-          DurableObjectServices | Req
+          Req
         >,
+        // `Exclude` (rather than `DurableObjectServices | Req` inference)
+        // so ambient DO services resolved in the outer init effect never
+        // leak into the host Worker's requirements — mirrors Worker.make's
+        // `Exclude<InitReq, Self | WorkerServices>`.
       ): Layer.Layer<Self, never, Worker | Exclude<Req, DurableObjectServices>>;
     };
   };
@@ -344,7 +369,7 @@ export class DurableObjectScope extends Context.Service<
  * ```
  *
  * There are two ways to define a Durable Object. See the
- * [Functions & Servers](/infrastructure-as-effects/functions-and-servers) page
+ * [Runtime](/infrastructure-as-effects/runtime) page
  * for the full explanation.
  *
  * - **Inline** — Effect implementation passed directly, single file.
@@ -699,8 +724,8 @@ export class DurableObjectScope extends Context.Service<
  * Durable Objects support WebSocket hibernation — the runtime can
  * evict the object from memory while keeping connections open. Use
  * `Cloudflare.upgrade()` to accept a connection, and return
- * `webSocketMessage` / `webSocketClose` handlers to process events
- * when the object wakes back up.
+ * `webSocketMessage` / `webSocketClose` / `webSocketError` handlers to
+ * process events when the object wakes back up.
  *
  * **Example:** Accepting a WebSocket connection
  * ```typescript
@@ -731,6 +756,13 @@ export class DurableObjectScope extends Context.Service<
  *     reason: string,
  *   ) {
  *     yield* ws.close(code, reason);
+ *   }),
+ *   webSocketError: Effect.fn(function* (
+ *     ws: Cloudflare.WebSocket,
+ *     error: unknown,
+ *   ) {
+ *     // the runtime closes the socket afterwards; clear its session here
+ *     ws.serializeAttachment(null);
  *   }),
  * };
  * ```
@@ -801,6 +833,40 @@ export class DurableObjectScope extends Context.Service<
  *       }
  *     }),
  * };
+ * ```
+ *
+ * ### Aborting a Durable Object
+ * `state.abort(reason?, options?)` forcibly resets the isolate. By
+ * default an in-progress alarm retries after the reset. Pass
+ * `{ retryAlarm: false }` when the alarm should stop instead — for
+ * example an alarm that deletes storage so the constructor does not
+ * recreate it.
+ *
+ * **Example:** Stop alarm retries after cleanup
+ * ```typescript
+ * export class CleanupTask extends Cloudflare.DurableObject<CleanupTask>()(
+ *   "CleanupTask",
+ *   Effect.gen(function* () {
+ *     const state = yield* Cloudflare.DurableObjectState;
+ *
+ *     return Effect.gen(function* () {
+ *       // This won't be re-run after the alarm is aborted
+ *       yield* state.storage.sql.exec(`
+ *         CREATE TABLE IF NOT EXISTS foo (
+ *           id INTEGER PRIMARY KEY
+ *         )
+ *       `);
+ *
+ *       return {
+ *         alarm: () =>
+ *           Effect.gen(function* () {
+ *             yield* state.storage.sql.exec("DROP TABLE foo");
+ *             yield* state.abort("Cleanup complete", { retryAlarm: false });
+ *           }),
+ *       };
+ *     });
+ *   }),
+ * ) {}
  * ```
  *
  * ### Using from a Worker
@@ -1123,6 +1189,7 @@ export const DurableObject: DurableObjectClass = taggedFunction(
       transferredFrom?:
         | DurableObjectTransferSource
         | DurableObjectTransferSource[],
+      errors?: ReadonlyArray<RpcErrorClass>,
     ) =>
       Effect.gen(function* () {
         // The ambient host is whatever NATIVE worker resource is being
@@ -1158,7 +1225,7 @@ export const DurableObject: DurableObjectClass = taggedFunction(
                 `DurableObject '${namespace}' can only be called at runtime`,
               );
             }
-            return stub(native.getByName(name, options));
+            return stub(native.getByName(name, options), { errors });
           },
           // newUniqueId: () => use((ns) => ns.newUniqueId()),
           // idFromName: (name: string) => use((ns) => ns.idFromName(name)),
@@ -1178,7 +1245,7 @@ export const DurableObject: DurableObjectClass = taggedFunction(
     const classProps =
       isClassForm && !Effect.isEffect(propsOrImpl)
         ? (propsOrImpl as
-            | Pick<DurableObjectProps, "transferredFrom">
+            | Pick<DurableObjectProps, "transferredFrom" | "errors">
             | undefined)
         : undefined;
 
@@ -1195,7 +1262,11 @@ export const DurableObject: DurableObjectClass = taggedFunction(
       // and also return it so a `Layer.effect(tag, make(impl))` Layer
       // resolves the tag to a concrete namespace value.
       const worker = yield* requireDurableObjectHost(namespace);
-      const self = yield* binding(undefined, classProps?.transferredFrom);
+      const self = yield* binding(
+        undefined,
+        classProps?.transferredFrom,
+        classProps?.errors,
+      );
       const constructor = impl.pipe(
         Effect.provide(Layer.succeed(DurableObjectScope, self as any)),
       );
@@ -1267,7 +1338,11 @@ export const DurableObject: DurableObjectClass = taggedFunction(
 
           return resolved.pipe(
             Effect.flatMap((w) =>
-              binding(typeof w === "string" ? w : w.workerName),
+              binding(
+                typeof w === "string" ? w : w.workerName,
+                undefined,
+                classProps?.errors,
+              ),
             ),
           );
         };

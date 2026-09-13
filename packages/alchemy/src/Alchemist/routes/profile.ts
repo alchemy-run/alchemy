@@ -2,6 +2,7 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import type { Interaction } from "../../Interaction.ts";
+import { AuthError } from "../../Auth/AuthProvider.ts";
 import { CredentialsStore } from "../../Auth/Credentials.ts";
 import {
   inspectProvider,
@@ -101,7 +102,10 @@ export const list = Effect.fn("Alchemist.profile.list")(function* () {
       active: name === selected.name,
       providers: Object.entries(profile.providers)
         .sort(([a], [b]) => a.localeCompare(b))
-        .map(([name, config]) => ({ name, method: config.method })),
+        .map(([name, config]) => ({
+          name,
+          method: config.method ?? "unknown",
+        })),
     }));
 });
 
@@ -146,10 +150,25 @@ export const get = Effect.fn("Alchemist.profile.get")(function* (input: {
         Interaction
       > =>
         includeProviderStatus
-          ? inspectProvider(input.name, provider, config, registered)
+          ? inspectProvider(
+              input.name,
+              provider,
+              config,
+              registered,
+              (updated) =>
+                profiles.setProviderConfig(input.name, provider, updated).pipe(
+                  Effect.mapError(
+                    (cause) =>
+                      new AuthError({
+                        message: `Could not persist repaired ${provider} credentials for profile '${input.name}'.`,
+                        cause,
+                      }),
+                  ),
+                ),
+            )
           : Effect.succeed({
               name: provider,
-              method: config.method,
+              method: config.method ?? "unknown",
               status: "connected",
               details: [],
             }),
@@ -306,10 +325,7 @@ export const configure = Effect.fn("Alchemist.profile.configure")(function* (
                 .pipe(Effect.orElseSucceed(() => undefined))
             : undefined,
         );
-  yield* profiles.setProfile(input.profile, {
-    ...stored,
-    providers: { ...stored.providers, [input.provider]: config },
-  });
+  yield* profiles.setProviderConfig(input.profile, input.provider, config);
   yield* report({
     _tag: "provider.configure.completed",
     provider: input.provider,
@@ -350,11 +366,7 @@ export const removeProvider = Effect.fn("Alchemist.profile.removeProvider")(
         logout = "completed";
       } else logout = "skipped-invalid-config";
     }
-    const { [input.provider]: _removed, ...remaining } = stored.providers;
-    yield* profiles.setProfile(input.profile, {
-      ...stored,
-      providers: remaining,
-    });
+    yield* profiles.deleteProviderConfig(input.profile, input.provider);
     return { profile: input.profile, provider: input.provider, logout };
   },
 );
@@ -388,10 +400,23 @@ export const refresh = Effect.fn("Alchemist.profile.refresh")(function* (
       );
     }
     yield* report({ _tag: "provider.refresh.started", provider: name });
-    yield* provider.login(
+    const refreshed = yield* provider.login(
       input.profile,
       yield* provider.decodeConfig(input.profile, config),
+      (updated) =>
+        profiles.setProviderConfig(input.profile, name, updated).pipe(
+          Effect.mapError(
+            (cause) =>
+              new AuthError({
+                message: `Could not persist refreshed ${name} credentials for profile '${input.profile}'.`,
+                cause,
+              }),
+          ),
+        ),
     );
+    if (refreshed !== undefined) {
+      yield* profiles.setProviderConfig(input.profile, name, refreshed);
+    }
     yield* report({ _tag: "provider.refresh.completed", provider: name });
   }
   return yield* get({

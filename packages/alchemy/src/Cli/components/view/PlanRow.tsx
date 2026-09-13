@@ -1,8 +1,7 @@
 /** @jsxImportSource react */
 /**
- * Shared row shapes for the plan tree. Both the approved plan (Plan.tsx) and
- * the applying plan render namespaces through PlanView, this one
- * component so the two views look like the same tree.
+ * Shared rows for the Plan tree. Review and apply modes both render
+ * namespaces through this component so they look like the same tree.
  */
 import type { JSX } from "react";
 import { Row, Text, useGlyphs } from "../ui/index.ts";

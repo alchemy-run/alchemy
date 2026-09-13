@@ -38,6 +38,7 @@ export const RESERVED_DURABLE_OBJECT_HANDLERS: ReadonlySet<string> = new Set([
   "alarm",
   "webSocketMessage",
   "webSocketClose",
+  "webSocketError",
 ]);
 
 /** The built instance shape: the lifecycle handlers plus the RPC surface. */

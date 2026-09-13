@@ -12,6 +12,9 @@ export {
   type ActionPlanned,
   type ApplyEvent,
   type NukeEvent,
+  type NukeScanStarted,
+  type NukeProviderScanStarted,
+  type NukePassStarted,
   type NukeProviderScanned,
   type NukeResourceDeleted,
   type NukeResourceFailed,
@@ -68,9 +71,6 @@ const spanEventOf = (
           ...(event.message === undefined
             ? {}
             : { "alchemy.apply.message": event.message }),
-          ...(event.bindingId === undefined
-            ? {}
-            : { "alchemy.binding.id": event.bindingId }),
         },
       };
     case "apply.resource.note":
@@ -91,12 +91,30 @@ const spanEventOf = (
         name: `alchemy.${event._tag}`,
         attributes: { "alchemy.state_store.name": event.store },
       };
+    case "nuke.scan.started":
+      return {
+        name: "alchemy.nuke.scan.started",
+        attributes: { "alchemy.nuke.providers": event.total },
+      };
+    case "nuke.pass.started":
+      return {
+        name: "alchemy.nuke.pass.started",
+        attributes: { "alchemy.nuke.pass": event.pass },
+      };
+    case "nuke.scan.provider.started":
+      return {
+        name: "alchemy.nuke.scan.provider.started",
+        attributes: { "alchemy.provider": event.provider },
+      };
     case "nuke.scan.provider.completed":
       return {
         name: "alchemy.nuke.scan.provider.completed",
         attributes: {
           "alchemy.provider": event.provider,
           "alchemy.nuke.resources": event.resources,
+          ...(event.error === undefined
+            ? {}
+            : { "alchemy.nuke.message": event.error }),
         },
       };
     case "nuke.resource.deleted":

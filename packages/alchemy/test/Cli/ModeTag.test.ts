@@ -14,7 +14,7 @@
  */
 import { formatModeNote, modeLabel } from "@/Cli/ModeTag.ts";
 import { formatPlanLines } from "@/Cli/LoggingCli.ts";
-import { PlanViewStore } from "@/Cli/components/view/PlanView.tsx";
+import { PlanTree } from "@/Cli/components/view/PlanView.tsx";
 import type { CRUD, Plan } from "@/Plan.ts";
 import type { ProviderMode } from "@/ProviderMode.ts";
 import { describe, expect, test } from "alchemy-test";
@@ -180,7 +180,7 @@ describe("compact plan output", () => {
   });
 
   test("targets live status updates by FQN when logical IDs repeat", () => {
-    const store = new PlanViewStore(
+    const store = new PlanTree(
       makePlan({
         resources: {
           "claude/toolchain": crud({
@@ -226,7 +226,7 @@ describe("compact plan output", () => {
     expect(lineFor(lines, "Stable")).toContain("noop");
     expect(lineFor(lines, "Changed")).toContain("update");
     expect(lines).not.toContain("1 unchanged hidden");
-    const rows = new PlanViewStore(plan).rows;
+    const rows = new PlanTree(plan).rows;
     expect(
       rows.some((row) => row.type === "resource" && row.id === "Stable"),
     ).toBe(true);
@@ -236,7 +236,7 @@ describe("compact plan output", () => {
   });
 
   test("an all-noop plan keeps typed resource rows", () => {
-    const rows = new PlanViewStore(
+    const rows = new PlanTree(
       makePlan({
         defaultMode: "live",
         resources: {

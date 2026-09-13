@@ -1,0 +1,111 @@
+---
+title: Git
+description: A pluggable, embeddable, self-hostable git server on Cloudflare Workers, Durable Objects, and R2. Smart HTTP for any client, a typed REST plane with pull requests, and a GitHub-compatible API, assembled in one file.
+---
+
+`alchemy/Git` is a pluggable, embeddable, self-hostable git server. It
+speaks git's smart HTTP to any client, serves a typed REST plane with
+pull requests, and answers the GitHub REST v3 API for `gh` and Octokit.
+It runs on Cloudflare Workers, Durable Objects, and R2, embeds in your
+own `HttpApi`, and each part of it is an Effect Layer you can replace:
+
+```typescript
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Git from "alchemy/Git";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+
+export const GitObjects = Cloudflare.R2.Bucket("GitObjects");
+
+const GitLive = Git.Server.layer(Api).pipe( // Api: Git.Api behind your middleware
+  Layer.provide(Git.Handlers), // the engine's implementation of every route
+  Layer.provide(AuthenticatedLive), // your middleware: who may call what
+  Layer.provide(Git.ReposDurableObject), // refs, objects, pull requests
+  Layer.provide(Git.RegistryDurableObject), // owner/name → repo
+  Layer.provide(Git.BlobStoreR2(GitObjects)), // packs, bundles, large pushes
+  Layer.provide(Git.HasherInline), // push verification
+);
+
+export default Cloudflare.Worker(
+  "Git",
+  { main: import.meta.url, ...Git.GIT_WORKER_OPTIONS },
+  Effect.gen(function* () {
+    const git = yield* Git.Server;
+    return { fetch: git.fetch };
+  }).pipe(Effect.provide(GitLive)),
+);
+```
+
+Each line of the graph is one decision with its own implementations.
+Changing a line changes the decision and nothing else:
+
+```diff lang="typescript"
+const GitLive = Git.Server.layer(Api).pipe(
+  Layer.provide(Git.Handlers),
+  Layer.provide(AuthenticatedLive),
++  Layer.provide(ProtectedMain),
+  Layer.provide(Git.ReposDurableObject),
+  Layer.provide(Git.RegistryDurableObject),
+-  Layer.provide(Git.BlobStoreR2(GitObjects)),
++  Layer.provide(Git.BlobStoreS3()),
+  Layer.provide(Git.HasherInline),
+);
+```
+
+Bytes now live in S3 and `main` only moves for its owner. A missing
+line is a type error.
+
+The engine holds no users, no credentials, and no policy. Who may call
+a route is the middleware of the API that mounts it, so the same host
+runs behind a shared secret, behind Better Auth, or behind any other
+authentication, and which refs may move is git's pre-receive hook as a
+service. Every route is a class with a pluggable implementation, so
+the host is also an API that can be extended and reshaped one route at
+a time.
+[git.alchemy.run](https://git.alchemy.run) runs this file. The alchemy
+monorepo, 44,051 objects in a 67 MiB pack, is hosted on it and clones
+back byte-identical under `git fsck --strict`.
+
+## Build one
+
+[Getting Started](/git/getting-started) deploys the file above and pushes to it in ten
+minutes. The tutorial then builds it from an empty file, one decision
+per part:
+
+1. [A git server in one file](/git/tutorial/part-1) — each block,
+   named as you type it.
+2. [Repositories](/git/tutorial/part-2) — create, push, make public,
+   clone anonymously.
+3. [Your own API](/git/tutorial/part-3) — the git routes inside your
+   `HttpApi` behind Better Auth, a route of your own, and one of the
+   engine's replaced.
+4. [Your own rules](/git/tutorial/part-4) — git's pre-receive hook as
+   a service: protect `main`, let a team share a repository.
+
+## Use it
+
+- [Cloning & pushing](/git/clone-and-push) — standard clients, what
+  the wire supports, credentials.
+- [Repositories](/git/repositories) — create, fork, import, and manage
+  over the typed REST plane.
+- [Pull requests](/git/pull-requests) — server-side merge base, diffs,
+  and merges.
+- [GitHub API compatibility](/git/github-api) — `gh api` and Octokit
+  against your host.
+
+## Shape it
+
+[Building blocks](/git/blocks) is the reference for each line of the
+graph: the contract, what ships, how to write your own.
+[Recipes](/git/recipes) maps requirements to lines, with
+[Scaling](/git/recipes/scaling) as the why behind the table and complete
+stack files to copy.
+
+## Not a GitHub replacement
+
+No issues, reviews, comments, checks, Actions, or GraphQL. `gh api`
+works. `gh pr create` and the rest of the porcelain do not. What it is:
+a git remote you own, with an API, that you can build on.
+
+Looking for the GitHub *provider*, which manages repos, Actions
+secrets, and webhooks on github.com? That is [GitHub](/github).

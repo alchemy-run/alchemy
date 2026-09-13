@@ -12,6 +12,10 @@ import { theme } from "../../../Util/Theme.ts";
 import { useCliEnvironment, useGlyphs } from "./Environment.tsx";
 import { Text } from "./Typography.tsx";
 
+// Windowed list that clips to the rows its container leaves over; it draws no
+// colors of its own, so it needs no theme-aware wrapper.
+export { VirtualList } from "@alchemy.run/sigil";
+
 export type BoxProps = ComponentProps<typeof SigilBox>;
 
 /** Theme-aware Sigil container used by CliKit layouts. */

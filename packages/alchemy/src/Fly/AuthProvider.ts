@@ -32,7 +32,6 @@ const resolveApiBaseUrl = (explicit?: string) =>
 
 const flyAuth = makeStoredAuthProvider<FlyResolvedCredentials>({
   provider: FLY_AUTH_PROVIDER_NAME,
-  storageKey: "fly-stored",
   fields: [
     { name: "apiKey", label: "Fly.io API Token", secret: true },
     {

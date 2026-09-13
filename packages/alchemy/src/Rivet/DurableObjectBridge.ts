@@ -198,6 +198,13 @@ export const makeRivetActor = (
             ) ?? Effect.void,
         );
       });
+      websocket.addEventListener?.("error", (event: { error?: unknown }) => {
+        void core.execute(
+          (instance) =>
+            instance.webSocketError?.(socket, event.error ?? event) ??
+            Effect.void,
+        );
+      });
       websocket.addEventListener?.(
         "close",
         (event: { code?: number; reason?: string; wasClean?: boolean }) => {

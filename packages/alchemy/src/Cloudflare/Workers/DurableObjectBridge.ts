@@ -134,5 +134,13 @@ export const makeDurableObjectBridge =
             ) ?? Effect.void,
         );
       }
+
+      async webSocketError(ws: WebSocket, error: unknown): Promise<void> {
+        await this.#core.execute(
+          (instance) =>
+            instance.webSocketError?.(fromWebSocket(ws as any), error) ??
+            Effect.void,
+        );
+      }
     } as any;
   };

@@ -110,12 +110,12 @@ const runnerBuildOptions = (
  * service-stability wait surfaces the fault instead of a silent hang.
  */
 const ensureRunnerConfig = Effect.gen(function* () {
-  const raw = yield* Config.option(Config.string("RIVET_ENDPOINT"));
+  const raw = yield* Config.option(Config.String("RIVET_ENDPOINT"));
   if (Option.isNone(raw)) {
     return;
   }
   const { endpoint, namespace, token } = parseRivetEndpoint(raw.value);
-  const pool = yield* Config.string("RIVET_POOL").pipe(
+  const pool = yield* Config.String("RIVET_POOL").pipe(
     Effect.orElseSucceed(() => RIVET_RUNNER_POOL),
   );
   const client = (yield* HttpClient.HttpClient).pipe(HttpClient.filterStatusOk);

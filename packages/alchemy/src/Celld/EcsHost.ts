@@ -345,7 +345,7 @@ export const Ecs = (): Layer.Layer<Host, never, StackServices> =>
               AWS_REGION: yield* region,
               // The managed CLI cache lives under $HOME/.alchemy.
               ...Option.match(
-                yield* Config.option(Config.string("HOME")).pipe(
+                yield* Config.option(Config.String("HOME")).pipe(
                   Effect.orElseSucceed(() => Option.none<string>()),
                 ),
                 {

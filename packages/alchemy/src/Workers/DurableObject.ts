@@ -14,6 +14,7 @@ import type * as cf from "@cloudflare/workers-types";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import type { RpcErrorClass } from "../Rpc.ts";
 import * as Option from "effect/Option";
 import * as Binding from "../Binding.ts";
 import type { HttpEffect } from "../Http.ts";
@@ -32,6 +33,15 @@ export type AlarmInvocationInfo = cf.AlarmInvocationInfo;
 // ---------------------------------------------------------------------------
 // DurableObjectState — the per-instance state service
 // ---------------------------------------------------------------------------
+
+/**
+ * Options for {@link DurableObjectState.abort}.
+ *
+ * `retryAlarm` defaults to `true`: an alarm interrupted by `abort` is
+ * retried after the isolate resets. Set it to `false` to cancel that
+ * alarm instead.
+ */
+export type DurableObjectAbortOptions = cf.DurableObjectAbortOptions;
 
 export class DurableObjectState extends Context.Service<
   DurableObjectState,
@@ -52,9 +62,16 @@ export class DurableObjectState extends Context.Service<
      * The raw engine DurableObjectState, for interop with async APIs.
      */
     readonly raw: cf.DurableObjectState;
-    blockConcurrencyWhile<T>(
-      callback: () => Effect.Effect<T, never, RuntimeContext>,
-    ): Effect.Effect<T, never, RuntimeContext>;
+    /**
+     * Run `callback` while the engine holds every other event on this object.
+     * The callback runs with the caller's full context (services, tracing),
+     * as `waitUntil` does, so a service provided to the calling fiber is
+     * visible inside the gate. A defect in the callback rejects the gate
+     * and the engine resets the object, which is the platform's contract.
+     */
+    blockConcurrencyWhile<T, R = never>(
+      callback: () => Effect.Effect<T, never, R>,
+    ): Effect.Effect<T, never, R | RuntimeContext>;
     acceptWebSocket(
       ws: WebSocket,
       tags?: string[],
@@ -82,7 +99,18 @@ export class DurableObjectState extends Context.Service<
       RuntimeContext
     >;
     getTags(ws: cf.WebSocket): Effect.Effect<string[], never, RuntimeContext>;
-    abort(reason?: string): Effect.Effect<void, never, RuntimeContext>;
+    /**
+     * Forcibly reset this Durable Object. A JavaScript `Error` with the
+     * given message is logged and cannot be caught in application code.
+     *
+     * By default an in-progress alarm retries after the reset. Pass
+     * `{ retryAlarm: false }` to stop it instead — for example an `alarm`
+     * handler that deletes storage so the constructor does not recreate it.
+     */
+    abort(
+      reason?: string,
+      options?: DurableObjectAbortOptions,
+    ): Effect.Effect<void, never, RuntimeContext>;
   }
 >()("Cloudflare.DurableObjectState") {}
 
@@ -104,10 +132,19 @@ export const fromDurableObjectState = (
         ),
       );
     }),
-  blockConcurrencyWhile: <T>(callback: () => Effect.Effect<T>) =>
-    Effect.tryPromise(() =>
-      state.blockConcurrencyWhile(() => Effect.runPromise(callback())),
-    ),
+  blockConcurrencyWhile: <T, R = never>(
+    callback: () => Effect.Effect<T, never, R>,
+  ) =>
+    Effect.gen(function* () {
+      const context = yield* Effect.context<R>();
+      // The failure is typed away as before: a rejected gate is the
+      // platform resetting the object, not a value a caller handles.
+      return yield* Effect.promise(() =>
+        state.blockConcurrencyWhile(() =>
+          Effect.runPromise(callback().pipe(Effect.provide(context))),
+        ),
+      );
+    }),
   acceptWebSocket: (ws: WebSocket, tags?: string[]) =>
     Effect.sync(() => state.acceptWebSocket(ws.ws, tags)),
   getWebSockets: (tag?: string) =>
@@ -123,7 +160,8 @@ export const fromDurableObjectState = (
   getHibernatableWebSocketEventTimeout: () =>
     Effect.sync(() => state.getHibernatableWebSocketEventTimeout()),
   getTags: (ws: cf.WebSocket) => Effect.sync(() => state.getTags(ws)),
-  abort: (reason?: string) => Effect.sync(() => state.abort(reason)),
+  abort: (reason?: string, options?: DurableObjectAbortOptions) =>
+    Effect.sync(() => state.abort(reason, options)),
 });
 
 // ---------------------------------------------------------------------------
@@ -134,7 +172,7 @@ export interface DurableObjectShape {
   fetch?: HttpEffect<DurableObjectState | RuntimeContext>;
   alarm?: (
     alarmInfo?: AlarmInvocationInfo,
-  ) => Effect.Effect<void, never, never>;
+  ) => Effect.Effect<void, never, RuntimeContext>;
   webSocketMessage?: (
     socket: WebSocket,
     message: string | ArrayBuffer,
@@ -145,6 +183,11 @@ export interface DurableObjectShape {
     reason: string,
     wasClean: boolean,
   ) => Effect.Effect<void>;
+  /**
+   * Called when a hibernatable WebSocket errors. The runtime closes the
+   * socket after this handler; use it to drop the peer's session state.
+   */
+  webSocketError?: (socket: WebSocket, error: unknown) => Effect.Effect<void>;
 }
 
 export interface DurableObjectExport {
@@ -231,7 +274,18 @@ export interface DurableObjectHostLike {
   readonly durableObjectStub: (
     nativeStub: DurableObjectStubLike,
     namespace: string,
+    options: DurableObjectStubOptions,
   ) => unknown;
+}
+
+/** Per-class options a host's stub flavor honors. */
+export interface DurableObjectStubOptions {
+  /**
+   * Tagged-error classes the class's RPC methods can fail with: failures
+   * crossing the RPC boundary are reconstructed as real instances (see
+   * `RpcErrorClass` in `Rpc.ts`).
+   */
+  readonly errors?: ReadonlyArray<RpcErrorClass> | undefined;
 }
 
 export const isDurableObjectHost = (
@@ -313,8 +367,10 @@ export const makeDurableObjectHosting = (namespace: string) => {
         ),
       );
 
-      const stub = (nativeStub: DurableObjectStubLike) =>
-        host.durableObjectStub(nativeStub, namespace);
+      const stub = (
+        nativeStub: DurableObjectStubLike,
+        options: DurableObjectStubOptions = {},
+      ) => host.durableObjectStub(nativeStub, namespace, options);
       return { native, stub } as const;
     });
 

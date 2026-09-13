@@ -35,11 +35,13 @@
  * @internal
  */
 import * as Effect from "effect/Effect";
+import { reviveRpcStubErrors } from "../Rpc.ts";
 import * as Stream from "effect/Stream";
 import type {
   DurableObjectBindingDeclaration,
   DurableObjectState,
   DurableObjectStubLike,
+  DurableObjectStubOptions,
 } from "../Workers/DurableObject.ts";
 import type { DurableObjectStorage } from "../Workers/DurableObjectStorage.ts";
 import {
@@ -63,8 +65,11 @@ export const durableObjectBinding = (
  * each hosted class to a gateway-backed namespace, so the "native stub" IS
  * the finished stub.
  */
-export const durableObjectStub = (nativeStub: DurableObjectStubLike) =>
-  nativeStub;
+export const durableObjectStub = (
+  nativeStub: DurableObjectStubLike,
+  _namespace: string,
+  options: DurableObjectStubOptions,
+) => reviveRpcStubErrors(nativeStub, options.errors);
 
 /** The reserved Rivet action the bridge registers to deliver alarms. */
 export const ALARM_ACTION = "__alchemyAlarm";

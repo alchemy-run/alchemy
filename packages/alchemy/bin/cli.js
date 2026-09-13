@@ -20,8 +20,8 @@
 // exports point at .ts source), but consumers install into `node_modules/`,
 // so the path check sends them to the bundled `alchemy.js` regardless.
 //
-// Own the spawn so bun's hard-coded watcher warning can be filtered while
-// signals, IPC messages, and the child's exit status are forwarded.
+// Own the spawn so runtime diagnostics can be filtered while signals, IPC
+// messages, and the child's exit status are forwarded.
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { constants } from "node:os";
@@ -130,13 +130,15 @@ const [nodeMajor = 0, nodeMinor = 0] = process.versions.node
   .map(Number);
 
 /**
- * Whether this node has `module.registerHooks` (v22.15 / v23.5 / v24+) —
- * the capability gate for running the CLI from source: every hooks-capable
- * node also loads `.ts` (via the transform flag below v26, natively from
- * v26). Mirrors `src/Util/Node.ts#isRegisterHooksSupported` — duplicated
- * because this launcher must run under plain node before any .ts can load.
+ * Whether this node has `module.registerHooks` (v22.15 / v23.5 / v24+).
+ * Alchemy loads every `.ts`/`.tsx` — its own source in a checkout, the
+ * user's stack everywhere — through the Oxc loader those hooks install, and
+ * never through Node's built-in TypeScript support (strip-only, and its
+ * transform flag was removed in Node 26). So this is THE gate for running
+ * under node at all. Mirrors `src/Util/Node.ts#isRegisterHooksSupported` —
+ * duplicated because this launcher must run under plain node first.
  */
-const nodeRunsTypeScript =
+const nodeSupportsHooks =
   (nodeMajor === 22 && nodeMinor >= 15) ||
   (nodeMajor === 23 && nodeMinor >= 5) ||
   nodeMajor >= 24;
@@ -148,6 +150,15 @@ const isDev = !(
 
 // We no longer force bun in dev when node is the invoker because this prevents us from testing in node.
 const runtime = invokedByBun ? "bun" : "node";
+
+if (runtime === "node" && !nodeSupportsHooks) {
+  process.stderr.write(
+    `alchemy: node ${process.versions.node} is not supported ` +
+      "(module.registerHooks needs node 22.15+, 23.5+, or 24+).\n" +
+      "Use a newer node, or run alchemy with bun.\n",
+  );
+  process.exit(1);
+}
 
 const args = [];
 
@@ -161,25 +172,25 @@ if (runtime === "bun" && isDev) {
   args.push(`--tsconfig-override=${path.join(binDir, "..", "tsconfig.json")}`);
 }
 
-if (runtime === "node" && isDev && nodeRunsTypeScript) {
-  // Run the checkout's source directly, no build required: the
-  // register-dev-mode hooks load .ts/.tsx through tsx's loader AND resolve
-  // the monorepo's own packages (`alchemy/*`, `@alchemy.run/*`,
-  // `@distilled.cloud/*`) through their `bun` export condition onto src/ —
+if (runtime === "node") {
+  // Checkout: run the source directly, no build required — the
+  // register-dev-mode hooks load .ts/.tsx through Oxc AND resolve the
+  // monorepo's own packages (`alchemy/*`, `@alchemy.run/*`,
+  // `@distilled.cloud/*`) through their `bun` export condition onto src/,
   // so the CLI, the user's stack, and every workspace dependency load one
   // source universe instead of whatever built lib/ happens to be around.
-  args.push("--import", new URL("register-dev-mode.js", import.meta.url).href);
+  // Published: only the Oxc loader, for the user's own .ts/.tsx.
+  args.push(
+    "--import",
+    new URL(isDev ? "register-dev-mode.js" : "register-oxc.js", import.meta.url)
+      .href,
+  );
 }
-const entry =
-  runtime === "bun" || (isDev && nodeRunsTypeScript) ? tsEntry : jsEntry;
-if (entry === jsEntry && isDev && !existsSync(jsEntry)) {
-  // The version gate declined source mode and there is no built output to
-  // fall back to — fail with a diagnosis instead of a raw MODULE_NOT_FOUND.
+const entry = runtime === "bun" || isDev ? tsEntry : jsEntry;
+if (entry === jsEntry && !existsSync(jsEntry)) {
   process.stderr.write(
-    `alchemy: node ${process.versions.node} cannot run the TypeScript source ` +
-      "(module.registerHooks needs node 22.15+, 23.5+, or 24+) and " +
-      `${jsEntry} has not been built.\n` +
-      "Use bun or a newer node, or run `pnpm build` in packages/alchemy.\n",
+    `alchemy: ${jsEntry} has not been built.\n` +
+      "Run `pnpm build` in packages/alchemy.\n",
   );
   process.exit(1);
 }
@@ -211,7 +222,5 @@ const program =
 foregroundChild(
   program,
   args,
-  (line) =>
-    !line.includes("is not in the project directory and will not be watched") &&
-    !line.includes("directory mismatch for directory"),
+  (line) => !line.includes("directory mismatch for directory"),
 );
