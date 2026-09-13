@@ -50,12 +50,7 @@ export interface VariablesProps {
  * @resource
  * @product Actions
  */
-export const Variables = ({
-  owner,
-  repository,
-  environment,
-  variables,
-}: VariablesProps) =>
+export const Variables = ({ owner, repository, environment, variables }: VariablesProps) =>
   Effect.all(
     Object.entries(variables).map(([name, value]) =>
       Variable(name, {

@@ -106,9 +106,7 @@ test(
         until: (body) => JSON.stringify(body).includes('"schedule"'),
       }),
     );
-    expect(events).toEqual(
-      expect.arrayContaining([expect.objectContaining({ kind: "schedule" })]),
-    );
+    expect(events).toEqual(expect.arrayContaining([expect.objectContaining({ kind: "schedule" })]));
   }),
   {
     tags: [

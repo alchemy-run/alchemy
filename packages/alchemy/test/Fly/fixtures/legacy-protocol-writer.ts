@@ -2,8 +2,8 @@ import * as machines from "@distilled.cloud/fly-io/machines";
 import * as Retry from "@distilled.cloud/fly-io/Retry";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as HttpClient from "effect/http/HttpClient";
+import * as Layer from "effect/Layer";
 import { throughProxy } from "./transport.ts";
 
 const rolloutKeys = new Set([
@@ -22,9 +22,7 @@ const rolloutKeys = new Set([
   "alchemy.min-secrets-version",
 ]);
 
-class LegacyWriterLeaseInvalid extends Data.TaggedError(
-  "LegacyWriterLeaseInvalid",
-)<{
+class LegacyWriterLeaseInvalid extends Data.TaggedError("LegacyWriterLeaseInvalid")<{
   machineId: string;
 }> {}
 
@@ -69,21 +67,17 @@ export const writeLegacyProtocol = (
                   }),
             },
             metadata: Object.fromEntries(
-              Object.entries(config.metadata ?? {}).filter(
-                ([key]) => !rolloutKeys.has(key),
-              ),
+              Object.entries(config.metadata ?? {}).filter(([key]) => !rolloutKeys.has(key)),
             ),
           },
         })
         .pipe(Retry.none, Effect.timeout("45 seconds"));
     } finally {
-      yield* machines
-        .machinesReleaseLease({ ...target, lease_nonce: nonce })
-        .pipe(
-          Retry.none,
-          Effect.catchTag("NotFound", () => Effect.void),
-          Effect.timeout("30 seconds"),
-        );
+      yield* machines.machinesReleaseLease({ ...target, lease_nonce: nonce }).pipe(
+        Retry.none,
+        Effect.catchTag("NotFound", () => Effect.void),
+        Effect.timeout("30 seconds"),
+      );
     }
   });
 
@@ -108,18 +102,13 @@ export const observeStops = (
             const target = request.url.match(/\/machines\/([^/]+)\/stop$/);
             if (request.method !== "POST" || !target) return;
             if (request.body._tag !== "Uint8Array") {
-              throw new Error(
-                "Expected the native SDK's JSON stop request body",
-              );
+              throw new Error("Expected the native SDK's JSON stop request body");
             }
-            const body = JSON.parse(
-              new TextDecoder().decode(request.body.body),
-            );
+            const body = JSON.parse(new TextDecoder().decode(request.body.body));
             record({
               machineId: target[1]!,
               signal: typeof body.signal === "string" ? body.signal : undefined,
-              timeout:
-                typeof body.timeout === "string" ? body.timeout : undefined,
+              timeout: typeof body.timeout === "string" ? body.timeout : undefined,
             });
           }),
         ),

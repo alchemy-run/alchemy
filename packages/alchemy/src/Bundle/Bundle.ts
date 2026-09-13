@@ -6,10 +6,7 @@ import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import type * as rolldown from "rolldown";
 import { sha256, sha256Object } from "../Util/sha256.ts";
-import {
-  bundleAnalyzerPlugin,
-  type BundleAnalyzerPluginOptions,
-} from "./BundleAnalyzerPlugin.ts";
+import { bundleAnalyzerPlugin, type BundleAnalyzerPluginOptions } from "./BundleAnalyzerPlugin.ts";
 import { purePlugin, type PurePluginOptions } from "./PurePlugin.ts";
 import { rawPlugin } from "./RawPlugin.ts";
 
@@ -28,16 +25,8 @@ import { rawPlugin } from "./RawPlugin.ts";
  * So: never put `import` or `require` in these lists. Only the runtime
  * condition and the kind-agnostic ones; rolldown supplies the kind.
  */
-export const BUN_CONDITION_NAMES: readonly string[] = [
-  "bun",
-  "module",
-  "default",
-];
-export const NODE_CONDITION_NAMES: readonly string[] = [
-  "node",
-  "module",
-  "default",
-];
+export const BUN_CONDITION_NAMES: readonly string[] = ["bun", "module", "default"];
+export const NODE_CONDITION_NAMES: readonly string[] = ["node", "module", "default"];
 
 /**
  * Rolldown is loaded lazily on first {@link build}/{@link watch} so that
@@ -119,13 +108,10 @@ export interface BundleFile {
   readonly hash: string;
 }
 
-export class BundleError extends Schema.TaggedError<BundleError>()(
-  "BundleError",
-  {
-    message: Schema.String,
-    cause: Schema.optional(Schema.Defect({ includeStack: true })),
-  },
-) {}
+export class BundleError extends Schema.TaggedError<BundleError>()("BundleError", {
+  message: Schema.String,
+  cause: Schema.optional(Schema.Defect({ includeStack: true })),
+}) {}
 
 export type BundleWatchEvent =
   | BundleWatchEvent.Start
@@ -175,12 +161,11 @@ const ALCHEMY_DEFINE: Record<string, string> = {
  * bundle (`migrations.js` does `import m0000 from './0000_x.sql'`) work
  * without a wrangler-style rules config or a codegen step.
  */
-const ALCHEMY_MODULE_TYPES: NonNullable<rolldown.InputOptions["moduleTypes"]> =
-  {
-    ".sql": "text",
-    ".txt": "text",
-    ".html": "text",
-  };
+const ALCHEMY_MODULE_TYPES: NonNullable<rolldown.InputOptions["moduleTypes"]> = {
+  ".sql": "text",
+  ".txt": "text",
+  ".html": "text",
+};
 
 /**
  * Merge {@link ALCHEMY_DEFINE} into the caller's `transform.define` (the
@@ -188,9 +173,7 @@ const ALCHEMY_MODULE_TYPES: NonNullable<rolldown.InputOptions["moduleTypes"]> =
  * {@link ALCHEMY_MODULE_TYPES} into the caller's `moduleTypes` (caller
  * keys win, so an extension can be remapped or disabled per bundle).
  */
-const withAlchemyDefine = (
-  inputOptions: rolldown.InputOptions,
-): rolldown.InputOptions => ({
+const withAlchemyDefine = (inputOptions: rolldown.InputOptions): rolldown.InputOptions => ({
   ...inputOptions,
   transform: {
     ...inputOptions.transform,
@@ -211,9 +194,7 @@ const withAlchemyDefine = (
  * removed from every bundle (define alone only folds the condition; removal
  * needs DCE). Callers that opt into full minification (e.g. Workers) keep it.
  */
-const withDceDefault = (
-  outputOptions?: rolldown.OutputOptions,
-): rolldown.OutputOptions => ({
+const withDceDefault = (outputOptions?: rolldown.OutputOptions): rolldown.OutputOptions => ({
   ...outputOptions,
   minify: outputOptions?.minify ?? "dce-only",
 });
@@ -358,9 +339,7 @@ const ENTRY_OR_BARE_REGEX = /^(?:\0virtual:alchemy-entry:|[^./\0])/;
 export const virtualEntryPlugin = Effect.gen(function* () {
   const path = yield* Path.Path;
 
-  const normalizeInput = (
-    input: rolldown.InputOption,
-  ): Record<string, string> => {
+  const normalizeInput = (input: rolldown.InputOption): Record<string, string> => {
     if (typeof input === "string") {
       return { [path.parse(input).name || "index"]: input };
     } else if (Array.isArray(input)) {
@@ -448,10 +427,7 @@ export function bundleOutputFromRolldownOutputBundle(
     );
   }
   return Effect.forEach(
-    files as [
-      rolldown.OutputChunk,
-      ...(rolldown.OutputChunk | rolldown.OutputAsset)[],
-    ],
+    files as [rolldown.OutputChunk, ...(rolldown.OutputChunk | rolldown.OutputAsset)[]],
     bundleFileFromOutputChunk,
   ).pipe(Effect.flatMap(bundleOutputFromFiles));
 }
@@ -464,14 +440,10 @@ export function bundleOutputFromRolldownOutputBundle(
  * `node_modules/<pkg>/...` by upstream resolver plugins such as
  * `@alchemy.run/cloudflare-runtime/rolldown`.
  */
-async function builtInPlugins(
-  extra?: BundleExtraOptions,
-): Promise<rolldown.RolldownPluginOption> {
+async function builtInPlugins(extra?: BundleExtraOptions): Promise<rolldown.RolldownPluginOption> {
   return [
     extra?.bundleAnalyzer
-      ? await bundleAnalyzerPlugin(
-          extra.bundleAnalyzer === true ? {} : extra.bundleAnalyzer,
-        )
+      ? await bundleAnalyzerPlugin(extra.bundleAnalyzer === true ? {} : extra.bundleAnalyzer)
       : undefined,
     extra?.pure !== false ? purePlugin(extra?.pure ?? {}) : undefined,
     rawPlugin(),

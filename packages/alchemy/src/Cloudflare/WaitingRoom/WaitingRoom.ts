@@ -28,11 +28,7 @@ export type QueueingStatusCode = 200 | 202 | 429;
  * Which Turnstile widget type the waiting room uses for detecting bot
  * traffic.
  */
-export type TurnstileMode =
-  | "off"
-  | "invisible"
-  | "visible_non_interactive"
-  | "visible_managed";
+export type TurnstileMode = "off" | "invisible" | "visible_non_interactive" | "visible_managed";
 
 /**
  * What to do when Turnstile detects a bot: `log` only records it in
@@ -308,13 +304,8 @@ export const WaitingRoomProvider = () =>
       const o = olds as Props;
       const n = news as Props;
       // zoneId is Input<string>; compare only once both sides are concrete.
-      const oldZoneId =
-        output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
-      if (
-        oldZoneId !== undefined &&
-        typeof n.zoneId === "string" &&
-        oldZoneId !== n.zoneId
-      ) {
+      const oldZoneId = output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
+      if (oldZoneId !== undefined && typeof n.zoneId === "string" && oldZoneId !== n.zoneId) {
         return { action: "replace" } as const;
       }
       return undefined;
@@ -410,12 +401,8 @@ export const WaitingRoomProvider = () =>
             ),
             // Plan-gated / partial-permission zones reject the route, and a
             // zone deleted out-of-band has no rooms; skip both.
-            Effect.catchTag("Forbidden", () =>
-              Effect.succeed([] as Attributes[]),
-            ),
-            Effect.catchTag("InvalidRoute", () =>
-              Effect.succeed([] as Attributes[]),
-            ),
+            Effect.catchTag("Forbidden", () => Effect.succeed([] as Attributes[])),
+            Effect.catchTag("InvalidRoute", () => Effect.succeed([] as Attributes[])),
           ),
         { concurrency: 10 },
       );
@@ -445,9 +432,7 @@ const findByName = (zoneId: string, name: string) =>
   waitingRooms.listWaitingRoomsForZone.items({ zoneId }).pipe(
     Stream.runCollect,
     Effect.map((chunk) =>
-      Array.from(chunk).find(
-        (room): room is ObservedRoom => room.name === name,
-      ),
+      Array.from(chunk).find((room): room is ObservedRoom => room.name === name),
     ),
     // Zone deleted out-of-band — nothing to find.
     Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
@@ -526,10 +511,7 @@ const isDirty = (
   if (observed.totalActiveUsers !== desired.totalActiveUsers) return true;
   if (observed.newUsersPerMinute !== desired.newUsersPerMinute) return true;
 
-  const defaulted = <K extends keyof typeof DEFAULTS>(
-    key: K,
-    observedValue: unknown,
-  ): boolean => {
+  const defaulted = <K extends keyof typeof DEFAULTS>(key: K, observedValue: unknown): boolean => {
     const want = desired[key as keyof typeof desired] ?? DEFAULTS[key];
     return (observedValue ?? DEFAULTS[key]) !== want;
   };
@@ -569,9 +551,7 @@ const isDirty = (
   }
   if (desired.cookieAttributes !== undefined) {
     const o = observed.cookieAttributes ?? {};
-    if (
-      (o.samesite ?? "auto") !== (desired.cookieAttributes.samesite ?? "auto")
-    ) {
+    if ((o.samesite ?? "auto") !== (desired.cookieAttributes.samesite ?? "auto")) {
       return true;
     }
     if ((o.secure ?? "auto") !== (desired.cookieAttributes.secure ?? "auto")) {
@@ -585,8 +565,7 @@ const isDirty = (
       o.length !== d.length ||
       o.some(
         (route, i) =>
-          (route.host ?? "") !== (d[i]?.host ?? "") ||
-          (route.path ?? "/") !== (d[i]?.path ?? "/"),
+          (route.host ?? "") !== (d[i]?.host ?? "") || (route.path ?? "/") !== (d[i]?.path ?? "/"),
       )
     ) {
       return true;

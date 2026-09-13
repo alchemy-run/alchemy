@@ -27,9 +27,7 @@ export const cloneDatabase = (options: CloneDatabaseOptions) =>
       .execute(HttpClientRequest.get(exportResult.signedUrl))
       .pipe(Effect.orDie);
     if (dumpRes.status < 200 || dumpRes.status >= 300) {
-      return yield* Effect.die(
-        `Failed to fetch D1 export dump (${dumpRes.status})`,
-      );
+      return yield* Effect.die(`Failed to fetch D1 export dump (${dumpRes.status})`);
     }
     const sqlData = yield* dumpRes.text.pipe(Effect.orDie);
 

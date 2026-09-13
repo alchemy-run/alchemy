@@ -29,17 +29,13 @@ class WorkerNotReady extends Data.TaggedError("WorkerNotReady")<{
 const ready = Schedule.max([Schedule.spaced("2 seconds"), Schedule.recurs(45)]);
 
 /** Retry an HTTP call until it returns 200. */
-const untilOk = <E, R>(
-  eff: Effect.Effect<HttpClientResponse.HttpClientResponse, E, R>,
-) =>
+const untilOk = <E, R>(eff: Effect.Effect<HttpClientResponse.HttpClientResponse, E, R>) =>
   eff.pipe(
     Effect.flatMap((res) =>
       res.status === 200
         ? Effect.succeed(res)
         : res.text.pipe(
-            Effect.flatMap((body) =>
-              Effect.fail(new WorkerNotReady({ status: res.status, body })),
-            ),
+            Effect.flatMap((body) => Effect.fail(new WorkerNotReady({ status: res.status, body }))),
           ),
     ),
     Effect.retry({
@@ -126,12 +122,7 @@ test(
     expect(rows.map((r) => r.email)).toContain("alice@example.com");
   }),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:d1",
-      "provider:cloudflare:worker",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:d1", "provider:cloudflare:worker", "live"],
     timeout: TEST_TIMEOUT,
   },
 );

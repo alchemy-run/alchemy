@@ -44,17 +44,13 @@ test.provider(
         "s3://alchemy-athena-wg-test-results/prefix/",
       );
       expect(created?.Configuration?.EnforceWorkGroupConfiguration).toBe(true);
-      expect(created?.Configuration?.BytesScannedCutoffPerQuery).toBe(
-        10_000_000,
-      );
+      expect(created?.Configuration?.BytesScannedCutoffPerQuery).toBe(10_000_000);
 
       // Tags applied.
       const tags = yield* athena.listTagsForResource({
         ResourceARN: deployed.workGroupArn,
       });
-      expect(
-        tags.Tags?.some((t) => t.Key === "env" && t.Value === "test"),
-      ).toBe(true);
+      expect(tags.Tags?.some((t) => t.Key === "env" && t.Value === "test")).toBe(true);
 
       // Canonical list() coverage.
       const provider = yield* Provider.findProvider(WorkGroup);
@@ -75,15 +71,11 @@ test.provider(
       );
       const updated = yield* getWorkGroup;
       expect(updated?.State).toBe("DISABLED");
-      expect(
-        updated?.Configuration?.BytesScannedCutoffPerQuery,
-      ).toBeUndefined();
+      expect(updated?.Configuration?.BytesScannedCutoffPerQuery).toBeUndefined();
       const updatedTags = yield* athena.listTagsForResource({
         ResourceARN: deployed.workGroupArn,
       });
-      expect(
-        updatedTags.Tags?.some((t) => t.Key === "env" && t.Value === "prod"),
-      ).toBe(true);
+      expect(updatedTags.Tags?.some((t) => t.Key === "env" && t.Value === "prod")).toBe(true);
 
       // Destroy — provider recursively deletes and it's gone.
       yield* stack.destroy();

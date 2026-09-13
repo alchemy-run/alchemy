@@ -33,71 +33,44 @@ describe(
   "IoTManagedIntegrations binding operations (typed probes)",
   { tags: ["provider:aws", "provider:aws:iotmanagedintegrations", "live"] },
   () => {
-    test.provider(
-      "getManagedThingState on a nonexistent thing fails with a typed tag",
-      () =>
-        Effect.gen(function* () {
-          const error = yield* Effect.flip(
-            pin(
-              mi.getManagedThingState({
-                ManagedThingId: "alchemynonexistentthingprobe",
-              }),
-            ),
-          );
-          expect([
-            "ResourceNotFoundException",
-            "ValidationException",
-          ]).toContain(error._tag);
-        }),
+    test.provider("getManagedThingState on a nonexistent thing fails with a typed tag", () =>
+      Effect.gen(function* () {
+        const error = yield* Effect.flip(
+          pin(mi.getManagedThingState({ ManagedThingId: "alchemynonexistentthingprobe" })),
+        );
+        expect(["ResourceNotFoundException", "ValidationException"]).toContain(error._tag);
+      }),
     );
 
-    test.provider(
-      "getDeviceDiscovery on a nonexistent discovery fails with a typed tag",
-      () =>
-        Effect.gen(function* () {
-          const error = yield* Effect.flip(
-            pin(
-              mi.getDeviceDiscovery({
-                Identifier: "alchemynonexistentdiscoveryprobe",
-              }),
-            ),
-          );
-          expect([
-            "ResourceNotFoundException",
-            "ValidationException",
-          ]).toContain(error._tag);
-        }),
+    test.provider("getDeviceDiscovery on a nonexistent discovery fails with a typed tag", () =>
+      Effect.gen(function* () {
+        const error = yield* Effect.flip(
+          pin(mi.getDeviceDiscovery({ Identifier: "alchemynonexistentdiscoveryprobe" })),
+        );
+        expect(["ResourceNotFoundException", "ValidationException"]).toContain(error._tag);
+      }),
     );
 
-    test.provider(
-      "sendConnectorEvent to a nonexistent connector fails with a typed tag",
-      () =>
-        Effect.gen(function* () {
-          const error = yield* Effect.flip(
-            pin(
-              mi.sendConnectorEvent({
-                ConnectorId: "alchemynonexistentconnectorprobe",
-                Operation: "DEVICE_EVENT",
-              }),
-            ),
-          );
-          expect([
-            "ResourceNotFoundException",
-            "ValidationException",
-          ]).toContain(error._tag);
-        }),
+    test.provider("sendConnectorEvent to a nonexistent connector fails with a typed tag", () =>
+      Effect.gen(function* () {
+        const error = yield* Effect.flip(
+          pin(
+            mi.sendConnectorEvent({
+              ConnectorId: "alchemynonexistentconnectorprobe",
+              Operation: "DEVICE_EVENT",
+            }),
+          ),
+        );
+        expect(["ResourceNotFoundException", "ValidationException"]).toContain(error._tag);
+      }),
     );
 
-    test.provider(
-      "listSchemaVersions reads the public capability schema catalog",
-      () =>
-        Effect.gen(function* () {
-          const result = yield* pin(
-            mi.listSchemaVersions({ Type: "capability", MaxResults: 3 }),
-          );
-          expect(result.Items).toBeDefined();
-          expect(result.Items!.length).toBeGreaterThan(0);
-        }),
+    test.provider("listSchemaVersions reads the public capability schema catalog", () =>
+      Effect.gen(function* () {
+        const result = yield* pin(mi.listSchemaVersions({ Type: "capability", MaxResults: 3 }));
+        expect(result.Items).toBeDefined();
+        expect(result.Items!.length).toBeGreaterThan(0);
+      }),
     );
   },
 );
@@ -130,16 +103,11 @@ test.provider.skipIf(!process.env.AWS_TEST_IOT_MI)(
           HttpClient.get(`${baseUrl}${path}`).pipe(
             Effect.flatMap((response) =>
               response.status >= 500
-                ? Effect.fail(
-                    new Error(`transient upstream ${response.status}`),
-                  )
+                ? Effect.fail(new Error(`transient upstream ${response.status}`))
                 : Effect.succeed(response),
             ),
             Effect.retry({
-              schedule: Schedule.max([
-                Schedule.exponential("500 millis"),
-                Schedule.recurs(10),
-              ]),
+              schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
             }),
             Effect.flatMap((r) => r.json),
           );
@@ -165,9 +133,7 @@ test.provider.skipIf(!process.env.AWS_TEST_IOT_MI)(
         expect(metadata.errorTag).toBeUndefined();
         expect(metadata.managedThingId).toBeTruthy();
 
-        const capabilities = (yield* getJson("/capabilities")) as {
-          errorTag?: string;
-        };
+        const capabilities = (yield* getJson("/capabilities")) as { errorTag?: string };
         expect(capabilities.errorTag).toBeUndefined();
 
         // The remaining routes exercise ops that cannot fully succeed
@@ -193,12 +159,7 @@ test.provider.skipIf(!process.env.AWS_TEST_IOT_MI)(
       }).pipe(Effect.ensuring(sharedStack.destroy().pipe(Effect.orDie)));
     }),
   {
-    tags: [
-      "provider:aws",
-      "provider:aws:iotmanagedintegrations",
-      "provider:aws:lambda",
-      "live",
-    ],
+    tags: ["provider:aws", "provider:aws:iotmanagedintegrations", "provider:aws:lambda", "live"],
     timeout: 600_000,
   },
 );

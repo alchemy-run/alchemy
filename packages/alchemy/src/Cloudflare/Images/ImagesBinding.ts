@@ -12,11 +12,7 @@ import {
 } from "./Images.ts";
 
 /** The binding value produced by calling {@link Images} (declared on `env` or `yield*`-ed). */
-export type ImagesBinding = Binding.Binding<
-  Images["key"],
-  ImagesClient,
-  Images
->;
+export type ImagesBinding = Binding.Binding<Images["key"], ImagesClient, Images>;
 
 /**
  * The layer that provides the Effect-native interface for the Cloudflare
@@ -28,11 +24,7 @@ export type ImagesBinding = Binding.Binding<
  * the Effect-native {@link ImagesClient} (wrapping the raw `cf.ImagesBinding` so every
  * `info` / `input(...).transform(...).output(...)` call returns an `Effect`).
  */
-export const ImagesBinding = makeBindingLayer<
-  Images,
-  cf.ImagesBinding,
-  ImagesClient
->(
+export const ImagesBinding = makeBindingLayer<Images, cf.ImagesBinding, ImagesClient>(
   Images,
   (raw) =>
     ({
@@ -70,14 +62,11 @@ const wrapTransformer = (raw: cf.ImageTransformer): ImageTransformer => ({
       Effect.map((readable) => wrapTransformer(raw.draw(readable, options))),
     );
   },
-  output: (options) =>
-    tryPromise(() => raw.output(options)).pipe(Effect.map(wrapResult)),
+  output: (options) => tryPromise(() => raw.output(options)).pipe(Effect.map(wrapResult)),
 });
 
 /** Wrap a runtime `ImageTransformationResult` as the Effect-native result client. */
-const wrapResult = (
-  raw: cf.ImageTransformationResult,
-): ImageTransformationResult => ({
+const wrapResult = (raw: cf.ImageTransformationResult): ImageTransformationResult => ({
   raw,
   response: Effect.sync(() => raw.response()),
   contentType: Effect.sync(() => raw.contentType()),

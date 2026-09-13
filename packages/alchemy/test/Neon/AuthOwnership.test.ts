@@ -9,14 +9,8 @@ import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import { adopt, Unowned } from "@/AdoptPolicy.ts";
 import { Auth, AuthProvider, removedAuthSettings } from "@/Neon/Auth.ts";
-import {
-  AuthOAuthProvider,
-  AuthOAuthProviderProvider,
-} from "@/Neon/AuthOAuthProvider.ts";
-import {
-  AuthTrustedDomain,
-  AuthTrustedDomainProvider,
-} from "@/Neon/AuthTrustedDomain.ts";
+import { AuthOAuthProvider, AuthOAuthProviderProvider } from "@/Neon/AuthOAuthProvider.ts";
+import { AuthTrustedDomain, AuthTrustedDomainProvider } from "@/Neon/AuthTrustedDomain.ts";
 import { Branch } from "@/Neon/Branch.ts";
 import { DataApi, DataApiProvider } from "@/Neon/DataApi.ts";
 import { runSql, withPgClient } from "@/Neon/Migrations.ts";
@@ -38,11 +32,7 @@ const context = {
   oldBindings: [],
   newBindings: [],
   bindings: [],
-  session: {
-    emit: () => Effect.void,
-    done: () => Effect.void,
-    note: () => Effect.void,
-  },
+  session: { emit: () => Effect.void, done: () => Effect.void, note: () => Effect.void },
 };
 
 test.provider(
@@ -51,10 +41,7 @@ test.provider(
     Effect.gen(function* () {
       const auth = yield* Auth.Provider;
       const domain = yield* AuthTrustedDomain.Provider;
-      const scope = {
-        projectId: "recovery-project",
-        branchId: "recovery-branch",
-      };
+      const scope = { projectId: "recovery-project", branchId: "recovery-branch" };
       const origin = "https://recovery.example.com";
       const incompleteAuth = { branch: { ...scope } };
       const partialAuth = { branch: { ...scope } };
@@ -78,9 +65,7 @@ test.provider(
             request,
             Response.json(
               request.url.endsWith("/domains")
-                ? {
-                    domains: [{ domain: origin, auth_provider: "better_auth" }],
-                  }
+                ? { domains: [{ domain: origin, auth_provider: "better_auth" }] }
                 : {
                     auth_provider: "better_auth",
                     auth_provider_project_id: "recovery-auth",
@@ -102,9 +87,7 @@ test.provider(
           { branch: { projectId: scope.projectId, branchId: "" } },
           { project: { projectId: "" } },
         ]) {
-          expect(
-            yield* auth.read!({ ...context, olds, output: undefined }),
-          ).toBeUndefined();
+          expect(yield* auth.read!({ ...context, olds, output: undefined })).toBeUndefined();
         }
         for (const olds of [
           incompleteDomain,
@@ -112,9 +95,7 @@ test.provider(
           missingOrigin,
           { auth: { projectId: "", branchId: scope.branchId }, domain: origin },
         ]) {
-          expect(
-            yield* domain.read!({ ...context, olds, output: undefined }),
-          ).toBeUndefined();
+          expect(yield* domain.read!({ ...context, olds, output: undefined })).toBeUndefined();
         }
         expect(requests).toEqual([]);
         const authOutput = yield* auth.read!({
@@ -130,35 +111,18 @@ test.provider(
         expect(Unowned.is(authOutput)).toBe(true);
         expect(Unowned.is(domainOutput)).toBe(true);
         if (!authOutput || !domainOutput)
-          return yield* Effect.fail(
-            new Error("Expected observed Auth identities"),
-          );
+          return yield* Effect.fail(new Error("Expected observed Auth identities"));
         expect(
-          Unowned.is(
-            yield* auth.read!({
-              ...context,
-              olds: incompleteAuth,
-              output: authOutput,
-            }),
-          ),
+          Unowned.is(yield* auth.read!({ ...context, olds: incompleteAuth, output: authOutput })),
         ).toBe(false);
         expect(
           Unowned.is(
-            yield* domain.read!({
-              ...context,
-              olds: incompleteDomain,
-              output: domainOutput,
-            }),
+            yield* domain.read!({ ...context, olds: incompleteDomain, output: domainOutput }),
           ),
         ).toBe(false);
         expect(
           yield* auth
-            .reconcile({
-              ...context,
-              olds: undefined,
-              news: { branch: scope },
-              output: undefined,
-            })
+            .reconcile({ ...context, olds: undefined, news: { branch: scope }, output: undefined })
             .pipe(
               Effect.as(false),
               Effect.catchTag("OwnedBySomeoneElse", () => Effect.succeed(true)),
@@ -188,19 +152,8 @@ test.provider(
           }),
         ),
       );
-    }).pipe(
-      Effect.provide(
-        Layer.mergeAll(AuthProvider(), AuthTrustedDomainProvider()),
-      ),
-    ),
-  {
-    tags: [
-      "provider:neon",
-      "provider:neon:auth",
-      "provider:neon:authtrusteddomain",
-      "live",
-    ],
-  },
+    }).pipe(Effect.provide(Layer.mergeAll(AuthProvider(), AuthTrustedDomainProvider()))),
+  { tags: ["provider:neon", "provider:neon:auth", "provider:neon:authtrusteddomain", "live"] },
 );
 
 test.provider(
@@ -324,9 +277,7 @@ test.provider(
           })
           .pipe(
             Effect.as(false),
-            Effect.catchTag("InvalidDataApiConfiguration", () =>
-              Effect.succeed(true),
-            ),
+            Effect.catchTag("InvalidDataApiConfiguration", () => Effect.succeed(true)),
           ),
       ).toBe(true);
       expect(
@@ -359,19 +310,13 @@ test.provider(
         yield* data
           .reconcile({
             ...context,
-            olds: {
-              branch: scope,
-              database: "neondb",
-              settings: { db_max_rows: 10 },
-            },
+            olds: { branch: scope, database: "neondb", settings: { db_max_rows: 10 } },
             news: { branch: scope, database: "neondb", settings: {} },
             output: dataOutput,
           })
           .pipe(
             Effect.as(false),
-            Effect.catchTag("InvalidDataApiConfiguration", () =>
-              Effect.succeed(true),
-            ),
+            Effect.catchTag("InvalidDataApiConfiguration", () => Effect.succeed(true)),
           ),
       ).toBe(true);
     }).pipe(
@@ -423,9 +368,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
       const base = Effect.gen(function* () {
-        const project = yield* Project("AuthOwnershipProject", {
-          region: "aws-us-east-2",
-        });
+        const project = yield* Project("AuthOwnershipProject", { region: "aws-us-east-2" });
         const branch = yield* Branch("AuthOwnershipBranch", { project });
         return { project, branch };
       });
@@ -445,15 +388,11 @@ test.provider(
           }).pipe(adopt(takeOwnership));
           return { auth };
         });
-      const refusal = yield* stack
-        .deploy(application(false))
-        .pipe(Effect.result);
+      const refusal = yield* stack.deploy(application(false)).pipe(Effect.result);
       expect(Result.isFailure(refusal)).toBe(true);
       yield* stack.deploy(application(true));
       expect((yield* SDK.getNeonAuth(request)).name).toBe("Owned managed auth");
-      expect(
-        (yield* SDK.getNeonAuthAllowLocalhost(request)).allow_localhost,
-      ).toBe(false);
+      expect((yield* SDK.getNeonAuthAllowLocalhost(request)).allow_localhost).toBe(false);
       yield* SDK.disableNeonAuth(request);
       const refused = yield* stack.deploy(application(false)).pipe(
         Effect.as(undefined),
@@ -493,8 +432,7 @@ const { test: retryTest } = Test.make({
   providers: Layer.mergeAll(
     AuthProvider(),
     Provider.succeed(PreviewScope, {
-      reconcile: () =>
-        Effect.succeed({ projectId: "retry-project", branchId: "retry-child" }),
+      reconcile: () => Effect.succeed({ projectId: "retry-project", branchId: "retry-child" }),
       delete: () => Effect.void,
     }),
   ).pipe(
@@ -517,9 +455,7 @@ retryTest.provider(
     const http = HttpClient.make((request) =>
       Effect.sync(() => {
         requests.push(request.method);
-        expect(request.url).toContain(
-          "/projects/retry-project/branches/retry-child/auth",
-        );
+        expect(request.url).toContain("/projects/retry-project/branches/retry-child/auth");
         expect(["GET", "DELETE"]).toContain(request.method);
         return HttpClientResponse.fromWeb(
           request,
@@ -554,15 +490,9 @@ retryTest.provider(
       expect(refusal).toBe(true);
       expect(requests.every((method) => method === "GET")).toBe(true);
       const state = yield* yield* State;
-      const refused = yield* state.get({
-        stack: stack.name,
-        stage: stack.stage,
-        fqn: "Auth",
-      });
+      const refused = yield* state.get({ stack: stack.name, stage: stack.stage, fqn: "Auth" });
       if (!refused || refused.kind === "action")
-        return yield* Effect.fail(
-          new Error("Expected an Auth resource checkpoint"),
-        );
+        return yield* Effect.fail(new Error("Expected an Auth resource checkpoint"));
       expect(refused.attr).toBeUndefined();
       expect(
         yield* stack.deploy(app(false)).pipe(
@@ -584,10 +514,7 @@ retryTest.provider(
       Effect.provideService(HttpClient.HttpClient, http),
     );
   },
-  {
-    tags: ["unit", "provider:neon", "provider:neon:auth", "local"],
-    timeout: 10_000,
-  },
+  { tags: ["unit", "provider:neon", "provider:neon:auth", "local"], timeout: 10_000 },
 );
 
 const { test: previewTest } = Test.make({
@@ -601,9 +528,7 @@ previewTest.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
       const parent = Effect.gen(function* () {
-        const project = yield* Project("DeferredAuthProject", {
-          region: "aws-us-east-2",
-        });
+        const project = yield* Project("DeferredAuthProject", { region: "aws-us-east-2" });
         const auth = yield* Auth("ParentAuth", {
           project,
           name: "Deferred adoption parent",
@@ -617,15 +542,10 @@ previewTest.provider(
         return { project, auth };
       });
       const first = yield* stack.deploy(parent);
-      const parentRequest = {
-        project_id: first.auth.projectId,
-        branch_id: first.auth.branchId,
-      };
+      const parentRequest = { project_id: first.auth.projectId, branch_id: first.auth.branchId };
       const parentUri = Redacted.make(first.project.connectionUri);
       const query = (uri: Redacted.Redacted<string>, sql: string) =>
-        withPgClient(uri, (client) =>
-          makePgMigrationExecutor(client).query(sql),
-        );
+        withPgClient(uri, (client) => makePgMigrationExecutor(client).query(sql));
       yield* runSql(
         parentUri,
         "CREATE TABLE auth_preview_probe (id integer PRIMARY KEY, value text NOT NULL); INSERT INTO auth_preview_probe VALUES (1, 'parent');",
@@ -648,24 +568,18 @@ previewTest.provider(
       const parentUsers = yield* query(parentUri, usersSql);
       expect(parentUsers.length).toBe(1);
       const parentAuth = yield* SDK.getNeonAuth(parentRequest);
-      const parentSettings =
-        yield* SDK.getNeonAuthEmailAndPasswordConfig(parentRequest);
-      const parentLocalhost =
-        yield* SDK.getNeonAuthAllowLocalhost(parentRequest);
+      const parentSettings = yield* SDK.getNeonAuthEmailAndPasswordConfig(parentRequest);
+      const parentLocalhost = yield* SDK.getNeonAuthAllowLocalhost(parentRequest);
       const verifyParent = Effect.gen(function* () {
         const survivingAuth = yield* SDK.getNeonAuth(parentRequest);
         expect(survivingAuth.base_url).toBe(parentAuth.base_url);
         expect(survivingAuth.name).toBe(parentAuth.name);
-        expect(
-          yield* SDK.getNeonAuthEmailAndPasswordConfig(parentRequest),
-        ).toEqual(parentSettings);
-        expect(yield* SDK.getNeonAuthAllowLocalhost(parentRequest)).toEqual(
-          parentLocalhost,
-        );
+        expect(yield* SDK.getNeonAuthEmailAndPasswordConfig(parentRequest)).toEqual(parentSettings);
+        expect(yield* SDK.getNeonAuthAllowLocalhost(parentRequest)).toEqual(parentLocalhost);
         expect(yield* query(parentUri, usersSql)).toEqual(parentUsers);
-        expect(
-          yield* query(parentUri, "SELECT * FROM auth_preview_probe"),
-        ).toEqual([{ id: 1, value: "parent" }]);
+        expect(yield* query(parentUri, "SELECT * FROM auth_preview_probe")).toEqual([
+          { id: 1, value: "parent" },
+        ]);
       });
       const preview = Effect.gen(function* () {
         const resources = yield* parent;
@@ -686,28 +600,18 @@ previewTest.provider(
       expect(child.auth.branchId).toBe(child.branch.branchId);
       expect(child.auth.branchId).not.toBe(first.auth.branchId);
       expect(child.auth.baseUrl).not.toBe(first.auth.baseUrl);
-      const childRequest = {
-        project_id: child.auth.projectId,
-        branch_id: child.auth.branchId,
-      };
-      expect((yield* SDK.getNeonAuth(childRequest)).name).toBe(
-        "Deferred adoption child",
-      );
-      expect(
-        (yield* SDK.getNeonAuthAllowLocalhost(childRequest)).allow_localhost,
-      ).toBe(false);
+      const childRequest = { project_id: child.auth.projectId, branch_id: child.auth.branchId };
+      expect((yield* SDK.getNeonAuth(childRequest)).name).toBe("Deferred adoption child");
+      expect((yield* SDK.getNeonAuthAllowLocalhost(childRequest)).allow_localhost).toBe(false);
       const childUri = Redacted.make(child.branch.connectionUri);
       expect(yield* query(childUri, usersSql)).toEqual(parentUsers);
-      expect(
-        yield* query(childUri, "SELECT * FROM auth_preview_probe"),
-      ).toEqual([{ id: 1, value: "parent" }]);
-      yield* runSql(
-        childUri,
-        "UPDATE auth_preview_probe SET value = 'child' WHERE id = 1",
-      );
-      expect(
-        yield* query(childUri, "SELECT * FROM auth_preview_probe"),
-      ).toEqual([{ id: 1, value: "child" }]);
+      expect(yield* query(childUri, "SELECT * FROM auth_preview_probe")).toEqual([
+        { id: 1, value: "parent" },
+      ]);
+      yield* runSql(childUri, "UPDATE auth_preview_probe SET value = 'child' WHERE id = 1");
+      expect(yield* query(childUri, "SELECT * FROM auth_preview_probe")).toEqual([
+        { id: 1, value: "child" },
+      ]);
       yield* verifyParent;
       const unchanged = yield* stack.deploy(preview);
       expect(unchanged.auth.baseUrl).toBe(child.auth.baseUrl);
@@ -758,13 +662,9 @@ test.provider(
       yield* stack.destroy();
       const application = (second: boolean) =>
         Effect.gen(function* () {
-          const project = yield* Project("AuthReplacementProject", {
-            region: "aws-us-east-2",
-          });
+          const project = yield* Project("AuthReplacementProject", { region: "aws-us-east-2" });
           const a = yield* Branch("AuthBranchA", { project });
-          const b = second
-            ? yield* Branch("AuthBranchB", { project })
-            : undefined;
+          const b = second ? yield* Branch("AuthBranchB", { project }) : undefined;
           const auth = yield* Auth("ReplacingAuth", { branch: b ?? a });
           const domain = yield* AuthTrustedDomain("ScopeOrigin", {
             auth,

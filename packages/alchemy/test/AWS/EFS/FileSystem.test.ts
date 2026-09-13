@@ -8,9 +8,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-const efsTagsToRecord = (
-  tags: readonly efs.Tag[] | undefined,
-): Record<string, string> =>
+const efsTagsToRecord = (tags: readonly efs.Tag[] | undefined): Record<string, string> =>
   Object.fromEntries((tags ?? []).map((t) => [t.Key, t.Value]));
 
 // Typed wait-until-gone: DescribeFileSystems surfaces the typed
@@ -18,9 +16,7 @@ const efsTagsToRecord = (
 // in the `deleted` state also counts as gone.
 const waitUntilFileSystemGone = (fileSystemId: string) =>
   efs.describeFileSystems({ FileSystemId: fileSystemId }).pipe(
-    Effect.map((r) =>
-      (r.FileSystems ?? []).every((f) => f.LifeCycleState === "deleted"),
-    ),
+    Effect.map((r) => (r.FileSystems ?? []).every((f) => f.LifeCycleState === "deleted")),
     Effect.catchTag("FileSystemNotFound", () => Effect.succeed(true)),
     Effect.repeat({
       schedule: Schedule.fixed("2 seconds"),
@@ -78,10 +74,7 @@ test.provider(
                   Sid: "AllowMountViaMountTarget",
                   Effect: "Allow",
                   Principal: { AWS: "*" },
-                  Action: [
-                    "elasticfilesystem:ClientMount",
-                    "elasticfilesystem:ClientWrite",
-                  ],
+                  Action: ["elasticfilesystem:ClientMount", "elasticfilesystem:ClientWrite"],
                   Condition: {
                     Bool: {
                       "elasticfilesystem:AccessedViaMountTarget": "true",
@@ -125,11 +118,7 @@ test.provider(
       const protection = yield* efs
         .describeFileSystems({ FileSystemId: created.files.fileSystemId })
         .pipe(
-          Effect.map(
-            (r) =>
-              r.FileSystems![0].FileSystemProtection
-                ?.ReplicationOverwriteProtection,
-          ),
+          Effect.map((r) => r.FileSystems![0].FileSystemProtection?.ReplicationOverwriteProtection),
         );
       expect(protection).toBe("DISABLED");
 
@@ -154,10 +143,7 @@ test.provider(
                       "elasticfilesystem:AccessedViaMountTarget": "true",
                     },
                   },
-                  Action: [
-                    "elasticfilesystem:ClientMount",
-                    "elasticfilesystem:ClientWrite",
-                  ],
+                  Action: ["elasticfilesystem:ClientMount", "elasticfilesystem:ClientWrite"],
                   Principal: { AWS: "*" },
                   Effect: "Allow",
                   Sid: "AllowMountViaMountTarget",
@@ -209,8 +195,7 @@ test.provider(
         .pipe(
           Effect.map(
             (r) =>
-              r.FileSystems![0].FileSystemProtection
-                ?.ReplicationOverwriteProtection ?? "ENABLED",
+              r.FileSystems![0].FileSystemProtection?.ReplicationOverwriteProtection ?? "ENABLED",
           ),
         );
       expect(protectionReverted).toBe("ENABLED");
@@ -230,9 +215,7 @@ test.provider(
       // --- list ---
       const provider = yield* Provider.findProvider(AWS.EFS.FileSystem);
       const all = yield* provider.list();
-      expect(
-        all.some((f) => f.fileSystemId === created.files.fileSystemId),
-      ).toBe(true);
+      expect(all.some((f) => f.fileSystemId === created.files.fileSystemId)).toBe(true);
 
       // --- delete + typed wait-until-gone ---
       yield* stack.destroy();

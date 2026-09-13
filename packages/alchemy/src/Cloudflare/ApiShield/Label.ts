@@ -60,13 +60,7 @@ export interface LabelAttributes {
 export const isLabel = (value: unknown): value is Label =>
   Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
-export type Label = Resource<
-  TypeId,
-  LabelProps,
-  LabelAttributes,
-  never,
-  Providers
->;
+export type Label = Resource<TypeId, LabelProps, LabelAttributes, never, Providers>;
 
 /**
  * A Cloudflare API Shield user label — a zone-scoped tag that can be
@@ -120,9 +114,7 @@ export const LabelProvider = () =>
             Stream.runCollect,
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) =>
-                (page.result ?? []).map((label) =>
-                  toAttributes(label, zone.id),
-                ),
+                (page.result ?? []).map((label) => toAttributes(label, zone.id)),
               ),
             ),
             // A zone may genuinely vanish mid-enumeration: a concurrent
@@ -132,9 +124,7 @@ export const LabelProvider = () =>
             // code-10000 "Authentication error" blips under concurrency are
             // retried globally by the Cloudflare retry policy, so they never
             // reach here as a real failure.)
-            Effect.catchTag(["ZonePurged", "InvalidRoute", "NotFound"], () =>
-              Effect.succeed([]),
-            ),
+            Effect.catchTag(["ZonePurged", "InvalidRoute", "NotFound"], () => Effect.succeed([])),
           ),
         { concurrency: 10 },
       );
@@ -156,11 +146,7 @@ export const LabelProvider = () =>
         return { action: "replace" } as const;
       }
       // zoneId is Input<string>; compare only once both are concrete.
-      if (
-        typeof o.zoneId === "string" &&
-        typeof n.zoneId === "string" &&
-        o.zoneId !== n.zoneId
-      ) {
+      if (typeof o.zoneId === "string" && typeof n.zoneId === "string" && o.zoneId !== n.zoneId) {
         return { action: "replace" } as const;
       }
       return undefined;
@@ -268,10 +254,7 @@ const createLabelName = (id: string, name: string | undefined) =>
     );
   });
 
-const toAttributes = (
-  label: ObservedLabel,
-  zoneId: string,
-): LabelAttributes => ({
+const toAttributes = (label: ObservedLabel, zoneId: string): LabelAttributes => ({
   zoneId,
   name: label.name,
   description: label.description,

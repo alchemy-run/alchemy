@@ -45,11 +45,7 @@ test.provider(
               ScheduleTarget: {
                 Version: "2012-10-17",
                 Statement: [
-                  {
-                    Effect: "Allow",
-                    Action: ["sqs:SendMessage"],
-                    Resource: [queue.queueArn],
-                  },
+                  { Effect: "Allow", Action: ["sqs:SendMessage"], Resource: [queue.queueArn] },
                 ],
               },
             },
@@ -59,10 +55,7 @@ test.provider(
             name: "alchemy-test-schedule-list",
             scheduleExpression: "rate(1 hour)",
             flexibleTimeWindow: { Mode: "OFF" },
-            target: {
-              Arn: queue.queueArn,
-              RoleArn: role.roleArn,
-            },
+            target: { Arn: queue.queueArn, RoleArn: role.roleArn },
           });
         }),
       );
@@ -70,14 +63,10 @@ test.provider(
       const provider = yield* Provider.findProvider(Schedule);
       const all = yield* provider.list();
 
-      expect(all.some((s) => s.scheduleName === deployed.scheduleName)).toBe(
-        true,
-      );
+      expect(all.some((s) => s.scheduleName === deployed.scheduleName)).toBe(true);
       expect(
         all.some(
-          (s) =>
-            s.scheduleName === deployed.scheduleName &&
-            s.scheduleArn === deployed.scheduleArn,
+          (s) => s.scheduleName === deployed.scheduleName && s.scheduleArn === deployed.scheduleArn,
         ),
       ).toBe(true);
 

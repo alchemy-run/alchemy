@@ -7,8 +7,7 @@ import { API_PORT, BoxKey, Marker, SignKey, Site } from "./bindings-shared.ts";
 import Box from "./bindings-sprite.ts";
 
 const bytesToB64 = (bytes: Uint8Array) => Buffer.from(bytes).toString("base64");
-const b64ToBytes = (value: string) =>
-  Uint8Array.from(Buffer.from(value, "base64"));
+const b64ToBytes = (value: string) => Uint8Array.from(Buffer.from(value, "base64"));
 
 /**
  * HTTP Service that exercises Secret, SecretKey, and Sprite bindings.
@@ -95,10 +94,7 @@ export default class BindingsApi extends Fly.Service<BindingsApi>()(
               Effect.succeed({
                 name: undefined as string | undefined,
                 value: undefined as string | undefined,
-                error:
-                  error instanceof Error
-                    ? `${error.name}: ${error.message}`
-                    : String(error),
+                error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
               }),
             ),
           );
@@ -131,12 +127,10 @@ export default class BindingsApi extends Fly.Service<BindingsApi>()(
             value?: string;
           };
           const name = body.name ?? "BINDING_CREATED";
-          return yield* write
-            .create(name, Redacted.make(body.value ?? "created"))
-            .pipe(
-              Effect.flatMap(() => HttpServerResponse.json({ ok: true, name })),
-              Effect.catch((error) => fail(error)),
-            );
+          return yield* write.create(name, Redacted.make(body.value ?? "created")).pipe(
+            Effect.flatMap(() => HttpServerResponse.json({ ok: true, name })),
+            Effect.catch((error) => fail(error)),
+          );
         }
 
         if (path === "/encrypt" && request.method === "POST") {
@@ -190,9 +184,7 @@ export default class BindingsApi extends Fly.Service<BindingsApi>()(
             plaintext: new TextEncoder().encode(body.text ?? ""),
             signature: b64ToBytes(body.signature ?? ""),
           }).pipe(
-            Effect.flatMap((checked) =>
-              HttpServerResponse.json({ valid: checked.valid }),
-            ),
+            Effect.flatMap((checked) => HttpServerResponse.json({ valid: checked.valid })),
             Effect.catch((error) => fail(error)),
           );
         }

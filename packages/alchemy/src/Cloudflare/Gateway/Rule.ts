@@ -38,13 +38,7 @@ export type RuleAction =
  * the `dns_resolver` plane (which is what private-app destinations use when
  * Gateway needs to override the answer for an internal hostname).
  */
-export type RuleFilter =
-  | "http"
-  | "dns"
-  | "l4"
-  | "egress"
-  | "dns_resolver"
-  | (string & {});
+export type RuleFilter = "http" | "dns" | "l4" | "egress" | "dns_resolver" | (string & {});
 
 /**
  * Settings the rule applies when it matches. Re-exports distilled's request
@@ -55,9 +49,7 @@ export type RuleFilter =
  * Only a subset is meaningful for any given `action`; consult Cloudflare's
  * Gateway rule docs for which settings apply per action.
  */
-export type RuleSettings = NonNullable<
-  zeroTrust.CreateGatewayRuleRequest["ruleSettings"]
->;
+export type RuleSettings = NonNullable<zeroTrust.CreateGatewayRuleRequest["ruleSettings"]>;
 
 export interface RuleProps {
   /**
@@ -151,13 +143,7 @@ export interface RuleAttributes {
   updatedAt: string | undefined;
 }
 
-export type Rule = Resource<
-  "Cloudflare.Gateway.Rule",
-  RuleProps,
-  RuleAttributes,
-  never,
-  Providers
->;
+export type Rule = Resource<"Cloudflare.Gateway.Rule", RuleProps, RuleAttributes, never, Providers>;
 
 /**
  * A Cloudflare Zero Trust Gateway rule.
@@ -230,14 +216,10 @@ export const RuleProvider = () =>
         listRules.items({ accountId }).pipe(
           Stream.runCollect,
           Effect.map((chunk) =>
-            Array.from(chunk).find(
-              (r) => (r as { name?: string | null }).name === name,
-            ),
+            Array.from(chunk).find((r) => (r as { name?: string | null }).name === name),
           ),
           Effect.map((found) =>
-            found === undefined
-              ? undefined
-              : narrowRule(found as Parameters<typeof narrowRule>[0]),
+            found === undefined ? undefined : narrowRule(found as Parameters<typeof narrowRule>[0]),
           ),
         );
 
@@ -269,15 +251,8 @@ export const RuleProvider = () =>
               Effect.map((chunk) =>
                 Array.from(chunk).flatMap((page) =>
                   (page.result ?? []).flatMap((raw) => {
-                    const r = narrowRule(
-                      raw as Parameters<typeof narrowRule>[0],
-                    );
-                    if (
-                      !r.id ||
-                      !r.action ||
-                      !r.filters ||
-                      r.precedence === undefined
-                    ) {
+                    const r = narrowRule(raw as Parameters<typeof narrowRule>[0]);
+                    if (!r.id || !r.action || !r.filters || r.precedence === undefined) {
                       return [];
                     }
                     return [
@@ -341,10 +316,7 @@ export const RuleProvider = () =>
               // before re-failing so a racing create still converges.
               Effect.catch((err) =>
                 Effect.gen(function* () {
-                  const existing = yield* findRuleByName(
-                    accountId,
-                    resolvedName,
-                  );
+                  const existing = yield* findRuleByName(accountId, resolvedName);
                   if (existing) return existing;
                   return yield* Effect.fail(err);
                 }),
@@ -385,9 +357,7 @@ export const RuleProvider = () =>
             observed.precedence === undefined
           ) {
             return yield* Effect.fail(
-              new Error(
-                "Cloudflare returned a Gateway rule without id/action/filters/precedence",
-              ),
+              new Error("Cloudflare returned a Gateway rule without id/action/filters/precedence"),
             );
           }
           return {
@@ -451,8 +421,7 @@ interface ObservedRule {
   readonly updatedAt?: string;
 }
 
-const undef = <T>(v: T | null | undefined): T | undefined =>
-  v == null ? undefined : v;
+const undef = <T>(v: T | null | undefined): T | undefined => (v == null ? undefined : v);
 
 const undefArr = <T>(
   v: ReadonlyArray<T | null> | null | undefined,
@@ -506,10 +475,7 @@ interface RuleMutableBody {
   description?: string;
 }
 
-const buildMutableBody = (
-  news: RuleProps,
-  resolvedName: string,
-): RuleMutableBody => {
+const buildMutableBody = (news: RuleProps, resolvedName: string): RuleMutableBody => {
   const body: RuleMutableBody = {
     name: resolvedName,
     action: news.action,
@@ -529,50 +495,32 @@ const buildMutableBody = (
 // Drift detection
 // ---------------------------------------------------------------------------
 
-const bodyEqualsObserved = (
-  desired: RuleMutableBody,
-  observed: ObservedRule,
-): boolean => {
+const bodyEqualsObserved = (desired: RuleMutableBody, observed: ObservedRule): boolean => {
   if (desired.name !== observed.name) return false;
   if (desired.action !== observed.action) return false;
   if (!arrayEquals(desired.filters, observed.filters)) return false;
   if (desired.traffic !== undefined && desired.traffic !== observed.traffic) {
     return false;
   }
-  if (
-    desired.identity !== undefined &&
-    desired.identity !== observed.identity
-  ) {
+  if (desired.identity !== undefined && desired.identity !== observed.identity) {
     return false;
   }
-  if (
-    desired.devicePosture !== undefined &&
-    desired.devicePosture !== observed.devicePosture
-  ) {
+  if (desired.devicePosture !== undefined && desired.devicePosture !== observed.devicePosture) {
     return false;
   }
-  if (
-    desired.precedence !== undefined &&
-    desired.precedence !== observed.precedence
-  ) {
+  if (desired.precedence !== undefined && desired.precedence !== observed.precedence) {
     return false;
   }
   if (desired.enabled !== undefined && desired.enabled !== observed.enabled) {
     return false;
   }
-  if (
-    desired.description !== undefined &&
-    desired.description !== observed.description
-  ) {
+  if (desired.description !== undefined && desired.description !== observed.description) {
     return false;
   }
   // ruleSettings is a deeply-nested object whose server echo may include
   // extra `null` fields. Stringify-compare only when the caller set them.
   if (desired.ruleSettings !== undefined) {
-    if (
-      JSON.stringify(desired.ruleSettings) !==
-      JSON.stringify(observed.ruleSettings ?? {})
-    ) {
+    if (JSON.stringify(desired.ruleSettings) !== JSON.stringify(observed.ruleSettings ?? {})) {
       return false;
     }
   }

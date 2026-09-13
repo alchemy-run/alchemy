@@ -1,9 +1,9 @@
-import { GcpEnvironment } from "@/GCP/Environment";
 import type { GcpOpError } from "@distilled.cloud/gcp/datastream_v1";
 import { NotFound } from "@distilled.cloud/gcp/datastream_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { GcpEnvironment } from "@/GCP/Environment";
 
 export const logLevel = Effect.provideService(
   MinimumLogLevel,
@@ -15,12 +15,9 @@ export const runLifecycle = !process.env.FAST;
 
 // Private connections peer a dedicated VPC and take 5-10 minutes to create
 // and delete.
-export const runSlowLifecycle =
-  !!process.env.GCP_TEST_SLOW && !process.env.FAST;
+export const runSlowLifecycle = !!process.env.GCP_TEST_SLOW && !process.env.FAST;
 
-export const currentProject = GcpEnvironment.current.pipe(
-  Effect.map((env) => env.project),
-);
+export const currentProject = GcpEnvironment.current.pipe(Effect.map((env) => env.project));
 
 export const LOCATION = "us-central1";
 

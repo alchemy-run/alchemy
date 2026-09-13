@@ -10,10 +10,7 @@ import { expectUrlContains } from "../Utils/Http.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const script = (marker: string) =>
   `export default { fetch() { return new Response("${marker}"); } };`;
@@ -48,9 +45,7 @@ describe.concurrent(
           expect(v1.preview.previewSlug).toBeDefined();
           expect(v1.preview.deploymentId).toBeDefined();
           expect(v1.preview.url).toBeDefined();
-          expect(v1.preview.url).toContain(
-            `${v1.preview.previewSlug}-${v1.parent.workerName}.`,
-          );
+          expect(v1.preview.url).toContain(`${v1.preview.previewSlug}-${v1.parent.workerName}.`);
           expect(v1.preview.versionOf).toBeUndefined();
 
           yield* expectUrlContains(v1.parent.url!, "parent-marker-v1", {
@@ -120,9 +115,7 @@ describe.concurrent(
           const error = yield* stack
             .deploy(
               Effect.gen(function* () {
-                yield* Cloudflare.Worker("ComboParent", {
-                  script: script("combo-parent"),
-                });
+                yield* Cloudflare.Worker("ComboParent", { script: script("combo-parent") });
                 return yield* Cloudflare.Worker("ComboPreview", {
                   script: script("combo-preview"),
                   preview: { of: parent.workerName },
@@ -158,9 +151,7 @@ describe.concurrent(
           const error = yield* stack
             .deploy(
               Effect.gen(function* () {
-                yield* Cloudflare.Worker("SettingsParent", {
-                  script: script("settings-parent"),
-                });
+                yield* Cloudflare.Worker("SettingsParent", { script: script("settings-parent") });
                 return yield* Cloudflare.Worker("SettingsPreview", {
                   script: script("settings-preview"),
                   preview: { of: parent.workerName },

@@ -169,9 +169,7 @@ export interface WebsiteRouterDomainProps {
  * site owns its own CloudFront distribution) or a Router attachment (the
  * site is served through an existing `AWS.Website.Router`).
  */
-export type WebsiteDomainProps =
-  | WebsiteStandaloneDomainProps
-  | WebsiteRouterDomainProps;
+export type WebsiteDomainProps = WebsiteStandaloneDomainProps | WebsiteRouterDomainProps;
 
 /**
  * Accepted `domain` prop shape: a bare hostname string (shorthand for
@@ -189,11 +187,7 @@ export type WebsiteDomainInput = string | WebsiteDomainProps | null;
 export const normalizeWebsiteDomain = <D extends WebsiteDomainProps>(
   domain: string | D | null | undefined,
 ): D | undefined =>
-  domain == null
-    ? undefined
-    : typeof domain === "string"
-      ? ({ name: domain } as D)
-      : domain;
+  domain == null ? undefined : typeof domain === "string" ? ({ name: domain } as D) : domain;
 
 export interface WebsiteRewrite {
   /**
@@ -245,12 +239,7 @@ export interface WebsiteInvalidationProps {
  * Character encoding appended as `charset` to inferred text-based content
  * types (`none` omits the charset entirely).
  */
-export type WebsiteTextEncoding =
-  | "utf-8"
-  | "iso-8859-1"
-  | "windows-1252"
-  | "ascii"
-  | "none";
+export type WebsiteTextEncoding = "utf-8" | "iso-8859-1" | "windows-1252" | "ascii" | "none";
 
 export interface StaticSiteBuildProps {
   /**

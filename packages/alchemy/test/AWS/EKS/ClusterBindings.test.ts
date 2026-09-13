@@ -19,9 +19,7 @@ const slowStack = Core.scratchStack(testOptions, "EKSClusterBindings");
 // envs as Cluster.test.ts: a cluster IAM role (AWS_TEST_EKS_ROLE_ARN) and at
 // least two subnets (AWS_TEST_EKS_SUBNET_IDS, comma-separated). An account
 // with that standing infrastructure runs this unchanged.
-test.provider.skipIf(
-  !process.env.AWS_TEST_EKS_ROLE_ARN || !process.env.AWS_TEST_EKS_SUBNET_IDS,
-)(
+test.provider.skipIf(!process.env.AWS_TEST_EKS_ROLE_ARN || !process.env.AWS_TEST_EKS_SUBNET_IDS)(
   "cluster-scoped bindings against a live control plane",
   () =>
     Effect.gen(function* () {
@@ -39,10 +37,7 @@ test.provider.skipIf(
         const get = (path: string) =>
           HttpClient.get(`${baseUrl}${path}`).pipe(
             Effect.retry({
-              schedule: Schedule.max([
-                Schedule.exponential("500 millis"),
-                Schedule.recurs(10),
-              ]),
+              schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
             }),
             Effect.flatMap((r) => r.json),
           );
@@ -85,34 +80,27 @@ test.provider.skipIf(
         expect(probes.nodegroupTag).toBe("ResourceNotFoundException");
         expect(probes.addonTag).toBe("ResourceNotFoundException");
         expect(probes.fargateProfileTag).toBe("ResourceNotFoundException");
-        expect([
-          "ResourceNotFoundException",
-          "InvalidParameterException",
-        ]).toContain(probes.podIdentityTag);
-        expect([
-          "ResourceNotFoundException",
-          "InvalidRequestException",
-        ]).toContain(probes.accessEntryTag);
-        expect([
-          "ResourceNotFoundException",
-          "InvalidParameterException",
-        ]).toContain(probes.updateTag);
-        expect([
-          "ResourceNotFoundException",
-          "InvalidParameterException",
-        ]).toContain(probes.insightTag);
-        expect([
-          "ResourceNotFoundException",
-          "InvalidRequestException",
-        ]).toContain(probes.associatedPoliciesTag);
-        expect([
-          "ResourceNotFoundException",
-          "InvalidParameterException",
-        ]).toContain(probes.capabilityTag);
-        expect([
-          "ResourceNotFoundException",
-          "InvalidParameterException",
-        ]).toContain(probes.identityProviderConfigTag);
+        expect(["ResourceNotFoundException", "InvalidParameterException"]).toContain(
+          probes.podIdentityTag,
+        );
+        expect(["ResourceNotFoundException", "InvalidRequestException"]).toContain(
+          probes.accessEntryTag,
+        );
+        expect(["ResourceNotFoundException", "InvalidParameterException"]).toContain(
+          probes.updateTag,
+        );
+        expect(["ResourceNotFoundException", "InvalidParameterException"]).toContain(
+          probes.insightTag,
+        );
+        expect(["ResourceNotFoundException", "InvalidRequestException"]).toContain(
+          probes.associatedPoliciesTag,
+        );
+        expect(["ResourceNotFoundException", "InvalidParameterException"]).toContain(
+          probes.capabilityTag,
+        );
+        expect(["ResourceNotFoundException", "InvalidParameterException"]).toContain(
+          probes.identityProviderConfigTag,
+        );
 
         // Insights refresh: kick an on-demand refresh and read its status
         // back. A refresh already in flight surfaces the typed

@@ -45,6 +45,4 @@ export interface StartInstance extends Binding.Service<
   >
 > {}
 
-export const StartInstance = Binding.Service<StartInstance>(
-  "AWS.EC2.StartInstance",
-);
+export const StartInstance = Binding.Service<StartInstance>("AWS.EC2.StartInstance");

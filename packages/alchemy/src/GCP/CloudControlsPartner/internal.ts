@@ -1,17 +1,13 @@
 import * as cloudcontrolspartner from "@distilled.cloud/gcp/cloudcontrolspartner_v1";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
-import * as Data from "effect/Data";
 import * as Config from "effect/Config";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 
 export const MAX_DISPLAY_NAME_LENGTH = 128;
 export const LIST_LOCATIONS = ["global", "-"] as const;
@@ -41,20 +37,15 @@ export const organizationParent = (value: string) =>
     ? `organizations/${lastSegment(value.split("/locations/")[0] ?? value)}`
     : `organizations/${lastSegment(value)}`;
 
-export const organizationIdOf = (value: string) =>
-  lastSegment(organizationParent(value));
+export const organizationIdOf = (value: string) => lastSegment(organizationParent(value));
 
-export const normalizeLocation = (location: string) =>
-  lastSegment(location).toLowerCase();
+export const normalizeLocation = (location: string) => lastSegment(location).toLowerCase();
 
 export const locationParent = (organization: string, location: string) =>
   `${organizationParent(organization)}/locations/${normalizeLocation(location)}`;
 
-export const customerName = (
-  organization: string,
-  location: string,
-  customerId: string,
-) => `${locationParent(organization, location)}/customers/${customerId}`;
+export const customerName = (organization: string, location: string, customerId: string) =>
+  `${locationParent(organization, location)}/customers/${customerId}`;
 
 export const parseName = (name: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
@@ -62,16 +53,10 @@ export const parseName = (name: string) => {
   const locationsAt = parts.lastIndexOf("locations");
   const customersAt = parts.lastIndexOf("customers");
   return {
-    organization:
-      orgsAt >= 0 && parts[orgsAt + 1]
-        ? `organizations/${parts[orgsAt + 1]}`
-        : "",
-    location:
-      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
+    organization: orgsAt >= 0 && parts[orgsAt + 1] ? `organizations/${parts[orgsAt + 1]}` : "",
+    location: locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
     customerId:
-      customersAt >= 0 && parts[customersAt + 1]
-        ? parts[customersAt + 1]!
-        : lastSegment(name),
+      customersAt >= 0 && parts[customersAt + 1] ? parts[customersAt + 1]! : lastSegment(name),
     parent:
       customersAt > 0
         ? parts.slice(0, customersAt).join("/")
@@ -90,10 +75,7 @@ export const toCustomerId = (value: string | undefined) => {
 export const sameText = (left: string | undefined, right: string | undefined) =>
   (left ?? "") === (right ?? "");
 
-export const replaceOn = (
-  previous: string | undefined,
-  next: string | undefined,
-) =>
+export const replaceOn = (previous: string | undefined, next: string | undefined) =>
   previous !== undefined && next !== undefined && previous !== next
     ? ({ action: "replace" as const, deleteFirst: false } as const)
     : undefined;
@@ -134,10 +116,7 @@ const fitMarker = (labels: Record<string, string>, maxLength: number) => {
   let stage = labels[alchemyLabelKeys.stage] ?? "x";
   let id = labels[alchemyLabelKeys.id] ?? "x";
   let marker = markerOf(stack, stage, id);
-  while (
-    marker.length > maxLength &&
-    (stack.length > 1 || stage.length > 1 || id.length > 1)
-  ) {
+  while (marker.length > maxLength && (stack.length > 1 || stage.length > 1 || id.length > 1)) {
     if (stack.length >= stage.length && stack.length >= id.length) {
       stack = stack.slice(0, -1);
     } else if (stage.length >= id.length) {
@@ -185,14 +164,10 @@ export const parseOwnership = (
 };
 
 export const hasOwnershipMarker = (text: string | undefined) =>
-  Object.keys(parseOwnership(text).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseOwnership(text).labels).some((key) => key.startsWith("alchemy-"));
 
 const prefixMatch = (expected: string, observed: string) =>
-  expected === observed ||
-  expected.startsWith(observed) ||
-  observed.startsWith(expected);
+  expected === observed || expected.startsWith(observed) || observed.startsWith(expected);
 
 export const ownedByAlchemy = (id: string, text: string | undefined) =>
   Effect.gen(function* () {
@@ -202,18 +177,9 @@ export const ownedByAlchemy = (id: string, text: string | undefined) =>
     const exact = yield* hasAlchemyLabels(id, labels);
     if (exact) return true;
     return (
-      prefixMatch(
-        expected[alchemyLabelKeys.stack] ?? "",
-        labels[alchemyLabelKeys.stack] ?? "",
-      ) &&
-      prefixMatch(
-        expected[alchemyLabelKeys.stage] ?? "",
-        labels[alchemyLabelKeys.stage] ?? "",
-      ) &&
-      prefixMatch(
-        expected[alchemyLabelKeys.id] ?? "",
-        labels[alchemyLabelKeys.id] ?? "",
-      )
+      prefixMatch(expected[alchemyLabelKeys.stack] ?? "", labels[alchemyLabelKeys.stack] ?? "") &&
+      prefixMatch(expected[alchemyLabelKeys.stage] ?? "", labels[alchemyLabelKeys.stage] ?? "") &&
+      prefixMatch(expected[alchemyLabelKeys.id] ?? "", labels[alchemyLabelKeys.id] ?? "")
     );
   });
 
@@ -235,13 +201,8 @@ const ancestryParent = (name: string) =>
 /** Organization from the ConfigProvider (env by default), if configured. */
 const configuredOrganization = () =>
   Effect.gen(function* () {
-    for (const key of [
-      "GOOGLE_CLOUDCONTROLSPARTNER_ORGANIZATION",
-      "GOOGLE_ORGANIZATION_ID",
-    ]) {
-      const raw = Option.getOrUndefined(
-        yield* Config.option(Config.String(key)),
-      )?.trim();
+    for (const key of ["GOOGLE_CLOUDCONTROLSPARTNER_ORGANIZATION", "GOOGLE_ORGANIZATION_ID"]) {
+      const raw = Option.getOrUndefined(yield* Config.option(Config.String(key)))?.trim();
       if (raw) return organizationParent(raw);
     }
     return undefined;
@@ -261,10 +222,7 @@ export const tryResolveOrganization = () =>
     return undefined;
   });
 
-export const resolveOrganization = (
-  explicit: string | undefined,
-  existing: string | undefined,
-) =>
+export const resolveOrganization = (explicit: string | undefined, existing: string | undefined) =>
   Effect.gen(function* () {
     if (explicit !== undefined && explicit.length > 0) {
       return organizationParent(explicit);
@@ -285,8 +243,7 @@ export const listLocationParents = (organization: string, region: string) =>
     locationParent(organization, location),
   );
 
-const emptyCustomers = () =>
-  Effect.succeed([] as cloudcontrolspartner.Customer[]);
+const emptyCustomers = () => Effect.succeed([] as cloudcontrolspartner.Customer[]);
 
 export const listCustomers = (parent: string) =>
   parent.length === 0

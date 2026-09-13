@@ -12,20 +12,14 @@ test.provider(
   () =>
     Effect.gen(function* () {
       expect(
-        yield* resolveBranchScope({
-          branch: { projectId: "project", branchId: "branch" },
-        }),
+        yield* resolveBranchScope({ branch: { projectId: "project", branchId: "branch" } }),
       ).toEqual({ projectId: "project", branchId: "branch" });
       // @ts-expect-error Scope alternatives are mutually exclusive, including for JavaScript callers at runtime.
       const conflict: BranchScope = {
         project: { projectId: "project" },
         branch: { projectId: "project", branchId: "branch" },
       };
-      expect(
-        Result.isFailure(
-          yield* resolveBranchScope(conflict).pipe(Effect.result),
-        ),
-      ).toBe(true);
+      expect(Result.isFailure(yield* resolveBranchScope(conflict).pipe(Effect.result))).toBe(true);
       expect(
         // @ts-expect-error A scope declaration is required.
         Result.isFailure(yield* resolveBranchScope({}).pipe(Effect.result)),

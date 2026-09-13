@@ -40,7 +40,6 @@ export interface AcceptSubscriptionRequest extends Binding.Service<
     >
   >
 > {}
-export const AcceptSubscriptionRequest =
-  Binding.Service<AcceptSubscriptionRequest>(
-    "AWS.DataZone.AcceptSubscriptionRequest",
-  );
+export const AcceptSubscriptionRequest = Binding.Service<AcceptSubscriptionRequest>(
+  "AWS.DataZone.AcceptSubscriptionRequest",
+);

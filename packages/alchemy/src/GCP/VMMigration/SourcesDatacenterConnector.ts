@@ -26,9 +26,7 @@ import {
   waitUntilGone,
 } from "./internal.ts";
 
-export type DatacenterConnectorState =
-  | vm.DatacenterConnectorStateEnum
-  | (string & {});
+export type DatacenterConnectorState = vm.DatacenterConnectorStateEnum | (string & {});
 
 export type SourcesDatacenterConnectorProps = {
   /**
@@ -132,11 +130,7 @@ export const SourcesDatacenterConnector = Resource<SourcesDatacenterConnector>(
 const resourceName = (source: string, datacenterConnectorId: string) =>
   `${source}/datacenterConnectors/${datacenterConnectorId}`;
 
-const toAttrs = (
-  connector: vm.DatacenterConnector,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (connector: vm.DatacenterConnector, project: string, region: string) => {
   const name = connector.name ?? "";
   const parsed = parseName(name, "datacenterConnectors", region);
   const ownership = parseOwnership(connector.version);
@@ -170,22 +164,11 @@ const listChildren = (parent: string) =>
       pageSize: 1000,
     }),
     (page) => page.datacenterConnectors,
-  ).pipe(
-    Effect.catchTag("NotFound", () =>
-      Effect.succeed([] as vm.DatacenterConnector[]),
-    ),
-  );
+  ).pipe(Effect.catchTag("NotFound", () => Effect.succeed([] as vm.DatacenterConnector[])));
 
 export const SourcesDatacenterConnectorProvider = () =>
   Provider.succeed(SourcesDatacenterConnector, {
-    stables: [
-      "name",
-      "datacenterConnectorId",
-      "source",
-      "project",
-      "location",
-      "createTime",
-    ],
+    stables: ["name", "datacenterConnectorId", "source", "project", "location", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -194,23 +177,17 @@ export const SourcesDatacenterConnectorProvider = () =>
       const extra =
         (news.registrationId !== undefined &&
           (olds?.registrationId ?? output?.registrationId) !== undefined &&
-          news.registrationId !==
-            (olds?.registrationId ?? output?.registrationId)) ||
+          news.registrationId !== (olds?.registrationId ?? output?.registrationId)) ||
         (news.serviceAccount !== undefined &&
           (olds?.serviceAccount ?? output?.serviceAccount) !== undefined &&
-          news.serviceAccount !==
-            (olds?.serviceAccount ?? output?.serviceAccount));
+          news.serviceAccount !== (olds?.serviceAccount ?? output?.serviceAccount));
       return replaceOnIdentity({
-        previousId:
-          olds?.datacenterConnectorId ?? output?.datacenterConnectorId,
+        previousId: olds?.datacenterConnectorId ?? output?.datacenterConnectorId,
         nextId:
           news.datacenterConnectorId ??
           olds?.datacenterConnectorId ??
           output?.datacenterConnectorId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -223,10 +200,7 @@ export const SourcesDatacenterConnectorProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const datacenterConnectorId = yield* toPhysicalId(
         id,
         olds?.datacenterConnectorId,
@@ -238,24 +212,17 @@ export const SourcesDatacenterConnectorProvider = () =>
           ? sourceOf(olds.source, env.project, location)
           : (output?.source ?? "");
       const name =
-        output?.name ??
-        (source.length > 0 ? resourceName(source, datacenterConnectorId) : "");
+        output?.name ?? (source.length > 0 ? resourceName(source, datacenterConnectorId) : "");
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* ownedByAlchemy(id, existing.version))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.version)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* forEachSource(
-          env.project,
-          listChildren,
-          env.region,
-        );
+        const items = yield* forEachSource(env.project, listChildren, env.region);
         return items
           .filter((item) => hasOwnershipMarker(item.version))
           .map((item) => toAttrs(item, env.project, env.region));
@@ -263,10 +230,7 @@ export const SourcesDatacenterConnectorProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const source = sourceOf(news.source, env.project, location);
       const datacenterConnectorId = yield* toPhysicalId(
         id,

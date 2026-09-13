@@ -7,10 +7,7 @@ import type { Workflow } from "./Workflow.ts";
  * Request accepted by the {@link GetWorkflowRun} runtime callable. The
  * `WorkflowArn` is injected from the bound {@link Workflow}.
  */
-export type GetWorkflowRunInput = Omit<
-  mwaa.GetWorkflowRunRequest,
-  "WorkflowArn"
->;
+export type GetWorkflowRunInput = Omit<mwaa.GetWorkflowRunRequest, "WorkflowArn">;
 
 /**
  * Runtime binding for `airflow-serverless:GetWorkflowRun`.
@@ -42,6 +39,4 @@ export interface GetWorkflowRun extends Binding.Service<
     ) => Effect.Effect<mwaa.GetWorkflowRunResponse, mwaa.GetWorkflowRunError>
   >
 > {}
-export const GetWorkflowRun = Binding.Service<GetWorkflowRun>(
-  "AWS.MWAAServerless.GetWorkflowRun",
-);
+export const GetWorkflowRun = Binding.Service<GetWorkflowRun>("AWS.MWAAServerless.GetWorkflowRun");

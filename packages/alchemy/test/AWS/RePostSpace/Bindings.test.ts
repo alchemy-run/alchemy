@@ -6,9 +6,7 @@ import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import * as Test from "@/Test/Alchemy";
 import * as Core from "@/Test/Core";
-import RePostSpaceBindingsFunctionLive, {
-  RePostSpaceBindingsFunction,
-} from "./bindings-handler";
+import RePostSpaceBindingsFunctionLive, { RePostSpaceBindingsFunction } from "./bindings-handler";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -41,9 +39,7 @@ test.provider(
   "listChannels on a nonexistent space fails with ResourceNotFoundException",
   () =>
     Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        repostspace.listChannels({ spaceId: BOGUS_SPACE_ID }),
-      );
+      const error = yield* Effect.flip(repostspace.listChannels({ spaceId: BOGUS_SPACE_ID }));
       expect(error._tag).toBe("ResourceNotFoundException");
     }),
   { tags: ["provider:aws", "provider:aws:repostspace", "live"] },
@@ -61,9 +57,7 @@ test.provider(
           body: "alchemy probe",
         }),
       );
-      expect(["ResourceNotFoundException", "ValidationException"]).toContain(
-        error._tag,
-      );
+      expect(["ResourceNotFoundException", "ValidationException"]).toContain(error._tag);
     }),
   { tags: ["provider:aws", "provider:aws:repostspace", "live"] },
 );
@@ -79,9 +73,7 @@ test.provider(
           role: "EXPERT",
         }),
       );
-      expect(["ResourceNotFoundException", "ValidationException"]).toContain(
-        error._tag,
-      );
+      expect(["ResourceNotFoundException", "ValidationException"]).toContain(error._tag);
     }),
   { tags: ["provider:aws", "provider:aws:repostspace", "live"] },
 );
@@ -113,9 +105,7 @@ describe(
         yield* Effect.logInfo("RePostSpace E2E setup: destroying previous run");
         yield* sharedStack.destroy();
 
-        yield* Effect.logInfo(
-          "RePostSpace E2E setup: deploying space + Lambda (~30 min)",
-        );
+        yield* Effect.logInfo("RePostSpace E2E setup: deploying space + Lambda (~30 min)");
         const { functionUrl } = yield* sharedStack.deploy(
           Effect.gen(function* () {
             return yield* RePostSpaceBindingsFunction;
@@ -130,15 +120,10 @@ describe(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.retry({
-            schedule: Schedule.max([
-              Schedule.fixed("2 seconds"),
-              Schedule.recurs(60),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(60)]),
           }),
         );
       }),
@@ -154,13 +139,11 @@ describe(
       { timeout: 600_000 },
     );
 
-    test.provider.skipIf(!RUN_LIVE)(
-      "all 11 capabilities initialize in the runtime",
-      () =>
-        Effect.gen(function* () {
-          const response = (yield* get("/bindings")) as any;
-          expect(response.bound).toHaveLength(11);
-        }),
+    test.provider.skipIf(!RUN_LIVE)("all 11 capabilities initialize in the runtime", () =>
+      Effect.gen(function* () {
+        const response = (yield* get("/bindings")) as any;
+        expect(response.bound).toHaveLength(11);
+      }),
     );
 
     test.provider.skipIf(!RUN_LIVE)(
@@ -178,9 +161,7 @@ describe(
           // Channel-role mutations against the real channel with a bogus
           // accessor — the API reports per-accessor errors (or a typed 400),
           // either proves the grant + injection end-to-end.
-          const roles = (yield* post(
-            `/channel-roles/bogus?channelId=${created.channelId}`,
-          )) as any;
+          const roles = (yield* post(`/channel-roles/bogus?channelId=${created.channelId}`)) as any;
           expect(roles.added).toBeDefined();
           expect(roles.removed).toBeDefined();
         }),

@@ -1,10 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import {
-  type WaitComputeOptions,
-  waitGlobalOperation,
-  waitRegionOperation,
-  waitZoneOperation,
-} from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -24,6 +18,12 @@ import {
   toLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import {
+  type WaitComputeOptions,
+  waitGlobalOperation,
+  waitRegionOperation,
+  waitZoneOperation,
+} from "./operations.ts";
 
 export type SnapshotProps = {
   /**
@@ -154,29 +154,21 @@ export type Snapshot = Resource<
  */
 export const Snapshot = Resource<Snapshot>("GCP.Compute.Snapshot");
 
-export class SnapshotNotResolved extends Data.TaggedError(
-  "GCP.Compute.SnapshotNotResolved",
-)<{
+export class SnapshotNotResolved extends Data.TaggedError("GCP.Compute.SnapshotNotResolved")<{
   snapshotName: string;
 }> {}
 
-export class SnapshotNotReady extends Data.TaggedError(
-  "GCP.Compute.SnapshotNotReady",
-)<{
+export class SnapshotNotReady extends Data.TaggedError("GCP.Compute.SnapshotNotReady")<{
   snapshotName: string;
   status: string;
 }> {}
 
-export class SnapshotFailed extends Data.TaggedError(
-  "GCP.Compute.SnapshotFailed",
-)<{
+export class SnapshotFailed extends Data.TaggedError("GCP.Compute.SnapshotFailed")<{
   snapshotName: string;
   status: string;
 }> {}
 
-export class SnapshotStillExists extends Data.TaggedError(
-  "GCP.Compute.SnapshotStillExists",
-)<{
+export class SnapshotStillExists extends Data.TaggedError("GCP.Compute.SnapshotStillExists")<{
   snapshotName: string;
   status: string;
 }> {}
@@ -327,37 +319,26 @@ export const SnapshotProvider = () =>
 
       const previousName = olds?.snapshotName ?? output?.snapshotName;
       const nextName = news.snapshotName ?? previousName;
-      const previousSource = canonicalizeSource(
-        olds?.sourceDisk ?? output?.sourceDisk,
-      );
+      const previousSource = canonicalizeSource(olds?.sourceDisk ?? output?.sourceDisk);
       const nextSource = canonicalizeSource(news.sourceDisk);
       const previousInstant = canonicalizeSource(
         olds?.sourceInstantSnapshot ?? output?.sourceInstantSnapshot,
       );
       const nextInstant = canonicalizeSource(news.sourceInstantSnapshot);
-      const previousType =
-        olds?.snapshotType ?? output?.snapshotType ?? DEFAULT_SNAPSHOT_TYPE;
+      const previousType = olds?.snapshotType ?? output?.snapshotType ?? DEFAULT_SNAPSHOT_TYPE;
       const nextType = news.snapshotType ?? DEFAULT_SNAPSHOT_TYPE;
-      const previousDescription =
-        olds?.description ?? output?.description ?? "";
+      const previousDescription = olds?.description ?? output?.description ?? "";
       const nextDescription = news.description ?? "";
       const previousChain = olds?.chainName ?? output?.chainName ?? "";
       const nextChain = news.chainName ?? "";
       const locationsSpecified = news.storageLocations !== undefined;
       const locationsChanged =
         locationsSpecified &&
-        !sameLocations(
-          news.storageLocations,
-          olds?.storageLocations ?? output?.storageLocations,
-        );
+        !sameLocations(news.storageLocations, olds?.storageLocations ?? output?.storageLocations);
 
       const replace =
-        (previousName !== undefined &&
-          nextName !== undefined &&
-          previousName !== nextName) ||
-        (nextSource.length > 0 &&
-          previousSource.length > 0 &&
-          previousSource !== nextSource) ||
+        (previousName !== undefined && nextName !== undefined && previousName !== nextName) ||
+        (nextSource.length > 0 && previousSource.length > 0 && previousSource !== nextSource) ||
         previousInstant !== nextInstant ||
         previousType !== nextType ||
         previousDescription !== nextDescription ||
@@ -368,25 +349,17 @@ export const SnapshotProvider = () =>
       return {
         action: "replace" as const,
         deleteFirst:
-          previousName !== undefined &&
-          nextName !== undefined &&
-          previousName === nextName,
+          previousName !== undefined && nextName !== undefined && previousName === nextName,
       };
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const snapshotName = yield* toName(
-        id,
-        olds?.snapshotName,
-        output?.snapshotName,
-      );
+      const snapshotName = yield* toName(id, olds?.snapshotName, output?.snapshotName);
       const existing = yield* getByName(env.project, snapshotName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -400,9 +373,7 @@ export const SnapshotProvider = () =>
           })
           .pipe(
             Stream.filter((snapshot) =>
-              Object.keys(snapshot.labels ?? {}).some((key) =>
-                key.startsWith("alchemy-"),
-              ),
+              Object.keys(snapshot.labels ?? {}).some((key) => key.startsWith("alchemy-")),
             ),
             Stream.map((snapshot) => toAttrs(snapshot, env.project)),
             Stream.runCollect,
@@ -412,11 +383,7 @@ export const SnapshotProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const snapshotName = yield* toName(
-        id,
-        news.snapshotName,
-        output?.snapshotName,
-      );
+      const snapshotName = yield* toName(id, news.snapshotName, output?.snapshotName);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),

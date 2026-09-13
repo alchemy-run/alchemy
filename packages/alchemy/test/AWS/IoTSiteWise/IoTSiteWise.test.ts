@@ -27,24 +27,14 @@ test.provider(
 );
 
 // Bounded wait until a describe reports the resource gone.
-const untilGone = <R>(
-  label: string,
-  probe: Effect.Effect<"gone" | string, never, R>,
-) =>
+const untilGone = <R>(label: string, probe: Effect.Effect<"gone" | string, never, R>) =>
   Effect.gen(function* () {
     const state = yield* probe;
     if (state !== "gone") {
-      return yield* Effect.fail(
-        new Error(`${label} still exists (state: ${state})`),
-      );
+      return yield* Effect.fail(new Error(`${label} still exists (state: ${state})`));
     }
   }).pipe(
-    Effect.retry({
-      schedule: Schedule.max([
-        Schedule.spaced("3 seconds"),
-        Schedule.recurs(10),
-      ]),
-    }),
+    Effect.retry({ schedule: Schedule.max([Schedule.spaced("3 seconds"), Schedule.recurs(10)]) }),
   );
 
 test.provider(
@@ -96,9 +86,10 @@ test.provider(
         assetModelId: first.model.assetModelId,
       });
       expect(describedModel.assetModelDescription).toBe("pump model v1");
-      expect(
-        describedModel.assetModelProperties.map((p) => p.name).sort(),
-      ).toEqual(["SerialNumber", "Temperature"]);
+      expect(describedModel.assetModelProperties.map((p) => p.name).sort()).toEqual([
+        "SerialNumber",
+        "Temperature",
+      ]);
       const describedAsset = yield* sitewise.describeAsset({
         assetId: first.asset.assetId,
         excludeProperties: true,
@@ -129,39 +120,24 @@ test.provider(
       yield* stack.destroy();
       yield* untilGone(
         "asset",
-        sitewise
-          .describeAsset({
-            assetId: first.asset.assetId,
-            excludeProperties: true,
-          })
-          .pipe(
-            Effect.map((r) => r.assetStatus.state as string),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed("gone" as const),
-            ),
-            Effect.orDie,
-          ),
+        sitewise.describeAsset({ assetId: first.asset.assetId, excludeProperties: true }).pipe(
+          Effect.map((r) => r.assetStatus.state as string),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed("gone" as const)),
+          Effect.orDie,
+        ),
       );
       yield* untilGone(
         "asset model",
         sitewise
-          .describeAssetModel({
-            assetModelId: first.model.assetModelId,
-            excludeProperties: true,
-          })
+          .describeAssetModel({ assetModelId: first.model.assetModelId, excludeProperties: true })
           .pipe(
             Effect.map((r) => r.assetModelStatus.state as string),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed("gone" as const),
-            ),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed("gone" as const)),
             Effect.orDie,
           ),
       );
     }),
-  {
-    tags: ["provider:aws", "provider:aws:iotsitewise", "live"],
-    timeout: 240_000,
-  },
+  { tags: ["provider:aws", "provider:aws:iotsitewise", "live"], timeout: 240_000 },
 );
 
 test.provider(
@@ -187,32 +163,25 @@ test.provider(
       expect(first.gateway.gatewayArn).toContain(":gateway/");
 
       // Out-of-band verification via distilled.
-      const described = yield* sitewise.describeGateway({
-        gatewayId: first.gateway.gatewayId,
-      });
+      const described = yield* sitewise.describeGateway({ gatewayId: first.gateway.gatewayId });
       expect(described.gatewayPlatform?.greengrassV2?.coreDeviceThingName).toBe(
         "AlchemyIoTSiteWiseCoreA",
       );
-      const tags = yield* sitewise.listTagsForResource({
-        resourceArn: first.gateway.gatewayArn,
-      });
+      const tags = yield* sitewise.listTagsForResource({ resourceArn: first.gateway.gatewayArn });
       expect(tags.tags?.fixture).toBe("iotsitewise-gateway");
 
       // Changing the platform replaces the gateway.
       const second = yield* deploy("AlchemyIoTSiteWiseCoreB");
       expect(second.gateway.gatewayId).not.toBe(first.gateway.gatewayId);
       expect(
-        (yield* sitewise.describeGateway({
-          gatewayId: second.gateway.gatewayId,
-        })).gatewayPlatform?.greengrassV2?.coreDeviceThingName,
+        (yield* sitewise.describeGateway({ gatewayId: second.gateway.gatewayId })).gatewayPlatform
+          ?.greengrassV2?.coreDeviceThingName,
       ).toBe("AlchemyIoTSiteWiseCoreB");
       yield* untilGone(
         "replaced gateway",
         sitewise.describeGateway({ gatewayId: first.gateway.gatewayId }).pipe(
           Effect.map(() => "exists"),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed("gone" as const),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed("gone" as const)),
           Effect.orDie,
         ),
       );
@@ -223,15 +192,10 @@ test.provider(
         "gateway",
         sitewise.describeGateway({ gatewayId: second.gateway.gatewayId }).pipe(
           Effect.map(() => "exists"),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed("gone" as const),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed("gone" as const)),
           Effect.orDie,
         ),
       );
     }),
-  {
-    tags: ["provider:aws", "provider:aws:iotsitewise", "live"],
-    timeout: 180_000,
-  },
+  { tags: ["provider:aws", "provider:aws:iotsitewise", "live"], timeout: 180_000 },
 );

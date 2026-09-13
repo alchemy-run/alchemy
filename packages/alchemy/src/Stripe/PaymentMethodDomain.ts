@@ -136,9 +136,7 @@ export type PaymentMethodDomain = Resource<
  * @resource
  * @product Payment Methods
  */
-export const PaymentMethodDomain = Resource<PaymentMethodDomain>(
-  "Stripe.PaymentMethodDomain",
-);
+export const PaymentMethodDomain = Resource<PaymentMethodDomain>("Stripe.PaymentMethodDomain");
 
 export class PaymentMethodDomainNotResolved extends Data.TaggedError(
   "Stripe.PaymentMethodDomainNotResolved",
@@ -148,11 +146,7 @@ export class PaymentMethodDomainNotResolved extends Data.TaggedError(
 
 type PaymentMethodDomainAttributes = PaymentMethodDomain["Attributes"];
 
-const toDomainName = (
-  id: string,
-  domainName: string | undefined,
-  existing?: string,
-) =>
+const toDomainName = (id: string, domainName: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     return (
       domainName ??
@@ -175,9 +169,7 @@ const toPaymentMethodStatus = (
       : { errorMessage: value.status_details.error_message },
 });
 
-const toAttrs = (
-  domain: StripePaymentMethodDomain,
-): PaymentMethodDomainAttributes => ({
+const toAttrs = (domain: StripePaymentMethodDomain): PaymentMethodDomainAttributes => ({
   id: domain.id,
   domainName: domain.domain_name,
   enabled: domain.enabled,
@@ -198,10 +190,7 @@ const getById = (paymentMethodDomain: string) =>
     payment_method_domain: paymentMethodDomain,
   }).pipe(Effect.catchIf(isMissingDomain, () => Effect.succeed(undefined)));
 
-const listByEnabled = Effect.fn(function* (
-  enabled: boolean,
-  domainName?: string,
-) {
+const listByEnabled = Effect.fn(function* (enabled: boolean, domainName?: string) {
   const domains: StripePaymentMethodDomain[] = [];
   let startingAfter: string | undefined;
   for (let page = 0; page < LIST_MAX_PAGES; page++) {
@@ -228,16 +217,11 @@ const findByDomainName = Effect.fn(function* (domainName: string) {
     [listByEnabled(true, domainName), listByEnabled(false, domainName)],
     { concurrency: 2 },
   );
-  const matches = [...enabled, ...disabled].filter(
-    (domain) => domain.domain_name === domainName,
-  );
+  const matches = [...enabled, ...disabled].filter((domain) => domain.domain_name === domainName);
   return matches.find((domain) => domain.enabled) ?? matches[0];
 });
 
-const observe = Effect.fn(function* (input: {
-  id?: string;
-  domainName?: string;
-}) {
+const observe = Effect.fn(function* (input: { id?: string; domainName?: string }) {
   if (input.id !== undefined) {
     const byId = yield* getById(input.id);
     if (byId !== undefined) return byId;
@@ -291,11 +275,7 @@ export const PaymentMethodDomainProvider = () =>
     }),
 
     reconcile: Effect.fn(function* ({ id, news, output, instanceId }) {
-      const domainName = yield* toDomainName(
-        id,
-        news.domainName,
-        output?.domainName,
-      );
+      const domainName = yield* toDomainName(id, news.domainName, output?.domainName);
       const desiredEnabled = news.enabled ?? true;
 
       let current = yield* observe({

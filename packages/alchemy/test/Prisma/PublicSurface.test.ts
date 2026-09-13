@@ -232,11 +232,7 @@ const internalPrismaDeepImports = [
   "Refs",
 ] as const;
 
-const internalPrismaRootFiles = [
-  "Credentials",
-  "PrismaDevDatabase",
-  "Refs",
-] as const;
+const internalPrismaRootFiles = ["Credentials", "PrismaDevDatabase", "Refs"] as const;
 
 const removedPrismaDeepImports = [
   "ComputeApp",
@@ -245,145 +241,116 @@ const removedPrismaDeepImports = [
   "ComputeVersionObserve",
 ] as const;
 
-const importPackagePath = (specifier: string) =>
-  import(/* @vite-ignore */ specifier);
+const importPackagePath = (specifier: string) => import(/* @vite-ignore */ specifier);
 
-describe(
-  "Prisma public surface",
-  { tags: ["unit", "provider:prisma", "local"] },
-  () => {
-    it("exports the user-facing resources, providers, and operations", () => {
-      const expected = [...publicExports].sort();
+describe("Prisma public surface", { tags: ["unit", "provider:prisma", "local"] }, () => {
+  it("exports the user-facing resources, providers, and operations", () => {
+    const expected = [...publicExports].sort();
 
-      expect(Object.keys(Prisma).sort()).toEqual(expected);
-      expect(Prisma.KNOWN_REGION_IDS).toContain("us-east-1");
-      expect(Prisma.REGIONS[0]).toEqual({
-        id: Prisma.KNOWN_REGION_IDS[0],
-        displayName: Prisma.KNOWN_REGION_IDS[0],
-      });
+    expect(Object.keys(Prisma).sort()).toEqual(expected);
+    expect(Prisma.KNOWN_REGION_IDS).toContain("us-east-1");
+    expect(Prisma.REGIONS[0]).toEqual({
+      id: Prisma.KNOWN_REGION_IDS[0],
+      displayName: Prisma.KNOWN_REGION_IDS[0],
     });
+  });
 
-    it("exports the same surface through the alchemy/Prisma package path", () => {
-      const expected = [...publicExports].sort();
+  it("exports the same surface through the alchemy/Prisma package path", () => {
+    const expected = [...publicExports].sort();
 
-      expect(Object.keys(PrismaPackage).sort()).toEqual(expected);
-    });
+    expect(Object.keys(PrismaPackage).sort()).toEqual(expected);
+  });
 
-    it(
-      "supports deep Prisma package path imports",
-      async () => {
-        for (const moduleName of publicPrismaDeepImports) {
-          const module = await importPackagePath(
-            `alchemy/Prisma/${moduleName}`,
-          );
-          expect(Object.keys(module as object).length).toBeGreaterThan(0);
-        }
-
-        const [compute, operations, client, archive, types, postgres] =
-          await Promise.all([
-            import("alchemy/Prisma/Compute"),
-            import("alchemy/Prisma/Operations"),
-            import("alchemy/Prisma/Client"),
-            import("alchemy/Prisma/ComputeArchive"),
-            import("alchemy/Prisma/Types"),
-            import("alchemy/Prisma/Postgres"),
-          ]);
-
-        expect(compute.Compute.Type).toBe("Prisma.Compute");
-        expect(typeof operations.listProjects).toBe("function");
-        expect(typeof client.PrismaApiError).toBe("function");
-        expect(archive.COMPUTE_MANIFEST_VERSION).toBe("1");
-        expect(types.KNOWN_REGION_IDS).toContain("us-east-1");
-        expect(postgres.Postgres.Type).toBe("Prisma.Database");
-        expect(Prisma.Postgres).toBe(Prisma.Database);
-      },
-      { tags: ["provider:prisma:database"] },
-    );
-
-    it("does not expose removed Compute deep imports", async () => {
-      for (const moduleName of removedPrismaDeepImports) {
-        await expect(
-          importPackagePath(`alchemy/Prisma/${moduleName}`),
-        ).rejects.toThrow();
+  it(
+    "supports deep Prisma package path imports",
+    async () => {
+      for (const moduleName of publicPrismaDeepImports) {
+        const module = await importPackagePath(`alchemy/Prisma/${moduleName}`);
+        expect(Object.keys(module as object).length).toBeGreaterThan(0);
       }
-    });
 
-    it("does not expose internal Prisma deep imports", async () => {
+      const [compute, operations, client, archive, types, postgres] = await Promise.all([
+        import("alchemy/Prisma/Compute"),
+        import("alchemy/Prisma/Operations"),
+        import("alchemy/Prisma/Client"),
+        import("alchemy/Prisma/ComputeArchive"),
+        import("alchemy/Prisma/Types"),
+        import("alchemy/Prisma/Postgres"),
+      ]);
+
+      expect(compute.Compute.Type).toBe("Prisma.Compute");
+      expect(typeof operations.listProjects).toBe("function");
+      expect(typeof client.PrismaApiError).toBe("function");
+      expect(archive.COMPUTE_MANIFEST_VERSION).toBe("1");
+      expect(types.KNOWN_REGION_IDS).toContain("us-east-1");
+      expect(postgres.Postgres.Type).toBe("Prisma.Database");
+      expect(Prisma.Postgres).toBe(Prisma.Database);
+    },
+    { tags: ["provider:prisma:database"] },
+  );
+
+  it("does not expose removed Compute deep imports", async () => {
+    for (const moduleName of removedPrismaDeepImports) {
+      await expect(importPackagePath(`alchemy/Prisma/${moduleName}`)).rejects.toThrow();
+    }
+  });
+
+  it("does not expose internal Prisma deep imports", async () => {
+    for (const moduleName of internalPrismaDeepImports) {
+      await expect(importPackagePath(`alchemy/Prisma/${moduleName}`)).rejects.toThrow();
+    }
+  });
+
+  it.effect("keeps Prisma root modules intentionally classified", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const prismaSourceRoot = path.resolve(import.meta.dirname, "../../src/Prisma");
+      const files = (yield* fs.readDirectory(prismaSourceRoot))
+        .filter((file) => file.endsWith(".ts"))
+        .sort();
+
+      expect(files).toEqual(
+        [
+          "index.ts",
+          ...publicPrismaDeepImports.map((moduleName) => `${moduleName}.ts`),
+          ...internalPrismaRootFiles.map((moduleName) => `${moduleName}.ts`),
+        ].sort(),
+      );
+    }).pipe(Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("blocks internal Prisma deep imports in the package export map", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const packageJsonPath = path.resolve(import.meta.dirname, "../../package.json");
+      const packageJson = JSON.parse(yield* fs.readFileString(packageJsonPath));
+
       for (const moduleName of internalPrismaDeepImports) {
-        await expect(
-          importPackagePath(`alchemy/Prisma/${moduleName}`),
-        ).rejects.toThrow();
+        const exportPath = moduleName.startsWith("Internal/")
+          ? "./Prisma/Internal/*"
+          : `./Prisma/${moduleName}`;
+        expect(packageJson.exports[exportPath]).toBeNull();
       }
-    });
+    }).pipe(Effect.provide(NodeServices.layer)),
+  );
 
-    it.effect("keeps Prisma root modules intentionally classified", () =>
-      Effect.gen(function* () {
-        const fs = yield* FileSystem.FileSystem;
-        const path = yield* Path.Path;
-        const prismaSourceRoot = path.resolve(
-          import.meta.dirname,
-          "../../src/Prisma",
-        );
-        const files = (yield* fs.readDirectory(prismaSourceRoot))
-          .filter((file) => file.endsWith(".ts"))
-          .sort();
+  it.effect("pins Prisma package export map entries", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const packageJsonPath = path.resolve(import.meta.dirname, "../../package.json");
+      const packageJson = JSON.parse(yield* fs.readFileString(packageJsonPath));
 
-        expect(files).toEqual(
-          [
-            "index.ts",
-            ...publicPrismaDeepImports.map((moduleName) => `${moduleName}.ts`),
-            ...internalPrismaRootFiles.map((moduleName) => `${moduleName}.ts`),
-          ].sort(),
-        );
-      }).pipe(Effect.provide(NodeServices.layer)),
-    );
-
-    it.effect(
-      "blocks internal Prisma deep imports in the package export map",
-      () =>
-        Effect.gen(function* () {
-          const fs = yield* FileSystem.FileSystem;
-          const path = yield* Path.Path;
-          const packageJsonPath = path.resolve(
-            import.meta.dirname,
-            "../../package.json",
-          );
-          const packageJson = JSON.parse(
-            yield* fs.readFileString(packageJsonPath),
-          );
-
-          for (const moduleName of internalPrismaDeepImports) {
-            const exportPath = moduleName.startsWith("Internal/")
-              ? "./Prisma/Internal/*"
-              : `./Prisma/${moduleName}`;
-            expect(packageJson.exports[exportPath]).toBeNull();
-          }
-        }).pipe(Effect.provide(NodeServices.layer)),
-    );
-
-    it.effect("pins Prisma package export map entries", () =>
-      Effect.gen(function* () {
-        const fs = yield* FileSystem.FileSystem;
-        const path = yield* Path.Path;
-        const packageJsonPath = path.resolve(
-          import.meta.dirname,
-          "../../package.json",
-        );
-        const packageJson = JSON.parse(
-          yield* fs.readFileString(packageJsonPath),
-        );
-
-        expect(packageJson.exports["./Prisma"]).toBe("./src/Prisma/index.ts");
-        expect(packageJson.exports["./Prisma/ORM"]).toBe(
-          "./src/Prisma/ORM/index.ts",
-        );
-        // Deep Prisma modules use the package-wide source export wildcard.
-        expect(packageJson.exports["./Prisma/*"]).toBeUndefined();
-        expect(packageJson.exports["./*"]).toBe("./src/*.ts");
-        for (const moduleName of removedPrismaDeepImports) {
-          expect(packageJson.exports[`./Prisma/${moduleName}`]).toBeNull();
-        }
-      }).pipe(Effect.provide(NodeServices.layer)),
-    );
-  },
-);
+      expect(packageJson.exports["./Prisma"]).toBe("./src/Prisma/index.ts");
+      expect(packageJson.exports["./Prisma/ORM"]).toBe("./src/Prisma/ORM/index.ts");
+      // Deep Prisma modules use the package-wide source export wildcard.
+      expect(packageJson.exports["./Prisma/*"]).toBeUndefined();
+      expect(packageJson.exports["./*"]).toBe("./src/*.ts");
+      for (const moduleName of removedPrismaDeepImports) {
+        expect(packageJson.exports[`./Prisma/${moduleName}`]).toBeNull();
+      }
+    }).pipe(Effect.provide(NodeServices.layer)),
+  );
+});

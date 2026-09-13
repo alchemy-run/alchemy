@@ -26,8 +26,7 @@ const reapRestApis = (logicalId: string) =>
       Array.from(chunk).flatMap((page) =>
         (page.items ?? []).filter(
           (api): api is ag.RestApi & { id: string } =>
-            api.id != null &&
-            (api.name?.includes(`-${logicalId}-test-`) ?? false),
+            api.id != null && (api.name?.includes(`-${logicalId}-test-`) ?? false),
         ),
       ),
     ),
@@ -153,14 +152,10 @@ test.provider.skipIf(!!process.env.FAST)(
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        AWS.ApiGateway.DeploymentResource,
-      );
+      const provider = yield* Provider.findProvider(AWS.ApiGateway.DeploymentResource);
       const all = yield* provider.list();
 
-      expect(all.some((d) => d.deploymentId === deployment.deploymentId)).toBe(
-        true,
-      );
+      expect(all.some((d) => d.deploymentId === deployment.deploymentId)).toBe(true);
 
       yield* stack.destroy();
       yield* assertRestApiDeleted(api.restApiId);

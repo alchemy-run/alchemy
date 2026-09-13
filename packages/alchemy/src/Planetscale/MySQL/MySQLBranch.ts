@@ -1,9 +1,5 @@
 import { Resource } from "../../Resource.ts";
-import {
-  type BaseBranchAttributes,
-  type BaseBranchProps,
-  makeBranchProvider,
-} from "../Branch.ts";
+import { type BaseBranchAttributes, type BaseBranchProps, makeBranchProvider } from "../Branch.ts";
 import type { Providers } from "../Providers.ts";
 import type { MySQLClusterSize } from "./MySQLClusterSize.ts";
 import type { MySQLDatabase } from "./MySQLDatabase.ts";

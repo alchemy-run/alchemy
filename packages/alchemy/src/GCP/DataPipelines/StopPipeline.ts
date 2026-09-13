@@ -46,6 +46,4 @@ export interface StopPipeline extends Binding.Service<
   >
 > {}
 
-export const StopPipeline = Binding.Service<StopPipeline>(
-  "GCP.DataPipelines.StopPipeline",
-);
+export const StopPipeline = Binding.Service<StopPipeline>("GCP.DataPipelines.StopPipeline");

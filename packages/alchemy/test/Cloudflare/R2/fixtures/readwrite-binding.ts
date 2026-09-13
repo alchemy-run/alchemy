@@ -19,9 +19,7 @@ export default class R2ReadWriteBindingWorker extends Cloudflare.Worker<R2ReadWr
         const url = new URL(request.url, "http://x");
         // The ReadWrite client composes both halves; route to whichever
         // matches so we exercise read *and* write through one client.
-        const handled =
-          (yield* writeRoutes(r2, request, url)) ??
-          (yield* readRoutes(r2, url));
+        const handled = (yield* writeRoutes(r2, request, url)) ?? (yield* readRoutes(r2, url));
         return handled ?? HttpServerResponse.text("Not Found", { status: 404 });
       }),
     };

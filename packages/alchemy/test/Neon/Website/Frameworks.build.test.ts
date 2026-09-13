@@ -38,10 +38,7 @@ describe.sequential(
                       outdir: "dist",
                       memo: false,
                     }).pipe(
-                      Effect.map((build) => ({
-                        distDir: build.outdir,
-                        serverEntry: undefined,
-                      })),
+                      Effect.map((build) => ({ distDir: build.outdir, serverEntry: undefined })),
                     )
                   : Server("Build", {
                       root,
@@ -52,8 +49,7 @@ describe.sequential(
                       target,
                       memo: false,
                       env: { GREETING: `Hello from ${name} on Neon!` },
-                      options:
-                        slug === "astro" ? { astro: { output: "server" } } : {},
+                      options: slug === "astro" ? { astro: { output: "server" } } : {},
                     });
               }),
             );
@@ -94,10 +90,7 @@ describe.sequential(
               ],
               { concurrency: "unbounded" },
             ).pipe(Effect.timeout("30 seconds"));
-            expect({ code, stderr: code === 0 ? "" : stderr }).toEqual({
-              code: 0,
-              stderr: "",
-            });
+            expect({ code, stderr: code === 0 ? "" : stderr }).toEqual({ code: 0, stderr: "" });
             expect(stdout).toContain("NEON_FETCH_ARTIFACT_OK");
             yield* stack.destroy();
           }).pipe(Effect.scoped),

@@ -53,12 +53,9 @@ export const isOid = (s: string): boolean => OID_REGEX.test(s);
  * Error raised by the object codec when parsing malformed object content
  * (commits, trees, tags) or malformed varint/offset encodings.
  */
-export class ObjectParseError extends Schema.TaggedError<ObjectParseError>()(
-  "ObjectParseError",
-  {
-    reason: Schema.String,
-  },
-) {}
+export class ObjectParseError extends Schema.TaggedError<ObjectParseError>()("ObjectParseError", {
+  reason: Schema.String,
+}) {}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Object types
@@ -112,8 +109,7 @@ const TYPE_NAMES: Record<ObjectType, ObjectTypeName> = {
 /**
  * Maps a numeric object type to its canonical text name.
  */
-export const objectTypeName = (type: ObjectType): ObjectTypeName =>
-  TYPE_NAMES[type];
+export const objectTypeName = (type: ObjectType): ObjectTypeName => TYPE_NAMES[type];
 
 /**
  * Maps a text object type name back to its numeric type, or `undefined` when
@@ -137,8 +133,7 @@ export const objectTypeOf = (name: string): ObjectType | undefined => {
 /**
  * Returns `true` when a pack entry type denotes a delta (OFS or REF).
  */
-export const isDeltaType = (type: PackEntryType): type is 6 | 7 =>
-  type === 6 || type === 7;
+export const isDeltaType = (type: PackEntryType): type is 6 | 7 => type === 6 || type === 7;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Bytes / hex helpers
@@ -188,8 +183,7 @@ export const concatBytes = (
   chunks: ReadonlyArray<Uint8Array>,
   totalLength?: number,
 ): Uint8Array => {
-  const total =
-    totalLength ?? chunks.reduce((acc, chunk) => acc + chunk.length, 0);
+  const total = totalLength ?? chunks.reduce((acc, chunk) => acc + chunk.length, 0);
   const out = new Uint8Array(total);
   let pos = 0;
   for (const chunk of chunks) {
@@ -274,10 +268,7 @@ export const hashObjectSync = (type: ObjectType, content: Uint8Array): Oid => {
   return sha.digestHex();
 };
 
-export const hashObject = (
-  type: ObjectType,
-  content: Uint8Array,
-): Effect.Effect<Oid> =>
+export const hashObject = (type: ObjectType, content: Uint8Array): Effect.Effect<Oid> =>
   Effect.sync(() => {
     const sha = makeSha1();
     sha.update(looseHeader(type, content.length));
@@ -349,15 +340,11 @@ const IDENTITY_REGEX = /^(.*) <(.*)> (\d+) ([+-]\d{4})$/;
  * Parses an identity value (`Name <email> ts tz`). Fails with
  * {@link ObjectParseError} when the shape does not match.
  */
-export const parseIdentity = (
-  value: string,
-): Effect.Effect<Identity, ObjectParseError> =>
+export const parseIdentity = (value: string): Effect.Effect<Identity, ObjectParseError> =>
   Effect.suspend(() => {
     const match = IDENTITY_REGEX.exec(value);
     if (match === null) {
-      return Effect.fail(
-        new ObjectParseError({ reason: `malformed identity: ${value}` }),
-      );
+      return Effect.fail(new ObjectParseError({ reason: `malformed identity: ${value}` }));
     }
     return Effect.succeed({
       name: match[1]!,
@@ -490,10 +477,7 @@ export interface CommitFields {
 
 const TZ_REGEX = /^[+-]\d{4}$/;
 
-const validateIdentity = (
-  role: string,
-  id: Identity,
-): ObjectParseError | undefined => {
+const validateIdentity = (role: string, id: Identity): ObjectParseError | undefined => {
   if (/[<>\n]/.test(id.name) || /[<>\n]/.test(id.email)) {
     return new ObjectParseError({
       reason: `commit ${role} name/email must not contain '<', '>' or newline`,
@@ -517,9 +501,7 @@ const validateIdentity = (
  * `tree <oid>\n` + `parent <oid>\n`* + `author …\n` + `committer …\n` +
  * `\n` + message. Byte-exact round trip through {@link parseCommit}.
  */
-export const encodeCommit = (
-  fields: CommitFields,
-): Effect.Effect<Uint8Array, ObjectParseError> =>
+export const encodeCommit = (fields: CommitFields): Effect.Effect<Uint8Array, ObjectParseError> =>
   Effect.suspend(() => {
     if (!isOid(fields.tree)) {
       return Effect.fail(
@@ -600,8 +582,7 @@ export const parseTag = Effect.fn(function* (content: Uint8Array) {
       reason: "tag is missing object/type/tag header",
     });
   }
-  const tagger =
-    taggerRaw === undefined ? undefined : yield* parseIdentity(taggerRaw);
+  const tagger = taggerRaw === undefined ? undefined : yield* parseIdentity(taggerRaw);
   const parsed: ParsedTag = {
     object,
     targetType,
@@ -685,9 +666,7 @@ export const parseTree = (
       }
       const name = utf8Decode(content.subarray(spaceIdx + 1, nulIdx));
       if (name.length === 0) {
-        return Effect.fail(
-          new ObjectParseError({ reason: `tree entry at ${pos}: empty name` }),
-        );
+        return Effect.fail(new ObjectParseError({ reason: `tree entry at ${pos}: empty name` }));
       }
       if (nulIdx + 21 > content.length) {
         return Effect.fail(
@@ -710,12 +689,8 @@ export const parseTree = (
  * the tree hash and trips `git fsck`.
  */
 export const treeEntryCompare = (a: TreeEntry, b: TreeEntry): number => {
-  const aBytes = utf8Encode(
-    treeEntryKind(a.mode) === "tree" ? `${a.name}/` : a.name,
-  );
-  const bBytes = utf8Encode(
-    treeEntryKind(b.mode) === "tree" ? `${b.name}/` : b.name,
-  );
+  const aBytes = utf8Encode(treeEntryKind(a.mode) === "tree" ? `${a.name}/` : a.name);
+  const bBytes = utf8Encode(treeEntryKind(b.mode) === "tree" ? `${b.name}/` : b.name);
   const len = Math.min(aBytes.length, bBytes.length);
   for (let i = 0; i < len; i++) {
     const d = aBytes[i]! - bBytes[i]!;
@@ -783,10 +758,7 @@ export interface TypeSizeHeader {
  * `type = (b0 >> 4) & 0x07`. Throws {@link ObjectParseError} on truncation
  * or an invalid type (0 or 5).
  */
-export const decodeTypeSize = (
-  buf: Uint8Array,
-  offset: number,
-): TypeSizeHeader => {
+export const decodeTypeSize = (buf: Uint8Array, offset: number): TypeSizeHeader => {
   if (offset >= buf.length) {
     throw new ObjectParseError({ reason: "truncated pack entry header" });
   }
@@ -820,10 +792,7 @@ export const decodeTypeSize = (
  * Encodes a pack entry type+size header varint (inverse of
  * {@link decodeTypeSize}).
  */
-export const encodeTypeSize = (
-  type: PackEntryType,
-  size: number,
-): Uint8Array => {
+export const encodeTypeSize = (type: PackEntryType, size: number): Uint8Array => {
   const out: Array<number> = [];
   let rest = Math.floor(size / 16);
   let first = ((type & 0x07) << 4) | (size & 0x0f);
@@ -901,10 +870,7 @@ export const encodeSizeVarint = (value: number): Uint8Array => {
  * Naive concatenation without the `+1` is wrong for multi-byte offsets.
  * Throws {@link ObjectParseError} on truncation.
  */
-export const decodeOfsDeltaOffset = (
-  buf: Uint8Array,
-  offset: number,
-): Varint => {
+export const decodeOfsDeltaOffset = (buf: Uint8Array, offset: number): Varint => {
   if (offset >= buf.length) {
     throw new ObjectParseError({ reason: "truncated ofs-delta offset" });
   }

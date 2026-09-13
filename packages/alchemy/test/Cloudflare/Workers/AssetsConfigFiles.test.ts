@@ -40,10 +40,7 @@ describe.concurrent(
 
           yield* stack.destroy();
 
-          const deploy = (
-            assets: string | { directory: string; hash: string },
-            marker: string,
-          ) =>
+          const deploy = (assets: string | { directory: string; hash: string }, marker: string) =>
             stack.deploy(
               Effect.gen(function* () {
                 return yield* Cloudflare.Worker("AssetsConfigFiles", {
@@ -64,12 +61,9 @@ describe.concurrent(
             status: 301,
             label: "initial redirect",
           });
-          yield* expectUrlHeader(
-            `${url}/`,
-            "x-alchemy-test",
-            "assets-config-header",
-            { label: "initial header" },
-          );
+          yield* expectUrlHeader(`${url}/`, "x-alchemy-test", "assets-config-header", {
+            label: "initial header",
+          });
           // The special files themselves stay excluded from serving.
           yield* expectUrlAbsent(`${url}/_redirects`, "/old-path", {
             timeout: "15 seconds",
@@ -77,13 +71,8 @@ describe.concurrent(
           });
 
           // 2. Update: editing only `_redirects` must deploy the new rules.
-          const dir = yield* cloneFixture(fixtureDir, {
-            prefix: "alchemy-assets-config-",
-          });
-          yield* fs.writeFileString(
-            path.join(dir, "_redirects"),
-            "/moved /index.html 302\n",
-          );
+          const dir = yield* cloneFixture(fixtureDir, { prefix: "alchemy-assets-config-" });
+          yield* fs.writeFileString(path.join(dir, "_redirects"), "/moved /index.html 302\n");
           yield* deploy(dir, "worker-v2");
           yield* expectUrlRedirect(`${url}/moved`, "/index.html", {
             status: 302,
@@ -109,12 +98,9 @@ describe.concurrent(
             status: 302,
             label: "redirect after keep-assets deploy",
           });
-          yield* expectUrlHeader(
-            `${url}/`,
-            "x-alchemy-test",
-            "assets-config-header",
-            { label: "header after keep-assets deploy" },
-          );
+          yield* expectUrlHeader(`${url}/`, "x-alchemy-test", "assets-config-header", {
+            label: "header after keep-assets deploy",
+          });
 
           yield* stack.destroy();
         }),

@@ -9,9 +9,7 @@ import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import * as Test from "@/Test/Alchemy";
 import * as Core from "@/Test/Core";
-import AmplifyTestFunctionLive, {
-  AmplifyTestFunction,
-} from "./fixtures/handler";
+import AmplifyTestFunctionLive, { AmplifyTestFunction } from "./fixtures/handler";
 import { makeAmplifyTestLease } from "./TestLease.ts";
 
 const testOptions = { providers: AWS.providers() };
@@ -30,10 +28,7 @@ const branchName = "main";
 const SITE_ZIP_BASE64 =
   "UEsDBBQAAAAAAAAAIVwZ1jYHJwAAACcAAAAKAAAAaW5kZXguaHRtbDxodG1sPjxib2R5PmhlbGxvIGFtcGxpZnk8L2JvZHk+PC9odG1sPlBLAQIUAxQAAAAAAAAAIVwZ1jYHJwAAACcAAAAKAAAAAAAAAAAAAACAAQAAAABpbmRleC5odG1sUEsFBgAAAAABAAEAOAAAAE8AAAAAAA==";
 
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(10),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]);
 
 let baseUrl: string;
 let appId: string;
@@ -65,18 +60,13 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
 const postJson = (path: string, body: unknown) =>
   send(
-    HttpClientRequest.post(`${baseUrl}${path}`).pipe(
-      HttpClientRequest.bodyJsonUnsafe(body),
-    ),
+    HttpClientRequest.post(`${baseUrl}${path}`).pipe(HttpClientRequest.bodyJsonUnsafe(body)),
   ).pipe(Effect.flatMap((response) => response.json));
 
 const getJson = (path: string) =>
@@ -109,16 +99,12 @@ const deploySite = (branchName: string) =>
     })) as { jobSummary: { jobId: string; status: string } };
     expect(released.jobSummary.jobId).toBe(staged.jobId);
 
-    const settled = yield* getJson(
-      `/job?branchName=${branchName}&jobId=${staged.jobId}`,
-    ).pipe(
+    const settled = yield* getJson(`/job?branchName=${branchName}&jobId=${staged.jobId}`).pipe(
       Effect.map((body) => body as { status: string; stepCount: number }),
       Effect.repeat({
         schedule: Schedule.spaced("5 seconds"),
         until: (job): boolean =>
-          job.status === "SUCCEED" ||
-          job.status === "FAILED" ||
-          job.status === "CANCELLED",
+          job.status === "SUCCEED" || job.status === "FAILED" || job.status === "CANCELLED",
         times: 10,
       }),
     );
@@ -129,14 +115,7 @@ const deploySite = (branchName: string) =>
 
 describe.sequential(
   "Amplify Bindings",
-  {
-    tags: [
-      "provider:aws",
-      "provider:aws:amplify",
-      "provider:aws:lambda",
-      "live",
-    ],
-  },
+  { tags: ["provider:aws", "provider:aws:amplify", "provider:aws:lambda", "live"] },
   () => {
     beforeAll(
       Effect.gen(function* () {
@@ -155,9 +134,7 @@ describe.sequential(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.retry({ schedule: readinessPolicy }),
         );
@@ -173,11 +150,7 @@ describe.sequential(
         // provide the AWS providers (Credentials/Region) explicitly for the
         // out-of-band distilled call.
         yield* Core.withProviders(
-          amplify.createBranch({
-            appId,
-            branchName,
-            enableAutoBuild: false,
-          }),
+          amplify.createBranch({ appId, branchName, enableAutoBuild: false }),
           testOptions,
           "AmplifyBindings",
         );
@@ -205,9 +178,7 @@ describe.sequential(
         // itself (auth + wiring) is what's under test.
         const artifacts = (yield* getJson(
           `/artifacts?branchName=${branchName}&jobId=${deployed.jobId}`,
-        )) as {
-          artifacts: Array<{ artifactId: string; artifactFileName: string }>;
-        };
+        )) as { artifacts: Array<{ artifactId: string; artifactFileName: string }> };
         expect(Array.isArray(artifacts.artifacts)).toBe(true);
 
         // GetArtifactUrl — only exercisable when the job produced artifacts.
@@ -220,10 +191,10 @@ describe.sequential(
 
         // StopJob — the job already settled, so the service rejects the stop
         // with a typed tag; either outcome proves the binding + IAM wiring.
-        const stopped = (yield* postJson("/jobs/stop", {
-          branchName,
-          jobId: deployed.jobId,
-        })) as { stopped: boolean; errorTag?: string };
+        const stopped = (yield* postJson("/jobs/stop", { branchName, jobId: deployed.jobId })) as {
+          stopped: boolean;
+          errorTag?: string;
+        };
         if (!stopped.stopped) {
           expect(stopped.errorTag).toBe("BadRequestException");
         }
@@ -262,9 +233,7 @@ describe.sequential(
           testOptions,
           "AmplifyBindings",
         );
-        expect(remaining.jobSummaries.map((j) => j.jobId)).not.toContain(
-          deployed.jobId,
-        );
+        expect(remaining.jobSummaries.map((j) => j.jobId)).not.toContain(deployed.jobId);
       }),
       { timeout: 120_000, retry: 0 },
     );
@@ -275,10 +244,10 @@ describe.sequential(
         // RELEASE jobs need a connected Git repository; a manual-deploy branch
         // rejects them with BadRequestException. Reaching that typed tag proves
         // the binding executed against the service with the granted IAM.
-        const result = (yield* postJson("/jobs/start", {
-          branchName,
-          jobType: "RELEASE",
-        })) as { started: boolean; errorTag?: string };
+        const result = (yield* postJson("/jobs/start", { branchName, jobType: "RELEASE" })) as {
+          started: boolean;
+          errorTag?: string;
+        };
         expect(result.started).toBe(false);
         expect(result.errorTag).toBe("BadRequestException");
       }),
@@ -301,13 +270,10 @@ describe.sequential(
         );
         const rule = rules.find(
           (r): boolean =>
-            typeof r.EventPattern === "string" &&
-            r.EventPattern.includes('"aws.amplify"'),
+            typeof r.EventPattern === "string" && r.EventPattern.includes('"aws.amplify"'),
         );
         expect(rule).toBeDefined();
-        expect(rule!.EventPattern).toContain(
-          "Amplify Deployment Status Change",
-        );
+        expect(rule!.EventPattern).toContain("Amplify Deployment Status Change");
       }),
       { tags: ["provider:aws:eventbridge"], timeout: 60_000 },
     );
@@ -316,9 +282,7 @@ describe.sequential(
       "generateAccessLogs returns a pre-signed log URL for the default domain",
       Effect.gen(function* () {
         const meta = (yield* getJson("/meta")) as { defaultDomain: string };
-        const result = (yield* postJson("/access-logs", {
-          domainName: meta.defaultDomain,
-        })) as {
+        const result = (yield* postJson("/access-logs", { domainName: meta.defaultDomain })) as {
           ok: boolean;
           logUrl?: string;
           errorTag?: string;
@@ -334,9 +298,7 @@ describe.sequential(
         } else {
           // Some accounts gate access logs on the default domain — the typed
           // tag still proves the binding + IAM wiring.
-          expect(["BadRequestException", "NotFoundException"]).toContain(
-            result.errorTag,
-          );
+          expect(["BadRequestException", "NotFoundException"]).toContain(result.errorTag);
         }
       }),
       { timeout: 60_000, retry: 0 },

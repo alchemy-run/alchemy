@@ -39,32 +39,19 @@ test.provider(
       const provider = yield* Provider.findProvider(LaunchTemplate);
       const all = yield* provider.list();
 
-      expect(
-        all.some((t) => t.launchTemplateId === template.launchTemplateId),
-      ).toBe(true);
+      expect(all.some((t) => t.launchTemplateId === template.launchTemplateId)).toBe(true);
 
       yield* stack.destroy();
 
       // Out-of-band proof the template is gone: describing the deleted name
       // raises the typed `InvalidLaunchTemplateName.NotFoundException`.
       const remaining = yield* ec2
-        .describeLaunchTemplates({
-          LaunchTemplateNames: ["alchemy-test-lt-list"],
-        } as any)
+        .describeLaunchTemplates({ LaunchTemplateNames: ["alchemy-test-lt-list"] } as any)
         .pipe(
           Effect.map((r) => (r.LaunchTemplates ?? []).length),
-          Effect.catchTag("InvalidLaunchTemplateName.NotFoundException", () =>
-            Effect.succeed(0),
-          ),
+          Effect.catchTag("InvalidLaunchTemplateName.NotFoundException", () => Effect.succeed(0)),
         );
       expect(remaining).toBe(0);
     }),
-  {
-    tags: [
-      "provider:aws",
-      "provider:aws:autoscaling",
-      "provider:aws:ec2",
-      "live",
-    ],
-  },
+  { tags: ["provider:aws", "provider:aws:autoscaling", "provider:aws:ec2", "live"] },
 );

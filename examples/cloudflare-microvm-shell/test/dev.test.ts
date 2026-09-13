@@ -21,20 +21,13 @@ const root = path.resolve(import.meta.dirname, "..");
 // Spawn the CLI entry directly (not through `bun run` / the cli.js
 // launcher) so signals hit the actual CLI process, whose scope teardown
 // kills the exec child and the provider sidecars.
-const alchemyBin = path.join(
-  root,
-  "node_modules",
-  "alchemy",
-  "bin",
-  "alchemy.js",
-);
+const alchemyBin = path.join(root, "node_modules", "alchemy", "bin", "alchemy.js");
 // Isolated stage so this suite never fights a developer's own `alchemy dev`
 // session (default stage) over state rows.
 const STAGE = "dev-cli-test";
 
 // The whole suite needs docker (floci and the MicroVM containers).
-const dockerAvailable =
-  spawnSync("docker", ["info"], { stdio: "ignore" }).status === 0;
+const dockerAvailable = spawnSync("docker", ["info"], { stdio: "ignore" }).status === 0;
 
 let proc: ReturnType<typeof spawn> | undefined;
 let ws: WebSocket | undefined;
@@ -87,9 +80,7 @@ const run = (socket: WebSocket, command: string, expected: string) =>
     // The first command waits through the session's MicroVM boot.
     const timer = setTimeout(() => {
       socket.removeEventListener("message", onMessage);
-      reject(
-        new Error(`timeout for '${command}' (got: ${JSON.stringify(out)})`),
-      );
+      reject(new Error(`timeout for '${command}' (got: ${JSON.stringify(out)})`));
     }, 120_000);
     socket.addEventListener("message", onMessage);
     socket.send(command);
@@ -124,13 +115,9 @@ afterAll(async () => {
     // Session MicroVMs are provisioned at RUNTIME (per WebSocket), not as
     // stack resources, so `destroy` does not reap them — remove the
     // emulator's VM containers this run booted.
-    const ids = spawnSync(
-      "docker",
-      ["ps", "-q", "--filter", "name=floci-microvm-"],
-      {
-        encoding: "utf8",
-      },
-    )
+    const ids = spawnSync("docker", ["ps", "-q", "--filter", "name=floci-microvm-"], {
+      encoding: "utf8",
+    })
       .stdout.trim()
       .split("\n")
       .filter(Boolean);
@@ -155,14 +142,10 @@ test.skipIf(!dockerAvailable)(
 
     // First dev deploy builds the ShellMicrovm image before printing
     // stack outputs.
-    const url = await pollUntil(
-      "url in stack outputs",
-      () => outputUrl("url"),
-      {
-        tries: 600,
-        delayMs: 1000,
-      },
-    );
+    const url = await pollUntil("url in stack outputs", () => outputUrl("url"), {
+      tries: 600,
+      delayMs: 1000,
+    });
 
     // Dev identity: the Worker is local workerd; no real cloud.
     expect(url).toContain("localhost");
@@ -195,11 +178,7 @@ test.skipIf(!dockerAvailable)(
 
     // Two more commands on the SAME socket → same cached VM: a file written
     // by one command is read back by the next (state persists, no re-boot).
-    await run(
-      socket,
-      "echo persisted-$$ > /tmp/marker.txt && echo written",
-      "written",
-    );
+    await run(socket, "echo persisted-$$ > /tmp/marker.txt && echo written", "written");
     const readBack = await run(socket, "cat /tmp/marker.txt", "persisted-");
     expect(readBack).toMatch(/persisted-\d+\n/);
     expect(readBack).not.toMatch(/\n\n/);

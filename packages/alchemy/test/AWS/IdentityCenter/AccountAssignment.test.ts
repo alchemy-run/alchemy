@@ -68,10 +68,7 @@ test.provider.skipIf(SKIP_IDENTITY_CENTER)(
 
       yield* stack.destroy();
     }),
-  {
-    tags: ["provider:aws", "provider:aws:identitycenter", "live"],
-    timeout: 300_000,
-  },
+  { tags: ["provider:aws", "provider:aws:identitycenter", "live"], timeout: 300_000 },
 );
 
 // A `creating` row can persist without resolved Outputs (`targetId` from
@@ -88,8 +85,7 @@ test.provider(
         fqn: "AccountAssignment",
         instanceId: "test-instance",
         olds: {
-          permissionSetArn:
-            "arn:aws:sso:::permissionSet/ssoins-example/ps-example",
+          permissionSetArn: "arn:aws:sso:::permissionSet/ssoins-example/ps-example",
           principalId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
           principalType: "GROUP",
         } as AccountAssignment["Props"],

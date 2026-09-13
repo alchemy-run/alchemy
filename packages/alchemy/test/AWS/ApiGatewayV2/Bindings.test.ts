@@ -17,11 +17,7 @@ const { test } = Test.make({ providers: AWS.providers() });
 const readinessSchedule = Schedule.max([
   Schedule.exponential(500).pipe(
     Schedule.modifyDelay(({ duration: d }) =>
-      Effect.succeed(
-        Duration.isGreaterThan(d, Duration.seconds(10))
-          ? Duration.seconds(10)
-          : d,
-      ),
+      Effect.succeed(Duration.isGreaterThan(d, Duration.seconds(10)) ? Duration.seconds(10) : d),
     ),
   ),
   Schedule.recurs(20),
@@ -78,12 +74,7 @@ test.provider.skipIf(!!process.env.FAST)(
       yield* stack.destroy();
     }),
   {
-    tags: [
-      "provider:aws",
-      "provider:aws:apigatewayv2",
-      "provider:aws:lambda",
-      "live",
-    ],
+    tags: ["provider:aws", "provider:aws:apigatewayv2", "provider:aws:lambda", "live"],
     timeout: 600_000,
   },
 );

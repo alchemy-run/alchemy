@@ -14,8 +14,7 @@ it.effect(
       const provider: ProviderService = {
         list: () => Effect.succeed([]),
         reconcile: () => Effect.succeed({}),
-        delete: ({ id }) =>
-          id === "slow" ? Deferred.await(fastDeleted) : Effect.void,
+        delete: ({ id }) => (id === "slow" ? Deferred.await(fastDeleted) : Effect.void),
       };
       const result = yield* Nuke.destroy({
         targets: ["fast", "slow"].map((displayName) => ({
@@ -33,8 +32,7 @@ it.effect(
         onDeleted: (resource) =>
           Effect.gen(function* () {
             events.push(resource.displayName);
-            if (resource.displayName === "fast")
-              yield* Deferred.succeed(fastDeleted, undefined);
+            if (resource.displayName === "fast") yield* Deferred.succeed(fastDeleted, undefined);
           }),
       }).pipe(Effect.timeout("2 seconds"));
       expect(result.deleted).toHaveLength(2);
@@ -71,11 +69,7 @@ it.effect(
           }),
       });
       expect(result.failures).toHaveLength(1);
-      expect(events).toEqual([
-        "total 1",
-        "start Test.Resource",
-        "done Test.Resource 0",
-      ]);
+      expect(events).toEqual(["total 1", "start Test.Resource", "done Test.Resource 0"]);
     }),
   { tags: ["unit", "local"] },
 );
@@ -94,10 +88,7 @@ it.effect(
         reconcile: () => Effect.succeed({}),
         delete: () => Effect.fail(error),
       };
-      const context = Context.make(
-        Context.Service<ProviderService>("Test.Resource"),
-        provider,
-      );
+      const context = Context.make(Context.Service<ProviderService>("Test.Resource"), provider);
       const scan = yield* Nuke.list({ context, mode: "live" });
       const messages = scan.failures.map((failure) => failure.message);
       for (const strategy of [
@@ -106,12 +97,7 @@ it.effect(
       ] as const) {
         const result = yield* Nuke.destroy({
           targets: [
-            {
-              providerId: "Test.Resource",
-              displayName: "example",
-              attributes: {},
-              provider,
-            },
+            { providerId: "Test.Resource", displayName: "example", attributes: {}, provider },
           ],
           context,
           strategy,
@@ -141,8 +127,7 @@ it.effect(
     Effect.gen(function* () {
       const reported = yield* Deferred.make<void>();
       const failed: ProviderService = {
-        list: () =>
-          Effect.fail({ _tag: "AccessDenied", message: "denied during scan" }),
+        list: () => Effect.fail({ _tag: "AccessDenied", message: "denied during scan" }),
         reconcile: () => Effect.succeed({}),
         delete: () => Effect.void,
       };
@@ -150,10 +135,9 @@ it.effect(
         ...failed,
         list: () => Deferred.await(reported).pipe(Effect.as([])),
       };
-      const context = Context.make(
-        Context.Service<ProviderService>("Test.Failed"),
-        failed,
-      ).pipe(Context.add(Context.Service<ProviderService>("Test.Slow"), slow));
+      const context = Context.make(Context.Service<ProviderService>("Test.Failed"), failed).pipe(
+        Context.add(Context.Service<ProviderService>("Test.Slow"), slow),
+      );
       const errors: string[] = [];
       const result = yield* Nuke.list({
         context,

@@ -9,13 +9,8 @@ import * as Test from "@/Test/Alchemy";
 const { test } = Test.make({ providers: AWS.providers() });
 
 const describeLogGroup = Effect.fn(function* (logGroupName: string) {
-  const described = yield* logs.describeLogGroups({
-    logGroupNamePrefix: logGroupName,
-    limit: 1,
-  });
-  return (described.logGroups ?? []).find(
-    (group) => group.logGroupName === logGroupName,
-  );
+  const described = yield* logs.describeLogGroups({ logGroupNamePrefix: logGroupName, limit: 1 });
+  return (described.logGroups ?? []).find((group) => group.logGroupName === logGroupName);
 });
 
 // Canonical `list()` test (AWS account/region-scoped collection): deploy a real
@@ -40,9 +35,7 @@ test.provider(
       const provider = yield* Provider.findProvider(LogGroup);
       const all = yield* provider.list();
 
-      expect(all.some((g) => g.logGroupName === logGroup.logGroupName)).toBe(
-        true,
-      );
+      expect(all.some((g) => g.logGroupName === logGroup.logGroupName)).toBe(true);
 
       yield* stack.destroy();
       // Assert the log group is gone after the final destroy.

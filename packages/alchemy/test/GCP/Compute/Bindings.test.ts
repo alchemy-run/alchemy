@@ -1,12 +1,12 @@
-import * as GCP from "@/GCP";
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as Test from "@/Test/Alchemy";
-import * as Core from "@/Test/Core";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import { dockerAvailable, expectProbe } from "../bindingHost.ts";
 import ComputeBindingsHost, { Vm } from "./fixtures/bindings-host.ts";
 
@@ -52,15 +52,10 @@ const expectInstanceGrants = Effect.gen(function* () {
     resource: vm.instanceName,
   });
   const roles = (policy.bindings ?? [])
-    .filter((binding) =>
-      (binding.members ?? []).includes(`serviceAccount:${hostAccount}`),
-    )
+    .filter((binding) => (binding.members ?? []).includes(`serviceAccount:${hostAccount}`))
     .map((binding) => binding.role)
     .sort();
-  expect(roles).toEqual([
-    "roles/compute.instanceAdmin.v1",
-    "roles/compute.viewer",
-  ]);
+  expect(roles).toEqual(["roles/compute.instanceAdmin.v1", "roles/compute.viewer"]);
 
   const { project } = yield* GcpEnvironment.current;
   const projectPolicy = yield* resourcemanager.getIamPolicyProjects({
@@ -147,10 +142,7 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
             expect(op.operationType).toEqual("stop");
             expect(op.targetLink).toContain(`/instances/${vm.instanceName}`);
             expect(yield* waitForStatus("TERMINATED")).toEqual("TERMINATED");
-            const seen = yield* expectProbe<{ status?: string }>(
-              baseUrl,
-              "getInstance",
-            );
+            const seen = yield* expectProbe<{ status?: string }>(baseUrl, "getInstance");
             expect(seen.status).toEqual("TERMINATED");
             yield* expectInstanceGrants;
           }),
@@ -173,10 +165,7 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
             expect(op.operationType).toEqual("start");
             expect(op.targetLink).toContain(`/instances/${vm.instanceName}`);
             expect(yield* waitForStatus("RUNNING")).toEqual("RUNNING");
-            const seen = yield* expectProbe<{ status?: string }>(
-              baseUrl,
-              "getInstance",
-            );
+            const seen = yield* expectProbe<{ status?: string }>(baseUrl, "getInstance");
             expect(seen.status).toEqual("RUNNING");
             yield* expectInstanceGrants;
           }),

@@ -14,12 +14,7 @@ import * as Cloudflare from "@/Cloudflare/index.ts";
 describe(
   "Website prop surfaces",
   {
-    tags: [
-      "unit",
-      "provider:cloudflare",
-      "provider:cloudflare:website",
-      "local",
-    ],
+    tags: ["unit", "provider:cloudflare", "provider:cloudflare:website", "local"],
   },
   () => {
     const _pins = [

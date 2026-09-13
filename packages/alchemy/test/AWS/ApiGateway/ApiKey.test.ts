@@ -46,9 +46,7 @@ test.provider.skipIf(!!process.env.FAST)(
       );
 
       expect(key.id).toBeDefined();
-      expect(Object.keys(key as Record<string, unknown>)).not.toContain(
-        "value",
-      );
+      expect(Object.keys(key as Record<string, unknown>)).not.toContain("value");
 
       yield* stack.destroy();
       yield* assertApiKeyDeleted(key.id);

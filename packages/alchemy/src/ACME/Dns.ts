@@ -13,9 +13,9 @@
  */
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Schedule from "effect/Schedule";
 import { DnsPropagationTimeout } from "./Errors.ts";
 
 export interface PropagationOptions {
@@ -47,9 +47,7 @@ export interface PropagationOptions {
 export const DEFAULT_PROPAGATION_DELAY: Duration.Input = "5 seconds";
 
 /** Sleep `options.delay` (default 5 seconds). */
-export const propagationDelay = (
-  options: PropagationOptions = {},
-): Effect.Effect<void> =>
+export const propagationDelay = (options: PropagationOptions = {}): Effect.Effect<void> =>
   Effect.sleep(options.delay ?? DEFAULT_PROPAGATION_DELAY);
 
 // =============================================================================
@@ -69,25 +67,20 @@ const nodeDns: Effect.Effect<NodeDns | undefined> = Effect.tryPromise(
   () => import("node:dns/promises") as unknown as Promise<NodeDns>,
 ).pipe(
   Effect.map((mod) =>
-    typeof mod?.Resolver === "function" && typeof mod.resolveNs === "function"
-      ? mod
-      : undefined,
+    typeof mod?.Resolver === "function" && typeof mod.resolveNs === "function" ? mod : undefined,
   ),
   Effect.orElseSucceed(() => undefined),
 );
 
 /** The zone apex's nameserver IPv4s for `fqdn`, or `[]` when unknown. */
-const authoritativeServers = (
-  dns: NodeDns,
-  fqdn: string,
-): Effect.Effect<ReadonlyArray<string>> =>
+const authoritativeServers = (dns: NodeDns, fqdn: string): Effect.Effect<ReadonlyArray<string>> =>
   Effect.gen(function* () {
     const labels = fqdn.replace(/\.$/, "").split(".");
     for (let i = 0; i < labels.length - 1; i++) {
       const candidate = labels.slice(i).join(".");
-      const names = yield* Effect.tryPromise(() =>
-        dns.resolveNs(candidate),
-      ).pipe(Effect.orElseSucceed(() => [] as string[]));
+      const names = yield* Effect.tryPromise(() => dns.resolveNs(candidate)).pipe(
+        Effect.orElseSucceed(() => [] as string[]),
+      );
       if (names.length === 0) continue;
       const addresses = yield* Effect.forEach(
         names,
@@ -201,9 +194,7 @@ export const waitForTxt = (
           ),
           doh: Effect.all(
             (options.resolvers ?? DEFAULT_RESOLVERS).map((resolver) =>
-              resolveTxt(resolver, fqdn).pipe(
-                Effect.map((values) => values.includes(value)),
-              ),
+              resolveTxt(resolver, fqdn).pipe(Effect.map((values) => values.includes(value))),
             ),
             { concurrency: "unbounded" },
           ),

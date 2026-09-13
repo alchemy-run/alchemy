@@ -27,11 +27,7 @@ export const normalizeLocation = (location: string | undefined) =>
 export const locationParent = (project: string, location: string) =>
   `projects/${project}/locations/${location}`;
 
-export const productSetNameOf = (
-  project: string,
-  location: string,
-  productSetId: string,
-) => {
+export const productSetNameOf = (project: string, location: string, productSetId: string) => {
   if (productSetId.length === 0) return "";
   if (productSetId.includes("/productSets/")) {
     return productSetId.replace(/\/+$/, "");
@@ -39,11 +35,7 @@ export const productSetNameOf = (
   return `${locationParent(project, location)}/productSets/${lastSegment(productSetId)}`;
 };
 
-export const productNameOf = (
-  project: string,
-  location: string,
-  productId: string,
-) => {
+export const productNameOf = (project: string, location: string, productId: string) => {
   if (productId.length === 0) return "";
   if (productId.includes("/products/")) {
     return productId.replace(/\/+$/, "");
@@ -62,33 +54,18 @@ export const referenceImageNameOf = (parent: string, imageId: string) => {
 const expandProductName = (project: string, location: string, value: string) =>
   productNameOf(project, location, value);
 
-export const parseResourceName = (
-  name: string,
-  fallbackProject: string,
-  collection: string,
-) => {
+export const parseResourceName = (name: string, fallbackProject: string, collection: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const collectionAt = parts.lastIndexOf(collection);
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
     name,
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1]
-        ? parts[projectsAt + 1]!
-        : fallbackProject,
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : fallbackProject,
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
-    id:
-      collectionAt >= 0 && parts[collectionAt + 1]
-        ? parts[collectionAt + 1]!
-        : lastSegment(name),
-    parent:
-      collectionAt >= 0
-        ? parts.slice(0, collectionAt).join("/")
-        : parentOf(name),
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : DEFAULT_LOCATION,
+    id: collectionAt >= 0 && parts[collectionAt + 1] ? parts[collectionAt + 1]! : lastSegment(name),
+    parent: collectionAt >= 0 ? parts.slice(0, collectionAt).join("/") : parentOf(name),
   };
 };
 
@@ -146,21 +123,16 @@ export const toResourceId = (
       maxLength,
       lowercase: true,
     });
-    const next = /^[a-z]/.test(generated)
-      ? generated
-      : `v${generated}`.slice(0, maxLength);
+    const next = /^[a-z]/.test(generated) ? generated : `v${generated}`.slice(0, maxLength);
     return next.length >= 4 ? next : `${next}xxxx`.slice(0, maxLength);
   });
 
 const emptyList = <A>() => Effect.succeed([] as A[]);
 
-const catchMissing = <A, E extends { readonly _tag: string }, R>(
-  effect: Effect.Effect<A, E, R>,
-) =>
+const catchMissing = <A, E extends { readonly _tag: string }, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
     Effect.catchIf(
-      (error): error is E & { readonly _tag: "NotFound" } =>
-        error._tag === "NotFound",
+      (error): error is E & { readonly _tag: "NotFound" } => error._tag === "NotFound",
       () => Effect.succeed(undefined),
     ),
   );
@@ -170,20 +142,15 @@ const ignoreMissing = <E extends { readonly _tag: string }, R>(
 ) =>
   effect.pipe(
     Effect.catchIf(
-      (error): error is E & { readonly _tag: "NotFound" } =>
-        error._tag === "NotFound",
+      (error): error is E & { readonly _tag: "NotFound" } => error._tag === "NotFound",
       () => Effect.void,
     ),
   );
 
-export class DeleteNotConfirmed extends Data.TaggedError(
-  "GCP.Vision.DeleteNotConfirmed",
-)<{}> {}
+export class DeleteNotConfirmed extends Data.TaggedError("GCP.Vision.DeleteNotConfirmed")<{}> {}
 
 /** Poll until the resource is gone; fails if it is still readable after ~60s. */
-export const waitUntilGone = <A, E, R>(
-  get: Effect.Effect<A | undefined, E, R>,
-) =>
+export const waitUntilGone = <A, E, R>(get: Effect.Effect<A | undefined, E, R>) =>
   get.pipe(
     Effect.repeat({
       schedule: Schedule.spaced("2 seconds"),
@@ -204,8 +171,7 @@ const collectPages = <Page, Item, E extends { readonly _tag: string }, R>(
     Stream.runCollect,
     Effect.map((chunk) => Array.from(chunk) as Item[]),
     Effect.catchIf(
-      (error): error is E & { readonly _tag: "NotFound" } =>
-        error._tag === "NotFound",
+      (error): error is E & { readonly _tag: "NotFound" } => error._tag === "NotFound",
       () => emptyList<Item>(),
     ),
   );
@@ -223,9 +189,7 @@ export const getProduct = (name: string) =>
 export const getReferenceImage = (name: string) =>
   name.length === 0
     ? Effect.succeed(undefined)
-    : catchMissing(
-        vision.getProjectsLocationsProductsReferenceImages({ name }),
-      );
+    : catchMissing(vision.getProjectsLocationsProductsReferenceImages({ name }));
 
 export const listProductsInSet = (name: string) =>
   name.length === 0
@@ -241,9 +205,7 @@ export const listProductsInSet = (name: string) =>
 export const productLabelsOf = (
   labels: ReadonlyArray<{ key?: string; value?: string }> | undefined,
 ): Array<{ key: string; value: string }> =>
-  (labels ?? []).flatMap((item) =>
-    item.key ? [{ key: item.key, value: item.value ?? "" }] : [],
-  );
+  (labels ?? []).flatMap((item) => (item.key ? [{ key: item.key, value: item.value ?? "" }] : []));
 
 export const sameProductLabels = (
   left: ReadonlyArray<{ key: string; value: string }> | undefined,
@@ -260,16 +222,12 @@ export const deleteProductSet = (name: string) =>
     : ignoreMissing(vision.deleteProjectsLocationsProductSets({ name }));
 
 export const deleteProduct = (name: string) =>
-  name.length === 0
-    ? Effect.void
-    : ignoreMissing(vision.deleteProjectsLocationsProducts({ name }));
+  name.length === 0 ? Effect.void : ignoreMissing(vision.deleteProjectsLocationsProducts({ name }));
 
 export const deleteReferenceImage = (name: string) =>
   name.length === 0
     ? Effect.void
-    : ignoreMissing(
-        vision.deleteProjectsLocationsProductsReferenceImages({ name }),
-      );
+    : ignoreMissing(vision.deleteProjectsLocationsProductsReferenceImages({ name }));
 
 export const syncProductSetMembership = (
   setName: string,

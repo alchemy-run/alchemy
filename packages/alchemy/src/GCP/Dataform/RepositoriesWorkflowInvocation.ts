@@ -114,10 +114,9 @@ export type RepositoriesWorkflowInvocation = Resource<
  * @resource
  * @category Dataform
  */
-export const RepositoriesWorkflowInvocation =
-  Resource<RepositoriesWorkflowInvocation>(
-    "GCP.Dataform.RepositoriesWorkflowInvocation",
-  );
+export const RepositoriesWorkflowInvocation = Resource<RepositoriesWorkflowInvocation>(
+  "GCP.Dataform.RepositoriesWorkflowInvocation",
+);
 
 export class RepositoriesWorkflowInvocationNotResolved extends Data.TaggedError(
   "GCP.Dataform.RepositoriesWorkflowInvocationNotResolved",
@@ -125,11 +124,7 @@ export class RepositoriesWorkflowInvocationNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const toAttrs = (
-  invocation: dataform.WorkflowInvocation,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (invocation: dataform.WorkflowInvocation, project: string, region: string) => {
   const name = invocation.name ?? "";
   const parsed = parseResourceName(name, "workflowInvocations", region);
   return {
@@ -161,15 +156,13 @@ const invocationBody = (
   workflowConfig: news.workflowConfig,
   invocationConfig: news.invocationConfig
     ? {
-        transitiveDependentsIncluded:
-          news.invocationConfig.transitiveDependentsIncluded,
+        transitiveDependentsIncluded: news.invocationConfig.transitiveDependentsIncluded,
         serviceAccount: news.invocationConfig.serviceAccount,
         includedTags: news.invocationConfig.includedTags,
         fullyRefreshIncrementalTablesEnabled:
           news.invocationConfig.fullyRefreshIncrementalTablesEnabled,
         queryPriority: news.invocationConfig.queryPriority,
-        transitiveDependenciesIncluded:
-          news.invocationConfig.transitiveDependenciesIncluded,
+        transitiveDependenciesIncluded: news.invocationConfig.transitiveDependenciesIncluded,
         includedTargets: news.invocationConfig.includedTargets,
       }
     : undefined,
@@ -177,13 +170,7 @@ const invocationBody = (
 
 export const RepositoriesWorkflowInvocationProvider = () =>
   Provider.succeed(RepositoriesWorkflowInvocation, {
-    stables: [
-      "name",
-      "workflowInvocationId",
-      "repository",
-      "project",
-      "location",
-    ],
+    stables: ["name", "workflowInvocationId", "repository", "project", "location"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -195,13 +182,11 @@ export const RepositoriesWorkflowInvocationProvider = () =>
       const compilationChanged =
         (olds?.compilationResult ?? output?.compilationResult) !== undefined &&
         news.compilationResult !== undefined &&
-        news.compilationResult !==
-          (olds?.compilationResult ?? output?.compilationResult);
+        news.compilationResult !== (olds?.compilationResult ?? output?.compilationResult);
       const workflowChanged =
         (olds?.workflowConfig ?? output?.workflowConfig) !== undefined &&
         news.workflowConfig !== undefined &&
-        news.workflowConfig !==
-          (olds?.workflowConfig ?? output?.workflowConfig);
+        news.workflowConfig !== (olds?.workflowConfig ?? output?.workflowConfig);
       const configChanged =
         news.invocationConfig !== undefined &&
         olds?.invocationConfig !== undefined &&
@@ -230,27 +215,16 @@ export const RepositoriesWorkflowInvocationProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const invocations = yield* forEachOwnedRepository(
-          env.project,
-          env.region,
-          (repo) => listWorkflowInvocations(repo.name ?? ""),
+        const invocations = yield* forEachOwnedRepository(env.project, env.region, (repo) =>
+          listWorkflowInvocations(repo.name ?? ""),
         );
-        return invocations.map((item) =>
-          toAttrs(item, env.project, env.region),
-        );
+        return invocations.map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const repository = expandRepository(
-        news.repository,
-        env.project,
-        location,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const repository = expandRepository(news.repository, env.project, location);
 
       let current = yield* getByName(output?.name ?? "");
 

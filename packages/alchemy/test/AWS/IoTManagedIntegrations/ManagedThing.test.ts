@@ -42,8 +42,7 @@ class ThingStillExists extends Data.TaggedError("ThingStillExists")<{
 const assertThingGone = (managedThingId: string) =>
   mi.getManagedThing({ Identifier: managedThingId }).pipe(
     Effect.flatMap((thing) =>
-      thing.ProvisioningStatus === "DELETED" ||
-      thing.ProvisioningStatus === "DELETE_IN_PROGRESS"
+      thing.ProvisioningStatus === "DELETED" || thing.ProvisioningStatus === "DELETE_IN_PROGRESS"
         ? Effect.void
         : Effect.fail(new ThingStillExists({ managedThingId })),
     ),
@@ -92,9 +91,7 @@ test.provider.skipIf(!process.env.AWS_TEST_IOT_MI)(
       expect(thing.tags.fixture).toBe("iot-mi-managed-thing");
 
       // Out-of-band verification via distilled.
-      const observed = yield* mi.getManagedThing({
-        Identifier: thing.managedThingId,
-      });
+      const observed = yield* mi.getManagedThing({ Identifier: thing.managedThingId });
       expect(observed.Arn).toBe(thing.managedThingArn);
 
       // Update a mutable field in place.
@@ -104,8 +101,5 @@ test.provider.skipIf(!process.env.AWS_TEST_IOT_MI)(
       yield* stack.destroy();
       yield* assertThingGone(thing.managedThingId);
     }),
-  {
-    tags: ["provider:aws", "provider:aws:iotmanagedintegrations", "live"],
-    timeout: 240_000,
-  },
+  { tags: ["provider:aws", "provider:aws:iotmanagedintegrations", "live"], timeout: 240_000 },
 );

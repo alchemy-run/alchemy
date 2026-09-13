@@ -103,8 +103,7 @@ test.provider(
   },
 );
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 test.provider(
   "worker.url with a custom domain resolves to localhost after live → local",

@@ -54,14 +54,10 @@ describe(
           expect(deployed.site.ip).toBeUndefined();
 
           const origin = String(url).replace(/\/+$/, "");
-          yield* expectUrlContains(
-            `${origin}/`,
-            "REACT_ROUTER_AWS_PAGE_MARKER",
-            {
-              timeout: "90 seconds",
-              label: "dev home page",
-            },
-          );
+          yield* expectUrlContains(`${origin}/`, "REACT_ROUTER_AWS_PAGE_MARKER", {
+            timeout: "90 seconds",
+            label: "dev home page",
+          });
           yield* expectUrlContains(
             `${origin}/api/hello?echo=roundtrip`,
             "REACT_ROUTER_AWS_API_MARKER",

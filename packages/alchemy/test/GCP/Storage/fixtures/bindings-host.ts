@@ -1,7 +1,7 @@
-import * as GCP from "@/GCP";
-import { ObjectRequestFailed } from "@/GCP/Storage/ObjectMedia.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
+import { ObjectRequestFailed } from "@/GCP/Storage/ObjectMedia.ts";
 import { serveProbes } from "../../bindingHost.ts";
 
 /** Object key and content seeded into the read-side buckets. */
@@ -105,10 +105,7 @@ export default class StorageBindingsHost extends GCP.Function<StorageBindingsHos
         }),
         readWriteBucket: forbiddenAsTag(
           Effect.gen(function* () {
-            const put = yield* readWriteBucket.put(
-              "round-trip.txt",
-              "hello from ReadWriteBucket",
-            );
+            const put = yield* readWriteBucket.put("round-trip.txt", "hello from ReadWriteBucket");
             const object = yield* readWriteBucket.get("round-trip.txt");
             const listed = yield* readWriteBucket.list();
             return {
@@ -143,9 +140,7 @@ export default class StorageBindingsHost extends GCP.Function<StorageBindingsHos
             })),
           ),
         ),
-        deleteObject: deleteObject({ object: SEED_KEY }).pipe(
-          Effect.as({ deleted: SEED_KEY }),
-        ),
+        deleteObject: deleteObject({ object: SEED_KEY }).pipe(Effect.as({ deleted: SEED_KEY })),
         deleteObjectMissing: deleteObject({ object: "missing.txt" }),
         signGetObjectUrl: signGetObjectUrl({
           object: SEED_KEY,

@@ -76,8 +76,7 @@ export const SecretsStoreLive = Layer.effect(
     const enableControlEndpoints = yield* Plugin.UnsafeEnableControlEndpoints;
 
     const makeStorageService = Effect.gen(function* () {
-      const storageDiskPath =
-        "disk" in storage ? storage.disk?.path : undefined;
+      const storageDiskPath = "disk" in storage ? storage.disk?.path : undefined;
       if (!storageDiskPath) {
         return yield* new ConfigError({
           subtag: "SecretsStore",
@@ -204,9 +203,7 @@ export const SecretsStoreLive = Layer.effect(
  * `Secret "<secretName>" not found` (matching Miniflare) until a value is
  * seeded through the {@link admin} surface.
  */
-export const local = (
-  props: SecretsStoreSecretProps,
-): BindingHook<SecretsStore> =>
+export const local = (props: SecretsStoreSecretProps): BindingHook<SecretsStore> =>
   Plugin.use(SecretsStore, (secretsStore) =>
     Effect.map(
       secretsStore.api.register({
@@ -229,10 +226,7 @@ export const local = (
  * Secret provider, through the platform proxy) uses it to write secret
  * values into the same store the `secrets_store_secret` bindings read.
  */
-export const admin = (props: {
-  binding: string;
-  storeId: string;
-}): BindingHook<SecretsStore> =>
+export const admin = (props: { binding: string; storeId: string }): BindingHook<SecretsStore> =>
   Plugin.use(SecretsStore, (secretsStore) =>
     Effect.map(
       secretsStore.api.registerStore({ storeId: props.storeId }),

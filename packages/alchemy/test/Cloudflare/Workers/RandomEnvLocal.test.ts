@@ -13,10 +13,7 @@ const { test } = Test.make({
   dev: true,
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 interface RandomEnvBody {
   resolvedType: string;
@@ -63,10 +60,7 @@ test.provider(
           ),
           Effect.retry({
             while: (e): e is WorkerNotReady => e instanceof WorkerNotReady,
-            schedule: Schedule.max([
-              Schedule.exponential("500 millis"),
-              Schedule.recurs(10),
-            ]),
+            schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
           }),
         );
         return (yield* res.json) as unknown as RandomEnvBody;

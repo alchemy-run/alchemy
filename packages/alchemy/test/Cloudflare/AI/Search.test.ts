@@ -11,10 +11,7 @@ import AiSearchCrawlTargetWorker from "./fixtures/crawl-target-worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Type-level coverage: the `AiSearch` construct result *is* an
 // `AiSearchInstance`, so it can be passed anywhere one is expected. These
@@ -56,16 +53,10 @@ const getInstance = (accountId: string, id: string, namespace = "default") =>
 const expectGone = (accountId: string, id: string, namespace = "default") =>
   getInstance(accountId, id, namespace).pipe(
     Effect.flatMap(() => Effect.fail({ _tag: "InstanceNotDeleted" } as const)),
-    Effect.catchTag(
-      ["AiSearchInstanceNotFound", "NamespaceNotFound"],
-      () => Effect.void,
-    ),
+    Effect.catchTag(["AiSearchInstanceNotFound", "NamespaceNotFound"], () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "InstanceNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 
@@ -110,12 +101,7 @@ test.provider(
       yield* expectGone(accountId, search.instanceId);
     }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:ai",
-      "provider:cloudflare:r2",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:ai", "provider:cloudflare:r2", "live"],
     timeout: 300_000,
   },
 );
@@ -186,12 +172,7 @@ test.provider(
       yield* expectGone(accountId, search.instanceId);
     }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:ai",
-      "provider:cloudflare:worker",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:ai", "provider:cloudflare:worker", "live"],
     timeout: 300_000,
   },
 );

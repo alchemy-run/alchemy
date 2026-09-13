@@ -146,9 +146,7 @@ export const AccountResourceTags = Resource<AccountResourceTags>(TypeId);
 /**
  * Returns true if the given value is an AccountResourceTags resource.
  */
-export const isAccountResourceTags = (
-  value: unknown,
-): value is AccountResourceTags =>
+export const isAccountResourceTags = (value: unknown): value is AccountResourceTags =>
   Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const AccountResourceTagsProvider = () =>
@@ -160,26 +158,21 @@ export const AccountResourceTagsProvider = () =>
     // hydratable into the `read` Attributes shape.
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      return yield* resourceTagging.listResourceTaggings
-        .pages({ accountId })
-        .pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.result ?? []).map(
-                (item): AccountResourceTagsAttributes => ({
-                  accountId,
-                  resourceType: item.type,
-                  resourceId: item.id,
-                  workerId:
-                    "workerId" in item ? (item.workerId as string) : undefined,
-                  tags: narrowTags(item.tags),
-                  etag: item.etag,
-                }),
-              ),
-            ),
+      return yield* resourceTagging.listResourceTaggings.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? []).map((item): AccountResourceTagsAttributes => ({
+              accountId,
+              resourceType: item.type,
+              resourceId: item.id,
+              workerId: "workerId" in item ? (item.workerId as string) : undefined,
+              tags: narrowTags(item.tags),
+              etag: item.etag,
+            })),
           ),
-        );
+        ),
+      );
     }),
 
     diff: Effect.fn(function* ({ olds = {}, news }) {
@@ -212,8 +205,7 @@ export const AccountResourceTagsProvider = () =>
       // At plan time `olds` may still hold unresolved Output proxies (e.g.
       // an adoption pre-check before the referenced resource deploys) —
       // only fall back to them once resolved.
-      const resolvedOlds =
-        olds !== undefined && isResolved(olds) ? olds : undefined;
+      const resolvedOlds = olds !== undefined && isResolved(olds) ? olds : undefined;
       const resourceId = output?.resourceId ?? resolvedOlds?.resourceId;
       const resourceType = output?.resourceType ?? resolvedOlds?.resourceType;
       const workerId = output?.workerId ?? resolvedOlds?.workerId;
@@ -306,14 +298,8 @@ export const AccountResourceTagsProvider = () =>
 
 /** Narrow distilled's `Record<string, unknown>` tag values to strings. */
 const narrowTags = (tags: Record<string, unknown>): Record<string, string> =>
-  Object.fromEntries(
-    Object.entries(tags).map(([k, v]) => [k, String(v)] as const),
-  );
+  Object.fromEntries(Object.entries(tags).map(([k, v]) => [k, String(v)] as const));
 
 /** Resolve `Input<string>` tag values (already concrete after Plan). */
-const resolveTags = (
-  tags: Record<string, Input<string>>,
-): Record<string, string> =>
-  Object.fromEntries(
-    Object.entries(tags).map(([k, v]) => [k, v as string] as const),
-  );
+const resolveTags = (tags: Record<string, Input<string>>): Record<string, string> =>
+  Object.fromEntries(Object.entries(tags).map(([k, v]) => [k, v as string] as const));

@@ -36,7 +36,6 @@ export interface GetTableMetadataLocation extends Binding.Service<
     >
   >
 > {}
-export const GetTableMetadataLocation =
-  Binding.Service<GetTableMetadataLocation>(
-    "AWS.S3Tables.GetTableMetadataLocation",
-  );
+export const GetTableMetadataLocation = Binding.Service<GetTableMetadataLocation>(
+  "AWS.S3Tables.GetTableMetadataLocation",
+);

@@ -1,5 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitGlobalOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
@@ -9,12 +8,9 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitGlobalOperation } from "./operations.ts";
 
 export type HttpRedirectAction = compute.HttpRedirectAction;
 export type HostRule = compute.HostRule;
@@ -177,9 +173,7 @@ export type UrlMap = Resource<
  */
 export const UrlMap = Resource<UrlMap>("GCP.Compute.UrlMap");
 
-export class UrlMapNotResolved extends Data.TaggedError(
-  "GCP.Compute.UrlMapNotResolved",
-)<{
+export class UrlMapNotResolved extends Data.TaggedError("GCP.Compute.UrlMapNotResolved")<{
   urlMapName: string;
 }> {}
 
@@ -267,9 +261,7 @@ const toAttrs = (urlMap: compute.UrlMap, project: string) => {
 };
 
 const isEmpty = (value: unknown): boolean =>
-  value === undefined ||
-  value === null ||
-  (Array.isArray(value) && value.length === 0);
+  value === undefined || value === null || (Array.isArray(value) && value.length === 0);
 
 const subsetEqual = (observed: unknown, desired: unknown): boolean => {
   if (desired === undefined || desired === null) return isEmpty(observed);
@@ -280,17 +272,11 @@ const subsetEqual = (observed: unknown, desired: unknown): boolean => {
     return desired.every((item, index) => subsetEqual(observed[index], item));
   }
   if (typeof desired === "object") {
-    if (
-      observed === undefined ||
-      observed === null ||
-      typeof observed !== "object"
-    ) {
+    if (observed === undefined || observed === null || typeof observed !== "object") {
       return false;
     }
     const current = observed as Record<string, unknown>;
-    for (const [key, value] of Object.entries(
-      desired as Record<string, unknown>,
-    )) {
+    for (const [key, value] of Object.entries(desired as Record<string, unknown>)) {
       if (value === undefined) continue;
       if (!subsetEqual(current[key], value)) return false;
     }
@@ -320,13 +306,7 @@ const getByName = (project: string, urlMap: string) =>
 
 export const UrlMapProvider = () =>
   Provider.succeed(UrlMap, {
-    stables: [
-      "urlMapName",
-      "project",
-      "urlMapId",
-      "selfLink",
-      "creationTimestamp",
-    ],
+    stables: ["urlMapName", "project", "urlMapId", "selfLink", "creationTimestamp"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -340,11 +320,7 @@ export const UrlMapProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const urlMapName = yield* toName(
-        id,
-        olds?.urlMapName,
-        output?.urlMapName,
-      );
+      const urlMapName = yield* toName(id, olds?.urlMapName, output?.urlMapName);
       const existing = yield* getByName(env.project, urlMapName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
@@ -358,9 +334,7 @@ export const UrlMapProvider = () =>
         return yield* compute.listUrlMaps.items({ project: env.project }).pipe(
           Stream.filter((urlMap) => {
             const { labels } = parseDescription(urlMap.description);
-            return Object.keys(labels).some((key) =>
-              key.startsWith("alchemy-"),
-            );
+            return Object.keys(labels).some((key) => key.startsWith("alchemy-"));
           }),
           Stream.map((urlMap) => toAttrs(urlMap, env.project)),
           Stream.runCollect,
@@ -383,9 +357,7 @@ export const UrlMapProvider = () =>
             body: desired,
           })
           .pipe(
-            Effect.flatMap((operation) =>
-              waitGlobalOperation(env.project, operation),
-            ),
+            Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)),
             Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
           );
         current = yield* getByName(env.project, urlMapName);
@@ -402,11 +374,7 @@ export const UrlMapProvider = () =>
             urlMap: urlMapName,
             body: toBody(urlMapName, news, ownership, current.fingerprint),
           })
-          .pipe(
-            Effect.flatMap((operation) =>
-              waitGlobalOperation(env.project, operation),
-            ),
-          );
+          .pipe(Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)));
         current = yield* getByName(env.project, urlMapName);
         if (current === undefined) {
           return yield* new UrlMapNotResolved({ urlMapName });

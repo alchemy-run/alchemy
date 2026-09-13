@@ -12,10 +12,7 @@ import { assertNetworkAclGone, assertSubnetGone } from "./Gone.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 class NetworkAclAssociationNotListed extends Data.TaggedError(
   "NetworkAclAssociationNotListed",
@@ -34,9 +31,7 @@ test.provider(
             vpcId: defaultVpc.vpcId,
             cidrBlock: defaultVpc.subnetCidrBlock(221),
           });
-          const acl = yield* NetworkAcl("ListNaclAssocAcl", {
-            vpcId: defaultVpc.vpcId,
-          });
+          const acl = yield* NetworkAcl("ListNaclAssocAcl", { vpcId: defaultVpc.vpcId });
           const assoc = yield* NetworkAclAssociation("ListNaclAssoc", {
             networkAclId: acl.networkAclId,
             subnetId: subnet.subnetId,
@@ -54,16 +49,11 @@ test.provider(
         ),
         Effect.retry({
           while: (e) => e._tag === "NetworkAclAssociationNotListed",
-          schedule: Schedule.max([
-            Schedule.spaced("3 seconds"),
-            Schedule.recurs(10),
-          ]),
+          schedule: Schedule.max([Schedule.spaced("3 seconds"), Schedule.recurs(10)]),
         }),
       );
 
-      expect(all.some((x) => x.associationId === assoc.associationId)).toBe(
-        true,
-      );
+      expect(all.some((x) => x.associationId === assoc.associationId)).toBe(true);
 
       yield* stack.destroy();
 

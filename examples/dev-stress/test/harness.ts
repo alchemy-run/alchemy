@@ -18,13 +18,7 @@ export const EXAMPLE_ROOT = path.resolve(import.meta.dirname, "..");
  * signals reach the actual CLI process whose scope teardown kills the exec
  * child and the provider sidecars.
  */
-export const ALCHEMY_BIN = path.join(
-  EXAMPLE_ROOT,
-  "node_modules",
-  "alchemy",
-  "bin",
-  "alchemy.js",
-);
+export const ALCHEMY_BIN = path.join(EXAMPLE_ROOT, "node_modules", "alchemy", "bin", "alchemy.js");
 
 /** Entries never copied into a scratch project. */
 const SKIP_COPY = new Set([
@@ -59,12 +53,7 @@ const SKIP_COPY = new Set([
 export const resetFlociEmulator = (): void => {
   const names = spawnSync(
     "docker",
-    [
-      "ps",
-      "-aq",
-      "--filter",
-      "name=^(alchemy-floci$|floci-ec2|floci-ecs|floci-microvm)",
-    ],
+    ["ps", "-aq", "--filter", "name=^(alchemy-floci$|floci-ec2|floci-ecs|floci-microvm)"],
     { encoding: "utf8", timeout: 30_000 },
   )
     .stdout?.trim()
@@ -290,20 +279,14 @@ export class DevServer {
 
   /** Extract a plain value for `key` from the stack outputs the CLI printed. */
   outputValue(key: string): string | undefined {
-    const matches = this.output.match(
-      new RegExp(`${key}:\\s*['\"]?([^\\s'\",]+)`, "g"),
-    );
+    const matches = this.output.match(new RegExp(`${key}:\\s*['\"]?([^\\s'\",]+)`, "g"));
     // The newest print wins: outputs are re-printed on every re-apply.
-    return matches
-      ?.at(-1)
-      ?.match(new RegExp(`${key}:\\s*['\"]?([^\\s'\",]+)`))?.[1];
+    return matches?.at(-1)?.match(new RegExp(`${key}:\\s*['\"]?([^\\s'\",]+)`))?.[1];
   }
 
   /** Extract a URL for `key` from the stack outputs the CLI printed. */
   outputUrl(key: string): string | undefined {
-    const matches = this.output.match(
-      new RegExp(`${key}:\\s*['"]?(http[^\\s'",]+)`, "g"),
-    );
+    const matches = this.output.match(new RegExp(`${key}:\\s*['"]?(http[^\\s'",]+)`, "g"));
     // The newest print wins: outputs are re-printed on every re-apply.
     return matches?.at(-1)?.match(/(http[^\s'",]+)/)?.[1];
   }
@@ -345,9 +328,7 @@ export class DevServer {
    */
   patchRegion(relative: string, name: string, body: string): void {
     const source = this.read(relative);
-    const pattern = new RegExp(
-      `([ \\t]*// <<${name}>>\\n)[\\s\\S]*?([ \\t]*// <<\\/${name}>>)`,
-    );
+    const pattern = new RegExp(`([ \\t]*// <<${name}>>\\n)[\\s\\S]*?([ \\t]*// <<\\/${name}>>)`);
     if (!pattern.test(source)) {
       throw new Error(`region <<${name}>> not found in ${relative}`);
     }
@@ -510,10 +491,8 @@ export const waitForJson = async <T>(
 };
 
 /** `http://localhost:<port>` */
-export const at = (port: number, path = "/"): URL =>
-  new URL(path, `http://localhost:${port}`);
+export const at = (port: number, path = "/"): URL => new URL(path, `http://localhost:${port}`);
 
 /** Docker gate — floci (the AWS emulator) and Containers both need it. */
 export const dockerAvailable =
-  spawnSync("docker", ["info"], { stdio: "ignore", timeout: 30_000 }).status ===
-  0;
+  spawnSync("docker", ["info"], { stdio: "ignore", timeout: 30_000 }).status === 0;

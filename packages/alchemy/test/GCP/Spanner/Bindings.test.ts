@@ -1,16 +1,11 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
-import * as Core from "@/Test/Core";
 import * as spanner from "@distilled.cloud/gcp/spanner_v1";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import { dockerAvailable, expectProbe } from "../bindingHost.ts";
-import SpannerBindingsHost, {
-  App,
-  Db,
-  ITEMS_DDL,
-  Schema,
-} from "./fixtures/bindings-host.ts";
+import SpannerBindingsHost, { App, Db, ITEMS_DDL, Schema } from "./fixtures/bindings-host.ts";
 
 const testOptions = { providers: GCP.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -80,10 +75,7 @@ describe.skipIf(!dockerAvailable)(
         "reads the instance, granted viewer on the instance only",
         (_stack) =>
           Effect.gen(function* () {
-            const live = yield* expectProbe<spanner.Instance>(
-              baseUrl,
-              "getInstance",
-            );
+            const live = yield* expectProbe<spanner.Instance>(baseUrl, "getInstance");
             expect(live.name).toEqual(names.instance);
             expect(live.processingUnits).toEqual(100);
             expect(yield* instanceRoles).toEqual(["roles/spanner.viewer"]);
@@ -100,10 +92,7 @@ describe.skipIf(!dockerAvailable)(
         "reads the schema, granted databaseReader on the database only",
         (_stack) =>
           Effect.gen(function* () {
-            const ddl = yield* expectProbe<spanner.GetDatabaseDdlResponse>(
-              baseUrl,
-              "getDdl",
-            );
+            const ddl = yield* expectProbe<spanner.GetDatabaseDdlResponse>(baseUrl, "getDdl");
             expect(ddl.statements).toEqual([ITEMS_DDL]);
 
             const direct = yield* spanner.getDdlProjectsInstancesDatabases({
@@ -111,9 +100,7 @@ describe.skipIf(!dockerAvailable)(
             });
             expect(ddl.statements).toEqual(direct.statements);
 
-            expect(yield* databaseRoles(names.schema)).toEqual([
-              "roles/spanner.databaseReader",
-            ]);
+            expect(yield* databaseRoles(names.schema)).toEqual(["roles/spanner.databaseReader"]);
           }),
         {
           tags: ["provider:gcp", "provider:gcp:spanner", "live"],
@@ -127,20 +114,13 @@ describe.skipIf(!dockerAvailable)(
         "queries the database, granted databaseUser on the database only",
         (_stack) =>
           Effect.gen(function* () {
-            const result = yield* expectProbe<spanner.ResultSet>(
-              baseUrl,
-              "executeSql",
-            );
+            const result = yield* expectProbe<spanner.ResultSet>(baseUrl, "executeSql");
             expect(result.metadata?.rowType?.fields?.[0]?.name).toEqual("n");
             expect(result.rows).toEqual([["0"]]);
 
-            expect(yield* databaseRoles(names.app)).toEqual([
-              "roles/spanner.databaseUser",
-            ]);
+            expect(yield* databaseRoles(names.app)).toEqual(["roles/spanner.databaseUser"]);
             // Nothing leaks onto the other database or the instance.
-            expect(yield* databaseRoles(names.schema)).toEqual([
-              "roles/spanner.databaseReader",
-            ]);
+            expect(yield* databaseRoles(names.schema)).toEqual(["roles/spanner.databaseReader"]);
             expect(yield* instanceRoles).toEqual(["roles/spanner.viewer"]);
           }),
         {

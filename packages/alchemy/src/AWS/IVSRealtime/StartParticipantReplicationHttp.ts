@@ -19,10 +19,7 @@ export const StartParticipantReplicationHttp = Layer.effect(
     });
     return Effect.fn(function* (sourceStage: Stage, destinationStage: Stage) {
       const startReplication = yield* make(sourceStage, destinationStage);
-      return ({
-        reconnectWindow,
-        ...request
-      }: StartParticipantReplicationRequest) =>
+      return ({ reconnectWindow, ...request }: StartParticipantReplicationRequest) =>
         startReplication({
           ...request,
           reconnectWindowSeconds: toWireSeconds(reconnectWindow),

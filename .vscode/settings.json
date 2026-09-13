@@ -1,13 +1,5 @@
 {
   "diffEditor.renderSideBySide": false,
-  // Point the editor at THIS workspace's pinned typescript@7 install. The
-  // Effect diagnostics (e.g. `anyUnknownInErrorContext`) come from
-  // `effect-tsgo patch` (run automatically on install via `prepare`), which
-  // patches the workspace `node_modules/typescript` binary in place — the
-  // editor must use the WORKSPACE version or no Effect diagnostics appear.
-  // Opt in once per machine via Command Palette -> "TypeScript: Select
-  // TypeScript Version" -> "Use Workspace Version".
-  // (`enablePromptUseWorkspaceTsdk` below makes the editor prompt for this.)
   "js/ts.tsdk.path": "node_modules/typescript/lib",
   "js/ts.tsdk.promptToUseWorkspaceVersion": true,
   "js/ts.preferences.importModuleSpecifier": "relative",
@@ -24,9 +16,6 @@
   "editor.tabSize": 2,
   "editor.indentSize": 2,
   "editor.insertSpaces": true,
-  "editor.codeActionsOnSave": {
-    "source.fixAll": "explicit"
-  },
   "[toml]": {
     "editor.defaultFormatter": "tamasfe.even-better-toml"
   },

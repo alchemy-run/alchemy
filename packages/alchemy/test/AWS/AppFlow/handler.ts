@@ -117,8 +117,7 @@ export const AppFlowApiFunctionLive = AppFlowApiFunction.make(
     const startFlow = yield* AWS.AppFlow.StartFlow(flow);
     const stopFlow = yield* AWS.AppFlow.StopFlow(flow);
     const cancelFlowExecutions = yield* AWS.AppFlow.CancelFlowExecutions(flow);
-    const describeFlowExecutionRecords =
-      yield* AWS.AppFlow.DescribeFlowExecutionRecords(flow);
+    const describeFlowExecutionRecords = yield* AWS.AppFlow.DescribeFlowExecutionRecords(flow);
     const eventsSink = yield* AWS.SQS.QueueSink(eventsQueue);
     const flowEventPattern = AWS.AppFlow.flowEvents({
       flowNames: [FLOW_NAME],

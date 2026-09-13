@@ -34,10 +34,7 @@ test.provider(
 
       expect(Array.isArray(all)).toBe(true);
       expect(
-        all.some(
-          (g) =>
-            g.dbClusterParameterGroupName === group.dbClusterParameterGroupName,
-        ),
+        all.some((g) => g.dbClusterParameterGroupName === group.dbClusterParameterGroupName),
       ).toBe(true);
 
       for (const g of all) {

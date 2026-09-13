@@ -1,9 +1,9 @@
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Layer from "effect/Layer";
+import * as Stream from "effect/Stream";
 import path from "pathe";
 import { EventBus } from "@/AWS/EventBridge";
 import * as Lambda from "@/AWS/Lambda";
@@ -162,9 +162,7 @@ export default SchemasTestFunction.make(
         if (request.method === "GET" && pathname === "/versions") {
           const response = yield* listSchemaVersions();
           return yield* HttpServerResponse.json({
-            versions: (response.SchemaVersions ?? []).map(
-              (v) => v.SchemaVersion,
-            ),
+            versions: (response.SchemaVersions ?? []).map((v) => v.SchemaVersion),
           });
         }
 

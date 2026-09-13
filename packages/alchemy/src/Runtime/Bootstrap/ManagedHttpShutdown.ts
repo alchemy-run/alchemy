@@ -17,10 +17,7 @@ export class ManagedHttpShutdown extends Context.Service<
     readonly drainTimeoutMs: number;
     readonly isStopping: () => boolean;
     readonly observeRequest: (fiber: Fiber.Fiber<unknown, unknown>) => void;
-    readonly runnerFinished: (
-      exit: Exit.Exit<unknown, unknown>,
-      last: boolean,
-    ) => void;
+    readonly runnerFinished: (exit: Exit.Exit<unknown, unknown>, last: boolean) => void;
   }
 >()("Alchemy.Runtime.ManagedHttpShutdown") {}
 
@@ -61,15 +58,9 @@ export const withManagedHttpShutdown = (
   timeoutMs: number,
 ) =>
   Effect.gen(function* () {
-    if (
-      !Number.isSafeInteger(timeoutMs) ||
-      timeoutMs <= 0 ||
-      timeoutMs > 300_000
-    ) {
+    if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0 || timeoutMs > 300_000) {
       return yield* Effect.fail(
-        new Error(
-          "ALCHEMY_FLY_SHUTDOWN_TIMEOUT_MS must be a positive integer at most 300000",
-        ),
+        new Error("ALCHEMY_FLY_SHUTDOWN_TIMEOUT_MS must be a positive integer at most 300000"),
       );
     }
 
@@ -96,9 +87,7 @@ export const withManagedHttpShutdown = (
       drainDeadline = setTimeout(() => {
         if (drained) return;
         timedOut = true;
-        console.error(
-          "Managed HTTP drain deadline exceeded; closing connections.",
-        );
+        console.error("Managed HTTP drain deadline exceeded; closing connections.");
         for (const server of servers) server.closeAllConnections();
       }, drainTimeoutMs);
       deadline = setTimeout(() => {
@@ -142,20 +131,14 @@ export const withManagedHttpShutdown = (
             requests.delete(request);
             if (Exit.isFailure(exit) && !Cause.hasInterruptsOnly(exit.cause)) {
               requestFailures.push(exit.cause);
-              console.error(
-                "Managed HTTP request cleanup failed",
-                Cause.pretty(exit.cause),
-              );
+              console.error("Managed HTTP request cleanup failed", Cause.pretty(exit.cause));
             }
           });
         },
         runnerFinished: (exit, last) => {
           if (Exit.isFailure(exit) && !Cause.hasInterruptsOnly(exit.cause)) {
             runnerFailures.push(exit.cause);
-            console.error(
-              "Managed process cleanup failed",
-              Cause.pretty(exit.cause),
-            );
+            console.error("Managed process cleanup failed", Cause.pretty(exit.cause));
             beginShutdown();
             Deferred.doneUnsafe(signal, Effect.void);
           } else if (last) {
@@ -184,14 +167,11 @@ export const withManagedHttpShutdown = (
     // Socket closure is not completion of the request fiber's finalizers.
     yield* Fiber.awaitAll(requests);
     drained = true;
-    const dependencyExit = yield* Scope.close(dependencies, programExit).pipe(
-      Effect.exit,
-    );
+    const dependencyExit = yield* Scope.close(dependencies, programExit).pipe(Effect.exit);
     const failures = runnerFailures.concat(
       requestFailures,
       [httpExit, programExit, dependencyExit].flatMap((exit) =>
-        Exit.isFailure(exit) &&
-        !(interrupted && Cause.hasInterruptsOnly(exit.cause))
+        Exit.isFailure(exit) && !(interrupted && Cause.hasInterruptsOnly(exit.cause))
           ? [exit.cause]
           : [],
       ),
@@ -201,9 +181,7 @@ export const withManagedHttpShutdown = (
     }
     if (failures.length > 0) return yield* Effect.failCause(failures[0]!);
     if (timedOut) {
-      return yield* Effect.fail(
-        new Error("Managed process drain deadline exceeded"),
-      );
+      return yield* Effect.fail(new Error("Managed process drain deadline exceeded"));
     }
     return interrupted;
   }).pipe(Effect.scoped);

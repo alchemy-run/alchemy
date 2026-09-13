@@ -9,10 +9,7 @@ import * as Test from "./VpcTest.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 test.provider(
   "list enumerates the deployed RouteTableAssociation",
@@ -43,9 +40,7 @@ test.provider(
       const provider = yield* Provider.findProvider(RouteTableAssociation);
       const all = yield* provider.list();
 
-      expect(all.some((x) => x.associationId === assoc.associationId)).toBe(
-        true,
-      );
+      expect(all.some((x) => x.associationId === assoc.associationId)).toBe(true);
 
       yield* stack.destroy();
 

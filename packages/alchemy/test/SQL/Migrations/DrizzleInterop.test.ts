@@ -34,9 +34,7 @@ describe("drizzle adoption (one-way conversion)", (it) => {
         const db = new Database(":memory:");
         // The user's pre-Alchemy state, produced by drizzle's own migrator.
         yield* Effect.sync(() =>
-          drizzleMigrate(drizzle({ client: db }), {
-            migrationsFolder: fixturesDir,
-          }),
+          drizzleMigrate(drizzle({ client: db }), { migrationsFolder: fixturesDir }),
         );
         const drizzleRows = rowsOf(db, "__drizzle_migrations");
         expect(drizzleRows.length).toBe(2);
@@ -71,9 +69,7 @@ describe("drizzle adoption (one-way conversion)", (it) => {
       Effect.gen(function* () {
         const db = new Database(":memory:");
         yield* Effect.sync(() =>
-          drizzleMigrate(drizzle({ client: db }), {
-            migrationsFolder: fixturesDir,
-          }),
+          drizzleMigrate(drizzle({ client: db }), { migrationsFolder: fixturesDir }),
         );
         const frozen = rowsOf(db, "__drizzle_migrations");
 

@@ -37,9 +37,7 @@ export default class RateLimitEffectWorker extends Cloudflare.Worker<RateLimitEf
 
           const results: boolean[] = [];
           for (let i = 0; i < n; i++) {
-            const { success } = yield* throttle
-              .limit({ key })
-              .pipe(Effect.orDie);
+            const { success } = yield* throttle.limit({ key }).pipe(Effect.orDie);
             results.push(success);
           }
 

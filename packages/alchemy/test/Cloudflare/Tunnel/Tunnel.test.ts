@@ -12,10 +12,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const stack = beforeAll(deploy(Stack));
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
@@ -66,9 +63,10 @@ describe(
       "TunnelWrite creates and deletes a tunnel with a write-scoped token",
       Effect.gen(function* () {
         const { effectUrl } = yield* stack;
-        const body = (yield* hit(
-          `${effectUrl}/write?name=${encodeURIComponent(writeName)}`,
-        )) as { id: string; deleted: boolean };
+        const body = (yield* hit(`${effectUrl}/write?name=${encodeURIComponent(writeName)}`)) as {
+          id: string;
+          deleted: boolean;
+        };
         expect(body.id).toBeTypeOf("string");
         expect(body.id.length).toBeGreaterThan(0);
         expect(body.deleted).toBe(true);
@@ -81,9 +79,7 @@ describe(
       Effect.gen(function* () {
         const { effectUrl } = yield* stack;
         const name = readWriteName;
-        const body = (yield* hit(
-          `${effectUrl}/readwrite?name=${encodeURIComponent(name)}`,
-        )) as {
+        const body = (yield* hit(`${effectUrl}/readwrite?name=${encodeURIComponent(name)}`)) as {
           id: string;
           getName: string;
           count: number;

@@ -34,10 +34,7 @@ export interface ListMultipartUploads extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: ListMultipartUploadsRequest,
-    ) => Effect.Effect<
-      S3.ListMultipartUploadsOutput,
-      S3.ListMultipartUploadsError
-    >
+    ) => Effect.Effect<S3.ListMultipartUploadsOutput, S3.ListMultipartUploadsError>
   >
 > {}
 export const ListMultipartUploads = Binding.Service<ListMultipartUploads>(

@@ -8,10 +8,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Axiom.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Axiom credentials are resolved via the AuthProvider (env method reads
 // AXIOM_TOKEN / AXIOM_API_KEY). When neither is present the suite can't talk
@@ -69,12 +66,7 @@ test.provider.skipIf(!hasAxiomCreds)(
       yield* stack.destroy();
     }).pipe(logLevel),
   {
-    tags: [
-      "provider:axiom",
-      "provider:axiom:dataset",
-      "provider:axiom:monitor",
-      "live",
-    ],
+    tags: ["provider:axiom", "provider:axiom:dataset", "provider:axiom:monitor", "live"],
     timeout: 120_000,
   },
 );

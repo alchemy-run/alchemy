@@ -15,10 +15,7 @@ const sharedStack = Core.scratchStack(testOptions, "RbinBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -37,32 +34,23 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
 const getJson = (path: string) =>
-  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 describe.sequential(
   "Rbin Bindings",
-  {
-    tags: ["provider:aws", "provider:aws:lambda", "provider:aws:rbin", "live"],
-  },
+  { tags: ["provider:aws", "provider:aws:lambda", "provider:aws:rbin", "live"] },
   () => {
     beforeAll(
       Effect.gen(function* () {
@@ -80,21 +68,15 @@ describe.sequential(
         baseUrl = attrs.functionUrl!.replace(/\/+$/, "");
 
         const readinessUrl = `${baseUrl}/bindings`;
-        yield* Effect.logInfo(
-          `Rbin test setup: probing readiness at ${readinessUrl}`,
-        );
+        yield* Effect.logInfo(`Rbin test setup: probing readiness at ${readinessUrl}`);
         yield* HttpClient.get(readinessUrl).pipe(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.tapError((error) =>
-            Effect.logWarning(
-              `Rbin test setup: fixture not ready yet (${String(error)})`,
-            ),
+            Effect.logWarning(`Rbin test setup: fixture not ready yet (${String(error)})`),
           ),
           Effect.retry({ schedule: readinessPolicy }),
         );
@@ -114,35 +96,29 @@ describe.sequential(
     });
 
     describe("GetRule", () => {
-      test.provider(
-        "reads the bound rule's detail (injected identifier)",
-        (_stack) =>
-          Effect.gen(function* () {
-            const response = (yield* getJson("/rule")) as {
-              identifier: string;
-              resourceType: string;
-              retentionDays: number;
-              description: string;
-            };
-            expect(response.identifier).toBeTruthy();
-            expect(response.resourceType).toBe("EBS_SNAPSHOT");
-            expect(response.retentionDays).toBe(7);
-            expect(response.description).toBe(
-              "alchemy rbin bindings fixture rule",
-            );
-          }),
+      test.provider("reads the bound rule's detail (injected identifier)", (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* getJson("/rule")) as {
+            identifier: string;
+            resourceType: string;
+            retentionDays: number;
+            description: string;
+          };
+          expect(response.identifier).toBeTruthy();
+          expect(response.resourceType).toBe("EBS_SNAPSHOT");
+          expect(response.retentionDays).toBe(7);
+          expect(response.description).toBe("alchemy rbin bindings fixture rule");
+        }),
       );
     });
 
     describe("ListRules", () => {
-      test.provider(
-        "enumerates the Region's rules including the fixture's",
-        (_stack) =>
-          Effect.gen(function* () {
-            const rule = (yield* getJson("/rule")) as { identifier: string };
-            const response = (yield* getJson("/rules")) as { ids: string[] };
-            expect(response.ids).toContain(rule.identifier);
-          }),
+      test.provider("enumerates the Region's rules including the fixture's", (_stack) =>
+        Effect.gen(function* () {
+          const rule = (yield* getJson("/rule")) as { identifier: string };
+          const response = (yield* getJson("/rules")) as { ids: string[] };
+          expect(response.ids).toContain(rule.identifier);
+        }),
       );
     });
   },

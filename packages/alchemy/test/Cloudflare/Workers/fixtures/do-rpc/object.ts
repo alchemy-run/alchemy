@@ -21,9 +21,7 @@ export class WorkerEnvironmentKVObject extends Cloudflare.DurableObject<WorkerEn
         // Egress colo is diagnostic, not a placement guarantee.
         colo: () =>
           Effect.promise(async () => {
-            const response = await fetch(
-              "https://cloudflare.com/cdn-cgi/trace",
-            );
+            const response = await fetch("https://cloudflare.com/cdn-cgi/trace");
             const trace = await response.text();
             return trace.match(/^colo=(.*)$/m)?.[1] ?? "unknown";
           }),

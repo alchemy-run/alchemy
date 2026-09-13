@@ -9,9 +9,7 @@ import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import * as Test from "@/Test/Alchemy";
 import * as Core from "@/Test/Core";
-import Route53DomainsTestFunctionLive, {
-  Route53DomainsTestFunction,
-} from "./handler";
+import Route53DomainsTestFunctionLive, { Route53DomainsTestFunction } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -24,10 +22,7 @@ const withRoute53DomainsRegion = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy under parallel-suite load.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -44,19 +39,14 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("1 second"),
-        Schedule.recurs(5),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(5)]),
     }),
   );
 
@@ -77,10 +67,7 @@ test.provider(
       // probe proves auth + the us-east-1 pin + response decoding.
       expect(result.Availability).toBeDefined();
     }),
-  {
-    tags: ["provider:aws", "provider:aws:route53domains", "live"],
-    timeout: 60_000,
-  },
+  { tags: ["provider:aws", "provider:aws:route53domains", "live"], timeout: 60_000 },
 );
 
 test.provider(
@@ -92,34 +79,22 @@ test.provider(
       // specialized to DomainNotFound by the distilled patch.
       const detail = yield* withRoute53DomainsRegion(
         route53domains.getDomainDetail({ DomainName: "example.com" }),
-      ).pipe(
-        Effect.catchTag("DomainNotFound", (error) =>
-          Effect.succeed(error._tag),
-        ),
-      );
+      ).pipe(Effect.catchTag("DomainNotFound", (error) => Effect.succeed(error._tag)));
       expect(detail).toBe("DomainNotFound");
     }),
-  {
-    tags: ["provider:aws", "provider:aws:route53domains", "live"],
-    timeout: 60_000,
-  },
+  { tags: ["provider:aws", "provider:aws:route53domains", "live"], timeout: 60_000 },
 );
 
 test.provider(
   "listDomains succeeds for the account",
   (_stack) =>
     Effect.gen(function* () {
-      const result = yield* withRoute53DomainsRegion(
-        route53domains.listDomains({ MaxItems: 100 }),
-      );
+      const result = yield* withRoute53DomainsRegion(route53domains.listDomains({ MaxItems: 100 }));
       // The testing account owns no domains — the call succeeding with a
       // (possibly empty) list proves auth and response decoding.
       expect(Array.isArray(result.Domains ?? [])).toBe(true);
     }),
-  {
-    tags: ["provider:aws", "provider:aws:route53domains", "live"],
-    timeout: 60_000,
-  },
+  { tags: ["provider:aws", "provider:aws:route53domains", "live"], timeout: 60_000 },
 );
 
 test.provider(
@@ -133,16 +108,11 @@ test.provider(
         route53domains.retrieveDomainAuthCode({ DomainName: "example.com" }),
       ).pipe(
         Effect.map(() => "success" as const),
-        Effect.catchTag("DomainNotFound", (error) =>
-          Effect.succeed(error._tag),
-        ),
+        Effect.catchTag("DomainNotFound", (error) => Effect.succeed(error._tag)),
       );
       expect(tag).toBe("DomainNotFound");
     }),
-  {
-    tags: ["provider:aws", "provider:aws:route53domains", "live"],
-    timeout: 60_000,
-  },
+  { tags: ["provider:aws", "provider:aws:route53domains", "live"], timeout: 60_000 },
 );
 
 test.provider(
@@ -156,16 +126,11 @@ test.provider(
         }),
       ).pipe(
         Effect.map(() => "success" as const),
-        Effect.catchTag("DomainNotFound", (error) =>
-          Effect.succeed(error._tag),
-        ),
+        Effect.catchTag("DomainNotFound", (error) => Effect.succeed(error._tag)),
       );
       expect(tag).toBe("DomainNotFound");
     }),
-  {
-    tags: ["provider:aws", "provider:aws:route53domains", "live"],
-    timeout: 60_000,
-  },
+  { tags: ["provider:aws", "provider:aws:route53domains", "live"], timeout: 60_000 },
 );
 
 test.provider(
@@ -181,44 +146,27 @@ test.provider(
       );
       expect(Array.isArray(result.SuggestionsList ?? [])).toBe(true);
     }),
-  {
-    tags: ["provider:aws", "provider:aws:route53domains", "live"],
-    timeout: 60_000,
-  },
+  { tags: ["provider:aws", "provider:aws:route53domains", "live"], timeout: 60_000 },
 );
 
 test.provider(
   "listPrices returns registration pricing for the com TLD",
   (_stack) =>
     Effect.gen(function* () {
-      const result = yield* withRoute53DomainsRegion(
-        route53domains.listPrices({ Tld: "com" }),
-      );
+      const result = yield* withRoute53DomainsRegion(route53domains.listPrices({ Tld: "com" }));
       expect((result.Prices ?? []).length).toBeGreaterThan(0);
       expect(result.Prices?.[0]?.RegistrationPrice?.Price).toBeGreaterThan(0);
     }),
-  {
-    tags: ["provider:aws", "provider:aws:route53domains", "live"],
-    timeout: 60_000,
-  },
+  { tags: ["provider:aws", "provider:aws:route53domains", "live"], timeout: 60_000 },
 );
 
 describe(
   "Route53Domains Bindings",
-  {
-    tags: [
-      "provider:aws",
-      "provider:aws:lambda",
-      "provider:aws:route53domains",
-      "live",
-    ],
-  },
+  { tags: ["provider:aws", "provider:aws:lambda", "provider:aws:route53domains", "live"] },
   () => {
     beforeAll(
       Effect.gen(function* () {
-        yield* Effect.logInfo(
-          "Route53Domains test setup: destroying previous resources",
-        );
+        yield* Effect.logInfo("Route53Domains test setup: destroying previous resources");
         yield* sharedStack.destroy();
 
         yield* Effect.logInfo("Route53Domains test setup: deploying fixture");
@@ -232,16 +180,12 @@ describe(
         baseUrl = functionUrl!.replace(/\/+$/, "");
         const readinessUrl = `${baseUrl}/ping`;
 
-        yield* Effect.logInfo(
-          `Route53Domains test setup: probing readiness at ${readinessUrl}`,
-        );
+        yield* Effect.logInfo(`Route53Domains test setup: probing readiness at ${readinessUrl}`);
         yield* HttpClient.get(readinessUrl).pipe(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.tapError((error) =>
             Effect.logWarning(
@@ -261,11 +205,9 @@ describe(
         "returns an availability verdict from inside the Lambda",
         (_stack) =>
           Effect.gen(function* () {
-            const response = (yield* send(
-              HttpClientRequest.get(`${baseUrl}/availability`),
-            ).pipe(Effect.flatMap((r) => r.json))) as {
-              availability: string | undefined;
-            };
+            const response = (yield* send(HttpClientRequest.get(`${baseUrl}/availability`)).pipe(
+              Effect.flatMap((r) => r.json),
+            )) as { availability: string | undefined };
 
             expect(response.availability).toBeDefined();
           }),
@@ -278,12 +220,9 @@ describe(
         "lists the account's registered domains from inside the Lambda",
         (_stack) =>
           Effect.gen(function* () {
-            const response = (yield* send(
-              HttpClientRequest.get(`${baseUrl}/domains`),
-            ).pipe(Effect.flatMap((r) => r.json))) as {
-              count: number;
-              names: string[];
-            };
+            const response = (yield* send(HttpClientRequest.get(`${baseUrl}/domains`)).pipe(
+              Effect.flatMap((r) => r.json),
+            )) as { count: number; names: string[] };
 
             expect(response.count).toBeGreaterThanOrEqual(0);
             expect(Array.isArray(response.names)).toBe(true);
@@ -297,12 +236,9 @@ describe(
         "reaches the API from inside the Lambda and gets a typed domain error",
         (_stack) =>
           Effect.gen(function* () {
-            const response = (yield* send(
-              HttpClientRequest.get(`${baseUrl}/detail`),
-            ).pipe(Effect.flatMap((r) => r.json))) as {
-              ok: boolean;
-              errorTag?: string;
-            };
+            const response = (yield* send(HttpClientRequest.get(`${baseUrl}/detail`)).pipe(
+              Effect.flatMap((r) => r.json),
+            )) as { ok: boolean; errorTag?: string };
 
             // The call must reach the API (proving the IAM grant and the
             // us-east-1 pin) and fail with a domain-level error — never
@@ -312,9 +248,7 @@ describe(
             // patched DomainNotFound specialization (the strict typed
             // assertion is the out-of-band probe above).
             expect(response.ok).toBe(false);
-            expect(["DomainNotFound", "InvalidInput"]).toContain(
-              response.errorTag,
-            );
+            expect(["DomainNotFound", "InvalidInput"]).toContain(response.errorTag);
           }),
         { timeout: 120_000 },
       );
@@ -325,11 +259,9 @@ describe(
         "returns a transferability verdict from inside the Lambda",
         (_stack) =>
           Effect.gen(function* () {
-            const response = (yield* send(
-              HttpClientRequest.get(`${baseUrl}/transferability`),
-            ).pipe(Effect.flatMap((r) => r.json))) as {
-              transferable: string | undefined;
-            };
+            const response = (yield* send(HttpClientRequest.get(`${baseUrl}/transferability`)).pipe(
+              Effect.flatMap((r) => r.json),
+            )) as { transferable: string | undefined };
 
             expect(response.transferable).toBeDefined();
           }),
@@ -342,9 +274,9 @@ describe(
         "returns suggestions from inside the Lambda",
         (_stack) =>
           Effect.gen(function* () {
-            const response = (yield* send(
-              HttpClientRequest.get(`${baseUrl}/suggestions`),
-            ).pipe(Effect.flatMap((r) => r.json))) as { count: number };
+            const response = (yield* send(HttpClientRequest.get(`${baseUrl}/suggestions`)).pipe(
+              Effect.flatMap((r) => r.json),
+            )) as { count: number };
 
             expect(response.count).toBeGreaterThanOrEqual(0);
           }),
@@ -357,12 +289,9 @@ describe(
         "returns .com pricing from inside the Lambda",
         (_stack) =>
           Effect.gen(function* () {
-            const response = (yield* send(
-              HttpClientRequest.get(`${baseUrl}/prices`),
-            ).pipe(Effect.flatMap((r) => r.json))) as {
-              count: number;
-              registrationPrice: number | undefined;
-            };
+            const response = (yield* send(HttpClientRequest.get(`${baseUrl}/prices`)).pipe(
+              Effect.flatMap((r) => r.json),
+            )) as { count: number; registrationPrice: number | undefined };
 
             expect(response.count).toBeGreaterThan(0);
             expect(response.registrationPrice).toBeGreaterThan(0);
@@ -376,9 +305,9 @@ describe(
         "lists the account's registration operations from inside the Lambda",
         (_stack) =>
           Effect.gen(function* () {
-            const response = (yield* send(
-              HttpClientRequest.get(`${baseUrl}/operations`),
-            ).pipe(Effect.flatMap((r) => r.json))) as { count: number };
+            const response = (yield* send(HttpClientRequest.get(`${baseUrl}/operations`)).pipe(
+              Effect.flatMap((r) => r.json),
+            )) as { count: number };
 
             expect(response.count).toBeGreaterThanOrEqual(0);
           }),
@@ -393,10 +322,7 @@ describe(
           Effect.gen(function* () {
             const response = (yield* send(
               HttpClientRequest.get(`${baseUrl}/operation-detail`),
-            ).pipe(Effect.flatMap((r) => r.json))) as {
-              ok: boolean;
-              errorTag?: string;
-            };
+            ).pipe(Effect.flatMap((r) => r.json))) as { ok: boolean; errorTag?: string };
 
             expect(response.ok).toBe(false);
             expect(response.errorTag).toBe("InvalidInput");
@@ -410,19 +336,14 @@ describe(
         "reaches the API from inside the Lambda and gets a typed domain error",
         (_stack) =>
           Effect.gen(function* () {
-            const response = (yield* send(
-              HttpClientRequest.get(`${baseUrl}/auth-code`),
-            ).pipe(Effect.flatMap((r) => r.json))) as {
-              ok: boolean;
-              errorTag?: string;
-            };
+            const response = (yield* send(HttpClientRequest.get(`${baseUrl}/auth-code`)).pipe(
+              Effect.flatMap((r) => r.json),
+            )) as { ok: boolean; errorTag?: string };
 
             // Same stale-lib caveat as GetDomainDetail: the strict
             // DomainNotFound assertion is the out-of-band probe above.
             expect(response.ok).toBe(false);
-            expect(["DomainNotFound", "InvalidInput"]).toContain(
-              response.errorTag,
-            );
+            expect(["DomainNotFound", "InvalidInput"]).toContain(response.errorTag);
           }),
         { timeout: 120_000 },
       );
@@ -433,17 +354,12 @@ describe(
         "reaches the API from inside the Lambda and gets a typed domain error",
         (_stack) =>
           Effect.gen(function* () {
-            const response = (yield* send(
-              HttpClientRequest.get(`${baseUrl}/nameservers`),
-            ).pipe(Effect.flatMap((r) => r.json))) as {
-              ok: boolean;
-              errorTag?: string;
-            };
+            const response = (yield* send(HttpClientRequest.get(`${baseUrl}/nameservers`)).pipe(
+              Effect.flatMap((r) => r.json),
+            )) as { ok: boolean; errorTag?: string };
 
             expect(response.ok).toBe(false);
-            expect(["DomainNotFound", "InvalidInput"]).toContain(
-              response.errorTag,
-            );
+            expect(["DomainNotFound", "InvalidInput"]).toContain(response.errorTag);
           }),
         { timeout: 120_000 },
       );
@@ -454,19 +370,14 @@ describe(
         "reaches the API from inside the Lambda and gets a typed domain error",
         (_stack) =>
           Effect.gen(function* () {
-            const response = (yield* send(
-              HttpClientRequest.get(`${baseUrl}/renew`),
-            ).pipe(Effect.flatMap((r) => r.json))) as {
-              ok: boolean;
-              errorTag?: string;
-            };
+            const response = (yield* send(HttpClientRequest.get(`${baseUrl}/renew`)).pipe(
+              Effect.flatMap((r) => r.json),
+            )) as { ok: boolean; errorTag?: string };
 
             // example.com is not in the account — the renewal is rejected
             // before any billing can occur.
             expect(response.ok).toBe(false);
-            expect(["DomainNotFound", "InvalidInput"]).toContain(
-              response.errorTag,
-            );
+            expect(["DomainNotFound", "InvalidInput"]).toContain(response.errorTag);
           }),
         { timeout: 120_000 },
       );
@@ -477,19 +388,14 @@ describe(
         "reaches the API from inside the Lambda and is rejected for an unsupported TLD",
         (_stack) =>
           Effect.gen(function* () {
-            const response = (yield* send(
-              HttpClientRequest.get(`${baseUrl}/register`),
-            ).pipe(Effect.flatMap((r) => r.json))) as {
-              ok: boolean;
-              errorTag?: string;
-            };
+            const response = (yield* send(HttpClientRequest.get(`${baseUrl}/register`)).pipe(
+              Effect.flatMap((r) => r.json),
+            )) as { ok: boolean; errorTag?: string };
 
             // The deliberately invalid TLD guarantees rejection before any
             // registration or billing — this suite NEVER registers a domain.
             expect(response.ok).toBe(false);
-            expect(["UnsupportedTLD", "InvalidInput"]).toContain(
-              response.errorTag,
-            );
+            expect(["UnsupportedTLD", "InvalidInput"]).toContain(response.errorTag);
           }),
         { timeout: 120_000 },
       );

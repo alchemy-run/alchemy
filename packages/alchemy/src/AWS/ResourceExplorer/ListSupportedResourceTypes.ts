@@ -31,13 +31,9 @@ export interface ListSupportedResourceTypes extends Binding.Service<
   () => Effect.Effect<
     (
       request?: RE2.ListSupportedResourceTypesInput,
-    ) => Effect.Effect<
-      RE2.ListSupportedResourceTypesOutput,
-      RE2.ListSupportedResourceTypesError
-    >
+    ) => Effect.Effect<RE2.ListSupportedResourceTypesOutput, RE2.ListSupportedResourceTypesError>
   >
 > {}
-export const ListSupportedResourceTypes =
-  Binding.Service<ListSupportedResourceTypes>(
-    "AWS.ResourceExplorer.ListSupportedResourceTypes",
-  );
+export const ListSupportedResourceTypes = Binding.Service<ListSupportedResourceTypes>(
+  "AWS.ResourceExplorer.ListSupportedResourceTypes",
+);

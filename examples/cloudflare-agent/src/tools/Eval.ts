@@ -2,9 +2,9 @@ import * as AI from "alchemy/AI";
 import * as Cloudflare from "alchemy/Cloudflare";
 import { dedent } from "alchemy/Util";
 import * as Effect from "effect/Effect";
+import { HttpClientRequest } from "effect/http";
 import * as Layer from "effect/Layer";
 import * as S from "effect/Schema";
-import { HttpClientRequest } from "effect/http";
 
 export const code = AI.Parameter("code")(S.String)`
 The JavaScript code to evaluate. 
@@ -40,9 +40,7 @@ export const EvalLive = Layer.effect(
           },
         })
         .pipe(
-          Effect.flatMap((worker) =>
-            worker.fetch(HttpClientRequest.get("https://worker/")),
-          ),
+          Effect.flatMap((worker) => worker.fetch(HttpClientRequest.get("https://worker/"))),
           Effect.flatMap((response) => response.text),
           Effect.catch((e) =>
             Effect.succeed({

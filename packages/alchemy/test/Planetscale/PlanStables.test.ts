@@ -6,12 +6,7 @@ import * as Plan from "@/Plan";
 import * as Planetscale from "@/Planetscale";
 import * as Stack from "@/Stack";
 import { Stage } from "@/Stage";
-import {
-  InMemoryService,
-  inMemoryState,
-  State,
-  type ResourceState,
-} from "@/State";
+import { InMemoryService, inMemoryState, State, type ResourceState } from "@/State";
 import * as Test from "@/Test/Alchemy";
 
 const TEST_STACK = "planetscale-plan-stables";

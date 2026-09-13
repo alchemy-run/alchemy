@@ -28,13 +28,10 @@ test.provider(
             tableType: "EXTERNAL_TABLE",
             storageDescriptor: {
               location: "s3://example-bucket/events/",
-              inputFormat:
-                "org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat",
-              outputFormat:
-                "org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat",
+              inputFormat: "org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat",
+              outputFormat: "org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat",
               serdeInfo: {
-                serializationLibrary:
-                  "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe",
+                serializationLibrary: "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe",
               },
               columns: [
                 { name: "id", type: "string" },
@@ -55,19 +52,11 @@ test.provider(
       );
 
       // out-of-band verification
-      const observed = yield* getTable(
-        created.database.databaseName,
-        created.table.tableName,
-      );
+      const observed = yield* getTable(created.database.databaseName, created.table.tableName);
       expect(observed?.Name).toEqual(created.table.tableName);
       expect(observed?.TableType).toEqual("EXTERNAL_TABLE");
-      expect(observed?.StorageDescriptor?.Location).toEqual(
-        "s3://example-bucket/events/",
-      );
-      expect(observed?.StorageDescriptor?.Columns?.map((c) => c.Name)).toEqual([
-        "id",
-        "amount",
-      ]);
+      expect(observed?.StorageDescriptor?.Location).toEqual("s3://example-bucket/events/");
+      expect(observed?.StorageDescriptor?.Columns?.map((c) => c.Name)).toEqual(["id", "amount"]);
       expect(observed?.PartitionKeys?.map((c) => c.Name)).toEqual(["dt"]);
       expect(observed?.Parameters?.classification).toEqual("parquet");
       expect(observed?.Parameters?.["alchemy::id"]).toBeDefined();
@@ -81,13 +70,10 @@ test.provider(
             tableType: "EXTERNAL_TABLE",
             storageDescriptor: {
               location: "s3://example-bucket/events-v2/",
-              inputFormat:
-                "org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat",
-              outputFormat:
-                "org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat",
+              inputFormat: "org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat",
+              outputFormat: "org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat",
               serdeInfo: {
-                serializationLibrary:
-                  "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe",
+                serializationLibrary: "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe",
               },
               columns: [
                 { name: "id", type: "string" },
@@ -103,24 +89,18 @@ test.provider(
       );
 
       expect(updated.table.tableName).toEqual(created.table.tableName);
-      const reobserved = yield* getTable(
-        created.database.databaseName,
-        created.table.tableName,
-      );
-      expect(reobserved?.StorageDescriptor?.Location).toEqual(
-        "s3://example-bucket/events-v2/",
-      );
-      expect(
-        reobserved?.StorageDescriptor?.Columns?.map((c) => c.Name),
-      ).toEqual(["id", "amount", "currency"]);
+      const reobserved = yield* getTable(created.database.databaseName, created.table.tableName);
+      expect(reobserved?.StorageDescriptor?.Location).toEqual("s3://example-bucket/events-v2/");
+      expect(reobserved?.StorageDescriptor?.Columns?.map((c) => c.Name)).toEqual([
+        "id",
+        "amount",
+        "currency",
+      ]);
       expect(reobserved?.Parameters?.owner).toEqual("analytics");
 
       // delete
       yield* stack.destroy();
-      const gone = yield* getTable(
-        created.database.databaseName,
-        created.table.tableName,
-      );
+      const gone = yield* getTable(created.database.databaseName, created.table.tableName);
       expect(gone).toBeUndefined();
     }),
   { tags: ["provider:aws", "provider:aws:glue", "live"] },

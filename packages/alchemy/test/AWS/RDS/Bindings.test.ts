@@ -7,9 +7,7 @@ import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import * as Test from "@/Test/Alchemy";
 import * as Core from "@/Test/Core";
-import RdsBindingsTestFunctionLive, {
-  RdsBindingsTestFunction,
-} from "./fixtures/handler";
+import RdsBindingsTestFunctionLive, { RdsBindingsTestFunction } from "./fixtures/handler";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -17,10 +15,7 @@ const sharedStack = Core.scratchStack(testOptions, "RdsBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -32,10 +27,7 @@ const getJson = (path: string) =>
         : Effect.succeed(response),
     ),
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
     Effect.flatMap((r) => r.json),
   );
@@ -64,9 +56,7 @@ describe.sequential(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.retry({ schedule: readinessPolicy }),
         );
@@ -86,24 +76,20 @@ describe.sequential(
     });
 
     describe("DescribeDBClusters", () => {
-      test.provider(
-        "surfaces the typed not-found tag for a nonexistent cluster",
-        (_stack) =>
-          Effect.gen(function* () {
-            const response = yield* getJson("/clusters");
-            expect((response as any).tag).toBe("DBClusterNotFoundFault");
-          }),
+      test.provider("surfaces the typed not-found tag for a nonexistent cluster", (_stack) =>
+        Effect.gen(function* () {
+          const response = yield* getJson("/clusters");
+          expect((response as any).tag).toBe("DBClusterNotFoundFault");
+        }),
       );
     });
 
     describe("DescribeDBInstances", () => {
-      test.provider(
-        "surfaces the typed not-found tag for a nonexistent instance",
-        (_stack) =>
-          Effect.gen(function* () {
-            const response = yield* getJson("/instances");
-            expect((response as any).tag).toBe("DBInstanceNotFoundFault");
-          }),
+      test.provider("surfaces the typed not-found tag for a nonexistent instance", (_stack) =>
+        Effect.gen(function* () {
+          const response = yield* getJson("/instances");
+          expect((response as any).tag).toBe("DBInstanceNotFoundFault");
+        }),
       );
     });
 
@@ -144,15 +130,11 @@ describe.sequential(
     });
 
     describe("DeleteDBClusterSnapshot", () => {
-      test.provider(
-        "surfaces the typed not-found tag for a nonexistent snapshot",
-        (_stack) =>
-          Effect.gen(function* () {
-            const response = yield* getJson("/delete-cluster-snapshot-probe");
-            expect((response as any).tag).toBe(
-              "DBClusterSnapshotNotFoundFault",
-            );
-          }),
+      test.provider("surfaces the typed not-found tag for a nonexistent snapshot", (_stack) =>
+        Effect.gen(function* () {
+          const response = yield* getJson("/delete-cluster-snapshot-probe");
+          expect((response as any).tag).toBe("DBClusterSnapshotNotFoundFault");
+        }),
       );
     });
 
@@ -162,21 +144,17 @@ describe.sequential(
         (_stack) =>
           Effect.gen(function* () {
             const response = yield* getJson("/copy-cluster-snapshot-probe");
-            expect((response as any).tag).toBe(
-              "DBClusterSnapshotNotFoundFault",
-            );
+            expect((response as any).tag).toBe("DBClusterSnapshotNotFoundFault");
           }),
       );
     });
 
     describe("DeleteDBSnapshot", () => {
-      test.provider(
-        "surfaces the typed not-found tag for a nonexistent snapshot",
-        (_stack) =>
-          Effect.gen(function* () {
-            const response = yield* getJson("/delete-instance-snapshot-probe");
-            expect((response as any).tag).toBe("DBSnapshotNotFoundFault");
-          }),
+      test.provider("surfaces the typed not-found tag for a nonexistent snapshot", (_stack) =>
+        Effect.gen(function* () {
+          const response = yield* getJson("/delete-instance-snapshot-probe");
+          expect((response as any).tag).toBe("DBSnapshotNotFoundFault");
+        }),
       );
     });
 
@@ -192,32 +170,26 @@ describe.sequential(
     });
 
     describe("DescribePendingMaintenanceActions", () => {
-      test.provider(
-        "lists the account's pending maintenance actions",
-        (_stack) =>
-          Effect.gen(function* () {
-            const response = yield* getJson("/pending-maintenance");
-            expect((response as any).count).toBeGreaterThanOrEqual(0);
-          }),
+      test.provider("lists the account's pending maintenance actions", (_stack) =>
+        Effect.gen(function* () {
+          const response = yield* getJson("/pending-maintenance");
+          expect((response as any).count).toBeGreaterThanOrEqual(0);
+        }),
       );
     });
 
     describe("ApplyPendingMaintenanceAction", () => {
-      test.provider(
-        "surfaces the typed not-found tag for a nonexistent resource ARN",
-        (_stack) =>
-          Effect.gen(function* () {
-            // Build a well-formed cluster ARN in this account/region that
-            // cannot exist — the apply call must decode ResourceNotFoundFault.
-            // (`Region`'s service value is itself an Effect — resolve twice.)
-            const region = yield* yield* Region;
-            const identity = yield* sts.getCallerIdentity({});
-            const arn = `arn:aws:rds:${region}:${identity.Account}:cluster:alchemy-nonexistent-rds-cluster-probe`;
-            const response = yield* getJson(
-              `/apply-probe?arn=${encodeURIComponent(arn)}`,
-            );
-            expect((response as any).tag).toBe("ResourceNotFoundFault");
-          }),
+      test.provider("surfaces the typed not-found tag for a nonexistent resource ARN", (_stack) =>
+        Effect.gen(function* () {
+          // Build a well-formed cluster ARN in this account/region that
+          // cannot exist — the apply call must decode ResourceNotFoundFault.
+          // (`Region`'s service value is itself an Effect — resolve twice.)
+          const region = yield* yield* Region;
+          const identity = yield* sts.getCallerIdentity({});
+          const arn = `arn:aws:rds:${region}:${identity.Account}:cluster:alchemy-nonexistent-rds-cluster-probe`;
+          const response = yield* getJson(`/apply-probe?arn=${encodeURIComponent(arn)}`);
+          expect((response as any).tag).toBe("ResourceNotFoundFault");
+        }),
       );
     });
   },

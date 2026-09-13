@@ -33,11 +33,7 @@ export interface GetCluster extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: GetClusterRequest,
-    ) => Effect.Effect<
-      alloydb.Cluster,
-      alloydb.GetProjectsLocationsClustersError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<alloydb.Cluster, alloydb.GetProjectsLocationsClustersError, RuntimeContext>
   >
 > {}
 

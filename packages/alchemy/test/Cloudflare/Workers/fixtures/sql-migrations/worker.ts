@@ -3,11 +3,7 @@ import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Cloudflare from "@/Cloudflare";
-import {
-  CustomMigratedObject,
-  MigratedObject,
-  MigrationScenarios,
-} from "./object.ts";
+import { CustomMigratedObject, MigratedObject, MigrationScenarios } from "./object.ts";
 
 export default class SqlMigrationsWorker extends Cloudflare.Worker<SqlMigrationsWorker>()(
   "SqlMigrationsWorker",
@@ -87,9 +83,7 @@ export default class SqlMigrationsWorker extends Cloudflare.Worker<SqlMigrations
         return HttpServerResponse.text("Not Found", { status: 404 });
       }).pipe(
         Effect.catchCause((cause) =>
-          Effect.succeed(
-            HttpServerResponse.text(Cause.pretty(cause), { status: 500 }),
-          ),
+          Effect.succeed(HttpServerResponse.text(Cause.pretty(cause), { status: 500 })),
         ),
       ),
     };

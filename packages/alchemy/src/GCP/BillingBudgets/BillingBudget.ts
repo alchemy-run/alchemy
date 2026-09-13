@@ -276,9 +276,7 @@ export type BillingBudget = Resource<
  * @resource
  * @category BillingBudgets
  */
-export const BillingBudget = Resource<BillingBudget>(
-  "GCP.BillingBudgets.BillingBudget",
-);
+export const BillingBudget = Resource<BillingBudget>("GCP.BillingBudgets.BillingBudget");
 
 export class BillingBudgetNotResolved extends Data.TaggedError(
   "GCP.BillingBudgets.BillingBudgetNotResolved",
@@ -286,15 +284,9 @@ export class BillingBudgetNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const toMoney = (
-  money: billingbudgets.GoogleTypeMoney | Money | undefined,
-): Money | undefined => {
+const toMoney = (money: billingbudgets.GoogleTypeMoney | Money | undefined): Money | undefined => {
   if (money === undefined) return undefined;
-  if (
-    money.units === undefined &&
-    money.currencyCode === undefined &&
-    money.nanos === undefined
-  ) {
+  if (money.units === undefined && money.currencyCode === undefined && money.nanos === undefined) {
     return undefined;
   }
   return compact({
@@ -305,15 +297,11 @@ const toMoney = (
 };
 
 const toAmount = (
-  amount:
-    | billingbudgets.GoogleCloudBillingBudgetsV1BudgetAmount
-    | BudgetAmount
-    | undefined,
+  amount: billingbudgets.GoogleCloudBillingBudgetsV1BudgetAmount | BudgetAmount | undefined,
 ): BudgetAmount | undefined => {
   if (amount === undefined) return undefined;
   const specifiedAmount = toMoney(amount.specifiedAmount);
-  const lastPeriodAmount =
-    amount.lastPeriodAmount !== undefined ? {} : undefined;
+  const lastPeriodAmount = amount.lastPeriodAmount !== undefined ? {} : undefined;
   if (specifiedAmount === undefined && lastPeriodAmount === undefined) {
     return undefined;
   }
@@ -324,21 +312,14 @@ const toDate = (
   date: billingbudgets.GoogleTypeDate | CustomPeriod["startDate"] | undefined,
 ): CustomPeriod["startDate"] | undefined => {
   if (date === undefined) return undefined;
-  if (
-    date.year === undefined &&
-    date.month === undefined &&
-    date.day === undefined
-  ) {
+  if (date.year === undefined && date.month === undefined && date.day === undefined) {
     return undefined;
   }
   return compact({ year: date.year, month: date.month, day: date.day });
 };
 
 const toCustomPeriod = (
-  period:
-    | billingbudgets.GoogleCloudBillingBudgetsV1CustomPeriod
-    | CustomPeriod
-    | undefined,
+  period: billingbudgets.GoogleCloudBillingBudgetsV1CustomPeriod | CustomPeriod | undefined,
 ): CustomPeriod | undefined => {
   if (period === undefined) return undefined;
   const startDate = toDate(period.startDate);
@@ -348,24 +329,17 @@ const toCustomPeriod = (
 };
 
 const toFilter = (
-  filter:
-    | billingbudgets.GoogleCloudBillingBudgetsV1Filter
-    | BudgetFilter
-    | undefined,
+  filter: billingbudgets.GoogleCloudBillingBudgetsV1Filter | BudgetFilter | undefined,
 ): BudgetFilter | undefined => {
   if (filter === undefined) return undefined;
   const next = compact({
     resourceAncestors: filter.resourceAncestors
       ? sortedStrings(filter.resourceAncestors)
       : undefined,
-    subaccounts: filter.subaccounts
-      ? sortedStrings(filter.subaccounts)
-      : undefined,
+    subaccounts: filter.subaccounts ? sortedStrings(filter.subaccounts) : undefined,
     calendarPeriod: filter.calendarPeriod,
     services: filter.services ? sortedStrings(filter.services) : undefined,
-    creditTypes: filter.creditTypes
-      ? sortedStrings(filter.creditTypes)
-      : undefined,
+    creditTypes: filter.creditTypes ? sortedStrings(filter.creditTypes) : undefined,
     creditTypesTreatment: filter.creditTypesTreatment,
     projects: filter.projects ? sortedStrings(filter.projects) : undefined,
     customPeriod: toCustomPeriod(filter.customPeriod),
@@ -388,17 +362,13 @@ const toThresholdRules = (
       }),
     )
     .sort((left, right) => {
-      const percent =
-        (left.thresholdPercent ?? 0) - (right.thresholdPercent ?? 0);
+      const percent = (left.thresholdPercent ?? 0) - (right.thresholdPercent ?? 0);
       if (percent !== 0) return percent;
       return (left.spendBasis ?? "").localeCompare(right.spendBasis ?? "");
     });
 
 const toNotifications = (
-  rule:
-    | billingbudgets.GoogleCloudBillingBudgetsV1NotificationsRule
-    | NotificationsRule
-    | undefined,
+  rule: billingbudgets.GoogleCloudBillingBudgetsV1NotificationsRule | NotificationsRule | undefined,
 ): NotificationsRule | undefined => {
   if (rule === undefined) return undefined;
   const next = compact({
@@ -444,10 +414,7 @@ const desiredAmount = (
   return {
     specifiedAmount: compact({
       units: specified.units,
-      currencyCode:
-        specified.currencyCode ??
-        observed?.specifiedAmount?.currencyCode ??
-        "USD",
+      currencyCode: specified.currencyCode ?? observed?.specifiedAmount?.currencyCode ?? "USD",
       nanos: specified.nanos,
     }),
   };
@@ -467,9 +434,7 @@ const toCreateBody = (
           | undefined)
       : undefined,
     thresholdRules:
-      news.thresholdRules !== undefined
-        ? toThresholdRules(news.thresholdRules)
-        : undefined,
+      news.thresholdRules !== undefined ? toThresholdRules(news.thresholdRules) : undefined,
     notificationsRule: news.notificationsRule
       ? (toNotifications(news.notificationsRule) as
           | billingbudgets.GoogleCloudBillingBudgetsV1NotificationsRule
@@ -486,16 +451,12 @@ export const BillingBudgetProvider = () =>
       if (!isResolved(news)) return undefined;
       const previousId = olds?.budgetId ?? output?.budgetId;
       const idChanged =
-        previousId !== undefined &&
-        news.budgetId !== undefined &&
-        news.budgetId !== previousId;
-      const previousAccount =
-        olds?.billingAccountId ?? output?.billingAccountId;
+        previousId !== undefined && news.budgetId !== undefined && news.budgetId !== previousId;
+      const previousAccount = olds?.billingAccountId ?? output?.billingAccountId;
       const accountChanged =
         previousAccount !== undefined &&
         news.billingAccountId !== undefined &&
-        billingAccountIdOf(news.billingAccountId) !==
-          billingAccountIdOf(previousAccount);
+        billingAccountIdOf(news.billingAccountId) !== billingAccountIdOf(previousAccount);
       if (!idChanged && !accountChanged) return undefined;
       return { action: "replace" as const, deleteFirst: true };
     }),
@@ -506,9 +467,7 @@ export const BillingBudgetProvider = () =>
         output?.billingAccountId,
       );
       const budgetId = output?.budgetId ?? olds?.budgetId;
-      const name =
-        output?.name ??
-        (budgetId ? budgetNameOf(billingAccountId, budgetId) : "");
+      const name = output?.name ?? (budgetId ? budgetNameOf(billingAccountId, budgetId) : "");
       const generated = yield* generatedDisplayName(id);
       const existing =
         (yield* getBudget(name)) ??
@@ -528,12 +487,8 @@ export const BillingBudgetProvider = () =>
       );
       const parent = billingAccountParent(billingAccountId);
       const desiredDisplayName =
-        news.displayName ??
-        output?.displayName ??
-        (yield* generatedDisplayName(id));
-      const resolvedProjects = yield* resolveProjectRefs(
-        news.budgetFilter?.projects,
-      );
+        news.displayName ?? output?.displayName ?? (yield* generatedDisplayName(id));
+      const resolvedProjects = yield* resolveProjectRefs(news.budgetFilter?.projects);
       const desiredNews =
         resolvedProjects === undefined
           ? news
@@ -546,8 +501,7 @@ export const BillingBudgetProvider = () =>
             };
 
       let current = yield* getBudget(
-        output?.name ??
-          (news.budgetId ? budgetNameOf(billingAccountId, news.budgetId) : ""),
+        output?.name ?? (news.budgetId ? budgetNameOf(billingAccountId, news.budgetId) : ""),
       );
       if (current === undefined && news.budgetId === undefined) {
         current = yield* findBudgetByDisplayName(parent, desiredDisplayName);
@@ -560,9 +514,7 @@ export const BillingBudgetProvider = () =>
             body: toCreateBody(desiredNews, desiredDisplayName, undefined),
           })
           .pipe(
-            Effect.catchTag("Conflict", () =>
-              findBudgetByDisplayName(parent, desiredDisplayName),
-            ),
+            Effect.catchTag("Conflict", () => findBudgetByDisplayName(parent, desiredDisplayName)),
           );
         current = created ?? undefined;
       }
@@ -574,11 +526,7 @@ export const BillingBudgetProvider = () =>
       }
 
       const observedAmount = toAmount(current.amount);
-      const desiredBody = toCreateBody(
-        desiredNews,
-        desiredDisplayName,
-        observedAmount,
-      );
+      const desiredBody = toCreateBody(desiredNews, desiredDisplayName, observedAmount);
       const mask: string[] = [];
       if ((current.displayName ?? "") !== desiredDisplayName) {
         mask.push("displayName");
@@ -590,9 +538,7 @@ export const BillingBudgetProvider = () =>
         desiredNews.budgetFilter !== undefined &&
         filterChanged(
           toFilter(current.budgetFilter) as Record<string, unknown> | undefined,
-          toFilter(desiredNews.budgetFilter) as
-            | Record<string, unknown>
-            | undefined,
+          toFilter(desiredNews.budgetFilter) as Record<string, unknown> | undefined,
         )
       ) {
         mask.push("budgetFilter");
@@ -640,8 +586,6 @@ export const BillingBudgetProvider = () =>
       if (!output.name) return;
       yield* billingbudgets
         .deleteBillingAccountsBudgets({ name: output.name })
-        .pipe(
-          Effect.catchTag(["NotFound", "BudgetNotFound"], () => Effect.void),
-        );
+        .pipe(Effect.catchTag(["NotFound", "BudgetNotFound"], () => Effect.void));
     }),
   });

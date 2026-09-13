@@ -25,8 +25,7 @@ export default class FetchCallerWorker extends Cloudflare.Worker<FetchCallerWork
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
-        const name =
-          new URL(request.url, "http://x").searchParams.get("name") ?? "world";
+        const name = new URL(request.url, "http://x").searchParams.get("name") ?? "world";
         const res = yield* fetchTarget(
           HttpClientRequest.get("https://target/").pipe(
             HttpClientRequest.setUrlParam("name", name),

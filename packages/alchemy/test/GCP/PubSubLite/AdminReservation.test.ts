@@ -1,15 +1,9 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as pubsublite from "@distilled.cloud/gcp/pubsublite_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import {
-  logLevel,
-  currentProject,
-  region,
-  runLifecycle,
-  waitUntilGone,
-} from "./common.ts";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
+import { logLevel, currentProject, region, runLifecycle, waitUntilGone } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -75,11 +69,9 @@ test.provider.skipIf(!runLifecycle)(
       expect(updated.name).toEqual(created.name);
       expect(updated.throughputCapacity).toEqual("8");
 
-      const refetched = yield* pubsublite.getAdminProjectsLocationsReservations(
-        {
-          name: created.name,
-        },
-      );
+      const refetched = yield* pubsublite.getAdminProjectsLocationsReservations({
+        name: created.name,
+      });
       expect(refetched.throughputCapacity).toEqual("8");
 
       yield* stack.destroy();

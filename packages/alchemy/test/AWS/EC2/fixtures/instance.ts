@@ -77,9 +77,7 @@ export default class TestInstance extends AWS.EC2.Instance<TestInstance>()(
       port: 3000,
       keyName: key.keyName,
       // SSM access so the instance is manageable via Session Manager.
-      roleManagedPolicyArns: [
-        "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore",
-      ],
+      roleManagedPolicyArns: ["arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"],
     };
   }),
   Effect.gen(function* () {

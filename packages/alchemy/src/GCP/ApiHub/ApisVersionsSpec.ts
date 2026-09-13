@@ -84,11 +84,7 @@ export type ApisVersionsSpecProps = {
   /**
    * OpenAPI parsing mode.
    */
-  parsingMode?:
-    | "PARSING_MODE_UNSPECIFIED"
-    | "RELAXED"
-    | "STRICT"
-    | (string & {});
+  parsingMode?: "PARSING_MODE_UNSPECIFIED" | "RELAXED" | "STRICT" | (string & {});
   /**
    * External documentation.
    */
@@ -158,12 +154,9 @@ export type ApisVersionsSpec = Resource<
  * @resource
  * @category ApiHub
  */
-export const ApisVersionsSpec = Resource<ApisVersionsSpec>(
-  "GCP.ApiHub.ApisVersionsSpec",
-);
+export const ApisVersionsSpec = Resource<ApisVersionsSpec>("GCP.ApiHub.ApisVersionsSpec");
 
-const resourceName = (version: string, specId: string) =>
-  `${version}/specs/${specId}`;
+const resourceName = (version: string, specId: string) => `${version}/specs/${specId}`;
 
 const toAttrs = (
   spec: apihub.GoogleCloudApihubV1Spec,
@@ -206,10 +199,7 @@ export const ApisVersionsSpecProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.specId ?? output?.specId,
         nextId: news.specId ?? olds?.specId ?? output?.specId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -227,17 +217,13 @@ export const ApisVersionsSpecProvider = () =>
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* ownedByAlchemy(id, existing.displayName))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.displayName)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const apis = yield* listApis(
-          `projects/${env.project}/locations/${env.region}`,
-        );
+        const apis = yield* listApis(`projects/${env.project}/locations/${env.region}`);
         const versions = yield* listChildResources(apis, listVersions);
         const specs = yield* listChildResources(versions, listSpecs);
         return specs
@@ -256,13 +242,9 @@ export const ApisVersionsSpecProvider = () =>
         news.displayName ?? specId,
         MAX_DISPLAY_NAME_LENGTH,
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const specType =
-        news.specType ??
-        (news.contents ? openApiSpecType(env.project, location) : undefined);
+        news.specType ?? (news.contents ? openApiSpecType(env.project, location) : undefined);
       const encodedContents =
         news.contents === undefined
           ? undefined
@@ -301,8 +283,7 @@ export const ApisVersionsSpecProvider = () =>
       const sourceChanged = !sameText(current.sourceUri, news.sourceUri);
       const contentsChanged =
         news.contents !== undefined && !sameJson(news.contents, olds?.contents);
-      const typeChanged =
-        specType !== undefined && !sameJson(current.specType, specType);
+      const typeChanged = specType !== undefined && !sameJson(current.specType, specType);
       const attributesChanged = !sameJson(current.attributes, news.attributes);
 
       if (

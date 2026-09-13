@@ -25,11 +25,7 @@ import {
   toResourceId,
   updateMaskOf,
 } from "./ownership.ts";
-import type {
-  AuthConfigVisibility,
-  CredentialType,
-  DecryptedCredential,
-} from "./shared.ts";
+import type { AuthConfigVisibility, CredentialType, DecryptedCredential } from "./shared.ts";
 import { credentialBody } from "./shared.ts";
 
 export type ProductsAuthConfigProps = {
@@ -155,12 +151,8 @@ export class ProductsAuthConfigNotResolved extends Data.TaggedError(
 const DEFAULT_CREDENTIAL_TYPE: CredentialType = "USERNAME_AND_PASSWORD";
 const DEFAULT_VISIBILITY: AuthConfigVisibility = "PRIVATE";
 
-const resourceName = (
-  project: string,
-  location: string,
-  product: string,
-  authConfigId: string,
-) => `${productParent(project, location, product)}/authConfigs/${authConfigId}`;
+const resourceName = (project: string, location: string, product: string, authConfigId: string) =>
+  `${productParent(project, location, product)}/authConfigs/${authConfigId}`;
 
 const toAttrs = (
   config: integrations.GoogleCloudIntegrationsV1alphaAuthConfig,
@@ -177,8 +169,7 @@ const toAttrs = (
     project,
     displayName: config.displayName,
     description: parsed.text,
-    credentialType:
-      config.credentialType ?? config.decryptedCredential?.credentialType,
+    credentialType: config.credentialType ?? config.decryptedCredential?.credentialType,
     certificateId: config.certificateId,
     visibility: config.visibility,
     state: config.state,
@@ -195,49 +186,33 @@ const getByName = (name: string) =>
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const listAt = (parent: string, project: string, region: string) =>
-  integrations.listProjectsLocationsProductsAuthConfigs
-    .pages({ parent, pageSize: 100 })
-    .pipe(
-      Stream.flatMap((page) => Stream.fromIterable(page.authConfigs ?? [])),
-      Stream.filter((config) => hasOwnershipMarker(config.description)),
-      Stream.map((config) => toAttrs(config, project, region)),
-      Stream.runCollect,
-      Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag("NotFound", () => Effect.succeed([])),
-    );
+  integrations.listProjectsLocationsProductsAuthConfigs.pages({ parent, pageSize: 100 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.authConfigs ?? [])),
+    Stream.filter((config) => hasOwnershipMarker(config.description)),
+    Stream.map((config) => toAttrs(config, project, region)),
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
+    Effect.catchTag("NotFound", () => Effect.succeed([])),
+  );
 
 const findOwned = (parent: string, id: string) =>
-  integrations.listProjectsLocationsProductsAuthConfigs
-    .pages({ parent, pageSize: 100 })
-    .pipe(
-      Stream.flatMap((page) => Stream.fromIterable(page.authConfigs ?? [])),
-      Stream.filterEffect((config) => ownedByAlchemy(id, config.description)),
-      Stream.runHead,
-      Effect.map((option) =>
-        option._tag === "Some" ? option.value : undefined,
-      ),
-      Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-    );
+  integrations.listProjectsLocationsProductsAuthConfigs.pages({ parent, pageSize: 100 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.authConfigs ?? [])),
+    Stream.filterEffect((config) => ownedByAlchemy(id, config.description)),
+    Stream.runHead,
+    Effect.map((option) => (option._tag === "Some" ? option.value : undefined)),
+    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+  );
 
 export const ProductsAuthConfigProvider = () =>
   Provider.succeed(ProductsAuthConfig, {
-    stables: [
-      "name",
-      "authConfigId",
-      "location",
-      "product",
-      "project",
-      "createTime",
-    ],
+    stables: ["name", "authConfigId", "location", "product", "project", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
       const previousLocation = olds?.location ?? output?.location;
-      const nextLocation = normalizeLocation(
-        news.location,
-        previousLocation ?? env.region,
-      );
+      const nextLocation = normalizeLocation(news.location, previousLocation ?? env.region);
       if (
         previousLocation !== undefined &&
         normalizeLocation(previousLocation, env.region) !== nextLocation
@@ -246,10 +221,7 @@ export const ProductsAuthConfigProvider = () =>
       }
       const previousProduct = olds?.product ?? output?.product;
       const nextProduct = normalizeProduct(news.product);
-      if (
-        previousProduct !== undefined &&
-        normalizeProduct(previousProduct) !== nextProduct
-      ) {
+      if (previousProduct !== undefined && normalizeProduct(previousProduct) !== nextProduct) {
         return { action: "replace" as const, deleteFirst: false };
       }
       const previousId = olds?.authConfigId ?? output?.authConfigId;
@@ -265,31 +237,17 @@ export const ProductsAuthConfigProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const authConfigId = yield* toResourceId(
-        id,
-        olds?.authConfigId,
-        output?.authConfigId,
-      );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const authConfigId = yield* toResourceId(id, olds?.authConfigId, output?.authConfigId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const product = normalizeProduct(olds?.product ?? output?.product);
-      const name =
-        output?.name ??
-        resourceName(env.project, location, product, authConfigId);
+      const name = output?.name ?? resourceName(env.project, location, product, authConfigId);
       let existing = yield* getByName(name);
       if (existing === undefined && output?.name === undefined) {
-        existing = yield* findOwned(
-          productParent(env.project, location, product),
-          id,
-        );
+        existing = yield* findOwned(productParent(env.project, location, product), id);
       }
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* ownedByAlchemy(id, existing.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -304,31 +262,17 @@ export const ProductsAuthConfigProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const product = normalizeProduct(
-        news.product ?? output?.product ?? DEFAULT_PRODUCT,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const product = normalizeProduct(news.product ?? output?.product ?? DEFAULT_PRODUCT);
       const parent = productParent(env.project, location, product);
-      const authConfigId = yield* toResourceId(
-        id,
-        news.authConfigId,
-        output?.authConfigId,
-      );
-      const name =
-        output?.name ??
-        resourceName(env.project, location, product, authConfigId);
+      const authConfigId = yield* toResourceId(id, news.authConfigId, output?.authConfigId);
+      const name = output?.name ?? resourceName(env.project, location, product, authConfigId);
       const ownership = yield* createInternalLabels(id);
       const description = encodeOwnership(ownership, news.description);
       const displayName = news.displayName ?? authConfigId;
       const credentialType = news.credentialType ?? DEFAULT_CREDENTIAL_TYPE;
       const visibility = news.visibility ?? DEFAULT_VISIBILITY;
-      const decryptedCredential = credentialBody(
-        news.decryptedCredential,
-        credentialType,
-      );
+      const decryptedCredential = credentialBody(news.decryptedCredential, credentialType);
 
       let current = yield* getByName(output?.name ?? name);
       if (current === undefined) {
@@ -359,10 +303,7 @@ export const ProductsAuthConfigProvider = () =>
       const displayChanged = !sameText(current.displayName, displayName);
       const descriptionChanged = (current.description ?? "") !== description;
       const visibilityChanged = !sameText(current.visibility, visibility);
-      const certificateChanged = !sameText(
-        current.certificateId,
-        news.certificateId,
-      );
+      const certificateChanged = !sameText(current.certificateId, news.certificateId);
       const credentialChanged = news.decryptedCredential !== undefined;
 
       if (
@@ -372,26 +313,24 @@ export const ProductsAuthConfigProvider = () =>
         certificateChanged ||
         credentialChanged
       ) {
-        current = yield* integrations.patchProjectsLocationsProductsAuthConfigs(
-          {
+        current = yield* integrations.patchProjectsLocationsProductsAuthConfigs({
+          name: currentName,
+          updateMask: updateMaskOf(
+            displayChanged ? "display_name" : undefined,
+            descriptionChanged ? "description" : undefined,
+            visibilityChanged ? "visibility" : undefined,
+            certificateChanged ? "certificate_id" : undefined,
+            credentialChanged ? "decrypted_credential" : undefined,
+          ),
+          body: {
             name: currentName,
-            updateMask: updateMaskOf(
-              displayChanged ? "display_name" : undefined,
-              descriptionChanged ? "description" : undefined,
-              visibilityChanged ? "visibility" : undefined,
-              certificateChanged ? "certificate_id" : undefined,
-              credentialChanged ? "decrypted_credential" : undefined,
-            ),
-            body: {
-              name: currentName,
-              displayName,
-              description,
-              decryptedCredential,
-              certificateId: news.certificateId,
-              visibility,
-            },
+            displayName,
+            description,
+            decryptedCredential,
+            certificateId: news.certificateId,
+            visibility,
           },
-        );
+        });
       }
 
       return toAttrs(current, env.project, env.region);

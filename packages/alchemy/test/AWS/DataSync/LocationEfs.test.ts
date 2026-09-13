@@ -27,8 +27,7 @@ test.provider(
     Effect.gen(function* () {
       const result = yield* datasync
         .describeLocationEfs({
-          LocationArn:
-            "arn:aws:datasync:us-west-2:391965393224:location/loc-00000000000000000",
+          LocationArn: "arn:aws:datasync:us-west-2:391965393224:location/loc-00000000000000000",
         })
         .pipe(Effect.result);
       expect(result._tag).toBe("Failure");
@@ -102,13 +101,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       expect(gone).toBe(true);
     }),
   {
-    tags: [
-      "provider:aws",
-      "provider:aws:datasync",
-      "provider:aws:ec2",
-      "provider:aws:efs",
-      "live",
-    ],
+    tags: ["provider:aws", "provider:aws:datasync", "provider:aws:ec2", "provider:aws:efs", "live"],
     timeout: 600_000,
   },
 );

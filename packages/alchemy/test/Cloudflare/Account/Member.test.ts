@@ -11,10 +11,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Deterministic invite addresses we own — invites stay `pending`, which is
 // fine; deleting the member cancels the invite. Each test owns a distinct
@@ -36,9 +33,7 @@ const forbiddenRetry = {
 } as const;
 
 const getMember = (accountId: string, memberId: string) =>
-  accounts
-    .getMember({ accountId, memberId })
-    .pipe(Effect.retry(forbiddenRetry));
+  accounts.getMember({ accountId, memberId }).pipe(Effect.retry(forbiddenRetry));
 
 const expectGone = (accountId: string, memberId: string) =>
   getMember(accountId, memberId).pipe(
@@ -48,10 +43,7 @@ const expectGone = (accountId: string, memberId: string) =>
     Effect.catchTag("MemberNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "MemberNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 

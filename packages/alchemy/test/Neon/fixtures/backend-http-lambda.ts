@@ -5,11 +5,7 @@ import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Lambda from "@/AWS/Lambda";
 import * as Neon from "@/Neon";
-import {
-  backendAuth,
-  backendDataApi,
-  backendGateway,
-} from "./backend-resources.ts";
+import { backendAuth, backendDataApi, backendGateway } from "./backend-resources.ts";
 
 const bindings = Layer.mergeAll(
   Neon.ConnectAuthHttp,

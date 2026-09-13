@@ -13,15 +13,9 @@ import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 
 const { test } = Test.make({ providers: Fly.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const fixtureDir = pathe.resolve(
-  import.meta.dirname,
-  "../../AWS/Website/fixtures/octane-app",
-);
+const fixtureDir = pathe.resolve(import.meta.dirname, "../../AWS/Website/fixtures/octane-app");
 const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
 const fixtureEntries = [
   ".gitignore",
@@ -93,14 +87,10 @@ test.provider(
         timeout: "90 seconds",
         label: "home page",
       });
-      yield* expectUrlContains(
-        `${url!}/api/hello?echo=roundtrip`,
-        "OCTANE_AWS_API_MARKER",
-        {
-          timeout: "30 seconds",
-          label: "api route",
-        },
-      );
+      yield* expectUrlContains(`${url!}/api/hello?echo=roundtrip`, "OCTANE_AWS_API_MARKER", {
+        timeout: "30 seconds",
+        label: "api route",
+      });
 
       const appName = deployed.site.app!.appName;
       yield* stack.destroy();
@@ -108,12 +98,7 @@ test.provider(
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
   {
-    tags: [
-      "provider:fly",
-      "provider:fly:machine",
-      "provider:fly:website",
-      "live",
-    ],
+    tags: ["provider:fly", "provider:fly:machine", "provider:fly:website", "live"],
     timeout: 240000,
   },
 );

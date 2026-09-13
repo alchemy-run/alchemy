@@ -1,5 +1,5 @@
-import * as GCP from "@/GCP";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
 import { serveProbes } from "../../bindingHost.ts";
 
 /**
@@ -11,9 +11,7 @@ import { serveProbes } from "../../bindingHost.ts";
  * same set.
  */
 export const memcacheEnabled =
-  !!process.env.GCP_TEST_PRIVATE_SERVICE_ACCESS &&
-  !!process.env.GCP_TEST_SLOW &&
-  !process.env.FAST;
+  !!process.env.GCP_TEST_PRIVATE_SERVICE_ACCESS && !!process.env.GCP_TEST_SLOW && !process.env.FAST;
 
 /** Instance the binding is granted for; declared only when enabled. */
 export const Cache = GCP.Memcache.Instance("Cache", {

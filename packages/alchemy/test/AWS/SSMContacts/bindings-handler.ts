@@ -61,8 +61,7 @@ export default ContactsBindingsFunction.make(
     const { oncall, email, rotation } = yield* BoundContacts;
 
     const startEngagement = yield* AWS.SSMContacts.StartEngagement(oncall);
-    const listPagesByContact =
-      yield* AWS.SSMContacts.ListPagesByContact(oncall);
+    const listPagesByContact = yield* AWS.SSMContacts.ListPagesByContact(oncall);
     const stopEngagement = yield* AWS.SSMContacts.StopEngagement();
     const describeEngagement = yield* AWS.SSMContacts.DescribeEngagement();
     const listEngagements = yield* AWS.SSMContacts.ListEngagements();
@@ -70,25 +69,16 @@ export default ContactsBindingsFunction.make(
     const describePage = yield* AWS.SSMContacts.DescribePage();
     const listPageReceipts = yield* AWS.SSMContacts.ListPageReceipts();
     const listPageResolutions = yield* AWS.SSMContacts.ListPageResolutions();
-    const listPagesByEngagement =
-      yield* AWS.SSMContacts.ListPagesByEngagement();
+    const listPagesByEngagement = yield* AWS.SSMContacts.ListPagesByEngagement();
     const sendActivationCode = yield* AWS.SSMContacts.SendActivationCode(email);
-    const activateContactChannel =
-      yield* AWS.SSMContacts.ActivateContactChannel(email);
-    const deactivateContactChannel =
-      yield* AWS.SSMContacts.DeactivateContactChannel(email);
-    const listRotationShifts =
-      yield* AWS.SSMContacts.ListRotationShifts(rotation);
-    const listPreviewRotationShifts =
-      yield* AWS.SSMContacts.ListPreviewRotationShifts();
-    const createRotationOverride =
-      yield* AWS.SSMContacts.CreateRotationOverride(rotation);
-    const getRotationOverride =
-      yield* AWS.SSMContacts.GetRotationOverride(rotation);
-    const deleteRotationOverride =
-      yield* AWS.SSMContacts.DeleteRotationOverride(rotation);
-    const listRotationOverrides =
-      yield* AWS.SSMContacts.ListRotationOverrides(rotation);
+    const activateContactChannel = yield* AWS.SSMContacts.ActivateContactChannel(email);
+    const deactivateContactChannel = yield* AWS.SSMContacts.DeactivateContactChannel(email);
+    const listRotationShifts = yield* AWS.SSMContacts.ListRotationShifts(rotation);
+    const listPreviewRotationShifts = yield* AWS.SSMContacts.ListPreviewRotationShifts();
+    const createRotationOverride = yield* AWS.SSMContacts.CreateRotationOverride(rotation);
+    const getRotationOverride = yield* AWS.SSMContacts.GetRotationOverride(rotation);
+    const deleteRotationOverride = yield* AWS.SSMContacts.DeleteRotationOverride(rotation);
+    const listRotationOverrides = yield* AWS.SSMContacts.ListRotationOverrides(rotation);
 
     const bound = {
       startEngagement,

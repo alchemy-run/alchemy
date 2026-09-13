@@ -1,18 +1,15 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as iam from "@distilled.cloud/gcp/iam_v2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Needs roles/iam.denyAdmin on the project (GCP_TEST_IAM_DENY_ADMIN=1); Owner
 // does not include it, so create fails with `Forbidden: Permission
@@ -26,9 +23,7 @@ const missingNameOf = (project: string) =>
 
 const waitUntilGone = (name: string) =>
   iam.getPolicies({ name }).pipe(
-    Effect.map((policy) =>
-      policy.deleteTime ? ("gone" as const) : ("found" as const),
-    ),
+    Effect.map((policy) => (policy.deleteTime ? ("gone" as const) : ("found" as const))),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("2 seconds"),
@@ -71,9 +66,7 @@ test.provider.skipIf(runLifecycle)(
               {
                 denyRule: {
                   deniedPermissions: ["iam.googleapis.com/roles.list"],
-                  deniedPrincipals: [
-                    "principal://goog/subject/alchemy-deny-probe@example.invalid",
-                  ],
+                  deniedPrincipals: ["principal://goog/subject/alchemy-deny-probe@example.invalid"],
                 },
               },
             ],

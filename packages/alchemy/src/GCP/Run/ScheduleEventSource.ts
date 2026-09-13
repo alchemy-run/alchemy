@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Layer from "effect/Layer";
 import * as Namespace from "../../Namespace.ts";
 import * as Output from "../../Output.ts";
 import { Job } from "../CloudScheduler/Job.ts";
@@ -97,8 +97,7 @@ export const ScheduleEventSource = Layer.effect(
         Effect.gen(function* () {
           const body = yield* request.text.pipe(Effect.orElseSucceed(() => ""));
           yield* process({
-            scheduleTime:
-              request.headers["x-cloudscheduler-scheduletime"] ?? "",
+            scheduleTime: request.headers["x-cloudscheduler-scheduletime"] ?? "",
             jobName: request.headers["x-cloudscheduler-jobname"] ?? "",
             body: body.length > 0 ? body : undefined,
           }).pipe(Effect.orDie);

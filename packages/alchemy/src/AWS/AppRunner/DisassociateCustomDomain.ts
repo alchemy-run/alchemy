@@ -40,7 +40,6 @@ export interface DisassociateCustomDomain extends Binding.Service<
     >
   >
 > {}
-export const DisassociateCustomDomain =
-  Binding.Service<DisassociateCustomDomain>(
-    "AWS.AppRunner.DisassociateCustomDomain",
-  );
+export const DisassociateCustomDomain = Binding.Service<DisassociateCustomDomain>(
+  "AWS.AppRunner.DisassociateCustomDomain",
+);

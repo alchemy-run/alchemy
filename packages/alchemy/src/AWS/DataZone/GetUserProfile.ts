@@ -34,12 +34,7 @@ export interface GetUserProfile extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetUserProfileRequest,
-    ) => Effect.Effect<
-      datazone.GetUserProfileOutput,
-      datazone.GetUserProfileError
-    >
+    ) => Effect.Effect<datazone.GetUserProfileOutput, datazone.GetUserProfileError>
   >
 > {}
-export const GetUserProfile = Binding.Service<GetUserProfile>(
-  "AWS.DataZone.GetUserProfile",
-);
+export const GetUserProfile = Binding.Service<GetUserProfile>("AWS.DataZone.GetUserProfile");

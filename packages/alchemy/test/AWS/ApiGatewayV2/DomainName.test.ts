@@ -59,10 +59,7 @@ test.provider.skipIf(!!process.env.FAST || !domainName || !certificateArn)(
           });
 
           const api = yield* AWS.ApiGatewayV2.Api("V2DomainApi", {});
-          const stage = yield* AWS.ApiGatewayV2.Stage("V2DomainStage", {
-            api,
-            autoDeploy: true,
-          });
+          const stage = yield* AWS.ApiGatewayV2.Stage("V2DomainStage", { api, autoDeploy: true });
 
           const mapping = yield* AWS.ApiGatewayV2.ApiMapping("V2Mapping", {
             api,
@@ -79,9 +76,7 @@ test.provider.skipIf(!!process.env.FAST || !domainName || !certificateArn)(
         }),
       );
 
-      const remoteDomain = yield* agw2.getDomainName({
-        DomainName: out.domainName,
-      });
+      const remoteDomain = yield* agw2.getDomainName({ DomainName: out.domainName });
       expect(remoteDomain.DomainName).toBe(domainName);
 
       const remoteMapping = yield* agw2.getApiMapping({
@@ -94,20 +89,12 @@ test.provider.skipIf(!!process.env.FAST || !domainName || !certificateArn)(
       yield* stack.destroy();
 
       const gone = yield* agw2
-        .getApiMapping({
-          DomainName: out.domainName,
-          ApiMappingId: out.apiMappingId,
-        })
+        .getApiMapping({ DomainName: out.domainName, ApiMappingId: out.apiMappingId })
         .pipe(
           Effect.map(() => "still-exists" as const),
-          Effect.catchTag("NotFoundException", () =>
-            Effect.succeed("deleted" as const),
-          ),
+          Effect.catchTag("NotFoundException", () => Effect.succeed("deleted" as const)),
         );
       expect(gone).toBe("deleted");
     }),
-  {
-    tags: ["provider:aws", "provider:aws:apigatewayv2", "live"],
-    timeout: 240_000,
-  },
+  { tags: ["provider:aws", "provider:aws:apigatewayv2", "live"], timeout: 240_000 },
 );

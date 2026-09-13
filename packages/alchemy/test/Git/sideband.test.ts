@@ -30,10 +30,7 @@ const deframe = (framed: Uint8Array) => {
   const pieces: Array<Uint8Array> = [];
   let pos = 0;
   while (pos < framed.length) {
-    const len = Number.parseInt(
-      new TextDecoder().decode(framed.subarray(pos, pos + 4)),
-      16,
-    );
+    const len = Number.parseInt(new TextDecoder().decode(framed.subarray(pos, pos + 4)), 16);
     expect(len).toBeGreaterThan(5);
     expect(len).toBeLessThanOrEqual(SIDEBAND_DATA_MAX + 5);
     expect(framed[pos + 4]).toBe(1);
@@ -51,33 +48,29 @@ const deframe = (framed: Uint8Array) => {
   return { data: out, frames: pieces.map((p) => p.length) };
 };
 
-describe(
-  "sidebandFrame / sidebandFrameAll",
-  { tags: ["unit", "local"] },
-  () => {
-    test("sidebandFrame is header + data in one buffer", () => {
-      const data = bytes(10);
-      const frame = sidebandFrame(1, data);
-      expect(frame.length).toBe(15);
-      expect(new TextDecoder().decode(frame.subarray(0, 4))).toBe("000f");
-      expect(frame[4]).toBe(1);
-      expect(Array.from(frame.subarray(5))).toEqual(Array.from(data));
-    });
+describe("sidebandFrame / sidebandFrameAll", { tags: ["unit", "local"] }, () => {
+  test("sidebandFrame is header + data in one buffer", () => {
+    const data = bytes(10);
+    const frame = sidebandFrame(1, data);
+    expect(frame.length).toBe(15);
+    expect(new TextDecoder().decode(frame.subarray(0, 4))).toBe("000f");
+    expect(frame[4]).toBe(1);
+    expect(Array.from(frame.subarray(5))).toEqual(Array.from(data));
+  });
 
-    test("sidebandFrameAll cuts exactly at SIDEBAND_DATA_MAX and round-trips", () => {
-      const data = bytes(SIDEBAND_DATA_MAX * 2 + 123);
-      const framed = sidebandFrameAll(1, data);
-      expect(framed.length).toBe(sidebandFramedLength(data.length));
-      const back = deframe(framed);
-      expect(back.frames).toEqual([SIDEBAND_DATA_MAX, SIDEBAND_DATA_MAX, 123]);
-      expect(Array.from(back.data)).toEqual(Array.from(data));
-    });
+  test("sidebandFrameAll cuts exactly at SIDEBAND_DATA_MAX and round-trips", () => {
+    const data = bytes(SIDEBAND_DATA_MAX * 2 + 123);
+    const framed = sidebandFrameAll(1, data);
+    expect(framed.length).toBe(sidebandFramedLength(data.length));
+    const back = deframe(framed);
+    expect(back.frames).toEqual([SIDEBAND_DATA_MAX, SIDEBAND_DATA_MAX, 123]);
+    expect(Array.from(back.data)).toEqual(Array.from(data));
+  });
 
-    test("sidebandFrameAll of an empty chunk is empty", () => {
-      expect(sidebandFrameAll(1, new Uint8Array(0)).length).toBe(0);
-    });
-  },
-);
+  test("sidebandFrameAll of an empty chunk is empty", () => {
+    expect(sidebandFrameAll(1, new Uint8Array(0)).length).toBe(0);
+  });
+});
 
 describe("sidebandRechunk", { tags: ["unit", "local"] }, () => {
   const run = (chunks: ReadonlyArray<Uint8Array>) =>
@@ -116,22 +109,14 @@ describe("sidebandRechunk", { tags: ["unit", "local"] }, () => {
     expect(Array.from(tiny)).toEqual(Array.from(whole));
     expect(Array.from(uneven)).toEqual(Array.from(whole));
     const back = deframe(whole);
-    expect(back.frames).toEqual([
-      SIDEBAND_DATA_MAX,
-      SIDEBAND_DATA_MAX,
-      SIDEBAND_DATA_MAX,
-      4567,
-    ]);
+    expect(back.frames).toEqual([SIDEBAND_DATA_MAX, SIDEBAND_DATA_MAX, SIDEBAND_DATA_MAX, 4567]);
     expect(Array.from(back.data)).toEqual(Array.from(data));
   });
 
   test("an exact multiple of the frame size has no short tail; empty input frames nothing", async () => {
     const data = bytes(SIDEBAND_DATA_MAX * 2, 3);
     const framed = await run([data.subarray(0, 100), data.subarray(100)]);
-    expect(deframe(framed).frames).toEqual([
-      SIDEBAND_DATA_MAX,
-      SIDEBAND_DATA_MAX,
-    ]);
+    expect(deframe(framed).frames).toEqual([SIDEBAND_DATA_MAX, SIDEBAND_DATA_MAX]);
     expect((await run([])).length).toBe(0);
     expect((await run([new Uint8Array(0)])).length).toBe(0);
   });

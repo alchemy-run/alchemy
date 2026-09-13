@@ -37,9 +37,7 @@ test.provider(
   { tags: ["provider:aws", "provider:aws:iotmanagedintegrations", "live"] },
 );
 
-class DestinationStillExists extends Data.TaggedError(
-  "DestinationStillExists",
-)<{
+class DestinationStillExists extends Data.TaggedError("DestinationStillExists")<{
   readonly name: string;
 }> {}
 
@@ -110,15 +108,11 @@ test.provider.skipIf(!process.env.AWS_TEST_IOT_MI)(
       const observed = yield* mi.getDestination({
         Name: destination.destinationName,
       });
-      expect(observed.DeliveryDestinationArn).toBe(
-        destination.deliveryDestinationArn,
-      );
+      expect(observed.DeliveryDestinationArn).toBe(destination.deliveryDestinationArn);
       expect(observed.Tags?.fixture).toBe("iot-mi-destination");
 
       // Update the description in place.
-      const { destination: updated } = yield* stack.deploy(
-        makeStack("phase two"),
-      );
+      const { destination: updated } = yield* stack.deploy(makeStack("phase two"));
       expect(updated.destinationName).toBe(destination.destinationName);
       expect(updated.description).toBe("phase two");
 

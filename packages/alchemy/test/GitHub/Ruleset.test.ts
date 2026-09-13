@@ -10,14 +10,10 @@ import * as Test from "@/Test/Alchemy";
 
 const owner = process.env.GITHUB_TEST_OWNER ?? "alchemy-run-test";
 if (owner !== "alchemy-run-test" && owner !== "alchemy-run-test-2") {
-  throw new Error(
-    `Refusing GitHub Ruleset tests for unauthorized owner: ${owner}`,
-  );
+  throw new Error(`Refusing GitHub Ruleset tests for unauthorized owner: ${owner}`);
 }
 
-const { test } = Test.make({
-  providers: GitHub.providers({ baseUrl: "github.com" }),
-});
+const { test } = Test.make({ providers: GitHub.providers({ baseUrl: "github.com" }) });
 
 const fixtureNames = [
   "alchemy-pr-1570-ruleset-lifecycle",
@@ -28,12 +24,7 @@ const fixtureNames = [
 
 // Retain public fixtures: the gh token lacks delete_repo, and private rulesets are plan-gated.
 const repository = (name: string, id = "Repo") =>
-  GitHub.Repository(id, {
-    owner,
-    name,
-    visibility: "public",
-    autoInit: true,
-  });
+  GitHub.Repository(id, { owner, name, visibility: "public", autoInit: true });
 
 const repoName = (repo: GitHub.Repository) =>
   Output.map(repo.fullName, (fullName) => fullName.split("/")[1]!);
@@ -42,12 +33,7 @@ const getRuleset = (repo: string, rulesetId: number) =>
   Effect.gen(function* () {
     const octokit = yield* Octokit;
     return yield* Effect.tryPromise({
-      try: () =>
-        octokit.rest.repos.getRepoRuleset({
-          owner,
-          repo,
-          ruleset_id: rulesetId,
-        }),
+      try: () => octokit.rest.repos.getRepoRuleset({ owner, repo, ruleset_id: rulesetId }),
       catch: (error) => error as Error & { status?: number },
     }).pipe(
       Effect.map(({ data }) => data),
@@ -79,9 +65,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
       const repo = fixtureNames[0]!;
-      const deploy = (
-        props: Omit<GitHub.RulesetProps, "owner" | "repository">,
-      ) =>
+      const deploy = (props: Omit<GitHub.RulesetProps, "owner" | "repository">) =>
         stack.deploy(
           Effect.gen(function* () {
             const fixture = yield* repository(repo);
@@ -126,11 +110,7 @@ test.provider(
         name: "updated main protection",
         enforcement: "disabled",
         conditions: { include: ["refs/heads/main", "refs/heads/release/*"] },
-        rules: {
-          nonFastForward: true,
-          requiredLinearHistory: true,
-          update: false,
-        },
+        rules: { nonFastForward: true, requiredLinearHistory: true, update: false },
       });
       expect(updated.rulesetId).toBe(created.rulesetId);
       expect(updated.nodeId).toBe(created.nodeId);
@@ -151,10 +131,7 @@ test.provider(
       const cleared = yield* deploy({ name: "all branches" });
       expect(cleared.rulesetId).toBe(created.rulesetId);
       const afterClear = yield* getRuleset(repo, cleared.rulesetId);
-      expect(afterClear?.conditions?.ref_name).toEqual({
-        include: ["~ALL"],
-        exclude: [],
-      });
+      expect(afterClear?.conditions?.ref_name).toEqual({ include: ["~ALL"], exclude: [] });
       expect(afterClear?.rules ?? []).toEqual([]);
       expect(afterClear?.enforcement).toBe("active");
 
@@ -164,14 +141,7 @@ test.provider(
       expect(yield* getRulesets(repo)).toEqual([]);
       yield* stack.destroy();
     }),
-  {
-    tags: [
-      "provider:github",
-      "provider:github:repository",
-      "provider:github:ruleset",
-      "live",
-    ],
-  },
+  { tags: ["provider:github", "provider:github:repository", "provider:github:ruleset", "live"] },
 );
 
 test.provider(
@@ -219,9 +189,9 @@ test.provider(
               octokit.hook.after("request", (response, options) => {
                 const url = new URL(options.url, "https://api.github.com");
                 if (url.pathname === `/orgs/${owner}/repos`) {
-                  response.data = (
-                    response.data as Array<{ name: string }>
-                  ).filter((repository) => repository.name === repo);
+                  response.data = (response.data as Array<{ name: string }>).filter(
+                    (repository) => repository.name === repo,
+                  );
                 }
               });
               return octokit;
@@ -229,9 +199,7 @@ test.provider(
           }),
         ),
       );
-      const found = listed.find(
-        (ruleset) => ruleset.rulesetId === created.rulesetId,
-      );
+      const found = listed.find((ruleset) => ruleset.rulesetId === created.rulesetId);
       expect(found?.name).toBe("listed tag protection");
       expect(found?.nodeId).toBe(created.nodeId);
       expect((yield* getRuleset(repo, created.rulesetId))?.target).toBe("tag");
@@ -241,14 +209,7 @@ test.provider(
       expect(yield* getRulesets(repo)).toEqual([]);
       yield* stack.destroy();
     }),
-  {
-    tags: [
-      "provider:github",
-      "provider:github:repository",
-      "provider:github:ruleset",
-      "live",
-    ],
-  },
+  { tags: ["provider:github", "provider:github:repository", "provider:github:ruleset", "live"] },
 );
 
 test.provider(
@@ -276,15 +237,11 @@ test.provider(
           }),
         );
       const created = yield* deploy("a");
-      expect((yield* getRuleset(repoA, created.rulesetId))?.name).toBe(
-        "replacement protection",
-      );
+      expect((yield* getRuleset(repoA, created.rulesetId))?.name).toBe("replacement protection");
       const replaced = yield* deploy("b");
       expect(replaced.rulesetId).not.toBe(created.rulesetId);
       expect(yield* getRuleset(repoA, created.rulesetId)).toBeUndefined();
-      expect((yield* getRuleset(repoB, replaced.rulesetId))?.name).toBe(
-        "replacement protection",
-      );
+      expect((yield* getRuleset(repoB, replaced.rulesetId))?.name).toBe("replacement protection");
 
       yield* stack.deploy(fixtures);
       expect(yield* getRuleset(repoB, replaced.rulesetId)).toBeUndefined();
@@ -292,12 +249,5 @@ test.provider(
       expect(yield* getRulesets(repoB)).toEqual([]);
       yield* stack.destroy();
     }),
-  {
-    tags: [
-      "provider:github",
-      "provider:github:repository",
-      "provider:github:ruleset",
-      "live",
-    ],
-  },
+  { tags: ["provider:github", "provider:github:repository", "provider:github:ruleset", "live"] },
 );

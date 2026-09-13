@@ -5,12 +5,7 @@ import { Unowned } from "../../AdoptPolicy.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  diffTags,
-  hasAlchemyTags,
-  type Tags,
-} from "../../Tags.ts";
+import { createInternalTags, diffTags, hasAlchemyTags, type Tags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 import { toTagRecord, unredact } from "./internal.ts";
 
@@ -178,13 +173,9 @@ export interface Control extends Resource<
 export const Control = Resource<Control>("AWS.AuditManager.Control");
 
 const createControlName = (id: string, props: { name?: string | undefined }) =>
-  props.name
-    ? Effect.succeed(props.name)
-    : createPhysicalName({ id, maxLength: 100 });
+  props.name ? Effect.succeed(props.name) : createPhysicalName({ id, maxLength: 100 });
 
-const toAttributes = (
-  control: auditmanager.Control,
-): Control["Attributes"] => ({
+const toAttributes = (control: auditmanager.Control): Control["Attributes"] => ({
   controlId: control.id ?? "",
   arn: control.arn ?? "",
   name: control.name ?? "",
@@ -196,11 +187,7 @@ const toAttributes = (
 const readControlById = Effect.fn(function* (controlId: string) {
   const response = yield* auditmanager
     .getControl({ controlId })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
   return response?.control;
 });
 
@@ -252,13 +239,9 @@ export const ControlProvider = () =>
             const ids = Array.from(pages)
               .flatMap((page) => page.controlMetadataList ?? [])
               .flatMap((control) => (control.id ? [control.id] : []));
-            const hydrated = yield* Effect.forEach(
-              ids,
-              (controlId) => readControlById(controlId),
-              {
-                concurrency: 5,
-              },
-            );
+            const hydrated = yield* Effect.forEach(ids, (controlId) => readControlById(controlId), {
+              concurrency: 5,
+            });
             return hydrated.flatMap((control) =>
               control === undefined ? [] : [toAttributes(control)],
             );
@@ -266,14 +249,10 @@ export const ControlProvider = () =>
         read: Effect.fn(function* ({ id, olds, output }) {
           const control = output?.controlId
             ? yield* readControlById(output.controlId)
-            : yield* findControlByName(
-                yield* createControlName(id, olds ?? {}),
-              );
+            : yield* findControlByName(yield* createControlName(id, olds ?? {}));
           if (!control) return undefined;
           const attrs = toAttributes(control);
-          return (yield* hasAlchemyTags(id, attrs.tags as Tags))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, attrs.tags as Tags)) ? attrs : Unowned(attrs);
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const name = yield* createControlName(id, news);
@@ -307,22 +286,18 @@ export const ControlProvider = () =>
           }
 
           // Sync — diff observed against desired; UpdateControl on drift.
-          const observedSources = (control.controlMappingSources ?? []).map(
-            (source) =>
-              projectSource({
-                ...source,
-                troubleshootingText: unredact(source.troubleshootingText),
-              }),
+          const observedSources = (control.controlMappingSources ?? []).map((source) =>
+            projectSource({
+              ...source,
+              troubleshootingText: unredact(source.troubleshootingText),
+            }),
           );
           const desiredSources = news.controlMappingSources.map(projectSource);
           const drifted =
             (control.name ?? "") !== name ||
-            (unredact(control.description) ?? "") !==
-              (news.description ?? "") ||
-            (unredact(control.testingInformation) ?? "") !==
-              (news.testingInformation ?? "") ||
-            (unredact(control.actionPlanTitle) ?? "") !==
-              (news.actionPlanTitle ?? "") ||
+            (unredact(control.description) ?? "") !== (news.description ?? "") ||
+            (unredact(control.testingInformation) ?? "") !== (news.testingInformation ?? "") ||
+            (unredact(control.actionPlanTitle) ?? "") !== (news.actionPlanTitle ?? "") ||
             (unredact(control.actionPlanInstructions) ?? "") !==
               (news.actionPlanInstructions ?? "") ||
             JSON.stringify(observedSources) !== JSON.stringify(desiredSources);
@@ -342,12 +317,10 @@ export const ControlProvider = () =>
               testingInformation: news.testingInformation,
               actionPlanTitle: news.actionPlanTitle,
               actionPlanInstructions: news.actionPlanInstructions,
-              controlMappingSources: news.controlMappingSources.map(
-                (source) => ({
-                  ...source,
-                  sourceId: observedByName.get(source.sourceName),
-                }),
-              ),
+              controlMappingSources: news.controlMappingSources.map((source) => ({
+                ...source,
+                sourceId: observedByName.get(source.sourceName),
+              })),
             });
             control = updated.control ?? control;
             yield* session.note(`Updated control ${name}`);
@@ -365,9 +338,7 @@ export const ControlProvider = () =>
           if (upsert.length > 0) {
             yield* auditmanager.tagResource({
               resourceArn: attrs.arn,
-              tags: Object.fromEntries(
-                upsert.map(({ Key, Value }) => [Key, Value]),
-              ),
+              tags: Object.fromEntries(upsert.map(({ Key, Value }) => [Key, Value])),
             });
           }
 
@@ -377,9 +348,7 @@ export const ControlProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* auditmanager
             .deleteControl({ controlId: output.controlId })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       };
     }),

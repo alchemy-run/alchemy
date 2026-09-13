@@ -2,12 +2,12 @@ import * as kv from "@distilled.cloud/cloudflare/kv";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import * as HttpClient from "effect/http/HttpClient";
-import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as pathe from "pathe";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Cloudflare from "@/Cloudflare/index.ts";
@@ -19,21 +19,12 @@ import { expectUrlContains } from "../Utils/Http.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers(), dev: true });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const fixtureDir = pathe.resolve(import.meta.dirname, "fixtures", "waku-app");
 const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
 
-const fixtureEntries = [
-  ".gitignore",
-  "package.json",
-  "tsconfig.json",
-  "public",
-  "src",
-];
+const fixtureEntries = [".gitignore", "package.json", "tsconfig.json", "public", "src"];
 
 /**
  * Execute `request` until it answers 200 with a JSON body — the dev server
@@ -52,19 +43,12 @@ const requestJsonReady = <T>(request: HttpClientRequest.HttpClientRequest) =>
               }),
             )
           : Effect.flatMap(res.text, (body) =>
-              Effect.fail(
-                new Error(
-                  `dev server not ready: ${res.status} ${body.slice(0, 300)}`,
-                ),
-              ),
+              Effect.fail(new Error(`dev server not ready: ${res.status} ${body.slice(0, 300)}`)),
             ),
       ),
       Effect.retry({
         schedule: Schedule.max([
-          Schedule.min([
-            Schedule.exponential("500 millis"),
-            Schedule.spaced("2 seconds"),
-          ]),
+          Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("2 seconds")]),
           Schedule.recurs(15),
         ]),
       }),
@@ -72,11 +56,7 @@ const requestJsonReady = <T>(request: HttpClientRequest.HttpClientRequest) =>
   });
 
 /** PUT then GET `key` through the fixture's `/api/kv` route. */
-const kvRoundTrip = Effect.fn(function* (
-  baseUrl: string,
-  key: string,
-  value: string,
-) {
+const kvRoundTrip = Effect.fn(function* (baseUrl: string, key: string, value: string) {
   yield* requestJsonReady<{ ok: boolean }>(
     HttpClientRequest.put(`${baseUrl}/api/kv`).pipe(
       HttpClientRequest.bodyJsonUnsafe({ key, value }),
@@ -98,13 +78,7 @@ const kvRoundTrip = Effect.fn(function* (
 // dev server only chdirs briefly inside the RPC sidecar during startup.
 describe.concurrent(
   "Waku dev",
-  {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:kv",
-      "provider:cloudflare:website",
-    ],
-  },
+  { tags: ["provider:cloudflare", "provider:cloudflare:kv", "provider:cloudflare:website"] },
   () => {
     test.provider(
       "Waku dev: local dev server renders RSC SSR with bindings, local KV, and HMR",
@@ -129,18 +103,8 @@ describe.concurrent(
               const site = yield* Cloudflare.Website.Waku("WakuLocal", {
                 rootDir,
                 dev: { port: 0 },
-                memo: {
-                  include: [
-                    "src/**",
-                    "public/**",
-                    "package.json",
-                    "tsconfig.json",
-                  ],
-                },
-                env: {
-                  MESSAGE: bindingMarker,
-                  SITE_KV: siteKv,
-                },
+                memo: { include: ["src/**", "public/**", "package.json", "tsconfig.json"] },
+                env: { MESSAGE: bindingMarker, SITE_KV: siteKv },
               });
               return { site, siteKv };
             }),
@@ -164,32 +128,20 @@ describe.concurrent(
 
           // The page reads the `MESSAGE` binding from `cloudflare:workers`
           // env — proves alchemy-managed bindings reach the dev RSC server.
-          yield* expectUrlContains(
-            `${site.url!}/`,
-            `MESSAGE=${bindingMarker}`,
-            {
-              timeout: "60 seconds",
-              label: "waku dev env binding in SSR output",
-            },
-          );
+          yield* expectUrlContains(`${site.url!}/`, `MESSAGE=${bindingMarker}`, {
+            timeout: "60 seconds",
+            label: "waku dev env binding in SSR output",
+          });
 
           // Static asset from `public/` through the dev server.
-          yield* expectUrlContains(
-            `${site.url!}/hello.txt`,
-            "hello from public/",
-            {
-              timeout: "60 seconds",
-              label: "waku dev static asset",
-            },
-          );
+          yield* expectUrlContains(`${site.url!}/hello.txt`, "hello from public/", {
+            timeout: "60 seconds",
+            label: "waku dev static asset",
+          });
 
           // The KV binding round-trips through the `/api/kv` route against the
           // local simulator.
-          const roundTrip = yield* kvRoundTrip(
-            site.url!,
-            "waku-dev-key",
-            "kv-dev-value",
-          );
+          const roundTrip = yield* kvRoundTrip(site.url!, "waku-dev-key", "kv-dev-value");
           expect(roundTrip.value).toBe("kv-dev-value");
 
           // ── HMR: edit the page in place; the dev server rebuilds and serves
@@ -210,11 +162,7 @@ describe.concurrent(
 
           // The KV binding survives the rebuild: the previous write is still
           // readable and new writes land.
-          const afterHmr = yield* kvRoundTrip(
-            site.url!,
-            "waku-dev-key-2",
-            "kv-dev-value-2",
-          );
+          const afterHmr = yield* kvRoundTrip(site.url!, "waku-dev-key-2", "kv-dev-value-2");
           expect(afterHmr.value).toBe("kv-dev-value-2");
           const stillThere = yield* requestJsonReady<{ value: string | null }>(
             HttpClientRequest.get(`${site.url!}/api/kv?key=waku-dev-key`),
@@ -247,24 +195,12 @@ describe.concurrent(
 
           const { site, liveKv } = yield* stack.deploy(
             Effect.gen(function* () {
-              const liveKv = yield* Cloudflare.KV.Namespace(
-                "WakuRemoteKV",
-              ).pipe(Alchemy.remote());
+              const liveKv = yield* Cloudflare.KV.Namespace("WakuRemoteKV").pipe(Alchemy.remote());
               const site = yield* Cloudflare.Website.Waku("WakuLocalRemoteKV", {
                 rootDir,
                 dev: { port: 0 },
-                memo: {
-                  include: [
-                    "src/**",
-                    "public/**",
-                    "package.json",
-                    "tsconfig.json",
-                  ],
-                },
-                env: {
-                  MESSAGE: "waku-dev-remote-marker",
-                  SITE_KV: liveKv,
-                },
+                memo: { include: ["src/**", "public/**", "package.json", "tsconfig.json"] },
+                env: { MESSAGE: "waku-dev-remote-marker", SITE_KV: liveKv },
               });
               return { site, liveKv };
             }),
@@ -277,11 +213,7 @@ describe.concurrent(
 
           // Write through the locally-served site into the remote-proxied
           // binding.
-          const roundTrip = yield* kvRoundTrip(
-            site.url!,
-            "waku-remote-key",
-            "kv-remote-value",
-          );
+          const roundTrip = yield* kvRoundTrip(site.url!, "waku-remote-key", "kv-remote-value");
           expect(roundTrip.value).toBe("kv-remote-value");
 
           // Out-of-band: the write is visible through the cloud API — the
@@ -296,9 +228,7 @@ describe.concurrent(
             .pipe(
               Effect.flatMap((res) =>
                 Effect.tryPromise(() =>
-                  new Response(
-                    Stream.toReadableStream(res.body) as BodyInit,
-                  ).text(),
+                  new Response(Stream.toReadableStream(res.body) as BodyInit).text(),
                 ),
               ),
               // The KV REST read can lag the proxied write — propagation is
@@ -321,12 +251,10 @@ describe.concurrent(
           // The live namespace was deleted from the cloud on destroy (its
           // state row is stamped live, so the live provider handles the delete
           // even in a dev run).
-          const gone = yield* kv
-            .getNamespace({ accountId, namespaceId: liveKv.namespaceId })
-            .pipe(
-              Effect.as(false),
-              Effect.catchTag("NamespaceNotFound", () => Effect.succeed(true)),
-            );
+          const gone = yield* kv.getNamespace({ accountId, namespaceId: liveKv.namespaceId }).pipe(
+            Effect.as(false),
+            Effect.catchTag("NamespaceNotFound", () => Effect.succeed(true)),
+          );
           expect(gone).toBe(true);
         }).pipe(logLevel),
       { tags: ["live"], timeout: 300_000 },

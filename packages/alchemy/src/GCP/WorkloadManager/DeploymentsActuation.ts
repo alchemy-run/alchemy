@@ -162,11 +162,7 @@ const toOutput = (
         hasUserFacingErrorMsg: output.hasUserFacingErrorMsg,
       };
 
-const toAttrs = (
-  item: workloadmanager.Actuation,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (item: workloadmanager.Actuation, project: string, region: string) => {
   const name = item.name ?? "";
   const parsed = parseName(name, "actuations", region);
   return {
@@ -205,22 +201,12 @@ const listOwned = (project: string, region: string) =>
 
 export const DeploymentsActuationProvider = () =>
   Provider.succeed(DeploymentsActuation, {
-    stables: [
-      "name",
-      "actuationId",
-      "deployment",
-      "project",
-      "location",
-      "startTime",
-    ],
+    stables: ["name", "actuationId", "deployment", "project", "location", "startTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
         env.region,
@@ -234,12 +220,7 @@ export const DeploymentsActuationProvider = () =>
               "deployments",
             )
           : undefined;
-      const nextParent = expandNamed(
-        news.deployment,
-        env.project,
-        nextLocation,
-        "deployments",
-      );
+      const nextParent = expandNamed(news.deployment, env.project, nextLocation, "deployments");
       return replaceOnIdentity({
         previousId: olds?.actuationId ?? output?.actuationId,
         nextId: news.actuationId ?? olds?.actuationId ?? output?.actuationId,
@@ -252,15 +233,8 @@ export const DeploymentsActuationProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const actuationId = yield* toActuationId(
-        id,
-        olds?.actuationId,
-        output?.actuationId,
-      );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const actuationId = yield* toActuationId(id, olds?.actuationId, output?.actuationId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const deployment = expandNamed(
         olds?.deployment ?? output?.deployment ?? "",
         env.project,
@@ -282,21 +256,9 @@ export const DeploymentsActuationProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const actuationId = yield* toActuationId(
-        id,
-        news.actuationId,
-        output?.actuationId,
-      );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const deployment = expandNamed(
-        news.deployment,
-        env.project,
-        location,
-        "deployments",
-      );
+      const actuationId = yield* toActuationId(id, news.actuationId, output?.actuationId);
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const deployment = expandNamed(news.deployment, env.project, location, "deployments");
       const name = resourceName(deployment, actuationId);
 
       let current = yield* getByName(output?.name ?? name);
@@ -316,10 +278,7 @@ export const DeploymentsActuationProvider = () =>
             ),
           );
           const fromOp = resourceNameFromOperation(created);
-          current = yield* waitUntilExists(
-            getByName(fromOp ?? name),
-            fromOp ?? name,
-          );
+          current = yield* waitUntilExists(getByName(fromOp ?? name), fromOp ?? name);
         } else {
           current = yield* waitUntilExists(getByName(name), name);
         }

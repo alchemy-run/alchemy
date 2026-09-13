@@ -1,5 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitZoneOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -10,12 +9,9 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitZoneOperation } from "./operations.ts";
 
 export type TargetInstanceNatPolicy = compute.TargetInstanceNatPolicyEnum;
 
@@ -141,9 +137,7 @@ export type TargetInstance = Resource<
  * @resource
  * @category Compute
  */
-export const TargetInstance = Resource<TargetInstance>(
-  "GCP.Compute.TargetInstance",
-);
+export const TargetInstance = Resource<TargetInstance>("GCP.Compute.TargetInstance");
 
 export class TargetInstanceNotResolved extends Data.TaggedError(
   "GCP.Compute.TargetInstanceNotResolved",
@@ -244,14 +238,8 @@ const toNetworkRef = (project: string, network: string | undefined) => {
   return `projects/${project}/global/networks/${network}`;
 };
 
-const resolveZone = (
-  news: { zone?: string; instance?: string },
-  fallback?: string,
-) =>
-  lastSegment(news.zone) ||
-  zoneFromUrl(news.instance) ||
-  lastSegment(fallback) ||
-  DEFAULT_ZONE;
+const resolveZone = (news: { zone?: string; instance?: string }, fallback?: string) =>
+  lastSegment(news.zone) || zoneFromUrl(news.instance) || lastSegment(fallback) || DEFAULT_ZONE;
 
 const toAttrs = (target: compute.TargetInstance, project: string) => {
   const parsed = parseDescription(target.description);
@@ -276,18 +264,12 @@ const getByName = (project: string, zone: string, targetInstance: string) =>
     .getTargetInstances({ project, zone, targetInstance })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const waitTargetGone = (
-  project: string,
-  zone: string,
-  targetInstanceName: string,
-) =>
+const waitTargetGone = (project: string, zone: string, targetInstanceName: string) =>
   getByName(project, zone, targetInstanceName).pipe(
     Effect.flatMap((existing) =>
       existing === undefined
         ? Effect.void
-        : Effect.fail(
-            new TargetInstanceStillExists({ targetInstanceName, zone }),
-          ),
+        : Effect.fail(new TargetInstanceStillExists({ targetInstanceName, zone })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Compute.TargetInstanceStillExists",
@@ -296,18 +278,12 @@ const waitTargetGone = (
     }),
   );
 
-const requireTarget = (
-  project: string,
-  zone: string,
-  targetInstanceName: string,
-) =>
+const requireTarget = (project: string, zone: string, targetInstanceName: string) =>
   getByName(project, zone, targetInstanceName).pipe(
     Effect.flatMap((existing) =>
       existing !== undefined
         ? Effect.succeed(existing)
-        : Effect.fail(
-            new TargetInstanceNotResolved({ targetInstanceName, zone }),
-          ),
+        : Effect.fail(new TargetInstanceNotResolved({ targetInstanceName, zone })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Compute.TargetInstanceNotResolved",
@@ -332,8 +308,7 @@ export const TargetInstanceProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
-      const previousName =
-        olds?.targetInstanceName ?? output?.targetInstanceName;
+      const previousName = olds?.targetInstanceName ?? output?.targetInstanceName;
       const nextName = news.targetInstanceName ?? previousName;
       const previousZone = resolveZone(
         { zone: olds?.zone ?? output?.zone, instance: olds?.instance },
@@ -343,21 +318,14 @@ export const TargetInstanceProvider = () =>
       const previousInstance = lastSegment(olds?.instance ?? output?.instance);
       const nextInstance = lastSegment(news.instance);
       const previousNetwork = lastSegment(olds?.network ?? output?.network);
-      const nextNetwork =
-        news.network !== undefined
-          ? lastSegment(news.network)
-          : previousNetwork;
-      const previousNat =
-        olds?.natPolicy ?? output?.natPolicy ?? DEFAULT_NAT_POLICY;
+      const nextNetwork = news.network !== undefined ? lastSegment(news.network) : previousNetwork;
+      const previousNat = olds?.natPolicy ?? output?.natPolicy ?? DEFAULT_NAT_POLICY;
       const nextNat = news.natPolicy ?? DEFAULT_NAT_POLICY;
-      const previousDescription =
-        olds?.description ?? output?.description ?? "";
+      const previousDescription = olds?.description ?? output?.description ?? "";
       const nextDescription = news.description ?? "";
 
       const replace =
-        (previousName !== undefined &&
-          nextName !== undefined &&
-          previousName !== nextName) ||
+        (previousName !== undefined && nextName !== undefined && previousName !== nextName) ||
         previousZone !== nextZone ||
         (previousInstance.length > 0 &&
           nextInstance.length > 0 &&
@@ -370,9 +338,7 @@ export const TargetInstanceProvider = () =>
       return {
         action: "replace" as const,
         deleteFirst:
-          previousName !== undefined &&
-          nextName !== undefined &&
-          previousName === nextName,
+          previousName !== undefined && nextName !== undefined && previousName === nextName,
       };
     }),
 
@@ -409,9 +375,7 @@ export const TargetInstanceProvider = () =>
             (scoped?.targetInstances ?? [])
               .filter((item) => {
                 const { labels } = parseDescription(item.description);
-                return Object.keys(labels).some((key) =>
-                  key.startsWith("alchemy-"),
-                );
+                return Object.keys(labels).some((key) => key.startsWith("alchemy-"));
               })
               .map((item) => toAttrs(item, env.project)),
           ),
@@ -451,9 +415,7 @@ export const TargetInstanceProvider = () =>
             body,
           })
           .pipe(
-            Effect.flatMap((operation) =>
-              waitZoneOperation(env.project, zone, operation),
-            ),
+            Effect.flatMap((operation) => waitZoneOperation(env.project, zone, operation)),
             Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
           );
         current = yield* requireTarget(env.project, zone, targetInstanceName);
@@ -477,11 +439,7 @@ export const TargetInstanceProvider = () =>
               targetInstance: targetInstanceName,
               body: { securityPolicy: news.securityPolicy },
             })
-            .pipe(
-              Effect.flatMap((operation) =>
-                waitZoneOperation(env.project, zone, operation),
-              ),
-            );
+            .pipe(Effect.flatMap((operation) => waitZoneOperation(env.project, zone, operation)));
           current = yield* requireTarget(env.project, zone, targetInstanceName);
         }
       }

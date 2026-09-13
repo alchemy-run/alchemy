@@ -27,17 +27,13 @@ export const resourceNameFromOperation = (
 };
 
 const getOperation = (name: string) =>
-  datalabeling
-    .getProjectsOperations({ name })
-    .pipe(Effect.provide(noRetryLayer));
+  datalabeling.getProjectsOperations({ name }).pipe(Effect.provide(noRetryLayer));
 
 /**
  * Wait for an Instruction / feedback-message create operation, then return
  * the finished operation (with its `response`).
  */
-export const waitForOperation = (
-  operation: datalabeling.GoogleLongrunningOperation,
-) =>
+export const waitForOperation = (operation: datalabeling.GoogleLongrunningOperation) =>
   Effect.gen(function* () {
     yield* waitForGcpOperation(operation, getOperation, {
       budget: "10 minutes",

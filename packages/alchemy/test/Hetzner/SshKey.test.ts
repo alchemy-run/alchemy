@@ -10,10 +10,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Hetzner.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
 
@@ -28,12 +25,7 @@ const generatePublicKey = (comment: string) =>
       buf.writeUInt32BE(n);
       return buf;
     };
-    const payload = Buffer.concat([
-      u32(type.length),
-      type,
-      u32(raw.length),
-      raw,
-    ]);
+    const payload = Buffer.concat([u32(type.length), type, u32(raw.length), raw]);
     return `ssh-ed25519 ${payload.toString("base64")} ${comment}`;
   });
 
@@ -104,12 +96,7 @@ test.provider.skipIf(!hasHetznerCreds)(
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
   {
-    tags: [
-      "provider:hetzner",
-      "provider:hetzner:service",
-      "provider:hetzner:sshkey",
-      "live",
-    ],
+    tags: ["provider:hetzner", "provider:hetzner:service", "provider:hetzner:sshkey", "live"],
     timeout: 120_000,
   },
 );
@@ -159,12 +146,7 @@ test.provider.skipIf(!hasHetznerCreds)(
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
   {
-    tags: [
-      "provider:hetzner",
-      "provider:hetzner:service",
-      "provider:hetzner:sshkey",
-      "live",
-    ],
+    tags: ["provider:hetzner", "provider:hetzner:service", "provider:hetzner:sshkey", "live"],
     timeout: 180_000,
   },
 );
@@ -196,12 +178,7 @@ test.provider.skipIf(!hasHetznerCreds)(
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
   {
-    tags: [
-      "provider:hetzner",
-      "provider:hetzner:service",
-      "provider:hetzner:sshkey",
-      "live",
-    ],
+    tags: ["provider:hetzner", "provider:hetzner:service", "provider:hetzner:sshkey", "live"],
     timeout: 120_000,
   },
 );

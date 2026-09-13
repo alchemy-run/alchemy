@@ -23,9 +23,7 @@ export const makeHttpSpriteBinding = <Client>(options: {
   makeClient: (auth: SpriteAuth, spriteName: Effect.Effect<string>) => Client;
 }) =>
   Effect.gen(function* () {
-    const context = yield* Effect.context<
-      Credentials | HttpClient.HttpClient
-    >();
+    const context = yield* Effect.context<Credentials | HttpClient.HttpClient>();
 
     return Effect.fn(function* (sprite: Sprite) {
       yield* bindFlyApiToken().pipe(Effect.provideContext(context));
@@ -45,11 +43,7 @@ export const makeSpriteAuth = (
 ): SpriteAuth => ({
   authorize: (eff) => {
     if (globalThis.__ALCHEMY_RUNTIME__) {
-      return eff.pipe(
-        Effect.provide(
-          Layer.mergeAll(CredentialsFromEnv, FetchHttpClient.layer),
-        ),
-      );
+      return eff.pipe(Effect.provide(Layer.mergeAll(CredentialsFromEnv, FetchHttpClient.layer)));
     }
     return eff.pipe(Effect.provideContext(ambient));
   },

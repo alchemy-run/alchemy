@@ -27,9 +27,7 @@ test.provider(
       // suffix) — the API rejects anything else with a ValidationException
       // before the lookup even runs.
       const bogusArn = `arn:aws:airflow-serverless:${region}:${identity.Account}:workflow/alchemy-nonexistent-probe-0123456789`;
-      const error = yield* Effect.flip(
-        mwaa.getWorkflow({ WorkflowArn: bogusArn }),
-      );
+      const error = yield* Effect.flip(mwaa.getWorkflow({ WorkflowArn: bogusArn }));
       expect(error._tag).toBe("ResourceNotFoundException");
     }),
   { tags: ["provider:aws", "provider:aws:mwaaserverless", "live"] },
@@ -76,10 +74,7 @@ const infrastructure = Effect.gen(function* () {
           {
             Effect: "Allow",
             Action: ["s3:GetObject*", "s3:GetBucket*", "s3:List*"],
-            Resource: [
-              bucket.bucketArn,
-              Output.interpolate`${bucket.bucketArn}/*`,
-            ],
+            Resource: [bucket.bucketArn, Output.interpolate`${bucket.bucketArn}/*`],
           },
         ],
       },
@@ -93,10 +88,7 @@ const workflowPhase = (description: string, name?: string) =>
     const { bucket, role } = yield* infrastructure;
     const workflow = yield* Workflow("Etl", {
       name,
-      definitionS3Location: {
-        bucket: bucket.bucketName,
-        objectKey: DEFINITION_KEY,
-      },
+      definitionS3Location: { bucket: bucket.bucketName, objectKey: DEFINITION_KEY },
       roleArn: role.roleArn,
       description,
       tags: { fixture: "mwaa-serverless-workflow" },
@@ -107,11 +99,7 @@ const workflowPhase = (description: string, name?: string) =>
 const findWorkflow = (workflowArn: string) =>
   mwaa
     .getWorkflow({ WorkflowArn: workflowArn })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
 class WorkflowStillExists extends Data.TaggedError("WorkflowStillExists")<{
   readonly workflowArn: string;
@@ -130,12 +118,8 @@ const logGroupNameFor = (workflowArn: string) =>
 const assertLogGroupDeleted = (workflowArn: string) =>
   Effect.gen(function* () {
     const logGroupName = logGroupNameFor(workflowArn);
-    const found = yield* logs.describeLogGroups({
-      logGroupNamePrefix: logGroupName,
-    });
-    const exists = (found.logGroups ?? []).some(
-      (group) => group.logGroupName === logGroupName,
-    );
+    const found = yield* logs.describeLogGroups({ logGroupNamePrefix: logGroupName });
+    const exists = (found.logGroups ?? []).some((group) => group.logGroupName === logGroupName);
     if (exists) {
       return yield* Effect.fail(new LogGroupStillExists({ logGroupName }));
     }
@@ -160,16 +144,12 @@ const TEST_LOG_GROUP_PREFIXES = [
 
 const reapTestLogGroups = Effect.gen(function* () {
   for (const prefix of TEST_LOG_GROUP_PREFIXES) {
-    const found = yield* logs.describeLogGroups({
-      logGroupNamePrefix: prefix,
-    });
+    const found = yield* logs.describeLogGroups({ logGroupNamePrefix: prefix });
     for (const group of found.logGroups ?? []) {
       if (group.logGroupName !== undefined) {
         yield* logs
           .deleteLogGroup({ logGroupName: group.logGroupName })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
       }
     }
   }
@@ -184,10 +164,7 @@ const assertWorkflowDeleted = (workflowArn: string) =>
     ),
     Effect.retry({
       while: (e) => e._tag === "WorkflowStillExists",
-      schedule: Schedule.max([
-        Schedule.fixed("5 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(10)]),
     }),
   );
 
@@ -204,9 +181,7 @@ test.provider(
       yield* s3.putObject({
         Bucket: infra.bucket.bucketName,
         Key: DEFINITION_KEY,
-        Body: new TextEncoder().encode(
-          workflowDefinition(infra.bucket.bucketName),
-        ),
+        Body: new TextEncoder().encode(workflowDefinition(infra.bucket.bucketName)),
         ContentType: "application/yaml",
       });
 
@@ -219,14 +194,10 @@ test.provider(
       expect(workflow.name).toBeDefined();
 
       // Out-of-band verification via distilled.
-      const observed = yield* mwaa.getWorkflow({
-        WorkflowArn: workflow.workflowArn,
-      });
+      const observed = yield* mwaa.getWorkflow({ WorkflowArn: workflow.workflowArn });
       expect(observed.Name).toBe(workflow.name);
       expect(observed.RoleArn).toBeDefined();
-      const tags = yield* mwaa.listTagsForResource({
-        ResourceArn: workflow.workflowArn,
-      });
+      const tags = yield* mwaa.listTagsForResource({ ResourceArn: workflow.workflowArn });
       expect(tags.Tags?.fixture).toBe("mwaa-serverless-workflow");
 
       // Phase 3 — update mutable config (description) in place; the
@@ -235,12 +206,8 @@ test.provider(
         workflowPhase("alchemy mwaa-serverless test workflow (updated)"),
       );
       expect(updated.workflow.workflowArn).toBe(workflow.workflowArn);
-      const reobserved = yield* mwaa.getWorkflow({
-        WorkflowArn: workflow.workflowArn,
-      });
-      expect(reobserved.Description).toBe(
-        "alchemy mwaa-serverless test workflow (updated)",
-      );
+      const reobserved = yield* mwaa.getWorkflow({ WorkflowArn: workflow.workflowArn });
+      expect(reobserved.Description).toBe("alchemy mwaa-serverless test workflow (updated)");
 
       // Phase 4 — changing the name is a replacement: a new workflow (new
       // ARN) is created and the old one deleted.

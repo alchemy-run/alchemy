@@ -36,20 +36,14 @@ const CLOUDFLARE_ENV_KEYS = [
  * An empty `--env-file` in the temp home is passed through so
  * `loadConfigProvider` never falls back to the checkout's cwd `.env`.
  */
-const withIsolatedHome = <A, E, R>(
-  effect: (envFile: string) => Effect.Effect<A, E, R>,
-) =>
+const withIsolatedHome = <A, E, R>(effect: (envFile: string) => Effect.Effect<A, E, R>) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    const dir = yield* fs.makeTempDirectoryScoped({
-      prefix: "alchemy-cf-bootstrap-profile-",
-    });
+    const dir = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-cf-bootstrap-profile-" });
     const envFile = path.join(dir, "empty.env");
     yield* fs.writeFileString(envFile, "");
-    const previous: Record<string, string | undefined> = {
-      ALCHEMY_HOME: process.env.ALCHEMY_HOME,
-    };
+    const previous: Record<string, string | undefined> = { ALCHEMY_HOME: process.env.ALCHEMY_HOME };
     for (const key of CLOUDFLARE_ENV_KEYS) {
       previous[key] = process.env[key];
     }
@@ -73,11 +67,7 @@ const withIsolatedHome = <A, E, R>(
         Layer.mergeAll(
           Layer.provide(ProfileStoreLive, PlatformServices),
           Layer.provide(CredentialsStoreLive, PlatformServices),
-          Layer.succeed(AlchemyContext, {
-            dotAlchemy: dir,
-            dev: false,
-            adopt: false,
-          }),
+          Layer.succeed(AlchemyContext, { dotAlchemy: dir, dev: false, adopt: false }),
           Interaction.layerNonInteractive(),
           ConfigProvider.layer(ConfigProvider.fromUnknown({})),
         ),
@@ -110,10 +100,7 @@ it.live(
           storedToken(DEFAULT_ACCOUNT, "default-token"),
         );
 
-        const scoped = yield* resolveStateStoreScope({
-          profile: "staging",
-          envFile,
-        });
+        const scoped = yield* resolveStateStoreScope({ profile: "staging", envFile });
         expect(scoped.profile).toBe("staging");
         expect(scoped.accountId).toBe(STAGING_ACCOUNT);
       }),
@@ -154,10 +141,7 @@ it.live(
           storedToken(STAGING_ACCOUNT, "staging-token"),
         );
 
-        const scoped = yield* resolveStateStoreScope({
-          profile: "staging",
-          envFile,
-        });
+        const scoped = yield* resolveStateStoreScope({ profile: "staging", envFile });
         expect(scoped.accountId).toBe(STAGING_ACCOUNT);
 
         // Environment resolution is lazy: missing auth surfaces when the

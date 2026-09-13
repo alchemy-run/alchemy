@@ -15,9 +15,7 @@ const findReportGroupArn = codebuild
   .listReportGroups({})
   .pipe(
     Effect.map((res) =>
-      res.reportGroups?.find((arn) =>
-        arn.endsWith(`report-group/${reportGroupName}`),
-      ),
+      res.reportGroups?.find((arn) => arn.endsWith(`report-group/${reportGroupName}`)),
     ),
   );
 
@@ -44,9 +42,7 @@ test.provider(
           type: "TEST",
         }),
       );
-      expect(deployed.reportGroupArn).toContain(
-        `report-group/${reportGroupName}`,
-      );
+      expect(deployed.reportGroupArn).toContain(`report-group/${reportGroupName}`);
       expect(deployed.reportGroupName).toBe(reportGroupName);
 
       // Out-of-band verification via distilled.
@@ -69,9 +65,7 @@ test.provider(
         }),
       );
       const updated = yield* getReportGroup;
-      expect(updated?.tags?.find((t) => t.key === "Purpose")?.value).toBe(
-        "alchemy-test",
-      );
+      expect(updated?.tags?.find((t) => t.key === "Purpose")?.value).toBe("alchemy-test");
 
       // Re-deploy identical props — sync diff is a no-op that converges.
       yield* stack.deploy(

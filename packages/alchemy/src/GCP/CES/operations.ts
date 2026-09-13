@@ -1,9 +1,6 @@
 import * as ces from "@distilled.cloud/gcp/ces_v1";
 import * as Effect from "effect/Effect";
-import {
-  waitForOperation as waitForLongRunning,
-  type LongRunningOperation,
-} from "../Operation.ts";
+import { waitForOperation as waitForLongRunning, type LongRunningOperation } from "../Operation.ts";
 
 // A display-name clash ("App with display name … already exists") also reports
 // ALREADY_EXISTS but means our resource was never created, so it must fail.
@@ -16,13 +13,9 @@ const OPERATION_BUDGET = "10 minutes";
  * concurrent create won the race; reconcile observes the resource next.
  */
 export const waitForOperation = (operation: LongRunningOperation) =>
-  waitForLongRunning(
-    operation,
-    (name) => ces.getProjectsLocationsOperations({ name }),
-    {
-      budget: OPERATION_BUDGET,
-    },
-  ).pipe(
+  waitForLongRunning(operation, (name) => ces.getProjectsLocationsOperations({ name }), {
+    budget: OPERATION_BUDGET,
+  }).pipe(
     Effect.catchIf(
       (error) => error._tag === "GCP.OperationFailed" && error.code === 6,
       () => Effect.succeed(operation),
@@ -37,8 +30,7 @@ export const waitForDeleteOperation = (operation: LongRunningOperation) =>
   waitForOperation(operation).pipe(
     Effect.catchIf(
       (error) =>
-        error._tag === "NotFound" ||
-        (error._tag === "GCP.OperationFailed" && error.code === 5),
+        error._tag === "NotFound" || (error._tag === "GCP.OperationFailed" && error.code === 5),
       () => Effect.succeed(operation),
     ),
   );

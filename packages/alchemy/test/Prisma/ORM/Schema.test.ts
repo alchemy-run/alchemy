@@ -1,13 +1,7 @@
 import { expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
-import {
-  defineContract,
-  enumType,
-  field,
-  member,
-  model,
-} from "@/Prisma/ORM/index.ts";
+import { defineContract, enumType, field, member, model } from "@/Prisma/ORM/index.ts";
 import { emitSchemas, makeSchemas, SchemaError } from "@/Prisma/ORM/Schema.ts";
 import { contract } from "./fixtures/client/contract.ts";
 
@@ -22,23 +16,13 @@ it.effect(
         name: null,
       });
       expect(row).toEqual({ id: 1, email: "a@example.com", name: null });
-      expect(
-        Schema.is(schemas.public.User)({
-          id: "1",
-          email: "a@example.com",
-          name: null,
-        }),
-      ).toBe(false);
-      expect(
-        Schema.is(schemas.public.User)({ id: 1, email: "a@example.com" }),
-      ).toBe(false);
-      expect(
-        Schema.is(schemas.public.User)({
-          id: 1.5,
-          email: "a@example.com",
-          name: null,
-        }),
-      ).toBe(false);
+      expect(Schema.is(schemas.public.User)({ id: "1", email: "a@example.com", name: null })).toBe(
+        false,
+      );
+      expect(Schema.is(schemas.public.User)({ id: 1, email: "a@example.com" })).toBe(false);
+      expect(Schema.is(schemas.public.User)({ id: 1.5, email: "a@example.com", name: null })).toBe(
+        false,
+      );
     }),
   { tags: ["unit", "provider:prisma", "provider:prisma:orm", "local"] },
 );
@@ -47,28 +31,21 @@ it.effect(
   "maps lists and namespaces without including navigation relations",
   () =>
     Effect.sync(() => {
-      const contract = defineContract(
-        { namespaces: ["auth"] },
-        ({ field, model }) => ({
-          models: {
-            Account: model("Account", {
-              namespace: "auth",
-              fields: {
-                id: field.int().id(),
-                tags: field.text().many(),
-                name: field.text().optional(),
-              },
-            }),
-          },
-        }),
-      );
+      const contract = defineContract({ namespaces: ["auth"] }, ({ field, model }) => ({
+        models: {
+          Account: model("Account", {
+            namespace: "auth",
+            fields: {
+              id: field.int().id(),
+              tags: field.text().many(),
+              name: field.text().optional(),
+            },
+          }),
+        },
+      }));
       const schemas = makeSchemas(contract);
-      expect(
-        Schema.is(schemas.auth.Account)({ id: 1, tags: ["a"], name: null }),
-      ).toBe(true);
-      expect(
-        Schema.is(schemas.auth.Account)({ id: 1, tags: [1], name: null }),
-      ).toBe(false);
+      expect(Schema.is(schemas.auth.Account)({ id: 1, tags: ["a"], name: null })).toBe(true);
+      expect(Schema.is(schemas.auth.Account)({ id: 1, tags: [1], name: null })).toBe(false);
       expect(emitSchemas(contract)).not.toContain("Postgres");
       expect(emitSchemas(contract)).not.toContain("@prisma");
     }),
@@ -90,26 +67,12 @@ it.effect(
         models: {
           Value: model("Value", {
             fields: {
-              id: field
-                .column({ codecId: "pg/int8@1", nativeType: "int8" })
-                .id(),
-              decimal: field.column({
-                codecId: "pg/numeric@1",
-                nativeType: "numeric",
-              }),
-              bytes: field.column({
-                codecId: "pg/bytea@1",
-                nativeType: "bytea",
-              }),
+              id: field.column({ codecId: "pg/int8@1", nativeType: "int8" }).id(),
+              decimal: field.column({ codecId: "pg/numeric@1", nativeType: "numeric" }),
+              bytes: field.column({ codecId: "pg/bytea@1", nativeType: "bytea" }),
               uuid: field.column({ codecId: "pg/uuid@1", nativeType: "uuid" }),
-              date: field.column({
-                codecId: "pg/date-string@1",
-                nativeType: "date",
-              }),
-              json: field.column({
-                codecId: "pg/jsonb@1",
-                nativeType: "jsonb",
-              }),
+              date: field.column({ codecId: "pg/date-string@1", nativeType: "date" }),
+              json: field.column({ codecId: "pg/jsonb@1", nativeType: "jsonb" }),
               status: field.namedType(Status),
             },
           }),
@@ -129,13 +92,9 @@ it.effect(
       expect(Schema.is(schema)({ ...row, id: 1 })).toBe(false);
       expect(Schema.is(schema)({ ...row, decimal: 1.5 })).toBe(false);
       expect(Schema.is(schema)({ ...row, decimal: "invalid" })).toBe(false);
-      expect(Schema.is(schema)({ ...row, json: { invalid: undefined } })).toBe(
-        false,
-      );
+      expect(Schema.is(schema)({ ...row, json: { invalid: undefined } })).toBe(false);
       expect(Schema.is(schema)({ ...row, status: "missing" })).toBe(false);
-      expect(emitSchemas(contract)).toContain(
-        'Schema.Literals(["active","inactive"])',
-      );
+      expect(emitSchemas(contract)).toContain('Schema.Literals(["active","inactive"])');
     }),
   { tags: ["unit", "provider:prisma", "provider:prisma:orm", "local"] },
 );
@@ -179,17 +138,11 @@ it.effect(
         },
       };
       expect(() => makeSchemas(custom)).toThrow(SchemaError);
-      expect(() => emitSchemas(custom)).toThrow(
-        'options.codecs["custom/id@1"]',
-      );
+      expect(() => emitSchemas(custom)).toThrow('options.codecs["custom/id@1"]');
       const options = {
-        codecs: {
-          "custom/id@1": { schema: Schema.String, expression: "Schema.String" },
-        },
+        codecs: { "custom/id@1": { schema: Schema.String, expression: "Schema.String" } },
       };
-      expect(
-        Schema.is(makeSchemas(custom, options).public.Custom)({ id: "custom" }),
-      ).toBe(true);
+      expect(Schema.is(makeSchemas(custom, options).public.Custom)({ id: "custom" })).toBe(true);
       expect(emitSchemas(custom, options)).toContain('"id": Schema.String');
     }),
   { tags: ["unit", "provider:prisma", "provider:prisma:orm", "local"] },

@@ -140,9 +140,7 @@ const USER_POOL_TRIGGER_NAMES: readonly UserPoolTriggerName[] = [
  * Usually populated through the trigger event source
  * (`Cognito.onPreSignUp(pool, ...)` etc.) rather than declared directly.
  */
-export interface UserPoolLambdaConfig extends Partial<
-  Record<UserPoolTriggerName, string>
-> {}
+export interface UserPoolLambdaConfig extends Partial<Record<UserPoolTriggerName, string>> {}
 
 /**
  * The binding contract of a user pool: event sources contribute
@@ -158,9 +156,7 @@ export interface UserPoolBinding {
  * Two different Lambda functions were registered for the same user pool
  * trigger slot — Cognito supports exactly one function per trigger.
  */
-export class ConflictingUserPoolTrigger extends Data.TaggedError(
-  "ConflictingUserPoolTrigger",
-)<{
+export class ConflictingUserPoolTrigger extends Data.TaggedError("ConflictingUserPoolTrigger")<{
   readonly trigger: string;
   readonly functionArns: readonly string[];
 }> {}
@@ -170,20 +166,14 @@ export class ConflictingUserPoolTrigger extends Data.TaggedError(
  * email sender without the KMS key Cognito needs to encrypt the codes it
  * hands to the function). Raised before any API call is made.
  */
-export class InvalidUserPoolConfiguration extends Data.TaggedError(
-  "InvalidUserPoolConfiguration",
-)<{
+export class InvalidUserPoolConfiguration extends Data.TaggedError("InvalidUserPoolConfiguration")<{
   readonly reason: string;
 }> {}
 
 /**
  * A first-factor sign-in method for choice-based authentication.
  */
-export type UserPoolAuthFactor =
-  | "PASSWORD"
-  | "EMAIL_OTP"
-  | "SMS_OTP"
-  | "WEB_AUTHN";
+export type UserPoolAuthFactor = "PASSWORD" | "EMAIL_OTP" | "SMS_OTP" | "WEB_AUTHN";
 
 /**
  * The sign-in policy of the pool — which first-factor authentication
@@ -522,9 +512,7 @@ const toWirePasswordPolicy = (policy: UserPoolPasswordPolicy | undefined) =>
         RequireNumbers: policy.requireNumbers,
         RequireSymbols: policy.requireSymbols,
         PasswordHistorySize: policy.passwordHistorySize,
-        TemporaryPasswordValidityDays: toWireDays(
-          policy.temporaryPasswordValidity,
-        ),
+        TemporaryPasswordValidityDays: toWireDays(policy.temporaryPasswordValidity),
       };
 
 const toWireSchemaAttribute = (attribute: UserPoolSchemaAttribute) => ({
@@ -549,9 +537,7 @@ const toWireSchemaAttribute = (attribute: UserPoolSchemaAttribute) => ({
         },
 });
 
-const toWireAccountRecovery = (
-  mechanisms: UserPoolRecoveryMechanism[] | undefined,
-) =>
+const toWireAccountRecovery = (mechanisms: UserPoolRecoveryMechanism[] | undefined) =>
   mechanisms === undefined
     ? undefined
     : {
@@ -562,9 +548,7 @@ const toWireAccountRecovery = (
       };
 
 const toWireSignInPolicy = (policy: UserPoolSignInPolicy | undefined) =>
-  policy === undefined
-    ? undefined
-    : { AllowedFirstAuthFactors: policy.allowedFirstAuthFactors };
+  policy === undefined ? undefined : { AllowedFirstAuthFactors: policy.allowedFirstAuthFactors };
 
 const toWireEmailConfiguration = (
   config: UserPoolEmailConfiguration | undefined,
@@ -582,9 +566,7 @@ const toWireEmailConfiguration = (
 /** Observed/desired email configuration with the service default filled in,
  * for order- and absence-insensitive comparison (`JSON.stringify` drops the
  * `undefined` members on both sides). */
-const normalizedEmailConfiguration = (
-  config: cip.EmailConfigurationType | undefined,
-) => ({
+const normalizedEmailConfiguration = (config: cip.EmailConfigurationType | undefined) => ({
   emailSendingAccount: config?.EmailSendingAccount ?? "COGNITO_DEFAULT",
   sourceArn: config?.SourceArn,
   from: config?.From,
@@ -644,9 +626,7 @@ const tagRecordOf = (
   tags: { [key: string]: string | undefined } | undefined,
 ): Record<string, string> =>
   Object.fromEntries(
-    Object.entries(tags ?? {}).filter(
-      (entry): entry is [string, string] => entry[1] !== undefined,
-    ),
+    Object.entries(tags ?? {}).filter((entry): entry is [string, string] => entry[1] !== undefined),
   );
 
 /**
@@ -655,36 +635,23 @@ const tagRecordOf = (
  * developer-only attributes).
  */
 const customAttributeWireName = (attribute: UserPoolSchemaAttribute) =>
-  attribute.developerOnlyAttribute
-    ? `dev:custom:${attribute.name}`
-    : `custom:${attribute.name}`;
+  attribute.developerOnlyAttribute ? `dev:custom:${attribute.name}` : `custom:${attribute.name}`;
 
-const schemaAttributeChanged = (
-  before: UserPoolSchemaAttribute,
-  after: UserPoolSchemaAttribute,
-) =>
-  JSON.stringify(toWireSchemaAttribute(before)) !==
-  JSON.stringify(toWireSchemaAttribute(after));
+const schemaAttributeChanged = (before: UserPoolSchemaAttribute, after: UserPoolSchemaAttribute) =>
+  JSON.stringify(toWireSchemaAttribute(before)) !== JSON.stringify(toWireSchemaAttribute(after));
 
 export const UserPoolProvider = () =>
   Provider.effect(
     UserPool,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: Pick<UserPoolProps, "poolName">,
-      ) {
-        return (
-          props.poolName ?? (yield* createPhysicalName({ id, maxLength: 128 }))
-        );
+      const createName = Effect.fn(function* (id: string, props: Pick<UserPoolProps, "poolName">) {
+        return props.poolName ?? (yield* createPhysicalName({ id, maxLength: 128 }));
       });
 
       const describePool = Effect.fn(function* (userPoolId: string) {
         return yield* cip.describeUserPool({ UserPoolId: userPoolId }).pipe(
           Effect.map((r) => r.UserPool),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
         );
       });
 
@@ -693,21 +660,13 @@ export const UserPoolProvider = () =>
        * candidate — callers disambiguate by ownership tags.
        */
       const findPoolsByName = Effect.fn(function* (name: string) {
-        const pages = yield* cip.listUserPools
-          .pages({ MaxResults: 60 })
-          .pipe(Stream.runCollect);
+        const pages = yield* cip.listUserPools.pages({ MaxResults: 60 }).pipe(Stream.runCollect);
         const candidates = Array.from(pages)
           .flatMap((page) => page.UserPools ?? [])
           .filter((pool) => pool.Name === name && pool.Id !== undefined);
-        return yield* Effect.forEach(
-          candidates,
-          (candidate) => describePool(candidate.Id!),
-          {
-            concurrency: 3,
-          },
-        ).pipe(
-          Effect.map((pools) => pools.filter((pool) => pool !== undefined)),
-        );
+        return yield* Effect.forEach(candidates, (candidate) => describePool(candidate.Id!), {
+          concurrency: 3,
+        }).pipe(Effect.map((pools) => pools.filter((pool) => pool !== undefined)));
       });
 
       const attributesOf = (pool: cip.UserPoolType) => ({
@@ -777,8 +736,7 @@ export const UserPoolProvider = () =>
           CustomEmailSender: toWireCustomEmailSender(news.customEmailSender),
           CustomSMSSender: customSMSSender,
           KMSKeyID:
-            news.kmsKeyId ??
-            (customSMSSender !== undefined ? observed?.KMSKeyID : undefined),
+            news.kmsKeyId ?? (customSMSSender !== undefined ? observed?.KMSKeyID : undefined),
         };
         const present = Object.fromEntries(
           Object.entries(config).filter(([, value]) => value !== undefined),
@@ -796,10 +754,8 @@ export const UserPoolProvider = () =>
           if (desired?.[trigger] !== observed?.[trigger]) return true;
         }
         if (
-          desired?.CustomEmailSender?.LambdaArn !==
-            observed?.CustomEmailSender?.LambdaArn ||
-          desired?.CustomEmailSender?.LambdaVersion !==
-            observed?.CustomEmailSender?.LambdaVersion
+          desired?.CustomEmailSender?.LambdaArn !== observed?.CustomEmailSender?.LambdaArn ||
+          desired?.CustomEmailSender?.LambdaVersion !== observed?.CustomEmailSender?.LambdaVersion
         ) {
           return true;
         }
@@ -838,8 +794,7 @@ export const UserPoolProvider = () =>
               ? undefined
               : { PasswordPolicy, SignInPolicy },
           DeletionProtection: news.deletionProtection ? "ACTIVE" : "INACTIVE",
-          AutoVerifiedAttributes:
-            news.autoVerifiedAttributes ?? observed.AutoVerifiedAttributes,
+          AutoVerifiedAttributes: news.autoVerifiedAttributes ?? observed.AutoVerifiedAttributes,
           MfaConfiguration: news.mfaConfiguration ?? "OFF",
           AdminCreateUserConfig:
             news.adminCreateUserOnly === undefined
@@ -850,8 +805,7 @@ export const UserPoolProvider = () =>
                     // Cognito rejects it next to TemporaryPasswordValidityDays
                     AllowAdminCreateUserOnly:
                       observed.AdminCreateUserConfig.AllowAdminCreateUserOnly,
-                    InviteMessageTemplate:
-                      observed.AdminCreateUserConfig.InviteMessageTemplate,
+                    InviteMessageTemplate: observed.AdminCreateUserConfig.InviteMessageTemplate,
                   }
               : { AllowAdminCreateUserOnly: news.adminCreateUserOnly },
           AccountRecoverySetting:
@@ -884,10 +838,7 @@ export const UserPoolProvider = () =>
           temporaryPasswordValidityDays?: number;
         },
       ): Required<
-        Omit<
-          UserPoolPasswordPolicy,
-          "passwordHistorySize" | "temporaryPasswordValidity"
-        >
+        Omit<UserPoolPasswordPolicy, "passwordHistorySize" | "temporaryPasswordValidity">
       > & {
         passwordHistorySize: number | undefined;
         temporaryPasswordValidityDays: number;
@@ -898,8 +849,7 @@ export const UserPoolProvider = () =>
         requireNumbers: policy.requireNumbers ?? true,
         requireSymbols: policy.requireSymbols ?? true,
         passwordHistorySize: policy.passwordHistorySize,
-        temporaryPasswordValidityDays:
-          policy.temporaryPasswordValidityDays ?? 7,
+        temporaryPasswordValidityDays: policy.temporaryPasswordValidityDays ?? 7,
       });
 
       /** True when the observed pool differs from the desired mutable state.
@@ -918,12 +868,7 @@ export const UserPoolProvider = () =>
         if (
           news.signInPolicy?.allowedFirstAuthFactors !== undefined &&
           [...news.signInPolicy.allowedFirstAuthFactors].sort().join(",") !==
-            [
-              ...(observed.Policies?.SignInPolicy?.AllowedFirstAuthFactors ??
-                []),
-            ]
-              .sort()
-              .join(",")
+            [...(observed.Policies?.SignInPolicy?.AllowedFirstAuthFactors ?? [])].sort().join(",")
         ) {
           return true;
         }
@@ -936,14 +881,11 @@ export const UserPoolProvider = () =>
           });
           const actual = normalizedPasswordPolicy({
             minimumLength: observed.Policies?.PasswordPolicy?.MinimumLength,
-            requireUppercase:
-              observed.Policies?.PasswordPolicy?.RequireUppercase,
-            requireLowercase:
-              observed.Policies?.PasswordPolicy?.RequireLowercase,
+            requireUppercase: observed.Policies?.PasswordPolicy?.RequireUppercase,
+            requireLowercase: observed.Policies?.PasswordPolicy?.RequireLowercase,
             requireNumbers: observed.Policies?.PasswordPolicy?.RequireNumbers,
             requireSymbols: observed.Policies?.PasswordPolicy?.RequireSymbols,
-            passwordHistorySize:
-              observed.Policies?.PasswordPolicy?.PasswordHistorySize,
+            passwordHistorySize: observed.Policies?.PasswordPolicy?.PasswordHistorySize,
             temporaryPasswordValidityDays:
               observed.Policies?.PasswordPolicy?.TemporaryPasswordValidityDays,
           });
@@ -962,22 +904,14 @@ export const UserPoolProvider = () =>
         ) {
           return true;
         }
-        if (
-          (news.mfaConfiguration ?? "OFF") !==
-          (observed.MfaConfiguration ?? "OFF")
-        ) {
+        if ((news.mfaConfiguration ?? "OFF") !== (observed.MfaConfiguration ?? "OFF")) {
           return true;
         }
         if (
           news.emailConfiguration !== undefined &&
           JSON.stringify(
-            normalizedEmailConfiguration(
-              toWireEmailConfiguration(news.emailConfiguration),
-            ),
-          ) !==
-            JSON.stringify(
-              normalizedEmailConfiguration(observed.EmailConfiguration),
-            )
+            normalizedEmailConfiguration(toWireEmailConfiguration(news.emailConfiguration)),
+          ) !== JSON.stringify(normalizedEmailConfiguration(observed.EmailConfiguration))
         ) {
           return true;
         }
@@ -992,12 +926,10 @@ export const UserPoolProvider = () =>
           news.accountRecovery !== undefined &&
           canonicalRecovery(news.accountRecovery) !==
             canonicalRecovery(
-              (observed.AccountRecoverySetting?.RecoveryMechanisms ?? []).map(
-                (m) => ({
-                  priority: m.Priority,
-                  name: m.Name,
-                }),
-              ),
+              (observed.AccountRecoverySetting?.RecoveryMechanisms ?? []).map((m) => ({
+                priority: m.Priority,
+                name: m.Name,
+              })),
             )
         ) {
           return true;
@@ -1016,17 +948,13 @@ export const UserPoolProvider = () =>
             const pages = yield* cip.listUserPools
               .pages({ MaxResults: 60 })
               .pipe(Stream.runCollect);
-            const descriptions = Array.from(pages).flatMap(
-              (page) => page.UserPools ?? [],
-            );
+            const descriptions = Array.from(pages).flatMap((page) => page.UserPools ?? []);
             const pools = yield* Effect.forEach(
               descriptions.filter((d) => d.Id !== undefined),
               (d) => describePool(d.Id!),
               { concurrency: 5 },
             );
-            return pools
-              .filter((pool) => pool !== undefined)
-              .map((pool) => attributesOf(pool));
+            return pools.filter((pool) => pool !== undefined).map((pool) => attributesOf(pool));
           }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
@@ -1059,8 +987,7 @@ export const UserPoolProvider = () =>
               JSON.stringify(news?.usernameAttributes ?? []) ||
             JSON.stringify(olds?.aliasAttributes ?? []) !==
               JSON.stringify(news?.aliasAttributes ?? []) ||
-            (olds?.usernameCaseSensitive ?? true) !==
-              (news?.usernameCaseSensitive ?? true)
+            (olds?.usernameCaseSensitive ?? true) !== (news?.usernameCaseSensitive ?? true)
           ) {
             return { action: "replace" } as const;
           }
@@ -1075,13 +1002,7 @@ export const UserPoolProvider = () =>
           }
         }),
 
-        reconcile: Effect.fn(function* ({
-          id,
-          news = {},
-          output,
-          session,
-          bindings,
-        }) {
+        reconcile: Effect.fn(function* ({ id, news = {}, output, session, bindings }) {
           yield* validateProps(news);
           const name = output?.userPoolName ?? (yield* createName(id, news));
           const internalTags = yield* createInternalTags(id);
@@ -1091,18 +1012,14 @@ export const UserPoolProvider = () =>
           // 1. OBSERVE — output.userPoolId is only a cache; fall back to a
           //    name search so out-of-band deletes and adoption converge.
           let observed =
-            output?.userPoolId !== undefined
-              ? yield* describePool(output.userPoolId)
-              : undefined;
+            output?.userPoolId !== undefined ? yield* describePool(output.userPoolId) : undefined;
           if (observed === undefined) {
             // Recover from state loss by name — only take over a pool that
             // carries our ownership tags (adoption flows arrive with output
             // set, not through this path).
             const candidates = yield* findPoolsByName(name);
             for (const candidate of candidates) {
-              if (
-                yield* hasAlchemyTags(id, tagRecordOf(candidate.UserPoolTags))
-              ) {
+              if (yield* hasAlchemyTags(id, tagRecordOf(candidate.UserPoolTags))) {
                 observed = candidate;
                 break;
               }
@@ -1116,21 +1033,14 @@ export const UserPoolProvider = () =>
                 PoolName: name,
                 LambdaConfig: desiredLambdaConfig(news, triggers, undefined),
                 Policies:
-                  news.passwordPolicy === undefined &&
-                  news.signInPolicy === undefined
+                  news.passwordPolicy === undefined && news.signInPolicy === undefined
                     ? undefined
                     : {
-                        PasswordPolicy: toWirePasswordPolicy(
-                          news.passwordPolicy,
-                        ),
+                        PasswordPolicy: toWirePasswordPolicy(news.passwordPolicy),
                         SignInPolicy: toWireSignInPolicy(news.signInPolicy),
                       },
-                DeletionProtection: news.deletionProtection
-                  ? "ACTIVE"
-                  : "INACTIVE",
-                EmailConfiguration: toWireEmailConfiguration(
-                  news.emailConfiguration,
-                ),
+                DeletionProtection: news.deletionProtection ? "ACTIVE" : "INACTIVE",
+                EmailConfiguration: toWireEmailConfiguration(news.emailConfiguration),
                 UsernameAttributes: news.usernameAttributes,
                 AliasAttributes: news.aliasAttributes,
                 AutoVerifiedAttributes: news.autoVerifiedAttributes,
@@ -1140,9 +1050,7 @@ export const UserPoolProvider = () =>
                   news.adminCreateUserOnly === undefined
                     ? undefined
                     : { AllowAdminCreateUserOnly: news.adminCreateUserOnly },
-                AccountRecoverySetting: toWireAccountRecovery(
-                  news.accountRecovery,
-                ),
+                AccountRecoverySetting: toWireAccountRecovery(news.accountRecovery),
                 UsernameConfiguration:
                   news.usernameCaseSensitive === undefined
                     ? undefined
@@ -1155,11 +1063,7 @@ export const UserPoolProvider = () =>
             // 3. SYNC — updateUserPool resets omitted fields to defaults, so
             //    the body is always the full desired mutable state; skip the
             //    call entirely when nothing drifted.
-            const lambdaConfig = desiredLambdaConfig(
-              news,
-              triggers,
-              observed.LambdaConfig,
-            );
+            const lambdaConfig = desiredLambdaConfig(news, triggers, observed.LambdaConfig);
             if (hasDrift(news, observed, lambdaConfig)) {
               yield* cip.updateUserPool({
                 UserPoolId: observed.Id!,
@@ -1191,14 +1095,12 @@ export const UserPoolProvider = () =>
 
           // 3c. SYNC TAGS — diff against OBSERVED cloud tags so adoption
           //     converges (never olds/output).
-          const observedTags = yield* cip
-            .listTagsForResource({ ResourceArn: userPoolArn })
-            .pipe(
-              Effect.map((r) => tagRecordOf(r.Tags)),
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed({} as Record<string, string>),
-              ),
-            );
+          const observedTags = yield* cip.listTagsForResource({ ResourceArn: userPoolArn }).pipe(
+            Effect.map((r) => tagRecordOf(r.Tags)),
+            Effect.catchTag("ResourceNotFoundException", () =>
+              Effect.succeed({} as Record<string, string>),
+            ),
+          );
           const { upsert, removed } = diffTags(observedTags, desiredTags);
           if (upsert.length > 0) {
             yield* cip.tagResource({
@@ -1220,9 +1122,7 @@ export const UserPoolProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* cip
             .deleteUserPool({ UserPoolId: output.userPoolId })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       });
     }),

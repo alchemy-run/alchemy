@@ -1,21 +1,9 @@
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 
-export const SPINNER_FRAMES = [
-  "⠋",
-  "⠙",
-  "⠹",
-  "⠸",
-  "⠼",
-  "⠴",
-  "⠦",
-  "⠧",
-  "⠇",
-  "⠏",
-];
+export const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
 export const prefersReducedMotion = () =>
-  typeof window !== "undefined" &&
-  window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 /** Pauses of at least this long are a demo holding a finished frame. */
 const HOLD_MS = 2000;
@@ -36,10 +24,7 @@ export function useSpinner(active: boolean, intervalMs = 80): string {
   const [i, setI] = useState(0);
   useEffect(() => {
     if (!active || prefersReducedMotion()) return;
-    const t = setInterval(
-      () => setI((v) => (v + 1) % SPINNER_FRAMES.length),
-      intervalMs,
-    );
+    const t = setInterval(() => setI((v) => (v + 1) % SPINNER_FRAMES.length), intervalMs);
     return () => clearInterval(t);
   }, [active, intervalMs]);
   return SPINNER_FRAMES[i]!;
@@ -133,18 +118,9 @@ export function TermChrome({
     // fragments ("~/my-appDEV", "○localhost:1337/ HMR").
     <div className="alc-term not-content" data-nosnippet="">
       <div className="alc-term__header">
-        <span
-          className="alc-code-block__dot"
-          style={{ background: "var(--alc-danger)" }}
-        />
-        <span
-          className="alc-code-block__dot"
-          style={{ background: "var(--alc-warn)" }}
-        />
-        <span
-          className="alc-code-block__dot"
-          style={{ background: "var(--alc-accent-bright)" }}
-        />
+        <span className="alc-code-block__dot" style={{ background: "var(--alc-danger)" }} />
+        <span className="alc-code-block__dot" style={{ background: "var(--alc-warn)" }} />
+        <span className="alc-code-block__dot" style={{ background: "var(--alc-accent-bright)" }} />
         <span className="alc-term__title">{title}</span>
         <span style={{ flex: 1 }} />
         {badge && badgeColor && (
@@ -173,16 +149,6 @@ export function TermChrome({
   );
 }
 
-export function Line({
-  children,
-  style,
-}: {
-  children?: ReactNode;
-  style?: CSSProperties;
-}) {
-  return (
-    <div style={{ minHeight: "1.55em", whiteSpace: "pre", ...style }}>
-      {children}
-    </div>
-  );
+export function Line({ children, style }: { children?: ReactNode; style?: CSSProperties }) {
+  return <div style={{ minHeight: "1.55em", whiteSpace: "pre", ...style }}>{children}</div>;
 }

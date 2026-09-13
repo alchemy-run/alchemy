@@ -24,10 +24,7 @@ const sharedStack = Core.scratchStack(testOptions, "EMRServerlessBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 let functionArn: string;
@@ -63,43 +60,28 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
 const getJson = (path: string) =>
-  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 const postJson = (path: string) =>
-  send(HttpClientRequest.post(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.post(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 const waitForTerminalJobRun = (jobRunId: string) =>
   getJson(`/jobrun-detail?id=${jobRunId}`).pipe(
     Effect.flatMap((value) => {
-      const detail = value as {
-        jobRunId: string;
-        state: string;
-        stateDetails?: string;
-      };
-      return terminalJobRunStates.includes(
-        detail.state as (typeof terminalJobRunStates)[number],
-      )
+      const detail = value as { jobRunId: string; state: string; stateDetails?: string };
+      return terminalJobRunStates.includes(detail.state as (typeof terminalJobRunStates)[number])
         ? Effect.succeed(detail)
         : Effect.fail(
             new JobRunNotTerminal({
@@ -110,16 +92,11 @@ const waitForTerminalJobRun = (jobRunId: string) =>
           );
     }),
     Effect.tapError((error) =>
-      error._tag === "JobRunNotTerminal"
-        ? Effect.logInfo(error.message)
-        : Effect.void,
+      error._tag === "JobRunNotTerminal" ? Effect.logInfo(error.message) : Effect.void,
     ),
     Effect.retry({
       while: (error) => error._tag === "JobRunNotTerminal",
-      schedule: Schedule.max([
-        Schedule.spaced("3 seconds"),
-        Schedule.recurs(40),
-      ]),
+      schedule: Schedule.max([Schedule.spaced("3 seconds"), Schedule.recurs(40)]),
     }),
   );
 
@@ -128,28 +105,18 @@ const waitForApplicationStarted = (applicationId: string) =>
     Effect.flatMap(({ application }) =>
       application.state === "STARTED"
         ? Effect.succeed(application)
-        : Effect.fail(
-            new ApplicationNotStarted({
-              applicationId,
-              state: application.state,
-            }),
-          ),
+        : Effect.fail(new ApplicationNotStarted({ applicationId, state: application.state })),
     ),
     Effect.retry({
       while: (error) => error._tag === "ApplicationNotStarted",
-      schedule: Schedule.max([
-        Schedule.spaced("3 seconds"),
-        Schedule.recurs(15),
-      ]),
+      schedule: Schedule.max([Schedule.spaced("3 seconds"), Schedule.recurs(15)]),
     }),
   );
 
 /** Find the fixture application out-of-band via its deterministic name. */
 const findApplication = Effect.gen(function* () {
   const summary = yield* emr.listApplications.items({}).pipe(
-    Stream.filter(
-      (s) => s.name === BINDINGS_APP_NAME && s.state !== "TERMINATED",
-    ),
+    Stream.filter((s) => s.name === BINDINGS_APP_NAME && s.state !== "TERMINATED"),
     Stream.runHead,
     Effect.map(Option.getOrUndefined),
   );
@@ -171,9 +138,7 @@ describe.sequential(
   () => {
     beforeAll(
       Effect.gen(function* () {
-        yield* Effect.logInfo(
-          "EMRServerless test setup: destroying previous resources",
-        );
+        yield* Effect.logInfo("EMRServerless test setup: destroying previous resources");
         yield* sharedStack.destroy();
 
         yield* Effect.logInfo("EMRServerless test setup: deploying fixture");
@@ -188,21 +153,15 @@ describe.sequential(
         functionArn = attrs.functionArn;
 
         const readinessUrl = `${baseUrl}/bindings`;
-        yield* Effect.logInfo(
-          `EMRServerless test setup: probing readiness at ${readinessUrl}`,
-        );
+        yield* Effect.logInfo(`EMRServerless test setup: probing readiness at ${readinessUrl}`);
         yield* HttpClient.get(readinessUrl).pipe(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.tapError((error) =>
-            Effect.logWarning(
-              `EMRServerless test setup: fixture not ready yet (${String(error)})`,
-            ),
+            Effect.logWarning(`EMRServerless test setup: fixture not ready yet (${String(error)})`),
           ),
           Effect.retry({ schedule: readinessPolicy }),
         );
@@ -222,13 +181,11 @@ describe.sequential(
     });
 
     describe("ListJobRuns", () => {
-      test.provider(
-        "reads job runs through the injected application id",
-        (_stack) =>
-          Effect.gen(function* () {
-            const response = (yield* getJson("/jobruns")) as { ids: string[] };
-            expect(Array.isArray(response.ids)).toBe(true);
-          }),
+      test.provider("reads job runs through the injected application id", (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* getJson("/jobruns")) as { ids: string[] };
+          expect(Array.isArray(response.ids)).toBe(true);
+        }),
       );
     });
 
@@ -250,38 +207,13 @@ describe.sequential(
       // ValidationException instead — either tag proves the IAM grant passed
       // authorization and the application id was injected.
       const probes: ReadonlyArray<
-        readonly [
-          name: string,
-          method: "GET" | "POST",
-          path: string,
-          tags: readonly string[],
-        ]
+        readonly [name: string, method: "GET" | "POST", path: string, tags: readonly string[]]
       > = [
         ["GetJobRun", "GET", "/jobrun", ["ResourceNotFoundException"]],
-        [
-          "GetDashboardForJobRun",
-          "GET",
-          "/jobrun-dashboard",
-          ["ResourceNotFoundException"],
-        ],
-        [
-          "ListJobRunAttempts",
-          "GET",
-          "/jobrun-attempts",
-          ["ResourceNotFoundException"],
-        ],
-        [
-          "CancelJobRun",
-          "POST",
-          "/jobrun-cancel-fake",
-          ["ResourceNotFoundException"],
-        ],
-        [
-          "GetSession",
-          "GET",
-          "/session",
-          ["ResourceNotFoundException", "ValidationException"],
-        ],
+        ["GetDashboardForJobRun", "GET", "/jobrun-dashboard", ["ResourceNotFoundException"]],
+        ["ListJobRunAttempts", "GET", "/jobrun-attempts", ["ResourceNotFoundException"]],
+        ["CancelJobRun", "POST", "/jobrun-cancel-fake", ["ResourceNotFoundException"]],
+        ["GetSession", "GET", "/session", ["ResourceNotFoundException", "ValidationException"]],
         [
           "GetSessionEndpoint",
           "GET",
@@ -297,54 +229,47 @@ describe.sequential(
       ] as const;
 
       for (const [name, method, path, tags] of probes) {
-        test.provider(
-          `${name} answers with a typed error (not AccessDenied)`,
-          (_stack) =>
-            Effect.gen(function* () {
-              const response = (yield* method === "GET"
-                ? getJson(path)
-                : postJson(path)) as { tag: string; detail: string };
-              expect(response.detail).not.toContain("not authorized");
-              expect(tags).toContain(response.tag);
-            }),
+        test.provider(`${name} answers with a typed error (not AccessDenied)`, (_stack) =>
+          Effect.gen(function* () {
+            const response = (yield* method === "GET" ? getJson(path) : postJson(path)) as {
+              tag: string;
+              detail: string;
+            };
+            expect(response.detail).not.toContain("not authorized");
+            expect(tags).toContain(response.tag);
+          }),
         );
       }
     });
 
     describe("GetResourceDashboard", () => {
-      test.provider(
-        "answers with the typed service-gate tag (see probe.test.ts)",
-        (_stack) =>
-          Effect.gen(function* () {
-            // The service currently denies emr-serverless:GetResourceDashboard
-            // for every caller (even Action:"*" admins) — the operation backs
-            // the console dashboards and has not launched for API callers.
-            // probe.test.ts pins that platform gate; here we assert the
-            // binding surfaces the same typed tag end-to-end from the Lambda.
-            const response = (yield* getJson("/resource-dashboard")) as {
-              tag: string;
-            };
-            expect(response.tag).toBe("AccessDeniedException");
-          }),
+      test.provider("answers with the typed service-gate tag (see probe.test.ts)", (_stack) =>
+        Effect.gen(function* () {
+          // The service currently denies emr-serverless:GetResourceDashboard
+          // for every caller (even Action:"*" admins) — the operation backs
+          // the console dashboards and has not launched for API callers.
+          // probe.test.ts pins that platform gate; here we assert the
+          // binding surfaces the same typed tag end-to-end from the Lambda.
+          const response = (yield* getJson("/resource-dashboard")) as { tag: string };
+          expect(response.tag).toBe("AccessDeniedException");
+        }),
       );
     });
 
     describe("StartSession", () => {
-      test.provider(
-        "grant + PassRole reach the service (typed validation error)",
-        (_stack) =>
-          Effect.gen(function* () {
-            // The fixture application has no interactive configuration, so the
-            // service must answer with a typed validation error — reaching it
-            // proves both the StartSession grant and the PassRole statement.
-            const { Account } = yield* sts.getCallerIdentity({});
-            const roleArn = `arn:aws:iam::${Account}:role/${BINDINGS_ROLE_NAME}`;
-            const response = (yield* postJson(
-              `/session-start?roleArn=${encodeURIComponent(roleArn)}`,
-            )) as { tag: string; detail: string };
-            expect(response.detail).not.toContain("not authorized");
-            expect(response.tag).toBe("ValidationException");
-          }),
+      test.provider("grant + PassRole reach the service (typed validation error)", (_stack) =>
+        Effect.gen(function* () {
+          // The fixture application has no interactive configuration, so the
+          // service must answer with a typed validation error — reaching it
+          // proves both the StartSession grant and the PassRole statement.
+          const { Account } = yield* sts.getCallerIdentity({});
+          const roleArn = `arn:aws:iam::${Account}:role/${BINDINGS_ROLE_NAME}`;
+          const response = (yield* postJson(
+            `/session-start?roleArn=${encodeURIComponent(roleArn)}`,
+          )) as { tag: string; detail: string };
+          expect(response.detail).not.toContain("not authorized");
+          expect(response.tag).toBe("ValidationException");
+        }),
       );
     });
 
@@ -360,16 +285,17 @@ describe.sequential(
             // 2. Submit a job run (SparkPi from the EMR image).
             const { Account } = yield* sts.getCallerIdentity({});
             const roleArn = `arn:aws:iam::${Account}:role/${BINDINGS_ROLE_NAME}`;
-            const run = (yield* postJson(
-              `/jobrun-run?roleArn=${encodeURIComponent(roleArn)}`,
-            )) as { jobRunId: string; arn: string };
+            const run = (yield* postJson(`/jobrun-run?roleArn=${encodeURIComponent(roleArn)}`)) as {
+              jobRunId: string;
+              arn: string;
+            };
             expect(run.jobRunId).toBeTruthy();
             expect(run.arn).toContain("/jobruns/");
 
             // 3. Cancel it immediately (no workers ever run).
-            const cancelled = (yield* postJson(
-              `/jobrun-cancel?id=${run.jobRunId}`,
-            )) as { jobRunId: string };
+            const cancelled = (yield* postJson(`/jobrun-cancel?id=${run.jobRunId}`)) as {
+              jobRunId: string;
+            };
             expect(cancelled.jobRunId).toBe(run.jobRunId);
 
             // 4. GetJobRun observes the cancellation through a terminal state.
@@ -388,16 +314,9 @@ describe.sequential(
             //    job settles under load, but StopApplication is only valid from
             //    STARTED.
             const app = yield* findApplication;
-            const { application } = yield* emr.getApplication({
-              applicationId: app.id,
-            });
-            if (
-              application.state === "CREATED" ||
-              application.state === "STOPPED"
-            ) {
-              const restarted = (yield* postJson("/app-start")) as {
-                tag: string;
-              };
+            const { application } = yield* emr.getApplication({ applicationId: app.id });
+            if (application.state === "CREATED" || application.state === "STOPPED") {
+              const restarted = (yield* postJson("/app-start")) as { tag: string };
               expect(restarted.tag).toBe("ok");
             }
             const startedApplication = yield* waitForApplicationStarted(app.id);
@@ -411,24 +330,18 @@ describe.sequential(
       );
     });
 
-    describe(
-      "consumeJobRunEvents",
-      { tags: ["provider:aws:eventbridge"] },
-      () => {
-        test.provider(
-          "the deploy created an EventBridge rule targeting the function",
-          (_stack) =>
-            Effect.gen(function* () {
-              // Out-of-band via distilled: the fixture's consumeJobRunEvents must
-              // have materialized as a rule on the default bus with the Lambda as
-              // target.
-              const { RuleNames } = yield* eventbridge.listRuleNamesByTarget({
-                TargetArn: functionArn,
-              });
-              expect((RuleNames ?? []).length).toBeGreaterThanOrEqual(1);
-            }),
-        );
-      },
-    );
+    describe("consumeJobRunEvents", { tags: ["provider:aws:eventbridge"] }, () => {
+      test.provider("the deploy created an EventBridge rule targeting the function", (_stack) =>
+        Effect.gen(function* () {
+          // Out-of-band via distilled: the fixture's consumeJobRunEvents must
+          // have materialized as a rule on the default bus with the Lambda as
+          // target.
+          const { RuleNames } = yield* eventbridge.listRuleNamesByTarget({
+            TargetArn: functionArn,
+          });
+          expect((RuleNames ?? []).length).toBeGreaterThanOrEqual(1);
+        }),
+      );
+    });
   },
 );

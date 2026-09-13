@@ -1,5 +1,5 @@
-import * as aiplatform from "@distilled.cloud/gcp/aiplatform_v1";
 import { createHash } from "node:crypto";
+import * as aiplatform from "@distilled.cloud/gcp/aiplatform_v1";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -41,11 +41,7 @@ export type StudyParameterSpec = {
   /** Categorical feasible values. */
   categoricalValueSpec?: { values?: string[]; defaultValue?: string };
   /** Scaling. Leave unset for categorical parameters. */
-  scaleType?:
-    | "UNIT_LINEAR_SCALE"
-    | "UNIT_LOG_SCALE"
-    | "UNIT_REVERSE_LOG_SCALE"
-    | (string & {});
+  scaleType?: "UNIT_LINEAR_SCALE" | "UNIT_LOG_SCALE" | "UNIT_REVERSE_LOG_SCALE" | (string & {});
 };
 
 export type StudySpec = {
@@ -54,16 +50,9 @@ export type StudySpec = {
   /** Parameters to tune. */
   parameters: StudyParameterSpec[];
   /** Search algorithm. */
-  algorithm?:
-    | "ALGORITHM_UNSPECIFIED"
-    | "GRID_SEARCH"
-    | "RANDOM_SEARCH"
-    | (string & {});
+  algorithm?: "ALGORITHM_UNSPECIFIED" | "GRID_SEARCH" | "RANDOM_SEARCH" | (string & {});
   /** Which measurement to use when a trial reports several. */
-  measurementSelectionType?:
-    | "LAST_MEASUREMENT"
-    | "BEST_MEASUREMENT"
-    | (string & {});
+  measurementSelectionType?: "LAST_MEASUREMENT" | "BEST_MEASUREMENT" | (string & {});
 };
 
 export type StudyProps = {
@@ -141,15 +130,11 @@ export type Study = Resource<
  */
 export const Study = Resource<Study>("GCP.AIPlatform.Study");
 
-export class StudyNotResolved extends Data.TaggedError(
-  "GCP.AIPlatform.StudyNotResolved",
-)<{
+export class StudyNotResolved extends Data.TaggedError("GCP.AIPlatform.StudyNotResolved")<{
   name: string;
 }> {}
 
-const toStudySpec = (
-  spec: StudySpec,
-): aiplatform.GoogleCloudAiplatformV1StudySpec => ({
+const toStudySpec = (spec: StudySpec): aiplatform.GoogleCloudAiplatformV1StudySpec => ({
   metrics: spec.metrics.map((metric) => ({
     metricId: metric.metricId,
     goal: metric.goal,
@@ -188,10 +173,7 @@ const ownerSuffix = (id: string) =>
       Effect.sync(
         () =>
           OWNER_SEPARATOR +
-          createHash("sha256")
-            .update(JSON.stringify(labels))
-            .digest("hex")
-            .slice(0, 20),
+          createHash("sha256").update(JSON.stringify(labels)).digest("hex").slice(0, 20),
       ),
     ),
   );
@@ -201,9 +183,7 @@ const encodeDisplayName = (suffix: string, displayName: string | undefined) =>
 
 const parseDisplayName = (displayName: string | undefined) => {
   const at = displayName?.lastIndexOf(OWNER_SEPARATOR) ?? -1;
-  return displayName !== undefined && at > 0
-    ? displayName.slice(0, at)
-    : displayName;
+  return displayName !== undefined && at > 0 ? displayName.slice(0, at) : displayName;
 };
 
 /** Whether a study's display name carries an Alchemy ownership suffix. */
@@ -211,14 +191,9 @@ export const hasStudyOwnership = (displayName: string | undefined) =>
   (displayName?.lastIndexOf(OWNER_SEPARATOR) ?? -1) > 0;
 
 const ownedByAlchemy = (id: string, displayName: string | undefined) =>
-  ownerSuffix(id).pipe(
-    Effect.map((suffix) => displayName?.endsWith(suffix) === true),
-  );
+  ownerSuffix(id).pipe(Effect.map((suffix) => displayName?.endsWith(suffix) === true));
 
-const toAttrs = (
-  study: aiplatform.GoogleCloudAiplatformV1Study,
-  project: string,
-) => {
+const toAttrs = (study: aiplatform.GoogleCloudAiplatformV1Study, project: string) => {
   const name = study.name ?? "";
   const parsed = { text: parseDisplayName(study.displayName) };
   return {
@@ -287,22 +262,15 @@ export const StudyProvider = () =>
       const existing = yield* getByName(output?.name ?? "");
       if (existing !== undefined) {
         const attrs = toAttrs(existing, env.project);
-        return (yield* ownedByAlchemy(id, existing.displayName))
-          ? attrs
-          : Unowned(attrs);
+        return (yield* ownedByAlchemy(id, existing.displayName)) ? attrs : Unowned(attrs);
       }
       const location = olds?.location ?? output?.location ?? env.region;
       const parent = locationParent(env.project, location);
-      const displayName = encodeDisplayName(
-        yield* ownerSuffix(id),
-        olds?.displayName,
-      );
+      const displayName = encodeDisplayName(yield* ownerSuffix(id), olds?.displayName);
       const lookedUp = yield* lookupByDisplayName(parent, displayName);
       if (lookedUp === undefined) return undefined;
       const attrs = toAttrs(lookedUp, env.project);
-      return (yield* ownedByAlchemy(id, lookedUp.displayName))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, lookedUp.displayName)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -317,10 +285,7 @@ export const StudyProvider = () =>
       const env = yield* GcpEnvironment.current;
       const location = news.location ?? output?.location ?? env.region;
       const parent = locationParent(env.project, location);
-      const displayName = encodeDisplayName(
-        yield* ownerSuffix(id),
-        news.displayName,
-      );
+      const displayName = encodeDisplayName(yield* ownerSuffix(id), news.displayName);
       const studySpec = toStudySpec(news.studySpec);
 
       let current = yield* getByName(output?.name ?? "");
@@ -337,11 +302,7 @@ export const StudyProvider = () =>
               studySpec,
             },
           })
-          .pipe(
-            Effect.catchTag("Conflict", () =>
-              lookupByDisplayName(parent, displayName),
-            ),
-          );
+          .pipe(Effect.catchTag("Conflict", () => lookupByDisplayName(parent, displayName)));
         current = created ?? undefined;
       }
 

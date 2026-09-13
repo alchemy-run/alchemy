@@ -10,9 +10,7 @@ test.provider(
   "diag list",
   (stack) =>
     Effect.gen(function* () {
-      const provider = yield* Provider.findProvider(
-        Cloudflare.LoadBalancer.Monitor,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.LoadBalancer.Monitor);
       const all = yield* provider.list();
       expect(Array.isArray(all)).toBe(true);
       yield* stack.destroy();

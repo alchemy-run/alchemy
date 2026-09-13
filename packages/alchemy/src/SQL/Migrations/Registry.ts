@@ -44,9 +44,7 @@ export interface NormalizedMigrationsInput {
   table?: string;
 }
 
-export const normalizeMigrationsInput = (
-  input: MigrationsInput,
-): NormalizedMigrationsInput => {
+export const normalizeMigrationsInput = (input: MigrationsInput): NormalizedMigrationsInput => {
   if (typeof input === "string") return { dir: input };
   if ("out" in input) return { dir: input.out };
   return input;
@@ -155,18 +153,12 @@ export const runMigrations = <E, R>(options: {
       FileSystem.FileSystem | Path.Path
     >,
   ) => Effect.Effect<void, E, R>;
-}): Effect.Effect<
-  MigrationRun,
-  MigrationError | E,
-  R | FileSystem.FileSystem | Path.Path
-> =>
+}): Effect.Effect<MigrationRun, MigrationError | E, R | FileSystem.FileSystem | Path.Path> =>
   Effect.gen(function* () {
     const hashes = yield* hashMigrationsDir(options.input.dir);
     const resolved = resolveMigrations(options);
     if (Object.keys(hashes).length > 0) {
-      yield* options.withExecutor((executor) =>
-        applyMigrations({ resolved, executor }),
-      );
+      yield* options.withExecutor((executor) => applyMigrations({ resolved, executor }));
     }
     return { resolved, hashes };
   });
@@ -196,9 +188,7 @@ export const diffMigrations = (options: {
       input,
       stamped: stampedOf(options.output),
     });
-    return (
-      resolved.table !== (options.output?.migrationsTable ?? resolved.table)
-    );
+    return resolved.table !== (options.output?.migrationsTable ?? resolved.table);
   });
 
 /**
@@ -222,8 +212,6 @@ export const migrationsAttrs = (options: {
   migrationsHashes: Record<string, string>;
 } => ({
   migrationsDir: options.input?.dir,
-  migrationsTable:
-    options.run?.resolved.table ?? options.output?.migrationsTable,
-  migrationsHashes:
-    options.run?.hashes ?? options.output?.migrationsHashes ?? {},
+  migrationsTable: options.run?.resolved.table ?? options.output?.migrationsTable,
+  migrationsHashes: options.run?.hashes ?? options.output?.migrationsHashes ?? {},
 });

@@ -115,9 +115,7 @@ export const resolveCloudflareOptions = (
  */
 export const resolveRoot: (
   options: Options,
-) => Effect.Effect<string | undefined, never, Path.Path> = Effect.fn(function* (
-  options: Options,
-) {
+) => Effect.Effect<string | undefined, never, Path.Path> = Effect.fn(function* (options: Options) {
   if (options.root === undefined) {
     return undefined;
   }
@@ -156,15 +154,12 @@ export declare namespace Options {
    */
   type FrameworkFactory = (
     options: Options,
-  ) =>
-    | FrameworkLayer
-    | Effect.Effect<FrameworkLayer, unknown, FrameworkServices>;
+  ) => FrameworkLayer | Effect.Effect<FrameworkLayer, unknown, FrameworkServices>;
 
   type FrameworkInput = string | FrameworkLayer | FrameworkFactory;
 }
 
-export const make = (options: Options.Input) =>
-  Object.assign(options, { [kOptions]: true });
+export const make = (options: Options.Input) => Object.assign(options, { [kOptions]: true });
 
 export const load = Effect.fn(function* () {
   const path = yield* Path.Path;

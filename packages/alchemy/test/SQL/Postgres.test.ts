@@ -65,10 +65,7 @@ test(
       name: "erina",
       email: "erina@example.com",
     };
-    const updated = (yield* putJson(`${url}/users/values`, [
-      daveV2,
-      erinV2,
-    ])) as {
+    const updated = (yield* putJson(`${url}/users/values`, [daveV2, erinV2])) as {
       rows: UserRow[];
     };
     expect(updated.rows).toEqual([daveV2, erinV2]);

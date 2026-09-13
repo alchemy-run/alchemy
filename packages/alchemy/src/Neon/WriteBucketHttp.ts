@@ -4,9 +4,7 @@ import { makeStorageBinding, storageHttpLayer } from "./StorageBinding.ts";
 import { WriteBucket, type WriteBucketClient } from "./WriteBucket.ts";
 
 export const makeWriteBucketClient = (
-  client: Effect.Success<
-    ReturnType<Effect.Success<ReturnType<typeof makeStorageBinding>>>
-  >,
+  client: Effect.Success<ReturnType<Effect.Success<ReturnType<typeof makeStorageBinding>>>>,
 ): WriteBucketClient => ({
   put: client.put,
   delete: client.delete,

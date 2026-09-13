@@ -28,19 +28,13 @@ const repository = (name: string) =>
     description: "Retained fixture for Alchemy PR #1577 release tests",
   });
 
-const release = (
-  fixture: string,
-  props: Omit<GitHub.ReleaseProps, "owner" | "repository">,
-) =>
+const release = (fixture: string, props: Omit<GitHub.ReleaseProps, "owner" | "repository">) =>
   Effect.gen(function* () {
     const repo = yield* repository(fixture);
     return yield* GitHub.Release("Release", {
       ...props,
       owner,
-      repository: Output.map(
-        repo.fullName,
-        (fullName) => fullName.split("/")[1]!,
-      ),
+      repository: Output.map(repo.fullName, (fullName) => fullName.split("/")[1]!),
     }).pipe(destroy());
   });
 
@@ -96,9 +90,7 @@ test.provider(
       expect(created.body).toBe("First release");
       expect(created.draft).toBe(false);
       expect(created.prerelease).toBe(false);
-      expect((yield* getRelease("update", created.releaseId))?.body).toBe(
-        "First release",
-      );
+      expect((yield* getRelease("update", created.releaseId))?.body).toBe("First release");
 
       const updated = yield* stack.deploy(
         release("update", {
@@ -114,9 +106,7 @@ test.provider(
       expect(observed?.body).toBe(updated.body);
       expect(observed?.prerelease).toBe(true);
 
-      const reset = yield* stack.deploy(
-        release("update", { tagName: "v1.0.0" }),
-      );
+      const reset = yield* stack.deploy(release("update", { tagName: "v1.0.0" }));
       expect(reset.releaseId).toBe(created.releaseId);
       expect(reset.name).toBe("v1.0.0");
       expect(reset.body).toBe("");
@@ -129,12 +119,7 @@ test.provider(
       yield* stack.destroy();
     }),
   {
-    tags: [
-      "provider:github",
-      "provider:github:release",
-      "provider:github:repository",
-      "live",
-    ],
+    tags: ["provider:github", "provider:github:release", "provider:github:repository", "live"],
     timeout: 120_000,
   },
 );
@@ -175,12 +160,7 @@ test.provider(
       yield* stack.destroy();
     }),
   {
-    tags: [
-      "provider:github",
-      "provider:github:release",
-      "provider:github:repository",
-      "live",
-    ],
+    tags: ["provider:github", "provider:github:release", "provider:github:repository", "live"],
     timeout: 120_000,
   },
 );
@@ -201,20 +181,13 @@ test.provider(
       expect(created.tagName).toBe("v3.0.0-beta.1");
       expect(created.prerelease).toBe(true);
       expect(created.draft).toBe(false);
-      expect(
-        (yield* getRelease("prerelease", created.releaseId))?.prerelease,
-      ).toBe(true);
+      expect((yield* getRelease("prerelease", created.releaseId))?.prerelease).toBe(true);
       yield* stack.deploy(repository("prerelease"));
       yield* assertDeleted("prerelease", created.releaseId);
       yield* stack.destroy();
     }),
   {
-    tags: [
-      "provider:github",
-      "provider:github:release",
-      "provider:github:repository",
-      "live",
-    ],
+    tags: ["provider:github", "provider:github:release", "provider:github:repository", "live"],
     timeout: 120_000,
   },
 );
@@ -259,9 +232,9 @@ test.provider(
               octokit.hook.after("request", (response, options) => {
                 const url = new URL(options.url, "https://api.github.com");
                 if (url.pathname === `/orgs/${owner}/repos`) {
-                  response.data = (
-                    response.data as Array<{ name: string }>
-                  ).filter((repo) => repo.name === name);
+                  response.data = (response.data as Array<{ name: string }>).filter(
+                    (repo) => repo.name === name,
+                  );
                 }
               });
               return octokit;
@@ -272,15 +245,12 @@ test.provider(
         Effect.repeat({
           schedule: Schedule.spaced("2 seconds"),
           times: 10,
-          until: (releases) =>
-            releases.some((item) => item.releaseId === created.releaseId),
+          until: (releases) => releases.some((item) => item.releaseId === created.releaseId),
         }),
       );
-      expect(
-        all.every((item) =>
-          item.htmlUrl.startsWith(`https://github.com/${owner}/`),
-        ),
-      ).toBe(true);
+      expect(all.every((item) => item.htmlUrl.startsWith(`https://github.com/${owner}/`))).toBe(
+        true,
+      );
       const found = all.find((item) => item.releaseId === created.releaseId);
       expect(found).toBeDefined();
       expect(found?.tagName).toBe(created.tagName);
@@ -289,12 +259,7 @@ test.provider(
       yield* stack.destroy();
     }),
   {
-    tags: [
-      "provider:github",
-      "provider:github:release",
-      "provider:github:repository",
-      "live",
-    ],
+    tags: ["provider:github", "provider:github:release", "provider:github:repository", "live"],
     timeout: 120_000,
   },
 );
@@ -304,29 +269,18 @@ test.provider(
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
-      const created = yield* stack.deploy(
-        release("replace", { tagName: "v1.0.0" }),
-      );
-      const replaced = yield* stack.deploy(
-        release("replace", { tagName: "v2.0.0" }),
-      );
+      const created = yield* stack.deploy(release("replace", { tagName: "v1.0.0" }));
+      const replaced = yield* stack.deploy(release("replace", { tagName: "v2.0.0" }));
       expect(replaced.releaseId).not.toBe(created.releaseId);
       expect(replaced.tagName).toBe("v2.0.0");
       expect(yield* getRelease("replace", created.releaseId)).toBeUndefined();
-      expect((yield* getRelease("replace", replaced.releaseId))?.tag_name).toBe(
-        "v2.0.0",
-      );
+      expect((yield* getRelease("replace", replaced.releaseId))?.tag_name).toBe("v2.0.0");
       yield* stack.deploy(repository("replace"));
       yield* assertDeleted("replace", replaced.releaseId);
       yield* stack.destroy();
     }),
   {
-    tags: [
-      "provider:github",
-      "provider:github:release",
-      "provider:github:repository",
-      "live",
-    ],
+    tags: ["provider:github", "provider:github:release", "provider:github:repository", "live"],
     timeout: 120_000,
   },
 );

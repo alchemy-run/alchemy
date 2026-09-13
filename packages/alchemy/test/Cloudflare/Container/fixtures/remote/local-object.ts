@@ -31,9 +31,7 @@ export class LocalRemoteContainerObject extends Cloudflare.DurableObject<LocalRe
       return {
         hello: () =>
           Effect.gen(function* () {
-            const response = yield* fetch(
-              HttpClientRequest.get("http://container/"),
-            );
+            const response = yield* fetch(HttpClientRequest.get("http://container/"));
             return yield* response.text;
           }),
       };

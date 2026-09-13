@@ -61,9 +61,7 @@ export interface ReadWriteDns extends Binding.Service<
   (zone: Zone) => Effect.Effect<ReadWriteDnsClient>
 > {}
 
-export const ReadWriteDns = Binding.Service<ReadWriteDns>(
-  "Cloudflare.DNS.ReadWriteDns",
-);
+export const ReadWriteDns = Binding.Service<ReadWriteDns>("Cloudflare.DNS.ReadWriteDns");
 
 /** Combined read + write DNS record operations. */
 export interface ReadWriteDnsClient extends ReadDnsClient, WriteDnsClient {}

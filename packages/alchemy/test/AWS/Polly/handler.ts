@@ -73,13 +73,10 @@ export default PollyTestFunction.make(
     const listLexicons = yield* AWS.Polly.ListLexicons();
     const getLexicon = yield* AWS.Polly.GetLexicon(lexicon);
     const synthesizeSpeech = yield* AWS.Polly.SynthesizeSpeech();
-    const startSpeechSynthesisTask =
-      yield* AWS.Polly.StartSpeechSynthesisTask();
+    const startSpeechSynthesisTask = yield* AWS.Polly.StartSpeechSynthesisTask();
     const getSpeechSynthesisTask = yield* AWS.Polly.GetSpeechSynthesisTask();
-    const listSpeechSynthesisTasks =
-      yield* AWS.Polly.ListSpeechSynthesisTasks();
-    const startSpeechSynthesisStream =
-      yield* AWS.Polly.StartSpeechSynthesisStream();
+    const listSpeechSynthesisTasks = yield* AWS.Polly.ListSpeechSynthesisTasks();
+    const startSpeechSynthesisStream = yield* AWS.Polly.StartSpeechSynthesisStream();
     // Grants the Lambda role s3:PutObject on the output bucket — Polly
     // writes the async synthesis result with the caller's credentials.
     yield* AWS.S3.PutObject(bucket);
@@ -152,20 +149,15 @@ export default PollyTestFunction.make(
               { CloseStreamEvent: {} },
             ),
           });
-          const events = Array.from(
-            yield* Stream.runCollect(result.EventStream!),
-          );
+          const events = Array.from(yield* Stream.runCollect(result.EventStream!));
           const audioBytes = events.reduce(
-            (total, event) =>
-              total + (event.AudioEvent?.AudioChunk?.length ?? 0),
+            (total, event) => total + (event.AudioEvent?.AudioChunk?.length ?? 0),
             0,
           );
           return yield* HttpServerResponse.json({
             events: events.length,
             audioBytes,
-            closed: events.some(
-              (event) => event.StreamClosedEvent !== undefined,
-            ),
+            closed: events.some((event) => event.StreamClosedEvent !== undefined),
           });
         }
 
@@ -178,10 +170,7 @@ export default PollyTestFunction.make(
             LexiconNames: [LEXICON_NAME],
           });
           const chunks = yield* Stream.runCollect(result.AudioStream!);
-          const byteLength = Array.from(chunks).reduce(
-            (total, chunk) => total + chunk.length,
-            0,
-          );
+          const byteLength = Array.from(chunks).reduce((total, chunk) => total + chunk.length, 0);
           return yield* HttpServerResponse.json({
             contentType: result.ContentType,
             byteLength,
@@ -204,10 +193,7 @@ export default PollyTestFunction.make(
           const task = yield* getSpeechSynthesisTask({ TaskId: taskId }).pipe(
             Effect.retry({
               while: (e) => e._tag === "SynthesisTaskNotFoundException",
-              schedule: Schedule.max([
-                Schedule.fixed("2 seconds"),
-                Schedule.recurs(5),
-              ]),
+              schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(5)]),
             }),
             Effect.repeat({
               schedule: Schedule.spaced("2 seconds"),
@@ -236,9 +222,7 @@ export default PollyTestFunction.make(
       }).pipe(
         // Surface every failure (typed error or defect) to the test as JSON
         // instead of an opaque 500 — the test asserts `error` is absent.
-        Effect.catchCause((cause) =>
-          HttpServerResponse.json({ error: Cause.pretty(cause) }),
-        ),
+        Effect.catchCause((cause) => HttpServerResponse.json({ error: Cause.pretty(cause) })),
       ),
     };
   }).pipe(

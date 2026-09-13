@@ -11,10 +11,7 @@ export const StopCodeInterpreterSessionHttp = Layer.effect(
     operation: agentcore.stopCodeInterpreterSession,
     actions: ["bedrock-agentcore:StopCodeInterpreterSession"],
     requestKey: "codeInterpreterIdentifier",
-    identifier: (codeInterpreter: CodeInterpreter) =>
-      codeInterpreter.codeInterpreterId,
-    arns: (codeInterpreter: CodeInterpreter) => [
-      codeInterpreter.codeInterpreterArn,
-    ],
+    identifier: (codeInterpreter: CodeInterpreter) => codeInterpreter.codeInterpreterId,
+    arns: (codeInterpreter: CodeInterpreter) => [codeInterpreter.codeInterpreterArn],
   }),
 );

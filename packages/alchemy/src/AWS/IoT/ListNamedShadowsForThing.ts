@@ -40,5 +40,6 @@ export interface ListNamedShadowsForThing extends Binding.Service<
   >
 > {}
 
-export const ListNamedShadowsForThing =
-  Binding.Service<ListNamedShadowsForThing>("AWS.IoT.ListNamedShadowsForThing");
+export const ListNamedShadowsForThing = Binding.Service<ListNamedShadowsForThing>(
+  "AWS.IoT.ListNamedShadowsForThing",
+);

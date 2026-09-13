@@ -42,9 +42,7 @@ export default class DynamicLoaderEffectWorker extends Cloudflare.Worker<Dynamic
                 }
               }`,
             },
-            ...(request.url.startsWith("/outbound/sandboxed")
-              ? { globalOutbound: null }
-              : {}),
+            ...(request.url.startsWith("/outbound/sandboxed") ? { globalOutbound: null } : {}),
           });
           return yield* worker.fetch(request).pipe(Effect.orDie);
         }

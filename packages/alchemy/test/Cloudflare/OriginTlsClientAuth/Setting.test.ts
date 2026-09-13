@@ -10,21 +10,15 @@ import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
@@ -69,37 +63,32 @@ describe.sequential(
     ],
   },
   () => {
-    test.provider(
-      "enables AOP and restores the original value on destroy",
-      (stack) =>
-        Effect.gen(function* () {
-          const zoneId = yield* resolveZoneId;
+    test.provider("enables AOP and restores the original value on destroy", (stack) =>
+      Effect.gen(function* () {
+        const zoneId = yield* resolveZoneId;
 
-          yield* stack.destroy();
-          // Known baseline: zone-level AOP defaults to disabled.
-          yield* setBaseline(zoneId, false);
+        yield* stack.destroy();
+        // Known baseline: zone-level AOP defaults to disabled.
+        yield* setBaseline(zoneId, false);
 
-          const setting = yield* stack.deploy(
-            Cloudflare.OriginTlsClientAuth.Setting("Aop", {
-              zoneId,
-              enabled: true,
-            }),
-          );
+        const setting = yield* stack.deploy(
+          Cloudflare.OriginTlsClientAuth.Setting("Aop", { zoneId, enabled: true }),
+        );
 
-          expect(setting.zoneId).toEqual(zoneId);
-          expect(setting.enabled).toEqual(true);
-          // The pre-management value is captured for restore-on-destroy.
-          expect(setting.initialEnabled).toEqual(false);
+        expect(setting.zoneId).toEqual(zoneId);
+        expect(setting.enabled).toEqual(true);
+        // The pre-management value is captured for restore-on-destroy.
+        expect(setting.initialEnabled).toEqual(false);
 
-          const observed = yield* getSetting(zoneId);
-          expect(observed.enabled).toEqual(true);
+        const observed = yield* getSetting(zoneId);
+        expect(observed.enabled).toEqual(true);
 
-          yield* stack.destroy();
+        yield* stack.destroy();
 
-          // Destroy restores the captured baseline, not a hardcoded default.
-          const restored = yield* getSetting(zoneId);
-          expect(restored.enabled).toEqual(false);
-        }).pipe(logLevel),
+        // Destroy restores the captured baseline, not a hardcoded default.
+        const restored = yield* getSetting(zoneId);
+        expect(restored.enabled).toEqual(false);
+      }).pipe(logLevel),
     );
 
     test.provider("updates the enabled flag in place", (stack) =>
@@ -110,20 +99,14 @@ describe.sequential(
         yield* setBaseline(zoneId, false);
 
         const enabled = yield* stack.deploy(
-          Cloudflare.OriginTlsClientAuth.Setting("AopUpdate", {
-            zoneId,
-            enabled: true,
-          }),
+          Cloudflare.OriginTlsClientAuth.Setting("AopUpdate", { zoneId, enabled: true }),
         );
         expect(enabled.enabled).toEqual(true);
         expect(enabled.initialEnabled).toEqual(false);
 
         // In-place update — the singleton is never replaced.
         const disabled = yield* stack.deploy(
-          Cloudflare.OriginTlsClientAuth.Setting("AopUpdate", {
-            zoneId,
-            enabled: false,
-          }),
+          Cloudflare.OriginTlsClientAuth.Setting("AopUpdate", { zoneId, enabled: false }),
         );
         expect(disabled.enabled).toEqual(false);
         // The original baseline survives the update.
@@ -147,9 +130,7 @@ describe.sequential(
       Effect.gen(function* () {
         const zoneId = yield* resolveZoneId;
 
-        const provider = yield* Provider.findProvider(
-          Cloudflare.OriginTlsClientAuth.Setting,
-        );
+        const provider = yield* Provider.findProvider(Cloudflare.OriginTlsClientAuth.Setting);
         // Ride out fresh-token 403 blips on the account-wide enumeration, like
         // every other out-of-band call in this suite.
         const all = yield* provider.list().pipe(

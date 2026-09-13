@@ -11,10 +11,7 @@ import { suitePartition } from "./suiteProject.ts";
 
 const { test } = Test.make({ providers: Railway.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const TEST_DOMAIN = process.env.RAILWAY_TEST_DOMAIN;
 
@@ -39,30 +36,18 @@ const readCustomDomainDeletion = Query.fn((id: string, projectId: string) => {
 
 const readCustomDomain = Query.fn((id: string, projectId: string) => {
   const domain = RailwayApi.customDomain({ id, projectId });
-  return {
-    id: domain.id,
-    domain: domain.domain,
-    targetPort: domain.targetPort,
-  };
+  return { id: domain.id, domain: domain.domain, targetPort: domain.targetPort };
 });
 
-const readCustomDomainVerification = Query.fn(
-  (id: string, projectId: string) => {
-    const domain = RailwayApi.customDomain({ id, projectId });
-    return {
-      domain: domain.domain,
-      status: { verified: domain.status.verified },
-    };
-  },
-);
+const readCustomDomainVerification = Query.fn((id: string, projectId: string) => {
+  const domain = RailwayApi.customDomain({ id, projectId });
+  return { domain: domain.domain, status: { verified: domain.status.verified } };
+});
 
 const createCustomDomain = Query.fn(
-  (input: {
-    domain: string;
-    environmentId: string;
-    projectId: string;
-    serviceId: string;
-  }) => ({ id: RailwayApi.customDomainCreate({ input }).id }),
+  (input: { domain: string; environmentId: string; projectId: string; serviceId: string }) => ({
+    id: RailwayApi.customDomainCreate({ input }).id,
+  }),
 );
 
 const createService = Query.fn(
@@ -77,11 +62,7 @@ const createService = Query.fn(
   }),
 );
 
-const listLive = (
-  environmentId: string,
-  projectId: string,
-  serviceId: string,
-) =>
+const listLive = (environmentId: string, projectId: string, serviceId: string) =>
   readCustomDomains({ environmentId, projectId, serviceId }).pipe(
     Effect.map((result) =>
       result.customDomains.filter(
@@ -117,10 +98,7 @@ test.provider(
 
       const { project, environment } = yield* stack.deploy(suitePartition);
 
-      const service = yield* createTargetService(
-        project.projectId,
-        environment.environmentId,
-      );
+      const service = yield* createTargetService(project.projectId, environment.environmentId);
 
       const rejected = yield* Effect.result(
         createCustomDomain({
@@ -161,22 +139,13 @@ test.provider(
       expect(created.domain.targetPort).toEqual(5678);
       expect(created.domain.url).toEqual(`https://${hostname}`);
 
-      const listed = yield* listLive(
-        environment.environmentId,
-        project.projectId,
-        service.id,
-      );
-      const fetched = listed.find(
-        (item) => item.id === created.domain.customDomainId,
-      );
+      const listed = yield* listLive(environment.environmentId, project.projectId, service.id);
+      const fetched = listed.find((item) => item.id === created.domain.customDomainId);
       expect(fetched).toBeDefined();
       expect(fetched?.domain).toEqual(hostname);
       expect(fetched?.targetPort).toEqual(5678);
 
-      const outOfBand = yield* readCustomDomain(
-        created.domain.customDomainId,
-        project.projectId,
-      );
+      const outOfBand = yield* readCustomDomain(created.domain.customDomainId, project.projectId);
       expect(outOfBand.id).toEqual(created.domain.customDomainId);
       expect(outOfBand.domain).toEqual(hostname);
       expect(outOfBand.targetPort).toEqual(5678);
@@ -194,9 +163,7 @@ test.provider(
         }),
       );
 
-      expect(updated.domain.customDomainId).toEqual(
-        created.domain.customDomainId,
-      );
+      expect(updated.domain.customDomainId).toEqual(created.domain.customDomainId);
       expect(updated.domain.targetPort).toEqual(8080);
       expect(updated.domain.domain).toEqual(hostname);
       expect(updated.project.projectId).toEqual(project.projectId);
@@ -237,10 +204,7 @@ test.provider.skipIf(!TEST_DOMAIN)(
 
       const { project, environment } = yield* stack.deploy(suitePartition);
 
-      const service = yield* createTargetService(
-        project.projectId,
-        environment.environmentId,
-      );
+      const service = yield* createTargetService(project.projectId, environment.environmentId);
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
@@ -262,9 +226,7 @@ test.provider.skipIf(!TEST_DOMAIN)(
         project.projectId,
       );
       expect(fetched.domain).toEqual(hostname);
-      expect(
-        fetched.status.verified === true || fetched.status.verified === false,
-      ).toBe(true);
+      expect(fetched.status.verified === true || fetched.status.verified === false).toBe(true);
 
       yield* stack.destroy();
 

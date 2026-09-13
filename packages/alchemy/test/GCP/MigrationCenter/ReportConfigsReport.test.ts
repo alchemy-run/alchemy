@@ -1,18 +1,15 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as migrationcenter from "@distilled.cloud/gcp/migrationcenter_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   migrationcenter.getProjectsLocationsReportConfigsReports({ name }).pipe(
@@ -66,20 +63,15 @@ test.provider.skipIf(!!process.env.FAST)(
           const config = yield* GCP.MigrationCenter.ReportConfig("Tco", {
             location: "us-central1",
             displayName: "report-config",
-            groupPreferencesetAssignments: [
-              { group: group.name, preferenceSet: prefs.name },
-            ],
+            groupPreferencesetAssignments: [{ group: group.name, preferenceSet: prefs.name }],
           });
-          const report = yield* GCP.MigrationCenter.ReportConfigsReport(
-            "Quarter",
-            {
-              reportConfig: config.name,
-              location: "us-central1",
-              type: "TOTAL_COST_OF_OWNERSHIP",
-              displayName: "q1-tco",
-              description: "first quarter",
-            },
-          );
+          const report = yield* GCP.MigrationCenter.ReportConfigsReport("Quarter", {
+            reportConfig: config.name,
+            location: "us-central1",
+            type: "TOTAL_COST_OF_OWNERSHIP",
+            displayName: "q1-tco",
+            description: "first quarter",
+          });
           return { group, prefs, config, report };
         }),
       );
@@ -90,11 +82,10 @@ test.provider.skipIf(!!process.env.FAST)(
       expect(created.report.displayName).toEqual("q1-tco");
       expect(created.report.description).toEqual("first quarter");
 
-      const fetched =
-        yield* migrationcenter.getProjectsLocationsReportConfigsReports({
-          name: created.report.name,
-          view: "REPORT_VIEW_BASIC",
-        });
+      const fetched = yield* migrationcenter.getProjectsLocationsReportConfigsReports({
+        name: created.report.name,
+        view: "REPORT_VIEW_BASIC",
+      });
       expect(fetched.name).toEqual(created.report.name);
       expect(fetched.description).toContain("alchemy-id=");
       expect(fetched.description).toContain("first quarter");

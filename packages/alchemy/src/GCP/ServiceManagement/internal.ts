@@ -4,10 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { createPhysicalName } from "../../PhysicalName.ts";
-import {
-  waitForOperation as waitForLongRunning,
-  type LongRunningOperation,
-} from "../Operation.ts";
+import { waitForOperation as waitForLongRunning, type LongRunningOperation } from "../Operation.ts";
 
 export const MAX_LABEL_LENGTH = 63;
 export const GENERATED_LABEL_LENGTH = 40;
@@ -24,13 +21,9 @@ export class ServiceStillExists extends Data.TaggedError(
   serviceName: string;
 }> {}
 
-export const endpointsSuffix = (project: string) =>
-  `.endpoints.${project}.cloud.goog`;
+export const endpointsSuffix = (project: string) => `.endpoints.${project}.cloud.goog`;
 
-export const isGeneratedServiceName = (
-  serviceName: string,
-  project: string,
-) => {
+export const isGeneratedServiceName = (serviceName: string, project: string) => {
   const suffix = endpointsSuffix(project);
   return (
     serviceName.startsWith("alch-") &&
@@ -69,9 +62,7 @@ export const toServiceName = (
       maxLength: GENERATED_LABEL_LENGTH,
       lowercase: true,
     });
-    const label = dnsLabel(
-      generated.startsWith("alch-") ? generated : `alch-${generated}`,
-    );
+    const label = dnsLabel(generated.startsWith("alch-") ? generated : `alch-${generated}`);
     return `${label}${endpointsSuffix(project)}`;
   });
 
@@ -82,19 +73,13 @@ export const toServiceName = (
 export const getByName = (serviceName: string) =>
   servicemanagement
     .getServices({ serviceName })
-    .pipe(
-      Effect.catchTag(["NotFound", "ServiceNotFound"], () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag(["NotFound", "ServiceNotFound"], () => Effect.succeed(undefined)));
 
 /** The newest config version (the list is ordered newest first). */
 export const getLatestConfig = (serviceName: string) =>
   servicemanagement.listServicesConfigs({ serviceName, pageSize: 1 }).pipe(
     Effect.map((page) => page.serviceConfigs?.[0]),
-    Effect.catchTag(["NotFound", "ServiceNotFound"], () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag(["NotFound", "ServiceNotFound"], () => Effect.succeed(undefined)),
   );
 
 export const waitUntilExists = (serviceName: string) =>
@@ -105,8 +90,7 @@ export const waitUntilExists = (serviceName: string) =>
         : Effect.fail(new ServiceNotResolved({ serviceName })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.ServiceManagement.ServiceNotResolved",
+      while: (error) => error._tag === "GCP.ServiceManagement.ServiceNotResolved",
       times: 20,
       schedule: Schedule.spaced("6 seconds"),
     }),
@@ -115,13 +99,10 @@ export const waitUntilExists = (serviceName: string) =>
 export const waitUntilGone = (serviceName: string) =>
   getByName(serviceName).pipe(
     Effect.flatMap((service) =>
-      service === undefined
-        ? Effect.void
-        : Effect.fail(new ServiceStillExists({ serviceName })),
+      service === undefined ? Effect.void : Effect.fail(new ServiceStillExists({ serviceName })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.ServiceManagement.ServiceStillExists",
+      while: (error) => error._tag === "GCP.ServiceManagement.ServiceStillExists",
       times: 10,
       schedule: Schedule.spaced("4 seconds"),
     }),
@@ -132,9 +113,8 @@ export const undeleteService = (serviceName: string) =>
     const operation = yield* servicemanagement
       .undeleteServices({ serviceName })
       .pipe(
-        Effect.catchTag(
-          ["NotFound", "ServiceNotFound", "ServiceAlreadyActive"],
-          () => Effect.succeed(undefined),
+        Effect.catchTag(["NotFound", "ServiceNotFound", "ServiceAlreadyActive"], () =>
+          Effect.succeed(undefined),
         ),
       );
     if (operation !== undefined) {
@@ -153,9 +133,7 @@ export const listProducerServices = (project: string) =>
       Stream.flatMap((page) => Stream.fromIterable(page.services ?? [])),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag("NotFound", () =>
-        Effect.succeed([] as servicemanagement.ManagedService[]),
-      ),
+      Effect.catchTag("NotFound", () => Effect.succeed([] as servicemanagement.ManagedService[])),
     );
 
 /** Managed-service creates and deletes routinely run past three minutes. */
@@ -166,13 +144,9 @@ const OPERATION_BUDGET = "10 minutes";
  * concurrent create won the race; reconcile observes the resource next.
  */
 export const waitForOperation = (operation: LongRunningOperation) =>
-  waitForLongRunning(
-    operation,
-    (name) => servicemanagement.getOperations({ name }),
-    {
-      budget: OPERATION_BUDGET,
-    },
-  ).pipe(
+  waitForLongRunning(operation, (name) => servicemanagement.getOperations({ name }), {
+    budget: OPERATION_BUDGET,
+  }).pipe(
     Effect.catchIf(
       (error) => error._tag === "GCP.OperationFailed" && error.code === 6,
       () => Effect.succeed(operation),
@@ -187,8 +161,7 @@ export const waitForDeleteOperation = (operation: LongRunningOperation) =>
   waitForOperation(operation).pipe(
     Effect.catchIf(
       (error) =>
-        error._tag === "NotFound" ||
-        (error._tag === "GCP.OperationFailed" && error.code === 5),
+        error._tag === "NotFound" || (error._tag === "GCP.OperationFailed" && error.code === 5),
       () => Effect.succeed(operation),
     ),
   );

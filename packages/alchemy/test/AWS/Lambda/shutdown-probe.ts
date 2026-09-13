@@ -24,9 +24,7 @@ export default class ShutdownProbe extends AWS.Lambda.Function<ShutdownProbe>()(
     timeout: Duration.seconds(10),
   },
   Effect.gen(function* () {
-    yield* Effect.addFinalizer(() =>
-      Effect.sync(() => console.log("ALCHEMY_INSTANCE_FINALIZED")),
-    );
+    yield* Effect.addFinalizer(() => Effect.sync(() => console.log("ALCHEMY_INSTANCE_FINALIZED")));
     return {
       fetch: Effect.gen(function* () {
         yield* Effect.addFinalizer(() =>

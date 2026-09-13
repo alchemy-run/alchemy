@@ -46,9 +46,7 @@ test(
     // The `GREETING` env value from alchemy.run.ts, read via `getEnv` in the
     // dynamic RSC page — proves the Worker rendered it at request time.
     expect(html).toContain("Hello from Waku on Cloudflare!");
-    expect(html).toContain(
-      "This page is rendered by the Worker on every request.",
-    );
+    expect(html).toContain("This page is rendered by the Worker on every request.");
   }),
   { timeout: 180_000 },
 );

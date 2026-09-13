@@ -72,8 +72,7 @@ export type Tag = Resource<
 export const Tag = Resource<Tag>("Cloudflare.Access.Tag");
 
 export const isTag = (value: unknown): value is Tag =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === "Cloudflare.Access.Tag";
+  Predicate.hasProperty(value, "Type") && value.Type === "Cloudflare.Access.Tag";
 
 export const TagProvider = () =>
   Provider.succeed(Tag, {
@@ -109,9 +108,7 @@ export const TagProvider = () =>
       const name = yield* createTagName(id, output?.name ?? olds?.name);
       const existing = yield* zeroTrust
         .getAccessTag({ accountId: acct, tagName: name })
-        .pipe(
-          Effect.catchTag("AccessTagNotFound", () => Effect.succeed(undefined)),
-        );
+        .pipe(Effect.catchTag("AccessTagNotFound", () => Effect.succeed(undefined)));
       if (!existing) return undefined;
       return { name: existing.name, accountId: acct };
     }),
@@ -123,9 +120,7 @@ export const TagProvider = () =>
       // Observe — the name is the identity, so existence is the only state.
       const observed = yield* zeroTrust
         .getAccessTag({ accountId: acct, tagName: name })
-        .pipe(
-          Effect.catchTag("AccessTagNotFound", () => Effect.succeed(undefined)),
-        );
+        .pipe(Effect.catchTag("AccessTagNotFound", () => Effect.succeed(undefined)));
 
       // Ensure — create when missing; a create race resolves to the same tag.
       if (!observed) {
@@ -135,9 +130,7 @@ export const TagProvider = () =>
             Effect.catch((err) =>
               zeroTrust
                 .getAccessTag({ accountId: acct, tagName: name })
-                .pipe(
-                  Effect.catchTag("AccessTagNotFound", () => Effect.fail(err)),
-                ),
+                .pipe(Effect.catchTag("AccessTagNotFound", () => Effect.fail(err))),
             ),
           );
         return { name: created.name, accountId: acct };

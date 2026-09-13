@@ -15,8 +15,7 @@ const escapeRegex = (str: string) => {
 
 // Placeholder names must begin with a colon then a letter, be alphanumeric and optionally contain underscores.
 // e.g. :place_123_holder
-const HOST_PLACEHOLDER_REGEX =
-  /(?<=^https:\\\/\\\/[^/]*?):([A-Za-z]\w*)(?=\\)/g;
+const HOST_PLACEHOLDER_REGEX = /(?<=^https:\\\/\\\/[^/]*?):([A-Za-z]\w*)(?=\\)/g;
 const PLACEHOLDER_REGEX = /:([A-Za-z]\w*)/g;
 
 export type Replacements = Record<string, string>;
@@ -84,9 +83,7 @@ export const generateRulesMatcher = <T>(
         return [{ crossHost, regExp }, match];
       } catch {}
     })
-    .filter((value) => value !== undefined) as Array<
-    [{ crossHost: boolean; regExp: RegExp }, T]
-  >;
+    .filter((value) => value !== undefined) as Array<[{ crossHost: boolean; regExp: RegExp }, T]>;
 
   return ({ request }: { request: Request }) => {
     const { pathname, hostname } = new URL(request.url);
@@ -119,8 +116,7 @@ export const staticRedirectsMatcher = (
   host: string,
   pathname: string,
 ) => {
-  const withHostMatch =
-    configuration.redirects.staticRules[`https://${host}${pathname}`];
+  const withHostMatch = configuration.redirects.staticRules[`https://${host}${pathname}`];
   const withoutHostMatch = configuration.redirects.staticRules[pathname];
 
   if (withHostMatch && withoutHostMatch) {
@@ -134,13 +130,9 @@ export const staticRedirectsMatcher = (
   return withHostMatch || withoutHostMatch;
 };
 
-export const generateRedirectsMatcher = (
-  configuration: Required<AssetConfig>,
-) =>
+export const generateRedirectsMatcher = (configuration: Required<AssetConfig>) =>
   generateRulesMatcher(
-    configuration.redirects.version === REDIRECTS_VERSION
-      ? configuration.redirects.rules
-      : {},
+    configuration.redirects.version === REDIRECTS_VERSION ? configuration.redirects.rules : {},
     ({ status, to }, replacements) => {
       const target = replacer(to, replacements).trim();
       const protoPattern = /^(\w+:\/\/)/;

@@ -1,18 +1,15 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as dlp from "@distilled.cloud/gcp/dlp_v2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const runLifecycle = !process.env.FAST;
 
@@ -61,14 +58,11 @@ test.provider.skipIf(!runLifecycle)(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const template = yield* GCP.DLP.LocationsInspectTemplate(
-            "EmailInspect",
-            {
-              location: "us",
-              displayName: "emails",
-              inspectConfig: { infoTypes: [{ name: "EMAIL_ADDRESS" }] },
-            },
-          );
+          const template = yield* GCP.DLP.LocationsInspectTemplate("EmailInspect", {
+            location: "us",
+            displayName: "emails",
+            inspectConfig: { infoTypes: [{ name: "EMAIL_ADDRESS" }] },
+          });
           return yield* GCP.DLP.DiscoveryConfig("Profiles", {
             location: "us",
             displayName: "paused storage",
@@ -93,14 +87,11 @@ test.provider.skipIf(!runLifecycle)(
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          const template = yield* GCP.DLP.LocationsInspectTemplate(
-            "EmailInspect",
-            {
-              location: "us",
-              displayName: "emails",
-              inspectConfig: { infoTypes: [{ name: "EMAIL_ADDRESS" }] },
-            },
-          );
+          const template = yield* GCP.DLP.LocationsInspectTemplate("EmailInspect", {
+            location: "us",
+            displayName: "emails",
+            inspectConfig: { infoTypes: [{ name: "EMAIL_ADDRESS" }] },
+          });
           return yield* GCP.DLP.DiscoveryConfig("Profiles", {
             configId: created.configId,
             location: "us",

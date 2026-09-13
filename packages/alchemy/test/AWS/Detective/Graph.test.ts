@@ -15,9 +15,7 @@ const testLease = makeDetectiveTestLease();
 beforeAll(testLease.acquire, { timeout: 240_000 });
 afterAll(testLease.release);
 
-const firstGraphArn = detective
-  .listGraphs({})
-  .pipe(Effect.map((r) => r.GraphList?.[0]?.Arn));
+const firstGraphArn = detective.listGraphs({}).pipe(Effect.map((r) => r.GraphList?.[0]?.Arn));
 
 // The Detective behavior graph is an account/region singleton. This test only
 // runs when the account has no graph — it must never delete a graph the user

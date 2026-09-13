@@ -38,6 +38,4 @@ export interface GetOdbNetwork extends Binding.Service<
   >
 > {}
 
-export const GetOdbNetwork = Binding.Service<GetOdbNetwork>(
-  "GCP.OracleDatabase.GetOdbNetwork",
-);
+export const GetOdbNetwork = Binding.Service<GetOdbNetwork>("GCP.OracleDatabase.GetOdbNetwork");

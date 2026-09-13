@@ -59,9 +59,7 @@ const infra = (securityGroups?: () => string[]) =>
     const target = yield* AWS.EFS.MountTarget("MtTarget", {
       fileSystemId: files.fileSystemId,
       subnetId,
-      ...(securityGroups !== undefined
-        ? { securityGroups: securityGroups() }
-        : {}),
+      ...(securityGroups !== undefined ? { securityGroups: securityGroups() } : {}),
     });
     return { files, target, extraSg };
   });
@@ -118,13 +116,9 @@ describe.sequential(
           expect(updated.target.mountTargetId).toBe(mountTargetId);
 
           const observed = yield* efs
-            .describeMountTargetSecurityGroups({
-              MountTargetId: mountTargetId,
-            })
+            .describeMountTargetSecurityGroups({ MountTargetId: mountTargetId })
             .pipe(Effect.map((r) => [...r.SecurityGroups].sort()));
-          expect(observed).toEqual(
-            [defaultSecurityGroupId, extraSecurityGroupId].sort(),
-          );
+          expect(observed).toEqual([defaultSecurityGroupId, extraSecurityGroupId].sort());
         }),
       { timeout: 120_000 },
     );
@@ -166,9 +160,7 @@ test.provider.skipIf(!process.env.AWS_TEST_EFS_MULTI_AZ)(
         }),
       );
 
-      expect(deployed.targetA.availabilityZoneName).not.toBe(
-        deployed.targetB.availabilityZoneName,
-      );
+      expect(deployed.targetA.availabilityZoneName).not.toBe(deployed.targetB.availabilityZoneName);
 
       const observed = yield* efs.describeMountTargets({
         FileSystemId: deployed.files.fileSystemId,
@@ -181,19 +173,12 @@ test.provider.skipIf(!process.env.AWS_TEST_EFS_MULTI_AZ)(
         .pipe(
           Effect.map((r) => (r.MountTargets ?? []).length === 0),
           Effect.catchTag("FileSystemNotFound", () => Effect.succeed(true)),
-          Effect.repeat({
-            schedule: Schedule.fixed("5 seconds"),
-            until: (g) => g,
-            times: 36,
-          }),
+          Effect.repeat({ schedule: Schedule.fixed("5 seconds"), until: (g) => g, times: 36 }),
         );
       expect(gone).toBe(true);
     }).pipe(
       Effect.tap(() => stack.destroy()),
       Effect.onError(() => stack.destroy().pipe(Effect.ignore)),
     ),
-  {
-    tags: ["provider:aws", "provider:aws:ec2", "provider:aws:efs", "live"],
-    timeout: 600_000,
-  },
+  { tags: ["provider:aws", "provider:aws:ec2", "provider:aws:efs", "live"], timeout: 600_000 },
 );

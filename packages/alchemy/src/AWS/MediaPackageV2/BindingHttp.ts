@@ -191,10 +191,7 @@ export const makeMediaPackageV2OriginEndpointHttpBinding = <
         }
       }
       return Effect.fn(`${options.tag}(${endpoint.LogicalId})`)(function* (
-        request?: Omit<
-          I,
-          "ChannelGroupName" | "ChannelName" | "OriginEndpointName"
-        >,
+        request?: Omit<I, "ChannelGroupName" | "ChannelName" | "OriginEndpointName">,
       ) {
         return yield* op({
           ...request,

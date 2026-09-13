@@ -15,9 +15,7 @@ import * as Test from "@/Test/Alchemy";
 import * as Core from "@/Test/Core";
 import EksHostApi from "./fixtures/deployment.ts";
 
-const testOptions = {
-  providers: Layer.mergeAll(AWS.providers(), Kubernetes.providers()),
-};
+const testOptions = { providers: Layer.mergeAll(AWS.providers(), Kubernetes.providers()) };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
 
 // Ungated probe: `Deployment` is a composite host (in-cluster
@@ -36,14 +34,7 @@ test.provider(
       expect(Array.isArray(all)).toBe(true);
       expect(all).toEqual([]);
     }),
-  {
-    tags: [
-      "provider:aws",
-      "provider:kubernetes",
-      "provider:kubernetes:deployment",
-      "live",
-    ],
-  },
+  { tags: ["provider:aws", "provider:kubernetes", "provider:kubernetes:deployment", "live"] },
 );
 
 // Full end-to-end (gated). An EKS Auto Mode cluster takes ~10–15 min to
@@ -121,10 +112,7 @@ describe.skipIf(!process.env.AWS_TEST_SLOW)(
             const release = yield* Kubernetes.HelmChart("E2EHelmChart", {
               cluster,
               chart: `${import.meta.dirname}/fixtures/chart`,
-              values: {
-                message: "helm-e2e",
-                secondConfigMap: { enabled: true },
-              },
+              values: { message: "helm-e2e", secondConfigMap: { enabled: true } },
             });
             const host = yield* EksHostApi;
             return { host, cluster, release };
@@ -154,9 +142,7 @@ describe.skipIf(!process.env.AWS_TEST_SLOW)(
       { timeout: 2_700_000 },
     );
 
-    afterAll.skipIf(!!process.env.NO_DESTROY)(sharedStack.destroy(), {
-      timeout: 600_000,
-    });
+    afterAll.skipIf(!!process.env.NO_DESTROY)(sharedStack.destroy(), { timeout: 600_000 });
 
     test.provider(
       "bound DynamoDB PutItem writes an item from inside the pod",
@@ -177,12 +163,7 @@ describe.skipIf(!process.env.AWS_TEST_SLOW)(
           // out-of-band via the control-plane API.
           const got = yield* dynamodb
             .getItem({ TableName: body.table, Key: { pk: { S: itemId } } })
-            .pipe(
-              Effect.retry({
-                schedule: Schedule.spaced("2 seconds"),
-                times: 10,
-              }),
-            );
+            .pipe(Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 10 }));
           expect(got.Item?.pk?.S).toBe(itemId);
         }),
       { timeout: 180_000 },
@@ -202,19 +183,16 @@ describe.skipIf(!process.env.AWS_TEST_SLOW)(
 
           // Read the primary ConfigMap back out-of-band through the
           // Kubernetes API and prove the values reached the cluster.
-          const configRef = helmRelease.objects.find((object) =>
-            object.name.endsWith("-config"),
-          )!;
+          const configRef = helmRelease.objects.find((object) => object.name.endsWith("-config"))!;
           expect(configRef).toBeDefined();
           const transport = yield* makeEksTransport({
             clusterName: helmCluster.clusterName,
             endpoint: helmCluster.endpoint!,
             certificateAuthorityData: helmCluster.certificateAuthorityData!,
           });
-          const applied = (yield* readObject({
-            transport,
-            object: configRef,
-          })) as { data?: Record<string, string> } | undefined;
+          const applied = (yield* readObject({ transport, object: configRef })) as
+            | { data?: Record<string, string> }
+            | undefined;
           expect(applied?.data?.message).toBe("helm-e2e");
           expect(applied?.data?.release).toBe(helmRelease.releaseName);
         }),

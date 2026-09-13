@@ -1,9 +1,9 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as binaryauthorization from "@distilled.cloud/gcp/binaryauthorization_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import { logLevel, currentProject } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -83,10 +83,7 @@ test.provider(
             description: "updated",
             gkePolicy: {
               imageAllowlist: {
-                allowPattern: [
-                  "gcr.io/google-containers/*",
-                  "gcr.io/google-containers/**",
-                ],
+                allowPattern: ["gcr.io/google-containers/*", "gcr.io/google-containers/**"],
               },
             },
           });
@@ -100,10 +97,9 @@ test.provider(
         "gcr.io/google-containers/**",
       ]);
 
-      const fetchedUpdate =
-        yield* binaryauthorization.getProjectsPlatformsPolicies({
-          name: updated.name,
-        });
+      const fetchedUpdate = yield* binaryauthorization.getProjectsPlatformsPolicies({
+        name: updated.name,
+      });
       expect(fetchedUpdate.description).toContain("updated");
 
       yield* stack.destroy();

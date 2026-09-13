@@ -72,12 +72,7 @@ test.provider(
 
       // delete waits until the group is fully gone
       yield* stack.destroy();
-      expect(
-        yield* findFeatureGroup(featureGroup.featureGroupName),
-      ).toBeUndefined();
+      expect(yield* findFeatureGroup(featureGroup.featureGroupName)).toBeUndefined();
     }),
-  {
-    tags: ["provider:aws", "provider:aws:sagemaker", "live"],
-    timeout: 240_000,
-  },
+  { tags: ["provider:aws", "provider:aws:sagemaker", "live"], timeout: 240_000 },
 );

@@ -39,9 +39,7 @@ export const deployWorker = (
 
 export const census = (appName: string) =>
   machines.listMachines({ app_name: appName }).pipe(
-    Effect.map((listed) =>
-      listed.filter((machine) => machine.state !== "destroyed"),
-    ),
+    Effect.map((listed) => listed.filter((machine) => machine.state !== "destroyed")),
     Effect.provide(FetchHttpClient.layer),
   );
 
@@ -64,14 +62,10 @@ export const assertCommitted = (appName: string, ids: string[]) =>
   Effect.gen(function* () {
     const live = yield* census(appName);
     expect(live.map((machine) => machine.id).sort()).toEqual([...ids].sort());
-    expect(
-      live.every(
-        (machine) => machine.config?.metadata?.["alchemy.phase"] === "active",
-      ),
-    ).toBe(true);
-    expect(live.every((machine) => !!machine.image_ref?.digest)).toBe(true);
-    expect(new Set(live.map((machine) => machine.image_ref?.digest)).size).toBe(
-      1,
+    expect(live.every((machine) => machine.config?.metadata?.["alchemy.phase"] === "active")).toBe(
+      true,
     );
+    expect(live.every((machine) => !!machine.image_ref?.digest)).toBe(true);
+    expect(new Set(live.map((machine) => machine.image_ref?.digest)).size).toBe(1);
     return live;
   });

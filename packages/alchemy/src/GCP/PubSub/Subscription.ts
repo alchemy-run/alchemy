@@ -267,11 +267,7 @@ const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
 
-const toId = (
-  id: string,
-  subscriptionId: string | undefined,
-  existing?: string,
-) =>
+const toId = (id: string, subscriptionId: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     return (
       subscriptionId ??
@@ -309,8 +305,7 @@ const toAttrs = (subscription: pubsub.Subscription, project: string) => {
     project,
     topic: subscription.topic ?? "",
     labels: userLabels(subscription.labels),
-    ackDeadlineSeconds:
-      subscription.ackDeadlineSeconds ?? DEFAULT_ACK_DEADLINE_SECONDS,
+    ackDeadlineSeconds: subscription.ackDeadlineSeconds ?? DEFAULT_ACK_DEADLINE_SECONDS,
     retainAckedMessages: subscription.retainAckedMessages === true,
     messageRetentionDuration: subscription.messageRetentionDuration,
     enableMessageOrdering: subscription.enableMessageOrdering === true,
@@ -375,11 +370,7 @@ const waitUntilPresent = (name: string) =>
  * Let the project's Pub/Sub service agent forward dead letters: publish to
  * the dead-letter topic and ack the original on the subscription.
  */
-const grantDeadLetterAgent = (
-  project: string,
-  subscription: string,
-  deadLetterTopic: string,
-) =>
+const grantDeadLetterAgent = (project: string, subscription: string, deadLetterTopic: string) =>
   Effect.gen(function* () {
     const number = yield* projectNumber(project);
     const member = `serviceAccount:service-${number}@gcp-sa-pubsub.iam.gserviceaccount.com`;
@@ -397,10 +388,8 @@ const grantDeadLetterAgent = (
     });
   });
 
-const sameOptionalString = (
-  left: string | undefined,
-  right: string | undefined,
-) => (left ?? "") === (right ?? "");
+const sameOptionalString = (left: string | undefined, right: string | undefined) =>
+  (left ?? "") === (right ?? "");
 
 const retryChanged = (
   desired: SubscriptionRetryPolicy | undefined,
@@ -439,8 +428,7 @@ const pushChanged = (
     JSON.stringify(desiredAttributes) !== JSON.stringify(observedAttributes) ||
     (desired.oidcToken?.serviceAccountEmail ?? "") !==
       (observed?.oidcToken?.serviceAccountEmail ?? "") ||
-    (desired.oidcToken?.audience ?? "") !==
-      (observed?.oidcToken?.audience ?? "")
+    (desired.oidcToken?.audience ?? "") !== (observed?.oidcToken?.audience ?? "")
   );
 };
 
@@ -500,8 +488,7 @@ export const SubscriptionProvider = () =>
         news.subscriptionId !== previousId;
       const previousTopic = olds?.topic ?? output?.topic;
       const topicChanged =
-        previousTopic !== undefined &&
-        topicKey(news.topic) !== topicKey(previousTopic);
+        previousTopic !== undefined && topicKey(news.topic) !== topicKey(previousTopic);
       const previousFilter = olds?.filter ?? output?.filter ?? "";
       const nextFilter = news.filter ?? "";
       const previousOrdering =
@@ -518,27 +505,18 @@ export const SubscriptionProvider = () =>
       return {
         action: "replace" as const,
         deleteFirst:
-          !nameChanged &&
-          nextId !== undefined &&
-          previousId !== undefined &&
-          nextId === previousId,
+          !nameChanged && nextId !== undefined && previousId !== undefined && nextId === previousId,
       };
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const subscriptionId = yield* toId(
-        id,
-        olds?.subscriptionId,
-        output?.subscriptionId,
-      );
+      const subscriptionId = yield* toId(id, olds?.subscriptionId, output?.subscriptionId);
       const name = output?.name ?? resourceName(env.project, subscriptionId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -550,13 +528,9 @@ export const SubscriptionProvider = () =>
             pageSize: 1000,
           })
           .pipe(
-            Stream.flatMap((page) =>
-              Stream.fromIterable(page.subscriptions ?? []),
-            ),
+            Stream.flatMap((page) => Stream.fromIterable(page.subscriptions ?? [])),
             Stream.filter((subscription) =>
-              Object.keys(subscription.labels ?? {}).some((key) =>
-                key.startsWith("alchemy-"),
-              ),
+              Object.keys(subscription.labels ?? {}).some((key) => key.startsWith("alchemy-")),
             ),
             Stream.map((subscription) => toAttrs(subscription, env.project)),
             Stream.runCollect,
@@ -566,11 +540,7 @@ export const SubscriptionProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const subscriptionId = yield* toId(
-        id,
-        news.subscriptionId,
-        output?.subscriptionId,
-      );
+      const subscriptionId = yield* toId(id, news.subscriptionId, output?.subscriptionId);
       const name = resourceName(env.project, subscriptionId);
       const topicName = topicNameOf(env.project, news.topic);
       const desiredLabels = {
@@ -596,8 +566,7 @@ export const SubscriptionProvider = () =>
           .pipe(Effect.catchTag("Conflict", () => waitUntilPresent(name)));
         // Block until Pub/Sub serves the subscription: the create response
         // alone does not mean a GET (or a publish routed to it) sees it yet.
-        current =
-          created === undefined ? undefined : yield* waitUntilPresent(name);
+        current = created === undefined ? undefined : yield* waitUntilPresent(name);
       }
 
       if (current === undefined) {
@@ -608,44 +577,22 @@ export const SubscriptionProvider = () =>
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
       const desiredAck =
-        news.ackDeadlineSeconds ??
-        current.ackDeadlineSeconds ??
-        DEFAULT_ACK_DEADLINE_SECONDS;
+        news.ackDeadlineSeconds ?? current.ackDeadlineSeconds ?? DEFAULT_ACK_DEADLINE_SECONDS;
       const ackChanged =
-        desiredAck !==
-        (current.ackDeadlineSeconds ?? DEFAULT_ACK_DEADLINE_SECONDS);
-      const desiredRetain =
-        news.retainAckedMessages ?? current.retainAckedMessages ?? false;
-      const retainChanged =
-        desiredRetain !== (current.retainAckedMessages === true);
+        desiredAck !== (current.ackDeadlineSeconds ?? DEFAULT_ACK_DEADLINE_SECONDS);
+      const desiredRetain = news.retainAckedMessages ?? current.retainAckedMessages ?? false;
+      const retainChanged = desiredRetain !== (current.retainAckedMessages === true);
       const desiredExactlyOnce =
-        news.enableExactlyOnceDelivery ??
-        current.enableExactlyOnceDelivery ??
-        false;
+        news.enableExactlyOnceDelivery ?? current.enableExactlyOnceDelivery ?? false;
       const exactlyOnceChanged =
         desiredExactlyOnce !== (current.enableExactlyOnceDelivery === true);
       const retentionChanged =
         news.messageRetentionDuration !== undefined &&
-        !sameOptionalString(
-          news.messageRetentionDuration,
-          current.messageRetentionDuration,
-        );
-      const expChanged = expirationChanged(
-        news.expirationPolicy,
-        current.expirationPolicy,
-      );
-      const retriesChanged = retryChanged(
-        news.retryPolicy,
-        current.retryPolicy,
-      );
-      const deadLettersChanged = deadLetterChanged(
-        news.deadLetterPolicy,
-        current.deadLetterPolicy,
-      );
-      const pushConfigChanged = pushChanged(
-        news.pushConfig,
-        current.pushConfig,
-      );
+        !sameOptionalString(news.messageRetentionDuration, current.messageRetentionDuration);
+      const expChanged = expirationChanged(news.expirationPolicy, current.expirationPolicy);
+      const retriesChanged = retryChanged(news.retryPolicy, current.retryPolicy);
+      const deadLettersChanged = deadLetterChanged(news.deadLetterPolicy, current.deadLetterPolicy);
+      const pushConfigChanged = pushChanged(news.pushConfig, current.pushConfig);
 
       if (
         labelsChanged ||
@@ -670,13 +617,10 @@ export const SubscriptionProvider = () =>
                 retainAckedMessages: desiredRetain,
                 enableExactlyOnceDelivery: desiredExactlyOnce,
                 messageRetentionDuration:
-                  news.messageRetentionDuration ??
-                  current.messageRetentionDuration,
-                expirationPolicy:
-                  news.expirationPolicy ?? current.expirationPolicy,
+                  news.messageRetentionDuration ?? current.messageRetentionDuration,
+                expirationPolicy: news.expirationPolicy ?? current.expirationPolicy,
                 retryPolicy: news.retryPolicy ?? current.retryPolicy,
-                deadLetterPolicy:
-                  news.deadLetterPolicy ?? current.deadLetterPolicy,
+                deadLetterPolicy: news.deadLetterPolicy ?? current.deadLetterPolicy,
                 pushConfig: news.pushConfig ?? current.pushConfig,
               },
               updateMask: [

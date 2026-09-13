@@ -16,9 +16,7 @@ test.provider(
   () =>
     Effect.gen(function* () {
       const error = yield* Effect.flip(
-        repostspace.getSpace({
-          spaceId: "SPalchemynonexistentprobe0",
-        }),
+        repostspace.getSpace({ spaceId: "SPalchemynonexistentprobe0" }),
       );
       expect(error._tag).toBe("ResourceNotFoundException");
     }),
@@ -31,22 +29,13 @@ const assertSpaceDeleting = (spaceId: string) =>
   Effect.gen(function* () {
     const status = yield* repostspace.getSpace({ spaceId }).pipe(
       Effect.map((space) => space.status),
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed("gone" as const),
-      ),
+      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed("gone" as const)),
     );
     if (status !== "gone" && !status.startsWith("DELETE")) {
-      return yield* Effect.fail(
-        new Error(`space '${spaceId}' still exists (status: ${status})`),
-      );
+      return yield* Effect.fail(new Error(`space '${spaceId}' still exists (status: ${status})`));
     }
   }).pipe(
-    Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("10 seconds"),
-        Schedule.recurs(18),
-      ]),
-    }),
+    Effect.retry({ schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(18)]) }),
   );
 
 // re:Post Private is a paid tier (Basic/Standard) that requires IAM Identity
@@ -81,16 +70,12 @@ test.provider.skipIf(!process.env.AWS_TEST_REPOSTSPACE)(
       expect(space.description).toBe("alchemy repostspace test");
 
       // Out-of-band verification via distilled.
-      const observed = yield* repostspace.getSpace({
-        spaceId: space.spaceId,
-      });
+      const observed = yield* repostspace.getSpace({ spaceId: space.spaceId });
       expect(observed.status).toBe("CREATE_COMPLETED");
       expect(observed.tier).toBe("BASIC");
 
       // In-place update (no replacement): description changes, id is stable.
-      const { space: updated } = yield* stack.deploy(
-        make("alchemy repostspace test (updated)"),
-      );
+      const { space: updated } = yield* stack.deploy(make("alchemy repostspace test (updated)"));
       expect(updated.spaceId).toBe(space.spaceId);
       expect(updated.description).toBe("alchemy repostspace test (updated)");
 
@@ -100,8 +85,5 @@ test.provider.skipIf(!process.env.AWS_TEST_REPOSTSPACE)(
       yield* assertSpaceDeleting(space.spaceId);
     }),
   // async provisioning (~30 min) + update + delete initiation, one test.
-  {
-    tags: ["provider:aws", "provider:aws:repostspace", "live"],
-    timeout: 3_600_000,
-  },
+  { tags: ["provider:aws", "provider:aws:repostspace", "live"], timeout: 3_600_000 },
 );

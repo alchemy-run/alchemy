@@ -20,17 +20,13 @@ import {
  * `process.env`, so populate it before `beforeAll(deploy(Stack))`
  * compiles the stack.
  */
-const CONFIG_SECRET_VALUE = (process.env.CONFIG_SECRET =
-  "sk-from-config-source-xyz");
+const CONFIG_SECRET_VALUE = (process.env.CONFIG_SECRET = "sk-from-config-source-xyz");
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const stack = beforeAll(deploy(Stack));
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
@@ -58,10 +54,7 @@ const fetchWhenReady = (url: string) =>
       Effect.retry({
         while: (e): e is WorkerNotReady =>
           e instanceof WorkerNotReady && (e.status === 404 || e.status >= 500),
-        schedule: Schedule.max([
-          Schedule.exponential("500 millis"),
-          Schedule.recurs(20),
-        ]),
+        schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(20)]),
       }),
     );
   });

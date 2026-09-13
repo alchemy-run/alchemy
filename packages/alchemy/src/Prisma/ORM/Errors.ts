@@ -101,9 +101,7 @@ export type ConstraintViolationError =
  * ...). `sqlState` carries the driver-normalized SQLSTATE for finer
  * refinement.
  */
-export class QueryError extends Data.TaggedError(
-  "Prisma.QueryError",
-)<QueryErrorFields> {}
+export class QueryError extends Data.TaggedError("Prisma.QueryError")<QueryErrorFields> {}
 
 /**
  * A connection-level failure (refused, reset, timed out). `transient`
@@ -116,9 +114,7 @@ export class QueryError extends Data.TaggedError(
  * })
  * ```
  */
-export class ConnectionError extends Data.TaggedError(
-  "Prisma.ConnectionError",
-)<{
+export class ConnectionError extends Data.TaggedError("Prisma.ConnectionError")<{
   message: string;
   transient?: boolean | undefined;
   cause: unknown;
@@ -162,9 +158,7 @@ export class UnknownError extends Data.TaggedError("Prisma.UnknownError")<{
  * surfaces in the caller's error channel, catchable with
  * `Effect.catchTag("Prisma.RollbackError", ...)`.
  */
-export class RollbackError extends Data.TaggedError(
-  "Prisma.RollbackError",
-)<{}> {}
+export class RollbackError extends Data.TaggedError("Prisma.RollbackError")<{}> {}
 
 /** Everything a Prisma query can fail with. */
 export type ClientError =

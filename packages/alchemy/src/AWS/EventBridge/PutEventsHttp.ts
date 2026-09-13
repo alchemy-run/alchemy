@@ -24,11 +24,10 @@ export const PutEventsHttp = Layer.effect(
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
-          const { accountId, region } =
-            yield* AWSEnvironment.current as unknown as Effect.Effect<{
-              accountId: string;
-              region: string;
-            }>;
+          const { accountId, region } = yield* AWSEnvironment.current as unknown as Effect.Effect<{
+            accountId: string;
+            region: string;
+          }>;
           // Pass the ARN as an unresolved Output — binding data is resolved
           // by the engine before the host reconciles. Eagerly yielding here
           // (during plan) produces a deferred object that serializes into an
@@ -37,34 +36,29 @@ export const PutEventsHttp = Layer.effect(
             ? Output.interpolate`${bus.eventBusArn}`
             : (`arn:aws:events:${region}:${accountId}:event-bus/default` as const);
 
-          yield* host.bind`Allow(${host}, AWS.EventBridge.PutEvents(${bus ?? "default"}))`(
-            {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: ["events:PutEvents"],
-                  Resource: [resource],
-                },
-              ],
-            },
-          );
+          yield* host.bind`Allow(${host}, AWS.EventBridge.PutEvents(${bus ?? "default"}))`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: ["events:PutEvents"],
+                Resource: [resource],
+              },
+            ],
+          });
         }
       }
-      return Effect.fn(`AWS.EventBridge.PutEvents(${bus?.LogicalId})`)(
-        function* (request: PutEventsRequest) {
-          const eventBusName = EventBusName ? yield* EventBusName : undefined;
-          return yield* putEvents({
-            ...request,
-            Entries: request.Entries.map((entry) => ({
-              ...entry,
-              EventBusName:
-                eventBusName && eventBusName !== "default"
-                  ? eventBusName
-                  : undefined,
-            })),
-          });
-        },
-      );
+      return Effect.fn(`AWS.EventBridge.PutEvents(${bus?.LogicalId})`)(function* (
+        request: PutEventsRequest,
+      ) {
+        const eventBusName = EventBusName ? yield* EventBusName : undefined;
+        return yield* putEvents({
+          ...request,
+          Entries: request.Entries.map((entry) => ({
+            ...entry,
+            EventBusName: eventBusName && eventBusName !== "default" ? eventBusName : undefined,
+          })),
+        });
+      });
     });
   }),
 );

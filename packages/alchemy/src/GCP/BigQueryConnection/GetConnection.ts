@@ -41,6 +41,4 @@ export interface GetConnection extends Binding.Service<
   >
 > {}
 
-export const GetConnection = Binding.Service<GetConnection>(
-  "GCP.BigQueryConnection.GetConnection",
-);
+export const GetConnection = Binding.Service<GetConnection>("GCP.BigQueryConnection.GetConnection");

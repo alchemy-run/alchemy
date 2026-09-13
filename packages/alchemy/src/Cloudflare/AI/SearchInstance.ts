@@ -20,10 +20,7 @@ export type SearchInstanceSourceType = "r2" | "web-crawler";
 /**
  * Generation model used to answer AI Search queries.
  */
-export type SearchModel = Exclude<
-  NonNullable<aisearch.CreateInstanceRequest["aiSearchModel"]>,
-  ""
->;
+export type SearchModel = Exclude<NonNullable<aisearch.CreateInstanceRequest["aiSearchModel"]>, "">;
 
 /**
  * Embedding model used to vectorize indexed content. Cannot be changed
@@ -43,37 +40,27 @@ export type RerankingModel = "@cf/baai/bge-reranker-base";
  * Data-source specific indexing parameters (R2 prefix / include / exclude
  * filters, or web-crawler options).
  */
-export type SourceParams = NonNullable<
-  aisearch.CreateInstanceRequest["sourceParams"]
->;
+export type SourceParams = NonNullable<aisearch.CreateInstanceRequest["sourceParams"]>;
 
 /**
  * Controls which storage backends are used during indexing.
  */
-export type IndexMethod = NonNullable<
-  aisearch.CreateInstanceRequest["indexMethod"]
->;
+export type IndexMethod = NonNullable<aisearch.CreateInstanceRequest["indexMethod"]>;
 
 /**
  * Keyword indexing options.
  */
-export type IndexingOptions = NonNullable<
-  aisearch.CreateInstanceRequest["indexingOptions"]
->;
+export type IndexingOptions = NonNullable<aisearch.CreateInstanceRequest["indexingOptions"]>;
 
 /**
  * Custom metadata fields extracted at indexing time.
  */
-export type CustomMetadata = NonNullable<
-  aisearch.CreateInstanceRequest["customMetadata"]
->;
+export type CustomMetadata = NonNullable<aisearch.CreateInstanceRequest["customMetadata"]>;
 
 /**
  * Retrieval-time options (boosting and keyword match mode).
  */
-export type RetrievalOptions = NonNullable<
-  aisearch.CreateInstanceRequest["retrievalOptions"]
->;
+export type RetrievalOptions = NonNullable<aisearch.CreateInstanceRequest["retrievalOptions"]>;
 
 /**
  * Public REST endpoint configuration for the instance.
@@ -549,14 +536,7 @@ export const isSearchInstance = (value: unknown): value is SearchInstance =>
 
 export const SearchInstanceProvider = () =>
   Provider.succeed(SearchInstance, {
-    stables: [
-      "instanceId",
-      "accountId",
-      "namespace",
-      "type",
-      "embeddingModel",
-      "createdAt",
-    ],
+    stables: ["instanceId", "accountId", "namespace", "type", "embeddingModel", "createdAt"],
     diff: Effect.fn(function* ({ id, olds, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       if (!isResolved(news)) return undefined;
@@ -568,15 +548,12 @@ export const SearchInstanceProvider = () =>
       // new instance lives at a different path, so create-before-delete is
       // always safe here regardless of whether the id is pinned.
       const newNamespace = resolveNamespace(news.namespace);
-      const oldNamespace = resolveNamespace(
-        output?.namespace ?? olds.namespace,
-      );
+      const oldNamespace = resolveNamespace(output?.namespace ?? olds.namespace);
       if (newNamespace !== oldNamespace) {
         return { action: "replace" } as const;
       }
       // The instance id is its identity — renaming is a replacement.
-      const oldId =
-        output?.instanceId ?? (yield* createInstanceId(id, olds.instanceId));
+      const oldId = output?.instanceId ?? (yield* createInstanceId(id, olds.instanceId));
       // Auto-generated ids are engine-owned: the deployed id stays
       // authoritative even if the generator would name this id differently
       // today. Only an explicit user-provided instanceId can force a replace.
@@ -602,8 +579,7 @@ export const SearchInstanceProvider = () =>
         return replace;
       }
       // The embedding model defines the vector space and is immutable.
-      const oldEmbedding =
-        normalize(output?.embeddingModel) ?? olds.embeddingModel;
+      const oldEmbedding = normalize(output?.embeddingModel) ?? olds.embeddingModel;
       if (
         news.embeddingModel !== undefined &&
         oldEmbedding !== undefined &&
@@ -620,8 +596,7 @@ export const SearchInstanceProvider = () =>
       // The id is deterministic (explicit prop or generated from the
       // logical id + instance id), so a cold read (lost state) resolves
       // the same identifier as the original create did.
-      const instanceId =
-        output?.instanceId ?? (yield* createInstanceId(id, olds?.instanceId));
+      const instanceId = output?.instanceId ?? (yield* createInstanceId(id, olds?.instanceId));
       const observed = yield* getInstance(acct, namespace, instanceId);
       return observed ? toAttributes(observed, acct, namespace) : undefined;
     }),
@@ -630,34 +605,26 @@ export const SearchInstanceProvider = () =>
       // SearchInstances are namespace-scoped, so enumerate every namespace
       // (always including the account-provided `default`) and fan out a
       // paginated instance list per namespace.
-      const namespaces = yield* aisearch.listNamespaces
-        .pages({ accountId })
-        .pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.result ?? []).map((ns) => ns.name),
-            ),
-          ),
-        );
+      const namespaces = yield* aisearch.listNamespaces.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) => (page.result ?? []).map((ns) => ns.name)),
+        ),
+      );
       const allNamespaces = Array.from(new Set(["default", ...namespaces]));
       const rows = yield* Effect.forEach(
         allNamespaces,
         (namespace) =>
-          aisearch.listNamespaceInstances
-            .pages({ accountId, name: namespace })
-            .pipe(
-              Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) =>
-                  (page.result ?? []).map((instance) =>
-                    toAttributes(instance, accountId, namespace),
-                  ),
-                ),
+          aisearch.listNamespaceInstances.pages({ accountId, name: namespace }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.result ?? []).map((instance) => toAttributes(instance, accountId, namespace)),
               ),
-              // A namespace deleted between list and fan-out is simply empty.
-              Effect.catchTag("NamespaceNotFound", () => Effect.succeed([])),
             ),
+            // A namespace deleted between list and fan-out is simply empty.
+            Effect.catchTag("NamespaceNotFound", () => Effect.succeed([])),
+          ),
         { concurrency: 5 },
       );
       return rows.flat();
@@ -666,8 +633,7 @@ export const SearchInstanceProvider = () =>
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
       const namespace = resolveNamespace(news.namespace);
-      const instanceId =
-        output?.instanceId ?? (yield* createInstanceId(id, news.instanceId));
+      const instanceId = output?.instanceId ?? (yield* createInstanceId(id, news.instanceId));
 
       // Observe — `output.instanceId` is a cache, not a guarantee: a NotFound
       // falls through to "missing" and we recreate.
@@ -694,11 +660,7 @@ export const SearchInstanceProvider = () =>
             })),
             Effect.catchTag("InstanceAlreadyExists", (originalError) =>
               Effect.gen(function* () {
-                const existing = yield* getInstance(
-                  acct,
-                  namespace,
-                  instanceId,
-                );
+                const existing = yield* getInstance(acct, namespace, instanceId);
                 if (!existing) return yield* Effect.fail(originalError);
                 return { created: false as const, instance: existing };
               }),
@@ -776,10 +738,7 @@ export const SearchInstanceProvider = () =>
           id: output.instanceId,
         })
         .pipe(
-          Effect.catchTag(
-            ["AiSearchInstanceNotFound", "NamespaceNotFound"],
-            () => Effect.void,
-          ),
+          Effect.catchTag(["AiSearchInstanceNotFound", "NamespaceNotFound"], () => Effect.void),
         );
     }),
   });
@@ -801,13 +760,10 @@ export const SearchInstanceProvider = () =>
  * Both settle within a bounded window; a genuinely invalid token or
  * unreachable/empty seed still fails once the retries are exhausted.
  */
-const retryTokenPropagation = <A, E extends { _tag: string }, R>(
-  effect: Effect.Effect<A, E, R>,
-) =>
+const retryTokenPropagation = <A, E extends { _tag: string }, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
     Effect.retry({
-      while: (e) =>
-        e._tag === "InvalidTokenCredentials" || e._tag === "MissingSitemap",
+      while: (e) => e._tag === "InvalidTokenCredentials" || e._tag === "MissingSitemap",
       // A full-body update PUT re-sends `source`, which makes Cloudflare
       // re-validate the (write-only, auto-provisioned) R2 service token and
       // re-fetch a web-crawler seed — opening a fresh propagation window each
@@ -819,10 +775,7 @@ const retryTokenPropagation = <A, E extends { _tag: string }, R>(
       // sparsely and detects a settled token tens of seconds late. Capped
       // polling detects within 6s of propagation completing while still
       // covering a long total window.
-      schedule: Schedule.min([
-        Schedule.exponential("1 second", 1.5),
-        Schedule.spaced("6 seconds"),
-      ]),
+      schedule: Schedule.min([Schedule.exponential("1 second", 1.5), Schedule.spaced("6 seconds")]),
       times: 22,
     }),
   );
@@ -833,8 +786,7 @@ type ObservedInstance = aisearch.ReadNamespaceInstanceResponse;
  * Resolve the namespace name an instance lives in, defaulting to the
  * account-provided `default` namespace.
  */
-const resolveNamespace = (namespace: string | undefined): string =>
-  namespace ?? "default";
+const resolveNamespace = (namespace: string | undefined): string => namespace ?? "default";
 
 /**
  * Read an instance by id within its namespace, mapping "gone" to
@@ -932,9 +884,7 @@ const preserveObserved = (observed: ObservedInstance) =>
 
 /** Strip `undefined` entries so they don't override spread order. */
 const defined = <T extends Record<string, unknown>>(value: T): Partial<T> =>
-  Object.fromEntries(
-    Object.entries(value).filter(([, v]) => v !== undefined),
-  ) as Partial<T>;
+  Object.fromEntries(Object.entries(value).filter(([, v]) => v !== undefined)) as Partial<T>;
 
 /**
  * The instance fields `read` projects, common to the create / read /

@@ -28,9 +28,7 @@ interface RowMeta {
 }
 
 /** Encodes staged rows for one `stagePush` call. */
-export const encodeStagedBatch = (
-  objects: ReadonlyArray<StagedObject>,
-): Uint8Array => {
+export const encodeStagedBatch = (objects: ReadonlyArray<StagedObject>): Uint8Array => {
   const meta: Array<RowMeta> = [];
   let blobBytes = 0;
   for (const object of objects) {
@@ -40,10 +38,7 @@ export const encodeStagedBatch = (
       s: object.size,
       n: object.zdata.byteLength,
       z: object.zsize,
-      p:
-        object.pack === undefined
-          ? undefined
-          : { i: object.pack.packId, f: object.pack.offset },
+      p: object.pack === undefined ? undefined : { i: object.pack.packId, f: object.pack.offset },
     });
     blobBytes += object.zdata.byteLength;
   }
@@ -60,14 +55,8 @@ export const encodeStagedBatch = (
 };
 
 /** Decodes a `stagePush` batch back into staged rows (views into `bytes`). */
-export const decodeStagedBatch = (
-  bytes: Uint8Array,
-): ReadonlyArray<StagedObject> => {
-  const jsonLen = new DataView(
-    bytes.buffer,
-    bytes.byteOffset,
-    bytes.byteLength,
-  ).getUint32(0);
+export const decodeStagedBatch = (bytes: Uint8Array): ReadonlyArray<StagedObject> => {
+  const jsonLen = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(0);
   const meta = JSON.parse(
     new TextDecoder().decode(bytes.subarray(4, 4 + jsonLen)),
   ) as ReadonlyArray<RowMeta>;
@@ -82,8 +71,7 @@ export const decodeStagedBatch = (
       size: row.s,
       zdata,
       zsize: row.z,
-      pack:
-        row.p === undefined ? undefined : { packId: row.p.i, offset: row.p.f },
+      pack: row.p === undefined ? undefined : { packId: row.p.i, offset: row.p.f },
     });
   }
   return out;

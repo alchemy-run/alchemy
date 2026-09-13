@@ -9,7 +9,4 @@ import { ReadSubscription } from "./ReadSubscription.ts";
  * @provides GCP.PubSub.ReadSubscription
  * @category PubSub
  */
-export const ReadSubscriptionHttp = Layer.effect(
-  ReadSubscription,
-  makeReadSubscriptionBinding,
-);
+export const ReadSubscriptionHttp = Layer.effect(ReadSubscription, makeReadSubscriptionBinding);

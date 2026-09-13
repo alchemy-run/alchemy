@@ -16,17 +16,13 @@ import type { TunnelAuth } from "./TunnelBinding.ts";
  * NOT exported from `index.ts` — this is internal scaffolding shared by the
  * three access-level Local layers.
  */
-export const makeLocalTunnelClient = <Client>(
-  makeClient: (auth: TunnelAuth) => Client,
-) =>
+export const makeLocalTunnelClient = <Client>(makeClient: (auth: TunnelAuth) => Client) =>
   Effect.gen(function* () {
     // Account + credentials are ambient during stack-eval (the stack's
     // providers layer). Capture the full context so cfd_tunnel HTTP ops can run
     // with the current credentials — no `host.bind`, no minted token.
     const { accountId } = yield* yield* CloudflareEnvironment;
-    const context = yield* Effect.context<
-      Credentials | HttpClient.HttpClient
-    >();
+    const context = yield* Effect.context<Credentials | HttpClient.HttpClient>();
 
     return Effect.fn(function* () {
       const auth: TunnelAuth = {

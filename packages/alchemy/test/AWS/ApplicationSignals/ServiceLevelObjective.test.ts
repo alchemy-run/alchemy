@@ -16,9 +16,7 @@ test.provider(
   () =>
     Effect.gen(function* () {
       const error = yield* Effect.flip(
-        appsignals.getServiceLevelObjective({
-          Id: "alchemy-nonexistent-slo-probe",
-        }),
+        appsignals.getServiceLevelObjective({ Id: "alchemy-nonexistent-slo-probe" }),
       );
       expect(error._tag).toBe("ResourceNotFoundException");
     }),
@@ -27,9 +25,7 @@ test.provider(
 
 // A period-based SLI over an arbitrary CloudWatch metric (the metric does
 // not need to exist for the SLO to be valid).
-const sliConfig = (
-  threshold: number,
-): appsignals.ServiceLevelIndicatorConfig => ({
+const sliConfig = (threshold: number): appsignals.ServiceLevelIndicatorConfig => ({
   SliMetricConfig: {
     MetricDataQueries: [
       {
@@ -60,16 +56,9 @@ const goal = (attainmentGoal: number): appsignals.Goal => ({
 // Deletion is synchronous but allow brief eventual consistency.
 const assertSloGone = (id: string) =>
   appsignals.getServiceLevelObjective({ Id: id }).pipe(
-    Effect.flatMap((r) =>
-      Effect.fail(new Error(`slo '${r.Slo.Name}' still exists`)),
-    ),
+    Effect.flatMap((r) => Effect.fail(new Error(`slo '${r.Slo.Name}' still exists`))),
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-    Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(10),
-      ]),
-    }),
+    Effect.retry({ schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]) }),
   );
 
 test.provider(
@@ -107,11 +96,7 @@ test.provider(
       // Tags: user tag + internal Alchemy branding.
       const tags = yield* appsignals
         .listTagsForResource({ ResourceArn: slo.sloArn })
-        .pipe(
-          Effect.map((r) =>
-            Object.fromEntries((r.Tags ?? []).map((t) => [t.Key, t.Value])),
-          ),
-        );
+        .pipe(Effect.map((r) => Object.fromEntries((r.Tags ?? []).map((t) => [t.Key, t.Value]))));
       expect(tags.fixture).toBe("application-signals-slo");
       expect(tags["alchemy::id"]).toBe("Slo");
 
@@ -132,18 +117,12 @@ test.provider(
       const observedUpdated = yield* appsignals
         .getServiceLevelObjective({ Id: updated.sloName })
         .pipe(Effect.map((r) => r.Slo));
-      expect(observedUpdated.Description).toBe(
-        "alchemy application-signals test slo (updated)",
-      );
+      expect(observedUpdated.Description).toBe("alchemy application-signals test slo (updated)");
       expect(observedUpdated.Goal.AttainmentGoal).toBe(99.5);
       expect(observedUpdated.Sli?.MetricThreshold).toBe(3000);
       const updatedTags = yield* appsignals
         .listTagsForResource({ ResourceArn: updated.sloArn })
-        .pipe(
-          Effect.map((r) =>
-            Object.fromEntries((r.Tags ?? []).map((t) => [t.Key, t.Value])),
-          ),
-        );
+        .pipe(Effect.map((r) => Object.fromEntries((r.Tags ?? []).map((t) => [t.Key, t.Value]))));
       expect(updatedTags.updated).toBe("true");
 
       // REPLACE — an explicit name change replaces the SLO (no rename API).
@@ -169,8 +148,5 @@ test.provider(
       yield* stack.destroy();
       yield* assertSloGone(replaced.sloName);
     }),
-  {
-    tags: ["provider:aws", "provider:aws:applicationsignals", "live"],
-    timeout: 120_000,
-  },
+  { tags: ["provider:aws", "provider:aws:applicationsignals", "live"], timeout: 120_000 },
 );

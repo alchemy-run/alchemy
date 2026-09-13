@@ -3,13 +3,8 @@ import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
-import {
-  materializeIsolatedProject,
-  removeIsolatedProject,
-} from "../../IsolatedProject.ts";
-import IsolatedProjectInstance, {
-  project,
-} from "./fixtures/isolated-project-instance.ts";
+import { materializeIsolatedProject, removeIsolatedProject } from "../../IsolatedProject.ts";
+import IsolatedProjectInstance, { project } from "./fixtures/isolated-project-instance.ts";
 import { assertInstanceTerminated } from "./Gone.ts";
 import * as Test from "./VpcTest.ts";
 

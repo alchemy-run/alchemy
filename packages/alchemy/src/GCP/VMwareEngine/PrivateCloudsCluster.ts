@@ -195,11 +195,8 @@ export const PrivateCloudsCluster = Resource<PrivateCloudsCluster>(
   "GCP.VMwareEngine.PrivateCloudsCluster",
 );
 
-const parentCloudName = (
-  project: string,
-  location: string,
-  privateCloud: string,
-) => expandName(privateCloud, project, location, PARENT_COLLECTION);
+const parentCloudName = (project: string, location: string, privateCloud: string) =>
+  expandName(privateCloud, project, location, PARENT_COLLECTION);
 
 const resourceNameOf = (parent: string, clusterId: string) =>
   `${parent}/${COLLECTION}/${clusterId}`;
@@ -263,10 +260,7 @@ const autoscalingOf = (
 };
 
 const stretchedOf = (
-  value:
-    | vmwareengine.StretchedClusterConfig
-    | StretchedClusterConfig
-    | undefined,
+  value: vmwareengine.StretchedClusterConfig | StretchedClusterConfig | undefined,
 ): StretchedClusterConfig | undefined => {
   if (value === undefined) return undefined;
   return {
@@ -326,31 +320,18 @@ const getParentCloud = (name: string) =>
     .getProjectsLocationsPrivateClouds({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const defaultNodeTypeConfigs = (
-  value: Record<string, NodeTypeConfig | undefined> | undefined,
-) =>
+const defaultNodeTypeConfigs = (value: Record<string, NodeTypeConfig | undefined> | undefined) =>
   value ?? {
     [DEFAULT_NODE_TYPE]: { nodeCount: DEFAULT_NODE_COUNT },
   };
 
 export const PrivateCloudsClusterProvider = () =>
   Provider.succeed(PrivateCloudsCluster, {
-    stables: [
-      "name",
-      "clusterId",
-      "privateCloud",
-      "project",
-      "location",
-      "uid",
-      "createTime",
-    ],
+    stables: ["name", "clusterId", "privateCloud", "project", "location", "uid", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        DEFAULT_ZONE,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, DEFAULT_ZONE);
       return replaceOnIdentity({
         previousId: olds?.clusterId ?? output?.clusterId,
         nextId: news.clusterId
@@ -358,17 +339,14 @@ export const PrivateCloudsClusterProvider = () =>
           : (olds?.clusterId ?? output?.clusterId),
         previousLocation,
         nextLocation: normalizeLocation(
-          news.location ??
-            locationFromName(news.privateCloud, previousLocation),
+          news.location ?? locationFromName(news.privateCloud, previousLocation),
           DEFAULT_ZONE,
         ),
         previousParent: olds?.privateCloud ?? output?.privateCloud,
         nextParent: news.privateCloud,
         extra: !sameJson(
           stretchedOf(news.stretchedClusterConfig),
-          stretchedOf(
-            olds?.stretchedClusterConfig ?? output?.stretchedClusterConfig,
-          ),
+          stretchedOf(olds?.stretchedClusterConfig ?? output?.stretchedClusterConfig),
         ),
       });
     }),
@@ -378,9 +356,7 @@ export const PrivateCloudsClusterProvider = () =>
       const location = normalizeLocation(
         olds?.location ??
           output?.location ??
-          (olds?.privateCloud
-            ? locationFromName(olds.privateCloud, DEFAULT_ZONE)
-            : undefined),
+          (olds?.privateCloud ? locationFromName(olds.privateCloud, DEFAULT_ZONE) : undefined),
         DEFAULT_ZONE,
       );
       const parent = parentCloudName(
@@ -388,41 +364,29 @@ export const PrivateCloudsClusterProvider = () =>
         location,
         olds?.privateCloud ?? output?.privateCloud ?? "",
       );
-      const clusterId = yield* toPhysicalId(
-        id,
-        olds?.clusterId,
-        output?.clusterId,
-        "cluster",
-      );
+      const clusterId = yield* toPhysicalId(id, olds?.clusterId, output?.clusterId, "cluster");
       const name = output?.name ?? resourceNameOf(parent, clusterId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       if (output?.name === (existing.name ?? name)) return attrs;
       const parentCloud = yield* getParentCloud(attrs.privateCloud);
-      return hasOwnershipMarker(parentCloud?.description)
-        ? attrs
-        : Unowned(attrs);
+      return hasOwnershipMarker(parentCloud?.description) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const clouds = yield* listAcrossLocations(
-          env.project,
-          env.region,
-          (parent) =>
-            collectPages(
-              vmwareengine.listProjectsLocationsPrivateClouds.pages({
-                parent,
-                pageSize: 1000,
-              }),
-              (page) => page.privateClouds,
-            ),
+        const clouds = yield* listAcrossLocations(env.project, env.region, (parent) =>
+          collectPages(
+            vmwareengine.listProjectsLocationsPrivateClouds.pages({
+              parent,
+              pageSize: 1000,
+            }),
+            (page) => page.privateClouds,
+          ),
         );
-        const ownedClouds = clouds.filter((cloud) =>
-          hasOwnershipMarker(cloud.description),
-        );
+        const ownedClouds = clouds.filter((cloud) => hasOwnershipMarker(cloud.description));
         const nested = yield* Effect.forEach(
           ownedClouds.filter((cloud) => (cloud.name ?? "").length > 0),
           (cloud) =>
@@ -444,18 +408,11 @@ export const PrivateCloudsClusterProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(
-        news.location ??
-          output?.location ??
-          locationFromName(news.privateCloud, DEFAULT_ZONE),
+        news.location ?? output?.location ?? locationFromName(news.privateCloud, DEFAULT_ZONE),
         DEFAULT_ZONE,
       );
       const parent = parentCloudName(env.project, location, news.privateCloud);
-      const clusterId = yield* toPhysicalId(
-        id,
-        news.clusterId,
-        output?.clusterId,
-        "cluster",
-      );
+      const clusterId = yield* toPhysicalId(id, news.clusterId, output?.clusterId, "cluster");
       const name = resourceNameOf(parent, clusterId);
       yield* createInternalLabels(id);
       const nodeTypeConfigs = defaultNodeTypeConfigs(news.nodeTypeConfigs);
@@ -497,10 +454,7 @@ export const PrivateCloudsClusterProvider = () =>
         (item) => item.state,
       );
 
-      const nodesChanged = !sameJson(
-        nodeTypeConfigsOf(current.nodeTypeConfigs),
-        nodeTypeConfigs,
-      );
+      const nodesChanged = !sameJson(nodeTypeConfigsOf(current.nodeTypeConfigs), nodeTypeConfigs);
       const autoscalingChanged = !sameJson(
         autoscalingOf(current.autoscalingSettings),
         autoscalingOf(news.autoscalingSettings),
@@ -511,16 +465,15 @@ export const PrivateCloudsClusterProvider = () =>
       ]);
 
       if (updateMask.length > 0) {
-        const operation =
-          yield* vmwareengine.patchProjectsLocationsPrivateCloudsClusters({
+        const operation = yield* vmwareengine.patchProjectsLocationsPrivateCloudsClusters({
+          name: current.name ?? name,
+          updateMask: updateMask.join(","),
+          body: {
             name: current.name ?? name,
-            updateMask: updateMask.join(","),
-            body: {
-              name: current.name ?? name,
-              nodeTypeConfigs,
-              autoscalingSettings: news.autoscalingSettings,
-            },
-          });
+            nodeTypeConfigs,
+            autoscalingSettings: news.autoscalingSettings,
+          },
+        });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(
           getByName(current.name ?? name),

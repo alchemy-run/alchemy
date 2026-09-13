@@ -30,24 +30,13 @@ test.provider.skipIf(canUpload)(
           url: "https://developers.cloudflare.com/og-docs.png",
         }),
         (image) =>
-          image.id
-            ? images.deleteV1({ accountId, imageId: image.id }).pipe(cleanup)
-            : Effect.void,
+          image.id ? images.deleteV1({ accountId, imageId: image.id }).pipe(cleanup) : Effect.void,
       ).pipe(Effect.scoped, Effect.flip);
-      expect(error).toMatchObject({
-        _tag: "ImagesAccessNotEnabled",
-        code: 5403,
-      });
+      expect(error).toMatchObject({ _tag: "ImagesAccessNotEnabled", code: 5403 });
       yield* stack.destroy();
     }).pipe(
       Effect.ensuring(
-        stack
-          .destroy()
-          .pipe(
-            Effect.timeout("15 seconds"),
-            Effect.orDie,
-            Effect.interruptible,
-          ),
+        stack.destroy().pipe(Effect.timeout("15 seconds"), Effect.orDie, Effect.interruptible),
       ),
     ),
   { tags: ["provider:cloudflare", "provider:cloudflare:images", "live"] },
@@ -72,14 +61,11 @@ test.provider.skipIf(!canUpload)(
         Effect.gen(function* () {
           const source = yield* variant;
           const queue = yield* Cloudflare.Queues.Queue("ImageEvents");
-          const subscription = yield* Cloudflare.Queues.Subscription(
-            "Uploads",
-            {
-              source: yield* Cloudflare.Images.Variant.ref("Variant"),
-              events: ["image.uploaded"],
-              queueId: queue.queueId,
-            },
-          );
+          const subscription = yield* Cloudflare.Queues.Subscription("Uploads", {
+            source: yield* Cloudflare.Images.Variant.ref("Variant"),
+            events: ["image.uploaded"],
+            queueId: queue.queueId,
+          });
           return { source, queue, subscription };
         }),
       );
@@ -136,13 +122,11 @@ test.provider.skipIf(!canUpload)(
                 times: 8,
               }),
             );
-          const decoded = yield* Effect.forEach(
-            pulled.messages ?? [],
-            ({ body }) => Schema.decodeUnknownEffect(SubscriptionEvent)(body),
+          const decoded = yield* Effect.forEach(pulled.messages ?? [], ({ body }) =>
+            Schema.decodeUnknownEffect(SubscriptionEvent)(body),
           );
           events.push(...decoded);
-          if (decoded.length)
-            yield* Effect.logInfo("Image subscription receipts", decoded);
+          if (decoded.length) yield* Effect.logInfo("Image subscription receipts", decoded);
           const acks = (pulled.messages ?? []).flatMap(({ leaseId }) =>
             leaseId ? [{ leaseId }] : [],
           );
@@ -162,13 +146,7 @@ test.provider.skipIf(!canUpload)(
         yield* Effect.gen(function* () {
           probes.push(yield* upload(`probe-${probes.length}`));
           yield* pull;
-        }).pipe(
-          Effect.repeat({
-            schedule: Schedule.spaced("3 seconds"),
-            times: 8,
-            until: ready,
-          }),
-        );
+        }).pipe(Effect.repeat({ schedule: Schedule.spaced("3 seconds"), times: 8, until: ready }));
         expect(ready()).toBe(true);
         // A readiness probe must not satisfy the final upload assertion.
         const imageId = yield* upload("final");
@@ -183,21 +161,12 @@ test.provider.skipIf(!canUpload)(
         expect(delivered(imageId)).toBe(true);
       }).pipe(Effect.timeout("60 seconds"), Effect.scoped);
       yield* stack.deploy(variant);
-      yield* images.getV1Variant({
-        accountId,
-        variantId: deployed.source.variantName,
-      });
+      yield* images.getV1Variant({ accountId, variantId: deployed.source.variantName });
       yield* stack.destroy();
     }).pipe(
       Effect.scoped,
       Effect.ensuring(
-        stack
-          .destroy()
-          .pipe(
-            Effect.timeout("15 seconds"),
-            Effect.orDie,
-            Effect.interruptible,
-          ),
+        stack.destroy().pipe(Effect.timeout("15 seconds"), Effect.orDie, Effect.interruptible),
       ),
     ),
   {

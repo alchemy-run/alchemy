@@ -30,9 +30,7 @@ export const makeStorageBucketHelpers = Effect.gen(function* () {
         Effect.flatMap((bucket) =>
           media.download({ bucket, object, generation: options?.generation }),
         ),
-        Effect.catchTag("GCP.Storage.ObjectNotFound", () =>
-          Effect.succeed(undefined),
-        ),
+        Effect.catchTag("GCP.Storage.ObjectNotFound", () => Effect.succeed(undefined)),
       ),
     list: (options) =>
       bucketName.pipe(
@@ -47,11 +45,7 @@ export const makeStorageBucketHelpers = Effect.gen(function* () {
 
   const makeWrite = (bucketName: Effect.Effect<string>): WriteBucketClient => ({
     put: (name, body, options) =>
-      bucketName.pipe(
-        Effect.flatMap((bucket) =>
-          media.upload(bucket, { ...options, name, body }),
-        ),
-      ),
+      bucketName.pipe(Effect.flatMap((bucket) => media.upload(bucket, { ...options, name, body }))),
     delete: (object) =>
       bucketName.pipe(
         Effect.flatMap((bucket) => deleteObject({ bucket, object })),

@@ -82,16 +82,13 @@ export const RoomMessageReviewEventSource = Layer.effect(
                 accountId: string;
                 region: string;
               }>;
-            const permission = yield* Permission(
-              `${room.LogicalId}-MessageReview-Permission`,
-              {
-                action: "lambda:InvokeFunction",
-                functionName: host.functionArn,
-                principal: "ivschat.amazonaws.com",
-                sourceAccount: accountId,
-                sourceArn: `arn:aws:ivschat:${region}:${accountId}:room/*`,
-              },
-            );
+            const permission = yield* Permission(`${room.LogicalId}-MessageReview-Permission`, {
+              action: "lambda:InvokeFunction",
+              functionName: host.functionArn,
+              principal: "ivschat.amazonaws.com",
+              sourceAccount: accountId,
+              sourceArn: `arn:aws:ivschat:${region}:${accountId}:room/*`,
+            });
 
             // The Permission echoes the `functionName` prop (the function
             // ARN) as an attribute — threading it as the handler `uri`

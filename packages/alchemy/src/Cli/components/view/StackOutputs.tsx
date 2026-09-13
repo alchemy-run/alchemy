@@ -33,6 +33,4 @@ export function StackOutputs({
 export const stackOutputLineCount = (value: unknown): number =>
   inspect(value, { colors: false }).split("\n").length;
 
-export const stackOutputsView = (value: unknown): ReactNode => (
-  <StackOutputs value={value} />
-);
+export const stackOutputsView = (value: unknown): ReactNode => <StackOutputs value={value} />;

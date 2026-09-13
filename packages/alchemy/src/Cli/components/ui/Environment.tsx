@@ -25,20 +25,13 @@ type ObservingEnvironmentProps = {
   readonly children?: ReactNode;
 };
 
-function ObservingEnvironment({
-  capabilities,
-  children,
-}: ObservingEnvironmentProps) {
+function ObservingEnvironment({ capabilities, children }: ObservingEnvironmentProps) {
   const window = useWindowSize();
   const environment = useMemo(
     () => ({ ...capabilities, columns: window.columns, rows: window.rows }),
     [capabilities, window.columns, window.rows],
   );
-  return (
-    <EnvironmentContext.Provider value={environment}>
-      {children}
-    </EnvironmentContext.Provider>
-  );
+  return <EnvironmentContext.Provider value={environment}>{children}</EnvironmentContext.Provider>;
 }
 
 type CliEnvironmentProps = {
@@ -54,13 +47,9 @@ export function CliEnvironment({
   children,
 }: CliEnvironmentProps) {
   return observeWindow ? (
-    <ObservingEnvironment capabilities={capabilities}>
-      {children}
-    </ObservingEnvironment>
+    <ObservingEnvironment capabilities={capabilities}>{children}</ObservingEnvironment>
   ) : (
-    <EnvironmentContext.Provider value={capabilities}>
-      {children}
-    </EnvironmentContext.Provider>
+    <EnvironmentContext.Provider value={capabilities}>{children}</EnvironmentContext.Provider>
   );
 }
 

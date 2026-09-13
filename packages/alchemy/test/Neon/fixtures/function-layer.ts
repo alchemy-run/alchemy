@@ -15,9 +15,7 @@ export default LayerFunction.make(
     return {
       fetch: Effect.gen(function* () {
         const response = yield* invoke.fetch().pipe(Effect.orDie);
-        const text = yield* Effect.tryPromise(() => response.text()).pipe(
-          Effect.orDie,
-        );
+        const text = yield* Effect.tryPromise(() => response.text()).pipe(Effect.orDie);
         return HttpServerResponse.text(`layer:${text}`);
       }),
     };

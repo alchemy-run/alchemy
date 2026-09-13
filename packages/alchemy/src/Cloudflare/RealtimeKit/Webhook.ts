@@ -91,13 +91,7 @@ export type WebhookAttributes = {
   updatedAt: string;
 };
 
-export type Webhook = Resource<
-  TypeId,
-  WebhookProps,
-  WebhookAttributes,
-  never,
-  Providers
->;
+export type Webhook = Resource<TypeId, WebhookProps, WebhookAttributes, never, Providers>;
 
 /**
  * A Cloudflare RealtimeKit webhook — receives meeting, recording,
@@ -203,11 +197,7 @@ export const WebhookProvider = () =>
       // Observe — the webhookId cached on `output` is a hint, not a
       // guarantee: a missing webhook falls through and we recreate.
       const observed = output?.webhookId
-        ? yield* getWebhook(
-            output.accountId ?? accountId,
-            appId,
-            output.webhookId,
-          )
+        ? yield* getWebhook(output.accountId ?? accountId, appId, output.webhookId)
         : undefined;
 
       if (!observed) {
@@ -220,11 +210,7 @@ export const WebhookProvider = () =>
         // leaking / failing.
         const created = yield* realtimeKit
           .createWebhookWebhook({ accountId, appId, ...desired })
-          .pipe(
-            Effect.catchTag("RealtimeKitWebhookExists", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("RealtimeKitWebhookExists", () => Effect.succeed(undefined)));
         if (created) {
           return toAttributes(created.data, accountId, appId);
         }
@@ -234,9 +220,7 @@ export const WebhookProvider = () =>
           // engine retry the reconcile rather than silently succeeding.
           return yield* realtimeKit
             .createWebhookWebhook({ accountId, appId, ...desired })
-            .pipe(
-              Effect.map((res) => toAttributes(res.data, accountId, appId)),
-            );
+            .pipe(Effect.map((res) => toAttributes(res.data, accountId, appId)));
         }
         yield* realtimeKit.replaceWebhookWebhook({
           accountId,
@@ -307,11 +291,7 @@ export const WebhookProvider = () =>
         appIds,
         (appId) =>
           realtimeKit.getWebhooksWebhook({ accountId, appId }).pipe(
-            Effect.map((res) =>
-              res.data.map((webhook) =>
-                toAttributes(webhook, accountId, appId),
-              ),
-            ),
+            Effect.map((res) => res.data.map((webhook) => toAttributes(webhook, accountId, appId))),
             // An app with no webhooks 404s (`RealtimeKitWebhookNotFound`).
             Effect.catchTag("RealtimeKitWebhookNotFound", () =>
               Effect.succeed([] as WebhookAttributes[]),
@@ -332,9 +312,7 @@ type ObservedWebhook = realtimeKit.GetWebhookByIdWebhookResponse["data"];
 const getWebhook = (accountId: string, appId: string, webhookId: string) =>
   realtimeKit.getWebhookByIdWebhook({ accountId, appId, webhookId }).pipe(
     Effect.map((res) => res.data),
-    Effect.catchTag("RealtimeKitWebhookNotFound", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("RealtimeKitWebhookNotFound", () => Effect.succeed(undefined)),
   );
 
 /**
@@ -351,9 +329,7 @@ const findByName = (accountId: string, appId: string, name: string) =>
         .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
         .at(0),
     ),
-    Effect.catchTag("RealtimeKitWebhookNotFound", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("RealtimeKitWebhookNotFound", () => Effect.succeed(undefined)),
   );
 
 const createWebhookName = (id: string, name: string | undefined) =>

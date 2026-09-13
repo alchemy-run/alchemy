@@ -70,13 +70,11 @@ export const lookup = (props: VpcServiceLookupProps) =>
     Effect.gen(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
       if ("name" in props) {
-        const match = yield* connectivity.listDirectoryServices
-          .items({ accountId })
-          .pipe(
-            Stream.filter((s) => s.name === props.name),
-            Stream.runHead,
-            Effect.map(Option.getOrUndefined),
-          );
+        const match = yield* connectivity.listDirectoryServices.items({ accountId }).pipe(
+          Stream.filter((s) => s.name === props.name),
+          Stream.runHead,
+          Effect.map(Option.getOrUndefined),
+        );
         if (!match) {
           return yield* Effect.die(`VPC service "${props.name}" not found`);
         }

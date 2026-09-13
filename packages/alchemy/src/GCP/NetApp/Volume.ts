@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   expandParent,
@@ -176,9 +171,7 @@ export type VolumeProps = {
   /**
    * Restricted actions (`DELETE`, …).
    */
-  restrictedActions?: Array<
-    netapp.VolumeRestrictedActionsItemEnum | (string & {})
-  >;
+  restrictedActions?: Array<netapp.VolumeRestrictedActionsItemEnum | (string & {})>;
   /**
    * NFS export policy.
    */
@@ -370,9 +363,7 @@ export const Volume = Resource<Volume>("GCP.NetApp.Volume");
 const resourceName = (project: string, location: string, volumeId: string) =>
   `projects/${project}/locations/${location}/volumes/${volumeId}`;
 
-const toBackupConfig = (
-  config: netapp.BackupConfig | undefined,
-): BackupConfig | undefined =>
+const toBackupConfig = (config: netapp.BackupConfig | undefined): BackupConfig | undefined =>
   config === undefined
     ? undefined
     : {
@@ -381,9 +372,7 @@ const toBackupConfig = (
         scheduledBackupEnabled: config.scheduledBackupEnabled,
       };
 
-const toExportPolicy = (
-  policy: netapp.ExportPolicy | undefined,
-): ExportPolicy | undefined =>
+const toExportPolicy = (policy: netapp.ExportPolicy | undefined): ExportPolicy | undefined =>
   policy === undefined
     ? undefined
     : {
@@ -404,9 +393,7 @@ const toExportPolicy = (
         })),
       };
 
-const toSnapshotPolicy = (
-  policy: netapp.SnapshotPolicy | undefined,
-): SnapshotPolicy | undefined =>
+const toSnapshotPolicy = (policy: netapp.SnapshotPolicy | undefined): SnapshotPolicy | undefined =>
   policy === undefined
     ? undefined
     : {
@@ -417,9 +404,7 @@ const toSnapshotPolicy = (
         monthlySchedule: policy.monthlySchedule,
       };
 
-const toTieringPolicy = (
-  policy: netapp.TieringPolicy | undefined,
-): TieringPolicy | undefined =>
+const toTieringPolicy = (policy: netapp.TieringPolicy | undefined): TieringPolicy | undefined =>
   policy === undefined
     ? undefined
     : {
@@ -530,10 +515,7 @@ export const VolumeProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.volumeId ?? output?.volumeId,
         nextId: news.volumeId ?? olds?.volumeId ?? output?.volumeId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -545,8 +527,7 @@ export const VolumeProvider = () =>
           (previousShare !== undefined &&
             news.shareName !== undefined &&
             news.shareName !== previousShare) ||
-          (previousProtocols !== undefined &&
-            !sameStringList(previousProtocols, nextProtocols)) ||
+          (previousProtocols !== undefined && !sameStringList(previousProtocols, nextProtocols)) ||
           (previousStyle !== undefined &&
             news.securityStyle !== undefined &&
             news.securityStyle !== previousStyle) ||
@@ -555,8 +536,7 @@ export const VolumeProvider = () =>
             news.kerberosEnabled !== previousKerberos) ||
           (olds?.restoreParameters !== undefined &&
             news.restoreParameters !== undefined &&
-            fingerprint(olds.restoreParameters) !==
-              fingerprint(news.restoreParameters)) ||
+            fingerprint(olds.restoreParameters) !== fingerprint(news.restoreParameters)) ||
           (olds?.largeCapacity !== undefined &&
             news.largeCapacity !== undefined &&
             news.largeCapacity !== olds.largeCapacity) ||
@@ -568,24 +548,13 @@ export const VolumeProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const volumeId = yield* toPhysicalId(
-        id,
-        olds?.volumeId,
-        output?.volumeId,
-        "volume",
-      );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, volumeId);
+      const volumeId = yield* toPhysicalId(id, olds?.volumeId, output?.volumeId, "volume");
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, volumeId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -597,16 +566,8 @@ export const VolumeProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const volumeId = yield* toPhysicalId(
-        id,
-        news.volumeId,
-        output?.volumeId,
-        "volume",
-      );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const volumeId = yield* toPhysicalId(id, news.volumeId, output?.volumeId, "volume");
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, volumeId);
       // Volumes reference their pool by id; a full resource name is rejected
       // with `BadRequest: specified storage pool not found`.
@@ -618,11 +579,7 @@ export const VolumeProvider = () =>
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
       };
-      const backupConfig = desiredBackupConfig(
-        env.project,
-        location,
-        news.backupConfig,
-      );
+      const backupConfig = desiredBackupConfig(env.project, location, news.backupConfig);
       const blockDevices = news.blockDevices?.map((device) => ({
         osType: device.osType,
         name: device.name,
@@ -687,8 +644,7 @@ export const VolumeProvider = () =>
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const mask = fieldMask([
         (upsert.length > 0 || removed.length > 0) && "labels",
-        (current.description ?? "") !== (news.description ?? "") &&
-          "description",
+        (current.description ?? "") !== (news.description ?? "") && "description",
         (current.capacityGib ?? "") !== (capacityGib ?? "") && "capacityGib",
         news.unixPermissions !== undefined &&
           (current.unixPermissions ?? "") !== news.unixPermissions &&
@@ -709,20 +665,17 @@ export const VolumeProvider = () =>
           !sameStringList(current.restrictedActions, news.restrictedActions) &&
           "restrictedActions",
         news.exportPolicy !== undefined &&
-          fingerprint(toExportPolicy(current.exportPolicy)) !==
-            fingerprint(news.exportPolicy) &&
+          fingerprint(toExportPolicy(current.exportPolicy)) !== fingerprint(news.exportPolicy) &&
           "exportPolicy",
         news.snapshotPolicy !== undefined &&
           fingerprint(toSnapshotPolicy(current.snapshotPolicy)) !==
             fingerprint(news.snapshotPolicy) &&
           "snapshotPolicy",
         news.backupConfig !== undefined &&
-          fingerprint(toBackupConfig(current.backupConfig)) !==
-            fingerprint(backupConfig) &&
+          fingerprint(toBackupConfig(current.backupConfig)) !== fingerprint(backupConfig) &&
           "backupConfig",
         news.tieringPolicy !== undefined &&
-          fingerprint(toTieringPolicy(current.tieringPolicy)) !==
-            fingerprint(news.tieringPolicy) &&
+          fingerprint(toTieringPolicy(current.tieringPolicy)) !== fingerprint(news.tieringPolicy) &&
           "tieringPolicy",
         news.blockDevices !== undefined &&
           fingerprint(current.blockDevices) !== fingerprint(blockDevices) &&
@@ -764,16 +717,14 @@ export const VolumeProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      const operation = yield* netapp
-        .deleteProjectsLocationsVolumes({ name: output.name })
-        .pipe(
-          Effect.retry({
-            while: (error) => error._tag === "Conflict",
-            times: 8,
-            schedule: Schedule.spaced("2 seconds"),
-          }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-        );
+      const operation = yield* netapp.deleteProjectsLocationsVolumes({ name: output.name }).pipe(
+        Effect.retry({
+          while: (error) => error._tag === "Conflict",
+          times: 8,
+          schedule: Schedule.spaced("2 seconds"),
+        }),
+        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+      );
       if (operation !== undefined) {
         yield* waitForDeleteOperation(operation);
       }

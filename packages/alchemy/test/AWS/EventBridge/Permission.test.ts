@@ -53,8 +53,7 @@ test.provider(
       expect(
         all.some(
           (p) =>
-            p.statementId === permission.statementId &&
-            p.eventBusName === permission.eventBusName,
+            p.statementId === permission.statementId && p.eventBusName === permission.eventBusName,
         ),
       ).toBe(true);
 

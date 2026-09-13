@@ -41,7 +41,6 @@ export interface GetGlossariesGlossaryEntry extends Binding.Service<
   >
 > {}
 
-export const GetGlossariesGlossaryEntry =
-  Binding.Service<GetGlossariesGlossaryEntry>(
-    "GCP.Translate.GetGlossariesGlossaryEntry",
-  );
+export const GetGlossariesGlossaryEntry = Binding.Service<GetGlossariesGlossaryEntry>(
+  "GCP.Translate.GetGlossariesGlossaryEntry",
+);

@@ -13,13 +13,9 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 // Deterministic per-test URL targets. Each test owns a disjoint path so
 // reruns never collide, and the same target is reused on every run (never
@@ -35,9 +31,7 @@ const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
@@ -50,9 +44,7 @@ const resolveZoneId = Effect.gen(function* () {
 // patches).
 const forbiddenRetrySchedule = Schedule.exponential("500 millis");
 
-const retryForbidden = <A, E extends { _tag: string }, R>(
-  effect: Effect.Effect<A, E, R>,
-) =>
+const retryForbidden = <A, E extends { _tag: string }, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
     Effect.retry({
       while: (e) => e._tag === "Forbidden",
@@ -61,17 +53,13 @@ const retryForbidden = <A, E extends { _tag: string }, R>(
     }),
   );
 
-const targetOf = (rule: {
-  targets: ReadonlyArray<{ constraint?: { value: string } | null }>;
-}) => rule.targets[0]?.constraint?.value;
+const targetOf = (rule: { targets: ReadonlyArray<{ constraint?: { value: string } | null }> }) =>
+  rule.targets[0]?.constraint?.value;
 
-const listRules = (zoneId: string) =>
-  retryForbidden(pageRules.listPageRules({ zoneId }));
+const listRules = (zoneId: string) => retryForbidden(pageRules.listPageRules({ zoneId }));
 
 const findRule = (zoneId: string, target: string) =>
-  listRules(zoneId).pipe(
-    Effect.map((rules) => rules.find((r) => targetOf(r) === target)),
-  );
+  listRules(zoneId).pipe(Effect.map((rules) => rules.find((r) => targetOf(r) === target)));
 
 const getRule = (zoneId: string, pageruleId: string) =>
   retryForbidden(pageRules.getPageRule({ zoneId, pageruleId }));
@@ -241,12 +229,7 @@ test.provider(
       const pre = yield* retryForbidden(
         pageRules.createPageRule({
           zoneId,
-          targets: [
-            {
-              target: "url",
-              constraint: { operator: "matches", value: TARGET_ADOPT },
-            },
-          ],
+          targets: [{ target: "url", constraint: { operator: "matches", value: TARGET_ADOPT } }],
           actions: [{ id: "cache_level", value: "bypass" }],
           status: "active",
         }),
@@ -287,9 +270,9 @@ test.provider(
 
       const live = yield* getRule(zoneId, adopted.pageRuleId);
       const cacheLevel = live.actions.find((a) => a.id === "cache_level");
-      expect(
-        cacheLevel?.id === "cache_level" ? cacheLevel.value : undefined,
-      ).toEqual("cache_everything");
+      expect(cacheLevel?.id === "cache_level" ? cacheLevel.value : undefined).toEqual(
+        "cache_everything",
+      );
 
       yield* stack.destroy();
 
@@ -329,9 +312,7 @@ test.provider(
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.PageRule.PageRule,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.PageRule.PageRule);
       const all = yield* provider.list();
 
       expect(all.some((r) => r.pageRuleId === rule.pageRuleId)).toBe(true);
@@ -358,9 +339,7 @@ test.provider(
  * Pull the {@link OwnedBySomeoneElse} value out of a Cause regardless of
  * whether the engine raised it as a typed failure or a defect.
  */
-const findOwnedError = (
-  cause: Cause.Cause<unknown>,
-): OwnedBySomeoneElse | undefined =>
+const findOwnedError = (cause: Cause.Cause<unknown>): OwnedBySomeoneElse | undefined =>
   cause.reasons
     .map((reason) =>
       Cause.isFailReason(reason)
@@ -369,7 +348,4 @@ const findOwnedError = (
           ? reason.defect
           : undefined,
     )
-    .find(
-      (value): value is OwnedBySomeoneElse =>
-        value instanceof OwnedBySomeoneElse,
-    );
+    .find((value): value is OwnedBySomeoneElse => value instanceof OwnedBySomeoneElse);

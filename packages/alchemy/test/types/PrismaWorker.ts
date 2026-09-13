@@ -8,17 +8,12 @@ import type { RuntimeContext } from "@/RuntimeContext";
 declare const connection: Prisma.Connection;
 
 type ApiShape = {
-  databaseUrl(): Effect.Effect<
-    Redacted.Redacted<string>,
-    never,
-    RuntimeContext
-  >;
+  databaseUrl(): Effect.Effect<Redacted.Redacted<string>, never, RuntimeContext>;
 };
 
-export class PrismaWorkerApi extends Cloudflare.Worker<
-  PrismaWorkerApi,
-  ApiShape
->()("PrismaWorkerApi") {}
+export class PrismaWorkerApi extends Cloudflare.Worker<PrismaWorkerApi, ApiShape>()(
+  "PrismaWorkerApi",
+) {}
 
 export const PrismaWorkerApiLive = PrismaWorkerApi.make(
   {

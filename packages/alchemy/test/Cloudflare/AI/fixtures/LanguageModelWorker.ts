@@ -22,9 +22,7 @@ const TOOL_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
 const GetWeather = Tool.make("get_weather", {
   description:
     "Get the current weather for a city. Always call this tool when the user asks about the weather.",
-  parameters: Schema.Struct({
-    city: Schema.String,
-  }),
+  parameters: Schema.Struct({ city: Schema.String }),
   success: Schema.Struct({
     city: Schema.String,
     temperatureF: Schema.Number,
@@ -35,19 +33,12 @@ const GetWeather = Tool.make("get_weather", {
 const WeatherToolkit = Toolkit.make(GetWeather);
 
 const WeatherToolkitLayer = WeatherToolkit.toLayer({
-  get_weather: ({ city }) =>
-    Effect.succeed({
-      city,
-      temperatureF: 72,
-      condition: "sunny",
-    }),
+  get_weather: ({ city }) => Effect.succeed({ city, temperatureF: 72, condition: "sunny" }),
 });
 
 export default class LanguageModelTestWorker extends Cloudflare.Worker<LanguageModelTestWorker>()(
   "LanguageModelTestWorker",
-  {
-    main: import.meta.url,
-  },
+  { main: import.meta.url },
   Effect.gen(function* () {
     const aiGateway = yield* Cloudflare.AI.QueryGateway(Gateway);
 
@@ -80,8 +71,7 @@ export default class LanguageModelTestWorker extends Cloudflare.Worker<LanguageM
             ),
           catch: (e) => e,
         });
-        if (response.body == null)
-          return HttpServerResponse.text("no body", { status: 500 });
+        if (response.body == null) return HttpServerResponse.text("no body", { status: 500 });
         const body = Stream.fromReadableStream<Uint8Array, never>({
           evaluate: () => response.body!,
           onError: () => undefined as never,
@@ -97,13 +87,10 @@ export default class LanguageModelTestWorker extends Cloudflare.Worker<LanguageM
         const ctx = yield* Effect.context<RuntimeContext>();
         const url = new URL(request.url, "http://worker");
         const prompt =
-          url.searchParams.get("prompt") ??
-          "Say the single word 'pong' and nothing else.";
+          url.searchParams.get("prompt") ?? "Say the single word 'pong' and nothing else.";
 
         if (url.pathname === "/generate") {
-          const response = yield* AiLanguageModel.generateText({ prompt }).pipe(
-            Effect.orDie,
-          );
+          const response = yield* AiLanguageModel.generateText({ prompt }).pipe(Effect.orDie);
           return yield* HttpServerResponse.json({
             text: response.text,
             finishReason: response.finishReason,
@@ -120,36 +107,30 @@ export default class LanguageModelTestWorker extends Cloudflare.Worker<LanguageM
           return yield* dumpRawStream(
             model,
             [{ role: "user", content: prompt }],
-            includeUsage
-              ? { stream_options: { include_usage: true } }
-              : undefined,
+            includeUsage ? { stream_options: { include_usage: true } } : undefined,
           );
         }
 
         if (url.pathname === "/raw-tool-stream") {
           // Dump the raw Workers AI SSE for a streamed tool call so we can
           // see exactly how the model encodes tool_calls in the stream.
-          return yield* dumpRawStream(
-            TOOL_MODEL,
-            [{ role: "user", content: prompt }],
-            {
-              tools: [
-                {
-                  type: "function",
-                  function: {
-                    name: "get_weather",
-                    description: "Get the current weather for a city.",
-                    parameters: {
-                      type: "object",
-                      properties: { city: { type: "string" } },
-                      required: ["city"],
-                    },
+          return yield* dumpRawStream(TOOL_MODEL, [{ role: "user", content: prompt }], {
+            tools: [
+              {
+                type: "function",
+                function: {
+                  name: "get_weather",
+                  description: "Get the current weather for a city.",
+                  parameters: {
+                    type: "object",
+                    properties: { city: { type: "string" } },
+                    required: ["city"],
                   },
                 },
-              ],
-              tool_choice: "required",
-            },
-          );
+              },
+            ],
+            tool_choice: "required",
+          });
         }
 
         if (url.pathname === "/test-stream") {
@@ -203,9 +184,7 @@ export default class LanguageModelTestWorker extends Cloudflare.Worker<LanguageM
             toolkit: WeatherToolkit,
             toolChoice: "required",
           }).pipe(
-            Stream.map((part) =>
-              encoder.encode(`data: ${JSON.stringify(part)}\n\n`),
-            ),
+            Stream.map((part) => encoder.encode(`data: ${JSON.stringify(part)}\n\n`)),
             Stream.provide(WeatherToolkitLayer),
             Stream.provide(toolLanguageModel),
             Stream.provideContext(ctx),
@@ -218,9 +197,7 @@ export default class LanguageModelTestWorker extends Cloudflare.Worker<LanguageM
         if (url.pathname === "/stream") {
           const encoder = new TextEncoder();
           const body = AiLanguageModel.streamText({ prompt }).pipe(
-            Stream.map((part) =>
-              encoder.encode(`data: ${JSON.stringify(part)}\n\n`),
-            ),
+            Stream.map((part) => encoder.encode(`data: ${JSON.stringify(part)}\n\n`)),
             Stream.provide(languageModel),
             Stream.provideContext(ctx),
           );

@@ -36,9 +36,7 @@ export default Cloudflare.Worker(
         // readiness retry treats a container that is still starting as
         // retryable rather than fatal.
         Effect.catchCause((cause) =>
-          Effect.succeed(
-            HttpServerResponse.text(String(cause), { status: 503 }),
-          ),
+          Effect.succeed(HttpServerResponse.text(String(cause), { status: 503 })),
         ),
       ),
     };

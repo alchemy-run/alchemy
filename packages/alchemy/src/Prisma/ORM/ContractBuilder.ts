@@ -4,10 +4,7 @@ import {
   field as nativeField,
   model as nativeModel,
 } from "@prisma/orm-postgres/contract-builder";
-import type {
-  Contract,
-  NamespaceId,
-} from "@prisma/orm-postgres/contract/types";
+import type { Contract, NamespaceId } from "@prisma/orm-postgres/contract/types";
 import type {
   ContractWithTypeMaps,
   ExtractTypeMapsFromContract,
@@ -41,14 +38,10 @@ type ContractShape = Pick<Contract<SqlStorage>, "domain"> & {
   readonly storage: Pick<SqlStorage, "namespaces">;
 };
 type Known<T> = {
-  [
-    K in keyof T as string extends K ? never : number extends K ? never : K
-  ]: T[K];
+  [K in keyof T as string extends K ? never : number extends K ? never : K]: T[K];
 };
 type State<F> = F extends { readonly __state: infer S } ? S : never;
-type Fields<M> = M extends { readonly stageOne: { readonly fields: infer F } }
-  ? F
-  : never;
+type Fields<M> = M extends { readonly stageOne: { readonly fields: infer F } } ? F : never;
 type Relations<M> = M extends {
   readonly stageOne: { readonly relations: infer R };
 }
@@ -67,15 +60,9 @@ type ModelRef<R> = R extends { readonly modelName: infer M extends string }
   : R extends { readonly resolve: () => infer M extends string }
     ? M
     : never;
-type Tuple<T> = T extends readonly string[]
-  ? T
-  : T extends string
-    ? readonly [T]
-    : readonly [];
+type Tuple<T> = T extends readonly string[] ? T : T extends string ? readonly [T] : readonly [];
 type InlineIds<M> = {
-  [K in keyof Fields<M>]: State<Fields<M>[K]> extends { readonly id: object }
-    ? K
-    : never;
+  [K in keyof Fields<M>]: State<Fields<M>[K]> extends { readonly id: object } ? K : never;
 }[keyof Fields<M>] &
   string;
 type PrimaryFields<M> = M extends {
@@ -92,10 +79,8 @@ type NullableFields<M> = {
     ? K
     : never;
 }[keyof Fields<M>];
-type IsNullable<M, F> =
-  Extract<Tuple<F>[number], NullableFields<M>> extends never ? false : true;
-type NativeModels<C extends ContractShape> =
-  C["domain"]["namespaces"][string]["models"];
+type IsNullable<M, F> = Extract<Tuple<F>[number], NullableFields<M>> extends never ? false : true;
+type NativeModels<C extends ContractShape> = C["domain"]["namespaces"][string]["models"];
 type Table<
   C extends ContractShape,
   M extends keyof NativeModels<C>,
@@ -117,12 +102,10 @@ type Columns<
   Fs extends readonly string[],
 > = { readonly [K in keyof Fs]: Column<C, M, Fs[K]> };
 
-type RelationType<
-  C extends ContractShape,
-  Ms extends Models,
-  M extends keyof Ms,
-  R,
-> = R extends { readonly kind: infer Kind; readonly toModel: infer To }
+type RelationType<C extends ContractShape, Ms extends Models, M extends keyof Ms, R> = R extends {
+  readonly kind: infer Kind;
+  readonly toModel: infer To;
+}
   ? ModelRef<To> extends keyof Ms
     ? {
         readonly to: {
@@ -170,16 +153,8 @@ type RelationType<
                   readonly through: {
                     readonly namespaceId: Namespace<Ms[ModelRef<Through>]>;
                     readonly table: Table<C, ModelRef<Through>>;
-                    readonly parentColumns: Columns<
-                      C,
-                      ModelRef<Through>,
-                      Tuple<From>
-                    >;
-                    readonly childColumns: Columns<
-                      C,
-                      ModelRef<Through>,
-                      Tuple<Target>
-                    >;
+                    readonly parentColumns: Columns<C, ModelRef<Through>, Tuple<From>>;
+                    readonly childColumns: Columns<C, ModelRef<Through>, Tuple<Target>>;
                     readonly targetColumns: Columns<
                       C,
                       ModelRef<To> & keyof NativeModels<C>,
@@ -198,11 +173,7 @@ type FixFields<C extends ContractShape, Ms extends Models, Map> = Map extends {
 }
   ? {
       readonly [Ns in Namespaces<Ms>]: {
-        readonly [
-          M in keyof ModelsMap & keyof Ms as Namespace<Ms[M]> extends Ns
-            ? M
-            : never
-        ]: {
+        readonly [M in keyof ModelsMap & keyof Ms as Namespace<Ms[M]> extends Ns ? M : never]: {
           readonly [F in keyof ModelsMap[M]]: F extends keyof Fields<Ms[M]>
             ? true extends State<Fields<Ms[M]>[F]>["many"]
               ? ModelsMap[M][F]
@@ -222,9 +193,7 @@ type FixFields<C extends ContractShape, Ms extends Models, Map> = Map extends {
   : never;
 type StorageFields<C extends ContractShape, Ms extends Models, Map> = {
   readonly [Ns in keyof Map]: {
-    readonly [
-      M in keyof Map[Ns] & keyof Ms & keyof NativeModels<C> as Table<C, M>
-    ]: {
+    readonly [M in keyof Map[Ns] & keyof Ms & keyof NativeModels<C> as Table<C, M>]: {
       readonly [F in keyof Map[Ns][M] as Column<C, M, F>]: Map[Ns][M][F];
     };
   };
@@ -261,26 +230,16 @@ type FixedMaps<
       Omit<Known<Codecs>, keyof CodecTypes>
     >
   : never;
-type FixedModels<
-  C extends ContractShape,
-  Ms extends Models,
-  Ns extends string,
-> = {
-  readonly [
-    M in keyof Ms & keyof NativeModels<C> as Namespace<Ms[M]> extends Ns
-      ? M
-      : never
-  ]: Omit<NativeModels<C>[M], "relations" | "storage"> & {
+type FixedModels<C extends ContractShape, Ms extends Models, Ns extends string> = {
+  readonly [M in keyof Ms & keyof NativeModels<C> as Namespace<Ms[M]> extends Ns ? M : never]: Omit<
+    NativeModels<C>[M],
+    "relations" | "storage"
+  > & {
     readonly storage: NativeModels<C>[M]["storage"] & {
       readonly namespaceId: Namespace<Ms[M]>;
     };
     readonly relations: {
-      readonly [R in keyof Relations<Ms[M]>]: RelationType<
-        C,
-        Ms,
-        M,
-        State<Relations<Ms[M]>[R]>
-      >;
+      readonly [R in keyof Relations<Ms[M]>]: RelationType<C, Ms, M, State<Relations<Ms[M]>[R]>>;
     };
   };
 };
@@ -334,22 +293,13 @@ type FixedTable<
             M,
             F
           > extends keyof NativeColumns<C, M>
-            ? FixColumn<
-                NativeColumns<C, M>[Column<C, M, F>],
-                State<Fields<Ms[M]>[F]>
-              >
+            ? FixColumn<NativeColumns<C, M>[Column<C, M, F>], State<Fields<Ms[M]>[F]>>
             : never;
         };
-        readonly uniques: readonly (
-          | InlineUniques<C, Ms, M>
-          | AttributeUniques<C, Ms, M>
-        )[];
+        readonly uniques: readonly (InlineUniques<C, Ms, M> | AttributeUniques<C, Ms, M>)[];
       }
     : never;
-type FixStorage<C extends ContractShape, Ms extends Models> = Omit<
-  C["storage"],
-  "namespaces"
-> & {
+type FixStorage<C extends ContractShape, Ms extends Models> = Omit<C["storage"], "namespaces"> & {
   readonly namespaces: {
     readonly [Ns in Namespaces<Ms> | "public"]: {
       readonly id: Ns;
@@ -417,20 +367,12 @@ type Materialize<T, Depth extends number = 9> = Depth extends 0
     ? T
     : T extends object
       ? {
-          [K in keyof T]: K extends TypeMapsPhantomKey
-            ? T[K]
-            : Materialize<T[K], Depths[Depth]>;
+          [K in keyof T]: K extends TypeMapsPhantomKey ? T[K] : Materialize<T[K], Depths[Depth]>;
         }
       : T;
 /** Native runtime contract with rc.11's erased authoring metadata restored. */
-export type AuthoredContract<
-  C extends ContractShape,
-  Ms extends Models,
-> = ContractWithTypeMaps<
-  Omit<
-    C,
-    "domain" | "storage" | "capabilities" | "execution" | TypeMapsPhantomKey
-  > & {
+export type AuthoredContract<C extends ContractShape, Ms extends Models> = ContractWithTypeMaps<
+  Omit<C, "domain" | "storage" | "capabilities" | "execution" | TypeMapsPhantomKey> & {
     readonly domain: Omit<C["domain"], "namespaces"> & {
       readonly namespaces: {
         readonly [Ns in Namespaces<Ms>]: {
@@ -444,9 +386,7 @@ export type AuthoredContract<
       ? Empty
       : {
           readonly execution: {
-            readonly executionHash: NonNullable<
-              Contract["execution"]
-            >["executionHash"];
+            readonly executionHash: NonNullable<Contract["execution"]>["executionHash"];
             readonly mutations: {
               readonly defaults: readonly ExecutionDefaults<C, Ms>[];
             };
@@ -468,15 +408,7 @@ interface DefineContract {
       IdentityNaming & { readonly types?: T; readonly models?: M },
   ): Materialize<
     AuthoredContract<
-      ReturnType<
-        typeof nativeDefineContract<
-          T,
-          M,
-          E extends undefined ? Empty : E,
-          EN,
-          Empty
-        >
-      >,
+      ReturnType<typeof nativeDefineContract<T, M, E extends undefined ? Empty : E, EN, Empty>>,
       M
     >
   >;
@@ -487,29 +419,16 @@ interface DefineContract {
     const SE extends Enums = Empty,
     const FE extends Enums = Empty,
   >(
-    scaffold: Omit<
-      Parameters<typeof nativeDefineContract<T, M, E, SE, FE>>[0],
-      "naming"
-    > &
+    scaffold: Omit<Parameters<typeof nativeDefineContract<T, M, E, SE, FE>>[0], "naming"> &
       IdentityNaming,
     factory: (
       helpers: Helpers<
-        Parameters<
-          Parameters<typeof nativeDefineContract<T, M, NoInfer<E>, SE, FE>>[1]
-        >[0]
+        Parameters<Parameters<typeof nativeDefineContract<T, M, NoInfer<E>, SE, FE>>[1]>[0]
       >,
     ) => { readonly types?: T; readonly models?: M; readonly enums?: FE },
   ): Materialize<
     AuthoredContract<
-      ReturnType<
-        typeof nativeDefineContract<
-          T,
-          M,
-          E extends undefined ? Empty : E,
-          SE,
-          FE
-        >
-      >,
+      ReturnType<typeof nativeDefineContract<T, M, E extends undefined ? Empty : E, SE, FE>>,
       M
     >
   >;

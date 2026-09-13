@@ -4,11 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { createPhysicalName } from "../../PhysicalName.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 
 export const DEFAULT_LOCATION = "us";
@@ -67,16 +63,10 @@ export const parseName = (name: string, collection: string) => {
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
-    id:
-      collectionAt >= 0 && parts[collectionAt + 1]
-        ? parts[collectionAt + 1]!
-        : lastSegment(name),
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : DEFAULT_LOCATION,
+    id: collectionAt >= 0 && parts[collectionAt + 1] ? parts[collectionAt + 1]! : lastSegment(name),
     parent:
       collectionAt > 0
         ? parts.slice(0, collectionAt).join("/")
@@ -127,18 +117,11 @@ export const canonical = (value: unknown): unknown => {
   return undefined;
 };
 
-export const fingerprint = (value: unknown): string =>
-  JSON.stringify(canonical(value) ?? null);
+export const fingerprint = (value: unknown): string => JSON.stringify(canonical(value) ?? null);
 
-export const sameJson = (left: unknown, right: unknown) =>
-  fingerprint(left) === fingerprint(right);
+export const sameJson = (left: unknown, right: unknown) => fingerprint(left) === fingerprint(right);
 
-const markerOf = (
-  labels: Record<string, string>,
-  stack: string,
-  stage: string,
-  id: string,
-) =>
+const markerOf = (labels: Record<string, string>, stack: string, stage: string, id: string) =>
   `[alchemy ${alchemyLabelKeys.stack}=${stack} ${alchemyLabelKeys.stage}=${stage} ${alchemyLabelKeys.id}=${id}]`;
 
 const compactMarkerOf = (stack: string, stage: string, id: string) =>
@@ -153,10 +136,7 @@ const shrinkMarker = (
   let stage = labels[alchemyLabelKeys.stage] ?? "x";
   let id = labels[alchemyLabelKeys.id] ?? "x";
   let marker = build(stack, stage, id);
-  while (
-    marker.length > maxLength &&
-    (stack.length > 1 || stage.length > 1 || id.length > 1)
-  ) {
+  while (marker.length > maxLength && (stack.length > 1 || stage.length > 1 || id.length > 1)) {
     if (stack.length >= stage.length && stack.length >= id.length) {
       stack = stack.slice(0, -1);
     } else if (stage.length >= id.length) {
@@ -173,10 +153,8 @@ export const encodeOwnership = (
   labels: Record<string, string>,
   text: string | undefined,
 ): string => {
-  const marker = shrinkMarker(
-    labels,
-    MAX_DESCRIPTION_LENGTH,
-    (stack, stage, id) => markerOf(labels, stack, stage, id),
+  const marker = shrinkMarker(labels, MAX_DESCRIPTION_LENGTH, (stack, stage, id) =>
+    markerOf(labels, stack, stage, id),
   );
   const trimmed = text?.trim();
   return trimmed && trimmed.length > 0 ? `${marker}\n${trimmed}` : marker;
@@ -190,9 +168,7 @@ export const encodeOwnershipLine = (
   const marker =
     maxLength < 54
       ? shrinkMarker(labels, maxLength, compactMarkerOf)
-      : shrinkMarker(labels, maxLength, (stack, stage, id) =>
-          markerOf(labels, stack, stage, id),
-        );
+      : shrinkMarker(labels, maxLength, (stack, stage, id) => markerOf(labels, stack, stage, id));
   const trimmed = text?.replace(/[\r\n]+/g, " ").trim();
   if (!trimmed) return marker;
   return `${marker} ${trimmed}`.slice(0, maxLength);
@@ -232,14 +208,10 @@ export const parseOwnership = (
 };
 
 export const hasOwnershipMarker = (text: string | undefined) =>
-  Object.keys(parseOwnership(text).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseOwnership(text).labels).some((key) => key.startsWith("alchemy-"));
 
 const prefixMatch = (expected: string, observed: string) =>
-  expected === observed ||
-  expected.startsWith(observed) ||
-  observed.startsWith(expected);
+  expected === observed || expected.startsWith(observed) || observed.startsWith(expected);
 
 export const ownedByAlchemy = (id: string, text: string | undefined) =>
   Effect.gen(function* () {
@@ -249,18 +221,9 @@ export const ownedByAlchemy = (id: string, text: string | undefined) =>
     const exact = yield* hasAlchemyLabels(id, labels);
     if (exact) return true;
     return (
-      prefixMatch(
-        expected[alchemyLabelKeys.stack] ?? "",
-        labels[alchemyLabelKeys.stack] ?? "",
-      ) &&
-      prefixMatch(
-        expected[alchemyLabelKeys.stage] ?? "",
-        labels[alchemyLabelKeys.stage] ?? "",
-      ) &&
-      prefixMatch(
-        expected[alchemyLabelKeys.id] ?? "",
-        labels[alchemyLabelKeys.id] ?? "",
-      )
+      prefixMatch(expected[alchemyLabelKeys.stack] ?? "", labels[alchemyLabelKeys.stack] ?? "") &&
+      prefixMatch(expected[alchemyLabelKeys.stage] ?? "", labels[alchemyLabelKeys.stage] ?? "") &&
+      prefixMatch(expected[alchemyLabelKeys.id] ?? "", labels[alchemyLabelKeys.id] ?? "")
     );
   });
 
@@ -307,8 +270,7 @@ export const ignoreList =
   ): Effect.Effect<A1 | A, E, R> =>
     self.pipe(
       Effect.catchIf(
-        (error): error is Extract<E, { readonly _tag: "NotFound" }> =>
-          error._tag === "NotFound",
+        (error): error is Extract<E, { readonly _tag: "NotFound" }> => error._tag === "NotFound",
         () => Effect.succeed(fallback),
       ),
     );
@@ -323,8 +285,7 @@ export const waitUntilExists = <A, E extends { readonly _tag: string }, R>(
       () => new ResourceNotResolved({ name }),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.ContentWarehouse.ResourceNotResolved",
+      while: (error) => error._tag === "GCP.ContentWarehouse.ResourceNotResolved",
       times: 8,
       schedule: Schedule.spaced("1 second"),
     }),
@@ -340,8 +301,7 @@ export const waitUntilGone = <A, E extends { readonly _tag: string }, R>(
       () => new ResourceStillExists({ name }),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.ContentWarehouse.ResourceStillExists",
+      while: (error) => error._tag === "GCP.ContentWarehouse.ResourceStillExists",
       times: 10,
       schedule: Schedule.spaced("2 seconds"),
     }),
@@ -387,8 +347,7 @@ export const waitForOperation = (
     ),
   );
 
-const isReady = (state: string | undefined) =>
-  state === "PROJECT_STATE_COMPLETED";
+const isReady = (state: string | undefined) => state === "PROJECT_STATE_COMPLETED";
 
 const needsProvision = (state: string | undefined) =>
   state === undefined ||
@@ -398,35 +357,30 @@ const needsProvision = (state: string | undefined) =>
 
 export const ensureProject = (parent: string) =>
   Effect.gen(function* () {
-    const status = yield* cw
-      .getStatusProjectsLocations({ location: parent })
-      .pipe(
-        Effect.catchTag("NotFound", () =>
-          Effect.succeed<cw.GoogleCloudContentwarehouseV1ProjectStatus>({
-            state: "PROJECT_STATE_NOT_FOUND",
-          }),
-        ),
-      );
+    const status = yield* cw.getStatusProjectsLocations({ location: parent }).pipe(
+      Effect.catchTag("NotFound", () =>
+        Effect.succeed<cw.GoogleCloudContentwarehouseV1ProjectStatus>({
+          state: "PROJECT_STATE_NOT_FOUND",
+        }),
+      ),
+    );
     if (isReady(status.state)) return status;
 
     if (status.state === "PROJECT_STATE_PENDING") {
-      const pending = yield* cw
-        .getStatusProjectsLocations({ location: parent })
-        .pipe(
-          Effect.filterOrFail(
-            (current) => isReady(current.state),
-            () =>
-              new ContentwarehouseOperationPending({
-                operation: parent,
-              }),
-          ),
-          Effect.retry({
-            while: (error) =>
-              error._tag === "GCP.ContentWarehouse.OperationPending",
-            times: 10,
-            schedule: Schedule.spaced("5 seconds"),
-          }),
-        );
+      const pending = yield* cw.getStatusProjectsLocations({ location: parent }).pipe(
+        Effect.filterOrFail(
+          (current) => isReady(current.state),
+          () =>
+            new ContentwarehouseOperationPending({
+              operation: parent,
+            }),
+        ),
+        Effect.retry({
+          while: (error) => error._tag === "GCP.ContentWarehouse.OperationPending",
+          times: 10,
+          schedule: Schedule.spaced("5 seconds"),
+        }),
+      );
       return pending;
     }
 
@@ -451,8 +405,7 @@ export const ensureProject = (parent: string) =>
         () => new ContentwarehouseOperationPending({ operation: parent }),
       ),
       Effect.retry({
-        while: (error) =>
-          error._tag === "GCP.ContentWarehouse.OperationPending",
+        while: (error) => error._tag === "GCP.ContentWarehouse.OperationPending",
         times: 10,
         schedule: Schedule.spaced("5 seconds"),
       }),
@@ -464,36 +417,26 @@ export const ownershipSynonymWord = (labels: Record<string, string>) =>
 
 export const withOwnershipSynonyms = (
   labels: Record<string, string>,
-  synonyms:
-    | readonly cw.GoogleCloudContentwarehouseV1SynonymSetSynonym[]
-    | undefined,
+  synonyms: readonly cw.GoogleCloudContentwarehouseV1SynonymSetSynonym[] | undefined,
 ): cw.GoogleCloudContentwarehouseV1SynonymSetSynonym[] => {
   const marker = ownershipSynonymWord(labels);
   const rest = (synonyms ?? []).filter(
     (group) =>
-      !(group.words ?? []).some(
-        (word) => word.startsWith("[alc ") || word.startsWith("[alchemy "),
-      ),
+      !(group.words ?? []).some((word) => word.startsWith("[alc ") || word.startsWith("[alchemy ")),
   );
   return [{ words: [marker] }, ...rest];
 };
 
 export const userSynonyms = (
-  synonyms:
-    | readonly cw.GoogleCloudContentwarehouseV1SynonymSetSynonym[]
-    | undefined,
+  synonyms: readonly cw.GoogleCloudContentwarehouseV1SynonymSetSynonym[] | undefined,
 ): cw.GoogleCloudContentwarehouseV1SynonymSetSynonym[] =>
   (synonyms ?? []).filter(
     (group) =>
-      !(group.words ?? []).some(
-        (word) => word.startsWith("[alc ") || word.startsWith("[alchemy "),
-      ),
+      !(group.words ?? []).some((word) => word.startsWith("[alc ") || word.startsWith("[alchemy ")),
   );
 
 export const synonymOwnershipText = (
-  synonyms:
-    | readonly cw.GoogleCloudContentwarehouseV1SynonymSetSynonym[]
-    | undefined,
+  synonyms: readonly cw.GoogleCloudContentwarehouseV1SynonymSetSynonym[] | undefined,
 ) => {
   for (const group of synonyms ?? []) {
     for (const word of group.words ?? []) {
@@ -516,12 +459,8 @@ export const defaultTextProperty = (
 });
 
 export const appendProperties = (
-  observed:
-    | readonly cw.GoogleCloudContentwarehouseV1PropertyDefinition[]
-    | undefined,
-  desired:
-    | readonly cw.GoogleCloudContentwarehouseV1PropertyDefinition[]
-    | undefined,
+  observed: readonly cw.GoogleCloudContentwarehouseV1PropertyDefinition[] | undefined,
+  desired: readonly cw.GoogleCloudContentwarehouseV1PropertyDefinition[] | undefined,
 ) => {
   const current = [...(observed ?? [])];
   const seen = new Set(

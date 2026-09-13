@@ -10,15 +10,11 @@ import { waitForOperation as waitForLongRunning } from "../Operation.ts";
 
 export const MAX_NAME_LENGTH = 63;
 
-export class ResourceNotResolved extends Data.TaggedError(
-  "GCP.Datastream.ResourceNotResolved",
-)<{
+export class ResourceNotResolved extends Data.TaggedError("GCP.Datastream.ResourceNotResolved")<{
   name: string;
 }> {}
 
-export class ResourceStillExists extends Data.TaggedError(
-  "GCP.Datastream.ResourceStillExists",
-)<{
+export class ResourceStillExists extends Data.TaggedError("GCP.Datastream.ResourceStillExists")<{
   name: string;
 }> {}
 
@@ -41,10 +37,8 @@ export const rfc1035 = (name: string, fallback = "ds"): string => {
   return next.slice(0, MAX_NAME_LENGTH);
 };
 
-export const normalizeLocation = (
-  location: string | undefined,
-  defaultLocation: string,
-) => lastSegment(location ?? defaultLocation).toLowerCase();
+export const normalizeLocation = (location: string | undefined, defaultLocation: string) =>
+  lastSegment(location ?? defaultLocation).toLowerCase();
 
 export const locationParent = (project: string, location: string) =>
   `projects/${project}/locations/${lastSegment(location).toLowerCase()}`;
@@ -68,26 +62,16 @@ export const toPhysicalId = (
     );
   });
 
-export const parseName = (
-  name: string,
-  collection: string,
-  defaultLocation: string,
-) => {
+export const parseName = (name: string, collection: string, defaultLocation: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const collectionAt = parts.lastIndexOf(collection);
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : defaultLocation,
-    id:
-      collectionAt >= 0 && parts[collectionAt + 1]
-        ? parts[collectionAt + 1]!
-        : lastSegment(name),
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : defaultLocation,
+    id: collectionAt >= 0 && parts[collectionAt + 1] ? parts[collectionAt + 1]! : lastSegment(name),
     parent:
       collectionAt > 0
         ? parts.slice(0, collectionAt).join("/")
@@ -105,17 +89,11 @@ export const expandParent = (
   return `projects/${project}/locations/${location}/${collection}/${value}`;
 };
 
-export const connectionProfileOf = (
-  value: string,
-  project: string,
-  location: string,
-) => expandParent(value, project, location, "connectionProfiles");
+export const connectionProfileOf = (value: string, project: string, location: string) =>
+  expandParent(value, project, location, "connectionProfiles");
 
-export const privateConnectionOf = (
-  value: string,
-  project: string,
-  location: string,
-) => expandParent(value, project, location, "privateConnections");
+export const privateConnectionOf = (value: string, project: string, location: string) =>
+  expandParent(value, project, location, "privateConnections");
 
 export const networkOf = (value: string, project: string) => {
   const trimmed = value.replace(/\/+$/, "");
@@ -128,9 +106,8 @@ export const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
 
-export const hasAlchemyLabelMap = (
-  labels: Record<string, string | undefined> | null | undefined,
-) => Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
+export const hasAlchemyLabelMap = (labels: Record<string, string | undefined> | null | undefined) =>
+  Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
 
 export const canonical = (value: unknown): unknown => {
   if (value === undefined || value === null) return undefined;
@@ -153,16 +130,12 @@ export const canonical = (value: unknown): unknown => {
   return undefined;
 };
 
-export const fingerprint = (value: unknown): string =>
-  JSON.stringify(canonical(value) ?? null);
+export const fingerprint = (value: unknown): string => JSON.stringify(canonical(value) ?? null);
 
 export const fieldMask = (fields: Array<string | false | undefined>) =>
-  fields
-    .filter((field): field is string => typeof field === "string")
-    .join(",");
+  fields.filter((field): field is string => typeof field === "string").join(",");
 
-export const emptyMessage = (value: unknown) =>
-  value === undefined ? undefined : {};
+export const emptyMessage = (value: unknown) => (value === undefined ? undefined : {});
 
 export const replaceOnIdentity = (input: {
   previousId: string | undefined;
@@ -203,20 +176,14 @@ export const replaceOnIdentity = (input: {
  * `notFoundOk` also accepts a `NOT_FOUND` result or an operation that has
  * already been garbage-collected (deletes).
  */
-export const waitForOperation = (
-  operation: ds.Operation,
-  options?: { notFoundOk?: boolean },
-) =>
-  waitForLongRunning(
-    operation,
-    (name) => ds.getProjectsLocationsOperations({ name }),
-    { budget: "30 minutes" },
-  ).pipe(
+export const waitForOperation = (operation: ds.Operation, options?: { notFoundOk?: boolean }) =>
+  waitForLongRunning(operation, (name) => ds.getProjectsLocationsOperations({ name }), {
+    budget: "30 minutes",
+  }).pipe(
     Effect.catchIf(
       (error) =>
         error._tag === "GCP.OperationFailed" &&
-        (error.code === 6 ||
-          (options?.notFoundOk === true && error.code === 5)),
+        (error.code === 6 || (options?.notFoundOk === true && error.code === 5)),
       () => Effect.void,
     ),
     Effect.catchIf(
@@ -231,9 +198,7 @@ export const waitUntilExists = <A, E extends { readonly _tag: string }, R>(
 ) =>
   get.pipe(
     Effect.flatMap((value) =>
-      value
-        ? Effect.succeed(value)
-        : Effect.fail(new ResourceNotResolved({ name })),
+      value ? Effect.succeed(value) : Effect.fail(new ResourceNotResolved({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Datastream.ResourceNotResolved",
@@ -249,9 +214,7 @@ export const waitUntilGone = <A, E extends { readonly _tag: string }, R>(
 ) =>
   get.pipe(
     Effect.flatMap((value) =>
-      value === undefined
-        ? Effect.void
-        : Effect.fail(new ResourceStillExists({ name })),
+      value === undefined ? Effect.void : Effect.fail(new ResourceStillExists({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Datastream.ResourceStillExists",
@@ -263,8 +226,7 @@ export const waitUntilGone = <A, E extends { readonly _tag: string }, R>(
 export const settleOperation = (
   operation: ds.Operation | undefined,
   options?: { notFoundOk?: boolean },
-) =>
-  operation === undefined ? Effect.void : waitForOperation(operation, options);
+) => (operation === undefined ? Effect.void : waitForOperation(operation, options));
 
 export const collectPages = <Page, A, E, R>(
   pages: Stream.Stream<Page, E, R>,

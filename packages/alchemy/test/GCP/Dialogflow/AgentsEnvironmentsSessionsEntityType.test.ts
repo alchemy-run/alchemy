@@ -1,34 +1,29 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as dialogflow from "@distilled.cloud/gcp/dialogflow_v3";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import { deleteAgent, ensureAgent, quotaTolerant } from "./parent.ts";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
+import { deleteAgent, ensureAgent, quotaTolerant } from "./parent.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const runLifecycle = !process.env.FAST;
 
 const waitUntilGone = (name: string) =>
-  dialogflow
-    .getProjectsLocationsAgentsEnvironmentsSessionsEntityTypes({ name })
-    .pipe(
-      Effect.as("found" as const),
-      Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
-      Effect.repeat({
-        schedule: Schedule.spaced("1 second"),
-        until: (status) => status === "gone",
-        times: 10,
-      }),
-    );
+  dialogflow.getProjectsLocationsAgentsEnvironmentsSessionsEntityTypes({ name }).pipe(
+    Effect.as("found" as const),
+    Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
+    Effect.repeat({
+      schedule: Schedule.spaced("1 second"),
+      until: (status) => status === "gone",
+      times: 10,
+    }),
+  );
 
 test.provider(
   "getProjectsLocationsAgentsEnvironmentsSessionsEntityTypes on a missing session entity type fails with a typed tag",
@@ -75,41 +70,34 @@ test.provider.skipIf(!runLifecycle)(
               displayName: "v1",
               description: "session snapshot",
             });
-            const environment = yield* GCP.Dialogflow.AgentsEnvironment(
-              "Prod",
+            const environment = yield* GCP.Dialogflow.AgentsEnvironment("Prod", {
+              agent: agent.name ?? "",
+              displayName: "prod",
+              versionConfigs: [{ version: version.name }],
+            });
+            const session = yield* GCP.Dialogflow.AgentsEnvironmentsSessionsEntityType(
+              "SessionColor",
               {
-                agent: agent.name ?? "",
-                displayName: "prod",
-                versionConfigs: [{ version: version.name }],
+                environment: environment.name,
+                entityType: color.name,
+                entityOverrideMode: "ENTITY_OVERRIDE_MODE_OVERRIDE",
+                entities: [{ value: "blue", synonyms: ["blue", "navy"] }],
               },
             );
-            const session =
-              yield* GCP.Dialogflow.AgentsEnvironmentsSessionsEntityType(
-                "SessionColor",
-                {
-                  environment: environment.name,
-                  entityType: color.name,
-                  entityOverrideMode: "ENTITY_OVERRIDE_MODE_OVERRIDE",
-                  entities: [{ value: "blue", synonyms: ["blue", "navy"] }],
-                },
-              );
             return { color, version, environment, session };
           }),
         );
 
         expect(created.session.name).toContain("/sessions/");
         expect(created.session.name).toContain("/entityTypes/");
-        expect(created.session.entityOverrideMode).toEqual(
-          "ENTITY_OVERRIDE_MODE_OVERRIDE",
-        );
+        expect(created.session.entityOverrideMode).toEqual("ENTITY_OVERRIDE_MODE_OVERRIDE");
         expect(created.session.entities).toEqual(
           expect.arrayContaining([expect.objectContaining({ value: "blue" })]),
         );
 
-        const fetched =
-          yield* dialogflow.getProjectsLocationsAgentsEnvironmentsSessionsEntityTypes(
-            { name: created.session.name },
-          );
+        const fetched = yield* dialogflow.getProjectsLocationsAgentsEnvironmentsSessionsEntityTypes(
+          { name: created.session.name },
+        );
         expect(fetched.name).toEqual(created.session.name);
 
         const updated = yield* stack.deploy(
@@ -127,37 +115,29 @@ test.provider.skipIf(!runLifecycle)(
               displayName: "v1",
               description: "session snapshot",
             });
-            const environment = yield* GCP.Dialogflow.AgentsEnvironment(
-              "Prod",
+            const environment = yield* GCP.Dialogflow.AgentsEnvironment("Prod", {
+              agent: agent.name ?? "",
+              environmentId: created.environment.environmentId,
+              displayName: "prod",
+              versionConfigs: [{ version: version.name }],
+            });
+            const session = yield* GCP.Dialogflow.AgentsEnvironmentsSessionsEntityType(
+              "SessionColor",
               {
-                agent: agent.name ?? "",
-                environmentId: created.environment.environmentId,
-                displayName: "prod",
-                versionConfigs: [{ version: version.name }],
+                environment: environment.name,
+                entityType: color.name,
+                sessionId: created.session.sessionId,
+                entityOverrideMode: "ENTITY_OVERRIDE_MODE_OVERRIDE",
+                entities: [{ value: "blue", synonyms: ["blue", "navy", "azure"] }],
               },
             );
-            const session =
-              yield* GCP.Dialogflow.AgentsEnvironmentsSessionsEntityType(
-                "SessionColor",
-                {
-                  environment: environment.name,
-                  entityType: color.name,
-                  sessionId: created.session.sessionId,
-                  entityOverrideMode: "ENTITY_OVERRIDE_MODE_OVERRIDE",
-                  entities: [
-                    { value: "blue", synonyms: ["blue", "navy", "azure"] },
-                  ],
-                },
-              );
             return { color, version, environment, session };
           }),
         );
 
         expect(updated.session.name).toEqual(created.session.name);
         expect(
-          updated.session.entities.some((entity) =>
-            (entity.synonyms ?? []).includes("azure"),
-          ),
+          updated.session.entities.some((entity) => (entity.synonyms ?? []).includes("azure")),
         ).toEqual(true);
 
         yield* stack.destroy();

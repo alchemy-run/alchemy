@@ -27,28 +27,22 @@ describe(
     // Fast probe (no deploy): creating a VPC origin against a bogus ARN must
     // surface a typed `InvalidArgument` (or `EntityNotFound`), proving the error
     // typing for the create op without provisioning any infrastructure.
-    test.provider(
-      "createVpcOrigin rejects a bogus ARN with a typed error",
-      () =>
-        Effect.gen(function* () {
-          const result = yield* cloudfront
-            .createVpcOrigin({
-              VpcOriginEndpointConfig: {
-                Name: "alchemy-vpc-origin-probe",
-                Arn: "arn:aws:elasticloadbalancing:us-east-1:000000000000:loadbalancer/app/does-not-exist/0000000000000000",
-                HTTPPort: 80,
-                HTTPSPort: 443,
-                OriginProtocolPolicy: "https-only",
-              },
-            })
-            .pipe(Effect.flip);
+    test.provider("createVpcOrigin rejects a bogus ARN with a typed error", () =>
+      Effect.gen(function* () {
+        const result = yield* cloudfront
+          .createVpcOrigin({
+            VpcOriginEndpointConfig: {
+              Name: "alchemy-vpc-origin-probe",
+              Arn: "arn:aws:elasticloadbalancing:us-east-1:000000000000:loadbalancer/app/does-not-exist/0000000000000000",
+              HTTPPort: 80,
+              HTTPSPort: 443,
+              OriginProtocolPolicy: "https-only",
+            },
+          })
+          .pipe(Effect.flip);
 
-          expect([
-            "InvalidArgument",
-            "EntityNotFound",
-            "AccessDenied",
-          ]).toContain(result._tag);
-        }),
+        expect(["InvalidArgument", "EntityNotFound", "AccessDenied"]).toContain(result._tag);
+      }),
     );
 
     test.provider.skipIf(!runLifecycle)(
@@ -63,20 +57,11 @@ describe(
           // the networking + ALB is deployed in a first phase, then the VPC origin
           // in a second — the IGW must be attached before `createVpcOrigin` runs.
           const network = Effect.gen(function* () {
-            const net = yield* Network("VpcOriginNet", {
-              cidrBlock: "10.40.0.0/16",
-            });
+            const net = yield* Network("VpcOriginNet", { cidrBlock: "10.40.0.0/16" });
             const sg = yield* SecurityGroup("VpcOriginSg", {
               vpcId: net.vpcId,
               description: "alchemy vpc origin alb",
-              ingress: [
-                {
-                  ipProtocol: "tcp",
-                  fromPort: 80,
-                  toPort: 80,
-                  cidrIpv4: "0.0.0.0/0",
-                },
-              ],
+              ingress: [{ ipProtocol: "tcp", fromPort: 80, toPort: 80, cidrIpv4: "0.0.0.0/0" }],
             });
             const alb = yield* LoadBalancer("VpcOriginAlb", {
               scheme: "internal",
@@ -104,14 +89,10 @@ describe(
           );
 
           // Out-of-band: confirm it deployed.
-          const got = yield* cloudfront.getVpcOrigin({
-            Id: deployed.vpcOrigin.vpcOriginId,
-          });
+          const got = yield* cloudfront.getVpcOrigin({ Id: deployed.vpcOrigin.vpcOriginId });
           expect(got.VpcOrigin?.Status).toEqual("Deployed");
           expect(got.VpcOrigin?.VpcOriginEndpointConfig.HTTPPort).toEqual(80);
-          expect(
-            got.VpcOrigin?.VpcOriginEndpointConfig.OriginProtocolPolicy,
-          ).toEqual("http-only");
+          expect(got.VpcOrigin?.VpcOriginEndpointConfig.OriginProtocolPolicy).toEqual("http-only");
 
           yield* stack.destroy();
           yield* assertVpcOriginDeleted(deployed.vpcOrigin.vpcOriginId);
@@ -122,18 +103,16 @@ describe(
       { tags: ["provider:aws:ec2", "provider:aws:elbv2"], timeout: 2_700_000 },
     );
 
-    test.provider.skipIf(!runLifecycle)(
-      "list enumerates account VPC origins",
-      () =>
-        Effect.gen(function* () {
-          const provider = yield* Provider.findProvider(VpcOrigin);
-          const all = yield* provider.list();
-          expect(Array.isArray(all)).toBe(true);
-          for (const item of all) {
-            expect(item.vpcOriginId).toBeDefined();
-            expect(item.vpcOriginArn).toBeDefined();
-          }
-        }),
+    test.provider.skipIf(!runLifecycle)("list enumerates account VPC origins", () =>
+      Effect.gen(function* () {
+        const provider = yield* Provider.findProvider(VpcOrigin);
+        const all = yield* provider.list();
+        expect(Array.isArray(all)).toBe(true);
+        for (const item of all) {
+          expect(item.vpcOriginId).toBeDefined();
+          expect(item.vpcOriginArn).toBeDefined();
+        }
+      }),
     );
   },
 );
@@ -141,17 +120,11 @@ describe(
 const assertVpcOriginDeleted = (id: string) =>
   cloudfront.getVpcOrigin({ Id: id }).pipe(
     Effect.flatMap((result) =>
-      result.VpcOrigin
-        ? Effect.fail(new Error("VpcOriginStillExists"))
-        : Effect.void,
+      result.VpcOrigin ? Effect.fail(new Error("VpcOriginStillExists")) : Effect.void,
     ),
     Effect.catchTag("EntityNotFound", () => Effect.void),
     Effect.retry({
-      while: (error) =>
-        error instanceof Error && error.message === "VpcOriginStillExists",
-      schedule: Schedule.max([
-        Schedule.fixed("10 seconds"),
-        Schedule.recurs(30),
-      ]),
+      while: (error) => error instanceof Error && error.message === "VpcOriginStillExists",
+      schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(30)]),
     }),
   );

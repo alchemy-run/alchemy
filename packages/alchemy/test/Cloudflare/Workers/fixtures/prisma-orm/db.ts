@@ -16,11 +16,7 @@ export const Db = Effect.gen(function* () {
   // Resolved inside the effect (not at module scope) so it only runs at
   // deploy time — `import.meta.url` is undefined in the bundled worker.
   const configPath = yield* Effect.sync(() =>
-    path.join(
-      import.meta.url ? fileURLToPath(import.meta.url) : ".",
-      "..",
-      "prisma.config.ts",
-    ),
+    path.join(import.meta.url ? fileURLToPath(import.meta.url) : ".", "..", "prisma.config.ts"),
   );
 
   const contract = yield* Prisma.Contract("PrismaOrmContract", {

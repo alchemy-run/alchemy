@@ -47,14 +47,10 @@ export const JobNotificationsSNS = Layer.provideMerge(
                 }),
             }).pipe(
               Effect.flatMap((payload) =>
-                Effect.logInfo(
-                  `Job notification received: ${payload.type} (${payload.job.id})`,
-                ),
+                Effect.logInfo(`Job notification received: ${payload.type} (${payload.job.id})`),
               ),
               // Keep the example resilient to malformed demo messages.
-              Effect.catchTag("NotifyJobError", (error) =>
-                Effect.logWarning(error.message),
-              ),
+              Effect.catchTag("NotifyJobError", (error) => Effect.logWarning(error.message)),
             ),
           ),
           Stream.runDrain,

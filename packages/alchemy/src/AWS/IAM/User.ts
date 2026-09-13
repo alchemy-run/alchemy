@@ -5,18 +5,9 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  createTagsList,
-  diffTags,
-  hasTags,
-} from "../../Tags.ts";
+import { createInternalTags, createTagsList, diffTags, hasTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  parsePolicyDocument,
-  stringifyPolicyDocument,
-  toTagRecord,
-} from "./common.ts";
+import { parsePolicyDocument, stringifyPolicyDocument, toTagRecord } from "./common.ts";
 import type { PolicyDocument } from "./Policy.ts";
 
 export interface UserProps {
@@ -97,31 +88,23 @@ export const UserProvider = () =>
     User,
     Effect.gen(function* () {
       const toName = (id: string, props: UserProps) =>
-        props.userName
-          ? Effect.succeed(props.userName)
-          : createPhysicalName({ id, maxLength: 64 });
+        props.userName ? Effect.succeed(props.userName) : createPhysicalName({ id, maxLength: 64 });
 
       const readManagedPolicies = Effect.fn(function* (userName: string) {
-        const attached = yield* iam.listAttachedUserPolicies
-          .items({ UserName: userName })
-          .pipe(
-            Stream.runCollect,
-            Effect.map((chunk) => Array.from(chunk)),
-          );
+        const attached = yield* iam.listAttachedUserPolicies.items({ UserName: userName }).pipe(
+          Stream.runCollect,
+          Effect.map((chunk) => Array.from(chunk)),
+        );
         return attached
           .map((policy) => policy.PolicyArn)
-          .filter(
-            (policyArn): policyArn is string => typeof policyArn === "string",
-          );
+          .filter((policyArn): policyArn is string => typeof policyArn === "string");
       });
 
       const readInlinePolicies = Effect.fn(function* (userName: string) {
-        const policyNames = yield* iam.listUserPolicies
-          .items({ UserName: userName })
-          .pipe(
-            Stream.runCollect,
-            Effect.map((chunk) => Array.from(chunk)),
-          );
+        const policyNames = yield* iam.listUserPolicies.items({ UserName: userName }).pipe(
+          Stream.runCollect,
+          Effect.map((chunk) => Array.from(chunk)),
+        );
         const entries = yield* Effect.all(
           policyNames.map((policyName) =>
             iam
@@ -131,11 +114,7 @@ export const UserProvider = () =>
               })
               .pipe(
                 Effect.map(
-                  (response) =>
-                    [
-                      policyName,
-                      parsePolicyDocument(response.PolicyDocument),
-                    ] as const,
+                  (response) => [policyName, parsePolicyDocument(response.PolicyDocument)] as const,
                 ),
                 Effect.catchTag("NoSuchEntityException", () =>
                   Effect.succeed([policyName, undefined] as const),
@@ -144,10 +123,7 @@ export const UserProvider = () =>
           ),
         );
         return Object.fromEntries(
-          entries.filter(
-            (entry): entry is [string, PolicyDocument] =>
-              entry[1] !== undefined,
-          ),
+          entries.filter((entry): entry is [string, PolicyDocument] => entry[1] !== undefined),
         );
       });
 
@@ -184,9 +160,7 @@ export const UserProvider = () =>
                 UserName: userName,
                 PolicyArn: policyArn,
               })
-              .pipe(
-                Effect.catchTag("NoSuchEntityException", () => Effect.void),
-              );
+              .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
           }
         }
       });
@@ -201,10 +175,7 @@ export const UserProvider = () =>
         news: Record<string, PolicyDocument>;
       }) {
         for (const [policyName, document] of Object.entries(news)) {
-          if (
-            JSON.stringify(olds[policyName] ?? null) !==
-            JSON.stringify(document)
-          ) {
+          if (JSON.stringify(olds[policyName] ?? null) !== JSON.stringify(document)) {
             yield* iam.putUserPolicy({
               UserName: userName,
               PolicyName: policyName,
@@ -219,9 +190,7 @@ export const UserProvider = () =>
                 UserName: userName,
                 PolicyName: policyName,
               })
-              .pipe(
-                Effect.catchTag("NoSuchEntityException", () => Effect.void),
-              );
+              .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
           }
         }
       });
@@ -236,52 +205,42 @@ export const UserProvider = () =>
             // them) to produce the same Attributes shape `read` returns.
             const users = yield* iam.listUsers.pages({}).pipe(
               Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) => page.Users ?? []),
-              ),
+              Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.Users ?? [])),
             );
 
             const hydrated = yield* Effect.forEach(
               users,
               (user) =>
                 Effect.gen(function* () {
-                  const [managedPolicyArns, inlinePolicies, tags] =
-                    yield* Effect.all([
-                      readManagedPolicies(user.UserName),
-                      readInlinePolicies(user.UserName),
-                      readTags(user.UserName),
-                    ]);
+                  const [managedPolicyArns, inlinePolicies, tags] = yield* Effect.all([
+                    readManagedPolicies(user.UserName),
+                    readInlinePolicies(user.UserName),
+                    readTags(user.UserName),
+                  ]);
                   return {
                     userArn: user.Arn,
                     userName: user.UserName,
                     userId: user.UserId,
                     path: user.Path,
-                    permissionsBoundary:
-                      user.PermissionsBoundary?.PermissionsBoundaryArn,
+                    permissionsBoundary: user.PermissionsBoundary?.PermissionsBoundaryArn,
                     managedPolicyArns,
                     inlinePolicies,
                     tags,
                   };
                 }).pipe(
                   // A user may be deleted concurrently mid-hydration.
-                  Effect.catchTag("NoSuchEntityException", () =>
-                    Effect.succeed(undefined),
-                  ),
+                  Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)),
                 ),
               { concurrency: 10 },
             );
 
             return hydrated.filter(
-              (attrs): attrs is NonNullable<typeof attrs> =>
-                attrs !== undefined,
+              (attrs): attrs is NonNullable<typeof attrs> => attrs !== undefined,
             );
           }),
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return;
-          if (
-            (yield* toName(id, olds ?? ({} as UserProps))) !==
-            (yield* toName(id, news))
-          ) {
+          if ((yield* toName(id, olds ?? ({} as UserProps))) !== (yield* toName(id, news))) {
             return { action: "replace" } as const;
           }
           if ((olds?.path ?? "/") !== (news.path ?? "/")) {
@@ -289,17 +248,12 @@ export const UserProvider = () =>
           }
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
-          const userName =
-            output?.userName ?? (yield* toName(id, olds ?? ({} as UserProps)));
+          const userName = output?.userName ?? (yield* toName(id, olds ?? ({} as UserProps)));
           const response = yield* iam
             .getUser({
               UserName: userName,
             })
-            .pipe(
-              Effect.catchTag("NoSuchEntityException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
           if (!response?.User?.Arn) {
             return undefined;
           }
@@ -313,8 +267,7 @@ export const UserProvider = () =>
             userName: response.User.UserName,
             userId: response.User.UserId,
             path: response.User.Path,
-            permissionsBoundary:
-              response.User.PermissionsBoundary?.PermissionsBoundaryArn,
+            permissionsBoundary: response.User.PermissionsBoundary?.PermissionsBoundaryArn,
             managedPolicyArns,
             inlinePolicies,
             tags,
@@ -330,11 +283,7 @@ export const UserProvider = () =>
           // Observe — read the live user (or absence).
           const observedResponse = yield* iam
             .getUser({ UserName: userName })
-            .pipe(
-              Effect.catchTag("NoSuchEntityException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
           let observedUser = observedResponse?.User;
 
           // Ensure — create the user when missing. On race, verify
@@ -364,8 +313,7 @@ export const UserProvider = () =>
           }
 
           // Sync permissions boundary against observed.
-          const observedBoundary =
-            observedUser?.PermissionsBoundary?.PermissionsBoundaryArn;
+          const observedBoundary = observedUser?.PermissionsBoundary?.PermissionsBoundaryArn;
           if (news.permissionsBoundary !== observedBoundary) {
             if (news.permissionsBoundary) {
               yield* iam.putUserPermissionsBoundary({
@@ -377,19 +325,16 @@ export const UserProvider = () =>
                 .deleteUserPermissionsBoundary({
                   UserName: userName,
                 })
-                .pipe(
-                  Effect.catchTag("NoSuchEntityException", () => Effect.void),
-                );
+                .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
             }
           }
 
           // Sync managed and inline policies — observe live state and
           // apply only the delta.
-          const [observedManagedPolicies, observedInlinePolicies] =
-            yield* Effect.all([
-              readManagedPolicies(userName),
-              readInlinePolicies(userName),
-            ]);
+          const [observedManagedPolicies, observedInlinePolicies] = yield* Effect.all([
+            readManagedPolicies(userName),
+            readInlinePolicies(userName),
+          ]);
           yield* syncManagedPolicies({
             userName,
             olds: observedManagedPolicies,
@@ -428,8 +373,7 @@ export const UserProvider = () =>
             userId: user.User?.UserId ?? observedUser?.UserId,
             path: user.User?.Path ?? observedUser?.Path ?? news.path ?? "/",
             permissionsBoundary:
-              user.User?.PermissionsBoundary?.PermissionsBoundaryArn ??
-              news.permissionsBoundary,
+              user.User?.PermissionsBoundary?.PermissionsBoundaryArn ?? news.permissionsBoundary,
             managedPolicyArns: news.managedPolicyArns ?? [],
             inlinePolicies: news.inlinePolicies ?? {},
             tags: desiredTags,
@@ -449,37 +393,28 @@ export const UserProvider = () =>
                   UserName: output.userName,
                   PolicyName: policyName,
                 })
-                .pipe(
-                  Effect.catchTag("NoSuchEntityException", () => Effect.void),
-                ),
+                .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void)),
             ),
             Stream.runDrain,
             // The user itself may already be gone.
             Effect.catchTag("NoSuchEntityException", () => Effect.void),
           );
 
-          yield* iam.listAttachedUserPolicies
-            .items({ UserName: output.userName })
-            .pipe(
-              Stream.mapEffect((policy) =>
-                policy.PolicyArn
-                  ? iam
-                      .detachUserPolicy({
-                        UserName: output.userName,
-                        PolicyArn: policy.PolicyArn,
-                      })
-                      .pipe(
-                        Effect.catchTag(
-                          "NoSuchEntityException",
-                          () => Effect.void,
-                        ),
-                      )
-                  : Effect.void,
-              ),
-              Stream.runDrain,
-              // The user itself may already be gone.
-              Effect.catchTag("NoSuchEntityException", () => Effect.void),
-            );
+          yield* iam.listAttachedUserPolicies.items({ UserName: output.userName }).pipe(
+            Stream.mapEffect((policy) =>
+              policy.PolicyArn
+                ? iam
+                    .detachUserPolicy({
+                      UserName: output.userName,
+                      PolicyArn: policy.PolicyArn,
+                    })
+                    .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void))
+                : Effect.void,
+            ),
+            Stream.runDrain,
+            // The user itself may already be gone.
+            Effect.catchTag("NoSuchEntityException", () => Effect.void),
+          );
 
           yield* iam
             .deleteUser({

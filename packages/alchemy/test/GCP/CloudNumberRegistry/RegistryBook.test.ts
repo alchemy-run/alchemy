@@ -1,8 +1,8 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as cnr from "@distilled.cloud/gcp/cloudnumberregistry_v1alpha";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import {
   location,
   logLevel,
@@ -66,11 +66,9 @@ test.provider.skipIf(!runLifecycle)(
       });
       expect(fetched.name).toEqual(created.name);
       expect(fetched.labels?.env).toEqual("test");
-      expect(
-        Object.keys(fetched.labels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
-      ).toEqual(true);
+      expect(Object.keys(fetched.labels ?? {}).some((key) => key.startsWith("alchemy-"))).toEqual(
+        true,
+      );
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {

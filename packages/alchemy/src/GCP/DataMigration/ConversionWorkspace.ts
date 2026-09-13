@@ -159,11 +159,7 @@ export const ConversionWorkspace = Resource<ConversionWorkspace>(
   "GCP.DataMigration.ConversionWorkspace",
 );
 
-const resourceName = (
-  project: string,
-  location: string,
-  conversionWorkspaceId: string,
-) =>
+const resourceName = (project: string, location: string, conversionWorkspaceId: string) =>
   `${locationParent(project, location)}/conversionWorkspaces/${conversionWorkspaceId}`;
 
 const settingsOf = (
@@ -213,9 +209,7 @@ const listOwned = (project: string, region: string) =>
       pageSize: 1000,
     })
     .pipe(
-      Stream.flatMap((page) =>
-        Stream.fromIterable(page.conversionWorkspaces ?? []),
-      ),
+      Stream.flatMap((page) => Stream.fromIterable(page.conversionWorkspaces ?? [])),
       Stream.filter((item) => hasOwnershipMarker(item.displayName)),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
@@ -226,15 +220,11 @@ const listOwned = (project: string, region: string) =>
             pageSize: 1000,
           })
           .pipe(
-            Stream.flatMap((page) =>
-              Stream.fromIterable(page.conversionWorkspaces ?? []),
-            ),
+            Stream.flatMap((page) => Stream.fromIterable(page.conversionWorkspaces ?? [])),
             Stream.filter((item) => hasOwnershipMarker(item.displayName)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed([] as dm.ConversionWorkspace[]),
-            ),
+            Effect.catchTag("NotFound", () => Effect.succeed([] as dm.ConversionWorkspace[])),
           ),
       ),
     );
@@ -247,43 +237,28 @@ const engineOf = (value: DatabaseEngineInfo | undefined) =>
 
 export const ConversionWorkspaceProvider = () =>
   Provider.succeed(ConversionWorkspace, {
-    stables: [
-      "name",
-      "conversionWorkspaceId",
-      "project",
-      "location",
-      "createTime",
-    ],
+    stables: ["name", "conversionWorkspaceId", "project", "location", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
       return replaceOnIdentity({
-        previousId:
-          olds?.conversionWorkspaceId ?? output?.conversionWorkspaceId,
+        previousId: olds?.conversionWorkspaceId ?? output?.conversionWorkspaceId,
         nextId:
           news.conversionWorkspaceId ??
           olds?.conversionWorkspaceId ??
           output?.conversionWorkspaceId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
         ),
         extra:
           engineOf(news.source) !== engineOf(olds?.source ?? output?.source) ||
-          engineOf(news.destination) !==
-            engineOf(olds?.destination ?? output?.destination) ||
-          (news.sourceProvider ??
-            olds?.sourceProvider ??
-            output?.sourceProvider) !==
+          engineOf(news.destination) !== engineOf(olds?.destination ?? output?.destination) ||
+          (news.sourceProvider ?? olds?.sourceProvider ?? output?.sourceProvider) !==
             (olds?.sourceProvider ?? output?.sourceProvider) ||
-          (news.destinationProvider ??
-            olds?.destinationProvider ??
-            output?.destinationProvider) !==
+          (news.destinationProvider ?? olds?.destinationProvider ?? output?.destinationProvider) !==
             (olds?.destinationProvider ?? output?.destinationProvider),
       });
     }),
@@ -296,19 +271,12 @@ export const ConversionWorkspaceProvider = () =>
         output?.conversionWorkspaceId,
         "workspace",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ??
-        resourceName(env.project, location, conversionWorkspaceId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, conversionWorkspaceId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, existing.displayName))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.displayName)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -326,10 +294,7 @@ export const ConversionWorkspaceProvider = () =>
         output?.conversionWorkspaceId,
         "workspace",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, conversionWorkspaceId);
       const ownership = yield* createInternalLabels(id);
       const displayName = encodeOwnershipLine(ownership, news.displayName);
@@ -365,8 +330,7 @@ export const ConversionWorkspaceProvider = () =>
       const observedDisplay = current.displayName ?? "";
       const displayNameChanged = observedDisplay !== displayName;
       const settingsChanged =
-        fingerprint(settingsOf(current.globalSettings)) !==
-        fingerprint(globalSettings);
+        fingerprint(settingsOf(current.globalSettings)) !== fingerprint(globalSettings);
       const mask = fieldMask([
         displayNameChanged && "displayName",
         settingsChanged && "globalSettings",
@@ -383,10 +347,7 @@ export const ConversionWorkspaceProvider = () =>
           },
         });
         yield* waitForOperation(operation);
-        current = yield* waitUntilExists(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project);

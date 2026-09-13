@@ -8,18 +8,11 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Railway.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const verifyLoginSession = Query.fn((code: string) =>
-  RailwaySdk.loginSessionVerify({ code }),
-);
+const verifyLoginSession = Query.fn((code: string) => RailwaySdk.loginSessionVerify({ code }));
 
-const consumeLoginSession = Query.fn((code: string) =>
-  RailwaySdk.loginSessionConsume({ code }),
-);
+const consumeLoginSession = Query.fn((code: string) => RailwaySdk.loginSessionConsume({ code }));
 
 test.provider(
   "create, verify, and cancel a login session",
@@ -27,19 +20,16 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const code = yield* Railway.provideAnonymousRailway(
-        Railway.createLoginSession(),
-      );
+      const code = yield* Railway.provideAnonymousRailway(Railway.createLoginSession());
       expect(code).toEqual(expect.any(String));
       expect(code.length).toBeGreaterThan(0);
 
       const url = Railway.loginSessionUrl(code, { hostname: "alchemy-test" });
       expect(url.startsWith("https://railway.com/cli-login?d=")).toBe(true);
       const encoded = url.slice("https://railway.com/cli-login?d=".length);
-      const payload = Buffer.from(
-        encoded.replace(/-/g, "+").replace(/_/g, "/"),
-        "base64",
-      ).toString("utf8");
+      const payload = Buffer.from(encoded.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString(
+        "utf8",
+      );
       expect(payload).toContain(`wordCode=${code}`);
       expect(payload).toContain("hostname=alchemy-test");
 
@@ -59,9 +49,7 @@ test.provider(
       );
       expect(beforeAuth).toBeNull();
 
-      const cancelled = yield* Railway.provideAnonymousRailway(
-        Railway.cancelLoginSession(code),
-      );
+      const cancelled = yield* Railway.provideAnonymousRailway(Railway.cancelLoginSession(code));
       expect(cancelled).toBe(true);
 
       const cancelledAgain = yield* Railway.provideAnonymousRailway(

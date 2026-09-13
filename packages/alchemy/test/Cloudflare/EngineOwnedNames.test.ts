@@ -1,7 +1,4 @@
-import {
-  apiTokenCredentials,
-  Credentials,
-} from "@distilled.cloud/cloudflare/Credentials";
+import { apiTokenCredentials, Credentials } from "@distilled.cloud/cloudflare/Credentials";
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -14,21 +11,12 @@ import { ArtifactStore, createArtifactStore } from "@/Artifacts.ts";
 import type { CloudflareResolvedCredentials } from "@/Cloudflare/Auth/AuthConfig.ts";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment.ts";
 import { type Database, DatabaseProvider } from "@/Cloudflare/D1/Database.ts";
-import {
-  type Connection,
-  ConnectionProvider,
-} from "@/Cloudflare/Hyperdrive/Connection.ts";
-import {
-  type Namespace,
-  NamespaceProvider,
-} from "@/Cloudflare/KV/Namespace.ts";
+import { type Connection, ConnectionProvider } from "@/Cloudflare/Hyperdrive/Connection.ts";
+import { type Namespace, NamespaceProvider } from "@/Cloudflare/KV/Namespace.ts";
 import { LocalRuntimeState } from "@/Cloudflare/LocalRuntime.ts";
 import { type Queue, QueueProvider } from "@/Cloudflare/Queues/Queue.ts";
 import { type Bucket, BucketProvider } from "@/Cloudflare/R2/Bucket.ts";
-import {
-  type Index,
-  IndexProvider,
-} from "@/Cloudflare/Vectorize/VectorizeIndex.ts";
+import { type Index, IndexProvider } from "@/Cloudflare/Vectorize/VectorizeIndex.ts";
 import { InstanceId } from "@/InstanceId.ts";
 import { Provider } from "@/Provider.ts";
 import { Stack, type StackSpec } from "@/Stack.ts";
@@ -73,17 +61,10 @@ const env = Layer.mergeAll(
   Layer.succeed(Stack, stack),
   Layer.succeed(Stage, stack.stage),
   Layer.succeed(InstanceId, "0123456789abcdef0123456789abcdef"),
-  Layer.succeed(AlchemyContext, {
-    dotAlchemy: "/tmp/.alchemy-test",
-    dev: false,
-    adopt: false,
-  }),
+  Layer.succeed(AlchemyContext, { dotAlchemy: "/tmp/.alchemy-test", dev: false, adopt: false }),
   // The remaining layers only satisfy the provider layers' type-level
   // requirements (reconcile/read need clients); diff never touches them.
-  Layer.succeed(
-    Credentials,
-    Effect.succeed(apiTokenCredentials({ apiToken: "test-token" })),
-  ),
+  Layer.succeed(Credentials, Effect.succeed(apiTokenCredentials({ apiToken: "test-token" }))),
   Layer.sync(ArtifactStore, createArtifactStore),
   Layer.succeed(
     LocalRuntimeState,
@@ -97,12 +78,7 @@ const env = Layer.mergeAll(
   FetchHttpClient.layer,
 );
 
-const diffInput = <Olds, News, Output>(
-  id: string,
-  olds: Olds,
-  news: News,
-  output: Output,
-) => ({
+const diffInput = <Olds, News, Output>(id: string, olds: Olds, news: News, output: Output) => ({
   id,
   fqn: id,
   instanceId: "0123456789abcdef0123456789abcdef",
@@ -189,12 +165,7 @@ describe(
         Effect.gen(function* () {
           const provider = yield* Provider<Bucket>("Cloudflare.R2.Bucket");
           const result = yield* provider.diff!(
-            diffInput(
-              "Files",
-              {},
-              {},
-              { bucketName: DRIFTED, accountId: TEST_ACCOUNT },
-            ),
+            diffInput("Files", {}, {}, { bucketName: DRIFTED, accountId: TEST_ACCOUNT }),
           );
           expect(result?.action).not.toBe("replace");
         }).pipe(Effect.provide(BucketProvider()), Effect.provide(env)),
@@ -247,12 +218,7 @@ describe(
         Effect.gen(function* () {
           const provider = yield* Provider<Index>("Cloudflare.VectorizeIndex");
           const result = yield* provider.diff!(
-            diffInput(
-              "Vectors",
-              {},
-              {},
-              { indexName: DRIFTED, accountId: TEST_ACCOUNT },
-            ),
+            diffInput("Vectors", {}, {}, { indexName: DRIFTED, accountId: TEST_ACCOUNT }),
           );
           expect(result?.action).not.toBe("replace");
         }).pipe(Effect.provide(IndexProvider()), Effect.provide(env)),
@@ -263,9 +229,7 @@ describe(
       "KV Namespace: drifted auto-generated title does not rename",
       () =>
         Effect.gen(function* () {
-          const provider = yield* Provider<Namespace>(
-            "Cloudflare.KV.Namespace",
-          );
+          const provider = yield* Provider<Namespace>("Cloudflare.KV.Namespace");
           const result = yield* provider.diff!(
             diffInput(
               "Cache",

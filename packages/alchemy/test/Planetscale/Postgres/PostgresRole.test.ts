@@ -14,10 +14,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Planetscale.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 describe
   .skipIf(!process.env.PLANETSCALE_TEST)
@@ -29,9 +26,7 @@ describe
       // default role) against the live org, without provisioning anything.
       test.provider("list enumerates default roles (read-only)", () =>
         Effect.gen(function* () {
-          const provider = yield* Provider.findProvider(
-            Planetscale.PostgresDefaultRole,
-          );
+          const provider = yield* Provider.findProvider(Planetscale.PostgresDefaultRole);
           const all = yield* provider.list();
 
           expect(Array.isArray(all)).toBe(true);
@@ -63,20 +58,15 @@ describe
                   clusterSize: "PS_10",
                   arch: "arm",
                 });
-                const role = yield* Planetscale.PostgresDefaultRole(
-                  "ListRole",
-                  {
-                    database,
-                    forceReset: true,
-                  },
-                );
+                const role = yield* Planetscale.PostgresDefaultRole("ListRole", {
+                  database,
+                  forceReset: true,
+                });
                 return { database, role };
               }),
             );
 
-            const provider = yield* Provider.findProvider(
-              Planetscale.PostgresDefaultRole,
-            );
+            const provider = yield* Provider.findProvider(Planetscale.PostgresDefaultRole);
             const all = yield* provider.list();
 
             expect(
@@ -89,10 +79,7 @@ describe
             ).toBe(true);
 
             yield* stack.destroy();
-            yield* waitForDatabaseToBeDeleted(
-              database.name,
-              database.organization,
-            );
+            yield* waitForDatabaseToBeDeleted(database.name, database.organization);
           }).pipe(logLevel),
         5_000_000,
       );
@@ -102,9 +89,7 @@ describe
       // provisioning anything.
       test.provider("list enumerates roles (read-only)", () =>
         Effect.gen(function* () {
-          const provider = yield* Provider.findProvider(
-            Planetscale.PostgresRole,
-          );
+          const provider = yield* Provider.findProvider(Planetscale.PostgresRole);
           const all = yield* provider.list();
 
           expect(Array.isArray(all)).toBe(true);
@@ -144,9 +129,7 @@ describe
               }),
             );
 
-            const provider = yield* Provider.findProvider(
-              Planetscale.PostgresRole,
-            );
+            const provider = yield* Provider.findProvider(Planetscale.PostgresRole);
             const all = yield* provider.list();
 
             expect(
@@ -159,10 +142,7 @@ describe
             ).toBe(true);
 
             yield* stack.destroy();
-            yield* waitForDatabaseToBeDeleted(
-              database.name,
-              database.organization,
-            );
+            yield* waitForDatabaseToBeDeleted(database.name, database.organization);
           }).pipe(logLevel),
         5_000_000,
       );
@@ -176,16 +156,11 @@ describe
             // First: create default role, expect success
             const { database, role1 } = yield* stack.deploy(
               Effect.gen(function* () {
-                const database = yield* Planetscale.PostgresDatabase(
-                  "Database",
-                  {
-                    clusterSize: "PS_10",
-                    arch: "arm",
-                  },
-                );
-                const role1 = yield* Planetscale.PostgresDefaultRole("Role1", {
-                  database,
+                const database = yield* Planetscale.PostgresDatabase("Database", {
+                  clusterSize: "PS_10",
+                  arch: "arm",
                 });
+                const role1 = yield* Planetscale.PostgresDefaultRole("Role1", { database });
 
                 return { role1, database };
               }),
@@ -212,27 +187,17 @@ describe
             expect(role1.privateConnectionServiceName).toEqual(
               defaultRoleFromApi.private_connection_service_name,
             );
-            expect(role1.privateHost).toEqual(
-              defaultRoleFromApi.private_access_host_url,
-            );
+            expect(role1.privateHost).toEqual(defaultRoleFromApi.private_access_host_url);
 
             // Second: create again without forceReset — should fail (default already exists)
             const exit = yield* stack
               .deploy(
                 Effect.gen(function* () {
-                  const database = yield* Planetscale.PostgresDatabase(
-                    "Database",
-                    {
-                      clusterSize: "PS_10",
-                      arch: "arm",
-                    },
-                  );
-                  const role2 = yield* Planetscale.PostgresDefaultRole(
-                    "Role2",
-                    {
-                      database,
-                    },
-                  );
+                  const database = yield* Planetscale.PostgresDatabase("Database", {
+                    clusterSize: "PS_10",
+                    arch: "arm",
+                  });
+                  const role2 = yield* Planetscale.PostgresDefaultRole("Role2", { database });
 
                   return { role2 };
                 }),
@@ -250,13 +215,10 @@ describe
             // Third: create with forceReset — should succeed and return a different role id
             const { role3 } = yield* stack.deploy(
               Effect.gen(function* () {
-                const database = yield* Planetscale.PostgresDatabase(
-                  "Database",
-                  {
-                    clusterSize: "PS_10",
-                    arch: "arm",
-                  },
-                );
+                const database = yield* Planetscale.PostgresDatabase("Database", {
+                  clusterSize: "PS_10",
+                  arch: "arm",
+                });
                 const role3 = yield* Planetscale.PostgresDefaultRole("Role3", {
                   database,
                   forceReset: true,
@@ -278,15 +240,10 @@ describe
             });
 
             // the default role ID is the same, but the password is different
-            expect(Redacted.value(role3.password)).not.toEqual(
-              Redacted.value(role1.password),
-            );
+            expect(Redacted.value(role3.password)).not.toEqual(Redacted.value(role1.password));
 
             yield* stack.destroy();
-            yield* waitForDatabaseToBeDeleted(
-              database.name,
-              database.organization,
-            );
+            yield* waitForDatabaseToBeDeleted(database.name, database.organization);
           }).pipe(logLevel),
         5_000_000,
       );
@@ -300,13 +257,10 @@ describe
             // Create a role
             const { database, role } = yield* stack.deploy(
               Effect.gen(function* () {
-                const database = yield* Planetscale.PostgresDatabase(
-                  "Database",
-                  {
-                    clusterSize: "PS_10",
-                    arch: "arm",
-                  },
-                );
+                const database = yield* Planetscale.PostgresDatabase("Database", {
+                  clusterSize: "PS_10",
+                  arch: "arm",
+                });
                 const role = yield* Planetscale.PostgresRole("Role", {
                   database,
                   // Empty array means no permissions, which is fine for testing.
@@ -336,20 +290,15 @@ describe
             expect(role.privateConnectionServiceName).toEqual(
               roleFromApi.private_connection_service_name,
             );
-            expect(role.privateHost).toEqual(
-              roleFromApi.private_access_host_url,
-            );
+            expect(role.privateHost).toEqual(roleFromApi.private_access_host_url);
 
             // Update role with different ttl (should trigger replacement)
             const { updatedRole } = yield* stack.deploy(
               Effect.gen(function* () {
-                const database = yield* Planetscale.PostgresDatabase(
-                  "Database",
-                  {
-                    clusterSize: "PS_10",
-                    arch: "arm",
-                  },
-                );
+                const database = yield* Planetscale.PostgresDatabase("Database", {
+                  clusterSize: "PS_10",
+                  arch: "arm",
+                });
                 const updatedRole = yield* Planetscale.PostgresRole("Role", {
                   database,
                   ttl: 3600,
@@ -388,10 +337,7 @@ describe
 
             yield* stack.destroy();
 
-            yield* waitForDatabaseToBeDeleted(
-              database.name,
-              database.organization,
-            );
+            yield* waitForDatabaseToBeDeleted(database.name, database.organization);
           }).pipe(logLevel),
         5_000_000,
       );
@@ -404,21 +350,15 @@ describe
 
             const { database, role1 } = yield* stack.deploy(
               Effect.gen(function* () {
-                const database = yield* Planetscale.PostgresDatabase(
-                  "Database",
-                  {
-                    clusterSize: "PS_10",
-                    arch: "arm",
-                  },
-                );
-                const role1 = yield* Planetscale.PostgresRole(
-                  "RoleReplication",
-                  {
-                    database,
-                    inheritedRoles: ["postgres"],
-                    withReplication: true,
-                  },
-                );
+                const database = yield* Planetscale.PostgresDatabase("Database", {
+                  clusterSize: "PS_10",
+                  arch: "arm",
+                });
+                const role1 = yield* Planetscale.PostgresRole("RoleReplication", {
+                  database,
+                  inheritedRoles: ["postgres"],
+                  withReplication: true,
+                });
 
                 return { database, role1 };
               }),
@@ -432,20 +372,14 @@ describe
 
             const { role2 } = yield* stack.deploy(
               Effect.gen(function* () {
-                const database = yield* Planetscale.PostgresDatabase(
-                  "Database",
-                  {
-                    clusterSize: "PS_10",
-                    arch: "arm",
-                  },
-                );
-                const role2 = yield* Planetscale.PostgresRole(
-                  "RoleReplication",
-                  {
-                    database,
-                    inheritedRoles: ["postgres"],
-                  },
-                );
+                const database = yield* Planetscale.PostgresDatabase("Database", {
+                  clusterSize: "PS_10",
+                  arch: "arm",
+                });
+                const role2 = yield* Planetscale.PostgresRole("RoleReplication", {
+                  database,
+                  inheritedRoles: ["postgres"],
+                });
 
                 return { role2 };
               }),
@@ -456,10 +390,7 @@ describe
 
             yield* stack.destroy();
 
-            yield* waitForDatabaseToBeDeleted(
-              database.name,
-              database.organization,
-            );
+            yield* waitForDatabaseToBeDeleted(database.name, database.organization);
           }).pipe(logLevel),
         5_000_000,
       );
@@ -472,13 +403,10 @@ describe
 
             const { database, role1 } = yield* stack.deploy(
               Effect.gen(function* () {
-                const database = yield* Planetscale.PostgresDatabase(
-                  "Database",
-                  {
-                    clusterSize: "PS_10",
-                    arch: "arm",
-                  },
-                );
+                const database = yield* Planetscale.PostgresDatabase("Database", {
+                  clusterSize: "PS_10",
+                  arch: "arm",
+                });
                 const role1 = yield* Planetscale.PostgresRole("RoleReplace", {
                   database: database,
                   inheritedRoles: ["pg_read_all_data"],
@@ -500,13 +428,10 @@ describe
 
             const { role2 } = yield* stack.deploy(
               Effect.gen(function* () {
-                const database = yield* Planetscale.PostgresDatabase(
-                  "Database",
-                  {
-                    clusterSize: "PS_10",
-                    arch: "arm",
-                  },
-                );
+                const database = yield* Planetscale.PostgresDatabase("Database", {
+                  clusterSize: "PS_10",
+                  arch: "arm",
+                });
                 const role2 = yield* Planetscale.PostgresRole("RoleReplace", {
                   database: database,
                   inheritedRoles: ["postgres"],
@@ -528,10 +453,7 @@ describe
 
             yield* stack.destroy();
 
-            yield* waitForDatabaseToBeDeleted(
-              database.name,
-              database.organization,
-            );
+            yield* waitForDatabaseToBeDeleted(database.name, database.organization);
           }).pipe(logLevel),
         5_000_000,
       );
@@ -546,20 +468,14 @@ describe
 
             const { database, role } = yield* stack.deploy(
               Effect.gen(function* () {
-                const database = yield* Planetscale.PostgresDatabase(
-                  "Database",
-                  {
-                    clusterSize: "PS_10",
-                    arch: "arm",
-                  },
-                ).pipe(RemovalPolicy.retain(true));
-                const role = yield* Planetscale.PostgresRole(
-                  "RoleRetainRemoval",
-                  {
-                    database,
-                    inheritedRoles: ["postgres"],
-                  },
-                ).pipe(RemovalPolicy.retain(true));
+                const database = yield* Planetscale.PostgresDatabase("Database", {
+                  clusterSize: "PS_10",
+                  arch: "arm",
+                }).pipe(RemovalPolicy.retain(true));
+                const role = yield* Planetscale.PostgresRole("RoleRetainRemoval", {
+                  database,
+                  inheritedRoles: ["postgres"],
+                }).pipe(RemovalPolicy.retain(true));
 
                 return { database, role };
               }),
@@ -575,31 +491,18 @@ describe
             yield* stack.destroy();
 
             const liveRole = yield* ps
-              .getRole({
-                organization,
-                database: database.name,
-                branch: "main",
-                id: role.id,
-              })
-              .pipe(
-                Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-              );
+              .getRole({ organization, database: database.name, branch: "main", id: role.id })
+              .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
             expect(liveRole).toBeDefined();
             expect(liveRole?.id).toEqual(role.id);
 
             // deleting the db takes care of deleting the role
             yield* ps
-              .deleteDatabase({
-                organization,
-                database: database.name,
-              })
+              .deleteDatabase({ organization, database: database.name })
               .pipe(Effect.catchTag("NotFound", () => Effect.void));
 
-            yield* waitForDatabaseToBeDeleted(
-              database.name,
-              database.organization,
-            );
+            yield* waitForDatabaseToBeDeleted(database.name, database.organization);
           }).pipe(logLevel),
         5_000_000,
       );
@@ -612,13 +515,10 @@ describe
 
             const { database, role1 } = yield* stack.deploy(
               Effect.gen(function* () {
-                const database = yield* Planetscale.PostgresDatabase(
-                  "Database",
-                  {
-                    clusterSize: "PS_10",
-                    arch: "arm",
-                  },
-                );
+                const database = yield* Planetscale.PostgresDatabase("Database", {
+                  clusterSize: "PS_10",
+                  arch: "arm",
+                });
                 const role1 = yield* Planetscale.PostgresRole("RoleSuccessor", {
                   database,
                   inheritedRoles: ["postgres"],
@@ -639,13 +539,10 @@ describe
 
             const { role2 } = yield* stack.deploy(
               Effect.gen(function* () {
-                const database = yield* Planetscale.PostgresDatabase(
-                  "Database",
-                  {
-                    clusterSize: "PS_10",
-                    arch: "arm",
-                  },
-                );
+                const database = yield* Planetscale.PostgresDatabase("Database", {
+                  clusterSize: "PS_10",
+                  arch: "arm",
+                });
                 const role2 = yield* Planetscale.PostgresRole("RoleSuccessor", {
                   database,
                   inheritedRoles: ["postgres"],
@@ -656,19 +553,13 @@ describe
               }),
             );
 
-            expect(role2).toMatchObject({
-              id: originalId,
-              successor: "pg_read_all_data",
-            });
+            expect(role2).toMatchObject({ id: originalId, successor: "pg_read_all_data" });
 
             expect(role2.id).toEqual(originalId);
 
             yield* stack.destroy();
 
-            yield* waitForDatabaseToBeDeleted(
-              database.name,
-              database.organization,
-            );
+            yield* waitForDatabaseToBeDeleted(database.name, database.organization);
           }).pipe(logLevel),
         5_000_000,
       );
@@ -681,29 +572,18 @@ describe
 
             const { database, branch, role } = yield* stack.deploy(
               Effect.gen(function* () {
-                const database = yield* Planetscale.PostgresDatabase(
-                  "Database",
-                  {
-                    clusterSize: "PS_10",
-                    arch: "arm",
-                  },
-                );
+                const database = yield* Planetscale.PostgresDatabase("Database", {
+                  clusterSize: "PS_10",
+                  arch: "arm",
+                });
 
-                const branch = yield* Planetscale.PostgresBranch(
-                  "CustomBranch",
-                  {
-                    database,
-                  },
-                );
+                const branch = yield* Planetscale.PostgresBranch("CustomBranch", { database });
 
-                const role = yield* Planetscale.PostgresRole(
-                  "RoleCustomBranch",
-                  {
-                    database,
-                    branch,
-                    inheritedRoles: ["postgres"],
-                  },
-                );
+                const role = yield* Planetscale.PostgresRole("RoleCustomBranch", {
+                  database,
+                  branch,
+                  inheritedRoles: ["postgres"],
+                });
 
                 return { database, branch, role };
               }),
@@ -719,33 +599,21 @@ describe
 
             yield* stack.destroy();
 
-            yield* waitForDatabaseToBeDeleted(
-              database.name,
-              database.organization,
-            );
+            yield* waitForDatabaseToBeDeleted(database.name, database.organization);
           }).pipe(logLevel),
         5_000_000,
       );
     },
   );
-const waitForDatabaseToBeDeleted = Effect.fn(function* (
-  database: string,
-  organization: string,
-) {
-  yield* ps
-    .getDatabase({
-      organization,
-      database,
-    })
-    .pipe(
-      Effect.flatMap(() => Effect.fail(new DatabaseStillExists())),
-      Effect.retry({
-        while: (e): e is DatabaseStillExists =>
-          e instanceof DatabaseStillExists,
-        schedule: Schedule.exponential(100),
-      }),
-      Effect.catchTag("NotFound", () => Effect.void),
-    );
+const waitForDatabaseToBeDeleted = Effect.fn(function* (database: string, organization: string) {
+  yield* ps.getDatabase({ organization, database }).pipe(
+    Effect.flatMap(() => Effect.fail(new DatabaseStillExists())),
+    Effect.retry({
+      while: (e): e is DatabaseStillExists => e instanceof DatabaseStillExists,
+      schedule: Schedule.exponential(100),
+    }),
+    Effect.catchTag("NotFound", () => Effect.void),
+  );
 });
 
 class DatabaseStillExists extends Data.TaggedError("DatabaseStillExists") {}

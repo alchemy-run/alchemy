@@ -143,9 +143,7 @@ export type DevelopersApp = Resource<
  * @resource
  * @category Apigee
  */
-export const DevelopersApp = Resource<DevelopersApp>(
-  "GCP.Apigee.DevelopersApp",
-);
+export const DevelopersApp = Resource<DevelopersApp>("GCP.Apigee.DevelopersApp");
 
 export class DevelopersAppNotResolved extends Data.TaggedError(
   "GCP.Apigee.DevelopersAppNotResolved",
@@ -163,11 +161,8 @@ const developerEmailOf = (developer: string) => {
 const developerNameOf = (organization: string, developer: string) =>
   childName(orgNameOf(organization), "developers", developerEmailOf(developer));
 
-const resourceName = (
-  organization: string,
-  developer: string,
-  appName: string,
-) => `${developerNameOf(organization, developer)}/apps/${appName}`;
+const resourceName = (organization: string, developer: string, appName: string) =>
+  `${developerNameOf(organization, developer)}/apps/${appName}`;
 
 const toAttrs = (
   app: apigee.GoogleCloudApigeeV1DeveloperApp,
@@ -198,11 +193,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsDevelopersApps({ name })
-    .pipe(
-      Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
 
 const listDeveloperEmails = (organization: string) =>
   apigee
@@ -217,21 +208,12 @@ const listDeveloperEmails = (organization: string) =>
           .map((developer) => developer.email ?? "")
           .filter((email) => email.length > 0),
       ),
-      Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
-        Effect.succeed([] as string[]),
-      ),
+      Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed([] as string[])),
     );
 
 export const DevelopersAppProvider = () =>
   Provider.succeed(DevelopersApp, {
-    stables: [
-      "name",
-      "appName",
-      "appId",
-      "developer",
-      "organization",
-      "createdAt",
-    ],
+    stables: ["name", "appName", "appId", "developer", "organization", "createdAt"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -239,13 +221,10 @@ export const DevelopersAppProvider = () =>
       const previousDeveloper = olds?.developer ?? output?.developer;
       const previousOrg = olds?.organization ?? output?.organization;
       const nameChanged =
-        previousName !== undefined &&
-        news.appName !== undefined &&
-        news.appName !== previousName;
+        previousName !== undefined && news.appName !== undefined && news.appName !== previousName;
       const developerChanged =
         previousDeveloper !== undefined &&
-        developerEmailOf(news.developer) !==
-          developerEmailOf(previousDeveloper);
+        developerEmailOf(news.developer) !== developerEmailOf(previousDeveloper);
       const orgChanged =
         previousOrg !== undefined &&
         news.organization !== undefined &&
@@ -261,26 +240,15 @@ export const DevelopersAppProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const organization = defaultOrgName(
-        env.project,
-        olds?.organization ?? output?.organization,
-      );
+      const organization = defaultOrgName(env.project, olds?.organization ?? output?.organization);
       const developer = olds?.developer ?? output?.developer;
       if (developer === undefined) return undefined;
-      const appName = yield* letterPrefixedId(
-        id,
-        olds?.appName,
-        output?.appName,
-        255,
-      );
-      const name =
-        output?.name ?? resourceName(organization, developer, appName);
+      const appName = yield* letterPrefixedId(id, olds?.appName, output?.appName, 255);
+      const name = output?.name ?? resourceName(organization, developer, appName);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, organization, developer);
-      return (yield* ownedBy(id, attributesToRecord(existing.attributes)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedBy(id, attributesToRecord(existing.attributes))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -305,9 +273,7 @@ export const DevelopersAppProvider = () =>
               );
             for (const app of page.app ?? []) {
               const labels = attributesToRecord(app.attributes);
-              if (
-                Object.keys(labels).some((key) => key.startsWith("alchemy-"))
-              ) {
+              if (Object.keys(labels).some((key) => key.startsWith("alchemy-"))) {
                 rows.push(toAttrs(app, organization, email));
               }
             }
@@ -320,12 +286,7 @@ export const DevelopersAppProvider = () =>
       const env = yield* GcpEnvironment.current;
       const organization = defaultOrgName(env.project, news.organization);
       const developer = developerEmailOf(news.developer);
-      const appName = yield* letterPrefixedId(
-        id,
-        news.appName,
-        output?.appName,
-        255,
-      );
+      const appName = yield* letterPrefixedId(id, news.appName, output?.appName, 255);
       const parent = developerNameOf(organization, developer);
       const name = `${parent}/apps/${appName}`;
       const ownership = yield* createOwnership(id);
@@ -357,17 +318,11 @@ export const DevelopersAppProvider = () =>
       }
 
       const observedAttributes = attributesToRecord(current.attributes);
-      const callbackChanged =
-        (current.callbackUrl ?? "") !== (news.callbackUrl ?? "");
-      const productsChanged = !sameStringList(
-        current.apiProducts,
-        news.apiProducts,
-      );
+      const callbackChanged = (current.callbackUrl ?? "") !== (news.callbackUrl ?? "");
+      const productsChanged = !sameStringList(current.apiProducts, news.apiProducts);
       const scopesChanged = !sameStringList(current.scopes, news.scopes);
-      const statusChanged =
-        news.status !== undefined && (current.status ?? "") !== news.status;
-      const familyChanged =
-        (current.appFamily ?? "") !== (news.appFamily ?? "");
+      const statusChanged = news.status !== undefined && (current.status ?? "") !== news.status;
+      const familyChanged = (current.appFamily ?? "") !== (news.appFamily ?? "");
       const attributesChanged = !sameRecord(observedAttributes, attributes);
 
       if (
@@ -398,11 +353,6 @@ export const DevelopersAppProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       yield* apigee
         .deleteOrganizationsDevelopersApps({ name: output.name })
-        .pipe(
-          Effect.catchTag(
-            ["NotFound", "ApigeeResourceNotFound"],
-            () => Effect.void,
-          ),
-        );
+        .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.void));
     }),
   });

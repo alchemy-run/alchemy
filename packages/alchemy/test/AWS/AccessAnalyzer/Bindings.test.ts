@@ -7,9 +7,7 @@ import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import * as Test from "@/Test/Alchemy";
 import * as Core from "@/Test/Core";
-import AccessAnalyzerTestFunctionLive, {
-  AccessAnalyzerTestFunction,
-} from "./handler";
+import AccessAnalyzerTestFunctionLive, { AccessAnalyzerTestFunction } from "./handler";
 import { makeAccessAnalyzerTestLease } from "./TestLease.ts";
 
 const testOptions = { providers: AWS.providers() };
@@ -22,10 +20,7 @@ afterAll(testLease.release);
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy under parallel-suite load.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 let functionRoleArn: string;
@@ -46,38 +41,24 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
 describe.sequential(
   "AccessAnalyzer Bindings",
-  {
-    tags: [
-      "provider:aws",
-      "provider:aws:accessanalyzer",
-      "provider:aws:lambda",
-      "live",
-    ],
-  },
+  { tags: ["provider:aws", "provider:aws:accessanalyzer", "provider:aws:lambda", "live"] },
   () => {
     beforeAll(
       Effect.gen(function* () {
-        yield* Effect.logInfo(
-          "AccessAnalyzer test setup: destroying previous resources",
-        );
+        yield* Effect.logInfo("AccessAnalyzer test setup: destroying previous resources");
         yield* sharedStack.destroy();
 
         yield* Effect.logInfo("AccessAnalyzer test setup: deploying fixture");
@@ -92,16 +73,12 @@ describe.sequential(
         functionRoleArn = roleArn;
 
         const readinessUrl = `${baseUrl}/bindings`;
-        yield* Effect.logInfo(
-          `AccessAnalyzer test setup: probing readiness at ${readinessUrl}`,
-        );
+        yield* Effect.logInfo(`AccessAnalyzer test setup: probing readiness at ${readinessUrl}`);
         yield* HttpClient.get(readinessUrl).pipe(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.tapError((error) =>
             Effect.logWarning(
@@ -119,9 +96,9 @@ describe.sequential(
     describe("binding registration", () => {
       test.provider("all 24 capabilities initialize in the runtime", (_stack) =>
         Effect.gen(function* () {
-          const response = yield* send(
-            HttpClientRequest.get(`${baseUrl}/bindings`),
-          ).pipe(Effect.flatMap((r) => r.json));
+          const response = yield* send(HttpClientRequest.get(`${baseUrl}/bindings`)).pipe(
+            Effect.flatMap((r) => r.json),
+          );
           expect((response as any).bound).toHaveLength(24);
         }),
       );
@@ -130,9 +107,9 @@ describe.sequential(
     describe("ValidatePolicy", () => {
       test.provider("validates a well-formed identity policy", (_stack) =>
         Effect.gen(function* () {
-          const response = yield* send(
-            HttpClientRequest.post(`${baseUrl}/validate-policy`),
-          ).pipe(Effect.flatMap((r) => r.json));
+          const response = yield* send(HttpClientRequest.post(`${baseUrl}/validate-policy`)).pipe(
+            Effect.flatMap((r) => r.json),
+          );
           // The sample policy is syntactically valid — no ERROR findings.
           expect((response as any).findingTypes).not.toContain("ERROR");
         }),
@@ -140,50 +117,44 @@ describe.sequential(
     });
 
     describe("CheckNoNewAccess", () => {
-      test.provider(
-        "passes when the new policy is a subset of the existing one",
-        (_stack) =>
-          Effect.gen(function* () {
-            const response = yield* send(
-              HttpClientRequest.post(`${baseUrl}/check-no-new-access`),
-            ).pipe(Effect.flatMap((r) => r.json));
-            expect((response as any).result).toBe("PASS");
-          }),
+      test.provider("passes when the new policy is a subset of the existing one", (_stack) =>
+        Effect.gen(function* () {
+          const response = yield* send(
+            HttpClientRequest.post(`${baseUrl}/check-no-new-access`),
+          ).pipe(Effect.flatMap((r) => r.json));
+          expect((response as any).result).toBe("PASS");
+        }),
       );
     });
 
     describe("CheckAccessNotGranted", () => {
-      test.provider(
-        "passes when the policy does not grant the checked action",
-        (_stack) =>
-          Effect.gen(function* () {
-            const response = yield* send(
-              HttpClientRequest.post(`${baseUrl}/check-access-not-granted`),
-            ).pipe(Effect.flatMap((r) => r.json));
-            expect((response as any).result).toBe("PASS");
-          }),
+      test.provider("passes when the policy does not grant the checked action", (_stack) =>
+        Effect.gen(function* () {
+          const response = yield* send(
+            HttpClientRequest.post(`${baseUrl}/check-access-not-granted`),
+          ).pipe(Effect.flatMap((r) => r.json));
+          expect((response as any).result).toBe("PASS");
+        }),
       );
     });
 
     describe("CheckNoPublicAccess", () => {
-      test.provider(
-        "passes for a bucket policy scoped to a single account",
-        (_stack) =>
-          Effect.gen(function* () {
-            const response = yield* send(
-              HttpClientRequest.post(`${baseUrl}/check-no-public-access`),
-            ).pipe(Effect.flatMap((r) => r.json));
-            expect((response as any).result).toBe("PASS");
-          }),
+      test.provider("passes for a bucket policy scoped to a single account", (_stack) =>
+        Effect.gen(function* () {
+          const response = yield* send(
+            HttpClientRequest.post(`${baseUrl}/check-no-public-access`),
+          ).pipe(Effect.flatMap((r) => r.json));
+          expect((response as any).result).toBe("PASS");
+        }),
       );
     });
 
     describe("ListFindingsV2", () => {
       test.provider("lists the fixture analyzer's findings", (_stack) =>
         Effect.gen(function* () {
-          const response = yield* send(
-            HttpClientRequest.get(`${baseUrl}/list-findings`),
-          ).pipe(Effect.flatMap((r) => r.json));
+          const response = yield* send(HttpClientRequest.get(`${baseUrl}/list-findings`)).pipe(
+            Effect.flatMap((r) => r.json),
+          );
           // A fresh unused-access analyzer typically has zero findings —
           // assert the call round-trips with a well-formed page.
           expect(typeof (response as any).count).toBe("number");
@@ -192,15 +163,13 @@ describe.sequential(
     });
 
     describe("GetFindingV2", () => {
-      test.provider(
-        "returns the typed not-found error for an unknown finding id",
-        (_stack) =>
-          Effect.gen(function* () {
-            const response = yield* send(
-              HttpClientRequest.get(`${baseUrl}/get-finding-not-found`),
-            ).pipe(Effect.flatMap((r) => r.json));
-            expect((response as any).found).toBe(false);
-          }),
+      test.provider("returns the typed not-found error for an unknown finding id", (_stack) =>
+        Effect.gen(function* () {
+          const response = yield* send(
+            HttpClientRequest.get(`${baseUrl}/get-finding-not-found`),
+          ).pipe(Effect.flatMap((r) => r.json));
+          expect((response as any).found).toBe(false);
+        }),
       );
     });
 
@@ -265,9 +234,7 @@ describe.sequential(
                 { principalArn: functionRoleArn },
               ),
             ).pipe(Effect.flatMap((r) => r.json));
-            expect(["Started", "ValidationException"]).toContain(
-              (response as any).startTag,
-            );
+            expect(["Started", "ValidationException"]).toContain((response as any).startTag);
             expect((response as any).getTag).toBe("ValidationException");
             expect((response as any).cancelTag).toBe("ValidationException");
           }),

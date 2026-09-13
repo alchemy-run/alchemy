@@ -23,18 +23,13 @@ const readJson = (url: string) =>
       res.status === 200
         ? res.json
         : res.text.pipe(
-            Effect.flatMap((body) =>
-              Effect.fail(new WorkerNotReady({ status: res.status, body })),
-            ),
+            Effect.flatMap((body) => Effect.fail(new WorkerNotReady({ status: res.status, body }))),
           ),
     ),
   ).pipe(
     Effect.retry({
       while: (e): e is WorkerNotReady => e instanceof WorkerNotReady,
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(20),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(20)]),
     }),
   );
 

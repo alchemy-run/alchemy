@@ -38,16 +38,12 @@ export const packCommand = Command.make(
     registry: registryFlag,
     out: outFlag,
     since: Flag.String("since").pipe(
-      Flag.withDescription(
-        "Compare HEAD with this Git ref; defaults to the PR base in Actions",
-      ),
+      Flag.withDescription("Compare HEAD with this Git ref; defaults to the PR base in Actions"),
       Flag.optional,
     ),
     all: Flag.Boolean("all").pipe(
       Flag.withDefault(false),
-      Flag.withDescription(
-        "Pack every configured package regardless of changes",
-      ),
+      Flag.withDescription("Pack every configured package regardless of changes"),
     ),
     rebuildAllPaths: Flag.String("rebuild-all-path").pipe(
       Flag.withDescription(
@@ -98,17 +94,13 @@ export const publishCommand = Command.make(
   Command.withDescription(
     "Publish a pkg pack directory from the current GitHub Actions job, after its manifest artifact has been uploaded",
   ),
-  Command.withExamples([
-    { command: "pkg publish --registry https://pkg.alchemy.run" },
-  ]),
+  Command.withExamples([{ command: "pkg publish --registry https://pkg.alchemy.run" }]),
 );
 
 export const root = Command.make("pkg", {}, () =>
   Effect.fail(new CliError.ShowHelp({ commandPath: ["pkg"], errors: [] })),
 ).pipe(
-  Command.withDescription(
-    "Pack and publish preview packages for pull requests.",
-  ),
+  Command.withDescription("Pack and publish preview packages for pull requests."),
   Command.withSubcommands([packCommand, publishCommand]),
 );
 
@@ -117,9 +109,7 @@ Command.run(root, { version: pkg.version }).pipe(
     Layer.mergeAll(
       PlatformServices,
       FetchHttpClient.layer,
-      CliConfig.layer({
-        builtIns: [GlobalFlag.Help, GlobalFlag.Version],
-      }),
+      CliConfig.layer({ builtIns: [GlobalFlag.Help, GlobalFlag.Version] }),
     ),
   ),
   runMain,

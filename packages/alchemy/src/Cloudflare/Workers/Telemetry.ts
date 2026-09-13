@@ -57,9 +57,7 @@ export interface CloudflareTelemetryProps {
 
 const tracesFromProps = (props: CloudflareTelemetryProps) => ({
   enabled: props.enabled ?? true,
-  ...(props.headSamplingRate !== undefined
-    ? { headSamplingRate: props.headSamplingRate }
-    : {}),
+  ...(props.headSamplingRate !== undefined ? { headSamplingRate: props.headSamplingRate } : {}),
   ...(props.persist !== undefined ? { persist: props.persist } : {}),
 });
 

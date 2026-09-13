@@ -5,14 +5,8 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import * as Test from "@/Test/Alchemy";
-import {
-  materializeIsolatedProject,
-  removeIsolatedProject,
-} from "../../IsolatedProject.ts";
-import IsolatedProjectJob, {
-  MARKER,
-  project,
-} from "./fixtures/isolated-project-job.ts";
+import { materializeIsolatedProject, removeIsolatedProject } from "../../IsolatedProject.ts";
+import IsolatedProjectJob, { MARKER, project } from "./fixtures/isolated-project-job.ts";
 import { BatchTestNetwork } from "./TestNetwork.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -37,13 +31,10 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
         const outputs = yield* stack.deploy(
           Effect.gen(function* () {
             const network = yield* BatchTestNetwork;
-            const computeEnvironment = yield* AWS.Batch.ComputeEnvironment(
-              "IsolatedProjectCE",
-              {
-                subnets: network.subnetIds,
-                securityGroupIds: network.securityGroupIds,
-              },
-            );
+            const computeEnvironment = yield* AWS.Batch.ComputeEnvironment("IsolatedProjectCE", {
+              subnets: network.subnetIds,
+              securityGroupIds: network.securityGroupIds,
+            });
             const queue = yield* AWS.Batch.JobQueue("IsolatedProjectQueue", {
               computeEnvironments: [computeEnvironment.computeEnvironmentArn],
             });
@@ -64,16 +55,13 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
           Effect.map((result) => result.jobs?.[0]),
           Effect.repeat({
             schedule: Schedule.spaced("10 seconds"),
-            until: (j): boolean =>
-              j?.status === "SUCCEEDED" || j?.status === "FAILED",
+            until: (j): boolean => j?.status === "SUCCEEDED" || j?.status === "FAILED",
             times: 60,
           }),
         );
         // SUCCEEDED = container exit 0 = the bootstrap booted and ran `run`
         // (the reason is included so a FAILED run shows why).
-        expect(`${job?.status}: ${job?.statusReason ?? ""}`).toMatch(
-          /^SUCCEEDED:/,
-        );
+        expect(`${job?.status}: ${job?.statusReason ?? ""}`).toMatch(/^SUCCEEDED:/);
 
         // The bundled program actually executed: its marker is in the job's
         // log stream (log delivery can lag the state change slightly).

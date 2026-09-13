@@ -1,5 +1,3 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as cloudfunctions from "@distilled.cloud/gcp/cloudfunctions_v2";
 import * as pubsub from "@distilled.cloud/gcp/pubsub_v1";
 import * as storage from "@distilled.cloud/gcp/storage_v1";
@@ -7,17 +5,16 @@ import * as iam from "@distilled.cloud/gcp/unstable/iam_v1";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/http/HttpClient";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import EffectFunction, { Marker, Pings } from "./fixtures/effect-function.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 class NotReady extends Data.TaggedError("NotReady")<{ status: number }> {}
 
@@ -97,12 +94,10 @@ test.provider.skipIf(!!process.env.FAST)(
 
       yield* stack.destroy();
 
-      const gone = yield* cloudfunctions
-        .getProjectsLocationsFunctions({ name: out.name })
-        .pipe(
-          Effect.as("found" as const),
-          Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
-        );
+      const gone = yield* cloudfunctions.getProjectsLocationsFunctions({ name: out.name }).pipe(
+        Effect.as("found" as const),
+        Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
+      );
       expect(gone).toEqual("gone");
       const saGone = yield* iam
         .getProjectsServiceAccounts({

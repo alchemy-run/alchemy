@@ -13,10 +13,7 @@ const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
 const sharedStack = Core.scratchStack(testOptions, "GeoBindings");
 
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -31,19 +28,14 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("1 second"),
-        Schedule.recurs(5),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(5)]),
     }),
   );
 
@@ -76,21 +68,15 @@ describe(
         baseUrl = functionUrl!.replace(/\/+$/, "");
         const readinessUrl = `${baseUrl}/ping`;
 
-        yield* Effect.logInfo(
-          `Geo test setup: probing readiness at ${readinessUrl}`,
-        );
+        yield* Effect.logInfo(`Geo test setup: probing readiness at ${readinessUrl}`);
         yield* HttpClient.get(readinessUrl).pipe(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.tapError((error) =>
-            Effect.logWarning(
-              `Geo test setup: fixture not ready yet (${String(error)})`,
-            ),
+            Effect.logWarning(`Geo test setup: fixture not ready yet (${String(error)})`),
           ),
           Effect.retry({ schedule: readinessPolicy }),
         );
@@ -105,12 +91,9 @@ describe(
         "returns ranked results for a text query",
         (_stack) =>
           Effect.gen(function* () {
-            const response = (yield* send(
-              HttpClientRequest.get(`${baseUrl}/search-text`),
-            ).pipe(Effect.flatMap((r) => r.json))) as {
-              count: number;
-              firstPosition?: number[];
-            };
+            const response = (yield* send(HttpClientRequest.get(`${baseUrl}/search-text`)).pipe(
+              Effect.flatMap((r) => r.json),
+            )) as { count: number; firstPosition?: number[] };
 
             expect(response.count).toBeGreaterThan(0);
             expect(Array.isArray(response.firstPosition)).toBe(true);
@@ -125,12 +108,9 @@ describe(
         "geocodes an address into coordinates",
         (_stack) =>
           Effect.gen(function* () {
-            const response = (yield* send(
-              HttpClientRequest.get(`${baseUrl}/geocode`),
-            ).pipe(Effect.flatMap((r) => r.json))) as {
-              count: number;
-              position?: number[];
-            };
+            const response = (yield* send(HttpClientRequest.get(`${baseUrl}/geocode`)).pipe(
+              Effect.flatMap((r) => r.json),
+            )) as { count: number; position?: number[] };
 
             expect(response.count).toBeGreaterThan(0);
             expect(Array.isArray(response.position)).toBe(true);
@@ -145,12 +125,9 @@ describe(
         "reverse geocodes coordinates into an address",
         (_stack) =>
           Effect.gen(function* () {
-            const response = (yield* send(
-              HttpClientRequest.get(`${baseUrl}/reverse-geocode`),
-            ).pipe(Effect.flatMap((r) => r.json))) as {
-              count: number;
-              label?: string;
-            };
+            const response = (yield* send(HttpClientRequest.get(`${baseUrl}/reverse-geocode`)).pipe(
+              Effect.flatMap((r) => r.json),
+            )) as { count: number; label?: string };
 
             expect(response.count).toBeGreaterThan(0);
             expect(typeof response.label).toBe("string");
@@ -186,12 +163,9 @@ describe(
         "completes a partial address query",
         (_stack) =>
           Effect.gen(function* () {
-            const response = (yield* send(
-              HttpClientRequest.get(`${baseUrl}/autocomplete`),
-            ).pipe(Effect.flatMap((r) => r.json))) as {
-              count: number;
-              firstTitle?: string;
-            };
+            const response = (yield* send(HttpClientRequest.get(`${baseUrl}/autocomplete`)).pipe(
+              Effect.flatMap((r) => r.json),
+            )) as { count: number; firstTitle?: string };
 
             expect(response.count).toBeGreaterThan(0);
             expect(typeof response.firstTitle).toBe("string");
@@ -227,13 +201,9 @@ describe(
         "fetches a vector tile at z/x/y",
         (_stack) =>
           Effect.gen(function* () {
-            const response = (yield* send(
-              HttpClientRequest.get(`${baseUrl}/get-tile`),
-            ).pipe(Effect.flatMap((r) => r.json))) as {
-              byteLength: number;
-              contentType?: string;
-              pricingBucket?: string;
-            };
+            const response = (yield* send(HttpClientRequest.get(`${baseUrl}/get-tile`)).pipe(
+              Effect.flatMap((r) => r.json),
+            )) as { byteLength: number; contentType?: string; pricingBucket?: string };
 
             expect(response.byteLength).toBeGreaterThan(0);
             expect(typeof response.pricingBucket).toBe("string");
@@ -247,13 +217,9 @@ describe(
         "renders a static map image",
         (_stack) =>
           Effect.gen(function* () {
-            const response = (yield* send(
-              HttpClientRequest.get(`${baseUrl}/get-static-map`),
-            ).pipe(Effect.flatMap((r) => r.json))) as {
-              byteLength: number;
-              contentType?: string;
-              pricingBucket?: string;
-            };
+            const response = (yield* send(HttpClientRequest.get(`${baseUrl}/get-static-map`)).pipe(
+              Effect.flatMap((r) => r.json),
+            )) as { byteLength: number; contentType?: string; pricingBucket?: string };
 
             expect(response.byteLength).toBeGreaterThan(0);
             expect(response.contentType).toContain("image");

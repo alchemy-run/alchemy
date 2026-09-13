@@ -91,13 +91,7 @@ export type SiteAttributes = {
   created: string | undefined;
 };
 
-export type Site = Resource<
-  TypeId,
-  SiteProps,
-  SiteAttributes,
-  never,
-  Providers
->;
+export type Site = Resource<TypeId, SiteProps, SiteAttributes, never, Providers>;
 
 /**
  * A Cloudflare Web Analytics (RUM) site.
@@ -199,8 +193,7 @@ export const SiteProvider = () =>
       // over unless `adopt` is set.
       const host = output?.host ?? olds?.host;
       const zoneTag =
-        output?.zoneTag ??
-        (typeof olds?.zoneTag === "string" ? olds.zoneTag : undefined);
+        output?.zoneTag ?? (typeof olds?.zoneTag === "string" ? olds.zoneTag : undefined);
       if (host !== undefined || zoneTag !== undefined) {
         const match = yield* findSite(acct, host, zoneTag);
         if (match) return Unowned(toAttributes(match, acct));
@@ -318,11 +311,7 @@ const getSite = (accountId: string, siteTag: string) =>
  * (orange-clouded). Cloudflare allows several sites for the same target, so
  * pick the oldest for determinism.
  */
-const findSite = (
-  accountId: string,
-  host: string | undefined,
-  zoneTag: string | undefined,
-) =>
+const findSite = (accountId: string, host: string | undefined, zoneTag: string | undefined) =>
   rum.listSiteInfos.items({ accountId }).pipe(
     Stream.runCollect,
     Effect.map((chunk) =>
@@ -335,19 +324,14 @@ const findSite = (
               // probe must only match true zone sites — otherwise an
               // unrelated host site satisfies the probe and the engine
               // refuses adoption with OwnedBySomeoneElse.
-              zoneTag !== undefined &&
-              !site.host &&
-              site.ruleset?.zoneTag === zoneTag,
+              zoneTag !== undefined && !site.host && site.ruleset?.zoneTag === zoneTag,
         )
         .sort((a, b) => (a.created ?? "").localeCompare(b.created ?? ""))
         .at(0),
     ),
   );
 
-const toAttributes = (
-  site: ObservedSite,
-  accountId: string,
-): SiteAttributes => ({
+const toAttributes = (site: ObservedSite, accountId: string): SiteAttributes => ({
   siteTag: site.siteTag ?? "",
   siteToken: site.siteToken ?? "",
   snippet: site.snippet ?? undefined,

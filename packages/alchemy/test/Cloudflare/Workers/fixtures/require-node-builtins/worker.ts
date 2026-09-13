@@ -20,9 +20,7 @@ export default class RequireNodeBuiltinsWorker extends Cloudflare.Worker<Require
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
-        const value =
-          new URL(request.url, "http://localhost").searchParams.get("value") ??
-          "";
+        const value = new URL(request.url, "http://localhost").searchParams.get("value") ?? "";
         return HttpServerResponse.text(roundTrip(value));
       }),
     };

@@ -45,8 +45,7 @@ export const json = (value: unknown, init?: ResponseInit) =>
   });
 
 /** `{ data }` — the Management API's single-resource envelope. */
-export const data = <T>(value: T, init?: ResponseInit) =>
-  json({ data: value }, init);
+export const data = <T>(value: T, init?: ResponseInit) => json({ data: value }, init);
 
 /** `{ data, pagination }` — the Management API's list envelope. */
 export const page = <T>(
@@ -59,25 +58,14 @@ export const page = <T>(
 export const noContent = () => new Response(null, { status: 204 });
 
 /** `{ error: { code, message } }` with a real status code. */
-export const failure = (
-  status: number,
-  code: string,
-  message: string,
-  hint?: string,
-) =>
-  json(
-    { error: hint === undefined ? { code, message } : { code, message, hint } },
-    { status },
-  );
+export const failure = (status: number, code: string, message: string, hint?: string) =>
+  json({ error: hint === undefined ? { code, message } : { code, message, hint } }, { status });
 
-export const notFound = (message = "Not found") =>
-  failure(404, "not_found", message);
+export const notFound = (message = "Not found") => failure(404, "not_found", message);
 
-export const conflict = (message = "Already exists") =>
-  failure(409, "already_exists", message);
+export const conflict = (message = "Already exists") => failure(409, "already_exists", message);
 
-export const badRequest = (message = "Invalid request") =>
-  failure(400, "bad_request", message);
+export const badRequest = (message = "Invalid request") => failure(400, "bad_request", message);
 
 export interface FakeManagementApi {
   /** Fake transport plus the credentials the generated operations resolve. */
@@ -101,8 +89,7 @@ export const makeFakeManagementApi = (
     Effect.sync(() => {
       const url = new URL(request.url);
       const body = request.body as HttpBody.HttpBody;
-      const bodyText =
-        body._tag === "Uint8Array" ? new TextDecoder().decode(body.body) : "";
+      const bodyText = body._tag === "Uint8Array" ? new TextDecoder().decode(body.body) : "";
       const entry: Captured = {
         url: request.url,
         method: request.method,
@@ -186,9 +173,7 @@ export const asResponse = (
       : wrap(outcome.success);
 
 /** A delete handler's result on the wire: `204`, or the injected failure. */
-export const voidResponse = (
-  outcome: ReturnType<typeof runHandler>,
-): Response =>
+export const voidResponse = (outcome: ReturnType<typeof runHandler>): Response =>
   Result.isFailure(outcome) ? errorResponse(outcome.failure) : noContent();
 
 export interface HandlerDispatch {
@@ -199,10 +184,7 @@ export interface HandlerDispatch {
     wrap?: (value: unknown) => Response,
   ) => Response;
   /** Same, for the delete routes that answer `204`. */
-  readonly callVoid: (
-    handler: unknown,
-    args: ReadonlyArray<unknown>,
-  ) => Response;
+  readonly callVoid: (handler: unknown, args: ReadonlyArray<unknown>) => Response;
   /** The `{ data, pagination }` wrap for list routes. */
   readonly list: (value: unknown) => Response;
 }
@@ -262,8 +244,7 @@ export const wireProject = (options: WireProjectOptions = {}) => {
     name: options.name ?? "app",
     logicalId: options.logicalId ?? null,
     createdAt: options.createdAt ?? WIRE_CREATED_AT,
-    defaultRegion:
-      options.defaultRegion === undefined ? "us-east-1" : options.defaultRegion,
+    defaultRegion: options.defaultRegion === undefined ? "us-east-1" : options.defaultRegion,
     workspace: ref("workspaces", options.workspaceId ?? "workspace-1", "team"),
   };
 };
@@ -304,11 +285,7 @@ export const wireConnection = (options: WireConnectionOptions = {}) => {
             },
           }),
     },
-    database: ref(
-      "databases",
-      options.databaseId ?? "database-1",
-      options.databaseName ?? "main",
-    ),
+    database: ref("databases", options.databaseId ?? "database-1", options.databaseName ?? "main"),
   };
 };
 
@@ -327,8 +304,7 @@ export interface WireDatabaseOptions {
 
 export const wireDatabase = (options: WireDatabaseOptions = {}) => {
   const id = options.id ?? "database-1";
-  const regionId =
-    options.regionId === undefined ? "us-east-1" : options.regionId;
+  const regionId = options.regionId === undefined ? "us-east-1" : options.regionId;
   return {
     id,
     type: "database",
@@ -339,11 +315,7 @@ export const wireDatabase = (options: WireDatabaseOptions = {}) => {
     isDefault: options.isDefault ?? false,
     defaultConnectionId: options.defaultConnectionId ?? null,
     connections: options.connections ?? [],
-    project: ref(
-      "projects",
-      options.projectId ?? "project-1",
-      options.projectName ?? "app",
-    ),
+    project: ref("projects", options.projectId ?? "project-1", options.projectName ?? "app"),
     region: regionId === null ? null : { id: regionId, name: regionId },
     source: { type: "empty" },
     branchId: options.branchId ?? null,

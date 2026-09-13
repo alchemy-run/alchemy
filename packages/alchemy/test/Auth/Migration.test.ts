@@ -43,14 +43,8 @@ const withFixtureHome = <A, E, R>(
       prefix: "alchemy-migrate-",
     });
     if (fixture !== undefined) {
-      yield* fs.copyFile(
-        path.join(fixture, "profiles.json"),
-        path.join(dir, "profiles.json"),
-      );
-      yield* fs.copy(
-        path.join(fixture, "credentials"),
-        path.join(dir, "credentials"),
-      );
+      yield* fs.copyFile(path.join(fixture, "profiles.json"), path.join(dir, "profiles.json"));
+      yield* fs.copy(path.join(fixture, "credentials"), path.join(dir, "credentials"));
     }
     const previous = process.env.ALCHEMY_HOME;
     yield* Effect.acquireRelease(
@@ -79,10 +73,7 @@ it.live(
 
         // Every profile and provider entry survives (ids backfilled from the
         // profile name), except legacy `method: "env"` entries.
-        expect(Object.keys(manifest.profiles).sort()).toEqual([
-          "default",
-          "work",
-        ]);
+        expect(Object.keys(manifest.profiles).sort()).toEqual(["default", "work"]);
         expect(manifest.profiles.default?.id).toBe("default");
         expect(manifest.profiles.work?.id).toBe("work");
         expect(manifest.profiles.default?.providers.Cloudflare).toEqual({
@@ -107,9 +98,7 @@ it.live(
           email: "worker@example.com",
           accountId: "0123456789abcdef0123456789abcdef",
         });
-        expect(manifest.profiles.work?.providers.GitHub?.token).toBe(
-          "ghp_v0token",
-        );
+        expect(manifest.profiles.work?.providers.GitHub?.token).toBe("ghp_v0token");
         expect(manifest.profiles.work?.providers.Axiom).toEqual({
           method: "stored",
           token: "xaat-v0-token",
@@ -119,9 +108,7 @@ it.live(
         // Each provider is now its own document. Compatible provider values
         // survive. Cloudflare OAuth is deliberately emptied because its old
         // grant is obsolete; stored API key credentials remain compatible.
-        const aws = JSON.parse(
-          yield* fs.readFileString(profileProviderFilePath("default", "AWS")),
-        );
+        const aws = JSON.parse(yield* fs.readFileString(profileProviderFilePath("default", "AWS")));
         expect(aws).toEqual({
           format: PROFILE_FORMAT,
           provider: "AWS",
@@ -129,25 +116,19 @@ it.live(
           values: { method: "sso", ssoProfile: "dev" },
         });
         const oauthCloudflare = JSON.parse(
-          yield* fs.readFileString(
-            profileProviderFilePath("default", "Cloudflare"),
-          ),
+          yield* fs.readFileString(profileProviderFilePath("default", "Cloudflare")),
         );
         expect(oauthCloudflare.values).toEqual({ method: "oauth" });
         const storedCloudflare = JSON.parse(
-          yield* fs.readFileString(
-            profileProviderFilePath("work", "Cloudflare"),
-          ),
+          yield* fs.readFileString(profileProviderFilePath("work", "Cloudflare")),
         );
-        expect(storedCloudflare.values).toEqual(
-          manifest.profiles.work?.providers.Cloudflare,
-        );
-        expect(
-          (yield* fs.readDirectory(path.join(home, "profiles/default"))).sort(),
-        ).toEqual(["aws.json", "cloudflare.json", "github.json"]);
-        expect(
-          yield* fs.exists(profileProviderFilePath("default", "Neon")),
-        ).toBe(false);
+        expect(storedCloudflare.values).toEqual(manifest.profiles.work?.providers.Cloudflare);
+        expect((yield* fs.readDirectory(path.join(home, "profiles/default"))).sort()).toEqual([
+          "aws.json",
+          "cloudflare.json",
+          "github.json",
+        ]);
+        expect(yield* fs.exists(profileProviderFilePath("default", "Neon"))).toBe(false);
         expect(yield* fs.exists(path.join(home, "profiles.json"))).toBe(false);
 
         // The original manifest and every credential file are preserved in
@@ -164,9 +145,7 @@ it.live(
         // v0 profiles are flat provider maps (no `providers` wrapper).
         expect(backedUp.profiles.default.Neon.method).toBe("env");
         const oauth = JSON.parse(
-          yield* fs.readFileString(
-            path.join(backupDir, "credentials/default/cf-oauth.json"),
-          ),
+          yield* fs.readFileString(path.join(backupDir, "credentials/default/cf-oauth.json")),
         );
         expect(oauth.refresh).toBe("v0-refresh-token");
         for (const file of [
@@ -190,14 +169,10 @@ it.live(
           manifest.profiles.work?.providers.Cloudflare,
         );
         expect(
-          (yield* fs.readDirectory(home)).filter((entry) =>
-            entry.startsWith(".profiles-v0-"),
-          ),
+          (yield* fs.readDirectory(home)).filter((entry) => entry.startsWith(".profiles-v0-")),
         ).toHaveLength(1);
         expect(
-          JSON.parse(
-            yield* fs.readFileString(path.join(backupDir, "profiles.json")),
-          ).version,
+          JSON.parse(yield* fs.readFileString(path.join(backupDir, "profiles.json"))).version,
         ).toBe(0);
       }),
     ),
@@ -233,13 +208,9 @@ it.live(
           apiKey: "current-key",
         });
         expect(
-          (yield* fs.readDirectory(home)).filter((entry) =>
-            entry.startsWith(".profiles-v0-"),
-          ),
+          (yield* fs.readDirectory(home)).filter((entry) => entry.startsWith(".profiles-v0-")),
         ).toHaveLength(0);
-        expect(
-          JSON.parse(yield* fs.readFileString(providerFile)).metadata,
-        ).toEqual({
+        expect(JSON.parse(yield* fs.readFileString(providerFile)).metadata).toEqual({
           label: "production",
         });
       }),
@@ -267,9 +238,7 @@ it.live(
           method: "sso",
           ssoProfile: "dev",
         });
-        expect(manifest.profiles.work?.providers.GitHub?.token).toBe(
-          "ghp_v0token",
-        );
+        expect(manifest.profiles.work?.providers.GitHub?.token).toBe("ghp_v0token");
         expect(manifest.profiles.work?.providers.Axiom).toEqual({
           method: "stored",
         });
@@ -280,9 +249,7 @@ it.live(
         );
         expect(backup).toBeDefined();
         expect(
-          yield* fs.readFileString(
-            path.join(home, backup!, "credentials/work/axiom-stored.json"),
-          ),
+          yield* fs.readFileString(path.join(home, backup!, "credentials/work/axiom-stored.json")),
         ).toBe("{not-json");
       }),
     ),
@@ -360,10 +327,7 @@ it.live(
           const dir = path.join(home, "credentials", profile);
           yield* fs.makeDirectory(dir, { recursive: true });
           for (const [key, values] of Object.entries(credentials)) {
-            yield* fs.writeFileString(
-              path.join(dir, `${key}.json`),
-              JSON.stringify(values),
-            );
+            yield* fs.writeFileString(path.join(dir, `${key}.json`), JSON.stringify(values));
           }
         }
 

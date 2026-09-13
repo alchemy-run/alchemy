@@ -172,11 +172,7 @@ export const SchemaProvider = () =>
       // There is no rename API. A generated name (news.name undefined) is
       // deterministic and therefore never drifts.
       const oldName = output?.name ?? olds?.name;
-      if (
-        news.name !== undefined &&
-        oldName !== undefined &&
-        news.name !== oldName
-      ) {
+      if (news.name !== undefined && oldName !== undefined && news.name !== oldName) {
         return { action: "replace" } as const;
       }
       // The uploaded source is immutable. Prefer the previously-passed
@@ -190,8 +186,7 @@ export const SchemaProvider = () =>
       // ("Disabling a schema is not allowed, delete schema instead.") —
       // converge by replacing: upload a new, disabled copy and delete the
       // old one. Enabling (false → true) is a plain in-place update.
-      const oldEnabled =
-        output?.validationEnabled ?? olds?.validationEnabled ?? true;
+      const oldEnabled = output?.validationEnabled ?? olds?.validationEnabled ?? true;
       if (oldEnabled && news.validationEnabled === false) {
         return { action: "replace" } as const;
       }
@@ -199,9 +194,7 @@ export const SchemaProvider = () =>
     }),
 
     read: Effect.fn(function* ({ id, output, olds }) {
-      const zoneId =
-        output?.zoneId ??
-        (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
+      const zoneId = output?.zoneId ?? (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
       if (zoneId === undefined) return undefined;
 
       if (output?.schemaId) {
@@ -228,9 +221,7 @@ export const SchemaProvider = () =>
 
       // 1. Observe — the cached schemaId is a hint, not a guarantee: a
       //    SchemaNotFound falls through to "missing" and we re-upload.
-      const observed = output?.schemaId
-        ? yield* getSchema(zoneId, output.schemaId)
-        : undefined;
+      const observed = output?.schemaId ? yield* getSchema(zoneId, output.schemaId) : undefined;
 
       // 2. Ensure — upload when missing. Names are not unique server-side,
       //    so there is no AlreadyExists race to tolerate.
@@ -281,26 +272,22 @@ export const SchemaProvider = () =>
       const rows = yield* Effect.forEach(
         zones,
         (zone) =>
-          schemaValidation.listSchemas
-            .pages({ zoneId: zone.id, omitSource: false })
-            .pipe(
-              Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) =>
-                  (page.result ?? []).map((schema) =>
-                    toAttributes(zone.id, schema),
-                  ),
-                ),
-              ),
-              // Skip zones schema-validation can't enumerate: `InvalidRoute`
-              // (feature not available on the zone), `ZonePurged` (the
-              // account-wide zone listing can momentarily include a zone that
-              // has since been purged), and `Forbidden` (the scoped token /
-              // zone plan doesn't grant schema-validation access).
-              Effect.catchTag(["InvalidRoute", "ZonePurged", "Forbidden"], () =>
-                Effect.succeed<SchemaAttributes[]>([]),
+          schemaValidation.listSchemas.pages({ zoneId: zone.id, omitSource: false }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.result ?? []).map((schema) => toAttributes(zone.id, schema)),
               ),
             ),
+            // Skip zones schema-validation can't enumerate: `InvalidRoute`
+            // (feature not available on the zone), `ZonePurged` (the
+            // account-wide zone listing can momentarily include a zone that
+            // has since been purged), and `Forbidden` (the scoped token /
+            // zone plan doesn't grant schema-validation access).
+            Effect.catchTag(["InvalidRoute", "ZonePurged", "Forbidden"], () =>
+              Effect.succeed<SchemaAttributes[]>([]),
+            ),
+          ),
         { concurrency: 10 },
       );
       return rows.flat();

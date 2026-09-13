@@ -6,10 +6,7 @@ import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Alchemy from "@/index.ts";
 import * as Test from "@/Test/Alchemy";
 import { expectUrlContains } from "../Utils/Http.ts";
-import HttpServerWorker, {
-  readyMarker,
-  sensitiveContext,
-} from "./fixtures/http-server-worker.ts";
+import HttpServerWorker, { readyMarker, sensitiveContext } from "./fixtures/http-server-worker.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
@@ -45,9 +42,7 @@ const getEmptyResponse = (url: string, status: number) =>
       );
     }
     return response;
-  }).pipe(
-    Effect.retry({ schedule: Schedule.spaced("1500 millis"), times: 20 }),
-  );
+  }).pipe(Effect.retry({ schedule: Schedule.spaced("1500 millis"), times: 20 }));
 
 test(
   "a Respondable defect keeps its intended response over the wire",

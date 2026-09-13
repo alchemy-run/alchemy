@@ -93,14 +93,10 @@ export function NukeProgress({ store }: { store: NukeProgressStore }) {
 
 const logNukeEvent = (event: ProgressEvent, interactive: boolean) => {
   if (event._tag === "nuke.scan.provider.completed") {
-    if (event.error !== undefined)
-      return Effect.logWarning(`${event.provider}: ${event.error}`);
-    if (!interactive)
-      return Effect.logInfo(`scanned ${event.provider} (${event.resources})`);
+    if (event.error !== undefined) return Effect.logWarning(`${event.provider}: ${event.error}`);
+    if (!interactive) return Effect.logInfo(`scanned ${event.provider} (${event.resources})`);
   } else if (event._tag === "nuke.resource.failed") {
-    return Effect.logWarning(
-      `${event.provider} ${event.resource}: ${event.message}`,
-    );
+    return Effect.logWarning(`${event.provider} ${event.resource}: ${event.message}`);
   } else if (!interactive && event._tag === "nuke.resource.deleted") {
     return Effect.logInfo(`deleted ${event.provider} ${event.resource}`);
   }
@@ -131,10 +127,7 @@ export const renderNukeScan =
 
 /** Drive the same resource rows used by the preview through their deletion lifecycle. */
 export const renderNukeDelete =
-  (
-    targets: ReadonlyArray<Pick<Target, "providerId" | "displayName">>,
-    mode: ProviderMode,
-  ) =>
+  (targets: ReadonlyArray<Pick<Target, "providerId" | "displayName">>, mode: ProviderMode) =>
   <A extends NukeResult, E, R>(effect: Effect.Effect<A, E, R>) =>
     Effect.gen(function* () {
       const cli = yield* CliKit;
@@ -150,10 +143,7 @@ export const renderNukeDelete =
       return yield* effect.pipe(
         Effect.provideService(Progress, (event) =>
           Effect.gen(function* () {
-            if (
-              event._tag === "apply.resource.status" ||
-              event._tag === "apply.resource.note"
-            )
+            if (event._tag === "apply.resource.status" || event._tag === "apply.resource.note")
               tree.emit(event);
             else if (event._tag === "nuke.pass.started")
               tree.setLabel(`Deleting resources · pass ${event.pass}`);
@@ -191,18 +181,12 @@ export const nukePlan = (
         id: target.providerId,
         resourceType: target.providerId,
         detail:
-          target.displayName && target.displayName !== "unknown"
-            ? target.displayName
-            : undefined,
+          target.displayName && target.displayName !== "unknown" ? target.displayName : undefined,
         depth: 0,
         action: "delete" as const,
         providerMode: options.mode,
       }))
-      .sort(
-        (a, b) =>
-          a.id.localeCompare(b.id) ||
-          (a.detail ?? "").localeCompare(b.detail ?? ""),
-      ),
+      .sort((a, b) => a.id.localeCompare(b.id) || (a.detail ?? "").localeCompare(b.detail ?? "")),
     summary: {
       counts: {
         create: 0,

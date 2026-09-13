@@ -1,8 +1,8 @@
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Layer from "effect/Layer";
 import path from "pathe";
 import * as Lambda from "@/AWS/Lambda";
 import * as S3Vectors from "@/AWS/S3Vectors";
@@ -106,11 +106,7 @@ export default VectorsTestFunction.make(
     };
   }).pipe(
     Effect.provide(
-      Layer.mergeAll(
-        S3Vectors.VectorsHttp,
-        S3Vectors.VectorsReadHttp,
-        S3Vectors.VectorsWriteHttp,
-      ),
+      Layer.mergeAll(S3Vectors.VectorsHttp, S3Vectors.VectorsReadHttp, S3Vectors.VectorsWriteHttp),
     ),
   ),
 );

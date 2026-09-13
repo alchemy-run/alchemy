@@ -96,9 +96,7 @@ export default Cloudflare.Worker(
           return yield* Effect.gen(function* () {
             yield* getMicrovm({ microvmIdentifier: vm.microvmId }).pipe(
               Effect.flatMap((m) =>
-                m.state === "RUNNING"
-                  ? Effect.void
-                  : Effect.fail(new Error(`microvm ${m.state}`)),
+                m.state === "RUNNING" ? Effect.void : Effect.fail(new Error(`microvm ${m.state}`)),
               ),
               Effect.retry({
                 schedule: Schedule.spaced("2 seconds"),
@@ -129,12 +127,9 @@ export default Cloudflare.Worker(
             const client = yield* HttpClient.HttpClient;
             const headers = AWS.Lambda.microvmAuthHeaders(authToken);
             const echoRes = yield* client
-              .get(
-                `https://${vm.endpoint}/echo?message=${encodeURIComponent(message)}`,
-                {
-                  headers,
-                },
-              )
+              .get(`https://${vm.endpoint}/echo?message=${encodeURIComponent(message)}`, {
+                headers,
+              })
               .pipe(
                 Effect.retry({
                   schedule: Schedule.exponential("500 millis"),
@@ -152,9 +147,7 @@ export default Cloudflare.Worker(
             });
           }).pipe(
             Effect.ensuring(
-              terminateMicrovm({ microvmIdentifier: vm.microvmId }).pipe(
-                Effect.ignore,
-              ),
+              terminateMicrovm({ microvmIdentifier: vm.microvmId }).pipe(Effect.ignore),
             ),
             Effect.provide(FetchHttpClient.layer),
           );

@@ -18,14 +18,7 @@ import {
 
 describe(
   "WorkerProvider",
-  {
-    tags: [
-      "unit",
-      "provider:cloudflare",
-      "provider:cloudflare:worker",
-      "local",
-    ],
-  },
+  { tags: ["unit", "provider:cloudflare", "provider:cloudflare:worker", "local"] },
   () => {
     describe("normalizeStateDomains", () => {
       // Worker state has gone through three generations: <= beta.44 stored each
@@ -35,25 +28,21 @@ describe(
       // The diff path reads all three without throwing (#546).
       test("coerces legacy domain objects to hostnames", () => {
         expect(
-          normalizeStateDomains([
-            { id: "abc", hostname: "metrics.example.com", zoneId: "z1" },
-          ]),
+          normalizeStateDomains([{ id: "abc", hostname: "metrics.example.com", zoneId: "z1" }]),
         ).toEqual(["metrics.example.com"]);
       });
 
       test("coerces legacy https:// URL strings to hostnames", () => {
         expect(
-          normalizeStateDomains([
-            "https://app.example.com",
-            "https://my-worker.acct.workers.dev",
-          ]),
+          normalizeStateDomains(["https://app.example.com", "https://my-worker.acct.workers.dev"]),
         ).toEqual(["app.example.com", "my-worker.acct.workers.dev"]);
       });
 
       test("leaves current-format hostnames untouched", () => {
-        expect(normalizeStateDomains(["app.example.com", "localhost"])).toEqual(
-          ["app.example.com", "localhost"],
-        );
+        expect(normalizeStateDomains(["app.example.com", "localhost"])).toEqual([
+          "app.example.com",
+          "localhost",
+        ]);
       });
 
       test("drops entries that fit no state generation", () => {
@@ -89,10 +78,7 @@ describe(
 
       test("reads legacy URL-string state", () => {
         expect(
-          stateCustomDomains([
-            "https://app.example.com",
-            "https://my-worker.acct.workers.dev",
-          ]),
+          stateCustomDomains(["https://app.example.com", "https://my-worker.acct.workers.dev"]),
         ).toEqual(["app.example.com"]);
       });
     });
@@ -153,10 +139,7 @@ describe(
       test("a hostname in more than one role is a typed error", () => {
         const result = Effect.runSync(
           Effect.result(
-            resolveWorkerDomain({
-              name: "app.example.com",
-              aliases: ["app.example.com"],
-            }),
+            resolveWorkerDomain({ name: "app.example.com", aliases: ["app.example.com"] }),
           ),
         );
         expect(Result.isFailure(result)).toBe(true);
@@ -167,47 +150,27 @@ describe(
 
       test("carries zoneId / zone / zoneName pins", () => {
         const zoneId = "0123456789abcdef0123456789abcdef";
-        expect(
-          resolve({
-            name: "app.example.com",
-            zoneId,
-          }),
-        ).toEqual({
+        expect(resolve({ name: "app.example.com", zoneId })).toEqual({
           name: "app.example.com",
           aliases: [],
           redirects: [],
           zone: zoneId,
         });
-        expect(
-          resolve({
-            name: "app.example.com",
-            zoneName: "example.com",
-          }),
-        ).toEqual({
+        expect(resolve({ name: "app.example.com", zoneName: "example.com" })).toEqual({
           name: "app.example.com",
           aliases: [],
           redirects: [],
           zone: "example.com",
         });
         expect(
-          resolveWorkerDomainZone({
-            zoneId,
-            zoneName: "ignored.com",
-            zone: "also-ignored.com",
-          }),
+          resolveWorkerDomainZone({ zoneId, zoneName: "ignored.com", zone: "also-ignored.com" }),
         ).toEqual(zoneId);
       });
 
       test("recreates an existing attachment only for a changed explicit zone", () => {
-        expect(
-          shouldRecreateWorkerDomainAttachment("live-zone", undefined),
-        ).toBe(false);
-        expect(
-          shouldRecreateWorkerDomainAttachment("live-zone", "live-zone"),
-        ).toBe(false);
-        expect(
-          shouldRecreateWorkerDomainAttachment("live-zone", "desired-zone"),
-        ).toBe(true);
+        expect(shouldRecreateWorkerDomainAttachment("live-zone", undefined)).toBe(false);
+        expect(shouldRecreateWorkerDomainAttachment("live-zone", "live-zone")).toBe(false);
+        expect(shouldRecreateWorkerDomainAttachment("live-zone", "desired-zone")).toBe(true);
       });
     });
 
@@ -251,12 +214,7 @@ describe(
               zoneName: "example.com",
             },
           }),
-        ).toEqual({
-          name: "app.example.com",
-          aliases: [],
-          redirects: [],
-          zone: "example.com",
-        });
+        ).toEqual({ name: "app.example.com", aliases: [], redirects: [], zone: "example.com" });
       });
 
       test("derives name + aliases from legacy URL-string domains state", () => {
@@ -268,30 +226,18 @@ describe(
               "https://my-worker.acct.workers.dev",
             ],
           }),
-        ).toEqual({
-          name: "app.example.com",
-          aliases: ["www.example.com"],
-          redirects: [],
-        });
+        ).toEqual({ name: "app.example.com", aliases: ["www.example.com"], redirects: [] });
       });
 
       test("derives from <= beta.44 domain objects", () => {
         expect(
-          stateWorkerDomain({
-            domains: [{ id: "abc", hostname: "app.example.com", zoneId: "z" }],
-          }),
-        ).toEqual({
-          name: "app.example.com",
-          aliases: [],
-          redirects: [],
-        });
+          stateWorkerDomain({ domains: [{ id: "abc", hostname: "app.example.com", zoneId: "z" }] }),
+        ).toEqual({ name: "app.example.com", aliases: [], redirects: [] });
       });
 
       test("workers.dev-only and empty state resolve to no domain", () => {
         expect(
-          stateWorkerDomain({
-            domains: ["https://my-worker.acct.workers.dev"],
-          }),
+          stateWorkerDomain({ domains: ["https://my-worker.acct.workers.dev"] }),
         ).toBeUndefined();
         expect(stateWorkerDomain({})).toBeUndefined();
         expect(stateWorkerDomain(undefined)).toBeUndefined();
@@ -300,28 +246,16 @@ describe(
 
     describe("resolveWorkersDev", () => {
       test("defaults to the full workers.dev behavior", () => {
-        expect(resolveWorkersDev(undefined)).toEqual({
-          enabled: true,
-          previewsEnabled: true,
-        });
-        expect(resolveWorkersDev(true)).toEqual({
-          enabled: true,
-          previewsEnabled: true,
-        });
+        expect(resolveWorkersDev(undefined)).toEqual({ enabled: true, previewsEnabled: true });
+        expect(resolveWorkersDev(true)).toEqual({ enabled: true, previewsEnabled: true });
       });
 
       test("false disables both toggles", () => {
-        expect(resolveWorkersDev(false)).toEqual({
-          enabled: false,
-          previewsEnabled: false,
-        });
+        expect(resolveWorkersDev(false)).toEqual({ enabled: false, previewsEnabled: false });
       });
 
       test("object form fills unset toggles with true", () => {
-        expect(resolveWorkersDev({})).toEqual({
-          enabled: true,
-          previewsEnabled: true,
-        });
+        expect(resolveWorkersDev({})).toEqual({ enabled: true, previewsEnabled: true });
         expect(resolveWorkersDev({ enabled: false })).toEqual({
           enabled: false,
           previewsEnabled: true,
@@ -330,9 +264,7 @@ describe(
           enabled: true,
           previewsEnabled: false,
         });
-        expect(
-          resolveWorkersDev({ enabled: false, previewsEnabled: true }),
-        ).toEqual({
+        expect(resolveWorkersDev({ enabled: false, previewsEnabled: true })).toEqual({
           enabled: false,
           previewsEnabled: true,
         });
@@ -353,9 +285,9 @@ describe(
       });
 
       test("elides the class name when it equals the logical id", () => {
-        expect(
-          encodeDurableObjectTags([{ logicalId: "A", className: "A" }]),
-        ).toEqual(["alchemy:dos:A"]);
+        expect(encodeDurableObjectTags([{ logicalId: "A", className: "A" }])).toEqual([
+          "alchemy:dos:A",
+        ]);
       });
 
       test("output is deterministic regardless of input order", () => {
@@ -375,12 +307,8 @@ describe(
           logicalId: `binding-${i}`,
           className: `ClassName${i}`,
         }));
-        expect(
-          getDurableObjectTagMap(encodeDurableObjectTags(mappings)),
-        ).toEqual(
-          Object.fromEntries(
-            mappings.map(({ logicalId, className }) => [logicalId, className]),
-          ),
+        expect(getDurableObjectTagMap(encodeDurableObjectTags(mappings))).toEqual(
+          Object.fromEntries(mappings.map(({ logicalId, className }) => [logicalId, className])),
         );
       });
 
@@ -416,9 +344,7 @@ describe(
           expect(tag.startsWith("alchemy:dos:")).toBe(true);
         }
         expect(getDurableObjectTagMap(tags)).toEqual(
-          Object.fromEntries(
-            mappings.map(({ logicalId, className }) => [logicalId, className]),
-          ),
+          Object.fromEntries(mappings.map(({ logicalId, className }) => [logicalId, className])),
         );
       });
 
@@ -433,9 +359,7 @@ describe(
           expect(encoder.encode(tag).length).toBeLessThanOrEqual(1024);
         }
         expect(getDurableObjectTagMap(tags)).toEqual(
-          Object.fromEntries(
-            mappings.map(({ logicalId, className }) => [logicalId, className]),
-          ),
+          Object.fromEntries(mappings.map(({ logicalId, className }) => [logicalId, className])),
         );
       });
 
@@ -452,17 +376,12 @@ describe(
 
       test("packed entries win over legacy entries for the same logical id", () => {
         expect(
-          getDurableObjectTagMap([
-            "alchemy:do:Counter:OldClass",
-            "alchemy:dos:Counter=NewClass",
-          ]),
+          getDurableObjectTagMap(["alchemy:do:Counter:OldClass", "alchemy:dos:Counter=NewClass"]),
         ).toEqual({ Counter: "NewClass" });
       });
 
       test("returns an empty map when no DO tags are present", () => {
-        expect(getDurableObjectTagMap(["alchemy:stack:app", "user"])).toEqual(
-          {},
-        );
+        expect(getDurableObjectTagMap(["alchemy:stack:app", "user"])).toEqual({});
       });
     });
 
@@ -474,35 +393,21 @@ describe(
     describe("shouldObserveWorkerDomains", () => {
       test("skips when neither props nor state manage custom domains", () => {
         expect(
-          shouldObserveWorkerDomains(
-            {},
-            {
-              domains: ["https://my-worker.acct.workers.dev"],
-            },
-          ),
+          shouldObserveWorkerDomains({}, { domains: ["https://my-worker.acct.workers.dev"] }),
         ).toBe(false);
         expect(shouldObserveWorkerDomains(undefined, undefined)).toBe(false);
       });
 
       test("observes when domain prop is present, including null", () => {
-        expect(shouldObserveWorkerDomains({ domain: null }, undefined)).toBe(
-          true,
-        );
-        expect(
-          shouldObserveWorkerDomains({ domain: "app.example.com" }, undefined),
-        ).toBe(true);
+        expect(shouldObserveWorkerDomains({ domain: null }, undefined)).toBe(true);
+        expect(shouldObserveWorkerDomains({ domain: "app.example.com" }, undefined)).toBe(true);
       });
 
       test("observes when prior state has non-workers.dev domains", () => {
         expect(
           shouldObserveWorkerDomains(
             {},
-            {
-              domains: [
-                "https://app.example.com",
-                "https://my-worker.acct.workers.dev",
-              ],
-            },
+            { domains: ["https://app.example.com", "https://my-worker.acct.workers.dev"] },
           ),
         ).toBe(true);
       });
@@ -517,10 +422,7 @@ describe(
       test("observes when routes prop is present, including empty array", () => {
         expect(shouldObserveWorkerRoutes({ routes: [] }, undefined)).toBe(true);
         expect(
-          shouldObserveWorkerRoutes(
-            { routes: [{ pattern: "example.com/*" }] },
-            undefined,
-          ),
+          shouldObserveWorkerRoutes({ routes: [{ pattern: "example.com/*" }] }, undefined),
         ).toBe(true);
       });
 
@@ -528,9 +430,7 @@ describe(
         expect(
           shouldObserveWorkerRoutes(
             {},
-            {
-              routes: [{ id: "r1", pattern: "example.com/*", zoneId: "z1" }],
-            },
+            { routes: [{ id: "r1", pattern: "example.com/*", zoneId: "z1" }] },
           ),
         ).toBe(true);
       });
@@ -544,15 +444,11 @@ describe(
 
       test("observes when crons prop is present, including empty array", () => {
         expect(shouldObserveWorkerCrons({ crons: [] }, undefined)).toBe(true);
-        expect(
-          shouldObserveWorkerCrons({ crons: ["0 * * * *"] }, undefined),
-        ).toBe(true);
+        expect(shouldObserveWorkerCrons({ crons: ["0 * * * *"] }, undefined)).toBe(true);
       });
 
       test("observes when prior state has crons (e.g. Effect-native cron())", () => {
-        expect(shouldObserveWorkerCrons({}, { crons: ["0 * * * *"] })).toBe(
-          true,
-        );
+        expect(shouldObserveWorkerCrons({}, { crons: ["0 * * * *"] })).toBe(true);
       });
     });
   },

@@ -23,10 +23,7 @@ const sharedStack = Core.scratchStack(testOptions, "DataZoneBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) plus DataZone
 // user-profile propagation can take well over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 let functionArn: string;
@@ -45,9 +42,7 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
@@ -59,9 +54,7 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
   );
 
 const getJson = (path: string) =>
-  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 /** Resolve the fixture domain's id by its deterministic name. */
 const findDomainId = Effect.gen(function* () {
@@ -70,8 +63,7 @@ const findDomainId = Effect.gen(function* () {
     .flatMap((page) => page.items ?? [])
     .find(
       (s) =>
-        (Redacted.isRedacted(s.name) ? Redacted.value(s.name) : s.name) ===
-          BINDINGS_DOMAIN_NAME &&
+        (Redacted.isRedacted(s.name) ? Redacted.value(s.name) : s.name) === BINDINGS_DOMAIN_NAME &&
         s.status !== "DELETING" &&
         s.status !== "DELETED",
     );
@@ -80,20 +72,11 @@ const findDomainId = Effect.gen(function* () {
 
 describe.sequential(
   "DataZone Bindings",
-  {
-    tags: [
-      "provider:aws",
-      "provider:aws:datazone",
-      "provider:aws:lambda",
-      "live",
-    ],
-  },
+  { tags: ["provider:aws", "provider:aws:datazone", "provider:aws:lambda", "live"] },
   () => {
     beforeAll(
       Effect.gen(function* () {
-        yield* Effect.logInfo(
-          "DataZone test setup: destroying previous resources",
-        );
+        yield* Effect.logInfo("DataZone test setup: destroying previous resources");
         yield* sharedStack.destroy();
 
         yield* Effect.logInfo("DataZone test setup: deploying fixture");
@@ -109,21 +92,15 @@ describe.sequential(
         functionRoleArn = attrs.roleArn;
 
         const readinessUrl = `${baseUrl}/bindings`;
-        yield* Effect.logInfo(
-          `DataZone test setup: probing readiness at ${readinessUrl}`,
-        );
+        yield* Effect.logInfo(`DataZone test setup: probing readiness at ${readinessUrl}`);
         yield* HttpClient.get(readinessUrl).pipe(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.tapError((error) =>
-            Effect.logWarning(
-              `DataZone test setup: fixture not ready yet (${String(error)})`,
-            ),
+            Effect.logWarning(`DataZone test setup: fixture not ready yet (${String(error)})`),
           ),
           Effect.retry({ schedule: readinessPolicy }),
         );
@@ -163,14 +140,11 @@ describe.sequential(
 
           // Inventory search is project-scoped: the function's user profile
           // must be a member of the fixture project.
-          const projects = yield* datazone.listProjects({
-            domainIdentifier: domainId!,
-          });
+          const projects = yield* datazone.listProjects({ domainIdentifier: domainId! });
           const project = (projects.items ?? []).find(
             (p) =>
-              (Redacted.isRedacted(p.name)
-                ? Redacted.value(p.name)
-                : p.name) === BINDINGS_PROJECT_NAME,
+              (Redacted.isRedacted(p.name) ? Redacted.value(p.name) : p.name) ===
+              BINDINGS_PROJECT_NAME,
           );
           expect(project).toBeTruthy();
           yield* datazone
@@ -189,18 +163,14 @@ describe.sequential(
     });
 
     describe("binding registration", () => {
-      test.provider(
-        "all 30 domain capabilities initialize in the runtime",
-        () =>
-          Effect.gen(function* () {
-            const response = (yield* getJson("/bindings")) as {
-              bound: string[];
-            };
-            expect(response.bound).toHaveLength(30);
-            expect(response.bound).toContain("search");
-            expect(response.bound).toContain("acceptSubscriptionRequest");
-            expect(response.bound).toContain("postLineageEvent");
-          }),
+      test.provider("all 30 domain capabilities initialize in the runtime", () =>
+        Effect.gen(function* () {
+          const response = (yield* getJson("/bindings")) as { bound: string[] };
+          expect(response.bound).toHaveLength(30);
+          expect(response.bound).toContain("search");
+          expect(response.bound).toContain("acceptSubscriptionRequest");
+          expect(response.bound).toContain("postLineageEvent");
+        }),
       );
     });
 
@@ -225,36 +195,25 @@ describe.sequential(
     describe("SearchListings", () => {
       test.provider("searches the published catalog", () =>
         Effect.gen(function* () {
-          const response = (yield* getJson("/listings")) as {
-            ok: boolean;
-            items: number;
-          };
+          const response = (yield* getJson("/listings")) as { ok: boolean; items: number };
           expect(response).toMatchObject({ ok: true, items: 0 });
         }),
       );
     });
 
     describe("ListSubscriptions", () => {
-      test.provider(
-        "lists approved subscriptions (empty in a fresh domain)",
-        () =>
-          Effect.gen(function* () {
-            const response = (yield* getJson("/subscriptions")) as {
-              ok: boolean;
-              items: number;
-            };
-            expect(response).toMatchObject({ ok: true, items: 0 });
-          }),
+      test.provider("lists approved subscriptions (empty in a fresh domain)", () =>
+        Effect.gen(function* () {
+          const response = (yield* getJson("/subscriptions")) as { ok: boolean; items: number };
+          expect(response).toMatchObject({ ok: true, items: 0 });
+        }),
       );
     });
 
     describe("ListSubscriptionRequests", () => {
       test.provider("lists pending requests (empty in a fresh domain)", () =>
         Effect.gen(function* () {
-          const response = (yield* getJson("/requests")) as {
-            ok: boolean;
-            items: number;
-          };
+          const response = (yield* getJson("/requests")) as { ok: boolean; items: number };
           expect(response).toMatchObject({ ok: true, items: 0 });
         }),
       );
@@ -274,24 +233,18 @@ describe.sequential(
       );
     });
 
-    describe(
-      "consumeDataZoneEvents",
-      { tags: ["provider:aws:eventbridge"] },
-      () => {
-        test.provider(
-          "the deploy created an EventBridge rule targeting the function",
-          () =>
-            Effect.gen(function* () {
-              // Out-of-band via distilled: the fixture's consumeDataZoneEvents
-              // must have materialized as a rule on the default bus with the
-              // Lambda as target.
-              const { RuleNames } = yield* eventbridge.listRuleNamesByTarget({
-                TargetArn: functionArn,
-              });
-              expect((RuleNames ?? []).length).toBeGreaterThanOrEqual(1);
-            }),
-        );
-      },
-    );
+    describe("consumeDataZoneEvents", { tags: ["provider:aws:eventbridge"] }, () => {
+      test.provider("the deploy created an EventBridge rule targeting the function", () =>
+        Effect.gen(function* () {
+          // Out-of-band via distilled: the fixture's consumeDataZoneEvents
+          // must have materialized as a rule on the default bus with the
+          // Lambda as target.
+          const { RuleNames } = yield* eventbridge.listRuleNamesByTarget({
+            TargetArn: functionArn,
+          });
+          expect((RuleNames ?? []).length).toBeGreaterThanOrEqual(1);
+        }),
+      );
+    });
   },
 );

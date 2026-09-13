@@ -29,20 +29,8 @@ layer(NodeServices.layer)("Bundle namespace initialization", (it) => {
 
         try {
           const cloudflare = path.join(cwd, "src", "Cloudflare", "index.ts");
-          const effect = path.join(
-            cwd,
-            "node_modules",
-            "effect",
-            "dist",
-            "Effect.js",
-          );
-          const cause = path.join(
-            cwd,
-            "node_modules",
-            "effect",
-            "dist",
-            "Cause.js",
-          );
+          const effect = path.join(cwd, "node_modules", "effect", "dist", "Effect.js");
+          const cause = path.join(cwd, "node_modules", "effect", "dist", "Cause.js");
           const entry = path.join(root, "entry.ts");
           yield* fs.writeFileString(
             entry,
@@ -69,17 +57,11 @@ layer(NodeServices.layer)("Bundle namespace initialization", (it) => {
             isExternal: true,
             build: { external: ["cloudflare:workers"] },
           } as FunctionZipProps);
-          const bundle = yield* Bundle.build(
-            plan.inputOptions,
-            plan.outputOptions,
-            plan.extra,
-          );
+          const bundle = yield* Bundle.build(plan.inputOptions, plan.outputOptions, plan.extra);
           yield* Effect.forEach(bundle.files, (file) => {
             const output = path.join(root, file.path);
             return Effect.gen(function* () {
-              yield* fs.makeDirectory(path.dirname(output), {
-                recursive: true,
-              });
+              yield* fs.makeDirectory(path.dirname(output), { recursive: true });
               if (typeof file.content === "string") {
                 yield* fs.writeFileString(output, file.content);
               } else {

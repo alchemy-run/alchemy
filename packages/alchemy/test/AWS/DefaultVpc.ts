@@ -4,17 +4,11 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { VpcId } from "@/AWS/EC2";
 
-class DefaultVpcNotVisible extends Data.TaggedError(
-  "DefaultVpcNotVisible",
-)<{}> {}
+class DefaultVpcNotVisible extends Data.TaggedError("DefaultVpcNotVisible")<{}> {}
 
-class DefaultVpcNetworkNotVisible extends Data.TaggedError(
-  "DefaultVpcNetworkNotVisible",
-)<{}> {}
+class DefaultVpcNetworkNotVisible extends Data.TaggedError("DefaultVpcNetworkNotVisible")<{}> {}
 
-class UnsupportedDefaultVpcCidr extends Data.TaggedError(
-  "UnsupportedDefaultVpcCidr",
-)<{
+class UnsupportedDefaultVpcCidr extends Data.TaggedError("UnsupportedDefaultVpcCidr")<{
   readonly cidrBlock: string;
 }> {}
 
@@ -35,9 +29,7 @@ export const getDefaultVpc = Effect.gen(function* () {
 
   const [baseAddress, prefixString] = vpc.CidrBlock.split("/");
   if (prefixString !== "16") {
-    return yield* Effect.fail(
-      new UnsupportedDefaultVpcCidr({ cidrBlock: vpc.CidrBlock }),
-    );
+    return yield* Effect.fail(new UnsupportedDefaultVpcCidr({ cidrBlock: vpc.CidrBlock }));
   }
 
   const [a, b] = baseAddress.split(".");

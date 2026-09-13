@@ -237,16 +237,13 @@ const observeSettings = (accountId: string) =>
       const snapshot: DeviceSettingsSnapshot = {};
       if (s.disableForTime != null) snapshot.disableForTime = s.disableForTime;
       if (s.externalEmergencySignalEnabled != null) {
-        snapshot.externalEmergencySignalEnabled =
-          s.externalEmergencySignalEnabled;
+        snapshot.externalEmergencySignalEnabled = s.externalEmergencySignalEnabled;
       }
       if (s.externalEmergencySignalFingerprint != null) {
-        snapshot.externalEmergencySignalFingerprint =
-          s.externalEmergencySignalFingerprint;
+        snapshot.externalEmergencySignalFingerprint = s.externalEmergencySignalFingerprint;
       }
       if (s.externalEmergencySignalInterval != null) {
-        snapshot.externalEmergencySignalInterval =
-          s.externalEmergencySignalInterval;
+        snapshot.externalEmergencySignalInterval = s.externalEmergencySignalInterval;
       }
       if (s.externalEmergencySignalUrl != null) {
         snapshot.externalEmergencySignalUrl = s.externalEmergencySignalUrl;
@@ -258,8 +255,7 @@ const observeSettings = (accountId: string) =>
         snapshot.gatewayUdpProxyEnabled = s.gatewayUdpProxyEnabled;
       }
       if (s.rootCertificateInstallationEnabled != null) {
-        snapshot.rootCertificateInstallationEnabled =
-          s.rootCertificateInstallationEnabled;
+        snapshot.rootCertificateInstallationEnabled = s.rootCertificateInstallationEnabled;
       }
       if (s.useZtVirtualIp != null) snapshot.useZtVirtualIp = s.useZtVirtualIp;
       return snapshot;
@@ -276,7 +272,5 @@ const toAttributes = (
   initialSettings,
 });
 
-const sameSnapshot = (
-  a: DeviceSettingsSnapshot,
-  b: DeviceSettingsSnapshot,
-): boolean => SETTING_KEYS.every((key) => a[key] === b[key]);
+const sameSnapshot = (a: DeviceSettingsSnapshot, b: DeviceSettingsSnapshot): boolean =>
+  SETTING_KEYS.every((key) => a[key] === b[key]);

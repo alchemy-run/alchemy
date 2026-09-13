@@ -8,12 +8,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   normalizeLocation,
@@ -32,13 +27,9 @@ import {
 const DEFAULT_TYPE = "IPV4" satisfies networksecurity.AddressGroupTypeEnum;
 const DEFAULT_CAPACITY = 100;
 
-export type AddressGroupType =
-  | networksecurity.AddressGroupTypeEnum
-  | (string & {});
+export type AddressGroupType = networksecurity.AddressGroupTypeEnum | (string & {});
 
-export type AddressGroupPurpose =
-  | networksecurity.AddressGroupPurposeItemEnum
-  | (string & {});
+export type AddressGroupPurpose = networksecurity.AddressGroupPurposeItemEnum | (string & {});
 
 export type AddressGroupProps = {
   /**
@@ -162,19 +153,12 @@ export type AddressGroup = Resource<
  * @resource
  * @category NetworkSecurity
  */
-export const AddressGroup = Resource<AddressGroup>(
-  "GCP.NetworkSecurity.AddressGroup",
-);
+export const AddressGroup = Resource<AddressGroup>("GCP.NetworkSecurity.AddressGroup");
 
-const resourceName = (
-  project: string,
-  location: string,
-  addressGroupId: string,
-) =>
+const resourceName = (project: string, location: string, addressGroupId: string) =>
   `projects/${project}/locations/${location}/addressGroups/${addressGroupId}`;
 
-const typeOf = (value: string | undefined) =>
-  (value ?? DEFAULT_TYPE).toUpperCase();
+const typeOf = (value: string | undefined) => (value ?? DEFAULT_TYPE).toUpperCase();
 
 const capacityOf = (value: number | undefined) => value ?? DEFAULT_CAPACITY;
 
@@ -212,9 +196,7 @@ const listOwned = (project: string) =>
     .pipe(
       Stream.flatMap((page) => Stream.fromIterable(page.addressGroups ?? [])),
       Stream.filter((group) =>
-        Object.keys(group.labels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
+        Object.keys(group.labels ?? {}).some((key) => key.startsWith("alchemy-")),
       ),
       Stream.map((group) => toAttrs(group, project)),
       Stream.runCollect,
@@ -224,40 +206,22 @@ const listOwned = (project: string) =>
 
 export const AddressGroupProvider = () =>
   Provider.succeed(AddressGroup, {
-    stables: [
-      "name",
-      "addressGroupId",
-      "project",
-      "location",
-      "type",
-      "capacity",
-      "createTime",
-    ],
+    stables: ["name", "addressGroupId", "project", "location", "type", "capacity", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const previousId = olds?.addressGroupId ?? output?.addressGroupId;
       const nextId = news.addressGroupId ?? previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? olds?.location ?? output?.location,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location);
+      const nextLocation = normalizeLocation(news.location ?? olds?.location ?? output?.location);
       const previousType = typeOf(olds?.type ?? output?.type);
       const nextType = typeOf(news.type ?? olds?.type ?? output?.type);
       const previousCapacity = capacityOf(olds?.capacity ?? output?.capacity);
-      const nextCapacity = capacityOf(
-        news.capacity ?? olds?.capacity ?? output?.capacity,
-      );
+      const nextCapacity = capacityOf(news.capacity ?? olds?.capacity ?? output?.capacity);
       const previousPurpose = sortedStrings(olds?.purpose ?? output?.purpose);
-      const nextPurpose = sortedStrings(
-        news.purpose ?? olds?.purpose ?? output?.purpose,
-      );
+      const nextPurpose = sortedStrings(news.purpose ?? olds?.purpose ?? output?.purpose);
       const replace =
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation ||
         previousType !== nextType ||
         previousCapacity !== nextCapacity ||
@@ -266,9 +230,7 @@ export const AddressGroupProvider = () =>
       return {
         action: "replace" as const,
         deleteFirst:
-          previousLocation === nextLocation &&
-          previousId !== undefined &&
-          nextId === previousId,
+          previousLocation === nextLocation && previousId !== undefined && nextId === previousId,
       };
     }),
 
@@ -281,14 +243,11 @@ export const AddressGroupProvider = () =>
         "addressgroup",
       );
       const location = normalizeLocation(olds?.location ?? output?.location);
-      const name =
-        output?.name ?? resourceName(env.project, location, addressGroupId);
+      const name = output?.name ?? resourceName(env.project, location, addressGroupId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -353,8 +312,7 @@ export const AddressGroupProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
       const itemsChanged = !sameStringList(current.items, items);
 
       if (labelsChanged || descriptionChanged || itemsChanged) {
@@ -364,22 +322,18 @@ export const AddressGroupProvider = () =>
           itemsChanged ? "items" : undefined,
         ].filter((field): field is string => field !== undefined);
 
-        const operation =
-          yield* networksecurity.patchProjectsLocationsAddressGroups({
+        const operation = yield* networksecurity.patchProjectsLocationsAddressGroups({
+          name: current.name ?? name,
+          updateMask: updateMask.join(","),
+          body: {
             name: current.name ?? name,
-            updateMask: updateMask.join(","),
-            body: {
-              name: current.name ?? name,
-              labels: desiredLabels,
-              description: news.description,
-              items,
-            },
-          });
+            labels: desiredLabels,
+            description: news.description,
+            items,
+          },
+        });
         yield* waitForOperation(operation);
-        current = yield* waitUntilExists(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project);

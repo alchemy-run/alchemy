@@ -3,25 +3,16 @@ import * as Effect from "effect/Effect";
 import { FileSystem } from "effect/FileSystem";
 import * as Option from "effect/Option";
 import type { Path } from "effect/Path";
+import type { ChildProcessSpawner } from "effect/process/ChildProcessSpawner";
 import type { Stdio } from "effect/Stdio";
 import type { Terminal } from "effect/Terminal";
-import type { ChildProcessSpawner } from "effect/process/ChildProcessSpawner";
 import type { HttpEffect } from "../Http.ts";
 import * as Http from "../Http.ts";
 import * as Output from "../Output.ts";
 import { ManagedHttpShutdown } from "../Runtime/Bootstrap/ManagedHttpShutdown.ts";
-import {
-  packEnvValue,
-  unpackEnvValue,
-  type BaseRuntimeContext,
-} from "../RuntimeContext.ts";
+import { packEnvValue, unpackEnvValue, type BaseRuntimeContext } from "../RuntimeContext.ts";
 
-export type ProcessServices =
-  | ChildProcessSpawner
-  | FileSystem
-  | Path
-  | Stdio
-  | Terminal;
+export type ProcessServices = ChildProcessSpawner | FileSystem | Path | Stdio | Terminal;
 
 export interface ProcessContext extends BaseRuntimeContext {
   run: <Req = never, RunReq = never>(
@@ -38,10 +29,9 @@ export interface ProcessContext extends BaseRuntimeContext {
  * can `yield* ServerHost` and call `host.run(...)` during plan/deploy without
  * the caller providing the layer itself.
  */
-export class ServerHost extends Context.Service<
-  ServerHost,
-  Pick<ProcessContext, "run">
->()("Alchemy::ServerHost") {}
+export class ServerHost extends Context.Service<ServerHost, Pick<ProcessContext, "run">>()(
+  "Alchemy::ServerHost",
+) {}
 
 /**
  * Deploy-time / plan-time host context for platforms that bundle a long-lived
@@ -113,16 +103,12 @@ export const createHostRuntimeContext =
                 ? runners.map((runner) =>
                     runner.pipe(
                       Effect.onExit((exit) =>
-                        Effect.sync(() =>
-                          managed.value.runnerFinished(exit, --remaining === 0),
-                        ),
+                        Effect.sync(() => managed.value.runnerFinished(exit, --remaining === 0)),
                       ),
                       Effect.scoped,
                       // Parent interruption may discard child finalizer defects.
                       Effect.onExit((exit) =>
-                        Effect.sync(() =>
-                          managed.value.runnerFinished(exit, false),
-                        ),
+                        Effect.sync(() => managed.value.runnerFinished(exit, false)),
                       ),
                     ),
                   )

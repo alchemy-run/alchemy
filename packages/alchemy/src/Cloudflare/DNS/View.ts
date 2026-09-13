@@ -45,13 +45,7 @@ export interface ViewAttributes {
   modifiedTime: string;
 }
 
-export type View = Resource<
-  DnsViewTypeId,
-  ViewProps,
-  ViewAttributes,
-  never,
-  Providers
->;
+export type View = Resource<DnsViewTypeId, ViewProps, ViewAttributes, never, Providers>;
 
 /**
  * An Internal DNS view (`/accounts/{account_id}/dns_settings/views`) —
@@ -216,10 +210,7 @@ const sameZones = (observed: readonly string[], desired: readonly string[]) =>
   observed.length === desired.length &&
   [...observed].sort().join(",") === [...desired].sort().join(",");
 
-const toAttributes = (
-  view: ObservedView,
-  accountId: string,
-): ViewAttributes => ({
+const toAttributes = (view: ObservedView, accountId: string): ViewAttributes => ({
   viewId: view.id,
   accountId,
   name: view.name,

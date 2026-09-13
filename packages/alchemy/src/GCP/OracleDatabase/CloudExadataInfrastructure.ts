@@ -46,9 +46,7 @@ export type MaintenanceWindow = {
   /** Lead time in weeks (1-4). */
   leadTimeWeek?: number;
   /** Days of week. */
-  daysOfWeek?: Array<
-    oracle.MaintenanceWindowDaysOfWeekItemEnum | (string & {})
-  >;
+  daysOfWeek?: Array<oracle.MaintenanceWindowDaysOfWeekItemEnum | (string & {})>;
   /** Enable custom action timeout. */
   isCustomActionTimeoutEnabled?: boolean;
   /** Weeks of month (1, 2, 3, 4). */
@@ -236,9 +234,9 @@ const toAttrs = (infra: oracle.CloudExadataInfrastructure, project: string) => {
 };
 
 const getByName = (name: string) =>
-  retryQuota(
-    oracle.getProjectsLocationsCloudExadataInfrastructures({ name }),
-  ).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+  retryQuota(oracle.getProjectsLocationsCloudExadataInfrastructures({ name })).pipe(
+    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+  );
 
 const listInfras = (project: string, region: string) => {
   const collect = (parent: string) =>
@@ -248,11 +246,7 @@ const listInfras = (project: string, region: string) => {
         pageSize: 1000,
       }),
       (page) => page.cloudExadataInfrastructures,
-    ).pipe(
-      Effect.map((items) =>
-        items.filter((item) => hasAlchemyLabelMap(item.labels)),
-      ),
-    );
+    ).pipe(Effect.map((items) => items.filter((item) => hasAlchemyLabelMap(item.labels))));
   return listAtLocation(project, region, collect).pipe(
     Effect.catchTag("NotFound", () => Effect.succeed([])),
   );
@@ -260,35 +254,23 @@ const listInfras = (project: string, region: string) => {
 
 export const CloudExadataInfrastructureProvider = () =>
   Provider.succeed(CloudExadataInfrastructure, {
-    stables: [
-      "name",
-      "cloudExadataInfrastructureId",
-      "project",
-      "location",
-      "createTime",
-      "ocid",
-    ],
+    stables: ["name", "cloudExadataInfrastructureId", "project", "location", "createTime", "ocid"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
       const props = mergedProperties(news);
-      const previousShape =
-        olds?.shape ?? olds?.properties?.shape ?? output?.shape ?? "";
+      const previousShape = olds?.shape ?? olds?.properties?.shape ?? output?.shape ?? "";
       const nextShape = props.shape ?? previousShape;
       const previousZone = olds?.gcpOracleZone ?? output?.gcpOracleZone ?? "";
       const nextZone = news.gcpOracleZone ?? previousZone;
       return replaceOnIdentity({
-        previousId:
-          olds?.cloudExadataInfrastructureId ??
-          output?.cloudExadataInfrastructureId,
+        previousId: olds?.cloudExadataInfrastructureId ?? output?.cloudExadataInfrastructureId,
         nextId:
           news.cloudExadataInfrastructureId ??
           olds?.cloudExadataInfrastructureId ??
           output?.cloudExadataInfrastructureId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location ?? env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location ?? env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location ?? env.region,
         ),
@@ -304,23 +286,14 @@ export const CloudExadataInfrastructureProvider = () =>
         output?.cloudExadataInfrastructureId,
         FALLBACK_ID,
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location ?? env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location ?? env.region);
       const name =
         output?.name ??
-        resourceNameOf(
-          env.project,
-          location,
-          COLLECTION,
-          cloudExadataInfrastructureId,
-        );
+        resourceNameOf(env.project, location, COLLECTION, cloudExadataInfrastructureId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -338,15 +311,8 @@ export const CloudExadataInfrastructureProvider = () =>
         output?.cloudExadataInfrastructureId,
         FALLBACK_ID,
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location ?? env.region,
-      );
-      const name = resourceNameOf(
-        env.project,
-        location,
-        COLLECTION,
-        cloudExadataInfrastructureId,
-      );
+      const location = normalizeLocation(news.location ?? output?.location ?? env.region);
+      const name = resourceNameOf(env.project, location, COLLECTION, cloudExadataInfrastructureId);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),

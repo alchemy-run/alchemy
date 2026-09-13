@@ -78,14 +78,10 @@ const assertCapabilityGone = (capabilityId: string) =>
   Effect.gen(function* () {
     const result = yield* b2bi.getCapability({ capabilityId }).pipe(
       Effect.map(() => "present" as const),
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed("gone" as const),
-      ),
+      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed("gone" as const)),
     );
     if (result === "present") {
-      return yield* Effect.fail(
-        new Error(`Capability '${capabilityId}' still exists`),
-      );
+      return yield* Effect.fail(new Error(`Capability '${capabilityId}' still exists`));
     }
   }).pipe(
     Effect.retry({

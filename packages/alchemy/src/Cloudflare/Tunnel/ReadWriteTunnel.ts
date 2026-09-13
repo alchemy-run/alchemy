@@ -55,11 +55,7 @@ import { writeClient, type WriteTunnelClient } from "./WriteTunnel.ts";
 export interface ReadWriteTunnel extends Binding.Service<
   ReadWriteTunnel,
   "Cloudflare.Tunnel.ReadWriteTunnel",
-  () => Effect.Effect<
-    ReadWriteTunnelClient,
-    never,
-    Worker | CloudflareEnvironment
-  >
+  () => Effect.Effect<ReadWriteTunnelClient, never, Worker | CloudflareEnvironment>
 > {}
 
 export const ReadWriteTunnel = Binding.Service<ReadWriteTunnel>(
@@ -67,8 +63,7 @@ export const ReadWriteTunnel = Binding.Service<ReadWriteTunnel>(
 );
 
 /** Combined read + write tunnel operations. */
-export interface ReadWriteTunnelClient
-  extends ReadTunnelClient, WriteTunnelClient {}
+export interface ReadWriteTunnelClient extends ReadTunnelClient, WriteTunnelClient {}
 
 /** Build the combined read + write client over an injectable {@link TunnelAuth}. */
 export const readWriteClient = (auth: TunnelAuth): ReadWriteTunnelClient => ({

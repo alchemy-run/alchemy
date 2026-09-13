@@ -4,10 +4,7 @@ import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
-import {
-  hashDockerBuildInputs,
-  resolveDockerBuildPaths,
-} from "../../Docker/BuildHash.ts";
+import { hashDockerBuildInputs, resolveDockerBuildPaths } from "../../Docker/BuildHash.ts";
 import { Docker } from "../../Docker/Docker.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -37,9 +34,7 @@ export const getEcrRegistryCredentials = Effect.gen(function* () {
   const token = authData?.authorizationToken;
   const proxyEndpoint = authData?.proxyEndpoint;
   if (!token || !proxyEndpoint) {
-    return yield* Effect.die(
-      new Error("Failed to get ECR authorization token"),
-    );
+    return yield* Effect.die(new Error("Failed to get ECR authorization token"));
   }
   const password = yield* Effect.sync(() => {
     const raw = Redacted.isRedacted(token) ? Redacted.value(token) : token;
@@ -253,19 +248,15 @@ export const ImageProvider = () =>
         );
 
       // Observe the pushed image in ECR. Missing repository or tag → undefined.
-      const describeImage = Effect.fn(function* (
-        repositoryName: string,
-        imageTag: string,
-      ) {
+      const describeImage = Effect.fn(function* (repositoryName: string, imageTag: string) {
         const described = yield* ecr
           .describeImages({
             repositoryName,
             imageIds: [{ imageTag }],
           })
           .pipe(
-            Effect.catchTag(
-              ["ImageNotFoundException", "RepositoryNotFoundException"],
-              () => Effect.succeed(undefined),
+            Effect.catchTag(["ImageNotFoundException", "RepositoryNotFoundException"], () =>
+              Effect.succeed(undefined),
             ),
           );
         return described?.imageDetails?.[0];
@@ -273,10 +264,7 @@ export const ImageProvider = () =>
 
       // Ensure the auto-created repository exists. Idempotent: tolerates
       // `RepositoryAlreadyExistsException` as a race / re-run and re-describes.
-      const ensureOwnedRepository = Effect.fn(function* (
-        id: string,
-        repositoryName: string,
-      ) {
+      const ensureOwnedRepository = Effect.fn(function* (id: string, repositoryName: string) {
         const internalTags = yield* createInternalTags(id);
         const created = yield* ecr
           .createRepository({
@@ -291,17 +279,13 @@ export const ImageProvider = () =>
             Effect.catchTag("RepositoryAlreadyExistsException", () =>
               ecr
                 .describeRepositories({ repositoryNames: [repositoryName] })
-                .pipe(
-                  Effect.map((res) => ({ repository: res.repositories?.[0] })),
-                ),
+                .pipe(Effect.map((res) => ({ repository: res.repositories?.[0] }))),
             ),
           );
         const repositoryUri = created.repository?.repositoryUri;
         if (!repositoryUri) {
           return yield* Effect.fail(
-            new Error(
-              `Failed to create or read ECR repository '${repositoryName}'`,
-            ),
+            new Error(`Failed to create or read ECR repository '${repositoryName}'`),
           );
         }
         return repositoryUri;
@@ -312,10 +296,7 @@ export const ImageProvider = () =>
           // The content hash cannot be recovered without running a build, so
           // a lost-state read has nothing to look up.
           if (!output) return undefined;
-          const detail = yield* describeImage(
-            output.repositoryName,
-            output.imageTag,
-          );
+          const detail = yield* describeImage(output.repositoryName, output.imageTag);
           if (!detail?.imageDigest) return undefined;
           return { ...output, digest: detail.imageDigest };
         }),
@@ -327,10 +308,7 @@ export const ImageProvider = () =>
         diff: Effect.fn(function* ({ news, output, olds }) {
           if (!isResolved(news) || !output) return undefined;
           const hash = yield* hashBuildInputs(news);
-          if (
-            hash !== output.imageTag ||
-            olds.repositoryUri !== news.repositoryUri
-          ) {
+          if (hash !== output.imageTag || olds.repositoryUri !== news.repositoryUri) {
             return { action: "update" } as const;
           }
           const image = yield* describeImage(output.repositoryName, hash);
@@ -341,24 +319,20 @@ export const ImageProvider = () =>
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           // Resolve the target repository: user-supplied URI, or an
           // auto-created repository owned by this Image.
-          const { repositoryName, repositoryUri, ownsRepository } =
-            yield* Effect.gen(function* () {
-              if (news.repositoryUri) {
-                return {
-                  repositoryName: repositoryNameFromUri(news.repositoryUri),
-                  repositoryUri: news.repositoryUri,
-                  ownsRepository: false,
-                };
-              }
-              const repositoryName = output?.ownsRepository
-                ? output.repositoryName
-                : yield* toOwnedRepositoryName(id);
-              const repositoryUri = yield* ensureOwnedRepository(
-                id,
-                repositoryName,
-              );
-              return { repositoryName, repositoryUri, ownsRepository: true };
-            });
+          const { repositoryName, repositoryUri, ownsRepository } = yield* Effect.gen(function* () {
+            if (news.repositoryUri) {
+              return {
+                repositoryName: repositoryNameFromUri(news.repositoryUri),
+                repositoryUri: news.repositoryUri,
+                ownsRepository: false,
+              };
+            }
+            const repositoryName = output?.ownsRepository
+              ? output.repositoryName
+              : yield* toOwnedRepositoryName(id);
+            const repositoryUri = yield* ensureOwnedRepository(id, repositoryName);
+            return { repositoryName, repositoryUri, ownsRepository: true };
+          });
 
           const { context, dockerfile } = yield* resolveDockerBuildPaths({
             context: news.context,
@@ -399,9 +373,7 @@ export const ImageProvider = () =>
 
           const pushed = yield* describeImage(repositoryName, imageTag);
           if (!pushed?.imageDigest) {
-            return yield* Effect.fail(
-              new Error(`Image ${imageUri} not found in ECR after push`),
-            );
+            return yield* Effect.fail(new Error(`Image ${imageUri} not found in ECR after push`));
           }
           yield* session.note(imageUri);
           return {
@@ -423,9 +395,7 @@ export const ImageProvider = () =>
           Effect.gen(function* () {
             const repositories = yield* ecr.describeRepositories.pages({}).pipe(
               Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) => page.repositories ?? []),
-              ),
+              Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.repositories ?? [])),
             );
             const nested = yield* Effect.forEach(
               repositories.filter(
@@ -437,34 +407,28 @@ export const ImageProvider = () =>
                 } => r.repositoryName != null && r.repositoryUri != null,
               ),
               (repository) =>
-                ecr.describeImages
-                  .pages({ repositoryName: repository.repositoryName })
-                  .pipe(
-                    Stream.runCollect,
-                    Effect.map((chunk) =>
-                      Array.from(chunk).flatMap(
-                        (page) => page.imageDetails ?? [],
-                      ),
-                    ),
-                    Effect.map((details) =>
-                      details.flatMap((detail) =>
-                        detail.imageDigest === undefined
-                          ? []
-                          : (detail.imageTags ?? []).map((imageTag) => ({
-                              imageUri: `${repository.repositoryUri}:${imageTag}`,
-                              digest: detail.imageDigest!,
-                              repositoryUri: repository.repositoryUri,
-                              repositoryName: repository.repositoryName,
-                              imageTag,
-                              ownsRepository: false,
-                            })),
-                      ),
-                    ),
-                    // Repository deleted between the list and the describe.
-                    Effect.catchTag("RepositoryNotFoundException", () =>
-                      Effect.succeed([]),
+                ecr.describeImages.pages({ repositoryName: repository.repositoryName }).pipe(
+                  Stream.runCollect,
+                  Effect.map((chunk) =>
+                    Array.from(chunk).flatMap((page) => page.imageDetails ?? []),
+                  ),
+                  Effect.map((details) =>
+                    details.flatMap((detail) =>
+                      detail.imageDigest === undefined
+                        ? []
+                        : (detail.imageTags ?? []).map((imageTag) => ({
+                            imageUri: `${repository.repositoryUri}:${imageTag}`,
+                            digest: detail.imageDigest!,
+                            repositoryUri: repository.repositoryUri,
+                            repositoryName: repository.repositoryName,
+                            imageTag,
+                            ownsRepository: false,
+                          })),
                     ),
                   ),
+                  // Repository deleted between the list and the describe.
+                  Effect.catchTag("RepositoryNotFoundException", () => Effect.succeed([])),
+                ),
               { concurrency: 10 },
             );
             return nested.flat();
@@ -476,12 +440,7 @@ export const ImageProvider = () =>
                 repositoryName: output.repositoryName,
                 force: true,
               })
-              .pipe(
-                Effect.catchTag(
-                  "RepositoryNotFoundException",
-                  () => Effect.void,
-                ),
-              );
+              .pipe(Effect.catchTag("RepositoryNotFoundException", () => Effect.void));
             return;
           }
           // Foreign repository: delete only our tag. `batchDeleteImage`
@@ -492,9 +451,7 @@ export const ImageProvider = () =>
               repositoryName: output.repositoryName,
               imageIds: [{ imageTag: output.imageTag }],
             })
-            .pipe(
-              Effect.catchTag("RepositoryNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("RepositoryNotFoundException", () => Effect.void));
         }),
       };
     }),

@@ -1,6 +1,6 @@
+import * as Layer from "effect/Layer";
 import { Stack } from "@/Stack";
 import { Stage } from "@/Stage";
-import * as Layer from "effect/Layer";
 
 /**
  * Placeholder `Stack` + `Stage` for suites that build a provider layer and

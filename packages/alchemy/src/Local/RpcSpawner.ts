@@ -25,10 +25,7 @@ import { nodeLoaderArgs } from "../Util/Node.ts";
 import { httpServer } from "../Util/PlatformServices.ts";
 import { pipedColorEnv } from "../Util/Terminal.ts";
 import { SPAWNER_URL_ENV_KEY } from "./RpcProviderProxy.ts";
-import {
-  RPC_SERVER_ENVIRONMENT_KEY,
-  type RpcServerEnvironment,
-} from "./RpcServerEnvironment.ts";
+import { RPC_SERVER_ENVIRONMENT_KEY, type RpcServerEnvironment } from "./RpcServerEnvironment.ts";
 
 export class RpcSpawner extends Context.Service<
   RpcSpawner,
@@ -79,8 +76,7 @@ export const make = Effect.fn(function* ({
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const scope = yield* Effect.scope;
   const cache = yield* Cache.make({
-    lookup: (serverEntryUrl: string) =>
-      spawn(serverEntryUrl).pipe(Scope.provide(scope)),
+    lookup: (serverEntryUrl: string) => spawn(serverEntryUrl).pipe(Scope.provide(scope)),
     capacity: Infinity,
   });
 
@@ -103,9 +99,7 @@ export const make = Effect.fn(function* ({
       // Fallback path (no exec child subscribed): sidecar lines already carry
       // the sidecar's logger prefix, so print verbatim rather than stamping
       // this process's logger prefix on top.
-      return line.channel === "stderr"
-        ? Console.error(line.line)
-        : Console.log(line.line);
+      return line.channel === "stderr" ? Console.error(line.line) : Console.log(line.line);
     });
 
   const spawn = Effect.fn(function* (serverEntryUrl: string) {
@@ -174,9 +168,7 @@ export const make = Effect.fn(function* ({
     // Command cleanup allows 1s for TERM and 1s for KILL; reserve 1s for sidecar teardown.
     const kill = handle.kill({ forceKillAfter: "3 seconds" });
     yield* Effect.addFinalizer(() => kill.pipe(Effect.ignore));
-    const url = yield* getRpcAddress(handle.stdout, (line) =>
-      publish({ channel: "stdout", line }),
-    );
+    const url = yield* getRpcAddress(handle.stdout, (line) => publish({ channel: "stdout", line }));
     const ws = yield* Effect.acquireRelease(
       Effect.sync(() => new WebSocket(new URL("/parent", url))),
       (ws) => Effect.sync(() => ws.close()),
@@ -186,9 +178,7 @@ export const make = Effect.fn(function* ({
       isRunning: Effect.zipWith(
         handle.isRunning,
         Effect.sync(
-          () =>
-            ws.readyState === WebSocket.CONNECTING ||
-            ws.readyState === WebSocket.OPEN,
+          () => ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.OPEN,
         ),
         (a, b) => a && b,
         { concurrent: true },
@@ -207,9 +197,7 @@ export const make = Effect.fn(function* ({
     }
     if (attempt > 3) {
       return yield* Effect.die(
-        new Error(
-          `Failed to spawn RPC server for "${serverEntryUrl}" after ${attempt} attempts.`,
-        ),
+        new Error(`Failed to spawn RPC server for "${serverEntryUrl}" after ${attempt} attempts.`),
       );
     }
     yield* child.kill;
@@ -227,9 +215,7 @@ export const make = Effect.fn(function* ({
   const HEARTBEAT = encoder.encode(`${JSON.stringify(heartbeat)}\n`);
   const heartbeats = Stream.make(HEARTBEAT).pipe(
     Stream.concat(
-      Stream.fromSchedule(Schedule.spaced(Duration.seconds(5))).pipe(
-        Stream.map(() => HEARTBEAT),
-      ),
+      Stream.fromSchedule(Schedule.spaced(Duration.seconds(5))).pipe(Stream.map(() => HEARTBEAT)),
     ),
   );
 
@@ -260,9 +246,7 @@ export const make = Effect.fn(function* ({
         );
       }
       const decoded = yield* Effect.result(
-        request.json.pipe(
-          Effect.flatMap(Schema.decodeUnknownEffect(RpcSpawnPayload)),
-        ),
+        request.json.pipe(Effect.flatMap(Schema.decodeUnknownEffect(RpcSpawnPayload))),
       );
       if (decoded._tag === "Failure") {
         return HttpServerResponse.text("Invalid RPC spawn payload.", {
@@ -276,10 +260,7 @@ export const make = Effect.fn(function* ({
         }),
       );
       if (entry._tag === "Failure" || entry.success.protocol !== "file:") {
-        return HttpServerResponse.text(
-          "serverEntryUrl must be a valid file URL.",
-          { status: 400 },
-        );
+        return HttpServerResponse.text("serverEntryUrl must be a valid file URL.", { status: 400 });
       }
       const url = yield* register(entry.success.href);
       return HttpServerResponse.text(url);
@@ -291,9 +272,7 @@ export const make = Effect.fn(function* ({
   });
 });
 
-export const layerServer = (
-  environment: Pick<RpcServerEnvironment, "profile" | "envFile">,
-) =>
+export const layerServer = (environment: Pick<RpcServerEnvironment, "profile" | "envFile">) =>
   Layer.effect(RpcSpawner, make(environment)).pipe(
     // `/logs` is deliberately long-lived. On shutdown the exec child still
     // owns that response while this scope owns the exec child, so waiting for
@@ -303,8 +282,7 @@ export const layerServer = (
     Layer.provide(httpServer(0, "127.0.0.1", { gracefulShutdownTimeout: 0 })),
   );
 
-const RPC_ADDRESS_REGEX =
-  /(<ALCHEMY_RPC_ADDRESS>)(.+)(<\/ALCHEMY_RPC_ADDRESS>)/;
+const RPC_ADDRESS_REGEX = /(<ALCHEMY_RPC_ADDRESS>)(.+)(<\/ALCHEMY_RPC_ADDRESS>)/;
 
 const getRpcAddress = (
   stdout: Stream.Stream<Uint8Array, PlatformError>,
@@ -330,13 +308,11 @@ const getRpcAddress = (
     return yield* Deferred.await(address);
   });
 
-export const parseSidecarLogLine = (
-  raw: string,
-): SidecarLogLine | undefined => {
+export const parseSidecarLogLine = (raw: string): SidecarLogLine | undefined => {
   try {
-    return Schema.decodeUnknownOption(SidecarLogLineSchema)(
-      JSON.parse(raw),
-    ).pipe(Option.getOrUndefined);
+    return Schema.decodeUnknownOption(SidecarLogLineSchema)(JSON.parse(raw)).pipe(
+      Option.getOrUndefined,
+    );
   } catch {
     return undefined;
   }
@@ -360,9 +336,7 @@ export const forwardSidecarLogs = (
     Effect.flatMap((spawnerUrl) => {
       const streamOnce = Effect.gen(function* () {
         const client = yield* HttpClient.HttpClient;
-        const response = yield* client.get(
-          new URL(LOGS_PATH, spawnerUrl).toString(),
-        );
+        const response = yield* client.get(new URL(LOGS_PATH, spawnerUrl).toString());
         yield* response.stream.pipe(
           Stream.decodeText,
           Stream.splitLines,

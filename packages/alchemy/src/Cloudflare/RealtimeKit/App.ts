@@ -199,9 +199,7 @@ const listAllApps = (accountId: string) =>
       pageNo: 1,
       perPage: LIST_PER_PAGE,
     });
-    const apps = (first.data ?? []).filter(
-      (a): a is NonNullable<typeof a> => a !== null,
-    );
+    const apps = (first.data ?? []).filter((a): a is NonNullable<typeof a> => a !== null);
     const total = first.paging?.totalCount ?? apps.length;
     const pages = Math.ceil(total / LIST_PER_PAGE);
     if (pages <= 1) return apps;
@@ -212,9 +210,7 @@ const listAllApps = (accountId: string) =>
           .getApp({ accountId, pageNo, perPage: LIST_PER_PAGE })
           .pipe(
             Effect.map((res) =>
-              (res.data ?? []).filter(
-                (a): a is NonNullable<typeof a> => a !== null,
-              ),
+              (res.data ?? []).filter((a): a is NonNullable<typeof a> => a !== null),
             ),
           ),
       { concurrency: 10 },
@@ -227,9 +223,7 @@ const listAllApps = (accountId: string) =>
  * has neither an update endpoint (to rename in place) nor a delete endpoint
  * (to model the change as a replacement).
  */
-export class AppRenameNotSupported extends Data.TaggedError(
-  "AppRenameNotSupported",
-)<{
+export class AppRenameNotSupported extends Data.TaggedError("AppRenameNotSupported")<{
   readonly appId: string;
   readonly currentName: string;
   readonly desiredName: string;

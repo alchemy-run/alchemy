@@ -120,9 +120,7 @@ export interface DBParameterGroup extends Resource<
  *
  * @resource
  */
-export const DBParameterGroup = Resource<DBParameterGroup>(
-  "AWS.RDS.DBParameterGroup",
-);
+export const DBParameterGroup = Resource<DBParameterGroup>("AWS.RDS.DBParameterGroup");
 
 /**
  * A parameter modify/reset issued immediately after another change fails with
@@ -137,9 +135,7 @@ const retryWhileParameterGroupBusy = <A, E extends { _tag: string }, R>(
     schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(10)]),
   });
 
-class DBParameterGroupNotSettled extends Data.TaggedError(
-  "DBParameterGroupNotSettled",
-)<{
+class DBParameterGroupNotSettled extends Data.TaggedError("DBParameterGroupNotSettled")<{
   name: string;
 }> {}
 
@@ -157,11 +153,7 @@ export const DBParameterGroupProvider = () =>
           .describeDBParameterGroups({
             DBParameterGroupName: name,
           })
-          .pipe(
-            Effect.catchTag("DBParameterGroupNotFoundFault", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("DBParameterGroupNotFoundFault", () => Effect.succeed(undefined)));
         return response?.DBParameterGroups?.[0];
       });
 
@@ -178,14 +170,10 @@ export const DBParameterGroupProvider = () =>
       // All parameters (defaults + overrides) with their current values and
       // apply types — the observed baseline for the parameter sync.
       const readParameters = Effect.fn(function* (name: string) {
-        return yield* rds.describeDBParameters
-          .pages({ DBParameterGroupName: name })
-          .pipe(
-            Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) => page.Parameters ?? []),
-            ),
-          );
+        return yield* rds.describeDBParameters.pages({ DBParameterGroupName: name }).pipe(
+          Stream.runCollect,
+          Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.Parameters ?? [])),
+        );
       });
 
       // The subset the user has overridden (Source `user`) — used to compute
@@ -195,9 +183,7 @@ export const DBParameterGroupProvider = () =>
           .pages({ DBParameterGroupName: name, Source: "user" })
           .pipe(
             Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) => page.Parameters ?? []),
-            ),
+            Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.Parameters ?? [])),
           );
       });
 
@@ -220,27 +206,19 @@ export const DBParameterGroupProvider = () =>
         diff: Effect.fn(function* ({ id, olds, news, output }) {
           if (!isResolved(news)) return undefined;
           if (
-            (yield* toName(id, olds ?? ({} as DBParameterGroupProps))) !==
-            (yield* toName(id, news))
+            (yield* toName(id, olds ?? ({} as DBParameterGroupProps))) !== (yield* toName(id, news))
           ) {
             return { action: "replace" } as const;
           }
-          if (
-            olds?.family !== news.family ||
-            olds?.description !== news.description
-          ) {
+          if (olds?.family !== news.family || olds?.description !== news.description) {
             return { action: "replace" } as const;
           }
           if (output !== undefined) {
             const group = yield* readGroup(output.dbParameterGroupName);
             if (!group) return { action: "update", stables: [] } as const;
             const desired = news.parameters ?? {};
-            const parameters = yield* readParameters(
-              output.dbParameterGroupName,
-            ).pipe(
-              Effect.catchTag("DBParameterGroupNotFoundFault", () =>
-                Effect.succeed(undefined),
-              ),
+            const parameters = yield* readParameters(output.dbParameterGroupName).pipe(
+              Effect.catchTag("DBParameterGroupNotFoundFault", () => Effect.succeed(undefined)),
             );
             if (parameters === undefined) {
               return { action: "update", stables: [] } as const;
@@ -252,10 +230,7 @@ export const DBParameterGroupProvider = () =>
             };
             if (
               !deepEqual(desired, observed) ||
-              !deepEqual(
-                desiredTags,
-                yield* readTags(group.DBParameterGroupArn),
-              )
+              !deepEqual(desiredTags, yield* readTags(group.DBParameterGroupArn))
             ) {
               return { action: "update" } as const;
             }
@@ -294,10 +269,7 @@ export const DBParameterGroupProvider = () =>
         read: Effect.fn(function* ({ id, olds, output }) {
           const name =
             output?.dbParameterGroupName ??
-            (yield* toName(
-              id,
-              olds ?? ({ family: "" } as DBParameterGroupProps),
-            ));
+            (yield* toName(id, olds ?? ({ family: "" } as DBParameterGroupProps)));
           const group = yield* readGroup(name);
           if (!group?.DBParameterGroupName) {
             return undefined;
@@ -316,8 +288,7 @@ export const DBParameterGroupProvider = () =>
           };
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const name =
-            output?.dbParameterGroupName ?? (yield* toName(id, news));
+          const name = output?.dbParameterGroupName ?? (yield* toName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
@@ -332,24 +303,16 @@ export const DBParameterGroupProvider = () =>
               .createDBParameterGroup({
                 DBParameterGroupName: name,
                 DBParameterGroupFamily: news.family,
-                Description:
-                  news.description ?? `Alchemy parameter group ${name}`,
+                Description: news.description ?? `Alchemy parameter group ${name}`,
                 Tags: Object.entries(desiredTags).map(([Key, Value]) => ({
                   Key,
                   Value,
                 })),
               })
-              .pipe(
-                Effect.catchTag(
-                  "DBParameterGroupAlreadyExistsFault",
-                  () => Effect.void,
-                ),
-              );
+              .pipe(Effect.catchTag("DBParameterGroupAlreadyExistsFault", () => Effect.void));
             observed = yield* readGroup(name);
             if (!observed?.DBParameterGroupName) {
-              return yield* Effect.fail(
-                new Error(`Failed to create DB parameter group '${name}'`),
-              );
+              return yield* Effect.fail(new Error(`Failed to create DB parameter group '${name}'`));
             }
           }
 
@@ -358,28 +321,23 @@ export const DBParameterGroupProvider = () =>
           {
             const byName = new Map(
               (yield* readParameters(name)).flatMap((p) =>
-                p.ParameterName !== undefined
-                  ? [[p.ParameterName, p] as const]
-                  : [],
+                p.ParameterName !== undefined ? [[p.ParameterName, p] as const] : [],
               ),
             );
 
-            const toModify: rds.Parameter[] = Object.entries(
-              desiredParameters,
-            ).flatMap(([ParameterName, ParameterValue]) => {
-              const current = byName.get(ParameterName);
-              if (current?.ParameterValue === ParameterValue) return [];
-              return [
-                {
-                  ParameterName,
-                  ParameterValue,
-                  ApplyMethod:
-                    current?.ApplyType === "static"
-                      ? "pending-reboot"
-                      : "immediate",
-                },
-              ];
-            });
+            const toModify: rds.Parameter[] = Object.entries(desiredParameters).flatMap(
+              ([ParameterName, ParameterValue]) => {
+                const current = byName.get(ParameterName);
+                if (current?.ParameterValue === ParameterValue) return [];
+                return [
+                  {
+                    ParameterName,
+                    ParameterValue,
+                    ApplyMethod: current?.ApplyType === "static" ? "pending-reboot" : "immediate",
+                  },
+                ];
+              },
+            );
             if (toModify.length > 0) {
               // The API caps a single call at 20 parameters.
               for (let i = 0; i < toModify.length; i += 20) {
@@ -394,8 +352,7 @@ export const DBParameterGroupProvider = () =>
 
             // Reset user-overridden parameters that were removed from props.
             const toReset = (yield* readUserParameters(name)).flatMap((p) =>
-              p.ParameterName !== undefined &&
-              !(p.ParameterName in desiredParameters)
+              p.ParameterName !== undefined && !(p.ParameterName in desiredParameters)
                 ? [
                     {
                       ParameterName: p.ParameterName,
@@ -443,10 +400,7 @@ export const DBParameterGroupProvider = () =>
           // for a pending observation, never repeat accepted mutations here.
           const parameters = yield* readParameters(name).pipe(
             Effect.flatMap((parameters) => {
-              const observed = toManagedParameterRecord(
-                parameters,
-                desiredParameters,
-              );
+              const observed = toManagedParameterRecord(parameters, desiredParameters);
               return deepEqual(desiredParameters, observed)
                 ? Effect.succeed(observed)
                 : Effect.fail(new DBParameterGroupNotSettled({ name }));
@@ -472,12 +426,7 @@ export const DBParameterGroupProvider = () =>
             .deleteDBParameterGroup({
               DBParameterGroupName: output.dbParameterGroupName,
             })
-            .pipe(
-              Effect.catchTag(
-                "DBParameterGroupNotFoundFault",
-                () => Effect.void,
-              ),
-            );
+            .pipe(Effect.catchTag("DBParameterGroupNotFoundFault", () => Effect.void));
         }),
       };
     }),

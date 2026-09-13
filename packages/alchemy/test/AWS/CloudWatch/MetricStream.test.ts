@@ -55,9 +55,7 @@ test.provider.skipIf(!process.env.AWS_TEST_METRICSTREAM)(
       // fails the test instead of silently orphaning the resource.
       const emptyBucket = Effect.gen(function* () {
         const listed = yield* s3.listObjectsV2({ Bucket: bucketName });
-        const objects = (listed.Contents ?? []).flatMap((o) =>
-          o.Key ? [{ Key: o.Key }] : [],
-        );
+        const objects = (listed.Contents ?? []).flatMap((o) => (o.Key ? [{ Key: o.Key }] : []));
         if (objects.length > 0) {
           yield* s3.deleteObjects({
             Bucket: bucketName,
@@ -139,9 +137,7 @@ test.provider.skipIf(!process.env.AWS_TEST_METRICSTREAM)(
         // first so it has the longest time to propagate before use.
         const streamRole = yield* iam.createRole({
           RoleName: streamRoleName,
-          AssumeRolePolicyDocument: trustPolicy(
-            "streams.metrics.cloudwatch.amazonaws.com",
-          ),
+          AssumeRolePolicyDocument: trustPolicy("streams.metrics.cloudwatch.amazonaws.com"),
         });
         const streamRoleArn = streamRole.Role.Arn;
 
@@ -187,45 +183,32 @@ test.provider.skipIf(!process.env.AWS_TEST_METRICSTREAM)(
           })
           .pipe(
             Effect.catchTag("ResourceInUseException", () =>
-              firehose
-                .describeDeliveryStream({ DeliveryStreamName: firehoseName })
-                .pipe(
-                  Effect.map((d) => ({
-                    DeliveryStreamARN:
-                      d.DeliveryStreamDescription.DeliveryStreamARN,
-                  })),
-                ),
+              firehose.describeDeliveryStream({ DeliveryStreamName: firehoseName }).pipe(
+                Effect.map((d) => ({
+                  DeliveryStreamARN: d.DeliveryStreamDescription.DeliveryStreamARN,
+                })),
+              ),
             ),
             Effect.retry({
               while: (e) => e._tag === "InvalidArgumentException",
-              schedule: Schedule.max([
-                Schedule.spaced("5 seconds"),
-                Schedule.recurs(8),
-              ]),
+              schedule: Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(8)]),
             }),
           );
 
         const firehoseArn = created.DeliveryStreamARN!;
 
         // Wait for the Firehose to become ACTIVE before CloudWatch will accept it.
-        yield* firehose
-          .describeDeliveryStream({ DeliveryStreamName: firehoseName })
-          .pipe(
-            Effect.map((d) => d.DeliveryStreamDescription.DeliveryStreamStatus),
-            Effect.tap((status) =>
-              status === "ACTIVE"
-                ? Effect.void
-                : Effect.fail("not-active" as const),
-            ),
-            Effect.retry({
-              while: (e) => e === "not-active",
-              schedule: Schedule.max([
-                Schedule.spaced("10 seconds"),
-                Schedule.recurs(10),
-              ]),
-            }),
-            Effect.catch(() => Effect.void),
-          );
+        yield* firehose.describeDeliveryStream({ DeliveryStreamName: firehoseName }).pipe(
+          Effect.map((d) => d.DeliveryStreamDescription.DeliveryStreamStatus),
+          Effect.tap((status) =>
+            status === "ACTIVE" ? Effect.void : Effect.fail("not-active" as const),
+          ),
+          Effect.retry({
+            while: (e) => e === "not-active",
+            schedule: Schedule.max([Schedule.spaced("10 seconds"), Schedule.recurs(10)]),
+          }),
+          Effect.catch(() => Effect.void),
+        );
 
         yield* iam.putRolePolicy({
           RoleName: streamRoleName,
@@ -256,22 +239,16 @@ test.provider.skipIf(!process.env.AWS_TEST_METRICSTREAM)(
         const provider = yield* Provider.findProvider(MetricStream);
         const all = yield* provider.list();
 
-        expect(
-          all.some((ms) => ms.metricStreamName === deployed.metricStreamName),
-        ).toBe(true);
+        expect(all.some((ms) => ms.metricStreamName === deployed.metricStreamName)).toBe(true);
 
         yield* stack.destroy();
 
         // Out-of-band assert-gone: getMetricStream returns the typed
         // ResourceNotFoundException once the stream is deleted.
-        const gone = yield* cloudwatch
-          .getMetricStream({ Name: deployed.metricStreamName })
-          .pipe(
-            Effect.map(() => false),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(true),
-            ),
-          );
+        const gone = yield* cloudwatch.getMetricStream({ Name: deployed.metricStreamName }).pipe(
+          Effect.map(() => false),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
+        );
         expect(gone).toBe(true);
       }).pipe(Effect.ensuring(cleanup.pipe(Effect.orDie)));
     }),

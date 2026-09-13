@@ -1,10 +1,7 @@
 import * as Effect from "effect/Effect";
 import { pipe } from "effect/Function";
 import * as Redacted from "effect/Redacted";
-import type {
-  ReplacedResourceState,
-  ResourceState,
-} from "../../State/ResourceState.ts";
+import type { ReplacedResourceState, ResourceState } from "../../State/ResourceState.ts";
 import { encodeState } from "../../State/StateEncoding.ts";
 import * as Secret from "../SecretsStore/index.ts";
 import { DurableObject } from "../Workers/DurableObject.ts";
@@ -22,24 +19,17 @@ export default class Store extends DurableObject<Store>()(
     const storage = state.storage;
 
     return Effect.gen(function* () {
-      const keyHex = yield* encryptionSecret
-        .get()
-        .pipe(Effect.map(Redacted.value), Effect.orDie);
+      const keyHex = yield* encryptionSecret.get().pipe(Effect.map(Redacted.value), Effect.orDie);
       const cryptoKey = yield* Effect.tryPromise(() =>
-        crypto.subtle.importKey(
-          "raw",
-          Buffer.from(keyHex, "hex"),
-          { name: "AES-CTR" },
-          false,
-          ["encrypt", "decrypt"],
-        ),
+        crypto.subtle.importKey("raw", Buffer.from(keyHex, "hex"), { name: "AES-CTR" }, false, [
+          "encrypt",
+          "decrypt",
+        ]),
       ).pipe(Effect.orDie);
 
       const encryptValue = (value: unknown) =>
         Effect.tryPromise(async () => {
-          const plaintext = new TextEncoder().encode(
-            JSON.stringify(encodeState(value)),
-          );
+          const plaintext = new TextEncoder().encode(JSON.stringify(encodeState(value)));
           const counter = crypto.getRandomValues(allocBytes(NONCE_BYTES));
           const ct = new Uint8Array(
             await crypto.subtle.encrypt(
@@ -68,10 +58,7 @@ export default class Store extends DurableObject<Store>()(
             // We return undefined here because in 2.0.0-beta.45, we rotated encryption keys unnecessarily.
             // So, we catch a decryption error here and return undefined instead.
             // The engine should reconcile, hopefully, but users may lose some data
-            console.error(
-              "Error decrypting entry. Returning undefined instead.",
-              error,
-            );
+            console.error("Error decrypting entry. Returning undefined instead.", error);
             return undefined;
           }
           return JSON.parse(new TextDecoder().decode(pt)) as ResourceState;
@@ -160,20 +147,10 @@ export default class Store extends DurableObject<Store>()(
          * (Stack DO only) Persist a resource. Returns the stored
          * value unchanged.
          */
-        set: ({
-          stage,
-          fqn,
-          value,
-        }: {
-          stage: string;
-          fqn: string;
-          value: ResourceState;
-        }) =>
+        set: ({ stage, fqn, value }: { stage: string; fqn: string; value: ResourceState }) =>
           encryptValue(value).pipe(
             Effect.flatMap((encrypted) =>
-              storage
-                .put<string>(resourceKey(stage, fqn), encrypted)
-                .pipe(Effect.asVoid),
+              storage.put<string>(resourceKey(stage, fqn), encrypted).pipe(Effect.asVoid),
             ),
             Effect.map(() => value),
           ),
@@ -223,9 +200,7 @@ export default class Store extends DurableObject<Store>()(
         setOutput: ({ stage, value }: { stage: string; value: any }) =>
           encryptValue(value).pipe(
             Effect.flatMap((encrypted) =>
-              storage
-                .put<string>(stackOutputKey(stage), encrypted)
-                .pipe(Effect.asVoid),
+              storage.put<string>(stackOutputKey(stage), encrypted).pipe(Effect.asVoid),
             ),
             Effect.map(() => value),
           ),
@@ -238,16 +213,10 @@ export default class Store extends DurableObject<Store>()(
         getReplacedResources: ({ stage }: { stage: string }) =>
           pipe(
             storage.list<string>({ prefix: stagePrefix(stage) }),
-            Effect.map((entries) =>
-              [...entries.values()].filter((e): e is string => !!e),
-            ),
-            Effect.flatMap(
-              Effect.forEach(decryptEntry, { concurrency: "unbounded" }),
-            ),
+            Effect.map((entries) => [...entries.values()].filter((e): e is string => !!e)),
+            Effect.flatMap(Effect.forEach(decryptEntry, { concurrency: "unbounded" })),
             Effect.map((decoded) =>
-              decoded.filter(
-                (d): d is ReplacedResourceState => d?.status === "replaced",
-              ),
+              decoded.filter((d): d is ReplacedResourceState => d?.status === "replaced"),
             ),
           ),
       };
@@ -278,8 +247,7 @@ const STACK_INDEX_PREFIX = "s:";
 const NONCE_BYTES = 16;
 
 /** Build the resource key inside a *stack DO*. */
-const resourceKey = (stage: string, fqn: string) =>
-  `${RESOURCE_PREFIX}${stage}${SEP}${fqn}`;
+const resourceKey = (stage: string, fqn: string) => `${RESOURCE_PREFIX}${stage}${SEP}${fqn}`;
 
 /** Prefix matching every resource key inside a specific stage. */
 const stagePrefix = (stage: string) => `${RESOURCE_PREFIX}${stage}${SEP}`;
@@ -291,9 +259,7 @@ const stackOutputKey = (stage: string) => `${STACK_OUTPUT_PREFIX}${stage}`;
  * Parse a resource key back into its (stage, fqn) tuple. Returns
  * undefined for keys that do not match the expected shape.
  */
-const parseResourceKey = (
-  key: string,
-): { stage: string; fqn: string } | undefined => {
+const parseResourceKey = (key: string): { stage: string; fqn: string } | undefined => {
   if (!key.startsWith(RESOURCE_PREFIX)) return undefined;
   const rest = key.slice(RESOURCE_PREFIX.length);
   const sep = rest.indexOf(SEP);
@@ -306,5 +272,4 @@ const parseResourceKey = (
  * the resulting buffer satisfies Web Crypto's `BufferSource` type
  * constraint under strict DOM typings.
  */
-const allocBytes = (size: number): Uint8Array<ArrayBuffer> =>
-  new Uint8Array(new ArrayBuffer(size));
+const allocBytes = (size: number): Uint8Array<ArrayBuffer> => new Uint8Array(new ArrayBuffer(size));

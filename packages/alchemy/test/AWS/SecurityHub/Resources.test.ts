@@ -189,9 +189,7 @@ test.provider(
       const updatedInsight = yield* securityhub.getInsights({
         InsightArns: [created.insightArn],
       });
-      expect(updatedInsight.Insights?.[0]?.GroupByAttribute).toBe(
-        "SeverityLabel",
-      );
+      expect(updatedInsight.Insights?.[0]?.GroupByAttribute).toBe("SeverityLabel");
 
       const updatedRule = yield* securityhub.batchGetAutomationRules({
         AutomationRulesArns: [created.ruleArn],
@@ -207,10 +205,7 @@ test.provider(
         FindingAggregatorArn: created.aggregatorArn,
       });
       // The API returns Regions in normalized order.
-      expect([...(updatedAggregator.Regions ?? [])].sort()).toEqual([
-        "eu-central-1",
-        "eu-west-1",
-      ]);
+      expect([...(updatedAggregator.Regions ?? [])].sort()).toEqual(["eu-central-1", "eu-west-1"]);
 
       // Destroy — every resource is removed and Security Hub is disabled
       // (which also proves delete-idempotence via the InvalidAccess catches:

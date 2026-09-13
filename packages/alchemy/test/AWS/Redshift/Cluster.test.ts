@@ -19,9 +19,7 @@ test.provider(
   () =>
     Effect.gen(function* () {
       const error = yield* Effect.flip(
-        redshift.describeClusters({
-          ClusterIdentifier: "alchemy-nonexistent-redshift-probe",
-        }),
+        redshift.describeClusters({ ClusterIdentifier: "alchemy-nonexistent-redshift-probe" }),
       );
       expect(error._tag).toBe("ClusterNotFoundFault");
     }),
@@ -43,9 +41,7 @@ const defaultSubnets = Effect.gen(function* () {
     .sort()
     .slice(0, 2);
   if (subnetIds.length < 2) {
-    return yield* Effect.die(
-      new Error("default VPC has fewer than 2 default-for-az subnets"),
-    );
+    return yield* Effect.die(new Error("default VPC has fewer than 2 default-for-az subnets"));
   }
   return subnetIds as SubnetId[];
 });
@@ -55,26 +51,17 @@ const defaultSubnets = Effect.gen(function* () {
 // waiting for it would push the test into its timeout.
 const assertClusterDeleting = (identifier: string) =>
   Effect.gen(function* () {
-    const status = yield* redshift
-      .describeClusters({ ClusterIdentifier: identifier })
-      .pipe(
-        Effect.map((r) => r.Clusters?.[0]?.ClusterStatus ?? "gone"),
-        Effect.catchTag("ClusterNotFoundFault", () =>
-          Effect.succeed("gone" as const),
-        ),
-      );
+    const status = yield* redshift.describeClusters({ ClusterIdentifier: identifier }).pipe(
+      Effect.map((r) => r.Clusters?.[0]?.ClusterStatus ?? "gone"),
+      Effect.catchTag("ClusterNotFoundFault", () => Effect.succeed("gone" as const)),
+    );
     if (status !== "gone" && status !== "deleting") {
       return yield* Effect.fail(
         new Error(`cluster '${identifier}' still exists (status: ${status})`),
       );
     }
   }).pipe(
-    Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("10 seconds"),
-        Schedule.recurs(18),
-      ]),
-    }),
+    Effect.retry({ schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(18)]) }),
   );
 
 // Provisioned Redshift clusters take ~5-10 minutes to reach `available` and
@@ -130,9 +117,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       expect(observed?.NodeType).toBe("ra3.large");
       expect(observed?.Encrypted).toBe(true);
       expect(
-        observed?.Tags?.some(
-          (t) => t.Key === "fixture" && t.Value === "redshift-cluster",
-        ),
+        observed?.Tags?.some((t) => t.Key === "fixture" && t.Value === "redshift-cluster"),
       ).toBe(true);
 
       // Destroy immediately — clusters bill while they exist — and verify

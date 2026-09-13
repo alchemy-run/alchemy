@@ -9,29 +9,17 @@ import type { Contract } from "./fixtures/psl/generated/contract.js";
 import { schemas } from "./fixtures/psl/generated/schemas.ts";
 
 type Equal<A, B> =
-  (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
-    ? true
-    : false;
+  (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 type Assert<T extends true> = T;
 const authored = makeSchemas(contract);
 export type AuthoredRow = Assert<
-  Equal<
-    typeof authored.public.User.Type,
-    { id: number; email: string; name: string | null }
-  >
+  Equal<typeof authored.public.User.Type, { id: number; email: string; name: string | null }>
 >;
-export type GeneratedId = Assert<
-  Equal<typeof schemas.public.User.Type.id, number>
->;
-export type GeneratedName = Assert<
-  Equal<typeof schemas.public.User.Type.name, string | null>
->;
+export type GeneratedId = Assert<Equal<typeof schemas.public.User.Type.id, number>>;
+export type GeneratedName = Assert<Equal<typeof schemas.public.User.Type.name, string | null>>;
 
-export function inferredChannels<E, R>(
-  connection: Effect.Effect<Redacted.Redacted<string>, E, R>,
-) {
-  const result: Effect.Effect<PostgresDatabase<Contract, E, R>> =
-    makeDatabase(connection);
+export function inferredChannels<E, R>(connection: Effect.Effect<Redacted.Redacted<string>, E, R>) {
+  const result: Effect.Effect<PostgresDatabase<Contract, E, R>> = makeDatabase(connection);
   return result;
 }
 

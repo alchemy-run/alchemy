@@ -88,9 +88,7 @@ test.provider(
       const docker = yield* Docker.Docker;
       const gone = yield* docker.service.inspect(service.id).pipe(
         Effect.map(() => false),
-        Effect.catchReason("PlatformError", "NotFound", () =>
-          Effect.succeed(true),
-        ),
+        Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(true)),
       );
       expect(gone).toBe(true);
 
@@ -98,9 +96,7 @@ test.provider(
       // cleaned up with the service.
       const imageGone = yield* docker.image.inspect(imageRef).pipe(
         Effect.map(() => false),
-        Effect.catchReason("PlatformError", "NotFound", () =>
-          Effect.succeed(true),
-        ),
+        Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(true)),
       );
       expect(imageGone).toBe(true);
     }),

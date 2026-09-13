@@ -30,10 +30,7 @@ test.provider(
           ContactId: `arn:aws:ssm-contacts:${region}:${accountId}:contact/alchemy-nonexistent-probe`,
         }),
       );
-      expect([
-        "ResourceNotFoundException",
-        "IncidentManagerNotOnboarded",
-      ]).toContain(error._tag);
+      expect(["ResourceNotFoundException", "IncidentManagerNotOnboarded"]).toContain(error._tag);
     }),
   { tags: ["provider:aws", "provider:aws:ssmcontacts", "live"] },
 );
@@ -63,10 +60,7 @@ const ensureReplicationSet = Effect.gen(function* () {
   const status = yield* incidents.getReplicationSet({ arn }).pipe(
     Effect.map((r) => r.replicationSet.status),
     Effect.repeat({
-      schedule: Schedule.max([
-        Schedule.fixed("5 seconds"),
-        Schedule.recurs(60),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(60)]),
       until: (status) => status !== "CREATING" && status !== "UPDATING",
     }),
   );
@@ -144,28 +138,22 @@ test.provider.skipIf(!process.env.AWS_TEST_INCIDENT_MANAGER)(
       expect(deployed.rotation.rotationArn).toContain(":rotation/");
 
       // Out-of-band verification via distilled.
-      const liveContact = yield* contacts.getContact({
-        ContactId: deployed.oncall.contactArn,
-      });
+      const liveContact = yield* contacts.getContact({ ContactId: deployed.oncall.contactArn });
       expect(liveContact.Alias).toBe(deployed.oncall.alias);
       expect(liveContact.DisplayName).toBe("Primary On-Call");
       expect(liveContact.Plan.Stages).toHaveLength(1);
       const contactTags = yield* contacts.listTagsForResource({
         ResourceARN: deployed.oncall.contactArn,
       });
-      expect(
-        contactTags.Tags?.some(
-          (t) => t.Key === "alchemy::id" && t.Value === "Oncall",
-        ),
-      ).toBe(true);
+      expect(contactTags.Tags?.some((t) => t.Key === "alchemy::id" && t.Value === "Oncall")).toBe(
+        true,
+      );
 
       const liveChannel = yield* contacts.getContactChannel({
         ContactChannelId: deployed.email.contactChannelArn,
       });
       expect(liveChannel.Type).toBe("EMAIL");
-      expect(liveChannel.DeliveryAddress.SimpleAddress).toBe(
-        "oncall@example.com",
-      );
+      expect(liveChannel.DeliveryAddress.SimpleAddress).toBe("oncall@example.com");
 
       const liveRotation = yield* contacts.getRotation({
         RotationId: deployed.rotation.rotationArn,
@@ -236,17 +224,13 @@ test.provider.skipIf(!process.env.AWS_TEST_INCIDENT_MANAGER)(
         }),
       );
 
-      const updatedContact = yield* contacts.getContact({
-        ContactId: deployed.oncall.contactArn,
-      });
+      const updatedContact = yield* contacts.getContact({ ContactId: deployed.oncall.contactArn });
       expect(updatedContact.DisplayName).toBe("Secondary On-Call");
       expect(updatedContact.Plan.Stages?.[0]?.DurationInMinutes).toBe(10);
       const updatedChannel = yield* contacts.getContactChannel({
         ContactChannelId: deployed.email.contactChannelArn,
       });
-      expect(updatedChannel.DeliveryAddress.SimpleAddress).toBe(
-        "standby@example.com",
-      );
+      expect(updatedChannel.DeliveryAddress.SimpleAddress).toBe("standby@example.com");
       const updatedRotation = yield* contacts.getRotation({
         RotationId: deployed.rotation.rotationArn,
       });
@@ -254,9 +238,7 @@ test.provider.skipIf(!process.env.AWS_TEST_INCIDENT_MANAGER)(
       const updatedTags = yield* contacts.listTagsForResource({
         ResourceARN: deployed.oncall.contactArn,
       });
-      expect(
-        updatedTags.Tags?.some((t) => t.Key === "env" && t.Value === "test"),
-      ).toBe(true);
+      expect(updatedTags.Tags?.some((t) => t.Key === "env" && t.Value === "test")).toBe(true);
       const updatedPolicy = yield* contacts.getContactPolicy({
         ContactArn: deployed.oncall.contactArn,
       });
@@ -275,12 +257,7 @@ test.provider.skipIf(!process.env.AWS_TEST_INCIDENT_MANAGER)(
     }),
   // ensureReplicationSet may onboard Incident Manager (~1-2 min) on first run.
   {
-    tags: [
-      "provider:aws",
-      "provider:aws:ssmcontacts",
-      "provider:aws:ssmincidents",
-      "live",
-    ],
+    tags: ["provider:aws", "provider:aws:ssmcontacts", "provider:aws:ssmincidents", "live"],
     timeout: 600_000,
   },
 );

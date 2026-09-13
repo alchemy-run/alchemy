@@ -1,10 +1,6 @@
 import type * as Context from "effect/Context";
 import type * as vite from "vite";
-import type {
-  BindingHooks,
-  RuntimeServices,
-  RuntimeWorker,
-} from "../core/index.ts";
+import type { BindingHooks, RuntimeServices, RuntimeWorker } from "../core/index.ts";
 import type { BasePluginOptions } from "../rolldown/options.ts";
 import {
   additionalModulesPlugin,
@@ -42,10 +38,7 @@ export interface CloudflareVitePluginDevOptions {
 export interface CloudflareVitePluginOptions<
   B extends BindingHooks = BindingHooks,
 > extends BasePluginOptions {
-  worker?: Omit<
-    RuntimeWorker<B>,
-    "compatibilityDate" | "compatibilityFlags" | "modules"
-  >;
+  worker?: Omit<RuntimeWorker<B>, "compatibilityDate" | "compatibilityFlags" | "modules">;
   context?: Context.Context<RuntimeServices>;
   dev?: CloudflareVitePluginDevOptions;
 }
@@ -62,8 +55,7 @@ export const OFFICIAL_CLOUDFLARE_VITE_PLUGIN_NAME = "vite-plugin-cloudflare";
  * `name.startsWith("vite-plugin-cloudflare:")` check without colliding
  * with the official plugin's exact name.
  */
-export const ALCHEMY_CLOUDFLARE_VITE_PLUGIN_NAME =
-  "vite-plugin-cloudflare:alchemy";
+export const ALCHEMY_CLOUDFLARE_VITE_PLUGIN_NAME = "vite-plugin-cloudflare:alchemy";
 
 const officialCloudflareVitePluginPrefix = `${OFFICIAL_CLOUDFLARE_VITE_PLUGIN_NAME}:`;
 
@@ -100,10 +92,7 @@ export const disableOfficialCloudflareVitePlugins = (
       return;
     }
     const plugin = entry as vite.Plugin;
-    if (
-      typeof plugin.name !== "string" ||
-      !isOfficialCloudflareVitePlugin(plugin)
-    ) {
+    if (typeof plugin.name !== "string" || !isOfficialCloudflareVitePlugin(plugin)) {
       return;
     }
     disableOfficialCloudflareVitePlugin(plugin);
@@ -116,12 +105,7 @@ export const disableOfficialCloudflareVitePlugins = (
 const disableOfficialCloudflareVitePlugin = (plugin: vite.Plugin): void => {
   const record = plugin as unknown as Record<string, unknown>;
   for (const key of Object.keys(record)) {
-    if (
-      key === "name" ||
-      key === "enforce" ||
-      key === "apply" ||
-      key === "applyToEnvironment"
-    ) {
+    if (key === "name" || key === "enforce" || key === "apply" || key === "applyToEnvironment") {
       continue;
     }
     const value = record[key];

@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   type ApiConfigFile,
@@ -42,11 +37,7 @@ import {
   waitUntilGone,
 } from "./internal.ts";
 
-export type {
-  ApiConfigFile,
-  ApiConfigGrpcServiceDefinition,
-  ApiConfigOpenApiDocument,
-};
+export type { ApiConfigFile, ApiConfigGrpcServiceDefinition, ApiConfigOpenApiDocument };
 
 export type ApisConfigProps = {
   /**
@@ -172,11 +163,7 @@ export type ApisConfig = Resource<
  */
 export const ApisConfig = Resource<ApisConfig>("GCP.ApiGateway.ApisConfig");
 
-const toAttrs = (
-  config: apigateway.ApigatewayApiConfig,
-  project: string,
-  api?: string,
-) => {
+const toAttrs = (config: apigateway.ApigatewayApiConfig, project: string, api?: string) => {
   const parsed = parseName(config.name ?? "", "configs");
   // API Gateway reports names with the project number; keep the project-id
   // form the parent API is addressed by so names are stable and comparable.
@@ -185,9 +172,7 @@ const toAttrs = (
       ? api
       : parsed.parent.replace(/^projects\/\d+\//, `projects/${project}/`);
   const name =
-    config.name === undefined || config.name.length === 0
-      ? ""
-      : `${parent}/configs/${parsed.id}`;
+    config.name === undefined || config.name.length === 0 ? "" : `${parent}/configs/${parsed.id}`;
   return {
     name,
     apiConfigId: parsed.id,
@@ -211,10 +196,7 @@ const getByName = (name: string) =>
         .getProjectsLocationsApisConfigs({ name, view: "FULL" })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const documentsChanged = (
-  news: ApisConfigProps,
-  olds: ApisConfigProps | undefined,
-) =>
+const documentsChanged = (news: ApisConfigProps, olds: ApisConfigProps | undefined) =>
   (news.openapiDocuments !== undefined &&
     olds?.openapiDocuments !== undefined &&
     !sameJson(news.openapiDocuments, olds.openapiDocuments)) ||
@@ -227,30 +209,19 @@ const documentsChanged = (
 
 export const ApisConfigProvider = () =>
   Provider.succeed(ApisConfig, {
-    stables: [
-      "name",
-      "apiConfigId",
-      "api",
-      "project",
-      "location",
-      "createTime",
-    ],
+    stables: ["name", "apiConfigId", "api", "project", "location", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
       const accountChanged =
-        (olds?.gatewayServiceAccount ?? output?.gatewayServiceAccount) !==
-          undefined &&
+        (olds?.gatewayServiceAccount ?? output?.gatewayServiceAccount) !== undefined &&
         (news.gatewayServiceAccount ?? "") !==
           (olds?.gatewayServiceAccount ?? output?.gatewayServiceAccount ?? "");
       return replaceOnIdentity({
         previousId: olds?.apiConfigId ?? output?.apiConfigId,
         nextId: news.apiConfigId ?? olds?.apiConfigId ?? output?.apiConfigId,
-        previousParent:
-          olds?.api !== undefined
-            ? expandApi(olds.api, env.project)
-            : output?.api,
+        previousParent: olds?.api !== undefined ? expandApi(olds.api, env.project) : output?.api,
         nextParent: expandApi(news.api, env.project),
         extra: documentsChanged(news, olds) || accountChanged,
       });
@@ -258,22 +229,13 @@ export const ApisConfigProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const apiConfigId = yield* toPhysicalId(
-        id,
-        olds?.apiConfigId,
-        output?.apiConfigId,
-      );
-      const api =
-        olds?.api !== undefined
-          ? expandApi(olds.api, env.project)
-          : (output?.api ?? "");
+      const apiConfigId = yield* toPhysicalId(id, olds?.apiConfigId, output?.apiConfigId);
+      const api = olds?.api !== undefined ? expandApi(olds.api, env.project) : (output?.api ?? "");
       const name = output?.name ?? (api ? resourceName(api, apiConfigId) : "");
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, api);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -289,24 +251,16 @@ export const ApisConfigProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const api = expandApi(news.api, env.project);
-      const apiConfigId = yield* toPhysicalId(
-        id,
-        news.apiConfigId,
-        output?.apiConfigId,
-      );
+      const apiConfigId = yield* toPhysicalId(id, news.apiConfigId, output?.apiConfigId);
       const name = output?.name ?? resourceName(api, apiConfigId);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
       };
       const displayName = news.displayName ?? apiConfigId;
-      const openapiDocuments = yield* encodeOpenApiDocuments(
-        news.openapiDocuments,
-      );
+      const openapiDocuments = yield* encodeOpenApiDocuments(news.openapiDocuments);
       const grpcServices = yield* encodeGrpcServices(news.grpcServices);
-      const managedServiceConfigs = yield* encodeFiles(
-        news.managedServiceConfigs,
-      );
+      const managedServiceConfigs = yield* encodeFiles(news.managedServiceConfigs);
 
       let current = yield* getByName(output?.name ?? name);
 
@@ -342,10 +296,7 @@ export const ApisConfigProvider = () =>
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
       const displayChanged = !sameText(current.displayName, displayName);
-      const mask = fieldMask([
-        labelsChanged && "labels",
-        displayChanged && "displayName",
-      ]);
+      const mask = fieldMask([labelsChanged && "labels", displayChanged && "displayName"]);
 
       if (mask.length > 0) {
         const operation = yield* apigateway.patchProjectsLocationsApisConfigs({
@@ -358,10 +309,7 @@ export const ApisConfigProvider = () =>
           },
         });
         yield* waitForOperation(operation);
-        current = yield* waitUntilExists(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
         if ((current.state ?? "").toUpperCase() === "FAILED") {
           return yield* new ResourceFailed({
             name: current.name ?? name,

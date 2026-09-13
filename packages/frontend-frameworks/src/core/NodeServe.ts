@@ -11,20 +11,11 @@ import * as NodePath from "node:path";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import {
-  toOutputFile,
-  type BuildOutput,
-  type OutputFile,
-} from "./BuildOutput.ts";
+import { toOutputFile, type BuildOutput, type OutputFile } from "./BuildOutput.ts";
 import { DeployTargetError } from "./DeployTarget.ts";
 
 /** Node resolve conditions for server code (no `workerd`). */
-export const NODE_BUNDLE_CONDITIONS = [
-  "node",
-  "import",
-  "module",
-  "default",
-] as const;
+export const NODE_BUNDLE_CONDITIONS = ["node", "import", "module", "default"] as const;
 
 /** The file name the finishing pass writes next to the framework server entry. */
 export const NODE_SERVE_ENTRY_FILE_NAME = "serve-node.mjs";
@@ -88,10 +79,7 @@ export interface NodeServeEntryOptions {
  * file via `import.meta.url`. Falls back to an absolute JSON string when
  * the two paths do not share a relative root (e.g. different Windows drives).
  */
-export const relativeClientDirExpression = (
-  fromFile: string,
-  clientDirectory: string,
-): string => {
+export const relativeClientDirExpression = (fromFile: string, clientDirectory: string): string => {
   const fromDir = NodePath.posix.dirname(fromFile.replaceAll("\\", "/"));
   const client = clientDirectory.replaceAll("\\", "/");
   let relative = NodePath.posix.relative(fromDir, client);
@@ -111,16 +99,11 @@ export const relativeClientDirExpression = (
 };
 
 /** Pin `serveModule` as `serverModules[0]`, keeping the rest of the bundle. */
-export const pinNodeServeModule = (
-  output: BuildOutput,
-  serveModule: OutputFile,
-): BuildOutput => ({
+export const pinNodeServeModule = (output: BuildOutput, serveModule: OutputFile): BuildOutput => ({
   ...output,
   serverModules: [
     serveModule,
-    ...(output.serverModules ?? []).filter(
-      (module_) => module_.name !== serveModule.name,
-    ),
+    ...(output.serverModules ?? []).filter((module_) => module_.name !== serveModule.name),
   ],
 });
 
@@ -129,9 +112,7 @@ export const pinNodeServeModule = (
  * then the framework handler. No package imports other than `node:*` and
  * the handler module the caller passes in.
  */
-export const makeNodeServeEntrySource = (
-  options: NodeServeEntryOptions,
-): string => {
+export const makeNodeServeEntrySource = (options: NodeServeEntryOptions): string => {
   const port = options.defaultPort ?? NODE_DEFAULT_PORT;
   const htmlHandling = options.htmlHandling ?? "none";
   const notFoundHandling = options.notFoundHandling ?? "none";
@@ -419,11 +400,7 @@ export interface WriteNodeServeEntryOptions extends NodeServeEntryOptions {
 /** Write the serve entry to disk and pin it as `serverModules[0]`. */
 export const writeNodeServeEntry = (
   options: WriteNodeServeEntryOptions,
-): Effect.Effect<
-  BuildOutput,
-  DeployTargetError,
-  FileSystem.FileSystem | Path.Path
-> =>
+): Effect.Effect<BuildOutput, DeployTargetError, FileSystem.FileSystem | Path.Path> =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;

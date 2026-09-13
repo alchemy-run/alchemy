@@ -9,10 +9,7 @@ import { poll } from "@/Util/poll.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Reading Flagship feature flags inside an Action via `ReadFlagsLocal` — the
 // local (current-credentials) implementation of the `ReadFlags` binding. It
@@ -59,13 +56,8 @@ test.provider(
                     untyped: flags.get(key),
                   }),
                   predicate: (read) =>
-                    read.enabled === true &&
-                    read.details.value === true &&
-                    read.untyped === true,
-                  schedule: Schedule.max([
-                    Schedule.spaced("3 seconds"),
-                    Schedule.recurs(20),
-                  ]),
+                    read.enabled === true && read.details.value === true && read.untyped === true,
+                  schedule: Schedule.max([Schedule.spaced("3 seconds"), Schedule.recurs(20)]),
                 });
                 // A boolean flag read as a string falls back to the default.
                 const asString = yield* flags.getStringValue(key, "fallback");
@@ -88,8 +80,5 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  {
-    tags: ["provider:cloudflare", "provider:cloudflare:flagship", "live"],
-    timeout: 120_000,
-  },
+  { tags: ["provider:cloudflare", "provider:cloudflare:flagship", "live"], timeout: 120_000 },
 );

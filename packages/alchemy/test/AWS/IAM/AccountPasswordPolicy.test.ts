@@ -61,9 +61,7 @@ test.provider(
 
       yield* stack.destroy();
 
-      const afterDestroy = yield* IAM.getAccountPasswordPolicy({}).pipe(
-        Effect.option,
-      );
+      const afterDestroy = yield* IAM.getAccountPasswordPolicy({}).pipe(Effect.option);
       expect(afterDestroy._tag).toBe("None");
     }),
   { tags: ["provider:aws", "provider:aws:iam", "live"] },

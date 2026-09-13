@@ -16,9 +16,7 @@ test.provider.skipIf(!!process.env.FAST)(
 
       const plan = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* AWS.ApiGateway.UsagePlan("AgUsagePlan", {
-            description: "test plan",
-          });
+          return yield* AWS.ApiGateway.UsagePlan("AgUsagePlan", { description: "test plan" });
         }),
       );
 

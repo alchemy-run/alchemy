@@ -9,9 +9,7 @@ import * as Stream from "effect/Stream";
 import * as AWS from "@/AWS";
 import * as Test from "@/Test/Alchemy";
 import * as Core from "@/Test/Core";
-import MediaTailorTestFunctionLive, {
-  MediaTailorTestFunction,
-} from "./handler";
+import MediaTailorTestFunctionLive, { MediaTailorTestFunction } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -36,19 +34,14 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("1 second"),
-        Schedule.recurs(8),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(8)]),
     }),
   );
 
@@ -59,25 +52,20 @@ const untilAuthorized = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
     Effect.repeat({
       schedule: Schedule.spaced("3 seconds"),
-      until: (body): boolean =>
-        (body as { error?: string }).error !== "AccessDeniedException",
+      until: (body): boolean => (body as { error?: string }).error !== "AccessDeniedException",
       times: 20,
     }),
   );
 
 const getJson = (path: string) =>
   untilAuthorized(
-    send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(
-      Effect.flatMap((r) => r.json),
-    ),
+    send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json)),
   );
 
 const postJson = (path: string, body: object) =>
   untilAuthorized(
     send(
-      HttpClientRequest.post(`${baseUrl}${path}`).pipe(
-        HttpClientRequest.bodyJsonUnsafe(body),
-      ),
+      HttpClientRequest.post(`${baseUrl}${path}`).pipe(HttpClientRequest.bodyJsonUnsafe(body)),
     ).pipe(Effect.flatMap((r) => r.json)),
   );
 
@@ -86,9 +74,7 @@ const postJson = (path: string, body: object) =>
 // `test.provider` so distilled has credentials; memoized across tests.
 const resolveConfig = Effect.gen(function* () {
   if (configName !== undefined) return;
-  const configs = yield* mediatailor.listPlaybackConfigurations
-    .items({})
-    .pipe(Stream.runCollect);
+  const configs = yield* mediatailor.listPlaybackConfigurations.items({}).pipe(Stream.runCollect);
   const config = Array.from(configs).find(
     (candidate) =>
       candidate.Tags?.["alchemy::id"] === "BindingsConfig" &&
@@ -101,20 +87,11 @@ const resolveConfig = Effect.gen(function* () {
 
 describe.sequential(
   "MediaTailor Bindings",
-  {
-    tags: [
-      "provider:aws",
-      "provider:aws:lambda",
-      "provider:aws:mediatailor",
-      "live",
-    ],
-  },
+  { tags: ["provider:aws", "provider:aws:lambda", "provider:aws:mediatailor", "live"] },
   () => {
     beforeAll(
       Effect.gen(function* () {
-        yield* Effect.logInfo(
-          "MediaTailor test setup: destroying previous resources",
-        );
+        yield* Effect.logInfo("MediaTailor test setup: destroying previous resources");
         yield* sharedStack.destroy();
 
         yield* Effect.logInfo("MediaTailor test setup: deploying fixture");
@@ -133,15 +110,10 @@ describe.sequential(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.retry({
-            schedule: Schedule.max([
-              Schedule.fixed("2 seconds"),
-              Schedule.recurs(75),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]),
           }),
         );
       }),
@@ -160,9 +132,11 @@ describe.sequential(
             yield* postJson("/prefetch/delete", { name: PREFETCH_NAME });
 
             // create
-            const created = (yield* postJson("/prefetch/create", {
-              name: PREFETCH_NAME,
-            })) as { arn?: string; error?: string; detail?: string };
+            const created = (yield* postJson("/prefetch/create", { name: PREFETCH_NAME })) as {
+              arn?: string;
+              error?: string;
+              detail?: string;
+            };
             expect(created.error, created.detail).toBeUndefined();
             expect(created.arn).toContain(":prefetchSchedule/");
 
@@ -174,9 +148,11 @@ describe.sequential(
             expect(fetched.Name).toBe(PREFETCH_NAME);
 
             // get through the binding
-            const got = (yield* getJson(
-              `/prefetch/get?name=${PREFETCH_NAME}`,
-            )) as { name?: string; error?: string; detail?: string };
+            const got = (yield* getJson(`/prefetch/get?name=${PREFETCH_NAME}`)) as {
+              name?: string;
+              error?: string;
+              detail?: string;
+            };
             expect(got.error, got.detail).toBeUndefined();
             expect(got.name).toBe(PREFETCH_NAME);
 
@@ -190,16 +166,19 @@ describe.sequential(
             expect(listed.names).toContain(PREFETCH_NAME);
 
             // delete through the binding
-            const deleted = (yield* postJson("/prefetch/delete", {
-              name: PREFETCH_NAME,
-            })) as { deleted: boolean; error?: string; detail?: string };
+            const deleted = (yield* postJson("/prefetch/delete", { name: PREFETCH_NAME })) as {
+              deleted: boolean;
+              error?: string;
+              detail?: string;
+            };
             expect(deleted.error, deleted.detail).toBeUndefined();
             expect(deleted.deleted).toBe(true);
 
             // get after delete surfaces the typed synthetic tag
-            const gone = (yield* getJson(
-              `/prefetch/get?name=${PREFETCH_NAME}`,
-            )) as { name?: string; error?: string };
+            const gone = (yield* getJson(`/prefetch/get?name=${PREFETCH_NAME}`)) as {
+              name?: string;
+              error?: string;
+            };
             expect(gone.error).toBe("PrefetchScheduleNotFound");
           }),
         { timeout: 120_000 },
@@ -217,9 +196,11 @@ describe.sequential(
             // playback-configuration ARN is rejected with the typed
             // BadRequestException (never AccessDenied — proving the
             // mediatailor:ListAlerts grant reached the API).
-            const body = (yield* getJson(
-              `/alerts?arn=${encodeURIComponent(configArn!)}`,
-            )) as { count: number; error?: string; detail?: string };
+            const body = (yield* getJson(`/alerts?arn=${encodeURIComponent(configArn!)}`)) as {
+              count: number;
+              error?: string;
+              detail?: string;
+            };
             expect(body.error, body.detail).toBe("BadRequestException");
           }),
         { timeout: 120_000 },
@@ -251,19 +232,17 @@ describe.sequential(
               name: "alchemy-nonexistent-mediatailor-channel",
             })) as { started: boolean; error?: string; detail?: string };
             expect(started.started).toBe(false);
-            expect(
-              ["ChannelNotFound", "BadRequestException"],
-              started.detail,
-            ).toContain(started.error);
+            expect(["ChannelNotFound", "BadRequestException"], started.detail).toContain(
+              started.error,
+            );
 
             const stopped = (yield* postJson("/channel/stop", {
               name: "alchemy-nonexistent-mediatailor-channel",
             })) as { stopped: boolean; error?: string; detail?: string };
             expect(stopped.stopped).toBe(false);
-            expect(
-              ["ChannelNotFound", "BadRequestException"],
-              stopped.detail,
-            ).toContain(stopped.error);
+            expect(["ChannelNotFound", "BadRequestException"], stopped.detail).toContain(
+              stopped.error,
+            );
           }),
         { timeout: 120_000 },
       );
@@ -280,10 +259,9 @@ describe.sequential(
               detail?: string;
             };
             expect(created.created).toBe(false);
-            expect(
-              ["ChannelNotFound", "BadRequestException"],
-              created.detail,
-            ).toContain(created.error);
+            expect(["ChannelNotFound", "BadRequestException"], created.detail).toContain(
+              created.error,
+            );
 
             const described = (yield* getJson("/program")) as {
               name?: string;
@@ -291,10 +269,9 @@ describe.sequential(
               detail?: string;
             };
             expect(described.name).toBeUndefined();
-            expect(
-              ["ProgramNotFound", "BadRequestException"],
-              described.detail,
-            ).toContain(described.error);
+            expect(["ProgramNotFound", "BadRequestException"], described.detail).toContain(
+              described.error,
+            );
 
             const updated = (yield* postJson("/program/update", {})) as {
               updated: boolean;
@@ -302,10 +279,9 @@ describe.sequential(
               detail?: string;
             };
             expect(updated.updated).toBe(false);
-            expect(
-              ["ProgramNotFound", "BadRequestException"],
-              updated.detail,
-            ).toContain(updated.error);
+            expect(["ProgramNotFound", "BadRequestException"], updated.detail).toContain(
+              updated.error,
+            );
 
             const deleted = (yield* postJson("/program/delete", {})) as {
               deleted: boolean;
@@ -313,10 +289,9 @@ describe.sequential(
               detail?: string;
             };
             expect(deleted.deleted).toBe(false);
-            expect(
-              ["ProgramNotFound", "BadRequestException"],
-              deleted.detail,
-            ).toContain(deleted.error);
+            expect(["ProgramNotFound", "BadRequestException"], deleted.detail).toContain(
+              deleted.error,
+            );
           }),
         { timeout: 120_000 },
       );

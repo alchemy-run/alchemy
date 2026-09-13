@@ -118,14 +118,10 @@ export const NetworkMonitoringProvider = Resource<NetworkMonitoringProvider>(
   "GCP.NetworkManagement.NetworkMonitoringProvider",
 );
 
-const resourceName = (
-  project: string,
-  location: string,
-  networkMonitoringProviderId: string,
-) => qualifiedName(project, location, COLLECTION, networkMonitoringProviderId);
+const resourceName = (project: string, location: string, networkMonitoringProviderId: string) =>
+  qualifiedName(project, location, COLLECTION, networkMonitoringProviderId);
 
-const typeOf = (value: string | undefined) =>
-  (value ?? DEFAULT_PROVIDER_TYPE).toUpperCase();
+const typeOf = (value: string | undefined) => (value ?? DEFAULT_PROVIDER_TYPE).toUpperCase();
 
 const ownedPrefix = (labels: Record<string, string>) => {
   const id = (labels[alchemyLabelKeys.id] ?? "x")
@@ -139,11 +135,7 @@ const GLOBAL_LOCATION = "global";
 
 const isOwnedId = (id: string) => id.toLowerCase().startsWith("alch");
 
-const toOwnedId = (
-  id: string,
-  explicit: string | undefined,
-  existing: string | undefined,
-) =>
+const toOwnedId = (id: string, explicit: string | undefined, existing: string | undefined) =>
   Effect.gen(function* () {
     if (explicit !== undefined) {
       return rfc1035(explicit, "nmp");
@@ -195,9 +187,7 @@ export const NetworkMonitoringProviderProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
-      const previousId =
-        olds?.networkMonitoringProviderId ??
-        output?.networkMonitoringProviderId;
+      const previousId = olds?.networkMonitoringProviderId ?? output?.networkMonitoringProviderId;
       const nextId = news.networkMonitoringProviderId
         ? rfc1035(news.networkMonitoringProviderId, "nmp")
         : previousId;
@@ -210,13 +200,9 @@ export const NetworkMonitoringProviderProvider = () =>
         GLOBAL_LOCATION,
       );
       const previousType = typeOf(olds?.providerType ?? output?.providerType);
-      const nextType = typeOf(
-        news.providerType ?? olds?.providerType ?? output?.providerType,
-      );
+      const nextType = typeOf(news.providerType ?? olds?.providerType ?? output?.providerType);
       if (
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation ||
         previousType !== nextType
       ) {
@@ -232,13 +218,8 @@ export const NetworkMonitoringProviderProvider = () =>
         olds?.networkMonitoringProviderId,
         output?.networkMonitoringProviderId,
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        GLOBAL_LOCATION,
-      );
-      const name =
-        output?.name ??
-        resourceName(env.project, location, networkMonitoringProviderId);
+      const location = normalizeLocation(olds?.location ?? output?.location, GLOBAL_LOCATION);
+      const name = output?.name ?? resourceName(env.project, location, networkMonitoringProviderId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, GLOBAL_LOCATION);
@@ -256,18 +237,14 @@ export const NetworkMonitoringProviderProvider = () =>
         const seen = new Set<string>();
         const parents = [
           parentOf(env.project, "-"),
-          ...[GLOBAL_LOCATION].map((location) =>
-            parentOf(env.project, location),
-          ),
+          ...[GLOBAL_LOCATION].map((location) => parentOf(env.project, location)),
         ];
         for (const parent of parents) {
           const items = yield* collectPages(
-            networkmanagement.listProjectsLocationsNetworkMonitoringProviders.pages(
-              {
-                parent,
-                pageSize: 1000,
-              },
-            ),
+            networkmanagement.listProjectsLocationsNetworkMonitoringProviders.pages({
+              parent,
+              pageSize: 1000,
+            }),
             (page) => page.networkMonitoringProviders,
           );
           for (const item of items) {
@@ -288,15 +265,8 @@ export const NetworkMonitoringProviderProvider = () =>
         news.networkMonitoringProviderId,
         output?.networkMonitoringProviderId,
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        GLOBAL_LOCATION,
-      );
-      const name = resourceName(
-        env.project,
-        location,
-        networkMonitoringProviderId,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, GLOBAL_LOCATION);
+      const name = resourceName(env.project, location, networkMonitoringProviderId);
       const providerType = typeOf(news.providerType);
 
       let current = yield* getByName(name);
@@ -322,10 +292,7 @@ export const NetworkMonitoringProviderProvider = () =>
         current = yield* waitUntilPresent(getByName(name), name);
       }
 
-      current = yield* waitUntilReady(
-        getByName(current.name ?? name),
-        current.name ?? name,
-      );
+      current = yield* waitUntilReady(getByName(current.name ?? name), current.name ?? name);
 
       return toAttrs(current, env.project, GLOBAL_LOCATION);
     }),

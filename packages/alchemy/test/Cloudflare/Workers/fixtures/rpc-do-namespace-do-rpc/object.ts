@@ -30,9 +30,7 @@ export default class RpcCounterObject extends Cloudflare.RpcDurableObject<RpcCou
           }),
         Get: () => Effect.succeed({ count }),
         CountUpTo: ({ upto }) =>
-          Stream.fromIterable(
-            Array.from({ length: Math.max(0, upto) }, (_, i) => i + 1),
-          ),
+          Stream.fromIterable(Array.from({ length: Math.max(0, upto) }, (_, i) => i + 1)),
         Reset: () =>
           Effect.gen(function* () {
             count = 0;

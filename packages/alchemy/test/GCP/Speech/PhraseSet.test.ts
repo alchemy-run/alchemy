@@ -1,9 +1,9 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as speech from "@distilled.cloud/gcp/speech_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import { location, logLevel, currentParent, currentProject } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -55,17 +55,13 @@ test.provider(
         }),
       );
 
-      expect(created.name).toMatch(
-        new RegExp(`^projects/[^/]+/locations/${location}/phraseSets/`),
-      );
+      expect(created.name).toMatch(new RegExp(`^projects/[^/]+/locations/${location}/phraseSets/`));
       expect(created.phraseSetId.length).toBeGreaterThanOrEqual(4);
       expect(created.project).toEqual(project);
       expect(created.location).toEqual(location);
       expect(created.boost).toEqual(5);
       expect(
-        created.phrases.some(
-          (phrase) => phrase.value === "weather" && phrase.boost === 10,
-        ),
+        created.phrases.some((phrase) => phrase.value === "weather" && phrase.boost === 10),
       ).toEqual(true);
 
       const fetched = yield* speech.getProjectsLocationsPhraseSets({
@@ -73,14 +69,10 @@ test.provider(
       });
       expect(fetched.name).toEqual(created.name);
       expect(fetched.boost).toEqual(5);
-      const fetchedValues = (fetched.phrases ?? []).map(
-        (phrase) => phrase.value ?? "",
-      );
+      const fetchedValues = (fetched.phrases ?? []).map((phrase) => phrase.value ?? "");
       expect(fetchedValues).toContain("weather");
       // Items steer recognition: Alchemy adds no ownership item.
-      expect(fetchedValues.some((value) => value.startsWith("alc "))).toEqual(
-        false,
-      );
+      expect(fetchedValues.some((value) => value.startsWith("alc "))).toEqual(false);
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
@@ -95,18 +87,13 @@ test.provider(
 
       expect(updated.name).toEqual(created.name);
       expect(updated.boost).toEqual(8);
-      expect(updated.phrases.map((phrase) => phrase.value).sort()).toEqual([
-        "forecast",
-        "weather",
-      ]);
+      expect(updated.phrases.map((phrase) => phrase.value).sort()).toEqual(["forecast", "weather"]);
 
       const fetchedUpdate = yield* speech.getProjectsLocationsPhraseSets({
         name: created.name,
       });
       expect(fetchedUpdate.boost).toEqual(8);
-      const updatedValues = (fetchedUpdate.phrases ?? []).map(
-        (phrase) => phrase.value ?? "",
-      );
+      const updatedValues = (fetchedUpdate.phrases ?? []).map((phrase) => phrase.value ?? "");
       expect(updatedValues).toContain("weather");
       expect(updatedValues).toContain("forecast");
 

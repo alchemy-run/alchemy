@@ -35,9 +35,7 @@ test.provider.skipIf(!!process.env.FAST)(
   { tags: ["provider:aws", "provider:aws:apigateway", "live"] },
 );
 
-test.provider.skipIf(
-  !!process.env.FAST || !testDomainName || !testCertificateArn,
-)(
+test.provider.skipIf(!!process.env.FAST || !testDomainName || !testCertificateArn)(
   "list includes a deployed base path mapping",
   (stack) =>
     Effect.gen(function* () {
@@ -97,8 +95,5 @@ test.provider.skipIf(
       yield* stack.destroy();
       yield* assertRestApiDeleted(deployed.restApiId);
     }),
-  {
-    tags: ["provider:aws", "provider:aws:apigateway", "live"],
-    timeout: 600_000,
-  },
+  { tags: ["provider:aws", "provider:aws:apigateway", "live"], timeout: 600_000 },
 );

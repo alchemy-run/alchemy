@@ -70,9 +70,7 @@ test.provider(
         UserPoolId: outputs.pool.userPoolId,
         ProviderName: "corporate-oidc",
       });
-      expect(afterUpdate.IdentityProvider?.AttributeMapping?.username).toBe(
-        "sub",
-      );
+      expect(afterUpdate.IdentityProvider?.AttributeMapping?.username).toBe("sub");
 
       yield* stack.destroy();
       const gone = yield* cip
@@ -82,9 +80,7 @@ test.provider(
         })
         .pipe(
           Effect.map(() => false),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(true),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
         );
       expect(gone).toBe(true);
     }),

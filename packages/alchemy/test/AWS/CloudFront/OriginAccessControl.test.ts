@@ -31,16 +31,12 @@ describe(
           const provider = yield* Provider.findProvider(OriginAccessControl);
           const all = yield* provider.list();
 
-          expect(
-            all.some(
-              (o) => o.originAccessControlId === deployed.originAccessControlId,
-            ),
-          ).toBe(true);
+          expect(all.some((o) => o.originAccessControlId === deployed.originAccessControlId)).toBe(
+            true,
+          );
 
           yield* stack.destroy();
-          yield* assertOriginAccessControlDeleted(
-            deployed.originAccessControlId,
-          );
+          yield* assertOriginAccessControlDeleted(deployed.originAccessControlId);
         }),
       { timeout: 300_000 },
     );
@@ -49,17 +45,11 @@ describe(
 
 const assertOriginAccessControlDeleted = (id: string) =>
   cloudfront.getOriginAccessControlConfig({ Id: id }).pipe(
-    Effect.flatMap(() =>
-      Effect.fail(new Error("OriginAccessControlStillExists")),
-    ),
+    Effect.flatMap(() => Effect.fail(new Error("OriginAccessControlStillExists"))),
     Effect.catchTag("NoSuchOriginAccessControl", () => Effect.void),
     Effect.retry({
       while: (error) =>
-        error instanceof Error &&
-        error.message === "OriginAccessControlStillExists",
-      schedule: Schedule.max([
-        Schedule.fixed("5 seconds"),
-        Schedule.recurs(24),
-      ]),
+        error instanceof Error && error.message === "OriginAccessControlStillExists",
+      schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(24)]),
     }),
   );

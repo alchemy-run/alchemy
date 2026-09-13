@@ -55,9 +55,7 @@ test(
   Effect.gen(function* () {
     const ctx = createContainerRuntimeContext("AWS.ECS.Service")("probe");
     const handler = Effect.succeed(HttpServerResponse.text("ok"));
-    yield* ctx
-      .serve(handler, { shape: { fetch: handler } })
-      .pipe(Effect.timeout(2_000));
+    yield* ctx.serve(handler, { shape: { fetch: handler } }).pipe(Effect.timeout(2_000));
     // The handler was registered exactly once as a runner.
     const { program } = yield* ctx.exports;
     expect(program).toBeDefined();
@@ -103,9 +101,7 @@ test.provider(
       // class-definition time); reaching this line proves it didn't blow up.
       // `LogicalId` is stamped on the class at runtime (see Platform.ts's
       // eager inline branch) but not declared on the inline-form class type.
-      expect(
-        (InlineService as unknown as { LogicalId: string }).LogicalId,
-      ).toBe("InlineService");
+      expect((InlineService as unknown as { LogicalId: string }).LogicalId).toBe("InlineService");
 
       const deployed = yield* stack
         .deploy(
@@ -128,8 +124,7 @@ test.provider(
         stage: stack.stage,
         fqn: "InlineService",
       });
-      const props = (row as { props?: Record<string, unknown> } | undefined)
-        ?.props as
+      const props = (row as { props?: Record<string, unknown> } | undefined)?.props as
         | { cluster?: { clusterName?: string }; image?: string; port?: number }
         | undefined;
       expect(props?.image).toBe("nginx:1.27");
@@ -156,9 +151,7 @@ const makePlan = <A, Err, Req>(
       state: inMemoryState(),
     }),
     Effect.provideService(Stage, "test"),
-    Effect.flatMap((compiled: any) =>
-      Plan.make(compiled).pipe(Effect.provide(compiled.services)),
-    ),
+    Effect.flatMap((compiled: any) => Plan.make(compiled).pipe(Effect.provide(compiled.services))),
   );
 
 test(
@@ -172,11 +165,9 @@ test(
     }).pipe(makePlan, Effect.timeout(30_000));
 
     expect(plan.resources["InlineService"]?.action).toBe("create");
-    expect(
-      Object.keys(plan.resources).filter((fqn) =>
-        fqn.includes("InlineService"),
-      ),
-    ).toEqual(["InlineService"]);
+    expect(Object.keys(plan.resources).filter((fqn) => fqn.includes("InlineService"))).toEqual([
+      "InlineService",
+    ]);
   }),
   {
     tags: ["unit", "provider:aws", "provider:aws:ecs", "local"],

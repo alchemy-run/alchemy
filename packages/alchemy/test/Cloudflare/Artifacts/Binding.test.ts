@@ -32,10 +32,7 @@ const HOOK_TIMEOUT = 300_000;
 // Must cover the ~150s `ready` readiness budget plus the round-trip itself.
 const TEST_TIMEOUT = 240_000;
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 class WorkerNotReady extends Data.TaggedError("WorkerNotReady")<{
   status: number;
@@ -52,17 +49,13 @@ class WorkerNotReady extends Data.TaggedError("WorkerNotReady")<{
 const ready = Schedule.max([Schedule.spaced("2 seconds"), Schedule.recurs(75)]);
 
 /** Retry an HTTP call until it returns 200 (rides out cold-start 404s). */
-const untilOk = <E, R>(
-  eff: Effect.Effect<HttpClientResponse.HttpClientResponse, E, R>,
-) =>
+const untilOk = <E, R>(eff: Effect.Effect<HttpClientResponse.HttpClientResponse, E, R>) =>
   eff.pipe(
     Effect.flatMap((res) =>
       res.status === 200
         ? Effect.succeed(res)
         : res.text.pipe(
-            Effect.flatMap((body) =>
-              Effect.fail(new WorkerNotReady({ status: res.status, body })),
-            ),
+            Effect.flatMap((body) => Effect.fail(new WorkerNotReady({ status: res.status, body }))),
           ),
     ),
     Effect.retry({
@@ -76,9 +69,7 @@ const body = <T>(res: HttpClientResponse.HttpClientResponse) =>
 
 const createRepo = (base: string, name: string) =>
   untilOk(
-    HttpClient.execute(
-      HttpClientRequest.post(`${base}/create?name=${encodeURIComponent(name)}`),
-    ),
+    HttpClient.execute(HttpClientRequest.post(`${base}/create?name=${encodeURIComponent(name)}`)),
   ).pipe(
     Effect.flatMap(
       body<{
@@ -103,9 +94,7 @@ const getRepo = (base: string, name: string) =>
 const deleteRepo = (base: string, name: string) =>
   untilOk(
     HttpClient.execute(
-      HttpClientRequest.make("DELETE")(
-        `${base}/delete?name=${encodeURIComponent(name)}`,
-      ),
+      HttpClientRequest.make("DELETE")(`${base}/delete?name=${encodeURIComponent(name)}`),
     ),
   ).pipe(Effect.flatMap(body<{ deleted: boolean }>));
 
@@ -147,17 +136,12 @@ const exercise = (label: string, base: string) =>
 // return empty URLs. The tests below are `skipIf`-gated on the same flag, so
 // they never read these placeholder URLs.
 const stack = beforeAll(
-  ARTIFACTS_ENABLED
-    ? deploy(Stack)
-    : Effect.succeed({ effectWorkerUrl: "", asyncWorkerUrl: "" }),
+  ARTIFACTS_ENABLED ? deploy(Stack) : Effect.succeed({ effectWorkerUrl: "", asyncWorkerUrl: "" }),
   { timeout: HOOK_TIMEOUT },
 );
-afterAll.skipIf(!ARTIFACTS_ENABLED || !!process.env.NO_DESTROY)(
-  destroy(Stack),
-  {
-    timeout: HOOK_TIMEOUT,
-  },
-);
+afterAll.skipIf(!ARTIFACTS_ENABLED || !!process.env.NO_DESTROY)(destroy(Stack), {
+  timeout: HOOK_TIMEOUT,
+});
 
 // Effect-native worker: `Cloudflare.Artifacts.ReadWriteNamespace(Repos)` + `ReadWriteNamespaceBinding`.
 test.skipIf(!ARTIFACTS_ENABLED)(

@@ -1,19 +1,15 @@
 import * as Effect from "effect/Effect";
+import { bindGcpHost } from "../Host.ts";
+import { type BindingIam, type GcpHttpOp, grantFor } from "../HttpBinding.ts";
 import type { WorkstationCluster } from "./WorkstationCluster.ts";
 import type { WorkstationClustersWorkstationConfig } from "./WorkstationClustersWorkstationConfig.ts";
 import type { WorkstationClustersWorkstationConfigsWorkstation } from "./WorkstationClustersWorkstationConfigsWorkstation.ts";
-import { bindGcpHost } from "../Host.ts";
-import { type BindingIam, type GcpHttpOp, grantFor } from "../HttpBinding.ts";
 
 /**
  * Shared HTTP scaffolding for Cloud Workstations bindings.
  * NOT exported from index.ts.
  */
-export const makeClusterHttpBinding = <
-  I extends { name?: string },
-  A,
-  E,
->(options: {
+export const makeClusterHttpBinding = <I extends { name?: string }, A, E>(options: {
   tag: string;
   iam: BindingIam;
   operation: GcpHttpOp<I, A, E>;
@@ -38,11 +34,7 @@ export const makeClusterHttpBinding = <
     });
   });
 
-export const makeConfigHttpBinding = <
-  I extends { name?: string },
-  A,
-  E,
->(options: {
+export const makeConfigHttpBinding = <I extends { name?: string }, A, E>(options: {
   tag: string;
   iam: BindingIam;
   operation: GcpHttpOp<I, A, E>;
@@ -67,20 +59,14 @@ export const makeConfigHttpBinding = <
     });
   });
 
-export const makeWorkstationHttpBinding = <
-  I extends { name?: string },
-  A,
-  E,
->(options: {
+export const makeWorkstationHttpBinding = <I extends { name?: string }, A, E>(options: {
   tag: string;
   iam: BindingIam;
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
     const run = yield* options.operation;
-    return Effect.fn(function* (
-      workstation: WorkstationClustersWorkstationConfigsWorkstation,
-    ) {
+    return Effect.fn(function* (workstation: WorkstationClustersWorkstationConfigsWorkstation) {
       yield* bindGcpHost({
         tag: options.tag,
         resource: workstation,
@@ -109,9 +95,7 @@ export const makeGenerateAccessTokenHttpBinding = <
 }) =>
   Effect.gen(function* () {
     const run = yield* options.operation;
-    return Effect.fn(function* (
-      workstation: WorkstationClustersWorkstationConfigsWorkstation,
-    ) {
+    return Effect.fn(function* (workstation: WorkstationClustersWorkstationConfigsWorkstation) {
       yield* bindGcpHost({
         tag: options.tag,
         resource: workstation,

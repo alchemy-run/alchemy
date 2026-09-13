@@ -57,9 +57,7 @@ describe.skipIf(gated)(
 
           expect(deployed.app.applicationStatus).toEqual("RUNNING");
           expect(deployed.snapshot.snapshotStatus).toEqual("READY");
-          expect(deployed.snapshot.applicationName).toEqual(
-            deployed.app.applicationName,
-          );
+          expect(deployed.snapshot.applicationName).toEqual(deployed.app.applicationName);
 
           // Out-of-band verification via distilled.
           const described = yield* analytics.describeApplicationSnapshot({
@@ -72,9 +70,7 @@ describe.skipIf(gated)(
 
           // The snapshot is deleted with the stack (before the application).
           const gone = yield* analytics
-            .describeApplication({
-              ApplicationName: deployed.app.applicationName,
-            })
+            .describeApplication({ ApplicationName: deployed.app.applicationName })
             .pipe(Effect.flip);
           expect(gone._tag).toEqual("ResourceNotFoundException");
         }),

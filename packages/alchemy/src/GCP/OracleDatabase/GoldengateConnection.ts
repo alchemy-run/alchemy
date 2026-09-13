@@ -65,17 +65,13 @@ export type GoldengateConnectionProps = {
    */
   properties?: oracle.GoldengateConnectionProperties;
   /** Connection type. Convenience alias for `properties.connectionType`. */
-  connectionType?:
-    | oracle.GoldengateConnectionPropertiesConnectionTypeEnum
-    | (string & {});
+  connectionType?: oracle.GoldengateConnectionPropertiesConnectionTypeEnum | (string & {});
   /** Display name. Convenience alias for `properties.displayName`. */
   displayName?: string;
   /** Description. Convenience alias for `properties.description`. */
   description?: string;
   /** Routing method. Convenience alias for `properties.routingMethod`. */
-  routingMethod?:
-    | oracle.GoldengateConnectionPropertiesRoutingMethodEnum
-    | (string & {});
+  routingMethod?: oracle.GoldengateConnectionPropertiesRoutingMethodEnum | (string & {});
 };
 
 export type GoldengateConnection = Resource<
@@ -205,11 +201,7 @@ const listConnections = (project: string, region: string) => {
         pageSize: 1000,
       }),
       (page) => page.goldengateConnections,
-    ).pipe(
-      Effect.map((items) =>
-        items.filter((item) => hasAlchemyLabelMap(item.labels)),
-      ),
-    );
+    ).pipe(Effect.map((items) => items.filter((item) => hasAlchemyLabelMap(item.labels))));
   return listAtLocation(project, region, collect).pipe(
     Effect.catchTag("NotFound", () => Effect.succeed([])),
   );
@@ -217,37 +209,23 @@ const listConnections = (project: string, region: string) => {
 
 export const GoldengateConnectionProvider = () =>
   Provider.succeed(GoldengateConnection, {
-    stables: [
-      "name",
-      "goldengateConnectionId",
-      "project",
-      "location",
-      "createTime",
-      "ocid",
-    ],
+    stables: ["name", "goldengateConnectionId", "project", "location", "createTime", "ocid"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
       const previousType =
-        olds?.connectionType ??
-        olds?.properties?.connectionType ??
-        output?.connectionType ??
-        "";
-      const nextType =
-        news.connectionType ?? news.properties?.connectionType ?? previousType;
+        olds?.connectionType ?? olds?.properties?.connectionType ?? output?.connectionType ?? "";
+      const nextType = news.connectionType ?? news.properties?.connectionType ?? previousType;
       const previousOdb = olds?.odbSubnet ?? output?.odbSubnet ?? "";
       const nextOdb = news.odbSubnet ?? previousOdb;
       return replaceOnIdentity({
-        previousId:
-          olds?.goldengateConnectionId ?? output?.goldengateConnectionId,
+        previousId: olds?.goldengateConnectionId ?? output?.goldengateConnectionId,
         nextId:
           news.goldengateConnectionId ??
           olds?.goldengateConnectionId ??
           output?.goldengateConnectionId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location ?? env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location ?? env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location ?? env.region,
         ),
@@ -263,23 +241,13 @@ export const GoldengateConnectionProvider = () =>
         output?.goldengateConnectionId,
         FALLBACK_ID,
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location ?? env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location ?? env.region);
       const name =
-        output?.name ??
-        resourceNameOf(
-          env.project,
-          location,
-          COLLECTION,
-          goldengateConnectionId,
-        );
+        output?.name ?? resourceNameOf(env.project, location, COLLECTION, goldengateConnectionId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -297,15 +265,8 @@ export const GoldengateConnectionProvider = () =>
         output?.goldengateConnectionId,
         FALLBACK_ID,
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location ?? env.region,
-      );
-      const name = resourceNameOf(
-        env.project,
-        location,
-        COLLECTION,
-        goldengateConnectionId,
-      );
+      const location = normalizeLocation(news.location ?? output?.location ?? env.region);
+      const name = resourceNameOf(env.project, location, COLLECTION, goldengateConnectionId);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),

@@ -16,10 +16,7 @@ const sharedStack = Core.scratchStack(testOptions, "BedrockBindings");
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy under parallel-suite load. Budget ~150s of
 // readiness polling.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -38,38 +35,24 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("1 second"),
-        Schedule.recurs(5),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(5)]),
     }),
   );
 
 describe(
   "Bedrock Bindings",
-  {
-    tags: [
-      "provider:aws",
-      "provider:aws:bedrock",
-      "provider:aws:lambda",
-      "live",
-    ],
-  },
+  { tags: ["provider:aws", "provider:aws:bedrock", "provider:aws:lambda", "live"] },
   () => {
     beforeAll(
       Effect.gen(function* () {
-        yield* Effect.logInfo(
-          "Bedrock test setup: destroying previous resources",
-        );
+        yield* Effect.logInfo("Bedrock test setup: destroying previous resources");
         yield* sharedStack.destroy();
 
         yield* Effect.logInfo("Bedrock test setup: deploying fixture");
@@ -83,21 +66,15 @@ describe(
         baseUrl = functionUrl!.replace(/\/+$/, "");
         const readinessUrl = `${baseUrl}/ping`;
 
-        yield* Effect.logInfo(
-          `Bedrock test setup: probing readiness at ${readinessUrl}`,
-        );
+        yield* Effect.logInfo(`Bedrock test setup: probing readiness at ${readinessUrl}`);
         yield* HttpClient.get(readinessUrl).pipe(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.tapError((error) =>
-            Effect.logWarning(
-              `Bedrock test setup: fixture not ready yet (${String(error)})`,
-            ),
+            Effect.logWarning(`Bedrock test setup: fixture not ready yet (${String(error)})`),
           ),
           Effect.retry({ schedule: readinessPolicy }),
         );
@@ -105,20 +82,16 @@ describe(
       { timeout: 240_000 },
     );
 
-    afterAll.skipIf(!!process.env.NO_DESTROY)(sharedStack.destroy(), {
-      timeout: 120_000,
-    });
+    afterAll.skipIf(!!process.env.NO_DESTROY)(sharedStack.destroy(), { timeout: 120_000 });
 
     describe("CountTokens", () => {
       test.provider(
         "counts input tokens without invoking the model",
         (_stack) =>
           Effect.gen(function* () {
-            const response = (yield* send(
-              HttpClientRequest.get(`${baseUrl}/count-tokens`),
-            ).pipe(Effect.flatMap((r) => r.json))) as {
-              inputTokens: number;
-            };
+            const response = (yield* send(HttpClientRequest.get(`${baseUrl}/count-tokens`)).pipe(
+              Effect.flatMap((r) => r.json),
+            )) as { inputTokens: number };
 
             expect(response.inputTokens).toBeGreaterThan(0);
           }),
@@ -131,11 +104,9 @@ describe(
         "reranks inline documents by relevance to the query",
         (_stack) =>
           Effect.gen(function* () {
-            const response = (yield* send(
-              HttpClientRequest.get(`${baseUrl}/rerank`),
-            ).pipe(Effect.flatMap((r) => r.json))) as {
-              results: Array<{ index: number; relevanceScore: number }>;
-            };
+            const response = (yield* send(HttpClientRequest.get(`${baseUrl}/rerank`)).pipe(
+              Effect.flatMap((r) => r.json),
+            )) as { results: Array<{ index: number; relevanceScore: number }> };
 
             expect(response.results).toHaveLength(2);
             // The alchemy document must outrank the banana document.
@@ -153,13 +124,9 @@ describe(
         "invokes the bound agent alias and streams a completion",
         (_stack) =>
           Effect.gen(function* () {
-            const response = (yield* send(
-              HttpClientRequest.get(`${baseUrl}/invoke-agent`),
-            ).pipe(Effect.flatMap((r) => r.json))) as {
-              sessionId: string;
-              chunkEvents: number;
-              text: string;
-            };
+            const response = (yield* send(HttpClientRequest.get(`${baseUrl}/invoke-agent`)).pipe(
+              Effect.flatMap((r) => r.json),
+            )) as { sessionId: string; chunkEvents: number; text: string };
 
             expect(response.sessionId.length).toBeGreaterThan(0);
             expect(response.chunkEvents).toBeGreaterThan(0);
@@ -175,12 +142,9 @@ describe(
         "reads and clears the agent's long-term memory for a memory id",
         (_stack) =>
           Effect.gen(function* () {
-            const response = (yield* send(
-              HttpClientRequest.get(`${baseUrl}/agent-memory`),
-            ).pipe(Effect.flatMap((r) => r.json))) as {
-              memoryContents: number;
-              deleted: boolean;
-            };
+            const response = (yield* send(HttpClientRequest.get(`${baseUrl}/agent-memory`)).pipe(
+              Effect.flatMap((r) => r.json),
+            )) as { memoryContents: number; deleted: boolean };
 
             // Session summaries generate asynchronously long after a session
             // ends, so a fresh agent has none — the route proves the IAM
@@ -197,13 +161,9 @@ describe(
         "converses with the bound model and returns a completion",
         (_stack) =>
           Effect.gen(function* () {
-            const response = (yield* send(
-              HttpClientRequest.get(`${baseUrl}/converse`),
-            ).pipe(Effect.flatMap((r) => r.json))) as {
-              text: string;
-              stopReason: string;
-              outputTokens: number;
-            };
+            const response = (yield* send(HttpClientRequest.get(`${baseUrl}/converse`)).pipe(
+              Effect.flatMap((r) => r.json),
+            )) as { text: string; stopReason: string; outputTokens: number };
 
             // Assert a non-empty completion — never exact model output (LLMs
             // are nondeterministic even at temperature 0).
@@ -220,9 +180,9 @@ describe(
         "streams a conversation as typed events",
         (_stack) =>
           Effect.gen(function* () {
-            const response = (yield* send(
-              HttpClientRequest.get(`${baseUrl}/converse-stream`),
-            ).pipe(Effect.flatMap((r) => r.json))) as {
+            const response = (yield* send(HttpClientRequest.get(`${baseUrl}/converse-stream`)).pipe(
+              Effect.flatMap((r) => r.json),
+            )) as {
               text: string;
               deltaEvents: number;
               totalEvents: number;
@@ -266,13 +226,9 @@ describe(
         "invokes the bound model with a raw payload and streams the response",
         (_stack) =>
           Effect.gen(function* () {
-            const response = (yield* send(
-              HttpClientRequest.get(`${baseUrl}/invoke-model`),
-            ).pipe(Effect.flatMap((r) => r.json))) as {
-              contentType: string;
-              text: string;
-              stopReason: string;
-            };
+            const response = (yield* send(HttpClientRequest.get(`${baseUrl}/invoke-model`)).pipe(
+              Effect.flatMap((r) => r.json),
+            )) as { contentType: string; text: string; stopReason: string };
 
             expect(response.contentType).toBe("application/json");
             // Assert a non-empty completion — never exact model output.

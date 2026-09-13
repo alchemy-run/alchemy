@@ -27,9 +27,7 @@ describe(
       "listScheduledQueries reports typed TimestreamNotOnboarded via endpoint discovery",
       (_stack) =>
         Effect.gen(function* () {
-          const error = yield* withQueryEndpoint(
-            TSQ.listScheduledQueries({}),
-          ).pipe(Effect.flip);
+          const error = yield* withQueryEndpoint(TSQ.listScheduledQueries({})).pipe(Effect.flip);
           expect(error._tag).toBe("TimestreamNotOnboarded");
         }),
       { timeout: 60_000 },
@@ -41,13 +39,9 @@ describe(
         Effect.gen(function* () {
           const infra = Effect.gen(function* () {
             const database = yield* Database("SqMetrics");
-            const table = yield* Table("SqCpu", {
-              databaseName: database.databaseName,
-            });
+            const table = yield* Table("SqCpu", { databaseName: database.databaseName });
             const topic = yield* SNS.Topic("SqNotifications");
-            const bucket = yield* S3.Bucket("SqErrorReports", {
-              forceDestroy: true,
-            });
+            const bucket = yield* S3.Bucket("SqErrorReports", { forceDestroy: true });
             const role = yield* IAM.Role("SqExecutionRole", {
               assumeRolePolicyDocument: {
                 Version: "2012-10-17",
@@ -73,18 +67,11 @@ describe(
                       ],
                       Resource: ["*"],
                     },
-                    {
-                      Effect: "Allow",
-                      Action: ["sns:Publish"],
-                      Resource: [topic.topicArn],
-                    },
+                    { Effect: "Allow", Action: ["sns:Publish"], Resource: [topic.topicArn] },
                     {
                       Effect: "Allow",
                       Action: ["s3:PutObject", "s3:GetBucketAcl"],
-                      Resource: [
-                        bucket.bucketArn,
-                        Output.interpolate`${bucket.bucketArn}/*`,
-                      ],
+                      Resource: [bucket.bucketArn, Output.interpolate`${bucket.bucketArn}/*`],
                     },
                   ],
                 },
@@ -108,30 +95,21 @@ describe(
           // Out-of-band verification via distilled through the discovered
           // endpoint.
           const described = yield* withQueryEndpoint(
-            TSQ.describeScheduledQuery({
-              ScheduledQueryArn: scheduledQuery.scheduledQueryArn,
-            }),
+            TSQ.describeScheduledQuery({ ScheduledQueryArn: scheduledQuery.scheduledQueryArn }),
           );
           expect(described.ScheduledQuery.State).toBe("ENABLED");
 
           yield* stack.destroy();
 
           const gone = yield* withQueryEndpoint(
-            TSQ.describeScheduledQuery({
-              ScheduledQueryArn: scheduledQuery.scheduledQueryArn,
-            }),
+            TSQ.describeScheduledQuery({ ScheduledQueryArn: scheduledQuery.scheduledQueryArn }),
           ).pipe(
             Effect.map(() => false),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(true),
-            ),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
           );
           expect(gone).toBe(true);
         }),
-      {
-        tags: ["provider:aws:iam", "provider:aws:s3", "provider:aws:sns"],
-        timeout: 600_000,
-      },
+      { tags: ["provider:aws:iam", "provider:aws:s3", "provider:aws:sns"], timeout: 600_000 },
     );
   },
 );

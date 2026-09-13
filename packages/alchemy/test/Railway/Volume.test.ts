@@ -10,12 +10,7 @@ import * as Schedule from "effect/Schedule";
 import * as Provider from "@/Provider";
 import * as Railway from "@/Railway";
 import * as Test from "@/Test/Alchemy";
-import VolumeApi, {
-  Data,
-  MARKER,
-  MARKER_FILE,
-  VOLUME_PATH,
-} from "./fixtures/volume-api.ts";
+import VolumeApi, { Data, MARKER, MARKER_FILE, VOLUME_PATH } from "./fixtures/volume-api.ts";
 import { suitePartition } from "./suiteProject.ts";
 import { waitUntilVolumeGone } from "./waitUntilVolumeGone.ts";
 
@@ -28,18 +23,12 @@ const readVolumeInstance = Query.fn((id: string) => {
     volumeId: instance.volumeId,
     mountPath: instance.mountPath,
     environmentId: instance.environmentId,
-    volume: {
-      name: instance.volume.name,
-      projectId: instance.volume.projectId,
-    },
+    volume: { name: instance.volume.name, projectId: instance.volume.projectId },
     serviceId: instance.serviceId,
   };
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 test.provider(
   "create, update, list, and delete a volume",
@@ -64,9 +53,7 @@ test.provider(
       expect(created.volume.volumeInstanceId).toEqual(expect.any(String));
       expect(created.volume.volumeInstanceId.length).toBeGreaterThan(0);
       expect(created.volume.projectId).toEqual(created.project.projectId);
-      expect(created.volume.environmentId).toEqual(
-        created.environment.environmentId,
-      );
+      expect(created.volume.environmentId).toEqual(created.environment.environmentId);
       expect(created.volume.mountPath).toEqual("/data");
       expect(created.volume.serviceId).toBeUndefined();
       expect(created.volume.name).toEqual(expect.any(String));
@@ -76,9 +63,7 @@ test.provider(
       expect(created.volume.sizeMB).toEqual(expect.any(Number));
       expect(created.volume.createdAt).toEqual(expect.any(String));
 
-      const fetched = yield* readVolumeInstance(
-        created.volume.volumeInstanceId,
-      );
+      const fetched = yield* readVolumeInstance(created.volume.volumeInstanceId);
       expect(fetched.id).toEqual(created.volume.volumeInstanceId);
       expect(fetched.volumeId).toEqual(created.volume.volumeId);
       expect(fetched.mountPath).toEqual("/data");
@@ -89,9 +74,7 @@ test.provider(
 
       const provider = yield* Provider.findProvider(Railway.Volume);
       const listed = yield* provider.list();
-      const found = listed.find(
-        (volume) => volume.volumeId === created.volume.volumeId,
-      );
+      const found = listed.find((volume) => volume.volumeId === created.volume.volumeId);
       expect(found).toBeDefined();
       expect(found?.volumeInstanceId).toEqual(created.volume.volumeInstanceId);
       expect(found?.mountPath).toEqual("/data");
@@ -110,19 +93,13 @@ test.provider(
       );
 
       expect(updated.volume.volumeId).toEqual(created.volume.volumeId);
-      expect(updated.volume.volumeInstanceId).toEqual(
-        created.volume.volumeInstanceId,
-      );
+      expect(updated.volume.volumeInstanceId).toEqual(created.volume.volumeInstanceId);
       expect(updated.volume.projectId).toEqual(created.volume.projectId);
-      expect(updated.volume.environmentId).toEqual(
-        created.volume.environmentId,
-      );
+      expect(updated.volume.environmentId).toEqual(created.volume.environmentId);
       expect(updated.volume.mountPath).toEqual("/app/data");
       expect(updated.volume.name).toEqual(created.volume.name);
 
-      const fetchedUpdate = yield* readVolumeInstance(
-        updated.volume.volumeInstanceId,
-      );
+      const fetchedUpdate = yield* readVolumeInstance(updated.volume.volumeInstanceId);
       expect(fetchedUpdate.id).toEqual(updated.volume.volumeInstanceId);
       expect(fetchedUpdate.mountPath).toEqual("/app/data");
       expect(fetchedUpdate.volume.name).toEqual(updated.volume.name);
@@ -251,10 +228,7 @@ test.provider(
             ? Effect.succeed(res)
             : Effect.fail(new Error(`health returned ${res.status}`)),
         ),
-        Effect.retry({
-          schedule: Schedule.spaced("4 seconds"),
-          times: 10,
-        }),
+        Effect.retry({ schedule: Schedule.spaced("4 seconds"), times: 10 }),
       );
       expect(health.status).toEqual(200);
 

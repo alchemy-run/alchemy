@@ -15,10 +15,7 @@ import { findEphemeralPort } from "../core/DevPort.ts";
  */
 import * as FrameworkCore from "../core/index.ts";
 import { toOutputFile, type BuildOutput } from "../core/index.ts";
-import {
-  loadProjectModule,
-  resolveProjectPackageDirectory,
-} from "../core/Loader.ts";
+import { loadProjectModule, resolveProjectPackageDirectory } from "../core/Loader.ts";
 import { loadVinextBuildConfig } from "./BuildConfig.ts";
 import { makeVinextCachePlugin, type VinextCacheKind } from "./cache/plugin.ts";
 import { loadVinextModule } from "./Modules.ts";
@@ -64,11 +61,7 @@ export const runVinextBuild = (options: {
     }>(root, "config/dotenv.js");
     yield* Effect.sync(() => loadDotenv({ root, mode: "production" }));
     const loaded = yield* Effect.tryPromise(() =>
-      vite.loadConfigFromFile(
-        { command: "build", mode: "production" },
-        undefined,
-        root,
-      ),
+      vite.loadConfigFromFile({ command: "build", mode: "production" }, undefined, root),
     );
     const plugins = loaded?.config.plugins ?? [vinext()];
     const config = yield* loadVinextBuildConfig(root, plugins);
@@ -85,8 +78,7 @@ export const runVinextBuild = (options: {
           (yield* fs.exists(path.join(root, "src", name)))
         );
       });
-    const hybrid =
-      (yield* hasDirectory("app")) && (yield* hasDirectory("pages"));
+    const hybrid = (yield* hasDirectory("app")) && (yield* hasDirectory("pages"));
     if (loaded?.config.build?.emptyOutDir !== false) {
       yield* fs.remove(path.join(root, "dist"), {
         recursive: true,
@@ -103,8 +95,7 @@ export const runVinextBuild = (options: {
           __VINEXT_SHARED_PRERENDER_SECRET: randomBytes(32).toString("hex"),
           ...(hybrid
             ? {
-                __VINEXT_PAGES_CLIENT_ASSETS_BUILD_SESSION:
-                  randomBytes(16).toString("hex"),
+                __VINEXT_PAGES_CLIENT_ASSETS_BUILD_SESSION: randomBytes(16).toString("hex"),
               }
             : {}),
         };
@@ -160,18 +151,9 @@ export const runVinextBuild = (options: {
               await vite.build({
                 root,
                 configFile: false,
-                plugins: [
-                  transforms,
-                  vinext({ disableAppRouter: true }),
-                  cache,
-                ],
+                plugins: [transforms, vinext({ disableAppRouter: true }), cache],
                 resolve: {
-                  dedupe: [
-                    "react",
-                    "react-dom",
-                    "react/jsx-runtime",
-                    "react/jsx-dev-runtime",
-                  ],
+                  dedupe: ["react", "react-dom", "react/jsx-runtime", "react/jsx-dev-runtime"],
                 },
                 build: {
                   outDir: "dist/server",
@@ -204,40 +186,28 @@ export const collectVinextDist = (root: string) =>
     const clientDir = path.join(distDir, "client");
     const rscEntry = path.join(distDir, VINEXT_RSC_ENTRY);
     const pagesEntry = path.join(distDir, VINEXT_PAGES_ENTRY);
-    const hasDist = yield* fs
-      .exists(distDir)
-      .pipe(Effect.orElseSucceed(() => false));
+    const hasDist = yield* fs.exists(distDir).pipe(Effect.orElseSucceed(() => false));
     if (!hasDist) {
       return yield* Effect.fail(
         failFramework(`The vinext build produced no ${distDir}`)(undefined),
       );
     }
-    const hasRsc = yield* fs
-      .exists(rscEntry)
-      .pipe(Effect.orElseSucceed(() => false));
-    const hasPages = yield* fs
-      .exists(pagesEntry)
-      .pipe(Effect.orElseSucceed(() => false));
+    const hasRsc = yield* fs.exists(rscEntry).pipe(Effect.orElseSucceed(() => false));
+    const hasPages = yield* fs.exists(pagesEntry).pipe(Effect.orElseSucceed(() => false));
     if (!hasRsc && !hasPages) {
       return yield* Effect.fail(
-        failFramework(
-          `The vinext build produced no server entry at ${rscEntry} or ${pagesEntry}`,
-        )(undefined),
+        failFramework(`The vinext build produced no server entry at ${rscEntry} or ${pagesEntry}`)(
+          undefined,
+        ),
       );
     }
-    const hasClient = yield* fs
-      .exists(clientDir)
-      .pipe(Effect.orElseSucceed(() => false));
+    const hasClient = yield* fs.exists(clientDir).pipe(Effect.orElseSucceed(() => false));
     yield* fs
       .writeFileString(
         path.join(serverDir, "package.json"),
         `${JSON.stringify({ type: "module" }, null, 2)}\n`,
       )
-      .pipe(
-        Effect.mapError(
-          failFramework("Failed to write dist/server/package.json"),
-        ),
-      );
+      .pipe(Effect.mapError(failFramework("Failed to write dist/server/package.json")));
     return {
       distDirectory: distDir,
       clientDirectory: hasClient ? clientDir : undefined,
@@ -257,17 +227,10 @@ export const pinServeModule = (
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    const servePath = path.join(
-      output.serverDir,
-      path.basename(serveModuleName),
-    );
+    const servePath = path.join(output.serverDir, path.basename(serveModuleName));
     yield* fs
       .writeFileString(servePath, serveSource)
-      .pipe(
-        Effect.mapError(
-          failFramework(`Failed to write the serve entry at ${servePath}`),
-        ),
-      );
+      .pipe(Effect.mapError(failFramework(`Failed to write the serve entry at ${servePath}`)));
     const serveModule = yield* toOutputFile(serveModuleName, serveSource);
     return {
       distDirectory: output.distDirectory,
@@ -291,9 +254,7 @@ export const spawnVinextDev = (options: {
   Effect.acquireRelease(
     Effect.try({
       try: () => {
-        const cp = createRequire(import.meta.url)(
-          "child_process",
-        ) as typeof NodeChildProcessModule;
+        const cp = createRequire(import.meta.url)("child_process") as typeof NodeChildProcessModule;
         const child = cp.spawn(
           "node",
           [
@@ -329,9 +290,7 @@ export const spawnVinextDev = (options: {
           } satisfies VinextDevChild,
         };
       },
-      catch: failFramework(
-        "Failed to spawn the vinext dev CLI (is `node` on PATH?)",
-      ),
+      catch: failFramework("Failed to spawn the vinext dev CLI (is `node` on PATH?)"),
     }),
     ({ child }) =>
       Effect.callback<void>((resume) => {
@@ -401,13 +360,9 @@ export const awaitVinextDevReady = (options: {
       yield* Effect.sleep(500);
     }
     return yield* Effect.fail(
-      failFramework(
-        `Timed out waiting for the vinext dev server at ${options.url}`,
-      )(undefined),
+      failFramework(`Timed out waiting for the vinext dev server at ${options.url}`)(undefined),
     );
   });
 
-export const pickEphemeralPort: Effect.Effect<
-  number,
-  FrameworkCore.FrameworkError
-> = findEphemeralPort();
+export const pickEphemeralPort: Effect.Effect<number, FrameworkCore.FrameworkError> =
+  findEphemeralPort();

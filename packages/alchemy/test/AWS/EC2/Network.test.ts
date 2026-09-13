@@ -4,9 +4,7 @@ import * as HttpClient from "effect/http/HttpClient";
 import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import * as Core from "@/Test/Core";
-import NetworkTestFunctionLive, {
-  NetworkTestFunction,
-} from "./fixtures/network-function";
+import NetworkTestFunctionLive, { NetworkTestFunction } from "./fixtures/network-function";
 import * as Test from "./VpcTest.ts";
 
 const testOptions = { providers: AWS.providers() };
@@ -15,10 +13,7 @@ const sharedStack = Core.scratchStack(testOptions, "EC2NetworkFunction");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take
 // well over 60s on a fresh deploy — budget ~150s of readiness polling.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -47,9 +42,7 @@ describe(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.retry({ schedule: readinessPolicy }),
         );

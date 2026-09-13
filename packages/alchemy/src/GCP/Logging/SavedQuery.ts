@@ -172,16 +172,12 @@ export type SavedQuery = Resource<
  */
 export const SavedQuery = Resource<SavedQuery>("GCP.Logging.SavedQuery");
 
-export class SavedQueryNotResolved extends Data.TaggedError(
-  "GCP.Logging.SavedQueryNotResolved",
-)<{
+export class SavedQueryNotResolved extends Data.TaggedError("GCP.Logging.SavedQueryNotResolved")<{
   name: string;
 }> {}
 
 const parseQueryName = (name: string) => {
-  const match = name.match(
-    /^projects\/([^/]+)\/locations\/([^/]+)\/savedQueries\/([^/]+)$/,
-  );
+  const match = name.match(/^projects\/([^/]+)\/locations\/([^/]+)\/savedQueries\/([^/]+)$/);
   if (!match) return undefined;
   return {
     project: match[1]!,
@@ -190,22 +186,15 @@ const parseQueryName = (name: string) => {
   };
 };
 
-const resourceName = (
-  project: string,
-  location: string,
-  savedQueryId: string,
-) => `projects/${project}/locations/${location}/savedQueries/${savedQueryId}`;
+const resourceName = (project: string, location: string, savedQueryId: string) =>
+  `projects/${project}/locations/${location}/savedQueries/${savedQueryId}`;
 
 const savedQueryIdOf = (query: logging.SavedQuery, fallback?: string) => {
   const parsed = parseQueryName(query.name ?? "");
   return parsed?.savedQueryId ?? fallback ?? lastSegment(query.name ?? "");
 };
 
-const toId = (
-  id: string,
-  savedQueryId: string | undefined,
-  existing?: string,
-) =>
+const toId = (id: string, savedQueryId: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     if (savedQueryId !== undefined) return savedQueryId;
     if (existing !== undefined) return existing;
@@ -214,9 +203,7 @@ const toId = (
       maxLength: MAX_NAME_LENGTH,
       lowercase: true,
     });
-    return /^[a-z0-9]/.test(generated)
-      ? generated
-      : `q${generated}`.slice(0, MAX_NAME_LENGTH);
+    return /^[a-z0-9]/.test(generated) ? generated : `q${generated}`.slice(0, MAX_NAME_LENGTH);
   });
 
 const loggingQueryOf = (
@@ -231,9 +218,7 @@ const loggingQueryOf = (
     summaryFieldStart: query.summaryFieldStart,
     summaryFieldEnd: query.summaryFieldEnd,
     summaryFields:
-      summaryFields !== undefined && summaryFields.length > 0
-        ? summaryFields
-        : undefined,
+      summaryFields !== undefined && summaryFields.length > 0 ? summaryFields : undefined,
   };
 };
 
@@ -265,11 +250,7 @@ const toOpsAnalyticsQueryBody = (
   return { sqlQueryText: query.sqlQueryText };
 };
 
-const toAttrs = (
-  query: logging.SavedQuery,
-  project: string,
-  location: string,
-) => {
+const toAttrs = (query: logging.SavedQuery, project: string, location: string) => {
   const savedQueryId = savedQueryIdOf(query);
   const parsed = parseDescription(query.description);
   const parsedName = parseQueryName(query.name ?? "");
@@ -278,9 +259,7 @@ const toAttrs = (
   return {
     name:
       query.name ??
-      (savedQueryId
-        ? resourceName(resolvedProject, resolvedLocation, savedQueryId)
-        : ""),
+      (savedQueryId ? resourceName(resolvedProject, resolvedLocation, savedQueryId) : ""),
     savedQueryId,
     project: resolvedProject,
     location: resolvedLocation,
@@ -322,13 +301,8 @@ export const SavedQueryProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const location = olds?.location ?? output?.location ?? DEFAULT_LOCATION;
-      const savedQueryId = yield* toId(
-        id,
-        olds?.savedQueryId,
-        output?.savedQueryId,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, savedQueryId);
+      const savedQueryId = yield* toId(id, olds?.savedQueryId, output?.savedQueryId);
+      const name = output?.name ?? resourceName(env.project, location, savedQueryId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, location);
@@ -345,9 +319,7 @@ export const SavedQueryProvider = () =>
             pageSize: 1000,
           })
           .pipe(
-            Stream.flatMap((page) =>
-              Stream.fromIterable(page.savedQueries ?? []),
-            ),
+            Stream.flatMap((page) => Stream.fromIterable(page.savedQueries ?? [])),
             Stream.filter((query) => hasOwnershipMarker(query.description)),
             Stream.map((query) => {
               const parsed = parseQueryName(query.name ?? "");
@@ -365,11 +337,7 @@ export const SavedQueryProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const location = news.location ?? output?.location ?? DEFAULT_LOCATION;
-      const savedQueryId = yield* toId(
-        id,
-        news.savedQueryId,
-        output?.savedQueryId,
-      );
+      const savedQueryId = yield* toId(id, news.savedQueryId, output?.savedQueryId);
       const name = resourceName(env.project, location, savedQueryId);
       const ownership = yield* createInternalLabels(id);
       const desiredDescription = encodeDescription(ownership, news.description);
@@ -401,21 +369,15 @@ export const SavedQueryProvider = () =>
         return yield* new SavedQueryNotResolved({ name });
       }
 
-      const displayNameChanged =
-        (current.displayName ?? "") !== desiredDisplayName;
-      const descriptionChanged =
-        (current.description ?? "") !== desiredDescription;
-      const visibilityChanged =
-        (current.visibility ?? DEFAULT_VISIBILITY) !== desiredVisibility;
+      const displayNameChanged = (current.displayName ?? "") !== desiredDisplayName;
+      const descriptionChanged = (current.description ?? "") !== desiredDescription;
+      const visibilityChanged = (current.visibility ?? DEFAULT_VISIBILITY) !== desiredVisibility;
       const loggingChanged =
         news.loggingQuery !== undefined &&
         !jsonEqual(loggingQueryOf(current.loggingQuery), news.loggingQuery);
       const opsChanged =
         news.opsAnalyticsQuery !== undefined &&
-        !jsonEqual(
-          opsAnalyticsQueryOf(current.opsAnalyticsQuery),
-          news.opsAnalyticsQuery,
-        );
+        !jsonEqual(opsAnalyticsQueryOf(current.opsAnalyticsQuery), news.opsAnalyticsQuery);
 
       const updateMask = [
         displayNameChanged ? "displayName" : undefined,

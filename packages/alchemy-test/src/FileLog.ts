@@ -1,4 +1,3 @@
-import { formatPlanPreview } from "./Plan.ts";
 /**
  * Persistent run log: every test's pass/failure followed by its captured
  * output, appended to `.alchemy/log/test.log` as the run progresses —
@@ -12,6 +11,7 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Queue from "effect/Queue";
 import type { LogEntry } from "./Model.ts";
+import { formatPlanPreview } from "./Plan.ts";
 import type { TestEvent } from "./Reporter.ts";
 
 const formatDuration = (ms: number): string =>
@@ -38,8 +38,7 @@ export const formatEvent = (event: TestEvent): string | undefined => {
       return `running ${event.tests.length} tests from ${event.files} files (${new Date().toISOString()})\n\n`;
     case "TestEnd": {
       const title = `${event.test.file} > ${event.test.titlePath.join(" > ")}`;
-      const retries =
-        event.result.retries > 0 ? ` [retried x${event.result.retries}]` : "";
+      const retries = event.result.retries > 0 ? ` [retried x${event.result.retries}]` : "";
       const lines = [
         `${GLYPH[event.result.status]} ${title} (${formatDuration(event.result.durationMs)})${retries}`,
       ];
@@ -125,11 +124,8 @@ const pruneOldLogs = Effect.fn(function* (dir: string) {
   for (const entry of entries) {
     if (!entry.endsWith(".log")) continue;
     const file = path.join(dir, entry);
-    const info = yield* fs
-      .stat(file)
-      .pipe(Effect.orElseSucceed(() => undefined));
-    const mtime =
-      info === undefined ? undefined : Option.getOrUndefined(info.mtime);
+    const info = yield* fs.stat(file).pipe(Effect.orElseSucceed(() => undefined));
+    const mtime = info === undefined ? undefined : Option.getOrUndefined(info.mtime);
     if (mtime !== undefined && mtime.getTime() < cutoff) {
       yield* fs.remove(file).pipe(Effect.ignore);
     }
@@ -140,17 +136,13 @@ const pruneOldLogs = Effect.fn(function* (dir: string) {
 export const makeFileLog = Effect.fn(function* (logFile: string) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  yield* fs
-    .makeDirectory(path.dirname(logFile), { recursive: true })
-    .pipe(Effect.ignore);
+  yield* fs.makeDirectory(path.dirname(logFile), { recursive: true }).pipe(Effect.ignore);
   yield* pruneOldLogs(path.dirname(logFile));
   yield* fs.writeFileString(logFile, "").pipe(Effect.ignore);
   const append: FileLog["append"] = (event) => {
     const chunk = formatEvent(event);
     if (chunk === undefined) return Effect.void;
-    return fs
-      .writeFileString(logFile, chunk, { flag: "a" })
-      .pipe(Effect.ignore);
+    return fs.writeFileString(logFile, chunk, { flag: "a" }).pipe(Effect.ignore);
   };
   // Hook lines flow through an unbounded queue to a single writer fiber so
   // the capture site (a synchronous array-push interception) never performs
@@ -162,9 +154,7 @@ export const makeFileLog = Effect.fn(function* (logFile: string) {
     Effect.gen(function* () {
       while (true) {
         const line = yield* Queue.take(hookLines);
-        yield* fs
-          .writeFileString(logFile, `${line}\n`, { flag: "a" })
-          .pipe(Effect.ignore);
+        yield* fs.writeFileString(logFile, `${line}\n`, { flag: "a" }).pipe(Effect.ignore);
       }
     }).pipe(
       // `Queue.take` fails with `Done` once `close` ends the queue and the

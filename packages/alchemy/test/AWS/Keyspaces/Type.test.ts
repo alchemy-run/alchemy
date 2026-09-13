@@ -10,11 +10,7 @@ const { test } = Test.make({ providers: AWS.providers() });
 const getType = (keyspaceName: string, typeName: string) =>
   keyspaces
     .getType({ keyspaceName, typeName })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
 test.provider(
   "create, replace on field change, delete Keyspaces type",
@@ -44,9 +40,7 @@ test.provider(
 
       // out-of-band verification
       const observed = yield* getType(ksName, created.address.typeName);
-      const fields = new Set(
-        (observed?.fieldDefinitions ?? []).map((f) => f.name),
-      );
+      const fields = new Set((observed?.fieldDefinitions ?? []).map((f) => f.name));
       expect(fields.has("street")).toBe(true);
       expect(fields.has("city")).toBe(true);
 
@@ -68,9 +62,7 @@ test.provider(
 
       expect(replaced.address.typeName).not.toEqual(created.address.typeName);
       const reobserved = yield* getType(ksName, replaced.address.typeName);
-      const reFields = new Set(
-        (reobserved?.fieldDefinitions ?? []).map((f) => f.name),
-      );
+      const reFields = new Set((reobserved?.fieldDefinitions ?? []).map((f) => f.name));
       expect(reFields.has("zip")).toBe(true);
       // the replaced (old) type is gone
       const old = yield* getType(ksName, created.address.typeName);

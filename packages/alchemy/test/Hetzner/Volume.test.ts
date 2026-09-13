@@ -9,10 +9,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Hetzner.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
 
@@ -95,12 +92,7 @@ test.provider.skipIf(!hasHetznerCreds)(
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
   {
-    tags: [
-      "provider:hetzner",
-      "provider:hetzner:service",
-      "provider:hetzner:volume",
-      "live",
-    ],
+    tags: ["provider:hetzner", "provider:hetzner:service", "provider:hetzner:volume", "live"],
     timeout: 120_000,
   },
 );
@@ -152,12 +144,7 @@ test.provider.skipIf(!hasHetznerCreds)(
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
   {
-    tags: [
-      "provider:hetzner",
-      "provider:hetzner:service",
-      "provider:hetzner:volume",
-      "live",
-    ],
+    tags: ["provider:hetzner", "provider:hetzner:service", "provider:hetzner:volume", "live"],
     timeout: 120_000,
   },
 );
@@ -193,12 +180,7 @@ test.provider.skipIf(!hasHetznerCreds)(
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
   {
-    tags: [
-      "provider:hetzner",
-      "provider:hetzner:service",
-      "provider:hetzner:volume",
-      "live",
-    ],
+    tags: ["provider:hetzner", "provider:hetzner:service", "provider:hetzner:volume", "live"],
     timeout: 120_000,
   },
 );

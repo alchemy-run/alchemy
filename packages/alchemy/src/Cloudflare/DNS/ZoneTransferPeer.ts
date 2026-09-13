@@ -202,10 +202,8 @@ export const ZoneTransferPeerProvider = () =>
         observed.name !== desired.name ||
         (desired.ip !== undefined && undef(observed.ip) !== desired.ip) ||
         (desired.port !== undefined && undef(observed.port) !== desired.port) ||
-        (desired.tsigId !== undefined &&
-          undef(observed.tsigId) !== desired.tsigId) ||
-        (desired.ixfrEnable !== undefined &&
-          undef(observed.ixfrEnable) !== desired.ixfrEnable);
+        (desired.tsigId !== undefined && undef(observed.tsigId) !== desired.tsigId) ||
+        (desired.ixfrEnable !== undefined && undef(observed.ixfrEnable) !== desired.ixfrEnable);
 
       if (!dirty) {
         return toAttributes(observed, acct);
@@ -237,8 +235,7 @@ type ObservedPeer =
   | dns.CreateZoneTransferPeerResponse
   | dns.UpdateZoneTransferPeerResponse;
 
-const undef = <T>(v: T | null | undefined): T | undefined =>
-  v == null ? undefined : v;
+const undef = <T>(v: T | null | undefined): T | undefined => (v == null ? undefined : v);
 
 /** Read a peer by id, mapping "gone" (404) to `undefined`. */
 const getPeer = (accountId: string, peerId: string) =>
@@ -266,10 +263,7 @@ const createPeerName = (id: string, name: string | undefined) =>
     return name ?? (yield* createPhysicalName({ id, lowercase: true }));
   });
 
-const toAttributes = (
-  peer: ObservedPeer,
-  accountId: string,
-): ZoneTransferPeerAttributes => ({
+const toAttributes = (peer: ObservedPeer, accountId: string): ZoneTransferPeerAttributes => ({
   peerId: peer.id,
   accountId,
   name: peer.name,

@@ -134,49 +134,31 @@ const listScorecards = (parent: string) =>
   );
 
 const listRaw = (parent: string) =>
-  cci.listProjectsLocationsQaScorecardsRevisions
-    .pages({ parent, pageSize: 100 })
-    .pipe(
-      Stream.flatMap((page) =>
-        Stream.fromIterable(page.qaScorecardRevisions ?? []),
-      ),
-      Stream.runCollect,
-      Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag("NotFound", () => Effect.succeed([])),
-    );
+  cci.listProjectsLocationsQaScorecardsRevisions.pages({ parent, pageSize: 100 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.qaScorecardRevisions ?? [])),
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
+    Effect.catchTag("NotFound", () => Effect.succeed([])),
+  );
 
 const findExisting = (parent: string, qaScorecardRevisionId: string) =>
   listRaw(parent).pipe(
     Effect.map(
       (revisions) =>
-        revisions.find(
-          (revision) =>
-            lastSegment(revision.name ?? "") === qaScorecardRevisionId,
-        ) ??
-        revisions.find((revision) =>
-          (revision.alternateIds ?? []).includes("latest"),
-        ) ??
+        revisions.find((revision) => lastSegment(revision.name ?? "") === qaScorecardRevisionId) ??
+        revisions.find((revision) => (revision.alternateIds ?? []).includes("latest")) ??
         revisions[0],
     ),
   );
 
 const listAtParent = (parent: string, project: string) =>
   listRaw(parent).pipe(
-    Effect.map((revisions) =>
-      revisions.map((revision) => toAttrs(revision, project)),
-    ),
+    Effect.map((revisions) => revisions.map((revision) => toAttrs(revision, project))),
   );
 
 export const QaScorecardsRevisionProvider = () =>
   Provider.succeed(QaScorecardsRevision, {
-    stables: [
-      "name",
-      "qaScorecardRevisionId",
-      "parent",
-      "location",
-      "project",
-      "createTime",
-    ],
+    stables: ["name", "qaScorecardRevisionId", "parent", "location", "project", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -184,8 +166,7 @@ export const QaScorecardsRevisionProvider = () =>
       if (previousParent !== undefined && news.parent !== previousParent) {
         return { action: "replace" as const, deleteFirst: false };
       }
-      const previousId =
-        olds?.qaScorecardRevisionId ?? output?.qaScorecardRevisionId;
+      const previousId = olds?.qaScorecardRevisionId ?? output?.qaScorecardRevisionId;
       if (
         previousId !== undefined &&
         news.qaScorecardRevisionId !== undefined &&
@@ -205,14 +186,11 @@ export const QaScorecardsRevisionProvider = () =>
       );
       const name =
         output?.name ??
-        (olds?.parent !== undefined
-          ? resourceName(olds.parent, qaScorecardRevisionId)
-          : "");
+        (olds?.parent !== undefined ? resourceName(olds.parent, qaScorecardRevisionId) : "");
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return hasOwnershipMarker(existing.snapshot?.description) ||
-        output?.name === existing.name
+      return hasOwnershipMarker(existing.snapshot?.description) || output?.name === existing.name
         ? attrs
         : Unowned(attrs);
     }),
@@ -220,9 +198,7 @@ export const QaScorecardsRevisionProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const scorecards = yield* listScorecards(
-          locationParent(env.project, env.region),
-        );
+        const scorecards = yield* listScorecards(locationParent(env.project, env.region));
         const pages = yield* Effect.forEach(
           scorecards,
           (parent) => listAtParent(parent, env.project),

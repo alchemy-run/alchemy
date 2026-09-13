@@ -72,9 +72,7 @@ test.provider(
 
       // No-op redeploy.
       const noop = yield* deployGroup("alchemy test group");
-      expect(noop.group.collectionGroupId).toBe(
-        created.group.collectionGroupId,
-      );
+      expect(noop.group.collectionGroupId).toBe(created.group.collectionGroupId);
 
       // Update the description.
       yield* deployGroup("alchemy test group v2");

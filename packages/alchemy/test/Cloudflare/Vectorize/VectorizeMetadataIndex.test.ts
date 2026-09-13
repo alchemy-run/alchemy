@@ -12,10 +12,7 @@ import { waitForMetadata } from "./Readiness.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Bounded typed wait for a parent VectorizeIndex to actually disappear from
 // Cloudflare after a delete/replace. Index deletes are quick; allow eight
@@ -50,14 +47,11 @@ describe.skipIf(!!process.env.FAST)(
                 dimensions: 32,
                 metric: "cosine",
               });
-              const meta = yield* Cloudflare.Vectorize.MetadataIndex(
-                "MetaIdx",
-                {
-                  indexName: index.indexName,
-                  propertyName: "category",
-                  indexType: "string",
-                },
-              );
+              const meta = yield* Cloudflare.Vectorize.MetadataIndex("MetaIdx", {
+                indexName: index.indexName,
+                propertyName: "category",
+                indexType: "string",
+              });
               return { index, meta };
             }),
           );
@@ -68,26 +62,17 @@ describe.skipIf(!!process.env.FAST)(
 
           // The metadata index appears in the parent's list once Cloudflare
           // processes the async mutation.
-          const entries = yield* waitForMetadata(accountId, index.indexName, [
-            meta,
-          ]);
-          expect(
-            entries
-              .find((e) => e.propertyName === "category")
-              ?.indexType?.toLowerCase(),
-          ).toBe("string");
+          const entries = yield* waitForMetadata(accountId, index.indexName, [meta]);
+          expect(entries.find((e) => e.propertyName === "category")?.indexType?.toLowerCase()).toBe(
+            "string",
+          );
 
           yield* stack.destroy();
 
           // Both parent and metadata index are gone.
           const after = yield* listMetadataIndexes(accountId, index.indexName);
           expect(after.length).toBe(0);
-        }).pipe(
-          Effect.ensuring(
-            stack.destroy().pipe(Effect.orDie).pipe(Effect.ignore),
-          ),
-          logLevel,
-        ),
+        }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.orDie).pipe(Effect.ignore)), logLevel),
       { timeout: 210_000 },
     );
 
@@ -105,39 +90,26 @@ describe.skipIf(!!process.env.FAST)(
                 dimensions: 32,
                 metric: "cosine",
               });
-              const category = yield* Cloudflare.Vectorize.MetadataIndex(
-                "CategoryMeta",
-                {
-                  indexName: index.indexName,
-                  propertyName: "category",
-                  indexType: "string",
-                },
-              );
-              const price = yield* Cloudflare.Vectorize.MetadataIndex(
-                "PriceMeta",
-                {
-                  indexName: index.indexName,
-                  propertyName: "price",
-                  indexType: "number",
-                },
-              );
+              const category = yield* Cloudflare.Vectorize.MetadataIndex("CategoryMeta", {
+                indexName: index.indexName,
+                propertyName: "category",
+                indexType: "string",
+              });
+              const price = yield* Cloudflare.Vectorize.MetadataIndex("PriceMeta", {
+                indexName: index.indexName,
+                propertyName: "price",
+                indexType: "number",
+              });
               return { index, category, price };
             }),
           );
-          const entries = yield* waitForMetadata(accountId, index.indexName, [
-            category,
-            price,
-          ]);
-          expect(
-            entries
-              .find((e) => e.propertyName === "category")
-              ?.indexType?.toLowerCase(),
-          ).toBe("string");
-          expect(
-            entries
-              .find((e) => e.propertyName === "price")
-              ?.indexType?.toLowerCase(),
-          ).toBe("number");
+          const entries = yield* waitForMetadata(accountId, index.indexName, [category, price]);
+          expect(entries.find((e) => e.propertyName === "category")?.indexType?.toLowerCase()).toBe(
+            "string",
+          );
+          expect(entries.find((e) => e.propertyName === "price")?.indexType?.toLowerCase()).toBe(
+            "number",
+          );
 
           yield* stack.destroy();
         }).pipe(
@@ -146,9 +118,7 @@ describe.skipIf(!!process.env.FAST)(
           // only, so a body that throws before the trailing `destroy()` would
           // otherwise leak the parent + metadata indexes with no next-run
           // cleanup.
-          Effect.ensuring(
-            stack.destroy().pipe(Effect.orDie).pipe(Effect.ignore),
-          ),
+          Effect.ensuring(stack.destroy().pipe(Effect.orDie).pipe(Effect.ignore)),
           logLevel,
         ),
       { timeout: 210_000 },
@@ -187,14 +157,11 @@ describe.skipIf(!!process.env.FAST)(
                 dimensions: 64,
                 metric: "cosine",
               });
-              const meta = yield* Cloudflare.Vectorize.MetadataIndex(
-                "ReplaceMeta",
-                {
-                  indexName: index.indexName,
-                  propertyName: "tag",
-                  indexType: "string",
-                },
-              );
+              const meta = yield* Cloudflare.Vectorize.MetadataIndex("ReplaceMeta", {
+                indexName: index.indexName,
+                propertyName: "tag",
+                indexType: "string",
+              });
               return { index, meta };
             }),
           );
@@ -204,22 +171,14 @@ describe.skipIf(!!process.env.FAST)(
 
           // Old parent is gone — bounded typed wait for the replacement's
           // delete of the old index to settle.
-          const oldGone = yield* waitForIndexGone(
-            accountId,
-            oldIndex.indexName,
-          );
+          const oldGone = yield* waitForIndexGone(accountId, oldIndex.indexName);
           expect(oldGone).toBe(true);
 
           // The new parent has the metadata index.
           yield* waitForMetadata(accountId, newIndex.indexName, [newMeta]);
 
           yield* stack.destroy();
-        }).pipe(
-          Effect.ensuring(
-            stack.destroy().pipe(Effect.orDie).pipe(Effect.ignore),
-          ),
-          logLevel,
-        ),
+        }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.orDie).pipe(Effect.ignore)), logLevel),
       { timeout: 210_000 },
     );
 
@@ -235,40 +194,29 @@ describe.skipIf(!!process.env.FAST)(
                 dimensions: 32,
                 metric: "cosine",
               });
-              const meta = yield* Cloudflare.Vectorize.MetadataIndex(
-                "ListMeta",
-                {
-                  indexName: index.indexName,
-                  propertyName: "category",
-                  indexType: "string",
-                },
-              );
+              const meta = yield* Cloudflare.Vectorize.MetadataIndex("ListMeta", {
+                indexName: index.indexName,
+                propertyName: "category",
+                indexType: "string",
+              });
               return { index, meta };
             }),
           );
 
-          const provider = yield* Provider.findProvider(
-            Cloudflare.Vectorize.MetadataIndex,
-          );
+          const provider = yield* Provider.findProvider(Cloudflare.Vectorize.MetadataIndex);
 
           const { accountId } = yield* yield* CloudflareEnvironment;
           yield* waitForMetadata(accountId, index.indexName, [meta]);
           const all = yield* provider.list().pipe(Effect.timeout("20 seconds"));
 
           const entry = all.find(
-            (x) =>
-              x.indexName === index.indexName && x.propertyName === "category",
+            (x) => x.indexName === index.indexName && x.propertyName === "category",
           );
           expect(entry?.indexType).toBe("string");
           expect(entry?.accountId).toBeDefined();
 
           yield* stack.destroy();
-        }).pipe(
-          Effect.ensuring(
-            stack.destroy().pipe(Effect.orDie).pipe(Effect.ignore),
-          ),
-          logLevel,
-        ),
+        }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.orDie).pipe(Effect.ignore)), logLevel),
       { timeout: 210_000 },
     );
 
@@ -298,10 +246,7 @@ describe.skipIf(!!process.env.FAST)(
           // On Cloudflare's side this also removes the metadata index.
           // Deletion must work even while the metadata mutation is pending;
           // waiting for query visibility is not a prerequisite for teardown.
-          yield* vectorize.deleteIndex({
-            accountId,
-            indexName: index.indexName,
-          });
+          yield* vectorize.deleteIndex({ accountId, indexName: index.indexName });
 
           // Bounded typed wait for the out-of-band delete to actually settle
           // before exercising the idempotent `destroy` path.
@@ -311,29 +256,19 @@ describe.skipIf(!!process.env.FAST)(
           // The metadata index provider's delete tolerates 404/410 from the
           // missing parent, so `destroy` succeeds without erroring.
           yield* stack.destroy();
-        }).pipe(
-          Effect.ensuring(
-            stack.destroy().pipe(Effect.orDie).pipe(Effect.ignore),
-          ),
-          logLevel,
-        ),
+        }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.orDie).pipe(Effect.ignore)), logLevel),
       { timeout: 210_000 },
     );
   },
 );
 
-const listMetadataIndexes = Effect.fn(function* (
-  accountId: string,
-  indexName: string,
-) {
-  return yield* vectorize
-    .listIndexMetadataIndexes({ accountId, indexName })
-    .pipe(
-      Effect.timeout("5 seconds"),
-      Effect.map((res) => res.metadataIndexes ?? []),
-      Effect.catchTag(["NotFound", "Gone"], () =>
-        // Parent index gone — treat as "no metadata indexes".
-        Effect.succeed([]),
-      ),
-    );
+const listMetadataIndexes = Effect.fn(function* (accountId: string, indexName: string) {
+  return yield* vectorize.listIndexMetadataIndexes({ accountId, indexName }).pipe(
+    Effect.timeout("5 seconds"),
+    Effect.map((res) => res.metadataIndexes ?? []),
+    Effect.catchTag(["NotFound", "Gone"], () =>
+      // Parent index gone — treat as "no metadata indexes".
+      Effect.succeed([]),
+    ),
+  );
 });

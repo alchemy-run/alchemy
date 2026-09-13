@@ -17,14 +17,9 @@ export const localState = () =>
   Layer.effect(
     State,
     Effect.gen(function* () {
-      const context = yield* Effect.context<
-        FileSystem.FileSystem | Path.Path
-      >();
+      const context = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
 
-      const make = makeLocalState().pipe(
-        recordStateStoreInit,
-        Effect.provideContext(context),
-      );
+      const make = makeLocalState().pipe(recordStateStoreInit, Effect.provideContext(context));
 
       return yield* Effect.cached(make);
     }),
@@ -67,10 +62,7 @@ export const makeLocalState = () =>
     // to an empty listing. A directory cannot legitimately reappear
     // between the two checks: nothing recreates a stage dir concurrently
     // with the session that is listing or deleting it.
-    const recoverMissingDir = <T>(
-      dir: string,
-      effect: Effect.Effect<T, PlatformError, never>,
-    ) =>
+    const recoverMissingDir = <T>(dir: string, effect: Effect.Effect<T, PlatformError, never>) =>
       effect.pipe(
         Effect.catchTag("PlatformError", (e) => {
           if (e.reason._tag !== "NotFound") return fail(e);
@@ -95,15 +87,8 @@ export const makeLocalState = () =>
     const stageDir = ({ stack, stage }: { stack: string; stage: string }) =>
       path.join(stateDir, stack, stage);
 
-    const resource = ({
-      stack,
-      stage,
-      fqn,
-    }: {
-      stack: string;
-      stage: string;
-      fqn: string;
-    }) => path.join(stateDir, stack, stage, `${encodeFqn(fqn)}.json`);
+    const resource = ({ stack, stage, fqn }: { stack: string; stage: string; fqn: string }) =>
+      path.join(stateDir, stack, stage, `${encodeFqn(fqn)}.json`);
 
     const outputFile = ({ stack, stage }: { stack: string; stage: string }) =>
       path.join(stateDir, stack, stage, `__stack_output__.json`);
@@ -112,17 +97,14 @@ export const makeLocalState = () =>
     // test reading shared `.alchemy/state`) never observes a truncated,
     // mid-write file — which would otherwise surface as `JSON.parse("")` →
     // "Unexpected end of JSON input".
-    const writeAtomic = (file: string, contents: string) =>
-      writeFileAtomic(fs, file, contents);
+    const writeAtomic = (file: string, contents: string) => writeFileAtomic(fs, file, contents);
 
     // Parse a state file, tolerating an empty read. A zero-length file can
     // linger from a write that was interrupted before this atomic-write change
     // (or any non-atomic external writer); treat it as "absent" rather than
     // throwing a JSON parse error that would abort the whole operation.
     const parseState = (contents: string) =>
-      contents.trim().length === 0
-        ? undefined
-        : JSON.parse(contents, reviveState);
+      contents.trim().length === 0 ? undefined : JSON.parse(contents, reviveState);
 
     const created = new Set<string>();
 
@@ -165,10 +147,7 @@ export const makeLocalState = () =>
       set: (request) =>
         ensure(stageDir(request)).pipe(
           Effect.flatMap(() =>
-            writeAtomic(
-              resource(request),
-              JSON.stringify(encodeState(request.value), null, 2),
-            ),
+            writeAtomic(resource(request), JSON.stringify(encodeState(request.value), null, 2)),
           ),
           recover,
           Effect.map(() => request.value),
@@ -176,10 +155,7 @@ export const makeLocalState = () =>
       delete: (request) => fs.remove(resource(request)).pipe(recover),
       deleteStack: ({ stack, stage }) =>
         Effect.suspend(() => {
-          const dir =
-            stage === undefined
-              ? path.join(stateDir, stack)
-              : stageDir({ stack, stage });
+          const dir = stage === undefined ? path.join(stateDir, stack) : stageDir({ stack, stage });
           return fs.remove(dir, { recursive: true }).pipe(
             (eff) => recoverMissingDir(dir, eff),
             // Drop cached `ensure`d directories under the removed tree, or a
@@ -208,11 +184,7 @@ export const makeLocalState = () =>
                   entries.length === 0
                     ? fs
                         .remove(stackDir, { recursive: true })
-                        .pipe(
-                          Effect.tap(() =>
-                            Effect.sync(() => created.delete(stackDir)),
-                          ),
-                        )
+                        .pipe(Effect.tap(() => Effect.sync(() => created.delete(stackDir))))
                     : Effect.void,
                 ),
                 Effect.ignore,
@@ -232,10 +204,7 @@ export const makeLocalState = () =>
               //    non-existent resource;
               //  - in-flight `*.tmp` files written by `writeAtomic` (and any
               //    other non-`.json` entry), which are not resources.
-              .filter(
-                (file) =>
-                  file.endsWith(".json") && file !== "__stack_output__.json",
-              )
+              .filter((file) => file.endsWith(".json") && file !== "__stack_output__.json")
               .map((file) => decodeFqn(file.replace(/\.json$/, ""))),
           ),
         ),

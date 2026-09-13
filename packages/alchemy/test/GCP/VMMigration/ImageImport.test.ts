@@ -1,8 +1,8 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as vmmigration from "@distilled.cloud/gcp/vmmigration_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import { logLevel, currentProject, waitUntilGone } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -63,9 +63,7 @@ test.provider.skipIf(!imageUri)(
       );
       expect(created.location).toEqual("us-central1");
       expect(created.cloudStorageUri).toContain("gs://");
-      expect(created.diskImageTargetDefaults?.imageName).toEqual(
-        "alchemy-imported-disk",
-      );
+      expect(created.diskImageTargetDefaults?.imageName).toEqual("alchemy-imported-disk");
       expect(created.diskImageTargetDefaults?.labels).toMatchObject({
         env: "test",
       });
@@ -75,9 +73,7 @@ test.provider.skipIf(!imageUri)(
       });
       expect(fetched.name).toEqual(created.name);
       expect(fetched.diskImageTargetDefaults?.labels?.env).toEqual("test");
-      expect(fetched.diskImageTargetDefaults?.description).toContain(
-        "alchemy-id=",
-      );
+      expect(fetched.diskImageTargetDefaults?.description).toContain("alchemy-id=");
 
       yield* stack.destroy();
       const gone = yield* waitUntilGone(

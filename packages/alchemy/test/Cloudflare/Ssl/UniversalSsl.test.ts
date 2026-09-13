@@ -10,21 +10,15 @@ import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
@@ -74,14 +68,7 @@ const destructive = !!process.env.CLOUDFLARE_TEST_UNIVERSAL_SSL;
 
 describe.sequential(
   "UniversalSsl",
-  {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:ssl",
-      "provider:cloudflare:zone",
-      "live",
-    ],
-  },
+  { tags: ["provider:cloudflare", "provider:cloudflare:ssl", "provider:cloudflare:zone", "live"] },
   () => {
     test.provider.skipIf(!destructive)(
       "disables Universal SSL and restores the original value on destroy",
@@ -95,10 +82,7 @@ describe.sequential(
 
           const setting = yield* stack.deploy(
             Effect.gen(function* () {
-              return yield* Cloudflare.Ssl.UniversalSsl("UniversalSsl", {
-                zoneId,
-                enabled: false,
-              });
+              return yield* Cloudflare.Ssl.UniversalSsl("UniversalSsl", { zoneId, enabled: false });
             }),
           );
 
@@ -130,10 +114,7 @@ describe.sequential(
 
           const initial = yield* stack.deploy(
             Effect.gen(function* () {
-              return yield* Cloudflare.Ssl.UniversalSsl("UniversalSsl", {
-                zoneId,
-                enabled: false,
-              });
+              return yield* Cloudflare.Ssl.UniversalSsl("UniversalSsl", { zoneId, enabled: false });
             }),
           );
 
@@ -142,10 +123,7 @@ describe.sequential(
 
           const updated = yield* stack.deploy(
             Effect.gen(function* () {
-              return yield* Cloudflare.Ssl.UniversalSsl("UniversalSsl", {
-                zoneId,
-                enabled: true,
-              });
+              return yield* Cloudflare.Ssl.UniversalSsl("UniversalSsl", { zoneId, enabled: true });
             }),
           );
 
@@ -178,10 +156,7 @@ describe.sequential(
 
           const setting = yield* stack.deploy(
             Effect.gen(function* () {
-              return yield* Cloudflare.Ssl.UniversalSsl("UniversalSsl", {
-                zoneId,
-                enabled: true,
-              });
+              return yield* Cloudflare.Ssl.UniversalSsl("UniversalSsl", { zoneId, enabled: true });
             }),
           );
 
@@ -210,9 +185,7 @@ describe.sequential(
       Effect.gen(function* () {
         const zoneId = yield* resolveZoneId;
 
-        const provider = yield* Provider.findProvider(
-          Cloudflare.Ssl.UniversalSsl,
-        );
+        const provider = yield* Provider.findProvider(Cloudflare.Ssl.UniversalSsl);
         const all = yield* provider.list();
 
         expect(all.length).toBeGreaterThan(0);

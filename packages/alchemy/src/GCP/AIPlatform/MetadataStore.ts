@@ -98,9 +98,7 @@ export type MetadataStore = Resource<
  * @resource
  * @category AIPlatform
  */
-export const MetadataStore = Resource<MetadataStore>(
-  "GCP.AIPlatform.MetadataStore",
-);
+export const MetadataStore = Resource<MetadataStore>("GCP.AIPlatform.MetadataStore");
 
 export class MetadataStoreNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.MetadataStoreNotResolved",
@@ -114,17 +112,10 @@ export class MetadataStoreStillExists extends Data.TaggedError(
   name: string;
 }> {}
 
-const resourceName = (
-  project: string,
-  location: string,
-  metadataStoreId: string,
-) =>
+const resourceName = (project: string, location: string, metadataStoreId: string) =>
   `projects/${project}/locations/${location}/metadataStores/${metadataStoreId}`;
 
-const toAttrs = (
-  store: aiplatform.GoogleCloudAiplatformV1MetadataStore,
-  project: string,
-) => {
+const toAttrs = (store: aiplatform.GoogleCloudAiplatformV1MetadataStore, project: string) => {
   const name = store.name ?? "";
   const parsed = parseDescription(store.description);
   return {
@@ -146,28 +137,22 @@ const getByName = (name: string) =>
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const listPage = (parent: string) =>
-  aiplatform.listProjectsLocationsMetadataStores
-    .pages({ parent, pageSize: 100 })
-    .pipe(
-      Stream.runCollect,
-      Effect.map((pages) =>
-        Array.from(pages).flatMap((page) => page.metadataStores ?? []),
-      ),
-      Effect.catchTag("NotFound", () =>
-        Effect.succeed([] as aiplatform.GoogleCloudAiplatformV1MetadataStore[]),
-      ),
-    );
+  aiplatform.listProjectsLocationsMetadataStores.pages({ parent, pageSize: 100 }).pipe(
+    Stream.runCollect,
+    Effect.map((pages) => Array.from(pages).flatMap((page) => page.metadataStores ?? [])),
+    Effect.catchTag("NotFound", () =>
+      Effect.succeed([] as aiplatform.GoogleCloudAiplatformV1MetadataStore[]),
+    ),
+  );
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
-      (store): store is aiplatform.GoogleCloudAiplatformV1MetadataStore =>
-        store !== undefined,
+      (store): store is aiplatform.GoogleCloudAiplatformV1MetadataStore => store !== undefined,
       () => new MetadataStoreNotResolved({ name }),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.AIPlatform.MetadataStoreNotResolved",
+      while: (error) => error._tag === "GCP.AIPlatform.MetadataStoreNotResolved",
       times: 8,
       schedule: Schedule.spaced("2 seconds"),
     }),
@@ -181,8 +166,7 @@ const waitUntilGone = (name: string) =>
     ),
     Effect.asVoid,
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.AIPlatform.MetadataStoreStillExists",
+      while: (error) => error._tag === "GCP.AIPlatform.MetadataStoreStillExists",
       times: 10,
       schedule: Schedule.spaced("2 seconds"),
     }),
@@ -190,44 +174,29 @@ const waitUntilGone = (name: string) =>
 
 export const MetadataStoreProvider = () =>
   Provider.succeed(MetadataStore, {
-    stables: [
-      "name",
-      "metadataStoreId",
-      "project",
-      "location",
-      "kmsKeyName",
-      "createTime",
-    ],
+    stables: ["name", "metadataStoreId", "project", "location", "kmsKeyName", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       const env = yield* GcpEnvironment.current;
       if (!isResolved(news)) return undefined;
       const previousId = olds?.metadataStoreId ?? output?.metadataStoreId;
       const nextId = news.metadataStoreId ?? previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
         env.region,
       );
-      const previousKms =
-        olds?.encryptionSpec?.kmsKeyName ?? output?.kmsKeyName ?? "";
+      const previousKms = olds?.encryptionSpec?.kmsKeyName ?? output?.kmsKeyName ?? "";
       const nextKms = news.encryptionSpec?.kmsKeyName ?? previousKms;
       if (
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation ||
         nextKms !== previousKms
       ) {
         return {
           action: "replace" as const,
           deleteFirst:
-            previousLocation === nextLocation &&
-            previousId !== undefined &&
-            nextId === previousId,
+            previousLocation === nextLocation && previousId !== undefined && nextId === previousId,
         };
       }
       return undefined;
@@ -240,12 +209,8 @@ export const MetadataStoreProvider = () =>
         olds?.metadataStoreId,
         output?.metadataStoreId,
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, metadataStoreId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, metadataStoreId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
@@ -258,8 +223,7 @@ export const MetadataStoreProvider = () =>
         const env = yield* GcpEnvironment.current;
         const pages = yield* Effect.forEach(
           listLocations(env.region),
-          (location) =>
-            listPage(`projects/${env.project}/locations/${location}`),
+          (location) => listPage(`projects/${env.project}/locations/${location}`),
           { concurrency: 4 },
         );
         return pages
@@ -275,10 +239,7 @@ export const MetadataStoreProvider = () =>
         news.metadataStoreId,
         output?.metadataStoreId,
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, metadataStoreId);
       const ownership = yield* createInternalLabels(id);
       const desiredDescription = encodeDescription(ownership, news.description);

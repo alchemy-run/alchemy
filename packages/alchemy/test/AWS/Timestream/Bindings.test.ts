@@ -17,14 +17,7 @@ const { test } = Test.make({ providers: AWS.providers() });
 // so an onboarded account can run it unchanged.
 describe(
   "AWS.Timestream Bindings",
-  {
-    tags: [
-      "provider:aws",
-      "provider:aws:lambda",
-      "provider:aws:timestream",
-      "live",
-    ],
-  },
+  { tags: ["provider:aws", "provider:aws:lambda", "provider:aws:timestream", "live"] },
   () => {
     test.provider.skipIf(!process.env.AWS_TEST_TIMESTREAM)(
       "Lambda writes records and queries them back",
@@ -42,10 +35,7 @@ describe(
           // function-URL cold start / IAM propagation.
           const writeResponse = yield* HttpClient.execute(
             HttpClientRequest.post(`${baseUrl}/write`).pipe(
-              HttpClientRequest.bodyJsonUnsafe({
-                host: "web-1",
-                value: "42.0",
-              }),
+              HttpClientRequest.bodyJsonUnsafe({ host: "web-1", value: "42.0" }),
             ),
           ).pipe(
             Effect.flatMap((response) =>
@@ -54,10 +44,7 @@ describe(
                 : Effect.fail(new Error(`write not ready: ${response.status}`)),
             ),
             Effect.retry({
-              schedule: Schedule.max([
-                Schedule.exponential("1 second"),
-                Schedule.recurs(8),
-              ]),
+              schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(8)]),
             }),
           );
           const written = (yield* writeResponse.json) as {
@@ -74,12 +61,7 @@ describe(
                 : Effect.fail(new Error(`query failed: ${response.status}`)),
             ),
             Effect.map(
-              (body) =>
-                (
-                  body as {
-                    rows: Array<{ Data: Array<{ ScalarValue?: string }> }>;
-                  }
-                ).rows,
+              (body) => (body as { rows: Array<{ Data: Array<{ ScalarValue?: string }> }> }).rows,
             ),
             Effect.flatMap((rows) =>
               Number(rows[0]?.Data[0]?.ScalarValue ?? "0") >= 1
@@ -87,15 +69,10 @@ describe(
                 : Effect.fail(new Error("no rows counted yet")),
             ),
             Effect.retry({
-              schedule: Schedule.max([
-                Schedule.spaced("2 seconds"),
-                Schedule.recurs(10),
-              ]),
+              schedule: Schedule.max([Schedule.spaced("2 seconds"), Schedule.recurs(10)]),
             }),
           );
-          expect(Number(rows[0]!.Data[0]!.ScalarValue)).toBeGreaterThanOrEqual(
-            1,
-          );
+          expect(Number(rows[0]!.Data[0]!.ScalarValue)).toBeGreaterThanOrEqual(1);
 
           // Validate the same SQL through the PrepareQuery binding.
           const prepared = (yield* HttpClient.get(`${baseUrl}/prepare`).pipe(
@@ -105,10 +82,7 @@ describe(
                 : Effect.fail(new Error(`prepare failed: ${response.status}`)),
             ),
             Effect.retry({
-              schedule: Schedule.max([
-                Schedule.spaced("2 seconds"),
-                Schedule.recurs(8),
-              ]),
+              schedule: Schedule.max([Schedule.spaced("2 seconds"), Schedule.recurs(8)]),
             }),
           )) as { columns: Array<{ Name?: string }> };
           expect(prepared.columns[0]?.Name).toBe("c");

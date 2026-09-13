@@ -121,9 +121,7 @@ export type BillingExclusion = Resource<
  * @resource
  * @category Logging
  */
-export const BillingExclusion = Resource<BillingExclusion>(
-  "GCP.Logging.BillingExclusion",
-);
+export const BillingExclusion = Resource<BillingExclusion>("GCP.Logging.BillingExclusion");
 
 export class BillingExclusionNotResolved extends Data.TaggedError(
   "GCP.Logging.BillingExclusionNotResolved",
@@ -150,9 +148,7 @@ const toAttrs = (exclusion: logging.LogExclusion, billingAccountId: string) => {
   const account = billingAccountOfName(exclusion.name ?? "", billingAccountId);
   return {
     name:
-      exclusion.name?.includes("/") === true
-        ? exclusion.name
-        : resourceName(account, exclusionId),
+      exclusion.name?.includes("/") === true ? exclusion.name : resourceName(account, exclusionId),
     exclusionId,
     billingAccountId: account,
     filter: exclusion.filter ?? "",
@@ -179,13 +175,11 @@ export const BillingExclusionProvider = () =>
         previousId !== undefined &&
         news.exclusionId !== undefined &&
         news.exclusionId !== previousId;
-      const previousAccount =
-        olds?.billingAccountId ?? output?.billingAccountId;
+      const previousAccount = olds?.billingAccountId ?? output?.billingAccountId;
       const accountChanged =
         previousAccount !== undefined &&
         news.billingAccountId !== undefined &&
-        billingAccountIdOf(news.billingAccountId) !==
-          billingAccountIdOf(previousAccount);
+        billingAccountIdOf(news.billingAccountId) !== billingAccountIdOf(previousAccount);
       if (!idChanged && !accountChanged) return undefined;
       return { action: "replace" as const, deleteFirst: false };
     }),
@@ -195,12 +189,7 @@ export const BillingExclusionProvider = () =>
         olds?.billingAccountId,
         output?.billingAccountId,
       );
-      const exclusionId = yield* toPhysicalId(
-        id,
-        olds?.exclusionId,
-        output?.exclusionId,
-        "e",
-      );
+      const exclusionId = yield* toPhysicalId(id, olds?.exclusionId, output?.exclusionId, "e");
       const name = output?.name ?? resourceName(billingAccountId, exclusionId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
@@ -212,9 +201,7 @@ export const BillingExclusionProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const billingAccountId = yield* lookupProjectBillingAccountId(
-          env.project,
-        );
+        const billingAccountId = yield* lookupProjectBillingAccountId(env.project);
         if (billingAccountId === undefined) return [];
         return yield* logging.listBillingAccountsExclusions
           .pages({
@@ -222,12 +209,8 @@ export const BillingExclusionProvider = () =>
             pageSize: 1000,
           })
           .pipe(
-            Stream.flatMap((page) =>
-              Stream.fromIterable(page.exclusions ?? []),
-            ),
-            Stream.filter((exclusion) =>
-              hasOwnershipMarker(exclusion.description),
-            ),
+            Stream.flatMap((page) => Stream.fromIterable(page.exclusions ?? [])),
+            Stream.filter((exclusion) => hasOwnershipMarker(exclusion.description)),
             Stream.map((exclusion) => toAttrs(exclusion, billingAccountId)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
@@ -242,12 +225,7 @@ export const BillingExclusionProvider = () =>
         news.billingAccountId,
         output?.billingAccountId,
       );
-      const exclusionId = yield* toPhysicalId(
-        id,
-        news.exclusionId,
-        output?.exclusionId,
-        "e",
-      );
+      const exclusionId = yield* toPhysicalId(id, news.exclusionId, output?.exclusionId, "e");
       const name = resourceName(billingAccountId, exclusionId);
       const ownership = yield* createInternalLabels(id);
       const desiredDescription = encodeDescription(ownership, news.description);
@@ -275,8 +253,7 @@ export const BillingExclusionProvider = () =>
 
       const desiredDisabled = news.disabled === true;
       const filterChanged = (current.filter ?? "") !== news.filter;
-      const descriptionChanged =
-        (current.description ?? "") !== desiredDescription;
+      const descriptionChanged = (current.description ?? "") !== desiredDescription;
       const disabledChanged = (current.disabled === true) !== desiredDisabled;
 
       const updateMask = [

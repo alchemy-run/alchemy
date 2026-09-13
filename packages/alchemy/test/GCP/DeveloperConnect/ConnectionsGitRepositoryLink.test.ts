@@ -1,11 +1,11 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as developerconnect from "@distilled.cloud/gcp/developerconnect_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -14,10 +14,8 @@ const { test } = Test.make({ providers: GCP.providers() });
 // ("connection must have installation_state COMPLETE"). Set
 // GCP_TEST_DEVELOPERCONNECT_GITHUB_TOKEN_SECRET (OAuth token secret version)
 // and GCP_TEST_DEVELOPERCONNECT_GITHUB_INSTALLATION_ID to run.
-const githubTokenSecret =
-  process.env.GCP_TEST_DEVELOPERCONNECT_GITHUB_TOKEN_SECRET;
-const githubInstallationId =
-  process.env.GCP_TEST_DEVELOPERCONNECT_GITHUB_INSTALLATION_ID;
+const githubTokenSecret = process.env.GCP_TEST_DEVELOPERCONNECT_GITHUB_TOKEN_SECRET;
+const githubInstallationId = process.env.GCP_TEST_DEVELOPERCONNECT_GITHUB_INSTALLATION_ID;
 const runLinkLifecycle = !!githubTokenSecret && !!githubInstallationId;
 const githubConfig = {
   githubApp: "DEVELOPER_CONNECT",
@@ -25,27 +23,21 @@ const githubConfig = {
   appInstallationId: githubInstallationId,
 };
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const cloneUri =
-  process.env.GCP_DEVELOPERCONNECT_CLONE_URI ??
-  "https://github.com/octocat/Hello-World.git";
+  process.env.GCP_DEVELOPERCONNECT_CLONE_URI ?? "https://github.com/octocat/Hello-World.git";
 
 const waitUntilGone = (name: string) =>
-  developerconnect
-    .getProjectsLocationsConnectionsGitRepositoryLinks({ name })
-    .pipe(
-      Effect.as("found" as const),
-      Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
-      Effect.repeat({
-        schedule: Schedule.spaced("1 second"),
-        until: (status) => status === "gone",
-        times: 10,
-      }),
-    );
+  developerconnect.getProjectsLocationsConnectionsGitRepositoryLinks({ name }).pipe(
+    Effect.as("found" as const),
+    Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
+    Effect.repeat({
+      schedule: Schedule.spaced("1 second"),
+      until: (status) => status === "gone",
+      times: 10,
+    }),
+  );
 
 const waitUntilConnectionGone = (name: string) =>
   developerconnect.getProjectsLocationsConnections({ name }).pipe(
@@ -93,12 +85,11 @@ test.provider.skipIf(!runLinkLifecycle)(
             githubConfig,
             labels: { env: "test" },
           });
-          const source =
-            yield* GCP.DeveloperConnect.ConnectionsGitRepositoryLink("Source", {
-              connection: github.name,
-              cloneUri,
-              labels: { env: "test" },
-            });
+          const source = yield* GCP.DeveloperConnect.ConnectionsGitRepositoryLink("Source", {
+            connection: github.name,
+            cloneUri,
+            labels: { env: "test" },
+          });
           return { github, source };
         }),
       );
@@ -109,12 +100,9 @@ test.provider.skipIf(!runLinkLifecycle)(
       expect(created.source.cloneUri).toEqual(cloneUri);
       expect(created.source.labels).toMatchObject({ env: "test" });
 
-      const fetched =
-        yield* developerconnect.getProjectsLocationsConnectionsGitRepositoryLinks(
-          {
-            name: created.source.name,
-          },
-        );
+      const fetched = yield* developerconnect.getProjectsLocationsConnectionsGitRepositoryLinks({
+        name: created.source.name,
+      });
       expect(fetched.name).toEqual(created.source.name);
       expect(fetched.cloneUri).toEqual(cloneUri);
       expect(fetched.labels?.env).toEqual("test");
@@ -128,13 +116,12 @@ test.provider.skipIf(!runLinkLifecycle)(
             githubConfig,
             labels: { env: "test" },
           });
-          const source =
-            yield* GCP.DeveloperConnect.ConnectionsGitRepositoryLink("Source", {
-              connection: github.name,
-              gitRepositoryLinkId: created.source.gitRepositoryLinkId,
-              cloneUri,
-              labels: { env: "prod", role: "source" },
-            });
+          const source = yield* GCP.DeveloperConnect.ConnectionsGitRepositoryLink("Source", {
+            connection: github.name,
+            gitRepositoryLinkId: created.source.gitRepositoryLinkId,
+            cloneUri,
+            labels: { env: "prod", role: "source" },
+          });
           return { github, source };
         }),
       );
@@ -146,11 +133,9 @@ test.provider.skipIf(!runLinkLifecycle)(
       });
 
       const fetchedUpdate =
-        yield* developerconnect.getProjectsLocationsConnectionsGitRepositoryLinks(
-          {
-            name: updated.source.name,
-          },
-        );
+        yield* developerconnect.getProjectsLocationsConnectionsGitRepositoryLinks({
+          name: updated.source.name,
+        });
       expect(fetchedUpdate.labels?.env).toEqual("prod");
       expect(fetchedUpdate.labels?.role).toEqual("source");
 
@@ -158,9 +143,7 @@ test.provider.skipIf(!runLinkLifecycle)(
 
       const gone = yield* waitUntilGone(updated.source.name);
       expect(gone).toEqual("gone");
-      const connectionGone = yield* waitUntilConnectionGone(
-        created.github.name,
-      );
+      const connectionGone = yield* waitUntilConnectionGone(created.github.name);
       expect(connectionGone).toEqual("gone");
     }).pipe(logLevel),
   {

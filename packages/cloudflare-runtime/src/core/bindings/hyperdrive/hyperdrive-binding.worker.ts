@@ -9,8 +9,7 @@ export default function makeBinding(env: { ORIGIN: HyperdriveOrigin }) {
     connectionString += `?${env.ORIGIN.scheme === "postgresql" || env.ORIGIN.scheme === "postgres" ? "sslmode" : "ssl-mode"}=${env.ORIGIN.sslmode}`;
   }
   return {
-    connect: () =>
-      sockets.connect({ hostname: env.ORIGIN.host, port: env.ORIGIN.port }),
+    connect: () => sockets.connect({ hostname: env.ORIGIN.host, port: env.ORIGIN.port }),
     connectionString,
     database: env.ORIGIN.database,
     user: env.ORIGIN.user,

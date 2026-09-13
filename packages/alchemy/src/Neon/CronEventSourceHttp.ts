@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Layer from "effect/Layer";
 import { AlchemyContext } from "../AlchemyContext.ts";
 import * as Namespace from "../Namespace.ts";
 import { ProviderModePolicy } from "../ProviderMode.ts";
@@ -12,10 +12,7 @@ import {
 import { Function } from "./Function.ts";
 import { FunctionRequest } from "./FunctionEnvironment.ts";
 import { FunctionTrigger } from "./FunctionTrigger.ts";
-import {
-  decodeFunctionTriggerEvent,
-  type CronEvent,
-} from "./FunctionTriggerEvent.ts";
+import { decodeFunctionTriggerEvent, type CronEvent } from "./FunctionTriggerEvent.ts";
 
 /**
  * Neon Function HTTP schedule dispatch and deployment wiring.
@@ -66,9 +63,7 @@ export const CronEventSourceHttp = Layer.effect(
       yield* host.route(
         path,
         Effect.gen(function* () {
-          const event = yield* decodeFunctionTriggerEvent(
-            yield* FunctionRequest,
-          );
+          const event = yield* decodeFunctionTriggerEvent(yield* FunctionRequest);
           if (
             event.trigger.type !== "schedule" ||
             event.trigger.name !== triggerName ||

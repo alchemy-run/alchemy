@@ -1,8 +1,8 @@
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import * as Result from "effect/Result";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Result from "effect/Result";
 import path from "pathe";
 import * as AWS from "@/AWS";
 
@@ -136,16 +136,11 @@ export default VerifiedPermissionsTestFunction.make(
             }),
           );
           return yield* HttpServerResponse.json({
-            tag: Result.isFailure(result)
-              ? result.failure._tag
-              : "unexpected-success",
+            tag: Result.isFailure(result) ? result.failure._tag : "unexpected-success",
           });
         }
 
-        return yield* HttpServerResponse.json(
-          { error: "Not found" },
-          { status: 404 },
-        );
+        return yield* HttpServerResponse.json({ error: "Not found" }, { status: 404 });
       }).pipe(Effect.orDie),
     };
   }).pipe(

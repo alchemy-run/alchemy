@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   expandParent,
@@ -160,12 +155,9 @@ export type BackupPlansBackup = Resource<
  * @resource
  * @category GKEBackup
  */
-export const BackupPlansBackup = Resource<BackupPlansBackup>(
-  "GCP.GKEBackup.BackupPlansBackup",
-);
+export const BackupPlansBackup = Resource<BackupPlansBackup>("GCP.GKEBackup.BackupPlansBackup");
 
-const resourceName = (plan: string, backupId: string) =>
-  `${plan}/backups/${backupId}`;
+const resourceName = (plan: string, backupId: string) => `${plan}/backups/${backupId}`;
 
 const toAttrs = (item: gkebackup.Backup, project: string, region: string) => {
   const name = item.name ?? "";
@@ -212,15 +204,7 @@ const listOwned = (project: string) =>
 
 export const BackupPlansBackupProvider = () =>
   Provider.succeed(BackupPlansBackup, {
-    stables: [
-      "name",
-      "backupId",
-      "backupPlan",
-      "project",
-      "location",
-      "uid",
-      "createTime",
-    ],
+    stables: ["name", "backupId", "backupPlan", "project", "location", "uid", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -228,10 +212,7 @@ export const BackupPlansBackupProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.backupId ?? output?.backupId,
         nextId: news.backupId ?? olds?.backupId ?? output?.backupId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -243,16 +224,8 @@ export const BackupPlansBackupProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const backupId = yield* toPhysicalId(
-        id,
-        olds?.backupId,
-        output?.backupId,
-        "backup",
-      );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const backupId = yield* toPhysicalId(id, olds?.backupId, output?.backupId, "backup");
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const plan = expandParent(
         olds?.backupPlan ?? output?.backupPlan ?? "",
         env.project,
@@ -263,9 +236,7 @@ export const BackupPlansBackupProvider = () =>
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -277,22 +248,9 @@ export const BackupPlansBackupProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const backupId = yield* toPhysicalId(
-        id,
-        news.backupId,
-        output?.backupId,
-        "backup",
-      );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const plan = expandParent(
-        news.backupPlan,
-        env.project,
-        location,
-        "backupPlans",
-      );
+      const backupId = yield* toPhysicalId(id, news.backupId, output?.backupId, "backup");
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const plan = expandParent(news.backupPlan, env.project, location, "backupPlans");
       const name = resourceName(plan, backupId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -332,29 +290,23 @@ export const BackupPlansBackupProvider = () =>
         news.deleteLockDays !== undefined &&
           news.deleteLockDays !== current.deleteLockDays &&
           "deleteLockDays",
-        news.retainDays !== undefined &&
-          news.retainDays !== current.retainDays &&
-          "retainDays",
+        news.retainDays !== undefined && news.retainDays !== current.retainDays && "retainDays",
       ]);
 
       if (mask.length > 0) {
-        const operation =
-          yield* gkebackup.patchProjectsLocationsBackupPlansBackups({
-            name: current.name ?? name,
-            updateMask: mask,
-            body: {
-              etag: current.etag,
-              labels: desiredLabels,
-              description: news.description,
-              deleteLockDays: news.deleteLockDays,
-              retainDays: news.retainDays,
-            },
-          });
+        const operation = yield* gkebackup.patchProjectsLocationsBackupPlansBackups({
+          name: current.name ?? name,
+          updateMask: mask,
+          body: {
+            etag: current.etag,
+            labels: desiredLabels,
+            description: news.description,
+            deleteLockDays: news.deleteLockDays,
+            retainDays: news.retainDays,
+          },
+        });
         yield* waitForOperation(operation);
-        current = yield* waitUntilExists(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project, env.region);

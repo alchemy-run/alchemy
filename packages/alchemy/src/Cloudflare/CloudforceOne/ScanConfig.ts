@@ -53,13 +53,7 @@ export type ScanConfigAttributes = {
   ports: string[];
 };
 
-export type ScanConfig = Resource<
-  TypeId,
-  ScanConfigProps,
-  ScanConfigAttributes,
-  never,
-  Providers
->;
+export type ScanConfig = Resource<TypeId, ScanConfigProps, ScanConfigAttributes, never, Providers>;
 
 /**
  * A Cloudforce One attack-surface scan configuration.
@@ -148,9 +142,7 @@ export const ScanConfigProvider = () =>
         ),
         // Accounts without the cfone.port_scan entitlement reject every
         // scan-config call with the typed Unauthorized — treat as "none".
-        Effect.catchTag("Unauthorized", () =>
-          Effect.succeed<ScanConfigAttributes[]>([]),
-        ),
+        Effect.catchTag("Unauthorized", () => Effect.succeed<ScanConfigAttributes[]>([])),
       );
     }),
     reconcile: Effect.fn(function* ({ news, output }) {
@@ -178,8 +170,7 @@ export const ScanConfigProvider = () =>
       // call entirely on a no-op.
       const dirty =
         !sameList(observed.ips, news.ips) ||
-        (news.frequency !== undefined &&
-          observed.frequency !== news.frequency) ||
+        (news.frequency !== undefined && observed.frequency !== news.frequency) ||
         (news.ports !== undefined && !sameList(observed.ports, news.ports));
 
       if (!dirty) {
@@ -242,10 +233,7 @@ const sameList = (observed: readonly string[], desired: readonly string[]) =>
   observed.length === desired.length &&
   [...observed].sort().join(",") === [...desired].sort().join(",");
 
-const toAttributes = (
-  config: ObservedScanConfig,
-  accountId: string,
-): ScanConfigAttributes => ({
+const toAttributes = (config: ObservedScanConfig, accountId: string): ScanConfigAttributes => ({
   configId: config.id,
   accountId,
   ips: [...config.ips],

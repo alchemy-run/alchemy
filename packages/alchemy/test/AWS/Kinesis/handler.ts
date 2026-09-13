@@ -58,20 +58,17 @@ export const KinesisApiFunctionLive = KinesisApiFunction.make(
   Effect.gen(function* () {
     const { stream, consumer } = yield* StreamAndConsumer;
 
-    const describeAccountSettings =
-      yield* AWS.Kinesis.DescribeAccountSettings();
+    const describeAccountSettings = yield* AWS.Kinesis.DescribeAccountSettings();
     const describeLimits = yield* AWS.Kinesis.DescribeLimits();
     const listStreams = yield* AWS.Kinesis.ListStreams();
     const describeStream = yield* AWS.Kinesis.DescribeStream(stream);
-    const describeStreamSummary =
-      yield* AWS.Kinesis.DescribeStreamSummary(stream);
+    const describeStreamSummary = yield* AWS.Kinesis.DescribeStreamSummary(stream);
     const listShards = yield* AWS.Kinesis.ListShards(stream);
     const getShardIterator = yield* AWS.Kinesis.GetShardIterator(stream);
     const getRecords = yield* AWS.Kinesis.GetRecords(stream);
     const getResourcePolicy = yield* AWS.Kinesis.GetResourcePolicy(stream);
     const listStreamConsumers = yield* AWS.Kinesis.ListStreamConsumers(stream);
-    const describeStreamConsumer =
-      yield* AWS.Kinesis.DescribeStreamConsumer(consumer);
+    const describeStreamConsumer = yield* AWS.Kinesis.DescribeStreamConsumer(consumer);
     const subscribeToShard = yield* AWS.Kinesis.SubscribeToShard(consumer);
     const listTagsForResource = yield* AWS.Kinesis.ListTagsForResource(stream);
     const putRecord = yield* AWS.Kinesis.PutRecord(stream);
@@ -168,9 +165,7 @@ export const KinesisApiFunctionLive = KinesisApiFunction.make(
         }
 
         if (request.method === "GET" && pathname === "/consumer") {
-          return yield* HttpServerResponse.json(
-            yield* describeStreamConsumer(),
-          );
+          return yield* HttpServerResponse.json(yield* describeStreamConsumer());
         }
 
         if (request.method === "GET" && pathname === "/tags") {
@@ -339,8 +334,7 @@ export const KinesisApiFunctionLive = KinesisApiFunction.make(
 
 export default KinesisApiFunctionLive;
 
-const decodeText = (value: Uint8Array<ArrayBufferLike>) =>
-  new TextDecoder().decode(value);
+const decodeText = (value: Uint8Array<ArrayBufferLike>) => new TextDecoder().decode(value);
 
 class RecordsNotReady extends Data.TaggedError("RecordsNotReady") {}
 

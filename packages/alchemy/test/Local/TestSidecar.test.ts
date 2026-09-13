@@ -65,9 +65,7 @@ live.test(
   "test runtimes provide a non-interactive Interaction",
   Effect.gen(function* () {
     const interaction = yield* Interaction;
-    const failure = yield* Effect.flip(
-      interaction.prompt.confirm({ message: "?" }),
-    );
+    const failure = yield* Effect.flip(interaction.prompt.confirm({ message: "?" }));
     expect(failure._tag).toBe("NonInteractiveTerminal");
   }),
   { tags: ["provider:cloudflare", "local"] },

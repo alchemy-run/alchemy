@@ -42,9 +42,9 @@ export interface ConnectionInfo {
 }
 
 /** The password secret has no readable `latest` version. */
-export class PasswordMissing extends Data.TaggedError(
-  "GCP.SQL.PasswordMissing",
-)<{ secret: string }> {}
+export class PasswordMissing extends Data.TaggedError("GCP.SQL.PasswordMissing")<{
+  secret: string;
+}> {}
 
 /**
  * Runtime binding that connects a Cloud Run service to a Cloud SQL

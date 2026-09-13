@@ -12,9 +12,7 @@ import { makeRequestEffect } from "@/Cloudflare/Workers/HttpServer.ts";
  */
 const ORIGIN = "https://example.test";
 
-const corsHandler = HttpMiddleware.cors()(
-  HttpServerResponse.json({ message: "world" }),
-);
+const corsHandler = HttpMiddleware.cors()(HttpServerResponse.json({ message: "world" }));
 
 const corsRequest = (method: string, extraHeaders?: Record<string, string>) =>
   new Request("https://worker.test/hello", {
@@ -30,12 +28,7 @@ const handleCors = (request: Request): Effect.Effect<Response> =>
 describe(
   "makeRequestEffect drains HttpMiddleware.cors() pre-response handlers",
   {
-    tags: [
-      "unit",
-      "provider:cloudflare",
-      "provider:cloudflare:worker",
-      "local",
-    ],
+    tags: ["unit", "provider:cloudflare", "provider:cloudflare:worker", "local"],
   },
   () => {
     it.effect("tags GET responses with Access-Control-Allow-Origin", () =>

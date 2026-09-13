@@ -58,9 +58,7 @@ let roleName: string;
 let functionName: string;
 
 class FixtureNotReady extends Data.TaggedError("FixtureNotReady") {}
-class UnexpectedFixtureStatus extends Data.TaggedError(
-  "UnexpectedFixtureStatus",
-)<{
+class UnexpectedFixtureStatus extends Data.TaggedError("UnexpectedFixtureStatus")<{
   readonly status: number;
 }> {}
 class BucketStillExists extends Data.TaggedError("BucketStillExists") {}
@@ -71,17 +69,10 @@ const bucketFor = (binding: Binding) => {
   return bucket.bucketName;
 };
 
-const post = <A, I>(
-  path: string,
-  body: object,
-  schema: Schema.Codec<A, I>,
-  expectedStatus = 200,
-) =>
+const post = <A, I>(path: string, body: object, schema: Schema.Codec<A, I>, expectedStatus = 200) =>
   Effect.gen(function* () {
     const response = yield* HttpClient.execute(
-      HttpClientRequest.post(`${baseUrl}${path}`).pipe(
-        HttpClientRequest.bodyJsonUnsafe(body),
-      ),
+      HttpClientRequest.post(`${baseUrl}${path}`).pipe(HttpClientRequest.bodyJsonUnsafe(body)),
     );
     if (response.status !== expectedStatus) {
       return yield* Effect.fail(
@@ -104,35 +95,22 @@ const policyDocument = Schema.fromJsonString(
 );
 
 const assertPermissions = Effect.gen(function* () {
-  const configuration = yield* Lambda.getFunctionConfiguration({
-    FunctionName: functionName,
-  });
+  const configuration = yield* Lambda.getFunctionConfiguration({ FunctionName: functionName });
   expect(configuration.FunctionName).toBe(functionName);
   expect(configuration.Role?.endsWith(`/${roleName}`)).toBe(true);
   const attached = yield* IAM.listAttachedRolePolicies
     .pages({ RoleName: roleName })
     .pipe(Stream.runCollect);
   expect(
-    attached
-      .flatMap((page) => page.AttachedPolicies ?? [])
-      .map((policy) => policy.PolicyArn),
-  ).toEqual([
-    "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
-  ]);
-  const pages = yield* IAM.listRolePolicies
-    .pages({ RoleName: roleName })
-    .pipe(Stream.runCollect);
+    attached.flatMap((page) => page.AttachedPolicies ?? []).map((policy) => policy.PolicyArn),
+  ).toEqual(["arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"]);
+  const pages = yield* IAM.listRolePolicies.pages({ RoleName: roleName }).pipe(Stream.runCollect);
   const policies = yield* Effect.forEach(
     pages.flatMap((page) => page.PolicyNames),
     (PolicyName) =>
       Effect.gen(function* () {
-        const policy = yield* IAM.getRolePolicy({
-          RoleName: roleName,
-          PolicyName,
-        });
-        const decoded = yield* Effect.try(() =>
-          decodeURIComponent(policy.PolicyDocument),
-        );
+        const policy = yield* IAM.getRolePolicy({ RoleName: roleName, PolicyName });
+        const decoded = yield* Effect.try(() => decodeURIComponent(policy.PolicyDocument));
         return yield* Schema.decodeUnknownEffect(policyDocument)(decoded);
       }),
   );
@@ -140,17 +118,11 @@ const assertPermissions = Effect.gen(function* () {
     .flatMap((policy) =>
       policy.Statement.flatMap((statement) => {
         const actionList =
-          typeof statement.Action === "string"
-            ? [statement.Action]
-            : statement.Action;
+          typeof statement.Action === "string" ? [statement.Action] : statement.Action;
         const resources =
-          typeof statement.Resource === "string"
-            ? [statement.Resource]
-            : statement.Resource;
+          typeof statement.Resource === "string" ? [statement.Resource] : statement.Resource;
         return actionList.flatMap((action) =>
-          resources.map(
-            (resource) => `${statement.Effect} ${action} ${resource}`,
-          ),
+          resources.map((resource) => `${statement.Effect} ${action} ${resource}`),
         );
       }),
     )
@@ -168,9 +140,7 @@ const assertPermissions = Effect.gen(function* () {
     .sort();
   expect(actual).toEqual(expected);
   for (const bucket of buckets) {
-    expect(
-      (yield* S3.getBucketVersioning({ Bucket: bucket.bucketName })).Status,
-    ).toBe("Enabled");
+    expect((yield* S3.getBucketVersioning({ Bucket: bucket.bucketName })).Status).toBe("Enabled");
   }
 });
 
@@ -213,12 +183,7 @@ const seedVersions = Effect.fn(function* (Bucket: string, Key: string) {
   expect(current.VersionId).toBeTruthy();
   expect(old.VersionId).not.toBe("null");
   expect(current.VersionId).not.toBe(old.VersionId);
-  return {
-    old: old.VersionId!,
-    current: current.VersionId!,
-    oldBody,
-    currentBody,
-  };
+  return { old: old.VersionId!, current: current.VersionId!, oldBody, currentBody };
 });
 
 const assertBody = Effect.fn(function* (
@@ -230,33 +195,21 @@ const assertBody = Effect.fn(function* (
   const object = yield* S3.getObject({ Bucket, Key, VersionId });
   if (VersionId !== undefined) expect(object.VersionId).toBe(VersionId);
   expect(object.Body).toBeDefined();
-  expect(yield* object.Body!.pipe(Stream.decodeText, Stream.mkString)).toBe(
-    body,
-  );
+  expect(yield* object.Body!.pipe(Stream.decodeText, Stream.mkString)).toBe(body);
   return object.VersionId;
 });
 
 const assertVersions = Effect.fn(function* (
   Bucket: string,
   Key: string,
-  versions: {
-    old: string;
-    current: string;
-    oldBody: string;
-    currentBody: string;
-  },
+  versions: { old: string; current: string; oldBody: string; currentBody: string },
 ) {
-  expect(yield* assertBody(Bucket, Key, undefined, versions.currentBody)).toBe(
-    versions.current,
-  );
+  expect(yield* assertBody(Bucket, Key, undefined, versions.currentBody)).toBe(versions.current);
   yield* assertBody(Bucket, Key, versions.old, versions.oldBody);
   const listed = yield* S3.listObjectVersions({ Bucket, Prefix: Key });
   expect(
     listed.Versions?.filter((version) => version.Key === Key)
-      .map((version) => ({
-        id: version.VersionId,
-        latest: version.IsLatest,
-      }))
+      .map((version) => ({ id: version.VersionId, latest: version.IsLatest }))
       .sort((a, b) => a.id!.localeCompare(b.id!)),
   ).toEqual(
     [
@@ -271,12 +224,7 @@ const minimumPartSize = 5 * 1024 * 1024;
 const assertCompletedVersion = Effect.fn(function* (
   Bucket: string,
   Key: string,
-  versions: {
-    old: string;
-    current: string;
-    oldBody: string;
-    currentBody: string;
-  },
+  versions: { old: string; current: string; oldBody: string; currentBody: string },
   VersionId: string,
   Body: string,
 ) {
@@ -291,10 +239,7 @@ const assertCompletedVersion = Effect.fn(function* (
   const listed = yield* S3.listObjectVersions({ Bucket, Prefix: Key });
   expect(
     listed.Versions?.filter((version) => version.Key === Key)
-      .map((version) => ({
-        id: version.VersionId,
-        latest: version.IsLatest,
-      }))
+      .map((version) => ({ id: version.VersionId, latest: version.IsLatest }))
       .sort((a, b) => a.id!.localeCompare(b.id!)),
   ).toEqual(
     [
@@ -303,25 +248,18 @@ const assertCompletedVersion = Effect.fn(function* (
       { id: VersionId, latest: true },
     ].sort((a, b) => a.id.localeCompare(b.id)),
   );
-  expect(
-    (yield* S3.listMultipartUploads({ Bucket, Prefix: Key })).Uploads ?? [],
-  ).toEqual([]);
+  expect((yield* S3.listMultipartUploads({ Bucket, Prefix: Key })).Uploads ?? []).toEqual([]);
 });
 
 const uploadedPart = Schema.Struct({ ETag: Schema.String });
-const completedUpload = Schema.Struct({
-  VersionId: Schema.String,
-  ETag: Schema.String,
-});
+const completedUpload = Schema.Struct({ VersionId: Schema.String, ETag: Schema.String });
 const noSuchUpload = Schema.Struct({ tag: Schema.Literal("NoSuchUpload") });
 
 beforeAll(
   Effect.gen(function* () {
     yield* stack.destroy();
     const deployed = yield* stack.deploy(
-      S3VersionedMultipartFunction.pipe(
-        Effect.provide(S3VersionedMultipartFunctionLive),
-      ),
+      S3VersionedMultipartFunction.pipe(Effect.provide(S3VersionedMultipartFunctionLive)),
     );
     expect(deployed.functionUrl).toBeTruthy();
     baseUrl = deployed.functionUrl!.replace(/\/+$/, "");
@@ -334,30 +272,21 @@ beforeAll(
             return yield* Effect.fail(new FixtureNotReady());
           }
           if (response.status === 200) return yield* response.json;
-          return yield* Effect.fail(
-            new UnexpectedFixtureStatus({ status: response.status }),
-          );
+          return yield* Effect.fail(new UnexpectedFixtureStatus({ status: response.status }));
         }),
       ),
       Effect.flatMap(Schema.decodeUnknownEffect(bucketInfo)),
       Effect.retry({
         while: (error) =>
           error._tag === "FixtureNotReady" ||
-          (error._tag === "HttpClientError" &&
-            error.reason._tag === "TransportError"),
+          (error._tag === "HttpClientError" && error.reason._tag === "TransportError"),
         schedule: Schedule.spaced("2 seconds"),
         times: 10,
       }),
     );
-    expect(buckets.map((bucket) => bucket.binding).sort()).toEqual(
-      Object.keys(actions).sort(),
-    );
+    expect(buckets.map((bucket) => bucket.binding).sort()).toEqual(Object.keys(actions).sort());
     expect(new Set(buckets.map((bucket) => bucket.bucketName)).size).toBe(9);
-    yield* Core.withProviders(
-      assertPermissions,
-      options,
-      "S3VersionedMultipart",
-    );
+    yield* Core.withProviders(assertPermissions, options, "S3VersionedMultipart");
   }),
   { timeout: 120_000, retry: 0 },
 );
@@ -366,11 +295,9 @@ afterAll(
   Effect.gen(function* () {
     yield* stack.destroy();
     yield* Core.withProviders(
-      Effect.forEach(
-        buckets,
-        (bucket) => assertBucketDeleted(bucket.bucketName),
-        { discard: true },
-      ),
+      Effect.forEach(buckets, (bucket) => assertBucketDeleted(bucket.bucketName), {
+        discard: true,
+      }),
       options,
       "S3VersionedMultipart",
     );
@@ -380,15 +307,7 @@ afterAll(
 
 describe(
   "CreateMultipartUpload",
-  {
-    tags: [
-      "provider:aws",
-      "provider:aws:iam",
-      "provider:aws:lambda",
-      "provider:aws:s3",
-      "live",
-    ],
-  },
+  { tags: ["provider:aws", "provider:aws:iam", "provider:aws:lambda", "provider:aws:s3", "live"] },
   () => {
     test.provider(
       "creates a pending upload without replacing either existing version",
@@ -400,23 +319,14 @@ describe(
           const created = yield* post(
             "/create",
             { Key, ContentType: "text/markdown" },
-            Schema.Struct({
-              Bucket: Schema.String,
-              Key: Schema.String,
-              UploadId: Schema.String,
-            }),
+            Schema.Struct({ Bucket: Schema.String, Key: Schema.String, UploadId: Schema.String }),
           );
           yield* Effect.gen(function* () {
             expect(created.Bucket).toBe(Bucket);
             expect(created.Key).toBe(Key);
             expect(created.UploadId).toBeTruthy();
-            const pending = yield* S3.listMultipartUploads({
-              Bucket,
-              Prefix: Key,
-            });
-            expect(pending.Uploads?.map((upload) => upload.UploadId)).toContain(
-              created.UploadId,
-            );
+            const pending = yield* S3.listMultipartUploads({ Bucket, Prefix: Key });
+            expect(pending.Uploads?.map((upload) => upload.UploadId)).toContain(created.UploadId);
             yield* assertVersions(Bucket, Key, versions);
             const part = yield* S3.uploadPart({
               Bucket,
@@ -432,19 +342,10 @@ describe(
               MultipartUpload: { Parts: [{ PartNumber: 1, ETag: part.ETag! }] },
             });
             expect(completed.VersionId).toBeTruthy();
-            const head = yield* S3.headObject({
-              Bucket,
-              Key,
-              VersionId: completed.VersionId,
-            });
+            const head = yield* S3.headObject({ Bucket, Key, VersionId: completed.VersionId });
             expect(head.ContentType).toBe("text/markdown");
             yield* assertBody(Bucket, Key, versions.old, versions.oldBody);
-            yield* assertBody(
-              Bucket,
-              Key,
-              versions.current,
-              versions.currentBody,
-            );
+            yield* assertBody(Bucket, Key, versions.current, versions.currentBody);
           }).pipe(Effect.ensuring(abortPending(Bucket, Key, created.UploadId)));
         }),
       { timeout: 120_000, retry: 0 },
@@ -454,15 +355,7 @@ describe(
 
 describe(
   "UploadPart",
-  {
-    tags: [
-      "provider:aws",
-      "provider:aws:iam",
-      "provider:aws:lambda",
-      "provider:aws:s3",
-      "live",
-    ],
-  },
+  { tags: ["provider:aws", "provider:aws:iam", "provider:aws:lambda", "provider:aws:s3", "live"] },
   () => {
     test.provider(
       "rejects an out-of-band aborted upload with typed NoSuchUpload",
@@ -484,8 +377,7 @@ describe(
               ).toEqual({ tag: "NoSuchUpload" });
               yield* assertVersions(Bucket, Key, versions);
               expect(
-                (yield* S3.listMultipartUploads({ Bucket, Prefix: Key }))
-                  .Uploads ?? [],
+                (yield* S3.listMultipartUploads({ Bucket, Prefix: Key })).Uploads ?? [],
               ).toEqual([]);
             }),
           );
@@ -504,13 +396,7 @@ describe(
             Effect.gen(function* () {
               const part = yield* post(
                 "/upload",
-                {
-                  Key,
-                  UploadId,
-                  PartNumber: 1,
-                  Body: "a",
-                  Repeat: minimumPartSize,
-                },
+                { Key, UploadId, PartNumber: 1, Body: "a", Repeat: minimumPartSize },
                 uploadedPart,
               );
               const initial = yield* S3.listParts({ Bucket, Key, UploadId });
@@ -524,13 +410,7 @@ describe(
               yield* assertVersions(Bucket, Key, versions);
               const replacement = yield* post(
                 "/upload",
-                {
-                  Key,
-                  UploadId,
-                  PartNumber: 1,
-                  Body: "b",
-                  Repeat: minimumPartSize,
-                },
+                { Key, UploadId, PartNumber: 1, Body: "b", Repeat: minimumPartSize },
                 uploadedPart,
               );
               expect(replacement.ETag).not.toBe(part.ETag);
@@ -563,16 +443,8 @@ describe(
                   ],
                 },
               });
-              const Body = yield* Effect.sync(
-                () => "b".repeat(minimumPartSize) + tail,
-              );
-              yield* assertCompletedVersion(
-                Bucket,
-                Key,
-                versions,
-                completed.VersionId!,
-                Body,
-              );
+              const Body = yield* Effect.sync(() => "b".repeat(minimumPartSize) + tail);
+              yield* assertCompletedVersion(Bucket, Key, versions, completed.VersionId!, Body);
             }),
           );
         }),
@@ -583,15 +455,7 @@ describe(
 
 describe(
   "UploadPartCopy",
-  {
-    tags: [
-      "provider:aws",
-      "provider:aws:iam",
-      "provider:aws:lambda",
-      "provider:aws:s3",
-      "live",
-    ],
-  },
+  { tags: ["provider:aws", "provider:aws:iam", "provider:aws:lambda", "provider:aws:s3", "live"] },
   () => {
     test.provider(
       "rejects an out-of-band aborted upload with typed NoSuchUpload",
@@ -621,8 +485,7 @@ describe(
               yield* assertVersions(sourceBucket, sourceKey, sourceVersions);
               yield* assertVersions(Bucket, Key, destinationVersions);
               expect(
-                (yield* S3.listMultipartUploads({ Bucket, Prefix: Key }))
-                  .Uploads ?? [],
+                (yield* S3.listMultipartUploads({ Bucket, Prefix: Key })).Uploads ?? [],
               ).toEqual([]);
             }),
           );
@@ -635,11 +498,9 @@ describe(
       () =>
         Effect.gen(function* () {
           const Bucket = bucketFor("UploadPartCopy");
-          const Key =
-            "versioned-multipart/copy-missing-version/destination.txt";
+          const Key = "versioned-multipart/copy-missing-version/destination.txt";
           const sourceBucket = bucketFor("UploadPartCopySource");
-          const sourceKey =
-            "versioned-multipart/copy-missing-version/source.txt";
+          const sourceKey = "versioned-multipart/copy-missing-version/source.txt";
           const sourceVersions = yield* seedVersions(sourceBucket, sourceKey);
           const destinationVersions = yield* seedVersions(Bucket, Key);
           const removed = yield* S3.putObject({
@@ -667,17 +528,14 @@ describe(
                   404,
                 ),
               ).toEqual({ tag: "NoSuchVersion" });
-              expect(
-                (yield* S3.listParts({ Bucket, Key, UploadId })).Parts ?? [],
-              ).toEqual([]);
+              expect((yield* S3.listParts({ Bucket, Key, UploadId })).Parts ?? []).toEqual([]);
               yield* assertVersions(sourceBucket, sourceKey, sourceVersions);
               yield* assertVersions(Bucket, Key, destinationVersions);
             }),
           );
-          expect(
-            (yield* S3.listMultipartUploads({ Bucket, Prefix: Key })).Uploads ??
-              [],
-          ).toEqual([]);
+          expect((yield* S3.listMultipartUploads({ Bucket, Prefix: Key })).Uploads ?? []).toEqual(
+            [],
+          );
         }),
       { timeout: 120_000, retry: 0 },
     );
@@ -692,10 +550,7 @@ describe(
           const sourceKey = "versioned-multipart/copy-delete-marker/source.txt";
           const sourceVersions = yield* seedVersions(sourceBucket, sourceKey);
           const destinationVersions = yield* seedVersions(Bucket, Key);
-          const marker = yield* S3.deleteObject({
-            Bucket: sourceBucket,
-            Key: sourceKey,
-          });
+          const marker = yield* S3.deleteObject({ Bucket: sourceBucket, Key: sourceKey });
           expect(marker.DeleteMarker).toBe(true);
           expect(marker.VersionId).toBeTruthy();
           const sourceState = yield* S3.listObjectVersions({
@@ -709,8 +564,7 @@ describe(
             })),
           ).toEqual([{ id: marker.VersionId, latest: true }]);
           const CopySource = yield* Effect.sync(
-            () =>
-              `${sourceBucket}/${sourceKey}?versionId=${encodeURIComponent(marker.VersionId!)}`,
+            () => `${sourceBucket}/${sourceKey}?versionId=${encodeURIComponent(marker.VersionId!)}`,
           );
           yield* withUpload(Bucket, Key, (UploadId) =>
             Effect.gen(function* () {
@@ -722,9 +576,7 @@ describe(
                   400,
                 ),
               ).toEqual({ tag: "InvalidRequest" });
-              expect(
-                (yield* S3.listParts({ Bucket, Key, UploadId })).Parts ?? [],
-              ).toEqual([]);
+              expect((yield* S3.listParts({ Bucket, Key, UploadId })).Parts ?? []).toEqual([]);
               yield* assertBody(
                 sourceBucket,
                 sourceKey,
@@ -746,10 +598,9 @@ describe(
               yield* assertVersions(Bucket, Key, destinationVersions);
             }),
           );
-          expect(
-            (yield* S3.listMultipartUploads({ Bucket, Prefix: Key })).Uploads ??
-              [],
-          ).toEqual([]);
+          expect((yield* S3.listMultipartUploads({ Bucket, Prefix: Key })).Uploads ?? []).toEqual(
+            [],
+          );
         }),
       { timeout: 120_000, retry: 0 },
     );
@@ -759,8 +610,7 @@ describe(
       () =>
         Effect.gen(function* () {
           const Bucket = bucketFor("UploadPartCopy");
-          const sourceKey =
-            "versioned-multipart/source space/+plus%percent/雪?#.txt";
+          const sourceKey = "versioned-multipart/source space/+plus%percent/雪?#.txt";
           const Key = "versioned-multipart/destination +%/copy.txt";
           const versions = yield* seedVersions(Bucket, sourceKey);
           const CopySource = yield* Effect.sync(
@@ -772,40 +622,22 @@ describe(
               const copied = yield* post(
                 "/copy",
                 { Key, UploadId, PartNumber: 1, CopySource },
-                Schema.Struct({
-                  CopySourceVersionId: Schema.String,
-                  CopyPartResult: uploadedPart,
-                }),
+                Schema.Struct({ CopySourceVersionId: Schema.String, CopyPartResult: uploadedPart }),
               );
               expect(copied.CopySourceVersionId).toBe(versions.old);
               expect(copied.CopySourceVersionId).not.toBe(versions.current);
               const listed = yield* S3.listParts({ Bucket, Key, UploadId });
-              expect(
-                listed.Parts?.map((part) => ({
-                  size: part.Size,
-                  etag: part.ETag,
-                })),
-              ).toEqual([
-                {
-                  size: versions.oldBody.length,
-                  etag: copied.CopyPartResult.ETag,
-                },
+              expect(listed.Parts?.map((part) => ({ size: part.Size, etag: part.ETag }))).toEqual([
+                { size: versions.oldBody.length, etag: copied.CopyPartResult.ETag },
               ]);
               const completed = yield* S3.completeMultipartUpload({
                 Bucket,
                 Key,
                 UploadId,
-                MultipartUpload: {
-                  Parts: [{ PartNumber: 1, ETag: copied.CopyPartResult.ETag }],
-                },
+                MultipartUpload: { Parts: [{ PartNumber: 1, ETag: copied.CopyPartResult.ETag }] },
               });
               expect(completed.VersionId).toBeTruthy();
-              yield* assertBody(
-                Bucket,
-                Key,
-                completed.VersionId!,
-                versions.oldBody,
-              );
+              yield* assertBody(Bucket, Key, completed.VersionId!, versions.oldBody);
               yield* assertVersions(Bucket, sourceKey, versions);
             }),
           );
@@ -819,8 +651,7 @@ describe(
         Effect.gen(function* () {
           const Bucket = bucketFor("UploadPartCopy");
           const sourceBucket = bucketFor("UploadPartCopySource");
-          const sourceKey =
-            "versioned-multipart/cross-bucket/source +%/雪?#.txt";
+          const sourceKey = "versioned-multipart/cross-bucket/source +%/雪?#.txt";
           const Key = "versioned-multipart/cross-bucket/destination.txt";
           expect(sourceBucket).not.toBe(Bucket);
           const versions = yield* seedVersions(sourceBucket, sourceKey);
@@ -833,10 +664,7 @@ describe(
               const copied = yield* post(
                 "/copy",
                 { Key, UploadId, PartNumber: 1, CopySource },
-                Schema.Struct({
-                  CopySourceVersionId: Schema.String,
-                  CopyPartResult: uploadedPart,
-                }),
+                Schema.Struct({ CopySourceVersionId: Schema.String, CopyPartResult: uploadedPart }),
               );
               expect(copied.CopySourceVersionId).toBe(versions.old);
               expect(copied.CopySourceVersionId).not.toBe(versions.current);
@@ -844,26 +672,15 @@ describe(
                 Bucket,
                 Key,
                 UploadId,
-                MultipartUpload: {
-                  Parts: [{ PartNumber: 1, ETag: copied.CopyPartResult.ETag }],
-                },
+                MultipartUpload: { Parts: [{ PartNumber: 1, ETag: copied.CopyPartResult.ETag }] },
               });
               expect(completed.VersionId).toBeTruthy();
               expect(completed.VersionId).not.toBe("null");
-              yield* assertBody(
-                Bucket,
-                Key,
-                completed.VersionId!,
-                versions.oldBody,
+              yield* assertBody(Bucket, Key, completed.VersionId!, versions.oldBody);
+              expect(yield* assertBody(Bucket, Key, undefined, versions.oldBody)).toBe(
+                completed.VersionId,
               );
-              expect(
-                yield* assertBody(Bucket, Key, undefined, versions.oldBody),
-              ).toBe(completed.VersionId);
-              const head = yield* S3.headObject({
-                Bucket,
-                Key,
-                VersionId: completed.VersionId!,
-              });
+              const head = yield* S3.headObject({ Bucket, Key, VersionId: completed.VersionId! });
               expect(head.VersionId).toBe(completed.VersionId);
               expect(head.ETag).toBe(completed.ETag);
               expect(head.ContentLength).toBe(versions.oldBody.length);
@@ -896,15 +713,11 @@ describe(
                 yield* post(
                   "/copy",
                   { Key, UploadId, PartNumber: 1, CopySource },
-                  Schema.Struct({
-                    tag: Schema.Literal("AccessDeniedException"),
-                  }),
+                  Schema.Struct({ tag: Schema.Literal("AccessDeniedException") }),
                   403,
                 ),
               ).toEqual({ tag: "AccessDeniedException" });
-              expect(
-                (yield* S3.listParts({ Bucket, Key, UploadId })).Parts ?? [],
-              ).toEqual([]);
+              expect((yield* S3.listParts({ Bucket, Key, UploadId })).Parts ?? []).toEqual([]);
               yield* assertVersions(sourceBucket, sourceKey, sourceVersions);
               yield* assertVersions(Bucket, Key, destinationVersions);
             }),
@@ -917,15 +730,7 @@ describe(
 
 describe(
   "ListParts",
-  {
-    tags: [
-      "provider:aws",
-      "provider:aws:iam",
-      "provider:aws:lambda",
-      "provider:aws:s3",
-      "live",
-    ],
-  },
+  { tags: ["provider:aws", "provider:aws:iam", "provider:aws:lambda", "provider:aws:s3", "live"] },
   () => {
     test.provider(
       "rejects an out-of-band aborted upload with typed NoSuchUpload",
@@ -936,21 +741,14 @@ describe(
           const versions = yield* seedVersions(Bucket, Key);
           yield* withUpload(Bucket, Key, (UploadId) =>
             Effect.gen(function* () {
-              yield* S3.uploadPart({
-                Bucket,
-                Key,
-                UploadId,
-                PartNumber: 1,
-                Body: "aborted part",
-              });
+              yield* S3.uploadPart({ Bucket, Key, UploadId, PartNumber: 1, Body: "aborted part" });
               yield* S3.abortMultipartUpload({ Bucket, Key, UploadId });
-              expect(
-                yield* post("/parts", { Key, UploadId }, noSuchUpload, 404),
-              ).toEqual({ tag: "NoSuchUpload" });
+              expect(yield* post("/parts", { Key, UploadId }, noSuchUpload, 404)).toEqual({
+                tag: "NoSuchUpload",
+              });
               yield* assertVersions(Bucket, Key, versions);
               expect(
-                (yield* S3.listMultipartUploads({ Bucket, Prefix: Key }))
-                  .Uploads ?? [],
+                (yield* S3.listMultipartUploads({ Bucket, Prefix: Key })).Uploads ?? [],
               ).toEqual([]);
             }),
           );
@@ -992,30 +790,17 @@ describe(
                   }),
                 ),
               });
-              const firstPage = yield* post(
-                "/parts",
-                { Key, UploadId, MaxParts: 1 },
-                page,
-              );
+              const firstPage = yield* post("/parts", { Key, UploadId, MaxParts: 1 }, page);
               expect(firstPage.IsTruncated).toBe(true);
-              expect(firstPage.Parts).toEqual([
-                { PartNumber: 1, ETag: first.ETag, Size: 5 },
-              ]);
+              expect(firstPage.Parts).toEqual([{ PartNumber: 1, ETag: first.ETag, Size: 5 }]);
               expect(firstPage.NextPartNumberMarker).toBeTruthy();
               const secondPage = yield* post(
                 "/parts",
-                {
-                  Key,
-                  UploadId,
-                  MaxParts: 1,
-                  PartNumberMarker: firstPage.NextPartNumberMarker,
-                },
+                { Key, UploadId, MaxParts: 1, PartNumberMarker: firstPage.NextPartNumberMarker },
                 page,
               );
               expect(secondPage.IsTruncated).toBe(false);
-              expect(secondPage.Parts).toEqual([
-                { PartNumber: 2, ETag: second.ETag, Size: 11 },
-              ]);
+              expect(secondPage.Parts).toEqual([{ PartNumber: 2, ETag: second.ETag, Size: 11 }]);
               yield* assertVersions(Bucket, Key, versions);
             }),
           );
@@ -1027,15 +812,7 @@ describe(
 
 describe(
   "ListMultipartUploads",
-  {
-    tags: [
-      "provider:aws",
-      "provider:aws:iam",
-      "provider:aws:lambda",
-      "provider:aws:s3",
-      "live",
-    ],
-  },
+  { tags: ["provider:aws", "provider:aws:iam", "provider:aws:lambda", "provider:aws:s3", "live"] },
   () => {
     test.provider(
       "lists only matching pending uploads, not committed versions or other prefixes",
@@ -1051,12 +828,7 @@ describe(
             IsTruncated: Schema.Boolean,
             NextKeyMarker: Schema.optional(Schema.String),
             NextUploadIdMarker: Schema.optional(Schema.String),
-            Uploads: Schema.Array(
-              Schema.Struct({
-                Key: Schema.String,
-                UploadId: Schema.String,
-              }),
-            ),
+            Uploads: Schema.Array(Schema.Struct({ Key: Schema.String, UploadId: Schema.String })),
           });
           yield* withUpload(Bucket, Key, (UploadId) =>
             withUpload(Bucket, Key, (siblingId) =>
@@ -1070,26 +842,14 @@ describe(
                       { Key: nextKey, UploadId: nextId },
                     ];
                     expect(
-                      [...listed.Uploads].sort((a, b) =>
-                        a.UploadId.localeCompare(b.UploadId),
-                      ),
-                    ).toEqual(
-                      [...expected].sort((a, b) =>
-                        a.UploadId.localeCompare(b.UploadId),
-                      ),
-                    );
-                    const first = yield* post(
-                      "/uploads",
-                      { Prefix, MaxUploads: 1 },
-                      page,
-                    );
+                      [...listed.Uploads].sort((a, b) => a.UploadId.localeCompare(b.UploadId)),
+                    ).toEqual([...expected].sort((a, b) => a.UploadId.localeCompare(b.UploadId)));
+                    const first = yield* post("/uploads", { Prefix, MaxUploads: 1 }, page);
                     expect(first.IsTruncated).toBe(true);
                     expect(first.Uploads).toHaveLength(1);
                     expect(first.Uploads[0].Key).toBe(Key);
                     expect(first.NextKeyMarker).toBe(Key);
-                    expect(first.NextUploadIdMarker).toBe(
-                      first.Uploads[0].UploadId,
-                    );
+                    expect(first.NextUploadIdMarker).toBe(first.Uploads[0].UploadId);
                     const second = yield* post(
                       "/uploads",
                       {
@@ -1104,15 +864,10 @@ describe(
                     expect(second.Uploads).toHaveLength(1);
                     expect(second.Uploads[0].Key).toBe(Key);
                     expect(second.NextKeyMarker).toBe(Key);
-                    expect(second.NextUploadIdMarker).toBe(
-                      second.Uploads[0].UploadId,
+                    expect(second.NextUploadIdMarker).toBe(second.Uploads[0].UploadId);
+                    expect([first.Uploads[0].UploadId, second.Uploads[0].UploadId].sort()).toEqual(
+                      [UploadId, siblingId].sort(),
                     );
-                    expect(
-                      [
-                        first.Uploads[0].UploadId,
-                        second.Uploads[0].UploadId,
-                      ].sort(),
-                    ).toEqual([UploadId, siblingId].sort());
                     const third = yield* post(
                       "/uploads",
                       {
@@ -1124,18 +879,14 @@ describe(
                       page,
                     );
                     expect(third.IsTruncated).toBe(false);
-                    expect(third.Uploads).toEqual([
-                      { Key: nextKey, UploadId: nextId },
-                    ]);
+                    expect(third.Uploads).toEqual([{ Key: nextKey, UploadId: nextId }]);
                     yield* assertVersions(Bucket, Key, versions);
                   }),
                 ),
               ),
             ),
           );
-          expect(
-            (yield* S3.listMultipartUploads({ Bucket })).Uploads ?? [],
-          ).toEqual([]);
+          expect((yield* S3.listMultipartUploads({ Bucket })).Uploads ?? []).toEqual([]);
         }),
       { timeout: 120_000, retry: 0 },
     );
@@ -1144,15 +895,7 @@ describe(
 
 describe(
   "CompleteMultipartUpload",
-  {
-    tags: [
-      "provider:aws",
-      "provider:aws:iam",
-      "provider:aws:lambda",
-      "provider:aws:s3",
-      "live",
-    ],
-  },
+  { tags: ["provider:aws", "provider:aws:iam", "provider:aws:lambda", "provider:aws:s3", "live"] },
   () => {
     test.provider(
       "rejects an out-of-band aborted upload with typed NoSuchUpload",
@@ -1178,9 +921,7 @@ describe(
                   {
                     Key,
                     UploadId,
-                    MultipartUpload: {
-                      Parts: [{ PartNumber: 1, ETag: part.ETag! }],
-                    },
+                    MultipartUpload: { Parts: [{ PartNumber: 1, ETag: part.ETag! }] },
                   },
                   noSuchUpload,
                   404,
@@ -1188,8 +929,7 @@ describe(
               ).toEqual({ tag: "NoSuchUpload" });
               yield* assertVersions(Bucket, Key, versions);
               expect(
-                (yield* S3.listMultipartUploads({ Bucket, Prefix: Key }))
-                  .Uploads ?? [],
+                (yield* S3.listMultipartUploads({ Bucket, Prefix: Key })).Uploads ?? [],
               ).toEqual([]);
             }),
           );
@@ -1206,9 +946,7 @@ describe(
           const versions = yield* seedVersions(Bucket, Key);
           yield* withUpload(Bucket, Key, (UploadId) =>
             Effect.gen(function* () {
-              const firstBody = yield* Effect.sync(() =>
-                "c".repeat(minimumPartSize),
-              );
+              const firstBody = yield* Effect.sync(() => "c".repeat(minimumPartSize));
               const tail = "new completed multipart version";
               const Body = firstBody + tail;
               const part = yield* S3.uploadPart({
@@ -1239,13 +977,7 @@ describe(
                 },
                 completedUpload,
               );
-              yield* assertCompletedVersion(
-                Bucket,
-                Key,
-                versions,
-                completed.VersionId,
-                Body,
-              );
+              yield* assertCompletedVersion(Bucket, Key, versions, completed.VersionId, Body);
             }),
           );
         }),
@@ -1256,15 +988,7 @@ describe(
 
 describe(
   "AbortMultipartUpload",
-  {
-    tags: [
-      "provider:aws",
-      "provider:aws:iam",
-      "provider:aws:lambda",
-      "provider:aws:s3",
-      "live",
-    ],
-  },
+  { tags: ["provider:aws", "provider:aws:iam", "provider:aws:lambda", "provider:aws:s3", "live"] },
   () => {
     test.provider(
       "leaves versions and unrelated uploads intact when aborting inactive upload IDs",
@@ -1283,22 +1007,15 @@ describe(
               );
               expect([200, 404]).toContain(response.status);
               expect(yield* response.json).toEqual(
-                response.status === 200
-                  ? { aborted: true }
-                  : { tag: "NoSuchUpload" },
+                response.status === 200 ? { aborted: true } : { tag: "NoSuchUpload" },
               );
             });
           // Use an issued ID under a different key, not a malformed upload ID.
           yield* withUpload(Bucket, sourceKey, (UploadId) =>
             Effect.gen(function* () {
               yield* assertInactiveAbort(UploadId);
-              const pending = yield* S3.listMultipartUploads({
-                Bucket,
-                Prefix: sourceKey,
-              });
-              expect(pending.Uploads?.map((upload) => upload.UploadId)).toEqual(
-                [UploadId],
-              );
+              const pending = yield* S3.listMultipartUploads({ Bucket, Prefix: sourceKey });
+              expect(pending.Uploads?.map((upload) => upload.UploadId)).toEqual([UploadId]);
               yield* assertVersions(Bucket, Key, versions);
             }),
           );
@@ -1323,38 +1040,22 @@ describe(
           yield* withUpload(Bucket, Key, (UploadId) =>
             Effect.gen(function* () {
               const Body = "completed upload survives a rejected abort";
-              const part = yield* S3.uploadPart({
-                Bucket,
-                Key,
-                UploadId,
-                PartNumber: 1,
-                Body,
-              });
+              const part = yield* S3.uploadPart({ Bucket, Key, UploadId, PartNumber: 1, Body });
               const completed = yield* S3.completeMultipartUpload({
                 Bucket,
                 Key,
                 UploadId,
-                MultipartUpload: {
-                  Parts: [{ PartNumber: 1, ETag: part.ETag! }],
-                },
+                MultipartUpload: { Parts: [{ PartNumber: 1, ETag: part.ETag! }] },
               });
               yield* assertInactiveAbort(UploadId);
-              yield* assertCompletedVersion(
-                Bucket,
-                Key,
-                versions,
-                completed.VersionId!,
-                Body,
-              );
+              yield* assertCompletedVersion(Bucket, Key, versions, completed.VersionId!, Body);
             }),
           );
+          expect((yield* S3.listMultipartUploads({ Bucket, Prefix: Key })).Uploads ?? []).toEqual(
+            [],
+          );
           expect(
-            (yield* S3.listMultipartUploads({ Bucket, Prefix: Key })).Uploads ??
-              [],
-          ).toEqual([]);
-          expect(
-            (yield* S3.listMultipartUploads({ Bucket, Prefix: sourceKey }))
-              .Uploads ?? [],
+            (yield* S3.listMultipartUploads({ Bucket, Prefix: sourceKey })).Uploads ?? [],
           ).toEqual([]);
         }),
       { timeout: 120_000, retry: 0 },
@@ -1391,19 +1092,12 @@ describe(
                     Schema.Struct({ aborted: Schema.Boolean }),
                   ),
                 ).toEqual({ aborted: true });
-                const pending = yield* S3.listMultipartUploads({
-                  Bucket,
-                  Prefix: Key,
-                });
+                const pending = yield* S3.listMultipartUploads({ Bucket, Prefix: Key });
+                expect(pending.Uploads?.map((upload) => upload.UploadId)).toEqual([siblingId]);
                 expect(
-                  pending.Uploads?.map((upload) => upload.UploadId),
-                ).toEqual([siblingId]);
-                expect(
-                  (yield* S3.listParts({
-                    Bucket,
-                    Key,
-                    UploadId: siblingId,
-                  })).Parts?.map((part) => part.ETag),
+                  (yield* S3.listParts({ Bucket, Key, UploadId: siblingId })).Parts?.map(
+                    (part) => part.ETag,
+                  ),
                 ).toEqual([sibling.ETag]);
                 yield* assertVersions(Bucket, Key, versions);
               }),

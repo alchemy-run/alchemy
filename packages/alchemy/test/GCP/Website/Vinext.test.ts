@@ -1,26 +1,17 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as pathe from "pathe";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 import { dockerAvailable } from "../bindingHost.ts";
-import {
-  assertSiteGone,
-  cloudRunUrl,
-  liveOptions,
-  logLevel,
-  serviceIdentity,
-} from "./site.ts";
+import { assertSiteGone, cloudRunUrl, liveOptions, logLevel, serviceIdentity } from "./site.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
 // Built in place: vinext and its RSC toolchain resolve only from the
 // example's own node_modules (build output is gitignored there).
-const rootDir = pathe.resolve(
-  import.meta.dirname,
-  "../../../../../examples/fly-website-vinext",
-);
+const rootDir = pathe.resolve(import.meta.dirname, "../../../../../examples/fly-website-vinext");
 
 test.provider.skipIf(!dockerAvailable)(
   "Vinext: deploy, GET page and env-backed API route, destroy, gone",
@@ -33,13 +24,7 @@ test.provider.skipIf(!dockerAvailable)(
           const site = yield* GCP.Website.Vinext("Web", {
             rootDir,
             memo: {
-              include: [
-                "app/**",
-                "public/**",
-                "package.json",
-                "vite.config.ts",
-                "tsconfig.json",
-              ],
+              include: ["app/**", "public/**", "package.json", "vite.config.ts", "tsconfig.json"],
             },
             env: { GREETING: "Hello from vinext on Cloud Run!" },
           });
@@ -54,11 +39,10 @@ test.provider.skipIf(!dockerAvailable)(
         timeout: "180 seconds",
         label: "vinext page",
       });
-      yield* expectUrlContains(
-        `${url}/api/hello?name=Alchemy`,
-        "Hello from vinext on Cloud Run!",
-        { timeout: "30 seconds", label: "vinext api env" },
-      );
+      yield* expectUrlContains(`${url}/api/hello?name=Alchemy`, "Hello from vinext on Cloud Run!", {
+        timeout: "30 seconds",
+        label: "vinext api env",
+      });
 
       yield* stack.destroy();
       yield* assertSiteGone(service);

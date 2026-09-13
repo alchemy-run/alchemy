@@ -1,8 +1,8 @@
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Layer from "effect/Layer";
 import path from "pathe";
 import * as AIOps from "@/AWS/AIOps";
 import { Role } from "@/AWS/IAM/Role.ts";
@@ -10,9 +10,7 @@ import * as Lambda from "@/AWS/Lambda";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
-export class AIOpsTestFunction extends Lambda.Function<Lambda.Function>()(
-  "AIOpsTestFunction",
-) {}
+export class AIOpsTestFunction extends Lambda.Function<Lambda.Function>()("AIOpsTestFunction") {}
 
 export default AIOpsTestFunction.make(
   {
@@ -44,8 +42,7 @@ export default AIOpsTestFunction.make(
     });
 
     const getInvestigationGroup = yield* AIOps.GetInvestigationGroup(group);
-    const getInvestigationGroupPolicy =
-      yield* AIOps.GetInvestigationGroupPolicy(group);
+    const getInvestigationGroupPolicy = yield* AIOps.GetInvestigationGroupPolicy(group);
     const listTagsForResource = yield* AIOps.ListTagsForResource(group);
     const listInvestigationGroups = yield* AIOps.ListInvestigationGroups();
 
@@ -84,9 +81,7 @@ export default AIOpsTestFunction.make(
         if (request.method === "GET" && pathname === "/policy") {
           const policy = yield* getInvestigationGroupPolicy().pipe(
             Effect.map((r) => r.policy),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
           );
           return yield* HttpServerResponse.json({
             hasPolicy: policy !== undefined,

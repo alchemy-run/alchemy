@@ -30,18 +30,15 @@ export class LifecycleTestFunction extends AWS.Lambda.Function<AWS.Lambda.Functi
  * `Output`s resolved at deploy time only, so this composition is safe to
  * re-execute inside the deployed Lambda without runtime guards.
  */
-export class LifecycleFleet extends Context.Service<
-  LifecycleFleet,
-  { group: AutoScalingGroup }
->()("AutoScalingLifecycleFleet") {}
+export class LifecycleFleet extends Context.Service<LifecycleFleet, { group: AutoScalingGroup }>()(
+  "AutoScalingLifecycleFleet",
+) {}
 
 export const LifecycleFleetLive = Layer.effect(
   LifecycleFleet,
   Effect.gen(function* () {
     const imageId = amazonLinux2023();
-    const subnetId = Output.fromEffect(
-      getAutoScalingTestSubnetId.pipe(Effect.orDie),
-    );
+    const subnetId = Output.fromEffect(getAutoScalingTestSubnetId.pipe(Effect.orDie));
 
     const template = yield* LaunchTemplate("LifecycleTemplate", {
       imageId,
@@ -128,11 +125,7 @@ export default LifecycleTestFunction.make(
     };
   }).pipe(
     Effect.provide(
-      Layer.mergeAll(
-        AWS.Lambda.EventSource,
-        CompleteLifecycleActionHttp,
-        LifecycleFleetLive,
-      ),
+      Layer.mergeAll(AWS.Lambda.EventSource, CompleteLifecycleActionHttp, LifecycleFleetLive),
     ),
   ),
 );

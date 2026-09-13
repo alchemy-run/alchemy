@@ -1,5 +1,5 @@
-import * as GCP from "@/GCP";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
 import { serveProbes } from "../../bindingHost.ts";
 
 /**
@@ -16,8 +16,7 @@ export const COMMITTED = { kind: "Task", name: "probe-commit" } as const;
 export const SEEDED = { kind: "Seeded", name: "probe-seeded" } as const;
 
 /** The Datastore API names the default database `""`, not `(default)`. */
-export const apiDatabaseId = (databaseId: string) =>
-  databaseId === "(default)" ? "" : databaseId;
+export const apiDatabaseId = (databaseId: string) => (databaseId === "(default)" ? "" : databaseId);
 
 /**
  * Effect-native Cloud Run service exercising every Datastore binding as its

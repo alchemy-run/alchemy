@@ -16,10 +16,7 @@ const sharedStack = Core.scratchStack(testOptions, "VpcLatticeBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 let functionArn: string;
@@ -38,50 +35,32 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e): boolean => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
 const getJson = (path: string) =>
-  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 const postJson = (path: string, body: object) =>
   send(
-    HttpClientRequest.post(`${baseUrl}${path}`).pipe(
-      HttpClientRequest.bodyJsonUnsafe(body),
-    ),
+    HttpClientRequest.post(`${baseUrl}${path}`).pipe(HttpClientRequest.bodyJsonUnsafe(body)),
   ).pipe(Effect.flatMap((r) => r.json));
 
 describe.sequential(
   "VpcLattice Bindings",
-  {
-    tags: [
-      "provider:aws",
-      "provider:aws:lambda",
-      "provider:aws:vpclattice",
-      "live",
-    ],
-  },
+  { tags: ["provider:aws", "provider:aws:lambda", "provider:aws:vpclattice", "live"] },
   () => {
     beforeAll(
       Effect.gen(function* () {
-        yield* Effect.logInfo(
-          "VpcLattice bindings setup: destroying previous resources",
-        );
+        yield* Effect.logInfo("VpcLattice bindings setup: destroying previous resources");
         yield* sharedStack.destroy();
 
         yield* Effect.logInfo("VpcLattice bindings setup: deploying fixture");
@@ -105,16 +84,12 @@ describe.sequential(
         functionArn = attrs.functionArn;
 
         const readinessUrl = `${baseUrl}/bindings`;
-        yield* Effect.logInfo(
-          `VpcLattice bindings setup: probing readiness at ${readinessUrl}`,
-        );
+        yield* Effect.logInfo(`VpcLattice bindings setup: probing readiness at ${readinessUrl}`);
         yield* HttpClient.get(readinessUrl).pipe(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.tapError((error) =>
             Effect.logWarning(
@@ -133,25 +108,17 @@ describe.sequential(
       test.provider("the capabilities initialize in the runtime", (_stack) =>
         Effect.gen(function* () {
           const response = (yield* getJson("/bindings")) as { bound: string[] };
-          expect(response.bound).toEqual([
-            "deregisterTargets",
-            "listTargets",
-            "registerTargets",
-          ]);
+          expect(response.bound).toEqual(["deregisterTargets", "listTargets", "registerTargets"]);
         }),
       );
     });
 
     describe("ListTargets", () => {
-      test.provider(
-        "lists an empty target group (injected target group id)",
-        (_stack) =>
-          Effect.gen(function* () {
-            const response = (yield* getJson("/targets")) as {
-              targets: { id: string }[];
-            };
-            expect(response.targets).toEqual([]);
-          }),
+      test.provider("lists an empty target group (injected target group id)", (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* getJson("/targets")) as { targets: { id: string }[] };
+          expect(response.targets).toEqual([]);
+        }),
       );
     });
 
@@ -161,22 +128,22 @@ describe.sequential(
         (_stack) =>
           Effect.gen(function* () {
             // Register the fixture's own function ARN into the LAMBDA group.
-            const registered = (yield* postJson("/register", {
-              id: functionArn,
-            })) as { successful: string[]; unsuccessful: unknown[] };
+            const registered = (yield* postJson("/register", { id: functionArn })) as {
+              successful: string[];
+              unsuccessful: unknown[];
+            };
             expect(registered.unsuccessful).toEqual([]);
             expect(registered.successful).toEqual([functionArn]);
 
             // The registration is observable through the list binding.
-            const listed = (yield* getJson("/targets")) as {
-              targets: { id: string }[];
-            };
+            const listed = (yield* getJson("/targets")) as { targets: { id: string }[] };
             expect(listed.targets.map((t) => t.id)).toEqual([functionArn]);
 
             // Deregister so the shared stack destroy is drain-free.
-            const deregistered = (yield* postJson("/deregister", {
-              id: functionArn,
-            })) as { successful: string[]; unsuccessful: unknown[] };
+            const deregistered = (yield* postJson("/deregister", { id: functionArn })) as {
+              successful: string[];
+              unsuccessful: unknown[];
+            };
             expect(deregistered.unsuccessful).toEqual([]);
             expect(deregistered.successful).toEqual([functionArn]);
           }),

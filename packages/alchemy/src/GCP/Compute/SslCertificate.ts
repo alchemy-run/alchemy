@@ -1,5 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitGlobalOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -10,12 +9,9 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitGlobalOperation } from "./operations.ts";
 
 export type SslCertificateType = "SELF_MANAGED" | "MANAGED";
 
@@ -153,9 +149,7 @@ export type SslCertificate = Resource<
  * @resource
  * @category Compute
  */
-export const SslCertificate = Resource<SslCertificate>(
-  "GCP.Compute.SslCertificate",
-);
+export const SslCertificate = Resource<SslCertificate>("GCP.Compute.SslCertificate");
 
 export class SslCertificateNotResolved extends Data.TaggedError(
   "GCP.Compute.SslCertificateNotResolved",
@@ -248,8 +242,7 @@ const selfManagedOf = (props: {
   privateKey: props.privateKey ?? props.selfManaged?.privateKey,
 });
 
-const normalizePem = (pem: string | undefined): string =>
-  (pem ?? "").replace(/\s+/g, "");
+const normalizePem = (pem: string | undefined): string => (pem ?? "").replace(/\s+/g, "");
 
 const sameDomains = (left?: readonly string[], right?: readonly string[]) =>
   [...(left ?? [])].sort().join("\0") === [...(right ?? [])].sort().join("\0");
@@ -338,8 +331,7 @@ const immutableChanged = (
   if ((news.description ?? "") !== previousDescription) return true;
 
   if (typeOf(news) === "MANAGED") {
-    const previousDomains =
-      olds?.managed?.domains ?? output?.managedDomains ?? [];
+    const previousDomains = olds?.managed?.domains ?? output?.managedDomains ?? [];
     if (
       news.managed?.domains !== undefined &&
       !sameDomains(news.managed.domains, previousDomains)
@@ -357,16 +349,14 @@ const immutableChanged = (
   });
   if (
     nextMaterial.certificate !== undefined &&
-    normalizePem(nextMaterial.certificate) !==
-      normalizePem(previousMaterial.certificate)
+    normalizePem(nextMaterial.certificate) !== normalizePem(previousMaterial.certificate)
   ) {
     return true;
   }
   if (
     nextMaterial.privateKey !== undefined &&
     previousMaterial.privateKey !== undefined &&
-    normalizePem(nextMaterial.privateKey) !==
-      normalizePem(previousMaterial.privateKey)
+    normalizePem(nextMaterial.privateKey) !== normalizePem(previousMaterial.privateKey)
   ) {
     return true;
   }
@@ -386,8 +376,7 @@ export const SslCertificateProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
-      const previousName =
-        olds?.sslCertificateName ?? output?.sslCertificateName;
+      const previousName = olds?.sslCertificateName ?? output?.sslCertificateName;
       const nextName = news.sslCertificateName ?? previousName;
       if (previousName === undefined && output === undefined) {
         return undefined;
@@ -451,9 +440,7 @@ export const SslCertificateProvider = () =>
             body: desired,
           })
           .pipe(
-            Effect.flatMap((operation) =>
-              waitGlobalOperation(env.project, operation),
-            ),
+            Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)),
             Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
           );
         current =

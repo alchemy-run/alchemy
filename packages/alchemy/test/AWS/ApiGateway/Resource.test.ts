@@ -37,9 +37,7 @@ test.provider.skipIf(!!process.env.FAST)(
       });
       expect(remote.pathPart).toEqual("items");
 
-      const provider = yield* Provider.findProvider(
-        AWS.ApiGateway.GatewayResource,
-      );
+      const provider = yield* Provider.findProvider(AWS.ApiGateway.GatewayResource);
       const all = yield* provider.list();
       expect(all.some((r) => r.resourceId === res.resourceId)).toBe(true);
 

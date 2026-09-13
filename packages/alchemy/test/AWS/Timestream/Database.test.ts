@@ -4,10 +4,7 @@ import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { Database, Table } from "@/AWS/Timestream";
-import {
-  withQueryEndpoint,
-  withWriteEndpoint,
-} from "@/AWS/Timestream/internal";
+import { withQueryEndpoint, withWriteEndpoint } from "@/AWS/Timestream/internal";
 import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -67,10 +64,7 @@ describe(
           // Out-of-band verification via distilled through the discovered
           // endpoint.
           const described = yield* withWriteEndpoint(
-            TSW.describeTable({
-              DatabaseName: database.databaseName,
-              TableName: table.tableName,
-            }),
+            TSW.describeTable({ DatabaseName: database.databaseName, TableName: table.tableName }),
           );
           expect(described.Table?.TableStatus).toBe("ACTIVE");
 
@@ -105,9 +99,7 @@ describe(
             TSW.describeDatabase({ DatabaseName: database.databaseName }),
           ).pipe(
             Effect.map(() => false),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(true),
-            ),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
           );
           expect(gone).toBe(true);
         }),

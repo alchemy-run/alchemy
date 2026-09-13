@@ -9,12 +9,7 @@ import { RuntimeContext } from "@/RuntimeContext.ts";
 describe(
   "fromDurableObjectState.abort",
   {
-    tags: [
-      "unit",
-      "provider:cloudflare",
-      "provider:cloudflare:worker",
-      "local",
-    ],
+    tags: ["unit", "provider:cloudflare", "provider:cloudflare:worker", "local"],
   },
   () => {
     const mockState = (abort: (...args: unknown[]) => void) =>

@@ -9,23 +9,14 @@ import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import * as Output from "@/Output";
 import * as Core from "@/Test/Core";
-import Ec2BindingsFunctionLive, {
-  Ec2BindingsFunction,
-} from "./fixtures/bindings-handler.ts";
+import Ec2BindingsFunctionLive, { Ec2BindingsFunction } from "./fixtures/bindings-handler.ts";
 import * as Test from "./VpcTest.ts";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
-const sharedStack = Core.scratchStack(
-  testOptions,
-  "Ec2Bindings",
-  "test/AWS/EC2/Bindings.test.ts",
-);
+const sharedStack = Core.scratchStack(testOptions, "Ec2Bindings", "test/AWS/EC2/Bindings.test.ts");
 
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -64,9 +55,7 @@ const callRoute = (method: "GET" | "POST", path: string) =>
       Effect.flatMap((response) =>
         response.status === 200
           ? response.json
-          : Effect.fail(
-              new Error(`Route ${path} not ready: ${response.status}`),
-            ),
+          : Effect.fail(new Error(`Route ${path} not ready: ${response.status}`)),
       ),
       // A freshly deployed Function URL can briefly return 502 while the
       // Lambda execution environment is still initializing. Retry transport
@@ -110,9 +99,7 @@ describe(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.retry({ schedule: readinessPolicy }),
         );
@@ -198,9 +185,7 @@ describe(
           // A failed earlier run may have left the rule behind: authorize then
           // tolerates the duplicate, revoke always finds one to remove.
           const authorize = yield* callRoute("POST", "/authorize");
-          expect(["Success", "InvalidPermission.Duplicate"]).toContain(
-            authorize.tag,
-          );
+          expect(["Success", "InvalidPermission.Duplicate"]).toContain(authorize.tag);
           const revoke = yield* callRoute("POST", "/revoke");
           expect(revoke.tag).toEqual("Success");
         }),
@@ -219,63 +204,38 @@ describe(
           // the snapshot immediately, but its background copy can keep the
           // source volume stuck in `deleting` for many minutes. Wait for this
           // tiny empty-volume snapshot to finish before removing it.
-          yield* ec2
-            .describeSnapshots({ SnapshotIds: [body.snapshotId!] })
-            .pipe(
-              Effect.flatMap((result) => {
-                const state = result.Snapshots?.[0]?.State ?? "missing";
-                if (state === "completed") return Effect.void;
-                if (state === "error") {
-                  return Effect.fail(
-                    new Error(
-                      `Snapshot ${body.snapshotId} entered error state`,
-                    ),
-                  );
-                }
-                return Effect.fail(
-                  new SnapshotNotReady({
-                    snapshotId: body.snapshotId!,
-                    state,
-                  }),
-                );
-              }),
-              Effect.retry({
-                while: (error) => error instanceof SnapshotNotReady,
-                schedule: Schedule.max([
-                  Schedule.fixed("2 seconds"),
-                  Schedule.recurs(29),
-                ]),
-              }),
-            );
+          yield* ec2.describeSnapshots({ SnapshotIds: [body.snapshotId!] }).pipe(
+            Effect.flatMap((result) => {
+              const state = result.Snapshots?.[0]?.State ?? "missing";
+              if (state === "completed") return Effect.void;
+              if (state === "error") {
+                return Effect.fail(new Error(`Snapshot ${body.snapshotId} entered error state`));
+              }
+              return Effect.fail(new SnapshotNotReady({ snapshotId: body.snapshotId!, state }));
+            }),
+            Effect.retry({
+              while: (error) => error instanceof SnapshotNotReady,
+              schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(29)]),
+            }),
+          );
 
           // The runtime-created snapshot is not stack-managed — delete it
           // out-of-band and confirm the exact ID is no longer enumerable.
           yield* ec2
             .deleteSnapshot({ SnapshotId: body.snapshotId! })
-            .pipe(
-              Effect.catchTag("InvalidSnapshot.NotFound", () => Effect.void),
-            );
-          yield* ec2
-            .describeSnapshots({ SnapshotIds: [body.snapshotId!] })
-            .pipe(
-              Effect.flatMap((result) =>
-                (result.Snapshots ?? []).length === 0
-                  ? Effect.void
-                  : Effect.fail(
-                      new SnapshotStillVisible({
-                        snapshotId: body.snapshotId!,
-                      }),
-                    ),
-              ),
-              Effect.catchTag("InvalidSnapshot.NotFound", () => Effect.void),
-              Effect.retry({
-                while: (error) => error instanceof SnapshotStillVisible,
-                schedule: Schedule.max([
-                  Schedule.fixed("1 second"),
-                  Schedule.recurs(10),
-                ]),
-              }),
-            );
+            .pipe(Effect.catchTag("InvalidSnapshot.NotFound", () => Effect.void));
+          yield* ec2.describeSnapshots({ SnapshotIds: [body.snapshotId!] }).pipe(
+            Effect.flatMap((result) =>
+              (result.Snapshots ?? []).length === 0
+                ? Effect.void
+                : Effect.fail(new SnapshotStillVisible({ snapshotId: body.snapshotId! })),
+            ),
+            Effect.catchTag("InvalidSnapshot.NotFound", () => Effect.void),
+            Effect.retry({
+              while: (error) => error instanceof SnapshotStillVisible,
+              schedule: Schedule.max([Schedule.fixed("1 second"), Schedule.recurs(10)]),
+            }),
+          );
         }),
       { timeout: 90_000 },
     );
@@ -284,22 +244,17 @@ describe(
       "consumeInstanceStateEvents created the EventBridge rule",
       (_stack) =>
         Effect.gen(function* () {
-          const ref = yield* AWS.EventBridge.Rule.ref(
-            "BindingsInstance-InstanceState",
-            {
-              stack: sharedStack.name,
-              stage: sharedStack.stage,
-            },
-          );
+          const ref = yield* AWS.EventBridge.Rule.ref("BindingsInstance-InstanceState", {
+            stack: sharedStack.name,
+            stage: sharedStack.stage,
+          });
           const { Name, EventBusName } = yield* Effect.all({
             Name: Output.evaluate(ref.ruleName, {}),
             EventBusName: Output.evaluate(ref.eventBusName, {}),
           }).pipe(Effect.provide(sharedStack.state));
           const rule = yield* eventbridge.describeRule({ Name, EventBusName });
           expect(rule?.EventPattern).toContain("aws.ec2");
-          expect(rule?.EventPattern).toContain(
-            "EC2 Instance State-change Notification",
-          );
+          expect(rule?.EventPattern).toContain("EC2 Instance State-change Notification");
         }),
       { tags: ["provider:aws:eventbridge"], timeout: 60_000 },
     );

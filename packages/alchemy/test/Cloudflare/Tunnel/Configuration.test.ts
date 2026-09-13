@@ -6,10 +6,7 @@ import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 describe(
   "Tunnel Configuration",
@@ -32,25 +29,17 @@ describe(
                 name: "alchemy-tunnel-config-list-test",
                 configSrc: "cloudflare",
               });
-              const config = yield* Cloudflare.Tunnel.Configuration(
-                "ListConfig",
-                {
-                  tunnelId: tunnel.tunnelId,
-                  ingress: [
-                    {
-                      hostname: "config-list-test.internal",
-                      service: "http://localhost:8080",
-                    },
-                  ],
-                },
-              );
+              const config = yield* Cloudflare.Tunnel.Configuration("ListConfig", {
+                tunnelId: tunnel.tunnelId,
+                ingress: [
+                  { hostname: "config-list-test.internal", service: "http://localhost:8080" },
+                ],
+              });
               return { tunnelId: tunnel.tunnelId, config };
             }),
           );
 
-          const provider = yield* Provider.findProvider(
-            Cloudflare.Tunnel.Configuration,
-          );
+          const provider = yield* Provider.findProvider(Cloudflare.Tunnel.Configuration);
           const all = yield* provider.list();
 
           expect(all.some((c) => c.tunnelId === deployed.tunnelId)).toBe(true);

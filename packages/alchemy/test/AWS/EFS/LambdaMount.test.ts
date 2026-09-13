@@ -56,9 +56,7 @@ const resolveNetwork = Effect.gen(function* () {
 const infra = (marker: string) =>
   Effect.gen(function* () {
     yield* resolveNetwork;
-    const files = yield* AWS.EFS.FileSystem("MountFiles", {
-      throughputMode: "elastic",
-    });
+    const files = yield* AWS.EFS.FileSystem("MountFiles", { throughputMode: "elastic" });
     const target = yield* AWS.EFS.MountTarget("MountTarget", {
       fileSystemId: files.fileSystemId,
       subnetId,
@@ -104,18 +102,11 @@ const getJsonWithRetry = (url: string, times: number) =>
         ? response.json
         : response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new Error(`${url} returned ${response.status}: ${body}`),
-              ),
+              Effect.fail(new Error(`${url} returned ${response.status}: ${body}`)),
             ),
           ),
     ),
-    Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("3 seconds"),
-        Schedule.recurs(times),
-      ]),
-    }),
+    Effect.retry({ schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(times)]) }),
   );
 
 // Gated behind AWS_TEST_SLOW: the suite's wall clock is ~6–8 minutes end to
@@ -127,13 +118,7 @@ const getJsonWithRetry = (url: string, times: number) =>
 describe.skipIf(!process.env.AWS_TEST_SLOW).sequential(
   "EFS Lambda mount",
   {
-    tags: [
-      "provider:aws",
-      "provider:aws:ec2",
-      "provider:aws:efs",
-      "provider:aws:lambda",
-      "live",
-    ],
+    tags: ["provider:aws", "provider:aws:ec2", "provider:aws:efs", "provider:aws:lambda", "live"],
   },
   () => {
     beforeAll(
@@ -166,9 +151,7 @@ describe.skipIf(!process.env.AWS_TEST_SLOW).sequential(
           const written = (yield* getJsonWithRetry(
             `${baseUrl}/write?content=hello-from-efs`,
             5,
-          )) as {
-            written: string;
-          };
+          )) as { written: string };
           expect(written.written).toBe("hello-from-efs");
 
           const read = (yield* getJsonWithRetry(`${baseUrl}/read`, 5)) as {

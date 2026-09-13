@@ -132,22 +132,14 @@ export const GroupProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const groupId = yield* toGroupId(
-        id,
-        olds?.groupId ?? output?.groupId,
-        output?.name,
-      );
-      const existing = yield* getGroup(
-        output?.name ?? groupName(env.project, groupId),
-      );
+      const groupId = yield* toGroupId(id, olds?.groupId ?? output?.groupId, output?.name);
+      const existing = yield* getGroup(output?.name ?? groupName(env.project, groupId));
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       // No labels, and the display name is shown to testers: a generated
       // alias derives from this stack, stage, logical id and instance; an
       // explicit alias is only ours when state has it.
-      return output !== undefined || olds?.groupId === undefined
-        ? attrs
-        : Unowned(attrs);
+      return output !== undefined || olds?.groupId === undefined ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -162,17 +154,9 @@ export const GroupProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const parent = projectParent(env.project);
-      const groupId = yield* toGroupId(
-        id,
-        news.groupId,
-        output?.groupId ?? output?.name,
-      );
+      const groupId = yield* toGroupId(id, news.groupId, output?.groupId ?? output?.name);
       const name = groupName(env.project, groupId);
-      const desiredDisplay = yield* toDisplayName(
-        id,
-        news.displayName,
-        output?.displayName,
-      );
+      const desiredDisplay = yield* toDisplayName(id, news.displayName, output?.displayName);
 
       let current = yield* getGroup(output?.name ?? name);
 
@@ -194,10 +178,7 @@ export const GroupProvider = () =>
       }
 
       const currentName = current.name ?? name;
-      if (
-        !sameText(current.displayName, desiredDisplay) &&
-        currentName.length > 0
-      ) {
+      if (!sameText(current.displayName, desiredDisplay) && currentName.length > 0) {
         current = yield* retryTransient(
           firebaseappdistribution.patchProjectsGroups({
             name: currentName,

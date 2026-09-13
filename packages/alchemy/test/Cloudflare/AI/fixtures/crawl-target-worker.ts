@@ -5,8 +5,7 @@ import * as Cloudflare from "@/Cloudflare/index.ts";
 
 const page = (title: string, body: string) =>
   HttpServerResponse.html(
-    `<!doctype html><html><head><title>${title}</title></head>` +
-      `<body>${body}</body></html>`,
+    `<!doctype html><html><head><title>${title}</title></head>` + `<body>${body}</body></html>`,
   );
 
 /**
@@ -56,10 +55,7 @@ export default class AiSearchCrawlTargetWorker extends Cloudflare.Worker<AiSearc
         }
 
         if (request.url.startsWith("/docs")) {
-          return page(
-            "Docs",
-            "<h1>Alchemy docs</h1><p>Indexable documentation content.</p>",
-          );
+          return page("Docs", "<h1>Alchemy docs</h1><p>Indexable documentation content.</p>");
         }
 
         return page(

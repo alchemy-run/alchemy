@@ -1,20 +1,17 @@
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as servicenetworking from "@distilled.cloud/gcp/servicenetworking_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 import { withNetworkSlot } from "../networkQuota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const parent = "services/servicenetworking.googleapis.com";
 
@@ -26,9 +23,7 @@ const waitUntilGone = (consumerNetwork: string) =>
     })
     .pipe(
       Effect.map((page) =>
-        (page.connections ?? []).length === 0
-          ? ("gone" as const)
-          : ("found" as const),
+        (page.connections ?? []).length === 0 ? ("gone" as const) : ("found" as const),
       ),
       Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
       Effect.repeat({
@@ -97,16 +92,10 @@ test.provider.skipIf(!!process.env.FAST)(
         }),
       );
 
-      expect(created.connection.networkName).toEqual(
-        created.network.networkName,
-      );
+      expect(created.connection.networkName).toEqual(created.network.networkName);
       expect(created.connection.service).toEqual(parent);
-      expect(created.connection.peering).toEqual(
-        "servicenetworking-googleapis-com",
-      );
-      expect(created.connection.reservedPeeringRanges).toEqual([
-        created.range.addressName,
-      ]);
+      expect(created.connection.peering).toEqual("servicenetworking-googleapis-com");
+      expect(created.connection.reservedPeeringRanges).toEqual([created.range.addressName]);
       expect(created.connection.project).toEqual(project);
       expect(created.connection.projectNumber).toEqual(expect.any(String));
 
@@ -115,13 +104,10 @@ test.provider.skipIf(!!process.env.FAST)(
         network: created.connection.network,
       });
       const fetched = (listed.connections ?? []).find(
-        (connection) =>
-          (connection.network ?? "") === created.connection.network,
+        (connection) => (connection.network ?? "") === created.connection.network,
       );
       expect(fetched?.peering).toEqual(created.connection.peering);
-      expect(fetched?.reservedPeeringRanges).toEqual([
-        created.range.addressName,
-      ]);
+      expect(fetched?.reservedPeeringRanges).toEqual([created.range.addressName]);
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {

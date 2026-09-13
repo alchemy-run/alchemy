@@ -24,16 +24,11 @@ class ServiceStillExists extends Data.TaggedError("ServiceStillExists")<{
 const assertServiceDeleted = (serviceId: string) =>
   findService(serviceId).pipe(
     Effect.flatMap((service) =>
-      service === undefined
-        ? Effect.void
-        : Effect.fail(new ServiceStillExists({ serviceId })),
+      service === undefined ? Effect.void : Effect.fail(new ServiceStillExists({ serviceId })),
     ),
     Effect.retry({
       while: (e) => e._tag === "ServiceStillExists",
-      schedule: Schedule.max([
-        Schedule.spaced("3 seconds"),
-        Schedule.recurs(20),
-      ]),
+      schedule: Schedule.max([Schedule.spaced("3 seconds"), Schedule.recurs(20)]),
     }),
   );
 
@@ -95,11 +90,7 @@ test.provider(
       expect(created?.DnsConfig?.DnsRecords).toEqual([{ Type: "A", TTL: 10 }]);
       const tags = yield* sd
         .listTagsForResource({ ResourceARN: service.serviceArn })
-        .pipe(
-          Effect.map((r) =>
-            Object.fromEntries((r.Tags ?? []).map((t) => [t.Key, t.Value])),
-          ),
-        );
+        .pipe(Effect.map((r) => Object.fromEntries((r.Tags ?? []).map((t) => [t.Key, t.Value]))));
       expect(tags.Environment).toBe("test");
       expect(tags["alchemy::id"]).toBe("Backend");
 
@@ -122,9 +113,7 @@ test.provider(
 
       const afterUpdate = yield* findService(service.serviceId);
       expect(afterUpdate?.Description).toBe("updated");
-      expect(afterUpdate?.DnsConfig?.DnsRecords).toEqual([
-        { Type: "A", TTL: 30 },
-      ]);
+      expect(afterUpdate?.DnsConfig?.DnsRecords).toEqual([{ Type: "A", TTL: 30 }]);
       expect(yield* findServiceAttributes(service.serviceId)).toEqual({
         tier: "web",
         extra: "x",
@@ -136,9 +125,7 @@ test.provider(
       );
       expect(replaced.service.serviceId).not.toBe(service.serviceId);
       const afterReplace = yield* findService(replaced.service.serviceId);
-      expect(afterReplace?.DnsConfig?.DnsRecords).toEqual([
-        { Type: "SRV", TTL: 30 },
-      ]);
+      expect(afterReplace?.DnsConfig?.DnsRecords).toEqual([{ Type: "SRV", TTL: 30 }]);
       yield* assertServiceDeleted(service.serviceId);
 
       yield* stack.destroy();

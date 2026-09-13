@@ -8,17 +8,12 @@ import type { RuntimeContext } from "@/RuntimeContext";
 declare const connection: Prisma.Connection;
 
 type ApiShape = {
-  databaseUrl(): Effect.Effect<
-    Redacted.Redacted<string>,
-    never,
-    RuntimeContext
-  >;
+  databaseUrl(): Effect.Effect<Redacted.Redacted<string>, never, RuntimeContext>;
 };
 
-export class PrismaLambdaApi extends AWS.Lambda.Function<
-  PrismaLambdaApi,
-  ApiShape
->()("PrismaLambdaApi") {}
+export class PrismaLambdaApi extends AWS.Lambda.Function<PrismaLambdaApi, ApiShape>()(
+  "PrismaLambdaApi",
+) {}
 
 export const PrismaLambdaApiLive = PrismaLambdaApi.make(
   {

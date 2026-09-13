@@ -14,11 +14,7 @@ interface EventDescriptor {
 
 export interface EcsRouteTargetProps extends Pick<
   RuleTarget,
-  | "Input"
-  | "InputPath"
-  | "InputTransformer"
-  | "RetryPolicy"
-  | "DeadLetterConfig"
+  "Input" | "InputPath" | "InputTransformer" | "RetryPolicy" | "DeadLetterConfig"
 > {
   task: {
     taskDefinitionArn: string;
@@ -59,8 +55,7 @@ export const toEcsTask = (
   props: EcsRouteTargetProps,
 ) =>
   Effect.gen(function* () {
-    const routeId =
-      descriptor.id ?? createRouteId(descriptor, `${cluster.LogicalId}Ecs`);
+    const routeId = descriptor.id ?? createRouteId(descriptor, `${cluster.LogicalId}Ecs`);
 
     const role = yield* IAM.Role(`${routeId}${cluster.LogicalId}Role`, {
       assumeRolePolicyDocument: {

@@ -1,15 +1,10 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as vault from "@distilled.cloud/gcp/vault_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import {
-  logLevel,
-  runAccountLifecycle,
-  sampleMailQuery,
-  vaultAccount,
-} from "./common.ts";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
+import { logLevel, runAccountLifecycle, sampleMailQuery, vaultAccount } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -101,10 +96,7 @@ test.provider.skipIf(!runAccountLifecycle)(
 
       yield* stack.destroy();
 
-      const gone = yield* waitUntilGone(
-        created.saved.matterId,
-        created.saved.savedQueryId,
-      );
+      const gone = yield* waitUntilGone(created.saved.matterId, created.saved.savedQueryId);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
   { tags: ["provider:gcp", "provider:gcp:vault", "live"], timeout: 90_000 },

@@ -19,9 +19,7 @@ export default class KVReadWriteHttpWorker extends Cloudflare.Worker<KVReadWrite
         const url = new URL(request.url, "http://x");
         // The ReadWrite client composes both halves; route to whichever
         // matches so we exercise read *and* write through one client.
-        const handled =
-          (yield* writeRoutes(kv, request, url)) ??
-          (yield* readRoutes(kv, url));
+        const handled = (yield* writeRoutes(kv, request, url)) ?? (yield* readRoutes(kv, url));
         return handled ?? HttpServerResponse.text("Not Found", { status: 404 });
       }),
     };

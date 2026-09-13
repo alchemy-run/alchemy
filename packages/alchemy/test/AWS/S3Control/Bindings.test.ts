@@ -24,10 +24,7 @@ const ACCOUNT_ID = "391965393224";
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 class TransientUpstream extends Data.TaggedError("TransientUpstream")<{
   readonly status: number;
@@ -43,26 +40,19 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e): boolean => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
 const getJson = (baseUrl: string, path: string) =>
-  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 const awaitReady = (readinessUrl: string) =>
   HttpClient.get(readinessUrl).pipe(
@@ -72,9 +62,7 @@ const awaitReady = (readinessUrl: string) =>
         : Effect.fail(new Error(`Function not ready: ${response.status}`)),
     ),
     Effect.tapError((error) =>
-      Effect.logWarning(
-        `S3Control test setup: fixture not ready yet (${String(error)})`,
-      ),
+      Effect.logWarning(`S3Control test setup: fixture not ready yet (${String(error)})`),
     ),
     Effect.retry({ schedule: readinessPolicy }),
   );
@@ -96,9 +84,7 @@ describe.sequential(
   () => {
     beforeAll(
       Effect.gen(function* () {
-        yield* Effect.logInfo(
-          "S3Control test setup: destroying previous resources",
-        );
+        yield* Effect.logInfo("S3Control test setup: destroying previous resources");
         yield* sharedStack.destroy();
 
         yield* Effect.logInfo("S3Control test setup: deploying fixture");
@@ -119,15 +105,11 @@ describe.sequential(
     afterAll(sharedStack.destroy(), { timeout: 240_000 });
 
     describe("binding registration", () => {
-      test.provider(
-        "all nine capabilities initialize in the runtime",
-        (_stack) =>
-          Effect.gen(function* () {
-            const response = (yield* getJson(baseUrl, "/bindings")) as {
-              bound: string[];
-            };
-            expect(response.bound).toHaveLength(9);
-          }),
+      test.provider("all nine capabilities initialize in the runtime", (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* getJson(baseUrl, "/bindings")) as { bound: string[] };
+          expect(response.bound).toHaveLength(9);
+        }),
       );
     });
 
@@ -147,15 +129,11 @@ describe.sequential(
     });
 
     describe("GetAccessPointPolicy", () => {
-      test.provider(
-        "typed NoSuchAccessPointPolicy on a policyless access point",
-        (_stack) =>
-          Effect.gen(function* () {
-            const result = (yield* getJson(baseUrl, "/policy")) as {
-              hasPolicy: boolean;
-            };
-            expect(result.hasPolicy).toBe(false);
-          }),
+      test.provider("typed NoSuchAccessPointPolicy on a policyless access point", (_stack) =>
+        Effect.gen(function* () {
+          const result = (yield* getJson(baseUrl, "/policy")) as { hasPolicy: boolean };
+          expect(result.hasPolicy).toBe(false);
+        }),
       );
     });
 
@@ -174,12 +152,8 @@ describe.sequential(
     describe("ListAccessPoints", () => {
       test.provider("finds the fixture access point by bucket", (_stack) =>
         Effect.gen(function* () {
-          const live = (yield* getJson(baseUrl, "/access-point")) as {
-            name: string | undefined;
-          };
-          const { names } = (yield* getJson(baseUrl, "/access-points")) as {
-            names: string[];
-          };
+          const live = (yield* getJson(baseUrl, "/access-point")) as { name: string | undefined };
+          const { names } = (yield* getJson(baseUrl, "/access-points")) as { names: string[] };
           expect(names).toContain(live.name);
         }),
       );
@@ -201,28 +175,18 @@ describe.sequential(
               finalStatus: string;
               listedJobIds: string[];
             };
-            expect(
-              result.ok,
-              `job flow failed: ${result.tag}: ${result.message}`,
-            ).toBe(true);
+            expect(result.ok, `job flow failed: ${result.tag}: ${result.message}`).toBe(true);
             expect(result.jobId).toBeTruthy();
             // The job settles into a stable state (Suspended when awaiting
             // confirmation; Failed/Complete when the generated manifest is
             // empty).
-            expect([
-              "Suspended",
-              "Failed",
-              "Complete",
-              "Cancelled",
-              "Ready",
-              "Active",
-            ]).toContain(result.settledStatus);
+            expect(["Suspended", "Failed", "Complete", "Cancelled", "Ready", "Active"]).toContain(
+              result.settledStatus,
+            );
             // Both bindings round-trip: either the mutation applied, or AWS
             // refused the transition with the TYPED tag (which also proves the
             // distilled JobStatusTransitionForbidden patch end-to-end).
-            expect(["updated", "JobStatusTransitionForbidden"]).toContain(
-              result.priorityOutcome,
-            );
+            expect(["updated", "JobStatusTransitionForbidden"]).toContain(result.priorityOutcome);
             expect(result.cancelOutcome).toBeTruthy();
             expect(result.finalStatus).toBeTruthy();
             expect(result.listedJobIds).toContain(result.jobId);
@@ -289,10 +253,7 @@ describe.skipIf(!process.env.AWS_TEST_SLOW).sequential(
             // Verify the binding's mutation independently of the Lambda
             // response, through the distilled S3Control client.
             const live = yield* s3control
-              .getMultiRegionAccessPointRoutes({
-                AccountId: ACCOUNT_ID,
-                Mrap: before.mrapName,
-              })
+              .getMultiRegionAccessPointRoutes({ AccountId: ACCOUNT_ID, Mrap: before.mrapName })
               .pipe(Effect.provideService(Region, Effect.succeed("us-west-2")));
             expect(live.Routes?.length).toBe(before.routes.length);
             for (const route of live.Routes ?? []) {

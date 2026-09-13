@@ -13,8 +13,8 @@ import * as Alchemy from "alchemy";
 import * as AWS from "alchemy/AWS";
 import * as Test from "alchemy/Test/Bun";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/http/HttpClient";
+import * as Schedule from "effect/Schedule";
 import Stack from "../alchemy.run.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
@@ -43,10 +43,7 @@ const getJson = Effect.fn(function* (url: string) {
   const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
   const res = yield* client.get(url).pipe(
     Effect.retry({
-      schedule: Schedule.min([
-        Schedule.exponential("1 second"),
-        Schedule.spaced("5 seconds"),
-      ]),
+      schedule: Schedule.min([Schedule.exponential("1 second"), Schedule.spaced("5 seconds")]),
       times: 30,
     }),
   );
@@ -73,10 +70,7 @@ test(
     const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
     const res = yield* client.get(url).pipe(
       Effect.retry({
-        schedule: Schedule.min([
-          Schedule.exponential("1 second"),
-          Schedule.spaced("5 seconds"),
-        ]),
+        schedule: Schedule.min([Schedule.exponential("1 second"), Schedule.spaced("5 seconds")]),
         times: 30,
       }),
     );

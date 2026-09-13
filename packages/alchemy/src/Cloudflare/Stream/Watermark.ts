@@ -15,12 +15,7 @@ type TypeId = typeof TypeId;
 /**
  * Location of the watermark image on the video.
  */
-export type WatermarkPosition =
-  | "upperRight"
-  | "upperLeft"
-  | "lowerLeft"
-  | "lowerRight"
-  | "center";
+export type WatermarkPosition = "upperRight" | "upperLeft" | "lowerLeft" | "lowerRight" | "center";
 
 export type WatermarkProps = {
   /**
@@ -117,13 +112,7 @@ export type WatermarkAttributes = {
   width: number | undefined;
 };
 
-export type Watermark = Resource<
-  TypeId,
-  WatermarkProps,
-  WatermarkAttributes,
-  never,
-  Providers
->;
+export type Watermark = Resource<TypeId, WatermarkProps, WatermarkAttributes, never, Providers>;
 
 /**
  * A Cloudflare Stream watermark profile — a PNG image stamped onto
@@ -169,15 +158,7 @@ export const isWatermark = (value: unknown): value is Watermark =>
 
 export const WatermarkProvider = () =>
   Provider.succeed(Watermark, {
-    stables: [
-      "watermarkId",
-      "accountId",
-      "created",
-      "downloadedFrom",
-      "size",
-      "height",
-      "width",
-    ],
+    stables: ["watermarkId", "accountId", "created", "downloadedFrom", "size", "height", "width"],
 
     diff: Effect.fn(function* ({ id, olds, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -191,16 +172,14 @@ export const WatermarkProvider = () =>
       // No update endpoint — any prop change is a replacement. Compare
       // against the observed output where the API echoes the value, and
       // against olds for the create-only `url`.
-      const oldName =
-        output?.name ?? olds.name ?? (yield* watermarkName(id, olds.name));
+      const oldName = output?.name ?? olds.name ?? (yield* watermarkName(id, olds.name));
       const newName = yield* watermarkName(id, news.name);
       if (
         newName !== oldName ||
         news.url !== olds.url ||
         (news.opacity ?? 1.0) !== (output?.opacity ?? olds.opacity ?? 1.0) ||
         (news.padding ?? 0.05) !== (output?.padding ?? olds.padding ?? 0.05) ||
-        (news.position ?? "upperRight") !==
-          (output?.position ?? olds.position ?? "upperRight") ||
+        (news.position ?? "upperRight") !== (output?.position ?? olds.position ?? "upperRight") ||
         (news.scale ?? 0.15) !== (output?.scale ?? olds.scale ?? 0.15)
       ) {
         return { action: "replace" } as const;
@@ -290,9 +269,7 @@ export const WatermarkProvider = () =>
 const getWatermark = (accountId: string, watermarkId: string) =>
   stream
     .getWatermark({ accountId, identifier: watermarkId })
-    .pipe(
-      Effect.catchTag("WatermarkNotFound", () => Effect.succeed(undefined)),
-    );
+    .pipe(Effect.catchTag("WatermarkNotFound", () => Effect.succeed(undefined)));
 
 /**
  * Find a watermark by exact name. Names are not unique — if several

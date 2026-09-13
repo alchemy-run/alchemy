@@ -33,12 +33,7 @@ test(
     yield* exerciseSqlSurface(url);
   }),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:d1",
-      "provider:cloudflare:worker",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:d1", "provider:cloudflare:worker", "live"],
     timeout: TEST_TIMEOUT,
   },
 );

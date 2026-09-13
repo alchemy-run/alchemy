@@ -22,9 +22,7 @@ test.provider(
   "getReferenceStore on a nonexistent id fails with ResourceNotFoundException",
   () =>
     Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        omics.getReferenceStore({ id: "1234567890" }),
-      );
+      const error = yield* Effect.flip(omics.getReferenceStore({ id: "1234567890" }));
       expect(error._tag).toBe("ResourceNotFoundException");
     }),
   { tags: ["provider:aws", "provider:aws:omics", "live"] },
@@ -66,17 +64,10 @@ const assertReferenceStoreGone = (id: string) =>
       Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
     );
     if (!gone) {
-      return yield* Effect.fail(
-        new Error(`reference store '${id}' still exists`),
-      );
+      return yield* Effect.fail(new Error(`reference store '${id}' still exists`));
     }
   }).pipe(
-    Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("3 seconds"),
-        Schedule.recurs(10),
-      ]),
-    }),
+    Effect.retry({ schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(10)]) }),
   );
 
 test.provider(
@@ -98,15 +89,11 @@ test.provider(
       expect(store.referenceStoreId).toBeDefined();
       expect(store.referenceStoreArn).toContain(":referenceStore/");
 
-      const live = yield* omics.getReferenceStore({
-        id: store.referenceStoreId,
-      });
+      const live = yield* omics.getReferenceStore({ id: store.referenceStoreId });
       expect(live.id).toBe(store.referenceStoreId);
       expect(live.description).toBe("alchemy omics test reference store");
 
-      const tags = yield* omics.listTagsForResource({
-        resourceArn: store.referenceStoreArn,
-      });
+      const tags = yield* omics.listTagsForResource({ resourceArn: store.referenceStoreArn });
       expect(tags.tags["fixture"]).toBe("omics-reference-store");
       expect(tags.tags["alchemy::id"]).toBe("Refs");
 
@@ -123,17 +110,10 @@ const assertSequenceStoreGone = (id: string) =>
       Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
     );
     if (!gone) {
-      return yield* Effect.fail(
-        new Error(`sequence store '${id}' still exists`),
-      );
+      return yield* Effect.fail(new Error(`sequence store '${id}' still exists`));
     }
   }).pipe(
-    Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("3 seconds"),
-        Schedule.recurs(10),
-      ]),
-    }),
+    Effect.retry({ schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(10)]) }),
   );
 
 test.provider(
@@ -156,9 +136,7 @@ test.provider(
       expect(store.sequenceStoreId).toBeDefined();
       expect(store.sequenceStoreArn).toContain(":sequenceStore/");
 
-      const live = yield* omics.getSequenceStore({
-        id: store.sequenceStoreId,
-      });
+      const live = yield* omics.getSequenceStore({ id: store.sequenceStoreId });
       expect(live.id).toBe(store.sequenceStoreId);
       expect(live.eTagAlgorithmFamily).toBe("SHA256up");
 
@@ -178,12 +156,7 @@ const assertRunGroupGone = (id: string) =>
       return yield* Effect.fail(new Error(`run group '${id}' still exists`));
     }
   }).pipe(
-    Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("3 seconds"),
-        Schedule.recurs(10),
-      ]),
-    }),
+    Effect.retry({ schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(10)]) }),
   );
 
 test.provider(
@@ -275,12 +248,7 @@ const buildZip = (fileName: string, content: string): Uint8Array => {
 
   const chunks: number[] = [];
   const push32 = (v: number) => {
-    chunks.push(
-      v & 0xff,
-      (v >>> 8) & 0xff,
-      (v >>> 16) & 0xff,
-      (v >>> 24) & 0xff,
-    );
+    chunks.push(v & 0xff, (v >>> 8) & 0xff, (v >>> 16) & 0xff, (v >>> 24) & 0xff);
   };
   const push16 = (v: number) => chunks.push(v & 0xff, (v >>> 8) & 0xff);
 
@@ -338,22 +306,13 @@ const assertWorkflowGone = (id: string) =>
   Effect.gen(function* () {
     const status = yield* omics.getWorkflow({ id }).pipe(
       Effect.map((w) => w.status ?? "gone"),
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed("gone" as const),
-      ),
+      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed("gone" as const)),
     );
     if (status !== "gone" && status !== "DELETED") {
-      return yield* Effect.fail(
-        new Error(`workflow '${id}' still exists (status: ${status})`),
-      );
+      return yield* Effect.fail(new Error(`workflow '${id}' still exists (status: ${status})`));
     }
   }).pipe(
-    Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("5 seconds"),
-        Schedule.recurs(12),
-      ]),
-    }),
+    Effect.retry({ schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(12)]) }),
   );
 
 test.provider.skipIf(!process.env.AWS_TEST_OMICS)(
@@ -395,17 +354,10 @@ const assertAnnotationStoreGone = (name: string) =>
       Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
     );
     if (!gone) {
-      return yield* Effect.fail(
-        new Error(`annotation store '${name}' still exists`),
-      );
+      return yield* Effect.fail(new Error(`annotation store '${name}' still exists`));
     }
   }).pipe(
-    Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("5 seconds"),
-        Schedule.recurs(24),
-      ]),
-    }),
+    Effect.retry({ schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(24)]) }),
   );
 
 test.provider.skipIf(!process.env.AWS_TEST_OMICS)(
@@ -418,9 +370,7 @@ test.provider.skipIf(!process.env.AWS_TEST_OMICS)(
         Effect.gen(function* () {
           const store = yield* AnnotationStore("Annotations", {
             storeFormat: "TSV",
-            storeOptions: {
-              tsvStoreOptions: { annotationType: "GENERIC" },
-            },
+            storeOptions: { tsvStoreOptions: { annotationType: "GENERIC" } },
             tags: { fixture: "omics-annotation-store" },
           });
           return { store };
@@ -447,22 +397,13 @@ const assertVariantStoreGone = (name: string) =>
       Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
     );
     if (!gone) {
-      return yield* Effect.fail(
-        new Error(`variant store '${name}' still exists`),
-      );
+      return yield* Effect.fail(new Error(`variant store '${name}' still exists`));
     }
   }).pipe(
-    Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("5 seconds"),
-        Schedule.recurs(24),
-      ]),
-    }),
+    Effect.retry({ schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(24)]) }),
   );
 
-test.provider.skipIf(
-  !process.env.AWS_TEST_OMICS || !process.env.OMICS_REFERENCE_ARN,
-)(
+test.provider.skipIf(!process.env.AWS_TEST_OMICS || !process.env.OMICS_REFERENCE_ARN)(
   "VariantStore: create with reference, verify ACTIVE, destroy",
   (stack) =>
     Effect.gen(function* () {

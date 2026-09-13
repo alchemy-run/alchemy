@@ -25,20 +25,11 @@ test.provider(
         const asset = "public/example.json";
         const original = yield* fs.readFileString(path.join(second, asset));
         yield* fs.writeFileString(path.join(first, asset), "changed");
-        expect(yield* fs.readFileString(path.join(second, asset))).toBe(
-          original,
-        );
+        expect(yield* fs.readFileString(path.join(second, asset))).toBe(original);
         yield* fs.makeDirectory(path.join(first, "node_modules/.vite"));
-        yield* fs.writeFileString(
-          path.join(first, "node_modules/.vite/marker"),
-          "private",
-        );
-        expect(
-          yield* fs.exists(path.join(second, "node_modules/.vite/marker")),
-        ).toBe(false);
-        expect(
-          yield* fs.exists(path.resolve(first, "../../tsconfig.base.json")),
-        ).toBe(true);
+        yield* fs.writeFileString(path.join(first, "node_modules/.vite/marker"), "private");
+        expect(yield* fs.exists(path.join(second, "node_modules/.vite/marker"))).toBe(false);
+        expect(yield* fs.exists(path.resolve(first, "../../tsconfig.base.json"))).toBe(true);
         expect(yield* fs.realPath(path.join(first, "node_modules/vite"))).toBe(
           yield* fs.realPath(path.join(second, "node_modules/vite")),
         );
@@ -71,8 +62,5 @@ test.provider(
       expect(plan.resources.Function?.action).toBe("create");
       yield* stack.destroy();
     }),
-  {
-    tags: ["provider:neon", "provider:neon:website", "live"],
-    timeout: 120_000,
-  },
+  { tags: ["provider:neon", "provider:neon:website", "live"], timeout: 120_000 },
 );

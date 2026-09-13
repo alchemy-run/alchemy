@@ -31,9 +31,7 @@ const assertPolicyGone = (arn: string) =>
   Effect.gen(function* () {
     const policy = yield* ivs.getPlaybackRestrictionPolicy({ arn }).pipe(
       Effect.map((r) => r.playbackRestrictionPolicy),
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
+      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
     );
     if (policy !== undefined) {
       return yield* Effect.fail(new Error(`policy '${arn}' still exists`));
@@ -61,15 +59,9 @@ test.provider(
       };
 
       // Create.
-      const created = yield* stack.deploy(
-        PlaybackRestrictionPolicy("GeoFence", props),
-      );
-      expect(created.playbackRestrictionPolicyArn).toContain(
-        ":playback-restriction-policy/",
-      );
-      expect(created.playbackRestrictionPolicyName).toBe(
-        "alchemy-test-ivs-prp",
-      );
+      const created = yield* stack.deploy(PlaybackRestrictionPolicy("GeoFence", props));
+      expect(created.playbackRestrictionPolicyArn).toContain(":playback-restriction-policy/");
+      expect(created.playbackRestrictionPolicyName).toBe("alchemy-test-ivs-prp");
       expect([...created.allowedCountries].sort()).toEqual(["CA", "US"]);
       expect(created.allowedOrigins).toEqual(["https://example.com"]);
 
@@ -77,21 +69,13 @@ test.provider(
       const observed = yield* ivs.getPlaybackRestrictionPolicy({
         arn: created.playbackRestrictionPolicyArn,
       });
-      expect(observed.playbackRestrictionPolicy?.name).toBe(
-        "alchemy-test-ivs-prp",
-      );
+      expect(observed.playbackRestrictionPolicy?.name).toBe("alchemy-test-ivs-prp");
       expect(observed.playbackRestrictionPolicy?.tags?.fixture).toBe("ivs-prp");
-      expect(observed.playbackRestrictionPolicy?.tags?.["alchemy::id"]).toBe(
-        "GeoFence",
-      );
+      expect(observed.playbackRestrictionPolicy?.tags?.["alchemy::id"]).toBe("GeoFence");
 
       // No-op redeploy keeps the same policy.
-      const noop = yield* stack.deploy(
-        PlaybackRestrictionPolicy("GeoFence", props),
-      );
-      expect(noop.playbackRestrictionPolicyArn).toBe(
-        created.playbackRestrictionPolicyArn,
-      );
+      const noop = yield* stack.deploy(PlaybackRestrictionPolicy("GeoFence", props));
+      expect(noop.playbackRestrictionPolicyArn).toBe(created.playbackRestrictionPolicyArn);
 
       // Update in place — countries, origins, and strict enforcement are
       // all mutable; the ARN must not change.
@@ -103,9 +87,7 @@ test.provider(
           enableStrictOriginEnforcement: true,
         }),
       );
-      expect(updated.playbackRestrictionPolicyArn).toBe(
-        created.playbackRestrictionPolicyArn,
-      );
+      expect(updated.playbackRestrictionPolicyArn).toBe(created.playbackRestrictionPolicyArn);
       expect(updated.allowedCountries).toEqual(["US"]);
       expect([...updated.allowedOrigins].sort()).toEqual([
         "https://example.com",
@@ -116,12 +98,8 @@ test.provider(
       const reobserved = yield* ivs.getPlaybackRestrictionPolicy({
         arn: created.playbackRestrictionPolicyArn,
       });
-      expect(
-        reobserved.playbackRestrictionPolicy?.enableStrictOriginEnforcement,
-      ).toBe(true);
-      expect(reobserved.playbackRestrictionPolicy?.allowedCountries).toEqual([
-        "US",
-      ]);
+      expect(reobserved.playbackRestrictionPolicy?.enableStrictOriginEnforcement).toBe(true);
+      expect(reobserved.playbackRestrictionPolicy?.allowedCountries).toEqual(["US"]);
 
       // Destroy and verify out-of-band with a typed wait-until-gone.
       yield* stack.destroy();

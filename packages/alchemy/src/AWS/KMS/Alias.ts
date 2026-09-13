@@ -62,9 +62,7 @@ export const AliasProvider = () =>
       Effect.gen(function* () {
         const aliases = yield* kms.listAliases.pages({}).pipe(
           Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) => page.Aliases ?? []),
-          ),
+          Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.Aliases ?? [])),
         );
 
         return aliases
@@ -87,8 +85,7 @@ export const AliasProvider = () =>
           }));
       }),
     read: Effect.fn(function* ({ id, olds, output }) {
-      const aliasName =
-        output?.aliasName ?? (yield* toAliasName(id, olds ?? {}));
+      const aliasName = output?.aliasName ?? (yield* toAliasName(id, olds ?? {}));
       const state = yield* readAlias(aliasName);
       if (!state) return undefined;
       return output ? state : Unowned(state);
@@ -136,9 +133,7 @@ export const AliasProvider = () =>
       }
 
       if (!state) {
-        return yield* Effect.die(
-          new Error(`failed to read KMS alias ${aliasName}`),
-        );
+        return yield* Effect.die(new Error(`failed to read KMS alias ${aliasName}`));
       }
 
       yield* session.note(`KMS alias ${aliasName}`);
@@ -158,19 +153,14 @@ export const AliasProvider = () =>
       });
       if (remaining !== undefined) {
         yield* Effect.die(
-          new Error(
-            `KMS alias ${output.aliasName} remained observable after delete`,
-          ),
+          new Error(`KMS alias ${output.aliasName} remained observable after delete`),
         );
       }
       yield* session.note(`Deleted KMS alias ${output.aliasName}`);
     }),
   });
 
-const toAliasName = Effect.fn(function* (
-  id: string,
-  props: { aliasName?: AliasName },
-) {
+const toAliasName = Effect.fn(function* (id: string, props: { aliasName?: AliasName }) {
   if (props.aliasName) {
     return props.aliasName;
   }
@@ -195,9 +185,7 @@ const readAlias = Effect.fn(function* (aliasName: AliasName) {
 const findAlias = Effect.fn(function* (aliasName: AliasName) {
   const aliases = yield* kms.listAliases.pages({}).pipe(
     Stream.runCollect,
-    Effect.map((chunk) =>
-      Array.from(chunk).flatMap((page) => page.Aliases ?? []),
-    ),
+    Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.Aliases ?? [])),
   );
 
   return aliases.find((alias) => alias.AliasName === aliasName);
@@ -213,12 +201,8 @@ const resolveTargetKeyId = Effect.fn(function* (targetKeyId: string) {
   return described.KeyMetadata?.KeyId!;
 });
 
-const isCustomerAlias = (
-  aliasName: string | undefined,
-): aliasName is AliasName =>
-  aliasName !== undefined &&
-  aliasName.startsWith("alias/") &&
-  !aliasName.startsWith("alias/aws/");
+const isCustomerAlias = (aliasName: string | undefined): aliasName is AliasName =>
+  aliasName !== undefined && aliasName.startsWith("alias/") && !aliasName.startsWith("alias/aws/");
 
 const isKmsEventuallyConsistent = (error: { _tag: string }) =>
   error._tag === "DependencyTimeoutException" ||
@@ -226,7 +210,4 @@ const isKmsEventuallyConsistent = (error: { _tag: string }) =>
   error._tag === "KMSInvalidStateException" ||
   error._tag === "NotFoundException";
 
-const kmsRetrySchedule = Schedule.max([
-  Schedule.exponential(250),
-  Schedule.recurs(7),
-]);
+const kmsRetrySchedule = Schedule.max([Schedule.exponential(250), Schedule.recurs(7)]);

@@ -198,9 +198,7 @@ export type Occurrence = Resource<
  * @resource
  * @category ContainerAnalysis
  */
-export const Occurrence = Resource<Occurrence>(
-  "GCP.ContainerAnalysis.Occurrence",
-);
+export const Occurrence = Resource<Occurrence>("GCP.ContainerAnalysis.Occurrence");
 
 const getByName = missingGet(containeranalysis.getProjectsOccurrences);
 
@@ -238,21 +236,12 @@ const toPublicAttrs = (
 
 export const OccurrenceProvider = () =>
   Provider.succeed(Occurrence, {
-    stables: [
-      "name",
-      "occurrenceId",
-      "project",
-      "noteName",
-      "resourceUri",
-      "kind",
-      "createTime",
-    ],
+    stables: ["name", "occurrenceId", "project", "noteName", "resourceUri", "kind", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const previousKind =
-        occurrenceKind(olds ?? { noteName: "", resourceUri: "" }) ??
-        output?.kind;
+        occurrenceKind(olds ?? { noteName: "", resourceUri: "" }) ?? output?.kind;
       const nextKind = occurrenceKind(news) ?? previousKind;
       return replaceOnIdentity({
         previousParent: olds?.noteName ?? output?.noteName,
@@ -260,9 +249,7 @@ export const OccurrenceProvider = () =>
         extra:
           ((olds?.resourceUri ?? output?.resourceUri) !== undefined &&
             news.resourceUri !== (olds?.resourceUri ?? output?.resourceUri)) ||
-          (previousKind !== undefined &&
-            nextKind !== undefined &&
-            previousKind !== nextKind),
+          (previousKind !== undefined && nextKind !== undefined && previousKind !== nextKind),
       });
     }),
 
@@ -348,8 +335,6 @@ export const OccurrenceProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      yield* ignoreGone(
-        containeranalysis.deleteProjectsOccurrences({ name: output.name }),
-      );
+      yield* ignoreGone(containeranalysis.deleteProjectsOccurrences({ name: output.name }));
     }),
   });

@@ -11,9 +11,9 @@ import { zipFiles, type ZipFile } from "../Util/zip.ts";
 import type { FunctionProps } from "./Function.ts";
 import { nativeArtifactError } from "./NativeArtifact.ts";
 
-export class FunctionArtifactError extends Data.TaggedError(
-  "FunctionArtifactError",
-)<{ message: string }> {}
+export class FunctionArtifactError extends Data.TaggedError("FunctionArtifactError")<{
+  message: string;
+}> {}
 
 const safePath = (name: string) =>
   name.length > 0 &&
@@ -39,11 +39,7 @@ export const validateFunctionZip = (bytes: Uint8Array) =>
     try: () => {
       if (bytes.byteLength > 100 * 1024 * 1024)
         throw new Error("Archive exceeds 100 MiB safety limit");
-      const view = new DataView(
-        bytes.buffer,
-        bytes.byteOffset,
-        bytes.byteLength,
-      );
+      const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
       let end = bytes.length - 22;
       for (; end >= Math.max(0, bytes.length - 65557); end--)
         if (view.getUint32(end, true) === 0x06054b50) break;
@@ -54,12 +50,9 @@ export const validateFunctionZip = (bytes: Uint8Array) =>
       let size = 0;
       const files: Record<string, Uint8Array> = Object.create(null);
       for (let i = 0; i < count; i++) {
-        if (view.getUint32(offset, true) !== 0x02014b50)
-          throw new Error("Invalid ZIP entry");
+        if (view.getUint32(offset, true) !== 0x02014b50) throw new Error("Invalid ZIP entry");
         const length = view.getUint16(offset + 28, true);
-        const name = new TextDecoder().decode(
-          bytes.subarray(offset + 46, offset + 46 + length),
-        );
+        const name = new TextDecoder().decode(bytes.subarray(offset + 46, offset + 46 + length));
         const mode = view.getUint32(offset + 38, true) >>> 16;
         if (!safePath(name) || name in files || (mode & 0xf000) === 0xa000)
           throw new Error("Unsafe or duplicate archive entry");
@@ -81,21 +74,17 @@ export const validateFunctionZip = (bytes: Uint8Array) =>
         const localCompressed = view.getUint32(local + 18, true);
         const localExpanded = view.getUint32(local + 22, true);
         if (
-          (((flags & 8) === 0 || localCompressed !== 0) &&
-            localCompressed !== compressedSize) ||
-          (((flags & 8) === 0 || localExpanded !== 0) &&
-            localExpanded !== expandedSize)
+          (((flags & 8) === 0 || localCompressed !== 0) && localCompressed !== compressedSize) ||
+          (((flags & 8) === 0 || localExpanded !== 0) && localExpanded !== expandedSize)
         )
           throw new Error("ZIP size mismatch");
         const localNameLength = view.getUint16(local + 26, true);
         if (
-          new TextDecoder().decode(
-            bytes.subarray(local + 30, local + 30 + localNameLength),
-          ) !== name
+          new TextDecoder().decode(bytes.subarray(local + 30, local + 30 + localNameLength)) !==
+          name
         )
           throw new Error("ZIP entry name mismatch");
-        const start =
-          local + 30 + localNameLength + view.getUint16(local + 28, true);
+        const start = local + 30 + localNameLength + view.getUint16(local + 28, true);
         if (start + compressedSize > view.getUint32(end + 16, true))
           throw new Error("ZIP entry overlaps directory");
         const compressed = bytes.subarray(start, start + compressedSize);
@@ -103,24 +92,16 @@ export const validateFunctionZip = (bytes: Uint8Array) =>
           method === 0
             ? compressed
             : inflateRawSync(compressed, { maxOutputLength: expandedSize + 1 });
-        if (content.byteLength !== expandedSize)
-          throw new Error("ZIP expanded size mismatch");
+        if (content.byteLength !== expandedSize) throw new Error("ZIP expanded size mismatch");
         const nativeError = nativeArtifactError(name, content);
         if (nativeError) throw new Error(nativeError);
         size += content.byteLength;
         files[name] = content;
         offset +=
-          46 +
-          length +
-          view.getUint16(offset + 30, true) +
-          view.getUint16(offset + 32, true);
+          46 + length + view.getUint16(offset + 30, true) + view.getUint16(offset + 32, true);
       }
-      if (!("index.mjs" in files))
-        throw new Error("Artifact requires root index.mjs");
-      if (
-        offset !==
-        view.getUint32(end + 16, true) + view.getUint32(end + 12, true)
-      )
+      if (!("index.mjs" in files)) throw new Error("Artifact requires root index.mjs");
+      if (offset !== view.getUint32(end + 16, true) + view.getUint32(end + 12, true))
         throw new Error("ZIP directory mismatch");
       return files;
     },
@@ -131,9 +112,7 @@ export const validateFunctionZip = (bytes: Uint8Array) =>
       }),
   });
 
-export const buildFunctionArtifact = Effect.fn(function* (
-  props: FunctionProps,
-) {
+export const buildFunctionArtifact = Effect.fn(function* (props: FunctionProps) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   let files: ZipFile[] = [];
@@ -146,33 +125,29 @@ export const buildFunctionArtifact = Effect.fn(function* (
     const root = yield* fs.realPath(props.artifact.directory);
     const walk: (
       relative: string,
-    ) => Effect.Effect<
-      void,
-      FunctionArtifactError | import("effect/PlatformError").PlatformError
-    > = Effect.fn(function* (relative) {
-      for (const entry of (yield* fs.readDirectory(
-        path.join(root, relative),
-      )).sort()) {
-        const name = relative ? `${relative}/${entry}` : entry;
-        if (!safePath(name))
-          return yield* new FunctionArtifactError({
-            message: `Unsafe Function artifact entry: ${name}`,
-          });
-        const absolute = path.join(root, name);
-        if ((yield* fs.realPath(absolute)) !== absolute)
-          return yield* new FunctionArtifactError({
-            message: "Function artifacts must not contain symlinks",
-          });
-        const info = yield* fs.stat(absolute);
-        if (info.type === "Directory") yield* walk(name);
-        else if (info.type === "File")
-          files.push({ path: name, content: yield* fs.readFile(absolute) });
-        else
-          return yield* new FunctionArtifactError({
-            message: "Function artifacts support regular files only",
-          });
-      }
-    });
+    ) => Effect.Effect<void, FunctionArtifactError | import("effect/PlatformError").PlatformError> =
+      Effect.fn(function* (relative) {
+        for (const entry of (yield* fs.readDirectory(path.join(root, relative))).sort()) {
+          const name = relative ? `${relative}/${entry}` : entry;
+          if (!safePath(name))
+            return yield* new FunctionArtifactError({
+              message: `Unsafe Function artifact entry: ${name}`,
+            });
+          const absolute = path.join(root, name);
+          if ((yield* fs.realPath(absolute)) !== absolute)
+            return yield* new FunctionArtifactError({
+              message: "Function artifacts must not contain symlinks",
+            });
+          const info = yield* fs.stat(absolute);
+          if (info.type === "Directory") yield* walk(name);
+          else if (info.type === "File")
+            files.push({ path: name, content: yield* fs.readFile(absolute) });
+          else
+            return yield* new FunctionArtifactError({
+              message: "Function artifacts support regular files only",
+            });
+        }
+      });
     yield* walk("");
   } else {
     if (!props.main)
@@ -182,9 +157,7 @@ export const buildFunctionArtifact = Effect.fn(function* (
     const realMain = yield* TempRoot.resolveMainPath(props.main);
     const virtual = yield* Bundle.virtualEntryPlugin;
     const bridge = yield* Effect.sync(() =>
-      import.meta.resolve(
-        `./FunctionBridge${moduleExtension(import.meta.url)}`,
-      ),
+      import.meta.resolve(`./FunctionBridge${moduleExtension(import.meta.url)}`),
     );
     const output = yield* Bundle.build(
       {

@@ -1,8 +1,8 @@
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Layer from "effect/Layer";
 import path from "pathe";
 import * as DocDB from "@/AWS/DocDB";
 import type { SecurityGroupId } from "@/AWS/EC2/SecurityGroup.ts";
@@ -111,9 +111,7 @@ export default DocDBSlowTestFunction.make(
 
         if (request.method === "GET" && pathname === "/ping") {
           const { use } = yield* db;
-          const pong = yield* use((_db, client) =>
-            client.db("admin").command({ ping: 1 }),
-          );
+          const pong = yield* use((_db, client) => client.db("admin").command({ ping: 1 }));
           return yield* HttpServerResponse.json({ ok: pong.ok });
         }
 

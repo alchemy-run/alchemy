@@ -34,9 +34,7 @@ export default class AccessProtectedWorker extends Cloudflare.Worker<AccessProte
       fetch: Effect.gen(function* () {
         const access = yield* Cloudflare.Access.Context;
         const identity =
-          access === undefined
-            ? undefined
-            : yield* access.getIdentity().pipe(Effect.orDie);
+          access === undefined ? undefined : yield* access.getIdentity().pipe(Effect.orDie);
         return yield* HttpServerResponse.json({
           marker: "alchemy-access-worker-open",
           authenticated: access !== undefined,

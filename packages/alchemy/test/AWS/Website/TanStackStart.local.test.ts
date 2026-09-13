@@ -12,24 +12,14 @@ import { expectUrlContains, expectUrlOk } from "../../Cloudflare/Utils/Http.ts";
 // matching the process topology of the real `alchemy dev` command.
 const { test } = Test.make({ providers: AWS.providers(), dev: true });
 
-const fixtureDir = pathe.resolve(
-  import.meta.dirname,
-  "fixtures",
-  "tanstack-start-app",
-);
+const fixtureDir = pathe.resolve(import.meta.dirname, "fixtures", "tanstack-start-app");
 
 // Clone under the alchemy package so `@tanstack/react-start`,
 // `@tanstack/react-router`, `vite`, `react`, and `@vitejs/plugin-react`
 // resolve from the workspace's node_modules (the fixture has none).
 const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
 
-const fixtureEntries = [
-  ".gitignore",
-  "package.json",
-  "vite.config.ts",
-  "src",
-  "public",
-];
+const fixtureEntries = [".gitignore", "package.json", "vite.config.ts", "src", "public"];
 
 describe(
   "AWS.Website.TanStackStart local",
@@ -49,15 +39,10 @@ describe(
 
           const deployed = yield* stack.deploy(
             Effect.gen(function* () {
-              const site = yield* AWS.Website.TanStackStart(
-                "TanStackStartSite",
-                {
-                  rootDir,
-                  env: {
-                    TANSTACK_ENV_MARKER: "tanstack-start-aws-dev-env-marker",
-                  },
-                },
-              );
+              const site = yield* AWS.Website.TanStackStart("TanStackStartSite", {
+                rootDir,
+                env: { TANSTACK_ENV_MARKER: "tanstack-start-aws-dev-env-marker" },
+              });
               return { site };
             }),
           );
@@ -65,9 +50,7 @@ describe(
           // The site is the framework's own dev server: a localhost URL and no
           // cloud rows at all (proof no AWS call ran).
           const url = deployed.site.url! as string;
-          expect(url).toMatch(
-            /^http:\/\/(localhost|127\.0\.0\.1|\[[0-9a-fA-F:]+\])/,
-          );
+          expect(url).toMatch(/^http:\/\/(localhost|127\.0\.0\.1|\[[0-9a-fA-F:]+\])/);
           // The URL is an origin, not a directory — appending a path must not
           // produce a double slash.
           expect(url.endsWith("/")).toBe(false);
@@ -100,15 +83,10 @@ describe(
 
           const deployed = yield* stack.deploy(
             Effect.gen(function* () {
-              const site = yield* AWS.Website.TanStackStart(
-                "TanStackStartSite",
-                {
-                  rootDir,
-                  env: {
-                    TANSTACK_ENV_MARKER: "tanstack-start-aws-dev-env-marker",
-                  },
-                },
-              );
+              const site = yield* AWS.Website.TanStackStart("TanStackStartSite", {
+                rootDir,
+                env: { TANSTACK_ENV_MARKER: "tanstack-start-aws-dev-env-marker" },
+              });
               return { site };
             }),
           );
@@ -121,24 +99,18 @@ describe(
             label: "dev SSR home page",
           });
           // The fixture's own vite.config.ts applied in dev too.
-          yield* expectUrlContains(
-            `${url}/`,
-            "config:tanstack-start-aws-user-config-loaded",
-            { label: "user vite.config.ts applied (dev)" },
-          );
+          yield* expectUrlContains(`${url}/`, "config:tanstack-start-aws-user-config-loaded", {
+            label: "user vite.config.ts applied (dev)",
+          });
           // server.environment reaches the dev server's process env — the same
           // values the Lambda gets on deploy (dev/live parity).
-          yield* expectUrlContains(
-            `${url}/`,
-            "env:tanstack-start-aws-dev-env-marker",
-            { label: "server.environment injected into dev server" },
-          );
+          yield* expectUrlContains(`${url}/`, "env:tanstack-start-aws-dev-env-marker", {
+            label: "server.environment injected into dev server",
+          });
           // Server route through the dev server.
-          yield* expectUrlContains(
-            `${url}/api/hello?echo=dev`,
-            "TANSTACK_AWS_API_MARKER",
-            { label: "server route (dev)" },
-          );
+          yield* expectUrlContains(`${url}/api/hello?echo=dev`, "TANSTACK_AWS_API_MARKER", {
+            label: "server route (dev)",
+          });
 
           // ── HMR: edit the server route in place. The stack is NOT
           // re-applied — vite's dev rebuild must pick the change up and serve
@@ -147,16 +119,12 @@ describe(
           const hello = yield* fs.readFileString(helloPath);
           yield* fs.writeFileString(
             helloPath,
-            hello.replace(
-              "TANSTACK_AWS_API_MARKER",
-              "TANSTACK_AWS_API_MARKER_V2",
-            ),
+            hello.replace("TANSTACK_AWS_API_MARKER", "TANSTACK_AWS_API_MARKER_V2"),
           );
-          yield* expectUrlContains(
-            `${url}/api/hello?echo=dev`,
-            "TANSTACK_AWS_API_MARKER_V2",
-            { timeout: "90 seconds", label: "server route after HMR edit" },
-          );
+          yield* expectUrlContains(`${url}/api/hello?echo=dev`, "TANSTACK_AWS_API_MARKER_V2", {
+            timeout: "90 seconds",
+            label: "server route after HMR edit",
+          });
 
           yield* stack.destroy();
         }),

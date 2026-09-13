@@ -17,10 +17,7 @@ it.effect(
       const rolling = yield* deploymentPolicy(undefined, undefined);
       expect(rolling.bluegreen).toBe(false);
       expect(rolling.shutdown).toBeUndefined();
-      const bluegreen = yield* deploymentPolicy(
-        { strategy: "bluegreen" },
-        undefined,
-      );
+      const bluegreen = yield* deploymentPolicy({ strategy: "bluegreen" }, undefined);
       expect(bluegreen.healthTimeoutMs).toBe(60_000);
       expect(bluegreen.shutdown).toEqual({
         signal: "SIGTERM",
@@ -43,8 +40,8 @@ it.effect(
       ] as const) {
         const check = { type: "http" as const, port: 80, interval: requested };
         expect(
-          toFlyService({ protocol: "tcp", internalPort: 80, checks: [check] })
-            .checks?.[0]?.interval,
+          toFlyService({ protocol: "tcp", internalPort: 80, checks: [check] }).checks?.[0]
+            ?.interval,
         ).toBe(effective);
         expect(toFlyServiceCheck(check).interval).toBe(requested);
       }
@@ -116,9 +113,9 @@ it.effect(
       });
       expect(policy.timeoutMs).toBe(1001);
       for (const timeout of ["0", "0s", "-1s", "+1s", "300.000000001s"]) {
-        const error = yield* predecessorShutdown({
-          config: { stop_config: { timeout } },
-        }).pipe(Effect.flip);
+        const error = yield* predecessorShutdown({ config: { stop_config: { timeout } } }).pipe(
+          Effect.flip,
+        );
         expect(error._tag).toBe("Fly.ShutdownPolicyMismatch");
       }
     }),
@@ -130,9 +127,7 @@ for (const timeout of [0, -1, 300_001, Infinity, 0.1]) {
     `rejects invalid shutdown duration ${timeout}`,
     () =>
       Effect.gen(function* () {
-        const error = yield* deploymentPolicy(undefined, { timeout }).pipe(
-          Effect.flip,
-        );
+        const error = yield* deploymentPolicy(undefined, { timeout }).pipe(Effect.flip);
         expect(error._tag).toBe("Fly.InvalidDeployment");
       }),
     { tags: ["unit", "provider:fly", "provider:fly:service", "local"] },
@@ -143,10 +138,7 @@ it.effect(
   "S10 S11 rejects unsupported bluegreen configuration before mutation",
   () =>
     Effect.gen(function* () {
-      const policy = yield* deploymentPolicy(
-        { strategy: "bluegreen" },
-        undefined,
-      );
+      const policy = yield* deploymentPolicy({ strategy: "bluegreen" }, undefined);
       const checks = { ready: { type: "http", port: 80, path: "/" } };
       const cases: Array<[FlyMachineConfig, boolean, boolean]> = [
         [{}, false, false],
@@ -157,30 +149,15 @@ it.effect(
         [{ checks, services: [{ ports: [{ port: 80 }] }] }, false, false],
       ];
       for (const [config, mounted, skip] of cases) {
-        const error = yield* validateDeployment(
-          policy,
-          config,
-          mounted,
-          skip,
-        ).pipe(Effect.flip);
+        const error = yield* validateDeployment(policy, config, mounted, skip).pipe(Effect.flip);
         expect(error._tag).toBe("Fly.InvalidDeployment");
       }
-      const signal = yield* deploymentPolicy(
-        undefined,
-        { signal: "SIGQUIT" },
-        true,
-      ).pipe(Effect.flip);
+      const signal = yield* deploymentPolicy(undefined, { signal: "SIGQUIT" }, true).pipe(
+        Effect.flip,
+      );
       expect(signal._tag).toBe("Fly.InvalidDeployment");
     }),
-  {
-    tags: [
-      "unit",
-      "provider:fly",
-      "provider:fly:machine",
-      "provider:fly:service",
-      "local",
-    ],
-  },
+  { tags: ["unit", "provider:fly", "provider:fly:machine", "provider:fly:service", "local"] },
 );
 
 it.effect(
@@ -209,10 +186,7 @@ for (const autostop of ["stop", "suspend"] as const) {
     `S11 accepts ${autostop} instead of silently rejecting idle capacity`,
     () =>
       Effect.gen(function* () {
-        const policy = yield* deploymentPolicy(
-          { strategy: "bluegreen" },
-          undefined,
-        );
+        const policy = yield* deploymentPolicy({ strategy: "bluegreen" }, undefined);
         yield* validateDeployment(
           policy,
           {

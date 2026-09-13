@@ -1,17 +1,14 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as artifactregistry from "@distilled.cloud/gcp/artifactregistry_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   artifactregistry.getProjectsLocationsRepositoriesRules({ name }).pipe(
@@ -52,10 +49,9 @@ test.provider(
       expect(created.rule.operation).toEqual("DOWNLOAD");
       expect(created.rule.location).toEqual("us-central1");
 
-      const fetched =
-        yield* artifactregistry.getProjectsLocationsRepositoriesRules({
-          name: created.rule.name,
-        });
+      const fetched = yield* artifactregistry.getProjectsLocationsRepositoriesRules({
+        name: created.rule.name,
+      });
       expect(fetched.name).toEqual(created.rule.name);
       expect(fetched.action).toEqual("ALLOW");
       expect(fetched.condition?.title).toContain("[alchemy ");
@@ -81,18 +77,13 @@ test.provider(
 
       expect(updated.rule.name).toEqual(created.rule.name);
       expect(updated.rule.action).toEqual("DENY");
-      expect(updated.rule.condition?.expression).toEqual(
-        "pkg.version.id != '9.9.9'",
-      );
+      expect(updated.rule.condition?.expression).toEqual("pkg.version.id != '9.9.9'");
 
-      const refetched =
-        yield* artifactregistry.getProjectsLocationsRepositoriesRules({
-          name: created.rule.name,
-        });
+      const refetched = yield* artifactregistry.getProjectsLocationsRepositoriesRules({
+        name: created.rule.name,
+      });
       expect(refetched.action).toEqual("DENY");
-      expect(refetched.condition?.expression).toEqual(
-        "pkg.version.id != '9.9.9'",
-      );
+      expect(refetched.condition?.expression).toEqual("pkg.version.id != '9.9.9'");
 
       yield* stack.destroy();
 

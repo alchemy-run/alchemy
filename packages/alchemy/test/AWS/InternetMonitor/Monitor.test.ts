@@ -17,9 +17,7 @@ test.provider(
   () =>
     Effect.gen(function* () {
       const error = yield* Effect.flip(
-        im.getMonitor({
-          MonitorName: "alchemy-nonexistent-internetmonitor-probe",
-        }),
+        im.getMonitor({ MonitorName: "alchemy-nonexistent-internetmonitor-probe" }),
       );
       expect(error._tag).toBe("ResourceNotFoundException");
     }),
@@ -29,16 +27,11 @@ test.provider(
 // Typed wait-until-gone after destroy.
 const assertMonitorGone = (monitorName: string) =>
   im.getMonitor({ MonitorName: monitorName }).pipe(
-    Effect.flatMap(() =>
-      Effect.fail(new Error(`monitor ${monitorName} still exists`)),
-    ),
+    Effect.flatMap(() => Effect.fail(new Error(`monitor ${monitorName} still exists`))),
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
     Effect.retry({
       while: (e) => e instanceof Error,
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
     }),
   );
 
@@ -85,9 +78,7 @@ describe(
           expect(created.tags["alchemy::id"]).toBe("AppMonitor");
 
           // Out-of-band verification via distilled.
-          const observed = yield* im.getMonitor({
-            MonitorName: created.monitorName,
-          });
+          const observed = yield* im.getMonitor({ MonitorName: created.monitorName });
           expect(observed.MonitorArn).toBe(created.monitorArn);
           expect(observed.Status).toBe("ACTIVE");
           expect(observed.Resources).toEqual([]);
@@ -104,9 +95,7 @@ describe(
           expect(updated.maxCityNetworksToMonitor).toBe(2);
           expect(updated.tags.updated).toBe("true");
 
-          const observedUpdated = yield* im.getMonitor({
-            MonitorName: created.monitorName,
-          });
+          const observedUpdated = yield* im.getMonitor({ MonitorName: created.monitorName });
           expect(observedUpdated.MaxCityNetworksToMonitor).toBe(2);
           expect(observedUpdated.Tags?.updated).toBe("true");
 
@@ -121,9 +110,7 @@ describe(
             .describeLogGroups({
               logGroupNamePrefix: `/aws/internet-monitor/${created.monitorName}`,
             })
-            .pipe(
-              Effect.map((r) => (r.logGroups ?? []).map((g) => g.logGroupName)),
-            );
+            .pipe(Effect.map((r) => (r.logGroups ?? []).map((g) => g.logGroupName)));
           expect(remainingLogGroups).toEqual([]);
         }),
       { timeout: 300_000 },

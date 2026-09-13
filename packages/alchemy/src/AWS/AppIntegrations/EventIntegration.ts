@@ -86,17 +86,13 @@ export interface EventIntegration extends Resource<
  *
  * @resource
  */
-export const EventIntegration = Resource<EventIntegration>(
-  "AWS.AppIntegrations.EventIntegration",
-);
+export const EventIntegration = Resource<EventIntegration>("AWS.AppIntegrations.EventIntegration");
 
 /**
  * Raised when the AppIntegrations API returns an event integration without
  * the fields required to build the resource attributes.
  */
-export class EventIntegrationIncomplete extends Data.TaggedError(
-  "EventIntegrationIncomplete",
-)<{
+export class EventIntegrationIncomplete extends Data.TaggedError("EventIntegrationIncomplete")<{
   message: string;
 }> {}
 
@@ -104,28 +100,17 @@ export const EventIntegrationProvider = () =>
   Provider.effect(
     EventIntegration,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: { name?: string },
-      ) {
-        return (
-          props.name ?? (yield* createPhysicalName({ id, maxLength: 255 }))
-        );
+      const createName = Effect.fn(function* (id: string, props: { name?: string }) {
+        return props.name ?? (yield* createPhysicalName({ id, maxLength: 255 }));
       });
 
       /** Observe a single event integration by name; undefined if absent. */
       const observe = (name: string) =>
         appintegrations
           .getEventIntegration({ Name: name })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
-      const toAttrs = Effect.fn(function* (
-        live: appintegrations.GetEventIntegrationResponse,
-      ) {
+      const toAttrs = Effect.fn(function* (live: appintegrations.GetEventIntegrationResponse) {
         if (
           live.Name === undefined ||
           live.EventIntegrationArn === undefined ||
@@ -145,12 +130,7 @@ export const EventIntegrationProvider = () =>
       });
 
       return EventIntegration.Provider.of({
-        stables: [
-          "eventIntegrationName",
-          "eventIntegrationArn",
-          "eventBridgeBus",
-          "source",
-        ],
+        stables: ["eventIntegrationName", "eventIntegrationArn", "eventBridgeBus", "source"],
 
         list: () =>
           appintegrations.listEventIntegrations.items({}).pipe(
@@ -175,8 +155,7 @@ export const EventIntegrationProvider = () =>
           ),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.eventIntegrationName ?? (yield* createName(id, olds ?? {}));
+          const name = output?.eventIntegrationName ?? (yield* createName(id, olds ?? {}));
           const live = yield* observe(name);
           if (live === undefined) return undefined;
           const attrs = yield* toAttrs(live);
@@ -200,8 +179,7 @@ export const EventIntegrationProvider = () =>
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const name =
-            output?.eventIntegrationName ?? (yield* createName(id, news));
+          const name = output?.eventIntegrationName ?? (yield* createName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
@@ -218,12 +196,7 @@ export const EventIntegrationProvider = () =>
                 EventBridgeBus: news.eventBridgeBus,
                 Tags: desiredTags,
               })
-              .pipe(
-                Effect.catchTag(
-                  "DuplicateResourceException",
-                  () => Effect.void,
-                ),
-              );
+              .pipe(Effect.catchTag("DuplicateResourceException", () => Effect.void));
             live = yield* appintegrations.getEventIntegration({ Name: name });
           }
           const attrs = yield* toAttrs(live);
@@ -231,10 +204,7 @@ export const EventIntegrationProvider = () =>
           // 3. Sync description — the only mutable field. The API cannot
           //    clear a description (min length 1), so only push a defined
           //    value that differs from the observed one.
-          if (
-            news.description !== undefined &&
-            news.description !== live.Description
-          ) {
+          if (news.description !== undefined && news.description !== live.Description) {
             yield* appintegrations.updateEventIntegration({
               Name: name,
               Description: news.description,
@@ -272,9 +242,7 @@ export const EventIntegrationProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* appintegrations
             .deleteEventIntegration({ Name: output.eventIntegrationName })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       });
     }),

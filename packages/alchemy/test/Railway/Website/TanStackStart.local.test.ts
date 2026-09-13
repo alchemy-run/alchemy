@@ -13,13 +13,7 @@ const fixtureDir = pathe.resolve(
   "../../AWS/Website/fixtures/tanstack-start-app",
 );
 const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
-const fixtureEntries = [
-  ".gitignore",
-  "package.json",
-  "vite.config.ts",
-  "src",
-  "public",
-];
+const fixtureEntries = [".gitignore", "package.json", "vite.config.ts", "src", "public"];
 
 describe(
   "Railway.Website.TanStackStart local",
@@ -39,9 +33,7 @@ describe(
 
           const deployed = yield* stack.deploy(
             Effect.gen(function* () {
-              const site = yield* Railway.Website.TanStackStart("Web", {
-                rootDir,
-              });
+              const site = yield* Railway.Website.TanStackStart("Web", { rootDir });
               return { site };
             }),
           );

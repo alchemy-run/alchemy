@@ -1,5 +1,5 @@
-import * as GCP from "@/GCP";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
 import { serveProbes } from "../../bindingHost.ts";
 
 /** Queue the binding is granted on (roles/cloudtasks.enqueuer). */

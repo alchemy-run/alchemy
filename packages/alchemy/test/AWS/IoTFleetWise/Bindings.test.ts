@@ -7,9 +7,7 @@ import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import * as Test from "@/Test/Alchemy";
 import * as Core from "@/Test/Core";
-import FleetWiseBindingsFunctionLive, {
-  FleetWiseBindingsFunction,
-} from "./bindings-handler";
+import FleetWiseBindingsFunctionLive, { FleetWiseBindingsFunction } from "./bindings-handler";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -22,9 +20,7 @@ const RUN_LIVE = !!process.env.AWS_TEST_IOTFLEETWISE;
 
 // FleetWise is offered in us-east-1/eu-central-1 only — pin every
 // out-of-band distilled call to the service's home region.
-const inHomeRegion = <A, E, R>(
-  effect: Effect.Effect<A, E, R>,
-): Effect.Effect<A, E, R> =>
+const inHomeRegion = <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
   effect.pipe(Effect.provideService(Region, Effect.succeed("us-east-1")));
 
 // Ungated typed-error probes: prove the distilled error unions the bindings
@@ -35,14 +31,10 @@ test.provider(
     Effect.gen(function* () {
       const error = yield* Effect.flip(
         iotfleetwise
-          .getVehicleStatus({
-            vehicleName: "alchemy-nonexistent-vehicle-probe",
-          })
+          .getVehicleStatus({ vehicleName: "alchemy-nonexistent-vehicle-probe" })
           .pipe(inHomeRegion),
       );
-      expect(["ResourceNotFoundException", "AccessDeniedException"]).toContain(
-        error._tag,
-      );
+      expect(["ResourceNotFoundException", "AccessDeniedException"]).toContain(error._tag);
     }),
   { tags: ["provider:aws", "provider:aws:iotfleetwise", "live"] },
 );
@@ -56,9 +48,7 @@ test.provider(
           .listVehiclesInFleet({ fleetId: "alchemy-nonexistent-fleet-probe" })
           .pipe(inHomeRegion),
       );
-      expect(["ResourceNotFoundException", "AccessDeniedException"]).toContain(
-        error._tag,
-      );
+      expect(["ResourceNotFoundException", "AccessDeniedException"]).toContain(error._tag);
     }),
   { tags: ["provider:aws", "provider:aws:iotfleetwise", "live"] },
 );
@@ -91,9 +81,7 @@ describe(
         yield* Effect.logInfo("FleetWise E2E setup: destroying previous run");
         yield* sharedStack.destroy();
 
-        yield* Effect.logInfo(
-          "FleetWise E2E setup: deploying resources + Lambda",
-        );
+        yield* Effect.logInfo("FleetWise E2E setup: deploying resources + Lambda");
         const { functionUrl } = yield* sharedStack.deploy(
           Effect.gen(function* () {
             return yield* FleetWiseBindingsFunction;
@@ -108,15 +96,10 @@ describe(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.retry({
-            schedule: Schedule.max([
-              Schedule.fixed("2 seconds"),
-              Schedule.recurs(60),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(60)]),
           }),
         );
       }),
@@ -130,13 +113,11 @@ describe(
       { timeout: 600_000 },
     );
 
-    test.provider.skipIf(!RUN_LIVE)(
-      "all 13 capabilities initialize in the runtime",
-      () =>
-        Effect.gen(function* () {
-          const response = (yield* get("/bindings")) as any;
-          expect(response.bound).toHaveLength(13);
-        }),
+    test.provider.skipIf(!RUN_LIVE)("all 13 capabilities initialize in the runtime", () =>
+      Effect.gen(function* () {
+        const response = (yield* get("/bindings")) as any;
+        expect(response.bound).toHaveLength(13);
+      }),
     );
 
     test.provider.skipIf(!RUN_LIVE)(
@@ -176,13 +157,11 @@ describe(
         }),
     );
 
-    test.provider.skipIf(!RUN_LIVE)(
-      "ListVehicles filters by the bound model manifest",
-      () =>
-        Effect.gen(function* () {
-          const response = (yield* get("/vehicles")) as any;
-          expect(response.count).toBeGreaterThanOrEqual(1);
-        }),
+    test.provider.skipIf(!RUN_LIVE)("ListVehicles filters by the bound model manifest", () =>
+      Effect.gen(function* () {
+        const response = (yield* get("/vehicles")) as any;
+        expect(response.count).toBeGreaterThanOrEqual(1);
+      }),
     );
 
     test.provider.skipIf(!RUN_LIVE)(

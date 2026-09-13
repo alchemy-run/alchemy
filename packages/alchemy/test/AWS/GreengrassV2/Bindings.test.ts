@@ -20,10 +20,7 @@ const sharedStack = Core.scratchStack(testOptions, "GreengrassV2Bindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 let functionArn: string;
@@ -43,39 +40,27 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
 const getJson = (path: string) =>
-  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 const postJson = (path: string) =>
-  send(HttpClientRequest.post(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.post(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 // A type alias (not an interface) so it keeps the implicit index signature —
 // interfaces are not comparable to the JSON `JsonObject` type that
 // `response.json` returns, which breaks the `as Probe` casts below.
-type Probe = {
-  ok: boolean;
-  tag?: string;
-};
+type Probe = { ok: boolean; tag?: string };
 
 describe.sequential(
   "GreengrassV2 Bindings",
@@ -92,9 +77,7 @@ describe.sequential(
   () => {
     beforeAll(
       Effect.gen(function* () {
-        yield* Effect.logInfo(
-          "GreengrassV2 test setup: destroying previous resources",
-        );
+        yield* Effect.logInfo("GreengrassV2 test setup: destroying previous resources");
         yield* sharedStack.destroy();
 
         yield* Effect.logInfo("GreengrassV2 test setup: deploying fixture");
@@ -109,21 +92,15 @@ describe.sequential(
         functionArn = attrs.functionArn;
 
         const readinessUrl = `${baseUrl}/bindings`;
-        yield* Effect.logInfo(
-          `GreengrassV2 test setup: probing readiness at ${readinessUrl}`,
-        );
+        yield* Effect.logInfo(`GreengrassV2 test setup: probing readiness at ${readinessUrl}`);
         yield* HttpClient.get(readinessUrl).pipe(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.tapError((error) =>
-            Effect.logWarning(
-              `GreengrassV2 test setup: fixture not ready yet (${String(error)})`,
-            ),
+            Effect.logWarning(`GreengrassV2 test setup: fixture not ready yet (${String(error)})`),
           ),
           Effect.retry({ schedule: readinessPolicy }),
         );
@@ -143,23 +120,21 @@ describe.sequential(
     });
 
     describe("DescribeComponent", () => {
-      test.provider(
-        "reads the bound component version's metadata (injected arn)",
-        (_stack) =>
-          Effect.gen(function* () {
-            const response = (yield* getJson("/component")) as {
-              arn: string;
-              componentName: string;
-              componentVersion: string;
-              state: string;
-            };
-            expect(response.componentName).toBe(COMPONENT_NAME);
-            expect(response.componentVersion).toBe(COMPONENT_VERSION);
-            expect(response.arn).toContain(
-              `:components:${COMPONENT_NAME}:versions:${COMPONENT_VERSION}`,
-            );
-            expect(response.state).toBe("DEPLOYABLE");
-          }),
+      test.provider("reads the bound component version's metadata (injected arn)", (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* getJson("/component")) as {
+            arn: string;
+            componentName: string;
+            componentVersion: string;
+            state: string;
+          };
+          expect(response.componentName).toBe(COMPONENT_NAME);
+          expect(response.componentVersion).toBe(COMPONENT_VERSION);
+          expect(response.arn).toContain(
+            `:components:${COMPONENT_NAME}:versions:${COMPONENT_VERSION}`,
+          );
+          expect(response.state).toBe("DEPLOYABLE");
+        }),
       );
     });
 
@@ -177,72 +152,55 @@ describe.sequential(
     });
 
     describe("GetComponentVersionArtifact", () => {
-      test.provider(
-        "a missing artifact surfaces a typed error (never AccessDenied)",
-        (_stack) =>
-          Effect.gen(function* () {
-            const response = (yield* getJson("/artifact")) as Probe;
-            expect(response.ok).toBe(false);
-            expect(response.tag).not.toBe("AccessDeniedException");
-            expect([
-              "ResourceNotFoundException",
-              "ValidationException",
-            ]).toContain(response.tag);
-          }),
+      test.provider("a missing artifact surfaces a typed error (never AccessDenied)", (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* getJson("/artifact")) as Probe;
+          expect(response.ok).toBe(false);
+          expect(response.tag).not.toBe("AccessDeniedException");
+          expect(["ResourceNotFoundException", "ValidationException"]).toContain(response.tag);
+        }),
       );
     });
 
     describe("GetDeployment", () => {
-      test.provider(
-        "reads the bound deployment's detail (injected deployment id)",
-        (_stack) =>
-          Effect.gen(function* () {
-            const response = (yield* getJson("/deployment")) as {
-              deploymentId: string;
-              deploymentStatus: string;
-              targetArn: string;
-              isLatestForTarget: boolean;
-            };
-            expect(response.deploymentId).toBeTruthy();
-            expect(response.targetArn).toContain(":thing/");
-            expect(response.isLatestForTarget).toBe(true);
-          }),
+      test.provider("reads the bound deployment's detail (injected deployment id)", (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* getJson("/deployment")) as {
+            deploymentId: string;
+            deploymentStatus: string;
+            targetArn: string;
+            isLatestForTarget: boolean;
+          };
+          expect(response.deploymentId).toBeTruthy();
+          expect(response.targetArn).toContain(":thing/");
+          expect(response.isLatestForTarget).toBe(true);
+        }),
       );
     });
 
     describe("ListDeployments", () => {
       test.provider("enumerates the account's latest deployments", (_stack) =>
         Effect.gen(function* () {
-          const deployment = (yield* getJson("/deployment")) as {
-            deploymentId: string;
-          };
-          const response = (yield* getJson("/deployments")) as {
-            ids: string[];
-          };
+          const deployment = (yield* getJson("/deployment")) as { deploymentId: string };
+          const response = (yield* getJson("/deployments")) as { ids: string[] };
           expect(response.ids).toContain(deployment.deploymentId);
         }),
       );
     });
 
     describe("ListComponents", () => {
-      test.provider(
-        "enumerates private components incl. the fixture's",
-        (_stack) =>
-          Effect.gen(function* () {
-            const response = (yield* getJson("/components")) as {
-              names: string[];
-            };
-            expect(response.names).toContain(COMPONENT_NAME);
-          }),
+      test.provider("enumerates private components incl. the fixture's", (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* getJson("/components")) as { names: string[] };
+          expect(response.names).toContain(COMPONENT_NAME);
+        }),
       );
     });
 
     describe("ListComponentVersions", () => {
       test.provider("lists the fixture component's versions", (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* getJson("/component-versions")) as {
-            versions: string[];
-          };
+          const response = (yield* getJson("/component-versions")) as { versions: string[] };
           expect(response.versions).toContain(COMPONENT_VERSION);
         }),
       );
@@ -251,9 +209,7 @@ describe.sequential(
     describe("ListCoreDevices", () => {
       test.provider("enumerates core devices (count is a number)", (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* getJson("/core-devices")) as {
-            count: number;
-          };
+          const response = (yield* getJson("/core-devices")) as { count: number };
           expect(response.count).toBeGreaterThanOrEqual(0);
         }),
       );
@@ -278,12 +234,8 @@ describe.sequential(
               }),
             )) as Record<string, Probe>;
             // Point reads/writes on a missing core device are typed not-found.
-            expect(response.getCoreDevice!.tag).toBe(
-              "ResourceNotFoundException",
-            );
-            expect(response.deleteCoreDevice!.tag).toBe(
-              "ResourceNotFoundException",
-            );
+            expect(response.getCoreDevice!.tag).toBe("ResourceNotFoundException");
+            expect(response.deleteCoreDevice!.tag).toBe("ResourceNotFoundException");
             // Every probe proves IAM: none may be AccessDenied.
             for (const probe of Object.values(response)) {
               expect(probe.tag).not.toBe("AccessDeniedException");
@@ -298,9 +250,7 @@ describe.sequential(
         "UpdateConnectivityInfo + GetConnectivityInfo round-trip on the fixture thing",
         (_stack) =>
           Effect.gen(function* () {
-            const response = (yield* postJson("/connectivity")) as {
-              hostAddresses: string[];
-            };
+            const response = (yield* postJson("/connectivity")) as { hostAddresses: string[] };
             expect(response.hostAddresses).toContain("127.0.0.1");
           }),
         { timeout: 120_000 },
@@ -314,40 +264,32 @@ describe.sequential(
       // even with greengrass:ResolveComponentCandidates granted. This ungated
       // probe proves the binding's request plumbing end-to-end: the call
       // reaches the service and surfaces the documented typed rejection.
-      test.provider(
-        "IAM-signed resolve surfaces the documented typed rejection",
-        (_stack) =>
-          Effect.gen(function* () {
-            const response = (yield* getJson("/resolve")) as {
-              ok: boolean;
-              names: string[];
-              tag?: string;
-            };
-            expect(response.ok).toBe(false);
-            expect(response.tag).toBe("AccessDeniedException");
-          }),
+      test.provider("IAM-signed resolve surfaces the documented typed rejection", (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* getJson("/resolve")) as {
+            ok: boolean;
+            names: string[];
+            tag?: string;
+          };
+          expect(response.ok).toBe(false);
+          expect(response.tag).toBe("AccessDeniedException");
+        }),
       );
     });
 
-    describe(
-      "consumeGreengrassEvents",
-      { tags: ["provider:aws:eventbridge"] },
-      () => {
-        test.provider(
-          "the deploy created an EventBridge rule targeting the function",
-          (_stack) =>
-            Effect.gen(function* () {
-              // Out-of-band via distilled: the fixture's consumeGreengrassEvents
-              // must have materialized as a rule on the default bus with the
-              // Lambda as target.
-              const { RuleNames } = yield* eventbridge.listRuleNamesByTarget({
-                TargetArn: functionArn,
-              });
-              expect((RuleNames ?? []).length).toBeGreaterThanOrEqual(1);
-            }),
-        );
-      },
-    );
+    describe("consumeGreengrassEvents", { tags: ["provider:aws:eventbridge"] }, () => {
+      test.provider("the deploy created an EventBridge rule targeting the function", (_stack) =>
+        Effect.gen(function* () {
+          // Out-of-band via distilled: the fixture's consumeGreengrassEvents
+          // must have materialized as a rule on the default bus with the
+          // Lambda as target.
+          const { RuleNames } = yield* eventbridge.listRuleNamesByTarget({
+            TargetArn: functionArn,
+          });
+          expect((RuleNames ?? []).length).toBeGreaterThanOrEqual(1);
+        }),
+      );
+    });
 
     describe("CancelDeployment", () => {
       // Runs last: cancels the fixture rollout (the deployment stays ACTIVE
@@ -363,8 +305,7 @@ describe.sequential(
             const response = (yield* postJson("/cancel-deployment").pipe(
               Effect.repeat({
                 schedule: Schedule.spaced("3 seconds"),
-                until: (r): boolean =>
-                  (r as Probe).tag !== "AccessDeniedException",
+                until: (r): boolean => (r as Probe).tag !== "AccessDeniedException",
                 times: 20,
               }),
             )) as Probe;
@@ -373,8 +314,7 @@ describe.sequential(
               Effect.repeat({
                 schedule: Schedule.spaced("3 seconds"),
                 until: (d): boolean =>
-                  (d as { deploymentStatus: string }).deploymentStatus ===
-                  "CANCELED",
+                  (d as { deploymentStatus: string }).deploymentStatus === "CANCELED",
                 times: 10,
               }),
             )) as { deploymentStatus: string };

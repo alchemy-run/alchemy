@@ -8,10 +8,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // DLP is a paid Zero Trust add-on. On the standard testing account
 // `POST /accounts/{id}/dlp/profiles/custom` fails with HTTP 403 code

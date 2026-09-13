@@ -17,12 +17,9 @@ export const AsyncWorker = Cloudflare.Worker("HyperdriveAsyncWorker", {
   env: {
     HD: Effect.gen(function* () {
       const project = yield* Neon.Project("HyperdriveBindingProject");
-      return yield* Cloudflare.Hyperdrive.Connection(
-        "HyperdriveBindingConnection",
-        {
-          origin: project.origin,
-        },
-      );
+      return yield* Cloudflare.Hyperdrive.Connection("HyperdriveBindingConnection", {
+        origin: project.origin,
+      });
     }),
   },
 });

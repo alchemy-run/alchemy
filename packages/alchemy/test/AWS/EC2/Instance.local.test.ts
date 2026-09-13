@@ -33,9 +33,7 @@ import * as AWS from "@/AWS";
 import * as Endpoint from "@/AWS/Endpoint.ts";
 import * as Region from "@/AWS/Region.ts";
 import * as Test from "@/Test/Alchemy";
-import DevProbeFunctionLive, {
-  Ec2DevProbeFunction,
-} from "./fixtures/dev-instance-fn.ts";
+import DevProbeFunctionLive, { Ec2DevProbeFunction } from "./fixtures/dev-instance-fn.ts";
 import DevInstance, { MARKER } from "./fixtures/dev-instance.ts";
 
 const { test } = Test.make({ providers: AWS.providers(), dev: true });
@@ -114,14 +112,7 @@ test.provider.todo(
             ? res.json
             : Effect.fail(new Error(`/describe returned ${res.status}`)),
         ),
-        Effect.map(
-          (json) =>
-            json as {
-              ok: boolean;
-              state?: string;
-              instanceId?: string;
-            },
-        ),
+        Effect.map((json) => json as { ok: boolean; state?: string; instanceId?: string }),
         Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 20 }),
       );
       expect(described.ok).toBe(true);
@@ -150,9 +141,7 @@ test.provider.todo(
 
       const status = yield* HttpClient.get(`${outputs.functionUrl}status`).pipe(
         Effect.flatMap((res) =>
-          res.status === 200
-            ? res.json
-            : Effect.fail(new Error(`/status returned ${res.status}`)),
+          res.status === 200 ? res.json : Effect.fail(new Error(`/status returned ${res.status}`)),
         ),
         Effect.map((json) => json as { ok: boolean; count?: number }),
         Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 10 }),
@@ -163,27 +152,20 @@ test.provider.todo(
       // Destroy: the emulated instance reaches a terminal state (or is
       // fully forgotten by the emulator).
       yield* stack.destroy();
-      const gone = yield* ec2
-        .describeInstances({ InstanceIds: [outputs.instanceId] })
-        .pipe(
-          Effect.map((res) => {
-            const state = res.Reservations?.[0]?.Instances?.[0]?.State?.Name;
-            return state === undefined || state === "terminated";
-          }),
-          Effect.catchTag("InvalidInstanceID.NotFound", () =>
-            Effect.succeed(true),
-          ),
-          Effect.provide(flociContext),
-          Effect.repeat({
-            schedule: Schedule.spaced("2 seconds"),
-            until: (isGone): boolean => isGone,
-            times: 30,
-          }),
-        );
+      const gone = yield* ec2.describeInstances({ InstanceIds: [outputs.instanceId] }).pipe(
+        Effect.map((res) => {
+          const state = res.Reservations?.[0]?.Instances?.[0]?.State?.Name;
+          return state === undefined || state === "terminated";
+        }),
+        Effect.catchTag("InvalidInstanceID.NotFound", () => Effect.succeed(true)),
+        Effect.provide(flociContext),
+        Effect.repeat({
+          schedule: Schedule.spaced("2 seconds"),
+          until: (isGone): boolean => isGone,
+          times: 30,
+        }),
+      );
       expect(gone).toBe(true);
     }),
-  {
-    tags: ["provider:aws", "provider:aws:ec2", "provider:aws:lambda", "local"],
-    timeout: 600_000,
-  },
+  { tags: ["provider:aws", "provider:aws:ec2", "provider:aws:lambda", "local"], timeout: 600_000 },
 );

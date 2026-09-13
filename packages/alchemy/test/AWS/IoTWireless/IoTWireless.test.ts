@@ -23,9 +23,7 @@ test.provider(
   () =>
     Effect.gen(function* () {
       const error = yield* Effect.flip(
-        iotw.getServiceProfile({
-          Id: "00000000-0000-0000-0000-000000000000",
-        }),
+        iotw.getServiceProfile({ Id: "00000000-0000-0000-0000-000000000000" }),
       );
       expect(error._tag).toBe("ResourceNotFoundException");
     }),
@@ -48,11 +46,7 @@ const deliveryRole = Role("IotWirelessDelivery", {
     deliver: {
       Version: "2012-10-17",
       Statement: [
-        {
-          Effect: "Allow",
-          Action: ["iot:DescribeEndpoint", "iot:Publish"],
-          Resource: ["*"],
-        },
+        { Effect: "Allow", Action: ["iot:DescribeEndpoint", "iot:Publish"], Resource: ["*"] },
       ],
     },
   },
@@ -96,22 +90,16 @@ test.provider(
       );
 
       expect(deployed.serviceProfile.serviceProfileId).toBeDefined();
-      expect(deployed.serviceProfile.serviceProfileArn).toContain(
-        "iotwireless",
-      );
+      expect(deployed.serviceProfile.serviceProfileArn).toContain("iotwireless");
       expect(deployed.deviceProfile.deviceProfileId).toBeDefined();
       expect(deployed.destination.destinationArn).toContain("iotwireless");
-      expect(deployed.destination.expression).toBe(
-        "alchemy_iot_wireless_test_rule",
-      );
+      expect(deployed.destination.expression).toBe("alchemy_iot_wireless_test_rule");
 
       // Out-of-band verification via distilled.
       const liveServiceProfile = yield* iotw.getServiceProfile({
         Id: deployed.serviceProfile.serviceProfileId,
       });
-      expect(liveServiceProfile.Name).toBe(
-        deployed.serviceProfile.serviceProfileName,
-      );
+      expect(liveServiceProfile.Name).toBe(deployed.serviceProfile.serviceProfileName);
       expect(liveServiceProfile.LoRaWAN?.AddGwMetadata).toBe(true);
 
       const liveDeviceProfile = yield* iotw.getDeviceProfile({
@@ -130,14 +118,10 @@ test.provider(
         ResourceArn: deployed.destination.destinationArn,
       });
       expect(
-        destinationTags.Tags?.some(
-          (t) => t.Key === "alchemy::id" && t.Value === "Uplinks",
-        ),
+        destinationTags.Tags?.some((t) => t.Key === "alchemy::id" && t.Value === "Uplinks"),
       ).toBe(true);
       expect(
-        destinationTags.Tags?.some(
-          (t) => t.Key === "fixture" && t.Value === "iot-wireless",
-        ),
+        destinationTags.Tags?.some((t) => t.Key === "fixture" && t.Value === "iot-wireless"),
       ).toBe(true);
 
       // Update — the destination's expression and the service profile's
@@ -172,20 +156,14 @@ test.provider(
       );
 
       // Destination updated in place (same identity).
-      expect(updated.destination.destinationName).toBe(
-        deployed.destination.destinationName,
-      );
+      expect(updated.destination.destinationName).toBe(deployed.destination.destinationName);
       const updatedDestination = yield* iotw.getDestination({
         Name: updated.destination.destinationName,
       });
-      expect(updatedDestination.Expression).toBe(
-        "alchemy_iot_wireless_test_rule_v2",
-      );
+      expect(updatedDestination.Expression).toBe("alchemy_iot_wireless_test_rule_v2");
 
       // Device profile untouched (same id).
-      expect(updated.deviceProfile.deviceProfileId).toBe(
-        deployed.deviceProfile.deviceProfileId,
-      );
+      expect(updated.deviceProfile.deviceProfileId).toBe(deployed.deviceProfile.deviceProfileId);
 
       // Service profile replaced (new id) and the old one deleted.
       expect(updated.serviceProfile.serviceProfileId).not.toBe(
@@ -196,19 +174,15 @@ test.provider(
       });
       expect(replacedServiceProfile.LoRaWAN?.AddGwMetadata).toBe(false);
       const oldServiceProfileError = yield* Effect.flip(
-        iotw.getServiceProfile({
-          Id: deployed.serviceProfile.serviceProfileId,
-        }),
+        iotw.getServiceProfile({ Id: deployed.serviceProfile.serviceProfileId }),
       );
       expect(oldServiceProfileError._tag).toBe("ResourceNotFoundException");
       const serviceProfileTags = yield* iotw.listTagsForResource({
         ResourceArn: updated.serviceProfile.serviceProfileArn,
       });
-      expect(
-        serviceProfileTags.Tags?.some(
-          (t) => t.Key === "env" && t.Value === "test",
-        ),
-      ).toBe(true);
+      expect(serviceProfileTags.Tags?.some((t) => t.Key === "env" && t.Value === "test")).toBe(
+        true,
+      );
 
       // Destroy — everything gone, typed.
       yield* stack.destroy();
@@ -217,9 +191,7 @@ test.provider(
       );
       expect(destinationError._tag).toBe("ResourceNotFoundException");
       const serviceProfileError = yield* Effect.flip(
-        iotw.getServiceProfile({
-          Id: updated.serviceProfile.serviceProfileId,
-        }),
+        iotw.getServiceProfile({ Id: updated.serviceProfile.serviceProfileId }),
       );
       expect(serviceProfileError._tag).toBe("ResourceNotFoundException");
       const deviceProfileError = yield* Effect.flip(
@@ -228,12 +200,7 @@ test.provider(
       expect(deviceProfileError._tag).toBe("ResourceNotFoundException");
     }),
   {
-    tags: [
-      "provider:aws",
-      "provider:aws:iam",
-      "provider:aws:iotwireless",
-      "live",
-    ],
+    tags: ["provider:aws", "provider:aws:iam", "provider:aws:iotwireless", "live"],
     timeout: 240_000,
   },
 );
@@ -293,21 +260,13 @@ test.provider.skipIf(!process.env.AWS_TEST_IOT_WIRELESS)(
             loRaWAN: { GatewayEui: GATEWAY_EUI, RfRegion: "US915" },
             tags: { fixture: "iot-wireless" },
           });
-          return {
-            destination,
-            serviceProfile,
-            deviceProfile,
-            device,
-            gateway,
-          };
+          return { destination, serviceProfile, deviceProfile, device, gateway };
         }),
       );
 
       expect(deployed.device.wirelessDeviceId).toBeDefined();
       expect(deployed.device.type).toBe("LoRaWAN");
-      expect(deployed.device.destinationName).toBe(
-        deployed.destination.destinationName,
-      );
+      expect(deployed.device.destinationName).toBe(deployed.destination.destinationName);
       expect(deployed.gateway.wirelessGatewayId).toBeDefined();
       expect(deployed.gateway.gatewayEui).toBe(GATEWAY_EUI);
 
@@ -317,12 +276,8 @@ test.provider.skipIf(!process.env.AWS_TEST_IOT_WIRELESS)(
         IdentifierType: "WirelessDeviceId",
       });
       expect(liveDevice.LoRaWAN?.DevEui?.toLowerCase()).toBe(DEV_EUI);
-      expect(liveDevice.LoRaWAN?.DeviceProfileId).toBe(
-        deployed.deviceProfile.deviceProfileId,
-      );
-      expect(liveDevice.LoRaWAN?.ServiceProfileId).toBe(
-        deployed.serviceProfile.serviceProfileId,
-      );
+      expect(liveDevice.LoRaWAN?.DeviceProfileId).toBe(deployed.deviceProfile.deviceProfileId);
+      expect(liveDevice.LoRaWAN?.ServiceProfileId).toBe(deployed.serviceProfile.serviceProfileId);
       const liveGateway = yield* iotw.getWirelessGateway({
         Identifier: deployed.gateway.wirelessGatewayId,
         IdentifierType: "WirelessGatewayId",
@@ -367,23 +322,15 @@ test.provider.skipIf(!process.env.AWS_TEST_IOT_WIRELESS)(
           });
           const gateway = yield* WirelessGateway("RooftopGw", {
             description: "alchemy test gateway",
-            loRaWAN: {
-              GatewayEui: GATEWAY_EUI,
-              RfRegion: "US915",
-              MaxEirp: 27,
-            },
+            loRaWAN: { GatewayEui: GATEWAY_EUI, RfRegion: "US915", MaxEirp: 27 },
             tags: { fixture: "iot-wireless" },
           });
           return { device, gateway };
         }),
       );
 
-      expect(updated.device.wirelessDeviceId).toBe(
-        deployed.device.wirelessDeviceId,
-      );
-      expect(updated.gateway.wirelessGatewayId).toBe(
-        deployed.gateway.wirelessGatewayId,
-      );
+      expect(updated.device.wirelessDeviceId).toBe(deployed.device.wirelessDeviceId);
+      expect(updated.gateway.wirelessGatewayId).toBe(deployed.gateway.wirelessGatewayId);
       const updatedDevice = yield* iotw.getWirelessDevice({
         Identifier: updated.device.wirelessDeviceId,
         IdentifierType: "WirelessDeviceId",
@@ -397,9 +344,7 @@ test.provider.skipIf(!process.env.AWS_TEST_IOT_WIRELESS)(
       const deviceTags = yield* iotw.listTagsForResource({
         ResourceArn: updated.device.wirelessDeviceArn,
       });
-      expect(
-        deviceTags.Tags?.some((t) => t.Key === "env" && t.Value === "test"),
-      ).toBe(true);
+      expect(deviceTags.Tags?.some((t) => t.Key === "env" && t.Value === "test")).toBe(true);
 
       // Destroy — device and gateway gone, typed.
       yield* stack.destroy();
@@ -419,12 +364,7 @@ test.provider.skipIf(!process.env.AWS_TEST_IOT_WIRELESS)(
       expect(gatewayError._tag).toBe("ResourceNotFoundException");
     }),
   {
-    tags: [
-      "provider:aws",
-      "provider:aws:iam",
-      "provider:aws:iotwireless",
-      "live",
-    ],
+    tags: ["provider:aws", "provider:aws:iam", "provider:aws:iotwireless", "live"],
     timeout: 240_000,
   },
 );

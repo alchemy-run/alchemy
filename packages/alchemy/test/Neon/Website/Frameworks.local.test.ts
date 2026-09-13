@@ -42,28 +42,18 @@ describe.sequential(
             expect(yield* asset.json).toHaveProperty("framework");
             if (slug === "nextjs") {
               const stream = yield* HttpClient.get(`${site.url}/api/stream`);
-              expect(yield* stream.text).toBe(
-                "data: first\n\ndata: second\n\n",
-              );
+              expect(yield* stream.text).toBe("data: first\n\ndata: second\n\n");
               const image = yield* HttpClient.get(`${site.url}/logo.svg`);
               expect(image.headers["content-type"]).toContain("image/svg+xml");
-              const redirect = yield* HttpClient.get(
-                `${site.url}/redirect`,
-              ).pipe(
-                Effect.provideService(FetchHttpClient.RequestInit, {
-                  redirect: "manual",
-                }),
+              const redirect = yield* HttpClient.get(`${site.url}/redirect`).pipe(
+                Effect.provideService(FetchHttpClient.RequestInit, { redirect: "manual" }),
               );
               expect(redirect.status).toBe(307);
               const location = new URL(redirect.headers.location!);
               expect(["localhost", "127.0.0.1"]).toContain(location.hostname);
               expect(location.port).toBe(new URL(String(site.url)).port);
-              expect(location.pathname + location.search).toBe(
-                "/?redirected=yes",
-              );
-              expect(
-                (yield* HttpClient.get(`${site.url}/not-a-real-page`)).status,
-              ).toBe(404);
+              expect(location.pathname + location.search).toBe("/?redirected=yes");
+              expect((yield* HttpClient.get(`${site.url}/not-a-real-page`)).status).toBe(404);
             }
             yield* browserRoundtrip(String(site.url), slug);
             yield* stack.destroy();

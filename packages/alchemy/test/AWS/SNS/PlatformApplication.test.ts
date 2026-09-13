@@ -68,22 +68,16 @@ describe.sequential(
             }).pipe(Effect.provide(PlatformApiFunctionLive)),
           );
 
-          expect(deployed.application.platformApplicationArn).toContain(
-            ":app/",
-          );
+          expect(deployed.application.platformApplicationArn).toContain(":app/");
           expect(deployed.application.enabled).toBe(true);
 
           const baseUrl = deployed.apiFunction.functionUrl!.replace(/\/+$/, "");
           const response = yield* HttpClient.execute(
-            HttpClientRequest.bodyJsonUnsafe(
-              HttpClientRequest.post(`${baseUrl}/endpoint-cycle`),
-              { token: process.env.AWS_TEST_SNS_PLATFORM_TOKEN },
-            ),
-          ).pipe(
-            Effect.retry({
-              schedule: Schedule.exponential("2 seconds"),
-              times: 8,
+            HttpClientRequest.bodyJsonUnsafe(HttpClientRequest.post(`${baseUrl}/endpoint-cycle`), {
+              token: process.env.AWS_TEST_SNS_PLATFORM_TOKEN,
             }),
+          ).pipe(
+            Effect.retry({ schedule: Schedule.exponential("2 seconds"), times: 8 }),
             Effect.flatMap((res) => res.json),
           );
 
@@ -93,9 +87,7 @@ describe.sequential(
 
           if (!process.env.NO_DESTROY) {
             yield* stack.destroy();
-            yield* assertPlatformApplicationGone(
-              deployed.application.platformApplicationArn,
-            );
+            yield* assertPlatformApplicationGone(deployed.application.platformApplicationArn);
           }
         }),
       { tags: ["provider:aws:lambda"], timeout: 300_000 },
@@ -103,23 +95,19 @@ describe.sequential(
   },
 );
 
-class PlatformApplicationStillExists extends Data.TaggedError(
-  "PlatformApplicationStillExists",
-) {}
+class PlatformApplicationStillExists extends Data.TaggedError("PlatformApplicationStillExists") {}
 
 // Out-of-band proof the trailing destroy left nothing behind: the platform
 // application must be observably gone (typed NotFoundException) after destroy.
 const assertPlatformApplicationGone = Effect.fn(function* (arn: string) {
-  yield* sns
-    .getPlatformApplicationAttributes({ PlatformApplicationArn: arn })
-    .pipe(
-      Effect.flatMap(() => Effect.fail(new PlatformApplicationStillExists())),
-      Effect.retry({
-        while: (error) => error._tag === "PlatformApplicationStillExists",
-        schedule: Schedule.exponential(100),
-        times: 8,
-      }),
-      Effect.catchTag("NotFoundException", () => Effect.void),
-      Effect.catchTag("InvalidParameterException", () => Effect.void),
-    );
+  yield* sns.getPlatformApplicationAttributes({ PlatformApplicationArn: arn }).pipe(
+    Effect.flatMap(() => Effect.fail(new PlatformApplicationStillExists())),
+    Effect.retry({
+      while: (error) => error._tag === "PlatformApplicationStillExists",
+      schedule: Schedule.exponential(100),
+      times: 8,
+    }),
+    Effect.catchTag("NotFoundException", () => Effect.void),
+    Effect.catchTag("InvalidParameterException", () => Effect.void),
+  );
 });

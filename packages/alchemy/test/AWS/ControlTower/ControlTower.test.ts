@@ -41,9 +41,7 @@ describe(
       "listLandingZones yields a typed result",
       () =>
         Effect.gen(function* () {
-          const result = yield* Effect.result(
-            controltower.listLandingZones({}),
-          );
+          const result = yield* Effect.result(controltower.listLandingZones({}));
           if (Result.isSuccess(result)) {
             // No landing zone on the testing account — an empty (or singleton)
             // list, never a crash.
@@ -51,10 +49,9 @@ describe(
           } else {
             // Some org configurations reject the call outright — but always
             // with a typed tag (UnauthorizedException is a distilled patch).
-            expect([
-              "AccessDeniedException",
-              "UnauthorizedException",
-            ]).toContain(result.failure._tag);
+            expect(["AccessDeniedException", "UnauthorizedException"]).toContain(
+              result.failure._tag,
+            );
           }
         }),
       { timeout: 60_000 },
@@ -92,10 +89,7 @@ describe(
           // with the wire error UnauthorizedException, which the Smithy model
           // omits — surfaced as a typed tag via the distilled patch. An
           // entitled account yields ResourceNotFoundException instead.
-          expect([
-            "UnauthorizedException",
-            "ResourceNotFoundException",
-          ]).toContain(error._tag);
+          expect(["UnauthorizedException", "ResourceNotFoundException"]).toContain(error._tag);
         }),
       { timeout: 60_000 },
     );
@@ -108,16 +102,13 @@ describe(
           if (Result.isSuccess(result)) {
             // The baseline catalog is served even without a landing zone.
             expect(result.success.baselines.length).toBeGreaterThan(0);
-            expect(
-              result.success.baselines.some(
-                (b) => b.name === "AWSControlTowerBaseline",
-              ),
-            ).toBe(true);
+            expect(result.success.baselines.some((b) => b.name === "AWSControlTowerBaseline")).toBe(
+              true,
+            );
           } else {
-            expect([
-              "AccessDeniedException",
-              "UnauthorizedException",
-            ]).toContain(result.failure._tag);
+            expect(["AccessDeniedException", "UnauthorizedException"]).toContain(
+              result.failure._tag,
+            );
           }
         }),
       { timeout: 60_000 },
@@ -165,29 +156,18 @@ describe(
           const observed = yield* controltower.getEnabledControl({
             enabledControlIdentifier: enabled.enabledControlArn,
           });
-          expect(observed.enabledControlDetails.controlIdentifier).toBe(
-            controlArn,
-          );
-          expect(observed.enabledControlDetails.statusSummary?.status).toBe(
-            "SUCCEEDED",
-          );
+          expect(observed.enabledControlDetails.controlIdentifier).toBe(controlArn);
+          expect(observed.enabledControlDetails.statusSummary?.status).toBe("SUCCEEDED");
 
           // Destroy and verify the enablement is gone (typed wait-until-gone).
           yield* stack.destroy();
           yield* controltower
-            .getEnabledControl({
-              enabledControlIdentifier: enabled.enabledControlArn,
-            })
+            .getEnabledControl({ enabledControlIdentifier: enabled.enabledControlArn })
             .pipe(
-              Effect.flatMap(() =>
-                Effect.fail(new Error("enabled control still exists")),
-              ),
+              Effect.flatMap(() => Effect.fail(new Error("enabled control still exists"))),
               Effect.catchTag("ResourceNotFoundException", () => Effect.void),
               Effect.retry({
-                schedule: Schedule.max([
-                  Schedule.fixed("10 seconds"),
-                  Schedule.recurs(18),
-                ]),
+                schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(18)]),
               }),
             );
         }),
@@ -204,16 +184,11 @@ describe(
           // Discover the AWSControlTowerBaseline ARN dynamically.
           const baselines = yield* controltower.listBaselines.pages({}).pipe(
             Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) => page.baselines),
-            ),
+            Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.baselines)),
           );
-          const controlTowerBaseline = baselines.find(
-            (b) => b.name === "AWSControlTowerBaseline",
-          );
+          const controlTowerBaseline = baselines.find((b) => b.name === "AWSControlTowerBaseline");
           expect(controlTowerBaseline).toBeDefined();
-          const baselineVersion =
-            process.env.AWS_TEST_CONTROLTOWER_BASELINE_VERSION ?? "4.0";
+          const baselineVersion = process.env.AWS_TEST_CONTROLTOWER_BASELINE_VERSION ?? "4.0";
 
           const { enabled } = yield* stack.deploy(
             Effect.gen(function* () {
@@ -235,26 +210,17 @@ describe(
           const observed = yield* controltower.getEnabledBaseline({
             enabledBaselineIdentifier: enabled.enabledBaselineArn,
           });
-          expect(observed.enabledBaselineDetails?.statusSummary.status).toBe(
-            "SUCCEEDED",
-          );
+          expect(observed.enabledBaselineDetails?.statusSummary.status).toBe("SUCCEEDED");
 
           // Destroy and verify the enablement is gone (typed wait-until-gone).
           yield* stack.destroy();
           yield* controltower
-            .getEnabledBaseline({
-              enabledBaselineIdentifier: enabled.enabledBaselineArn,
-            })
+            .getEnabledBaseline({ enabledBaselineIdentifier: enabled.enabledBaselineArn })
             .pipe(
-              Effect.flatMap(() =>
-                Effect.fail(new Error("enabled baseline still exists")),
-              ),
+              Effect.flatMap(() => Effect.fail(new Error("enabled baseline still exists"))),
               Effect.catchTag("ResourceNotFoundException", () => Effect.void),
               Effect.retry({
-                schedule: Schedule.max([
-                  Schedule.fixed("10 seconds"),
-                  Schedule.recurs(18),
-                ]),
+                schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(18)]),
               }),
             );
         }),

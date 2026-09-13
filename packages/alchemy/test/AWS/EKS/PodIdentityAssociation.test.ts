@@ -64,9 +64,7 @@ test.provider.skipIf(!process.env.AWS_TEST_EKS_CLUSTER)(
       const provider = yield* Provider.findProvider(PodIdentityAssociation);
       const all = yield* provider.list();
 
-      expect(
-        all.some((a) => a.associationId === association.associationId),
-      ).toBe(true);
+      expect(all.some((a) => a.associationId === association.associationId)).toBe(true);
 
       yield* stack.destroy();
     }),

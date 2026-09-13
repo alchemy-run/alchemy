@@ -53,11 +53,7 @@ test.provider.skipIf(!process.env.MPV2_SWEEP)(
             const channels = yield* listGroupChannels(group.ChannelGroupName);
             yield* Effect.forEach(
               channels,
-              (channel) =>
-                deleteChannelWithEndpoints(
-                  group.ChannelGroupName,
-                  channel.ChannelName,
-                ),
+              (channel) => deleteChannelWithEndpoints(group.ChannelGroupName, channel.ChannelName),
               { concurrency: 5, discard: true },
             );
             yield* mediapackagev2

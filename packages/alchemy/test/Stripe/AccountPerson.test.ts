@@ -1,8 +1,4 @@
-import {
-  DeleteAccount,
-  GetAccountPerson,
-  CreateAccount,
-} from "@distilled.cloud/stripe/stripe";
+import { DeleteAccount, GetAccountPerson, CreateAccount } from "@distilled.cloud/stripe/stripe";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -15,10 +11,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Stripe.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const CONNECT_ENABLED = process.env.STRIPE_TEST_CONNECT === "1";
 
@@ -58,9 +51,7 @@ test.provider(
         expect(probe.failure._tag).not.toEqual("UnknownStripeError");
         expect(probe.failure._tag).toEqual("InvalidRequestError");
         if (probe.failure._tag === "InvalidRequestError") {
-          expect(probe.failure.message ?? "").toContain(
-            "signed up for Connect",
-          );
+          expect(probe.failure.message ?? "").toContain("signed up for Connect");
         }
         yield* stack.destroy();
         return;
@@ -72,12 +63,7 @@ test.provider(
       yield* stack.destroy();
     }).pipe(logLevel),
   {
-    tags: [
-      "provider:stripe",
-      "provider:stripe:account",
-      "provider:stripe:accountperson",
-      "live",
-    ],
+    tags: ["provider:stripe", "provider:stripe:account", "provider:stripe:accountperson", "live"],
     timeout: 60_000,
   },
 );
@@ -137,12 +123,8 @@ test.provider.skipIf(!CONNECT_ENABLED)(
       expect(fetched.relationship?.director).toEqual(true);
       expect(fetched.relationship?.title).toEqual("CFO");
       expect(fetched.metadata?.role).toEqual("finance");
-      expect(
-        fetched.metadata?.[Stripe.alchemyMetadataKeys.stack],
-      ).toBeDefined();
-      expect(
-        fetched.metadata?.[Stripe.alchemyMetadataKeys.stage],
-      ).toBeDefined();
+      expect(fetched.metadata?.[Stripe.alchemyMetadataKeys.stack]).toBeDefined();
+      expect(fetched.metadata?.[Stripe.alchemyMetadataKeys.stage]).toBeDefined();
       expect(fetched.metadata?.[Stripe.alchemyMetadataKeys.id]).toBeDefined();
 
       const updated = yield* stack.deploy(
@@ -199,12 +181,7 @@ test.provider.skipIf(!CONNECT_ENABLED)(
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
   {
-    tags: [
-      "provider:stripe",
-      "provider:stripe:account",
-      "provider:stripe:accountperson",
-      "live",
-    ],
+    tags: ["provider:stripe", "provider:stripe:account", "provider:stripe:accountperson", "live"],
     timeout: 120_000,
   },
 );
@@ -251,24 +228,14 @@ test.provider.skipIf(!CONNECT_ENABLED)(
 
       yield* stack.destroy();
 
-      const gone = yield* waitUntilGone(
-        deployed.account.id,
-        deployed.person.id,
-      );
+      const gone = yield* waitUntilGone(deployed.account.id, deployed.person.id);
       expect(gone).toEqual("gone");
 
       const after = yield* provider.list();
-      expect(
-        after.find((person) => person.id === deployed.person.id),
-      ).toBeUndefined();
+      expect(after.find((person) => person.id === deployed.person.id)).toBeUndefined();
     }).pipe(logLevel),
   {
-    tags: [
-      "provider:stripe",
-      "provider:stripe:account",
-      "provider:stripe:accountperson",
-      "live",
-    ],
+    tags: ["provider:stripe", "provider:stripe:account", "provider:stripe:accountperson", "live"],
     timeout: 120_000,
   },
 );

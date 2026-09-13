@@ -40,10 +40,7 @@ export interface ListConnectorEntities extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: ListConnectorEntitiesRequest,
-    ) => Effect.Effect<
-      appflow.ListConnectorEntitiesResponse,
-      appflow.ListConnectorEntitiesError
-    >
+    ) => Effect.Effect<appflow.ListConnectorEntitiesResponse, appflow.ListConnectorEntitiesError>
   >
 > {}
 

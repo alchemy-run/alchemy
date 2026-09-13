@@ -3,10 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Bucket } from "./Bucket.ts";
 
-export interface PutObjectTaggingRequest extends Omit<
-  S3.PutObjectTaggingRequest,
-  "Bucket"
-> {}
+export interface PutObjectTaggingRequest extends Omit<S3.PutObjectTaggingRequest, "Bucket"> {}
 
 /**
  * Runtime binding for `s3:PutObjectTagging`.
@@ -40,6 +37,4 @@ export interface PutObjectTagging extends Binding.Service<
     ) => Effect.Effect<S3.PutObjectTaggingOutput, S3.PutObjectTaggingError>
   >
 > {}
-export const PutObjectTagging = Binding.Service<PutObjectTagging>(
-  "AWS.S3.PutObjectTagging",
-);
+export const PutObjectTagging = Binding.Service<PutObjectTagging>("AWS.S3.PutObjectTagging");

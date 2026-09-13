@@ -34,11 +34,9 @@ export const HandoffObjectLive = HandoffObject.make(
   }),
 );
 
-export class HandoffWorker extends Cloudflare.Worker<
-  HandoffWorker,
-  {},
-  HandoffObject
->()("HandoffWorker") {}
+export class HandoffWorker extends Cloudflare.Worker<HandoffWorker, {}, HandoffObject>()(
+  "HandoffWorker",
+) {}
 
 export default HandoffWorker.make(
   Effect.sync(() => ({
@@ -59,10 +57,7 @@ export default HandoffWorker.make(
         });
       }).pipe(
         Effect.catchCause((cause) =>
-          HttpServerResponse.json(
-            { error: Cause.pretty(cause) },
-            { status: 500 },
-          ),
+          HttpServerResponse.json({ error: Cause.pretty(cause) }, { status: 500 }),
         ),
       ),
     };

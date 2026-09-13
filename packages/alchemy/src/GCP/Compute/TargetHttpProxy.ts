@@ -1,5 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitGlobalOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
@@ -9,12 +8,9 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitGlobalOperation } from "./operations.ts";
 
 export type TargetHttpProxyProps = {
   /**
@@ -117,9 +113,7 @@ export type TargetHttpProxy = Resource<
  * @resource
  * @category Compute
  */
-export const TargetHttpProxy = Resource<TargetHttpProxy>(
-  "GCP.Compute.TargetHttpProxy",
-);
+export const TargetHttpProxy = Resource<TargetHttpProxy>("GCP.Compute.TargetHttpProxy");
 
 export class TargetHttpProxyNotResolved extends Data.TaggedError(
   "GCP.Compute.TargetHttpProxyNotResolved",
@@ -247,9 +241,7 @@ export const TargetHttpProxyProvider = () =>
           .pipe(
             Stream.filter((proxy) => {
               const { labels } = parseDescription(proxy.description);
-              return Object.keys(labels).some((key) =>
-                key.startsWith("alchemy-"),
-              );
+              return Object.keys(labels).some((key) => key.startsWith("alchemy-"));
             }),
             Stream.map((proxy) => toAttrs(proxy, env.project)),
             Stream.runCollect,
@@ -288,9 +280,7 @@ export const TargetHttpProxyProvider = () =>
             body,
           })
           .pipe(
-            Effect.flatMap((operation) =>
-              waitGlobalOperation(env.project, operation),
-            ),
+            Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)),
             Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
           );
         current = yield* getByName(env.project, targetHttpProxyName);
@@ -307,11 +297,7 @@ export const TargetHttpProxyProvider = () =>
             targetHttpProxy: targetHttpProxyName,
             body: { urlMap: desiredUrlMap },
           })
-          .pipe(
-            Effect.flatMap((operation) =>
-              waitGlobalOperation(env.project, operation),
-            ),
-          );
+          .pipe(Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)));
         current = yield* getByName(env.project, targetHttpProxyName);
         if (current === undefined) {
           return yield* new TargetHttpProxyNotResolved({
@@ -320,11 +306,9 @@ export const TargetHttpProxyProvider = () =>
         }
       }
 
-      const descriptionChanged =
-        (current.description ?? "") !== desiredDescription;
+      const descriptionChanged = (current.description ?? "") !== desiredDescription;
       const proxyBindChanged =
-        news.proxyBind !== undefined &&
-        (current.proxyBind === true) !== news.proxyBind;
+        news.proxyBind !== undefined && (current.proxyBind === true) !== news.proxyBind;
       const keepAliveChanged =
         news.httpKeepAliveTimeoutSec !== undefined &&
         current.httpKeepAliveTimeoutSec !== news.httpKeepAliveTimeoutSec;
@@ -346,11 +330,7 @@ export const TargetHttpProxyProvider = () =>
             targetHttpProxy: targetHttpProxyName,
             body,
           })
-          .pipe(
-            Effect.flatMap((operation) =>
-              waitGlobalOperation(env.project, operation),
-            ),
-          );
+          .pipe(Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)));
         current = yield* getByName(env.project, targetHttpProxyName);
         if (current === undefined) {
           return yield* new TargetHttpProxyNotResolved({

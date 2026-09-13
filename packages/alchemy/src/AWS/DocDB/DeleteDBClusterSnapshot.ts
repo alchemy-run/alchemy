@@ -32,10 +32,7 @@ export interface DeleteDBClusterSnapshot extends Binding.Service<
   () => Effect.Effect<
     (
       request: docdb.DeleteDBClusterSnapshotMessage,
-    ) => Effect.Effect<
-      docdb.DeleteDBClusterSnapshotResult,
-      docdb.DeleteDBClusterSnapshotError
-    >
+    ) => Effect.Effect<docdb.DeleteDBClusterSnapshotResult, docdb.DeleteDBClusterSnapshotError>
   >
 > {}
 export const DeleteDBClusterSnapshot = Binding.Service<DeleteDBClusterSnapshot>(

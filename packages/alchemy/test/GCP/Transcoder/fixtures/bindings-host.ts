@@ -1,5 +1,5 @@
-import * as GCP from "@/GCP";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
 import { serveProbes } from "../../bindingHost.ts";
 
 const sdConfig: GCP.Transcoder.JobConfig = {
@@ -64,9 +64,7 @@ export default class TranscoderBindingsHost extends GCP.Function<TranscoderBindi
           });
           return {
             name: job.name,
-            muxStreams: (job.config?.muxStreams ?? []).map(
-              (stream) => stream.key,
-            ),
+            muxStreams: (job.config?.muxStreams ?? []).map((stream) => stream.key),
           };
         }),
       }),

@@ -11,10 +11,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // The scoped API token the test harness mints propagates eventually-
 // consistently across Cloudflare's edge — ride out 403 blips
@@ -37,10 +34,7 @@ const expectGone = (accountId: string, keyId: string) =>
     Effect.catchTag("TurnKeyNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "TurnKeyNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 
@@ -52,9 +46,7 @@ test.provider(
 
       yield* stack.destroy();
 
-      const turnKey = yield* stack.deploy(
-        Cloudflare.Calls.TurnKey("DefaultTurnKey", {}),
-      );
+      const turnKey = yield* stack.deploy(Cloudflare.Calls.TurnKey("DefaultTurnKey", {}));
 
       expect(turnKey.keyId).toBeTruthy();
       expect(Redacted.value(turnKey.key)).toBeTruthy();
@@ -81,9 +73,7 @@ test.provider(
       yield* stack.destroy();
 
       const initial = yield* stack.deploy(
-        Cloudflare.Calls.TurnKey("UpdateTurnKey", {
-          name: "alchemy-calls-turn-update",
-        }),
+        Cloudflare.Calls.TurnKey("UpdateTurnKey", { name: "alchemy-calls-turn-update" }),
       );
 
       expect(initial.name).toEqual("alchemy-calls-turn-update");
@@ -91,9 +81,7 @@ test.provider(
       expect(initialKey).toBeTruthy();
 
       const updated = yield* stack.deploy(
-        Cloudflare.Calls.TurnKey("UpdateTurnKey", {
-          name: "alchemy-calls-turn-update-v2",
-        }),
+        Cloudflare.Calls.TurnKey("UpdateTurnKey", { name: "alchemy-calls-turn-update-v2" }),
       );
 
       // Same TURN key mutated in place — not a replacement — and the
@@ -107,9 +95,7 @@ test.provider(
 
       // Redeploying identical props is a no-op (still the same key).
       const noop = yield* stack.deploy(
-        Cloudflare.Calls.TurnKey("UpdateTurnKey", {
-          name: "alchemy-calls-turn-update-v2",
-        }),
+        Cloudflare.Calls.TurnKey("UpdateTurnKey", { name: "alchemy-calls-turn-update-v2" }),
       );
       expect(noop.keyId).toEqual(initial.keyId);
       expect(Redacted.value(noop.key)).toEqual(initialKey);
@@ -130,9 +116,7 @@ test.provider(
       yield* stack.destroy();
 
       const turnKey = yield* stack.deploy(
-        Cloudflare.Calls.TurnKey("HealTurnKey", {
-          name: "alchemy-calls-turn-heal",
-        }),
+        Cloudflare.Calls.TurnKey("HealTurnKey", { name: "alchemy-calls-turn-heal" }),
       );
 
       // Delete the TURN key out-of-band. A redeploy with identical props is
@@ -148,16 +132,12 @@ test.provider(
       );
 
       const healed = yield* stack.deploy(
-        Cloudflare.Calls.TurnKey("HealTurnKey", {
-          name: "alchemy-calls-turn-heal-v2",
-        }),
+        Cloudflare.Calls.TurnKey("HealTurnKey", { name: "alchemy-calls-turn-heal-v2" }),
       );
 
       expect(healed.keyId).not.toEqual(turnKey.keyId);
       expect(Redacted.value(healed.key)).toBeTruthy();
-      expect(Redacted.value(healed.key)).not.toEqual(
-        Redacted.value(turnKey.key),
-      );
+      expect(Redacted.value(healed.key)).not.toEqual(Redacted.value(turnKey.key));
       const live = yield* getTurnKey(accountId, healed.keyId);
       expect(live.name).toEqual("alchemy-calls-turn-heal-v2");
 
@@ -178,9 +158,7 @@ test.provider(
       yield* stack.destroy();
 
       const deployed = yield* stack.deploy(
-        Cloudflare.Calls.TurnKey("ListTurnKey", {
-          name: "alchemy-calls-turn-list",
-        }),
+        Cloudflare.Calls.TurnKey("ListTurnKey", { name: "alchemy-calls-turn-list" }),
       );
 
       const provider = yield* Provider.findProvider(Cloudflare.Calls.TurnKey);

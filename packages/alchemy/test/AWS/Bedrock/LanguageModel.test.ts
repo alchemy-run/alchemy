@@ -18,10 +18,7 @@ const sharedStack = Core.scratchStack(testOptions, "BedrockLanguageModel");
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy under parallel-suite load. Budget ~150s of
 // readiness polling.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -39,19 +36,14 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("1 second"),
-        Schedule.recurs(5),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(5)]),
     }),
   );
 
@@ -61,10 +53,7 @@ interface StreamPart {
   name?: string;
   delta?: string;
   reason?: string;
-  usage?: {
-    inputTokens?: { total?: number };
-    outputTokens?: { total?: number };
-  };
+  usage?: { inputTokens?: { total?: number }; outputTokens?: { total?: number } };
 }
 
 const parseSse = (sse: string): ReadonlyArray<StreamPart> =>
@@ -76,20 +65,11 @@ const parseSse = (sse: string): ReadonlyArray<StreamPart> =>
 
 describe(
   "Bedrock LanguageModel",
-  {
-    tags: [
-      "provider:aws",
-      "provider:aws:bedrock",
-      "provider:aws:lambda",
-      "live",
-    ],
-  },
+  { tags: ["provider:aws", "provider:aws:bedrock", "provider:aws:lambda", "live"] },
   () => {
     beforeAll(
       Effect.gen(function* () {
-        yield* Effect.logInfo(
-          "Bedrock LanguageModel setup: destroying previous resources",
-        );
+        yield* Effect.logInfo("Bedrock LanguageModel setup: destroying previous resources");
         yield* sharedStack.destroy();
 
         yield* Effect.logInfo("Bedrock LanguageModel setup: deploying fixture");
@@ -103,16 +83,12 @@ describe(
         baseUrl = functionUrl!.replace(/\/+$/, "");
         const readinessUrl = `${baseUrl}/ping`;
 
-        yield* Effect.logInfo(
-          `Bedrock LanguageModel setup: probing readiness at ${readinessUrl}`,
-        );
+        yield* Effect.logInfo(`Bedrock LanguageModel setup: probing readiness at ${readinessUrl}`);
         yield* HttpClient.get(readinessUrl).pipe(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.tapError((error) =>
             Effect.logWarning(
@@ -125,18 +101,14 @@ describe(
       { timeout: 240_000 },
     );
 
-    afterAll.skipIf(!!process.env.NO_DESTROY)(sharedStack.destroy(), {
-      timeout: 120_000,
-    });
+    afterAll.skipIf(!!process.env.NO_DESTROY)(sharedStack.destroy(), { timeout: 120_000 });
 
     test.provider(
       "generateText answers with text, usage, and a terminal finish reason",
       (_stack) =>
         Effect.gen(function* () {
           const response = (yield* send(
-            HttpClientRequest.get(
-              `${baseUrl}/generate?prompt=${encodeURIComponent("Say pong.")}`,
-            ),
+            HttpClientRequest.get(`${baseUrl}/generate?prompt=${encodeURIComponent("Say pong.")}`),
           ).pipe(Effect.flatMap((r) => r.json))) as {
             text: string;
             finishReason: string;
@@ -166,10 +138,7 @@ describe(
                 "Write a detailed multi-paragraph essay about the history of infrastructure as code.",
               )}`,
             ),
-          ).pipe(Effect.flatMap((r) => r.json))) as {
-            finishReason: string;
-            outputTokens: number;
-          };
+          ).pipe(Effect.flatMap((r) => r.json))) as { finishReason: string; outputTokens: number };
 
           expect(response.finishReason).toBe("length");
           expect(response.outputTokens).toBeLessThanOrEqual(8);
@@ -188,10 +157,7 @@ describe(
             HttpClientRequest.get(
               `${baseUrl}/generate-lite?prompt=${encodeURIComponent("Say pong.")}`,
             ),
-          ).pipe(Effect.flatMap((r) => r.json))) as {
-            text: string;
-            finishReason: string;
-          };
+          ).pipe(Effect.flatMap((r) => r.json))) as { text: string; finishReason: string };
 
           expect(response.text.length).toBeGreaterThan(0);
           expect(["stop", "length"]).toContain(response.finishReason);
@@ -254,11 +220,7 @@ describe(
             ),
           ).pipe(Effect.flatMap((r) => r.json))) as {
             finishReason: string;
-            toolCalls: Array<{
-              id: string;
-              name: string;
-              params: { city: string };
-            }>;
+            toolCalls: Array<{ id: string; name: string; params: { city: string } }>;
             toolResults: Array<{
               id: string;
               name: string;
@@ -302,9 +264,7 @@ describe(
           expect(starts[0]?.name).toBe("get_weather");
           // Adapter invariant: every contentBlockStart-opened tool block is
           // closed by contentBlockStop (or finalize), matched by id.
-          expect(new Set(ends.map((p) => p.id))).toEqual(
-            new Set(starts.map((p) => p.id)),
-          );
+          expect(new Set(ends.map((p) => p.id))).toEqual(new Set(starts.map((p) => p.id)));
 
           const firstId = starts[0]!.id!;
           const joined = parts
@@ -314,9 +274,7 @@ describe(
           const args = yield* Effect.try({
             try: () => JSON.parse(joined) as { city?: string },
             catch: (cause) =>
-              new Error(
-                `Invalid concatenated tool arguments ${JSON.stringify(joined)}: ${cause}`,
-              ),
+              new Error(`Invalid concatenated tool arguments ${JSON.stringify(joined)}: ${cause}`),
           });
           expect(typeof args.city).toBe("string");
           expect(args.city!.toLowerCase()).toContain("portland");

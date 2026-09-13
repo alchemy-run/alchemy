@@ -7,10 +7,7 @@ import { inMemoryState } from "@/State";
 import * as Test from "@/Test/Alchemy";
 import { ensureDockerSwarm } from "./Runtime.ts";
 
-const { test } = Test.make({
-  providers: Docker.providers(),
-  state: inMemoryState(),
-});
+const { test } = Test.make({ providers: Docker.providers(), state: inMemoryState() });
 
 // Every test deploys real swarm services through the engine (plan → apply →
 // destroy) — no provider-method unit tests. The suite self-provisions a
@@ -19,10 +16,7 @@ const { test } = Test.make({
 // --force` if you don't want the node to stay a swarm manager.
 describe(
   "Docker.Service",
-  {
-    tags: ["provider:docker", "provider:docker:service", "local"],
-    concurrent: false,
-  },
+  { tags: ["provider:docker", "provider:docker:service", "local"], concurrent: false },
   () => {
     test.provider(
       "creates a replicated service with labels",
@@ -51,9 +45,7 @@ describe(
           const docker = yield* Docker.Docker;
           const gone = yield* docker.service.inspect(service.id).pipe(
             Effect.map(() => false),
-            Effect.catchReason("PlatformError", "NotFound", () =>
-              Effect.succeed(true),
-            ),
+            Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(true)),
           );
           expect(gone).toBe(true);
         }),
@@ -100,10 +92,7 @@ describe(
           const serviceName = "alchemy-test-service-context";
 
           const first = yield* stack.deploy(
-            Docker.Service("context-service", {
-              name: serviceName,
-              image: "nginx:alpine",
-            }),
+            Docker.Service("context-service", { name: serviceName, image: "nginx:alpine" }),
           );
           expect(first.context).toBeUndefined();
 
@@ -134,25 +123,13 @@ describe(
           const docker = yield* Docker.Docker;
           const serviceName = "alchemy-test-service-adopt-existing";
 
-          yield* Effect.addFinalizer(() =>
-            docker.service.remove(serviceName).pipe(Effect.ignore),
-          );
+          yield* Effect.addFinalizer(() => docker.service.remove(serviceName).pipe(Effect.ignore));
 
           yield* docker.service
             .remove(serviceName)
-            .pipe(
-              Effect.catchReason(
-                "PlatformError",
-                "NotFound",
-                () => Effect.void,
-              ),
-            );
+            .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.void));
 
-          yield* docker.service.create({
-            name: serviceName,
-            image: "nginx:alpine",
-            replicas: 1,
-          });
+          yield* docker.service.create({ name: serviceName, image: "nginx:alpine", replicas: 1 });
 
           const error = yield* stack
             .deploy(
@@ -164,9 +141,7 @@ describe(
             )
             .pipe(
               Effect.as(undefined),
-              Effect.catchCause((cause) =>
-                Effect.succeed(findOwnedError(cause)),
-              ),
+              Effect.catchCause((cause) => Effect.succeed(findOwnedError(cause))),
             );
 
           expect(error).toBeInstanceOf(OwnedBySomeoneElse);
@@ -220,9 +195,7 @@ describe(
   },
 );
 
-const findOwnedError = (
-  cause: Cause.Cause<unknown>,
-): OwnedBySomeoneElse | undefined =>
+const findOwnedError = (cause: Cause.Cause<unknown>): OwnedBySomeoneElse | undefined =>
   cause.reasons
     .map((reason) =>
       Cause.isFailReason(reason)
@@ -231,7 +204,4 @@ const findOwnedError = (
           ? reason.defect
           : undefined,
     )
-    .find(
-      (value): value is OwnedBySomeoneElse =>
-        value instanceof OwnedBySomeoneElse,
-    );
+    .find((value): value is OwnedBySomeoneElse => value instanceof OwnedBySomeoneElse);

@@ -5,9 +5,7 @@ import * as Lambda from "@/AWS/Lambda";
 
 const main = import.meta.url;
 
-export class TestFunction extends Lambda.Function<Lambda.Function>()(
-  "TestFunction",
-) {}
+export class TestFunction extends Lambda.Function<Lambda.Function>()("TestFunction") {}
 
 export const TestFunctionLive = TestFunction.make(
   {
@@ -18,9 +16,7 @@ export const TestFunctionLive = TestFunction.make(
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
-        const pathname = yield* Effect.sync(
-          () => new URL(request.originalUrl).pathname,
-        );
+        const pathname = yield* Effect.sync(() => new URL(request.originalUrl).pathname);
         if (pathname === "/readiness") {
           const marker = yield* Effect.sync(() => process.env.READINESS_MARKER);
           return HttpServerResponse.text(marker ?? "missing");

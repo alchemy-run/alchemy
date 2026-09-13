@@ -44,9 +44,7 @@ const findDefaultSubnets = Effect.gen(function* () {
   // Not every AZ offers every cache node type; stay within the first three.
   const subnetIds = (subnets.Subnets ?? [])
     .filter((subnet) => /[abc]$/.test(subnet.AvailabilityZone ?? ""))
-    .sort((l, r) =>
-      (l.AvailabilityZone ?? "").localeCompare(r.AvailabilityZone ?? ""),
-    )
+    .sort((l, r) => (l.AvailabilityZone ?? "").localeCompare(r.AvailabilityZone ?? ""))
     .flatMap((subnet) => (subnet.SubnetId ? [subnet.SubnetId] : []))
     .slice(0, 2) as SubnetId[];
   if (subnetIds.length < 2) {
@@ -126,14 +124,8 @@ export const releaseProvisionedNetwork = Effect.suspend(() => {
 });
 
 export const shareProvisionedNetwork = (hooks: {
-  beforeAll: (
-    eff: Effect.Effect<unknown, any, any>,
-    options?: { timeout?: number },
-  ) => unknown;
-  afterAll: (
-    eff: Effect.Effect<unknown, any, any>,
-    options?: { timeout?: number },
-  ) => void;
+  beforeAll: (eff: Effect.Effect<unknown, any, any>, options?: { timeout?: number }) => unknown;
+  afterAll: (eff: Effect.Effect<unknown, any, any>, options?: { timeout?: number }) => void;
 }) => {
   hooks.beforeAll(acquireProvisionedNetwork, { timeout: 180_000 });
   hooks.afterAll(releaseProvisionedNetwork, { timeout: 180_000 });
@@ -141,28 +133,18 @@ export const shareProvisionedNetwork = (hooks: {
 
 export const assertReplicationGroupGone = (name: string) =>
   ElastiCache.describeReplicationGroups({ ReplicationGroupId: name }).pipe(
-    Effect.flatMap(() =>
-      Effect.fail(new Error(`replication group '${name}' still exists`)),
-    ),
+    Effect.flatMap(() => Effect.fail(new Error(`replication group '${name}' still exists`))),
     Effect.catchTag("ReplicationGroupNotFoundFault", () => Effect.void),
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("10 seconds"),
-        Schedule.recurs(18),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(18)]),
     }),
   );
 
 export const assertCacheClusterGone = (name: string) =>
   ElastiCache.describeCacheClusters({ CacheClusterId: name }).pipe(
-    Effect.flatMap(() =>
-      Effect.fail(new Error(`cache cluster '${name}' still exists`)),
-    ),
+    Effect.flatMap(() => Effect.fail(new Error(`cache cluster '${name}' still exists`))),
     Effect.catchTag("CacheClusterNotFoundFault", () => Effect.void),
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("10 seconds"),
-        Schedule.recurs(18),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(18)]),
     }),
   );

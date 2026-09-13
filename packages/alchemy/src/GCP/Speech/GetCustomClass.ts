@@ -44,6 +44,4 @@ export interface GetCustomClass extends Binding.Service<
   >
 > {}
 
-export const GetCustomClass = Binding.Service<GetCustomClass>(
-  "GCP.Speech.GetCustomClass",
-);
+export const GetCustomClass = Binding.Service<GetCustomClass>("GCP.Speech.GetCustomClass");

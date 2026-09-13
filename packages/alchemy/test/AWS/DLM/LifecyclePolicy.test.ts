@@ -21,10 +21,7 @@ const assertPolicyDeleted = (policyId: string) =>
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "PolicyStillExists",
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
     }),
   );
 
@@ -38,10 +35,7 @@ const assertRoleDeleted = (roleName: string) =>
     Effect.catchTag("NoSuchEntityException", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "RoleStillExists",
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
     }),
   );
 
@@ -94,9 +88,7 @@ test.provider(
       expect(created.ExecutionRoleArn).toBe(policy.executionRoleArn);
       expect(created.PolicyDetails?.PolicyType).toBe("EBS_SNAPSHOT_MANAGEMENT");
       expect(created.PolicyDetails?.ResourceTypes).toEqual(["VOLUME"]);
-      expect(created.PolicyDetails?.TargetTags).toEqual([
-        { Key: "AlchemyDlmTest", Value: "true" },
-      ]);
+      expect(created.PolicyDetails?.TargetTags).toEqual([{ Key: "AlchemyDlmTest", Value: "true" }]);
       expect(created.PolicyDetails?.Schedules?.[0]?.RetainRule?.Count).toBe(7);
       const createdTags = tagRecord(created.Tags);
       expect(createdTags.Environment).toBe("test");
@@ -119,9 +111,7 @@ test.provider(
         .getLifecyclePolicy({ PolicyId: policy.policyId })
         .pipe(Effect.map((r) => r.Policy!));
       expect(afterUpdate.State).toBe("DISABLED");
-      expect(afterUpdate.PolicyDetails?.Schedules?.[0]?.RetainRule?.Count).toBe(
-        14,
-      );
+      expect(afterUpdate.PolicyDetails?.Schedules?.[0]?.RetainRule?.Count).toBe(14);
       expect(tagRecord(afterUpdate.Tags).Extra).toBe("1");
       const modifiedAfterUpdate = afterUpdate.DateModified?.toISOString();
 

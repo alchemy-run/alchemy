@@ -17,14 +17,7 @@ export const withBuilder =
           .pipe(
             Effect.ignore,
             Effect.andThen(
-              docker.run([
-                "buildx",
-                "create",
-                "--name",
-                name,
-                "--driver",
-                "docker-container",
-              ]),
+              docker.run(["buildx", "create", "--name", name, "--driver", "docker-container"]),
             ),
           ),
         () =>
@@ -35,25 +28,17 @@ export const withBuilder =
                 attestations: process.env.BUILDX_NO_DEFAULT_ATTESTATIONS,
               };
               process.env.BUILDX_BUILDER = name;
-              process.env.BUILDX_NO_DEFAULT_ATTESTATIONS = String(
-                options?.attestations === false,
-              );
+              process.env.BUILDX_NO_DEFAULT_ATTESTATIONS = String(options?.attestations === false);
               return previous;
             }),
-            () =>
-              docker
-                .run(["buildx", "inspect", "--bootstrap"])
-                .pipe(Effect.andThen(effect)),
+            () => docker.run(["buildx", "inspect", "--bootstrap"]).pipe(Effect.andThen(effect)),
             (previous) =>
               Effect.sync(() => {
-                if (previous.builder === undefined)
-                  delete process.env.BUILDX_BUILDER;
+                if (previous.builder === undefined) delete process.env.BUILDX_BUILDER;
                 else process.env.BUILDX_BUILDER = previous.builder;
                 if (previous.attestations === undefined)
                   delete process.env.BUILDX_NO_DEFAULT_ATTESTATIONS;
-                else
-                  process.env.BUILDX_NO_DEFAULT_ATTESTATIONS =
-                    previous.attestations;
+                else process.env.BUILDX_NO_DEFAULT_ATTESTATIONS = previous.attestations;
               }),
           ),
         () => docker.run(["buildx", "rm", "--force", name]).pipe(Effect.orDie),
@@ -73,22 +58,15 @@ export const supportsRegistryExport = Effect.gen(function* () {
   return Number(match[1]) >= 1 || Number(match[2]) >= 26;
 });
 
-const decodeBuild = Schema.Struct({
-  ref: Schema.String,
-  status: Schema.String,
-}).pipe(Schema.fromJsonString, Schema.decodeEffect);
+const decodeBuild = Schema.Struct({ ref: Schema.String, status: Schema.String }).pipe(
+  Schema.fromJsonString,
+  Schema.decodeEffect,
+);
 
 export const buildHistory = Effect.gen(function* () {
   const docker = yield* Docker;
-  const history = yield* docker.run([
-    "buildx",
-    "history",
-    "ls",
-    "--format",
-    "json",
-  ]);
-  return yield* Effect.forEach(
-    history.stdout.split("\n").filter(Boolean),
-    (line) => decodeBuild(line),
+  const history = yield* docker.run(["buildx", "history", "ls", "--format", "json"]);
+  return yield* Effect.forEach(history.stdout.split("\n").filter(Boolean), (line) =>
+    decodeBuild(line),
   );
 });

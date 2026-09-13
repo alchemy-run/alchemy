@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   ResourceNotResolved,
@@ -36,9 +31,7 @@ import {
 
 const COLLECTION = "unitKinds";
 
-export type UnitKindBoundaryType =
-  | saasservicemgmt.UnitKindBoundaryTypeEnum
-  | (string & {});
+export type UnitKindBoundaryType = saasservicemgmt.UnitKindBoundaryTypeEnum | (string & {});
 
 export type UnitKindDependency = {
   /** UnitKind resource name this kind depends on. Immutable. */
@@ -196,9 +189,7 @@ export type UnitKind = Resource<
  * @resource
  * @category SaasServiceManagement
  */
-export const UnitKind = Resource<UnitKind>(
-  "GCP.SaasServiceManagement.UnitKind",
-);
+export const UnitKind = Resource<UnitKind>("GCP.SaasServiceManagement.UnitKind");
 
 const expandDependencies = (
   dependencies: UnitKindDependency[] | undefined,
@@ -255,9 +246,7 @@ const listOwned = (project: string, location: string) =>
     }),
     (page) => page.unitKinds,
   ).pipe(
-    Effect.map((items) =>
-      items.filter((item) => hasAlchemyLabelKeys(item.labels)),
-    ),
+    Effect.map((items) => items.filter((item) => hasAlchemyLabelKeys(item.labels))),
     Effect.flatMap((items) =>
       items.length > 0
         ? Effect.succeed(items)
@@ -268,24 +257,14 @@ const listOwned = (project: string, location: string) =>
             }),
             (page) => page.unitKinds,
           ).pipe(
-            Effect.map((fallback) =>
-              fallback.filter((item) => hasAlchemyLabelKeys(item.labels)),
-            ),
+            Effect.map((fallback) => fallback.filter((item) => hasAlchemyLabelKeys(item.labels))),
           ),
     ),
   );
 
 export const UnitKindProvider = () =>
   Provider.succeed(UnitKind, {
-    stables: [
-      "name",
-      "unitKindId",
-      "project",
-      "location",
-      "saasId",
-      "uid",
-      "createTime",
-    ],
+    stables: ["name", "unitKindId", "project", "location", "saasId", "uid", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -293,9 +272,7 @@ export const UnitKindProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.unitKindId ?? output?.unitKindId,
         nextId: news.unitKindId ?? olds?.unitKindId ?? output?.unitKindId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location ?? env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location ?? env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location ?? env.region,
         ),
@@ -309,24 +286,13 @@ export const UnitKindProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const unitKindId = yield* toPhysicalId(
-        id,
-        olds?.unitKindId,
-        output?.unitKindId,
-        "ukind",
-      );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location ?? env.region,
-      );
-      const name =
-        output?.name ??
-        resourceName(env.project, location, COLLECTION, unitKindId);
+      const unitKindId = yield* toPhysicalId(id, olds?.unitKindId, output?.unitKindId, "ukind");
+      const location = normalizeLocation(olds?.location ?? output?.location ?? env.region);
+      const name = output?.name ?? resourceName(env.project, location, COLLECTION, unitKindId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -338,15 +304,8 @@ export const UnitKindProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const unitKindId = yield* toPhysicalId(
-        id,
-        news.unitKindId,
-        output?.unitKindId,
-        "ukind",
-      );
-      const location = normalizeLocation(
-        news.location ?? output?.location ?? env.region,
-      );
+      const unitKindId = yield* toPhysicalId(id, news.unitKindId, output?.unitKindId, "ukind");
+      const location = normalizeLocation(news.location ?? output?.location ?? env.region);
       const name = resourceName(env.project, location, COLLECTION, unitKindId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -357,11 +316,7 @@ export const UnitKindProvider = () =>
         news.defaultRelease === undefined
           ? undefined
           : expandName(news.defaultRelease, env.project, location, "releases");
-      const dependencies = expandDependencies(
-        news.dependencies,
-        env.project,
-        location,
-      );
+      const dependencies = expandDependencies(news.dependencies, env.project, location);
       const annotations = news.annotations;
 
       let current = yield* getByName(output?.name ?? name);
@@ -404,23 +359,18 @@ export const UnitKindProvider = () =>
       const labelsChanged = upsert.length > 0 || removed.length > 0;
       const annotationsChanged =
         annotations !== undefined &&
-        fingerprint(userAnnotations(current.annotations)) !==
-          fingerprint(annotations);
+        fingerprint(userAnnotations(current.annotations)) !== fingerprint(annotations);
       const defaultReleaseChanged =
-        news.defaultRelease !== undefined &&
-        !sameRef(current.defaultRelease, defaultRelease);
+        news.defaultRelease !== undefined && !sameRef(current.defaultRelease, defaultRelease);
       const flagRevisionsChanged =
         news.defaultFlagRevisions !== undefined &&
-        fingerprint(current.defaultFlagRevisions) !==
-          fingerprint(news.defaultFlagRevisions);
+        fingerprint(current.defaultFlagRevisions) !== fingerprint(news.defaultFlagRevisions);
       const inputChanged =
         news.inputVariableMappings !== undefined &&
-        fingerprint(current.inputVariableMappings) !==
-          fingerprint(news.inputVariableMappings);
+        fingerprint(current.inputVariableMappings) !== fingerprint(news.inputVariableMappings);
       const outputChanged =
         news.outputVariableMappings !== undefined &&
-        fingerprint(current.outputVariableMappings) !==
-          fingerprint(news.outputVariableMappings);
+        fingerprint(current.outputVariableMappings) !== fingerprint(news.outputVariableMappings);
       const mask = fieldMask([
         labelsChanged && "labels",
         annotationsChanged && "annotations",
@@ -451,16 +401,14 @@ export const UnitKindProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      yield* saasservicemgmt
-        .deleteProjectsLocationsUnitKinds({ name: output.name })
-        .pipe(
-          Effect.retry({
-            while: (error) => error._tag === "Conflict",
-            times: 8,
-            schedule: Schedule.spaced("2 seconds"),
-          }),
-          Effect.catchTag("NotFound", () => Effect.void),
-        );
+      yield* saasservicemgmt.deleteProjectsLocationsUnitKinds({ name: output.name }).pipe(
+        Effect.retry({
+          while: (error) => error._tag === "Conflict",
+          times: 8,
+          schedule: Schedule.spaced("2 seconds"),
+        }),
+        Effect.catchTag("NotFound", () => Effect.void),
+      );
       yield* waitUntilGone(getByName(output.name), output.name);
     }),
   });

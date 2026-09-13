@@ -24,24 +24,17 @@ const defaultSubnetIds = Effect.gen(function* () {
     .filter((id): id is string => id !== undefined)
     .sort();
   if (ids.length < 2) {
-    return yield* Effect.die(
-      new Error("default VPC has fewer than 2 default-for-AZ subnets"),
-    );
+    return yield* Effect.die(new Error("default VPC has fewer than 2 default-for-AZ subnets"));
   }
   return ids;
 });
 
 const assertGone = (name: string) =>
   memorydb.describeSubnetGroups({ SubnetGroupName: name }).pipe(
-    Effect.flatMap(() =>
-      Effect.fail(new Error(`subnet group '${name}' still exists`)),
-    ),
+    Effect.flatMap(() => Effect.fail(new Error(`subnet group '${name}' still exists`))),
     Effect.catchTag("SubnetGroupNotFoundFault", () => Effect.void),
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
     }),
   );
 
@@ -93,9 +86,7 @@ test.provider(
       const redescribed = yield* memorydb.describeSubnetGroups({
         SubnetGroupName: group.subnetGroupName,
       });
-      expect(redescribed.SubnetGroups?.[0]?.Description).toBe(
-        "alchemy memorydb subnet group v2",
-      );
+      expect(redescribed.SubnetGroups?.[0]?.Description).toBe("alchemy memorydb subnet group v2");
 
       yield* stack.destroy();
       yield* assertGone(group.subnetGroupName);

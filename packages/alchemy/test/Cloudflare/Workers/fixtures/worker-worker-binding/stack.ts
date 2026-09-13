@@ -5,10 +5,7 @@ import * as Alchemy from "@/index";
 import BindingEffectCaller from "./binding-effect-caller.ts";
 import BindingTargetWorker from "./binding-target-worker.ts";
 
-const asyncCallerMain = pathe.resolve(
-  import.meta.dirname,
-  "binding-async-caller.ts",
-);
+const asyncCallerMain = pathe.resolve(import.meta.dirname, "binding-async-caller.ts");
 
 /**
  * Stack with three workers:

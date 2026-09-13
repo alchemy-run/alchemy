@@ -26,13 +26,10 @@ export default class RandomEnvWorker extends Cloudflare.Worker<RandomEnvWorker>(
     return {
       fetch: Effect.gen(function* () {
         const resolved = yield* accessor;
-        const value = Redacted.isRedacted(resolved)
-          ? Redacted.value(resolved)
-          : resolved;
+        const value = Redacted.isRedacted(resolved) ? Redacted.value(resolved) : resolved;
         return yield* HttpServerResponse.json({
           resolvedType: typeof value,
-          isHexSecret:
-            typeof value === "string" && /^[0-9a-f]{64}$/.test(value),
+          isHexSecret: typeof value === "string" && /^[0-9a-f]{64}$/.test(value),
         });
       }),
     };

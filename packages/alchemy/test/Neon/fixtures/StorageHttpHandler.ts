@@ -37,9 +37,7 @@ export const storageHttpHandler = Effect.gen(function* () {
       });
     }).pipe(
       Effect.catch(() =>
-        Effect.succeed(
-          HttpServerResponse.text("Storage request failed", { status: 500 }),
-        ),
+        Effect.succeed(HttpServerResponse.text("Storage request failed", { status: 500 })),
       ),
     ),
   };

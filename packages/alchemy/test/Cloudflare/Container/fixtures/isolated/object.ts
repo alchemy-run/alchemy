@@ -17,9 +17,7 @@ export class IsolatedObject extends Cloudflare.DurableObject<IsolatedObject>()(
         hello: () =>
           Effect.gen(function* () {
             const { fetch } = yield* container.getTcpPort(3000);
-            const response = yield* fetch(
-              HttpClientRequest.get("http://container/"),
-            );
+            const response = yield* fetch(HttpClientRequest.get("http://container/"));
             return yield* response.text;
           }).pipe(Effect.orDie),
       };

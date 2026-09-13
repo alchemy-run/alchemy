@@ -13,13 +13,9 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 // Deterministic per-test URL patterns. A lockdown rule's URL set is its
 // identity within a zone (duplicates are rejected), so each test owns
@@ -38,9 +34,7 @@ const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
@@ -56,9 +50,7 @@ const forbiddenRetry = {
 } as const;
 
 const getLockdown = (zoneId: string, lockdownId: string) =>
-  firewall
-    .getLockdown({ zoneId, lockDownsId: lockdownId })
-    .pipe(Effect.retry(forbiddenRetry));
+  firewall.getLockdown({ zoneId, lockDownsId: lockdownId }).pipe(Effect.retry(forbiddenRetry));
 
 // List every lockdown whose URL set intersects the given urls — used both
 // for assertions and to purge leftovers from interrupted runs so each test
@@ -92,10 +84,7 @@ const expectLockdownGone = (zoneId: string, lockdownId: string) =>
     Effect.catchTag("LockdownNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "LockdownNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 
@@ -150,17 +139,13 @@ test.provider(
 
       // Same rule updated in place — not a replacement.
       expect(updated.lockdownId).toEqual(initial.lockdownId);
-      expect([...updated.urls].sort()).toEqual(
-        [URL_LIFECYCLE_V1, URL_LIFECYCLE_V2].sort(),
-      );
+      expect([...updated.urls].sort()).toEqual([URL_LIFECYCLE_V1, URL_LIFECYCLE_V2].sort());
       expect(updated.configurations).toHaveLength(2);
       expect(updated.description).toEqual("alchemy lockdown test (v2)");
       expect(updated.paused).toEqual(true);
 
       const liveUpdated = yield* getLockdown(zoneId, updated.lockdownId);
-      expect([...liveUpdated.urls].sort()).toEqual(
-        [URL_LIFECYCLE_V1, URL_LIFECYCLE_V2].sort(),
-      );
+      expect([...liveUpdated.urls].sort()).toEqual([URL_LIFECYCLE_V1, URL_LIFECYCLE_V2].sort());
       expect(liveUpdated.configurations).toHaveLength(2);
       expect(liveUpdated.description).toEqual("alchemy lockdown test (v2)");
       expect(liveUpdated.paused).toEqual(true);
@@ -220,9 +205,7 @@ test.provider(
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Firewall.Lockdown,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.Firewall.Lockdown);
       const all = yield* provider.list();
 
       expect(all.some((r) => r.lockdownId === deployed.lockdownId)).toBe(true);

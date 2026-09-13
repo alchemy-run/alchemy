@@ -4,10 +4,10 @@ import * as Hetzner from "alchemy/Hetzner";
 import * as Neon from "alchemy/Neon";
 import * as Test from "alchemy/Test/Bun";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Layer from "effect/Layer";
+import * as Schedule from "effect/Schedule";
 import Stack from "../alchemy.run.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({

@@ -9,10 +9,7 @@ import { inMemoryState } from "@/State";
 import * as Test from "@/Test/Alchemy";
 import { findAvailablePort } from "./Runtime.ts";
 
-const { test } = Test.make({
-  providers: Docker.providers(),
-  state: inMemoryState(),
-});
+const { test } = Test.make({ providers: Docker.providers(), state: inMemoryState() });
 
 test.provider(
   "diff pulls again unless alwaysPull is disabled",
@@ -71,18 +68,8 @@ test.provider(
         id: "nginx",
         fqn: "nginx",
         instanceId: "instance",
-        olds: {
-          name: "nginx",
-          tag: "alpine",
-          alwaysPull: false,
-          context: "default",
-        },
-        news: {
-          name: "nginx",
-          tag: "alpine",
-          alwaysPull: false,
-          context: "remote-build",
-        },
+        olds: { name: "nginx", tag: "alpine", alwaysPull: false, context: "default" },
+        news: { name: "nginx", tag: "alpine", alwaysPull: false, context: "remote-build" },
         oldBindings: [],
         newBindings: [],
         output,
@@ -94,19 +81,12 @@ test.provider(
 
 describe(
   "Docker.RemoteImage",
-  {
-    tags: ["provider:docker", "provider:docker:remoteimage", "local"],
-    concurrent: false,
-  },
+  { tags: ["provider:docker", "provider:docker:remoteimage", "local"], concurrent: false },
   () => {
     test.provider("pulls a Docker image reference", (stack) =>
       Effect.gen(function* () {
         const image = yield* stack.deploy(
-          Docker.RemoteImage("remote-nginx", {
-            name: "nginx",
-            tag: "alpine",
-            alwaysPull: false,
-          }),
+          Docker.RemoteImage("remote-nginx", { name: "nginx", tag: "alpine", alwaysPull: false }),
         );
         expect(image.imageRef).toBe("nginx:alpine");
         expect(image.imageId.length).toBeGreaterThan(0);
@@ -171,12 +151,9 @@ describe(
         ]);
 
         // Wait for the registry HTTP API to start serving before pushing.
-        yield* client.get(`http://${host}/v2/`).pipe(
-          Effect.retry({
-            schedule: Schedule.exponential("250 millis"),
-            times: 20,
-          }),
-        );
+        yield* client
+          .get(`http://${host}/v2/`)
+          .pipe(Effect.retry({ schedule: Schedule.exponential("250 millis"), times: 20 }));
 
         const image = yield* stack.deploy(
           Docker.RemoteImage("pushed-hello", {

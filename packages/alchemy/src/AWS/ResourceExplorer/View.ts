@@ -109,9 +109,7 @@ export { ViewResource as View };
  * Raised when a view can neither be created (a peer holds the name) nor
  * observed afterwards — i.e. reconciliation raced a concurrent delete.
  */
-export class ViewUnobservable extends Data.TaggedError(
-  "ResourceExplorerViewUnobservable",
-)<{
+export class ViewUnobservable extends Data.TaggedError("ResourceExplorerViewUnobservable")<{
   message: string;
 }> {}
 
@@ -124,9 +122,8 @@ export class ViewUnobservable extends Data.TaggedError(
 const getViewSafe = Effect.fn(function* (viewArn: string) {
   return yield* re2.getView({ ViewArn: viewArn }).pipe(
     Effect.map((r): re2.GetViewOutput | undefined => r),
-    Effect.catchTag(
-      ["UnauthorizedException", "ResourceNotFoundException"],
-      () => Effect.succeed(undefined),
+    Effect.catchTag(["UnauthorizedException", "ResourceNotFoundException"], () =>
+      Effect.succeed(undefined),
     ),
   );
 });
@@ -138,9 +135,7 @@ const getViewSafe = Effect.fn(function* (viewArn: string) {
 const findViewArnByName = Effect.fn(function* (name: string) {
   const arns = yield* re2.listViews.pages({}).pipe(
     Stream.runCollect,
-    Effect.map((chunk) =>
-      Array.from(chunk).flatMap((page) => page.Views ?? []),
-    ),
+    Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.Views ?? [])),
   );
   return arns.find((arn) => arn.split("/")[1] === name);
 });
@@ -171,9 +166,8 @@ const toTagRecord = (
   return out;
 };
 
-const includedPropertyNames = (
-  properties: re2.IncludedProperty[] | undefined,
-): string[] => (properties ?? []).map((p) => p.Name);
+const includedPropertyNames = (properties: re2.IncludedProperty[] | undefined): string[] =>
+  (properties ?? []).map((p) => p.Name);
 
 const sameStringSet = (a: string[], b: string[]) =>
   a.length === b.length && [...a].sort().join(",") === [...b].sort().join(",");
@@ -186,9 +180,7 @@ export const ViewProvider = () =>
         id: string,
         props: { viewName?: string | undefined },
       ) {
-        return (
-          props.viewName ?? (yield* createPhysicalName({ id, maxLength: 64 }))
-        );
+        return props.viewName ?? (yield* createPhysicalName({ id, maxLength: 64 }));
       });
 
       const toAttrs = (view: re2.View, name: string): View["Attributes"] => ({
@@ -204,9 +196,7 @@ export const ViewProvider = () =>
           Effect.gen(function* () {
             const arns = yield* re2.listViews.pages({}).pipe(
               Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) => page.Views ?? []),
-              ),
+              Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.Views ?? [])),
             );
             // A view can vanish between enumeration and hydration — drop it.
             const items = yield* Effect.forEach(
@@ -215,18 +205,13 @@ export const ViewProvider = () =>
                 getViewSafe(arn).pipe(
                   Effect.map((found) =>
                     found?.View?.ViewArn
-                      ? toAttrs(
-                          found.View,
-                          found.View.ViewName ?? arn.split("/")[1]!,
-                        )
+                      ? toAttrs(found.View, found.View.ViewName ?? arn.split("/")[1]!)
                       : undefined,
                   ),
                 ),
               { concurrency: 10 },
             );
-            return items.filter(
-              (item): item is View["Attributes"] => item !== undefined,
-            );
+            return items.filter((item): item is View["Attributes"] => item !== undefined);
           }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
@@ -240,10 +225,7 @@ export const ViewProvider = () =>
           if (arn === undefined) return undefined;
           const found = yield* getViewSafe(arn);
           if (!found?.View?.ViewArn) return undefined;
-          const attrs = toAttrs(
-            found.View,
-            found.View.ViewName ?? arn.split("/")[1]!,
-          );
+          const attrs = toAttrs(found.View, found.View.ViewName ?? arn.split("/")[1]!);
           const tags = toTagRecord(found.Tags);
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
         }),
@@ -272,9 +254,7 @@ export const ViewProvider = () =>
           // 1. OBSERVE — by cached ARN first, then by name (covers
           //    adoption and lost state).
           let found =
-            output?.viewArn !== undefined
-              ? yield* getViewSafe(output.viewArn)
-              : undefined;
+            output?.viewArn !== undefined ? yield* getViewSafe(output.viewArn) : undefined;
           if (!found?.View) {
             const arn = yield* findViewArnByName(name);
             found = arn !== undefined ? yield* getViewSafe(arn) : undefined;
@@ -288,10 +268,7 @@ export const ViewProvider = () =>
             found = yield* retryWhileIndexProvisioning(
               re2.createView({
                 ViewName: name,
-                Filters:
-                  desiredFilter !== undefined
-                    ? { FilterString: desiredFilter }
-                    : undefined,
+                Filters: desiredFilter !== undefined ? { FilterString: desiredFilter } : undefined,
                 IncludedProperties: desiredProperties.map((Name) => ({
                   Name,
                 })),
@@ -300,15 +277,12 @@ export const ViewProvider = () =>
               }),
             ).pipe(
               Effect.map(
-                (r): re2.GetViewOutput | undefined =>
-                  r.View && { View: r.View, Tags: desiredTags },
+                (r): re2.GetViewOutput | undefined => r.View && { View: r.View, Tags: desiredTags },
               ),
               Effect.catchTag("ConflictException", () =>
                 Effect.gen(function* () {
                   const arn = yield* findViewArnByName(name);
-                  return arn !== undefined
-                    ? yield* getViewSafe(arn)
-                    : undefined;
+                  return arn !== undefined ? yield* getViewSafe(arn) : undefined;
                 }),
               ),
             );
@@ -328,19 +302,14 @@ export const ViewProvider = () =>
           //    IncludedProperties (omitted fields are cleared), so always
           //    send the full desired shape when either differs.
           const observedFilter = view.Filters?.FilterString;
-          const observedProperties = includedPropertyNames(
-            view.IncludedProperties,
-          );
+          const observedProperties = includedPropertyNames(view.IncludedProperties);
           if (
             (observedFilter ?? undefined) !== desiredFilter ||
             !sameStringSet(observedProperties, desiredProperties)
           ) {
             yield* re2.updateView({
               ViewArn: view.ViewArn,
-              Filters:
-                desiredFilter !== undefined
-                  ? { FilterString: desiredFilter }
-                  : undefined,
+              Filters: desiredFilter !== undefined ? { FilterString: desiredFilter } : undefined,
               IncludedProperties: desiredProperties.map((Name) => ({ Name })),
             });
           }
@@ -370,9 +339,8 @@ export const ViewProvider = () =>
           // UnauthorizedException (Resource Explorer's "not found" for
           // views) or ResourceNotFoundException.
           yield* re2.deleteView({ ViewArn: output.viewArn }).pipe(
-            Effect.catchTag(
-              ["UnauthorizedException", "ResourceNotFoundException"],
-              () => Effect.succeed(undefined),
+            Effect.catchTag(["UnauthorizedException", "ResourceNotFoundException"], () =>
+              Effect.succeed(undefined),
             ),
             Effect.asVoid,
           );

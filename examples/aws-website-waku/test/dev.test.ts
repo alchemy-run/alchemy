@@ -30,8 +30,7 @@ const cli = new DevCli({ root, stage: STAGE });
 const pagePath = path.join(root, "src", "pages", "index.tsx");
 const pageSource = fs.readFileSync(pagePath, "utf8");
 const MARKER = "This page is rendered by the server on every request.";
-const MARKER_V2 =
-  "This page is rendered by the server on every request. [dev-v2]";
+const MARKER_V2 = "This page is rendered by the server on every request. [dev-v2]";
 
 afterAll(async () => {
   // Always leave the repo tree clean, even on a mid-reload failure.

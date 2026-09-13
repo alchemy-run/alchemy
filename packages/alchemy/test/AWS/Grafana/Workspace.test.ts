@@ -15,9 +15,7 @@ test.provider(
   "describeWorkspace on a nonexistent id fails with ResourceNotFoundException",
   () =>
     Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        grafana.describeWorkspace({ workspaceId: "g-0000000000" }),
-      );
+      const error = yield* Effect.flip(grafana.describeWorkspace({ workspaceId: "g-0000000000" }));
       expect(error._tag).toBe("ResourceNotFoundException");
     }),
   { tags: ["provider:aws", "provider:aws:grafana", "live"] },
@@ -34,15 +32,10 @@ const assertWorkspaceDeleted = (workspaceId: string) =>
         ? Effect.fail(new WorkspaceStillExists({ workspaceId }))
         : Effect.succeed(undefined),
     ),
-    Effect.catchTag("ResourceNotFoundException", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
     Effect.retry({
       while: (e) => e._tag === "WorkspaceStillExists",
-      schedule: Schedule.max([
-        Schedule.spaced("5 seconds"),
-        Schedule.recurs(24),
-      ]),
+      schedule: Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(24)]),
     }),
   );
 
@@ -74,9 +67,7 @@ test.provider.skipIf(!process.env.AWS_TEST_GRAFANA)(
       expect(created.status).toBe("ACTIVE");
       expect(created.endpoint).toContain("grafana-workspace");
 
-      const describedWs = yield* grafana.describeWorkspace({
-        workspaceId: created.workspaceId,
-      });
+      const describedWs = yield* grafana.describeWorkspace({ workspaceId: created.workspaceId });
       expect(describedWs.workspace.tags?.["alchemy::id"]).toBe("Dashboards");
 
       // Update the description in place.

@@ -14,9 +14,11 @@ const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const fixtureDir = pathe.resolve(import.meta.dirname, "fixtures/assets-only");
 
-class NotFoundAssertionFailed extends Data.TaggedError(
-  "NotFoundAssertionFailed",
-)<{ url: string; status: number; bodyExcerpt: string }> {}
+class NotFoundAssertionFailed extends Data.TaggedError("NotFoundAssertionFailed")<{
+  url: string;
+  status: number;
+  bodyExcerpt: string;
+}> {}
 
 /**
  * Assert `url` serves the custom 404 page: status 404 with the fixture's
@@ -44,12 +46,7 @@ const expectCustom404 = (url: string) =>
             status: 0,
             bodyExcerpt: e instanceof Error ? e.message : String(e),
           }),
-  }).pipe(
-    Effect.retry({
-      schedule: Schedule.exponential("750 millis", 1.5),
-      times: 10,
-    }),
-  );
+  }).pipe(Effect.retry({ schedule: Schedule.exponential("750 millis", 1.5), times: 10 }));
 
 describe.concurrent(
   "Cloudflare.Worker assets-only",
@@ -65,9 +62,7 @@ describe.concurrent(
           yield* stack.destroy();
 
           const deploy = (props: {
-            assets:
-              | string
-              | { directory: string; notFoundHandling?: "404-page" };
+            assets: string | { directory: string; notFoundHandling?: "404-page" };
             script?: string;
           }) =>
             stack.deploy(
@@ -90,16 +85,12 @@ describe.concurrent(
           yield* expectCustom404(`${url}/does-not-exist`);
 
           // 2. Update: editing an asset must redeploy the new content.
-          const dir = yield* cloneFixture(fixtureDir, {
-            prefix: "alchemy-assets-only-",
-          });
+          const dir = yield* cloneFixture(fixtureDir, { prefix: "alchemy-assets-only-" });
           yield* fs.writeFileString(
             path.join(dir, "index.html"),
             "<html><body>alchemy-assets-only-index-v2</body></html>",
           );
-          yield* deploy({
-            assets: { directory: dir, notFoundHandling: "404-page" },
-          });
+          yield* deploy({ assets: { directory: dir, notFoundHandling: "404-page" } });
           yield* expectUrlContains(`${url}/`, "alchemy-assets-only-index-v2", {
             label: "updated asset",
           });
@@ -110,17 +101,13 @@ describe.concurrent(
             assets: dir,
             script: `export default { fetch: () => new Response("alchemy-assets-only-script") };`,
           });
-          yield* expectUrlContains(
-            `${url}/does-not-exist`,
-            "alchemy-assets-only-script",
-            { label: "script fallback after conversion" },
-          );
+          yield* expectUrlContains(`${url}/does-not-exist`, "alchemy-assets-only-script", {
+            label: "script fallback after conversion",
+          });
 
           // 4. Convert back to assets-only: the stored bundle hash must not
           //    mask the change, and the asset layer owns 404s again.
-          yield* deploy({
-            assets: { directory: dir, notFoundHandling: "404-page" },
-          });
+          yield* deploy({ assets: { directory: dir, notFoundHandling: "404-page" } });
           yield* expectCustom404(`${url}/does-not-exist`);
           yield* expectUrlContains(`${url}/`, "alchemy-assets-only-index-v2", {
             label: "assets serve after conversion back",

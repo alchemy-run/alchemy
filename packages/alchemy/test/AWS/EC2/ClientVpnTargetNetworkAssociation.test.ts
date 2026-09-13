@@ -28,9 +28,7 @@ describe(
     const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
       providers: AWS.providers(),
     });
-    const certificate = beforeAll(
-      importClientVpnCertificate("ClientVpnAssociationPrerequisites"),
-    );
+    const certificate = beforeAll(importClientVpnCertificate("ClientVpnAssociationPrerequisites"));
     const zones = beforeAll(clientVpnAvailabilityZones);
     const Stack = Alchemy.Stack(
       "ClientVpnAssociationPrerequisites",
@@ -46,14 +44,10 @@ describe(
         return { ...network, endpoint };
       }),
     );
-    const prerequisites = beforeAll(deploy(Stack), {
-      timeout: clientVpnTestTimeout,
-    });
+    const prerequisites = beforeAll(deploy(Stack), { timeout: clientVpnTestTimeout });
     afterAll(
       destroy(Stack).pipe(
-        Effect.andThen(
-          certificate.pipe(Effect.flatMap(assertClientVpnCertificateDeleted)),
-        ),
+        Effect.andThen(certificate.pipe(Effect.flatMap(assertClientVpnCertificateDeleted))),
       ),
       { timeout: clientVpnTestTimeout },
     );
@@ -63,17 +57,13 @@ describe(
       (stack) =>
         Effect.gen(function* () {
           yield* stack.destroy();
-          const { endpoint, vpc, firstSubnet, secondSubnet } =
-            yield* prerequisites;
+          const { endpoint, vpc, firstSubnet, secondSubnet } = yield* prerequisites;
           const clientVpnEndpointId = endpoint.clientVpnEndpointId;
           const deployAssociation = (
             subnetId: ClientVpnTargetNetworkAssociationProps["subnetId"],
           ) =>
             stack.deploy(
-              ClientVpnTargetNetworkAssociation("Association", {
-                clientVpnEndpointId,
-                subnetId,
-              }),
+              ClientVpnTargetNetworkAssociation("Association", { clientVpnEndpointId, subnetId }),
             );
           const created = yield* deployAssociation(firstSubnet.subnetId);
           expect(created.associationId).toMatch(/^cvpn-assoc-/);
@@ -97,15 +87,10 @@ describe(
               VpcId: vpc.vpcId,
             }),
           );
-          const provider = yield* Provider.findProvider(
-            ClientVpnTargetNetworkAssociation,
-          );
+          const provider = yield* Provider.findProvider(ClientVpnTargetNetworkAssociation);
           const listed = yield* waitForClientVpn(
             provider.list(),
-            (items) =>
-              items.some(
-                (network) => network.associationId === created.associationId,
-              ),
+            (items) => items.some((network) => network.associationId === created.associationId),
             "target network provider list",
           );
           expect(listed).toContainEqual(
@@ -140,15 +125,9 @@ describe(
               ),
             "replacement target network",
           );
-          yield* assertClientVpnAssociationDeleted(
-            clientVpnEndpointId,
-            created.associationId,
-          );
+          yield* assertClientVpnAssociationDeleted(clientVpnEndpointId, created.associationId);
           yield* stack.destroy();
-          yield* assertClientVpnAssociationDeleted(
-            clientVpnEndpointId,
-            replaced.associationId,
-          );
+          yield* assertClientVpnAssociationDeleted(clientVpnEndpointId, replaced.associationId);
         }),
       { timeout: clientVpnTestTimeout },
     );

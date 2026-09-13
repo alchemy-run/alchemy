@@ -110,12 +110,7 @@ test.provider(
     yield* expectProjectGone(initial.project.projectId);
   }),
   {
-    tags: [
-      "provider:prisma",
-      "provider:prisma:database",
-      "provider:prisma:project",
-      "live",
-    ],
+    tags: ["provider:prisma", "provider:prisma:database", "provider:prisma:project", "live"],
     timeout: 120_000,
   },
 );
@@ -125,10 +120,7 @@ test.provider(
   Effect.fn(function* (stack: Test.ScratchStack) {
     yield* stack.destroy();
 
-    const resources = (
-      attachment: "id" | "gitName" | "omitted",
-      name?: string,
-    ) =>
+    const resources = (attachment: "id" | "gitName" | "omitted", name?: string) =>
       Effect.gen(function* () {
         const project = yield* Prisma.Project("Project", {
           createDatabase: false,

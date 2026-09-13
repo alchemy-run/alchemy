@@ -19,10 +19,7 @@ import * as Test from "@/Test/Alchemy";
 const STACK = "alchemy_tests";
 const STAGE = "alchemy_tests";
 
-const { test } = Test.make({
-  providers: Cloudflare.providers(),
-  state: Cloudflare.state(),
-});
+const { test } = Test.make({ providers: Cloudflare.providers(), state: Cloudflare.state() });
 
 const sampleState = (fqn: string, instanceId: string) => ({
   kind: "resource" as const,
@@ -103,12 +100,7 @@ describe.sequential(
         const store = yield* yield* State;
         const fqn = "stack/scope/resource-a";
         const value = sampleState(fqn, "inst-a");
-        const echoed = yield* store.set({
-          stack: STACK,
-          stage: STAGE,
-          fqn,
-          value,
-        });
+        const echoed = yield* store.set({ stack: STACK, stage: STAGE, fqn, value });
         expect(echoed.fqn).toBe(fqn);
         expect(echoed.instanceId).toBe("inst-a");
       }),
@@ -154,10 +146,7 @@ describe.sequential(
           value: sampleState(fqnB, "inst-b"),
         });
         const fqns = yield* store.list({ stack: STACK, stage: STAGE });
-        expect([...fqns].sort()).toEqual([
-          "stack/scope/resource-a",
-          "stack/scope/resource-b",
-        ]);
+        expect([...fqns].sort()).toEqual(["stack/scope/resource-a", "stack/scope/resource-b"]);
       }),
       { timeout: 60_000 },
     );
@@ -210,10 +199,7 @@ describe.sequential(
       "GET /output returns undefined for an un-deployed stage",
       Effect.gen(function* () {
         const store = yield* yield* State;
-        const out = yield* store.getOutput({
-          stack: STACK,
-          stage: "never-deployed",
-        });
+        const out = yield* store.getOutput({ stack: STACK, stage: "never-deployed" });
         expect(out).toBeUndefined();
       }),
       { timeout: 60_000 },
@@ -224,16 +210,8 @@ describe.sequential(
       Effect.gen(function* () {
         const store = yield* yield* State;
         const fqn = "stack/scope/resource-replaced";
-        yield* store.set({
-          stack: STACK,
-          stage: STAGE,
-          fqn,
-          value: replacedState(fqn) as any,
-        });
-        const replaced = yield* store.getReplacedResources({
-          stack: STACK,
-          stage: STAGE,
-        });
+        yield* store.set({ stack: STACK, stage: STAGE, fqn, value: replacedState(fqn) as any });
+        const replaced = yield* store.getReplacedResources({ stack: STACK, stage: STAGE });
         const fqns = replaced.map((r) => (r as any).fqn);
         expect(fqns).toContain(fqn);
       }),
@@ -302,12 +280,7 @@ describe.sequential(
           Array.from({ length: 100 }, (_, i) => i),
           (i) =>
             store
-              .set({
-                stack,
-                stage,
-                fqn,
-                value: sampleState(fqn, `inst-${i}`),
-              })
+              .set({ stack, stage, fqn, value: sampleState(fqn, `inst-${i}`) })
               .pipe(Effect.asVoid),
           { discard: true },
         );
@@ -341,12 +314,7 @@ describe.sequential(
           (i) => {
             const fqn = `stack/scope/stress-par-${i}`;
             return store
-              .set({
-                stack,
-                stage,
-                fqn,
-                value: sampleState(fqn, `inst-${i}`),
-              })
+              .set({ stack, stage, fqn, value: sampleState(fqn, `inst-${i}`) })
               .pipe(Effect.asVoid);
           },
           { concurrency: "unbounded", discard: true },
@@ -391,12 +359,7 @@ describe.sequential(
                   [
                     store.get({ stack, stage, fqn }).pipe(Effect.asVoid),
                     store
-                      .set({
-                        stack,
-                        stage,
-                        fqn,
-                        value: sampleState(fqn, `inst-${fqn}`),
-                      })
+                      .set({ stack, stage, fqn, value: sampleState(fqn, `inst-${fqn}`) })
                       .pipe(Effect.asVoid),
                   ],
                   { concurrency: "unbounded", discard: true },

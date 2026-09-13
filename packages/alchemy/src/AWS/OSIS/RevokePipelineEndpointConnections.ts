@@ -31,17 +31,13 @@ export interface RevokePipelineEndpointConnections extends Binding.Service<
     pipeline: Pipeline,
   ) => Effect.Effect<
     (
-      request: Omit<
-        osis.RevokePipelineEndpointConnectionsRequest,
-        "PipelineArn"
-      >,
+      request: Omit<osis.RevokePipelineEndpointConnectionsRequest, "PipelineArn">,
     ) => Effect.Effect<
       osis.RevokePipelineEndpointConnectionsResponse,
       osis.RevokePipelineEndpointConnectionsError
     >
   >
 > {}
-export const RevokePipelineEndpointConnections =
-  Binding.Service<RevokePipelineEndpointConnections>(
-    "AWS.OSIS.RevokePipelineEndpointConnections",
-  );
+export const RevokePipelineEndpointConnections = Binding.Service<RevokePipelineEndpointConnections>(
+  "AWS.OSIS.RevokePipelineEndpointConnections",
+);

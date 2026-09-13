@@ -4,17 +4,10 @@ import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import { Unowned } from "@/AdoptPolicy";
 import { AlchemyContext } from "@/AlchemyContext";
-import {
-  PrismaApiError,
-  PrismaClient,
-  type PrismaManagementClient,
-} from "@/Prisma/Client";
+import { PrismaApiError, PrismaClient, type PrismaManagementClient } from "@/Prisma/Client";
 import { connectEnvKeys } from "@/Prisma/Connect";
 import { Connection, ConnectionProvider } from "@/Prisma/Connection";
-import type {
-  DatabaseConnection,
-  DatabaseConnectionWithSecrets,
-} from "@/Prisma/Types";
+import type { DatabaseConnection, DatabaseConnectionWithSecrets } from "@/Prisma/Types";
 import * as Provider from "@/Provider";
 import {
   conflict,
@@ -47,17 +40,10 @@ const connection = (id: string, name: string): DatabaseConnection => ({
   },
 });
 
-const withSecrets = (
-  value: DatabaseConnection,
-  suffix: string,
-): DatabaseConnectionWithSecrets => ({
+const withSecrets = (value: DatabaseConnection, suffix: string): DatabaseConnectionWithSecrets => ({
   ...value,
   endpoints: {
-    direct: {
-      host: "db.prisma.test",
-      port: 5432,
-      connectionString: `postgres://direct-${suffix}`,
-    },
+    direct: { host: "db.prisma.test", port: 5432, connectionString: `postgres://direct-${suffix}` },
     pooled: {
       host: "pooled.db.prisma.test",
       port: 5432,
@@ -85,10 +71,7 @@ const providerLayer = (client: PrismaManagementClient) =>
  * returning `undefined` is a 404, everything else a `{ data }` envelope.
  */
 interface ConnectionHandlers {
-  listDatabaseConnections?: (
-    databaseId: string,
-    query?: any,
-  ) => Effect.Effect<any, any>;
+  listDatabaseConnections?: (databaseId: string, query?: any) => Effect.Effect<any, any>;
   getConnection?: (id: string) => Effect.Effect<any, any>;
   createConnection?: (input: any) => Effect.Effect<any, any>;
   rotateConnection?: (id: string) => Effect.Effect<any, any>;
@@ -98,8 +81,7 @@ interface ConnectionHandlers {
 const connectionApi = (handlers: ConnectionHandlers) =>
   makeFakeManagementApi((request) => {
     const segments = request.pathname.split("/").filter((s) => s.length > 0);
-    const respond = (value: unknown) =>
-      value === undefined ? notFound("not found") : data(value);
+    const respond = (value: unknown) => (value === undefined ? notFound("not found") : data(value));
 
     if (
       segments.length === 4 &&
@@ -107,18 +89,12 @@ const connectionApi = (handlers: ConnectionHandlers) =>
       segments[3] === "connections" &&
       request.method === "GET"
     ) {
-      return page(
-        Effect.runSync(handlers.listDatabaseConnections!(segments[2]!)),
-      );
+      return page(Effect.runSync(handlers.listDatabaseConnections!(segments[2]!)));
     }
     if (request.pathname === "/v1/connections" && request.method === "POST") {
-      const created = Effect.runSync(
-        handlers.createConnection!(request.bodyJson),
-      );
+      const created = Effect.runSync(handlers.createConnection!(request.bodyJson));
       // A handler may answer with a Response directly to inject a status.
-      return created instanceof Response
-        ? created
-        : data(created, { status: 201 });
+      return created instanceof Response ? created : data(created, { status: 201 });
     }
     if (
       segments.length === 4 &&
@@ -207,15 +183,11 @@ describe(
           const first = yield* provider.reconcile(reconcileInput());
           // Simulate create succeeding but state persistence failing. Refresh
           // recovers the deterministic key without its one-time credentials.
-          const observed = yield* provider.read!(
-            readInput(undefined, instanceId),
-          );
+          const observed = yield* provider.read!(readInput(undefined, instanceId));
           expect(observed).toBeDefined();
           expect(Unowned.is(observed)).toBe(false);
           expect(observed?.directConnectionString).toBeUndefined();
-          const recovered = yield* provider.reconcile(
-            reconcileInput(observed!),
-          );
+          const recovered = yield* provider.reconcile(reconcileInput(observed!));
 
           expect(creates).toBe(1);
           expect(rotations).toBe(1);
@@ -225,10 +197,7 @@ describe(
           expect(Redacted.value(recovered.directConnectionString!)).toBe(
             "postgres://direct-rotated",
           );
-        }).pipe(
-          Effect.provide(providerLayer(client)),
-          Effect.provide(connectionApi(client).layer),
-        );
+        }).pipe(Effect.provide(providerLayer(client)), Effect.provide(connectionApi(client).layer));
       },
       { tags: ["provider:prisma:database"] },
     );
@@ -269,10 +238,7 @@ describe(
           expect(Redacted.value(recovered.directConnectionString!)).toBe(
             "postgres://direct-recovered",
           );
-        }).pipe(
-          Effect.provide(providerLayer(client)),
-          Effect.provide(connectionApi(client).layer),
-        );
+        }).pipe(Effect.provide(providerLayer(client)), Effect.provide(connectionApi(client).layer));
       },
       { tags: ["provider:prisma:database"] },
     );
@@ -318,12 +284,8 @@ describe(
           );
           expect(rotations).toBe(1);
 
-          const stable = yield* provider.reconcile(
-            reconcileInput(recovered, connectionProps),
-          );
-          expect(Redacted.value(stable.directConnectionString!)).toBe(
-            "postgres://direct-adopted",
-          );
+          const stable = yield* provider.reconcile(reconcileInput(recovered, connectionProps));
+          expect(Redacted.value(stable.directConnectionString!)).toBe("postgres://direct-adopted");
           expect(rotations).toBe(1);
 
           const optedIn = yield* provider.reconcile({
@@ -331,13 +293,8 @@ describe(
             news: { ...connectionProps, rotate: true },
           });
           expect(rotations).toBe(2);
-          expect(Redacted.value(optedIn.directConnectionString!)).toBe(
-            "postgres://direct-adopted",
-          );
-        }).pipe(
-          Effect.provide(providerLayer(client)),
-          Effect.provide(connectionApi(client).layer),
-        );
+          expect(Redacted.value(optedIn.directConnectionString!)).toBe("postgres://direct-adopted");
+        }).pipe(Effect.provide(providerLayer(client)), Effect.provide(connectionApi(client).layer));
       },
       { tags: ["provider:prisma:database"] },
     );
@@ -355,20 +312,12 @@ describe(
       return Effect.gen(function* () {
         const provider = yield* Connection.Provider;
         const error = yield* provider
-          .reconcile({
-            ...reconcileInput(),
-            news: { database: "database-1", name: "   " },
-          })
+          .reconcile({ ...reconcileInput(), news: { database: "database-1", name: "   " } })
           .pipe(Effect.flip);
 
-        expect(String(error)).toContain(
-          "must contain at least one non-space character",
-        );
+        expect(String(error)).toContain("must contain at least one non-space character");
         expect(listed).toBe(false);
-      }).pipe(
-        Effect.provide(providerLayer(client)),
-        Effect.provide(connectionApi(client).layer),
-      );
+      }).pipe(Effect.provide(providerLayer(client)), Effect.provide(connectionApi(client).layer));
     });
 
     it.effect(
@@ -413,10 +362,7 @@ describe(
           expect(Redacted.value(recovered.directConnectionString!)).toBe(
             "postgres://direct-current",
           );
-        }).pipe(
-          Effect.provide(providerLayer(client)),
-          Effect.provide(connectionApi(client).layer),
-        );
+        }).pipe(Effect.provide(providerLayer(client)), Effect.provide(connectionApi(client).layer));
       },
       { tags: ["provider:prisma:database"] },
     );
@@ -477,10 +423,7 @@ describe(
             .pipe(Effect.flip);
           expect(String(error)).toContain("mismatched identity");
           expect(rotations).toBe(0);
-        }).pipe(
-          Effect.provide(providerLayer(client)),
-          Effect.provide(connectionApi(client).layer),
-        );
+        }).pipe(Effect.provide(providerLayer(client)), Effect.provide(connectionApi(client).layer));
       },
       { tags: ["provider:prisma:database"] },
     );
@@ -491,24 +434,16 @@ describe(
         const existing = connection("connection-1", "api-aaaaaaaaaaaa");
         const client = {
           listDatabaseConnections: () =>
-            Effect.succeed([
-              existing,
-              connection("connection-foreign", "api-bbbbbbbbbbbb"),
-            ]),
+            Effect.succeed([existing, connection("connection-foreign", "api-bbbbbbbbbbbb")]),
         } as unknown as PrismaManagementClient;
 
         return Effect.gen(function* () {
           const provider = yield* Provider.findProvider(Connection);
-          const output = yield* provider.read!(
-            readInput(undefined, instanceId),
-          );
+          const output = yield* provider.read!(readInput(undefined, instanceId));
 
           expect(output?.connectionId).toBe("connection-1");
           expect(Unowned.is(output)).toBe(false);
-        }).pipe(
-          Effect.provide(providerLayer(client)),
-          Effect.provide(connectionApi(client).layer),
-        );
+        }).pipe(Effect.provide(providerLayer(client)), Effect.provide(connectionApi(client).layer));
       },
       { tags: ["provider:prisma:database"] },
     );
@@ -527,10 +462,7 @@ describe(
 
           expect(output?.connectionId).toBe("connection-1");
           expect(Unowned.is(output)).toBe(true);
-        }).pipe(
-          Effect.provide(providerLayer(client)),
-          Effect.provide(connectionApi(client).layer),
-        );
+        }).pipe(Effect.provide(providerLayer(client)), Effect.provide(connectionApi(client).layer));
       },
       { tags: ["provider:prisma:database"] },
     );
@@ -559,9 +491,7 @@ describe(
 
         return Effect.gen(function* () {
           const provider = yield* Provider.findProvider(Connection);
-          const observed = yield* provider.read!(
-            readInput(undefined, currentInstanceId),
-          );
+          const observed = yield* provider.read!(readInput(undefined, currentInstanceId));
           expect(observed?.connectionName).toBe("api-aaaaaaaaaaaa");
           expect(Unowned.is(observed)).toBe(true);
 
@@ -594,17 +524,12 @@ describe(
             "postgres://direct-adopted-old-generated",
           );
 
-          const refreshed = yield* provider.read!(
-            readInput(rotated, currentInstanceId),
-          );
+          const refreshed = yield* provider.read!(readInput(rotated, currentInstanceId));
           expect(refreshed?.connectionName).toBe("api-aaaaaaaaaaaa");
           expect(Redacted.value(refreshed!.directConnectionString!)).toBe(
             "postgres://direct-adopted-old-generated",
           );
-        }).pipe(
-          Effect.provide(providerLayer(client)),
-          Effect.provide(connectionApi(client).layer),
-        );
+        }).pipe(Effect.provide(providerLayer(client)), Effect.provide(connectionApi(client).layer));
       },
       { tags: ["provider:prisma:database"] },
     );
@@ -632,9 +557,7 @@ describe(
 
         return Effect.gen(function* () {
           const provider = yield* Provider.findProvider(Connection);
-          const observed = yield* provider.read!(
-            readInput(undefined, instanceId),
-          );
+          const observed = yield* provider.read!(readInput(undefined, instanceId));
           expect(observed?.connectionName).toBe("api");
           expect(Unowned.is(observed)).toBe(true);
 
@@ -652,10 +575,7 @@ describe(
           expect(Redacted.value(rotated.directConnectionString!)).toBe(
             "postgres://direct-adopted-natural",
           );
-        }).pipe(
-          Effect.provide(providerLayer(client)),
-          Effect.provide(connectionApi(client).layer),
-        );
+        }).pipe(Effect.provide(providerLayer(client)), Effect.provide(connectionApi(client).layer));
       },
       { tags: ["provider:prisma:database"] },
     );
@@ -687,16 +607,11 @@ describe(
 
         return Effect.gen(function* () {
           const provider = yield* Provider.findProvider(Connection);
-          const error = yield* provider.read!(
-            readInput(output, instanceId),
-          ).pipe(Effect.flip);
+          const error = yield* provider.read!(readInput(output, instanceId)).pipe(Effect.flip);
 
           expect(String(error)).toContain("no longer matches persisted");
           expect(String(error)).toContain("name 'api'");
-        }).pipe(
-          Effect.provide(providerLayer(client)),
-          Effect.provide(connectionApi(client).layer),
-        );
+        }).pipe(Effect.provide(providerLayer(client)), Effect.provide(connectionApi(client).layer));
       },
       { tags: ["provider:prisma:database"] },
     );
@@ -720,10 +635,7 @@ describe(
 
           expect(String(error)).toContain("has 2 connections named");
           expect(String(error)).toContain("<instance-id>");
-        }).pipe(
-          Effect.provide(providerLayer(client)),
-          Effect.provide(connectionApi(client).layer),
-        );
+        }).pipe(Effect.provide(providerLayer(client)), Effect.provide(connectionApi(client).layer));
       },
       { tags: ["provider:prisma:database"] },
     );
@@ -731,18 +643,10 @@ describe(
     it(
       "does not collide binding keys after lossy normalization",
       () => {
-        const hyphenated = connectEnvKeys({
-          FQN: "db-a",
-          LogicalId: "db-a",
-        });
-        const underscored = connectEnvKeys({
-          FQN: "db_a",
-          LogicalId: "db_a",
-        });
+        const hyphenated = connectEnvKeys({ FQN: "db-a", LogicalId: "db-a" });
+        const underscored = connectEnvKeys({ FQN: "db_a", LogicalId: "db_a" });
 
-        expect(hyphenated.directConnectionString).not.toBe(
-          underscored.directConnectionString,
-        );
+        expect(hyphenated.directConnectionString).not.toBe(underscored.directConnectionString);
       },
       { tags: ["provider:prisma:connect"] },
     );
@@ -750,10 +654,7 @@ describe(
     it.effect(
       "defaults the connection name to the logical ID",
       () => {
-        const created = withSecrets(
-          connection("connection-1", "Connection-aaaaaaaaaaaa"),
-          "new",
-        );
+        const created = withSecrets(connection("connection-1", "Connection-aaaaaaaaaaaa"), "new");
         let createdName: string | undefined;
         const client = {
           getConnection: () => Effect.succeed(undefined),
@@ -767,16 +668,10 @@ describe(
 
         return Effect.gen(function* () {
           const provider = yield* Connection.Provider;
-          yield* provider.reconcile({
-            ...reconcileInput(),
-            news: { database: "database-1" },
-          });
+          yield* provider.reconcile({ ...reconcileInput(), news: { database: "database-1" } });
           // name omitted -> logical ID prefix + instance identity suffix
           expect(createdName).toBe("Connection-aaaaaaaaaaaa");
-        }).pipe(
-          Effect.provide(providerLayer(client)),
-          Effect.provide(connectionApi(client).layer),
-        );
+        }).pipe(Effect.provide(providerLayer(client)), Effect.provide(connectionApi(client).layer));
       },
       { tags: ["provider:prisma:database"] },
     );
@@ -784,10 +679,7 @@ describe(
     it.effect(
       "materializes databaseUrl and parsed origins on reconcile",
       () => {
-        const created = withSecrets(
-          connection("connection-1", "api-aaaaaaaaaaaa"),
-          "new",
-        );
+        const created = withSecrets(connection("connection-1", "api-aaaaaaaaaaaa"), "new");
         const client = {
           getConnection: () => Effect.succeed(undefined),
           listDatabaseConnections: () => Effect.succeed([]),
@@ -799,17 +691,12 @@ describe(
           const attrs = yield* provider.reconcile(reconcileInput());
 
           // databaseUrl prefers the pooled endpoint for application traffic.
-          expect(Redacted.value(attrs.databaseUrl!)).toBe(
-            "postgres://pooled-new",
-          );
+          expect(Redacted.value(attrs.databaseUrl!)).toBe("postgres://pooled-new");
           // origin parses the direct connection string into Hyperdrive's shape.
           expect(attrs.origin?.host).toBe("direct-new");
           expect(attrs.origin?.scheme).toBe("postgres");
           expect(attrs.pooledOrigin?.host).toBe("pooled-new");
-        }).pipe(
-          Effect.provide(providerLayer(client)),
-          Effect.provide(connectionApi(client).layer),
-        );
+        }).pipe(Effect.provide(providerLayer(client)), Effect.provide(connectionApi(client).layer));
       },
       { tags: ["provider:prisma:database"] },
     );

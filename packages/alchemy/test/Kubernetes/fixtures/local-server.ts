@@ -1,6 +1,6 @@
-import * as Kubernetes from "@/Kubernetes";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Kubernetes from "@/Kubernetes";
 import { TestLocalCluster } from "./local.ts";
 
 /** An Effect HTTP server run as a Deployment on the local cluster. */

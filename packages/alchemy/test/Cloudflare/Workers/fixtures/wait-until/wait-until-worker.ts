@@ -20,8 +20,7 @@ export class Journal extends Cloudflare.DurableObject<Journal>()(
         state.storage
           .transaction(
             Effect.gen(function* () {
-              const entries =
-                (yield* state.storage.get<string[]>("entries")) ?? [];
+              const entries = (yield* state.storage.get<string[]>("entries")) ?? [];
               yield* state.storage.put("entries", [...entries, entry]);
             }),
           )
@@ -43,9 +42,7 @@ export class Journal extends Cloudflare.DurableObject<Journal>()(
           return "scheduled" as const;
         }),
         recordLater: Effect.fn(function* (entry: string) {
-          yield* state.waitUntil(
-            Effect.sleep("100 millis").pipe(Effect.andThen(append(entry))),
-          );
+          yield* state.waitUntil(Effect.sleep("100 millis").pipe(Effect.andThen(append(entry))));
           return "scheduled" as const;
         }),
         // Scope finalizers added inside a DO method run after the method
@@ -53,10 +50,7 @@ export class Journal extends Cloudflare.DurableObject<Journal>()(
         // close promise with `state.waitUntil`.
         recordOnClose: Effect.fn(function* (entry: string) {
           yield* Effect.addFinalizer(() =>
-            Effect.sleep("100 millis").pipe(
-              Effect.andThen(append(entry)),
-              Effect.ignore,
-            ),
+            Effect.sleep("100 millis").pipe(Effect.andThen(append(entry)), Effect.ignore),
           );
           return "scheduled" as const;
         }),
@@ -92,8 +86,7 @@ export default class WaitUntilWorker extends Cloudflare.Worker<WaitUntilWorker>(
     // finalizer added in the init closure runs. Counted on globalThis and
     // exposed via /init-runs and /init-finalizer-runs.
     yield* Effect.sync(() => {
-      (globalThis as any).__initRuns =
-        ((globalThis as any).__initRuns ?? 0) + 1;
+      (globalThis as any).__initRuns = ((globalThis as any).__initRuns ?? 0) + 1;
     });
     yield* Effect.addFinalizer(() =>
       Effect.sync(() => {
@@ -110,14 +103,10 @@ export default class WaitUntilWorker extends Cloudflare.Worker<WaitUntilWorker>(
 
         if (url.pathname === "/bg-many") {
           const journal = journals.getByName("parallel");
-          return HttpServerResponse.text(
-            `bg-many-${yield* journal.recordManyLater()}`,
-          );
+          return HttpServerResponse.text(`bg-many-${yield* journal.recordManyLater()}`);
         }
         if (url.pathname === "/entries-many") {
-          return yield* HttpServerResponse.json(
-            yield* journals.getByName("parallel").snapshot(),
-          );
+          return yield* HttpServerResponse.json(yield* journals.getByName("parallel").snapshot());
         }
         if (url.pathname === "/bg") {
           yield* exec.waitUntil(
@@ -158,15 +147,11 @@ export default class WaitUntilWorker extends Cloudflare.Worker<WaitUntilWorker>(
         }
 
         if (url.pathname === "/init-finalizer-runs") {
-          return HttpServerResponse.text(
-            String((globalThis as any).__initFinalizerRuns ?? 0),
-          );
+          return HttpServerResponse.text(String((globalThis as any).__initFinalizerRuns ?? 0));
         }
 
         if (url.pathname === "/init-runs") {
-          return HttpServerResponse.text(
-            String((globalThis as any).__initRuns ?? 0),
-          );
+          return HttpServerResponse.text(String((globalThis as any).__initRuns ?? 0));
         }
 
         if (url.pathname === "/raw") {

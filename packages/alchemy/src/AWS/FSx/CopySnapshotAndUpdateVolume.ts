@@ -38,7 +38,6 @@ export interface CopySnapshotAndUpdateVolume extends Binding.Service<
     >
   >
 > {}
-export const CopySnapshotAndUpdateVolume =
-  Binding.Service<CopySnapshotAndUpdateVolume>(
-    "AWS.FSx.CopySnapshotAndUpdateVolume",
-  );
+export const CopySnapshotAndUpdateVolume = Binding.Service<CopySnapshotAndUpdateVolume>(
+  "AWS.FSx.CopySnapshotAndUpdateVolume",
+);

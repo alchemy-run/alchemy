@@ -145,23 +145,16 @@ export class CollectionsEnginesControlNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const resourceName = (engine: string, controlId: string) =>
-  `${engine}/controls/${controlId}`;
+const resourceName = (engine: string, controlId: string) => `${engine}/controls/${controlId}`;
 
 const solutionOf = (
-  value:
-    | discoveryengine.GoogleCloudDiscoveryengineV1ControlSolutionTypeEnum
-    | undefined,
+  value: discoveryengine.GoogleCloudDiscoveryengineV1ControlSolutionTypeEnum | undefined,
 ) => value ?? "SOLUTION_TYPE_SEARCH";
 
 const useCasesOf = (
-  value:
-    | discoveryengine.GoogleCloudDiscoveryengineV1ControlUseCasesItemEnumList
-    | undefined,
+  value: discoveryengine.GoogleCloudDiscoveryengineV1ControlUseCasesItemEnumList | undefined,
   solutionType: string,
-):
-  | discoveryengine.GoogleCloudDiscoveryengineV1ControlUseCasesItemEnumList
-  | undefined => {
+): discoveryengine.GoogleCloudDiscoveryengineV1ControlUseCasesItemEnumList | undefined => {
   if (value && value.length > 0) return value;
   if (solutionType === "SOLUTION_TYPE_SEARCH") {
     return ["SEARCH_USE_CASE_SEARCH"];
@@ -174,10 +167,7 @@ const getByName = (name: string) =>
     .getProjectsLocationsCollectionsEnginesControls({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const toAttrs = (
-  control: discoveryengine.GoogleCloudDiscoveryengineV1Control,
-  project: string,
-) => {
+const toAttrs = (control: discoveryengine.GoogleCloudDiscoveryengineV1Control, project: string) => {
   const name = control.name ?? "";
   const parsed = parseResourceName(name, "controls");
   return {
@@ -198,9 +188,7 @@ const bodyOf = (
   news: CollectionsEnginesControlProps,
   displayName: string,
   solutionType: discoveryengine.GoogleCloudDiscoveryengineV1ControlSolutionTypeEnum,
-  useCases:
-    | discoveryengine.GoogleCloudDiscoveryengineV1ControlUseCasesItemEnumList
-    | undefined,
+  useCases: discoveryengine.GoogleCloudDiscoveryengineV1ControlUseCasesItemEnumList | undefined,
 ): discoveryengine.GoogleCloudDiscoveryengineV1Control => ({
   displayName,
   solutionType,
@@ -215,15 +203,7 @@ const bodyOf = (
 
 export const CollectionsEnginesControlProvider = () =>
   Provider.succeed(CollectionsEnginesControl, {
-    stables: [
-      "name",
-      "controlId",
-      "engine",
-      "project",
-      "location",
-      "collectionId",
-      "solutionType",
-    ],
+    stables: ["name", "controlId", "engine", "project", "location", "collectionId", "solutionType"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -240,9 +220,7 @@ export const CollectionsEnginesControlProvider = () =>
       );
       if (
         (previousEngine !== undefined && news.engine !== previousEngine) ||
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousSolution !== nextSolution
       ) {
         return { action: "replace" as const, deleteFirst: false };
@@ -265,14 +243,9 @@ export const CollectionsEnginesControlProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const parent = olds?.engine ?? output?.engine;
-      const childId = yield* toResourceId(
-        id,
-        olds?.controlId,
-        output?.controlId,
-      );
+      const childId = yield* toResourceId(id, olds?.controlId, output?.controlId);
       const name =
-        output?.name ??
-        (parent !== undefined ? resourceName(parent, childId) : undefined);
+        output?.name ?? (parent !== undefined ? resourceName(parent, childId) : undefined);
       if (name === undefined) return undefined;
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
@@ -283,11 +256,7 @@ export const CollectionsEnginesControlProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const controlId = yield* toResourceId(
-        id,
-        news.controlId,
-        output?.controlId,
-      );
+      const controlId = yield* toResourceId(id, news.controlId, output?.controlId);
       const displayName = news.displayName ?? controlId;
       const solutionType = solutionOf(news.solutionType);
       const useCases = useCasesOf(news.useCases, solutionType);
@@ -320,20 +289,17 @@ export const CollectionsEnginesControlProvider = () =>
 
       // Actions are immutable; diff replaces the control when they change.
       if (displayNameChanged || useCasesChanged || conditionsChanged) {
-        current =
-          yield* discoveryengine.patchProjectsLocationsCollectionsEnginesControls(
-            {
-              name,
-              updateMask: [
-                displayNameChanged ? "display_name" : undefined,
-                useCasesChanged ? "use_cases" : undefined,
-                conditionsChanged ? "conditions" : undefined,
-              ]
-                .filter((field): field is string => field !== undefined)
-                .join(","),
-              body: { name, ...desired },
-            },
-          );
+        current = yield* discoveryengine.patchProjectsLocationsCollectionsEnginesControls({
+          name,
+          updateMask: [
+            displayNameChanged ? "display_name" : undefined,
+            useCasesChanged ? "use_cases" : undefined,
+            conditionsChanged ? "conditions" : undefined,
+          ]
+            .filter((field): field is string => field !== undefined)
+            .join(","),
+          body: { name, ...desired },
+        });
       }
 
       return toAttrs(current, env.project);

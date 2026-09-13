@@ -17,13 +17,9 @@ import * as AWS from "@/AWS";
 import * as Output from "@/Output";
 import * as Test from "@/Test/Alchemy";
 import * as Core from "@/Test/Core";
-import SmokeApiFunctionLive, {
-  SmokeApiFunction,
-} from "./fixtures/api-handler.ts";
+import SmokeApiFunctionLive, { SmokeApiFunction } from "./fixtures/api-handler.ts";
 import { ServerlessResources } from "./fixtures/serverless-resources.ts";
-import SmokeWorkerFunctionLive, {
-  SmokeWorkerFunction,
-} from "./fixtures/worker-handler.ts";
+import SmokeWorkerFunctionLive, { SmokeWorkerFunction } from "./fixtures/worker-handler.ts";
 
 /**
  * Phase-1 exit flagship: the full-stack serverless story in ONE stack.
@@ -41,10 +37,7 @@ const sharedStack = Core.scratchStack(testOptions, "ServerlessSmoke");
 
 // Lambda cold start + API Gateway route/permission propagation can take
 // well over 60s on a fresh deploy under parallel-suite load.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(90),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(90)]);
 
 interface StackOutputs {
   url: string;
@@ -74,15 +67,11 @@ class UnexpectedStatus extends Data.TaggedError("UnexpectedStatus")<{
   readonly expected: number;
 }> {}
 
-class StillExists extends Data.TaggedError("StillExists")<{
-  readonly what: string;
-}> {}
+class StillExists extends Data.TaggedError("StillExists")<{ readonly what: string }> {}
 
 class MessageNotDelivered extends Data.TaggedError("MessageNotDelivered") {}
 
-class EventSourceMappingNotReady extends Data.TaggedError(
-  "EventSourceMappingNotReady",
-) {}
+class EventSourceMappingNotReady extends Data.TaggedError("EventSourceMappingNotReady") {}
 
 // Retry transient 5xx only (cold re-init, IAM propagation); 4xx and
 // assertion failures surface immediately.
@@ -92,63 +81,41 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
 // Poll until the API answers a request with the expected status — rides out
 // the short window while a freshly-created route/authorizer propagates.
-const awaitStatus = (
-  request: HttpClientRequest.HttpClientRequest,
-  expected: number,
-  times = 20,
-) =>
+const awaitStatus = (request: HttpClientRequest.HttpClientRequest, expected: number, times = 20) =>
   HttpClient.execute(request).pipe(
     Effect.flatMap((response) =>
       response.status === expected
         ? Effect.succeed(response)
-        : Effect.fail(
-            new UnexpectedStatus({ status: response.status, expected }),
-          ),
+        : Effect.fail(new UnexpectedStatus({ status: response.status, expected })),
     ),
     Effect.retry({
       while: (e) => e._tag === "UnexpectedStatus",
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(times),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(times)]),
     }),
   );
 
 // Bounded wait until an out-of-band probe reports the resource gone.
-const waitUntilGone = <E, R>(
-  what: string,
-  probe: Effect.Effect<boolean, E, R>,
-) =>
+const waitUntilGone = <E, R>(what: string, probe: Effect.Effect<boolean, E, R>) =>
   probe.pipe(
-    Effect.flatMap((gone) =>
-      gone ? Effect.void : Effect.fail(new StillExists({ what })),
-    ),
+    Effect.flatMap((gone) => (gone ? Effect.void : Effect.fail(new StillExists({ what })))),
     Effect.retry({
       // `instanceof`, not `_tag`: the probe's error type `E` is generic and
       // carries no tag constraint.
       while: (e) => e instanceof StillExists,
-      schedule: Schedule.max([
-        Schedule.fixed("3 seconds"),
-        Schedule.recurs(30),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(30)]),
     }),
   );
 
@@ -158,12 +125,9 @@ const deployProgram = Effect.gen(function* () {
   const apiFn = yield* SmokeApiFunction;
   const worker = yield* SmokeWorkerFunction;
 
-  const { api, integration, url } = yield* AWS.ApiGatewayV2.HttpApi(
-    "SmokeHttpApi",
-    {
-      handler: apiFn,
-    },
-  );
+  const { api, integration, url } = yield* AWS.ApiGatewayV2.HttpApi("SmokeHttpApi", {
+    handler: apiFn,
+  });
 
   // JWT authorizer wired to the Cognito user pool. The pool id embeds its
   // region (`us-west-2_Abc123`), so the issuer URL is derived from it.
@@ -209,9 +173,7 @@ const deployProgram = Effect.gen(function* () {
     workerFunctionName: worker.functionName,
     apiFunctionName: apiFn.functionName,
   };
-}).pipe(
-  Effect.provide(Layer.mergeAll(SmokeApiFunctionLive, SmokeWorkerFunctionLive)),
-);
+}).pipe(Effect.provide(Layer.mergeAll(SmokeApiFunctionLive, SmokeWorkerFunctionLive)));
 
 describe.sequential(
   "Serverless smoke",
@@ -246,9 +208,7 @@ describe.sequential(
               : Effect.fail(new Error(`API not ready: ${response.status}`)),
           ),
           Effect.tapError((error) =>
-            Effect.logWarning(
-              `Serverless smoke: API not ready yet (${String(error)})`,
-            ),
+            Effect.logWarning(`Serverless smoke: API not ready yet (${String(error)})`),
           ),
           Effect.retry({ schedule: readinessPolicy }),
         )) as {
@@ -281,9 +241,7 @@ describe.sequential(
       "unauthenticated $default route serves; JWT routes are gated",
       (_stack) =>
         Effect.gen(function* () {
-          const free = yield* send(
-            HttpClientRequest.get(`${baseUrl}/signup-free`),
-          );
+          const free = yield* send(HttpClientRequest.get(`${baseUrl}/signup-free`));
           expect(free.status).toBe(200);
           expect((yield* free.json) as object).toEqual({ ok: true });
 
@@ -322,9 +280,7 @@ describe.sequential(
       (_stack) =>
         Effect.gen(function* () {
           const tokens = (yield* send(
-            HttpClientRequest.post(
-              `${baseUrl}/auth?username=serverless-smoke-user`,
-            ),
+            HttpClientRequest.post(`${baseUrl}/auth?username=serverless-smoke-user`),
           ).pipe(Effect.flatMap((r) => r.json))) as {
             idToken: string | undefined;
             accessToken: string | undefined;
@@ -347,18 +303,13 @@ describe.sequential(
             200,
             10,
           );
-          expect((yield* wrote.json) as object).toEqual({
-            ok: true,
-            id: "todo-1",
-          });
+          expect((yield* wrote.json) as object).toEqual({ ok: true, id: "todo-1" });
 
           const read = yield* send(
             HttpClientRequest.get(`${baseUrl}/todo?id=todo-1`).pipe(authorize),
           );
           expect(read.status).toBe(200);
-          expect((yield* read.json) as object).toEqual({
-            item: { id: "todo-1", text },
-          });
+          expect((yield* read.json) as object).toEqual({ item: { id: "todo-1", text } });
 
           // Out-of-band: the item really landed in the table.
           const raw = yield* ddb.getItem({
@@ -393,10 +344,7 @@ describe.sequential(
           expect(put.status).toBe(200);
 
           // Out-of-band: fetch the object back via distilled.
-          const got = yield* S3.getObject({
-            Bucket: outputs.bucketName,
-            Key: key,
-          });
+          const got = yield* S3.getObject({ Bucket: outputs.bucketName, Key: key });
           expect(got.ContentType).toBe("text/plain");
           const text = yield* Stream.mkString(Stream.decodeText(got.Body!));
           expect(text).toBe(body);
@@ -423,16 +371,11 @@ describe.sequential(
               }),
               Effect.retry({
                 while: (e) => e._tag === "EventSourceMappingNotReady",
-                schedule: Schedule.max([
-                  Schedule.fixed("2 seconds"),
-                  Schedule.recurs(30),
-                ]),
+                schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(30)]),
               }),
             );
 
-          const message = yield* Effect.sync(
-            () => `smoke-job-${crypto.randomUUID()}`,
-          );
+          const message = yield* Effect.sync(() => `smoke-job-${crypto.randomUUID()}`);
           const enqueued = (yield* send(
             HttpClientRequest.post(`${baseUrl}/enqueue`).pipe(
               HttpClientRequest.bodyJsonUnsafe({ message }),
@@ -448,9 +391,7 @@ describe.sequential(
               MaxNumberOfMessages: 10,
               WaitTimeSeconds: 2,
             });
-            const match = (result.Messages ?? []).find(
-              (m) => m.Body === `processed:${message}`,
-            );
+            const match = (result.Messages ?? []).find((m) => m.Body === `processed:${message}`);
             if (!match?.ReceiptHandle) {
               return yield* Effect.fail(new MessageNotDelivered());
             }
@@ -462,10 +403,7 @@ describe.sequential(
           }).pipe(
             Effect.retry({
               while: (e) => e._tag === "MessageNotDelivered",
-              schedule: Schedule.max([
-                Schedule.fixed("2 seconds"),
-                Schedule.recurs(30),
-              ]),
+              schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(30)]),
             }),
           );
           expect(received).toBe(`processed:${message}`);
@@ -509,9 +447,7 @@ describe.sequential(
             "user pool",
             cip.describeUserPool({ UserPoolId: outputs.userPoolId }).pipe(
               Effect.map(() => false),
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(true),
-              ),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
             ),
           );
 
@@ -527,9 +463,7 @@ describe.sequential(
             "table",
             ddb.describeTable({ TableName: outputs.tableName }).pipe(
               Effect.map(() => false),
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(true),
-              ),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
             ),
           );
 
@@ -543,64 +477,42 @@ describe.sequential(
 
           yield* waitUntilGone(
             "jobs queue",
-            sqs
-              .getQueueUrl({
-                QueueName: queueNameFromUrl(outputs.jobsQueueUrl),
-              })
-              .pipe(
-                Effect.map(() => false),
-                Effect.catchTag("QueueDoesNotExist", () =>
-                  Effect.succeed(true),
-                ),
-              ),
+            sqs.getQueueUrl({ QueueName: queueNameFromUrl(outputs.jobsQueueUrl) }).pipe(
+              Effect.map(() => false),
+              Effect.catchTag("QueueDoesNotExist", () => Effect.succeed(true)),
+            ),
           );
 
           yield* waitUntilGone(
             "results queue",
-            sqs
-              .getQueueUrl({
-                QueueName: queueNameFromUrl(outputs.resultsQueueUrl),
-              })
-              .pipe(
-                Effect.map(() => false),
-                Effect.catchTag("QueueDoesNotExist", () =>
-                  Effect.succeed(true),
-                ),
-              ),
+            sqs.getQueueUrl({ QueueName: queueNameFromUrl(outputs.resultsQueueUrl) }).pipe(
+              Effect.map(() => false),
+              Effect.catchTag("QueueDoesNotExist", () => Effect.succeed(true)),
+            ),
           );
 
           yield* waitUntilGone(
             "api lambda",
             lambda.getFunction({ FunctionName: outputs.apiFunctionName }).pipe(
               Effect.map(() => false),
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(true),
-              ),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
             ),
           );
 
           yield* waitUntilGone(
             "worker lambda",
-            lambda
-              .getFunction({ FunctionName: outputs.workerFunctionName })
-              .pipe(
-                Effect.map(() => false),
-                Effect.catchTag("ResourceNotFoundException", () =>
-                  Effect.succeed(true),
-                ),
-              ),
+            lambda.getFunction({ FunctionName: outputs.workerFunctionName }).pipe(
+              Effect.map(() => false),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
+            ),
           );
 
           yield* waitUntilGone(
             "state machine",
-            sfn
-              .describeStateMachine({ stateMachineArn: outputs.machineArn })
-              .pipe(
-                Effect.map((machine) => machine.status === "DELETING"),
-                Effect.catchTag("StateMachineDoesNotExist", () =>
-                  Effect.succeed(true),
-                ),
-              ),
+            sfn.describeStateMachine({ stateMachineArn: outputs.machineArn }).pipe(
+              Effect.map((machine) => machine.status === "DELETING"),
+              Effect.catchTag("StateMachineDoesNotExist", () => Effect.succeed(true)),
+            ),
           );
         }),
       { timeout: 120_000 },

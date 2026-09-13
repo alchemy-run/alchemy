@@ -27,9 +27,7 @@ test.provider(
       yield* Effect.forEach(orphans, (f) =>
         inspector2
           .deleteFilter({ arn: f.arn })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-          ),
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void)),
       );
 
       const deploy = (props: { action: "NONE" | "SUPPRESS"; reason: string }) =>
@@ -39,9 +37,7 @@ test.provider(
               action: props.action,
               reason: props.reason,
               description: "created by alchemy Inspector2 resource test",
-              filterCriteria: {
-                severity: [{ comparison: "EQUALS", value: "INFORMATIONAL" }],
-              },
+              filterCriteria: { severity: [{ comparison: "EQUALS", value: "INFORMATIONAL" }] },
               tags: { env: "test" },
             });
             return {
@@ -62,8 +58,7 @@ test.provider(
       expect(created.action).toBe("SUPPRESS");
 
       // Out-of-band verification via distilled.
-      const live = (yield* inspector2.listFilters({ arns: [created.arn] }))
-        .filters[0];
+      const live = (yield* inspector2.listFilters({ arns: [created.arn] })).filters[0];
       expect(live?.action).toBe("SUPPRESS");
       expect(live?.tags?.["env"]).toBe("test");
       expect(live?.tags?.["alchemy::id"]).toBe("SuppressInfo");
@@ -74,15 +69,10 @@ test.provider(
       expect(all.some((f) => f.arn === created.arn)).toBe(true);
 
       // Update in place — the ARN is stable.
-      const updated = yield* deploy({
-        action: "NONE",
-        reason: "keep them visible after all",
-      });
+      const updated = yield* deploy({ action: "NONE", reason: "keep them visible after all" });
       expect(updated.arn).toBe(created.arn);
       expect(updated.action).toBe("NONE");
-      const liveUpdated = (yield* inspector2.listFilters({
-        arns: [created.arn],
-      })).filters[0];
+      const liveUpdated = (yield* inspector2.listFilters({ arns: [created.arn] })).filters[0];
       expect(liveUpdated?.action).toBe("NONE");
       expect(liveUpdated?.reason).toBe("keep them visible after all");
 
@@ -91,10 +81,7 @@ test.provider(
       const gone = yield* inspector2.listFilters({ arns: [created.arn] });
       expect(gone.filters).toHaveLength(0);
     }),
-  {
-    tags: ["provider:aws", "provider:aws:inspector2", "live"],
-    timeout: 120_000,
-  },
+  { tags: ["provider:aws", "provider:aws:inspector2", "live"], timeout: 120_000 },
 );
 
 // The CIS scan APIs are hard-gated on Inspector enablement — a disabled
@@ -105,17 +92,14 @@ test.provider(
   "CIS scan APIs reject a non-enabled account (typed)",
   () =>
     Effect.gen(function* () {
-      const account = (yield* inspector2.batchGetAccountStatus({}))
-        .accounts?.[0];
+      const account = (yield* inspector2.batchGetAccountStatus({})).accounts?.[0];
       if (account?.state?.status === "ENABLED") {
         yield* Effect.logInfo(
           "Inspector is enabled in this account — CIS APIs are accessible, probe not applicable",
         );
         return;
       }
-      const result = yield* Effect.result(
-        inspector2.listCisScanConfigurations({}),
-      );
+      const result = yield* Effect.result(inspector2.listCisScanConfigurations({}));
       expect(Result.isFailure(result)).toBe(true);
       if (Result.isFailure(result)) {
         expect(result.failure._tag).toBe("AccessDeniedException");
@@ -132,23 +116,13 @@ test.provider.skipIf(!process.env.INSPECTOR2_TEST_CIS)(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const deploy = (props: {
-        securityLevel: "LEVEL_1" | "LEVEL_2";
-        timeOfDay: string;
-      }) =>
+      const deploy = (props: { securityLevel: "LEVEL_1" | "LEVEL_2"; timeOfDay: string }) =>
         stack.deploy(
           Effect.gen(function* () {
             const cis = yield* CisScanConfiguration("NightlyCis", {
               securityLevel: props.securityLevel,
-              schedule: {
-                daily: {
-                  startTime: { timeOfDay: props.timeOfDay, timezone: "UTC" },
-                },
-              },
-              targets: {
-                accountIds: ["SELF"],
-                targetResourceTags: { AlchemyCisTest: ["true"] },
-              },
+              schedule: { daily: { startTime: { timeOfDay: props.timeOfDay, timezone: "UTC" } } },
+              targets: { accountIds: ["SELF"], targetResourceTags: { AlchemyCisTest: ["true"] } },
               tags: { env: "test" },
             });
             return {
@@ -159,10 +133,7 @@ test.provider.skipIf(!process.env.INSPECTOR2_TEST_CIS)(
           }),
         );
 
-      const created = yield* deploy({
-        securityLevel: "LEVEL_1",
-        timeOfDay: "02:00",
-      });
+      const created = yield* deploy({ securityLevel: "LEVEL_1", timeOfDay: "02:00" });
       expect(created.scanConfigurationArn).toContain("scan-configuration");
       expect(created.securityLevel).toBe("LEVEL_1");
 
@@ -184,17 +155,10 @@ test.provider.skipIf(!process.env.INSPECTOR2_TEST_CIS)(
       // Canonical list() coverage.
       const provider = yield* Provider.findProvider(CisScanConfiguration);
       const all = yield* provider.list();
-      expect(
-        all.some(
-          (c) => c.scanConfigurationArn === created.scanConfigurationArn,
-        ),
-      ).toBe(true);
+      expect(all.some((c) => c.scanConfigurationArn === created.scanConfigurationArn)).toBe(true);
 
       // Update in place — the ARN is stable.
-      const updated = yield* deploy({
-        securityLevel: "LEVEL_2",
-        timeOfDay: "03:30",
-      });
+      const updated = yield* deploy({ securityLevel: "LEVEL_2", timeOfDay: "03:30" });
       expect(updated.scanConfigurationArn).toBe(created.scanConfigurationArn);
       expect(updated.securityLevel).toBe("LEVEL_2");
       const liveUpdated = yield* byArn();
@@ -204,8 +168,5 @@ test.provider.skipIf(!process.env.INSPECTOR2_TEST_CIS)(
       yield* stack.destroy();
       expect(yield* byArn()).toBeUndefined();
     }),
-  {
-    tags: ["provider:aws", "provider:aws:inspector2", "live"],
-    timeout: 120_000,
-  },
+  { tags: ["provider:aws", "provider:aws:inspector2", "live"], timeout: 120_000 },
 );

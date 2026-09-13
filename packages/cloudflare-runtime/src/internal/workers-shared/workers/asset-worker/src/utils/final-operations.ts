@@ -5,11 +5,7 @@ import type { PerformanceTimer } from "../../../../shared/performance.ts";
 import { InternalServerErrorResponse } from "../../../../shared/responses.ts";
 import type { Analytics } from "../analytics.ts";
 
-export function handleError(
-  sentry: Toucan | undefined,
-  analytics: Analytics,
-  err: unknown,
-) {
+export function handleError(sentry: Toucan | undefined, analytics: Analytics, err: unknown) {
   try {
     const response = new InternalServerErrorResponse(err as Error);
 
