@@ -1,4 +1,5 @@
 import {
+  ListChecks,
   AlarmClock,
   BookmarkPlus,
   ChevronDown,
@@ -607,6 +608,19 @@ const THREAD: {
     input: { why?: string; thread?: string },
     output: string | undefined,
   ) => ToolCallView;
+  /** The manager's ledger bookkeeping — rendered as quiet one-liners. */
+  task_covering: (
+    input: { ref?: string },
+    output: string | undefined,
+  ) => ToolCallView;
+  task_upsert: (
+    input: { task?: string; title?: string; status?: string },
+    output: string | undefined,
+  ) => ToolCallView;
+  tasks: (
+    input: { status?: string },
+    output: string | undefined,
+  ) => ToolCallView;
 } = {
   assign: (input, output) => ({
     icon: Paperclip,
@@ -715,6 +729,60 @@ const THREAD: {
     ),
     summary: output === undefined ? undefined : summarize(output),
   }),
+
+  // the manager's LEDGER bookkeeping — one quiet line each, never a
+  // wall: the channel's content is events and responses, not filing
+  task_covering: (
+    input: { ref?: string },
+    output: string | undefined,
+  ) => {
+    const record = parseRecord(output);
+    const found = record?.covering as
+      | { id?: string; title?: string }
+      | null
+      | undefined;
+    return {
+      icon: ListChecks,
+      title: (
+        <span className="text-muted-foreground">
+          coverage of <Ref value={String(input.ref ?? "")} />
+          {" → "}
+          {found == null ? "untracked" : (found.id ?? "a task")}
+        </span>
+      ),
+    };
+  },
+  task_upsert: (
+    input: { task?: string; title?: string; status?: string },
+    output: string | undefined,
+  ) => {
+    const record = parseRecord(output);
+    return {
+      icon: ListChecks,
+      title: (
+        <span className="text-muted-foreground">
+          filed{" "}
+          <span className="font-mono">
+            {String(record?.id ?? input.task ?? "a task")}
+          </span>
+          {typeof input.status === "string" ? ` — ${input.status}` : ""}
+          {typeof input.title === "string" ? ` · ${input.title}` : ""}
+        </span>
+      ),
+    };
+  },
+  tasks: (_input: { status?: string }, output: string | undefined) => {
+    const record = parseRecord(output);
+    const list = Array.isArray(record?.tasks) ? record.tasks : [];
+    return {
+      icon: ListChecks,
+      title: (
+        <span className="text-muted-foreground">
+          read the ledger — {list.length} task{list.length === 1 ? "" : "s"}
+        </span>
+      ),
+    };
+  },
 
   read_state: (_input, output) => {
     const state = parseThreadState(output);
@@ -1636,6 +1704,9 @@ export const MIN_TOOL_RUN = 3;
 const RUN_LABELS: Record<string, (n: number, running: boolean) => string> = {
   workspace: (n, running) =>
     `${running ? "Creating" : "Created"} ${n} workspaces`,
+  task_covering: (n, running) =>
+    `${running ? "Checking" : "Checked"} coverage of ${n} refs`,
+  task_upsert: (n, running) => `${running ? "Filing" : "Filed"} ${n} tasks`,
   assign: (n, running) => `${running ? "Assigning" : "Assigned"} ${n} refs`,
   unassign: (n, running) =>
     `${running ? "Unassigning" : "Unassigned"} ${n} refs`,

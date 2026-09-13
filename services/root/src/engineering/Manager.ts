@@ -87,6 +87,41 @@ const taskNote = AI.Thing("note", S.optionalKey(S.String))`
 const itemRef = AI.Thing("ref", S.String)`
   An item ref — "owner/repo#N".`;
 
+const taskIdOut = AI.Thing("id", S.String)`
+  The task's id — pass it back to task_upsert to update.`;
+
+const covering = AI.Thing(
+  "covering",
+  S.NullOr(
+    S.Struct({
+      id: S.String,
+      title: S.String,
+      status: S.Literals(["todo", "working", "review", "done"]),
+    }),
+  ),
+)`
+  The covering task, or null when the ref is untracked.`;
+
+const ledger = AI.Thing(
+  "tasks",
+  S.Array(
+    S.Struct({
+      id: S.String,
+      title: S.String,
+      status: S.Literals(["todo", "working", "review", "done"]),
+      assignee: S.optionalKey(S.String),
+      workspace: S.optionalKey(S.String),
+      items: S.Array(
+        S.Struct({
+          ref: S.String,
+          kind: S.Literals(["issue", "pull", "request"]),
+        }),
+      ),
+    }),
+  ),
+)`
+  The ledger's tasks, newest first.`;
+
 export const EngineeringManagerLive = EngineeringManager.make(
   Effect.gen(function* () {
     const tasks = yield* Tasks;
@@ -110,7 +145,7 @@ export const EngineeringManagerLive = EngineeringManager.make(
         addItems,
         removeItems,
         taskNote,
-      )}.`(
+      )}. Answers ${AI.out(taskIdOut)}.`(
       Effect.fn(function* (p: {
         task?: string;
         title?: string;
@@ -133,23 +168,44 @@ export const EngineeringManagerLive = EngineeringManager.make(
             : {}),
           ...(p.note !== undefined ? { note: p.note } : {}),
         });
-        return { task: next.id, status: next.status };
+        return { id: next.id };
       }),
     );
 
     const taskList = yield* AI.Tool("tasks")`
-      The ledger — every task (optionally one status), newest first.`(
+      The ledger — every task (optionally ${status}), newest first.
+      Answers ${AI.out(ledger)}.`(
       Effect.fn(function* (p: { status?: TaskStatus }) {
-        return { tasks: yield* tasks.list(p.status) };
+        const list = yield* tasks.list(p.status);
+        return {
+          tasks: list.map((task) => ({
+            id: task.id,
+            title: task.title,
+            status: task.status,
+            ...(task.assignee !== undefined
+              ? { assignee: task.assignee }
+              : {}),
+            ...(task.workspace !== undefined
+              ? { workspace: task.workspace }
+              : {}),
+            items: task.items,
+          })),
+        };
       }),
     );
 
     const taskCovering = yield* AI.Tool("task_covering")`
       The task (if any) already covering ${itemRef} — how a late PR
-      joins the issue's task instead of forking a duplicate.`(
+      joins the issue's task instead of forking a duplicate. Answers
+      ${AI.out(covering)}.`(
       Effect.fn(function* (p: { ref: string }) {
         const found = yield* tasks.covering(p.ref);
-        return found === undefined ? { task: undefined } : { task: found };
+        return {
+          covering:
+            found === undefined
+              ? null
+              : { id: found.id, title: found.title, status: found.status },
+        };
       }),
     );
 

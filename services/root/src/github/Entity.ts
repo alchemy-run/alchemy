@@ -108,6 +108,27 @@ export const makeEntityLookup = Effect.gen(function* () {
 const refThing = AI.Thing("ref", S.String)`
   The GitHub entity — "owner/repo#N".`;
 
+const titleOut = AI.Thing("title", S.String)`
+  The entity's title.`;
+
+const stateOut = AI.Thing("state", S.String)`
+  open, closed, or merged.`;
+
+const bodyOut = AI.Thing("body", S.String)`
+  The description, clipped.`;
+
+const commentsOut = AI.Thing(
+  "comments",
+  S.Array(S.Struct({ author: S.String, body: S.String })),
+)`
+  The latest comments, oldest first.`;
+
+const headOut = AI.Thing("head", S.String)`
+  The pull request's head branch.`;
+
+const baseOut = AI.Thing("base", S.String)`
+  The branch it merges into.`;
+
 /**
  * `read_issue` / `read_pull` — one entity, read fresh from GitHub:
  * title, state, body, and the latest comments. The company's agents
@@ -158,9 +179,9 @@ export const makeEntityTools = Effect.gen(function* () {
   });
 
   const readIssue = yield* AI.Tool("read_issue")`
-    Read issue ${refThing} fresh from GitHub — title, state, body, the
-    latest comments. Fails with ${BadRef} when the ref is malformed,
-    unconnected, or absent.`(
+    Read issue ${refThing} fresh from GitHub. Answers
+    ${AI.out(titleOut, stateOut, bodyOut, commentsOut)}. Fails with
+    ${BadRef} when the ref is malformed, unconnected, or absent.`(
     Effect.fn(function* (p: { ref: string }) {
       const { repo, number } = yield* repoOf(p.ref);
       const issue = yield* repo
@@ -171,7 +192,6 @@ export const makeEntityTools = Effect.gen(function* () {
           ),
         );
       return {
-        ref: `${repo.full}#${issue.number}`,
         title: issue.title,
         state: issue.state,
         body: (issue.body ?? "").slice(0, 6_000),
@@ -181,9 +201,10 @@ export const makeEntityTools = Effect.gen(function* () {
   );
 
   const readPull = yield* AI.Tool("read_pull")`
-    Read pull request ${refThing} fresh from GitHub — title, state,
-    branches, body, the latest comments. Fails with ${BadRef} when the
-    ref is malformed, unconnected, or absent.`(
+    Read pull request ${refThing} fresh from GitHub. Answers
+    ${AI.out(titleOut, stateOut, headOut, baseOut, bodyOut, commentsOut)}.
+    Fails with ${BadRef} when the ref is malformed, unconnected, or
+    absent.`(
     Effect.fn(function* (p: { ref: string }) {
       const { repo, number } = yield* repoOf(p.ref);
       const pull = yield* repo
@@ -194,7 +215,6 @@ export const makeEntityTools = Effect.gen(function* () {
           ),
         );
       return {
-        ref: `${repo.full}#${pull.number}`,
         title: pull.title,
         state: pull.merged_at != null ? "merged" : pull.state,
         head: pull.head.ref,

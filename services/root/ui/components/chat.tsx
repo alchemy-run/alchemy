@@ -460,6 +460,14 @@ const TextPart = ({
   if (bookkeeping !== undefined) {
     return <ThreadNoteRow note={bookkeeping} repo={repo} />;
   }
+  const inbound = parseInbound(text);
+  if (inbound !== undefined) {
+    return <InboundPill inbound={inbound} repo={repo} />;
+  }
+  const incomingAsk = parseAskHeader(text);
+  if (incomingAsk !== undefined) {
+    return <AskPill ask={incomingAsk} repo={repo} />;
+  }
   const world = parseWorldEvent(text);
   if (world === undefined) {
     return <MarkdownText text={text} repo={repo} />;
@@ -467,6 +475,115 @@ const TextPart = ({
   const { event, raw } = world;
   return <EventCard event={event} raw={raw} />;
 };
+
+/* ── the channel's EVENTS: inbound world + incoming asks ──────────── */
+
+/** `[inbound owner/repo#N] sam opened pull request …` — one GitHub
+ *  event, pumped into the channel (engineering/Triage.ts). */
+const parseInbound = (
+  text: string,
+): { ref?: string; line: string } | undefined => {
+  const match = /^\[inbound(?: (\S+))?\]\s*([\s\S]*)$/.exec(text.trim());
+  if (match === null) return undefined;
+  return {
+    ...(match[1] === undefined ? {} : { ref: match[1] }),
+    line: match[2] ?? "",
+  };
+};
+
+/** The event's icon family, read off the rendered line. */
+const inboundFamily = (line: string) => {
+  if (line.includes("merged pull request")) {
+    return eventFamilyOf("PullRequestMerged");
+  }
+  if (line.includes("closed pull request")) {
+    return eventFamilyOf("PullRequestClosed");
+  }
+  if (line.includes("pull request")) return eventFamilyOf("PullRequestOpened");
+  if (line.includes("closed issue")) return eventFamilyOf("IssueClosed");
+  if (line.includes("issue")) return eventFamilyOf("IssueOpened");
+  return eventFamilyOf("Push");
+};
+
+/** An EVENT in the channel — a dedicated pill: the channel is
+ *  event-driven, and these are the events; what follows each pill is
+ *  the channel's agent responding to it. */
+const InboundPill = ({
+  inbound,
+  repo,
+}: {
+  inbound: { ref?: string; line: string };
+  repo?: string;
+}) => {
+  const family = inboundFamily(inbound.line);
+  const Icon = family.icon;
+  return (
+    <div
+      data-inbound={inbound.ref ?? ""}
+      className="flex min-w-0 max-w-full items-center gap-2 self-start overflow-hidden rounded-full border border-border bg-muted/30 py-1 pl-2.5 pr-3.5"
+    >
+      <Icon className={cn("size-3.5 shrink-0", family.className)} />
+      {inbound.ref !== undefined && (
+        <a
+          href={`https://github.com/${inbound.ref.replace("#", "/issues/")}`}
+          target="_blank"
+          rel="noreferrer"
+          className="shrink-0 font-mono text-[11px] text-muted-foreground hover:text-foreground hover:underline"
+        >
+          {inbound.ref}
+        </a>
+      )}
+      <span
+        className="min-w-0 truncate text-[12.5px] text-foreground/90"
+        title={inbound.line}
+      >
+        <LinkifiedText text={inbound.line} repo={repo} />
+      </span>
+    </div>
+  );
+};
+
+/** `[ask a-x9 | head > engineering-manager]\nquestion` — a question
+ *  arriving IN this channel: the start (or a hop) of a thread. The
+ *  chain breadcrumb says who is asking on whose behalf. */
+const parseAskHeader = (
+  text: string,
+): { id: string; chain: ReadonlyArray<string>; question: string } | undefined => {
+  const match = /^\[ask ([a-z0-9-]+) \| ([^\]]+)\]\n?([\s\S]*)$/.exec(
+    text.trim(),
+  );
+  if (match === null) return undefined;
+  return {
+    id: match[1]!,
+    chain: match[2]!.split(">").map((name) => name.trim()),
+    question: match[3] ?? "",
+  };
+};
+
+const AskPill = ({
+  ask,
+  repo,
+}: {
+  ask: { id: string; chain: ReadonlyArray<string>; question: string };
+  repo?: string;
+}) => (
+  <div
+    data-incoming-ask={ask.id}
+    className="flex min-w-0 flex-col gap-1 rounded-md border border-honey/40 bg-honey/5 px-3 py-2"
+  >
+    <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+      <MessageSquare className="size-3 shrink-0 text-honey" />
+      <span className="font-medium text-foreground">
+        {ask.chain[ask.chain.length - 2] ?? ask.chain[0] ?? "?"}
+      </span>
+      <span>asks</span>
+      <span className="font-mono text-[10px]">{ask.chain.join(" › ")}</span>
+    </div>
+    <div className="text-[13px]">
+      <MarkdownText text={ask.question} repo={repo} />
+    </div>
+  </div>
+);
 
 /* ── the thread's bookkeeping, told to its agent ──────────────────── */
 
@@ -830,6 +947,8 @@ const isBare = (message: UIMessage): boolean => {
           (parseWorldEvent(part.text) !== undefined ||
             part.text.trim().startsWith("<note>") ||
             part.text.trim().startsWith("[reminder]") ||
+            parseInbound(part.text) !== undefined ||
+            parseAskHeader(part.text) !== undefined ||
             parseThreadNote(part.text) !== undefined),
       ))
   );
