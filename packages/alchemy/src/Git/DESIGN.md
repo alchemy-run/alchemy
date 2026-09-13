@@ -676,16 +676,16 @@ which route is decided by the `HttpApi` middleware the user puts in front
 of the routes, before the engine sees a request; the engine's routes
 declare no middleware and no auth errors.
 
-Every route is an `alchemy/Http` route class (`Api/*.ts`): an
-`HttpApiEndpoint` carrying the tag of its implementation, so any route
-can be replaced by providing another Layer for its tag nearer the API.
+Every endpoint in `Api/*.ts` is an Effect `HttpApiEndpoint`.
 The user derives an API from `Git.Api` — `Git.Api.middleware(Session)`,
-plus their own routes — and `Server.layer(api)` serves it:
-`Http.handlers(api)` mounts every route group under the API's
-middleware and requires the tags; `Git.Handlers` is the default
-implementation of every route (`Server.ts`, one `*Live` per route over
-the shared core), and a Layer provided nearer than it overrides one.
-`ServerLive` is `Server.layer(Git.Api)` with `Handlers`: the open default.
+plus their own routes — and implements its groups with
+`HttpApiBuilder.group(api, group, ...)`. `Git.HandlersLive` builds a shared
+`Git.Handlers` service whose handler objects can be registered with
+`h.handleAll(git.repos)` (and the corresponding objects for other groups).
+Applications can override a handler with object spread before registration.
+`Server.layer(api, groups)` serves those groups and mounts `InternalLive` separately,
+outside application middleware. `ServerLive` provides `ApiLive` and
+`HandlersLive` for the unmodified `Git.Api`: the open default.
 
 The one decision a middleware cannot make is about the refs a push wants
 to move, because the pack has not been parsed yet. That is git's own

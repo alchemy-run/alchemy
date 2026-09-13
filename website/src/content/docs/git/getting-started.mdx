@@ -41,7 +41,10 @@ import * as HttpApiMiddleware from "effect/unstable/httpapi/HttpApiMiddleware";
 import * as HttpApiSecurity from "effect/unstable/httpapi/HttpApiSecurity";
 
 export const GitObjects = Cloudflare.R2.Bucket("GitObjects");
-export const GitSecret = Alchemy.Random("GitSecret");
+export const GitSecret = Effect.gen(function* () {
+  const Random = yield* Alchemy.Random;
+  return yield* Random("GitSecret");
+});
 
 /** One shared secret, sent as the password of HTTP Basic. */
 export class Authenticated extends HttpApiMiddleware.Service<
@@ -72,13 +75,34 @@ export const AuthenticatedLive = Layer.effect(
 /** The git API, every route behind the middleware. */
 export class Api extends Git.Api.middleware(Authenticated) {}
 
-const GitLive = Git.Server.layer(Api).pipe(
-  Layer.provide(Git.Handlers),
+export const ApiLive = Layer.mergeAll(
+  HttpApiBuilder.group(Api, "repos", (h) =>
+    Effect.map(Git.Handlers, (git) => h.handleAll(git.repos)),
+  ),
+  HttpApiBuilder.group(Api, "refs", (h) =>
+    Effect.map(Git.Handlers, (git) => h.handleAll(git.refs)),
+  ),
+  HttpApiBuilder.group(Api, "objects", (h) =>
+    Effect.map(Git.Handlers, (git) => h.handleAll(git.objects)),
+  ),
+  HttpApiBuilder.group(Api, "pulls", (h) =>
+    Effect.map(Git.Handlers, (git) => h.handleAll(git.pulls)),
+  ),
+  HttpApiBuilder.group(Api, "protocol", (h) =>
+    Effect.map(Git.Handlers, (git) => h.handleAll(git.protocol)),
+  ),
+  HttpApiBuilder.group(Api, "github", (h) =>
+    Effect.map(Git.Handlers, (git) => h.handleAll(git.github)),
+  ),
+);
+
+const GitLive = Git.Server.layer(Api, ApiLive).pipe(
+  Layer.provide(Git.HandlersLive),
   Layer.provide(AuthenticatedLive),
   Layer.provide(Git.ReposDurableObject),
   Layer.provide(Git.RegistryDurableObject),
-  Layer.provide(Git.BlobStoreR2(GitObjects)),
   Layer.provide(Git.HasherInline),
+  Layer.provide(Git.BlobStoreR2(GitObjects)),
 );
 
 export default class GitHost extends Cloudflare.Worker<GitHost>()(
@@ -90,6 +114,11 @@ export default class GitHost extends Cloudflare.Worker<GitHost>()(
   }).pipe(Effect.provide(GitLive)),
 ) {}
 ```
+
+`ApiLive` implements all six groups against `Api`, so each group sees its
+middleware. `Git.HandlersLive` builds the shared storage clients and handlers.
+`Server.layer(Api, ApiLive)` mounts those groups and the internal hash route;
+the internal route stays outside the application middleware.
 
 The engine holds no users and no credentials. Who may call a route is
 decided by the middleware of the API that mounts it, and `Git.Api`

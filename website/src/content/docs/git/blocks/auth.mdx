@@ -108,25 +108,30 @@ A route of your own declares the middleware it relies on, and its
 handler reads what the middleware provided:
 
 ```typescript
-export class Me extends Http.get<Me>()("me", "/api/v1/me", {
+export const Me = HttpApiEndpoint.get("me", "/api/v1/me", {
   success: User,
   error: Unauthorized,
-  middleware: [Authenticated],
-}) {}
+}).middleware(Authenticated);
 
-export const MeLive = Me.make(
-  Effect.succeed(() =>
-    Effect.gen(function* () {
-      const { user } = yield* Session;
-      if (user === null) return yield* new Unauthorized();
-      return user;
-    }),
-  ),
+export class AppRoutes extends HttpApiGroup.make("app").add(Me) {}
+export class AppApi extends Git.Api.add(AppRoutes).middleware(Authenticated) {}
+
+export const AppRoutesLive = HttpApiBuilder.group(AppApi, "app", (h) =>
+  h.handle("me", () => Effect.gen(function* () {
+    const { user } = yield* Session;
+    if (user === null) return yield* new Unauthorized();
+    return user;
+  })),
 );
 ```
 
-The engine's route classes do not declare your middleware. A handler
-that replaces one of them, or a hook, reads your service as an option:
+Merge this group layer with Git's group implementations and pass them to
+`Git.Server.layer(AppApi, AppApiLive)` as shown in
+[Server](/git/blocks/server#handlers). A replacement handler registered
+against `AppApi` can also yield `Session` directly.
+
+Hooks are independent of the API contract. They read application services
+optionally, because a host may provide a hook without that middleware:
 
 ```typescript
 const session = yield* Effect.serviceOption(Session);

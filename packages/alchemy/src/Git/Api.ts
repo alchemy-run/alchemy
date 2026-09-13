@@ -4,10 +4,8 @@
  * (`HttpApiClient.make(GitApi, ...)`), and OpenAPI share one schema-checked
  * surface.
  *
- * Every endpoint is an `alchemy/Http` route class: an `HttpApiEndpoint`
- * that also names the tag of its implementation, so any route can be
- * swapped by providing a different Layer for its tag. The groups are
- * classes too, and exported, so an API can be built from a subset.
+ * Endpoints use `HttpApiEndpoint`; groups are implemented with
+ * `HttpApiBuilder.group`. The exported groups can also form a smaller API.
  *
  * | Group | Path | Routes |
  * | --- | --- | --- |

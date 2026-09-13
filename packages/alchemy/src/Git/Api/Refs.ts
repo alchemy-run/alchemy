@@ -4,7 +4,7 @@
  * Ref names contain `/`, so the single-ref endpoints address the ref via
  * the `name` query parameter, not a path segment.
  */
-import * as Http from "../../Http/index.ts";
+import * as HttpApiEndpoint from "effect/unstable/httpapi/HttpApiEndpoint";
 import * as Schema from "effect/Schema";
 import * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup";
 import * as HttpApiSchema from "effect/unstable/httpapi/HttpApiSchema";
@@ -22,7 +22,7 @@ import {
 } from "./Schema.ts";
 
 /** Lists refs, optionally filtered by prefix (e.g. `refs/heads/`). */
-export class ListRefs extends Http.get<ListRefs>()(
+export const ListRefs = HttpApiEndpoint.get(
   "list",
   "/repos/:owner/:repo/refs",
   {
@@ -38,22 +38,18 @@ export class ListRefs extends Http.get<ListRefs>()(
     }),
     error: [RepoNotFound],
   },
-) {}
+);
 
 /** Reads one ref by full name (`?name=refs/heads/main`). */
-export class GetRef extends Http.get<GetRef>()(
-  "get",
-  "/repos/:owner/:repo/ref",
-  {
-    params: RepoPath,
-    query: Schema.Struct({ name: RefName }),
-    success: Ref,
-    error: [RepoNotFound, RefNotFound],
-  },
-) {}
+export const GetRef = HttpApiEndpoint.get("get", "/repos/:owner/:repo/ref", {
+  params: RepoPath,
+  query: Schema.Struct({ name: RefName }),
+  success: Ref,
+  error: [RepoNotFound, RefNotFound],
+});
 
 /** Writes one ref with CAS semantics. */
-export class UpdateRef extends Http.put<UpdateRef>()(
+export const UpdateRef = HttpApiEndpoint.put(
   "update",
   "/repos/:owner/:repo/ref",
   {
@@ -76,10 +72,10 @@ export class UpdateRef extends Http.put<UpdateRef>()(
       ReadOnlyRepo,
     ],
   },
-) {}
+);
 
 /** Deletes one ref with CAS semantics. */
-export class RemoveRef extends Http.del<RemoveRef>()(
+export const RemoveRef = HttpApiEndpoint.delete(
   "remove",
   "/repos/:owner/:repo/ref",
   {
@@ -92,7 +88,7 @@ export class RemoveRef extends Http.del<RemoveRef>()(
     success: HttpApiSchema.NoContent,
     error: [HookRejected, RepoNotFound, RefNotFound, RefConflict, ReadOnlyRepo],
   },
-) {}
+);
 
 /** The `refs` group, mounted at `/api/v1`. */
 export class Refs extends HttpApiGroup.make("refs")

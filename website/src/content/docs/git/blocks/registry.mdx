@@ -3,6 +3,10 @@ title: Registry
 description: The registry resolves owner/name to a repository and serves listings. Keep it in a Durable Object or move it to a D1 database.
 ---
 
+The examples use `Api`, `ApiLive`, and `AuthenticatedLive` from
+[Getting Started](/git/getting-started): the API, its `HttpApiBuilder.group`
+layers, and its middleware.
+
 The registry is the index. It maps `owner/name` to a repository id,
 enforces that names are unique, and answers listings. Two
 implementations ship, and the rest of the graph cannot tell them
@@ -28,13 +32,13 @@ fails safe: each repository's Durable Object stores its own
 ```typescript
 const RepoIndex = Cloudflare.D1.Database("RepoIndex");
 
-const GitLive = Git.Server.layer(Api).pipe(
-  Layer.provide(Git.Handlers),
+const GitLive = Git.Server.layer(Api, ApiLive).pipe(
+  Layer.provide(Git.HandlersLive),
   Layer.provide(AuthenticatedLive),
   Layer.provide(Git.ReposDurableObject),
   Layer.provide(Git.RegistryD1(RepoIndex)),
-  Layer.provide(Git.BlobStoreR2(GitObjects)),
   Layer.provide(Git.HasherInline),
+  Layer.provide(Git.BlobStoreR2(GitObjects)),
 );
 ```
 

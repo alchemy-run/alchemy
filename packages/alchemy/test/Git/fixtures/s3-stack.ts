@@ -1,3 +1,4 @@
+import { TestApiLive } from "./http.ts";
 /**
  * The Git host with its bytes on S3 (DESIGN §22): the same building-block
  * assembly as `stack.ts`, with `BlobStoreS3()` in place of R2. Needs BOTH
@@ -12,7 +13,7 @@ import * as Layer from "effect/Layer";
 import {
   BlobStoreS3,
   GIT_WORKER_OPTIONS,
-  Handlers,
+  HandlersLive,
   HasherInline,
   ReposDurableObject,
   RegistryDurableObject,
@@ -25,8 +26,8 @@ export { TEST_SECRET };
 /** Declared here so the stack tears it down with the packs still inside. */
 export const GitObjects = AWS.S3.Bucket("GitS3Objects", { forceDestroy: true });
 
-const GitLive = Server.layer(TestApi).pipe(
-  Layer.provide(Handlers),
+const GitLive = Server.layer(TestApi, TestApiLive).pipe(
+  Layer.provide(HandlersLive),
   Layer.provide(TestAuthLive),
   Layer.provide(ReposDurableObject),
   Layer.provide(RegistryDurableObject),

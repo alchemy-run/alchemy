@@ -14,16 +14,17 @@ import * as Cloudflare from "alchemy/Cloudflare";
 import * as Git from "alchemy/Git";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import { Api, ApiLive, AuthenticatedLive } from "./api.ts";
 
 export const GitObjects = Cloudflare.R2.Bucket("GitObjects");
 
-const GitLive = Git.Server.layer(Api).pipe( // Api: Git.Api behind your middleware
-  Layer.provide(Git.Handlers), // the engine's implementation of every route
+const GitLive = Git.Server.layer(Api, ApiLive).pipe( // Api: Git.Api behind your middleware
+  Layer.provide(Git.HandlersLive), // shared implementations used by ApiLive
   Layer.provide(AuthenticatedLive), // your middleware: who may call what
   Layer.provide(Git.ReposDurableObject), // refs, objects, pull requests
   Layer.provide(Git.RegistryDurableObject), // owner/name → repo
-  Layer.provide(Git.BlobStoreR2(GitObjects)), // packs, bundles, large pushes
   Layer.provide(Git.HasherInline), // push verification
+  Layer.provide(Git.BlobStoreR2(GitObjects)), // packs, bundles, large pushes
 );
 
 export default Cloudflare.Worker(
@@ -36,19 +37,23 @@ export default Cloudflare.Worker(
 );
 ```
 
+`Api`, `ApiLive`, and `AuthenticatedLive` are the application API, its
+group implementations, and its middleware. [Getting Started](/git/getting-started)
+defines all three; [Server](/git/blocks/server#handlers) explains their composition.
+
 Each line of the graph is one decision with its own implementations.
 Changing a line changes the decision and nothing else:
 
 ```diff lang="typescript"
-const GitLive = Git.Server.layer(Api).pipe(
-  Layer.provide(Git.Handlers),
+const GitLive = Git.Server.layer(Api, ApiLive).pipe(
+  Layer.provide(Git.HandlersLive),
   Layer.provide(AuthenticatedLive),
 +  Layer.provide(ProtectedMain),
   Layer.provide(Git.ReposDurableObject),
   Layer.provide(Git.RegistryDurableObject),
+  Layer.provide(Git.HasherInline),
 -  Layer.provide(Git.BlobStoreR2(GitObjects)),
 +  Layer.provide(Git.BlobStoreS3()),
-  Layer.provide(Git.HasherInline),
 );
 ```
 
@@ -59,9 +64,9 @@ The engine holds no users, no credentials, and no policy. Who may call
 a route is the middleware of the API that mounts it, so the same host
 runs behind a shared secret, behind Better Auth, or behind any other
 authentication, and which refs may move is git's pre-receive hook as a
-service. Every route is a class with a pluggable implementation, so
-the host is also an API that can be extended and reshaped one route at
-a time.
+service. Endpoints use Effect's `HttpApiEndpoint`; implementations use
+`HttpApiBuilder.group` and `handleAll`. Add your own groups or replace a
+handler in a Git group before registering it.
 [git.alchemy.run](https://git.alchemy.run) runs this file. The alchemy
 monorepo, 44,051 objects in a 67 MiB pack, is hosted on it and clones
 back byte-identical under `git fsck --strict`.

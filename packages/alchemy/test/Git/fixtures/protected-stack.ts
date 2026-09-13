@@ -1,3 +1,4 @@
+import { TestApiLive } from "./http.ts";
 /**
  * A SECOND building-block assembly with a `Git.Hooks` in the graph: the
  * suite's middleware, plus one branch-protection rule. This is the
@@ -17,7 +18,7 @@ import * as Option from "effect/Option";
 import {
   BlobStoreR2,
   GIT_WORKER_OPTIONS,
-  Handlers,
+  HandlersLive,
   HasherInline,
   Hooks,
   ReposDurableObject,
@@ -52,8 +53,8 @@ const ProtectedMain: Layer.Layer<Hooks> = Layer.succeed(Hooks, {
 /** This assembly's bucket (its own stack, so no clash with `stack.ts`). */
 const GitObjects = Cloudflare.R2.Bucket("GitObjects");
 
-const ProtectedGitLive = Server.layer(TestApi).pipe(
-  Layer.provide(Handlers),
+const ProtectedGitLive = Server.layer(TestApi, TestApiLive).pipe(
+  Layer.provide(HandlersLive),
   Layer.provide(TestAuthLive),
   Layer.provide(ProtectedMain),
   Layer.provide(ReposDurableObject),

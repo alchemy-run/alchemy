@@ -74,7 +74,7 @@ the REST ref writes, and on a pull request merge.
 ## Protect main
 
 The `Session` from Part 3 says who is pushing, and the middleware
-already let them in. The engine's route classes do not declare your
+already let them in. The engine's hooks do not declare your
 middleware, so the hook reads it as an option:
 
 ```typescript
@@ -107,9 +107,8 @@ every other ref; only the owner moves `main`.
 // src/git.ts
 +import { ProtectedMain } from "./hooks.ts";
 
-const GitLive = Git.Server.layer(AppApi).pipe(
-  Layer.provide([MeLive, GitHubUserLive]),
-  Layer.provide(Git.Handlers),
+const GitLive = Git.Server.layer(AppApi, AppApiLive).pipe(
+  Layer.provide(Git.HandlersLive),
   Layer.provide(AuthenticatedLive),
 +  Layer.provide(ProtectedMain),
   Layer.provide(Git.ReposDurableObject),

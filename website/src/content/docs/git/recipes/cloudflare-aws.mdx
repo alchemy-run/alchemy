@@ -3,6 +3,10 @@ title: Bytes in S3, hashing on Lambda
 description: Compute on Cloudflare, bytes in S3, and large pushes hashed one Lambda per chunk. One stack carries both provider sets, and Alchemy mints the cross-cloud identity.
 ---
 
+The examples use `Api`, `ApiLive`, and `AuthenticatedLive` from
+[Getting Started](/git/getting-started): the API, its `HttpApiBuilder.group`
+layers, and its middleware.
+
 import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
 
 The Worker and the Durable Objects stay on Cloudflare. Packs, bundles,
@@ -18,8 +22,8 @@ import * as GitHasher from "alchemy/Git/Hasher";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
-const GitLive = Git.Server.layer(Api).pipe(
-  Layer.provide(Git.Handlers),
+const GitLive = Git.Server.layer(Api, ApiLive).pipe(
+  Layer.provide(Git.HandlersLive),
   Layer.provide(AuthenticatedLive),
   Layer.provide(Git.ReposDurableObject),
   Layer.provide(Git.RegistryDurableObject),
@@ -110,14 +114,14 @@ Lambda hashes every chunk at once. The loaded Workers hash four at a
 time:
 
 ```diff lang="typescript"
-const GitLive = Git.Server.layer(Api).pipe(
-  Layer.provide(Git.Handlers),
+const GitLive = Git.Server.layer(Api, ApiLive).pipe(
+  Layer.provide(Git.HandlersLive),
   Layer.provide(AuthenticatedLive),
   Layer.provide(Git.ReposDurableObject),
   Layer.provide(Git.RegistryDurableObject),
-  Layer.provide(Git.BlobStoreR2(GitObjects)),
 -  Layer.provide(GitHasher.HasherWorkerLoader()),
 +  Layer.provide(GitHasher.HasherLambda(GitHasher.HasherFunction)),
+  Layer.provide(Git.BlobStoreR2(GitObjects)),
 +  Layer.provide(AWS.Lambda.InvokeFunctionHttp),
 );
 ```

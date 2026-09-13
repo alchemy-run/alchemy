@@ -17,18 +17,16 @@ import * as Alchemy from "@/index.ts";
 import * as Cloudflare from "@/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import {
   BlobStoreR2,
   GIT_WORKER_OPTIONS,
-  GitHubUser,
-  Handlers,
+  HandlersLive,
   HasherInline,
   ReposDurableObject,
   RegistryDurableObject,
   Server,
 } from "@/Git/index.ts";
+import { TestApiLive } from "./http.ts";
 import { TestApi, TestAuthLive, TestCaller } from "./test-auth.ts";
 
 export {
@@ -47,34 +45,9 @@ const GitObjects = Cloudflare.R2.Bucket("GitObjects", {
   forceDestroy: true,
 });
 
-/**
- * One of the engine's routes replaced: `GET /api/v3/user`, the probe
- * `gh` makes, answered from the caller the middleware resolved. Provided
- * nearer than `Handlers`, so it wins.
- */
-const GitHubUserTest = GitHubUser.make(
-  Effect.succeed(() =>
-    Effect.gen(function* () {
-      const caller = yield* Effect.serviceOption(TestCaller);
-      const user = Option.isSome(caller) ? caller.value.user : null;
-      return user === null
-        ? HttpServerResponse.jsonUnsafe(
-            { message: "Requires authentication" },
-            { status: 401 },
-          )
-        : HttpServerResponse.jsonUnsafe({
-            login: user.name,
-            id: 1,
-            type: "User",
-          });
-    }),
-  ),
-);
-
 /** One layer graph, one Effect.provide — the RFC assembly, verbatim. */
-const GitLive = Server.layer(TestApi).pipe(
-  Layer.provide(GitHubUserTest),
-  Layer.provide(Handlers),
+const GitLive = Server.layer(TestApi, TestApiLive).pipe(
+  Layer.provide(HandlersLive),
   Layer.provide(TestAuthLive),
   Layer.provide(ReposDurableObject),
   Layer.provide(RegistryDurableObject),

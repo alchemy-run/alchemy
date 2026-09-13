@@ -1,3 +1,4 @@
+import { TestApiLive } from "./http.ts";
 /**
  * The Git host with its pack hasher on AWS Lambda (DESIGN §22.11): the
  * same building-block assembly as `stack.ts`, with `HasherLambda` in place
@@ -12,7 +13,7 @@ import * as Layer from "effect/Layer";
 import {
   BlobStoreR2,
   GIT_WORKER_OPTIONS,
-  Handlers,
+  HandlersLive,
   ReposDurableObject,
   RegistryDurableObject,
   Server,
@@ -26,8 +27,8 @@ const GitObjects = Cloudflare.R2.Bucket("GitLambdaObjects", {
   forceDestroy: true,
 });
 
-const GitLive = Server.layer(TestApi).pipe(
-  Layer.provide(Handlers),
+const GitLive = Server.layer(TestApi, TestApiLive).pipe(
+  Layer.provide(HandlersLive),
   Layer.provide(TestAuthLive),
   Layer.provide(ReposDurableObject),
   Layer.provide(RegistryDurableObject),

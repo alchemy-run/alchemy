@@ -5,29 +5,29 @@
  *
  * `:repo` may carry a `.git` suffix; the handlers strip it.
  */
-import * as Http from "../../Http/index.ts";
+import * as HttpApiEndpoint from "effect/unstable/httpapi/HttpApiEndpoint";
 import * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup";
 
 /** `GET /:owner/:repo/info/refs?service=…`: the ref advertisement. */
-export class InfoRefs extends Http.get<InfoRefs>()(
+export const InfoRefs = HttpApiEndpoint.get(
   "infoRefs",
   "/:owner/:repo/info/refs",
   {},
-) {}
+);
 
 /** `POST /:owner/:repo/git-upload-pack`: clone and fetch. */
-export class UploadPack extends Http.post<UploadPack>()(
+export const UploadPack = HttpApiEndpoint.post(
   "uploadPack",
   "/:owner/:repo/git-upload-pack",
   {},
-) {}
+);
 
 /** `POST /:owner/:repo/git-receive-pack`: push. */
-export class ReceivePack extends Http.post<ReceivePack>()(
+export const ReceivePack = HttpApiEndpoint.post(
   "receivePack",
   "/:owner/:repo/git-receive-pack",
   {},
-) {}
+);
 
 /** The git wire protocol, mounted at the root. */
 export class Protocol extends HttpApiGroup.make("protocol", {

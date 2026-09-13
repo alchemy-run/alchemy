@@ -27,7 +27,17 @@ alchemy `Fetcher` bug: `HttpServerRequest.toWeb` returns the raw source
 trust headers never reached DOs and, worse, client-forged ones were
 never stripped (see §3.2 enforcement). Remaining (Phase B):
 `AuthBetterAuth`, `PullStore`/`RefStore`/`TokenStore` extraction, and
-the independently mountable plane layers.
+the remaining store extractions. HTTP planes are now exported as native API groups.
+
+**Current HTTP composition:** endpoints use Effect `HttpApiEndpoint`, and
+applications register groups with `HttpApiBuilder.group` / `handleAll`.
+`Git.HandlersLive` builds the shared `Git.Handlers` service;
+`Git.Server.layer(api, groups)` serves an application API and its group
+layers. `Git.ApiLive` implements the unmodified `Git.Api`, and
+`Git.ServerLive` combines it with `HandlersLive`. Authentication now lives
+in application HTTP middleware; the original phase notes below retain the
+history of the earlier auth proposal. See [DESIGN.md §8](./DESIGN.md#8-auth-model-nothing-inside-the-engine)
+for the current boundary.
 
 **On an AWS-native assembly (the DynamoDB question):** a `RefStore` on
 DynamoDB pay-per-request is *conditionally* feasible — conditional writes
@@ -394,11 +404,11 @@ store" is now a layer, not a fork.
 - **`Registry`** — `owner/name → repoId` resolution + listing (contract
   over the Registry DO; a single-tenant "static registry" layer becomes
   possible for users who want exactly one repo and no registry DO).
-- **`Git.Wire` / `Git.Rest` / `Git.GitHubCompat`** — the three HTTP plane
-  services with `Git.WireLive` / `Git.RestLive` / `Git.GitHubCompatLive`
-  route layers, independently mountable. Each depends only on
-  `Registry`, `Auth`, `Repos` (the DO namespace), and (Wire only)
-  `BlobStore`.
+- **HTTP groups** — `Git.Protocol`, `Git.Repos`, `Git.Refs`, `Git.Objects`,
+  `Git.Pulls`, and `Git.GitHub`. Each is independently mountable in an
+  Effect `HttpApi`. `Git.Handlers` exposes the corresponding handler
+  objects; `Git.HandlersLive` builds them over `RegistryStore`,
+  `RepoStore`, `BlobStore`, and `Hasher`.
 
 ## 4. `Git.Server` — the top-level block
 
@@ -406,30 +416,36 @@ There is no `GitService()` and no shipped Worker. The package's largest
 unit is a service:
 
 ```ts
-export class Server extends Context.Service<Server, {
-  /** The composed HTTP handler: wire + mounted REST planes. */
-  readonly fetch: HttpEffect;
-}>()("alchemy/Git/Server") {}
+// Open default: all six groups, with the shared handler implementation.
+const GitLive = Git.ServerLive.pipe(
+  Layer.provide(Git.ReposDurableObject),
+  Layer.provide(Git.RegistryDurableObject),
+  Layer.provide(Git.HasherInline),
+  Layer.provide(Git.BlobStoreR2(GitObjects)),
+);
 
-/** Default assembly: all three planes (exported as `Git.ServerLive`). */
-export const ServerLive: Layer.Layer<
-  Server,
-  never,
-  Repos | Registry | Auth | BlobStore
-> = ...;
+// A custom management API: select a group, attach middleware, and implement it.
+class ManagementApi extends HttpApi.make("git-management")
+  .add(Git.Repos)
+  .middleware(Authenticated) {}
 
-/** À-la-carte: compose a Server from chosen planes. */
-export const serverFrom = (planes: {
-  wire?: boolean; rest?: boolean; githubCompat?: boolean;
-}) => ...;
+const ManagementLive = HttpApiBuilder.group(ManagementApi, "repos", (h) =>
+  Effect.map(Git.Handlers, (git) => h.handleAll(git.repos)),
+);
+
+const ManagementServer = Git.Server.layer(ManagementApi, ManagementLive).pipe(
+  Layer.provide(Git.HandlersLive),
+  Layer.provide(AuthenticatedLive),
+  // provide the storage and hasher layers as above
+);
 ```
 
-Because `Git.Server` is just a service with `fetch`, users can mount it
-whole, nest it under their own router, wrap it in middleware, or ignore
-it entirely and mount the individual plane route layers themselves — the
-planes stay independently exported. The user always owns the
-`Cloudflare.Worker` (and therefore its name, bindings, domains, assets,
-and the DO class exports the runtime requires anyway).
+`Git.Server` exposes `fetch`, so users can mount it whole, nest it under
+another router, or register the exported API groups directly.
+`Server.layer` mounts `Git.InternalApi` separately from application
+middleware. A host that builds its own router can pair `InternalApi`
+with `Git.InternalLive`. Users own the `Cloudflare.Worker`, its bindings,
+domains, assets, and Durable Object exports.
 
 Consequences accepted: this is a **breaking change** — `GitService()` and
 the internal `GitWorker` class are deleted, and the example app becomes
@@ -449,8 +465,8 @@ Each phase lands green on the full suite before the next starts.
   `PullStore` / `TokenStore` / `ObjectStore`-as-service; `RepoObject`
   becomes choreography. `Auth` replaces the scattered
   `parseBasicOrBearer`/`verifyAdminKey` call sites.
-- **Phase C — plane split + `Git.Server`.** Route layers exported
-  individually; `Git.Server` service + `Git.ServerLive`/`Git.serverFrom` layers;
+- **Phase C — plane split + `Git.Server`.** Native HTTP groups exported
+  individually; `Git.Server` service + `Git.ServerLive`/`Git.Server.layer(api, groups)`;
   DO classes re-exported by users (no subclass factory); **`GitService()`
   and the shipped `GitWorker` deleted**; the example app rewritten as the reference
   assembly; tests re-pointed at a fixture assembly; docs (`@layer` pages

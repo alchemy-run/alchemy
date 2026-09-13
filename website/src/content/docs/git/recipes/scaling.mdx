@@ -3,6 +3,10 @@ title: Scaling
 description: Reads scale like a CDN and writes scale like git. The shape, the per-repository limits, the measured numbers, and a worked example of pushing something large and swapping the hasher.
 ---
 
+The examples use `Api`, `ApiLive`, and `AuthenticatedLive` from
+[Getting Started](/git/getting-started): the API, its `HttpApiBuilder.group`
+layers, and its middleware.
+
 Every repository is its own Durable Object, so the service's capacity
 is the sum of its repositories. Within one repository the two
 directions scale differently, and the difference is git's, not the
@@ -62,14 +66,14 @@ thread that received the body. Swap the hasher and deploy:
 ```diff lang="typescript"
 +import * as GitHasher from "alchemy/Git/Hasher";
 
-const GitLive = Git.Server.layer(Api).pipe(
-  Layer.provide(Git.Handlers),
+const GitLive = Git.Server.layer(Api, ApiLive).pipe(
+  Layer.provide(Git.HandlersLive),
   Layer.provide(AuthenticatedLive),
   Layer.provide(Git.ReposDurableObject),
   Layer.provide(Git.RegistryDurableObject),
-  Layer.provide(Git.BlobStoreR2(GitObjects)),
 -  Layer.provide(Git.HasherInline),
 +  Layer.provide(GitHasher.HasherWorkerLoader()),
+  Layer.provide(Git.BlobStoreR2(GitObjects)),
 );
 ```
 

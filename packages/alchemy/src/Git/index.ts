@@ -4,10 +4,10 @@
  *
  * Public surface:
  * - The HTTP contract ({@link GitApi}, aliased {@link Api}): every plane as
- *   one `HttpApi`, each endpoint an `alchemy/Http` route class, each group a
+ *   one `HttpApi`, each endpoint an `HttpApiEndpoint`, each group a
  *   class, with the schemas and tagged errors.
- * - {@link Handlers}, the default implementation of every route, and the
- *   per-route `*Live` Layers it is made of.
+ * - {@link Handlers} and {@link HandlersLive}: reusable handlers registered
+ *   with `HttpApiBuilder.group` and `handleAll`.
  * - {@link Hooks}, git's pre-receive hook as a service. There is no auth
  *   in the engine: the middleware of the API that mounts the routes decides
  *   who gets in.

@@ -3,17 +3,21 @@ title: Repository
 description: One Durable Object per repository, behind the Git.RepoStore service. Provide it, call it from your own routes, wrap it to hook pushes and ref updates, or implement its shape over another store.
 ---
 
+The examples use `Api`, `ApiLive`, and `AuthenticatedLive` from
+[Getting Started](/git/getting-started): the API, its `HttpApiBuilder.group`
+layers, and its middleware.
+
 `Git.ReposDurableObject` hosts one Durable Object per repository and
 provides `Git.RepoStore`, the service every route reaches it through:
 
 ```typescript
-const GitLive = Git.Server.layer(Api).pipe(
-  Layer.provide(Git.Handlers),
+const GitLive = Git.Server.layer(Api, ApiLive).pipe(
+  Layer.provide(Git.HandlersLive),
   Layer.provide(AuthenticatedLive),
   Layer.provide(Git.ReposDurableObject),
   // ReposDurableObject requires:
-  Layer.provide(Git.BlobStoreR2(GitObjects)), // packs, bundles, spilled pushes
   Layer.provide(Git.HasherInline),            // push verification
+  Layer.provide(Git.BlobStoreR2(GitObjects)), // packs, bundles, spilled pushes
   Layer.provide(Git.RegistryDurableObject),   // owner/name → repoId
 );
 ```
@@ -69,17 +73,24 @@ Resolve the id through the registry, then talk to the object. A route
 that answers the default branch's tip:
 
 ```typescript
-export class Tip extends Http.get<Tip>()("tip", "/api/v1/repos/:owner/:repo/tip", {
+import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
+import * as HttpApiEndpoint from "effect/unstable/httpapi/HttpApiEndpoint";
+import * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup";
+
+export const Tip = HttpApiEndpoint.get("tip", "/api/v1/repos/:owner/:repo/tip", {
   params: Git.RepoPath,
   success: Git.Ref,
   error: [Git.RepoNotFound, Git.RefNotFound],
-}) {}
+});
 
-export const TipLive = Tip.make(
+export class AppRoutes extends HttpApiGroup.make("app").add(Tip) {}
+export class AppApi extends Git.Api.add(AppRoutes).middleware(Authenticated) {}
+
+export const AppRoutesLive = HttpApiBuilder.group(AppApi, "app", (h) =>
   Effect.gen(function* () {
     const registry = yield* Git.RegistryStore;
     const repos = yield* Git.RepoStore;
-    return Effect.fn(function* ({ params }) {
+    return h.handle("tip", Effect.fn(function* ({ params }) {
       const entry = yield* registry
         .resolve(params.owner, params.repo)
         .pipe(Effect.catchTag("StoreError", (error) => Effect.die(error)));
@@ -92,13 +103,16 @@ export const TipLive = Tip.make(
         .getRef(`refs/heads/${meta.defaultBranch}`)
         .pipe(Effect.catchTag("StoreError", (error) => Effect.die(error)));
       return new Git.Ref({ name: ref.name, oid: ref.oid as Git.Oid });
-    });
+    }));
   }),
 );
 ```
 
-Mounted in an API derived from `Git.Api`, it runs behind that API's
-middleware like every other route.
+Merge `AppRoutesLive` with the six Git group layers built against `AppApi`,
+then pass the merged layer to `Git.Server.layer(AppApi, AppApiLive)`.
+[Server](/git/blocks/server#handlers) shows the full assembly. The registry
+and repository clients are resolved when the group builds; the handler
+runs once per request behind the API's middleware.
 
 ## Wrap it
 
@@ -132,8 +146,8 @@ export const ReposWithHooks = Layer.effect(
 ```
 
 ```diff lang="typescript"
-const GitLive = Git.Server.layer(Api).pipe(
-  Layer.provide(Git.Handlers),
+const GitLive = Git.Server.layer(Api, ApiLive).pipe(
+  Layer.provide(Git.HandlersLive),
   Layer.provide(AuthenticatedLive),
 -  Layer.provide(Git.ReposDurableObject),
 +  Layer.provide(ReposWithHooks),

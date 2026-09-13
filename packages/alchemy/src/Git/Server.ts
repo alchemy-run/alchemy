@@ -20,31 +20,50 @@
  * ### Deploying
  * **Example:** Compose the Worker into a Stack
  * ```typescript
- * import * as Alchemy from "../index.ts";
- * import * as Cloudflare from "../Cloudflare/index.ts";
+ * import * as Alchemy from "alchemy";
+ * import * as Cloudflare from "alchemy/Cloudflare";
+ * import * as Git from "alchemy/Git";
  * import * as Effect from "effect/Effect";
- * import GitWorker from "alchemy/Git/GitWorker";
+ * import * as Layer from "effect/Layer";
+ *
+ * const GitObjects = Cloudflare.R2.Bucket("GitObjects");
+ * const GitLive = Git.ServerLive.pipe(
+ *   Layer.provide(Git.ReposDurableObject),
+ *   Layer.provide(Git.RegistryDurableObject),
+ *   Layer.provide(Git.HasherInline),
+ *   Layer.provide(Git.BlobStoreR2(GitObjects)),
+ * );
+ * const GitHost = Cloudflare.Worker(
+ *   "Git",
+ *   { main: import.meta.url, ...Git.GIT_WORKER_OPTIONS },
+ *   Effect.gen(function* () {
+ *     const git = yield* Git.Server;
+ *     return { fetch: git.fetch };
+ *   }).pipe(Effect.provide(GitLive)),
+ * );
  *
  * export default Alchemy.Stack(
  *   "GitService",
  *   { providers: Cloudflare.providers(), state: Cloudflare.state() },
  *   Effect.gen(function* () {
- *     const worker = yield* GitWorker;
+ *     const worker = yield* GitHost;
  *     return { url: worker.url.as<string>() };
  *   }),
  * );
  * ```
  *
+ * `ServerLive` serves the open API. To add authentication, build groups
+ * against an API with your middleware and use `Server.layer(api, groups)`.
+ *
  * ### Using the deployed service
- * **Example:** Create a repo and push to it
+ * **Example:** Create a repo and push to the open host
  * ```sh
  * curl -X POST "$URL/api/v1/repos" \
- *   -H "Authorization: Bearer $GIT_SERVICE_SECRET" \
  *   -H "Content-Type: application/json" \
  *   -d '{"owner":"acme","name":"web"}'
- * # → { repo, remote, token: { token: "gs_..." } }
+ * # → { repo, remote }
  *
- * git remote add origin "https://x:gs_...@<host>/acme/web.git"
+ * git remote add origin "$URL/acme/web.git"
  * git push origin main
  * ```
  */
@@ -69,6 +88,32 @@ import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
 import type * as HttpApi from "effect/unstable/httpapi/HttpApi";
 import type * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup";
 import * as Http from "../Http/index.ts";
+import type * as HttpApiEndpoint from "effect/unstable/httpapi/HttpApiEndpoint";
+import type {
+  CreateRepo,
+  GetRepo,
+  UpdateRepo,
+  ListRepos,
+  DeleteRepo,
+  ForkRepo,
+  CompactRepo,
+  ImportRepo,
+  ListRefs,
+  GetRef,
+  UpdateRef,
+  RemoveRef,
+  GetCommit,
+  GetLog,
+  GetTree,
+  GetBlob,
+  GetDiff,
+  Compare,
+  CreatePull,
+  ListPulls,
+  GetPull,
+  UpdatePull,
+  MergePull,
+} from "./Api.ts";
 import {
   CommitDiff,
   CommitInfo,
@@ -77,48 +122,6 @@ import {
   GitApi,
   HookRejected,
   InternalApi,
-  // routes
-  Compare,
-  CompactRepo,
-  CreatePull,
-  CreateRepo,
-  DeleteRepo,
-  ForkRepo,
-  GetBlob,
-  GetBlobRaw,
-  GetCommit,
-  GetDiff,
-  GetFile,
-  GetLog,
-  GetPull,
-  GetRef,
-  GetRepo,
-  GetTree,
-  GitHubBranches,
-  GitHubCommit,
-  GitHubCommits,
-  GitHubContents,
-  GitHubCreatePull,
-  GitHubMergePull,
-  GitHubPull,
-  GitHubPullFiles,
-  GitHubPulls,
-  GitHubRepo,
-  GitHubUpdatePull,
-  GitHubUser,
-  HashPart,
-  ImportRepo,
-  InfoRefs,
-  ListPulls,
-  ListRefs,
-  ListRepos,
-  MergePull,
-  ReceivePack,
-  RemoveRef,
-  UpdatePull,
-  UpdateRef,
-  UpdateRepo,
-  UploadPack,
   ImportFailed,
   MergeResult,
   ObjectStats,
@@ -136,7 +139,6 @@ import {
   type Oid,
 } from "./Api.ts";
 import { Hooks, type HooksShape, type RefUpdate } from "./Hooks.ts";
-import type * as HttpApiEndpoint from "effect/unstable/httpapi/HttpApiEndpoint";
 import { gitHubCompatRoutes } from "./GitHubCompat.ts";
 import { BlobStore, type BlobStoreError } from "./BlobStore.ts";
 import { bundleCovers, type BundleInfo } from "./Jobs/Bundle.ts";
@@ -245,16 +247,6 @@ export const RESOLVE_CACHE_MAX = 1024;
 
 /** Blobs above this size are 422 on the JSON endpoint (use `/raw`). */
 export const MAX_JSON_BLOB_BYTES = 1024 * 1024;
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Shared layers
-// ─────────────────────────────────────────────────────────────────────────────
-
-/** Types a route's handler against its route class. */
-const impl = <R extends HttpApiEndpoint.Constraint>(
-  _route: R,
-  handler: Http.Handler<R>,
-): Http.Handler<R> => handler;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Pure mapping helpers
@@ -545,6 +537,8 @@ const makeCore = Effect.gen(function* () {
         : `${proto}://${host}/${owner}/${name}.git`;
     });
 
+  // Accept decoded fields rather than endpoint metadata so these handlers also
+  // work with APIs that add middleware or prefixes.
   // ── REST handler groups ────────────────────────────────────────────────
 
   /**
@@ -600,7 +594,9 @@ const makeCore = Effect.gen(function* () {
       );
 
   const reposRoutes = {
-    create: impl(CreateRepo, ({ payload }) =>
+    create: ({
+      payload,
+    }: Pick<HttpApiEndpoint.Request<typeof CreateRepo>, "payload">) =>
       Effect.gen(function* () {
         const entry = yield* insertRepoRow({
           owner: payload.owner,
@@ -639,8 +635,9 @@ const makeCore = Effect.gen(function* () {
           remote,
         });
       }),
-    ),
-    get: impl(GetRepo, ({ params }) =>
+    get: ({
+      params,
+    }: Pick<HttpApiEndpoint.Request<typeof GetRepo>, "params">) =>
       Effect.gen(function* () {
         // Includes rows mid-purge: GET keeps reporting
         // status "deleting" until the purge alarm frees the name (only
@@ -669,8 +666,13 @@ const makeCore = Effect.gen(function* () {
           );
         return toRepo(meta);
       }),
-    ),
-    update: impl(UpdateRepo, ({ params, payload }) =>
+    update: ({
+      params,
+      payload,
+    }: Pick<
+      HttpApiEndpoint.Request<typeof UpdateRepo>,
+      "params" | "payload"
+    >) =>
       Effect.gen(function* () {
         const entry = yield* resolveOrNotFound(params.owner, params.repo);
         const meta = yield* repos
@@ -694,8 +696,9 @@ const makeCore = Effect.gen(function* () {
           );
         return toRepo(meta);
       }),
-    ),
-    list: impl(ListRepos, ({ query }) =>
+    list: ({
+      query,
+    }: Pick<HttpApiEndpoint.Request<typeof ListRepos>, "query">) =>
       Effect.gen(function* () {
         // Everything the Registry holds; `public: true` narrows it. Who
         // may list at all was decided in front of the route.
@@ -719,8 +722,9 @@ const makeCore = Effect.gen(function* () {
           hasMore: page.hasMore,
         };
       }),
-    ),
-    delete: impl(DeleteRepo, ({ params }) =>
+    delete: ({
+      params,
+    }: Pick<HttpApiEndpoint.Request<typeof DeleteRepo>, "params">) =>
       Effect.gen(function* () {
         const entry = yield* resolveIncludingDeleting(
           params.owner,
@@ -752,8 +756,10 @@ const makeCore = Effect.gen(function* () {
           .pipe(Effect.catchTag("StoreError", (error) => Effect.die(error)));
         yield* dropCached(params.owner, params.repo);
       }),
-    ),
-    fork: impl(ForkRepo, ({ params, payload }) =>
+    fork: ({
+      params,
+      payload,
+    }: Pick<HttpApiEndpoint.Request<typeof ForkRepo>, "params" | "payload">) =>
       Effect.gen(function* () {
         const source = yield* resolveOrNotFound(params.owner, params.repo);
         const sourceMeta = yield* repos
@@ -814,8 +820,9 @@ const makeCore = Effect.gen(function* () {
           remote,
         });
       }),
-    ),
-    compact: impl(CompactRepo, ({ params }) =>
+    compact: ({
+      params,
+    }: Pick<HttpApiEndpoint.Request<typeof CompactRepo>, "params">) =>
       Effect.gen(function* () {
         const entry = yield* resolveOrNotFound(params.owner, params.repo);
         yield* repos
@@ -833,8 +840,9 @@ const makeCore = Effect.gen(function* () {
             ),
           );
       }),
-    ),
-    import: impl(ImportRepo, ({ payload }) =>
+    import: ({
+      payload,
+    }: Pick<HttpApiEndpoint.Request<typeof ImportRepo>, "payload">) =>
       Effect.gen(function* () {
         const entry = yield* registryStub()
           .createRepo({
@@ -873,11 +881,13 @@ const makeCore = Effect.gen(function* () {
           remote,
         });
       }),
-    ),
   };
 
   const refsRoutes = {
-    list: impl(ListRefs, ({ params, query }) =>
+    list: ({
+      params,
+      query,
+    }: Pick<HttpApiEndpoint.Request<typeof ListRefs>, "params" | "query">) =>
       Effect.gen(function* () {
         const entry = yield* resolveOrNotFound(params.owner, params.repo);
         const page = yield* repos
@@ -896,8 +906,10 @@ const makeCore = Effect.gen(function* () {
           );
         return { head: page.head, refs: page.refs.map(toRef) };
       }),
-    ),
-    get: impl(GetRef, ({ params, query }) =>
+    get: ({
+      params,
+      query,
+    }: Pick<HttpApiEndpoint.Request<typeof GetRef>, "params" | "query">) =>
       Effect.gen(function* () {
         const entry = yield* resolveOrNotFound(params.owner, params.repo);
         const ref = yield* repos
@@ -916,8 +928,14 @@ const makeCore = Effect.gen(function* () {
           );
         return toRef(ref);
       }),
-    ),
-    update: impl(UpdateRef, ({ params, query, payload }) =>
+    update: ({
+      params,
+      query,
+      payload,
+    }: Pick<
+      HttpApiEndpoint.Request<typeof UpdateRef>,
+      "params" | "query" | "payload"
+    >) =>
       Effect.gen(function* () {
         const entry = yield* resolveOrNotFound(params.owner, params.repo);
         const stub = repos.getByName(entry.repoId);
@@ -951,8 +969,14 @@ const makeCore = Effect.gen(function* () {
           );
         return toRef(ref);
       }),
-    ),
-    remove: impl(RemoveRef, ({ params, query, payload }) =>
+    remove: ({
+      params,
+      query,
+      payload,
+    }: Pick<
+      HttpApiEndpoint.Request<typeof RemoveRef>,
+      "params" | "query" | "payload"
+    >) =>
       Effect.gen(function* () {
         const entry = yield* resolveOrNotFound(params.owner, params.repo);
         const stub = repos.getByName(entry.repoId);
@@ -983,11 +1007,12 @@ const makeCore = Effect.gen(function* () {
             ),
           );
       }),
-    ),
   };
 
   const objectsRoutes = {
-    commit: impl(GetCommit, ({ params }) =>
+    commit: ({
+      params,
+    }: Pick<HttpApiEndpoint.Request<typeof GetCommit>, "params">) =>
       Effect.gen(function* () {
         const entry = yield* resolveOrNotFound(params.owner, params.repo);
         const data = yield* repos
@@ -1025,8 +1050,10 @@ const makeCore = Effect.gen(function* () {
           message: parsed.message,
         });
       }),
-    ),
-    log: impl(GetLog, ({ params, query }) =>
+    log: ({
+      params,
+      query,
+    }: Pick<HttpApiEndpoint.Request<typeof GetLog>, "params" | "query">) =>
       Effect.gen(function* () {
         const entry = yield* resolveOrNotFound(params.owner, params.repo);
         const page = yield* repos
@@ -1053,8 +1080,9 @@ const makeCore = Effect.gen(function* () {
           hasMore: page.hasMore,
         };
       }),
-    ),
-    tree: impl(GetTree, ({ params }) =>
+    tree: ({
+      params,
+    }: Pick<HttpApiEndpoint.Request<typeof GetTree>, "params">) =>
       Effect.gen(function* () {
         const entry = yield* resolveOrNotFound(params.owner, params.repo);
         const data = yield* repos
@@ -1085,8 +1113,9 @@ const makeCore = Effect.gen(function* () {
           ),
         };
       }),
-    ),
-    blob: impl(GetBlob, ({ params }) =>
+    blob: ({
+      params,
+    }: Pick<HttpApiEndpoint.Request<typeof GetBlob>, "params">) =>
       Effect.gen(function* () {
         const entry = yield* resolveOrNotFound(params.owner, params.repo);
         const data = yield* repos
@@ -1116,8 +1145,9 @@ const makeCore = Effect.gen(function* () {
           content: Encoding.encodeBase64(data.content),
         };
       }),
-    ),
-    diff: impl(GetDiff, ({ params }) =>
+    diff: ({
+      params,
+    }: Pick<HttpApiEndpoint.Request<typeof GetDiff>, "params">) =>
       Effect.gen(function* () {
         const entry = yield* resolveOrNotFound(params.owner, params.repo);
         const data = yield* repos
@@ -1141,8 +1171,10 @@ const makeCore = Effect.gen(function* () {
           truncated: data.truncated,
         });
       }),
-    ),
-    compare: impl(Compare, ({ params, query }) =>
+    compare: ({
+      params,
+      query,
+    }: Pick<HttpApiEndpoint.Request<typeof Compare>, "params" | "query">) =>
       Effect.gen(function* () {
         const entry = yield* resolveOrNotFound(params.owner, params.repo);
         const data = yield* repos
@@ -1171,11 +1203,16 @@ const makeCore = Effect.gen(function* () {
           filesTruncated: data.filesTruncated,
         });
       }),
-    ),
   };
 
   const pullsRoutes = {
-    create: impl(CreatePull, ({ params, payload }) =>
+    create: ({
+      params,
+      payload,
+    }: Pick<
+      HttpApiEndpoint.Request<typeof CreatePull>,
+      "params" | "payload"
+    >) =>
       Effect.gen(function* () {
         const entry = yield* resolveOrNotFound(params.owner, params.repo);
         const pull = yield* repos
@@ -1199,8 +1236,10 @@ const makeCore = Effect.gen(function* () {
           );
         return toPull(pull);
       }),
-    ),
-    list: impl(ListPulls, ({ params, query }) =>
+    list: ({
+      params,
+      query,
+    }: Pick<HttpApiEndpoint.Request<typeof ListPulls>, "params" | "query">) =>
       Effect.gen(function* () {
         const entry = yield* resolveOrNotFound(params.owner, params.repo);
         const page = yield* repos
@@ -1227,8 +1266,9 @@ const makeCore = Effect.gen(function* () {
           hasMore: page.hasMore,
         };
       }),
-    ),
-    get: impl(GetPull, ({ params }) =>
+    get: ({
+      params,
+    }: Pick<HttpApiEndpoint.Request<typeof GetPull>, "params">) =>
       Effect.gen(function* () {
         const entry = yield* resolveOrNotFound(params.owner, params.repo);
         const detail = yield* repos
@@ -1247,8 +1287,13 @@ const makeCore = Effect.gen(function* () {
           );
         return toPullDetail(detail);
       }),
-    ),
-    update: impl(UpdatePull, ({ params, payload }) =>
+    update: ({
+      params,
+      payload,
+    }: Pick<
+      HttpApiEndpoint.Request<typeof UpdatePull>,
+      "params" | "payload"
+    >) =>
       Effect.gen(function* () {
         const entry = yield* resolveOrNotFound(params.owner, params.repo);
         const pull = yield* repos
@@ -1272,8 +1317,10 @@ const makeCore = Effect.gen(function* () {
           );
         return toPull(pull);
       }),
-    ),
-    merge: impl(MergePull, ({ params, payload }) =>
+    merge: ({
+      params,
+      payload,
+    }: Pick<HttpApiEndpoint.Request<typeof MergePull>, "params" | "payload">) =>
       Effect.gen(function* () {
         const entry = yield* resolveOrNotFound(params.owner, params.repo);
         const stub = repos.getByName(entry.repoId);
@@ -1316,7 +1363,6 @@ const makeCore = Effect.gen(function* () {
           pull: toPull(result.pull),
         });
       }),
-    ),
   };
 
   const wire401 = HttpServerResponse.empty({
@@ -2160,175 +2206,95 @@ const makeCore = Effect.gen(function* () {
   return {
     repos: reposRoutes,
     refs: refsRoutes,
-    objects: objectsRoutes,
-    pulls: pullsRoutes,
-    raw: {
-      blobRaw: impl(GetBlobRaw, () => blobRawRoute),
-      file: impl(GetFile, () => fileRoute),
+    objects: {
+      ...objectsRoutes,
+      blobRaw: () => blobRawRoute,
+      file: () => fileRoute,
     },
+    pulls: pullsRoutes,
     protocol: {
-      infoRefs: impl(InfoRefs, () => wireProxy),
-      uploadPack: impl(UploadPack, () => wireProxy),
-      receivePack: impl(ReceivePack, () => receivePackRoute),
-      hashPart: impl(HashPart, () => hashPartRoute),
+      infoRefs: () => wireProxy.pipe(Effect.orDie),
+      uploadPack: () => wireProxy.pipe(Effect.orDie),
+      receivePack: () => receivePackRoute.pipe(Effect.orDie),
     },
     github: githubRoutes,
+    internal: {
+      hashPart: () => hashPartRoute.pipe(Effect.orDie),
+    },
   };
 });
 
 /**
- * The engine's HTTP planes as pieces, built once per Worker and shared by
- * every route below (the resolve cache, the DO stubs, the push gate).
- * Internal: users compose the routes, never the core.
+ * Reusable HTTP handlers for each Git API group. Resolve this service while
+ * building an `HttpApiBuilder.group`, then register its handlers with
+ * `handleAll`. Override individual handlers with ordinary object spread.
+ * The storage clients, resolve cache, and push gate are shared by all groups.
+ *
+ * ```typescript
+ * const ReposLive = HttpApiBuilder.group(AppApi, "repos", (h) =>
+ *   Effect.map(Git.Handlers, (git) => h.handleAll(git.repos)),
+ * );
+ * ```
  */
-class Core extends Context.Service<Core, Effect.Success<typeof makeCore>>()(
-  "alchemy/Git/Core",
-) {}
-const CoreLive = Layer.effect(Core, makeCore);
+export class Handlers extends Context.Service<
+  Handlers,
+  Effect.Success<typeof makeCore>
+>()("alchemy/Git/Handlers") {}
 
-/** A route's default implementation: the core's handler for it. */
-const live = <
-  R extends HttpApiEndpoint.Constraint & Http.RouteStatics<any, any>,
->(
-  route: R,
-  pick: (core: Effect.Success<typeof makeCore>) => Http.Handler<R>,
-): Layer.Layer<R["~Route"], never, Layer.Services<typeof CoreLive>> =>
-  route
-    .make(Effect.map(Core, pick) as Effect.Effect<any, never, Core>)
-    .pipe(Layer.provide(CoreLive));
+/**
+ * Builds reusable Git handlers from the storage and hasher services.
+ *
+ * ### Implementing a group
+ * **Example:** Repository handlers for an application API
+ * ```typescript
+ * const ReposLive = HttpApiBuilder.group(AppApi, "repos", (h) =>
+ *   Effect.map(Git.Handlers, (git) => h.handleAll(git.repos)),
+ * ).pipe(Layer.provide(Git.HandlersLive));
+ * ```
+ */
+export const HandlersLive = Layer.effect(Handlers, makeCore);
 
-// ── the default implementation of every route ────────────────────────────────
-// Each is `Route.make(...)` over the shared core, so any one of them can be
-// replaced by providing another Layer for the same route nearer the API.
-export const CreateRepoLive = live(CreateRepo, (core) => core.repos.create);
-export const GetRepoLive = live(GetRepo, (core) => core.repos.get);
-export const UpdateRepoLive = live(UpdateRepo, (core) => core.repos.update);
-export const ListReposLive = live(ListRepos, (core) => core.repos.list);
-export const DeleteRepoLive = live(DeleteRepo, (core) => core.repos.delete);
-export const ForkRepoLive = live(ForkRepo, (core) => core.repos.fork);
-export const ImportRepoLive = live(ImportRepo, (core) => core.repos.import);
-export const CompactRepoLive = live(CompactRepo, (core) => core.repos.compact);
-export const ListRefsLive = live(ListRefs, (core) => core.refs.list);
-export const GetRefLive = live(GetRef, (core) => core.refs.get);
-export const UpdateRefLive = live(UpdateRef, (core) => core.refs.update);
-export const RemoveRefLive = live(RemoveRef, (core) => core.refs.remove);
-export const GetCommitLive = live(GetCommit, (core) => core.objects.commit);
-export const GetLogLive = live(GetLog, (core) => core.objects.log);
-export const GetTreeLive = live(GetTree, (core) => core.objects.tree);
-export const GetBlobLive = live(GetBlob, (core) => core.objects.blob);
-export const GetDiffLive = live(GetDiff, (core) => core.objects.diff);
-export const CompareLive = live(Compare, (core) => core.objects.compare);
-export const GetBlobRawLive = live(GetBlobRaw, (core) => core.raw.blobRaw);
-export const GetFileLive = live(GetFile, (core) => core.raw.file);
-export const CreatePullLive = live(CreatePull, (core) => core.pulls.create);
-export const ListPullsLive = live(ListPulls, (core) => core.pulls.list);
-export const GetPullLive = live(GetPull, (core) => core.pulls.get);
-export const UpdatePullLive = live(UpdatePull, (core) => core.pulls.update);
-export const MergePullLive = live(MergePull, (core) => core.pulls.merge);
-export const InfoRefsLive = live(InfoRefs, (core) => core.protocol.infoRefs);
-export const UploadPackLive = live(
-  UploadPack,
-  (core) => core.protocol.uploadPack,
-);
-export const ReceivePackLive = live(
-  ReceivePack,
-  (core) => core.protocol.receivePack,
-);
-export const HashPartLive = live(HashPart, (core) => core.protocol.hashPart);
-export const GitHubUserLive = live(GitHubUser, (core) => core.github.user);
-export const GitHubRepoLive = live(GitHubRepo, (core) => core.github.repo);
-export const GitHubBranchesLive = live(
-  GitHubBranches,
-  (core) => core.github.branches,
-);
-export const GitHubCommitsLive = live(
-  GitHubCommits,
-  (core) => core.github.commits,
-);
-export const GitHubCommitLive = live(
-  GitHubCommit,
-  (core) => core.github.commit,
-);
-export const GitHubContentsLive = live(
-  GitHubContents,
-  (core) => core.github.contents,
-);
-export const GitHubPullsLive = live(GitHubPulls, (core) => core.github.pulls);
-export const GitHubCreatePullLive = live(
-  GitHubCreatePull,
-  (core) => core.github.createPull,
-);
-export const GitHubPullLive = live(GitHubPull, (core) => core.github.pull);
-export const GitHubUpdatePullLive = live(
-  GitHubUpdatePull,
-  (core) => core.github.updatePull,
-);
-export const GitHubMergePullLive = live(
-  GitHubMergePull,
-  (core) => core.github.mergePull,
-);
-export const GitHubPullFilesLive = live(
-  GitHubPullFiles,
-  (core) => core.github.pullFiles,
+/**
+ * The internal hash group for {@link InternalApi}. `Server.layer` mounts this
+ * separately from application middleware. A host that owns its router can
+ * provide it to `HttpApiBuilder.layer(Git.InternalApi)` directly.
+ */
+export const InternalLive = HttpApiBuilder.group(InternalApi, "internal", (h) =>
+  Effect.map(Handlers, (git) => h.handleAll(git.internal)),
 );
 
 /**
- * The default implementation of every git route: provide it to
- * `Http.handlers(api)` for any API derived from {@link GitApi}. Requires
- * the storage blocks; the API's middleware is required by the routes
- * themselves, through `Http.handlers`. A Layer provided nearer than
- * `Handlers` overrides the route it implements.
+ * Default group implementations for the unmodified {@link GitApi}.
+ * For an API with application middleware, prefixes, or additional endpoints,
+ * build groups against that API with `HttpApiBuilder.group` instead.
  *
+ * ### Serving the default API
+ * **Example:** Open Git server
  * ```typescript
- * Git.Server.layer(AppApi).pipe(
- *   Layer.provide([MeLive, GitHubUserBetterAuth]), // yours, and one override
- *   Layer.provide(Git.Handlers),
- *   Layer.provide(SessionLive), // the middleware AppApi declares
- * )
+ * const GitLive = Git.Server.layer(Git.Api, Git.ApiLive).pipe(
+ *   Layer.provide(Git.HandlersLive),
+ * );
  * ```
  */
-export const Handlers = Layer.mergeAll(
-  CreateRepoLive,
-  GetRepoLive,
-  UpdateRepoLive,
-  ListReposLive,
-  DeleteRepoLive,
-  ForkRepoLive,
-  ImportRepoLive,
-  CompactRepoLive,
-  ListRefsLive,
-  GetRefLive,
-  UpdateRefLive,
-  RemoveRefLive,
-  GetCommitLive,
-  GetLogLive,
-  GetTreeLive,
-  GetBlobLive,
-  GetDiffLive,
-  CompareLive,
-  GetBlobRawLive,
-  GetFileLive,
-  CreatePullLive,
-  ListPullsLive,
-  GetPullLive,
-  UpdatePullLive,
-  MergePullLive,
-  InfoRefsLive,
-  UploadPackLive,
-  ReceivePackLive,
-  HashPartLive,
-  GitHubUserLive,
-  GitHubRepoLive,
-  GitHubBranchesLive,
-  GitHubCommitsLive,
-  GitHubCommitLive,
-  GitHubContentsLive,
-  GitHubPullsLive,
-  GitHubCreatePullLive,
-  GitHubPullLive,
-  GitHubUpdatePullLive,
-  GitHubMergePullLive,
-  GitHubPullFilesLive,
+export const ApiLive = Layer.mergeAll(
+  HttpApiBuilder.group(GitApi, "repos", (h) =>
+    Effect.map(Handlers, (git) => h.handleAll(git.repos)),
+  ),
+  HttpApiBuilder.group(GitApi, "refs", (h) =>
+    Effect.map(Handlers, (git) => h.handleAll(git.refs)),
+  ),
+  HttpApiBuilder.group(GitApi, "objects", (h) =>
+    Effect.map(Handlers, (git) => h.handleAll(git.objects)),
+  ),
+  HttpApiBuilder.group(GitApi, "pulls", (h) =>
+    Effect.map(Handlers, (git) => h.handleAll(git.pulls)),
+  ),
+  HttpApiBuilder.group(GitApi, "protocol", (h) =>
+    Effect.map(Handlers, (git) => h.handleAll(git.protocol)),
+  ),
+  HttpApiBuilder.group(GitApi, "github", (h) =>
+    Effect.map(Handlers, (git) => h.handleAll(git.github)),
+  ),
 );
 
 /** What {@link Server} exposes: the composed HTTP handler for every plane. */
@@ -2340,16 +2306,26 @@ export interface ServerShape {
   >;
 }
 
-const makeServer = <Id extends string, Groups extends HttpApiGroup.Constraint>(
+const makeServer = <
+  Id extends string,
+  Groups extends HttpApiGroup.Constraint,
+  E,
+  R,
+>(
   api: HttpApi.HttpApi<Id, Groups>,
+  groups: Layer.Layer<HttpApiGroup.ToService<Id, Groups>, E, R>,
 ) =>
   Layer.mergeAll(
     HttpApiBuilder.layer(api),
     // The engine's own routes, outside whatever middleware `api` carries.
     HttpApiBuilder.layer(InternalApi),
   ).pipe(
-    Layer.provide([Http.handlers(api), Http.handlers(InternalApi)]),
+    Layer.provide(groups),
+    Layer.provide(InternalLive),
     Layer.provide(Http.Platform),
+    // Middleware lists RuntimeContext among its group requirements, but the
+    // Worker supplies it per request. The phantom layer adds no captured value.
+    Layer.provide(RuntimeContext.phantom),
     HttpRouter.toHttpEffect,
     // Browser clients (e.g. the example SPA) call the REST plane
     // cross-origin with a bearer token. Tokens are sent explicitly via
@@ -2376,18 +2352,24 @@ const makeServer = <Id extends string, Groups extends HttpApiGroup.Constraint>(
  * Blocks" §4): a `Context.Service` exposing the composed HTTP handler
  * for all three planes (git smart-HTTP wire, `/api/v1` REST, `/api/v3`
  * GitHub compat). The package ships no Worker — construct your own and
- * wire `fetch` in. `Server.layer(api)` serves an API derived from
+ * wire `fetch` in. `Server.layer(api, groups)` serves an API derived from
  * {@link GitApi}: yours, with your middleware in front of every route
- * and your own routes beside them; {@link Handlers} implements the
- * engine's routes, and a Layer provided nearer than it overrides one.
- * {@link ServerLive} is the open default: `Git.Api`, `Handlers`, nothing
+ * and your own routes beside them. Implement each group with
+ * `HttpApiBuilder.group(api, ...)`, using {@link Handlers} for the engine's
+ * default handlers.
+ * {@link ServerLive} is the open default: `Git.Api`, {@link ApiLive}, {@link HandlersLive}, nothing
  * in front.
  *
  * ```ts
- * class AppApi extends Git.Api.middleware(Session) {}
+ * class AppApi extends HttpApi.make("git-management")
+ *   .add(Git.Repos)
+ *   .middleware(Session) {}
+ * const AppApiLive = HttpApiBuilder.group(AppApi, "repos", (h) =>
+ *   Effect.map(Git.Handlers, (git) => h.handleAll(git.repos)),
+ * );
  *
- * const GitLive = Git.Server.layer(AppApi).pipe(
- *   Layer.provide(Git.Handlers),
+ * const GitLive = Git.Server.layer(AppApi, AppApiLive).pipe(
+ *   Layer.provide(Git.HandlersLive),
  *   Layer.provide(SessionLive),
  *   Layer.provide(Git.ReposDurableObject),
  *   Layer.provide(Git.RegistryDurableObject),
@@ -2407,20 +2389,22 @@ export class Server extends Context.Service<Server, ServerShape>()(
   "alchemy/Git/Server",
 ) {
   /**
-   * `Git.Server` over an API derived from {@link GitApi}. Requires an
-   * implementation of every route ({@link Handlers} for the engine's,
-   * yours for the rest), the API's middleware, and the storage blocks.
+   * `Git.Server` over an API and its `HttpApiBuilder.group` layers.
+   * Provide {@link HandlersLive} and the API's middleware to the result.
    */
   static readonly layer = <
     Id extends string,
     Groups extends HttpApiGroup.Constraint,
+    E,
+    R,
   >(
     api: HttpApi.HttpApi<Id, Groups>,
-  ) => Layer.effect(Server, makeServer(api));
+    groups: Layer.Layer<HttpApiGroup.ToService<Id, Groups>, E, R>,
+  ) => Layer.effect(Server, makeServer(api, groups));
 }
 
 /**
- * The default `Git.Server` assembly: {@link GitApi} with {@link Handlers}
+ * The default `Git.Server` assembly: {@link GitApi} with {@link ApiLive}
  * and nothing in front of the routes. Provide {@link ReposDurableObject}
  * and {@link RegistryDurableObject} (or your own implementations of the
  * underlying namespaces) in the same layer graph.
@@ -2428,7 +2412,9 @@ export class Server extends Context.Service<Server, ServerShape>()(
  * @layer
  * @provides Git.Server
  */
-export const ServerLive = Server.layer(GitApi).pipe(Layer.provide(Handlers));
+export const ServerLive = Server.layer(GitApi, ApiLive).pipe(
+  Layer.provide(HandlersLive),
+);
 
 /**
  * Hosts the `GitRegistry` Durable Object (owner/name → repoId) and

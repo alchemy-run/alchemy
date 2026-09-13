@@ -298,69 +298,89 @@ the raw reads, and the GitHub facade.
 
 ## A route of your own
 
-The git routes are `alchemy/Http` route classes: an `HttpApiEndpoint`
-that also names the tag of its implementation. Yours are the same. `Me`
-declares the middleware it relies on, so its handler can ask for the
-`Session`:
+The git routes are ordinary Effect `HttpApiEndpoint` values. Yours are
+built the same way. `Me` declares the middleware it relies on so its
+handler can read the `Session`:
 
 ```typescript
-import * as Http from "alchemy/Http";
+import * as HttpApiEndpoint from "effect/unstable/httpapi/HttpApiEndpoint";
 
-export class Me extends Http.get<Me>()("me", "/api/v1/me", {
+export const Me = HttpApiEndpoint.get("me", "/api/v1/me", {
   success: User,
   error: Unauthorized,
-  middleware: [Authenticated],
-}) {}
-
-export const MeLive = Me.make(
-  Effect.succeed(() =>
-    Effect.gen(function* () {
-      const { user } = yield* Session;
-      if (user === null) return yield* new Unauthorized();
-      return user;
-    }),
-  ),
-);
+}).middleware(Authenticated);
 ```
-
-`Me.make` is the implementation as a Layer. Its `init` returns the
-handler; `Effect.succeed` because this one has nothing to set up.
 
 ## Your API around the server
 
-A route goes in a group, a group goes in an API. `Git.Api` is the git
-groups, yours is one more, and the middleware goes in front of all of
-them. This API is the boundary your application talks to:
+An endpoint goes in a group, and a group goes in an API. Add the new
+group to `Git.Api`, then put the middleware in front of every group:
 
 ```typescript
 import * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup";
 
 export class AppRoutes extends HttpApiGroup.make("app").add(Me) {}
-
 export class AppApi extends Git.Api.add(AppRoutes).middleware(Authenticated) {}
 ```
 
+Implement each group against `AppApi`. This replaces the `ApiLive`
+assembly from Part 1. `Git.Handlers` supplies the Git handlers, while
+`handle("me", ...)` implements the new endpoint:
+
+```typescript
+export const AppApiLive = Layer.mergeAll(
+  HttpApiBuilder.group(AppApi, "repos", (h) =>
+    Effect.map(Git.Handlers, (git) => h.handleAll(git.repos)),
+  ),
+  HttpApiBuilder.group(AppApi, "refs", (h) =>
+    Effect.map(Git.Handlers, (git) => h.handleAll(git.refs)),
+  ),
+  HttpApiBuilder.group(AppApi, "objects", (h) =>
+    Effect.map(Git.Handlers, (git) => h.handleAll(git.objects)),
+  ),
+  HttpApiBuilder.group(AppApi, "pulls", (h) =>
+    Effect.map(Git.Handlers, (git) => h.handleAll(git.pulls)),
+  ),
+  HttpApiBuilder.group(AppApi, "protocol", (h) =>
+    Effect.map(Git.Handlers, (git) => h.handleAll(git.protocol)),
+  ),
+  HttpApiBuilder.group(AppApi, "github", (h) =>
+    Effect.map(Git.Handlers, (git) => h.handleAll(git.github)),
+  ),
+  HttpApiBuilder.group(AppApi, "app", (h) =>
+    h.handle("me", () => Effect.gen(function* () {
+      const { user } = yield* Session;
+      if (user === null) return yield* new Unauthorized();
+      return user;
+    })),
+  ),
+);
+```
+
+The group builder checks that every endpoint is implemented. Its setup
+runs once, and the handlers run per request. Use `Effect.gen` in the
+group builder when your own handlers need storage clients or bindings.
+
 ## The host
 
-`Git.Server.layer(AppApi)` serves the API. It asks for an
-implementation of every route, `Git.Handlers` for the engine's and
-`MeLive` for yours, and for the middleware the API declares. Leave one
-out and the compiler names it:
+Pass the API and its group layers to `Git.Server.layer`. Provide
+`Git.HandlersLive` to build the shared Git handlers, and provide the
+middleware and storage layers as before:
 
 ```diff lang="typescript"
--export class Api extends Git.Api.middleware(Authenticated) {}
--
--const GitLive = Git.Server.layer(Api).pipe(
-+const GitLive = Git.Server.layer(AppApi).pipe(
-+  Layer.provide(MeLive),
-  Layer.provide(Git.Handlers),
+-const GitLive = Git.Server.layer(Api, ApiLive).pipe(
++const GitLive = Git.Server.layer(AppApi, AppApiLive).pipe(
+  Layer.provide(Git.HandlersLive),
   Layer.provide(AuthenticatedLive),
   Layer.provide(Git.ReposDurableObject),
   Layer.provide(Git.RegistryDurableObject),
-  Layer.provide(Git.BlobStoreR2(GitObjects)),
   Layer.provide(Git.HasherInline),
+  Layer.provide(Git.BlobStoreR2(GitObjects)),
 );
 ```
+
+Delete the old `Api` and `ApiLive` declarations; `AppApi` and
+`AppApiLive` now include both the Git groups and the application group.
 
 Better Auth needs a database and its own routes under `/api/auth`.
 Declare the database, and serve the auth routes in front of the git
@@ -447,19 +467,16 @@ engine never saw a credential.
 ## Replacing one of the engine's routes
 
 `gh` validates its credential against `GET /api/v3/user`. The engine
-has no user to answer with. Answer with yours by providing another
-Layer for the same route, nearer the API than `Git.Handlers`. The
-engine's route class does not declare your middleware, so the handler
-reads the `Session` as an option:
+has no user to answer with. In `AppApiLive`, replace the `github` group
+registration with this one. Spread the default handlers and supply a
+new `user` handler:
 
 ```typescript
-import * as Option from "effect/Option";
-
-export const GitHubUserLive = Git.GitHubUser.make(
-  Effect.succeed(() =>
-    Effect.gen(function* () {
-      const session = yield* Effect.serviceOption(Session);
-      const user = Option.isSome(session) ? session.value.user : null;
+HttpApiBuilder.group(AppApi, "github", (h) =>
+  Effect.map(Git.Handlers, (git) => h.handleAll({
+    ...git.github,
+    user: () => Effect.gen(function* () {
+      const { user } = yield* Session;
       if (user === null) {
         return HttpServerResponse.jsonUnsafe(
           { message: "Requires authentication" },
@@ -472,19 +489,13 @@ export const GitHubUserLive = Git.GitHubUser.make(
         type: "User",
       });
     }),
-  ),
-);
+  })),
+)
 ```
 
-```diff lang="typescript"
-const GitLive = Git.Server.layer(AppApi).pipe(
--  Layer.provide(MeLive),
-+  Layer.provide([MeLive, GitHubUserLive]),
-  Layer.provide(Git.Handlers),
-```
-
-The nearer implementation wins. Every git route can be replaced this
-way, and the group it lives in never knows.
+The group is built against `AppApi`, so its middleware supplies `Session`
+directly. All the other handlers come from `git.github`. Any Git handler
+can be replaced this way; `GitLive` still receives the same `AppApiLive`.
 
 ## Your application on the same origin
 
