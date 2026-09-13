@@ -36,9 +36,16 @@ export class DurableObjectState extends Context.Service<
      * The raw workerd DurableObjectState, for interop with async APIs.
      */
     readonly raw: cf.DurableObjectState;
-    blockConcurrencyWhile<T>(
-      callback: () => Effect.Effect<T, never, RuntimeContext>,
-    ): Effect.Effect<T, never, RuntimeContext>;
+    /**
+     * Run `callback` while workerd holds every other event on this object.
+     * The callback runs with the caller's full context (services, tracing),
+     * as `waitUntil` does, so a service provided to the calling fiber is
+     * visible inside the gate. A defect in the callback rejects the gate
+     * and workerd resets the object, which is the platform's contract.
+     */
+    blockConcurrencyWhile<T, R = never>(
+      callback: () => Effect.Effect<T, never, R>,
+    ): Effect.Effect<T, never, R | RuntimeContext>;
     acceptWebSocket(
       ws: WebSocket,
       tags?: string[],
@@ -99,10 +106,19 @@ export const fromDurableObjectState = (
         ),
       );
     }),
-  blockConcurrencyWhile: <T>(callback: () => Effect.Effect<T>) =>
-    Effect.tryPromise(() =>
-      state.blockConcurrencyWhile(() => Effect.runPromise(callback())),
-    ),
+  blockConcurrencyWhile: <T, R = never>(
+    callback: () => Effect.Effect<T, never, R>,
+  ) =>
+    Effect.gen(function* () {
+      const context = yield* Effect.context<R>();
+      // The failure is typed away as before: a rejected gate is the
+      // platform resetting the object, not a value a caller handles.
+      return yield* Effect.tryPromise<T, never>(() =>
+        state.blockConcurrencyWhile(() =>
+          Effect.runPromise(callback().pipe(Effect.provide(context))),
+        ),
+      );
+    }),
   acceptWebSocket: (ws: WebSocket, tags?: string[]) =>
     Effect.sync(() => state.acceptWebSocket(ws.ws, tags)),
   getWebSockets: (tag?: string) =>

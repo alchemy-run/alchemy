@@ -4,10 +4,17 @@ description: Enumerate and delete every live resource across the stack's provide
 ---
 
 ```sh
-bun alchemy unsafe nuke [options]
+bun alchemy unsafe nuke [config] [options]
 ```
 
 `nuke` enumerates and deletes every live resource across the stack's providers. The command nests under `unsafe` and is deliberately hidden from `--help` — it's dangerous and we don't want agents to discover and use it. This page is its only discovery surface.
+
+Pass the stack file positionally or with `--config` / `-c`, but not both. If omitted, it defaults to `alchemy.run.ts`.
+
+```sh
+bun alchemy unsafe nuke ./stacks/nuke.ts --dry-run
+bun alchemy unsafe nuke --config ./stacks/nuke.ts --dry-run
+```
 
 :::caution
 `nuke` is **not** scoped to a stack, a stage, or the state store. The stack file is imported only to learn which providers are registered; each provider's `list()` then enumerates **every** resource of that type in the ambient account/region/zone — including resources alchemy never created — and deletes them all. This cannot be undone. What you usually want is [`alchemy destroy`](/cli/destroy), which is stack-scoped and state-driven.
@@ -48,7 +55,7 @@ Each selected provider's local variant is built lazily, as it is scanned, so `--
 `--include` and `--exclude` take provider-ID globs (picomatch, e.g. `'Cloudflare.*'`), are repeatable, and `--exclude` is applied after `--include`.
 
 ```sh
-bun alchemy unsafe nuke --include 'Cloudflare.Worker' --dry-run --verbose
+bun alchemy unsafe nuke --include 'Cloudflare.Worker' --dry-run
 ```
 
 `--filter` is a JavaScript expression evaluated with `resource` in scope (plus synthesized `Type` and `LogicalId` fields); a **truthy** expression **spares** the resource, and a throwing or non-boolean expression is treated as false. Repeatable.
@@ -60,9 +67,7 @@ bun alchemy unsafe nuke --filter 'resource.workerName.startsWith("prod-")'
 
 ## Dry run and confirmation
 
-Every run starts with a per-provider report of to-delete and filtered-out counts; `--verbose`/`-v` also enumerates each resource by a best-effort display name.
-
-`--dry-run` exits after the report. Otherwise a confirm prompt — `Permanently DELETE N resource(s)? This cannot be undone.` — defaults to **No** and is skipped by `--yes`. In non-interactive shells, run `--dry-run` first, then re-run with `--yes`.
+`--dry-run` exits after the report. Otherwise a confirm prompt — `Permanently DELETE N resource(s)? This cannot be undone.` — defaults to **Cancel** and is skipped by `--yes`. In non-interactive shells, run `--dry-run` first, then re-run with `--yes`.
 
 ## Multi-pass deletion
 
@@ -81,7 +86,6 @@ Deletion runs in passes: each pass attempts every remaining resource, failures a
 | `--env-file <path>`   | Load environment variables from a file                                                                                                                                 |
 | `--yes`               | Skip the confirmation prompt                                                                                                                                           |
 | `--dry-run`           | Report what would be deleted, then exit without deleting                                                                                                               |
-| `--verbose`           | List each resource instead of showing provider totals                                                                                                                  |
 | `--concurrency <n>`   | Max number of providers scanned/deleted in parallel (resources within a provider are always deleted concurrently). Use 0 for unbounded. Default: 16 — unbounded tends to be slower because it triggers provider-side rate limiting and retry backoff. |
 | `--timeout <s>`       | Per-provider timeout (seconds) for each list/delete call, so one slow or hanging provider can't stall the whole run. Default: 120.                                     |
 | `--include <glob>`    | Glob of provider IDs to include (e.g. `'Cloudflare.*'` or `'Cloudflare.Worker'`). Repeatable; when omitted, every provider is included.                                |
@@ -93,7 +97,7 @@ Deletion runs in passes: each pass attempts every remaining resource, failures a
 
 ## Debugging
 
-`DEBUG=1` routes provider logs to the console at Debug level and disables the TUI so the log stream isn't clobbered by the progress renderer; interactive runs otherwise show a scan progress bar followed by per-pass delete progress bars.
+`DEBUG=1` routes provider logs to the console at Debug level and disables the TUI so the log stream isn't clobbered by the progress renderer.
 
 ## Where next
 

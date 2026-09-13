@@ -7,6 +7,7 @@ import * as Option from "effect/Option";
 import { MinimumLogLevel } from "effect/References";
 import * as Nuke from "../../Nuke.ts";
 import type { ProviderMode } from "../../ProviderMode.ts";
+import type { ApplyStatus } from "../../Report.ts";
 import { Progress, withSpanEvents } from "../Progress.ts";
 import {
   buildStackProviders,
@@ -72,11 +73,15 @@ export const scan = Effect.fn("Alchemist.nuke.scan")(function* (
     exclude: input.exclude,
     concurrency: input.concurrency,
     timeoutSeconds: input.providerTimeoutSeconds,
-    onProvider: (provider, count) =>
+    onScan: (total) => report({ _tag: "nuke.scan.started", total }),
+    onProviderStarted: (provider) =>
+      report({ _tag: "nuke.scan.provider.started", provider }),
+    onProvider: (provider, count, error) =>
       report({
         _tag: "nuke.scan.provider.completed",
         provider,
         resources: count,
+        error,
       }),
   });
   return { mode: input.mode, resources, failures, context } satisfies NukeScan;
@@ -90,19 +95,52 @@ export const execute = Effect.fn("Alchemist.nuke.execute")(function* (
   input: ExecuteInput,
 ) {
   const report = withSpanEvents(yield* Progress);
+  const keys = new Map(
+    input.resources.map((resource, index) => [resource, `nuke/${index}`]),
+  );
+  const status = (
+    resource: Nuke.Target,
+    status: ApplyStatus,
+    message?: string,
+  ) =>
+    report({
+      _tag: "apply.resource.status",
+      fqn: keys.get(resource)!,
+      id: resource.providerId,
+      type: resource.providerId,
+      status,
+      message,
+    });
   return yield* Nuke.destroy({
     targets: input.resources,
     context: input.scan.context,
     strategy: input.strategy,
     concurrency: input.concurrency,
     timeoutSeconds: input.providerTimeoutSeconds,
+    onPass: (pass) => report({ _tag: "nuke.pass.started", pass }),
+    onDeleting: (resource) => status(resource, "deleting"),
+    onHeld: (resource, blockedBy) =>
+      status(resource, "skipped", `Held back by ${blockedBy.join(", ")}`),
     onDeleted: (resource) =>
-      report({ _tag: "nuke.resource.deleted", resource: resource.displayName }),
+      status(resource, "deleted").pipe(
+        Effect.andThen(
+          report({
+            _tag: "nuke.resource.deleted",
+            provider: resource.providerId,
+            resource: resource.displayName,
+          }),
+        ),
+      ),
     onFailed: (resource, message) =>
-      report({
-        _tag: "nuke.resource.failed",
-        resource: resource.displayName,
-        message,
-      }),
+      status(resource, "fail", message).pipe(
+        Effect.andThen(
+          report({
+            _tag: "nuke.resource.failed",
+            provider: resource.providerId,
+            resource: resource.displayName,
+            message,
+          }),
+        ),
+      ),
   });
 });

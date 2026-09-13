@@ -162,7 +162,7 @@ export const deleteOwnedServiceDomain = Effect.fn(function* (input: {
     if (row.syncStatus === "DELETING") continue;
     yield* withEnvironmentConfigLock(
       input.environmentId,
-      railway.serviceDomainDelete({ id: row.id }),
+      railway.deleteServiceDomain({ id: row.id }),
     ).pipe(
       Effect.catchTag(["RailwayNotFound", "NotFound"], () => Effect.void),
       Effect.asVoid,
@@ -353,7 +353,7 @@ const createViaMutation = (input: {
       ),
     );
   const create = railway
-    .serviceDomainCreate({
+    .createServiceDomain({
       input: {
         environmentId: input.environmentId,
         serviceId: input.serviceId,
@@ -439,7 +439,7 @@ const syncDomain = (input: {
   if (!rename && !retarget) return Effect.succeed(undefined);
   return withEnvironmentConfigLock(
     input.current.environmentId,
-    railway.serviceDomainUpdate({
+    railway.updateServiceDomain({
       input: {
         domain: domainName ?? input.current.domain,
         environmentId: input.current.environmentId,

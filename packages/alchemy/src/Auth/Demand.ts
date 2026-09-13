@@ -22,9 +22,9 @@
  *   read what a parent persisted) start with a warm token.
  * - AWS's `read` returns a credentials RECIPE whose inner effect stays
  *   unevaluated (SSO tokens are loaded lazily by consumers), so an
- *   expired SSO token passes the gate and still surfaces mid-run; an
- *   `{ method: "local" }` profile's read ensures the floci emulator,
- *   which the gate consequently starts before apply.
+ *   expired SSO token passes the gate and still surfaces mid-run. Local-mode
+ *   AWS providers carry a floci-scoped environment of their own (see
+ *   `AWS/Local/FlociServices.ts`) and ensure the emulator there.
  *
  * The demand scan keys on provider MODE, not plan action — noop live rows
  * still demand (their runtime proxies need live credentials to serve), so
@@ -305,20 +305,17 @@ export const demandCredentials = Effect.fn("Alchemy.demandCredentials")(
             );
           }
           // Read-only precheck of the two non-CI configuration sources the
-          // resolution precedence below consults: a profile entry, or —
-          // when no profile was explicitly selected — exported environment
-          // credentials. "Nothing configured" fails with the actionable
+          // resolution precedence below consults: environment credentials
+          // (which win regardless of the selected profile), or a profile
+          // entry. "Nothing configured" fails with the actionable
           // {@link CredentialsRequired} here, WITHOUT entering
           // `resolveProviderConfig`: its profile path goes through
           // `ensureProfile`, which fails a nonexistent profile with a
           // generic ProfileError that would bury which resources demanded
           // credentials and what command fixes it.
           const envUsable =
-            Option.isNone(configuredProfile) &&
             auth.readEnvironment !== undefined &&
-            (yield* Effect.sync(() =>
-              presentEnvironment(auth.environment, process.env),
-            )) !== undefined;
+            (yield* presentEnvironment(auth.environment)) !== undefined;
           const existing = yield* profile.getProfile(profileName);
           if (existing?.providers[auth.name] == null && !envUsable) {
             return yield* credentialsRequired(demand, profileName);
@@ -349,6 +346,36 @@ export const demandCredentials = Effect.fn("Alchemy.demandCredentials")(
     );
   },
 );
+
+/**
+ * Plan-time seam for `Alchemy.remote()` rows. The planner probes every new
+ * resource with its provider's `read` (engine-level adoption) — for a
+ * live-mode row in a dev run that is a real cloud call, made BEFORE
+ * {@link demandPlanCredentials} could run in apply. Demanding here first
+ * turns "nothing configured" into the typed {@link CredentialsRequired}
+ * (naming the rows and the exact `alchemy profile edit` command) instead
+ * of whatever raw error the first credential-less read produces. Bindings
+ * and live deletions are still gated in apply — nothing reads for them
+ * during plan.
+ */
+export const demandRemoteCredentials = (
+  resources: ReadonlyArray<{ readonly Type: string; readonly FQN: string }>,
+) => {
+  const byProvider = new Map<string, DemandingResource[]>();
+  for (const resource of resources) {
+    const provider = cloudOf(resource.Type);
+    byProvider.set(provider, [
+      ...(byProvider.get(provider) ?? []),
+      { fqn: resource.FQN, reason: "remote" },
+    ]);
+  }
+  return demandCredentials(
+    [...byProvider.entries()].map(([provider, resources]) => ({
+      provider,
+      resources,
+    })),
+  );
+};
 
 /**
  * The one-call seam wired into the dev path: scan the plan for live

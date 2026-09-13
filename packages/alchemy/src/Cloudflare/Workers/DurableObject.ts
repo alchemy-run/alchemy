@@ -115,6 +115,11 @@ export interface DurableObjectShape {
     reason: string,
     wasClean: boolean,
   ) => Effect.Effect<void>;
+  /**
+   * Called when a hibernatable WebSocket errors. The runtime closes the
+   * socket after this handler; use it to drop the peer's session state.
+   */
+  webSocketError?: (socket: WebSocket, error: unknown) => Effect.Effect<void>;
 }
 
 export type DurableObjectServices =
@@ -719,8 +724,8 @@ export class DurableObjectScope extends Context.Service<
  * Durable Objects support WebSocket hibernation — the runtime can
  * evict the object from memory while keeping connections open. Use
  * `Cloudflare.upgrade()` to accept a connection, and return
- * `webSocketMessage` / `webSocketClose` handlers to process events
- * when the object wakes back up.
+ * `webSocketMessage` / `webSocketClose` / `webSocketError` handlers to
+ * process events when the object wakes back up.
  *
  * **Example:** Accepting a WebSocket connection
  * ```typescript
@@ -751,6 +756,13 @@ export class DurableObjectScope extends Context.Service<
  *     reason: string,
  *   ) {
  *     yield* ws.close(code, reason);
+ *   }),
+ *   webSocketError: Effect.fn(function* (
+ *     ws: Cloudflare.WebSocket,
+ *     error: unknown,
+ *   ) {
+ *     // the runtime closes the socket afterwards; clear its session here
+ *     ws.serializeAttachment(null);
  *   }),
  * };
  * ```

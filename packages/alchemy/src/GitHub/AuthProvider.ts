@@ -492,9 +492,7 @@ export const makeGitHubAuth = (authOptions?: GitHubAuthOptions) =>
             )
           : Effect.fail(
               new AuthError({
-                message:
-                  `GitHub: unknown method '${input.method}'. Only 'stored' supports ` +
-                  "flag-driven configuration; use interactive configure for 'gh-cli'.",
+                message: `GitHub: unknown method '${input.method}'. Valid methods: stored. (gh-cli is interactive-only.)`,
               }),
             );
 
