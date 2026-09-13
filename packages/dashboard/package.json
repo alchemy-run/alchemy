@@ -1,16 +1,39 @@
 {
   "name": "@alchemy.run/dashboard",
-  "version": "0.0.0",
-  "private": true,
-  "description": "Web dashboard for alchemy stacks",
+  "version": "2.0.0-beta.76",
+  "description": "Web dashboard for alchemy stacks: the SPA behind `alchemy deploy --ui`, `alchemy dashboard`, and the hosted dashboard viewers.",
+  "homepage": "https://alchemy.run",
+  "license": "Apache-2.0",
+  "author": "Sam Goodwin <sam@alchemy.run>",
+  "keywords": [
+    "alchemy",
+    "dashboard",
+    "effect",
+    "infrastructure-as-code"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alchemy-run/alchemy.git",
+    "directory": "packages/dashboard"
+  },
+  "bugs": {
+    "url": "https://github.com/alchemy-run/alchemy/issues"
+  },
   "type": "module",
-  "files": ["dist"],
+  "files": [
+    "dist",
+    "NOTICE"
+  ],
   "exports": {
     "./package.json": "./package.json"
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && bun ../../scripts/copy-package-files.ts dashboard",
+    "clean": "rm -rf dist",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "bun test test/",

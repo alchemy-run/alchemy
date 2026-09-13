@@ -10,6 +10,7 @@ import * as GlobalFlag from "effect/unstable/cli/GlobalFlag";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 
 import { AlchemyContextLive } from "alchemy/AlchemyContext";
+import { withDashboardReporter } from "alchemy/Dashboard/Reporter";
 import { ArtifactStore, createArtifactStore } from "alchemy/Artifacts";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import { ProfileStoreLive } from "alchemy/Auth/Profile";
@@ -35,6 +36,7 @@ const commandMetadata = [
   ["dev", "Develop a stack with live reload"],
   ["destroy", "Destroy a deployed stack"],
   ["plan", "Preview changes to a stack"],
+  ["dashboard", "Serve the web dashboard for a stack"],
   ["logs", "Fetch or tail logs from stack resources"],
   ["profile", "Manage authentication profiles and accounts"],
   ["state", "Inspect and manage deployment state"],
@@ -62,6 +64,8 @@ const loadCommand = async (name: CommandName) => {
       return (await import("./commands/deploy.ts")).destroyCommand;
     case "plan":
       return (await import("./commands/deploy.ts")).planCommand;
+    case "dashboard":
+      return (await import("./commands/dashboard.ts")).dashboardCommand;
     case "logs":
       return (await import("./commands/logs.ts")).logsCommand;
     case "profile":
@@ -184,7 +188,13 @@ const services = Layer.mergeAll(
   routeCacheLayer,
   Layer.provide(
     Layer.provideMerge(
-      Layer.mergeAll(selectCliServices(), CliKit.CliKitInteraction),
+      Layer.mergeAll(
+        // Every apply session is also streamed to a running `alchemy
+        // dashboard` in this project (a `--ui` run's own, or a standalone
+        // one) — a no-op when none is advertised.
+        withDashboardReporter(selectCliServices()),
+        CliKit.CliKitInteraction,
+      ),
       CliKit.layer(),
     ),
     PlatformServices,

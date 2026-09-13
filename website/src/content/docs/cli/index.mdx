@@ -16,6 +16,7 @@ alchemy
 ├─ deploy              # plan → approve → apply
 ├─ plan                # preview changes, apply nothing
 ├─ destroy             # delete every resource in a stage
+├─ dashboard           # serve the web dashboard for a stack (or --ui on deploy/plan/destroy)
 ├─ drift               # detect (and optionally repair) infrastructure drift
 ├─ unsafe nuke         # delete everything a provider can list, tracked or not
 │
@@ -33,7 +34,7 @@ alchemy
    └─ cloudflare bootstrap|teardown|token|state logs
 ```
 
-Each command has its own page: [deploy](/cli/deploy), [plan](/cli/plan), [destroy](/cli/destroy), [drift](/cli/drift), [unsafe nuke](/cli/nuke), [dev](/cli/dev), [logs](/cli/logs), [profile](/cli/profile), [state](/cli/state), [AWS provider commands](/cli/aws), and [Cloudflare provider commands](/cli/cloudflare). The workflow guides cover [adopting resources](/cli/adopting-resources) and [inspecting state](/cli/inspecting-state).
+Each command has its own page: [deploy](/cli/deploy), [plan](/cli/plan), [destroy](/cli/destroy), [dashboard](/cli/dashboard), [drift](/cli/drift), [unsafe nuke](/cli/nuke), [dev](/cli/dev), [logs](/cli/logs), [profile](/cli/profile), [state](/cli/state), [AWS provider commands](/cli/aws), and [Cloudflare provider commands](/cli/cloudflare). The workflow guides cover [adopting resources](/cli/adopting-resources) and [inspecting state](/cli/inspecting-state).
 
 ## Common options
 

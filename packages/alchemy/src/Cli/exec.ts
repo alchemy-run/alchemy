@@ -17,6 +17,7 @@ import { AlchemyContextLive } from "../AlchemyContext.ts";
 import { StackModuleLoader } from "../Alchemist/Session.ts";
 import { ArtifactStore, createArtifactStore } from "../Artifacts.ts";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
+import { withDashboardReporter } from "../Dashboard/Reporter.ts";
 import { ProfileStoreLive } from "../Auth/Profile.ts";
 import { makeDevLogOpener } from "../Local/DevLog.ts";
 import * as RpcProviderProxy from "../Local/RpcProviderProxy.ts";
@@ -38,7 +39,11 @@ import { selectCliServices } from "./selectCli.ts";
 // `ALCHEMY_TUI` remains the explicit override in either direction.
 const services = Layer.mergeAll(
   Layer.provideMerge(
-    Layer.mergeAll(selectCliServices(), CliKit.CliKitInteraction),
+    Layer.mergeAll(
+      // dev applies stream to a running `alchemy dashboard` too
+      withDashboardReporter(selectCliServices()),
+      CliKit.CliKitInteraction,
+    ),
     CliKit.layer(),
   ),
   ConsoleLogLive,

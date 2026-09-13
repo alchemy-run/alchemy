@@ -558,6 +558,7 @@
     "ws": "catalog:shared"
   },
   "peerDependencies": {
+    "@alchemy.run/dashboard": "workspace:*",
     "@alchemy.run/frontend-frameworks": "workspace:*",
     "@aws/durable-execution-sdk-js": "catalog:aws",
     "@effect/platform-bun": "catalog:effect",
@@ -575,6 +576,9 @@
     "ws": "catalog:shared"
   },
   "peerDependenciesMeta": {
+    "@alchemy.run/dashboard": {
+      "optional": true
+    },
     "@alchemy.run/frontend-frameworks": {
       "optional": true
     },

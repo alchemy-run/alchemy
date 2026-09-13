@@ -2740,6 +2740,43 @@ importers:
         specifier: 4.0.0-rc.112
         version: 4.0.0-rc.112
 
+  examples/dashboard-aws:
+    dependencies:
+      '@alchemy.run/dashboard':
+        specifier: workspace:*
+        version: link:../../packages/dashboard
+      '@effect/platform-bun':
+        specifier: catalog:effect
+        version: 4.0.0-rc.112(effect@4.0.0-rc.112)
+      '@effect/platform-node':
+        specifier: catalog:effect
+        version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
+      alchemy:
+        specifier: workspace:*
+        version: link:../../packages/alchemy
+      effect:
+        specifier: 4.0.0-rc.112
+        version: 4.0.0-rc.112
+
+  examples/dashboard-cloudflare:
+    dependencies:
+      '@alchemy.run/dashboard':
+        specifier: workspace:*
+        version: link:../../packages/dashboard
+      '@effect/platform-bun':
+        specifier: catalog:effect
+        version: 4.0.0-rc.112(effect@4.0.0-rc.112)
+      '@effect/platform-node':
+        specifier: catalog:effect
+        version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
+      alchemy:
+        specifier: workspace:*
+        version: link:../../packages/alchemy
+      effect:
+        specifier: 4.0.0-rc.112
+        version: 4.0.0-rc.112
+
+
   examples/dev-stress:
     dependencies:
       '@cloudflare/workers-types':
@@ -5335,6 +5372,9 @@ importers:
       '@alchemy.run/cloudflare-runtime':
         specifier: workspace:*
         version: link:../cloudflare-runtime
+      '@alchemy.run/dashboard':
+        specifier: workspace:*
+        version: link:../dashboard
       '@alchemy.run/floci':
         specifier: workspace:*
         version: link:../floci

@@ -1,0 +1,89 @@
+---
+title: Hosted Dashboard
+description: Deploy the alchemy dashboard as a hosted viewer that reads your state store — no CLI process required.
+---
+
+The dashboard the CLI serves for [`alchemy dashboard` and `--ui`](/cli/dashboard) can also be **deployed**: the same `@alchemy.run/dashboard` SPA plus a read-only viewer API that reads a deployed state store directly. Anyone with access to the URL sees every stack and stage in that store — structure, decorations, deployment history, outputs — without running alchemy locally.
+
+Both variants are a few lines in an `alchemy.run.ts`. They need the SPA installed in the project:
+
+```sh
+bun add -D @alchemy.run/dashboard
+```
+
+## Cloudflare
+
+One Worker serves the SPA as static assets and the viewer API over the Cloudflare state store. Everything is derived at deploy time: the store's endpoint and token that `Cloudflare.state()` caches for your profile, a service binding to the `alchemy-state-store` Worker (Cloudflare blocks same-zone worker-to-worker `fetch`), and the SPA from the installed package.
+
+```typescript
+import * as Alchemy from "alchemy";
+import * as Cloudflare from "alchemy/Cloudflare";
+import { Dashboard } from "alchemy/Dashboard/Hosted/Cloudflare";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "Dashboard",
+  { providers: Cloudflare.providers(), state: Cloudflare.state() },
+  Effect.gen(function* () {
+    const dashboard = yield* Dashboard({
+      access: {
+        policies: [
+          { decision: "allow", include: [{ emailDomain: "example.com" }] },
+        ],
+      },
+    });
+    return { url: dashboard.url.as<string>() };
+  }),
+);
+```
+
+The dashboard exposes everything the state store holds (resource props and attributes with secrets redacted by the state encoding, deployment journals, outputs), so `access` is a required, deliberate choice: [Cloudflare Access](/cloudflare/security/access) policies — alchemy creates the Access application for the Worker — or `"public"` to serve it to anyone with the URL.
+
+Options:
+
+| Option       | Description                                                                                                  |
+| ------------ | ------------------------------------------------------------------------------------------------------------ |
+| `access`     | Access policies, or `"public"`. Required.                                                                     |
+| `stack`      | Stack to open with (defaults to the first stack in the store; `?stack=` selects others)                       |
+| `stage`      | Stage to open with (defaults to the first stage of the stack; `?stage=` selects others)                       |
+| `domain`     | Custom domain for the Worker                                                                                  |
+| `stateStore` | Explicit `{ url, authToken, service? }` instead of the profile's cached store; `service: false` for cross-zone |
+| `assets`     | Directory of a built SPA instead of the installed package's `dist/`                                           |
+
+## AWS
+
+The SPA lives on S3 behind a CloudFront distribution (an `AWS.Website.Router`) that routes `/api/*` to a Lambda serving the viewer API straight from the S3 state store. The Lambda's execution role is the only credential: it gets `s3:ListBucket` and `s3:GetObject` on the state bucket plus `kms:Decrypt` for the store's envelope-encrypted secrets.
+
+```typescript
+import * as Alchemy from "alchemy";
+import * as AWS from "alchemy/AWS";
+import { Dashboard } from "alchemy/Dashboard/Hosted/AWS";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "Dashboard",
+  { providers: AWS.providers(), state: AWS.state() },
+  Effect.gen(function* () {
+    const dashboard = yield* Dashboard("Dashboard");
+    return { url: dashboard.url };
+  }),
+);
+```
+
+Lambda Function URLs buffer responses, so the viewer serves its live stream as snapshot polling instead of one open SSE connection; the page still updates within seconds of a deploy.
+
+The distribution is public — CloudFront has no built-in login. Put it behind your own gate (a WAF rule, Lambda@Edge auth, a VPN) before sharing the URL.
+
+Options:
+
+| Option       | Description                                                                                       |
+| ------------ | ------------------------------------------------------------------------------------------------- |
+| `stack`      | Stack to open with (defaults to the first stack in the store; `?stack=` selects others)            |
+| `stage`      | Stage to open with (defaults to the first stage of the stack; `?stage=` selects others)            |
+| `stateStore` | `{ bucketName?, prefix? }` instead of the account-regional default bucket `AWS.state()` uses        |
+| `domain`     | Custom domain for the CloudFront distribution                                                      |
+| `assets`     | Directory of a built SPA instead of the installed package's `dist/`                                |
+
+## Any other host
+
+The viewer API is a plain `HttpServerRequest → HttpServerResponse` handler with no platform dependencies — `viewer(options)` from `alchemy/Dashboard/Viewer` — so it runs wherever the Effect HTTP types do. Point it at any `StateService` and serve the SPA `dist/` next to it (same origin, SPA fallback to `index.html`). Hosts that buffer response bodies should pass `sse: "poll"`.

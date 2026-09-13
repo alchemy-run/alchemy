@@ -56,6 +56,7 @@ When the plan contains no changes, the approval prompt is skipped automatically.
 | `--adopt`           | Adopt pre-existing cloud resources that conflict with this stack instead of failing. Useful for re-importing into a fresh state store. |
 | `--profile <name>`  | Auth profile to use (defaults to `$ALCHEMY_PROFILE` or `default`)                                                  |
 | `--env-file <path>` | Load environment variables from a file                                                                                     |
+| `--ui`              | Open the dashboard, approve the plan in the browser, and stream the run into it (needs `@alchemy.run/dashboard`, see [dashboard](/cli/dashboard)) |
 
 How `--adopt` decides what to take over is covered in [Adopting Resources](/cli/adopting-resources).
 

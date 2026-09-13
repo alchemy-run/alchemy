@@ -14,6 +14,7 @@ import * as HttpServer from "effect/unstable/http/HttpServer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import type { StateService } from "../State/State.ts";
+import { resolveDistDir } from "./Dist.ts";
 import { encodeState } from "../State/StateEncoding.ts";
 import {
   applyDeploymentRecord,
@@ -116,33 +117,7 @@ export interface DashboardServerOptions {
   command?: "deploy" | "destroy" | "plan";
 }
 
-/**
- * Locate the prebuilt dashboard SPA (`@alchemy.run/dashboard/dist`).
- * `@alchemy.run/dashboard` is an optional peer dependency — returns
- * undefined when it isn't installed. Overridable via
- * `ALCHEMY_DASHBOARD_DIST` for development.
- */
-export const resolveDistDir = Effect.fn(function* () {
-  const fs = yield* FileSystem.FileSystem;
-  const path = yield* Path.Path;
-  const override = process.env.ALCHEMY_DASHBOARD_DIST;
-  if (override) {
-    return (yield* fs.exists(override).pipe(Effect.orElseSucceed(() => false)))
-      ? override
-      : undefined;
-  }
-  const resolved = yield* Effect.try(() =>
-    import.meta.resolve("@alchemy.run/dashboard/package.json"),
-  ).pipe(Effect.option);
-  if (resolved._tag === "Some") {
-    const pkgDir = path.dirname(new URL(resolved.value).pathname);
-    const dist = path.join(pkgDir, "dist");
-    if (yield* fs.exists(dist).pipe(Effect.orElseSucceed(() => false))) {
-      return dist;
-    }
-  }
-  return undefined;
-});
+export { resolveDistDir } from "./Dist.ts";
 
 const FALLBACK_HTML = `<!doctype html>
 <html><head><title>alchemy dashboard</title></head>

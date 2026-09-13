@@ -584,6 +584,10 @@ export default defineConfig({
                   label: "Custom State Store",
                   link: "/state-store/custom-state-store",
                 },
+                {
+                  label: "Hosted Dashboard",
+                  link: "/state-store/hosted-dashboard",
+                },
               ],
             },
             {
@@ -632,6 +636,7 @@ export default defineConfig({
                 { label: "deploy", link: "/cli/deploy" },
                 { label: "plan", link: "/cli/plan" },
                 { label: "destroy", link: "/cli/destroy" },
+                { label: "dashboard", link: "/cli/dashboard" },
                 { label: "drift", link: "/cli/drift" },
                 { label: "nuke", link: "/cli/nuke" },
                 {

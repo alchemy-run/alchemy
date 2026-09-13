@@ -5,6 +5,7 @@ import * as Flag from "effect/unstable/cli/Flag";
 
 import * as Drift from "../../Alchemist/routes/drift.ts";
 import * as Stacks from "../../Alchemist/routes/stack.ts";
+import * as Dashboard from "../../Dashboard/Launch.ts";
 import { Cli } from "../../Report.ts";
 import * as CliKit from "../CliKit/index.ts";
 import { planDecisionScreen } from "../components/view/PlanDecision.tsx";
@@ -37,6 +38,7 @@ interface StackCommandOptions {
   readonly adopt?: boolean;
   readonly detailed?: boolean;
   readonly detectDrift?: boolean;
+  readonly ui?: boolean;
 }
 
 const stackSpanAttrs = (args: StackCommandOptions) => ({
@@ -49,6 +51,7 @@ const stackSpanAttrs = (args: StackCommandOptions) => ({
   "alchemy.adopt": !!args.adopt,
   "alchemy.detailed": !!args.detailed,
   "alchemy.detect_drift": !!args.detectDrift,
+  "alchemy.ui": !!args.ui,
 });
 
 const adopt = Flag.boolean("adopt").pipe(
@@ -67,6 +70,14 @@ const detailed = Flag.boolean("detailed").pipe(
 const detectDrift = Flag.boolean("detect-drift").pipe(
   Flag.withDescription(
     "Detect infrastructure drift and offer to repair it before deploying",
+  ),
+  Flag.withDefault(false),
+);
+
+const ui = Flag.boolean("ui").pipe(
+  Flag.withDescription(
+    "Open the alchemy dashboard, approve the plan there, and stream this run into it. " +
+      "Requires the optional @alchemy.run/dashboard package.",
   ),
   Flag.withDefault(false),
 );
@@ -173,6 +184,12 @@ const runStack = Effect.fn(function* (options: StackCommandOptions) {
     stage: options.stage,
   });
 
+  // --ui fails fast (with install instructions) when the optional
+  // @alchemy.run/dashboard peer is missing — before any cloud interaction.
+  if (options.ui) {
+    yield* Dashboard.requireDistDir();
+  }
+
   if (options.detectDrift && !options.destroy) {
     const proceed = yield* detectAndMaybeRepairDrift(target, options);
     if (!proceed) {
@@ -191,37 +208,123 @@ const runStack = Effect.fn(function* (options: StackCommandOptions) {
     updateStateStore: options.yes,
   }).pipe(withPlanningProgress);
 
+  // --ui: bring the dashboard up AFTER the plan is computed, not before —
+  // launching early opens a tab with nothing to show while planning bundles
+  // and diffs, and the approval banner trailing in later reads as a glitch.
+  // Post-plan, the tab opens with the plan overlay and the approve prompt
+  // together. The reporter tee only needs the server up before APPLY
+  // starts, which is always after planning.
+  const dashboard = options.ui
+    ? yield* Dashboard.ensureDashboard({
+        target,
+        stackName: snapshot.stack.name,
+        command: options.destroy
+          ? "destroy"
+          : options.dryRun
+            ? "plan"
+            : "deploy",
+        // opening a browser tab only makes sense where a human is looking
+        open: (yield* CliKit.CliKit).terminal.input,
+      }).pipe(
+        Effect.tap((ensured) =>
+          ensured === undefined
+            ? CliKit.accessors.output.warning(
+                "The dashboard did not start in time; continuing without --ui.",
+              )
+            : Effect.void,
+        ),
+      )
+    : undefined;
+
   if (options.dryRun) {
-    return yield* cli.displayPlan(snapshot.native, display);
+    yield* cli.displayPlan(snapshot.native, display);
+    if (dashboard?.launched) {
+      // `plan --ui` exists to LOOK at the plan — keep serving until Ctrl+C
+      yield* CliKit.accessors.output.info(
+        `Dashboard serving at ${dashboard.url} — press Ctrl+C to exit.`,
+      );
+      yield* Effect.never;
+    }
+    return;
   }
 
   if (!options.yes && Stacks.hasChanges(snapshot.summary)) {
-    const approved = yield* cli.approvePlan(snapshot.native, display).pipe(
-      Effect.tap((approved) =>
-        approved
-          ? Effect.void
-          : CliKit.accessors.output.info(
-              `${operation} aborted: plan declined.`,
-            ),
-      ),
-      Effect.catchTag("NonInteractiveTerminal", () =>
-        CliKit.accessors.output
-          .warning(
-            `Cannot prompt for approval in a non-interactive terminal. Nothing was changed — re-run with --yes to ${operation.toLowerCase()}.`,
-          )
-          .pipe(Effect.as(false)),
-      ),
-    );
+    const approved = yield* approvePlan(snapshot, {
+      operation,
+      display,
+      dashboardUrl: dashboard?.url,
+    });
     if (!approved) return yield* exitDeclined;
   }
 
   const result = yield* Stacks.apply(snapshot).pipe(
     renderApply(snapshot.native, display),
+    // The dashboard tab must see the final verdict before the server goes
+    // away: on failure too, give the SSE stream a beat to flush before the
+    // error propagates and the CLI tears down.
+    dashboard !== undefined
+      ? Effect.onExit(() => Dashboard.stopDashboard(dashboard))
+      : (effect) => effect,
   );
   if (result !== undefined) {
     const kit = yield* CliKit.CliKit;
     yield* kit.output.print(stackOutputsView(result));
   }
+});
+
+/**
+ * Ask for approval of a plan with changes. With a dashboard attached
+ * (`--ui`) the decision is delegated to the browser — the dashboard shows
+ * the plan with an approve/reject choice and the terminal just points at
+ * it — falling back to the terminal prompt whenever the dashboard cannot
+ * be reached. Without one, the terminal prompt decides; a non-interactive
+ * terminal declines with a `--yes` hint.
+ */
+const approvePlan = Effect.fn(function* (
+  snapshot: Stacks.PlanSnapshot,
+  options: {
+    readonly operation: string;
+    readonly display: { detailed?: boolean; stage?: string };
+    readonly dashboardUrl?: string;
+  },
+) {
+  const cli = yield* Cli;
+  if (options.dashboardUrl !== undefined) {
+    yield* CliKit.accessors.output.info(
+      `Review and approve the plan in the dashboard: ${options.dashboardUrl}`,
+    );
+    const decision = yield* Dashboard.requestApprovalViaDashboard(
+      options.dashboardUrl,
+      snapshot.native,
+    );
+    if (decision !== undefined) {
+      if (!decision) {
+        yield* CliKit.accessors.output.info(
+          `${options.operation} aborted: plan rejected in the dashboard.`,
+        );
+      }
+      return decision;
+    }
+    yield* CliKit.accessors.output.warning(
+      "Dashboard approval unreachable — falling back to terminal approval.",
+    );
+  }
+  return yield* cli.approvePlan(snapshot.native, options.display).pipe(
+    Effect.tap((approved) =>
+      approved
+        ? Effect.void
+        : CliKit.accessors.output.info(
+            `${options.operation} aborted: plan declined.`,
+          ),
+    ),
+    Effect.catchTag("NonInteractiveTerminal", () =>
+      CliKit.accessors.output
+        .warning(
+          `Cannot prompt for approval in a non-interactive terminal. Nothing was changed — re-run with --yes to ${options.operation.toLowerCase()}.`,
+        )
+        .pipe(Effect.as(false)),
+    ),
+  );
 });
 
 export const deployCommand = Command.make(
@@ -238,6 +341,7 @@ export const deployCommand = Command.make(
     adopt,
     detailed,
     detectDrift,
+    ui,
   },
   (args) =>
     resolveStackArgs("live")(args).pipe(
@@ -255,6 +359,7 @@ export const destroyCommand = Command.make(
     stage,
     yes,
     profile,
+    ui,
   },
   (args) =>
     resolveStackArgs("live")(args).pipe(
@@ -281,6 +386,7 @@ export const planCommand = Command.make(
     stage,
     profile,
     detailed,
+    ui,
   },
   (args) =>
     resolveStackArgs("live")(args).pipe(

@@ -91,6 +91,7 @@ jobs:
               { "dir": "packages/alchemy",                          "name": "alchemy",                            "group": "Alchemy" },
               { "dir": "packages/better-auth",                      "name": "@alchemy.run/better-auth",           "group": "Alchemy" },
               { "dir": "packages/cloudflare-runtime",               "name": "@alchemy.run/cloudflare-runtime",    "group": "Alchemy" },
+              { "dir": "packages/dashboard",                        "name": "@alchemy.run/dashboard",             "group": "Alchemy" },
               { "dir": "packages/frontend-frameworks",              "name": "@alchemy.run/frontend-frameworks",   "group": "Alchemy" },
               { "dir": "packages/node-utils",                       "name": "@alchemy.run/node-utils",            "group": "Alchemy" },
               { "dir": "packages/pr-package",                       "name": "@alchemy.run/pr-package",            "group": "Alchemy" },

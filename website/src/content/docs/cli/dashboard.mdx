@@ -1,0 +1,57 @@
+---
+title: dashboard
+description: Serve the web dashboard for a stack, or open it from deploy, plan and destroy with --ui.
+---
+
+```sh
+alchemy dashboard [options]
+```
+
+`dashboard` serves a local web dashboard for a stack: the resource graph from the state store, annotated with the current plan (create/update/replace/delete) when it can be computed, live apply progress from every `deploy` and `destroy` run in the project, and the deployment history the store keeps.
+
+The dashboard UI ships as a separate optional package so the core CLI stays lean. Install it once per project:
+
+```sh
+bun add -D @alchemy.run/dashboard
+# or: npm install --save-dev @alchemy.run/dashboard
+```
+
+Without it, `alchemy dashboard` and `--ui` fail with these instructions before touching the cloud.
+
+## Serving a stack
+
+```sh
+alchemy dashboard --stage prod
+```
+
+The server binds a stable per-project port (derived from the working directory and stack name, so a browser tab from a previous run reconnects to the same origin), opens the browser, and advertises itself in `.alchemy/dashboard.json`. Every `alchemy deploy`, `alchemy destroy` and `alchemy dev` run in the same project finds that advertisement and streams its apply events to the dashboard while still rendering the terminal exactly as before. Press Ctrl+C to stop; the advertisement is removed with the server.
+
+Switching stages in the dashboard re-evaluates the stack file under that stage, so a stage that has never been deployed still previews its plan.
+
+## Flags
+
+| Option                 | Description                                                                                          |
+| ---------------------- | ---------------------------------------------------------------------------------------------------- |
+| `--config, -c <file>`  | Stack file to serve (defaults to `alchemy.run.ts`)                                                   |
+| `--stage <name>`       | Stage to open with (defaults to `$ALCHEMY_STAGE` or `live_$USER`)                                    |
+| `--port <number>`      | Port to serve on. Defaults to the project's stable port; `0` picks a random free port                |
+| `--no-open`            | Do not open the browser                                                                              |
+| `--profile <name>`     | Auth profile to use (defaults to `$ALCHEMY_PROFILE` or `default`)                                    |
+| `--env-file <path>`    | Load environment variables from a file                                                               |
+
+## `--ui` on deploy, plan and destroy
+
+```sh
+alchemy deploy --ui
+```
+
+`--ui` attaches a dashboard to one run. Once the plan is computed the command reuses a dashboard already serving this project, or launches one in the background on the stable port, and opens the browser with the plan overlay. Approval moves to the browser: the terminal points at the dashboard, the tab shows the plan with an approve/reject choice, and the run continues (or aborts) with the decision. If the dashboard cannot be reached the terminal prompt takes over as usual. `--yes` skips approval as always; the run is still streamed to the dashboard.
+
+- `alchemy plan --ui` keeps serving after printing the plan so you can look at it — press Ctrl+C to exit.
+- `alchemy deploy --ui` and `alchemy destroy --ui` stop the dashboard they launched once the run settles; a dashboard that was already running keeps serving.
+- `alchemy destroy --ui` shows the destroy plan only — the background deploy-plan overlay is suppressed for a stage being torn down.
+- In a non-interactive terminal (`--no-input`, CI) no browser is opened, but a dashboard already serving the project still receives the run.
+
+## Hosted dashboard
+
+The same UI can be deployed as a **hosted viewer** that reads a deployed state store without any CLI process — see [Hosted Dashboard](/state-store/hosted-dashboard).
