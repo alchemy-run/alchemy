@@ -17,6 +17,15 @@ import {
 } from "./Skill.ts";
 import { bindSource, isSource } from "./Source.ts";
 import { isTool } from "./Tool.ts";
+import { isAgent } from "./Agent.ts";
+import { fragment } from "./Fragment.ts";
+import {
+  isGroup,
+  memberSlug,
+  MemberUnknown,
+  type Group,
+  type GroupLayer,
+} from "./Group.ts";
 
 /**
  * The one term kind the Driver can interpret: an {@link Agent}.
@@ -334,6 +343,23 @@ export const layer: {
     ...refs: Refs
   ): SkillLayer<L["Identifier"], Refs>;
   /**
+   * The GROUP Layer — `Engineering.make`…`` packages this: the group's
+   * tag out, the TEMPLATE's spliced member AGENTS' tags in. The org
+   * chart (the template) rides the service value AS A FRAGMENT, so a
+   * `${Engineering}` splice in a stance renders the chart inline; the
+   * members' actors are resolved from the Layer's own context, so
+   * `resolve(name)` addresses a member without the host charter ever
+   * seeing the member tags.
+   */
+  <
+    L extends Group<any, any> & Context.Service<any, any>,
+    const Refs extends any[],
+  >(
+    term: L,
+    template: TemplateStringsArray,
+    ...refs: Refs
+  ): GroupLayer<L["Identifier"], Refs>;
+  /**
    * The default AGENT Layer: interpret the charter, publish the verbs
    * as the tag's service.
    */
@@ -342,7 +368,76 @@ export const layer: {
     charter: C,
   ): Layer.Layer<A["Identifier"], never, Driver | CharterServices<C>>;
 } = ((term: any, charterOrTemplate?: any, ...refs: any[]) =>
-  isSkill(term)
+  isGroup(term)
+    ? Object.assign(
+        Layer.effect(
+          term as any,
+          Effect.gen(function* () {
+            const template = charterOrTemplate as TemplateStringsArray;
+            const context = yield* Effect.context<never>();
+            const groupName = term["~alchemy/Name"] as string;
+            const members: Array<{ name: string; slug: string }> = [];
+            const actors = new Map<string, unknown>();
+            for (const ref of refs) {
+              if (isSource(ref)) {
+                yield* bindSource(ref);
+                continue;
+              }
+              if (!isAgent(ref)) continue;
+              const name = (ref as { "~alchemy/Name": string })[
+                "~alchemy/Name"
+              ];
+              const service = Context.getOption(context, ref as any);
+              if (Option.isNone(service)) {
+                return yield* Effect.die(
+                  `AI.layer: no implementation provided for member '${name}' of group '${groupName}'`,
+                );
+              }
+              const slug = memberSlug(name);
+              members.push({ name, slug });
+              actors.set(name.toLowerCase(), service.value);
+              actors.set(slug, service.value);
+            }
+            const roster = members.map((member) => member.slug);
+            const head = members[0];
+            if (head === undefined) {
+              return yield* Effect.die(
+                `AI.layer: group '${groupName}' declares no member agents`,
+              );
+            }
+            // the chart renders member NAMES as inert prose — splicing
+            // a team into a stance must not register its members as
+            // delegates (no intrinsic dispatch; teams talk through the
+            // org's own conversation tools)
+            const teaching = yield* fragment(
+              template,
+              ...refs.map((ref) =>
+                isAgent(ref)
+                  ? memberSlug(
+                      (ref as { "~alchemy/Name": string })["~alchemy/Name"],
+                    )
+                  : ref,
+              ),
+            );
+            return {
+              ...teaching,
+              members,
+              head,
+              resolve: (member: string) => {
+                const found = actors.get(member.trim().toLowerCase());
+                return found === undefined
+                  ? Effect.fail(
+                      new MemberUnknown({ group: groupName, member, roster }),
+                    )
+                  : Effect.succeed(found);
+              },
+            };
+          }) as any,
+        ),
+        // the org chart as static data on the Layer (Teaching)
+        { template: charterOrTemplate as TemplateStringsArray, refs },
+      )
+    : isSkill(term)
     ? Object.assign(
         Layer.effect(
           term as any,

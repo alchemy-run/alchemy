@@ -455,9 +455,9 @@ export const Agent: {
 } = ((meta?: ImportMeta) => (name: string, charter?: Charter) =>
   makeTerm("Agent", name, undefined, undefined, meta, charter)) as any;
 
-/** Shared constructor for the tag-bearing terms (Agent, Skill). */
+/** Shared constructor for the tag-bearing terms (Agent, Skill, Group). */
 export const makeTerm = (
-  kind: "Agent" | "Skill",
+  kind: "Agent" | "Skill" | "Group",
   name: string,
   template?: TemplateStringsArray,
   refs?: any[],
@@ -475,12 +475,13 @@ export const makeTerm = (
     // an agent declared WITH its implementation: `Default` is the Layer
     ...(charter !== undefined ? { Default: layer(cls as any, charter) } : {}),
     // the implementation Layer: `Engineer.make(charter)`, the static
-    // tagged-template shorthand `Reviewer.make`…``, or a skill's
-    // teaching `Coding.make`…`` — for a Skill the template IS the
-    // service payload (prose + granted tools); for an Agent a
-    // template lifts to a constant charter
+    // tagged-template shorthand `Reviewer.make`…``, a skill's teaching
+    // `Coding.make`…``, or a group's org chart `Engineering.make`…`` —
+    // for a Skill/Group the template IS the service payload (prose +
+    // granted tools / member roster); for an Agent a template lifts to
+    // a constant charter
     make: (charterOrTemplate?: any, ...refs: any[]) =>
-      kind === "Skill"
+      kind === "Skill" || kind === "Group"
         ? layer(cls as any, charterOrTemplate, ...refs)
         : layer(
             cls as any,

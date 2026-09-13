@@ -20,6 +20,7 @@ import * as PersistentRef from "../PersistentRef.ts";
 import { RuntimeContext } from "../RuntimeContext.ts";
 import type { Actor } from "./Agent.ts";
 import { isAgent, type Agent } from "./Agent.ts";
+import { isGroup } from "./Group.ts";
 import { isDispatchTool, type DispatchTool } from "./Dispatch.ts";
 import type { Charter, Turn, TurnFn } from "./Driver.ts";
 import { Refused } from "./Errors.ts";
@@ -256,7 +257,7 @@ export const renderRef = (ref: unknown): string => {
       .map((thing) => `\`${thing["~alchemy/Name"]}\``)
       .join(", ");
   }
-  if (isAgent(ref)) {
+  if (isAgent(ref) || isGroup(ref)) {
     return (ref as { "~alchemy/Name": string })["~alchemy/Name"];
   }
   if (isSource(ref)) {

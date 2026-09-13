@@ -1169,6 +1169,17 @@ export const DurableObjectHost: Layer.Layer<
             .getByName(sessionName(term, key))
             .deliver(input, { wake: options?.wake })
             .pipe(Effect.orDie, Effect.asVoid),
+        // by-name dispatch: admit + join on the session's own DO —
+        // `Agent.dispatch` without the agent's Layer in hand
+        dispatch: (term, key, input, options) =>
+          sessions
+            .getByName(sessionName(term, key))
+            .dispatch(input, {
+              ...(options?.parent !== undefined
+                ? { parent: options.parent }
+                : {}),
+            })
+            .pipe(Effect.orDie),
         stop: (term, key) =>
           sessions
             .getByName(sessionName(term, key))

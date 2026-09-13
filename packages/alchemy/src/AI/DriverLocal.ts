@@ -364,6 +364,24 @@ export const DriverLocal: Layer.Layer<
         send: (term, key, input, options) =>
           engines.get(term)?.send(input, { key, wake: options?.wake }) ??
           Effect.void,
+        // by-name dispatch: admit + join, `Agent.dispatch` without the
+        // agent's Layer in hand — an unknown term is a wiring defect
+        dispatch: (term, key, input, options) =>
+          Effect.suspend(() => {
+            const engine = engines.get(term);
+            return engine === undefined
+              ? Effect.die(
+                  `Sessions.dispatch: no charter interpreted for term '${term}'`,
+                )
+              : Effect.orDie(
+                  engine.dispatch(input, {
+                    key,
+                    ...(options?.parent !== undefined
+                      ? { parent: options.parent }
+                      : {}),
+                  }),
+                );
+          }),
         resume,
         remove,
       }),

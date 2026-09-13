@@ -97,6 +97,23 @@ export class Sessions extends Context.Service<
       options?: { readonly wake?: boolean },
     ) => Effect.Effect<void, never, RuntimeContext>;
     /**
+     * DISPATCH one input to a session BY NAME — `Agent.dispatch`
+     * without the agent's service in hand: admit + JOIN, answering the
+     * session's settled outcome. This is how conversation primitives
+     * (an `ask` between teammates) reach any term without holding its
+     * Layer — the term and key address the session, the driver finds
+     * the charter. `options.parent` records which session caused the
+     * admission (observability, never routing).
+     */
+    readonly dispatch: (
+      term: string,
+      key: string,
+      input: unknown,
+      options?: {
+        readonly parent?: { readonly term: string; readonly key: string };
+      },
+    ) => Effect.Effect<unknown, never, RuntimeContext>;
+    /**
      * STOP one session from the outside — the operator's off switch.
      * Settles it (terminal: children cascade, the `settled`
      * observation lands, attached views see the end) and CUTS the

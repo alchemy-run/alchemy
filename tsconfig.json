@@ -305,7 +305,7 @@
       "path": "./examples/monorepo-multi-stack/tsconfig.json"
     },
     {
-      "path": "./services/alchemy-org/tsconfig.json"
+      "path": "./services/root/tsconfig.json"
     },
     {
       "path": "./benchmark/container/tsconfig.json"
