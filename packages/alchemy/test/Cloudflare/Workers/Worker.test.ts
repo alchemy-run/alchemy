@@ -132,6 +132,97 @@ describe.concurrent("Cloudflare.Worker", () => {
     }).pipe(logLevel),
   );
 
+  test.provider(
+    "create, redeploy, update, and remove worker cron triggers",
+    (stack) =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+
+        yield* stack.destroy();
+
+        const directory = yield* fs.makeTempDirectoryScoped({
+          prefix: "alchemy-worker-crons-",
+        });
+        const workerPath = path.join(directory, "worker.ts");
+        const writeWorker = (revision: string) =>
+          fs.writeFileString(
+            workerPath,
+            `export default {
+              fetch: async () => new Response(${JSON.stringify(revision)}),
+              scheduled: async () => console.log(${JSON.stringify(revision)}),
+            };`,
+          );
+        const program = (crons: string[]) =>
+          Effect.gen(function* () {
+            return yield* Cloudflare.Worker("CronWorker", {
+              main: workerPath,
+              crons,
+            });
+          });
+        const expression = "*/15 * * * *";
+
+        yield* writeWorker("cron-v1");
+        const first = yield* stack.deploy(program([expression]));
+        const readSchedules = () =>
+          workers.getScriptSchedule({
+            accountId,
+            scriptName: first.workerName,
+          });
+
+        try {
+          const initial = yield* readSchedules();
+          expect(initial.schedules.map(({ cron }) => cron)).toEqual([
+            expression,
+          ]);
+          expect(initial.schedules[0].modifiedOn).toBeDefined();
+          yield* expectUrlContains(first.url!, "cron-v1", {
+            timeout: "20 seconds",
+          });
+
+          // Change only the code, leaving the cron expression untouched.
+          yield* writeWorker("cron-v2");
+          const second = yield* stack.deploy(program([expression]));
+          expect(second.workerId).toBe(first.workerId);
+          expect(second.hash?.bundle).not.toEqual(first.hash?.bundle);
+          yield* expectUrlContains(second.url!, "cron-v2", {
+            timeout: "20 seconds",
+          });
+
+          const refreshed = yield* readSchedules();
+          expect(refreshed.schedules.map(({ cron }) => cron)).toEqual([
+            expression,
+          ]);
+          expect(refreshed.schedules[0].createdOn).toBe(
+            initial.schedules[0].createdOn,
+          );
+          expect(
+            Date.parse(refreshed.schedules[0].modifiedOn!),
+          ).toBeGreaterThan(Date.parse(initial.schedules[0].modifiedOn!));
+
+          yield* stack.deploy(program(["0 * * * *"]));
+          expect(
+            (yield* readSchedules()).schedules.map(({ cron }) => cron),
+          ).toEqual(["0 * * * *"]);
+
+          yield* stack.deploy(program([]));
+          expect((yield* readSchedules()).schedules).toEqual([]);
+
+          const settled = yield* stack.plan(program([]));
+          expect(
+            Object.values(settled.resources).find(
+              (node) => node.resource.LogicalId === "CronWorker",
+            )?.action,
+          ).toBe("noop");
+        } finally {
+          yield* stack.destroy();
+          yield* waitForWorkerToBeDeleted(first.workerName, accountId);
+        }
+      }).pipe(logLevel),
+    { timeout: 120_000 },
+  );
+
   test.provider("create, update, delete worker with assets", (stack) =>
     Effect.gen(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
