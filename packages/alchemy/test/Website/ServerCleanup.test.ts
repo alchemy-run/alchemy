@@ -48,7 +48,7 @@ for (const location of [
           id: "Build",
           fqn: "Build",
           instanceId: "cleanup-test",
-          olds: { framework: "unused", root },
+          olds: { framework: "unused", target: "unused", root },
           output: {
             distDir,
             clientDir: undefined,

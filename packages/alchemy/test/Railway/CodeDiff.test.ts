@@ -5,6 +5,9 @@ import { ServiceProvider } from "@/Railway/ServiceProvider";
 import { FunctionProvider } from "@/Railway/Function";
 import * as Layer from "effect/Layer";
 import * as Railway from "@/Railway";
+import { RailwayEnvironment } from "@/Railway/Environment";
+import { Credentials } from "@distilled.cloud/railway";
+import * as HttpClient from "effect/unstable/http/HttpClient";
 import {
   createRailwayFunctionSupport,
   createRailwayHostedSupport,
@@ -17,7 +20,26 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 
 const { test } = Test.make({
-  providers: Layer.mergeAll(ServiceProvider(), FunctionProvider()),
+  providers: Layer.mergeAll(ServiceProvider(), FunctionProvider()).pipe(
+    Layer.provide(
+      Layer.mergeAll(
+        Layer.succeed(
+          Credentials,
+          Effect.die("Offline diff must not resolve credentials"),
+        ),
+        Layer.succeed(
+          RailwayEnvironment,
+          Effect.die("Offline diff must not resolve environment"),
+        ),
+        Layer.succeed(
+          HttpClient.HttpClient,
+          HttpClient.make(() =>
+            Effect.die("Offline diff must not make HTTP requests"),
+          ),
+        ),
+      ),
+    ),
+  ),
 });
 
 for (const kind of ["Service", "Function"] as const) {
@@ -49,7 +71,15 @@ for (const kind of ["Service", "Function"] as const) {
             ? createRailwayHostedSupport(options)
             : createRailwayFunctionSupport(options);
         const props = {
-          project: { projectId: "project" },
+          // Diff receives plain persisted attributes, although its public Props
+          // type still describes the Resource with unresolved Output fields.
+          project: {
+            projectId: "project",
+            name: "project",
+            workspaceId: "workspace",
+            environmentId: "environment",
+            url: "https://railway.com/project/project",
+          } satisfies Railway.Project["Attributes"] as unknown as Railway.Project,
           environment: { environmentId: "environment" },
           main,
           isExternal: true,
@@ -58,7 +88,10 @@ for (const kind of ["Service", "Function"] as const) {
           exports: { fetch: Effect.succeed("runtime handler") },
         };
         const originalHash = yield* hosted.hash(props);
-        const provider = yield* Provider.findProvider(Railway[kind]);
+        const provider =
+          kind === "Service"
+            ? yield* Provider.findProvider(Railway.Service)
+            : yield* Provider.findProvider(Railway.Function);
         const diff = (hash: string) =>
           provider.diff!({
             id: "Api",
