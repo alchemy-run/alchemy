@@ -8,15 +8,15 @@ import { lineage } from "../Root.ts";
 import { makeWorkspaceTools } from "../sandbox/WorkspaceTools.ts";
 import { Engineer } from "./Engineer.ts";
 import { Tasks, type TaskItem, type TaskStatus } from "./Tasks.ts";
-import { Triage } from "./Triage.ts";
 
 /**
  * The ENGINEERING MANAGER — the head of the engineering team, the
  * agent managing ITS thread the way the Head manages the Root: the
  * recursion IS the org.
  *
- * The triage queue (Triage.ts) feeds it the inbound world strictly in
- * order; it files each item into the TASK LEDGER (Tasks.ts), moves the
+ * The inbound world arrives in ITS OWN SESSION INBOX (the session is
+ * the queue — Triage.ts dedupes and pumps, the driver wakes); it files
+ * each item into the TASK LEDGER (Tasks.ts), moves the
  * ledger todo → working → review → done, staffs engineers (one
  * workspace per task), verifies their output, and stages merge
  * proposals so the humans' approval is one click. It answers the Head
@@ -89,33 +89,11 @@ const itemRef = AI.Thing("ref", S.String)`
 
 export const EngineeringManagerLive = EngineeringManager.make(
   Effect.gen(function* () {
-    const triage = yield* Triage;
     const tasks = yield* Tasks;
     const engineer = yield* Engineer;
     const { workspace, dropWorkspace } = yield* makeWorkspaceTools;
     const { proposeComment, proposeMerge, proposeClose } =
       yield* makeProposalTools;
-
-    const takeInbound = yield* AI.Tool("take_inbound")`
-      Take the triage queue's HEAD — the oldest inbound item (a github
-      issue, pull request event, or direct request), the same one again
-      if a crash interrupted its filing. File it into the task ledger,
-      then finish_inbound and take the next; the queue is strict FIFO
-      and only you consume it.`(
-      Effect.fn(function* () {
-        const { item, waiting } = yield* triage.take();
-        return item === undefined
-          ? { empty: true as const, waiting }
-          : { item: { seq: item.seq, ref: item.ref, kind: item.kind, text: item.text }, waiting };
-      }),
-    );
-
-    const finishInbound = yield* AI.Tool("finish_inbound")`
-      Ack the item you took — it is filed; the next take pops fresh.`(
-      Effect.fn(function* () {
-        yield* triage.finish();
-      }),
-    );
 
     const taskUpsert = yield* AI.Tool("task_upsert")`
       Create or update a task — the unit of work. A task holds 1..*
@@ -124,8 +102,14 @@ export const EngineeringManagerLive = EngineeringManager.make(
       todo → working → review → done as the work moves; record the
       assignee ("e-…") and the workspace when work starts; append a
       note for anything the ledger should remember: ${AI.in(
-        taskId, title, status, assignee, taskWorkspace, addItems,
-        removeItems, taskNote,
+        taskId,
+        title,
+        status,
+        assignee,
+        taskWorkspace,
+        addItems,
+        removeItems,
+        taskNote,
       )}.`(
       Effect.fn(function* (p: {
         task?: string;
@@ -188,46 +172,49 @@ export const EngineeringManagerLive = EngineeringManager.make(
         });
         return {
           agent: name,
-          report: typeof outcome === "string" ? outcome : JSON.stringify(outcome),
+          report:
+            typeof outcome === "string" ? outcome : JSON.stringify(outcome),
         };
       }),
     );
 
     return {
       turn: AI.fragment`
-      You are the ENGINEERING MANAGER for the Alchemy products — the
-      alchemy repository and its distilled and floci submodule
-      repositories. You are the head of the engineering team of an
-      autonomous company whose Head talks to the human owner on the
-      root channel; you answer the Head (${Ask} reaches it as "head"),
-      and your answer IS your report — short and factual.
+        You are the ENGINEERING MANAGER for the Alchemy products — the
+        alchemy repository and its distilled and floci submodule
+        repositories. You are the head of the engineering team of an
+        autonomous company whose Head talks to the human owner on the
+        root channel; you answer the Head (${Ask} reaches it as "head"),
+        and your answer IS your report — short and factual.
 
-      Your first responsibility is the INBOUND STREAM: the company is
-      drowning in issues and pull requests. The triage queue feeds
-      them to you strictly in order — ${takeInbound} hands you the
-      head, you FILE it (${taskCovering} first: a PR for an issue you
-      track JOINS that task; ${taskUpsert} creates or updates; a task
-      holds 1..* items and persists as items join and leave), then
-      ${finishInbound} and take the next, until empty.
+        Your first responsibility is the INBOUND STREAM: the company is
+        drowning in issues and pull requests. Every event arrives in
+        YOUR INBOX as an "[inbound owner/repo#N] …" line — your
+        session is the queue, the driver wakes you, and one round may
+        carry several. FILE each one before anything else:
+        ${taskCovering} first (a PR for an issue you track JOINS that
+        task, never a duplicate), then ${taskUpsert} (a task holds
+        1..* items and persists as items join and leave). Reply with
+        one line per item filed.
 
-      Your second responsibility is MOVING the ledger (${taskList}):
-      todo → working — ${workspace} one workspace per task (a pull
-      request's workspace carries its head branch) and ${spawn} an
-      engineer in it with a self-contained brief;
-      working → review — read the report, ${Ask} the engineer hard
-      questions, verify claims against the tree before you accept
-      (${Call} a huddle of engineers when one question is not enough —
-      drive it with ask);
-      review → done — get the pull request CLEAN (green, reviewed,
-      described), then ${proposeMerge} so the human's approval is one
-      click; ${proposeComment} answers issue authors; ${proposeClose}
-      retires what is resolved or stale. ${dropWorkspace} when a
-      task's workspace is no longer needed.
+        Your second responsibility is MOVING the ledger (${taskList}):
+        todo → working — ${workspace} one workspace per task (a pull
+        request's workspace carries its head branch) and ${spawn} an
+        engineer in it with a self-contained brief;
+        working → review — read the report, ${Ask} the engineer hard
+        questions, verify claims against the tree before you accept
+        (${Call} a huddle of engineers when one question is not enough —
+        drive it with ask);
+        review → done — get the pull request CLEAN (green, reviewed,
+        described), then ${proposeMerge} so the human's approval is one
+        click; ${proposeComment} answers issue authors; ${proposeClose}
+        retires what is resolved or stale. ${dropWorkspace} when a
+        task's workspace is no longer needed.
 
-      POLICY: you never write to the outside world — merging,
-      commenting, closing are PROPOSALS the humans decide. Batch clean
-      proposals; keep the humans' queue small. ${Tell} the Head of
-      milestones; do not ask it what you can decide yourself.`,
+        POLICY: you never write to the outside world — merging,
+        commenting, closing are PROPOSALS the humans decide. Batch clean
+        proposals; keep the humans' queue small. ${Tell} the Head of
+        milestones; do not ask it what you can decide yourself.`,
     };
   }),
 );

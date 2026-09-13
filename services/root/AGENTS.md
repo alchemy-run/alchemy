@@ -2,16 +2,23 @@
      domain skills it names — edit the skill that owns a rule, not this file.
      The org's agents activate the same skills. -->
 
-# Working on alchemy-org — the harness
+# Working on root — the company
 
-`services/alchemy-org` is the software factory that maintains the
-alchemy repository: coding agents whose charters are prose, running
-over sandboxes that hold a checkout, pushing to pull requests and
-opening new ones directly. It lives INSIDE the repository it
-maintains, so a change here changes the hands that make the next
-change. The lift runs in three stages — a human coding agent editing
-this folder; `alchemy dev` running the org on the developer's
-machine (workspaces as git worktrees, GitHub by polling);
+`services/root` IS the company: an autonomous organization that
+builds and maintains the Alchemy products (alchemy, and its distilled
+and floci submodule repositories), written as code inside the
+repository it maintains — a change here changes the hands that make
+the next change. The bootstrap is Human + Root + Head: the ROOT GROUP
+(`Root.ts`, ⊥ — the bottom of the lineage, the static structure
+runtime hangs from) whose CHANNEL is the one conversation the human
+owner holds with the HEAD (`Head.ts`, ⊤ — the apex every ask-chain
+bubbles up into). THE STRUCTURE IS CODE, never runtime state: every
+role is an agent charter, every team an `AI.Group` declaration; the
+company evolves by editing itself — a new role or process is a file
+in `src/`, proposed as a pull request, merged by the human,
+self-deployed. The lift runs in three stages — a human coding agent
+editing this folder; `alchemy dev` running the company on the
+developer's machine (workspaces as git worktrees, GitHub by polling);
 `alchemy deploy` running it live (workspaces as microVMs, GitHub by
 webhook). Every stage is held to the same rules. The repository's
 root `AGENTS.md` applies in full; this folder adds its own.
@@ -22,11 +29,22 @@ root `AGENTS.md` applies in full; this folder adds its own.
 There is no `tools/`, `agents/`, `skills/`, or `lib/`, and no
 barrel `index.ts`: import the file.
 
-- `coding/` — the Engineer: its charter, the toolbox (Read + Run),
-  the editor (the ONLY Layer that grants a write), the publish pair.
-- `channel/` + `thread/` — the control plane: the org-wide channel,
-  threads (one task, one agent, one machine), their Durable Objects.
-- `sandbox/` — where code runs: a session's machine and its checkout.
+- `Root.ts` + `Head.ts` — the bootstrap pair: the Root Group's
+  declaration and lineage keys; the Head's charter.
+- `chat/` — HOW the company talks: ask (one question, one target,
+  chains bubble up — conversation as function calling), tell, call
+  (1..* members, a thread inside the thread, humans join), the ask
+  TREE, and the Root channel's wire (one file per route).
+- `engineering/` — the engineering group: its `AI.Group` chart,
+  the manager (fronting the TRIAGE QUEUE — the inbound issues/PRs,
+  strict FIFO — and the TASK LEDGER), and the Engineer.
+- `coding/` — the SKILL of coding: the toolbox (Read + Run), the
+  editor (the ONLY Layer that grants a write), the publish pair
+  behind the human gate.
+- `proposals/` — the humans' decision seam: every external write
+  (merge, comment, close, push, open-PR) is a staged proposal card.
+- `sandbox/` — where code runs: workspaces (each an isolated
+  machine with the repo checked out), the router, the checkouts.
 - `artifacts/` — what tools print: the `Artifacts` store (a temp
   dir locally, the session's sandbox on Cloudflare — the sandbox is
   one physics of it, not its home), output bounding, the spill net,
@@ -41,10 +59,11 @@ barrel `index.ts`: import the file.
   mismatches back into distilled, and one emulation skill per cloud
   (floci for AWS, the in-tree `cloudflare-runtime` for Cloudflare).
 - `platform/` — Cloudflare seams: the driver, the database, the model.
-- `Routes.ts` is the HTTP API the UI speaks; `Worker.ts` composes
-  everything onto Cloudflare; this file is the org's own entry, and
-  `src/CharterGuidance.ts` beside it is the grammar of the prose — the
-  two rules that span every domain live at the top, in none.
+- `Api.ts` is the SUM of every route file (one file, one route,
+  beside its domain); `ApiWorker.ts` serves it on Cloudflare — the
+  only Worker; `src/CharterGuidance.ts` beside this file is the
+  grammar of the prose — the two rules that span every domain live at
+  the top, in none.
 
 Names carry the convention: a variant family keeps its prefix
 (`Sandbox*`, `Checkouts*`, `Artifacts*`); an
@@ -70,28 +89,13 @@ file that "contains the conventions".
 
 ## Done means verified
 
-From the repository root, `pnpm exec tsc -b services/alchemy-org` is
-clean; in `services/alchemy-org`, `bun test` and `pnpm test:e2e
---project ui` pass (a deliberate UX change re-blesses the aria
-snapshots and screenshots with `pnpm test:e2e:update` — and you LOOK
-at what changed); `bun scripts/agents-md.ts --check` confirms
-`AGENTS.md` matches this doctrine. `Worker.ts` and `Routes.ts` are
-touched by every change to the system: single minimal insertions
-there, never a rewrite. Every behavior change ships with its test —
-the standard in `process/PullRequests.ts` applies to this service as
-to any other.
-
-## The gallery grows with the UI
-
-`e2e/ui/gallery.shots.ts` is the UX as SEEN: one pixel snapshot per
-feature state, committed under `e2e/ui/__screenshots__/`. Every UI
-feature you add, change, or redesign lands there in the same change
-— a new `test(...)` + `shot(page, "<area>-NN-<state>")` for a new
-state, the existing shot re-blessed for a redesign — generated with
-`pnpm test:e2e:update --project shots` and looked at before it is
-committed. An aria snapshot proves the structure; the shot is what a
-reviewer (and the next agent) can actually see. A UI change without
-its shot is not done.
+From the repository root, `pnpm exec tsc -b services/root` is
+clean; in `services/root`, `bun test` and `pnpm test:e2e` pass;
+`bun scripts/agents-md.ts --check` confirms `AGENTS.md` matches
+this doctrine. `Api.ts` and `ApiWorker.ts` are touched by every
+change to the system: single minimal insertions there, never a
+rewrite. Every behavior change ships with its test — the standard in
+`process/PullRequests.ts` applies to this service as to any other.
 
 ## Changing this doctrine
 
@@ -199,7 +203,7 @@ touch — a reply that needs no tool needs no machine, and the wait
 shows on the tool that does.
 
 `sandbox/WorkspaceAgent.ts` is the workspace as a SESSION
-(`<thread>::ws-<name>`, `thread/Terms.ts`): its key is its
+(`root::ws-<name>`, `sandbox/Keys.ts`): its key is its
 machine key, its methods provision and release the checkout, its
 `/terminal/Workspace/<key>` socket is the workspace's terminal.
 `sandbox/SandboxSession.ts` picks the physics; the variants keep

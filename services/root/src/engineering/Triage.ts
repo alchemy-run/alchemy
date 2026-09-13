@@ -9,62 +9,37 @@ import { lineage } from "../Root.ts";
 import { EngineeringManager } from "./Manager.ts";
 
 /**
- * The TRIAGE QUEUE — the inbound queue the EngineeringManager fronts:
- * GitHub issues, pull requests, and ad-hoc direct requests, durable
- * (TriageDO), drained in STRICT FIFO order.
+ * TRIAGE — the pump that turns the outside world into the
+ * EngineeringManager's inbound stream.
  *
- * Code, not an agent, PUMPS the world in: {@link TriagePump} subscribes
- * to every connected repository's events (a real webhook deployed; the
- * poller under `alchemy dev`), renders each delivery to one line, and
- * enqueues it — deduped on content (webhooks redeliver; the dev poller
- * re-synthesizes). A fresh item WAKES the manager, who consumes the
- * queue PULL-WISE with its tools: `take_inbound` hands it the head
- * (the same item again after a crash — nothing is lost mid-file),
- * `finish_inbound` acks it and moves on. One item at a time, in
- * arrival order — the strictness is the DO's sequence, not the
- * model's discipline.
+ * THE SESSION IS THE QUEUE. A session's inbox is already a durable,
+ * seq-ordered, crash-consistent mailbox whose engine DRIVES the agent:
+ * a waking input opens a round, inputs that arrive mid-round open the
+ * next one, and an interrupted round recovers over the thread where
+ * every admitted event already sits. So triage adds only what the
+ * mailbox lacks: DEDUPE (webhooks redeliver; the dev poller
+ * re-synthesizes) — one row per event key, in TriageDO beside the task
+ * ledger — and RENDERING (one `[inbound]` line per event). Everything
+ * else — ordering, durability, waking, redelivery — is the driver's.
  */
 
-export interface Inbound {
-  readonly seq: number;
-  /** `owner/repo#N` when the item concerns a GitHub entity. */
-  readonly ref?: string;
-  readonly kind: "issue" | "pull" | "request";
-  /** One rendered line — who did what. */
-  readonly text: string;
-  readonly at: number;
-}
+export type InboundKind = "issue" | "pull" | "request";
 
 export class Triage extends Context.Service<
   Triage,
   {
-    /** Enqueue one inbound item (deduped on `key`). Answers whether it
-     *  was fresh and how many now wait. */
-    readonly enqueue: (input: {
-      readonly key: string;
-      readonly ref?: string;
-      readonly kind: Inbound["kind"];
-      readonly text: string;
-    }) => Effect.Effect<{ duplicate: boolean; waiting: number }>;
-    /** The queue's head: the item already TAKEN (a redelivery — finish
-     *  it first) or the oldest pending, now taken. */
-    readonly take: () => Effect.Effect<{
-      readonly item: Inbound | undefined;
-      readonly waiting: number;
-    }>;
-    /** Ack the taken item — it is filed; the next take pops fresh. */
-    readonly finish: () => Effect.Effect<void>;
-    readonly waiting: () => Effect.Effect<number>;
+    /** Record one event key; answers whether it was already seen. */
+    readonly delivered: (key: string) => Effect.Effect<boolean>;
   }
 >()("Triage") {}
 
-/** One GitHub delivery, rendered for the queue. */
+/** One GitHub delivery, rendered for the manager's inbox. */
 export const inboundOf = (
   event: GitHub.RepositoryEvent,
 ): {
   readonly key: string;
   readonly ref?: string;
-  readonly kind: Inbound["kind"];
+  readonly kind: InboundKind;
   readonly text: string;
 } => {
   const repo = `${event.repository.owner.login}/${event.repository.name}`;
@@ -101,20 +76,20 @@ export const inboundOf = (
   return {
     key: JSON.stringify(event),
     ...(ref === undefined ? {} : { ref }),
-    kind:
-      event._tag.startsWith("PullRequest")
-        ? "pull"
-        : event._tag === "Push"
-          ? "request"
-          : "issue",
+    kind: (event._tag.startsWith("PullRequest")
+      ? "pull"
+      : event._tag === "Push"
+        ? "request"
+        : "issue") as InboundKind,
     text: line,
   };
 };
 
 /**
- * The PUMP: every GitHub event of every connected repository →
- * `Triage.enqueue` → a wake on the manager. The webhook handler
- * answers after the enqueue commits — processing is the manager's own
+ * The PUMP: every GitHub event of every connected repository, deduped,
+ * delivered straight into the manager's SESSION as one waking input —
+ * the engine does the queueing and the driving. The webhook handler
+ * answers after the send commits; processing is the manager's own
  * pace, never the webhook's timeout.
  */
 export const TriagePump = Layer.effectDiscard(
@@ -150,18 +125,16 @@ export const TriagePump = Layer.effectDiscard(
             ...(Option.isSome(secret) ? { secret: secret.value } : {}),
           },
           Effect.fn(function* (event) {
-            const { duplicate, waiting } = yield* triage.enqueue(
-              inboundOf(event),
-            );
-            if (duplicate) return;
+            const inbound = inboundOf(event);
+            if (yield* triage.delivered(inbound.key)) return;
             yield* manager
               .send(
-                `[triage] ${waiting} inbound waiting — take_inbound, file, finish_inbound; repeat until empty`,
+                `[inbound${inbound.ref === undefined ? "" : ` ${inbound.ref}`}] ${inbound.text}`,
                 { key: lineage("engineering-manager"), wake: true },
               )
               .pipe(
                 Effect.catchCause((cause) =>
-                  Effect.logWarning("triage wake failed", cause),
+                  Effect.logWarning("inbound delivery failed", cause),
                 ),
               );
           }),

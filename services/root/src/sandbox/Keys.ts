@@ -1,5 +1,3 @@
-import { ROOT } from "../Root.ts";
-
 /**
  * WORKSPACE and MACHINE keys — the sandbox's slice of the lineage.
  *
@@ -41,7 +39,3 @@ export const machineKey = (sessionKey: string): string => {
     ? `${segments[0]}::${segments[1]}`
     : segments[0]!;
 };
-
-/** Every workspace of the root — for tools that list or default. */
-export const rootWorkspaceKey = (name: string): string =>
-  workspaceKey(ROOT, name);

@@ -6,28 +6,19 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { inWorker } from "../platform/Database.ts";
 import { Tasks, type Task, type TaskItem, type TaskStatus } from "./Tasks.ts";
-import { Triage, type Inbound } from "./Triage.ts";
+import { Triage } from "./Triage.ts";
 
 /**
  * ENGINEERING's Durable Object — ONE instance (`main`) holding the
- * team's working memory: the TRIAGE QUEUE (with its content dedupe —
- * webhooks redeliver, the dev poller re-synthesizes) and the TASK
- * LEDGER. One SQLite database, one single-threaded turn per verb, so
- * FIFO strictness and take/finish atomicity are the storage's
- * guarantees, not the callers' discipline.
+ * team's working memory: the inbound DEDUPE (webhooks redeliver, the
+ * dev poller re-synthesizes; the manager's SESSION is the queue — the
+ * driver owns ordering, durability, waking) and the TASK LEDGER. One
+ * SQLite database, one single-threaded turn per verb.
  */
 
 const TABLES = [
   `CREATE TABLE IF NOT EXISTS delivered (
     key TEXT PRIMARY KEY
-  )`,
-  `CREATE TABLE IF NOT EXISTS queue (
-    seq INTEGER PRIMARY KEY AUTOINCREMENT,
-    ref TEXT,
-    kind TEXT NOT NULL,
-    text TEXT NOT NULL,
-    at INTEGER NOT NULL,
-    taken INTEGER NOT NULL DEFAULT 0
   )`,
   `CREATE TABLE IF NOT EXISTS tasks (
     id TEXT PRIMARY KEY,
@@ -47,15 +38,6 @@ const TABLES = [
   )`,
 ];
 
-interface QueueRow extends Record<string, Cloudflare.SqlStorageValue> {
-  seq: number;
-  ref: string | null;
-  kind: string;
-  text: string;
-  at: number;
-  taken: number;
-}
-
 interface TaskRow extends Record<string, Cloudflare.SqlStorageValue> {
   id: string;
   title: string;
@@ -67,32 +49,10 @@ interface TaskRow extends Record<string, Cloudflare.SqlStorageValue> {
   updated_at: number;
 }
 
-const toInbound = (row: QueueRow): Inbound => ({
-  seq: row.seq,
-  ...(row.ref === null ? {} : { ref: row.ref }),
-  kind: row.kind as Inbound["kind"],
-  text: row.text,
-  at: row.at,
-});
-
 interface EngineeringRpc extends MainRpc<Cloudflare.DurableObjectState> {
-  readonly enqueue: (input: {
-    readonly key: string;
-    readonly ref?: string;
-    readonly kind: Inbound["kind"];
-    readonly text: string;
-  }) => Effect.Effect<
-    { duplicate: boolean; waiting: number },
-    never,
-    RuntimeContext
-  >;
-  readonly take: () => Effect.Effect<
-    { item: Inbound | undefined; waiting: number },
-    never,
-    RuntimeContext
-  >;
-  readonly finish: () => Effect.Effect<void, never, RuntimeContext>;
-  readonly waiting: () => Effect.Effect<number, never, RuntimeContext>;
+  readonly delivered: (
+    key: string,
+  ) => Effect.Effect<boolean, never, RuntimeContext>;
   readonly taskUpsert: (input: {
     readonly id?: string;
     readonly title?: string;
@@ -119,13 +79,6 @@ const TriageDOLive = Cloudflare.DurableObject<EngineeringRpc>()(
   Effect.gen(function* () {
     const state = yield* Cloudflare.DurableObjectState;
     const sql = state.storage.sql;
-
-    const count = Effect.gen(function* () {
-      const cursor = yield* sql.exec<
-        { n: number } & Record<string, Cloudflare.SqlStorageValue>
-      >("SELECT COUNT(*) AS n FROM queue");
-      return (yield* cursor.toArray())[0]?.n ?? 0;
-    });
 
     const itemsOf = Effect.fn(function* (taskId: string) {
       const cursor = yield* sql.exec<
@@ -171,58 +124,16 @@ const TriageDOLive = Cloudflare.DurableObject<EngineeringRpc>()(
       );
 
       return {
-        enqueue: Effect.fn(function* (input) {
+        delivered: Effect.fn(function* (key) {
           const seen = yield* (yield* sql.exec<
             { n: number } & Record<string, Cloudflare.SqlStorageValue>
           >(
             "SELECT COUNT(*) AS n FROM delivered WHERE key = ?",
-            input.key,
+            key,
           )).toArray();
-          if ((seen[0]?.n ?? 0) > 0) {
-            return { duplicate: true, waiting: yield* count };
-          }
-          yield* sql.exec("INSERT INTO delivered (key) VALUES (?)", input.key);
-          const at = yield* Clock.currentTimeMillis;
-          yield* sql.exec(
-            "INSERT INTO queue (ref, kind, text, at) VALUES (?, ?, ?, ?)",
-            input.ref ?? null,
-            input.kind,
-            input.text,
-            at,
-          );
-          return { duplicate: false, waiting: yield* count };
-        }),
-
-        take: Effect.fn(function* () {
-          // a TAKEN item outstanding = a crash mid-file: hand it back
-          const taken = yield* (yield* sql.exec<QueueRow>(
-            "SELECT * FROM queue WHERE taken = 1 ORDER BY seq ASC LIMIT 1",
-          )).toArray();
-          if (taken[0] !== undefined) {
-            return {
-              item: toInbound(taken[0]),
-              waiting: (yield* count) - 1,
-            };
-          }
-          const head = yield* (yield* sql.exec<QueueRow>(
-            "SELECT * FROM queue WHERE taken = 0 ORDER BY seq ASC LIMIT 1",
-          )).toArray();
-          if (head[0] === undefined) {
-            return { item: undefined, waiting: 0 };
-          }
-          yield* sql.exec(
-            "UPDATE queue SET taken = 1 WHERE seq = ?",
-            head[0].seq,
-          );
-          return { item: toInbound(head[0]), waiting: (yield* count) - 1 };
-        }),
-
-        finish: Effect.fn(function* () {
-          yield* sql.exec("DELETE FROM queue WHERE taken = 1");
-        }),
-
-        waiting: Effect.fn(function* () {
-          return yield* count;
+          if ((seen[0]?.n ?? 0) > 0) return true;
+          yield* sql.exec("INSERT INTO delivered (key) VALUES (?)", key);
+          return false;
         }),
 
         taskUpsert: Effect.fn(function* (input) {
@@ -333,10 +244,7 @@ export const TriageLive: Layer.Layer<Triage, never, Cloudflare.Worker> =
       const namespace = yield* TriageDOLive;
       const stub = () => namespace.getByName(MAIN);
       return Triage.of({
-        enqueue: (input) => inWorker(stub().enqueue(input)),
-        take: () => inWorker(stub().take()),
-        finish: () => inWorker(stub().finish()),
-        waiting: () => inWorker(stub().waiting()),
+        delivered: (key) => inWorker(stub().delivered(key)),
       });
     }),
   );

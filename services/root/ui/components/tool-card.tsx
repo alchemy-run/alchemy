@@ -43,6 +43,8 @@ import type { GeneralEngineer } from "../../src/engineering/Engineer.ts";
 import { useAnchoredToggle } from "@/lib/anchor";
 import { Ansi, stripAnsi } from "@/lib/ansi";
 import { CodeCard } from "@/components/code";
+import { AskThread } from "@/components/ask-thread";
+import { showOverlay } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 
 /* ── helpers ─────────────────────────────────────────────────── */
@@ -584,6 +586,10 @@ const THREAD: {
     input: { name: string },
     output: string | undefined,
   ) => ToolCallView;
+  call: (
+    input: { members?: ReadonlyArray<string>; topic?: string },
+    output: string | undefined,
+  ) => ToolCallView;
   read_state: (input: unknown, output: string | undefined) => ToolCallView;
   /** Two tools share the name: the thread agent's `spawn` (an Engineer
    *  on a `brief`) and the driver's intrinsic `spawn` (an anonymous
@@ -644,6 +650,8 @@ const THREAD: {
 
   workspace: (input, output) => {
     const record = parseRecord(output);
+    const name =
+      typeof record?.name === "string" ? record.name : undefined;
     return {
       icon: FolderTree,
       title:
@@ -658,6 +666,43 @@ const THREAD: {
         ),
       summary:
         record === undefined ? undefined : `${record.name} (${record.branch})`,
+      body:
+        name === undefined ? undefined : (
+          <button
+            type="button"
+            onClick={() => showOverlay({ kind: "workspace", name })}
+            className="cursor-pointer rounded border border-border/60 px-2 py-0.5 font-mono text-[11px] hover:bg-accent"
+          >
+            open a terminal in {name}
+          </button>
+        ),
+    };
+  },
+
+  call: (input, output) => {
+    const record = parseRecord(output);
+    const id = typeof record?.call === "string" ? record.call : undefined;
+    return {
+      icon: MessageSquare,
+      title: (
+        <>
+          Call{" "}
+          <span className="font-mono text-muted-foreground">
+            {Array.isArray(input.members) ? input.members.join(", ") : ""}
+          </span>
+        </>
+      ),
+      summary: typeof input.topic === "string" ? input.topic : undefined,
+      body:
+        id === undefined ? undefined : (
+          <button
+            type="button"
+            onClick={() => showOverlay({ kind: "call", id })}
+            className="cursor-pointer rounded border border-border/60 px-2 py-0.5 font-mono text-[11px] hover:bg-accent"
+          >
+            open the call — watch and join
+          </button>
+        ),
     };
   },
 
@@ -988,8 +1033,12 @@ const CHANNEL: {
 const CODER: Renderers<typeof GeneralEngineer> = {
   // the word between colleagues — every agent holds ask/tell, so
   // these cards serve every wire
+  // an ask is a THREAD: once it lands, the card renders its whole
+  // subtree (the asks the target made while answering, nested) —
+  // reddit-style, from /api/asks/:id/tree
   ask: (input, output, running) => {
     const record = parseRecord(output);
+    const askId = typeof record?.ask === "string" ? record.ask : undefined;
     return {
       icon: MessageSquare,
       title: (
@@ -999,16 +1048,19 @@ const CODER: Renderers<typeof GeneralEngineer> = {
         </>
       ),
       summary: running ? "waiting for the answer…" : undefined,
-      body: (
-        <div className="flex flex-col gap-2">
-          {input.question ? <Prose>{input.question}</Prose> : null}
-          {record?.answer !== undefined && (
-            <div className="border-l-2 border-border pl-2">
-              <Prose>{String(record.answer)}</Prose>
-            </div>
-          )}
-        </div>
-      ),
+      body:
+        askId !== undefined ? (
+          <AskThread id={askId} />
+        ) : (
+          <div className="flex flex-col gap-2">
+            {input.question ? <Prose>{input.question}</Prose> : null}
+            {record?.answer !== undefined && (
+              <div className="border-l-2 border-border pl-2">
+                <Prose>{String(record.answer)}</Prose>
+              </div>
+            )}
+          </div>
+        ),
     };
   },
   tell: (input) => ({

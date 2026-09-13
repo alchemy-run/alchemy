@@ -1,362 +1,68 @@
 import { expect, test as base, type Page, type Route } from "@playwright/test";
-import { readFileSync } from "node:fs";
-import pr147 from "../fixtures/pr-147.json" with { type: "json" };
-import pr148 from "../fixtures/pr-148.json" with { type: "json" };
-import type {
-  ChannelCard,
-  ChannelMessage,
-  ThreadListing,
-  ThreadState,
-} from "../../ui/lib/channel.ts";
-import type { ChangedFile } from "../../ui/lib/diff.ts";
-import {
-  CHANNEL_PATH,
-  reviewPath,
-  workspacePath,
-  threadPath,
-} from "../../ui/lib/routes.ts";
+import type { AskNode } from "../../ui/components/ask-thread.tsx";
+import type { CallView } from "../../ui/components/call.tsx";
 
 export { expect };
-export { CHANNEL_PATH, reviewPath, workspacePath, threadPath };
+export type { AskNode, CallView };
 
 /** The wall clock every `ui` test runs under — relative timestamps
  *  are computed against this, never against now. */
 export const NOW = new Date("2026-08-21T12:00:00Z");
 
-export const OWNER = "alchemy-run";
-export const REPO_NAME = "test-alchemy";
-export const REPO = `${OWNER}/${REPO_NAME}`;
-
-type PullRequestView = typeof pr148;
-
-/* ── the fixtures' diffs, split as GitHub pages them ──────────────── */
-
-const diffOf = (number: number): string =>
-  readFileSync(
-    new URL(`../fixtures/pr-${number}.diff`, import.meta.url),
-    "utf8",
-  );
-
-/** Split a fixture's unified diff into GitHub's per-file records:
- *  the header lines give the names and status, the hunks the patch. */
-export const filesOf = (number: number): ChangedFile[] =>
-  diffOf(number)
-    .split(/^(?=diff --git )/m)
-    .filter((block) => block.startsWith("diff --git "))
-    .map((block) => {
-      const lines = block.split("\n");
-      const hunk = lines.findIndex((line) => line.startsWith("@@"));
-      const header = hunk === -1 ? lines : lines.slice(0, hunk);
-      const patch = hunk === -1 ? undefined : lines.slice(hunk).join("\n");
-      const names = /^diff --git a\/(.+) b\/(.+)$/.exec(header[0]!)!;
-      const renamed = header.some((line) => line.startsWith("rename to "));
-      const status: ChangedFile["status"] = header.some((line) =>
-        line.startsWith("new file"),
-      )
-        ? "added"
-        : header.some((line) => line.startsWith("deleted file"))
-          ? "removed"
-          : renamed
-            ? "renamed"
-            : "modified";
-      const count = (sign: string) =>
-        patch === undefined
-          ? 0
-          : patch
-              .split("\n")
-              .filter(
-                (line) =>
-                  line.startsWith(sign) && !line.startsWith(sign.repeat(3)),
-              ).length;
-      return {
-        filename: names[2]!,
-        previousFilename: renamed ? names[1] : undefined,
-        status,
-        additions: count("+"),
-        deletions: count("-"),
-        patch,
-        blobUrl: `https://github.com/${REPO}/blob/head/${names[2]}`,
-      };
-    });
+/** The Root channel's session id — the Head's one session. */
+export const ROOT_CHAT = "Head:root";
 
 type WebSocketRoute = Parameters<Parameters<Page["routeWebSocket"]>[1]>[0];
 
+/* ── proposals (src/proposals/Proposals.ts, shape mirrored) ───────── */
+
+export type ProposalKind = "comment" | "push" | "open_pull" | "merge" | "close";
+export type ProposalStatus =
+  | "pending"
+  | "approved"
+  | "denied"
+  | "executed"
+  | "failed";
+
+export interface ProposalRow {
+  id: string;
+  kind: ProposalKind;
+  status: ProposalStatus;
+  summary: string;
+  detail: string;
+  payload: Record<string, unknown> & { kind: ProposalKind };
+  proposer: { term: string; key: string };
+  task?: string;
+  outcome?: string;
+  createdAt: number;
+  decidedAt?: number;
+}
+
 /**
- * The FAKE BACKEND — an in-memory model of the org Worker's surface,
- * answered from `page.route`: the channel log + directory (HTTP page
- * + `/channel` cursor socket), thread state (`/api/threads/:id` +
- * `/thread/:id` snapshot socket), pulls from the fixtures,
- * chat run sockets, terminals. Mutable so tests seed a scenario and
- * then assert on what the UI did to it.
+ * The FAKE BACKEND — an in-memory model of the Worker's surface,
+ * answered from `page.route`: the Root channel's session socket
+ * (`/attach/:term/:key`), its snapshot + model routes, the human's
+ * post door (`POST /api/root`), ask trees, calls (HTTP + live
+ * socket), proposals, terminals. Mutable so tests seed a scenario
+ * and then assert on what the UI did to it.
  */
 export class FakeApi {
-  /* ── the channel ── */
+  /* ── the Root post door ── */
 
-  /** The log, seq-dense from 1. */
-  messages: ChannelMessage[] = [];
-  directory: ThreadListing[] = [];
-  /** Every `POST /api/channel` text, in order. */
-  posts: string[] = [];
-  /** Every `POST /api/channel` that replied — `{ text, replyTo }`. */
-  replies: Array<{ text: string; replyTo: string[] }> = [];
-  /** The live `/channel` sockets (the app opens one). */
-  private channelSockets: WebSocketRoute[] = [];
+  /** Every text the human posted into the Root channel, in order —
+   *  `POST /api/root` bodies AND the session socket's `submit` frames
+   *  for `Head:root` (the composer speaks over the socket; the HTTP
+   *  door is the API's other entrance and records the same way). */
+  root: { posted: string[] } = { posted: [] };
 
-  private nextSeq = 1;
-
-  seedMessage(
-    partial: Partial<ChannelMessage> & { kind: ChannelMessage["kind"] },
-  ): ChannelMessage {
-    const seq = this.nextSeq++;
-    const message: ChannelMessage = {
-      id: `m-${seq}`,
-      seq,
-      at: NOW.getTime() - 3_600_000 + seq * 60_000,
-      author: undefined,
-      text: "",
-      ...partial,
-    };
-    this.messages = [...this.messages, message];
-    return message;
-  }
-
-  seedEvent(
-    text: string,
-    options: {
-      author?: string;
-      event?: string;
-      ref?: string;
-      thread?: string;
-    } = {},
-  ): ChannelMessage {
-    return this.seedMessage({
-      kind: "event",
-      text,
-      repo: REPO,
-      event: options.event ?? "IssueOpened",
-      ...(options.ref !== undefined ? { ref: options.ref } : {}),
-      ...(options.thread !== undefined ? { thread: options.thread } : {}),
-      author:
-        options.author === undefined ? undefined : { login: options.author },
-    });
-  }
-
-  seedUser(text: string, login = "sam-goodwin"): ChannelMessage {
-    return this.seedMessage({ kind: "user", text, author: { login } });
-  }
-
-  seedAgent(text: string): ChannelMessage {
-    return this.seedMessage({ kind: "agent", text });
-  }
-
-  seedCard(card: ChannelCard, text: string): ChannelMessage {
-    return this.seedMessage({ kind: "card", text, card });
-  }
-
-  /** Push a LIVE append to every subscribed channel socket. */
-  pushMessage(
-    partial: Partial<ChannelMessage> & { kind: ChannelMessage["kind"] },
-  ): ChannelMessage {
-    const message = this.seedMessage(partial);
-    for (const socket of this.channelSockets) {
-      socket.send(JSON.stringify({ type: "item", item: message }));
-    }
-    return message;
-  }
-
-  /** Every id `DELETE /api/channel/messages` named, in order. */
-  deletedMessages: string[] = [];
-
-  /** Delete messages and push the `remove` frame — what the Worker's
-   *  DO does when the operator deletes rows. */
-  removeMessages(ids: ReadonlyArray<string>): void {
-    const drop = new Set(ids);
-    const seqs = this.messages
-      .filter((message) => drop.has(message.id))
-      .map((message) => message.seq);
-    if (seqs.length === 0) return;
-    this.messages = this.messages.filter((message) => !drop.has(message.id));
-    for (const socket of this.channelSockets) {
-      socket.send(JSON.stringify({ type: "remove", seqs }));
-    }
-  }
-
-  /** Amend a message in place and push the `update` frame. */
-  amendMessage(seq: number, patch: Partial<ChannelMessage>): void {
-    this.messages = this.messages.map((message) =>
-      message.seq === seq ? { ...message, ...patch } : message,
-    );
-    const amended = this.messages.find((message) => message.seq === seq);
-    if (amended === undefined) return;
-    for (const socket of this.channelSockets) {
-      socket.send(JSON.stringify({ type: "update", item: amended }));
-    }
-  }
-
-  pushDirectory(): void {
-    for (const socket of this.channelSockets) {
-      socket.send(JSON.stringify({ type: "directory", rows: this.directory }));
-    }
-  }
-
-  /* ── threads ── */
-
-  threads: Record<string, ThreadState> = {};
-  /** Every `POST /api/threads/:id/steer` body, keyed by thread. */
-  steered: Array<{ thread: string; text: string }> = [];
-  /** Every `POST /api/threads/:id/close`, in order. */
-  closedThreads: string[] = [];
-  /** Every `POST /api/threads/:id/reopen`, in order. */
-  reopenedThreads: string[] = [];
-  /** Every `DELETE /api/threads/:id`, in order. */
-  deletedThreads: string[] = [];
-  /** When set, thread DELETEs answer only once this resolves — the
-   *  real server tears down agents and workspaces (machines and all)
-   *  before answering, and the row stays in the directory until then. */
-  private threadDeleteGate: Promise<void> | undefined;
-  /** Hold every thread DELETE open; returns the release. */
-  holdThreadDelete(): () => void {
-    let release!: () => void;
-    this.threadDeleteGate = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    return release;
-  }
-  /** Every stop / resume / delete on a thread's agent, in order. */
-  agentActions: Array<{
-    thread: string;
-    key: string;
-    action: "stop" | "resume" | "delete";
-  }> = [];
-  /** When set, agent actions answer only once this resolves — the row
-   *  shows the request in flight until then. */
-  /** How many EN-MASSE requests landed (`…/agents/<verb>`) — the
-   *  per-agent actions above are recorded for each key either way. */
-  bulkRequests = 0;
-  private agentActionGate: Promise<void> | undefined;
-  /** Hold every agent action open; returns the release. */
-  holdAgentActions(): () => void {
-    let release!: () => void;
-    this.agentActionGate = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    return release;
-  }
-  private threadSockets: Record<string, WebSocketRoute[]> = {};
-
-  /* ── models ── */
-
-  /** The catalog `GET /api/models` serves — the real one's shape. */
-  readonly models = [
-    { id: "claude-opus-5", label: "Claude Opus 5", provider: "anthropic" },
-    {
-      id: "claude-fable-5-1",
-      label: "Claude Fable 5.1",
-      provider: "anthropic",
-    },
-    {
-      id: "claude-haiku-4-5",
-      label: "Claude Haiku 4.5",
-      provider: "anthropic",
-    },
-    { id: "gpt-6-astra", label: "GPT-6 Astra", provider: "openai" },
-    {
-      id: "deepseek-flash",
-      label: "DeepSeek V4.1 Flash",
-      provider: "deepseek",
-    },
-    { id: "deepseek-v4-pro", label: "DeepSeek V4 Pro", provider: "deepseek" },
-  ];
-  readonly defaultModel = "claude-haiku-4-5";
-  /** An engineer session's own pick (`Engineer:<key>`), `null` = default. */
-  engineerModels: Record<string, string | null> = {};
-  /** The channel agent's pick (`Channel:main`), `null` = default. */
-  channelModel: string | null = null;
-  /** Every `PUT /api/chats/:id/model`, in order. */
-  modelPicks: Array<{ session: string; model: string | null }> = [];
-
-  seedThread(partial: Partial<ThreadState> & { id: string }): ThreadState {
-    const state: ThreadState = {
-      name: partial.id,
-      title: "",
-      status: "open",
-      turn: "you",
-      createdAt: NOW.getTime() - 3_600_000,
-      updatedAt: NOW.getTime() - 60_000,
-      assigned: [],
-      agents: [],
-      members: [],
-      ...partial,
-      workspaces: partial.workspaces ?? [],
-    };
-    this.threads = { ...this.threads, [state.id]: state };
-    this.directory = [
-      ...this.directory.filter((row) => row.id !== state.id),
-      {
-        id: state.id,
-        name: state.name,
-        title: state.title,
-        status: state.status,
-        turn: state.turn,
-        updatedAt: state.updatedAt,
-      },
-    ];
-    return state;
-  }
-
-  /**
-   * A directory row whose thread has NO state — the server answers
-   * `/api/threads/:id` with 404 (its state was lost, or it was made
-   * under an earlier storage layout) yet the rail still lists it. The
-   * real server keeps letting it be deleted; so does this one.
-   */
-  seedOrphanRow(row: Partial<ThreadListing> & { id: string }): ThreadListing {
-    const listing: ThreadListing = {
-      name: row.id,
-      title: "",
-      status: "open",
-      turn: "others",
-      updatedAt: NOW.getTime() - 60_000,
-      ...row,
-    };
-    this.directory = [
-      ...this.directory.filter((entry) => entry.id !== listing.id),
-      listing,
-    ];
-    return listing;
-  }
-
-  /** Amend a thread's state and push the snapshot to its sockets. */
-  updateThread(id: string, patch: Partial<ThreadState>): void {
-    const current = this.threads[id];
-    if (current === undefined) return;
-    const next = { ...current, ...patch };
-    this.threads = { ...this.threads, [id]: next };
-    for (const socket of this.threadSockets[id] ?? []) {
-      socket.send(JSON.stringify({ type: "state", state: next }));
-    }
-  }
-
-  /* ── pulls ── */
-
-  prs: Record<number, PullRequestView> = { 148: pr148, 147: pr147 };
-  /** Every `GET /api/pulls/…/:n` (the review's load), in order. */
-  pullLoads: number[] = [];
-  /** Every files page fetched, in order — the fake pages ONE file per
-   *  page so any PR exercises the progressive load. */
-  filePages: Array<{ number: number; page: number }> = [];
-  /** Files served WITHOUT a patch (binary / too large upstream). */
-  unrenderable = new Set<string>();
-  /** Files reported HUGE (+1 200 lines) — collapsed behind a click. */
-  large = new Set<string>();
-
-  /* ── chat run sockets (`/attach/<term>/<key>`) ── */
+  /* ── chat sessions (`/attach/<term>/<key>`) ── */
 
   /** Durable observations per chat id, in seq order — what the socket
    *  replays when the transcript view subscribes. */
   transcripts: Record<string, unknown[]> = {};
-
-  /** Every `DELETE /api/chats/:id/messages/:mid`, in order. */
+  /** Every socket `submit`, in order — `{ id, text }`. */
+  submits: Array<{ id: string; text: string }> = [];
+  /** Every `DELETE /api/chats/:id/messages`, flattened. */
   deletedChatMessages: Array<{ id: string; messageId: string }> = [];
   /** Every `POST /api/chats/:id/interrupt` — the stop button. */
   interrupted: string[] = [];
@@ -372,17 +78,93 @@ export class FakeApi {
     };
   }
 
+  /** A plain exchange (no tool call) in chat `id`. */
+  seedTurn(id: string, ask: string, reply: string): void {
+    const rows = this.transcripts[id] ?? [];
+    const seq = rows.length;
+    this.transcripts[id] = [
+      ...rows,
+      { ...this.envelope(id, seq), type: "input", text: ask },
+      {
+        ...this.envelope(id, seq + 1),
+        type: "assistant",
+        tick: 0,
+        ms: 500,
+        text: reply,
+        toolCalls: [],
+      },
+    ];
+  }
+
+  /** An input the session heard WITHOUT answering — a quiet delivery
+   *  (`wake: false`): bookkeeping, a webhook event. */
+  seedInput(id: string, text: string): void {
+    const rows = this.transcripts[id] ?? [];
+    this.transcripts[id] = [
+      ...rows,
+      { ...this.envelope(id, rows.length), type: "input", text },
+    ];
+  }
+
   /**
-   * A round IN FLIGHT in chat `id`: the user asked, the agent called
-   * `name` — and nothing has come back yet. The transcript view sees
-   * an open turn (the stop button shows) until an observation ends it.
+   * One finished turn in chat `id`: the user asks, the agent calls one
+   * tool (`name` with `input`, answered by `output`), and replies. The
+   * shape every per-tool card is exercised through.
    */
+  seedTool(
+    id: string,
+    turn: {
+      ask: string;
+      name: string;
+      input: unknown;
+      /** The tool's answer — the record of its out-fields (or a plain
+       *  string for failures/legacy tools). */
+      output: unknown;
+      isFailure?: boolean;
+      reply: string;
+      /** What the agent thought before calling the tool. */
+      reasoning?: string;
+    },
+  ): void {
+    const rows = this.transcripts[id] ?? [];
+    const seq = rows.length;
+    const callId = `call-${seq + 1}`;
+    this.transcripts[id] = [
+      ...rows,
+      { ...this.envelope(id, seq), type: "input", text: turn.ask },
+      {
+        ...this.envelope(id, seq + 1),
+        type: "assistant",
+        tick: 0,
+        ms: 800,
+        text: "",
+        ...(turn.reasoning === undefined ? {} : { reasoning: turn.reasoning }),
+        toolCalls: [{ id: callId, name: turn.name, input: turn.input }],
+      },
+      {
+        ...this.envelope(id, seq + 2),
+        type: "tool-result",
+        toolCallId: callId,
+        toolName: turn.name,
+        output: turn.output,
+        isFailure: turn.isFailure ?? false,
+      },
+      {
+        ...this.envelope(id, seq + 3),
+        type: "assistant",
+        tick: 1,
+        ms: 600,
+        text: turn.reply,
+        toolCalls: [],
+      },
+    ];
+  }
+
   /**
    * A round IN FLIGHT: the model called one tool and its handler is
-   * still running — the `tool-call` row is durable (a view that opens
-   * now sees the call), the sampling's `assistant` row has not landed.
-   * Returns the call's id so a test can land the rest of the round
-   * with {@link landOpenRound}.
+   * still running — the `tool-call` row is durable, the sampling's
+   * `assistant` row has not landed. Returns the call's id so a test
+   * can land the rest of the round with {@link landOpenRound}.
    */
   seedOpenRound(
     id: string,
@@ -407,8 +189,7 @@ export class FakeApi {
   }
 
   /** The rest of a {@link seedOpenRound} round, as the Worker writes it
-   *  once the handler returns: the `assistant` row restating the call,
-   *  then the call's result, then the quiescent reply. */
+   *  once the handler returns. */
   landOpenRound(
     id: string,
     callId: string,
@@ -454,212 +235,94 @@ export class FakeApi {
     }
   }
 
-  /**
-   * One finished turn in chat `id`: the user asks, the agent calls one
-   * tool (`name` with `input`, answered by `output`), and replies. The
-   * shape every per-tool card is exercised through.
-   */
-  seedTool(
-    id: string,
-    turn: {
-      ask: string;
-      name: string;
-      input: unknown;
-      /** The tool's answer — the record of its out-fields (or a plain
-       *  string for failures/legacy tools). */
-      output: unknown;
-      isFailure?: boolean;
-      reply: string;
-      /** What the agent thought before calling the tool — a reasoning
-       *  trace on the tool-calling tick. */
-      reasoning?: string;
+  /* ── models ── */
+
+  /** The catalog `GET /api/models` serves — the real one's shape. */
+  readonly models = [
+    { id: "claude-opus-5", label: "Claude Opus 5", provider: "anthropic" },
+    {
+      id: "claude-fable-5-1",
+      label: "Claude Fable 5.1",
+      provider: "anthropic",
     },
-  ): void {
-    const at = id.indexOf(":");
-    const envelope = (seq: number) => ({
-      term: id.slice(0, at),
-      key: id.slice(at + 1),
-      seq,
-      at: NOW.getTime() - 60_000 + seq * 1000,
-    });
-    const callId = `call-${(this.transcripts[id]?.length ?? 0) + 1}`;
-    const rows = this.transcripts[id] ?? [];
-    const seq = rows.length;
-    this.transcripts[id] = [
-      ...rows,
-      { ...envelope(seq), type: "input", text: turn.ask },
-      {
-        ...envelope(seq + 1),
-        type: "assistant",
-        tick: 0,
-        ms: 800,
-        text: "",
-        ...(turn.reasoning === undefined ? {} : { reasoning: turn.reasoning }),
-        toolCalls: [{ id: callId, name: turn.name, input: turn.input }],
-      },
-      {
-        ...envelope(seq + 2),
-        type: "tool-result",
-        toolCallId: callId,
-        toolName: turn.name,
-        output: turn.output,
-        isFailure: turn.isFailure ?? false,
-      },
-      {
-        ...envelope(seq + 3),
-        type: "assistant",
-        tick: 1,
-        ms: 600,
-        text: turn.reply,
-        toolCalls: [],
-      },
-    ];
+    {
+      id: "claude-haiku-4-5",
+      label: "Claude Haiku 4.5",
+      provider: "anthropic",
+    },
+    { id: "gpt-6-astra", label: "GPT-6 Astra", provider: "openai" },
+    {
+      id: "deepseek-flash",
+      label: "DeepSeek V4.1 Flash",
+      provider: "deepseek",
+    },
+    { id: "deepseek-v4-pro", label: "DeepSeek V4 Pro", provider: "deepseek" },
+  ];
+  readonly defaultModel = "claude-haiku-4-5";
+  /** A session's own pick, keyed by chat id; `null` = the default.
+   *  Only `Head:*` and `Engineer:*` sessions have a model to pick
+   *  (src/chat/Models.ts) — anything else answers 404. */
+  sessionModels: Record<string, string | null> = {};
+  /** Every `PUT /api/chats/:id/model`, in order. */
+  modelPicks: Array<{ session: string; model: string | null }> = [];
+
+  /* ── asks ── */
+
+  /** Seedable ask TREES, keyed by the root ask's id —
+   *  `GET /api/asks/:id/tree` answers the node verbatim. */
+  asks: Record<string, AskNode> = {};
+
+  seedAskTree(root: AskNode): AskNode {
+    this.asks = { ...this.asks, [root.id]: root };
+    return root;
   }
 
-  /**
-   * One turn with a RUN of tool calls — the agent calls a tool once
-   * per tick, `calls.length` ticks in a row, then replies. The shape
-   * "make a worktree for each of these five pulls" takes, and what
-   * the transcript folds into one line.
-   */
-  seedTools(
-    id: string,
-    turn: {
-      ask: string;
-      calls: ReadonlyArray<{
-        name: string;
-        input: unknown;
-        output: unknown;
-        isFailure?: boolean;
-        /** Still running: a durable `tool-call` row, no result yet —
-         *  the round has not landed, and there is no reply. */
-        open?: boolean;
-      }>;
-      reply: string;
-    },
-  ): void {
-    const at = id.indexOf(":");
-    const envelope = (seq: number) => ({
-      term: id.slice(0, at),
-      key: id.slice(at + 1),
-      seq,
-      at: NOW.getTime() - 60_000 + seq * 1000,
-    });
-    const rows = [...(this.transcripts[id] ?? [])];
-    rows.push({ ...envelope(rows.length), type: "input", text: turn.ask });
-    let inFlight = false;
-    turn.calls.forEach((call, tick) => {
-      const callId = `call-${rows.length + 1}`;
-      if (call.open) {
-        inFlight = true;
-        rows.push({
-          ...envelope(rows.length),
-          type: "tool-call",
-          tick,
-          toolCallId: callId,
-          toolName: call.name,
-          input: call.input,
-        });
-        return;
-      }
-      rows.push({
-        ...envelope(rows.length),
-        type: "assistant",
-        tick,
-        ms: 500,
-        text: "",
-        toolCalls: [{ id: callId, name: call.name, input: call.input }],
-      });
-      rows.push({
-        ...envelope(rows.length),
-        type: "tool-result",
-        toolCallId: callId,
-        toolName: call.name,
-        output: call.output,
-        isFailure: call.isFailure ?? false,
-      });
-    });
-    if (!inFlight) {
-      rows.push({
-        ...envelope(rows.length),
-        type: "assistant",
-        tick: turn.calls.length,
-        ms: 600,
-        text: turn.reply,
-        toolCalls: [],
-      });
+  /* ── calls ── */
+
+  /** Seedable call views, keyed by id. */
+  calls: Record<string, CallView> = {};
+  /** Every `POST /api/calls/:id` body, in order. */
+  callPosts: Array<{ id: string; text: string; to?: string }> = [];
+  private callSockets: Record<string, WebSocketRoute[]> = {};
+
+  seedCall(view: CallView): CallView {
+    this.calls = { ...this.calls, [view.id]: view };
+    return view;
+  }
+
+  /** Replace a call's view and push the `call` frame to every
+   *  subscribed live socket — what the DO does after each utterance. */
+  pushCall(view: CallView): void {
+    this.calls = { ...this.calls, [view.id]: view };
+    for (const socket of this.callSockets[view.id] ?? []) {
+      socket.send(JSON.stringify({ type: "call", call: view }));
     }
-    this.transcripts[id] = rows;
   }
 
-  /** A turn where the agent runs `command` through `bash`. `stdout`
-   *  may carry ANSI escapes — the point of seeding it. */
-  seedBash(
-    id: string,
-    turn: {
-      ask: string;
-      command: string;
-      exit?: number;
-      stdout: string;
-      stderr?: string;
-      reply: string;
-    },
-  ): void {
-    this.seedTool(id, {
-      ask: turn.ask,
-      name: "bash",
-      input: { command: turn.command },
-      output: {
-        exitCode: turn.exit ?? 0,
-        stdout: turn.stdout,
-        stderr: turn.stderr ?? "",
-      },
-      reply: turn.reply,
-    });
-  }
+  /* ── proposals ── */
 
-  /** An input the session heard WITHOUT answering — a quiet delivery
-   *  (`wake: false`): the thread's bookkeeping, a webhook event. */
-  seedInput(id: string, text: string): void {
-    const at = id.indexOf(":");
-    const rows = this.transcripts[id] ?? [];
-    const seq = rows.length;
-    this.transcripts[id] = [
-      ...rows,
-      {
-        term: id.slice(0, at),
-        key: id.slice(at + 1),
-        seq,
-        at: NOW.getTime() - 60_000 + seq * 1000,
-        type: "input",
-        text,
-      },
-    ];
-  }
+  proposals: Record<string, ProposalRow> = {};
+  /** Every `POST /api/proposals/:id`, in order. */
+  decisions: Array<{
+    id: string;
+    decision: "approve" | "deny";
+    reason?: string;
+  }> = [];
 
-  /** A plain exchange (no tool call) in chat `id`. */
-  seedTurn(id: string, ask: string, reply: string): void {
-    const at = id.indexOf(":");
-    const envelope = (seq: number) => ({
-      term: id.slice(0, at),
-      key: id.slice(at + 1),
-      seq,
-      at: NOW.getTime() - 60_000 + seq * 1000,
-    });
-    const rows = this.transcripts[id] ?? [];
-    const seq = rows.length;
-    this.transcripts[id] = [
-      ...rows,
-      { ...envelope(seq), type: "input", text: ask },
-      {
-        ...envelope(seq + 1),
-        type: "assistant",
-        tick: 0,
-        ms: 500,
-        text: reply,
-        toolCalls: [],
-      },
-    ];
+  seedProposal(
+    partial: Partial<ProposalRow> & { id: string; kind: ProposalKind },
+  ): ProposalRow {
+    const row: ProposalRow = {
+      status: "pending",
+      summary: "",
+      detail: "",
+      payload: { kind: partial.kind },
+      proposer: { term: "Engineer", key: "root::e-0000" },
+      createdAt: NOW.getTime() - 600_000,
+      ...partial,
+    };
+    this.proposals = { ...this.proposals, [row.id]: row };
+    return row;
   }
 
   readonly terminal = new FakeTerminal();
@@ -673,39 +336,16 @@ export class FakeApi {
     await page.route(/^https?:\/\/(?!localhost|127\.0\.0\.1)/, (route) =>
       route.abort(),
     );
-    await page.routeWebSocket(/\/channel$/, (ws) => this.attachChannel(ws));
-    await page.routeWebSocket(/\/thread\//, (ws) => this.attachThread(ws));
     await page.routeWebSocket(/\/attach\//, (ws) => this.attachChat(ws));
+    await page.routeWebSocket(/\/api\/calls\/[^/]+\/live$/, (ws) =>
+      this.attachCall(ws),
+    );
     await page.routeWebSocket(/\/terminal\//, (ws) =>
       this.terminal.attach(ws.url(), ws),
     );
   }
 
-  private attachChannel(ws: WebSocketRoute) {
-    this.channelSockets.push(ws);
-    ws.onMessage((raw) => {
-      const frame = JSON.parse(String(raw)) as {
-        type: string;
-        after?: number;
-      };
-      if (frame.type !== "subscribe") return;
-      const after = frame.after ?? 0;
-      const items = this.messages.filter((message) => message.seq > after);
-      ws.send(JSON.stringify({ type: "batch", items, head: this.nextSeq - 1 }));
-      ws.send(JSON.stringify({ type: "live", seq: this.nextSeq - 1 }));
-      ws.send(JSON.stringify({ type: "directory", rows: this.directory }));
-    });
-  }
-
-  private attachThread(ws: WebSocketRoute) {
-    const path = decodeURIComponent(new URL(ws.url()).pathname);
-    const id = path.slice("/thread/".length);
-    this.threadSockets[id] = [...(this.threadSockets[id] ?? []), ws];
-    const state = this.threads[id];
-    if (state !== undefined) {
-      ws.send(JSON.stringify({ type: "state", state }));
-    }
-  }
+  /* ── the session socket ── */
 
   private attachChat(ws: WebSocketRoute) {
     const path = decodeURIComponent(new URL(ws.url()).pathname);
@@ -717,25 +357,45 @@ export class FakeApi {
       const frame = JSON.parse(String(raw)) as {
         type: string;
         input?: unknown;
+        fromSeq?: number | "live";
       };
       // a submit is admitted as a durable input row and broadcast —
       // the durable echo is how the sender's optimistic message
       // learns its `u-<seq>` id (exactly what the Worker does)
       if (frame.type === "submit") {
-        this.pushObservation(id, {
-          type: "input",
-          text: String(frame.input ?? ""),
-        });
+        const text = String(frame.input ?? "");
+        this.submits.push({ id, text });
+        if (id === ROOT_CHAT) this.root.posted.push(text);
+        this.pushObservation(id, { type: "input", text });
         return;
       }
       if (frame.type !== "subscribe") return;
       const rows = this.transcripts[id] ?? [];
-      for (const observation of rows) {
+      const from = frame.fromSeq === "live" ? rows.length : (frame.fromSeq ?? 0);
+      for (const observation of rows.slice(from)) {
         ws.send(
           JSON.stringify({ type: "observation", durable: true, observation }),
         );
       }
       ws.send(JSON.stringify({ type: "live", seq: rows.length }));
+    });
+  }
+
+  /* ── the call socket ── */
+
+  private attachCall(ws: WebSocketRoute) {
+    // /api/calls/<id>/live — the client re-states the id in its first
+    // frame ({ call: id }); subscribe it and answer the snapshot
+    const path = decodeURIComponent(new URL(ws.url()).pathname);
+    const id = path.slice("/api/calls/".length, -"/live".length);
+    ws.onMessage((raw) => {
+      const frame = JSON.parse(String(raw)) as { call?: string };
+      if (frame.call !== id) return;
+      this.callSockets[id] = [...(this.callSockets[id] ?? []), ws];
+      const view = this.calls[id];
+      if (view !== undefined) {
+        ws.send(JSON.stringify({ type: "call", call: view }));
+      }
     });
   }
 
@@ -755,134 +415,14 @@ export class FakeApi {
     const method = request.method();
     const path = url.pathname;
 
-    if (path === "/api/me") {
-      return this.json(route, {
-        login: "sam-goodwin",
-        name: "Sam Goodwin",
-        // the ui project aborts everything off-host — the fallback shows
-        avatarUrl: "https://avatars.githubusercontent.com/u/0?v=4",
-        url: "https://github.com/sam-goodwin",
-      });
-    }
-    if (path === "/api/repos") {
-      return this.json(route, [{ name: REPO, sessions: true }]);
-    }
-
-    if (path === "/api/channel" && method === "GET") {
-      const after = Number(url.searchParams.get("after") ?? "0");
-      const limit = Number(url.searchParams.get("limit") ?? "200");
-      const items = this.messages
-        .filter((message) => message.seq > after)
-        .slice(0, limit);
-      const head = this.nextSeq - 1;
-      const last = items[items.length - 1]?.seq;
-      return this.json(route, {
-        items,
-        head,
-        next: last !== undefined && last < head ? last : null,
-      });
-    }
-    if (path === "/api/channel" && method === "POST") {
-      const body = (request.postDataJSON() ?? {}) as {
-        text?: string;
-        replyTo?: string[];
-      };
-      const text = body.text ?? "";
-      this.posts.push(text);
-      const replyTo = body.replyTo ?? [];
-      if (replyTo.length > 0) this.replies.push({ text, replyTo });
-      this.pushMessage({
-        kind: "user",
-        text,
-        author: { login: "sam-goodwin" },
-        ...(replyTo.length > 0 ? { replyTo } : {}),
-      });
-      return this.json(route, {});
-    }
-    if (path === "/api/channel/directory") {
-      return this.json(route, this.directory);
-    }
-
-    if (path === "/api/channel/messages" && method === "DELETE") {
-      const body = (request.postDataJSON() ?? {}) as { ids?: string[] };
-      const ids = body.ids ?? [];
-      this.deletedMessages.push(...ids);
-      this.removeMessages(ids);
-      return this.json(route, { deleted: ids.length });
-    }
-
-    // the switches EN MASSE: POST …/agents/(stop|resume|delete) with
-    // `{ keys }` (a selection) or nothing (every agent) — recorded as
-    // one action per agent, exactly what the server's fan-out does
-    const bulk = path.match(
-      /^\/api\/threads\/([^/]+)\/agents\/(stop|resume|delete)$/,
-    );
-    if (bulk !== null && method === "POST") {
-      this.bulkRequests += 1;
-      const id = decodeURIComponent(bulk[1]!);
-      const verb = bulk[2] as "stop" | "resume" | "delete";
-      const state = this.threads[id];
-      if (state === undefined) {
-        return this.json(route, { error: `no thread ${id}` }, 404);
+    if (path === "/api/root" && method === "POST") {
+      const body = (request.postDataJSON() ?? {}) as { text?: string };
+      const text = typeof body.text === "string" ? body.text.trim() : "";
+      if (text.length === 0) {
+        return this.json(route, { error: "text required" }, 400);
       }
-      const body = (request.postDataJSON() ?? {}) as { keys?: string[] };
-      const keys = body.keys ?? state.agents.map((entry) => entry.key);
-      for (const key of keys) {
-        this.agentActions.push({ thread: id, key, action: verb });
-      }
-      if (this.agentActionGate !== undefined) await this.agentActionGate;
-      this.updateThread(id, {
-        agents:
-          verb === "delete"
-            ? state.agents.filter((entry) => !keys.includes(entry.key))
-            : state.agents.map((entry) => {
-                if (!keys.includes(entry.key)) return entry;
-                const { settledAt: _settled, ...rest } = entry;
-                return verb === "stop"
-                  ? { ...entry, state: "stopped", settledAt: NOW.getTime() }
-                  : { ...rest, state: "running" };
-              }),
-      });
-      return this.json(route, this.threads[id]);
-    }
-
-    // a thread's agents: POST …/agents/:key/(stop|resume), DELETE …/agents/:key
-    const agent = path.match(
-      /^\/api\/threads\/([^/]+)\/agents\/([^/]+)(\/(stop|resume))?$/,
-    );
-    if (agent !== null) {
-      const id = decodeURIComponent(agent[1]!);
-      const key = decodeURIComponent(agent[2]!);
-      const verb = agent[4];
-      const state = this.threads[id];
-      const row = state?.agents.find((entry) => entry.key === key);
-      if (state === undefined || row === undefined) {
-        return this.json(route, { error: `no agent ${key}` }, 404);
-      }
-      if (verb === undefined && method === "DELETE") {
-        this.agentActions.push({ thread: id, key, action: "delete" });
-        if (this.agentActionGate !== undefined) await this.agentActionGate;
-        this.updateThread(id, {
-          agents: state.agents.filter((entry) => entry.key !== key),
-        });
-        return this.json(route, this.threads[id]);
-      }
-      if ((verb === "stop" || verb === "resume") && method === "POST") {
-        this.agentActions.push({ thread: id, key, action: verb });
-        if (this.agentActionGate !== undefined) await this.agentActionGate;
-        const { settledAt: _settled, ...rest } = row;
-        this.updateThread(id, {
-          agents: state.agents.map((entry) =>
-            entry.key === key
-              ? verb === "stop"
-                ? { ...entry, state: "stopped", settledAt: NOW.getTime() }
-                : { ...rest, state: "running" }
-              : entry,
-          ),
-        });
-        return this.json(route, this.threads[id]);
-      }
-      return this.json(route, { error: "method not allowed" }, 405);
+      this.root.posted.push(text);
+      return this.json(route, { ok: true }, 202);
     }
 
     if (path === "/api/models") {
@@ -892,136 +432,148 @@ export class FakeApi {
       });
     }
 
-    // a session's model: a thread's from its state, an engineer's from
-    // its own cell; PUT records the pick and answers the new one
+    // a session's model pick — only Head/Engineer sessions have one
     const chatModel = path.match(/^\/api\/chats\/([^/]+)\/model$/);
     if (chatModel !== null) {
       const session = decodeURIComponent(chatModel[1]!);
-      const at = session.indexOf(":");
-      const term = session.slice(0, at);
-      const key = session.slice(at + 1);
-      const body = (method === "PUT" ? (request.postDataJSON() ?? {}) : {}) as {
-        model?: string | null;
-      };
-      if (term === "Thread") {
-        const state = this.threads[key];
-        if (state === undefined) {
-          return this.json(route, { error: "unknown thread" }, 404);
-        }
-        if (method === "PUT") {
-          this.modelPicks.push({ session, model: body.model ?? null });
-          const { model: _model, ...rest } = state;
-          this.updateThread(
-            key,
-            body.model === null || body.model === undefined
-              ? { ...rest, model: undefined }
-              : { model: body.model },
-          );
-        }
-        return this.json(route, {
-          model: this.threads[key]?.model ?? null,
-          default: this.defaultModel,
-        });
+      const term = session.slice(0, session.indexOf(":"));
+      if (term !== "Head" && term !== "Engineer") {
+        return this.json(route, { error: "no model to pick" }, 404);
       }
-      if (term === "Channel" && key === "main") {
-        if (method === "PUT") {
-          this.modelPicks.push({ session, model: body.model ?? null });
-          this.channelModel = body.model ?? null;
-        }
-        return this.json(route, {
-          model: this.channelModel,
-          default: this.defaultModel,
-        });
+      if (method === "PUT") {
+        const body = (request.postDataJSON() ?? {}) as {
+          model?: string | null;
+        };
+        this.modelPicks.push({ session, model: body.model ?? null });
+        this.sessionModels[session] = body.model ?? null;
       }
-      if (term === "Engineer") {
-        if (method === "PUT") {
-          this.modelPicks.push({ session, model: body.model ?? null });
-          this.engineerModels[key] = body.model ?? null;
-        }
-        return this.json(route, {
-          model: this.engineerModels[key] ?? null,
-          default: this.defaultModel,
-        });
-      }
-      return this.json(route, { error: "no model to pick" }, 404);
-    }
-
-    const thread = path.match(/^\/api\/threads\/([^/]+)(\/(close|reopen))?$/);
-    if (thread !== null) {
-      const id = decodeURIComponent(thread[1]!);
-      const state = this.threads[id];
-      if (
-        state === undefined &&
-        !(method === "DELETE" && thread[3] === undefined)
-      ) {
-        return this.json(route, { error: `unknown thread ${id}` }, 404);
-      }
-      if (thread[3] === "close" && method === "POST") {
-        this.closedThreads.push(id);
-        this.updateThread(id, { status: "closed" });
-        return this.json(route, {});
-      }
-      if (thread[3] === "reopen" && method === "POST") {
-        this.reopenedThreads.push(id);
-        this.updateThread(id, { status: "open" });
-        return this.json(route, {});
-      }
-      if (method === "DELETE") {
-        // the thread is erased; the rail learns over the directory
-        // frame, the channel rows it placed lose their tag. A thread
-        // with no state (an orphan row) is erased the same way — the
-        // server's teardown drops the projections whatever it finds.
-        this.deletedThreads.push(id);
-        if (this.threadDeleteGate !== undefined) await this.threadDeleteGate;
-        const { [id]: _dropped, ...rest } = this.threads;
-        this.threads = rest;
-        this.directory = this.directory.filter((row) => row.id !== id);
-        this.messages = this.messages.map((message) =>
-          message.thread === id && message.placed === true
-            ? { ...message, thread: undefined, placed: undefined }
-            : message,
-        );
-        this.pushDirectory();
-        return this.json(route, { ok: true });
-      }
-      if (method === "POST") {
-        // POST /api/threads/:id — steer: words into the thread agent
-        const body = (request.postDataJSON() ?? {}) as { text?: string };
-        this.steered.push({ thread: id, text: body.text ?? "" });
-        return this.json(route, {});
-      }
-      return this.json(route, state);
-    }
-
-    const files = path.match(/^\/api\/pulls\/([^/]+)\/([^/]+)\/(\d+)\/files$/);
-    if (files !== null) {
-      const number = Number(files[3]);
-      if (this.prs[number] === undefined) {
-        return this.json(route, { error: `no pull request #${number}` }, 404);
-      }
-      const page = Number(url.searchParams.get("page") ?? "1");
-      this.filePages.push({ number, page });
-      const all = filesOf(number).map((file) => ({
-        ...file,
-        patch: this.unrenderable.has(file.filename) ? undefined : file.patch,
-        additions: this.large.has(file.filename) ? 1_200 : file.additions,
-      }));
-      const file = all[page - 1];
       return this.json(route, {
-        files: file === undefined ? [] : [file],
-        next: page < all.length ? page + 1 : null,
+        model: this.sessionModels[session] ?? null,
+        default: this.defaultModel,
       });
     }
 
-    const pull = path.match(/^\/api\/pulls\/([^/]+)\/([^/]+)\/(\d+)$/);
-    if (pull !== null) {
-      const number = Number(pull[3]);
-      const view = this.prs[number];
+    // ask trees: GET /api/asks (roots) + GET /api/asks/:id/tree
+    if (path === "/api/asks" && method === "GET") {
+      return this.json(route, { asks: Object.values(this.asks) });
+    }
+    const askTree = path.match(/^\/api\/asks\/([^/]+)\/tree$/);
+    if (askTree !== null && method === "GET") {
+      const tree = this.asks[decodeURIComponent(askTree[1]!)];
+      return tree === undefined
+        ? this.json(route, { error: "no such ask" }, 404)
+        : this.json(route, tree);
+    }
+
+    // calls: GET snapshot, POST the human's join
+    const call = path.match(/^\/api\/calls\/([^/]+)$/);
+    if (call !== null) {
+      const id = decodeURIComponent(call[1]!);
+      const view = this.calls[id];
       if (view === undefined) {
-        return this.json(route, { error: `no pull request #${number}` }, 404);
+        return this.json(route, { error: "no such call" }, 404);
       }
-      this.pullLoads.push(number);
+      if (method === "POST") {
+        const body = (request.postDataJSON() ?? {}) as {
+          text?: string;
+          to?: string;
+        };
+        const text = typeof body.text === "string" ? body.text.trim() : "";
+        if (text.length === 0) {
+          return this.json(route, { error: "text required" }, 400);
+        }
+        this.callPosts.push({
+          id,
+          text,
+          ...(body.to === undefined ? {} : { to: body.to }),
+        });
+        const seq =
+          view.utterances.reduce((max, u) => Math.max(max, u.seq), 0) + 1;
+        const next: CallView = {
+          ...view,
+          utterances: [
+            ...view.utterances,
+            { seq, author: "human", text, at: NOW.getTime() },
+          ],
+        };
+        // the record grows AND every attached viewer hears it — the
+        // client ignores the POST's body and renders from the socket
+        this.pushCall(next);
+        return this.json(route, next);
+      }
       return this.json(route, view);
+    }
+
+    // proposals: the queue, one row, the decision
+    if (path === "/api/proposals" && method === "GET") {
+      const status = url.searchParams.get("status");
+      const rows = Object.values(this.proposals).filter(
+        (row) => status === null || row.status === status,
+      );
+      return this.json(route, { proposals: rows });
+    }
+    const proposal = path.match(/^\/api\/proposals\/([^/]+)$/);
+    if (proposal !== null) {
+      const id = decodeURIComponent(proposal[1]!);
+      const row = this.proposals[id];
+      if (method === "POST") {
+        const body = (request.postDataJSON() ?? {}) as {
+          decision?: unknown;
+          reason?: unknown;
+        };
+        if (body.decision !== "approve" && body.decision !== "deny") {
+          return this.json(
+            route,
+            { error: 'decision must be "approve" or "deny"' },
+            400,
+          );
+        }
+        if (row === undefined) {
+          return this.json(route, { error: "no such proposal" }, 404);
+        }
+        const reason =
+          typeof body.reason === "string" ? body.reason : undefined;
+        this.decisions.push({
+          id,
+          decision: body.decision,
+          ...(reason === undefined ? {} : { reason }),
+        });
+        if (row.status === "pending") {
+          // deny marks denied; approve executes worker-doable kinds
+          // and parks push/open_pull as approved (DecideApi.ts)
+          const status: ProposalStatus =
+            body.decision === "deny"
+              ? "denied"
+              : row.kind === "push" || row.kind === "open_pull"
+                ? "approved"
+                : "executed";
+          const next: ProposalRow = {
+            ...row,
+            status,
+            decidedAt: NOW.getTime(),
+            ...(body.decision === "deny"
+              ? {
+                  outcome:
+                    reason === undefined ? "denied" : `denied — ${reason}`,
+                }
+              : {}),
+          };
+          this.proposals = { ...this.proposals, [id]: next };
+          return this.json(route, next);
+        }
+        return this.json(route, row);
+      }
+      return row === undefined
+        ? this.json(route, { error: "no such proposal" }, 404)
+        : this.json(route, row);
+    }
+
+    // the transcript snapshot: answered 404 so the view falls back to
+    // a full replay over the session socket — the fake's transcripts
+    // are observations, and the client's own translator projects them
+    const chat = path.match(/^\/api\/chats\/([^/]+)\/(messages|log)$/);
+    if (chat !== null && method === "GET") {
+      return this.json(route, { error: "transcripts ride the socket" }, 404);
     }
 
     const chatDelete = path.match(/^\/api\/chats\/([^/]+)\/messages$/);
@@ -1059,11 +611,6 @@ export class FakeApi {
       this.pushObservation(id, { type: "aborted", by: "operator" });
       this.pushObservation(id, { type: "parked" });
       return this.json(route, { ok: true });
-    }
-
-    const chat = path.match(/^\/api\/chats\/([^/]+)\/(messages|log)$/);
-    if (chat !== null) {
-      return this.json(route, { error: "transcripts ride the socket" }, 404);
     }
 
     return this.json(route, { error: `unhandled ${method} ${path}` }, 404);
@@ -1150,29 +697,13 @@ export const test = base.extend<{ api: FakeApi }>({
   ],
 });
 
-/** Load the app fresh — empty layout memory, `path` as the route. */
-export const openApp = async (page: Page, path = CHANNEL_PATH) => {
-  await page.goto(path);
+/** Load the app fresh — empty layout memory, `path` as the route.
+ *  The first visit lands on the bare channel (no overlay) so storage
+ *  can be cleared without mounting `path`'s overlay twice — a double
+ *  mount would dial the terminal/call sockets once per mount and
+ *  double every "opened" count the test asserts on. */
+export const openApp = async (page: Page, path = "/") => {
+  await page.goto("/");
   await page.evaluate(() => localStorage.clear());
   await page.goto(path, { waitUntil: "networkidle" });
 };
-
-export const sidebar = (page: Page) => page.getByRole("complementary");
-export const main = (page: Page) => page.getByRole("main");
-export const threadNav = (page: Page) =>
-  page.getByRole("navigation", { name: "Threads" });
-
-/** Answer the app's confirm dialog — the app asks IN PAGE (the native
- *  `window.confirm` renders nowhere the app doesn't; see
- *  ui/components/confirm.tsx). Click the destructive action first,
- *  then accept or decline. */
-export const acceptConfirm = (page: Page) =>
-  page
-    .locator("[data-confirm]")
-    .getByRole("button", { name: "Delete" })
-    .click();
-export const declineConfirm = (page: Page) =>
-  page
-    .locator("[data-confirm]")
-    .getByRole("button", { name: "Cancel" })
-    .click();

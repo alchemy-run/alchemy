@@ -1,8 +1,6 @@
 import * as AI from "alchemy/AI";
-import * as Layer from "effect/Layer";
-import { EngineeringChart } from "./engineering/Group.ts";
 import Engineering from "./engineering/Group.ts";
-import { Head, HeadLive } from "./Head.ts";
+import { Head } from "./Head.ts";
 
 /**
  * The ROOT GROUP — ⊥, the bottom of the lineage.
