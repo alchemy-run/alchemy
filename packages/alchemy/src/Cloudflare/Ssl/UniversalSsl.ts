@@ -111,7 +111,7 @@ const patchUniversal = (input: { zoneId: string; enabled: boolean }) =>
   ssl.patchUniversalSetting(input).pipe(
     Effect.retry({
       while: (e) => e._tag === "TooManyRequests",
-      schedule: Schedule.spaced("20 seconds"),
+      schedule: Schedule.spaced("5 seconds"),
       times: 6,
     }),
   );

@@ -236,7 +236,7 @@ export const RuleProvider = () =>
       // Inputs have been resolved to concrete values by Plan.
       const zoneId = news.zoneId as string;
       const expression = news.expression as string;
-      const title = yield* createRuleTitle(id, news.title);
+      const title = yield* createRuleTitle(id, news.title ?? output?.title);
       const desired = {
         title,
         description: news.description ?? "",

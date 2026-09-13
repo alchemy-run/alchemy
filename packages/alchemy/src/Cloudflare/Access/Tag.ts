@@ -119,7 +119,7 @@ export const TagProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
-      const name = yield* createTagName(id, news.name);
+      const name = yield* createTagName(id, news.name ?? output?.name);
 
       // Observe — the name is the identity, so existence is the only state.
       const observed = yield* zeroTrust

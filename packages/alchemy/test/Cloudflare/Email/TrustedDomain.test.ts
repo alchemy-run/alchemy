@@ -21,7 +21,10 @@ const logLevel = Effect.provideService(
 // lifecycle test is gated behind an entitled account flagged via env.
 const entitled = !!process.env.CLOUDFLARE_EMAIL_SECURITY;
 
-const forbiddenRetrySchedule = Schedule.exponential("500 millis");
+const forbiddenRetrySchedule = Schedule.min([
+  Schedule.exponential("500 millis"),
+  Schedule.spaced("4 seconds"),
+]);
 
 const pattern = "alchemy-trusted.alchemy-test-2.us";
 
@@ -80,6 +83,14 @@ test.provider.skipIf(!entitled)(
       expect(updated.trustedDomainId).toEqual(created.trustedDomainId);
       expect(updated.isRecent).toEqual(true);
       expect(updated.comments).toEqual("v2");
+      const cleared = yield* stack.deploy(
+        Cloudflare.Email.TrustedDomain("Trusted", {
+          pattern,
+          isSimilarity: true,
+          isRecent: true,
+        }),
+      );
+      expect(cleared.comments ?? "").toEqual("");
 
       yield* stack.destroy();
 

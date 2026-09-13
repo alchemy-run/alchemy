@@ -13,6 +13,8 @@ const TypeId = "Cloudflare.Addressing.Prefix" as const;
 type TypeId = typeof TypeId;
 
 export interface PrefixProps {
+  /** Manage prefix-wide BGP advertisement. Omission after management withdraws it. */
+  advertised?: boolean;
   /**
    * IP Prefix in Classless Inter-Domain Routing format (e.g.
    * `192.0.2.0/24`). Immutable — changing it forces a replacement.
@@ -42,6 +44,8 @@ export interface PrefixProps {
 }
 
 export interface PrefixAttributes {
+  /** Observed prefix-wide advertisement state when managed. */
+  advertised?: boolean;
   /** Cloudflare-assigned identifier of the IP Prefix. */
   prefixId: string;
   /** The Cloudflare account the prefix belongs to. */
@@ -144,25 +148,29 @@ export const PrefixProvider = () =>
     ],
 
     diff: Effect.fn(function* ({ olds, news, output }) {
-      if (olds === undefined) return undefined;
-      if (!isResolved(news) || !isResolved(olds)) return undefined;
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (output && output.accountId !== accountId)
+        return { action: "replace" } as const;
+      if (!output && !olds) return undefined;
+      if (!isResolved(news)) return undefined;
       // cidr / asn / LOA settings are create-only.
-      if (news.cidr !== (output?.cidr ?? olds.cidr)) {
+      if (news.cidr !== (output?.cidr ?? olds?.cidr)) {
         return { action: "replace" } as const;
       }
-      if (news.asn !== (output?.asn ?? olds.asn)) {
+      if (news.asn !== (output?.asn ?? olds?.asn)) {
         return { action: "replace" } as const;
       }
       if (
-        typeof news.loaDocumentId === "string" &&
-        typeof olds.loaDocumentId === "string" &&
-        news.loaDocumentId !== olds.loaDocumentId
+        olds
+          ? olds.loaDocumentId !== news.loaDocumentId
+          : news.loaDocumentId !== undefined &&
+            output?.loaDocumentId !== news.loaDocumentId
       ) {
         return { action: "replace" } as const;
       }
       if (
         (news.delegateLoaCreation ?? false) !==
-        (olds.delegateLoaCreation ?? false)
+        (olds?.delegateLoaCreation ?? false)
       ) {
         return { action: "replace" } as const;
       }
@@ -190,7 +198,12 @@ export const PrefixProvider = () =>
 
       if (output?.prefixId) {
         const observed = yield* getPrefix(acct, output.prefixId);
-        return observed ? toAttributes(observed, acct) : undefined;
+        return observed
+          ? yield* withAdvertisement(
+              toAttributes(observed, acct),
+              output.advertised !== undefined,
+            )
+          : undefined;
       }
       // Cold read — a CIDR is unique per account, so match on it.
       const cidr = output?.cidr ?? olds?.cidr;
@@ -222,7 +235,10 @@ export const PrefixProvider = () =>
           loaDocumentId: news.loaDocumentId as string | undefined,
           delegateLoaCreation: news.delegateLoaCreation,
         });
-        return toAttributes(created, acct);
+        return yield* syncAdvertisement(
+          toAttributes(created, acct),
+          news.advertised,
+        );
       }
 
       // 3. Sync — `description` is the only mutable field; skip the PATCH
@@ -234,13 +250,30 @@ export const PrefixProvider = () =>
           prefixId: observed.id ?? "",
           description: desiredDescription,
         });
-        return toAttributes(patched, acct);
+        return yield* syncAdvertisement(
+          toAttributes(patched, acct),
+          news.advertised ??
+            (output?.advertised !== undefined ? false : undefined),
+        );
       }
 
-      return toAttributes(observed, acct);
+      return yield* syncAdvertisement(
+        toAttributes(observed, acct),
+        news.advertised ??
+          (output?.advertised !== undefined ? false : undefined),
+      );
     }),
 
     delete: Effect.fn(function* ({ output }) {
+      if (output.advertised !== undefined)
+        yield* addressing
+          .patchPrefixAdvertisementStatus({
+            accountId: output.accountId,
+            prefixId: output.prefixId,
+            advertised: false,
+          })
+          .pipe(Effect.catchTag("PrefixNotFound", () => Effect.void));
+
       // Deleting an onboarded prefix can be rejected while service bindings
       // or BGP advertisements still exist — children delete first; the
       // engine orders dependencies, so a hard failure here is genuine.
@@ -289,3 +322,28 @@ const toAttributes = (
   createdAt: prefix.createdAt ?? undefined,
   modifiedAt: prefix.modifiedAt ?? undefined,
 });
+
+const withAdvertisement = (attributes: PrefixAttributes, managed: boolean) =>
+  Effect.gen(function* () {
+    if (!managed) return attributes;
+    const status = yield* addressing.getPrefixAdvertisementStatus({
+      accountId: attributes.accountId,
+      prefixId: attributes.prefixId,
+    });
+    return { ...attributes, advertised: status.advertised ?? false };
+  });
+const syncAdvertisement = (
+  attributes: PrefixAttributes,
+  desired: boolean | undefined,
+) =>
+  Effect.gen(function* () {
+    if (desired === undefined) return attributes;
+    const observed = yield* withAdvertisement(attributes, true);
+    if (observed.advertised !== desired)
+      yield* addressing.patchPrefixAdvertisementStatus({
+        accountId: attributes.accountId,
+        prefixId: attributes.prefixId,
+        advertised: desired,
+      });
+    return { ...attributes, advertised: desired };
+  });

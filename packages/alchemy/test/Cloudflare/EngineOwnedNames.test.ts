@@ -88,8 +88,14 @@ const env = Layer.mergeAll(
   Layer.succeed(
     LocalRuntimeState,
     LocalRuntimeState.of({
+      pipelineStreams: MutableHashMap.empty(),
+      pipelineSinks: MutableHashMap.empty(),
+      pipelines: MutableHashMap.empty(),
+      pipelineWorkerStreams: new Map(),
       queues: MutableHashMap.empty(),
       queueConsumers: MutableHashMap.empty(),
+      vectorizeIndexes: MutableHashMap.empty(),
+      vectorizeMetadataIndexes: MutableHashMap.empty(),
       workerRestarts: MutableHashMap.empty(),
     }),
   ),

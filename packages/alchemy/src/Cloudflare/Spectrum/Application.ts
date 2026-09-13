@@ -186,6 +186,10 @@ export interface ApplicationAttributes {
   ipFirewall: boolean;
   /** PROXY Protocol mode to the origin. */
   proxyProtocol: ProxyProtocol;
+  /** Observed edge IP configuration. */
+  edgeIps: EdgeIps | undefined;
+  /** Observed tunnel virtual network. */
+  virtualNetworkId: string | undefined;
   /** ISO8601 creation timestamp. */
   createdOn: string;
   /** ISO8601 last-modified timestamp. */
@@ -276,19 +280,29 @@ export const ApplicationProvider = () =>
   Provider.succeed(Application, {
     stables: ["appId", "zoneId", "createdOn"],
 
-    diff: Effect.fn(function* ({ olds, news }) {
+    diff: Effect.fn(function* ({ olds, news, output }) {
       // `news` may still contain unresolved plan-time expressions — defer
       // to the engine's default update logic until everything is concrete.
       if (!isResolved(news)) return undefined;
       // Everything is mutable through the PUT update except the zone the
       // application lives in (a path parameter).
       if (
-        typeof olds?.zoneId === "string" &&
+        typeof (output?.zoneId ?? olds?.zoneId) === "string" &&
         typeof news.zoneId === "string" &&
-        olds.zoneId !== news.zoneId
+        (output?.zoneId ?? olds?.zoneId) !== news.zoneId
       ) {
         return { action: "replace" } as const;
       }
+      // PUT omits nullable clearing; replacing restores creation defaults.
+      if (
+        olds &&
+        isResolved(olds) &&
+        ((olds.tls !== undefined && news.tls === undefined) ||
+          (olds.edgeIps !== undefined && news.edgeIps === undefined) ||
+          (olds.virtualNetworkId !== undefined &&
+            news.virtualNetworkId === undefined))
+      )
+        return { action: "replace", deleteFirst: true } as const;
       return undefined;
     }),
 
@@ -451,9 +465,9 @@ const toRequestBody = (news: ApplicationProps) => ({
   originDns: news.originDns,
   originPort: news.originPort,
   tls: news.tls,
-  argoSmartRouting: news.argoSmartRouting,
-  ipFirewall: news.ipFirewall,
-  proxyProtocol: news.proxyProtocol,
+  argoSmartRouting: news.argoSmartRouting ?? false,
+  ipFirewall: news.ipFirewall ?? false,
+  proxyProtocol: news.proxyProtocol ?? "off",
   edgeIps: news.edgeIps,
   virtualNetworkId: news.virtualNetworkId as string | undefined,
 });
@@ -472,6 +486,10 @@ const isDirty = (observed: ObservedApp, news: ApplicationProps): boolean => {
     (o.trafficType ?? "direct") !== (news.trafficType ?? "direct") ||
     !sameList(o.originDirect ?? [], news.originDirect ?? []) ||
     (o.originDns?.name ?? undefined) !== news.originDns?.name ||
+    (news.originDns?.ttl !== undefined &&
+      o.originDns?.ttl !== news.originDns.ttl) ||
+    (news.originDns?.type !== undefined &&
+      o.originDns?.type !== news.originDns.type) ||
     (o.originPort ?? undefined) !== news.originPort ||
     (news.tls !== undefined && o.tls !== news.tls) ||
     (o.argoSmartRouting ?? false) !== (news.argoSmartRouting ?? false) ||
@@ -510,6 +528,17 @@ const toAttributes = (
   const a = asFull(app);
   return {
     appId: a.id,
+    edgeIps: a.edgeIps
+      ? {
+          type: a.edgeIps.type ?? undefined,
+          connectivity:
+            "connectivity" in a.edgeIps
+              ? (a.edgeIps.connectivity ?? undefined)
+              : undefined,
+          ips: "ips" in a.edgeIps ? (a.edgeIps.ips ?? undefined) : undefined,
+        }
+      : undefined,
+    virtualNetworkId: a.virtualNetworkId ?? undefined,
     zoneId,
     // Cloudflare always echoes both dns fields for a persisted app —
     // distilled just types them as optional/nullable.

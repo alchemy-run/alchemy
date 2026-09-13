@@ -2,6 +2,7 @@ import * as zones from "@distilled.cloud/cloudflare/zones";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 
+import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -70,6 +71,7 @@ export type SettingId =
   | "server_side_exclude"
   | "sha1_support"
   | "sort_query_string_for_cache"
+  | "ssl_recommender"
   | "ssl"
   | "tls_1_2_only"
   | "tls_1_3"
@@ -143,6 +145,7 @@ const KNOWN_ZONE_SETTING_IDS = [
   "sha1_support",
   "sort_query_string_for_cache",
   "ssl",
+  "ssl_recommender",
   "tls_1_2_only",
   "tls_1_3",
   "tls_client_auth",
@@ -176,6 +179,7 @@ export type SettingProps = {
    * number of seconds, structured settings (e.g. `ciphers`,
    * `security_header`) take arrays/objects.
    *
+   * `ssl_recommender` takes a boolean, mapped to its API `enabled` field.
    * Mutable — patched in place.
    */
   value: unknown;
@@ -283,6 +287,7 @@ export const SettingProvider = () =>
     stables: ["zoneId", "settingId", "initialValue"],
 
     diff: Effect.fn(function* ({ olds = {}, news, output }) {
+      if (!isResolved(news)) return undefined;
       const o = olds as SettingProps;
       const n = news as SettingProps;
       // settingId is the resource's identity.
@@ -345,7 +350,7 @@ export const SettingProvider = () =>
       const patched = yield* zones.patchSetting({
         zoneId,
         settingId,
-        value: news.value,
+        ...settingBody(settingId, news.value),
       });
       return toAttributes(zoneId, settingId, patched, initialValue);
     }),
@@ -365,7 +370,11 @@ export const SettingProvider = () =>
       // matches (idempotent re-delete after a crashed run).
       if (deepValueEquals(settingValue(observed), initialValue)) return;
       yield* zones
-        .patchSetting({ zoneId, settingId, value: initialValue })
+        .patchSetting({
+          zoneId,
+          settingId,
+          ...settingBody(settingId, initialValue),
+        })
         .pipe(Effect.catchTag("InvalidZoneIdentifier", () => Effect.void));
     }),
 
@@ -399,20 +408,9 @@ export const SettingProvider = () =>
             ),
             // Zone removed out-of-band or the setting is plan-gated / not
             // exposed to this token — skip it rather than fail the listing.
-            Effect.catchTag(["InvalidZoneIdentifier", "Forbidden"], () =>
-              Effect.succeed<SettingAttributes | undefined>(undefined),
-            ),
-            // A handful of structured settings (e.g.
-            // `automatic_platform_optimization`) can return a scalar value
-            // (`"off"`) that distilled's `GetSettingResponse` union doesn't
-            // model, surfacing as an untyped `CloudflareHttpError` (status
-            // 200, "Schema decode failed"). The Cloudflare patch system only
-            // types errors, not response schemas, so this can't be patched
-            // here — skip the undecodable setting rather than failing the
-            // whole listing. See the agent report's neededPatch (widen the
-            // `GetSettingResponse` member to accept the scalar form).
-            Effect.catch(() =>
-              Effect.succeed<SettingAttributes | undefined>(undefined),
+            Effect.catchTag(
+              ["InvalidZoneIdentifier", "UndefinedZoneSetting", "Forbidden"],
+              () => Effect.succeed<SettingAttributes | undefined>(undefined),
             ),
           ),
         { concurrency: 10 },
@@ -428,7 +426,13 @@ export const SettingProvider = () =>
  */
 const settingValue = (
   setting: zones.GetSettingResponse | zones.PatchSettingResponse,
-): unknown => (setting as { value?: unknown }).value;
+): unknown =>
+  setting.id === "ssl_recommender"
+    ? (setting as { enabled?: boolean | null }).enabled
+    : (setting as { value?: unknown }).value;
+
+const settingBody = (settingId: string, value: unknown) =>
+  settingId === "ssl_recommender" ? { enabled: value as boolean } : { value };
 
 const toAttributes = (
   zoneId: string,
@@ -444,7 +448,7 @@ const toAttributes = (
   return {
     zoneId,
     settingId,
-    value: s.value,
+    value: settingValue(setting),
     editable: s.editable ?? undefined,
     modifiedOn: s.modifiedOn ?? undefined,
     initialValue,

@@ -34,9 +34,7 @@ export interface SearchIndexAuth {
  * mirrors the native binding, whose client methods surface transport failures
  * as defects.
  *
- * Two methods have no Cloudflare HTTP equivalent and `Effect.die`:
- * - `raw` — there is no HTTP-backed `runtime.Vectorize` object to hand back.
- * - `queryById` — the HTTP query endpoint only accepts a raw vector, not an id.
+ * `raw` has no HTTP equivalent. `queryById` composes getByIds and query.
  */
 export const makeHttpSearchIndexClient = (
   auth: SearchIndexAuth,
@@ -75,14 +73,38 @@ export const makeHttpSearchIndexClient = (
             returnValues: options?.returnValues,
             returnMetadata: toReturnMetadata(options?.returnMetadata),
             filter: options?.filter,
+            namespace: options?.namespace,
           })
           .pipe(Effect.map(toMatches)),
       ),
-    queryById: () =>
-      Effect.die(
-        new Error(
-          "SearchIndex over HTTP: `queryById` is not supported — the HTTP query endpoint only accepts a raw query vector. Fetch the vector with `getByIds` and pass its values to `query`.",
-        ),
+    queryById: (id, options) =>
+      local((name) =>
+        Effect.gen(function* () {
+          const result = yield* vectorize.getByIdsIndex({
+            accountId,
+            indexName: name,
+            ids: [id],
+          });
+          const vector = (result as runtime.VectorizeVector[] | null)?.find(
+            (vector) => vector.id === id,
+          );
+          if (!vector)
+            return yield* Effect.die(
+              new Error(`Vectorize query vector ID was not found: ${id}`),
+            );
+          return yield* vectorize
+            .queryIndex({
+              accountId,
+              indexName: name,
+              vector: Array.from(vector.values),
+              topK: options?.topK,
+              returnValues: options?.returnValues,
+              returnMetadata: toReturnMetadata(options?.returnMetadata),
+              filter: options?.filter,
+              namespace: options?.namespace,
+            })
+            .pipe(Effect.map(toMatches));
+        }),
       ),
     insert: (vectors) =>
       local((name) =>

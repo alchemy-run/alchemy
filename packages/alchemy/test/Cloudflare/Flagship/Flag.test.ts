@@ -155,6 +155,28 @@ test.provider("create, update, delete a flag in an app", (stack) =>
       }),
     );
     expect(noop.flag.updatedAt).toEqual(updated.flag.updatedAt);
+    // Omitted key keeps its deployed identity while removed metadata resets.
+    const cleared = yield* stack.deploy(
+      Effect.gen(function* () {
+        const app = yield* Cloudflare.Flagship.App("FlagApp", {
+          name: "alchemy-test-flagship-flags",
+        });
+        return yield* Cloudflare.Flagship.Flag("Flag", {
+          appId: app.appId,
+          defaultVariation: "off",
+          variations: { off: false, on: true },
+        });
+      }),
+    );
+    expect(cleared.key).toEqual("alchemy-test-flag");
+    const liveCleared = yield* flagship.getAppFlag({
+      accountId,
+      appId: initial.app.appId,
+      flagKey: cleared.key,
+    });
+    expect(liveCleared.description ?? "").toEqual("");
+    expect(liveCleared.enabled).toBe(true);
+    expect(liveCleared.rules).toEqual([]);
 
     yield* stack.destroy();
 

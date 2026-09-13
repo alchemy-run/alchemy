@@ -5,6 +5,7 @@ import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 
+import { isResolved } from "../../Diff.ts";
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -162,22 +163,18 @@ export const SendingSubdomainProvider = () =>
       return rows.flat();
     }),
 
-    diff: Effect.fn(function* ({ olds = {}, news }) {
-      const o = olds as SendingSubdomainProps;
-      const n = news as SendingSubdomainProps;
-      // The API has no update operation — any prop change is a replace.
-      if (o.name !== undefined && o.name !== n.name) {
-        return { action: "replace" } as const;
-      }
-      // zoneId is Input<string>; compare only once both are concrete.
+    diff: Effect.fn(function* ({ olds, news, output }) {
+      if (!isResolved(news)) return undefined;
       if (
-        typeof o.zoneId === "string" &&
-        typeof n.zoneId === "string" &&
-        o.zoneId !== n.zoneId
-      ) {
+        (output?.name ?? olds?.name) !== undefined &&
+        (output?.name ?? olds?.name) !== news.name
+      )
         return { action: "replace" } as const;
-      }
-      return undefined;
+      if (
+        (output?.zoneId ?? olds?.zoneId) !== undefined &&
+        (output?.zoneId ?? olds?.zoneId) !== news.zoneId
+      )
+        return { action: "replace" } as const;
     }),
 
     read: Effect.fn(function* ({ output, olds }) {
@@ -254,7 +251,7 @@ export const SendingSubdomainProvider = () =>
             Effect.repeat({
               schedule: Schedule.spaced("5 seconds"),
               until: (latest) => latest.enabled,
-              times: 12,
+              times: 10,
             }),
           );
 

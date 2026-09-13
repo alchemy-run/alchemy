@@ -2,6 +2,7 @@ import * as customHostnames from "@distilled.cloud/cloudflare/custom-hostnames";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 
+import { isResolved } from "../../Diff.ts";
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -127,18 +128,11 @@ export const FallbackOriginProvider = () =>
       );
     }),
 
-    diff: Effect.fn(function* ({ olds = {}, news }) {
-      const o = olds as FallbackOriginProps;
-      const n = news as FallbackOriginProps;
-      // zoneId is Input<string>; compare only once both sides are
-      // concrete strings.
-      if (
-        typeof o.zoneId === "string" &&
-        typeof n.zoneId === "string" &&
-        o.zoneId !== n.zoneId
-      ) {
+    diff: Effect.fn(function* ({ olds, news, output }) {
+      if (!isResolved(news)) return;
+      const zoneId = output?.zoneId ?? olds?.zoneId;
+      if (zoneId !== undefined && zoneId !== news.zoneId)
         return { action: "replace" } as const;
-      }
     }),
 
     reconcile: Effect.fn(function* ({ news }) {

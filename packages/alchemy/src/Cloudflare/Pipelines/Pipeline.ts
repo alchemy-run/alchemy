@@ -1,3 +1,7 @@
+import * as Layer from "effect/Layer";
+import * as ProviderLayer from "../../Local/ProviderLayer.ts";
+import { localRuntimeServices } from "../LocalRuntime.ts";
+import { PipelineProviderLocal } from "./Local.ts";
 import * as pipelines from "@distilled.cloud/cloudflare/pipelines";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
@@ -95,6 +99,15 @@ export type Pipeline = Resource<
  *
  * @see https://developers.cloudflare.com/pipelines/
  *
+ * ### Local Development <!-- api-prose -->
+ * Local pipelines support `INSERT INTO sink SELECT * FROM stream`, selected
+ * columns with `AS` aliases, and one scalar `WHERE` comparison or null predicate.
+ * Multiple statements can route events to multiple local R2 sinks. Reference
+ * stream and sink name outputs in SQL to declare their deployment dependencies.
+ * Joins, aggregates, CTEs and computed expressions require `Alchemy.remote()`.
+ * Unsupported SQL fails during deployment. Local sends without a matching
+ * pipeline fail explicitly rather than discarding events.
+ *
  * @resource
  * @product Pipelines
  * @category Storage & Databases
@@ -107,7 +120,7 @@ export const Pipeline = Resource<Pipeline>(TypeId);
 export const isPipeline = (value: unknown): value is Pipeline =>
   Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
-export const PipelineProvider = () =>
+export const PipelineProviderLive = () =>
   Provider.succeed(Pipeline, {
     stables: ["pipelineId", "accountId", "name", "createdAt"],
 
@@ -153,7 +166,8 @@ export const PipelineProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const name = yield* pipelineName(id, news.name);
+      const name =
+        news.name ?? output?.name ?? (yield* pipelineName(id, undefined));
       const sql = news.sql as string;
 
       // 1. Observe — by cached id first, then by (unique) name so we
@@ -177,7 +191,7 @@ export const PipelineProvider = () =>
         yield* getPipeline(accountId, observed.id).pipe(
           Effect.repeat({
             schedule: Schedule.max([
-              Schedule.exponential("250 millis"),
+              Schedule.spaced("2 seconds"),
               Schedule.recurs(8),
             ]),
             until: (p) => p === undefined,
@@ -299,3 +313,10 @@ const toAttributes = (
   createdAt: observed.createdAt,
   modifiedAt: observed.modifiedAt,
 });
+
+export const PipelineProvider = () =>
+  ProviderLayer.dual(Pipeline, {
+    local: () =>
+      PipelineProviderLocal().pipe(Layer.provide(localRuntimeServices())),
+    live: () => PipelineProviderLive(),
+  });

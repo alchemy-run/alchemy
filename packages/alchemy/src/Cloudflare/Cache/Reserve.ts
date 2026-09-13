@@ -1,7 +1,6 @@
 import * as cache from "@distilled.cloud/cloudflare/cache";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
-import * as Schedule from "effect/Schedule";
 
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -27,8 +26,9 @@ export interface ReserveProps {
   enabled?: boolean;
   /**
    * When true, destroying the resource also clears any data already
-   * stored in Cache Reserve (after restoring the setting), waiting for
-   * the asynchronous clear operation to complete. Disabling Cache
+   * stored in Cache Reserve. This leaves the setting disabled and starts
+   * an asynchronous clear that can take up to 24 hours; deletion returns
+   * after Cloudflare accepts the clear. Disabling Cache
    * Reserve does NOT purge stored data by itself — storage continues to
    * bill until it expires or is cleared.
    * @default false
@@ -50,8 +50,8 @@ export interface ReserveAttributes {
   modifiedOn: string | undefined;
   /**
    * The value the setting had before Alchemy first patched it. Restored
-   * on destroy, so deleting the resource puts the zone back the way it
-   * was found.
+   * on destroy unless clearOnDelete requests an asynchronous clear, which
+   * requires the setting to remain disabled.
    */
   initialValue: string;
 }
@@ -229,22 +229,21 @@ export const ReserveProvider = () =>
       if (observed === undefined) return;
       // Restore the pre-management value; skip the call when it already
       // matches (idempotent re-delete after a crashed run).
+      if (olds?.clearOnDelete === true) {
+        // Cloudflare requires Reserve to stay off throughout a clear, which
+        // can take 24 hours. Starting the asynchronous operation is sufficient;
+        // do not hold an infrastructure deployment open for the full clear.
+        if (observed.value !== "off")
+          yield* cache.patchCacheReserve({ zoneId, value: "off" });
+        const status = yield* cache.statusCacheReserve({ zoneId });
+        if (status.state !== "In-progress")
+          yield* cache.clearCacheReserve({ zoneId });
+        return;
+      }
       if (observed.value !== initialValue) {
         yield* cache
           .patchCacheReserve({ zoneId, value: initialValue })
           .pipe(Effect.catchTag("InvalidRoute", () => Effect.void));
-      }
-      // Optionally clear data already stored in reserve — an async
-      // operation that we kick off and poll to completion (bounded).
-      if (olds?.clearOnDelete === true) {
-        yield* cache.clearCacheReserve({ zoneId });
-        yield* cache.statusCacheReserve({ zoneId }).pipe(
-          Effect.repeat({
-            schedule: Schedule.spaced("5 seconds"),
-            until: (status) => status.state === "Completed",
-            times: 60,
-          }),
-        );
       }
     }),
   });

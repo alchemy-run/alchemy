@@ -173,23 +173,10 @@ export class ExternalQueueConsumer extends WorkerEntrypoint<
   async fetch(request: Request): Promise<Response> {
     const fetcher = this.target.resolve();
     if (!fetcher) {
-      console.warn(
-        `[registry] No consumer registered for queue "${this.ctx.props.queueName}". Accepting and dropping message.`,
-      );
-      // Drain the request body before responding: workerd's queue client
-      // does not settle the producer's `send()` promise until the request
-      // body has been consumed, so responding without reading it would
-      // leave `send()` pending forever.
+      // A durable forwarding broker retains the batch until a consumer is
+      // registered. Never acknowledge absent consumers as successful delivery.
       await request.arrayBuffer();
-      return Response.json({
-        metadata: {
-          metrics: {
-            backlogCount: 0,
-            backlogBytes: 0,
-            oldestMessageTimestamp: 0,
-          },
-        },
-      });
+      return new Response("Queue consumer is not running", { status: 503 });
     }
     return fetcher.fetch(request);
   }
@@ -423,5 +410,43 @@ export class ExternalWorkflow extends WorkerEntrypoint<
 
   private notFoundMessage() {
     return `Workflow "${this.ctx.props.workflowName}" defined in worker "${this.ctx.props.scriptName}" not found. Make sure the worker is running locally and exports the workflow.`;
+  }
+}
+
+/** Routes a dynamic user-worker name within its subscribed local namespace. */
+export class ExternalDispatchNamespace extends WorkerEntrypoint<
+  Env,
+  Subscriber.Worker
+> {
+  async fetch(request: Request): Promise<Response> {
+    const metadata = JSON.parse(
+      request.headers.get("MF-Dispatch-Namespace-Options") ?? "{}",
+    );
+    if (typeof metadata.name !== "string" || !metadata.name.length)
+      throw new TypeError("A dispatch worker name is required");
+    if (metadata.options?.limits || Object.keys(metadata.args ?? {}).length) {
+      throw new Error(
+        "Local dispatch does not support per-invocation limits or outbound parameters",
+      );
+    }
+    const target = Target.makeResolver(
+      {
+        kind: "worker",
+        namespace: this.ctx.props.namespace,
+        scriptName: metadata.name,
+      },
+      (service) =>
+        this.env.REGISTRY_DEBUG_PORT.connect(
+          service.debugPortAddress,
+        ).getEntrypoint(service.fetchService),
+    );
+    const fetcher = target.resolve();
+    if (!fetcher)
+      throw new Error(
+        `Worker not found: "${metadata.name}" in namespace "${this.ctx.props.namespace}"`,
+      );
+    const headers = new Headers(request.headers);
+    headers.delete("MF-Dispatch-Namespace-Options");
+    return fetcher.fetch(new Request(request, { headers }));
   }
 }

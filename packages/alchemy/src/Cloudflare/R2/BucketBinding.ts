@@ -29,6 +29,9 @@ export const makeBucketBinding = <Client>(options: {
               type: "r2_bucket",
               name: bucket.LogicalId,
               bucketName: bucket.bucketName,
+              lockRules: bucket.lockRules,
+              lifecycleRules: bucket.lifecycleRules,
+              storageClass: bucket.storageClass,
               jurisdiction: bucket.jurisdiction.pipe(
                 Output.map((jurisdiction) =>
                   jurisdiction === "default" ? undefined : jurisdiction,

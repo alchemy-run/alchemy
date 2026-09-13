@@ -138,6 +138,7 @@ export const RegistryProxyLive = Layer.effect(
                   }
                   yield* registry.write({
                     scriptName: worker.name,
+                    namespace: worker.namespace,
                     debugPortAddress: `127.0.0.1:${debugPort}`,
                     services: [
                       {
@@ -192,7 +193,9 @@ export const RegistryProxyLive = Layer.effect(
                   case "worker":
                     return {
                       name: SERVICE_REGISTRY_PROXY,
-                      entrypoint: "ExternalService",
+                      entrypoint: subscriber.dispatch
+                        ? "ExternalDispatchNamespace"
+                        : "ExternalService",
                       props: {
                         json: JSON.stringify(subscriber),
                       },
@@ -245,7 +248,7 @@ const buildWorkerModules = async (
   const worker = await RegistryProxyWorker.worker();
   const main = [
     `import { makeExternalDurableObject, Target } from "./${worker.main}";`,
-    `export { ExternalService, ExternalWorkflow, ExternalQueueConsumer } from "./${worker.main}";`,
+    `export { ExternalService, ExternalDispatchNamespace, ExternalWorkflow, ExternalQueueConsumer } from "./${worker.main}";`,
     `Target.set(${JSON.stringify(targets)});`,
     `export default {`,
     `  async fetch(request) {`,

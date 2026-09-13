@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 
-import { isResolved } from "../../Diff.ts";
+import { deepEqual, isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { isResourceOfType, Resource } from "../../Resource.ts";
@@ -18,11 +18,17 @@ export type VpcServiceProps = {
    */
   name?: string;
   /**
-   * Service protocol. Currently only `"http"` is supported.
+   * Service protocol: HTTP or raw TCP.
    *
    * @default "http"
    */
-  serviceType?: "http";
+  serviceType?: "http" | "tcp";
+  /** Port for TCP services. */
+  tcpPort?: number;
+  /** Application protocol used by the connectivity service. */
+  appProtocol?: connectivity.CreateDirectoryServiceRequest["appProtocol"];
+  /** TLS verification and server-name settings. */
+  tlsSettings?: connectivity.CreateDirectoryServiceRequest["tlsSettings"];
   /**
    * Port that Workers should reach for plain HTTP traffic.
    */
@@ -78,6 +84,12 @@ export type Attributes = {
   serviceId: string;
   serviceName: string;
   serviceType: "http" | "tcp";
+  /** TCP port returned by Cloudflare. */
+  tcpPort?: number;
+  /** Configured application protocol. */
+  appProtocol?: connectivity.GetDirectoryServiceResponse["appProtocol"];
+  /** Configured TLS verification settings. */
+  tlsSettings?: connectivity.GetDirectoryServiceResponse["tlsSettings"];
   httpPort: number | undefined;
   httpsPort: number | undefined;
   host: VpcService.Host;
@@ -209,7 +221,11 @@ export const VpcServiceProvider = () =>
             accountId: acct,
             serviceId: output.serviceId,
           })
-          .pipe(Effect.catch(() => Effect.succeed(undefined)));
+          .pipe(
+            Effect.catchTag("VpcServiceNotFound", () =>
+              Effect.succeed(undefined),
+            ),
+          );
       }
       if (!observed) {
         const match = yield* findServiceByName(name);
@@ -230,15 +246,18 @@ export const VpcServiceProvider = () =>
             type: news.serviceType ?? "http",
             httpPort: news.httpPort,
             httpsPort: news.httpsPort,
+            tcpPort: news.tcpPort,
+            appProtocol: news.appProtocol,
+            tlsSettings: news.tlsSettings,
             host: news.host,
           })
           .pipe(
-            Effect.catch((err: unknown) =>
+            Effect.catchTag("VpcServiceNameAlreadyExists", (err) =>
               Effect.gen(function* () {
-                if (!news.adopt) return yield* Effect.fail(err as never);
+                if (!news.adopt) return yield* Effect.fail(err);
                 const existing = yield* findServiceByName(name);
                 if (!existing || !existing.serviceId) {
-                  return yield* Effect.fail(err as never);
+                  return yield* Effect.fail(err);
                 }
                 return yield* connectivity.updateDirectoryService({
                   accountId: acct,
@@ -247,6 +266,9 @@ export const VpcServiceProvider = () =>
                   type: news.serviceType ?? "http",
                   httpPort: news.httpPort,
                   httpsPort: news.httpsPort,
+                  tcpPort: news.tcpPort,
+                  appProtocol: news.appProtocol,
+                  tlsSettings: news.tlsSettings,
                   host: news.host,
                 });
               }),
@@ -255,9 +277,22 @@ export const VpcServiceProvider = () =>
         return formatVpcService(result, acct);
       }
 
-      // Sync — the Cloudflare update API replaces all mutable fields
-      // (name, ports, host) atomically, so always issue it so
-      // adoption and routine updates converge.
+      // Compare live state so drift is repaired and repeated reconciles do
+      // not issue a write when the service already matches.
+      if (
+        observed.name === name &&
+        observed.type === (news.serviceType ?? "http") &&
+        (observed.httpPort ?? undefined) === news.httpPort &&
+        (observed.httpsPort ?? undefined) === news.httpsPort &&
+        (observed.tcpPort ?? undefined) === news.tcpPort &&
+        (news.appProtocol === undefined ||
+          observed.appProtocol === news.appProtocol) &&
+        (news.tlsSettings === undefined ||
+          deepEqual(observed.tlsSettings, news.tlsSettings)) &&
+        deepEqual(observed.host, news.host)
+      ) {
+        return formatVpcService(observed, acct);
+      }
       const result = yield* connectivity.updateDirectoryService({
         accountId: acct,
         serviceId: observed.serviceId,
@@ -265,6 +300,9 @@ export const VpcServiceProvider = () =>
         type: news.serviceType ?? observed.type ?? "http",
         httpPort: news.httpPort,
         httpsPort: news.httpsPort,
+        tcpPort: news.tcpPort,
+        appProtocol: news.appProtocol,
+        tlsSettings: news.tlsSettings,
         host: news.host,
       });
       return formatVpcService(result, acct);
@@ -275,7 +313,7 @@ export const VpcServiceProvider = () =>
           accountId: output.accountId,
           serviceId: output.serviceId,
         })
-        .pipe(Effect.catch(() => Effect.void));
+        .pipe(Effect.catchTag("VpcServiceNotFound", () => Effect.void));
     }),
     read: Effect.fn(function* ({ id, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -287,7 +325,9 @@ export const VpcServiceProvider = () =>
           })
           .pipe(
             Effect.map((s) => formatVpcService(s, output.accountId)),
-            Effect.catch(() => Effect.succeed(undefined)),
+            Effect.catchTag("VpcServiceNotFound", () =>
+              Effect.succeed(undefined),
+            ),
           );
       }
       const name = yield* createServiceName(id, olds?.name);
@@ -308,6 +348,9 @@ export const formatVpcService = (
     updatedAt?: string | null;
     httpPort?: number | null;
     httpsPort?: number | null;
+    tcpPort?: number | null;
+    appProtocol?: connectivity.GetDirectoryServiceResponse["appProtocol"];
+    tlsSettings?: connectivity.GetDirectoryServiceResponse["tlsSettings"];
     host: connectivity.GetDirectoryServiceResponse["host"];
   },
   accountId: string,
@@ -344,6 +387,9 @@ export const formatVpcService = (
     serviceType: service.type as "http" | "tcp",
     httpPort: service.httpPort ?? undefined,
     httpsPort: service.httpsPort ?? undefined,
+    tcpPort: service.tcpPort ?? undefined,
+    appProtocol: service.appProtocol ?? undefined,
+    tlsSettings: service.tlsSettings ?? undefined,
     host,
     accountId,
     createdAt: service.createdAt

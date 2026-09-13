@@ -2,6 +2,7 @@ import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
+import * as pipelines from "@distilled.cloud/cloudflare/pipelines";
 import * as user from "@distilled.cloud/cloudflare/user";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -45,7 +46,7 @@ const r2Credentials = Effect.gen(function* () {
     user.verifyToken({}).pipe(
       Effect.retry({
         while: (e) => e._tag === "Forbidden",
-        schedule: Schedule.exponential("500 millis"),
+        schedule: Schedule.spaced("2 seconds"),
         times: 8,
       }),
     ),
@@ -75,6 +76,14 @@ test.provider(
             });
             return yield* Cloudflare.Pipelines.Sink("ListSink", {
               type: "r2",
+              schema: { fields: [{ name: "value", type: "json" }] },
+              format: {
+                type: "json",
+                compression: "gzip",
+                decimalEncoding: "string",
+                timestampFormat: "unix_millis",
+                unstructured: true,
+              },
               config: {
                 bucket: bucket.bucketName,
                 credentials: creds,
@@ -86,6 +95,20 @@ test.provider(
       );
 
       expect(deployed.sinkId).toBeTruthy();
+      const actual = yield* pipelines.getSink({
+        accountId: deployed.accountId,
+        sinkId: deployed.sinkId,
+      });
+      expect(actual.format).toMatchObject({
+        type: "json",
+        compression: "gzip",
+        decimalEncoding: "string",
+        timestampFormat: "unix_millis",
+        unstructured: true,
+      });
+      expect(actual.schema?.fields).toMatchObject([
+        { name: "value", type: "json" },
+      ]);
 
       // Account collection: list() exhaustively paginates every sink in
       // the account and hydrates each into the read Attributes shape.
@@ -100,5 +123,5 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 300_000 },
+  { timeout: 90_000 },
 );

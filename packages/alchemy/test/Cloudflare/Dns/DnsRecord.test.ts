@@ -764,3 +764,96 @@ const findOwnedError = (
       (value): value is OwnedBySomeoneElse =>
         value instanceof OwnedBySomeoneElse,
     );
+
+test.provider(
+  "reconciles DNS settings and removed metadata, then recovers a deleted record",
+  (stack) =>
+    Effect.gen(function* () {
+      const zoneId = yield* resolveZoneId;
+      const name = `alchemy-dnsrecord-settings.${zoneName}`;
+      yield* stack.destroy();
+      const props = {
+        zoneId,
+        name,
+        type: "A" as const,
+        content: "192.0.2.1",
+        proxied: true,
+        settings: process.env.CLOUDFLARE_TEST_DNS_RECORD_SETTINGS
+          ? { ipv4Only: true }
+          : undefined,
+        comment: "managed metadata",
+        tags: ["owner:audit"],
+      };
+      const created = yield* stack.deploy(
+        Cloudflare.DNS.Record("SettingsRecord", props),
+      );
+      const initial = yield* getRecord(zoneId, created.recordId);
+      if (process.env.CLOUDFLARE_TEST_DNS_RECORD_SETTINGS)
+        expect(initial.settings).toMatchObject({ ipv4Only: true });
+      expect(initial.comment).toEqual("managed metadata");
+      expect(initial.tags).toContain("owner:audit");
+
+      const desired = {
+        zoneId,
+        name,
+        type: "A" as const,
+        content: "192.0.2.1",
+        proxied: true,
+        settings: process.env.CLOUDFLARE_TEST_DNS_RECORD_SETTINGS
+          ? { ipv4Only: false }
+          : undefined,
+      };
+      const updated = yield* stack.deploy(
+        Cloudflare.DNS.Record("SettingsRecord", desired),
+      );
+      expect(updated.recordId).toEqual(created.recordId);
+      const live = yield* getRecord(zoneId, updated.recordId);
+      if (process.env.CLOUDFLARE_TEST_DNS_RECORD_SETTINGS)
+        expect(live.settings).toMatchObject({ ipv4Only: false });
+      expect(live.comment ?? "").toEqual("");
+      expect(live.tags ?? []).toEqual([]);
+
+      yield* dns.deleteRecord({ zoneId, dnsRecordId: updated.recordId });
+      const gone = yield* dns
+        .getRecord({ zoneId, dnsRecordId: updated.recordId })
+        .pipe(
+          Effect.catchTag("DnsRecordNotFound", () => Effect.succeed(undefined)),
+        );
+      expect(gone).toBeUndefined();
+      const recreated = yield* stack.deploy(
+        Cloudflare.DNS.Record("SettingsRecord", {
+          ...desired,
+          content: "192.0.2.2",
+        }),
+      );
+      expect(recreated.recordId).not.toEqual(created.recordId);
+      expect((yield* getRecord(zoneId, recreated.recordId)).content).toEqual(
+        "192.0.2.2",
+      );
+      yield* stack.destroy();
+      expect(yield* findRecord(zoneId, name, "A")).toBeUndefined();
+    }).pipe(logLevel),
+  { timeout: 90000 },
+);
+
+test.provider.skipIf(!!process.env.CLOUDFLARE_TEST_DNS_RECORD_SETTINGS)(
+  "reports the typed address-family settings entitlement error",
+  (stack) =>
+    Effect.gen(function* () {
+      const zoneId = yield* resolveZoneId;
+      yield* stack.destroy();
+      const error = yield* dns
+        .createRecord({
+          zoneId,
+          name: `alchemy-dnsrecord-settings-probe.${zoneName}`,
+          type: "A",
+          content: "192.0.2.1",
+          ttl: 1,
+          proxied: true,
+          settings: { ipv4Only: true },
+        })
+        .pipe(Effect.flip);
+      expect(error._tag).toEqual("DnsRecordSettingsNotEntitled");
+      yield* stack.destroy();
+    }).pipe(logLevel),
+);

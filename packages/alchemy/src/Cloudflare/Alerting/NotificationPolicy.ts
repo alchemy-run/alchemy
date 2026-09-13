@@ -4,6 +4,8 @@ import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
 
+import { Unowned } from "../../AdoptPolicy.ts";
+import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -67,7 +69,8 @@ export interface NotificationPolicyProps {
   description?: string;
   /**
    * How often to re-alert from the same incident (e.g. `"30m"`). Not
-   * supported by all alert types.
+   * supported by all alert types. Omission leaves the current interval unchanged;
+   * the API has no universal default across alert types.
    */
   alertInterval?: string;
   /**
@@ -196,6 +199,7 @@ export const NotificationPolicyProvider = () =>
     }),
 
     diff: Effect.fn(function* ({ olds = {}, news, output }) {
+      if (!isResolved(news)) return;
       const { accountId } = yield* yield* CloudflareEnvironment;
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
@@ -226,13 +230,13 @@ export const NotificationPolicyProvider = () =>
       // deterministic physical name in the account's policy list.
       const name = yield* createPolicyName(id, olds?.name);
       const match = yield* findPolicyByName(acct, name);
-      if (match) return toPolicyAttributes(match, acct);
+      if (match) return Unowned(toPolicyAttributes(match, acct));
       return undefined;
     }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const name = yield* createPolicyName(id, news.name);
+      const name = yield* createPolicyName(id, news.name ?? output?.name);
       const desired = buildPolicyBody(name, news);
 
       // 1. Observe — by cached id first, then by deterministic name.
@@ -372,7 +376,7 @@ const buildPolicyBody = (
   name,
   alertType: news.alertType,
   enabled: news.enabled ?? true,
-  description: news.description,
+  description: news.description ?? "",
   alertInterval: news.alertInterval,
   // `Input<string>` ids are resolved to concrete strings by the engine
   // before reconcile runs.
@@ -393,7 +397,8 @@ const policyEqualsObserved = (
   desired.name === (observed.name ?? "") &&
   desired.enabled === (observed.enabled ?? true) &&
   (desired.description ?? "") === (observed.description ?? "") &&
-  (desired.alertInterval ?? undefined) === observed.alertInterval &&
+  (desired.alertInterval === undefined ||
+    desired.alertInterval === observed.alertInterval) &&
   normalizedEquals(desired.mechanisms, observed.mechanisms) &&
   normalizedEquals(desired.filters, observed.filters);
 

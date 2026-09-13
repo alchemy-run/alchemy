@@ -10,14 +10,6 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-// The account-wide `list` test intermittently fails with a `Forbidden`
-// (fresh-token 403 blip) because — unlike every other call in this suite —
-// `provider.list()` is not wrapped in a `Forbidden` retry. Skipped by default;
-// set RUN_MANAGED_TRANSFORMS_LIST_TEST=1 to run it. (Alternatively it could be
-// fixed by retrying the typed `Forbidden` around `provider.list()`.)
-const runManagedTransformsListTest =
-  !!process.env.RUN_MANAGED_TRANSFORMS_LIST_TEST;
-
 const logLevel = Effect.provideService(
   MinimumLogLevel,
   process.env.DEBUG ? "Debug" : "Info",
@@ -42,7 +34,10 @@ const resolveZoneId = Effect.gen(function* () {
 // Ride out the blips on the test's own out-of-band verification calls by
 // retrying the typed `Forbidden` error (patched into the managed-transforms
 // operations' error unions).
-const forbiddenRetrySchedule = Schedule.exponential("500 millis");
+const forbiddenRetrySchedule = Schedule.min([
+  Schedule.exponential("500 millis"),
+  Schedule.spaced("5 seconds"),
+]);
 
 const listTransforms = (zoneId: string) =>
   managedTransforms.listManagedTransforms({ zoneId }).pipe(
@@ -167,6 +162,20 @@ describe.sequential("ManagedTransforms", () => {
             true,
           );
 
+          // Drop the newly managed field; destroy must still remember it.
+          yield* stack.deploy(
+            Cloudflare.ManagedTransforms.ManagedTransforms("Transforms", {
+              zoneId,
+              responseHeaders: { [MANAGED_ID]: false },
+            }),
+          );
+          expect(
+            enabledOf(
+              (yield* listTransforms(zoneId)).managedResponseHeaders,
+              UNMANAGED_ID,
+            ),
+          ).toBe(true);
+
           // 3. Destroy — managed ids are restored to their snapshot values.
           yield* stack.destroy();
 
@@ -181,7 +190,7 @@ describe.sequential("ManagedTransforms", () => {
 
         yield* stack.destroy();
       }).pipe(logLevel),
-    { timeout: 240_000 },
+    { timeout: 120_000 },
   );
 
   test.provider(
@@ -241,7 +250,7 @@ describe.sequential("ManagedTransforms", () => {
 
         yield* stack.destroy();
       }).pipe(logLevel),
-    { timeout: 240_000 },
+    { timeout: 120_000 },
   );
 
   test.provider(
@@ -291,14 +300,14 @@ describe.sequential("ManagedTransforms", () => {
           );
         }
       }).pipe(logLevel),
-    { timeout: 240_000 },
+    { timeout: 120_000 },
   );
 
   // Canonical `list()` test (zone-scoped singleton): there is no account-wide
   // API for the managed-transforms catalog, so `list()` enumerates every zone
   // via `listAllZones` and reads the singleton in each. Assert the result is
   // non-empty and contains the standing test zone.
-  test.provider.skipIf(!runManagedTransformsListTest)(
+  test.provider(
     "list enumerates managed transforms across all zones",
     (stack) =>
       Effect.gen(function* () {

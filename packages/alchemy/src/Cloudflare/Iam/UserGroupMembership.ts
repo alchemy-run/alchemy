@@ -136,19 +136,22 @@ export const UserGroupMembershipProvider = () =>
       return rows.flat();
     }),
 
-    diff: Effect.fn(function* ({ olds, news }) {
+    diff: Effect.fn(function* ({ olds, news, output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (output && output.accountId !== accountId)
+        return { action: "replace" } as const;
       if (!isResolved(news)) return undefined;
       // Identity change — both props are the resource's identity, so any
       // change is a replacement. Compare only once both sides are concrete.
       if (
-        typeof olds?.userGroup === "string" &&
-        olds.userGroup !== news.userGroup
+        typeof (output?.userGroupId ?? olds?.userGroup) === "string" &&
+        (output?.userGroupId ?? olds?.userGroup) !== news.userGroup
       ) {
         return { action: "replace" } as const;
       }
       if (
-        typeof olds?.memberId === "string" &&
-        olds.memberId !== news.memberId
+        typeof (output?.memberId ?? olds?.memberId) === "string" &&
+        (output?.memberId ?? olds?.memberId) !== news.memberId
       ) {
         return { action: "replace" } as const;
       }
@@ -226,7 +229,10 @@ export const UserGroupMembershipProvider = () =>
       return yield* ensure.pipe(
         Effect.retry({
           while: (e) => e._tag === "UserGroupNotFound",
-          schedule: Schedule.exponential("500 millis"),
+          schedule: Schedule.min([
+            Schedule.exponential("500 millis"),
+            Schedule.spaced("4 seconds"),
+          ]),
           times: 8,
         }),
       );

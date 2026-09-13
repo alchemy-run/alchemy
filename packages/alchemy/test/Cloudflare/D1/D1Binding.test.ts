@@ -26,12 +26,13 @@ const logLevel = Effect.provideService(
 class WorkerNotReady extends Data.TaggedError("WorkerNotReady")<{
   status: number;
   body: string;
+  message: string;
 }> {}
 
 // Bounded spaced schedule — caps total wait so a genuine failure surfaces
 // fast instead of an uncapped exponential blowing past the test timeout
 // while riding out fresh-workers.dev cold-start propagation.
-const ready = Schedule.max([Schedule.spaced("2 seconds"), Schedule.recurs(45)]);
+const ready = Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(10)]);
 
 /** Retry an HTTP call until it returns 200 (rides out cold-start 404s). */
 const untilOk = <E, R>(
@@ -42,9 +43,15 @@ const untilOk = <E, R>(
       res.status === 200
         ? Effect.succeed(res)
         : res.text.pipe(
-            Effect.flatMap((body) =>
-              Effect.fail(new WorkerNotReady({ status: res.status, body })),
-            ),
+            Effect.flatMap((body) => {
+              return Effect.fail(
+                new WorkerNotReady({
+                  status: res.status,
+                  body,
+                  message: `HTTP ${res.status} ${res.request.url}: ${body.slice(0, 300)}`,
+                }),
+              );
+            }),
           ),
     ),
     Effect.retry({

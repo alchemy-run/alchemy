@@ -4,6 +4,7 @@ import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -196,7 +197,9 @@ export const EvaluationProvider = () =>
       // match on our generated/explicit name is the best identity we have.
       const name = yield* createEvaluationName(id, olds?.name);
       const match = yield* findByName(acct, gatewayId, name);
-      return match ? toAttributes(match, acct, knownTypeIds) : undefined;
+      return match
+        ? Unowned(toAttributes(match, acct, knownTypeIds))
+        : undefined;
     }),
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -245,7 +248,13 @@ export const EvaluationProvider = () =>
           Effect.catchTag("EvaluationNameAlreadyExists", (originalError) =>
             findByName(accountId, gatewayId, name).pipe(
               Effect.flatMap((match) =>
-                match ? Effect.succeed(match) : Effect.fail(originalError),
+                match &&
+                deepEqual(
+                  match.datasets.map((dataset) => dataset.id),
+                  datasetIds,
+                )
+                  ? Effect.succeed(match)
+                  : Effect.fail(originalError),
               ),
             ),
           ),

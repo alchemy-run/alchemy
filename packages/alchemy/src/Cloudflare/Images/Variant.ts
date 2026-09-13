@@ -160,17 +160,9 @@ export const VariantProvider = () =>
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
 
-      // Enumerate variant names from the account-scoped list endpoint, then
-      // hydrate each via the per-variant GET (whose schema is correct) into
-      // the exact `read` Attributes shape.
-      //
-      // NOTE: distilled mis-types this response as a single variant, but the
-      // real body is a keyed `variants` map — so the strict decode currently
-      // fails. The fix is a distilled response-schema patch (see neededPatch
-      // in the agent report); once applied, the successful-decode path below
-      // works unchanged.
+      // The API returns a map keyed by arbitrary variant names.
       const names = yield* images.listV1Variants({ accountId }).pipe(
-        Effect.map(variantNamesFrom),
+        Effect.map((response) => Object.keys(response.variants ?? {})),
         // The built-in `public` variant is not managed by this resource —
         // Cloudflare silently ignores deletes of it (the DELETE returns 200
         // but the variant persists), so exclude it from enumeration.
@@ -320,16 +312,26 @@ export const VariantProvider = () =>
       // success, so the engine's replacement GC (which deletes the OLD
       // generation as the new one is created) leaves a genuinely clean slate
       // rather than an orphan that lingers past the caller's verification.
-      // Bounded — if it never clears we stop polling and proceed.
-      yield* getVariant(output.accountId, output.variantName).pipe(
+      // Bounded — retain engine state when deletion has not converged.
+      const remaining = yield* getVariant(
+        output.accountId,
+        output.variantName,
+      ).pipe(
         Effect.repeat({
           schedule: Schedule.max([
-            Schedule.exponential("500 millis"),
-            Schedule.recurs(12),
+            Schedule.spaced("2 seconds"),
+            Schedule.recurs(8),
           ]),
           until: (observed) => observed === undefined,
         }),
       );
+      if (remaining !== undefined) {
+        return yield* Effect.fail(
+          new Error(
+            `Image variant ${output.variantName} still exists after deletion polling`,
+          ),
+        );
+      }
     }),
   });
 
@@ -345,29 +347,6 @@ const getVariant = (accountId: string, variantId: string) =>
     Effect.map((response) => response.variant ?? undefined),
     Effect.catchTag("VariantNotFound", () => Effect.succeed(undefined)),
   );
-
-/**
- * Extract variant names — the keys of the `variants` map — from a list-variants
- * payload. The endpoint returns `result.variants` as a keyed object map of
- * variantId -> variant (not an array), so accept either the unwrapped `result`
- * (`{ variants: {...} }`) or the full raw body (`{ result: { variants: {...} } }`).
- */
-const variantNamesFrom = (value: unknown): string[] => {
-  const root =
-    Predicate.hasProperty(value, "result") &&
-    typeof value.result === "object" &&
-    value.result !== null
-      ? value.result
-      : value;
-  if (
-    Predicate.hasProperty(root, "variants") &&
-    typeof root.variants === "object" &&
-    root.variants !== null
-  ) {
-    return Object.keys(root.variants);
-  }
-  return [];
-};
 
 const desiredOptions = (news: VariantProps) => ({
   fit: news.fit,

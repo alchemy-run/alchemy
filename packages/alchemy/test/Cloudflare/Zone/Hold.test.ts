@@ -164,6 +164,23 @@ test.provider.skipIf(!enterpriseZoneId)(
       const liveUpdated = yield* getHold(zoneId);
       expect(isHeld(liveUpdated)).toBe(true);
       expect(includesSubdomains(liveUpdated)).toBe(true);
+      const holdAfter = "2070-01-01T00:00:00Z";
+      const scheduled = yield* stack.deploy(
+        Cloudflare.Zone.Hold("Hold", {
+          zoneId,
+          holdAfter,
+          includeSubdomains: true,
+        }),
+      );
+      expect(Date.parse(scheduled.holdAfter!)).toEqual(Date.parse(holdAfter));
+      expect(Date.parse((yield* getHold(zoneId)).holdAfter!)).toEqual(
+        Date.parse(holdAfter),
+      );
+      const resumed = yield* stack.deploy(
+        Cloudflare.Zone.Hold("Hold", { zoneId }),
+      );
+      expect(resumed.hold).toBe(true);
+      expect(resumed.includeSubdomains).toBe(false);
 
       yield* stack.destroy();
 

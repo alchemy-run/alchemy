@@ -1,3 +1,4 @@
+import { listAllApps } from "./lookup.ts";
 import * as realtimeKit from "@distilled.cloud/cloudflare/realtime-kit";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -126,7 +127,7 @@ export const AppProvider = () =>
     }),
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const name = yield* createAppName(id, news.name);
+      const name = yield* createAppName(id, news.name ?? output?.name);
 
       // Observe — the appId cached on `output` is a hint, not a guarantee.
       // Fall back to a name scan so an existing same-named app is adopted
@@ -140,6 +141,10 @@ export const AppProvider = () =>
         // AlreadyExists race to tolerate.
         const created = yield* realtimeKit.postApp({ accountId, name });
         const app = created.data?.app;
+        if (!app?.id)
+          return yield* Effect.fail(
+            new Error("Cloudflare returned a RealtimeKit app without an id"),
+          );
         return {
           appId: app?.id ?? "",
           accountId,
@@ -185,49 +190,6 @@ export const AppProvider = () =>
     }),
   });
 
-const LIST_PER_PAGE = 100;
-
-/**
- * Exhaustively enumerate every RealtimeKit app in the account. The list op is
- * not generated as a paginated method, so fetch the first page, derive the
- * page count from `paging.totalCount`, then fan out the remaining pages with
- * bounded concurrency.
- */
-const listAllApps = (accountId: string) =>
-  Effect.gen(function* () {
-    const first = yield* realtimeKit.getApp({
-      accountId,
-      pageNo: 1,
-      perPage: LIST_PER_PAGE,
-    });
-    const apps = (first.data ?? []).filter(
-      (a): a is NonNullable<typeof a> => a !== null,
-    );
-    const total = first.paging?.totalCount ?? apps.length;
-    const pages = Math.ceil(total / LIST_PER_PAGE);
-    if (pages <= 1) return apps;
-    const rest = yield* Effect.forEach(
-      Array.from({ length: pages - 1 }, (_, i) => i + 2),
-      (pageNo) =>
-        realtimeKit
-          .getApp({ accountId, pageNo, perPage: LIST_PER_PAGE })
-          .pipe(
-            Effect.map((res) =>
-              (res.data ?? []).filter(
-                (a): a is NonNullable<typeof a> => a !== null,
-              ),
-            ),
-          ),
-      { concurrency: 10 },
-    );
-    return [...apps, ...rest.flat()];
-  });
-
-/**
- * Error raised when a deploy attempts to rename a RealtimeKit app. The API
- * has neither an update endpoint (to rename in place) nor a delete endpoint
- * (to model the change as a replacement).
- */
 export class AppRenameNotSupported extends Data.TaggedError(
   "AppRenameNotSupported",
 )<{
@@ -248,9 +210,9 @@ type ObservedApp = {
  * Find an app by id. The API only exposes a list endpoint, so scan it.
  */
 const findById = (accountId: string, appId: string) =>
-  realtimeKit.getApp({ accountId }).pipe(
+  listAllApps(accountId).pipe(
     Effect.map((list) =>
-      (list.data ?? [])
+      list
         .filter((a): a is NonNullable<typeof a> => a !== null)
         .map((a): ObservedApp => ({ ...a, accountId }))
         .find((a) => a.id === appId),
@@ -262,9 +224,9 @@ const findById = (accountId: string, appId: string) =>
  * oldest for determinism.
  */
 const findByName = (accountId: string, name: string) =>
-  realtimeKit.getApp({ accountId }).pipe(
+  listAllApps(accountId).pipe(
     Effect.map((list) =>
-      (list.data ?? [])
+      list
         .filter((a): a is NonNullable<typeof a> => a !== null)
         .map((a): ObservedApp => ({ ...a, accountId }))
         .filter((a) => a.name === name)

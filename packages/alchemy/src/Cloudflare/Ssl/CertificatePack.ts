@@ -243,33 +243,18 @@ export const CertificatePackProvider = () =>
     stables: ["certificatePackId", "zoneId"],
 
     diff: Effect.fn(function* ({ olds, news, output }) {
-      // news is Input<Props> during plan — only compare once resolved.
-      if (!isResolved(news)) return undefined;
-      // No prior props to compare against — let the engine decide.
-      if (olds?.hosts === undefined) return undefined;
-      // zoneId is the pack's scope; it is Input<string>, so compare only
-      // once both sides are concrete.
-      const oldZoneId =
-        output?.zoneId ??
-        (typeof olds.zoneId === "string" ? olds.zoneId : undefined);
+      if (!isResolved(news)) return;
+      const previous = output ?? olds;
+      if (!previous) return;
       if (
-        oldZoneId !== undefined &&
-        typeof news.zoneId === "string" &&
-        oldZoneId !== news.zoneId
-      ) {
+        (previous.zoneId !== undefined && previous.zoneId !== news.zoneId) ||
+        (previous.certificateAuthority !== undefined &&
+          previous.certificateAuthority !== news.certificateAuthority) ||
+        (previous.validityDays !== undefined &&
+          previous.validityDays !== news.validityDays) ||
+        (previous.hosts !== undefined && !sameHosts(previous.hosts, news.hosts))
+      )
         return { action: "replace" } as const;
-      }
-      // The order is immutable in CA, hosts, and validity — any change is
-      // a re-order (replacement). hosts compare order-insensitively.
-      if (
-        olds.certificateAuthority !== news.certificateAuthority ||
-        olds.validityDays !== news.validityDays ||
-        !sameHosts(olds.hosts, news.hosts)
-      ) {
-        return { action: "replace" } as const;
-      }
-      // validationMethod / cloudflareBranding are in-place updates.
-      return undefined;
     }),
 
     read: Effect.fn(function* ({ output, olds }) {

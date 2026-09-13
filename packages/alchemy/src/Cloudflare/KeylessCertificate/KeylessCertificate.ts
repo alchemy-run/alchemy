@@ -266,36 +266,21 @@ export const KeylessCertificateProvider = () =>
       return rows.flat();
     }),
 
-    diff: Effect.fn(function* ({ olds, news }) {
-      // diff runs during plan — `news` may still contain unresolved Outputs.
-      if (!isResolved(news)) return undefined;
-      // No prior props to compare against — let the engine decide.
-      if (olds?.certificate === undefined) return undefined;
-      // The PATCH API has no certificate field — rotation replaces.
-      if (normalizePem(olds.certificate) !== normalizePem(news.certificate)) {
+    diff: Effect.fn(function* ({ olds, news, output }) {
+      if (!isResolved(news)) return;
+      const zoneId = output?.zoneId ?? olds?.zoneId;
+      if (zoneId !== undefined && zoneId !== news.zoneId)
         return { action: "replace" } as const;
-      }
-      // bundleMethod is create-only.
       if (
-        (olds.bundleMethod ?? "ubiquitous") !==
-        (news.bundleMethod ?? "ubiquitous")
-      ) {
+        (olds?.certificate !== undefined &&
+          normalizePem(olds.certificate) !== normalizePem(news.certificate)) ||
+        (olds?.certificate !== undefined &&
+          (olds.bundleMethod ?? "ubiquitous") !==
+            (news.bundleMethod ?? "ubiquitous")) ||
+        ((output?.tunnel ?? olds?.tunnel) !== undefined &&
+          news.tunnel === undefined)
+      )
         return { action: "replace" } as const;
-      }
-      // The PATCH API can set a tunnel but cannot clear one — removing it
-      // requires a replacement. (Adding/changing is an in-place update.)
-      if (olds.tunnel !== undefined && news.tunnel === undefined) {
-        return { action: "replace" } as const;
-      }
-      // zoneId is Input<string>; compare only once both are concrete.
-      if (
-        typeof olds.zoneId === "string" &&
-        typeof news.zoneId === "string" &&
-        olds.zoneId !== news.zoneId
-      ) {
-        return { action: "replace" } as const;
-      }
-      return undefined;
     }),
 
     read: Effect.fn(function* ({ id, output, olds }) {
@@ -323,7 +308,7 @@ export const KeylessCertificateProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       // Inputs have been resolved to concrete strings by Plan.
       const zoneId = news.zoneId as string;
-      const name = yield* createKeylessName(id, news.name);
+      const name = yield* createKeylessName(id, news.name ?? output?.name);
       const desiredTunnel = resolveTunnel(news.tunnel);
 
       // 1. Observe — the identifier cached on `output` is a hint, not a

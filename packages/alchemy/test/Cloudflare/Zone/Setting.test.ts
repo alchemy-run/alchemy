@@ -244,3 +244,53 @@ test.provider("list enumerates the deployed (zone, setting) pair", (stack) =>
     expect(valueOf(restored)).toEqual("off");
   }).pipe(logLevel),
 );
+
+test.provider.skipIf(!process.env.CLOUDFLARE_TEST_SSL_RECOMMENDER)(
+  "ssl_recommender maps boolean value to enabled and restores baseline",
+  (stack) =>
+    Effect.gen(function* () {
+      const zoneId = yield* resolveZoneId;
+      yield* stack.destroy();
+      const before = yield* zones.getSetting({
+        zoneId,
+        settingId: "ssl_recommender",
+      });
+      const initial = (before as { enabled?: boolean }).enabled ?? false;
+      const changed = yield* stack.deploy(
+        Cloudflare.Zone.Setting("SslRecommender", {
+          zoneId,
+          settingId: "ssl_recommender",
+          value: !initial,
+        }),
+      );
+      expect(changed.value).toEqual(!initial);
+      const actual = yield* zones.getSetting({
+        zoneId,
+        settingId: "ssl_recommender",
+      });
+      expect((actual as { enabled?: boolean }).enabled).toEqual(!initial);
+      yield* stack.destroy();
+      const restored = yield* zones.getSetting({
+        zoneId,
+        settingId: "ssl_recommender",
+      });
+      expect((restored as { enabled?: boolean }).enabled).toEqual(initial);
+    }).pipe(logLevel),
+);
+
+test.provider(
+  "ssl_recommender absence is a typed UndefinedZoneSetting",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const zoneId = yield* resolveZoneId;
+      if (!process.env.CLOUDFLARE_TEST_SSL_RECOMMENDER) {
+        const error = yield* zones
+          .getSetting({ zoneId, settingId: "ssl_recommender" })
+          .pipe(Effect.flip);
+        expect(error._tag).toEqual("UndefinedZoneSetting");
+        expect(error.message).toContain("ssl_recommender");
+      }
+      yield* stack.destroy();
+    }).pipe(logLevel),
+);

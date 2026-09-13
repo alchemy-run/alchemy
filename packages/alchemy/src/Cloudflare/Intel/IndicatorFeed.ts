@@ -241,7 +241,7 @@ export const IndicatorFeedProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const name = yield* createFeedName(id, news.name);
+      const name = yield* createFeedName(id, news.name ?? output?.name);
 
       // Observe — the feedId cached on `output` is a hint, not a
       // guarantee. Because feeds can never be deleted, a missing cache

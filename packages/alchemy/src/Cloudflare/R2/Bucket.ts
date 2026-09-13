@@ -134,7 +134,31 @@ export type BucketCorsRule = {
   maxAgeSeconds?: number;
 };
 
+/** Retention rule that prevents matching objects from being overwritten or deleted. */
+export interface BucketLockRule {
+  /** Unique rule identifier. */
+  id: string;
+  /** Whether the rule is active. @default true */
+  enabled?: boolean;
+  /** Object key prefix; an empty prefix matches every object. @default "" */
+  prefix?: string;
+  /** Keep objects for an age in seconds, until a date, or indefinitely. */
+  condition:
+    | { type: "Age"; maxAgeSeconds: number }
+    | { type: "Date"; date: string }
+    | { type: "Indefinite" };
+}
+
+const normalizeLockRule = (rule: BucketLockRule): Required<BucketLockRule> => ({
+  id: rule.id,
+  enabled: rule.enabled ?? true,
+  prefix: rule.prefix ?? "",
+  condition: rule.condition,
+});
+
 export type BucketProps = {
+  /** Object retention locks. Omit to preserve existing rules; use [] to clear them. */
+  lockRules?: BucketLockRule[];
   /**
    * Name of the bucket. If omitted, a unique name will be generated.
    * @default ${app}-${stage}-${id}
@@ -215,6 +239,8 @@ export type Bucket = Resource<
     domains: Bucket.CustomDomain[];
     lifecycleRules: Bucket.LifecycleRule[];
     cors: Bucket.CorsRule[];
+    /** Managed object retention locks, if this resource has configured them. */
+    lockRules?: BucketLockRule[];
     /**
      * Hostname of the bucket's Cloudflare-managed `r2.dev` domain.
      * Set only while `publicAccess` is enabled; `undefined` when
@@ -445,6 +471,17 @@ export type Bucket = Resource<
  *   ],
  * });
  * ```
+ *
+ * ### Object Retention
+ * **Example:** Prevent changes to audit objects for 30 days
+ * ```typescript
+ * const bucket = yield* Cloudflare.R2.Bucket("Audit", {
+ *   lockRules: [{ id: "audit-retention", prefix: "audit/", condition: { type: "Age", maxAgeSeconds: 2592000 } }],
+ * });
+ * ```
+ *
+ * Omit `lockRules` to preserve existing retention settings. Pass `[]` to
+ * remove them explicitly. `forceDestroy` does not bypass active object locks.
  *
  * ### Deleting a Bucket
  *
@@ -868,7 +905,12 @@ export const ProviderLive = () =>
             // shorter on a full page (nameless entries), which would end the
             // walk early and silently drop the remaining buckets.
             if (raw.length < perPage || page.length === 0) break;
-            startAfter = page[page.length - 1].name;
+            const next = page[page.length - 1].name;
+            if (next === startAfter)
+              return yield* Effect.fail(
+                new Error("Cloudflare R2 bucket pagination did not advance"),
+              );
+            startAfter = next;
           }
           return all;
         });
@@ -1259,6 +1301,34 @@ export const ProviderLive = () =>
             news.cors ?? [],
           );
 
+          let lockRules = output?.lockRules;
+          if (news.lockRules !== undefined || lockRules !== undefined) {
+            const current = yield* r2
+              .getBucketLock({
+                accountId: acct,
+                bucketName: attrs.bucketName,
+                jurisdiction: attrs.jurisdiction,
+              })
+              .pipe(
+                Effect.retry({
+                  while: (error) => error._tag === "NoSuchBucket",
+                  schedule: r2BucketEndpointConsistencySchedule,
+                }),
+              );
+            const observedRules = (current.rules ?? []).map((rule) =>
+              normalizeLockRule({ ...rule, prefix: rule.prefix ?? undefined }),
+            );
+            lockRules = news.lockRules?.map(normalizeLockRule) ?? observedRules;
+            if (!deepEqual(observedRules, lockRules)) {
+              yield* r2.putBucketLock({
+                accountId: acct,
+                bucketName: attrs.bucketName,
+                jurisdiction: attrs.jurisdiction,
+                rules: lockRules.map(normalizeLockRule),
+              });
+            }
+          }
+
           const publicDomain = yield* reconcileManagedDomain(
             attrs.bucketName,
             attrs.jurisdiction,
@@ -1267,6 +1337,7 @@ export const ProviderLive = () =>
 
           return {
             ...attrs,
+            lockRules,
             domains,
             lifecycleRules,
             cors,
@@ -1363,6 +1434,7 @@ export const ProviderLive = () =>
                 domains: output?.domains ?? [],
                 lifecycleRules: output?.lifecycleRules ?? [],
                 cors: output?.cors ?? [],
+                lockRules: output?.lockRules,
                 publicDomain: output?.publicDomain,
               })),
               Effect.catchTag("NoSuchBucket", () => Effect.succeed(undefined)),
@@ -1380,9 +1452,9 @@ export const ProviderLive = () =>
  * opaque id — the name IS the identity — so the `dev:` marker rides on the
  * name (a `:` can never appear in a real R2 bucket name).
  *
- * Custom domains, lifecycle rules, CORS, and the managed r2.dev domain
- * are deploy-side concerns with no local behavior; the local attributes
- * report them empty.
+ * Lifecycle and retention rules are enforced by the local object store.
+ * Custom domains and the managed r2.dev domain are cloud routing concerns.
+ * CORS governs browser access to HTTP/S3 endpoints, not native Worker bindings.
  */
 export const ProviderLocal = () =>
   Provider.succeed(Bucket, {
@@ -1409,8 +1481,9 @@ export const ProviderLocal = () =>
         location: undefined,
         accountId: output?.accountId ?? accountId,
         domains: [],
-        lifecycleRules: [],
+        lifecycleRules: (news.lifecycleRules ?? []).map(normalizeLifecycleRule),
         cors: [],
+        lockRules: news.lockRules?.map(normalizeLockRule) ?? output?.lockRules,
         publicDomain: undefined,
       };
     }),

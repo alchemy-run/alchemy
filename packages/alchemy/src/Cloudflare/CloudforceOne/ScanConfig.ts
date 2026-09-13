@@ -168,8 +168,8 @@ export const ScanConfigProvider = () =>
         const created = yield* cloudforceOne.createScanConfig({
           accountId,
           ips: news.ips,
-          frequency: news.frequency,
-          ports: news.ports,
+          frequency: news.frequency ?? 0,
+          ports: news.ports ?? ["default"],
         });
         return toAttributes(created, accountId);
       }
@@ -179,9 +179,8 @@ export const ScanConfigProvider = () =>
       // call entirely on a no-op.
       const dirty =
         !sameList(observed.ips, news.ips) ||
-        (news.frequency !== undefined &&
-          observed.frequency !== news.frequency) ||
-        (news.ports !== undefined && !sameList(observed.ports, news.ports));
+        observed.frequency !== (news.frequency ?? 0) ||
+        !sameList(observed.ports, news.ports ?? ["default"]);
 
       if (!dirty) {
         return toAttributes(observed, observed.accountId);
@@ -192,8 +191,8 @@ export const ScanConfigProvider = () =>
           accountId: observed.accountId,
           configId: observed.id,
           ips: news.ips,
-          frequency: news.frequency,
-          ports: news.ports,
+          frequency: news.frequency ?? 0,
+          ports: news.ports ?? ["default"],
         })
         .pipe(
           // Deleted out-of-band between observe and patch — recreate.
@@ -201,8 +200,8 @@ export const ScanConfigProvider = () =>
             cloudforceOne.createScanConfig({
               accountId,
               ips: news.ips,
-              frequency: news.frequency,
-              ports: news.ports,
+              frequency: news.frequency ?? 0,
+              ports: news.ports ?? ["default"],
             }),
           ),
         );
@@ -231,13 +230,14 @@ type ObservedScanConfig = {
  * the account-level list; absent from the list means gone.
  */
 const findConfig = (accountId: string, configId: string) =>
-  cloudforceOne
-    .listScanConfigs({ accountId })
-    .pipe(
-      Effect.map((page): ObservedScanConfig | undefined =>
-        page.result.find((c) => c.id === configId),
-      ),
-    );
+  cloudforceOne.listScanConfigs.pages({ accountId }).pipe(
+    Stream.runCollect,
+    Effect.map((pages): ObservedScanConfig | undefined =>
+      pages
+        .flatMap((page) => page.result ?? [])
+        .find((config) => config.id === configId),
+    ),
+  );
 
 const sameList = (observed: readonly string[], desired: readonly string[]) =>
   observed.length === desired.length &&

@@ -209,12 +209,11 @@ export const RuleProvider = () =>
         return { action: "replace" } as const;
       }
       // accountId is Input<string>; compare only once both are concrete.
+      const { accountId: defaultAccountId } =
+        yield* yield* CloudflareEnvironment;
+      const desiredAccountId = news.accountId ?? defaultAccountId;
       const oldAccount = output?.accountId;
-      if (
-        oldAccount !== undefined &&
-        typeof news.accountId === "string" &&
-        oldAccount !== news.accountId
-      ) {
+      if (oldAccount !== undefined && oldAccount !== desiredAccountId) {
         return { action: "replace" } as const;
       }
       return undefined;
@@ -250,7 +249,7 @@ export const RuleProvider = () =>
       // Inputs have been resolved to concrete strings by Plan.
       const accountId =
         (news.accountId as string | undefined) ?? defaultAccountId;
-      const name = yield* createRuleName(id, news.name);
+      const name = yield* createRuleName(id, news.name ?? output?.name);
 
       // 1. Observe — the rule id cached on `output` is a hint, not a
       //    guarantee: a missing rule falls through to the name scan and
@@ -287,10 +286,11 @@ export const RuleProvider = () =>
             // config has propagated, so ride out that consistency window.
             Effect.retry({
               while: (e) => e._tag === "MnmConfigMissing",
-              schedule: Schedule.max([
+              schedule: Schedule.min([
                 Schedule.exponential("500 millis"),
-                Schedule.recurs(8),
+                Schedule.spaced("5 seconds"),
               ]),
+              times: 8,
             }),
             Effect.catchTag("DuplicateMnmRuleName", (error) =>
               findByName(accountId, name).pipe(
@@ -300,7 +300,6 @@ export const RuleProvider = () =>
               ),
             ),
           );
-        return toAttributes(observed, accountId);
       }
 
       // 3. Sync — diff observed cloud state against desired; the PATCH
@@ -396,15 +395,14 @@ const getRule = (accountId: string, ruleId: string) =>
  * rule can match. An account with no rules answers `result: null`.
  */
 const findByName = (accountId: string, name: string) =>
-  mnm
-    .listRules({ accountId })
-    .pipe(
-      Effect.map((response) =>
-        (response.result ?? []).find(
-          (rule): rule is NonNullable<typeof rule> => rule?.name === name,
-        ),
-      ),
-    );
+  mnm.listRules.pages({ accountId }).pipe(
+    Stream.runCollect,
+    Effect.map((pages) =>
+      pages
+        .flatMap((page) => page.result ?? [])
+        .find((rule): rule is NonNullable<typeof rule> => rule?.name === name),
+    ),
+  );
 
 const createRuleName = (id: string, name: string | undefined) =>
   Effect.gen(function* () {

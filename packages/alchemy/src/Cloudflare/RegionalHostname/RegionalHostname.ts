@@ -146,30 +146,25 @@ export const RegionalHostnameProvider = () =>
     }),
 
     diff: Effect.fn(function* ({ olds, news, output }) {
-      if (olds === undefined) return undefined;
-      if (!isResolved(news) || !isResolved(olds)) return undefined;
-      // zoneId is Input<string>; by diff time both sides are concrete.
-      const oldZoneId = output?.zoneId ?? olds.zoneId;
+      if (!isResolved(news)) return;
+      const zoneId = output?.zoneId ?? olds?.zoneId;
+      const hostname = output?.hostname ?? olds?.hostname;
       if (
-        typeof oldZoneId === "string" &&
-        typeof news.zoneId === "string" &&
-        news.zoneId !== oldZoneId
+        (zoneId !== undefined && zoneId !== news.zoneId) ||
+        (hostname !== undefined && hostname !== news.hostname)
       ) {
         return { action: "replace" } as const;
       }
-      // The hostname is the API path identifier.
-      if (news.hostname !== (output?.hostname ?? olds.hostname)) {
-        return { action: "replace" } as const;
-      }
-      // PATCH only accepts regionKey — routing is create-only.
+      // PATCH cannot change routing. Delete first because POST has the same
+      // zone/hostname identity. Omission after an explicit value restores the
+      // service default without guessing what that default is.
+      const routing = output?.routing ?? olds?.routing;
       if (
-        olds.routing !== undefined &&
-        news.routing !== undefined &&
-        news.routing !== olds.routing
+        (news.routing !== undefined && routing !== news.routing) ||
+        (olds?.routing !== undefined && news.routing === undefined)
       ) {
-        return { action: "replace" } as const;
+        return { action: "replace", deleteFirst: true } as const;
       }
-      return undefined;
     }),
 
     read: Effect.fn(function* ({ output, olds }) {

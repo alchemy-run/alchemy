@@ -1,5 +1,6 @@
 import * as queues from "@distilled.cloud/cloudflare/queues";
 import * as workers from "@distilled.cloud/cloudflare/workers";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as MutableHashMap from "effect/MutableHashMap";
@@ -20,6 +21,8 @@ import {
   localRuntimeServices,
 } from "../LocalRuntime.ts";
 import type { Providers } from "../Providers.ts";
+
+class ConsumerStillAttached extends Data.TaggedError("ConsumerStillAttached") {}
 
 export type ConsumerProps = {
   /**
@@ -181,19 +184,18 @@ export const detachQueueConsumersOfScript = Effect.fn(function* (
         ),
         Effect.andThen(
           queues.getConsumer({ accountId, queueId, consumerId }).pipe(
-            Effect.flatMap(() => Effect.fail("still-attached" as const)),
+            Effect.flatMap(() => Effect.fail(new ConsumerStillAttached())),
             Effect.catchTag(
               ["ConsumerNotFound", "QueueNotFound"],
               () => Effect.void,
             ),
             Effect.retry({
-              while: (e) => e === "still-attached",
+              while: (e) => e._tag === "ConsumerStillAttached",
               schedule: Schedule.max([
-                Schedule.spaced("1 second"),
-                Schedule.recurs(30),
+                Schedule.spaced("3 seconds"),
+                Schedule.recurs(10),
               ]),
             }),
-            Effect.ignore,
           ),
         ),
       ),
@@ -332,20 +334,27 @@ export const ConsumerProviderLive = () =>
       const detachConsumer = Effect.fn(function* (consumerId: string) {
         yield* queues
           .deleteConsumer({ accountId: acct, queueId, consumerId })
-          .pipe(Effect.catchTag("ConsumerNotFound", () => Effect.void));
+          .pipe(
+            Effect.catchTag(
+              ["ConsumerNotFound", "QueueNotFound"],
+              () => Effect.void,
+            ),
+          );
         yield* queues
           .getConsumer({ accountId: acct, queueId, consumerId })
           .pipe(
-            Effect.flatMap(() => Effect.fail("still-attached" as const)),
-            Effect.catchTag("ConsumerNotFound", () => Effect.void),
+            Effect.flatMap(() => Effect.fail(new ConsumerStillAttached())),
+            Effect.catchTag(
+              ["ConsumerNotFound", "QueueNotFound"],
+              () => Effect.void,
+            ),
             Effect.retry({
-              while: (e) => e === "still-attached",
+              while: (e) => e._tag === "ConsumerStillAttached",
               schedule: Schedule.max([
-                Schedule.spaced("1 second"),
-                Schedule.recurs(30),
+                Schedule.spaced("3 seconds"),
+                Schedule.recurs(10),
               ]),
             }),
-            Effect.ignore,
           );
       });
 
@@ -367,7 +376,7 @@ export const ConsumerProviderLive = () =>
             consumerId: output.consumerId,
           })
           .pipe(
-            Effect.catchTag("ConsumerNotFound", () =>
+            Effect.catchTag(["ConsumerNotFound", "QueueNotFound"], () =>
               Effect.succeed(undefined),
             ),
           );
@@ -563,7 +572,7 @@ export const ConsumerProviderLive = () =>
             ? Effect.void
             : Effect.fail("ScriptUnbound" as const),
         ),
-        Effect.catchTag("ConsumerNotFound", () =>
+        Effect.catchTag(["ConsumerNotFound", "QueueNotFound"], () =>
           Effect.fail("ScriptUnbound" as const),
         ),
         Effect.retry({
@@ -591,7 +600,12 @@ export const ConsumerProviderLive = () =>
           queueId: output.queueId,
           consumerId: output.consumerId,
         })
-        .pipe(Effect.catchTag("ConsumerNotFound", () => Effect.void));
+        .pipe(
+          Effect.catchTag(
+            ["ConsumerNotFound", "QueueNotFound"],
+            () => Effect.void,
+          ),
+        );
 
       // Block until Cloudflare's worker subsystem stops claiming
       // the script as a queue consumer. Without this the
@@ -605,16 +619,18 @@ export const ConsumerProviderLive = () =>
           consumerId: output.consumerId,
         })
         .pipe(
-          Effect.flatMap(() => Effect.fail("still-attached" as const)),
-          Effect.catchTag("ConsumerNotFound", () => Effect.void),
+          Effect.flatMap(() => Effect.fail(new ConsumerStillAttached())),
+          Effect.catchTag(
+            ["ConsumerNotFound", "QueueNotFound"],
+            () => Effect.void,
+          ),
           Effect.retry({
-            while: (e) => e === "still-attached",
+            while: (e) => e._tag === "ConsumerStillAttached",
             schedule: Schedule.max([
-              Schedule.spaced("1 second"),
-              Schedule.recurs(30),
+              Schedule.spaced("3 seconds"),
+              Schedule.recurs(10),
             ]),
           }),
-          Effect.ignore,
         );
     }),
     read: Effect.fn(function* ({ output }) {
@@ -626,7 +642,7 @@ export const ConsumerProviderLive = () =>
             consumerId: output.consumerId,
           })
           .pipe(
-            Effect.catchTag("ConsumerNotFound", () =>
+            Effect.catchTag(["ConsumerNotFound", "QueueNotFound"], () =>
               Effect.succeed(undefined),
             ),
           );
@@ -683,7 +699,7 @@ const toObserved = (c: {
 // but a fresh container/asset deploy can stretch that.
 const queueHandlerReadinessSchedule = Schedule.max([
   Schedule.spaced("2 seconds"),
-  Schedule.recurs(30),
+  Schedule.recurs(10),
 ]);
 
 export const ConsumerProviderLocal = () =>

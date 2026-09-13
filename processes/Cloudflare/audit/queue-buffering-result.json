@@ -1,0 +1,41 @@
+{
+  "service": "queues-local-buffering",
+  "resources": [
+    "Queues.Queue",
+    "Queues.Consumer",
+    "Queue.local runtime binding",
+    "QueueBroker",
+    "RegistryProxy.ExternalQueueConsumer"
+  ],
+  "testsPassed": 37,
+  "testCommand": [
+    "timeout 240 pnpm exec vitest run --project core src/core/test/bindings/Queue.test.ts src/core/test/bindings/QueueBuffering.test.ts src/core/test/bindings/QueueSettings.test.ts",
+    "timeout 240 pnpm test test/Cloudflare/Queues/DropProbe.local.test.ts --profile testing --timeout 120000"
+  ],
+  "files": [
+    "packages/cloudflare-runtime/src/core/bindings/queue/Queue.ts",
+    "packages/cloudflare-runtime/src/core/bindings/queue/QueueBroker.worker.ts",
+    "packages/cloudflare-runtime/src/core/bindings/queue/QueueOptions.shared.ts",
+    "packages/cloudflare-runtime/src/core/registry/RegistryProxy.worker.ts",
+    "packages/cloudflare-runtime/src/core/RuntimeWorker.ts",
+    "packages/alchemy/src/Cloudflare/Workers/RuntimeBindings.ts",
+    "packages/alchemy/src/Cloudflare/Workers/WorkerBinding.ts",
+    "packages/alchemy/src/Cloudflare/Workers/WorkerAsyncBindings.ts",
+    "packages/alchemy/src/Cloudflare/Workers/WorkerProvider.ts",
+    "packages/alchemy/src/Cloudflare/Workers/LocalWorkerProvider.ts",
+    "packages/alchemy/src/Cloudflare/Queues/QueueBinding.ts",
+    "packages/alchemy/test/Cloudflare/Queues/DropProbe.local.test.ts",
+    "packages/cloudflare-runtime/src/core/test/bindings/Queue.test.ts",
+    "packages/cloudflare-runtime/src/core/test/bindings/QueueBuffering.test.ts",
+    "packages/cloudflare-runtime/src/core/test/fixtures/queues/buffering.js"
+  ],
+  "patches": [],
+  "skippedTests": [],
+  "notes": [
+    "34 native actual-workerd tests and 3 Alchemy deployed fixture tests passed.",
+    "Broader Queue.local combined suite6 completed; final existing remote shim producer test hit240second wall.",
+    "Stopped producer spool resumes when same producer restarts; no independent always-running account broker exists.",
+    "Storage keyed by queue generation prevents stale message resurrection on fixed-name delete/recreate.",
+    "Shared metadata/provider files changed minimally in queue blocks; preserve peer changes."
+  ]
+}

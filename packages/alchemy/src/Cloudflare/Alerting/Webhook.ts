@@ -179,7 +179,7 @@ export const NotificationWebhookProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const name = yield* createWebhookName(id, news.name);
+      const name = yield* createWebhookName(id, news.name ?? output?.name);
       // Inputs are resolved to concrete values by the engine before
       // reconcile runs.
       const url = news.url as string;
@@ -199,11 +199,9 @@ export const NotificationWebhookProvider = () =>
       //    the URL from an arbitrary PoP; when the destination is a
       //    just-deployed Worker that PoP may not have the fresh
       //    workers.dev subdomain yet and the test POST 404s even though
-      //    the URL serves elsewhere. A bounded retry (~2 min, capped
-      //    backoff) rides out edge propagation — fresh workers.dev URLs
-      //    have been observed to 404 for well over a minute under heavy
-      //    account-wide deploy load; a genuinely broken endpoint still
-      //    fails after the budget is exhausted.
+      //    the URL serves elsewhere. Retry for at most about 32 seconds;
+      //    an endpoint that remains unavailable then surfaces the typed
+      //    WebhookTestFailed so a later deployment can safely retry.
       if (!observed) {
         const created = yield* alerting
           .createDestinationWebhook({
@@ -220,7 +218,7 @@ export const NotificationWebhookProvider = () =>
                   Schedule.exponential("1 second"),
                   Schedule.spaced("5 seconds"),
                 ]),
-                Schedule.recurs(24),
+                Schedule.recurs(8),
               ]),
             }),
           );

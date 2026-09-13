@@ -558,3 +558,53 @@ test.provider(
     }).pipe(logLevel),
   { timeout: 300_000 },
 );
+
+test.provider(
+  "updates advanced self-hosted cookie and CORS settings",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      yield* stack.destroy();
+      const fixture = (enabled: boolean) =>
+        Effect.gen(function* () {
+          yield* Cloudflare.Zone.Zone("TestZone", { name: zoneName }).pipe(
+            AdoptPolicy.adopt(true),
+          );
+          return yield* Cloudflare.Access.Application("AdvancedApp", {
+            type: "self_hosted",
+            domain: `alchemy-advanced-app.${zoneName}`,
+            httpOnlyCookieAttribute: enabled,
+            sameSiteCookieAttribute: enabled ? "strict" : "lax",
+            optionsPreflightBypass: false,
+            allowIframe: enabled,
+            corsHeaders: {
+              allowedMethods: ["GET"],
+              allowedOrigins: ["https://example.com"],
+              allowCredentials: enabled,
+            },
+          });
+        });
+      const initial = yield* stack.deploy(fixture(true));
+      const read = () =>
+        zeroTrust.getAccessApplicationForAccount({
+          accountId,
+          appId: initial.applicationId,
+        });
+      const created = yield* read();
+      if (!("corsHeaders" in created))
+        throw new Error("Expected self-hosted app");
+      expect(created.httpOnlyCookieAttribute).toBe(true);
+      expect(created.sameSiteCookieAttribute).toEqual("strict");
+      expect(created.corsHeaders?.allowCredentials).toBe(true);
+      const updated = yield* stack.deploy(fixture(false));
+      expect(updated.applicationId).toEqual(initial.applicationId);
+      const live = yield* read();
+      if (!("corsHeaders" in live)) throw new Error("Expected self-hosted app");
+      expect(live.httpOnlyCookieAttribute).toBe(false);
+      expect(live.sameSiteCookieAttribute).toEqual("lax");
+      expect(live.optionsPreflightBypass).toBe(false);
+      expect(live.allowIframe ?? false).toBe(false);
+      expect(live.corsHeaders?.allowCredentials ?? false).toBe(false);
+      yield* stack.destroy();
+    }).pipe(logLevel),
+);

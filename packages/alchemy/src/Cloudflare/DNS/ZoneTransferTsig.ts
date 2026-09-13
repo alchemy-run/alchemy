@@ -132,7 +132,7 @@ export const ZoneTransferTsigProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const name = yield* createTsigName(id, news.name);
+      const name = yield* createTsigName(id, news.name ?? output?.name);
       const secret = Redacted.value(news.secret);
 
       // Observe — the id cached on `output` is a hint, not a guarantee.

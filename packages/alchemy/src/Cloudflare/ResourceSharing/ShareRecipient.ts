@@ -135,6 +135,13 @@ export const ShareRecipientProvider = () =>
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
       }
+      if (
+        olds &&
+        isResolved(olds) &&
+        (olds.accountId !== news.accountId ||
+          olds.organizationId !== news.organizationId)
+      )
+        return { action: "replace" } as const;
       // No update API — every identity change is a replacement. By diff
       // time both sides are resolved strings.
       const oldShareId = output?.shareId ?? olds?.shareId;
@@ -146,9 +153,9 @@ export const ShareRecipientProvider = () =>
         return { action: "replace" } as const;
       }
       const oldTarget =
+        (olds?.organizationId as string | undefined) ??
         output?.recipientAccountId ??
-        (olds?.accountId as string | undefined) ??
-        (olds?.organizationId as string | undefined);
+        (olds?.accountId as string | undefined);
       const newTarget =
         (news.accountId as string | undefined) ??
         (news.organizationId as string | undefined);

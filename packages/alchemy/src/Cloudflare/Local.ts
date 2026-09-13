@@ -1,3 +1,10 @@
+import { AppProviderLocal } from "./Flagship/App.ts";
+import { FlagProviderLocal } from "./Flagship/Flag.ts";
+import {
+  StreamProviderLocal,
+  SinkProviderLocal,
+  PipelineProviderLocal,
+} from "./Pipelines/Local.ts";
 import * as Layer from "effect/Layer";
 import { DockerLive } from "../Docker/Docker.ts";
 import * as RpcServer from "../Local/RpcServer.ts";
@@ -10,6 +17,8 @@ import { localRuntimeServices } from "./LocalRuntime.ts";
 import { ProviderLocal } from "./Queues/Queue.ts";
 import { ConsumerProviderLocal } from "./Queues/Consumer.ts";
 import { SecretProviderLocal } from "./SecretsStore/Secret.ts";
+import { IndexProviderLocal } from "./Vectorize/VectorizeIndex.ts";
+import { MetadataIndexProviderLocal } from "./Vectorize/VectorizeMetadataIndex.ts";
 import { LocalWorkerProvider } from "./Workers/LocalWorkerProvider.ts";
 
 const cloudflareServices = Layer.provide(
@@ -22,11 +31,18 @@ const cloudflareServices = Layer.provide(
 
 Layer.mergeAll(
   LocalWorkerProvider(),
+  AppProviderLocal(),
+  FlagProviderLocal(),
+  StreamProviderLocal(),
+  SinkProviderLocal(),
+  PipelineProviderLocal(),
   LocalContainerProvider(),
   ProviderLocal(),
   ConsumerProviderLocal(),
   D1ProviderLocal(),
   SecretProviderLocal(),
+  IndexProviderLocal(),
+  MetadataIndexProviderLocal(),
 ).pipe(
   Layer.provide(localRuntimeServices()),
   Layer.provide(cloudflareServices),

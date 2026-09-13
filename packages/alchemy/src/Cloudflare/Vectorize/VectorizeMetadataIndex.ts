@@ -1,5 +1,17 @@
 import * as vectorize from "@distilled.cloud/cloudflare/vectorize";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as MutableHashMap from "effect/MutableHashMap";
+import * as Option from "effect/Option";
+import * as ProviderLayer from "../../Local/ProviderLayer.ts";
+import * as RpcProvider from "../../Local/RpcProvider.ts";
+import {
+  generateLocalId,
+  LOCAL_ENTRY_URL,
+  LocalRuntimeState,
+  localRuntimeServices,
+} from "../LocalRuntime.ts";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 
 import { isResolved } from "../../Diff.ts";
@@ -90,23 +102,35 @@ export const MetadataIndex = Resource<MetadataIndex>(
   "Cloudflare.VectorizeMetadataIndex",
 );
 
-export const MetadataIndexProvider = () =>
+export const MetadataIndexProviderLive = () =>
   Provider.succeed(MetadataIndex, {
     stables: ["propertyName", "indexName", "accountId"],
     diff: Effect.fn(function* ({ olds, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       if (!isResolved(news)) return undefined;
       if ((output?.accountId ?? accountId) !== accountId) {
-        return { action: "replace" } as const;
+        return {
+          action: "replace",
+          deleteFirst:
+            (output?.indexName ?? olds.indexName) === news.indexName &&
+            (output?.propertyName ?? olds.propertyName) === news.propertyName,
+        } as const;
       }
       const newIndexName = news.indexName;
       const oldIndexName = output?.indexName ?? olds.indexName;
       if (
         (oldIndexName ?? newIndexName) !== newIndexName ||
-        (olds.propertyName ?? news.propertyName) !== news.propertyName ||
-        (olds.indexType ?? news.indexType) !== news.indexType
+        (output?.propertyName ?? olds.propertyName ?? news.propertyName) !==
+          news.propertyName ||
+        (output?.indexType ?? olds.indexType ?? news.indexType) !==
+          news.indexType
       ) {
-        return { action: "replace" } as const;
+        return {
+          action: "replace",
+          deleteFirst:
+            (output?.indexName ?? olds.indexName) === news.indexName &&
+            (output?.propertyName ?? olds.propertyName) === news.propertyName,
+        } as const;
       }
       return undefined;
     }),
@@ -133,7 +157,26 @@ export const MetadataIndexProvider = () =>
 
       // Observe — list metadata indexes on the parent and look for one
       // matching propertyName.
-      const existing = yield* findExisting(acct, indexName, news.propertyName);
+      let existing = yield* findExisting(acct, indexName, news.propertyName);
+      // Drift/adoption can expose the right property with the wrong immutable
+      // type. Remove only that property and recreate it with the desired type.
+      const replacingType =
+        existing !== undefined && existing.indexType !== news.indexType;
+      if (replacingType) {
+        yield* vectorize
+          .deleteIndexMetadataIndex({
+            accountId: acct,
+            indexName,
+            propertyName: news.propertyName,
+          })
+          .pipe(
+            Effect.catchTag(
+              ["NotFound", "Gone", "MetadataIndexNotFound"],
+              () => Effect.void,
+            ),
+          );
+        existing = undefined;
+      }
 
       // Ensure — create if missing. Cloudflare returns 409 Conflict on
       // duplicate; tolerate the race by reusing the prior mutationId.
@@ -147,8 +190,28 @@ export const MetadataIndexProvider = () =>
             indexType: news.indexType,
           })
           .pipe(
-            Effect.catchTag("MetadataIndexAlreadyExists", () =>
-              Effect.succeed({ mutationId: output?.mutationId }),
+            Effect.retry({
+              while: (error) =>
+                replacingType && error._tag === "MetadataIndexAlreadyExists",
+              times: 8,
+              schedule: Schedule.spaced("3 seconds"),
+            }),
+            Effect.catchTag("MetadataIndexAlreadyExists", (error) =>
+              Effect.gen(function* () {
+                if (replacingType) return yield* Effect.fail(error);
+                const raced = yield* findExisting(
+                  acct,
+                  indexName,
+                  news.propertyName,
+                );
+                if (raced && raced.indexType !== news.indexType)
+                  return yield* Effect.die(
+                    new Error(
+                      `Metadata index ${news.propertyName} was concurrently created with type ${raced.indexType}, expected ${news.indexType}`,
+                    ),
+                  );
+                return { mutationId: output?.mutationId };
+              }),
             ),
           );
         mutationId = created.mutationId ?? undefined;
@@ -253,3 +316,85 @@ const findExisting = (acct: string, indexName: string, propertyName: string) =>
       }),
       Effect.catchTag(["NotFound", "Gone"], () => Effect.succeed(undefined)),
     );
+
+export const MetadataIndexProviderLocal = () =>
+  RpcProvider.effect(
+    MetadataIndex,
+    LOCAL_ENTRY_URL,
+    Effect.gen(function* () {
+      const state = yield* LocalRuntimeState;
+      const key = (indexName: string, propertyName: string) =>
+        JSON.stringify([indexName, propertyName]);
+      const restart = () =>
+        Effect.forEach(
+          MutableHashMap.values(state.workerRestarts),
+          (restart) => restart,
+          { discard: true },
+        );
+      return {
+        stables: ["propertyName", "indexName", "accountId"],
+        diff: Effect.fn(function* ({ olds, news, output }) {
+          if (!isResolved(news)) return;
+          if (
+            news.indexName !== olds.indexName ||
+            news.propertyName !== olds.propertyName ||
+            news.indexType !== olds.indexType
+          )
+            return {
+              action: "replace",
+              deleteFirst:
+                (output?.indexName ?? olds.indexName) === news.indexName &&
+                (output?.propertyName ?? olds.propertyName) ===
+                  news.propertyName,
+            } as const;
+          if (output)
+            MutableHashMap.set(
+              state.vectorizeMetadataIndexes,
+              key(output.indexName, output.propertyName),
+              output,
+            );
+        }),
+        read: Effect.fn(function* ({ output }) {
+          return output;
+        }),
+        reconcile: Effect.fn(function* ({ news, output }) {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          const metadata: MetadataIndexAttributes = {
+            ...news,
+            accountId,
+            mutationId: output?.mutationId ?? generateLocalId(),
+          };
+          MutableHashMap.set(
+            state.vectorizeMetadataIndexes,
+            key(news.indexName, news.propertyName),
+            metadata,
+          );
+          yield* restart();
+          return metadata;
+        }),
+        delete: Effect.fn(function* ({ output }) {
+          const registryKey = key(output.indexName, output.propertyName);
+          const current = MutableHashMap.get(
+            state.vectorizeMetadataIndexes,
+            registryKey,
+          );
+          // A create-before-delete replacement may already have registered the
+          // new generation under the same parent/property pair.
+          if (
+            Option.isSome(current) &&
+            current.value.mutationId === output.mutationId
+          ) {
+            MutableHashMap.remove(state.vectorizeMetadataIndexes, registryKey);
+            yield* restart();
+          }
+        }),
+      };
+    }),
+  );
+
+export const MetadataIndexProvider = () =>
+  ProviderLayer.dual(MetadataIndex, {
+    live: () => MetadataIndexProviderLive(),
+    local: () =>
+      MetadataIndexProviderLocal().pipe(Layer.provide(localRuntimeServices())),
+  });

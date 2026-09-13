@@ -263,17 +263,11 @@ export const RouteProvider = () =>
       };
     }),
     delete: Effect.fn(function* ({ output }) {
-      yield* zeroTrust
-        .deleteNetworkRoute({
-          accountId: output.accountId,
-          routeId: output.routeId,
-        })
-        .pipe(
-          // Idempotent delete: distilled doesn't tag NotFound on
-          // teamnet/routes/{id}, so we swallow read-side failure
-          // wholesale. A "delete a deleted route" is not an error.
-          Effect.catch(() => Effect.succeed(undefined)),
-        );
+      if (!(yield* findRouteById(output.accountId, output.routeId))) return;
+      yield* zeroTrust.deleteNetworkRoute({
+        accountId: output.accountId,
+        routeId: output.routeId,
+      });
     }),
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -361,14 +355,6 @@ const findRouteByNetwork = (
       ),
       Stream.runHead,
       Effect.map(Option.getOrUndefined),
-      // The distilled cloudflare SDK only tags transport-shaped
-      // errors (Unauthorized / 5xx / TooManyRequests / parse
-      // errors) on this endpoint -- there's no `NotFound` or
-      // `Forbidden` tag to discriminate on. Mirror the
-      // canonical `Tunnel.ts` template: swallow read-side
-      // errors so observation falls through to "missing" and
-      // the ensure step can recover.
-      Effect.catch(() => Effect.succeed(undefined)),
     );
 
 const toObserved = (r: {
@@ -380,7 +366,7 @@ const toObserved = (r: {
   createdAt?: string | null;
   deletedAt?: string | null;
 }): ObservedRoute | undefined =>
-  r.id
+  r.id && !r.deletedAt
     ? {
         id: r.id,
         network: normalize(r.network),
@@ -398,12 +384,7 @@ const observe = Effect.fn(function* (
   routeId: string | undefined,
 ) {
   if (routeId) {
-    // See `findRouteByNetwork` -- distilled doesn't tag
-    // NotFound on this endpoint, so we tolerate any read
-    // error and fall through to the list scan.
-    const raw = yield* zeroTrust
-      .getNetworkRoute({ accountId: acct, routeId })
-      .pipe(Effect.catch((_: unknown) => Effect.succeed(undefined)));
+    const raw = yield* findRouteById(acct, routeId);
     const got = raw ? toObserved(raw) : undefined;
     if (got) return got;
   }
@@ -423,3 +404,11 @@ type ObservedRoute = {
 
 const normalize = (v: string | null | undefined): string | undefined =>
   v == null ? undefined : v;
+
+// A successful collection read proves absence; permission and transport failures propagate.
+const findRouteById = (accountId: string, routeId: string) =>
+  zeroTrust.listNetworkRoutes.items({ accountId, isDeleted: false }).pipe(
+    Stream.filter((route) => route.id === routeId && !route.deletedAt),
+    Stream.runHead,
+    Effect.map(Option.getOrUndefined),
+  );

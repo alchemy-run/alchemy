@@ -170,19 +170,20 @@ export const CustomNameserverProvider = () =>
         );
     }),
 
-    diff: Effect.fn(function* ({ olds, news }) {
-      if (!isResolved(news)) return undefined;
-      // No prior props to compare against — let the engine decide.
-      if (olds?.nsName === undefined) return undefined;
-      // There is no update API: both the FQDN and the set number are
-      // immutable, so any change is a replacement.
-      if (olds.nsName !== news.nsName) {
+    diff: Effect.fn(function* ({ olds, news, output }) {
+      if (!isResolved(news)) return;
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (output?.accountId !== undefined && output.accountId !== accountId) {
         return { action: "replace" } as const;
       }
-      if ((olds.nsSet ?? 1) !== (news.nsSet ?? 1)) {
+      const previous = output ?? olds;
+      if (previous?.nsName === undefined) return;
+      if (previous.nsName !== news.nsName)
         return { action: "replace" } as const;
+      // A set change keeps the same path identity; remove the old entry first.
+      if ((previous.nsSet ?? 1) !== (news.nsSet ?? 1)) {
+        return { action: "replace", deleteFirst: true } as const;
       }
-      return undefined;
     }),
 
     read: Effect.fn(function* ({ output, olds }) {

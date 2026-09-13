@@ -72,6 +72,8 @@ interface JobOpts {
   enabled?: boolean;
   maxUploadIntervalSeconds?: number;
   outputOptions?: Cloudflare.Logpush.OutputOptions;
+  frequency?: "high" | "low";
+  logpullOptions?: string;
 }
 
 // One program deploying both the R2 destination bucket and the Logpush job
@@ -88,6 +90,8 @@ const program = (creds: R2Creds, opts: JobOpts) =>
       enabled: opts.enabled,
       maxUploadIntervalSeconds: opts.maxUploadIntervalSeconds,
       outputOptions: opts.outputOptions,
+      frequency: opts.frequency,
+      logpullOptions: opts.logpullOptions,
     });
     return { bucket, job };
   });
@@ -98,7 +102,10 @@ const getJob = (accountId: string, jobId: number) =>
   logpush.getJobForAccount({ accountId, jobId }).pipe(
     Effect.retry({
       while: (e) => e._tag === "Forbidden",
-      schedule: Schedule.exponential("500 millis"),
+      schedule: Schedule.min([
+        Schedule.exponential("500 millis"),
+        Schedule.spaced("5 seconds"),
+      ]),
       times: 8,
     }),
   );
@@ -135,6 +142,8 @@ test.provider(
           program(creds, {
             dataset: "workers_trace_events",
             enabled: false,
+            frequency: "low",
+            logpullOptions: "fields=EventTimestampMs,Outcome,ScriptName",
           }),
         ),
       );
@@ -153,6 +162,8 @@ test.provider(
       expect(live.dataset).toEqual("workers_trace_events");
       expect(live.enabled).toEqual(false);
       expect(live.name).toEqual(initial.job.name);
+      expect(live.frequency).toEqual("low");
+      expect(live.logpullOptions).toContain("fields=");
 
       // Update mutable props in place — same job id.
       const updated = yield* retryAuthBlip(
@@ -160,6 +171,7 @@ test.provider(
           program(creds, {
             dataset: "workers_trace_events",
             enabled: true,
+            frequency: "high",
             maxUploadIntervalSeconds: 60,
             outputOptions: {
               fieldNames: ["EventTimestampMs", "Outcome", "ScriptName"],
@@ -174,6 +186,7 @@ test.provider(
 
       const liveUpdated = yield* getJob(accountId, updated.job.jobId);
       expect(liveUpdated.enabled).toEqual(true);
+      expect(liveUpdated.frequency).toEqual("high");
       expect(liveUpdated.maxUploadIntervalSeconds).toEqual(60);
       expect(liveUpdated.outputOptions?.fieldNames).toEqual([
         "EventTimestampMs",
@@ -188,7 +201,7 @@ test.provider(
       // Destroy again — delete must be idempotent (the job is already gone).
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  { timeout: 90_000 },
 );
 
 test.provider(
@@ -226,7 +239,7 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  { timeout: 90_000 },
 );
 
 // Requires entitlement for a second account-scoped dataset. On the testing
@@ -270,5 +283,5 @@ test.provider.skip(
 
       yield* waitForDelete(accountId, replaced.job.jobId);
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  { timeout: 90_000 },
 );

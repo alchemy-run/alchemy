@@ -1,3 +1,4 @@
+import { ConfigError } from "@alchemy.run/cloudflare-runtime/core";
 import type {
   BindingHook,
   BindingServices,
@@ -37,9 +38,11 @@ import {
   Workflows,
 } from "@alchemy.run/cloudflare-runtime/core/bindings";
 import * as Effect from "effect/Effect";
+import * as MutableHashMap from "effect/MutableHashMap";
+import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
-import { isLocalId } from "../LocalRuntime.ts";
+import { isLocalId, LocalRuntimeState } from "../LocalRuntime.ts";
 import type { WorkerBinding } from "./WorkerBinding.ts";
 
 export class WorkerValidationError extends Schema.TaggedError<WorkerValidationError>()(
@@ -96,9 +99,14 @@ export const toRuntimeBinding = Effect.fn(function* (
     case "data_blob":
       return Data.local(b.name, Buffer.from(b.part));
     case "dispatch_namespace":
-      return DispatchNamespace.remote({
+      return (
+        isLocalId(b.namespace)
+          ? DispatchNamespace.local
+          : DispatchNamespace.remote
+      )({
         binding: b.name,
         namespace: b.namespace,
+        outbound: b.outbound,
       });
     case "durable_object_namespace":
       return DurableObjectNamespace.local({
@@ -110,7 +118,10 @@ export const toRuntimeBinding = Effect.fn(function* (
           encodeURIComponent(`${b.scriptName!}-${b.className}`),
       });
     case "flagship":
-      return Flagship.remote(b.name, b.appId);
+      return (isLocalId(b.appId) ? Flagship.local : Flagship.remote)(
+        b.name,
+        b.appId,
+      );
     case "hyperdrive":
       return Hyperdrive.local(b.name, b.id);
     case "images":
@@ -132,8 +143,68 @@ export const toRuntimeBinding = Effect.fn(function* (
         : KvNamespace.remote(b.name, b.namespaceId);
     case "mtls_certificate":
       return MtlsCertificate.remote(b.name, b.certificateId);
-    case "pipelines":
-      return Pipelines.remote(b.name, b.pipeline);
+    case "pipelines": {
+      if (!isLocalId(b.pipeline)) return Pipelines.remote(b.name, b.pipeline);
+      const stateOption = yield* Effect.serviceOption(LocalRuntimeState);
+      if (Option.isNone(stateOption))
+        return yield* new WorkerValidationError({
+          message:
+            "Local Pipelines requires the local provider sidecar; external Vite child bindings are not implemented",
+          value: b,
+        });
+      const state = stateOption.value;
+      return Effect.suspend(() =>
+        Effect.gen(function* () {
+          const stream = MutableHashMap.get(
+            state.pipelineStreams,
+            b.pipeline,
+          ).pipe(Option.getOrUndefined);
+          if (!stream)
+            return yield* new ConfigError({
+              subtag: "PIPELINES_STREAM_MISSING",
+              message: `Local pipeline stream ${b.pipeline} is not registered`,
+              detail: b,
+            });
+          const routes: Pipelines.LocalPipelineRoute[] = [];
+          for (const pipeline of MutableHashMap.values(state.pipelines)) {
+            for (const query of Pipelines.parsePipelineSql(
+              pipeline.props.sql,
+            )) {
+              if (query.stream !== stream.attributes.name) continue;
+              const sink = [...MutableHashMap.values(state.pipelineSinks)].find(
+                (s) => s.attributes.name === query.sink,
+              );
+              if (!sink || sink.props.type !== "r2")
+                return yield* new ConfigError({
+                  subtag: "PIPELINES_SINK_MISSING",
+                  message: `Local pipeline sink ${query.sink} is not registered`,
+                  detail: b,
+                });
+              const props = sink.props;
+              routes.push({
+                query,
+                bucket: props.config.bucket,
+                path: props.config.path,
+                compression:
+                  props.format?.type === "json"
+                    ? props.format.compression
+                    : undefined,
+                filePrefix: props.config.fileNaming?.prefix,
+                fileSuffix: props.config.fileNaming?.suffix,
+                timePattern: props.config.partitioning?.timePattern,
+              });
+            }
+          }
+          return yield* Pipelines.local({
+            binding: b.name,
+            stream: stream.attributes.name,
+            enabled: stream.attributes.workerBindingEnabled,
+            fields: stream.props.schema?.fields,
+            routes,
+          });
+        }),
+      );
+    }
     case "plain_text":
       return Text.local(b.name, b.text);
     case "queue": {
@@ -168,6 +239,9 @@ export const toRuntimeBinding = Effect.fn(function* (
       return Queue.local({
         binding: b.name,
         queueName: b.queueName,
+        persistenceKey: b.queueId,
+        deliveryDelay: b.localQueueSettings?.deliveryDelay,
+        messageRetentionPeriod: b.localQueueSettings?.messageRetentionPeriod,
       });
     }
     case "r2_bucket":
@@ -175,7 +249,13 @@ export const toRuntimeBinding = Effect.fn(function* (
       // (R2 has no opaque id — the name is the identity); a real name is a
       // live bucket the dev worker proxies to.
       return isLocalId(b.bucketName)
-        ? R2Bucket.local({ binding: b.name, id: b.bucketName })
+        ? R2Bucket.local({
+            binding: b.name,
+            id: b.bucketName,
+            lockRules: b.lockRules,
+            lifecycleRules: b.lifecycleRules,
+            storageClass: b.storageClass,
+          })
         : R2Bucket.remote(b.name, b.bucketName, b.jurisdiction);
     case "ratelimit":
       return RateLimit.local({
@@ -240,8 +320,47 @@ export const toRuntimeBinding = Effect.fn(function* (
         : StreamSim.local({ binding: b.name });
     case "text_blob":
       return Data.local(b.name, Buffer.from(b.part));
-    case "vectorize":
-      return Vectorize.remote(b.name, b.indexName);
+    case "vectorize": {
+      if (!isLocalId(b.indexName)) return Vectorize.remote(b.name, b.indexName);
+      const state = yield* Effect.serviceOption(LocalRuntimeState);
+      if (!b.dimensions)
+        return yield* new WorkerValidationError({
+          message: "Local Vectorize binding requires dimensions",
+          value: b,
+        });
+      const dimensions = b.dimensions;
+      // Read mutable metadata wiring when workerd starts, including restarts
+      // requested by a sibling MetadataIndex resource.
+      return Effect.suspend(() => {
+        const metadataIndexes: Record<string, "string" | "number" | "boolean"> =
+          Option.isSome(state) ? {} : { ...b.metadataIndexes };
+        const metadataIndexVersions: Record<string, string> = Option.isSome(
+          state,
+        )
+          ? {}
+          : { ...b.metadataIndexVersions };
+        if (Option.isSome(state)) {
+          for (const metadata of MutableHashMap.values(
+            state.value.vectorizeMetadataIndexes,
+          )) {
+            if (metadata.indexName === b.indexName) {
+              metadataIndexes[metadata.propertyName] = metadata.indexType;
+              if (metadata.mutationId)
+                metadataIndexVersions[metadata.propertyName] =
+                  metadata.mutationId;
+            }
+          }
+        }
+        return Vectorize.local({
+          binding: b.name,
+          indexName: b.indexName,
+          dimensions,
+          metric: b.metric,
+          metadataIndexes,
+          metadataIndexVersions,
+        });
+      });
+    }
     case "version_metadata":
       return VersionMetadata.local(b.name);
     case "vpc_service":
@@ -326,6 +445,19 @@ export const materializeRuntimeBindings = Effect.fn(function* (
       ? [Json.local("ALCHEMY_DEV_ACCESS", config.devAccess)]
       : []),
   ];
+  const pipelinesState = yield* Effect.serviceOption(LocalRuntimeState);
+  if (Option.isSome(pipelinesState))
+    pipelinesState.value.pipelineWorkerStreams.set(
+      config.name,
+      config.bindingDescriptors
+        .filter(
+          (descriptor) =>
+            descriptor.type === "pipelines" && isLocalId(descriptor.pipeline),
+        )
+        .map((descriptor) =>
+          descriptor.type === "pipelines" ? descriptor.pipeline : "",
+        ),
+    );
   for (const descriptor of config.bindingDescriptors) {
     if (descriptor.type === "self_url") {
       // Lowered here rather than in `toRuntimeBinding` — only the caller

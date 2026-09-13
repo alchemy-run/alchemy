@@ -6,6 +6,8 @@ import * as Test from "@/Test/Alchemy";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
+import * as Data from "effect/Data";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -49,23 +51,36 @@ const freshConn = HttpClient.mapRequest(
   HttpClientRequest.setHeader("connection", "close"),
 );
 
+class WorkerResponseNotReady extends Data.TaggedError(
+  "WorkerResponseNotReady",
+)<{ status: number }> {}
+
 test(
   "durable object methods can use binding clients",
   Effect.gen(function* () {
     const { url } = yield* stack;
     const client = yield* HttpClient.HttpClient;
 
-    const res = yield* client.post(`${url}/roundtrip`).pipe(
-      Effect.flatMap((res) =>
-        res.status === 200
-          ? Effect.succeed(res)
-          : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
+    // Pre-create serves a text placeholder with HTTP200 until the final
+    // script reaches this edge. Wait for the fixture's JSON response.
+    const body = (yield* client.post(`${url}/roundtrip`).pipe(
+      Effect.flatMap(
+        Effect.fn(function* (res) {
+          if (
+            res.status !== 200 ||
+            !res.headers["content-type"]?.includes("application/json")
+          ) {
+            return yield* new WorkerResponseNotReady({ status: res.status });
+          }
+          return yield* res.json;
+        }),
       ),
-      Effect.retry({ schedule: readinessSchedule, times: 15 }),
-    );
-
-    expect(res.status).toBe(200);
-    const body = (yield* res.json) as { value: string };
+      Effect.retry({
+        while: (e) => e._tag === "WorkerResponseNotReady",
+        schedule: readinessSchedule,
+        times: 10,
+      }),
+    )) as { value: string };
     expect(body.value).toBe("ok");
   }).pipe(logLevel),
   { timeout: 60_000 },
@@ -556,6 +571,7 @@ export default { async fetch() { return new Response("v4"); } };
     "adopts a durable object class created outside alchemy",
     (scratch) =>
       Effect.gen(function* () {
+        yield* scratch.destroy();
         const { accountId } = yield* yield* CloudflareEnvironment;
 
         // Phase 1: provision a worker + `Counter` DO class straight through the
@@ -584,6 +600,7 @@ export default { async fetch() { return new Response("v4"); } };
             ],
             migrations: {
               newSqliteClasses: ["Counter"],
+              newTag: "external-v1",
             },
             // Match Alchemy's default compatibility date so adoption is a
             // pure class-reuse with no compat-date churn. Old dates predate
@@ -597,6 +614,34 @@ export default { async fetch() { return new Response("v4"); } };
             }),
           ],
         });
+
+        const mismatch = yield* workers
+          .putScript({
+            accountId,
+            scriptName: physicalName,
+            metadata: {
+              mainModule: "main.js",
+              compatibilityDate: "2026-03-17",
+              bindings: [
+                {
+                  type: "durable_object_namespace",
+                  name: "Counter",
+                  className: "Counter",
+                },
+              ],
+              migrations: { oldTag: "wrong-tag", newTag: "external-v2" },
+            },
+            files: [
+              new File([hostWorkerScript], "main.js", {
+                type: "application/javascript+module",
+              }),
+            ],
+          })
+          .pipe(Effect.result);
+        expect(Result.isFailure(mismatch)).toBe(true);
+        if (Result.isFailure(mismatch)) {
+          expect(mismatch.failure._tag).toBe("MigrationTagMismatch");
+        }
 
         // Phase 2: deploy an async Alchemy Worker (inline script) over the same
         // physical name with a matching `Counter` binding, opting in to the

@@ -5,7 +5,6 @@ import * as Stream from "effect/Stream";
 
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
-import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { recordsEqual } from "../../Util/equal.ts";
@@ -183,28 +182,19 @@ export const AccountResourceTagsProvider = () =>
         );
     }),
 
-    diff: Effect.fn(function* ({ olds = {}, news }) {
-      const o = olds as Partial<AccountResourceTagsProps>;
-      const n = news as AccountResourceTagsProps;
-      if (o.resourceType !== undefined && o.resourceType !== n.resourceType) {
+    diff: Effect.fn(function* ({ olds, news, output }) {
+      if (!isResolved(news)) return undefined;
+      const previous = output ?? (olds && isResolved(olds) ? olds : undefined);
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (output && output.accountId !== accountId)
         return { action: "replace" } as const;
-      }
-      // resourceId / workerId are Input<string>; by diff time persisted
-      // olds are concrete strings — compare only when both sides are.
       if (
-        typeof o.resourceId === "string" &&
-        typeof n.resourceId === "string" &&
-        o.resourceId !== n.resourceId
-      ) {
+        previous &&
+        (previous.resourceType !== news.resourceType ||
+          previous.resourceId !== news.resourceId ||
+          previous.workerId !== news.workerId)
+      )
         return { action: "replace" } as const;
-      }
-      if (
-        typeof o.workerId === "string" &&
-        typeof n.workerId === "string" &&
-        o.workerId !== n.workerId
-      ) {
-        return { action: "replace" } as const;
-      }
     }),
 
     read: Effect.fn(function* ({ output, olds }) {
@@ -312,9 +302,7 @@ const narrowTags = (tags: Record<string, unknown>): Record<string, string> =>
   );
 
 /** Resolve `Input<string>` tag values (already concrete after Plan). */
-const resolveTags = (
-  tags: Record<string, Input<string>>,
-): Record<string, string> =>
+const resolveTags = (tags: Record<string, string>): Record<string, string> =>
   Object.fromEntries(
     Object.entries(tags).map(([k, v]) => [k, v as string] as const),
   );

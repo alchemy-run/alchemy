@@ -1,3 +1,4 @@
+import { listAllApps } from "./lookup.ts";
 import * as realtimeKit from "@distilled.cloud/cloudflare/realtime-kit";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
@@ -57,13 +58,19 @@ export type PresetConfig = {
    */
   media: {
     screenshare: { frameRate: number; quality: MediaQuality };
-    video: { frameRate: number; quality: MediaQuality };
+    video: {
+      frameRate: number;
+      quality: MediaQuality;
+      /** Enable simulcast video publishing. */ simulcast?: boolean;
+    };
     audio?: { enableHighBitrate?: boolean; enableStereo?: boolean };
   };
   /**
    * Meeting layout this preset applies to.
    */
   viewType: ViewType;
+  /** Allowed livestream viewer resolutions. */
+  livestreamViewerQualities?: number[];
 };
 
 /**
@@ -104,6 +111,10 @@ export type PresetUi = {
       videoBg: string;
       warning: string;
     };
+    /** Custom font family for meeting UI. */
+    fontFamily?: string;
+    /** Google Fonts family for meeting UI. */
+    googleFont?: string;
     logo: string;
     spacingBase: number;
     theme: Theme;
@@ -167,6 +178,14 @@ export type PresetPermissions = {
   showParticipantList: boolean;
   waitingRoomType: WaitingRoomType;
   isRecorder?: boolean;
+  /** Allow accepting stage requests. */
+  acceptStageRequests?: boolean;
+  /** Permission to join the stage. */
+  stageAccess?: CanProduce;
+  /** Enable stage participation. */
+  stageEnabled?: boolean;
+  /** Enable transcription. */
+  transcriptionEnabled?: boolean;
 };
 
 export type PresetProps = {
@@ -443,7 +462,7 @@ export const PresetProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const appId = news.appId as string;
-      const name = yield* createPresetName(id, news.name);
+      const name = yield* createPresetName(id, news.name ?? output?.name);
       const desired = {
         name,
         config: news.config ?? defaultRealtimeKitPresetConfig(),
@@ -578,40 +597,6 @@ const LIST_PER_PAGE = 100;
  * not generated as a paginated method, so fetch the first page, derive the
  * page count from `paging.totalCount`, then fan out the remaining pages.
  */
-const listAllApps = (accountId: string) =>
-  Effect.gen(function* () {
-    const first = yield* realtimeKit.getApp({
-      accountId,
-      pageNo: 1,
-      perPage: LIST_PER_PAGE,
-    });
-    const apps = (first.data ?? []).filter(
-      (a): a is NonNullable<typeof a> => a !== null,
-    );
-    const total = first.paging?.totalCount ?? apps.length;
-    const pages = Math.ceil(total / LIST_PER_PAGE);
-    if (pages <= 1) return apps;
-    const rest = yield* Effect.forEach(
-      Array.from({ length: pages - 1 }, (_, i) => i + 2),
-      (pageNo) =>
-        realtimeKit
-          .getApp({ accountId, pageNo, perPage: LIST_PER_PAGE })
-          .pipe(
-            Effect.map((res) =>
-              (res.data ?? []).filter(
-                (a): a is NonNullable<typeof a> => a !== null,
-              ),
-            ),
-          ),
-      { concurrency: 10 },
-    );
-    return [...apps, ...rest.flat()];
-  });
-
-/**
- * Exhaustively enumerate every preset within a single app, paginating off
- * `paging.totalCount` the same way as {@link listAllApps}.
- */
 const listAllPresets = (accountId: string, appId: string) =>
   Effect.gen(function* () {
     const first = yield* realtimeKit.getPreset({
@@ -654,9 +639,9 @@ const getPreset = (accountId: string, appId: string, presetId: string) =>
  * carry the same name, pick the oldest for determinism.
  */
 const findByName = (accountId: string, appId: string, name: string) =>
-  realtimeKit.getPreset({ accountId, appId, perPage: 100 }).pipe(
+  listAllPresets(accountId, appId).pipe(
     Effect.map((list) =>
-      [...list.data]
+      [...list]
         .filter((p) => p.name === name)
         .sort((a, b) => (a.createdAt ?? "").localeCompare(b.createdAt ?? ""))
         .at(0),
@@ -751,6 +736,7 @@ const toAttributes = (
       video: {
         frameRate: preset.config.media.video.frameRate,
         quality: preset.config.media.video.quality as MediaQuality,
+        simulcast: preset.config.media.video.simulcast ?? undefined,
       },
       ...(preset.config.media.audio
         ? {
@@ -769,6 +755,8 @@ const toAttributes = (
         : {}),
     },
     viewType: preset.config.viewType as ViewType,
+    livestreamViewerQualities:
+      preset.config.livestreamViewerQualities ?? undefined,
   },
   ui: {
     designTokens: {
@@ -784,6 +772,8 @@ const toAttributes = (
         videoBg: preset.ui.designTokens.colors.videoBg,
         warning: preset.ui.designTokens.colors.warning,
       },
+      fontFamily: preset.ui.designTokens.fontFamily ?? undefined,
+      googleFont: preset.ui.designTokens.googleFont ?? undefined,
       logo: preset.ui.designTokens.logo ?? "",
       spacingBase: preset.ui.designTokens.spacingBase,
       theme: preset.ui.designTokens.theme as Theme,
@@ -792,6 +782,14 @@ const toAttributes = (
   },
   permissions: preset.permissions
     ? {
+        acceptStageRequests:
+          preset.permissions.acceptStageRequests ?? undefined,
+        stageAccess: (preset.permissions.stageAccess ?? undefined) as
+          | CanProduce
+          | undefined,
+        stageEnabled: preset.permissions.stageEnabled ?? undefined,
+        transcriptionEnabled:
+          preset.permissions.transcriptionEnabled ?? undefined,
         acceptWaitingRequests: preset.permissions.acceptWaitingRequests,
         canAcceptProductionRequests:
           preset.permissions.canAcceptProductionRequests,

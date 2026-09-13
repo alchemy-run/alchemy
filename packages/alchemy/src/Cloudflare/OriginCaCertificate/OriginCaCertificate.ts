@@ -4,6 +4,7 @@ import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 
+import { isResolved } from "../../Diff.ts";
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -204,23 +205,22 @@ export const OriginCaCertificateProvider = () =>
       return rows.flat();
     }),
 
-    diff: Effect.fn(function* ({ olds, news }) {
-      const o = olds as Props | undefined;
-      const n = news as Props;
-      // No prior props to compare against — let the engine decide.
-      if (o?.csr === undefined) return undefined;
-      // There is no update API for Origin CA certificates — every change
-      // is a replacement.
+    diff: Effect.fn(function* ({ olds, news, output }) {
+      if (!isResolved(news)) return;
+      const previous = output ?? olds;
+      if (!previous) return;
+      // GET omits the CSR; compare it only when prior state knows it.
       if (
-        o.csr !== n.csr ||
-        o.requestType !== n.requestType ||
-        (o.requestedValidity ?? DEFAULT_VALIDITY) !==
-          (n.requestedValidity ?? DEFAULT_VALIDITY) ||
-        !sameHostnames(o.hostnames, n.hostnames)
-      ) {
+        (previous.csr && previous.csr.trim() !== news.csr.trim()) ||
+        (previous.requestType !== undefined &&
+          previous.requestType !== news.requestType) ||
+        (previous.requestedValidity !== undefined &&
+          previous.requestedValidity !==
+            (news.requestedValidity ?? DEFAULT_VALIDITY)) ||
+        (previous.hostnames !== undefined &&
+          !sameHostnames(previous.hostnames, news.hostnames))
+      )
         return { action: "replace" } as const;
-      }
-      return undefined;
     }),
 
     read: Effect.fn(function* ({ output, olds }) {

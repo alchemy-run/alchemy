@@ -1,3 +1,4 @@
+import { listAllApps } from "@/Cloudflare/RealtimeKit/lookup";
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Provider from "@/Provider";
@@ -177,6 +178,8 @@ test.provider(
 
       const provider = yield* Provider.findProvider(Cloudflare.RealtimeKit.App);
       const all = yield* provider.list();
+      const paged = yield* listAllApps(deployed.accountId, 1);
+      expect(paged.some((app) => app.id === deployed.appId)).toBe(true);
 
       expect(all.some((a) => a.appId === deployed.appId)).toBe(true);
       const found = all.find((a) => a.appId === deployed.appId);

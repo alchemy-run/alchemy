@@ -395,11 +395,11 @@ export const ListProvider = () =>
 
       // Sync description — diff observed cloud state against desired and
       // skip the API call entirely on a no-op.
-      if ((observed.description ?? undefined) !== news.description) {
+      if ((observed.description ?? "") !== (news.description ?? "")) {
         observed = yield* rules.updateList({
           accountId: acct,
           listId: observed.id,
-          description: news.description,
+          description: news.description ?? "",
         });
       }
 
@@ -549,7 +549,7 @@ const awaitBulkOperation = (accountId: string, operationId: string) =>
         Effect.repeat({
           schedule: Schedule.spaced("2 seconds"),
           until: (op) => op.status === "completed" || op.status === "failed",
-          times: 90,
+          times: 10,
         }),
       );
     if (operation.status !== "completed") {

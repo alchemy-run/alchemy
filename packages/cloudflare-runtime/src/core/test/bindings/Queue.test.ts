@@ -737,56 +737,67 @@ layer(localRuntimeLayer, { excludeTestServices: true })(
         }),
     );
 
-    it.effect(
-      "starts a consumer whose dead letter queue has no consumer anywhere",
-      () =>
-        Effect.gen(function* () {
-          // Regression test for alchemy-run/alchemy#988: a DLQ that this worker
-          // does not itself consume resolves to the registry proxy. The subscribe
-          // used to happen inside this plugin's `defer`, racing the RegistryProxy
-          // defer that decides whether to emit the proxy service at all — workerd
-          // then failed to start with a binding referencing the undefined service
-          // `cloudflare-runtime:registry-proxy`.
-          const worker = yield* startTestWorker({
-            name: "queues-orphan-dlq",
-            compatibilityDate: "2024-11-20",
-            compatibilityFlags: [],
-            modules: [
-              { name: "main.js", type: "ESModule", content: QUEUE_SCRIPT },
-            ],
-            bindings: [
-              Queue.local({ binding: "QUEUE", queueName: "orphan-dlq-src" }),
-            ],
-            queueConsumers: [
-              {
-                queueName: "orphan-dlq-src",
-                maxBatchTimeout: 0,
-                maxRetries: 0,
-                deadLetterQueue: "orphan-dlq",
-              },
-            ],
-          });
+    it.effect("buffers dead letters until their consumer starts", () =>
+      Effect.gen(function* () {
+        // Regression test for alchemy-run/alchemy#988: a DLQ that this worker
+        // does not itself consume resolves to the registry proxy. The subscribe
+        // used to happen inside this plugin's `defer`, racing the RegistryProxy
+        // defer that decides whether to emit the proxy service at all — workerd
+        // then failed to start with a binding referencing the undefined service
+        // `cloudflare-runtime:registry-proxy`.
+        const worker = yield* startTestWorker({
+          name: "queues-orphan-dlq",
+          compatibilityDate: "2024-11-20",
+          compatibilityFlags: [],
+          modules: [
+            { name: "main.js", type: "ESModule", content: QUEUE_SCRIPT },
+          ],
+          bindings: [
+            Queue.local({ binding: "QUEUE", queueName: "orphan-dlq-src" }),
+          ],
+          queueConsumers: [
+            {
+              queueName: "orphan-dlq-src",
+              maxBatchTimeout: 0,
+              maxRetries: 0,
+              deadLetterQueue: "orphan-dlq",
+            },
+          ],
+        });
 
-          // Exhaust retries: the dead-lettered message routes to the proxy, which
-          // accepts and drops it because no consumer of "orphan-dlq" is running.
-          yield* worker.fetch("/send", {
-            method: "POST",
-            body: JSON.stringify({ binding: "QUEUE", body: { failUntil: 99 } }),
-          });
-          yield* pollMessages(worker, (r) => r.length >= 1);
+        // Exhaust retries while the dead-letter consumer is offline.
+        yield* worker.fetch("/send", {
+          method: "POST",
+          body: JSON.stringify({ binding: "QUEUE", body: { failUntil: 99 } }),
+        });
+        yield* pollMessages(worker, (r) => r.length >= 1);
 
-          // The worker stays functional after the drop.
-          yield* worker.fetch("/send", {
-            method: "POST",
-            body: JSON.stringify({ binding: "QUEUE", body: "still-alive" }),
-          });
-          const received = yield* pollMessages(worker, (r) =>
-            r.some((m) => m.body === "still-alive"),
-          );
-          expect(
-            received.every((message) => message.queue === "orphan-dlq-src"),
-          ).toBe(true);
-        }),
+        // The worker stays functional while its dead letters are buffered.
+        yield* worker.fetch("/send", {
+          method: "POST",
+          body: JSON.stringify({ binding: "QUEUE", body: "still-alive" }),
+        });
+        const received = yield* pollMessages(worker, (r) =>
+          r.some((m) => m.body === "still-alive"),
+        );
+        expect(
+          received.every((message) => message.queue === "orphan-dlq-src"),
+        ).toBe(true);
+        const dlq = yield* startTestWorker({
+          name: "late-dlq-consumer",
+          compatibilityDate: "2024-11-20",
+          compatibilityFlags: [],
+          modules: [
+            { name: "main.js", type: "ESModule", content: QUEUE_SCRIPT },
+          ],
+          bindings: [],
+          queueConsumers: [
+            { queueName: "orphan-dlq", maxBatchTimeout: 0, maxRetries: 0 },
+          ],
+        });
+        const deadLetters = yield* pollMessages(dlq, (r) => r.length >= 1);
+        expect(deadLetters[0]?.body).toEqual({ failUntil: 99 });
+      }),
     );
 
     it.effect(
@@ -1368,16 +1379,11 @@ layer(localRuntimeLayer, {
   );
 
   it.effect(
-    "settles send() when no consumer of the queue is running anywhere",
+    "retains producer messages until a consumer starts",
     () =>
       Effect.gen(function* () {
-        // Producer only: the binding routes through the registry proxy,
-        // which has no target and accepts-and-drops (with a `[registry]`
-        // warning). The drop must still settle the producer's `send()` —
-        // the stub previously responded without draining the request body,
-        // and workerd's queue client only settles once the body has been
-        // consumed, so `send()` (and this fetch) hung forever
-        // (alchemy-run/alchemy#1109).
+        // The durable producer spool acknowledges offline sends and retries
+        // forwarding once the registry publishes a consumer.
         const producer = yield* startTestWorker({
           name: "drop-producer",
           compatibilityDate: "2024-11-20",
@@ -1398,8 +1404,65 @@ layer(localRuntimeLayer, {
           .fetch("/", { method: "POST" })
           .pipe(Effect.timeout("15 seconds"));
         expect(res.status).toBe(204);
+        yield* Effect.sleep("1500 millis");
+        const consumer = yield* startTestWorker({
+          name: "late-consumer",
+          compatibilityDate: "2024-11-20",
+          compatibilityFlags: [],
+          modules: [
+            { name: "main.js", type: "ESModule", content: QUEUE_SCRIPT },
+          ],
+          bindings: [],
+          queueConsumers: [
+            { queueName: "nobody-consumes", maxBatchTimeout: 0 },
+          ],
+        });
+        const received = yield* pollMessages(consumer, (r) => r.length >= 1);
+        expect(received[0]?.body).toEqual({ hello: "from-producer" });
+        expect(received[0]?.attempts).toBe(1);
       }),
     { timeout: 60_000 },
+  );
+
+  it.effect(
+    "preserves content types while a producer waits for its consumer",
+    () =>
+      Effect.gen(function* () {
+        const producer = yield* startTestWorker({
+          name: "offline-types-producer",
+          compatibilityDate: "2024-11-20",
+          compatibilityFlags: [],
+          modules: [
+            { name: "main.js", type: "ESModule", content: QUEUE_SCRIPT },
+          ],
+          bindings: [
+            Queue.local({ binding: "QUEUE", queueName: "offline-types" }),
+          ],
+        });
+        yield* producer.fetch("/sendTypes", { method: "POST" });
+        yield* Effect.sleep("1500 millis");
+        const consumer = yield* startTestWorker({
+          name: "offline-types-consumer",
+          compatibilityDate: "2024-11-20",
+          compatibilityFlags: [],
+          modules: [
+            { name: "main.js", type: "ESModule", content: QUEUE_SCRIPT },
+          ],
+          bindings: [],
+          queueConsumers: [{ queueName: "offline-types", maxBatchTimeout: 0 }],
+        });
+        const received = yield* pollMessages(consumer, (r) => r.length >= 4);
+        const bodies = received.map((message) => message.body);
+        expect(bodies).toContainEqual("msg-text");
+        expect(bodies).toContainEqual([{ message: "msg-json" }]);
+        expect(bodies).toContainEqual({
+          $type: "ArrayBuffer",
+          value: [0, 1, 2, 3],
+        });
+        expect(bodies).toContainEqual({ $type: "Date", value: 1600000000000 });
+        expect(received.every((message) => message.attempts === 1)).toBe(true);
+      }),
+    { timeout: 30_000 },
   );
 
   it.effect(

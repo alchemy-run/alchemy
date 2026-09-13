@@ -1,0 +1,48 @@
+{
+  "service": [
+    "iam",
+    "resource_sharing",
+    "addressing",
+    "magic_transit",
+    "ddos_protection"
+  ],
+  "resources": [
+    "Iam.ResourceGroup",
+    "Iam.UserGroup",
+    "Iam.UserGroupMembership",
+    "ResourceSharing.Share",
+    "ResourceSharing.ShareResource",
+    "ResourceSharing.ShareRecipient",
+    "Addressing.AddressMap",
+    "Addressing.Prefix",
+    "Addressing.BgpPrefix",
+    "Addressing.PrefixDelegation",
+    "Addressing.ServiceBinding",
+    "MagicTransit.App",
+    "MagicTransit.Site",
+    "MagicTransit.SiteLan",
+    "MagicTransit.SiteWan",
+    "MagicTransit.SiteAcl",
+    "MagicTransit.GreTunnel",
+    "MagicTransit.IpsecTunnel",
+    "MagicTransit.StaticRoute",
+    "DdosProtection.AllowlistEntry",
+    "DdosProtection.SynProtectionFilter",
+    "DdosProtection.TcpFlowProtectionFilter",
+    "DdosProtection.SynProtectionRule",
+    "DdosProtection.TcpFlowProtectionRule"
+  ],
+  "testsPassed": 37,
+  "skippedTests": 27,
+  "testCommand": "timeout 240 pnpm test test/Cloudflare/{Iam,Addressing,ResourceSharing,MagicTransit,DdosProtection}/*.test.ts --profile testing --timeout 120000",
+  "files": "See service-semantic-zero.json, source/test directories for five assigned services",
+  "patches": {
+    "iam": [
+      "createResourceGroup",
+      "getResourceGroup",
+      "updateResourceGroup",
+      "listResourceGroups"
+    ]
+  },
+  "notes": "Real deployment tests only. Feature-coverage static review distinguished from gated live cases in semantic-zero.md."
+}

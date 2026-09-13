@@ -170,7 +170,7 @@ test.provider.skipIf(!!process.env.FAST)(
   // Two sequential out-of-band verifies (post-create, post-update) each ride
   // out a read-replica lag that can run ~90s under full-suite parallel load;
   // the 120s default can't hold both plus the deploys/destroys.
-  { timeout: 240_000 },
+  { timeout: 90_000 },
 );
 
 test.provider(
@@ -213,7 +213,7 @@ test.provider(
     }).pipe(logLevel),
   // Same eventual-consistency budget as above: the post-replace verify plus
   // two gone-assertions can exceed the 120s default under parallel load.
-  { timeout: 240_000 },
+  { timeout: 90_000 },
 );
 
 // Canonical `list()` test (account collection): deploy a variant, resolve the
@@ -221,36 +221,24 @@ test.provider(
 // deployed variant appears in the exhaustively-enumerated result. Bracketed by
 // `stack.destroy()` at both ends so the suite leaves no residue.
 //
-// SKIP-GATED on `CLOUDFLARE_TEST_IMAGES_LIST` until a distilled patch lands.
-// distilled mis-types the list-variants response as a single variant, but the
-// real body is a keyed `variants` map, so the strict decode fails and the GET
-// surfaces a `CloudflareHttpError` (status 200, statusText "Schema decode
-// failed"). Recovering from that catch-all is forbidden by the Typed Error
-// Doctrine, so the fix is the distilled response-schema patch in the agent
-// report. Once applied (and distilled `lib` rebuilt) this passes unchanged;
-// set `CLOUDFLARE_TEST_IMAGES_LIST=1` to run it.
-test.provider.skipIf(!process.env.CLOUDFLARE_TEST_IMAGES_LIST)(
-  "list enumerates the deployed variant",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
+test.provider("list enumerates the deployed variant", (stack) =>
+  Effect.gen(function* () {
+    yield* stack.destroy();
 
-      const deployed = yield* stack.deploy(
-        Cloudflare.Images.Variant("alchemytestlistvariant", {
-          fit: "cover",
-          width: 120,
-          height: 120,
-        }).pipe(adopt(true)),
-      );
+    const deployed = yield* stack.deploy(
+      Cloudflare.Images.Variant("alchemytestlistvariant", {
+        fit: "cover",
+        width: 120,
+        height: 120,
+      }).pipe(adopt(true)),
+    );
 
-      const provider = yield* Provider.findProvider(Cloudflare.Images.Variant);
-      const all = yield* provider.list();
+    const provider = yield* Provider.findProvider(Cloudflare.Images.Variant);
+    const all = yield* provider.list();
 
-      expect(Array.isArray(all)).toBe(true);
-      expect(all.some((v) => v.variantName === deployed.variantName)).toBe(
-        true,
-      );
+    expect(Array.isArray(all)).toBe(true);
+    expect(all.some((v) => v.variantName === deployed.variantName)).toBe(true);
 
-      yield* stack.destroy();
-    }).pipe(logLevel),
+    yield* stack.destroy();
+  }).pipe(logLevel),
 );

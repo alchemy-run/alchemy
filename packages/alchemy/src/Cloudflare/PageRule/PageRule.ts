@@ -4,6 +4,7 @@ import * as Predicate from "effect/Predicate";
 
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
+import { isResolved } from "../../Diff.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
@@ -213,19 +214,12 @@ export const PageRuleProvider = () =>
       return rows.flat();
     }),
 
-    diff: Effect.fn(function* ({ olds = {}, news }) {
-      const o = olds as Props;
-      const n = news as Props;
-      // zoneId is Input<string>; compare only once both are concrete.
-      if (
-        typeof o.zoneId === "string" &&
-        typeof n.zoneId === "string" &&
-        o.zoneId !== n.zoneId
-      ) {
+    diff: Effect.fn(function* ({ olds, news, output }) {
+      if (!isResolved(news)) return undefined;
+      const oldZoneId = output?.zoneId ?? olds?.zoneId;
+      if (typeof oldZoneId === "string" && oldZoneId !== news.zoneId) {
         return { action: "replace" } as const;
       }
-      // Everything else (target, actions, priority, status) is mutable
-      // via PUT — let the engine apply the default update logic.
       return undefined;
     }),
 

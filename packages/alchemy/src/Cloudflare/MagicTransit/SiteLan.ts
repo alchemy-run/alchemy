@@ -1,3 +1,4 @@
+import { removedConfiguration, sameConfiguration } from "./configuration.ts";
 import * as magicTransit from "@distilled.cloud/cloudflare/magic-transit";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
@@ -53,6 +54,8 @@ export interface MagicSiteLanStaticAddressing {
   };
   /** DHCP server configuration. */
   dhcpServer?: {
+    /** DHCP options advertised to LAN clients. */
+    dhcpOptions?: magicTransit.SitesLansCreateRequestStaticAddressingDhcpServerDhcpOptionsList;
     /** End of the DHCP address pool. */
     dhcpPoolEnd?: string;
     /** Start of the DHCP address pool. */
@@ -74,7 +77,7 @@ export interface MagicSiteLanProps {
   /**
    * The physical port number on the connector this LAN is attached to.
    */
-  physport: number;
+  physport?: number;
   /**
    * The name of the LAN. If omitted, a unique name is generated from the
    * app, stage, and logical ID.
@@ -119,6 +122,18 @@ export interface MagicSiteLanProps {
 }
 
 export interface MagicSiteLanAttributes {
+  /** Observed isBreakout configuration. */
+  isBreakout?: magicTransit.GetSiteLanResponse["isBreakout"];
+  /** Observed isPrioritized configuration. */
+  isPrioritized?: magicTransit.GetSiteLanResponse["isPrioritized"];
+  /** Observed nat configuration. */
+  nat?: magicTransit.GetSiteLanResponse["nat"];
+  /** Observed routedSubnets configuration. */
+  routedSubnets?: magicTransit.GetSiteLanResponse["routedSubnets"];
+  /** Observed staticAddressing configuration. */
+  staticAddressing?: magicTransit.GetSiteLanResponse["staticAddressing"];
+  /** Observed bondId configuration. */
+  bondId?: magicTransit.GetSiteLanResponse["bondId"];
   /** Cloudflare-assigned identifier of the LAN. */
   lanId: string;
   /** The site the LAN belongs to. */
@@ -194,7 +209,37 @@ export const MagicSiteLanProvider = () =>
   Provider.succeed(MagicSiteLan, {
     stables: ["lanId", "siteId", "accountId"],
 
-    diff: Effect.fn(function* ({ olds, news }) {
+    diff: Effect.fn(function* ({ olds, news, output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (output && output.accountId !== accountId)
+        return { action: "replace" } as const;
+      if (!isResolved(news)) return undefined;
+      if (
+        olds &&
+        isResolved(olds) &&
+        [
+          "vlanTag",
+          "isBreakout",
+          "isPrioritized",
+          "nat",
+          "routedSubnets",
+          "staticAddressing",
+          "bondId",
+        ].some((key) =>
+          removedConfiguration(
+            olds[key as keyof typeof olds],
+            news[key as keyof typeof news],
+          ),
+        )
+      )
+        return { action: "replace", deleteFirst: true } as const;
+      if ((output || olds) && (output?.siteId ?? olds?.siteId) !== news.siteId)
+        return { action: "replace", deleteFirst: true } as const;
+      if (
+        (output || olds) &&
+        (output?.haLink ?? olds?.haLink ?? false) !== (news.haLink ?? false)
+      )
+        return { action: "replace", deleteFirst: true } as const;
       if (!isResolved(news)) return undefined;
       if (olds === undefined) return undefined;
       // LANs cannot move between sites.
@@ -237,7 +282,7 @@ export const MagicSiteLanProvider = () =>
       const { accountId } = yield* yield* CloudflareEnvironment;
       // Inputs have been resolved to concrete strings by Plan.
       const siteId = news.siteId as string;
-      const name = yield* createLanName(id, news.name);
+      const name = yield* createLanName(id, news.name ?? output?.name);
 
       // Observe — the id on `output` is a hint; fall back to a name scan.
       let observed = output?.lanId
@@ -293,10 +338,11 @@ export const MagicSiteLanProvider = () =>
           (observed.nat?.staticPrefix ?? undefined) !==
             news.nat.staticPrefix) ||
         (news.routedSubnets !== undefined &&
-          !sameRoutedSubnets(observed.routedSubnets, news.routedSubnets)) ||
-        (news.staticAddressing !== undefined &&
-          (observed.staticAddressing?.address ?? undefined) !==
-            news.staticAddressing.address) ||
+          !sameConfiguration(
+            observed.routedSubnets ?? [],
+            news.routedSubnets,
+          )) ||
+        !sameConfiguration(observed.staticAddressing, news.staticAddressing) ||
         (news.bondId !== undefined &&
           (observed.bondId ?? undefined) !== news.bondId);
       if (dirty) {
@@ -377,25 +423,7 @@ export const MagicSiteLanProvider = () =>
     }),
   });
 
-interface ObservedLan {
-  id?: string | null;
-  name?: string | null;
-  physport?: number | null;
-  vlanTag?: number | null;
-  haLink?: boolean | null;
-  isBreakout?: boolean | null;
-  isPrioritized?: boolean | null;
-  nat?: { staticPrefix?: string | null } | null;
-  routedSubnets?:
-    | {
-        nextHop: string;
-        prefix: string;
-        nat?: { staticPrefix?: string | null } | null;
-      }[]
-    | null;
-  staticAddressing?: { address: string } | null;
-  bondId?: number | null;
-}
+type ObservedLan = magicTransit.GetSiteLanResponse;
 
 /**
  * Read a LAN by id, mapping "gone" (`SiteLanNotFound`, HTTP 404) to
@@ -412,9 +440,10 @@ const getLan = (accountId: string, siteId: string, lanId: string) =>
  * pick the first match deterministically by id.
  */
 const findByName = (accountId: string, siteId: string, name: string) =>
-  magicTransit.listSiteLans({ accountId, siteId }).pipe(
+  magicTransit.listSiteLans.items({ accountId, siteId }).pipe(
+    Stream.runCollect,
     Effect.map((r): ObservedLan | undefined =>
-      r.result
+      Array.from(r)
         .filter((lan) => lan.name === name)
         .sort((a, b) => (a.id ?? "").localeCompare(b.id ?? ""))
         .at(0),
@@ -443,6 +472,12 @@ const toAttributes = (
   siteId: string,
   accountId: string,
 ): MagicSiteLanAttributes => ({
+  isBreakout: lan.isBreakout ?? undefined,
+  isPrioritized: lan.isPrioritized ?? undefined,
+  nat: lan.nat ?? undefined,
+  routedSubnets: lan.routedSubnets ?? undefined,
+  staticAddressing: lan.staticAddressing ?? undefined,
+  bondId: lan.bondId ?? undefined,
   lanId: lan.id ?? "",
   siteId,
   accountId,

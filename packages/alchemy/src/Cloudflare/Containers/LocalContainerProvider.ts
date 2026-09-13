@@ -123,7 +123,7 @@ export const LocalContainerProvider = () =>
           // `external` variant.
           const context = yield* fs.realPath(news.context ?? ".");
           const dockerfile = news.dockerfile
-            ? yield* fs.realPath(news.dockerfile)
+            ? yield* fs.realPath(path.resolve(context, news.dockerfile))
             : path.join(context, "Dockerfile");
           const contextHash = yield* hashDirectory({ cwd: context });
           const dockerfileContent = yield* fs.readFileString(dockerfile);

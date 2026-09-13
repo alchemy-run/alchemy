@@ -46,6 +46,7 @@
     "@cloudflare/unenv-preset": "catalog:",
     "@puppeteer/browsers": "catalog:",
     "capnp-es": "catalog:",
+    "fontkitten": "1.0.3",
     "magic-string": "catalog:",
     "sharp": "catalog:",
     "unenv": "catalog:",

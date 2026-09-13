@@ -31,7 +31,7 @@ const resolveZoneId = Effect.gen(function* () {
 });
 
 // Retry 403 blips while the harness-minted scoped token propagates.
-const forbiddenRetrySchedule = Schedule.exponential("500 millis");
+const forbiddenRetrySchedule = Schedule.spaced("2 seconds");
 
 const getSettingOob = (zoneId: string) =>
   schemaValidation.getSetting({ zoneId }).pipe(
@@ -42,23 +42,6 @@ const getSettingOob = (zoneId: string) =>
     }),
   );
 
-// Normalize the zone to the Cloudflare default so each run starts from the
-// same cloud state regardless of what a previous run left behind.
-const setBaseline = (zoneId: string) =>
-  schemaValidation
-    .putSetting({
-      zoneId,
-      validationDefaultMitigationAction: "none",
-      validationOverrideMitigationAction: null,
-    })
-    .pipe(
-      Effect.retry({
-        while: (e) => e._tag === "Forbidden",
-        schedule: forbiddenRetrySchedule,
-        times: 8,
-      }),
-    );
-
 test.provider(
   "pins zone settings, updates in place, and restores the baseline on destroy",
   (stack) =>
@@ -66,7 +49,7 @@ test.provider(
       const zoneId = yield* resolveZoneId;
 
       yield* stack.destroy();
-      yield* setBaseline(zoneId);
+      const initial = yield* getSettingOob(zoneId);
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
@@ -81,8 +64,12 @@ test.provider(
       expect(created.validationDefaultMitigationAction).toEqual("block");
       expect(created.validationOverrideMitigationAction).toEqual(null);
       // The pre-management state was captured for restore-on-destroy.
-      expect(created.initialDefaultMitigationAction).toEqual("none");
-      expect(created.initialOverrideMitigationAction).toEqual(null);
+      expect(created.initialDefaultMitigationAction).toEqual(
+        initial.validationDefaultMitigationAction,
+      );
+      expect(created.initialOverrideMitigationAction).toEqual(
+        initial.validationOverrideMitigationAction ?? null,
+      );
 
       const live = yield* getSettingOob(zoneId);
       expect(live.validationDefaultMitigationAction).toEqual("block");
@@ -101,18 +88,38 @@ test.provider(
 
       expect(updated.validationDefaultMitigationAction).toEqual("block");
       expect(updated.validationOverrideMitigationAction).toEqual("none");
-      expect(updated.initialDefaultMitigationAction).toEqual("none");
-      expect(updated.initialOverrideMitigationAction).toEqual(null);
+      expect(updated.initialDefaultMitigationAction).toEqual(
+        initial.validationDefaultMitigationAction,
+      );
+      expect(updated.initialOverrideMitigationAction).toEqual(
+        initial.validationOverrideMitigationAction ?? null,
+      );
 
       const liveUpdated = yield* getSettingOob(zoneId);
       expect(liveUpdated.validationOverrideMitigationAction).toEqual("none");
+
+      const reset = yield* stack.deploy(
+        Cloudflare.SchemaValidation.Settings("Settings", {
+          zoneId,
+          validationDefaultMitigationAction: "block",
+        }),
+      );
+      expect(reset.validationOverrideMitigationAction).toBe(null);
+      expect(
+        (yield* getSettingOob(zoneId)).validationOverrideMitigationAction ??
+          null,
+      ).toBe(null);
 
       yield* stack.destroy();
 
       // Destroy restored the values the zone had before we managed them.
       const restored = yield* getSettingOob(zoneId);
-      expect(restored.validationDefaultMitigationAction).toEqual("none");
-      expect(restored.validationOverrideMitigationAction ?? null).toEqual(null);
+      expect(restored.validationDefaultMitigationAction).toEqual(
+        initial.validationDefaultMitigationAction,
+      );
+      expect(restored.validationOverrideMitigationAction ?? null).toEqual(
+        initial.validationOverrideMitigationAction ?? null,
+      );
     }).pipe(logLevel),
   { timeout: 120_000 },
 );

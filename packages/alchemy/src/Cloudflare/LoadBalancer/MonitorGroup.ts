@@ -164,7 +164,10 @@ export const MonitorGroupProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const description = yield* createDescription(id, news.description);
+      const description = yield* createDescription(
+        id,
+        news.description ?? output?.description,
+      );
       const members = buildMembers(news);
 
       // 1. Observe — output.monitorGroupId is a cache hint.
@@ -222,7 +225,10 @@ export const MonitorGroupProvider = () =>
           Effect.retry({
             while: (e) => e._tag === "MonitorGroupInUse",
             schedule: Schedule.max([
-              Schedule.exponential("1 second"),
+              Schedule.min([
+                Schedule.exponential("1 second"),
+                Schedule.spaced("5 seconds"),
+              ]),
               Schedule.recurs(6),
             ]),
           }),

@@ -39,7 +39,10 @@ const expectGone = (accountId: string, ipsecTunnelId: string) =>
     Effect.retry({
       while: (e) => e._tag === "TunnelNotDeleted",
       schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
+        Schedule.min([
+          Schedule.exponential("500 millis"),
+          Schedule.spaced("4 seconds"),
+        ]),
         Schedule.recurs(10),
       ]),
     }),
@@ -149,6 +152,7 @@ test.provider.skipIf(!entitled)(
           interfaceAddress: "10.213.11.10/31",
           description: "alchemy ipsec tunnel test",
           psk: Redacted.make("alchemy-test-psk-1"),
+          bgp: { customerAsn: 64512 },
         }),
       );
 
@@ -178,12 +182,31 @@ test.provider.skipIf(!entitled)(
           description: "alchemy ipsec tunnel test v2",
           replayProtection: true,
           psk: Redacted.make("alchemy-test-psk-1"),
+          bgp: { customerAsn: 64512 },
         }),
       );
 
       expect(updated.tunnelId).toEqual(tunnel.tunnelId);
       expect(updated.description).toEqual("alchemy ipsec tunnel test v2");
       expect(updated.replayProtection).toEqual(true);
+
+      // Only BGP changes here: the reconciler must not rely on description,
+      // endpoint, or health-check differences to send the update.
+      const changedBgp = yield* stack.deploy(
+        Cloudflare.MagicTransit.IpsecTunnel("Ipsec", {
+          name: "alch-ipsec-test1",
+          cloudflareEndpoint: cfEndpoint,
+          customerEndpoint: "198.51.100.20",
+          interfaceAddress: "10.213.11.10/31",
+          description: "alchemy ipsec tunnel test v2",
+          replayProtection: true,
+          psk: Redacted.make("alchemy-test-psk-1"),
+          bgp: { customerAsn: 64513 },
+        }),
+      );
+      expect(changedBgp.tunnelId).toBe(updated.tunnelId);
+      const bgp = yield* getTunnel(accountId, changedBgp.tunnelId);
+      expect(bgp.ipsecTunnel?.bgp?.customerAsn).toBe(64513);
 
       // The tunnel name is unique routing identity — changing it replaces.
       const replaced = yield* stack.deploy(

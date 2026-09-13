@@ -107,6 +107,11 @@ describe.sequential("DetectionSettings", () => {
           before.userProfiles ?? null,
         );
 
+        const omitted = yield* stack.deploy(
+          Cloudflare.Fraud.DetectionSettings("Fraud", { zoneId }),
+        );
+        expect(omitted.managedKeys).toContain("usernameExpressions");
+
         // 3. Destroy — nothing was written, so nothing is restored and the
         //    live settings are untouched.
         yield* stack.destroy();
@@ -225,6 +230,10 @@ describe.sequential("DetectionSettings", () => {
           expect(
             live2.authenticationSettings?.successCriteria?.statusCodes,
           ).toEqual([200]);
+
+          yield* stack.deploy(
+            Cloudflare.Fraud.DetectionSettings("Fraud", { zoneId }),
+          );
 
           // 3. Destroy — the managed fields are restored to the snapshot.
           yield* stack.destroy();

@@ -243,7 +243,7 @@ export const isAccountDnsSettings = (
 
 export const AccountDnsSettingsProvider = () =>
   Provider.succeed(AccountDnsSettings, {
-    stables: ["accountId", "initialSettings", "managedKeys"],
+    stables: ["accountId", "initialSettings"],
 
     // Account singleton — the DNS settings object always exists for the
     // ambient account. There is no enumeration API, so read the single

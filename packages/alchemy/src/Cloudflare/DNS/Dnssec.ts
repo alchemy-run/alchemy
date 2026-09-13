@@ -321,7 +321,7 @@ export const DnssecProvider = () =>
           Effect.repeat({
             schedule: Schedule.spaced("2 seconds"),
             until: (o) => statusFamily(o.status) === desiredStatus,
-            times: 15,
+            times: 10,
           }),
         );
       }

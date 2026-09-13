@@ -4,6 +4,7 @@ import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
 
+import { isResolved } from "../../Diff.ts";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -308,18 +309,11 @@ export const HealthcheckProvider = () =>
   Provider.succeed(Healthcheck, {
     stables: ["healthcheckId", "zoneId", "createdOn"],
 
-    diff: Effect.fn(function* ({ olds = {}, news }) {
-      const o = olds as Props;
-      const n = news as Props;
-      // zoneId is Input<string>; by diff time both sides are concrete
-      // strings when statically known.
-      if (
-        typeof o.zoneId === "string" &&
-        typeof n.zoneId === "string" &&
-        o.zoneId !== n.zoneId
-      ) {
-        return { action: "replace" } as const;
-      }
+    diff: Effect.fn(function* ({ olds, news, output }) {
+      if (!isResolved(news)) return;
+      const oldZoneId = output?.zoneId ?? olds?.zoneId;
+      if (oldZoneId !== undefined && oldZoneId !== news.zoneId)
+        return { action: "replace" };
     }),
 
     read: Effect.fn(function* ({ id, output, olds }) {
@@ -351,7 +345,7 @@ export const HealthcheckProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       // Inputs have been resolved to concrete strings by Plan.
       const zoneId = news.zoneId as string;
-      const name = yield* createHealthcheckName(id, news.name);
+      const name = yield* createHealthcheckName(id, news.name ?? output?.name);
       const desired = buildDesiredBody(news, name);
 
       // 1. Observe — the id cached on `output` is a hint, not a
@@ -374,12 +368,14 @@ export const HealthcheckProvider = () =>
         observed = yield* healthchecks
           .createHealthcheck({ zoneId, ...desired })
           .pipe(
-            Effect.map((created): ObservedHealthcheck | undefined => created),
+            Effect.map((created): ObservedHealthcheck | undefined => {
+              justCreated = true;
+              return created;
+            }),
             Effect.catchTag("HealthcheckAlreadyExists", () =>
               findByName(zoneId, name),
             ),
           );
-        justCreated = observed !== undefined;
       }
 
       // 3. Sync — the update endpoint is a PUT that takes the full body;

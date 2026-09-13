@@ -148,7 +148,7 @@ export const TurnKeyProvider = () =>
     }),
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const name = yield* createTurnKeyName(id, news.name);
+      const name = yield* createTurnKeyName(id, news.name ?? output?.name);
 
       // Observe — the keyId cached on `output` is a hint, not a guarantee:
       // a missing key (code 20008) falls through and we recreate.

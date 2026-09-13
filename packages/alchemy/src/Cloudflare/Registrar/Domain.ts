@@ -96,6 +96,8 @@ export interface DomainAttributes {
    * way it was found — the domain itself is never released.
    */
   initialSettings: DomainSettings;
+  /** Settings managed over this resource lifetime, including removed props. */
+  managedKeys?: (keyof DomainSettings)[];
 }
 
 export type Domain = Resource<
@@ -178,6 +180,9 @@ export const DomainProvider = () =>
 
     diff: Effect.fn(function* ({ olds, news, output }) {
       if (!isResolved(news)) return undefined;
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (output !== undefined && output.accountId !== accountId)
+        return { action: "replace" };
       // The domain name is the resource's identity.
       const oldDomainName = output?.domainName ?? olds?.domainName;
       if (oldDomainName !== undefined && oldDomainName !== news.domainName) {
@@ -202,10 +207,15 @@ export const DomainProvider = () =>
         output !== undefined
           ? output.initialSettings
           : captureSettings(observed);
-      return toAttributes(domainName, acct, observed, initialSettings);
+      return {
+        ...toAttributes(domainName, acct, observed, initialSettings),
+        managedKeys:
+          output?.managedKeys ??
+          settingsKeys.filter((key) => olds?.[key] !== undefined),
+      };
     }),
 
-    reconcile: Effect.fn(function* ({ news, output }) {
+    reconcile: Effect.fn(function* ({ news, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const domainName = news.domainName;
 
@@ -234,9 +244,19 @@ export const DomainProvider = () =>
 
       // 3. Sync — diff the observed settings against the declared props and
       //    PUT only on a delta. Omitted props are left untouched.
+      const managedKeys = [
+        ...new Set([
+          ...(output?.managedKeys ??
+            settingsKeys.filter((key) => olds?.[key] !== undefined)),
+          ...settingsKeys.filter((key) => news[key] !== undefined),
+        ]),
+      ];
       const delta = settingsDelta(observed, news);
       if (delta === undefined) {
-        return toAttributes(domainName, accountId, observed, initialSettings);
+        return {
+          ...toAttributes(domainName, accountId, observed, initialSettings),
+          managedKeys,
+        };
       }
       yield* registrar.putDomain({ accountId, domainName, ...delta });
 
@@ -244,10 +264,13 @@ export const DomainProvider = () =>
       //    updates can apply asynchronously, so overlay the desired
       //    settings on what we just put.
       const fresh = (yield* findDomain(accountId, domainName)) ?? observed;
-      return toAttributes(domainName, accountId, fresh, initialSettings, news);
+      return {
+        ...toAttributes(domainName, accountId, fresh, initialSettings, news),
+        managedKeys,
+      };
     }),
 
-    delete: Effect.fn(function* ({ output }) {
+    delete: Effect.fn(function* ({ output, olds }) {
       const { domainName, accountId, initialSettings } = output;
       // Never release the registration — destroy only restores the
       // settings the domain had before Alchemy managed it.
@@ -255,7 +278,13 @@ export const DomainProvider = () =>
       // Domain gone (transferred out / expired out-of-band) — nothing to
       // restore.
       if (!observed) return;
-      const delta = settingsDelta(observed, initialSettings);
+      const managed =
+        output.managedKeys ??
+        settingsKeys.filter((key) => olds?.[key] !== undefined);
+      const restore = Object.fromEntries(
+        managed.map((key) => [key, initialSettings[key]]),
+      ) as DomainSettings;
+      const delta = settingsDelta(observed, restore);
       if (delta === undefined) return;
       yield* registrar.putDomain({ accountId, domainName, ...delta }).pipe(
         // Lost ownership between the observe and the put — gone is done.
@@ -381,3 +410,5 @@ const toAttributes = (
   supportedTld: observed.supportedTld ?? undefined,
   initialSettings,
 });
+
+const settingsKeys = ["autoRenew", "locked", "privacy"] as const;

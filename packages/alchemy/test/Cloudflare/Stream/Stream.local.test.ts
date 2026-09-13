@@ -172,9 +172,7 @@ test.provider(
       const deleteRes = yield* client.get(
         `${deployed.url}/delete?id=${video.id}`,
       );
-      expect(((yield* deleteRes.json) as { deleted: boolean }).deleted).toBe(
-        true,
-      );
+      expect(yield* deleteRes.json).toEqual({ deleted: true });
       const goneRes = yield* client.get(
         `${deployed.url}/details?id=${video.id}`,
       );
@@ -184,5 +182,5 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  { timeout: 120_000 },
 );

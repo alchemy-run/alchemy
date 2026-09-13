@@ -18,6 +18,7 @@ import {
   BINDING_QUEUE_CONSUMER,
   BINDING_QUEUE_DLQ,
   BINDING_QUEUE_NAME,
+  BINDING_QUEUE_FORWARD,
   BINDING_QUEUE_PRODUCERS,
   BINDING_QUEUE_USER_WORKER,
 } from "./QueueOptions.shared.ts";
@@ -27,6 +28,7 @@ interface BrokerEnv {
   [BINDING_QUEUE_USER_WORKER]: Fetcher;
   [BINDING_QUEUE_NAME]: string;
   [BINDING_QUEUE_CONSUMER]?: QueueConsumer;
+  [BINDING_QUEUE_FORWARD]?: Fetcher;
   [BINDING_QUEUE_PRODUCERS]?: ReadonlyArray<QueueProducerEntry>;
   [binding: string]: unknown;
 }
@@ -102,20 +104,68 @@ const exceptionQueueResult: FetcherQueueResult = {
 };
 
 /**
- * In-memory queue broker. Exactly one Durable Object instance per queue (one
+ * Persistent queue broker. Exactly one Durable Object instance per queue (one
  * broker service is created per consumed queue, and the queue name is provided
  * via the {@link QUEUE_NAME_BINDING} env binding). Mirrors Miniflare's
  * `QueueBrokerObject`: messages are buffered, flushed in batches, retried with
  * backoff, and moved to a dead-letter queue (or dropped) after exhausting
- * retries. State is in-memory only and does not survive a runtime restart.
+ * retries. SQLite storage retains pending, delayed and retrying messages across
+ * runtime restarts; delivery is at least once.
  */
 export class QueueBroker extends DurableObject<BrokerEnv> {
   private messages: Array<QueueMessage> = [];
-  private pendingFlush?: {
-    immediate: boolean;
-    timeout: ReturnType<typeof setTimeout>;
-  };
+  private flushing = false;
   private backlogBytes = 0;
+
+  constructor(ctx: DurableObjectState, env: BrokerEnv) {
+    super(ctx, env);
+    ctx.storage.sql.exec(
+      "CREATE TABLE IF NOT EXISTS queue_messages (id TEXT PRIMARY KEY, data TEXT NOT NULL)",
+    );
+    for (const row of ctx.storage.sql.exec<{ data: string }>(
+      "SELECT data FROM queue_messages ORDER BY rowid",
+    )) {
+      const stored = JSON.parse(row.data) as QueueIncomingMessage & {
+        availableAt: number;
+        failedAttempts: number;
+      };
+      const message = new QueueMessage(
+        stored.id!,
+        new Date(stored.timestamp!),
+        deserialize(stored.contentType, base64ToBytes(stored.body)),
+      );
+      message.availableAt = stored.availableAt;
+      message.failedAttempts = stored.failedAttempts;
+      this.messages.push(message);
+    }
+    ctx.blockConcurrencyWhile(async () => {
+      this.discardExpired();
+      this.persist();
+      await this.ensurePendingFlush();
+    });
+  }
+
+  private persist() {
+    this.ctx.storage.transactionSync(() => {
+      this.ctx.storage.sql.exec("DELETE FROM queue_messages");
+      for (const message of this.messages) {
+        this.ctx.storage.sql.exec(
+          "INSERT INTO queue_messages (id, data) VALUES (?, ?)",
+          message.id,
+          JSON.stringify({
+            ...serialize(message),
+            availableAt: message.availableAt,
+            failedAttempts: message.failedAttempts,
+          }),
+        );
+      }
+    });
+  }
+
+  async alarm() {
+    await this.ctx.storage.deleteAlarm();
+    await this.flush();
+  }
 
   private get queueName(): string {
     return this.env[BINDING_QUEUE_NAME];
@@ -158,6 +208,7 @@ export class QueueBroker extends DurableObject<BrokerEnv> {
   }
 
   private getMetrics() {
+    this.discardExpired();
     return {
       backlogCount: this.messages.length,
       backlogBytes: this.backlogBytes,
@@ -167,10 +218,6 @@ export class QueueBroker extends DurableObject<BrokerEnv> {
 
   private async postMessage(request: Request): Promise<Response> {
     const response = { metadata: { metrics: this.getMetrics() } };
-    if (this.consumerOptions === undefined) {
-      return Response.json(response);
-    }
-
     const size = request.headers.get("Content-Length");
     if (size !== null && Number.parseInt(size) > MAX_MESSAGE_SIZE_BYTES) {
       throw new HttpError(
@@ -179,7 +226,10 @@ export class QueueBroker extends DurableObject<BrokerEnv> {
       );
     }
     const contentType = validateContentType(request.headers.get("X-Msg-Fmt"));
-    const delay = getDelayFromHeaders(request) ?? this.producer?.deliveryDelay;
+    const delay =
+      getDelayFromHeaders(request) ??
+      this.producer?.deliveryDelay ??
+      this.consumerOptions?.deliveryDelay;
     const bytes = new Uint8Array(await request.arrayBuffer());
 
     this.enqueueMessage({
@@ -187,17 +237,18 @@ export class QueueBroker extends DurableObject<BrokerEnv> {
       delaySecs: delay,
       body: bytesToBase64(bytes),
     });
+    this.persist();
+    await this.ensurePendingFlush();
     return Response.json(response);
   }
 
   private async postBatch(request: Request): Promise<Response> {
     const response = { metadata: { metrics: this.getMetrics() } };
-    if (this.consumerOptions === undefined) {
-      return Response.json(response);
-    }
-
     validateBatchSizeHeaders(request);
-    const delay = getDelayFromHeaders(request) ?? this.producer?.deliveryDelay;
+    const delay =
+      getDelayFromHeaders(request) ??
+      this.producer?.deliveryDelay ??
+      this.consumerOptions?.deliveryDelay;
     const body = await request.json<QueueBatchRequest>();
     for (const message of body.messages) {
       this.enqueueMessage({
@@ -205,131 +256,198 @@ export class QueueBroker extends DurableObject<BrokerEnv> {
         delaySecs: message.delaySecs ?? delay,
       });
     }
+    this.persist();
+    await this.ensurePendingFlush();
     return Response.json(response);
   }
 
   private enqueueMessage(message: QueueIncomingMessage) {
     const id = message.id ?? crypto.randomUUID().replace(/-/g, "");
+    if (this.messages.some((pending) => pending.id === id)) return;
     const timestamp = new Date(message.timestamp ?? Date.now());
     const body = deserialize(message.contentType, base64ToBytes(message.body));
     const msg = new QueueMessage(id, timestamp, body);
-    const delay = message.delaySecs ?? 0;
-    const push = () => {
+    msg.availableAt = Date.now() + (message.delaySecs ?? 0) * 1000;
+    if (!this.isExpired(msg)) {
       this.messages.push(msg);
       this.backlogBytes += msg.bytes;
-      this.ensurePendingFlush();
-    };
-    if (delay > 0) {
-      setTimeout(push, delay * 1000);
-    } else {
-      push();
     }
   }
 
-  private ensurePendingFlush() {
+  private isExpired(message: QueueMessage): boolean {
+    const retention =
+      this.consumerOptions?.messageRetentionPeriod ??
+      this.producer?.messageRetentionPeriod ??
+      86400;
+    return Date.now() - message.timestamp.getTime() >= retention * 1000;
+  }
+
+  private discardExpired() {
+    this.messages = this.messages.filter((message) => !this.isExpired(message));
+    this.backlogBytes = this.messages.reduce(
+      (total, message) => total + message.bytes,
+      0,
+    );
+  }
+
+  private async ensurePendingFlush() {
     const consumer = this.consumerOptions;
-    if (consumer === undefined) {
+    if (
+      this.flushing ||
+      (consumer === undefined && !this.env[BINDING_QUEUE_FORWARD]) ||
+      consumer?.deliveryPaused ||
+      this.messages.length === 0
+    ) {
       return;
     }
-    const batchSize = consumer.maxBatchSize ?? DEFAULT_BATCH_SIZE;
-    const batchTimeout = consumer.maxBatchTimeout ?? DEFAULT_BATCH_TIMEOUT;
-    const batchHasSpace = this.messages.length < batchSize;
-
-    if (this.pendingFlush) {
-      if (this.pendingFlush.immediate || batchHasSpace) {
-        return;
-      }
-      clearTimeout(this.pendingFlush.timeout);
-      this.pendingFlush = undefined;
-    }
-
-    const delay = batchHasSpace ? batchTimeout * 1000 : 0;
-    const timeout = setTimeout(() => void this.flush(), delay);
-    this.pendingFlush = { immediate: delay === 0, timeout };
+    const now = Date.now();
+    const ready = this.messages.filter((message) => message.availableAt <= now);
+    const batchSize = consumer?.maxBatchSize ?? DEFAULT_BATCH_SIZE;
+    const due =
+      ready.length > 0
+        ? now +
+          (ready.length >= batchSize
+            ? 0
+            : (consumer?.maxBatchTimeout ?? DEFAULT_BATCH_TIMEOUT) * 1000)
+        : Math.min(...this.messages.map((message) => message.availableAt));
+    const current = await this.ctx.storage.getAlarm();
+    if (current === null || current > due) await this.ctx.storage.setAlarm(due);
   }
 
   private async flush(): Promise<void> {
     const consumer = this.consumerOptions;
+    if (this.flushing || consumer?.deliveryPaused) return;
     if (consumer === undefined) {
-      this.pendingFlush = undefined;
+      await this.forwardPending();
       return;
     }
-
+    this.discardExpired();
+    const now = Date.now();
     const batchSize = consumer.maxBatchSize ?? DEFAULT_BATCH_SIZE;
     const maxAttempts = (consumer.maxRetries ?? DEFAULT_RETRIES) + 1;
-
-    const batch = this.messages.splice(0, batchSize);
-    this.backlogBytes -= batch.reduce((total, msg) => total + msg.bytes, 0);
-
-    const metadata: MessageBatchMetadata = {
-      metrics: {
-        backlogCount: this.messages.length,
-        backlogBytes: this.backlogBytes,
-        oldestMessageTimestamp: this.messages[0]?.timestamp,
-      },
-    };
-
-    const response = await this.dispatch(batch, metadata).catch((error) => {
-      console.error(`Queue "${this.queueName}" consumer threw:`, error);
-      return exceptionQueueResult;
-    });
-
-    const retryAll = response.retryBatch.retry || response.outcome !== "ok";
-    const retryMessages = new Map(
-      response.retryMessages?.map(
-        (message) => [message.msgId, message.delaySeconds] as const,
-      ),
-    );
-    // Explicitly acked messages take precedence over a batch-wide retry (from
-    // `batch.retryAll()` or a thrown handler): they have already succeeded and
-    // must not be redelivered.
-    const explicitAcks = new Set(response.explicitAcks ?? []);
-    const globalDelay =
-      response.retryBatch.delaySeconds ?? consumer.retryDelay ?? 0;
-
-    const toDeadLetterQueue: Array<QueueMessage> = [];
-    for (const message of batch) {
-      const shouldRetry =
-        retryMessages.has(message.id) ||
-        (retryAll && !explicitAcks.has(message.id));
-      if (!shouldRetry) {
-        continue;
-      }
-      message.failedAttempts++;
-      if (message.failedAttempts < maxAttempts) {
-        const delay = retryMessages.get(message.id) ?? globalDelay;
-        const requeue = () => {
-          this.messages.push(message);
-          this.backlogBytes += message.bytes;
-          this.ensurePendingFlush();
-        };
-        if (delay > 0) {
-          setTimeout(requeue, delay * 1000);
-        } else {
-          requeue();
-        }
-      } else if (consumer.deadLetterQueue !== undefined) {
-        toDeadLetterQueue.push(message);
-      } else {
-        console.warn(
-          `Dropped message "${message.id}" on queue "${this.queueName}" after ${maxAttempts} failed attempts`,
-        );
-      }
+    const batch = this.messages
+      .filter((message) => message.availableAt <= now)
+      .slice(0, batchSize);
+    if (batch.length === 0) {
+      this.persist();
+      await this.ensurePendingFlush();
+      return;
     }
+    // Keep in-flight messages durable until the handler acknowledges them.
+    // A restart during dispatch may redeliver, but cannot silently lose them.
+    this.flushing = true;
+    try {
+      const metadata: MessageBatchMetadata = {
+        metrics: {
+          backlogCount: this.messages.length,
+          backlogBytes: this.backlogBytes,
+          oldestMessageTimestamp: this.messages[0]?.timestamp,
+        },
+      };
 
-    this.pendingFlush = undefined;
-    if (this.messages.length > 0) {
-      this.ensurePendingFlush();
-    }
+      const response = await this.dispatch(batch, metadata).catch((error) => {
+        console.error(`Queue "${this.queueName}" consumer threw:`, error);
+        return exceptionQueueResult;
+      });
 
-    if (
-      toDeadLetterQueue.length > 0 &&
-      consumer.deadLetterQueue !== undefined
-    ) {
-      await this.sendToDeadLetterQueue(
-        consumer.deadLetterQueue,
-        toDeadLetterQueue,
+      const retryAll = response.retryBatch.retry || response.outcome !== "ok";
+      const retryMessages = new Map(
+        response.retryMessages?.map(
+          (message) => [message.msgId, message.delaySeconds] as const,
+        ),
       );
+      // Explicitly acked messages take precedence over a batch-wide retry (from
+      // `batch.retryAll()` or a thrown handler): they have already succeeded and
+      // must not be redelivered.
+      const explicitAcks = new Set(response.explicitAcks ?? []);
+      const globalDelay =
+        response.retryBatch.delaySeconds ?? consumer.retryDelay ?? 0;
+
+      const toDeadLetterQueue: Array<QueueMessage> = [];
+      for (const message of batch) {
+        const shouldRetry =
+          retryMessages.has(message.id) ||
+          (retryAll && !explicitAcks.has(message.id));
+        if (!shouldRetry) {
+          this.messages = this.messages.filter(
+            (pending) => pending !== message,
+          );
+          continue;
+        }
+        message.failedAttempts++;
+        if (message.failedAttempts < maxAttempts) {
+          const delay = retryMessages.get(message.id) ?? globalDelay;
+          message.availableAt = Date.now() + delay * 1000;
+        } else if (consumer.deadLetterQueue !== undefined) {
+          toDeadLetterQueue.push(message);
+        } else {
+          this.messages = this.messages.filter(
+            (pending) => pending !== message,
+          );
+          console.warn(
+            `Dropped message "${message.id}" on queue "${this.queueName}" after ${maxAttempts} failed attempts`,
+          );
+        }
+      }
+
+      if (
+        toDeadLetterQueue.length > 0 &&
+        consumer.deadLetterQueue !== undefined
+      ) {
+        await this.sendToDeadLetterQueue(
+          consumer.deadLetterQueue,
+          toDeadLetterQueue,
+        );
+        const sent = new Set(toDeadLetterQueue);
+        this.messages = this.messages.filter((message) => !sent.has(message));
+      }
+    } finally {
+      this.flushing = false;
+      this.discardExpired();
+      this.persist();
+      await this.ensurePendingFlush();
+    }
+  }
+
+  private async forwardPending(): Promise<void> {
+    const target = this.env[BINDING_QUEUE_FORWARD];
+    if (!target) return;
+    this.discardExpired();
+    const batch = this.messages
+      .filter((message) => message.availableAt <= Date.now())
+      .slice(0, DEFAULT_BATCH_SIZE);
+    if (batch.length === 0) {
+      this.persist();
+      await this.ensurePendingFlush();
+      return;
+    }
+    this.flushing = true;
+    try {
+      const response = await target.fetch("http://queue/batch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        // Delay has already elapsed in this durable producer spool. Preserve
+        // IDs/timestamps, and avoid applying the receiving queue's delay again.
+        body: JSON.stringify({
+          messages: batch.map((message) => ({
+            ...serialize(message),
+            delaySecs: 0,
+          })),
+        }),
+      });
+      await response.arrayBuffer();
+      if (response.ok) {
+        const sent = new Set(batch);
+        this.messages = this.messages.filter((message) => !sent.has(message));
+      }
+    } catch {
+      // A restarting consumer or unavailable registry is not a consumer
+      // handler failure: keep the messages without charging a retry attempt.
+    } finally {
+      this.flushing = false;
+      this.persist();
+      if (this.messages.length > 0)
+        await this.ctx.storage.setAlarm(Date.now() + 1000);
     }
   }
 
@@ -369,10 +487,9 @@ export class QueueBroker extends DurableObject<BrokerEnv> {
       | Fetcher
       | undefined;
     if (binding === undefined) {
-      console.warn(
-        `Cannot move messages on queue "${this.queueName}" to dead letter queue "${deadLetterQueue}": no binding configured`,
+      throw new Error(
+        `No binding configured for dead letter queue "${deadLetterQueue}"`,
       );
-      return;
     }
     const request: QueueBatchRequest = { messages: messages.map(serialize) };
     const response = await binding.fetch("http://placeholder/batch", {
@@ -383,8 +500,8 @@ export class QueueBroker extends DurableObject<BrokerEnv> {
       body: JSON.stringify(request),
     });
     if (!response.ok) {
-      console.warn(
-        `Failed to move messages on queue "${this.queueName}" to dead letter queue "${deadLetterQueue}": HTTP ${response.status}`,
+      throw new Error(
+        `Dead letter queue "${deadLetterQueue}" returned HTTP ${response.status}`,
       );
     }
   }
@@ -392,6 +509,7 @@ export class QueueBroker extends DurableObject<BrokerEnv> {
 
 class QueueMessage {
   failedAttempts = 0;
+  availableAt = 0;
 
   constructor(
     readonly id: string,

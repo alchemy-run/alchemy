@@ -26,7 +26,7 @@ const keyListed = (accountId: string, keyId: string) =>
     Effect.map((res) => (res.result ?? []).some((k) => k.id === keyId)),
     Effect.retry({
       while: (e) => e._tag === "Forbidden",
-      schedule: Schedule.exponential("500 millis"),
+      schedule: Schedule.spaced("2 seconds"),
       times: 8,
     }),
   );
@@ -41,7 +41,7 @@ const expectGone = (accountId: string, keyId: string) =>
     Effect.retry({
       while: (e) => e._tag === "SigningKeyNotDeleted",
       schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
+        Schedule.spaced("2 seconds"),
         Schedule.recurs(10),
       ]),
     }),

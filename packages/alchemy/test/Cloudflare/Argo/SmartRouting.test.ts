@@ -41,7 +41,10 @@ const resolveZoneId = Effect.gen(function* () {
 // consistently across Cloudflare's edge — a fresh token intermittently
 // 403s with "Unable to authenticate request". Ride out the blips on the
 // test's own out-of-band calls by retrying the typed `Forbidden` error.
-const forbiddenRetrySchedule = Schedule.exponential("500 millis");
+const forbiddenRetrySchedule = Schedule.min([
+  Schedule.exponential("500 millis"),
+  Schedule.spaced("4 seconds"),
+]);
 
 const getSmartRouting = (zoneId: string) =>
   argo.getSmartRouting({ zoneId }).pipe(

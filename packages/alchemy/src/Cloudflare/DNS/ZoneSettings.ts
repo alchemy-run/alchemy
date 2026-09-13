@@ -265,7 +265,7 @@ export const isZoneDnsSettings = (value: unknown): value is ZoneDnsSettings =>
 
 export const ZoneDnsSettingsProvider = () =>
   Provider.succeed(ZoneDnsSettings, {
-    stables: ["zoneId", "initialSettings", "managedKeys"],
+    stables: ["zoneId", "initialSettings"],
 
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;

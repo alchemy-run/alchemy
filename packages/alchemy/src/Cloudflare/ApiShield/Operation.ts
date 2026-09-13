@@ -4,6 +4,7 @@ import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 
+import { isResolved } from "../../Diff.ts";
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -173,28 +174,18 @@ export const OperationProvider = () =>
       return rows.flat();
     }),
 
-    diff: Effect.fn(function* ({ olds, news }) {
-      const o = olds as OperationProps | undefined;
-      const n = news as OperationProps;
-      if (o?.endpoint === undefined) return undefined;
-      // The tuple is the operation's identity — any change replaces.
-      if (o.method !== n.method || o.host !== n.host) {
-        return { action: "replace" } as const;
-      }
-      // Cloudflare normalizes `{name}` templates to `{varN}`; compare
-      // normalized forms so `/users/{id}` -> `/users/{userId}` is a no-op.
-      if (normalizeEndpoint(o.endpoint) !== normalizeEndpoint(n.endpoint)) {
-        return { action: "replace" } as const;
-      }
-      // zoneId is Input<string>; compare only once both are concrete.
+    diff: Effect.fn(function* ({ olds, news, output }) {
+      if (!isResolved(news)) return;
+      const previous = output ?? olds;
+      if (previous === undefined) return;
       if (
-        typeof o.zoneId === "string" &&
-        typeof n.zoneId === "string" &&
-        o.zoneId !== n.zoneId
-      ) {
-        return { action: "replace" } as const;
-      }
-      return undefined;
+        previous.method !== news.method ||
+        previous.host !== news.host ||
+        normalizeEndpoint(previous.endpoint) !==
+          normalizeEndpoint(news.endpoint) ||
+        previous.zoneId !== news.zoneId
+      )
+        return { action: "replace" };
     }),
 
     read: Effect.fn(function* ({ output, olds }) {

@@ -2,6 +2,8 @@ import * as wfp from "@distilled.cloud/cloudflare/workers-for-platforms";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 
+import * as ProviderLayer from "../../Local/ProviderLayer.ts";
+import { generateLocalId } from "../LocalRuntime.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -75,6 +77,11 @@ export type DispatchNamespace = Resource<
  *
  * Note: Workers for Platforms is a paid add-on. On accounts without the
  * subscription, namespace creation fails with an entitlement error.
+ * In local development, namespaces route fetch calls to locally running user
+ * Workers through the development registry, including worker updates and removal.
+ * Local outbound workers and per-invocation CPU/subrequest limits are unsupported
+ * and fail explicitly when requested.
+ *
  * ### Creating a Dispatch Namespace
  * **Example:** Namespace with a generated name
  * ```typescript
@@ -154,7 +161,7 @@ export const isDispatchNamespace = (
   value: unknown,
 ): value is DispatchNamespace => isResourceOfType(value, TypeId);
 
-export const DispatchNamespaceProvider = () =>
+export const DispatchNamespaceProviderLive = () =>
   Provider.succeed(DispatchNamespace, {
     stables: ["namespaceId", "name", "accountId", "createdOn"],
     diff: Effect.fn(function* ({ olds, news, output }) {
@@ -201,7 +208,9 @@ export const DispatchNamespaceProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const name =
-        news.name ?? (yield* createPhysicalName({ id, lowercase: true }));
+        news.name ??
+        output?.name ??
+        (yield* createPhysicalName({ id, lowercase: true }));
 
       // Observe — namespaces are looked up by name; `output` is only a
       // cache of the same identity. A missing namespace falls through to
@@ -262,3 +271,40 @@ const toAttributes = (
   createdOn: ns.createdOn ?? undefined,
   modifiedOn: ns.modifiedOn ?? undefined,
 });
+
+/** Local namespaces route to user workers through the development registry. */
+export const DispatchNamespaceProviderLocal = () =>
+  Provider.succeed(DispatchNamespace, {
+    stables: ["namespaceId", "name", "accountId", "createdOn"],
+    diff: Effect.fn(function* ({ olds, news, output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (!isResolved(news)) return undefined;
+      if (
+        (output && output.accountId !== accountId) ||
+        (olds?.name !== news.name && news.name !== undefined)
+      )
+        return { action: "replace" } as const;
+    }),
+    read: Effect.fn(function* ({ output }) {
+      return output;
+    }),
+    reconcile: Effect.fn(function* ({ output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const name = output?.name ?? generateLocalId();
+      return {
+        namespaceId: name,
+        name,
+        accountId,
+        scriptCount: 0,
+        trustedWorkers: false,
+        createdOn: output?.createdOn ?? new Date().toISOString(),
+        modifiedOn: undefined,
+      };
+    }),
+    delete: Effect.fn(function* () {}),
+  });
+export const DispatchNamespaceProvider = () =>
+  ProviderLayer.dual(DispatchNamespace, {
+    local: DispatchNamespaceProviderLocal,
+    live: DispatchNamespaceProviderLive,
+  });

@@ -202,7 +202,7 @@ export const GroupProvider = () =>
     }),
     reconcile: Effect.fn(function* ({ id, news = {} as GroupProps, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const name = yield* createGroupName(id, news.name);
+      const name = yield* createGroupName(id, news.name ?? output?.name);
       const acct = output?.accountId ?? accountId;
 
       // Observe — prefer the cached groupId, fall back to a name lookup so
@@ -301,7 +301,6 @@ const findGroupByName = (acct: string, name: string) =>
     Stream.filter((g): g is ObservedGroup => g.name === name),
     Stream.runHead,
     Effect.map(Option.getOrUndefined),
-    Effect.catch(() => Effect.succeed(undefined)),
   );
 
 type ObservedGroup = {

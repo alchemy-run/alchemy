@@ -240,7 +240,7 @@ export const ShareProvider = () =>
     }),
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const name = yield* createShareName(id, news.name);
+      const name = yield* createShareName(id, news.name ?? output?.name);
       const desiredRecipients = news.recipients.map((r) => ({
         accountId: r.accountId as string | undefined,
         organizationId: r.organizationId as string | undefined,
@@ -255,9 +255,10 @@ export const ShareProvider = () =>
       // Observe — the shareId cached on `output` is a hint, not a
       // guarantee: a missing (or fully deleted) share falls through and
       // we recreate.
-      const observed = output?.shareId
-        ? yield* getShare(output.accountId ?? accountId, output.shareId)
-        : undefined;
+      const observed =
+        (output?.shareId
+          ? yield* getShare(output.accountId ?? accountId, output.shareId)
+          : undefined) ?? (yield* findByName(accountId, name));
 
       if (!observed) {
         // Ensure — greenfield (or out-of-band delete): the create API
@@ -266,7 +267,12 @@ export const ShareProvider = () =>
         const created = yield* resourceSharing.createResourceSharing({
           accountId,
           name,
-          recipients: desiredRecipients,
+          recipients: desiredRecipients.map(
+            ({ accountId, organizationId }) => ({
+              recipientAccountId: accountId,
+              organizationId,
+            }),
+          ),
           resources: desiredResources,
         });
         return toAttributes(created, accountId);
@@ -337,7 +343,8 @@ export const ShareProvider = () =>
         const match = liveResources.find(
           (r) =>
             r.resourceType === desired.resourceType &&
-            r.resourceId === desired.resourceId,
+            r.resourceId === desired.resourceId &&
+            r.resourceAccountId === desired.resourceAccountId,
         );
         if (!match) {
           yield* resourceSharing.createResource({
@@ -364,7 +371,8 @@ export const ShareProvider = () =>
         const wanted = desiredResources.some(
           (d) =>
             d.resourceType === live.resourceType &&
-            d.resourceId === live.resourceId,
+            d.resourceId === live.resourceId &&
+            d.resourceAccountId === live.resourceAccountId,
         );
         if (!wanted) {
           yield* resourceSharing
@@ -412,11 +420,12 @@ const getShare = (accountId: string, shareId: string) =>
  * pick the oldest for determinism.
  */
 const findByName = (accountId: string, name: string) =>
-  resourceSharing
-    .listResourceSharings({ accountId, kind: "sent", perPage: 50 })
+  resourceSharing.listResourceSharings
+    .items({ accountId, kind: "sent", perPage: 50 })
     .pipe(
+      Stream.runCollect,
       Effect.map((list) =>
-        list.result
+        Array.from(list)
           .filter((s) => s.name === name && s.status !== "deleted")
           .sort((a, b) => a.created.localeCompare(b.created))
           .at(0),

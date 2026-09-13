@@ -166,29 +166,19 @@ export const HostnameCertificateProvider = () =>
       return rows.flat();
     }),
 
-    diff: Effect.fn(function* ({ olds, news }) {
-      if (!isResolved(news)) return undefined;
-      // zoneId is Input<string>; compare only once both sides are concrete.
-      if (
-        typeof olds.zoneId === "string" &&
-        typeof news.zoneId === "string" &&
-        olds.zoneId !== news.zoneId
-      ) {
+    diff: Effect.fn(function* ({ olds, news, output }) {
+      if (!isResolved(news)) return;
+      const zoneId = output?.zoneId ?? olds?.zoneId;
+      if (zoneId !== undefined && zoneId !== news.zoneId)
         return { action: "replace" } as const;
-      }
-      // Compare the certificate only when the old value is known — an
-      // Output-valued `certificate` doesn't survive a `creating`-state
-      // round-trip (it deserializes as `undefined`).
+      // Private keys cannot be observed. Adoption must not invent a rotation.
       if (
-        (olds.certificate !== undefined &&
+        (olds?.certificate !== undefined &&
           normalizePem(olds.certificate) !== normalizePem(news.certificate)) ||
-        unwrap(olds.privateKey) !== unwrap(news.privateKey)
-      ) {
-        // There is no update API for hostname client certificates — every
-        // change is a replacement.
+        (olds?.privateKey !== undefined &&
+          unwrap(olds.privateKey) !== unwrap(news.privateKey))
+      )
         return { action: "replace" } as const;
-      }
-      return undefined;
     }),
 
     read: Effect.fn(function* ({ output, olds }) {

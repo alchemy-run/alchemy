@@ -1,0 +1,136 @@
+{
+  "service": "runtime-owned-semantic-eight",
+  "resources": [
+    {
+      "resource": "Images.SigningKey",
+      "apiFields": [
+        "accountId",
+        "name"
+      ],
+      "lifecycleReview": "List/get existence protects secret rotation; cold read Unowned; effective account replacement now handles removing override; delete remains idempotent except provider correctly surfaces protected last key. Account list is unpaginated capped key collection.",
+      "fixes": "Effective account diff corrected.",
+      "limitations": "ImagesAccessNotEnabled (5403) lifecycle entitlement; ungated typed probe passes; no second account for replacement.",
+      "reviewed": true
+    },
+    {
+      "resource": "Stream.SigningKey",
+      "apiFields": [],
+      "lifecycleReview": "Immutable generated key; preserve write-only PEM/JWK on read; observe existing id before creating; missing id recreated; idempotent typed deletion. List SDK pagination mode single matches API. Cold recovery cannot reconstruct secret material.",
+      "fixes": "No missing mutable API fields found.",
+      "limitations": "Secret material is only returned at creation.",
+      "reviewed": true
+    },
+    {
+      "resource": "Stream.Webhook",
+      "apiFields": [
+        "notificationUrl"
+      ],
+      "lifecycleReview": "Account singleton GET/cold Unowned, PUT full desired URL, immutable account replacement, typed missing delete. Secret preserved from observed response. No pagination.",
+      "fixes": "No source changes needed.",
+      "limitations": "Deleting/recreating rotates service-generated secret; only empty account slot exercised.",
+      "reviewed": true
+    },
+    {
+      "resource": "Stream.Watermark",
+      "apiFields": [
+        "url",
+        "file",
+        "name",
+        "opacity",
+        "padding",
+        "position",
+        "scale"
+      ],
+      "lifecycleReview": "All fields immutable: replace on change; cold named match now Unowned; adoption compares observed props even without olds; omitted name preserves physical identity; typed missing deletion; list is single API collection. PNG multipart file mode added alongside JSON URL mode.",
+      "fixes": "SDK uploadWatermark new multipart operation; local Uint8Array property and source-mode replacement. Adoption/default removal/name preservation regression fixture.",
+      "limitations": "Cannot recover original uploaded file bytes; adopting file content requires replacement; download metadata is read-only.",
+      "reviewed": true
+    },
+    {
+      "resource": "Stream.LiveInputOutput",
+      "apiFields": [
+        "liveInputId",
+        "url",
+        "streamKey",
+        "enabled"
+      ],
+      "lifecycleReview": "Parent/url/key immutable, enabled updates/default true reset, observe missing output before create, typed idempotent delete, account list via parent inputs. Parent API bare-array/count wrapper patch already present.",
+      "fixes": "Removed obsolete list gate; tested enabled omission reset and actual parent enumeration.",
+      "limitations": "Unlabelled server-generated output id cannot be recovered without state.",
+      "reviewed": true
+    },
+    {
+      "resource": "SchemaValidation.Schema",
+      "apiFields": [
+        "zoneId",
+        "name",
+        "kind",
+        "source",
+        "validationEnabled"
+      ],
+      "lifecycleReview": "Full source create/read, name/source immutable replacement, default validation true; false->true patch, true->false replacement per API. Paginated name cold discovery Unowned, typed gone delete.",
+      "fixes": "Bounded test polling.",
+      "limitations": "Schema kind currently API openapi_v3 only.",
+      "reviewed": true
+    },
+    {
+      "resource": "SchemaValidation.Settings",
+      "apiFields": [
+        "zoneId",
+        "validationDefaultMitigationAction",
+        "validationOverrideMitigationAction"
+      ],
+      "lifecycleReview": "Zone singleton GET capture original; PUT full desired with omitted nullable override cleared; destroy restores initial actual settings; immutable zone replacement; no pagination.",
+      "fixes": "Fixture now captures actual baseline rather than mutating baseline before capture; verified omitted override reset.",
+      "limitations": "No source API-field gaps found.",
+      "reviewed": true
+    },
+    {
+      "resource": "SchemaValidation.OperationSetting",
+      "apiFields": [
+        "zoneId",
+        "operationId",
+        "mitigationAction"
+      ],
+      "lifecycleReview": "Individual operation PUT covers bulk PATCH equivalent fields; null action reads absent; cold Unowned; path identity replacement; typed missing deletion clears override. Parent operation enumeration for listing.",
+      "fixes": "Actual deployed test now deletes override while retaining parent operation, then verifies absence.",
+      "limitations": "Bulk multi-operation transaction is service operation, not extra per-resource desired state.",
+      "reviewed": true
+    }
+  ],
+  "tests": [
+    {
+      "log": ".audit/cloudflare/semantic-eight-live.log",
+      "passed": 18,
+      "skipped": 2,
+      "note": "Initial eight-resource batch; later removed stale Stream list skip."
+    },
+    {
+      "log": ".audit/cloudflare/semantic-eight-upload-live.log",
+      "passed": 10,
+      "skipped": 0,
+      "note": "Final changed Watermark, LiveInputOutput, OperationSetting tests, actual deployment."
+    },
+    {
+      "log": ".audit/cloudflare/semantic-eight-final.log",
+      "passed": 20,
+      "skipped": 1,
+      "note": "Final combined8resource run:20actual deployed/read/probe cases pass; Images lifecycle requires entitlement and retains typed probe."
+    }
+  ],
+  "testOptions": "timeout 240 pnpm test <files> --profile testing --retry 0 --concurrency 4",
+  "patches": [
+    {
+      "path": "submodules/distilled/packages/cloudflare/patches/stream/uploadWatermark.manual.json",
+      "reason": "Official watermark documentation supports multipart PNG uploads omitted by generated JSON operation. Adds separate upload operation preserving JSON API. spec-to-smithy and service generator both run."
+    }
+  ],
+  "sources": [
+    "https://developers.cloudflare.com/stream/edit-videos/applying-watermarks/",
+    "https://developers.cloudflare.com/api/resources/stream/subresources/watermarks/methods/create/",
+    "https://developers.cloudflare.com/api/resources/schema_validation/",
+    "https://developers.cloudflare.com/api/resources/images/subresources/v1/subresources/keys/",
+    "https://developers.cloudflare.com/api/resources/stream/subresources/keys/",
+    "https://developers.cloudflare.com/api/resources/stream/subresources/webhooks/"
+  ]
+}

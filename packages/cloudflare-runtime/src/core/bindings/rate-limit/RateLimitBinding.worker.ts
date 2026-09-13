@@ -7,8 +7,11 @@ const RATE_LIMIT_OPTION_KEYS = ["key", "limit", "period"];
 const RATE_LIMIT_PERIOD_VALUES = [10, 60];
 
 // create a new Ratelimit
-export default function makeBinding(env: { PROPS: RateLimitProps }) {
-  return new RateLimitBinding(env.PROPS);
+export default function makeBinding(env: {
+  PROPS: RateLimitProps;
+  FETCHER?: Fetcher;
+}) {
+  return new RateLimitBinding(env.PROPS, env.FETCHER);
 }
 
 interface Bucket {
@@ -24,7 +27,10 @@ class RateLimitBinding implements RateLimit {
   // buckets of every other key/period.
   buckets: Map<string, Bucket>;
 
-  constructor(readonly config: RateLimitProps) {
+  constructor(
+    readonly config: RateLimitProps,
+    readonly fetcher?: Fetcher,
+  ) {
     this.buckets = new Map<string, Bucket>();
   }
 
@@ -55,6 +61,19 @@ class RateLimitBinding implements RateLimit {
       `unsupported period: ${period}`,
     );
 
+    validate(
+      Number.isInteger(limit) && limit > 0,
+      `limit must be a positive integer: ${limit}`,
+    );
+    if (this.fetcher) {
+      const response = await this.fetcher.fetch("http://ratelimit/limit", {
+        method: "POST",
+        body: JSON.stringify({ key, limit, period }),
+      });
+      if (!response.ok)
+        throw new Error(`Local rate limiter failed: ${response.status}`);
+      return response.json<RateLimitOutcome>();
+    }
     const now = Date.now();
     let bucket = this.buckets.get(key);
     if (bucket === undefined || now >= bucket.resetAt) {

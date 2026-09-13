@@ -115,6 +115,12 @@ export const isDeviceManagedNetwork = (
 
 export const DeviceManagedNetworkProvider = () =>
   Provider.succeed(DeviceManagedNetwork, {
+    diff: Effect.fn(function* ({ output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (output !== undefined && output.accountId !== accountId) {
+        return { action: "replace" } as const;
+      }
+    }),
     stables: ["networkId", "accountId", "type"],
 
     // Account collection: managed networks are account-scoped and the
@@ -156,7 +162,7 @@ export const DeviceManagedNetworkProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const name = yield* createNetworkName(id, news.name);
+      const name = yield* createNetworkName(id, news.name ?? output?.name);
 
       // 1. Observe — the network id cached on `output` is a hint, not a
       //    guarantee. Names are unique per account, so also scan by name

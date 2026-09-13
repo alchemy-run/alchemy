@@ -343,7 +343,7 @@ export const WaitingRoomProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       // Inputs have been resolved to concrete strings by Plan.
       const zoneId = news.zoneId as string;
-      const name = yield* createRoomName(id, news.name);
+      const name = yield* createRoomName(id, news.name ?? output?.name);
 
       // 1. Observe — the id cached on `output` is a hint, not a guarantee:
       //    a missing room falls through to the name scan and then to create.
@@ -366,7 +366,7 @@ export const WaitingRoomProvider = () =>
 
       // 3. Sync — the update API is a full-body PUT; diff observed cloud
       //    state against the desired body and skip the call on a no-op.
-      const desired = desiredBody(news);
+      const desired = desiredBody(news, observed);
       if (!isDirty(observed, name, desired)) {
         return toAttributes(observed, zoneId);
       }
@@ -468,28 +468,83 @@ const createRoomName = (id: string, name: string | undefined) =>
  * defaults — sending Advanced-only fields explicitly would fail on
  * non-Advanced plans.
  */
-const desiredBody = (news: Props) => ({
+const desiredBody = (news: Props, observed?: ObservedRoom) => ({
   host: news.host,
   totalActiveUsers: news.totalActiveUsers,
   newUsersPerMinute: news.newUsersPerMinute,
-  path: news.path,
-  description: news.description,
-  sessionDuration: news.sessionDuration,
-  disableSessionRenewal: news.disableSessionRenewal,
-  queueAll: news.queueAll,
-  queueingMethod: news.queueingMethod,
-  queueingStatusCode: news.queueingStatusCode,
-  suspended: news.suspended,
-  jsonResponseEnabled: news.jsonResponseEnabled,
+  path:
+    news.path ??
+    (observed?.path != null && observed.path !== DEFAULTS.path
+      ? DEFAULTS.path
+      : undefined),
+  description:
+    news.description ??
+    (observed?.description != null &&
+    observed.description !== DEFAULTS.description
+      ? DEFAULTS.description
+      : undefined),
+  sessionDuration:
+    news.sessionDuration ??
+    (observed?.sessionDuration != null &&
+    observed.sessionDuration !== DEFAULTS.sessionDuration
+      ? DEFAULTS.sessionDuration
+      : undefined),
+  disableSessionRenewal:
+    news.disableSessionRenewal ??
+    (observed?.disableSessionRenewal != null &&
+    observed.disableSessionRenewal !== DEFAULTS.disableSessionRenewal
+      ? DEFAULTS.disableSessionRenewal
+      : undefined),
+  queueAll:
+    news.queueAll ??
+    (observed?.queueAll != null && observed.queueAll !== DEFAULTS.queueAll
+      ? DEFAULTS.queueAll
+      : undefined),
+  queueingMethod:
+    news.queueingMethod ??
+    (observed?.queueingMethod != null &&
+    observed.queueingMethod !== DEFAULTS.queueingMethod
+      ? DEFAULTS.queueingMethod
+      : undefined),
+  queueingStatusCode:
+    news.queueingStatusCode ??
+    (observed?.queueingStatusCode != null &&
+    observed.queueingStatusCode !== DEFAULTS.queueingStatusCode
+      ? DEFAULTS.queueingStatusCode
+      : undefined),
+  suspended:
+    news.suspended ??
+    (observed?.suspended != null && observed.suspended !== DEFAULTS.suspended
+      ? DEFAULTS.suspended
+      : undefined),
+  jsonResponseEnabled:
+    news.jsonResponseEnabled ??
+    (observed?.jsonResponseEnabled != null &&
+    observed.jsonResponseEnabled !== DEFAULTS.jsonResponseEnabled
+      ? DEFAULTS.jsonResponseEnabled
+      : undefined),
   customPageHtml: news.customPageHtml,
-  defaultTemplateLanguage:
-    news.defaultTemplateLanguage as waitingRooms.UpdateWaitingRoomRequest["defaultTemplateLanguage"],
+  defaultTemplateLanguage: (news.defaultTemplateLanguage ??
+    (observed?.defaultTemplateLanguage != null &&
+    observed.defaultTemplateLanguage !== DEFAULTS.defaultTemplateLanguage
+      ? DEFAULTS.defaultTemplateLanguage
+      : undefined)) as waitingRooms.UpdateWaitingRoomRequest["defaultTemplateLanguage"],
   cookieSuffix: news.cookieSuffix,
   cookieAttributes: news.cookieAttributes,
   additionalRoutes: news.additionalRoutes,
   enabledOriginCommands: news.enabledOriginCommands,
-  turnstileMode: news.turnstileMode,
-  turnstileAction: news.turnstileAction,
+  turnstileMode:
+    news.turnstileMode ??
+    (observed?.turnstileMode != null &&
+    observed.turnstileMode !== DEFAULTS.turnstileMode
+      ? DEFAULTS.turnstileMode
+      : undefined),
+  turnstileAction:
+    news.turnstileAction ??
+    (observed?.turnstileAction != null &&
+    observed.turnstileAction !== DEFAULTS.turnstileAction
+      ? DEFAULTS.turnstileAction
+      : undefined),
 });
 
 /**

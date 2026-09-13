@@ -266,7 +266,10 @@ export const TokenConfigurationProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       // Inputs have been resolved to concrete values by Plan.
       const zoneId = news.zoneId as string;
-      const title = yield* createConfigurationTitle(id, news.title);
+      const title = yield* createConfigurationTitle(
+        id,
+        news.title ?? output?.title,
+      );
 
       // 1. Observe — the UUID cached on `output` is a hint, not a
       //    guarantee: a 404 falls through to "missing" and we recreate.

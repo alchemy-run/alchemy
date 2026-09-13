@@ -1,0 +1,17 @@
+{
+  "service": "containers runtime",
+  "resources": [
+    "Containers.StartContainer"
+  ],
+  "testsPassed": 1,
+  "testCommand": "timeout 240 pnpm test test/Cloudflare/Container/ReadinessTimeout.local.test.ts --profile testing --timeout 120000 --retry 0",
+  "files": [
+    "packages/alchemy/src/Cloudflare/Containers/StartContainer.ts",
+    "packages/alchemy/test/Cloudflare/Container/ReadinessTimeout.local.test.ts",
+    "packages/alchemy/test/Cloudflare/Container/fixtures/readiness-timeout/object.ts",
+    "packages/alchemy/test/Cloudflare/Container/fixtures/readiness-timeout/worker.ts"
+  ],
+  "patches": [],
+  "skippedTests": [],
+  "notes": "Real Docker Bun server accepts HTTP connections but never responds. Real workerd DurableObject request fails with20s readiness message and elapsed<35s. Passed26.7stest27.2ssuite,no retries. Log08-40-04-pid72669. Entire instance/port phases now wall-clock limited8s/20s; request retry no longer repeats readiness."
+}

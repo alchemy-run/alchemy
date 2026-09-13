@@ -1,8 +1,12 @@
+import { createHash } from "node:crypto";
 import { loadInternalWorker } from "../../internal/internal-worker.ts";
 import * as queues from "@distilled.cloud/cloudflare/queues";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
+import * as Storage from "../../globals/Storage.ts";
 const QueueBrokerWorker = {
   worker: () =>
     loadInternalWorker(
@@ -34,6 +38,7 @@ import {
   BINDING_QUEUE_CONSUMER,
   BINDING_QUEUE_DLQ,
   BINDING_QUEUE_NAME,
+  BINDING_QUEUE_FORWARD,
   BINDING_QUEUE_PRODUCERS,
   BINDING_QUEUE_USER_WORKER,
 } from "./QueueOptions.shared.ts";
@@ -44,8 +49,8 @@ export class Queue extends Plugin.Service<
     /**
      * Record a producer binding and resolve the workerd `queue` designator it
      * should target: the local broker service when this worker also consumes the
-     * queue, otherwise the dev-registry `ExternalQueueProxy` (which forwards to
-     * whichever instance consumes the queue).
+     * queue, otherwise a durable producer spool that forwards through the dev registry
+     * when the consuming instance becomes available.
      */
     readonly registerProducer: (
       props: QueueProducerProps,
@@ -71,6 +76,9 @@ export const QueueLive = Layer.effect(
     // embedder (e.g. the local-only test suites) pays nothing — pull
     // consumers simply require an embedder that provides `Credentials`.
     const ambient = yield* Effect.context<never>();
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const storage = yield* Storage.Storage;
 
     return Queue.of(
       Effect.gen(function* () {
@@ -79,9 +87,38 @@ export const QueueLive = Layer.effect(
         const consumers = ctx.worker.queueConsumers ?? [];
         const producers: Array<QueueProducerEntry> = [];
         const remoteProducers: Array<QueueRemoteProducerProps> = [];
+        const forwardingTargets = new Map<
+          string,
+          WorkerdConfig.ServiceDesignator
+        >();
+        const brokerSockets: Array<WorkerdConfig.Socket> = [];
+        type BrokerQueue = QueueConsumer & { forwarding?: boolean };
+        const brokerQueues = (): Array<BrokerQueue> => [
+          ...consumers,
+          ...Array.from(forwardingTargets.keys(), (queueName) => ({
+            queueName,
+            forwarding: true,
+          })),
+        ];
 
         const queueServiceName = (queueName: string): string =>
           `queues:${queueName}`;
+        const spoolServiceName = (queueName: string): string =>
+          `queues:producer:${queueName}`;
+        const spoolSocketName = (queueName: string): string =>
+          `queue-spool:${queueName}`;
+        // A former producer-only instance may become the consumer. Keep its
+        // forwarding spool attached so saved messages drain into the new broker.
+        for (const consumer of consumers) {
+          forwardingTargets.set(consumer.queueName, {
+            name: queueServiceName(consumer.queueName),
+          });
+          brokerSockets.push({
+            name: spoolSocketName(consumer.queueName),
+            address: "127.0.0.1:0",
+            service: { name: spoolServiceName(consumer.queueName) },
+          });
+        }
 
         for (const consumer of consumers) {
           if (
@@ -117,14 +154,30 @@ export const QueueLive = Layer.effect(
         }
 
         const queueConsumerServiceDesignator = (queueName: string) =>
-          consumers.find((consumer) => consumer.queueName === queueName)
-            ? Effect.succeed<WorkerdConfig.ServiceDesignator>({
-                name: queueServiceName(queueName),
-              })
-            : proxy.api.subscribe({
+          Effect.gen(function* () {
+            if (
+              !consumers.some((consumer) => consumer.queueName === queueName) &&
+              !forwardingTargets.has(queueName)
+            ) {
+              const target = yield* proxy.api.subscribe({
                 kind: "queue-consumer",
                 queueName,
               });
+              forwardingTargets.set(queueName, target);
+              brokerSockets.push({
+                name: spoolSocketName(queueName),
+                address: "127.0.0.1:0",
+                service: { name: spoolServiceName(queueName) },
+              });
+            }
+            return {
+              name: consumers.some(
+                (consumer) => consumer.queueName === queueName,
+              )
+                ? queueServiceName(queueName)
+                : spoolServiceName(queueName),
+            };
+          });
 
         // Dead-letter-queue targets are resolved eagerly, at plugin init:
         // `defer` phases run concurrently across plugins, so a registry
@@ -148,6 +201,15 @@ export const QueueLive = Layer.effect(
           ),
         );
 
+        const persistenceKey = (queueName: string) =>
+          consumers.find((consumer) => consumer.queueName === queueName)
+            ?.persistenceKey ??
+          producers.find((producer) => producer.queueName === queueName)
+            ?.persistenceKey ??
+          consumers.find((consumer) => consumer.deadLetterQueue === queueName)
+            ?.deadLetterQueuePersistenceKey ??
+          queueName;
+
         /**
          * Build the workerd service for a single consumed queue. A single service both
          * hosts the `QueueBrokerObject` Durable Object and exposes the entry `fetch`
@@ -157,10 +219,12 @@ export const QueueLive = Layer.effect(
          * cross-service Durable Object reference, which the runtime does not support.
          */
         const queueConsumerService = Effect.fnUntraced(function* (
-          consumer: QueueConsumer,
+          consumer: BrokerQueue,
         ) {
           return {
-            name: queueServiceName(consumer.queueName),
+            name: consumer.forwarding
+              ? spoolServiceName(consumer.queueName)
+              : queueServiceName(consumer.queueName),
             worker: {
               compatibilityDate: DEFAULT_COMPATIBILITY_DATE,
               compatibilityFlags: [
@@ -173,12 +237,25 @@ export const QueueLive = Layer.effect(
               durableObjectNamespaces: [
                 {
                   className: "QueueBroker",
+                  enableSql: true,
                   // Unique per queue so each broker gets an isolated DO namespace.
-                  uniqueKey: `cloudflare-runtime-QueueBroker-${consumer.queueName}`,
+                  uniqueKey: `cloudflare-runtime-QueueBroker-${createHash(
+                    "sha256",
+                  )
+                    .update(
+                      consumer.forwarding
+                        ? JSON.stringify([
+                            "producer",
+                            ctx.worker.name,
+                            persistenceKey(consumer.queueName),
+                          ])
+                        : persistenceKey(consumer.queueName),
+                    )
+                    .digest("hex")}`,
                   preventEviction: true,
                 },
               ],
-              durableObjectStorage: { inMemory: WorkerdConfig.kVoid },
+              durableObjectStorage: { localDisk: "queues:storage" },
               bindings: [
                 {
                   name: BINDING_QUEUE_BROKER,
@@ -189,10 +266,19 @@ export const QueueLive = Layer.effect(
                   service: { name: SERVICE_USER_WORKER },
                 },
                 { name: BINDING_QUEUE_NAME, text: consumer.queueName },
-                {
-                  name: BINDING_QUEUE_CONSUMER,
-                  json: JSON.stringify(consumer),
-                },
+                ...(consumer.forwarding
+                  ? [
+                      {
+                        name: BINDING_QUEUE_FORWARD,
+                        service: forwardingTargets.get(consumer.queueName)!,
+                      },
+                    ]
+                  : [
+                      {
+                        name: BINDING_QUEUE_CONSUMER,
+                        json: JSON.stringify(consumer),
+                      },
+                    ]),
                 {
                   name: BINDING_QUEUE_PRODUCERS,
                   json: JSON.stringify(producers),
@@ -249,6 +335,14 @@ export const QueueLive = Layer.effect(
         );
         const pullSocketName = (queueName: string): string =>
           `queue-pull:${queueName}`;
+
+        brokerSockets.push(
+          ...consumers.map((consumer) => ({
+            name: pullSocketName(consumer.queueName),
+            address: "127.0.0.1:0",
+            service: { name: queueServiceName(consumer.queueName) },
+          })),
+        );
 
         const pullLoop = (
           consumer: QueueConsumer,
@@ -316,7 +410,9 @@ export const QueueLive = Layer.effect(
               Effect.suspend(() => {
                 producers.push({
                   queueName: props.queueName,
+                  persistenceKey: props.persistenceKey,
                   deliveryDelay: props.deliveryDelay,
+                  messageRetentionPeriod: props.messageRetentionPeriod,
                 });
                 return queueConsumerServiceDesignator(props.queueName);
               }),
@@ -326,26 +422,77 @@ export const QueueLive = Layer.effect(
                 return { name: remoteShimServiceName(props.binding) };
               }),
           },
-          sockets: pullConsumers.map((consumer) => ({
-            name: pullSocketName(consumer.queueName),
-            address: "127.0.0.1:0",
-            service: { name: queueServiceName(consumer.queueName) },
-          })),
+          sockets: brokerSockets,
           start: (ports) =>
-            Effect.forEach(
-              pullConsumers,
-              (consumer) => {
-                const port = ports[pullSocketName(consumer.queueName)];
-                return port === undefined
-                  ? Effect.void
-                  : Effect.forkScoped(pullLoop(consumer, consumer.pull!, port));
-              },
-              { discard: true },
-            ),
-          defer: Effect.suspend(() =>
-            Effect.all(
+            Effect.gen(function* () {
+              // Instantiate each broker on startup so persisted messages resume
+              // under the new consumer settings without requiring another send.
+              yield* Effect.forEach(
+                brokerQueues(),
+                (consumer) =>
+                  Effect.gen(function* () {
+                    const port =
+                      ports[
+                        consumer.forwarding
+                          ? spoolSocketName(consumer.queueName)
+                          : pullSocketName(consumer.queueName)
+                      ];
+                    if (port === undefined) return;
+                    yield* Effect.tryPromise({
+                      try: async () => {
+                        const response = await fetch(
+                          `http://127.0.0.1:${port}/metrics`,
+                        );
+                        if (!response.ok)
+                          throw new Error(
+                            `Broker returned HTTP ${response.status}`,
+                          );
+                        await response.arrayBuffer();
+                      },
+                      catch: (cause) =>
+                        new ConfigError({
+                          subtag: "Queue",
+                          message: `Failed to initialize queue "${consumer.queueName}".`,
+                          hint: "Inspect the broker runtime log.",
+                          cause,
+                        }),
+                    });
+                    if (consumer.pull)
+                      yield* Effect.forkScoped(
+                        pullLoop(consumer, consumer.pull, port),
+                      );
+                  }),
+                { discard: true },
+              );
+            }),
+          defer: Effect.gen(function* () {
+            const storageDiskPath =
+              "disk" in storage ? storage.disk?.path : undefined;
+            if (brokerQueues().length > 0 && !storageDiskPath) {
+              return yield* new ConfigError({
+                subtag: "Queue",
+                message: "Queue persistence requires disk-backed storage.",
+                hint: "Configure Storage.layerDisk or Storage.layerTemp.",
+              });
+            }
+            const persistPath = storageDiskPath
+              ? path.join(storageDiskPath, "queues")
+              : undefined;
+            if (brokerQueues().length > 0)
+              yield* fs.makeDirectory(persistPath!, { recursive: true }).pipe(
+                Effect.mapError(
+                  (cause) =>
+                    new ConfigError({
+                      subtag: "Queue",
+                      message: "Failed to create queue persistence directory.",
+                      hint: "Ensure the storage directory is writable.",
+                      cause,
+                    }),
+                ),
+              );
+            return yield* Effect.all(
               [
-                Effect.forEach(consumers, queueConsumerService, {
+                Effect.forEach(brokerQueues(), queueConsumerService, {
                   concurrency: "unbounded",
                 }),
                 Effect.forEach(remoteProducers, remoteShimService, {
@@ -355,10 +502,21 @@ export const QueueLive = Layer.effect(
               { concurrency: "unbounded" },
             ).pipe(
               Effect.map(([consumerServices, shimServices]) => ({
-                services: [...consumerServices, ...shimServices],
+                services: [
+                  ...(consumerServices.length > 0
+                    ? [
+                        {
+                          name: "queues:storage",
+                          disk: { path: persistPath!, writable: true },
+                        },
+                      ]
+                    : []),
+                  ...consumerServices,
+                  ...shimServices,
+                ],
               })),
-            ),
-          ),
+            );
+          }),
         };
       }),
     );
@@ -393,6 +551,10 @@ const decodePulledMessage = (message: {
 
 /** Options for a queue producer binding (`env.QUEUE.send()`). */
 export interface QueueProducerProps {
+  /** Stable identity for one queue lifetime; defaults to queueName. */
+  readonly persistenceKey?: string;
+  /** Retain offline messages for this many seconds. @default 86400 */
+  readonly messageRetentionPeriod?: number;
   /** Binding name exposed on `env`. */
   readonly binding: string;
   /** Logical name of the queue this binding produces to. */
@@ -408,7 +570,8 @@ export interface QueueProducerProps {
  * consumes the queue:
  * - If this worker consumes the queue, the broker is local.
  * - Otherwise the binding routes through the dev-registry proxy to the
- *   consuming instance (or accepts-and-drops if no consumer is running).
+ *   consuming instance through a durable forwarding broker. Pending messages
+ *   survive producer restarts and wait for a consumer to register.
  */
 export const local = (
   props: QueueProducerProps,

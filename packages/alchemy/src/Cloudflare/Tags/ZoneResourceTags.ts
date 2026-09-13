@@ -5,7 +5,7 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 
 import { Unowned } from "../../AdoptPolicy.ts";
-import type { Input } from "../../Input.ts";
+import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { recordsEqual } from "../../Util/equal.ts";
@@ -22,7 +22,10 @@ type TypeId = typeof TypeId;
 const targetVisibleRetry = {
   while: (e: { _tag: string }) => e._tag === "ZoneTagResourceNotFound",
   schedule: Schedule.max([
-    Schedule.exponential("500 millis"),
+    Schedule.min([
+      Schedule.exponential("500 millis"),
+      Schedule.spaced("5 seconds"),
+    ]),
     Schedule.recurs(10),
   ]),
 } as const;
@@ -196,36 +199,17 @@ export const ZoneResourceTagsProvider = () =>
         );
     }),
 
-    diff: Effect.fn(function* ({ olds = {}, news }) {
-      const o = olds as Partial<ZoneResourceTagsProps>;
-      const n = news as ZoneResourceTagsProps;
-      if (o.resourceType !== undefined && o.resourceType !== n.resourceType) {
-        return { action: "replace" } as const;
-      }
-      // zoneId / resourceId / accessApplicationId are Input<string>; by
-      // diff time persisted olds are concrete strings — compare only when
-      // both sides are.
+    diff: Effect.fn(function* ({ olds, news, output }) {
+      if (!isResolved(news)) return undefined;
+      const previous = output ?? (olds && isResolved(olds) ? olds : undefined);
       if (
-        typeof o.zoneId === "string" &&
-        typeof n.zoneId === "string" &&
-        o.zoneId !== n.zoneId
-      ) {
+        previous &&
+        (previous.zoneId !== news.zoneId ||
+          previous.resourceType !== news.resourceType ||
+          previous.resourceId !== news.resourceId ||
+          previous.accessApplicationId !== news.accessApplicationId)
+      )
         return { action: "replace" } as const;
-      }
-      if (
-        typeof o.resourceId === "string" &&
-        typeof n.resourceId === "string" &&
-        o.resourceId !== n.resourceId
-      ) {
-        return { action: "replace" } as const;
-      }
-      if (
-        typeof o.accessApplicationId === "string" &&
-        typeof n.accessApplicationId === "string" &&
-        o.accessApplicationId !== n.accessApplicationId
-      ) {
-        return { action: "replace" } as const;
-      }
     }),
 
     read: Effect.fn(function* ({ output, olds }) {
@@ -359,9 +343,7 @@ const narrowTags = (tags: Record<string, unknown>): Record<string, string> =>
   );
 
 /** Resolve `Input<string>` tag values (already concrete after Plan). */
-const resolveTags = (
-  tags: Record<string, Input<string>>,
-): Record<string, string> =>
+const resolveTags = (tags: Record<string, string>): Record<string, string> =>
   Object.fromEntries(
     Object.entries(tags).map(([k, v]) => [k, v as string] as const),
   );

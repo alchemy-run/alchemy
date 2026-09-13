@@ -159,7 +159,7 @@ export const TieredCachingProvider = () =>
       if (!zoneId) return undefined;
       const observed = yield* argo.getTieredCaching({ zoneId }).pipe(
         // Zone deleted out-of-band — the setting is gone with it.
-        Effect.catchTag("InvalidObjectIdentifier", () =>
+        Effect.catchTag(["InvalidObjectIdentifier", "ZoneNotFound"], () =>
           Effect.succeed(undefined),
         ),
       );
@@ -205,7 +205,7 @@ export const TieredCachingProvider = () =>
       const observed = yield* argo
         .getTieredCaching({ zoneId })
         .pipe(
-          Effect.catchTag("InvalidObjectIdentifier", () =>
+          Effect.catchTag(["InvalidObjectIdentifier", "ZoneNotFound"], () =>
             Effect.succeed(undefined),
           ),
         );

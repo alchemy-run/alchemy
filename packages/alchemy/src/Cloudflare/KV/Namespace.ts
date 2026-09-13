@@ -94,7 +94,8 @@ export const ProviderLive = () =>
     }),
     reconcile: Effect.fn(function* ({ id, news = {}, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const title = yield* createTitle(id, news.title);
+      const title =
+        news.title ?? output?.title ?? (yield* createTitle(id, undefined));
       const acct = output?.accountId ?? accountId;
 
       // Observe — re-fetch the cached namespace; fall back to a title
@@ -130,15 +131,13 @@ export const ProviderLive = () =>
             title,
           })
           .pipe(
-            Effect.catchTag("NamespaceTitleAlreadyExists", () =>
+            Effect.catchTag("NamespaceTitleAlreadyExists", (cause) =>
               Effect.gen(function* () {
                 const match = yield* findNamespaceByTitle(title);
                 if (match) {
                   return match;
                 }
-                return yield* Effect.die(
-                  `Namespace with title "${title}" already exists but could not be found`,
-                );
+                return yield* Effect.fail(cause);
               }),
             ),
           );

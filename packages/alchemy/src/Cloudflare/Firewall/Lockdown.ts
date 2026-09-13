@@ -5,6 +5,7 @@ import * as Stream from "effect/Stream";
 
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
+import { isResolved } from "../../Diff.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
@@ -176,17 +177,10 @@ export const LockdownProvider = () =>
   Provider.succeed(Lockdown, {
     stables: ["lockdownId", "zoneId", "createdOn"],
 
-    diff: Effect.fn(function* ({ olds = {}, news }) {
-      const o = olds as LockdownProps;
-      const n = news as LockdownProps;
-      // No prior props to compare against — let the engine decide.
-      if (o.zoneId === undefined) return undefined;
-      // zoneId is Input<string>; compare only once both are concrete.
-      if (
-        typeof o.zoneId === "string" &&
-        typeof n.zoneId === "string" &&
-        o.zoneId !== n.zoneId
-      ) {
+    diff: Effect.fn(function* ({ olds, news, output }) {
+      if (!isResolved(news)) return undefined;
+      const oldZoneId = output?.zoneId ?? olds?.zoneId;
+      if (typeof oldZoneId === "string" && oldZoneId !== news.zoneId) {
         return { action: "replace" } as const;
       }
       return undefined;

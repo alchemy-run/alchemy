@@ -1,3 +1,4 @@
+import { rulesEqual } from "./rulesEqual.ts";
 import * as rulesets from "@distilled.cloud/cloudflare/rulesets";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
@@ -122,7 +123,7 @@ export const RulesetProvider = () =>
           return { action: "replace" } as const;
         }
       }
-      if (olds.phase !== news.phase) {
+      if ((output?.phase ?? olds.phase) !== news.phase) {
         return { action: "replace" } as const;
       }
 
@@ -147,6 +148,19 @@ export const RulesetProvider = () =>
         );
       }
       const name = yield* createRulesetName(id, news.name ?? output?.name);
+      const observed = yield* rulesets
+        .getPhasForZone({ zoneId, rulesetPhase: news.phase })
+        .pipe(
+          Effect.catchTag("RulesetNotFound", () => Effect.succeed(undefined)),
+        );
+      if (
+        observed &&
+        observed.name === name &&
+        (observed.description ?? "") === (news.description ?? "") &&
+        rulesEqual(observed.rules ?? [], news.rules)
+      ) {
+        return toRulesetAttributes(zoneId, observed);
+      }
       const ruleset = yield* rulesets.putPhasForZone({
         zoneId,
         rulesetPhase: news.phase,

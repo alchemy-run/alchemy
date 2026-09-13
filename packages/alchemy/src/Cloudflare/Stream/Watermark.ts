@@ -3,7 +3,8 @@ import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
 
-import { isResolved } from "../../Diff.ts";
+import { Unowned } from "../../AdoptPolicy.ts";
+import { deepEqual, isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -34,9 +35,11 @@ export type WatermarkProps = {
   name?: string;
   /**
    * URL of the watermark image (a PNG up to 2 MiB) for Cloudflare to
-   * download. Changing the URL triggers a replacement.
+   * download. Set exactly one of url or file. Changing the URL triggers a replacement.
    */
-  url: string;
+  url?: string;
+  /** PNG image bytes (up to 2 MiB), uploaded directly. Set exactly one of file or url. Changes replace the watermark. */
+  file?: Uint8Array;
   /**
    * The translucency of the image. `0.0` is completely transparent and
    * `1.0` is completely opaque. Changing the opacity triggers a
@@ -135,7 +138,19 @@ export type Watermark = Resource<
  * profile is created and the old one deleted). The image is downloaded
  * by Cloudflare from the given URL at creation time.
  *
+ * A name match without prior state requires explicit adoption. Once adopted,
+ * observed immutable attributes still determine whether replacement is needed.
+ * Omitting a previously explicit name preserves that physical name.
+ *
  * Requires the Stream subscription to be enabled on the account.
+ * ### Uploading PNG bytes
+ * **Example:** Upload a checked-in image directly
+ * ```typescript
+ * const watermark = yield* Cloudflare.Stream.Watermark("Logo", {
+ *   file: new Uint8Array(await Bun.file("logo.png").arrayBuffer()),
+ * });
+ * ```
+ *
  * ### Creating a watermark
  * **Example:** Default watermark from an image URL
  * ```typescript
@@ -185,7 +200,7 @@ export const WatermarkProvider = () =>
       if (output !== undefined && output.accountId !== accountId) {
         return { action: "replace" } as const;
       }
-      if (olds === undefined) return undefined;
+      if (olds === undefined && output === undefined) return undefined;
       // `news` may still contain unresolved Outputs at plan time — let
       // the engine apply the default update logic in that case.
       if (!isResolved(news)) return undefined;
@@ -193,16 +208,21 @@ export const WatermarkProvider = () =>
       // against the observed output where the API echoes the value, and
       // against olds for the create-only `url`.
       const oldName =
-        output?.name ?? olds.name ?? (yield* watermarkName(id, olds.name));
-      const newName = yield* watermarkName(id, news.name);
+        output?.name ?? olds?.name ?? (yield* watermarkName(id, olds?.name));
+      const newName = yield* watermarkName(
+        id,
+        news.name ?? output?.name ?? olds?.name,
+      );
+      const oldUrl = olds?.url ?? output?.downloadedFrom;
       if (
         newName !== oldName ||
-        news.url !== olds.url ||
-        (news.opacity ?? 1.0) !== (output?.opacity ?? olds.opacity ?? 1.0) ||
-        (news.padding ?? 0.05) !== (output?.padding ?? olds.padding ?? 0.05) ||
+        (oldUrl !== undefined && news.url !== oldUrl) ||
+        !deepEqual(news.file, olds?.file) ||
+        (news.opacity ?? 1.0) !== (output?.opacity ?? olds?.opacity ?? 1.0) ||
+        (news.padding ?? 0.05) !== (output?.padding ?? olds?.padding ?? 0.05) ||
         (news.position ?? "upperRight") !==
-          (output?.position ?? olds.position ?? "upperRight") ||
-        (news.scale ?? 0.15) !== (output?.scale ?? olds.scale ?? 0.15)
+          (output?.position ?? olds?.position ?? "upperRight") ||
+        (news.scale ?? 0.15) !== (output?.scale ?? olds?.scale ?? 0.15)
       ) {
         return { action: "replace" } as const;
       }
@@ -223,12 +243,17 @@ export const WatermarkProvider = () =>
       // name is the best identity we have.
       const name = yield* watermarkName(id, olds?.name);
       const match = yield* findByName(acct, name);
-      return match ? toAttributes(match, acct) : undefined;
+      return match ? Unowned(toAttributes(match, acct)) : undefined;
     }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const name = yield* watermarkName(id, news.name);
+      const name = yield* watermarkName(id, news.name ?? output?.name);
+      if ((news.url === undefined) === (news.file === undefined)) {
+        return yield* Effect.die(
+          new Error("Watermark requires exactly one of url or file"),
+        );
+      }
 
       // Observe — the uid cached on `output` is a hint, not a
       // guarantee: a not-found falls through to "missing" and we
@@ -245,15 +270,20 @@ export const WatermarkProvider = () =>
 
       // Ensure — create with the full desired body. uids are
       // auto-assigned so there is no AlreadyExists race to tolerate.
-      const created = yield* stream.createWatermark({
+      const options = {
         accountId,
         name,
-        url: news.url,
         opacity: news.opacity,
         padding: news.padding,
         position: news.position,
         scale: news.scale,
-      });
+      };
+      const created = yield* news.file !== undefined
+        ? stream.uploadWatermark({
+            ...options,
+            file: new Blob([Uint8Array.from(news.file)], { type: "image/png" }),
+          })
+        : stream.createWatermark({ ...options, url: news.url });
       return toAttributes(created, accountId);
     }),
 

@@ -48,7 +48,7 @@ const getSchemaOob = (zoneId: string, schemaId: string) =>
   schemaValidation.getSchema({ zoneId, schemaId }).pipe(
     Effect.retry({
       while: (e) => e._tag === "Forbidden",
-      schedule: Schedule.exponential("500 millis"),
+      schedule: Schedule.spaced("2 seconds"),
       times: 8,
     }),
   );

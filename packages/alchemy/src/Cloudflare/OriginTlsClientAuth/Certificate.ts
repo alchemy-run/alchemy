@@ -133,29 +133,19 @@ export const CertificateProvider = () =>
   Provider.succeed(Certificate, {
     stables: ["certificateId", "zoneId"],
 
-    diff: Effect.fn(function* ({ olds = {}, news }) {
-      if (!isResolved(news)) return undefined;
-      const o = olds as CertificateProps;
-      const n = news as CertificateProps;
-      // zoneId is Input<string>; compare only once both sides are concrete.
-      if (
-        typeof o.zoneId === "string" &&
-        typeof n.zoneId === "string" &&
-        o.zoneId !== n.zoneId
-      ) {
+    diff: Effect.fn(function* ({ olds, news, output }) {
+      if (!isResolved(news)) return;
+      const zoneId = output?.zoneId ?? olds?.zoneId;
+      if (zoneId !== undefined && zoneId !== news.zoneId)
         return { action: "replace" } as const;
-      }
+      // Private keys cannot be observed. Adoption must not invent a rotation.
       if (
-        (o.certificate !== undefined &&
-          normalizePem(o.certificate) !== normalizePem(n.certificate)) ||
-        (o.privateKey !== undefined &&
-          unwrap(o.privateKey) !== unwrap(n.privateKey))
-      ) {
-        // There is no update API for zone client certificates — every change
-        // is a replacement.
+        (olds?.certificate !== undefined &&
+          normalizePem(olds.certificate) !== normalizePem(news.certificate)) ||
+        (olds?.privateKey !== undefined &&
+          unwrap(olds.privateKey) !== unwrap(news.privateKey))
+      )
         return { action: "replace" } as const;
-      }
-      return undefined;
     }),
 
     read: Effect.fn(function* ({ output, olds }) {
@@ -291,7 +281,7 @@ export const CertificateProvider = () =>
               e._tag === "CertificatePendingDeployment" ||
               e._tag === "ZoneClientCertConflict",
             schedule: Schedule.spaced("5 seconds"),
-            times: 12,
+            times: 10,
           }),
           Effect.catchTag(
             ["CertificateNotFound", "CertificateAlreadyDeleted"],

@@ -130,7 +130,9 @@ export const UserApiTokenProvider = () =>
         oldPolicyFp !== newPolicyFp ||
         oldCondFp !== newCondFp ||
         (olds?.expiresOn ?? undefined) !== (news.expiresOn ?? undefined) ||
-        (olds?.notBefore ?? undefined) !== (news.notBefore ?? undefined)
+        (olds?.notBefore ?? undefined) !== (news.notBefore ?? undefined) ||
+        (output?.status ?? olds?.status ?? "active") !==
+          (news.status ?? "active")
       ) {
         return { action: "update" } as const;
       }
@@ -173,6 +175,18 @@ export const UserApiTokenProvider = () =>
             `Cloudflare did not return a value for token "${name}".`,
           );
         }
+        if (news.status !== undefined && news.status !== "active") {
+          const updated = yield* user.updateToken({
+            tokenId: result.id!,
+            name,
+            policies,
+            condition: buildConditionPayload(news.condition),
+            expiresOn: news.expiresOn,
+            notBefore: news.notBefore,
+            status: news.status,
+          });
+          return buildAttributes(updated, Redacted.make(result.value));
+        }
         return buildAttributes(result, Redacted.make(result.value));
       }
 
@@ -186,6 +200,7 @@ export const UserApiTokenProvider = () =>
         condition: buildConditionPayload(news.condition),
         expiresOn: news.expiresOn,
         notBefore: news.notBefore,
+        status: news.status ?? "active",
       });
       return buildAttributes(result, output!.value);
     }),

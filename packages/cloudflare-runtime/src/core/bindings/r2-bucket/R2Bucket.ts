@@ -86,12 +86,15 @@ export const R2BucketLive = Layer.effect(
     return R2Bucket.of(
       Effect.sync(() => {
         let used = false;
+        const policies = new Map<string, R2ServiceProps>();
+        const socketName = (name: string) => `r2-policy:${name}`;
 
         return {
           api: {
             register: (props) =>
               Effect.sync(() => {
                 used = true;
+                policies.set(props.bucketName, props);
                 return {
                   name: SERVICE_R2,
                   props: { json: JSON.stringify(props) },
@@ -140,7 +143,40 @@ export const R2BucketLive = Layer.effect(
                 ],
               },
             };
-            return { services: [storageService, r2Service] };
+            return {
+              services: [storageService, r2Service],
+              sockets: [...policies.values()].map((policy) => ({
+                name: socketName(policy.bucketName),
+                address: "127.0.0.1:0",
+                service: {
+                  name: SERVICE_R2,
+                  props: { json: JSON.stringify(policy) },
+                },
+              })),
+              start: (ports) =>
+                Effect.forEach(
+                  [...policies.values()],
+                  (policy) =>
+                    Effect.tryPromise({
+                      try: async () => {
+                        const response = await fetch(
+                          `http://127.0.0.1:${ports[socketName(policy.bucketName)]}/__lifecycle_init`,
+                        );
+                        if (!response.ok)
+                          throw new Error(await response.text());
+                        await response.arrayBuffer();
+                      },
+                      catch: (cause) =>
+                        new ConfigError({
+                          subtag: "R2Bucket",
+                          message: `Failed to initialize bucket ${policy.bucketName}`,
+                          hint: "Inspect lifecycle and storage-class settings.",
+                          cause,
+                        }),
+                    }),
+                  { discard: true },
+                ),
+            };
           }),
         };
       }),
@@ -159,7 +195,12 @@ export const R2BucketLive = Layer.effect(
 export const local = (props: R2BucketProps): BindingHook<R2Bucket> =>
   Plugin.use(R2Bucket, (r2) =>
     Effect.map(
-      r2.api.register({ bucketName: props.id ?? props.binding }),
+      r2.api.register({
+        bucketName: props.id ?? props.binding,
+        lockRules: props.lockRules,
+        lifecycleRules: props.lifecycleRules,
+        storageClass: props.storageClass,
+      }),
       (service): WorkerdConfig.Worker_Binding => ({
         name: props.binding,
         r2Bucket: service,

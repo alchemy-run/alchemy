@@ -211,7 +211,15 @@ export const ShareResourceProvider = () =>
       if (resourceType === undefined || resourceId === undefined) {
         return undefined;
       }
-      const match = yield* findEntry(acct, shareId, resourceType, resourceId);
+      const match = yield* findEntry(
+        acct,
+        shareId,
+        resourceType,
+        resourceId,
+        typeof olds?.resourceAccountId === "string"
+          ? olds.resourceAccountId
+          : acct,
+      );
       return match ? toAttributes(match, acct, shareId) : undefined;
     }),
     reconcile: Effect.fn(function* ({ news, output }) {
@@ -228,7 +236,13 @@ export const ShareResourceProvider = () =>
         (output?.shareResourceId
           ? yield* getEntry(acct, shareId, output.shareResourceId)
           : undefined) ??
-        (yield* findEntry(acct, shareId, news.resourceType, resourceId));
+        (yield* findEntry(
+          acct,
+          shareId,
+          news.resourceType,
+          resourceId,
+          news.resourceAccountId ?? acct,
+        ));
 
       if (!observed) {
         // Ensure — greenfield (or out-of-band delete).
@@ -339,14 +353,17 @@ const findEntry = (
   shareId: string,
   resourceType: ShareableResourceType,
   resourceId: string,
+  resourceAccountId: string,
 ) =>
-  resourceSharing
-    .listResources({ accountId, shareId, resourceType, perPage: 50 })
+  resourceSharing.listResources
+    .items({ accountId, shareId, resourceType, perPage: 50 })
     .pipe(
+      Stream.runCollect,
       Effect.map((list) =>
-        list.result.find(
+        Array.from(list).find(
           (r) =>
             r.resourceId === resourceId &&
+            r.resourceAccountId === resourceAccountId &&
             r.status !== "deleted" &&
             r.status !== "deleting",
         ),

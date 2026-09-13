@@ -323,6 +323,16 @@ export const startContainer = Effect.fn(function* <
             schedule: Schedule.spaced(READINESS_POLL_INTERVAL),
             times: PORT_READY_RETRIES,
           }),
+          // Bound the whole phase, including time spent inside each probe.
+          Effect.timeout(TIMEOUT_TO_GET_PORTS_MS),
+          Effect.catchTag("TimeoutError", (cause) =>
+            Effect.fail(
+              new ContainerError({
+                message: `Container port ${portNumber} did not become ready within ${TIMEOUT_TO_GET_PORTS_MS}ms`,
+                cause,
+              }),
+            ),
+          ),
           Effect.andThen(() =>
             Effect.sync(() => {
               readyPorts.add(portNumber);
@@ -348,6 +358,15 @@ export const startContainer = Effect.fn(function* <
         schedule: Schedule.spaced(READINESS_POLL_INTERVAL),
         times: GET_CONTAINER_RETRIES,
       }),
+      Effect.timeout(TIMEOUT_TO_GET_CONTAINER_MS),
+      Effect.catchTag("TimeoutError", (cause) =>
+        Effect.fail(
+          new NoContainerInstanceError({
+            message: `Container did not start within ${TIMEOUT_TO_GET_CONTAINER_MS}ms`,
+            cause,
+          }),
+        ),
+      ),
       Effect.andThen(() => waitForPort(portNumber)),
     );
 
@@ -363,26 +382,26 @@ export const startContainer = Effect.fn(function* <
         // request is never replayed against a cold container.
         ensureReady(portNumber).pipe(
           Effect.andThen(() => container.getTcpPort(portNumber)),
-          Effect.andThen((port: Fetcher) => port.fetch(request as any)),
-          Effect.catchDefect((defect: unknown) =>
-            Effect.fail(
-              new ContainerError({
-                message: `Container fetch failed on port ${portNumber}: ${defect}`,
-                cause: defect,
+          Effect.andThen((port: Fetcher) =>
+            port.fetch(request as any).pipe(
+              Effect.catchDefect((defect: unknown) =>
+                Effect.fail(
+                  new ContainerError({
+                    message: `Container fetch failed on port ${portNumber}: ${defect}`,
+                    cause: defect,
+                  }),
+                ),
+              ),
+              // Retry transport failures only after readiness succeeds. Retrying
+              // the whole ensureReady flow would multiply its wall-clock budget.
+              Effect.retry({
+                while: (e) =>
+                  e._tag === "ContainerError" || e._tag === "HttpClientError",
+                schedule: Schedule.spaced(READINESS_POLL_INTERVAL),
+                times: REQUEST_RETRIES,
               }),
             ),
           ),
-          // Only retry a generic transient blip: a not-yet-ready port
-          // (`ContainerError`) or a transport hiccup on the real request such
-          // as "Network connection lost" (`HttpClientError`). A crash, rate
-          // limit, or exhausted no-instance budget is surfaced immediately so a
-          // crash-looping container fails fast instead of re-starting 3× more.
-          Effect.retry({
-            while: (e) =>
-              e._tag === "ContainerError" || e._tag === "HttpClientError",
-            schedule: Schedule.spaced(READINESS_POLL_INTERVAL),
-            times: REQUEST_RETRIES,
-          }),
         )) as {
         (
           request: HttpClientRequest.HttpClientRequest,

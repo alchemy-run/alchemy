@@ -5,6 +5,7 @@ import * as Stream from "effect/Stream";
 
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
+import { isResolved } from "../../Diff.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
@@ -183,27 +184,17 @@ export const AccessRuleProvider = () =>
   Provider.succeed(AccessRule, {
     stables: ["ruleId", "zoneId", "accountId", "allowedModes", "createdOn"],
 
-    diff: Effect.fn(function* ({ olds = {}, news }) {
-      const o = olds as AccessRuleProps;
-      const n = news as AccessRuleProps;
-      // No prior props to compare against — let the engine decide.
-      if (o.configuration === undefined) return undefined;
-      // The API can only patch mode/notes — configuration is immutable.
+    diff: Effect.fn(function* ({ olds, news, output }) {
+      if (!isResolved(news)) return undefined;
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const configuration = output?.configuration ?? olds?.configuration;
+      const oldZoneId = output ? output.zoneId : olds?.zoneId;
       if (
-        o.configuration.target !== n.configuration.target ||
-        o.configuration.value !== n.configuration.value
-      ) {
-        return { action: "replace" } as const;
-      }
-      // Scope change (zone <-> account, or a different zone) replaces.
-      if ((o.zoneId === undefined) !== (n.zoneId === undefined)) {
-        return { action: "replace" } as const;
-      }
-      // zoneId is Input<string>; compare only once both are concrete.
-      if (
-        typeof o.zoneId === "string" &&
-        typeof n.zoneId === "string" &&
-        o.zoneId !== n.zoneId
+        (output && output.accountId !== accountId) ||
+        ((output || olds) && oldZoneId !== news.zoneId) ||
+        (configuration &&
+          (configuration.target !== news.configuration.target ||
+            configuration.value !== news.configuration.value))
       ) {
         return { action: "replace" } as const;
       }

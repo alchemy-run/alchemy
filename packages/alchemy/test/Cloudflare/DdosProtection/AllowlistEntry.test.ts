@@ -24,7 +24,10 @@ const magicTransit = process.env.CLOUDFLARE_TEST_MAGIC_TRANSIT;
 // The scoped API token the test harness mints propagates eventually-
 // consistently across Cloudflare's edge — ride out 403 blips on the test's
 // own out-of-band calls by retrying the typed `Forbidden` error.
-const forbiddenRetrySchedule = Schedule.exponential("500 millis");
+const forbiddenRetrySchedule = Schedule.min([
+  Schedule.exponential("500 millis"),
+  Schedule.spaced("4 seconds"),
+]);
 
 const accountId = Effect.gen(function* () {
   const { accountId } = yield* yield* Cloudflare.CloudflareEnvironment;

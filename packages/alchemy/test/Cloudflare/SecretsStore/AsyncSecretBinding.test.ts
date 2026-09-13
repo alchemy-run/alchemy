@@ -15,7 +15,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   state: Cloudflare.state(),
 });
 
-const HOOK_TIMEOUT = 300_000;
+const HOOK_TIMEOUT = 120_000;
 const TEST_TIMEOUT = 120_000;
 
 const logLevel = Effect.provideService(
@@ -29,17 +29,14 @@ afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), {
 });
 
 // Fresh `workers.dev` URLs take a few seconds to start serving 200s, so the
-// first request rides this bounded schedule. Capping at 30 recurs surfaces a
+// first request rides this bounded schedule. Capping at 10 recurs surfaces a
 // genuine failure fast instead of an uncapped exponential blowing past the
 // test timeout.
 class WorkerNotReady extends Data.TaggedError("WorkerNotReady")<{
   status: number;
 }> {}
 
-const ready = Schedule.max([
-  Schedule.exponential("500 millis"),
-  Schedule.recurs(30),
-]);
+const ready = Schedule.max([Schedule.spaced("2 seconds"), Schedule.recurs(10)]);
 
 const fetchWhenReady = (url: string) =>
   Effect.gen(function* () {

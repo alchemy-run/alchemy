@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
 
+import { isResolved } from "../../Diff.ts";
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -119,6 +120,7 @@ export const WorkerRouteProvider = () =>
     stables: ["routeId", "zoneId"],
 
     diff: Effect.fn(function* ({ olds = {}, news }) {
+      if (!isResolved(news)) return undefined;
       const o = olds as WorkerRouteProps;
       const n = news as WorkerRouteProps;
       // zoneId is Input<string>; by diff time both sides are concrete

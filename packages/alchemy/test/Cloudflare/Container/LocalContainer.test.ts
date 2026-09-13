@@ -20,8 +20,8 @@ const logLevel = Effect.provideService(
 
 // First request has to wait for the local runtime to `docker pull` the image
 // and boot the container, so give it plenty of room.
-const HOOK_TIMEOUT = 300_000;
-const TEST_TIMEOUT = 240_000;
+const HOOK_TIMEOUT = 120_000;
+const TEST_TIMEOUT = 90_000;
 
 const readinessSchedule = Schedule.min([
   Schedule.exponential("500 millis"),
@@ -62,8 +62,8 @@ describe("local remote container (image)", () => {
                   : Effect.fail(new Error(`not ready: got ${text}`)),
               ),
         ),
-        Effect.timeout("30 seconds"),
-        Effect.retry({ schedule: readinessSchedule, times: 30 }),
+        Effect.timeout("5 seconds"),
+        Effect.retry({ schedule: readinessSchedule, times: 8 }),
       );
       expect(body).toContain("method");
     }).pipe(logLevel),

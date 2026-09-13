@@ -2,6 +2,7 @@ import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
+import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -50,4 +51,44 @@ test.provider("list enumerates the deployed Gateway rule", (stack) =>
 
     yield* stack.destroy();
   }).pipe(logLevel),
+);
+
+test.provider(
+  "updates a DNS policy schedule and recreates after deletion",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      yield* stack.destroy();
+      const fixture = (mon: string) =>
+        Cloudflare.Gateway.Rule("ScheduledRule", {
+          name: "alchemy-zt-rule-schedule",
+          action: "block",
+          filters: ["dns"],
+          traffic:
+            'any(dns.domains[*] == "schedule-test.alchemy-test.example")',
+          enabled: false,
+          schedule: { mon, timeZone: "UTC" },
+        });
+      const initial = yield* stack.deploy(fixture("09:00-17:00"));
+      expect(
+        (yield* zeroTrust.getGatewayRule({ accountId, ruleId: initial.ruleId }))
+          .schedule?.mon,
+      ).toEqual("09:00-17:00");
+      const updated = yield* stack.deploy(fixture("10:00-16:00"));
+      expect(updated.ruleId).toEqual(initial.ruleId);
+      expect(
+        (yield* zeroTrust.getGatewayRule({ accountId, ruleId: initial.ruleId }))
+          .schedule?.mon,
+      ).toEqual("10:00-16:00");
+      yield* zeroTrust.deleteGatewayRule({ accountId, ruleId: initial.ruleId });
+      const recreated = yield* stack.deploy(fixture("11:00-15:00"));
+      expect(recreated.ruleId).not.toEqual(initial.ruleId);
+      expect(
+        (yield* zeroTrust.getGatewayRule({
+          accountId,
+          ruleId: recreated.ruleId,
+        })).schedule?.mon,
+      ).toEqual("11:00-15:00");
+      yield* stack.destroy();
+    }).pipe(logLevel),
 );

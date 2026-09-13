@@ -1,3 +1,7 @@
+import * as Layer from "effect/Layer";
+import * as ProviderLayer from "../../Local/ProviderLayer.ts";
+import { localRuntimeServices } from "../LocalRuntime.ts";
+import { SinkProviderLocal } from "./Local.ts";
 import * as pipelines from "@distilled.cloud/cloudflare/pipelines";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
@@ -129,6 +133,14 @@ export type SinkFormat =
   | {
       /** Newline-delimited JSON output. */
       type: "json";
+      /** Compression applied to JSON output. */
+      compression?: "uncompressed" | "gzip";
+      /** How decimal values are encoded in JSON. */
+      decimalEncoding?: "number" | "string" | "bytes";
+      /** How timestamp values are encoded in JSON. */
+      timestampFormat?: "rfc3339" | "unix_millis";
+      /** Preserve unstructured JSON output. */
+      unstructured?: boolean;
     }
   | {
       /** Parquet output. */
@@ -158,6 +170,8 @@ interface SinkBaseProps {
    * @default { type: "json" }
    */
   format?: SinkFormat;
+  /** Event schema for the sink. Changing it replaces the sink. */
+  schema?: pipelines.CreateSinkRequest["schema"];
 }
 
 export type SinkProps =
@@ -192,6 +206,10 @@ export interface SinkAttributes {
   name: string;
   /** Sink type. */
   type: "r2" | "r2_data_catalog";
+  /** Observed output format, including server defaults. */
+  format?: pipelines.GetSinkResponse["format"];
+  /** Observed event schema. */
+  schema?: pipelines.GetSinkResponse["schema"];
   /** Destination R2 bucket name. */
   bucket: string;
   /** Key prefix output objects are written under (r2 sinks). */
@@ -269,6 +287,12 @@ export type Sink = Resource<
  *
  * @see https://developers.cloudflare.com/pipelines/
  *
+ * ### Local Development <!-- api-prose -->
+ * Local R2 sinks write newline-delimited JSON (optionally gzip) to local buckets.
+ * Each send flushes one file per matching SQL route, using UUIDv7 filenames and
+ * optional paths, prefixes, suffixes and UTC time partitions. Timed/size rolling,
+ * sink schema conversion, Parquet and Iceberg require `Alchemy.remote()`.
+ *
  * @resource
  * @product Pipelines
  * @category Storage & Databases
@@ -281,7 +305,7 @@ export const Sink = Resource<Sink>(TypeId);
 export const isSink = (value: unknown): value is Sink =>
   Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
-export const SinkProvider = () =>
+export const SinkProviderLive = () =>
   Provider.succeed(Sink, {
     stables: ["sinkId", "accountId", "name", "type", "createdAt"],
 
@@ -294,7 +318,8 @@ export const SinkProvider = () =>
       const o = olds as SinkProps | undefined;
       if (o === undefined) return undefined;
       // Sinks have no update API — any change is a replacement.
-      const newName = yield* sinkName(id, news.name);
+      const newName =
+        news.name ?? output?.name ?? (yield* sinkName(id, undefined));
       const oldName = output?.name ?? (yield* sinkName(id, o.name));
       if (
         newName !== oldName ||
@@ -326,7 +351,8 @@ export const SinkProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const name = yield* sinkName(id, news.name);
+      const name =
+        news.name ?? output?.name ?? (yield* sinkName(id, undefined));
 
       // 1. Observe — by cached id first, then by (unique) name so we
       //    recover from lost state writes.
@@ -350,7 +376,7 @@ export const SinkProvider = () =>
         yield* getSink(accountId, observed.id).pipe(
           Effect.repeat({
             schedule: Schedule.max([
-              Schedule.exponential("250 millis"),
+              Schedule.spaced("2 seconds"),
               Schedule.recurs(8),
             ]),
             until: (s) => s === undefined,
@@ -371,6 +397,7 @@ export const SinkProvider = () =>
             type: news.type,
             config: toRequestConfig(accountId, news),
             format: news.format,
+            schema: news.schema,
           })
           .pipe(
             Effect.catchTag("SinkAlreadyExists", (error) =>
@@ -414,6 +441,8 @@ interface ObservedSink {
   id: string;
   name: string;
   type: string;
+  format?: pipelines.GetSinkResponse["format"];
+  schema?: pipelines.GetSinkResponse["schema"];
   config?:
     | {
         bucket: string;
@@ -461,7 +490,7 @@ const deleteSink = (accountId: string, sinkId: string) =>
     Effect.retry({
       while: (e) => e._tag === "SinkInUse",
       schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
+        Schedule.spaced("2 seconds"),
         Schedule.recurs(8),
       ]),
     }),
@@ -546,6 +575,7 @@ const normalizeProps = (props: SinkProps): unknown => {
     return {
       type: props.type,
       format: props.format,
+      schema: props.schema,
       config: {
         ...props.config,
         credentials: {
@@ -560,6 +590,7 @@ const normalizeProps = (props: SinkProps): unknown => {
   return {
     type: props.type,
     format: props.format,
+    schema: props.schema,
     config: {
       ...props.config,
       token: Redacted.value(props.config.token),
@@ -593,6 +624,8 @@ const toAttributes = (
   accountId,
   name: observed.name,
   type: observed.type as "r2" | "r2_data_catalog",
+  format: observed.format,
+  schema: observed.schema,
   bucket: observed.config?.bucket ?? "",
   path:
     observed.config && "path" in observed.config
@@ -601,3 +634,10 @@ const toAttributes = (
   createdAt: observed.createdAt,
   modifiedAt: observed.modifiedAt,
 });
+
+export const SinkProvider = () =>
+  ProviderLayer.dual(Sink, {
+    local: () =>
+      SinkProviderLocal().pipe(Layer.provide(localRuntimeServices())),
+    live: () => SinkProviderLive(),
+  });

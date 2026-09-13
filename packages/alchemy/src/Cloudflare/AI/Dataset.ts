@@ -4,6 +4,7 @@ import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -213,12 +214,12 @@ export const DatasetProvider = () =>
       // match on our generated/explicit name is the best identity we have.
       const name = yield* createDatasetName(id, olds?.name);
       const match = yield* findByName(acct, gatewayId, name);
-      return match ? toAttributes(match, acct) : undefined;
+      return match ? Unowned(toAttributes(match, acct)) : undefined;
     }),
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const gatewayId = news.gatewayId as string;
-      const name = yield* createDatasetName(id, news.name);
+      const name = yield* createDatasetName(id, news.name ?? output?.name);
       const desired = {
         name,
         enable: news.enable ?? true,

@@ -253,7 +253,10 @@ export const SilenceProvider = () =>
           Effect.retry({
             while: (e) => e._tag === "SilencePending",
             schedule: Schedule.max([
-              Schedule.exponential("500 millis"),
+              Schedule.min([
+                Schedule.exponential("500 millis"),
+                Schedule.spaced("5 seconds"),
+              ]),
               Schedule.recurs(8),
             ]),
           }),

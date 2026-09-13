@@ -163,6 +163,7 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
               // Alchemy-only mode discriminator for dev (stripped before
               // upload).
               queueId: binding.queueId,
+              localQueueSettings: binding.settings,
               ...(shim ? { shim } : {}),
             },
           ],
@@ -222,9 +223,10 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
 
         yield* resource.bind`${bindingName}`({
           bindings: [resolvedBindingMeta],
-          hyperdrives: isHyperdriveConnection(binding)
-            ? getHyperdriveDevOrigin(binding)
-            : undefined,
+          hyperdrives:
+            accessHostMode === "local" && isHyperdriveConnection(binding)
+              ? getHyperdriveDevOrigin(binding)
+              : undefined,
           // Dev-only local-emulation opt-out channel (like `hyperdrives`):
           // worker-only bindings and `SendEmail` descriptors piped through
           // `Alchemy.remote()` carry the internal `devRemote` flag on their
@@ -496,6 +498,9 @@ const toBinding = (
       type: "r2_bucket",
       name: bindingName,
       bucketName: binding.bucketName,
+      lockRules: binding.lockRules,
+      lifecycleRules: binding.lifecycleRules,
+      storageClass: binding.storageClass,
       jurisdiction: binding.jurisdiction.pipe(
         Output.map((jurisdiction) =>
           jurisdiction === "default" ? undefined : jurisdiction,
@@ -515,6 +520,7 @@ const toBinding = (
       queueName: binding.queueName,
       // Alchemy-only mode discriminator for dev (stripped before upload).
       queueId: binding.queueId,
+      localQueueSettings: binding.settings,
     };
   } else if (isDispatchNamespace(binding)) {
     return {
@@ -578,6 +584,8 @@ const toBinding = (
       type: "vectorize",
       name: bindingName,
       indexName: binding.indexName,
+      dimensions: binding.dimensions,
+      metric: binding.metric,
     };
   } else if (isSecret(binding)) {
     return {

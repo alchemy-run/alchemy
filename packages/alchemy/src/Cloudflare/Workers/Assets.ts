@@ -545,7 +545,10 @@ export const uploadAssets = Effect.fn(function* (
       ),
       Effect.retry({
         while: isGatewayError,
-        schedule: Schedule.exponential("2 seconds"),
+        schedule: Schedule.min([
+          Schedule.exponential("2 seconds"),
+          Schedule.spaced("5 seconds"),
+        ]),
         times: MAX_UPLOAD_GATEWAY_RETRIES,
       }),
     );

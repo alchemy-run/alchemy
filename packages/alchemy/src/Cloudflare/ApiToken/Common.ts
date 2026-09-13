@@ -65,6 +65,8 @@ export type Props = {
    * be contributed by bindings (see {@link ApiTokenBinding}).
    */
   policies?: Policy[];
+  /** Token status. Omission restores active status. Applied after creation when disabled or expired. */
+  status?: "active" | "disabled" | "expired";
   /** ISO 8601 expiration timestamp. */
   expiresOn?: string;
   /** ISO 8601 "not before" timestamp. */

@@ -1,3 +1,4 @@
+import { removedConfiguration, sameConfiguration } from "./configuration.ts";
 import * as magicTransit from "@distilled.cloud/cloudflare/magic-transit";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
@@ -142,6 +143,23 @@ const DEFAULT_PRIORITY = 100;
 export const MagicStaticRouteProvider = () =>
   Provider.succeed(MagicStaticRoute, {
     stables: ["routeId", "accountId", "createdOn"],
+    diff: Effect.fn(function* ({ output, olds, news }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (output && output.accountId !== accountId)
+        return { action: "replace" } as const;
+      if (!isResolved(news)) return undefined;
+      if (
+        olds &&
+        isResolved(olds) &&
+        ["description", "weight", "scope"].some((key) =>
+          removedConfiguration(
+            olds[key as keyof typeof olds],
+            news[key as keyof typeof news],
+          ),
+        )
+      )
+        return { action: "replace", deleteFirst: true } as const;
+    }),
 
     read: Effect.fn(function* ({ output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

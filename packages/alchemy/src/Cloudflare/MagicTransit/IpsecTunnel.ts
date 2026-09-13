@@ -1,3 +1,4 @@
+import { removedConfiguration, sameConfiguration } from "./configuration.ts";
 import * as magicTransit from "@distilled.cloud/cloudflare/magic-transit";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
@@ -79,6 +80,15 @@ export interface IpsecTunnelProps {
 }
 
 export interface IpsecTunnelAttributes {
+  /** Observed automatic return routing mode. */
+  automaticReturnRouting?: boolean;
+  /** Observed health-check configuration. */
+  healthCheck?: magicTransit.IpsecTunnelsGetResponseIpsecTunnel["healthCheck"];
+  /** Observed BGP configuration with redacted authentication key. */
+  bgp?: Omit<
+    NonNullable<magicTransit.IpsecTunnelsGetResponseIpsecTunnel["bgp"]>,
+    "md5Key"
+  > & { md5Key?: Redacted.Redacted<string> };
   /** Cloudflare-assigned identifier of the IPsec tunnel. */
   tunnelId: string;
   /** The Cloudflare account the tunnel belongs to. */
@@ -170,7 +180,34 @@ export const IpsecTunnelProvider = () =>
   Provider.succeed(IpsecTunnel, {
     stables: ["tunnelId", "accountId", "createdOn"],
 
-    diff: Effect.fn(function* ({ olds, news }) {
+    diff: Effect.fn(function* ({ olds, news, output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (output && output.accountId !== accountId)
+        return { action: "replace" } as const;
+      if (!isResolved(news)) return undefined;
+      if (
+        olds &&
+        isResolved(olds) &&
+        [
+          "customerEndpoint",
+          "interfaceAddress6",
+          "description",
+          "healthCheck",
+          "bgp",
+          "psk",
+          "customRemoteIdentities",
+          "automaticReturnRouting",
+          "replayProtection",
+        ].some((key) =>
+          removedConfiguration(
+            olds[key as keyof typeof olds],
+            news[key as keyof typeof news],
+          ),
+        )
+      )
+        return { action: "replace", deleteFirst: true } as const;
+      if ((output || olds) && (output?.name ?? olds?.name) !== news.name)
+        return { action: "replace", deleteFirst: true } as const;
       if (!isResolved(news)) return undefined;
       if (olds === undefined) return undefined;
       // The tunnel name is unique routing identity; renames are rejected.
@@ -241,7 +278,15 @@ export const IpsecTunnelProvider = () =>
       // differs from the last-applied props.
       const oldPsk = olds?.psk ? Redacted.value(olds.psk) : undefined;
       const pskDirty = psk !== undefined && psk !== oldPsk;
-      if (dirty(observed, news) || pskDirty) {
+      if (
+        dirty(observed, news) ||
+        pskDirty ||
+        !sameConfiguration(olds?.bgp, news.bgp) ||
+        !sameConfiguration(
+          olds?.customRemoteIdentities,
+          news.customRemoteIdentities,
+        )
+      ) {
         const updated = yield* magicTransit.updateIpsecTunnel({
           accountId,
           ipsecTunnelId: observed.id,
@@ -301,29 +346,7 @@ export const IpsecTunnelProvider = () =>
     }),
   });
 
-interface ObservedIpsecTunnel {
-  id: string;
-  name: string;
-  cloudflareEndpoint: string;
-  interfaceAddress: string;
-  customerEndpoint?: string | null;
-  interfaceAddress6?: string | null;
-  description?: string | null;
-  allowNullCipher?: boolean | null;
-  replayProtection?: boolean | null;
-  healthCheck?: {
-    direction?: string | null;
-    enabled?: boolean | null;
-    rate?: string | null;
-    target?:
-      | { effective?: string | null; saved?: string | null }
-      | string
-      | null;
-    type?: string | null;
-  } | null;
-  createdOn?: string | null;
-  modifiedOn?: string | null;
-}
+type ObservedIpsecTunnel = magicTransit.IpsecTunnelsGetResponseIpsecTunnel;
 
 /**
  * Read a tunnel by id, mapping "gone" (`IpsecTunnelNotFound`, Cloudflare
@@ -356,6 +379,8 @@ const toBgpRequest = (bgp: MagicTunnelBgp | undefined) =>
   bgp
     ? {
         customerAsn: bgp.customerAsn,
+        exportFilterId: bgp.exportFilterId,
+        importFilterId: bgp.importFilterId,
         extraPrefixes: bgp.extraPrefixes,
         md5Key: bgp.md5Key ? Redacted.value(bgp.md5Key) : undefined,
       }
@@ -384,6 +409,9 @@ const dirty = (
   observed: ObservedIpsecTunnel,
   news: IpsecTunnelProps,
 ): boolean =>
+  (news.automaticReturnRouting !== undefined &&
+    (observed.automaticReturnRouting ?? false) !==
+      news.automaticReturnRouting) ||
   observed.cloudflareEndpoint !== news.cloudflareEndpoint ||
   observed.interfaceAddress !== news.interfaceAddress ||
   (news.customerEndpoint !== undefined &&
@@ -394,6 +422,8 @@ const dirty = (
     (observed.description ?? undefined) !== news.description) ||
   (news.replayProtection !== undefined &&
     (observed.replayProtection ?? false) !== news.replayProtection) ||
+  (news.bgp !== undefined &&
+    !sameConfiguration(observed.bgp, toBgpRequest(news.bgp))) ||
   healthCheckDirty(observed.healthCheck, news.healthCheck);
 
 const healthCheckDirty = (
@@ -419,6 +449,16 @@ const toAttributes = (
   accountId: string,
   psk: Redacted.Redacted<string> | undefined,
 ): IpsecTunnelAttributes => ({
+  automaticReturnRouting: tunnel.automaticReturnRouting ?? undefined,
+  healthCheck: tunnel.healthCheck ?? undefined,
+  bgp: tunnel.bgp
+    ? {
+        ...tunnel.bgp,
+        md5Key: tunnel.bgp.md5Key
+          ? Redacted.make(tunnel.bgp.md5Key)
+          : undefined,
+      }
+    : undefined,
   tunnelId: tunnel.id,
   accountId,
   name: tunnel.name,

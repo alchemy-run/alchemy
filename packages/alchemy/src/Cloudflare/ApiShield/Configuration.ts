@@ -48,6 +48,8 @@ export interface ConfigurationProps {
    * Mutable — written in place via PUT.
    */
   authIdCharacteristics: AuthIdCharacteristic[];
+  /** Request Cloudflare's normalized configuration representation on reads and writes. */
+  normalize?: boolean;
 }
 
 export interface ConfigurationAttributes {
@@ -178,12 +180,14 @@ export const ConfigurationProvider = () =>
     read: Effect.fn(function* ({ output, olds }) {
       const zoneId = output?.zoneId ?? (olds?.zoneId as string | undefined);
       if (zoneId === undefined) return undefined;
-      const observed = yield* apiGateway.getConfiguration({ zoneId }).pipe(
-        // Zone deleted out-of-band — the configuration is gone with it.
-        Effect.catchTag("InvalidObjectIdentifier", () =>
-          Effect.succeed(undefined),
-        ),
-      );
+      const observed = yield* apiGateway
+        .getConfiguration({ zoneId, normalize: olds?.normalize })
+        .pipe(
+          // Zone deleted out-of-band — the configuration is gone with it.
+          Effect.catchTag("InvalidObjectIdentifier", () =>
+            Effect.succeed(undefined),
+          ),
+        );
       if (observed === undefined) return undefined;
       // The configuration is a singleton that always exists with a default
       // (empty) value — there is nothing to "own", so a cold read adopts
@@ -196,12 +200,15 @@ export const ConfigurationProvider = () =>
       return toAttributes(zoneId, observed.authIdCharacteristics, initial);
     }),
 
-    reconcile: Effect.fn(function* ({ news, output }) {
+    reconcile: Effect.fn(function* ({ news, output, olds }) {
       // Inputs have been resolved to concrete strings by Plan.
       const zoneId = news.zoneId as string;
 
       // 1. Observe — the configuration always exists; read its live value.
-      const observed = yield* apiGateway.getConfiguration({ zoneId });
+      const observed = yield* apiGateway.getConfiguration({
+        zoneId,
+        normalize: news.normalize,
+      });
 
       // 2. Capture — the pre-management characteristics, restored on
       //    destroy. `output` (including an adoption read) already carries
@@ -214,6 +221,7 @@ export const ConfigurationProvider = () =>
 
       // 3. Sync — PUT only when the observed characteristics differ.
       if (
+        (news.normalize === undefined || news.normalize === olds?.normalize) &&
         characteristicsEqual(
           toCharacteristics(observed.authIdCharacteristics),
           news.authIdCharacteristics,
@@ -224,6 +232,7 @@ export const ConfigurationProvider = () =>
       const synced = yield* apiGateway.putConfiguration({
         zoneId,
         authIdCharacteristics: news.authIdCharacteristics,
+        normalize: news.normalize,
       });
       return toAttributes(zoneId, synced.authIdCharacteristics, initial);
     }),

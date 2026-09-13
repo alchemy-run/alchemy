@@ -236,7 +236,7 @@ export const DevicePostureIntegrationProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const name = yield* createIntegrationName(id, news.name);
+      const name = yield* createIntegrationName(id, news.name ?? output?.name);
 
       // 1. Observe — `output.integrationId` is a cached hint; fall back to
       //    a name scan so a crashed prior run converges.

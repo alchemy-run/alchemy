@@ -99,6 +99,10 @@ export interface Attributes {
    * ids this resource managed to these values.
    */
   initialResponseHeaders: Record<string, boolean>;
+  /** Request transform IDs managed across all deployments, including removed props. */
+  managedRequestIds: string[];
+  /** Response transform IDs managed across all deployments, including removed props. */
+  managedResponseIds: string[];
 }
 
 export type ManagedTransforms = Resource<
@@ -249,6 +253,8 @@ export const ManagedTransformsProvider = () =>
           snapshot(observed.managedRequestHeaders),
         output?.initialResponseHeaders ??
           snapshot(observed.managedResponseHeaders),
+        output?.managedRequestIds,
+        output?.managedResponseIds,
       );
     }),
 
@@ -297,24 +303,43 @@ export const ManagedTransformsProvider = () =>
         observed,
         initialRequestHeaders,
         initialResponseHeaders,
+        [
+          ...new Set([
+            ...(output?.managedRequestIds ?? []),
+            ...Object.keys(news.requestHeaders ?? {}),
+          ]),
+        ],
+        [
+          ...new Set([
+            ...(output?.managedResponseIds ?? []),
+            ...Object.keys(news.responseHeaders ?? {}),
+          ]),
+        ],
       );
     }),
 
     delete: Effect.fn(function* ({ output, olds }) {
       // Singleton — nothing to delete on the Cloudflare side. Restore the
-      // ids this resource managed (i.e. the ones named in the last-applied
-      // props) to their pre-management snapshot values. Ids missing from
+      // ids this resource ever managed to their pre-management snapshot values. Ids missing from
       // the snapshot (added by Cloudflare after adoption) are left as-is.
       const observed = yield* observe(output.zoneId);
       if (!observed) return; // zone is gone — nothing to restore
       const o = (olds ?? {}) as Props;
       const requestRestore = restoreDelta(
-        o.requestHeaders ?? {},
+        Object.fromEntries(
+          (output.managedRequestIds ?? Object.keys(o.requestHeaders ?? {})).map(
+            (id) => [id, true],
+          ),
+        ),
         output.initialRequestHeaders ?? {},
         observed.managedRequestHeaders,
       );
       const responseRestore = restoreDelta(
-        o.responseHeaders ?? {},
+        Object.fromEntries(
+          (
+            output.managedResponseIds ?? Object.keys(o.responseHeaders ?? {})
+          ).map((id) => [id, true]),
+        ),
         output.initialResponseHeaders ?? {},
         observed.managedResponseHeaders,
       );
@@ -431,10 +456,14 @@ const toAttributes = (
   observed: ObservedTransforms,
   initialRequestHeaders: Record<string, boolean>,
   initialResponseHeaders: Record<string, boolean>,
+  managedRequestIds: string[] = [],
+  managedResponseIds: string[] = [],
 ): Attributes => ({
   zoneId,
   requestHeaders: observed.managedRequestHeaders.map(toState),
   responseHeaders: observed.managedResponseHeaders.map(toState),
   initialRequestHeaders,
   initialResponseHeaders,
+  managedRequestIds,
+  managedResponseIds,
 });

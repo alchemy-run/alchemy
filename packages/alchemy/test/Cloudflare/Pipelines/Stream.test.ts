@@ -53,5 +53,5 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 300_000 },
+  { timeout: 90_000 },
 );

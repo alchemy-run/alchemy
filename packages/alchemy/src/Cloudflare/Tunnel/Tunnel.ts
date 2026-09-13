@@ -66,22 +66,11 @@ export declare namespace Tunnel {
   /**
    * Origin request configuration applied per-rule or globally.
    */
-  export interface OriginRequestConfig {
-    connectTimeout?: number;
-    tlsTimeout?: number;
-    tcpKeepAlive?: number;
-    noHappyEyeballs?: boolean;
-    keepAliveConnections?: number;
-    keepAliveTimeout?: number;
-    http2Origin?: boolean;
-    httpHostHeader?: string;
-    caPool?: string;
-    noTLSVerify?: boolean;
-    disableChunkedEncoding?: boolean;
-    proxyType?: string;
-    matchSNItoHost?: boolean;
-    originServerName?: string;
-  }
+  export type OriginRequestConfig = NonNullable<
+    NonNullable<
+      zeroTrust.PutTunnelCloudflaredConfigurationRequest["config"]
+    >["originRequest"]
+  >;
 }
 
 export type Tunnel = Resource<
@@ -264,8 +253,11 @@ export const TunnelProvider = () =>
             accountId: acct,
             tunnelId: output.tunnelId,
           })
-          .pipe(Effect.catch(() => Effect.succeed(undefined)));
+          .pipe(
+            Effect.catchTag("TunnelNotFound", () => Effect.succeed(undefined)),
+          );
       }
+      if (observed?.deletedAt != null) observed = undefined;
       if (!observed) {
         observed = yield* findTunnelByName(name);
       }
@@ -362,29 +354,33 @@ export const TunnelProvider = () =>
           })
           .pipe(
             Effect.flatMap((t) =>
-              zeroTrust
-                .getTunnelCloudflaredToken({
-                  accountId: output.accountId,
-                  tunnelId: output.tunnelId,
-                })
-                .pipe(
-                  Effect.map((token) => ({
-                    tunnelId: t.id ?? output.tunnelId,
-                    tunnelName: t.name ?? output.tunnelName,
-                    accountTag: t.accountTag ?? output.accountTag,
-                    accountId: output.accountId,
-                    createdAt: t.createdAt ?? output.createdAt,
-                    deletedAt: t.deletedAt ?? output.deletedAt,
-                    configSrc: ((
-                      t as { configSrc?: "cloudflare" | "local" | null }
-                    ).configSrc ??
-                      output.configSrc ??
-                      "cloudflare") as "cloudflare" | "local",
-                    token: Redacted.make(token),
-                  })),
-                ),
+              t.deletedAt != null
+                ? Effect.succeed(undefined)
+                : zeroTrust
+                    .getTunnelCloudflaredToken({
+                      accountId: output.accountId,
+                      tunnelId: output.tunnelId,
+                    })
+                    .pipe(
+                      Effect.map((token) => ({
+                        tunnelId: t.id ?? output.tunnelId,
+                        tunnelName: t.name ?? output.tunnelName,
+                        accountTag: t.accountTag ?? output.accountTag,
+                        accountId: output.accountId,
+                        createdAt: t.createdAt ?? output.createdAt,
+                        deletedAt: t.deletedAt ?? output.deletedAt,
+                        configSrc: ((
+                          t as { configSrc?: "cloudflare" | "local" | null }
+                        ).configSrc ??
+                          output.configSrc ??
+                          "cloudflare") as "cloudflare" | "local",
+                        token: Redacted.make(token),
+                      })),
+                    ),
             ),
-            Effect.catch(() => Effect.succeed(undefined)),
+            Effect.catchTag(["TunnelNotFound", "TunnelTokenNotFound"], () =>
+              Effect.succeed(undefined),
+            ),
           );
       }
       const name = yield* createTunnelName(id, olds?.name);

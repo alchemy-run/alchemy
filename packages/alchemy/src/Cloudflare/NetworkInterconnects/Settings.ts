@@ -113,17 +113,24 @@ export const NetworkInterconnectSettingsProvider = () =>
       ];
     }),
 
+    diff: Effect.fn(function* ({ output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (output && output.accountId !== accountId)
+        return { action: "replace" } as const;
+    }),
+
     read: Effect.fn(function* ({ output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       // The settings singleton always exists with a Cloudflare default —
       // there is nothing to "own", so a cold read adopts freely (never
       // `Unowned`). The observed value at adoption time becomes the
       // `initialDefaultAsn` restored on destroy.
-      const observed = yield* cni.getSetting({ accountId });
+      const acct = output?.accountId ?? accountId;
+      const observed = yield* cni.getSetting({ accountId: acct });
       const initialDefaultAsn =
         output !== undefined ? output.initialDefaultAsn : observed.defaultAsn;
       return {
-        accountId,
+        accountId: acct,
         defaultAsn: observed.defaultAsn,
         initialDefaultAsn,
       };
