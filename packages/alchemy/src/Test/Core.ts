@@ -154,10 +154,13 @@ export const resolveSidecar = (options: MakeOptions): boolean =>
   options.sidecar ?? resolveDev(options);
 
 /**
- * Default test stage: `test_$USER` (or `test_$USERNAME` / `test_unknown`).
+ * Default test stage: `ALCHEMY_TEST_STAGE`, then `test_$USER` (or
+ * `test_$USERNAME` / `test_unknown`). Set an explicit test stage to isolate
+ * concurrent worktrees that share a cloud account.
  * Matches the CLI's `live_$USER` / `dev_$USER` per-developer isolation.
  */
-export const defaultStage = (): string => Effect.runSync(userStage("test"));
+export const defaultStage = (): string =>
+  process.env.ALCHEMY_TEST_STAGE || Effect.runSync(userStage("test"));
 
 /** File-level stage: `options.stage` if set, otherwise {@link defaultStage}. */
 export const resolveStage = (options: { stage?: string }): string =>

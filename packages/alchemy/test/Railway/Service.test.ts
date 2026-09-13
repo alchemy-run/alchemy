@@ -1,4 +1,4 @@
-import * as railway from "@distilled.cloud/railway";
+import * as railway from "@distilled.cloud/railway/graphql";
 import * as Provider from "@/Provider";
 import * as Railway from "@/Railway";
 import { withEnvironmentConfigLock } from "@/Railway/transient.ts";
@@ -19,11 +19,11 @@ const logLevel = Effect.provideService(
 );
 
 const waitUntilGone = (serviceId: string) =>
-  railway.service({ id: serviceId }).pipe(
+  railway.service({ id: serviceId }, { deletedAt: true }).pipe(
     Effect.map((service) =>
       service.deletedAt != null ? ("gone" as const) : ("found" as const),
     ),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+    railway.catchTags(["RailwayNotFound"], () =>
       Effect.succeed("gone" as const),
     ),
     Effect.repeat({
@@ -38,23 +38,33 @@ const waitUntilNoServiceDomains = (input: {
   environmentId: string;
   serviceId: string;
 }) =>
-  railway.domains(input).pipe(
-    Effect.map((domains) =>
-      domains.serviceDomains.some(
-        (domain) =>
-          domain.deletedAt == null &&
-          domain.syncStatus !== "DELETED" &&
-          domain.syncStatus !== "DELETING",
-      )
-        ? ("found" as const)
-        : ("gone" as const),
-    ),
-    Effect.repeat({
-      schedule: Schedule.spaced("1 second"),
-      until: (status) => status === "gone",
-      times: 10,
-    }),
-  );
+  railway
+    .domains(input, {
+      serviceDomains: {
+        id: true,
+        domain: true,
+        targetPort: true,
+        deletedAt: true,
+        syncStatus: true,
+      },
+    })
+    .pipe(
+      Effect.map((domains) =>
+        domains.serviceDomains.some(
+          (domain) =>
+            domain.deletedAt == null &&
+            domain.syncStatus !== "DELETED" &&
+            domain.syncStatus !== "DELETING",
+        )
+          ? ("found" as const)
+          : ("gone" as const),
+      ),
+      Effect.repeat({
+        schedule: Schedule.spaced("1 second"),
+        until: (status) => status === "gone",
+        times: 10,
+      }),
+    );
 
 test.provider(
   "create, serve, list, update, and delete an image service",
@@ -94,16 +104,29 @@ test.provider(
       expect(created.api.domainId).toEqual(expect.any(String));
       expect(created.api.domainId!.length).toBeGreaterThan(0);
 
-      const fetched = yield* railway.service({ id: created.api.serviceId });
+      const fetched = yield* railway.service(
+        { id: created.api.serviceId },
+        { id: true, name: true, projectId: true, deletedAt: true },
+      );
       expect(fetched.id).toEqual(created.api.serviceId);
       expect(fetched.name).toEqual(created.api.name);
       expect(fetched.projectId).toEqual(created.api.projectId);
       expect(fetched.deletedAt).toBeNull();
 
-      const instance = yield* railway.serviceInstance({
-        environmentId: created.api.environmentId,
-        serviceId: created.api.serviceId,
-      });
+      const instance = yield* railway.serviceInstance(
+        {
+          environmentId: created.api.environmentId,
+          serviceId: created.api.serviceId,
+        },
+        {
+          serviceId: true,
+          environmentId: true,
+          source: { image: true },
+          healthcheckPath: true,
+          preDeployCommand: true,
+          numReplicas: true,
+        },
+      );
       expect(instance.serviceId).toEqual(created.api.serviceId);
       expect(instance.environmentId).toEqual(created.api.environmentId);
       expect(instance.source?.image).toEqual(
@@ -125,11 +148,22 @@ test.provider(
         created.api.replicas === undefined || created.api.replicas === 1,
       ).toEqual(true);
 
-      const domains = yield* railway.domains({
-        environmentId: created.api.environmentId,
-        projectId: created.api.projectId,
-        serviceId: created.api.serviceId,
-      });
+      const domains = yield* railway.domains(
+        {
+          environmentId: created.api.environmentId,
+          projectId: created.api.projectId,
+          serviceId: created.api.serviceId,
+        },
+        {
+          serviceDomains: {
+            id: true,
+            domain: true,
+            targetPort: true,
+            deletedAt: true,
+            syncStatus: true,
+          },
+        },
+      );
       const liveDomain = domains.serviceDomains.find(
         (domain) => domain.deletedAt == null && domain.syncStatus !== "DELETED",
       );
@@ -186,10 +220,13 @@ test.provider(
       expect(updated.api.projectId).toEqual(created.api.projectId);
       expect(updated.api.url).toEqual(created.api.url);
 
-      const updatedInstance = yield* railway.serviceInstance({
-        environmentId: updated.api.environmentId,
-        serviceId: updated.api.serviceId,
-      });
+      const updatedInstance = yield* railway.serviceInstance(
+        {
+          environmentId: updated.api.environmentId,
+          serviceId: updated.api.serviceId,
+        },
+        { healthcheckPath: true, preDeployCommand: true },
+      );
       expect(updatedInstance.healthcheckPath).toEqual("/");
       expect(
         updatedInstance.preDeployCommand == null ||
@@ -197,9 +234,12 @@ test.provider(
             updatedInstance.preDeployCommand.length === 0),
       ).toEqual(true);
 
-      const fetchedUpdate = yield* railway.service({
-        id: updated.api.serviceId,
-      });
+      const fetchedUpdate = yield* railway.service(
+        {
+          id: updated.api.serviceId,
+        },
+        { id: true, name: true },
+      );
       expect(fetchedUpdate.id).toEqual(updated.api.serviceId);
       expect(fetchedUpdate.name).toEqual(nextName);
 
@@ -275,11 +315,22 @@ test.provider(
           .map((domain) => domain.id);
       const beforeForeign = new Set(
         liveDomainIds(
-          yield* railway.domains({
-            projectId: publicUpdate.api.projectId,
-            environmentId: publicUpdate.api.environmentId,
-            serviceId: publicUpdate.api.serviceId,
-          }),
+          yield* railway.domains(
+            {
+              projectId: publicUpdate.api.projectId,
+              environmentId: publicUpdate.api.environmentId,
+              serviceId: publicUpdate.api.serviceId,
+            },
+            {
+              serviceDomains: {
+                id: true,
+                domain: true,
+                targetPort: true,
+                deletedAt: true,
+                syncStatus: true,
+              },
+            },
+          ),
         ),
       );
       const foreignPatchId = yield* Effect.sync(() => crypto.randomUUID());
@@ -303,11 +354,22 @@ test.provider(
         }),
       );
       const orderedIds = yield* railway
-        .domains({
-          projectId: publicUpdate.api.projectId,
-          environmentId: publicUpdate.api.environmentId,
-          serviceId: publicUpdate.api.serviceId,
-        })
+        .domains(
+          {
+            projectId: publicUpdate.api.projectId,
+            environmentId: publicUpdate.api.environmentId,
+            serviceId: publicUpdate.api.serviceId,
+          },
+          {
+            serviceDomains: {
+              id: true,
+              domain: true,
+              targetPort: true,
+              deletedAt: true,
+              syncStatus: true,
+            },
+          },
+        )
         .pipe(
           Effect.map(liveDomainIds),
           Effect.repeat({
@@ -316,7 +378,7 @@ test.provider(
               ids.includes(publicUpdate.api.domainId!) &&
               (ids.includes(foreignPatchId) ||
                 ids.some((id) => !beforeForeign.has(id))),
-            times: 15,
+            times: 10,
           }),
         );
       const foreignDomainId =
@@ -364,11 +426,22 @@ test.provider(
         }),
       );
       expect(privateWithForeignDomain.api.domainId).toBeUndefined();
-      const remainingDomains = yield* railway.domains({
-        projectId: publicUpdate.api.projectId,
-        environmentId: publicUpdate.api.environmentId,
-        serviceId: publicUpdate.api.serviceId,
-      });
+      const remainingDomains = yield* railway.domains(
+        {
+          projectId: publicUpdate.api.projectId,
+          environmentId: publicUpdate.api.environmentId,
+          serviceId: publicUpdate.api.serviceId,
+        },
+        {
+          serviceDomains: {
+            id: true,
+            domain: true,
+            targetPort: true,
+            deletedAt: true,
+            syncStatus: true,
+          },
+        },
+      );
       const remainingIds = remainingDomains.serviceDomains
         .filter(
           (domain) =>
@@ -383,7 +456,7 @@ test.provider(
       const gone = yield* waitUntilGone(created.api.serviceId);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 3_600_000 },
+  { timeout: 120_000 },
 );
 
 test.provider(
@@ -445,7 +518,7 @@ test.provider(
       yield* stack.destroy();
       expect(yield* waitUntilGone(created.worker.serviceId)).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 3_600_000 },
+  { timeout: 120_000 },
 );
 
 const localContextDir = `${import.meta.dirname}/fixtures/local-context`;
@@ -474,10 +547,13 @@ test.provider(
       expect(created.api.domain).toContain("up.railway.app");
       expect(created.api.url).toEqual(`https://${created.api.domain}`);
 
-      const fromContext = yield* railway.serviceInstance({
-        environmentId: created.api.environmentId,
-        serviceId: created.api.serviceId,
-      });
+      const fromContext = yield* railway.serviceInstance(
+        {
+          environmentId: created.api.environmentId,
+          serviceId: created.api.serviceId,
+        },
+        { dockerfilePath: true },
+      );
       expect(fromContext.dockerfilePath).toEqual("Dockerfile");
 
       const client = yield* HttpClient.HttpClient;
@@ -489,7 +565,7 @@ test.provider(
         ),
         Effect.retry({
           schedule: Schedule.spaced("4 seconds"),
-          times: 20,
+          times: 10,
         }),
       );
       expect(typeof body).toEqual("string");
@@ -510,10 +586,13 @@ test.provider(
       );
       expect(updated.api.serviceId).toEqual(created.api.serviceId);
 
-      const fromImage = yield* railway.serviceInstance({
-        environmentId: updated.api.environmentId,
-        serviceId: updated.api.serviceId,
-      });
+      const fromImage = yield* railway.serviceInstance(
+        {
+          environmentId: updated.api.environmentId,
+          serviceId: updated.api.serviceId,
+        },
+        { source: { image: true } },
+      );
       expect(fromImage.source?.image).toEqual(
         expect.stringContaining("nginx:alpine"),
       );
@@ -526,7 +605,7 @@ test.provider(
         ),
         Effect.retry({
           schedule: Schedule.spaced("4 seconds"),
-          times: 20,
+          times: 10,
         }),
       );
       expect(typeof afterImage).toEqual("string");
@@ -535,7 +614,7 @@ test.provider(
       yield* stack.destroy();
       expect(yield* waitUntilGone(created.api.serviceId)).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 3_600_000 },
+  { timeout: 120_000 },
 );
 
 // GitHub repo source requires a GitHub App connection on the Railway
@@ -549,7 +628,9 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const result = yield* Effect.result(railway.githubRepos({}));
+      const result = yield* Effect.result(
+        railway.githubRepos({}, { fullName: true, defaultBranch: true }),
+      );
       if (Result.isSuccess(result)) {
         yield* Effect.logInfo(
           `GitHub is connected (${result.success.length} repos); probe is a no-op`,
@@ -560,11 +641,11 @@ test.provider(
 
       // GitHub App is not connected for this token: GraphQL `Not Authorized`
       // is already the typed `RailwayForbidden` tag (never UnknownRailwayError).
-      expect(result.failure._tag).toEqual("RailwayForbidden");
+      expect(railway.isErrorTag(result.failure, "RailwayForbidden")).toBe(true);
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 3_600_000 },
+  { timeout: 120_000 },
 );
 
 test.provider.skipIf(!githubEntitled)(
@@ -573,7 +654,10 @@ test.provider.skipIf(!githubEntitled)(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const repos = yield* railway.githubRepos({});
+      const repos = yield* railway.githubRepos(
+        {},
+        { fullName: true, defaultBranch: true },
+      );
       const repo = repos[0];
       expect(repo).toBeDefined();
       expect(repo!.fullName.length).toBeGreaterThan(0);
@@ -594,10 +678,13 @@ test.provider.skipIf(!githubEntitled)(
       expect(created.api.serviceId).toEqual(expect.any(String));
       expect(created.api.repo).toEqual(repo!.fullName);
 
-      const instance = yield* railway.serviceInstance({
-        environmentId: created.api.environmentId,
-        serviceId: created.api.serviceId,
-      });
+      const instance = yield* railway.serviceInstance(
+        {
+          environmentId: created.api.environmentId,
+          serviceId: created.api.serviceId,
+        },
+        { source: { repo: true } },
+      );
       expect(instance.source?.repo).toEqual(repo!.fullName);
 
       yield* stack.destroy();
@@ -605,5 +692,5 @@ test.provider.skipIf(!githubEntitled)(
       const gone = yield* waitUntilGone(created.api.serviceId);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 3_600_000 },
+  { timeout: 120_000 },
 );

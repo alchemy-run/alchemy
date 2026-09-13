@@ -1,15 +1,8 @@
-import type {
-  CreateCloudAgentResponse,
-  CloudAgentResponse,
-  CloudAgentSleepResponse,
-  CloudAgentStatus,
-  CloudAgentWakeResponse,
-  CloudAgentsResultItem,
-} from "@distilled.cloud/railway";
-import * as railway from "@distilled.cloud/railway";
+import { waitUntilDeleted } from "./GraphQL.ts";
+import type { CloudAgentStatus } from "@distilled.cloud/railway";
+import * as railway from "@distilled.cloud/railway/graphql";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../AdoptPolicy.ts";
 import { isResolved } from "../Diff.ts";
@@ -22,6 +15,23 @@ import {
 } from "./Metadata.ts";
 import { ownedProjects, projectEnvironmentIds } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
+
+const selection = {
+  id: true,
+  name: true,
+  environmentId: true,
+  projectId: true,
+  status: true,
+  domain: true,
+  domains: { domain: true, port: true, prefix: true },
+  consoleTargetId: true,
+  createdAt: true,
+} as const satisfies railway.Selection<"CloudAgent">;
+type CreateCloudAgentResponse = railway.Result<"CloudAgent!", typeof selection>;
+type CloudAgentResponse = railway.Result<"CloudAgent!", typeof selection>;
+type CloudAgentSleepResponse = railway.Result<"CloudAgent!", typeof selection>;
+type CloudAgentWakeResponse = railway.Result<"CloudAgent!", typeof selection>;
+type CloudAgentsResultItem = railway.Result<"CloudAgent!", typeof selection>;
 
 /**
  * A resource-valued prop: the resource itself, or an Effect that produces
@@ -242,15 +252,10 @@ const projectIdOf = (value: unknown): string | undefined => {
 
 const listAgents = (environmentId: string) =>
   railway
-    .cloudAgents({ environmentId, mine: true })
+    .cloudAgents({ environmentId, mine: true }, selection)
     .pipe(
-      Effect.catchTag(
-        [
-          "RailwayNotFound",
-          "NotFound",
-          "RailwayForbidden",
-          "RailwayPlanLimitExceeded",
-        ],
+      railway.catchTags(
+        ["RailwayNotFound", "RailwayForbidden", "RailwayPlanLimitExceeded"],
         () => Effect.succeed([] as CloudAgentsResultItem[]),
       ),
     );
@@ -271,32 +276,36 @@ const listEnvironmentIds = (project: {
   projectId: string;
   environmentId: string;
 }) =>
-  railway.environments.items({ projectId: project.projectId, first: 50 }).pipe(
-    Stream.filter((env) => env.deletedAt == null),
-    Stream.map((env) => env.id),
-    Stream.runCollect,
-    Effect.map((ids) => {
-      const set = new Set(Array.from(ids));
-      if (project.environmentId.length > 0) {
-        set.add(project.environmentId);
-      }
-      return Array.from(set);
-    }),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-      Effect.succeed(
-        project.environmentId.length > 0 ? [project.environmentId] : [],
+  railway.environments
+    .items(
+      { projectId: project.projectId, first: 50 },
+      { id: true, deletedAt: true },
+    )
+    .pipe(
+      Stream.filter((env) => env.deletedAt == null),
+      Stream.map((env) => env.id),
+      Stream.runCollect,
+      Effect.map((ids) => {
+        const set = new Set(Array.from(ids));
+        if (project.environmentId.length > 0) {
+          set.add(project.environmentId);
+        }
+        return Array.from(set);
+      }),
+      railway.catchTags(["RailwayNotFound"], () =>
+        Effect.succeed(
+          project.environmentId.length > 0 ? [project.environmentId] : [],
+        ),
       ),
-    ),
-  );
+    );
 
 const waitUntilGone = (environmentId: string, cloudAgentId: string) =>
-  findById(environmentId, cloudAgentId).pipe(
-    Effect.map((agent) => isGone(agent)),
-    Effect.repeat({
-      schedule: Schedule.spaced("1 second"),
-      until: (gone) => gone,
-      times: 8,
-    }),
+  waitUntilDeleted(
+    "CloudAgent",
+    cloudAgentId,
+    findById(environmentId, cloudAgentId).pipe(
+      Effect.map((agent) => isGone(agent)),
+    ),
   );
 
 const cloudAgentIdOf = (
@@ -310,7 +319,10 @@ const cloudAgentIdOf = (
 export const sleepCloudAgent = Effect.fn(function* (
   agent: { readonly cloudAgentId: string } | string,
 ) {
-  return yield* railway.cloudAgentSleep({ id: cloudAgentIdOf(agent) });
+  return yield* railway.cloudAgentSleep(
+    { id: cloudAgentIdOf(agent) },
+    selection,
+  );
 });
 
 /**
@@ -320,7 +332,10 @@ export const sleepCloudAgent = Effect.fn(function* (
 export const wakeCloudAgent = Effect.fn(function* (
   agent: { readonly cloudAgentId: string } | string,
 ) {
-  return yield* railway.cloudAgentWake({ id: cloudAgentIdOf(agent) });
+  return yield* railway.cloudAgentWake(
+    { id: cloudAgentIdOf(agent) },
+    selection,
+  );
 });
 
 export const CloudAgentProvider = () =>
@@ -425,17 +440,20 @@ export const CloudAgentProvider = () =>
 
       if (current === undefined || isGone(current)) {
         const created = yield* railway
-          .createCloudAgent({
-            input: {
-              environmentId,
-              name,
-              ...(props.variables !== undefined
-                ? { variables: props.variables }
-                : {}),
+          .createCloudAgent(
+            {
+              input: {
+                environmentId,
+                name,
+                ...(props.variables !== undefined
+                  ? { variables: props.variables }
+                  : {}),
+              },
             },
-          })
+            selection,
+          )
           .pipe(
-            Effect.catchTag("RailwayValidationError", () =>
+            railway.catchTags("RailwayValidationError", () =>
               Effect.succeed(undefined),
             ),
           );
@@ -457,9 +475,7 @@ export const CloudAgentProvider = () =>
       if (cloudAgentId.length === 0) return;
       yield* railway
         .deleteCloudAgent({ id: cloudAgentId })
-        .pipe(
-          Effect.catchTag(["RailwayNotFound", "NotFound"], () => Effect.void),
-        );
+        .pipe(railway.catchTags(["RailwayNotFound"], () => Effect.void));
       if (output.environmentId.length > 0) {
         yield* waitUntilGone(output.environmentId, cloudAgentId);
       }

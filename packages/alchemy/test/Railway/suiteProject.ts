@@ -6,7 +6,7 @@
  * walks owned projects) and `pnpm nuke` can reclaim it.
  */
 import { CredentialsFromEnv } from "@distilled.cloud/railway";
-import * as railway from "@distilled.cloud/railway";
+import * as railway from "@distilled.cloud/railway/graphql";
 import { resolveWorkspace } from "@/Railway/Environment.ts";
 import { Environment } from "@/Railway/ProjectEnvironment.ts";
 import { createProject, type Project } from "@/Railway/Project.ts";
@@ -45,7 +45,17 @@ const toProject = (
 
 const findByName = (workspaceId: string) =>
   railway.projects
-    .items({ workspaceId, first: 50, includeDeleted: false })
+    .items(
+      { workspaceId, first: 50, includeDeleted: false },
+      {
+        id: true,
+        name: true,
+        workspaceId: true,
+        primaryEnvironmentId: true,
+        baseEnvironmentId: true,
+        deletedAt: true,
+      },
+    )
     .pipe(
       Stream.filter(
         (project) =>
@@ -65,14 +75,26 @@ const acquire = Effect.gen(function* () {
     Effect.gen(function* () {
       let attrs = toProject(project, workspace.id);
       if (attrs.environmentId.length === 0) {
-        const fresh = yield* railway.project({ id: attrs.projectId });
+        const fresh = yield* railway.project(
+          { id: attrs.projectId },
+          {
+            id: true,
+            name: true,
+            workspaceId: true,
+            primaryEnvironmentId: true,
+            baseEnvironmentId: true,
+          },
+        );
         attrs = toProject(fresh, workspace.id);
       }
       if (attrs.environmentId.length > 0) {
         return attrs;
       }
       const env = yield* railway.environments
-        .items({ projectId: attrs.projectId, first: 5 })
+        .items(
+          { projectId: attrs.projectId, first: 5 },
+          { id: true, deletedAt: true },
+        )
         .pipe(
           Stream.filter((item) => item.deletedAt == null),
           Stream.take(1),

@@ -1,4 +1,5 @@
-import * as railway from "@distilled.cloud/railway";
+import * as railway from "@distilled.cloud/railway/graphql";
+import { CredentialsFromToken } from "@distilled.cloud/railway";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
@@ -48,7 +49,7 @@ export const loginSessionUrl = (
  * mutations are public: they run before the user has a token.
  */
 const anonymousRailwayCredentials = (apiBaseUrl?: string) =>
-  railway.CredentialsFromToken({
+  CredentialsFromToken({
     token: "",
     tokenKind: "account",
     apiBaseUrl,
@@ -61,7 +62,11 @@ const anonymousRailway = (apiBaseUrl?: string) =>
   );
 
 export const provideAnonymousRailway = <A, E>(
-  effect: Effect.Effect<A, E, railway.RailwayOpContext>,
+  effect: Effect.Effect<
+    A,
+    E,
+    import("@distilled.cloud/railway").RailwayOpContext
+  >,
   apiBaseUrl?: string,
 ): Effect.Effect<A, E> =>
   effect.pipe(Effect.provide(anonymousRailway(apiBaseUrl)));
@@ -78,21 +83,15 @@ const LOGIN_POLL_TIMES = 300;
  * Exhaustion returns `undefined` (not a failure) so the AuthProvider can
  * surface a timeout rather than a poll error.
  */
-const missingSession = ["RailwayNotFound", "NotFound"] as const;
+const missingSession = ["RailwayNotFound"] as const;
 
-export const pollLoginSessionToken = (
-  code: string,
-): Effect.Effect<
-  string | undefined,
-  railway.RailwayOpError,
-  railway.RailwayOpContext
-> =>
+export const pollLoginSessionToken = (code: string) =>
   railway.verifyLoginSession({ code }).pipe(
-    Effect.catchTag(missingSession, () => Effect.succeed(false)),
+    railway.catchTags(missingSession, () => Effect.succeed(false)),
     Effect.flatMap(() =>
       railway
         .loginSessionConsume({ code })
-        .pipe(Effect.catchTag(missingSession, () => Effect.succeed(null))),
+        .pipe(railway.catchTags(missingSession, () => Effect.succeed(null))),
     ),
     Effect.map((token) =>
       token != null && token.length > 0 ? token : undefined,

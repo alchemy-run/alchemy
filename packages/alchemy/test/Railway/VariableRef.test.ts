@@ -1,4 +1,4 @@
-import * as railway from "@distilled.cloud/railway";
+import * as railway from "@distilled.cloud/railway/graphql";
 import * as Railway from "@/Railway";
 import { suitePartition } from "./suiteProject.ts";
 import * as Test from "@/Test/Alchemy";
@@ -41,7 +41,7 @@ const readVariables = (
     })
     .pipe(
       Effect.map(asVariableMap),
-      Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+      railway.catchTags(["RailwayNotFound"], () =>
         Effect.succeed({} as Record<string, string>),
       ),
     );
@@ -156,5 +156,5 @@ test.provider(
       );
       expect(variableGone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 3_600_000 },
+  { timeout: 120_000 },
 );

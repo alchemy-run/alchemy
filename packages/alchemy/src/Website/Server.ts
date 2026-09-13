@@ -398,10 +398,25 @@ export const ServerProviderLive = () =>
           const built = yield* runBuild(news);
           return yield* makeOutput(news, built);
         }),
-        delete: Effect.fn(function* ({ output }) {
+        delete: Effect.fn(function* ({ olds, output }) {
           if (output.distDir === undefined) return;
+          const root = path.resolve(initialCwd, olds.root ?? ".");
           const distDir = path.resolve(initialCwd, output.distDir);
-          if (!(yield* fs.exists(distDir))) return;
+          if (!(yield* fs.exists(root)) || !(yield* fs.exists(distDir))) return;
+          // Some frameworks (Next.js) serve from the project root itself.
+          // Only dedicated output directories inside that root are disposable.
+          // Canonical paths also protect roots reached through a symlink.
+          const relative = path.relative(
+            yield* fs.realPath(root),
+            yield* fs.realPath(distDir),
+          );
+          if (
+            relative === "" ||
+            relative === ".." ||
+            relative.startsWith(`..${path.sep}`) ||
+            path.isAbsolute(relative)
+          )
+            return;
           yield* fs.remove(distDir, { recursive: true });
         }),
       };

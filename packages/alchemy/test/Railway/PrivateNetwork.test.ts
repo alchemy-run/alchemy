@@ -1,4 +1,4 @@
-import * as railway from "@distilled.cloud/railway";
+import * as railway from "@distilled.cloud/railway/graphql";
 import * as Provider from "@/Provider";
 import * as Railway from "@/Railway";
 import { suitePartition } from "./suiteProject.ts";
@@ -16,37 +16,53 @@ const logLevel = Effect.provideService(
 );
 
 const listLive = (environmentId: string) =>
-  railway.privateNetworks({ environmentId }).pipe(
-    Effect.map((items) => items.filter((network) => network.deletedAt == null)),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () => Effect.succeed([])),
-  );
+  railway
+    .privateNetworks(
+      { environmentId },
+      {
+        publicId: true,
+        name: true,
+        dnsName: true,
+        projectId: true,
+        environmentId: true,
+        deletedAt: true,
+      },
+    )
+    .pipe(
+      Effect.map((items) =>
+        items.filter((network) => network.deletedAt == null),
+      ),
+      railway.catchTags(["RailwayNotFound"], () => Effect.succeed([])),
+    );
 
 const waitUntilEndpointGone = (input: {
   environmentId: string;
   privateNetworkId: string;
   serviceId: string;
 }) =>
-  railway.privateNetworkEndpoint(input).pipe(
-    Effect.map((endpoint) =>
-      endpoint == null ||
-      endpoint.deletedAt != null ||
-      endpoint.syncStatus === "DELETED" ||
-      endpoint.syncStatus === "DELETING"
-        ? ("gone" as const)
-        : ("found" as const),
-    ),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-      Effect.succeed("gone" as const),
-    ),
-    Effect.repeat({
-      schedule: Schedule.spaced("1 second"),
-      until: (status) => status === "gone",
-      times: 10,
-    }),
-  );
+  railway
+    .privateNetworkEndpoint(input, { deletedAt: true, syncStatus: true })
+    .pipe(
+      Effect.map((endpoint) =>
+        endpoint == null ||
+        endpoint.deletedAt != null ||
+        endpoint.syncStatus === "DELETED" ||
+        endpoint.syncStatus === "DELETING"
+          ? ("gone" as const)
+          : ("found" as const),
+      ),
+      railway.catchTags(["RailwayNotFound"], () =>
+        Effect.succeed("gone" as const),
+      ),
+      Effect.repeat({
+        schedule: Schedule.spaced("1 second"),
+        until: (status) => status === "gone",
+        times: 10,
+      }),
+    );
 
-test.provider.skip(
-  "create-or-get a private network is idempotent (dnsName was delightful-purpose, expected to contain api)",
+test.provider(
+  "create-or-get a private network is idempotent",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -88,14 +104,17 @@ test.provider.skip(
       expect(fetched?.projectId).toEqual(created.network.projectId);
       expect(fetched?.environmentId).toEqual(created.network.environmentId);
 
-      const again = yield* railway.privateNetworkCreateOrGet({
-        input: {
-          environmentId: created.network.environmentId,
-          projectId: created.network.projectId,
-          name: created.network.name,
-          tags: ["alchemy"],
+      const again = yield* railway.privateNetworkCreateOrGet(
+        {
+          input: {
+            environmentId: created.network.environmentId,
+            projectId: created.network.projectId,
+            name: created.network.name,
+            tags: ["alchemy"],
+          },
         },
-      });
+        { publicId: true, name: true, dnsName: true, networkId: true },
+      );
       expect(again.publicId).toEqual(created.network.publicId);
       expect(again.name).toEqual(created.network.name);
       expect(again.dnsName).toEqual(created.network.dnsName);
@@ -125,13 +144,16 @@ test.provider.skip(
       expect(updated.network.dnsName).toEqual(created.network.dnsName);
       expect(updated.project.projectId).toEqual(created.project.projectId);
 
-      const service = yield* railway.createService({
-        input: {
-          projectId: created.project.projectId,
-          environmentId: created.environment.environmentId,
-          source: { image: "hashicorp/http-echo" },
+      const service = yield* railway.createService(
+        {
+          input: {
+            projectId: created.project.projectId,
+            environmentId: created.environment.environmentId,
+            source: { image: "hashicorp/http-echo" },
+          },
         },
-      });
+        { id: true, name: true },
+      );
 
       const withEndpoint = yield* stack.deploy(
         Effect.gen(function* () {
@@ -162,24 +184,30 @@ test.provider.skip(
       expect(withEndpoint.endpoint.dnsName.length).toBeGreaterThan(0);
       expect(withEndpoint.endpoint.dnsName.toLowerCase()).toContain("api");
 
-      const liveEndpoint = yield* railway.privateNetworkEndpoint({
-        environmentId: created.environment.environmentId,
-        privateNetworkId: created.network.publicId,
-        serviceId: service.id,
-      });
+      const liveEndpoint = yield* railway.privateNetworkEndpoint(
+        {
+          environmentId: created.environment.environmentId,
+          privateNetworkId: created.network.publicId,
+          serviceId: service.id,
+        },
+        { publicId: true, dnsName: true },
+      );
       expect(liveEndpoint).not.toBeNull();
       expect(liveEndpoint?.publicId).toEqual(withEndpoint.endpoint.publicId);
       expect(liveEndpoint?.dnsName).toEqual(withEndpoint.endpoint.dnsName);
 
-      const endpointAgain = yield* railway.privateNetworkEndpointCreateOrGet({
-        input: {
-          environmentId: created.environment.environmentId,
-          privateNetworkId: created.network.publicId,
-          serviceId: service.id,
-          serviceName: "api",
-          tags: ["alchemy"],
+      const endpointAgain = yield* railway.privateNetworkEndpointCreateOrGet(
+        {
+          input: {
+            environmentId: created.environment.environmentId,
+            privateNetworkId: created.network.publicId,
+            serviceId: service.id,
+            serviceName: "api",
+            tags: ["alchemy"],
+          },
         },
-      });
+        { publicId: true },
+      );
       expect(endpointAgain.publicId).toEqual(withEndpoint.endpoint.publicId);
 
       const renamed = yield* stack.deploy(
@@ -214,5 +242,5 @@ test.provider.skip(
       const networks = yield* listLive(created.environment.environmentId);
       expect(networks.length).toBeGreaterThan(0);
     }).pipe(logLevel),
-  { timeout: 3_600_000 },
+  { timeout: 120_000 },
 );
