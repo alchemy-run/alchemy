@@ -1123,7 +1123,7 @@ test.skipIf(skipBench)(
         ),
       ),
     );
-    expect(warmClone.headers["x-git-served-by"]).toBe("head-snapshot");
+    expect(warmClone.headers["x-git-served-by"]).toBe("head-snapshot:bundle");
     const first = (yield* warmClone.arrayBuffer).byteLength;
     expect(first).toBeGreaterThan(blobKiB * 1024 * 0.5);
 

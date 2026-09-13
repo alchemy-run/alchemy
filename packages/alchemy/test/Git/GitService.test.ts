@@ -121,7 +121,7 @@ const stack = beforeAll(
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 
 test(
-  "repo lifecycle: create → bootstrap token → 409 → patch → delete → 404",
+  "repo lifecycle: create → read back → 409 → patch → delete → 404",
   Effect.gen(function* () {
     const { url } = yield* stack;
     const admin = yield* makeClient(url, TEST_SECRET);
@@ -133,14 +133,12 @@ test(
     expect(created.repo.status).toBe("ready");
     expect(created.repo.defaultBranch).toBe("main");
     expect(created.remote).toContain("/e2e/rest-lifecycle.git");
-    expect(TEST_SECRET.startsWith("gs_")).toBe(true);
 
-    // the bootstrap token works immediately (one-round-trip design goal)
-    const bootstrap = yield* makeClient(url, TEST_SECRET);
-    const viaBootstrap = yield* bootstrap.repos.get({
+    // readable immediately after create (one-round-trip design goal)
+    const read = yield* admin.repos.get({
       params: { owner: "e2e", repo: "rest-lifecycle" },
     });
-    expect(viaBootstrap.repoId).toBe(created.repo.repoId);
+    expect(read.repoId).toBe(created.repo.repoId);
 
     yield* expectTag(
       admin.repos.create({ payload: { owner: "e2e", name: "rest-lifecycle" } }),
