@@ -7,10 +7,10 @@ import * as Path from "effect/Path";
 import { AlchemyContext } from "../AlchemyContext.ts";
 import * as RpcProvider from "../Local/RpcProvider.ts";
 import { LOCAL_ID_PREFIX } from "../ProviderMode.ts";
-import { CloudflareEnvironment } from "./CloudflareEnvironment.ts";
-import type { Queue } from "./Queues/Queue.ts";
-import type { Consumer } from "./Queues/Consumer.ts";
 import { moduleExtension } from "../Util/Node.ts";
+import { CloudflareEnvironment } from "./CloudflareEnvironment.ts";
+import type { Consumer } from "./Queues/Consumer.ts";
+import type { Queue } from "./Queues/Queue.ts";
 
 /**
  * The Cloudflare provider group module ([Local.ts](./Local.ts)) every

@@ -1,5 +1,5 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as pathe from "pathe";
+import * as Cloudflare from "@/Cloudflare/index.ts";
 
 /**
  * Dispatch namespace shared by the platform Worker (which binds it via `Get`)
@@ -8,7 +8,9 @@ import * as pathe from "pathe";
  */
 export const DispatchNs = Cloudflare.WorkersForPlatforms.DispatchNamespace(
   "WfpBindingNs",
-  { name: "alchemy-wfp-binding-test-ns" },
+  {
+    name: "alchemy-wfp-binding-test-ns",
+  },
 );
 
 /**

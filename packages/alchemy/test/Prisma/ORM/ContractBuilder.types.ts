@@ -1,3 +1,5 @@
+import type { ExtractTypeMapsFromContract } from "@prisma/orm-postgres/family-contract/types";
+import type * as Effect from "effect/Effect";
 import {
   defineContract,
   enumType,
@@ -6,10 +8,8 @@ import {
   model,
 } from "@/Prisma/ORM/index.ts";
 import type { PostgresDatabase } from "@/Prisma/ORM/Postgres.ts";
-import type { ExtractTypeMapsFromContract } from "@prisma/orm-postgres/family-contract/types";
 import type { PostgresAggregateTypes } from "@/Prisma/ORM/PostgresAggregateTypes.ts";
 import type { AggregateTypes } from "./fixtures/client/generated/contract.d.ts";
-import type * as Effect from "effect/Effect";
 
 type Assert<T extends true> = T;
 type Equal<A, B> =

@@ -1,11 +1,11 @@
 import { Credentials, CredentialsFromEnv } from "@distilled.cloud/fly-io";
 import type * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import type * as HttpClient from "effect/http/HttpClient";
-import { bindFlyApiToken } from "./Credentials.ts";
+import * as Layer from "effect/Layer";
 import type { RuntimeContext } from "../RuntimeContext.ts";
+import { bindFlyApiToken } from "./Credentials.ts";
 import type { Sprite } from "./Sprite.ts";
 
 /**

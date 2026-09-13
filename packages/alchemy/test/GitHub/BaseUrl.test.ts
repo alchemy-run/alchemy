@@ -1,15 +1,15 @@
+import { describe, expect, test } from "alchemy-test";
+import * as ConfigProvider from "effect/ConfigProvider";
+import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
 import { readEnvCredentials } from "@/GitHub/AuthProvider";
-import { GitHubCredentials, fromToken } from "@/GitHub/Credentials";
 import {
   githubHostname,
   normalizeGitHubBaseUrl,
   resolveGitHubBaseUrlFromEnv,
 } from "@/GitHub/BaseUrl";
+import { GitHubCredentials, fromToken } from "@/GitHub/Credentials";
 import { gitHubBaseUrlChanged, octokitFor } from "@/GitHub/Octokit";
-import * as ConfigProvider from "effect/ConfigProvider";
-import * as Effect from "effect/Effect";
-import * as Result from "effect/Result";
-import { describe, expect, test } from "alchemy-test";
 
 const normalize = (input: string) =>
   Effect.runSync(normalizeGitHubBaseUrl(input));

@@ -1,13 +1,13 @@
-import * as AWS from "@/AWS";
-import type { PolicyDocument } from "@/AWS/IAM/Policy.ts";
-import { EmailIdentity, EmailIdentityPolicy } from "@/AWS/SES";
-import * as Output from "@/Output";
-import * as Test from "@/Test/Alchemy";
 import * as sesv2 from "@distilled.cloud/aws/sesv2";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import type { PolicyDocument } from "@/AWS/IAM/Policy.ts";
+import { EmailIdentity, EmailIdentityPolicy } from "@/AWS/SES";
+import * as Output from "@/Output";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

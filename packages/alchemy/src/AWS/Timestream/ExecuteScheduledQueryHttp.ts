@@ -8,8 +8,8 @@ import {
   ExecuteScheduledQuery,
   type ExecuteScheduledQueryRequest,
 } from "./ExecuteScheduledQuery.ts";
-import type { ScheduledQuery } from "./ScheduledQuery.ts";
 import { discover, withEndpoint } from "./internal.ts";
+import type { ScheduledQuery } from "./ScheduledQuery.ts";
 
 // Bespoke (not on the BindingHttp scaffold): the only Timestream binding
 // scoped to a ScheduledQuery rather than a Table or the account.

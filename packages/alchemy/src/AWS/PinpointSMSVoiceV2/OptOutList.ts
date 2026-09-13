@@ -83,7 +83,9 @@ export const OptOutList = Resource<OptOutList>(
  */
 export class SmsVoiceOptOutListMissing extends Data.TaggedError(
   "SmsVoiceOptOutListMissing",
-)<{ message: string }> {}
+)<{
+  message: string;
+}> {}
 
 export const OptOutListProvider = () =>
   Provider.effect(

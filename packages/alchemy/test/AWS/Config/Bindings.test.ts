@@ -1,14 +1,14 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as config from "@distilled.cloud/aws/config-service";
 import * as iam from "@distilled.cloud/aws/iam";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import ConfigTestFunctionLive, { ConfigTestFunction } from "./handler";
 import { makeConfigTestLease } from "./TestLease.ts";
 
@@ -249,10 +249,7 @@ describe(
           Effect.gen(function* () {
             const response = (yield* postJson(
               "/batch-get-resource-config",
-            )) as {
-              items: unknown[];
-              unprocessed: { resourceId?: string }[];
-            };
+            )) as { items: unknown[]; unprocessed: { resourceId?: string }[] };
             expect(Array.isArray(response.items)).toBe(true);
             expect(Array.isArray(response.unprocessed)).toBe(true);
           }),
@@ -266,10 +263,7 @@ describe(
           Effect.gen(function* () {
             const response = (yield* getJson(
               "/get-resource-config-history",
-            )) as {
-              items?: unknown[];
-              errorTag?: string;
-            };
+            )) as { items?: unknown[]; errorTag?: string };
             if (response.errorTag !== undefined) {
               expect(response.errorTag).toBe("ResourceNotDiscoveredException");
             } else {

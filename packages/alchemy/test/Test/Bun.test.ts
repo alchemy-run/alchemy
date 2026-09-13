@@ -1,5 +1,5 @@
-import { describe, expect, test } from "alchemy-test";
 import { fileURLToPath } from "node:url";
+import { describe, expect, test } from "alchemy-test";
 
 const fixturesDir = fileURLToPath(new URL("./fixtures/", import.meta.url));
 

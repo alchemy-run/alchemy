@@ -1,13 +1,13 @@
-import * as AWS from "@/AWS";
-import { EventDataStore } from "@/AWS/CloudTrail";
-import { AWSEnvironment } from "@/AWS/Environment.ts";
-import * as Test from "@/Test/Alchemy";
 import * as cloudtrail from "@distilled.cloud/aws/cloudtrail";
 import { expect } from "alchemy-test";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { EventDataStore } from "@/AWS/CloudTrail";
+import { AWSEnvironment } from "@/AWS/Environment.ts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

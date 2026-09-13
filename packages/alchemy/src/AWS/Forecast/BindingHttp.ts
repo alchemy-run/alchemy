@@ -69,7 +69,9 @@ export const makeForecastHttpBinding = <I, A, E, R>(options: {
             });
           }
           yield* host.bind`Allow(${host}, AWS.Forecast.${options.capability}())`(
-            { policyStatements },
+            {
+              policyStatements,
+            },
           );
         }
       }

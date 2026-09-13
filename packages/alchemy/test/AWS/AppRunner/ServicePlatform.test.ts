@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import * as Test from "@/Test/Alchemy";
 import * as apprunner from "@distilled.cloud/aws/apprunner";
 import * as ecr from "@distilled.cloud/aws/ecr";
 import * as iam from "@distilled.cloud/aws/iam";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/http/HttpClient";
+import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
 import TestService from "./fixtures/service.ts";
 import {
   awaitLogGroups,

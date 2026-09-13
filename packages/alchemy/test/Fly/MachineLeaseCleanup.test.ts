@@ -1,15 +1,15 @@
 import * as machines from "@distilled.cloud/fly-io/machines";
 import * as Retry from "@distilled.cloud/fly-io/Retry";
-import * as Fly from "@/Fly";
-import { makeMachineLeases } from "@/Fly/leases";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
-import * as Scope from "effect/Scope";
 import * as HttpClient from "effect/http/HttpClient";
+import * as Scope from "effect/Scope";
+import * as Fly from "@/Fly";
+import { makeMachineLeases } from "@/Fly/leases";
+import * as Test from "@/Test/Alchemy";
 import { assertAppGone } from "./fixtures/bluegreen.ts";
 import { sanitizeExecFailure } from "./fixtures/exec-lease.ts";
 

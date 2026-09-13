@@ -1,12 +1,12 @@
 import * as AWS from "alchemy/AWS";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Schedule from "effect/Schedule";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
-import ShellSession from "./shell-session.ts";
+import * as Layer from "effect/Layer";
+import * as Schedule from "effect/Schedule";
 import { ShellMicrovm } from "./shell-image.ts";
+import ShellSession from "./shell-session.ts";
 import { TERMINAL_HTML } from "./terminal-html.ts";
 
 /**

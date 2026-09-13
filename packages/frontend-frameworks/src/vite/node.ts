@@ -15,12 +15,12 @@
 import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
 import { runBuildChild } from "../core/BuildChild.ts";
+import { DeployTargetError, makeDeployTarget } from "../core/index.ts";
 import {
   NODE_BUNDLE_CONDITIONS,
   NODE_SERVE_ENTRY_FILE_NAME,
   writeNodeServeEntry,
 } from "../core/NodeServe.ts";
-import { DeployTargetError, makeDeployTarget } from "../core/index.ts";
 import { make, type ViteTarget, type ViteTargetConfig } from "./Vite.ts";
 
 const fail = (message: string, cause?: unknown) =>

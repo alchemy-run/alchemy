@@ -28,7 +28,9 @@ export class ServiceImageOrMainRequired extends Data.TaggedError(
 
 export class ServiceSourceInvalid extends Data.TaggedError(
   "Railway.ServiceSourceInvalid",
-)<{ message: string }> {}
+)<{
+  message: string;
+}> {}
 
 export class ServiceDockerfilePathInvalid extends Data.TaggedError(
   "Railway.ServiceDockerfilePathInvalid",
@@ -56,7 +58,10 @@ export class ServiceContextPathUnsupported extends Data.TaggedError(
 
 export class ServiceContextTooLarge extends Data.TaggedError(
   "Railway.ServiceContextTooLarge",
-)<{ limit: number; size: number }> {}
+)<{
+  limit: number;
+  size: number;
+}> {}
 
 export type RailwayServiceSource =
   | { readonly mode: "main"; readonly main: string }

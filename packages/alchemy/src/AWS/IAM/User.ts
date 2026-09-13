@@ -5,19 +5,19 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import type { Providers } from "../Providers.ts";
 import {
   createInternalTags,
   createTagsList,
   diffTags,
   hasTags,
 } from "../../Tags.ts";
-import type { PolicyDocument } from "./Policy.ts";
+import type { Providers } from "../Providers.ts";
 import {
   parsePolicyDocument,
   stringifyPolicyDocument,
   toTagRecord,
 } from "./common.ts";
+import type { PolicyDocument } from "./Policy.ts";
 
 export interface UserProps {
   /**

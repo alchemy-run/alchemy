@@ -158,7 +158,9 @@ const toReturnMetadata = (
 
 const toMutation = (r: {
   mutationId?: string | null;
-}): runtime.VectorizeAsyncMutation => ({ mutationId: r.mutationId ?? "" });
+}): runtime.VectorizeAsyncMutation => ({
+  mutationId: r.mutationId ?? "",
+});
 
 const toIndexInfo = (
   r: vectorize.GetIndexInfoResponse,

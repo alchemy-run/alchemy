@@ -1,4 +1,3 @@
-import { cachedFunction } from "../Util/cached-function.ts";
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -7,10 +6,10 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
-
 import * as Semaphore from "effect/Semaphore";
 import { Interaction } from "../Interaction.ts";
 import { UserFacingError } from "../UserFacingError.ts";
+import { cachedFunction } from "../Util/cached-function.ts";
 import { withProfileCredentialsLock } from "./Lock.ts";
 
 /**

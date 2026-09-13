@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import type { PolicyDocument } from "@/AWS/IAM/Policy.ts";
-import { ResourcePolicy } from "@/AWS/Logs/ResourcePolicy.ts";
-import * as Test from "@/Test/Alchemy";
 import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import type { PolicyDocument } from "@/AWS/IAM/Policy.ts";
+import { ResourcePolicy } from "@/AWS/Logs/ResourcePolicy.ts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -25,7 +25,9 @@ const findPolicy = Effect.fn(function* (policyName: string) {
 
 class ResourcePolicyStillExists extends Data.TaggedError(
   "ResourcePolicyStillExists",
-)<{ readonly policyName: string }> {}
+)<{
+  readonly policyName: string;
+}> {}
 
 const assertPolicyDeleted = (policyName: string) =>
   findPolicy(policyName).pipe(

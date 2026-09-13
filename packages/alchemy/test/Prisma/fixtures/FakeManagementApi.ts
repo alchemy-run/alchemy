@@ -1,11 +1,11 @@
-import { PrismaApiError } from "@/Prisma/Client";
 import { Credentials, fromApiToken } from "@distilled.cloud/prisma";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Result from "effect/Result";
 import * as HttpBody from "effect/http/HttpBody";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
+import * as Layer from "effect/Layer";
+import * as Result from "effect/Result";
+import { PrismaApiError } from "@/Prisma/Client";
 
 /**
  * An in-memory Prisma Management API served over a fake `HttpClient`.

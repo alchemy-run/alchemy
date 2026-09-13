@@ -1,13 +1,14 @@
-import { describe, expect, it } from "vitest";
-import { makeDataCacheHandler, type DataCacheStore } from "../cache/handler.ts";
-import { makeVinextCachePlugin } from "../cache/plugin.ts";
 import { fileURLToPath } from "node:url";
+import * as Effect from "effect/Effect";
+import { describe, expect, it } from "vitest";
 import { loadProjectModule } from "../../core/Loader.ts";
-import { kvAdapter } from "../cache/kv.ts";
+import { makeDataCacheHandler, type DataCacheStore } from "../cache/handler.ts";
+import { kvHttpNamespaceFromEnv } from "../cache/kv-http.ts";
 import createKvDataCacheAdapter from "../cache/kv-runtime.ts";
+import { kvAdapter } from "../cache/kv.ts";
+import { makeVinextCachePlugin } from "../cache/plugin.ts";
 import { redisAdapter } from "../cache/redis.ts";
 import { s3Adapter } from "../cache/s3.ts";
-import { kvHttpNamespaceFromEnv } from "../cache/kv-http.ts";
 import { seedPrerenderTo, type SeedSink } from "../cache/seed.ts";
 import {
   keySpace,
@@ -17,7 +18,6 @@ import {
   validateCacheEntry,
   validateTag,
 } from "../cache/shared.ts";
-import * as Effect from "effect/Effect";
 
 const memoryStore = (): DataCacheStore & { data: Map<string, string> } => {
   const data = new Map<string, string>();

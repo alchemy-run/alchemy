@@ -1,6 +1,6 @@
 import * as NodeHttp from "node:http";
-import path from "node:path";
 import type { AddressInfo } from "node:net";
+import path from "node:path";
 import * as vite from "vite";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { WebSocketServer } from "ws";

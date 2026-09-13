@@ -3,9 +3,6 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import type { Result as NukeResult, Target } from "../../../Nuke.ts";
 import type { ProviderMode } from "../../../ProviderMode.ts";
-import { Plan, PlanTree } from "./PlanView.tsx";
-import type { PlanTreeData } from "./PlanTree.ts";
-import { planDecisionScreen } from "./PlanDecision.tsx";
 import { Progress, type ProgressEvent } from "../../../Report.ts";
 import { CliKit } from "../../CliKit/index.ts";
 import {
@@ -17,6 +14,9 @@ import {
   Text,
   useLiveStore,
 } from "../ui/index.ts";
+import { planDecisionScreen } from "./PlanDecision.tsx";
+import type { PlanTreeData } from "./PlanTree.ts";
+import { Plan, PlanTree } from "./PlanView.tsx";
 
 interface NukeProgressState {
   readonly total: number;

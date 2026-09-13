@@ -1,11 +1,10 @@
 /** @effect-diagnostics anyUnknownInErrorContext:off */
 
 import bun from "bun:test";
+import type { HookOptions } from "node:test";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Scope from "effect/Scope";
-import type { HookOptions } from "node:test";
-
 import type { AlchemyContext } from "../AlchemyContext.ts";
 import type { CompiledStack } from "../Stack.ts";
 import type { Stage } from "../Stage.ts";

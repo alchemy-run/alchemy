@@ -1,8 +1,8 @@
-import { makePostgresState } from "@/State/PostgresState";
-import { StateStoreError, type StateService } from "@/State/State";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import { makePostgresState } from "@/State/PostgresState";
+import { StateStoreError, type StateService } from "@/State/State";
 
 /**
  * Live counterpart of `PostgresState.test.ts`. The hermetic suite answers the

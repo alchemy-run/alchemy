@@ -1,7 +1,7 @@
 import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
 import * as Layer from "effect/Layer";
+import * as Binding from "../../Binding.ts";
 import { isBindingHost } from "../Lambda/Function.ts";
 import { type AlarmResource, sortAlarmResources } from "./binding-common.ts";
 import {

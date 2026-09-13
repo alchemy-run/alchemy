@@ -1,4 +1,3 @@
-import { LIVE_OBJECTS } from "../Store/ObjectStore.ts";
 /**
  * The fork alarm job (DESIGN.md §2.3 Fork).
  *
@@ -25,6 +24,7 @@ import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
 import { StoreError } from "../Protocol/Store.ts";
+import { LIVE_OBJECTS } from "../Store/ObjectStore.ts";
 import type {
   CommitParentRow,
   CommitRow,

@@ -1,3 +1,7 @@
+import { describe, expect, it } from "alchemy-test";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
 /**
  * In-process unit tests for the Step Functions program DSL: `Sfn.simulate`
  * interprets the SAME program the live `FromProgram.test.ts` deploys, plus
@@ -5,10 +9,6 @@
  * determinism (the `normalizeDefinition` drift obligation).
  */
 import { Sfn } from "@/AWS/StepFunctions";
-import { describe, expect, it } from "alchemy-test";
-import * as Data from "effect/Data";
-import * as Effect from "effect/Effect";
-import * as Result from "effect/Result";
 import {
   makeOrderProgram,
   OrderRejected,

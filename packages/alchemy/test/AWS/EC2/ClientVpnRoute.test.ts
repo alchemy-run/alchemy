@@ -1,3 +1,6 @@
+import * as ec2 from "@distilled.cloud/aws/ec2";
+import { describe, expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { ClientVpnEndpoint } from "@/AWS/EC2/ClientVpnEndpoint.ts";
 import {
@@ -8,9 +11,6 @@ import { ClientVpnTargetNetworkAssociation } from "@/AWS/EC2/ClientVpnTargetNetw
 import * as Alchemy from "@/index.ts";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import * as ec2 from "@distilled.cloud/aws/ec2";
-import { describe, expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 import {
   assertClientVpnCertificateDeleted,
   assertClientVpnRouteDeleted,

@@ -1,4 +1,6 @@
 /** @jsxImportSource @alchemy.run/sigil */
+import type { JSX } from "react";
+import { theme } from "../../CliKit/index.ts";
 import {
   Box,
   Gutter,
@@ -9,8 +11,6 @@ import {
   useBorderStyle,
   useGlyphs,
 } from "../ui/index.ts";
-import type { JSX } from "react";
-import { theme } from "../../CliKit/index.ts";
 
 export interface ProfileProviderDisplay {
   readonly name: string;

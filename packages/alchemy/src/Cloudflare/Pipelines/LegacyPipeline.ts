@@ -1,10 +1,9 @@
 import { Credentials } from "@distilled.cloud/cloudflare/Credentials";
 import * as pipelines from "@distilled.cloud/cloudflare/pipelines";
 import * as Effect from "effect/Effect";
+import type * as HttpClient from "effect/http/HttpClient";
 import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
-import type * as HttpClient from "effect/http/HttpClient";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";

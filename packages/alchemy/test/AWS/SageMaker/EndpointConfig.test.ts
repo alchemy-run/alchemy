@@ -1,11 +1,11 @@
+import * as sagemaker from "@distilled.cloud/aws/sagemaker";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { AWSEnvironment } from "@/AWS/Environment.ts";
 import { Role } from "@/AWS/IAM/Role.ts";
 import { EndpointConfig, Model } from "@/AWS/SageMaker";
 import * as Test from "@/Test/Alchemy";
-import * as sagemaker from "@distilled.cloud/aws/sagemaker";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 import { sklearnImage } from "./images.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });

@@ -21,7 +21,9 @@ export default {
       const details = await env.FLAGS.getStringDetails(
         "nonexistent-flag",
         "fallback",
-        { userId: "user-42" },
+        {
+          userId: "user-42",
+        },
       );
       return Response.json({ mode: "async", details });
     }

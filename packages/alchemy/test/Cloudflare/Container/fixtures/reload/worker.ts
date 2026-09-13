@@ -1,7 +1,7 @@
-import * as Cloudflare from "@/Cloudflare";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Cloudflare from "@/Cloudflare";
 import { ReloadContainerObject } from "./object.ts";
 
 /** `GET /<file>` proxies to the container's httpd via the DO. */

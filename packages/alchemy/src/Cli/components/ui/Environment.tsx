@@ -2,8 +2,8 @@
 import { useWindowSize } from "@alchemy.run/sigil";
 import { createContext, useContext, useMemo } from "@alchemy.run/sigil/react";
 import type { ReactNode } from "react";
-import type { CliKitCapabilities } from "../types.ts";
 import { glyphsFor, theme, type KeyHint } from "../../../Util/Theme.ts";
+import type { CliKitCapabilities } from "../types.ts";
 
 const defaults: CliKitCapabilities = {
   input: false,

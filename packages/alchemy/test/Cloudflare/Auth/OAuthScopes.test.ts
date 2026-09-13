@@ -1,3 +1,13 @@
+import { describe, expect, it } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as Redacted from "effect/Redacted";
+import {
+  authorize,
+  refresh,
+  revoke,
+  type OAuthCredentials,
+} from "@/Cloudflare/Auth/OAuthClient.ts";
 import {
   ALL_SCOPE_IDS,
   ALL_SCOPES,
@@ -6,17 +16,7 @@ import {
   OAUTH_SCOPE_GROUPS,
   partitionOAuthScopes,
 } from "@/Cloudflare/Auth/OAuthScopes.ts";
-import {
-  authorize,
-  refresh,
-  revoke,
-  type OAuthCredentials,
-} from "@/Cloudflare/Auth/OAuthClient.ts";
 import { PlatformServices } from "@/Util/PlatformServices.ts";
-import { describe, expect, it } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
-import * as FetchHttpClient from "effect/http/FetchHttpClient";
 
 describe(
   "Cloudflare public OAuth client",

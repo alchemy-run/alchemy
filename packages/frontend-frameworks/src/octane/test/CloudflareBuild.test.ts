@@ -1,10 +1,10 @@
+import { createHash } from "node:crypto";
+import { pathToFileURL } from "node:url";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import type * as Scope from "effect/Scope";
-import { pathToFileURL } from "node:url";
-import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { runBuildChild } from "../../core/BuildChild.ts";
 import { buildCloudflare, clientPlugins } from "../CloudflareBuild.ts";

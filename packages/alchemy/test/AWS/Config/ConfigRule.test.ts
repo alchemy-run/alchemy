@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import { ConfigRule } from "@/AWS/Config";
-import * as Test from "@/Test/Alchemy";
 import * as config from "@distilled.cloud/aws/config-service";
 import * as iam from "@distilled.cloud/aws/iam";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { ConfigRule } from "@/AWS/Config";
+import * as Test from "@/Test/Alchemy";
 import { makeConfigTestLease } from "./TestLease.ts";
 
 const { test, beforeAll, afterAll } = Test.make({ providers: AWS.providers() });

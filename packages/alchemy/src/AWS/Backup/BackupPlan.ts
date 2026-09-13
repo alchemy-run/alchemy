@@ -315,7 +315,10 @@ export const BackupPlanProvider = () =>
             );
           const { upsert, removed } = diffTags(
             currentTags as Record<string, string>,
-            { ...news.tags, ...internalTags },
+            {
+              ...news.tags,
+              ...internalTags,
+            },
           );
           if (upsert.length > 0) {
             yield* backup.tagResource({

@@ -1,7 +1,7 @@
-import * as Playwright from "@alchemy.run/cloudflare-test-tools/e2e/Playwright";
-import { expect, test } from "@playwright/test";
 import { readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
+import * as Playwright from "@alchemy.run/cloudflare-test-tools/e2e/Playwright";
+import { expect, test } from "@playwright/test";
 
 const CLIENT_MARKER_FILE = fileURLToPath(
   new URL("../src/client-marker.ts", import.meta.url),

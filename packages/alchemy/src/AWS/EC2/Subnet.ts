@@ -4,13 +4,10 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-
-import type { ScopedPlanStatusSession } from "../../Report.ts";
 import { isResolved, somePropsAreDifferent } from "../../Diff.ts";
-import { retryWhileLingeringEnis } from "./LingeringEnis.ts";
 import * as Provider from "../../Provider.ts";
+import type { ScopedPlanStatusSession } from "../../Report.ts";
 import { Resource } from "../../Resource.ts";
-import type { Providers } from "../Providers.ts";
 import {
   createInternalTags,
   createTagsList,
@@ -18,7 +15,9 @@ import {
   hasTags,
 } from "../../Tags.ts";
 import type { AccountID } from "../Environment.ts";
+import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
+import { retryWhileLingeringEnis } from "./LingeringEnis.ts";
 import type { VpcId } from "./Vpc.ts";
 
 export type SubnetId<ID extends string = string> = `subnet-${ID}`;

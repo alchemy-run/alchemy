@@ -1,9 +1,9 @@
-import { readPrebuiltWorkerBundle } from "@/Cloudflare/Workers/Sources/Prebuilt";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, layer } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import { readPrebuiltWorkerBundle } from "@/Cloudflare/Workers/Sources/Prebuilt";
 
 const decode = (content: string | Uint8Array<ArrayBufferLike>) =>
   typeof content === "string"

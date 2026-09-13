@@ -1,12 +1,12 @@
+import zlib from "node:zlib";
+import { describe, expect, test } from "alchemy-test";
+import * as Effect from "effect/Effect";
 /**
  * `inflateEntry` (src/Git/Protocol/Zlib.ts): the exact-span inflate the pack
  * parser runs per entry. Pack entries are back-to-back zlib streams with no
  * length prefix, so the consumed-input count is as important as the output.
  */
 import { inflateEntry } from "@/Git/Protocol/Zlib.ts";
-import { describe, expect, test } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import zlib from "node:zlib";
 
 const content = (n: number, seed: number) => {
   const out = new Uint8Array(n);

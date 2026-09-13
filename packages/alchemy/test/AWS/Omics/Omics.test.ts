@@ -1,3 +1,7 @@
+import * as omics from "@distilled.cloud/aws/omics";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import {
   AnnotationStore,
@@ -8,10 +12,6 @@ import {
   Workflow,
 } from "@/AWS/Omics";
 import * as Test from "@/Test/Alchemy";
-import * as omics from "@distilled.cloud/aws/omics";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

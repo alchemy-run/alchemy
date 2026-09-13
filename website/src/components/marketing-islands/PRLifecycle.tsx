@@ -7,8 +7,8 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { prefersReducedMotion, useSpinner } from "./_terminal";
 import { yantraSvg } from "../../brand/yantra";
+import { prefersReducedMotion, useSpinner } from "./_terminal";
 import "./PRLifecycle.css";
 
 /*

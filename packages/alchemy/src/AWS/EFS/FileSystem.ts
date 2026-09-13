@@ -329,7 +329,10 @@ const retryWhileFileSystemUpdating = <A, E extends { _tag: string }, R>(
  */
 export class FileSystemNotAvailable extends Data.TaggedError(
   "FileSystemNotAvailable",
-)<{ fileSystemId: string; state: string }> {}
+)<{
+  fileSystemId: string;
+  state: string;
+}> {}
 
 const toWireLifecyclePolicies = (
   policies: FileSystemLifecyclePolicy[] | undefined,

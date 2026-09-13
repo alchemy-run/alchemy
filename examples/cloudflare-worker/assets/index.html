@@ -774,7 +774,9 @@
         try {
           const startResp = await fetch(
             `/workflow/start/${encodeURIComponent(roomId)}`,
-            { method: "POST" },
+            {
+              method: "POST",
+            },
           );
           if (!startResp.ok) {
             const errText = await startResp.text();
@@ -884,7 +886,10 @@
           const { status, body } = await callArtifacts(
             "POST",
             "/repos/create",
-            { name, description: "Created from Room Chat" },
+            {
+              name,
+              description: "Created from Room Chat",
+            },
           );
           setArtifactsStatus(`HTTP ${status}`, body);
           addMessage(

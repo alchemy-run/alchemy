@@ -1,3 +1,5 @@
+import * as NodeCrypto from "node:crypto";
+import { createRequire } from "node:module";
 /**
  * Alchemy Worker source provider for Astro projects.
  *
@@ -28,17 +30,15 @@
  * project sources are unchanged.
  */
 import type { CloudflareVitePluginOptions } from "@alchemy.run/cloudflare-runtime/vite";
-import { runBuildChild } from "../core/BuildChild.ts";
-import * as FrameworkCore from "../core/index.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import * as Redacted from "effect/Redacted";
 import type { PlatformError } from "effect/PlatformError";
+import * as Redacted from "effect/Redacted";
 import type * as Scope from "effect/Scope";
-import * as NodeCrypto from "node:crypto";
-import { createRequire } from "node:module";
+import { runBuildChild } from "../core/BuildChild.ts";
+import * as FrameworkCore from "../core/index.ts";
 import * as Astro from "./Astro.ts";
 import cloudflareTarget from "./cloudflare.ts";
 

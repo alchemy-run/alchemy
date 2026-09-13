@@ -1,12 +1,12 @@
+import { describe, expect, test } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import {
   formatDeclaredPropertyYaml,
   formatDriftPropertyYaml,
   formatYamlLines,
 } from "@/Cli/PropertyDiff.ts";
 import * as Output from "@/Output.ts";
-import { describe, expect, test } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
 
 describe("YAML property display", { tags: ["unit", "local"] }, () => {
   test("preserves nested create properties", () => {

@@ -1,16 +1,16 @@
+import { credentials } from "@distilled.cloud/fly-io/Credentials";
+import * as machines from "@distilled.cloud/fly-io/machines";
+import * as Clock from "effect/Clock";
+import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import type * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as HttpClientResponse from "effect/http/HttpClientResponse";
+import * as Schema from "effect/Schema";
 import { deepEqual } from "@/Diff";
 import { reconcileBlueGreen } from "@/Fly/bluegreen";
 import { makeMachineLeases } from "@/Fly/leases";
 import { alchemyMetadataKeys as keys } from "@/Fly/Metadata";
 import type { ReconcileReplicasInput } from "@/Fly/replicas";
-import { credentials } from "@distilled.cloud/fly-io/Credentials";
-import * as machines from "@distilled.cloud/fly-io/machines";
-import * as Clock from "effect/Clock";
-import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
-import * as HttpClient from "effect/http/HttpClient";
-import type * as HttpClientRequest from "effect/http/HttpClientRequest";
-import * as HttpClientResponse from "effect/http/HttpClientResponse";
 
 export const appName = "protocol-branches";
 export const candidateId = "controlled-candidate";

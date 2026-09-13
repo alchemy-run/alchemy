@@ -1,11 +1,11 @@
+import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { Alarm, CompositeAlarm } from "@/AWS/CloudWatch";
+import * as Output from "@/Output";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
-import * as Effect from "effect/Effect";
-import * as Output from "@/Output";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

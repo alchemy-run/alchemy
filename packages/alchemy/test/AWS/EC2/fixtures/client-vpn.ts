@@ -1,8 +1,3 @@
-import * as AWS from "@/AWS";
-import { Subnet, Vpc } from "@/AWS/EC2";
-import type { ClientVpnEndpointProps } from "@/AWS/EC2/ClientVpnEndpoint.ts";
-import { createInternalTags, createTagsList } from "@/Tags.ts";
-import { withProviders } from "@/Test/Core.ts";
 import * as acm from "@distilled.cloud/aws/acm";
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import { expect } from "alchemy-test";
@@ -11,6 +6,11 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import * as AWS from "@/AWS";
+import { Subnet, Vpc } from "@/AWS/EC2";
+import type { ClientVpnEndpointProps } from "@/AWS/EC2/ClientVpnEndpoint.ts";
+import { createInternalTags, createTagsList } from "@/Tags.ts";
+import { withProviders } from "@/Test/Core.ts";
 import {
   CLIENT_VPN_CA_PEM,
   CLIENT_VPN_CERTIFICATE_PEM,

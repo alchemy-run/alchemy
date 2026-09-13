@@ -1,15 +1,15 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import * as s3 from "@distilled.cloud/aws/s3";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import MwaaServerlessTestFunctionLive, {
   BINDINGS_BUCKET_NAME,
   BINDINGS_WORKFLOW_NAME,
@@ -86,11 +86,7 @@ const ensureDefinitionUploaded = Effect.gen(function* () {
       Bucket: BINDINGS_BUCKET_NAME,
       ...(region === "us-east-1"
         ? {}
-        : {
-            CreateBucketConfiguration: {
-              LocationConstraint: region,
-            },
-          }),
+        : { CreateBucketConfiguration: { LocationConstraint: region } }),
     })
     .pipe(Effect.catchTag("BucketAlreadyOwnedByYou", () => Effect.void));
   yield* s3.putObject({

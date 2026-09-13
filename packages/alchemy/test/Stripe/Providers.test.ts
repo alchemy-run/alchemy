@@ -1,3 +1,11 @@
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import { expect, it } from "alchemy-test";
+import * as ConfigProvider from "effect/ConfigProvider";
+import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as Layer from "effect/Layer";
+import * as Result from "effect/Result";
+import { v4 as uuidv4 } from "uuid";
 import { AlchemyContext } from "@/AlchemyContext.ts";
 import { AuthProviders } from "@/Auth/AuthProvider.ts";
 import * as CliKit from "@/Cli/CliKit/index.ts";
@@ -5,14 +13,6 @@ import { Stack } from "@/Stack.ts";
 import { Stage } from "@/Stage.ts";
 import * as Stripe from "@/Stripe";
 import { Credentials } from "@/Stripe/Credentials.ts";
-import * as NodeServices from "@effect/platform-node/NodeServices";
-import { expect, it } from "alchemy-test";
-import * as ConfigProvider from "effect/ConfigProvider";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Result from "effect/Result";
-import * as FetchHttpClient from "effect/http/FetchHttpClient";
-import { v4 as uuidv4 } from "uuid";
 
 it.live(
   "resolving Stripe credentials rejects an unknown explicit profile",

@@ -1,13 +1,13 @@
-import * as AWS from "@/AWS";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as pathe from "pathe";
-import { prepareNextjsFixture } from "../../Cloudflare/Website/TypeScriptCompat.ts";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
+import { prepareNextjsFixture } from "../../Cloudflare/Website/TypeScriptCompat.ts";
 
 // `dev: true` runs local providers behind the RPC sidecar proxy by default,
 // matching the process topology of the real `alchemy dev` command.
@@ -49,9 +49,7 @@ describe(
 
           const deployed = yield* stack.deploy(
             Effect.gen(function* () {
-              const site = yield* AWS.Website.Nextjs("NextjsSite", {
-                rootDir,
-              });
+              const site = yield* AWS.Website.Nextjs("NextjsSite", { rootDir });
               return { site };
             }),
           );
@@ -101,9 +99,7 @@ describe(
           yield* expectUrlContains(
             `${url}/api/hello?echo=post-hmr`,
             "post-hmr",
-            {
-              label: "API route query echo after HMR edit",
-            },
+            { label: "API route query echo after HMR edit" },
           );
 
           yield* stack.destroy();

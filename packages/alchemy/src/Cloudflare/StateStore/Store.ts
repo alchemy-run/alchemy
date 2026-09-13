@@ -1,7 +1,6 @@
 import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
-
 import { pipe } from "effect/Function";
+import * as Redacted from "effect/Redacted";
 import type {
   ReplacedResourceState,
   ResourceState,

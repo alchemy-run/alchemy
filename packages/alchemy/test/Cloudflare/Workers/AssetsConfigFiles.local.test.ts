@@ -1,9 +1,9 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as pathe from "pathe";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Test from "@/Test/Alchemy";
 import {
   expectUrlContains,
   expectUrlHeader,
@@ -56,7 +56,9 @@ test.provider(
         `${url}/`,
         "x-alchemy-test",
         "assets-config-header",
-        { label: "local _headers" },
+        {
+          label: "local _headers",
+        },
       );
       yield* expectUrlRedirect(`${url}/old-path`, "/index.html", {
         status: 301,

@@ -1,25 +1,30 @@
-import * as Data from "effect/Data";
-import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
-import { isResolved } from "../Diff.ts";
-import * as Provider from "../Provider.ts";
-import {
-  attrOrRedactedString,
-  attrOrString,
-  devId,
-  devProvider,
-} from "./Internal/DevStub.ts";
-import * as ProviderLayer from "../Local/ProviderLayer.ts";
-import { Resource } from "../Resource.ts";
-import type { Bucket } from "./Bucket.ts";
+import { Retry } from "@distilled.cloud/prisma";
 import {
   type GetBucketKeysResponse,
   deleteBucketKey,
   getBucketKeys,
   createBucketKey,
 } from "@distilled.cloud/prisma/management";
-import { Retry } from "@distilled.cloud/prisma";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
+import { isResolved } from "../Diff.ts";
+import * as ProviderLayer from "../Local/ProviderLayer.ts";
+import * as Provider from "../Provider.ts";
+import { Resource } from "../Resource.ts";
+import type { Bucket } from "./Bucket.ts";
+import {
+  attrOrRedactedString,
+  attrOrString,
+  devId,
+  devProvider,
+} from "./Internal/DevStub.ts";
 import { physicalInstanceName } from "./Internal/EnvName.ts";
+import {
+  type ObservedBucketKey,
+  requiredSecretValue,
+} from "./Internal/Observed.ts";
+import { PrismaPaginationError } from "./Internal/Pagination.ts";
 import type { Providers } from "./Providers.ts";
 import {
   concreteIdsChanged,
@@ -28,12 +33,7 @@ import {
   resolveBucketId,
   unresolvedBucketIdOf,
 } from "./Refs.ts";
-import {
-  type ObservedBucketKey,
-  requiredSecretValue,
-} from "./Internal/Observed.ts";
 import type { BucketKeyRole } from "./Types.ts";
-import { PrismaPaginationError } from "./Internal/Pagination.ts";
 
 export interface BucketAccessKeyProps {
   /**

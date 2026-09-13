@@ -11,10 +11,10 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as HttpApiMiddleware from "effect/http-api/HttpApiMiddleware";
-import * as Schema from "effect/Schema";
 import * as HttpRouter from "effect/http/HttpRouter";
 import * as HttpServerRequest from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Schema from "effect/Schema";
 import { GitApi, isRead, RegistryStore } from "@/Git/index.ts";
 import { RuntimeContext } from "@/RuntimeContext.ts";
 

@@ -1,3 +1,15 @@
+import { expect } from "alchemy-test";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as HttpApiClient from "effect/http-api/HttpApiClient";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Layer from "effect/Layer";
+import * as ChildProcess from "effect/process/ChildProcess";
+import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 /**
  * The pack hasher on AWS Lambda, end to end (DESIGN §22.11): the Git host
  * Worker binds `InvokeFunction` cross-cloud, pushes stream through Lambda
@@ -8,18 +20,6 @@ import * as AWS from "@/AWS";
 import * as Cloudflare from "@/Cloudflare";
 import { GitApi } from "@/Git/Api.ts";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Data from "effect/Data";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Layer from "effect/Layer";
-import { MinimumLogLevel } from "effect/References";
-import * as Schedule from "effect/Schedule";
-import * as Stream from "effect/Stream";
-import * as HttpClient from "effect/http/HttpClient";
-import * as HttpClientRequest from "effect/http/HttpClientRequest";
-import * as HttpApiClient from "effect/http-api/HttpApiClient";
-import * as ChildProcess from "effect/process/ChildProcess";
 import { makeLambdaTestStack, TEST_SECRET } from "./fixtures/lambda-stack.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({

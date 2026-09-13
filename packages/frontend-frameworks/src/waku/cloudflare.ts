@@ -1,3 +1,5 @@
+import * as NodePath from "node:path";
+import { fileURLToPath } from "node:url";
 // Alchemy modifications are licensed under Apache-2.0.
 // This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
 /**
@@ -15,10 +17,8 @@
 import cloudflareVitePlugin, {
   type CloudflareVitePluginOptions,
 } from "@alchemy.run/cloudflare-runtime/vite";
-import { DeployTargetError, makeDeployTarget } from "../core/index.ts";
 import * as Effect from "effect/Effect";
-import * as NodePath from "node:path";
-import { fileURLToPath } from "node:url";
+import { DeployTargetError, makeDeployTarget } from "../core/index.ts";
 import { WAKU_SERVER_ENTRY_PATH, type WakuTarget } from "./Waku.ts";
 
 export type { CloudflareVitePluginOptions } from "@alchemy.run/cloudflare-runtime/vite";

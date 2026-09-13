@@ -1,19 +1,19 @@
-import { PlatformServices } from "@/Util/PlatformServices.ts";
+import { fileURLToPath } from "node:url";
 import { assert, describe, expect, it } from "alchemy-test";
+import * as Clock from "effect/Clock";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as ChildProcess from "effect/process/ChildProcess";
 import * as Schedule from "effect/Schedule";
-import * as Clock from "effect/Clock";
+import * as Sink from "effect/Sink";
+import * as Stream from "effect/Stream";
+import { PlatformServices } from "@/Util/PlatformServices.ts";
 import {
   assertDead,
   lifecycleFixture,
 } from "../Command/fixture/lifecycle-support.ts";
-import * as Sink from "effect/Sink";
-import * as Stream from "effect/Stream";
-import * as ChildProcess from "effect/process/ChildProcess";
-import { fileURLToPath } from "node:url";
 import {
   assertPidExited,
   isAlive,

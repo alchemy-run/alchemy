@@ -1,3 +1,16 @@
+import * as NodeCrypto from "node:crypto";
+import { createRequire } from "node:module";
+import nodePath from "node:path";
+import { pathToFileURL } from "node:url";
+import type {
+  BindingHook,
+  BindingServices,
+  HyperdriveOrigin,
+  Assets as RuntimeAssets,
+  DurableObjectNamespace as RuntimeDurableObject,
+  QueueConsumer as RuntimeQueueConsumer,
+  RuntimeServices,
+} from "@alchemy.run/cloudflare-runtime/core";
 /**
  * `@alchemy.run/frontend-frameworks/vinext/source` — alchemy Worker
  * source provider for vinext. Implements the `WorkerSourceModule`
@@ -11,15 +24,6 @@
  * the same plugin stack.
  */
 import cloudflare from "@alchemy.run/cloudflare-runtime/vite";
-import type {
-  BindingHook,
-  BindingServices,
-  HyperdriveOrigin,
-  Assets as RuntimeAssets,
-  DurableObjectNamespace as RuntimeDurableObject,
-  QueueConsumer as RuntimeQueueConsumer,
-  RuntimeServices,
-} from "@alchemy.run/cloudflare-runtime/core";
 import type * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -28,30 +32,26 @@ import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
 import * as Redacted from "effect/Redacted";
 import type * as Scope from "effect/Scope";
-import * as NodeCrypto from "node:crypto";
-import { createRequire } from "node:module";
-import nodePath from "node:path";
-import { pathToFileURL } from "node:url";
-import { resolveViteDevPort } from "../core/DevPort.ts";
 import { runBuildChild } from "../core/BuildChild.ts";
 import { toOutputFile, type BuildOutput } from "../core/BuildOutput.ts";
+import { resolveViteDevPort } from "../core/DevPort.ts";
 import { ModuleLoadError } from "../core/Loader.ts";
+import { kvHttpNamespaceFromEnv, kvHttpSink } from "./cache/kv-http.ts";
+import { makeVinextCachePlugin } from "./cache/plugin.ts";
+import { seedPrerenderTo } from "./cache/seed.ts";
 import {
   ALCHEMY_CLOUDFLARE_VITE_INJECTED,
   DEFAULT_WORKER_ENTRY,
   makeVinextPluginOptions,
 } from "./cloudflare.ts";
 import {
-  VINEXT_CACHE_BINDING,
-  VINEXT_KV_CACHE_BINDING,
-} from "./PrerenderCache.ts";
-import {
   resolveVinextRoot,
   runVinextPrerenderIfConfigured,
 } from "./Prerender.ts";
-import { kvHttpNamespaceFromEnv, kvHttpSink } from "./cache/kv-http.ts";
-import { makeVinextCachePlugin } from "./cache/plugin.ts";
-import { seedPrerenderTo } from "./cache/seed.ts";
+import {
+  VINEXT_CACHE_BINDING,
+  VINEXT_KV_CACHE_BINDING,
+} from "./PrerenderCache.ts";
 
 const PROVIDER = "@alchemy.run/frontend-frameworks/vinext/source";
 

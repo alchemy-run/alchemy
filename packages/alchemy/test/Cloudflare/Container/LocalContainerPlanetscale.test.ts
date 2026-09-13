@@ -1,12 +1,12 @@
-import * as Cloudflare from "@/Cloudflare";
-import * as Planetscale from "@/Planetscale";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { MinimumLogLevel } from "effect/References";
-import { expectDatabaseReachable } from "./fixtures/sqlreach/expect.ts";
+import * as Cloudflare from "@/Cloudflare";
+import * as Planetscale from "@/Planetscale";
+import * as Test from "@/Test/Alchemy";
 import PlanetscaleHostStack from "./fixtures/pshost/stack.ts";
+import { expectDatabaseReachable } from "./fixtures/sqlreach/expect.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Layer.merge(Cloudflare.providers(), Planetscale.providers()),

@@ -1,10 +1,10 @@
+import * as inspector2 from "@distilled.cloud/aws/inspector2";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { Enabler } from "@/AWS/Inspector2/Enabler.ts";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import * as inspector2 from "@distilled.cloud/aws/inspector2";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

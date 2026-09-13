@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import { LoggingConfiguration, Room } from "@/AWS/IVSChat";
-import { LogGroup } from "@/AWS/Logs";
-import * as Test from "@/Test/Alchemy";
 import * as ivschat from "@distilled.cloud/aws/ivschat";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { LoggingConfiguration, Room } from "@/AWS/IVSChat";
+import { LogGroup } from "@/AWS/Logs";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

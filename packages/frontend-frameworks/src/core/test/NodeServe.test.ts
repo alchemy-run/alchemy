@@ -1,4 +1,6 @@
+import * as Effect from "effect/Effect";
 import { describe, expect, it } from "vitest";
+import { toOutputFile, type BuildOutput } from "../index.ts";
 import {
   NODE_BUNDLE_CONDITIONS,
   NODE_SERVE_ENTRY_FILE_NAME,
@@ -6,8 +8,6 @@ import {
   pinNodeServeModule,
   relativeClientDirExpression,
 } from "../NodeServe.ts";
-import { toOutputFile, type BuildOutput } from "../index.ts";
-import * as Effect from "effect/Effect";
 
 describe("NODE_BUNDLE_CONDITIONS", () => {
   it("is node-first and excludes workerd / aws-sdk", () => {

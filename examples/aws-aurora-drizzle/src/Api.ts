@@ -1,7 +1,7 @@
 import * as AWS from "alchemy/AWS";
 import * as Drizzle from "alchemy/Drizzle/Postgres";
-import * as Duration from "effect/Duration";
 import { eq, sql } from "drizzle-orm";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";

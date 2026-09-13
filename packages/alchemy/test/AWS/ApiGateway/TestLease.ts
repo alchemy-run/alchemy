@@ -1,7 +1,7 @@
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 
 // API Gateway REST has a very low account-wide control-plane mutation quota,
 // especially for deleting REST APIs. The authoritative AWS sweep runs a

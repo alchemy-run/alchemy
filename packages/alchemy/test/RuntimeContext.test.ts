@@ -1,10 +1,10 @@
+import { describe, expect, it } from "alchemy-test";
+import * as Redacted from "effect/Redacted";
 import {
   packEnvValue,
   packEnvValueKeepRedacted,
   unpackEnvValue,
 } from "@/RuntimeContext.ts";
-import { describe, expect, it } from "alchemy-test";
-import * as Redacted from "effect/Redacted";
 
 describe("packEnvValue / unpackEnvValue", { tags: ["unit", "local"] }, () => {
   it("stores a plain string verbatim (no quote characters on the wire)", () => {

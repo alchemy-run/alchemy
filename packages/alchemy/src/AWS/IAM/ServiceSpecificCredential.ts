@@ -6,8 +6,8 @@ import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import type { Providers } from "../Providers.ts";
 import { toWireDays } from "../../Util/Duration.ts";
+import type { Providers } from "../Providers.ts";
 import { toRedactedString } from "./common.ts";
 
 export interface ServiceSpecificCredentialProps {

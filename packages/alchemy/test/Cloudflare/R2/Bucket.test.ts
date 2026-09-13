@@ -1,17 +1,3 @@
-import { AlchemyContext } from "@/AlchemyContext.ts";
-import { ArtifactStore, createArtifactStore } from "@/Artifacts.ts";
-import * as Cloudflare from "@/Cloudflare";
-import type { CloudflareResolvedCredentials } from "@/Cloudflare/Auth/AuthConfig.ts";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Drift from "@/Drift.ts";
-import { LocalRuntimeState } from "@/Cloudflare/LocalRuntime.ts";
-import { InstanceId } from "@/InstanceId.ts";
-import * as RemovalPolicy from "@/RemovalPolicy.ts";
-import { Provider } from "@/Provider.ts";
-import { Stack, type StackSpec } from "@/Stack.ts";
-import { Stage } from "@/Stage.ts";
-import { type ResourceState, State } from "@/State";
-import * as Test from "@/Test/Alchemy";
 import {
   apiTokenCredentials,
   Credentials,
@@ -21,6 +7,8 @@ import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import type * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as MutableHashMap from "effect/MutableHashMap";
 import * as Redacted from "effect/Redacted";
@@ -28,8 +16,20 @@ import { MinimumLogLevel } from "effect/References";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import * as FetchHttpClient from "effect/http/FetchHttpClient";
-import type * as HttpClient from "effect/http/HttpClient";
+import { AlchemyContext } from "@/AlchemyContext.ts";
+import { ArtifactStore, createArtifactStore } from "@/Artifacts.ts";
+import * as Cloudflare from "@/Cloudflare";
+import type { CloudflareResolvedCredentials } from "@/Cloudflare/Auth/AuthConfig.ts";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import { LocalRuntimeState } from "@/Cloudflare/LocalRuntime.ts";
+import * as Drift from "@/Drift.ts";
+import { InstanceId } from "@/InstanceId.ts";
+import { Provider } from "@/Provider.ts";
+import * as RemovalPolicy from "@/RemovalPolicy.ts";
+import { Stack, type StackSpec } from "@/Stack.ts";
+import { Stage } from "@/Stage.ts";
+import { type ResourceState, State } from "@/State";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -606,10 +606,7 @@ test.provider(
       );
 
       const cleared = yield* r2
-        .getBucketCors({
-          accountId,
-          bucketName: initial.bucketName,
-        })
+        .getBucketCors({ accountId, bucketName: initial.bucketName })
         .pipe(
           Effect.map((response) => response.rules ?? []),
           Effect.catchTag("NoCorsConfiguration", () => Effect.succeed([])),
@@ -658,11 +655,7 @@ test.provider(
       );
 
       // Drift: overwrite the CORS configuration out-of-band.
-      yield* r2.putBucketCors({
-        accountId,
-        bucketName,
-        rules: [foreignRule],
-      });
+      yield* r2.putBucketCors({ accountId, bucketName, rules: [foreignRule] });
 
       // Re-deploy with a changed rule. Reconcile diffs desired against
       // *observed* cloud state (not olds), so the foreign rule is replaced
@@ -684,11 +677,7 @@ test.provider(
 
       // Adoption: re-drift the CORS config, then wipe local state so the next
       // deploy adopts via `read` (output defined, olds undefined).
-      yield* r2.putBucketCors({
-        accountId,
-        bucketName,
-        rules: [foreignRule],
-      });
+      yield* r2.putBucketCors({ accountId, bucketName, rules: [foreignRule] });
       yield* Effect.gen(function* () {
         const state = yield* yield* State;
         yield* state.delete({
@@ -1130,19 +1119,14 @@ const waitForBucketToBeDeleted = Effect.fn(function* (
   bucketName: string,
   accountId: string,
 ) {
-  yield* r2
-    .getBucket({
-      accountId,
-      bucketName,
-    })
-    .pipe(
-      Effect.flatMap(() => Effect.fail(new BucketStillExists())),
-      Effect.retry({
-        while: (e): e is BucketStillExists => e instanceof BucketStillExists,
-        schedule: Schedule.exponential(100),
-      }),
-      Effect.catchTag("NoSuchBucket", () => Effect.void),
-    );
+  yield* r2.getBucket({ accountId, bucketName }).pipe(
+    Effect.flatMap(() => Effect.fail(new BucketStillExists())),
+    Effect.retry({
+      while: (e): e is BucketStillExists => e instanceof BucketStillExists,
+      schedule: Schedule.exponential(100),
+    }),
+    Effect.catchTag("NoSuchBucket", () => Effect.void),
+  );
 });
 
 class BucketStillExists extends Data.TaggedError("BucketStillExists") {}

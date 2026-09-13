@@ -1,10 +1,10 @@
 import * as Cause from "effect/Cause";
+import * as CliError from "effect/cli/CliError";
 import * as Console from "effect/Console";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
 import * as Runtime from "effect/Runtime";
-import * as CliError from "effect/cli/CliError";
+import * as Schema from "effect/Schema";
 import { isUserFacing, UserFacingError } from "../../UserFacingError.ts";
 import {
   ANSI_DIM,

@@ -1,3 +1,4 @@
+import * as NodePath from "node:path";
 /**
  * Cloudflare Vite plugin options for a vinext Worker. The injected
  * `@alchemy.run/cloudflare-runtime/vite` stack registers
@@ -5,7 +6,6 @@
  * no-ops any official `@cloudflare/vite-plugin` already in the config.
  */
 import type { CloudflareVitePluginOptions } from "@alchemy.run/cloudflare-runtime/vite";
-import * as NodePath from "node:path";
 
 export type { CloudflareVitePluginOptions } from "@alchemy.run/cloudflare-runtime/vite";
 

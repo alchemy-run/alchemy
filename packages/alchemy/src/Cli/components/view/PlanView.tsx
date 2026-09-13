@@ -19,6 +19,13 @@
  */
 import { useMemo, useSyncExternalStore } from "@alchemy.run/sigil/react";
 import type { JSX, ReactNode } from "react";
+import type { Plan as AlchemyPlan } from "../../../Plan.ts";
+import type { ApplyStatus } from "../../../Report.ts";
+import { theme } from "../../CliKit/index.ts";
+import { formatElapsed } from "../../Format.ts";
+import { formatModeNote } from "../../ModeTag.ts";
+import type { ActionVerb, PlanSummaryCounts } from "../../NamespaceTree.ts";
+import { matchYamlChange, matchYamlKey } from "../../PropertyDiff.ts";
 import {
   Box,
   KeyBar,
@@ -31,21 +38,7 @@ import {
   useGlyphs,
   useKeyGlyphs,
 } from "../ui/index.ts";
-import type { Plan as AlchemyPlan } from "../../../Plan.ts";
-import type { ApplyStatus } from "../../../Report.ts";
-import type { ActionVerb, PlanSummaryCounts } from "../../NamespaceTree.ts";
-import { formatModeNote } from "../../ModeTag.ts";
-import { theme } from "../../CliKit/index.ts";
-import { formatElapsed } from "../../Format.ts";
-import {
-  actionStyle,
-  applyStatusColor,
-  isInProgress,
-  isTerminalStatus,
-} from "./statusStyle.ts";
-import { matchYamlChange, matchYamlKey } from "../../PropertyDiff.ts";
 import { NamespaceRow, namespaceStyle } from "./PlanRow.tsx";
-import { StackOutputs } from "./StackOutputs.tsx";
 import {
   PlanTree,
   initialResourceState,
@@ -54,8 +47,15 @@ import {
   type ResourceRow,
   type RowState,
 } from "./PlanTree.ts";
-import { usePlanViewport } from "./usePlanViewport.ts";
+import { StackOutputs } from "./StackOutputs.tsx";
+import {
+  actionStyle,
+  applyStatusColor,
+  isInProgress,
+  isTerminalStatus,
+} from "./statusStyle.ts";
 import { usePlanPresentation } from "./usePlanPresentation.ts";
+import { usePlanViewport } from "./usePlanViewport.ts";
 
 export { PlanTree } from "./PlanTree.ts";
 export type {

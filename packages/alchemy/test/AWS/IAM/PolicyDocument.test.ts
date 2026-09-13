@@ -1,3 +1,4 @@
+import { describe, expect, it } from "alchemy-test";
 import type { IamAction } from "@/AWS/IAM/actions.generated.ts";
 import {
   normalizePolicyDocument,
@@ -5,7 +6,6 @@ import {
   type PolicyDocument,
   type ServiceControlPolicyDocument,
 } from "@/AWS/IAM/Policy.ts";
-import { describe, expect, it } from "alchemy-test";
 
 const document: PolicyDocument = {
   Version: "2012-10-17",

@@ -1,7 +1,6 @@
 import * as mnm from "@distilled.cloud/cloudflare/magic-network-monitoring";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";

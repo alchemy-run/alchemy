@@ -1,6 +1,3 @@
-import { UserInputError } from "@/Cli/commands/errors.ts";
-import { resolveStage, stage, userStage } from "@/Cli/commands/flags.ts";
-import { PlatformServices } from "@/Util/PlatformServices.ts";
 import { describe, expect, test } from "alchemy-test";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
@@ -8,6 +5,9 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Result from "effect/Result";
+import { UserInputError } from "@/Cli/commands/errors.ts";
+import { resolveStage, stage, userStage } from "@/Cli/commands/flags.ts";
+import { PlatformServices } from "@/Util/PlatformServices.ts";
 
 const envLayer = (env: Record<string, string>) =>
   Layer.mergeAll(

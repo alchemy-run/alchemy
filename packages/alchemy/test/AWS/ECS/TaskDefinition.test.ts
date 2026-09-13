@@ -1,3 +1,9 @@
+import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
+import * as ec2 from "@distilled.cloud/aws/ec2";
+import * as ecs from "@distilled.cloud/aws/ecs";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import { Subnet } from "@/AWS/EC2";
 import { Cluster } from "@/AWS/ECS/Cluster.ts";
@@ -5,12 +11,6 @@ import { Service } from "@/AWS/ECS/Service.ts";
 import { TaskDefinition } from "@/AWS/ECS/TaskDefinition.ts";
 import { Role } from "@/AWS/IAM/Role.ts";
 import * as Test from "@/Test/Alchemy";
-import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
-import * as ec2 from "@distilled.cloud/aws/ec2";
-import * as ecs from "@distilled.cloud/aws/ecs";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import { getDefaultVpc } from "../DefaultVpc.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });

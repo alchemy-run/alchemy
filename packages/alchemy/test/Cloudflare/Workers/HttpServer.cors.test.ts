@@ -1,8 +1,8 @@
-import { makeRequestEffect } from "@/Cloudflare/Workers/HttpServer.ts";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as HttpMiddleware from "effect/http/HttpMiddleware";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { makeRequestEffect } from "@/Cloudflare/Workers/HttpServer.ts";
 
 /**
  * In-process pin of #175 / #404: wrapping a plain fetch handler with

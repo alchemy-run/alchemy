@@ -1,4 +1,3 @@
-import { waitUntilDeleted } from "./GraphQL.ts";
 import { Query, type UnwrapPlan } from "@distilled.cloud/core/query";
 import {
   Railway,
@@ -15,7 +14,7 @@ import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { RailwayEnvironment, resolveWorkspace } from "./Environment.ts";
-
+import { waitUntilDeleted } from "./GraphQL.ts";
 import type { Providers } from "./Providers.ts";
 
 const usageFields = <E>(row: Query<AggregatedUsage, E>) => ({

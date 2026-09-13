@@ -6,13 +6,13 @@
  * `Kubernetes.Manifest`.
  */
 import * as Effect from "effect/Effect";
-import type { Cluster } from "../Cluster.ts";
 import {
   kubernetesObjectKey,
   toKubernetesObjectRef,
   type KubernetesObjectDefinition,
   type KubernetesObjectMetadata,
 } from "../../../Kubernetes/internal/objects.ts";
+import type { Cluster } from "../Cluster.ts";
 
 export interface ClusterObjectProps {
   /** Target EKS cluster that will own this Kubernetes object. */

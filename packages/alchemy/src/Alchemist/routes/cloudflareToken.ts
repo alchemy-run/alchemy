@@ -71,7 +71,9 @@ export interface CreatedToken {
 /** Cloudflare accepted the create call but returned no usable token. */
 export class CloudflareTokenError extends Data.TaggedError(
   "CloudflareTokenError",
-)<{ readonly message: string }> {}
+)<{
+  readonly message: string;
+}> {}
 
 /** Authenticate the surrounding effect with the user's Global API Key. */
 const withGlobalKey = (credentials: GlobalCredentials) =>

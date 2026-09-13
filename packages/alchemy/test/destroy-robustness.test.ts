@@ -1,3 +1,8 @@
+import { describe, expect } from "alchemy-test";
+import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
 /**
  * Destroy robustness: a destroy (or the GC phase of a deploy) must delete
  * everything it can, aggregate every failure, and never let one bad row
@@ -16,11 +21,6 @@ import { MissingProviderError } from "@/Provider";
 import { Stack } from "@/Stack";
 import { State, type ResourceState } from "@/State";
 import * as Test from "@/Test/Alchemy";
-import { describe, expect } from "alchemy-test";
-import * as Cause from "effect/Cause";
-import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
-import * as Layer from "effect/Layer";
 import {
   TestLayers,
   TestResource,

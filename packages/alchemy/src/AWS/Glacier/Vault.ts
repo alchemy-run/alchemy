@@ -158,7 +158,9 @@ export const Vault = Resource<Vault>("AWS.Glacier.Vault");
  */
 export class GlacierVaultLockImmutable extends Data.TaggedError(
   "GlacierVaultLockImmutable",
-)<{ message: string }> {}
+)<{
+  message: string;
+}> {}
 
 /**
  * Raised when DescribeVault returns a vault record missing its ARN or
@@ -166,7 +168,9 @@ export class GlacierVaultLockImmutable extends Data.TaggedError(
  */
 export class GlacierVaultIncomplete extends Data.TaggedError(
   "GlacierVaultIncomplete",
-)<{ message: string }> {}
+)<{
+  message: string;
+}> {}
 
 // Explicitly-typed pipeable retry helper. Inlining `Effect.retry` in a
 // provider lifecycle op leaks `Retry.Return`'s conditional into declaration

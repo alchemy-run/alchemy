@@ -1,14 +1,14 @@
+import * as dns from "@distilled.cloud/cloudflare/dns";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import { MinimumLogLevel } from "effect/References";
+import * as Stream from "effect/Stream";
 import { Action } from "@/Action";
 import { adopt } from "@/AdoptPolicy";
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
 import * as Test from "@/Test/Alchemy";
-import * as dns from "@distilled.cloud/cloudflare/dns";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import { MinimumLogLevel } from "effect/References";
-import * as Stream from "effect/Stream";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 

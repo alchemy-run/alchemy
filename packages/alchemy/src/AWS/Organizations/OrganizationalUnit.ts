@@ -114,7 +114,9 @@ export const OrganizationalUnitProvider = () =>
             const hydrated = yield* Effect.forEach(
               ouIds,
               (ouId) => readOUById(ouId),
-              { concurrency: 10 },
+              {
+                concurrency: 10,
+              },
             );
             const result: OrganizationalUnit["Attributes"][] = hydrated.filter(
               (ou): ou is NonNullable<typeof ou> => ou !== undefined,
@@ -272,7 +274,9 @@ const collectDescendantOUIds = (
     const childLists = yield* Effect.forEach(
       parentIds,
       (parentId) => listOUsForParent(parentId),
-      { concurrency: 10 },
+      {
+        concurrency: 10,
+      },
     );
     const childIds = childLists
       .flat()

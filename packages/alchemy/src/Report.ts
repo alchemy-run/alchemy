@@ -285,7 +285,9 @@ export type ProgressReporter = (event: ProgressEvent) => Effect.Effect<void>;
  */
 export const Progress = Context.Reference<ProgressReporter>(
   "alchemy/Progress",
-  { defaultValue: (): ProgressReporter => () => Effect.void },
+  {
+    defaultValue: (): ProgressReporter => () => Effect.void,
+  },
 );
 
 export interface PlanStatusSession {

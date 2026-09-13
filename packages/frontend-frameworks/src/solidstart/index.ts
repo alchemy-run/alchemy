@@ -76,7 +76,9 @@ export interface HarnessOptions {
 /** Map the harness's options onto {@link SolidStartOptions}. */
 export const fromHarnessOptions = (
   options: HarnessOptions,
-): SolidStartOptions => ({ nitro: options.solidstart?.nitro });
+): SolidStartOptions => ({
+  nitro: options.solidstart?.nitro,
+});
 
 /**
  * The e2e-harness factory contract

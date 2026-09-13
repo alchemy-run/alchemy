@@ -1,20 +1,20 @@
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import { isLocalId } from "@/Cloudflare/LocalRuntime";
-import * as Test from "@/Test/Alchemy";
-import { initialCwd } from "@/Util/Node.ts";
 import * as r2 from "@distilled.cloud/cloudflare/r2";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/http/HttpClient";
-import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as pathe from "pathe";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import { isLocalId } from "@/Cloudflare/LocalRuntime";
+import * as Test from "@/Test/Alchemy";
+import { initialCwd } from "@/Util/Node.ts";
 import { cloneFixture } from "../Utils/Fixture.ts";
 import { expectUrlContains } from "../Utils/Http.ts";
 import {
@@ -296,9 +296,7 @@ describe.concurrent(
             Effect.gen(function* () {
               return yield* Cloudflare.Website.Vite("FixViteFoldkit", {
                 ...viteProps(rootDir, memoInclude),
-                assets: {
-                  notFoundHandling: "single-page-application",
-                },
+                assets: { notFoundHandling: "single-page-application" },
               });
             }),
           );
@@ -314,10 +312,7 @@ describe.concurrent(
           yield* expectUrlContains(
             `${site.url!}/counter/42`,
             "Foldkit Fixture",
-            {
-              timeout: "60 seconds",
-              label: "foldkit spa fallback",
-            },
+            { timeout: "60 seconds", label: "foldkit spa fallback" },
           );
 
           yield* stack.destroy();
@@ -733,10 +728,7 @@ if (el) {
             Effect.gen(function* () {
               return yield* Cloudflare.Website.Vite("ViteDo", {
                 ...viteProps(rootDir, memoInclude),
-                compatibility: {
-                  date: "2026-03-17",
-                  flags: ["nodejs_compat"],
-                },
+                compatibility: { date: "2026-03-17", flags: ["nodejs_compat"] },
                 // The documented SPA + Worker-API pattern (vite.mdx): the SPA
                 // fallback owns unmatched paths while the glob pins the API
                 // namespace to the Worker regardless of request mode.
@@ -766,10 +758,7 @@ if (el) {
           yield* expectUrlContains(
             `${site.url!}/deep/link`,
             "Vite DO fixture",
-            {
-              timeout: "60 seconds",
-              label: "vite do spa deep link",
-            },
+            { timeout: "60 seconds", label: "vite do spa deep link" },
           );
 
           const reset = yield* fetchJsonReady<{ ok: boolean }>(
@@ -820,13 +809,8 @@ if (el) {
             Effect.gen(function* () {
               return yield* Cloudflare.Website.Vite("ViteContainer", {
                 ...viteProps(rootDir, memoInclude),
-                compatibility: {
-                  date: "2026-03-17",
-                  flags: ["nodejs_compat"],
-                },
-                assets: {
-                  runWorkerFirst: ["/api/*"],
-                },
+                compatibility: { date: "2026-03-17", flags: ["nodejs_compat"] },
+                assets: { runWorkerFirst: ["/api/*"] },
                 env: {
                   ECHO: Cloudflare.Container("ViteEchoContainer", {
                     className: "EchoObject",
@@ -981,13 +965,8 @@ if (el) {
               return yield* Cloudflare.Website.Vite("ViteMain", {
                 ...viteProps(rootDir, memoInclude),
                 main: "src/worker-main.ts",
-                compatibility: {
-                  date: "2026-03-17",
-                  flags: ["nodejs_compat"],
-                },
-                assets: {
-                  runWorkerFirst: ["/api/*"],
-                },
+                compatibility: { date: "2026-03-17", flags: ["nodejs_compat"] },
+                assets: { runWorkerFirst: ["/api/*"] },
                 env: {
                   Counter: Cloudflare.DurableObject<ViteDoCounter>("Counter", {
                     className: "Counter",
@@ -1173,10 +1152,7 @@ if (el) {
               expectUrlContains(
                 deployed.defaultPortWorker.url!,
                 "default-port-worker",
-                {
-                  timeout: "30 seconds",
-                  label: "default-port worker",
-                },
+                { timeout: "30 seconds", label: "default-port worker" },
               ),
               expectUrlContains(deployed.appA.url!, "child-app-a", {
                 timeout: "30 seconds",
@@ -1322,16 +1298,9 @@ if (el) {
                     "TanStackDevBindings",
                     {
                       ...viteProps(rootDir, memoInclude),
-                      assets: {
-                        runWorkerFirst: true,
-                      },
-                      dev: {
-                        port: 0,
-                      },
-                      env: {
-                        BUCKET: bucket,
-                        DEV_MARKER: marker,
-                      },
+                      assets: { runWorkerFirst: true },
+                      dev: { port: 0 },
+                      env: { BUCKET: bucket, DEV_MARKER: marker },
                     },
                   );
                   return { bucket, worker };
@@ -1346,10 +1315,7 @@ if (el) {
             yield* expectUrlContains(
               joinUrl(first.worker.url!, "/"),
               "hmr-marker-v1",
-              {
-                timeout: "30 seconds",
-                label: "tanstack dev initial route",
-              },
+              { timeout: "30 seconds", label: "tanstack dev initial route" },
             );
 
             const env1 = yield* fetchJsonReady<{ marker: string }>(
@@ -1378,10 +1344,7 @@ if (el) {
             yield* expectUrlContains(
               joinUrl(first.worker.url!, "/"),
               "hmr-marker-v2",
-              {
-                timeout: "30 seconds",
-                label: "tanstack dev updated route",
-              },
+              { timeout: "30 seconds", label: "tanstack dev updated route" },
             );
 
             const second = yield* deploy("DevBucketB", "dev-marker-v2");
@@ -1624,10 +1587,7 @@ const expectBundleContains = (
 const viteProps = (rootDir: string, memoInclude: string[]) => ({
   rootDir,
   workersDev: true,
-  compatibility: {
-    date: "2024-09-23",
-    flags: ["nodejs_compat"],
-  },
+  compatibility: { date: "2024-09-23", flags: ["nodejs_compat"] },
   memo: { include: memoInclude },
 });
 
@@ -1666,26 +1626,21 @@ const waitForBucketToBeDeleted = Effect.fn(function* (
   // Dev-mode buckets are purely virtual (`dev:`-prefixed identity) — there
   // is no cloud bucket to wait on, and the real API rejects the name.
   if (isLocalId(bucketName)) return;
-  yield* r2
-    .getBucket({
-      accountId,
-      bucketName,
-    })
-    .pipe(
-      Effect.flatMap(() => Effect.fail(new BucketStillExists())),
-      Effect.retry({
-        while: (error): error is BucketStillExists =>
-          error instanceof BucketStillExists,
-        schedule: Schedule.max([
-          Schedule.min([
-            Schedule.exponential("200 millis"),
-            Schedule.spaced("2 seconds"),
-          ]),
-          Schedule.recurs(20),
+  yield* r2.getBucket({ accountId, bucketName }).pipe(
+    Effect.flatMap(() => Effect.fail(new BucketStillExists())),
+    Effect.retry({
+      while: (error): error is BucketStillExists =>
+        error instanceof BucketStillExists,
+      schedule: Schedule.max([
+        Schedule.min([
+          Schedule.exponential("200 millis"),
+          Schedule.spaced("2 seconds"),
         ]),
-      }),
-      Effect.catchTag("NoSuchBucket", () => Effect.void),
-    );
+        Schedule.recurs(20),
+      ]),
+    }),
+    Effect.catchTag("NoSuchBucket", () => Effect.void),
+  );
 });
 
 class BucketStillExists extends Data.TaggedError("BucketStillExists") {}

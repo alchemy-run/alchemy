@@ -134,7 +134,11 @@ export const ClusterPolicyProvider = () =>
         clusterId: string,
         policy: string,
         policyVersion: string,
-      ) => ({ clusterId, policy, policyVersion });
+      ) => ({
+        clusterId,
+        policy,
+        policyVersion,
+      });
 
       return {
         stables: ["clusterId"],

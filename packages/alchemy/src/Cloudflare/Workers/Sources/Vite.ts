@@ -1,3 +1,7 @@
+import { createRequire } from "node:module";
+import nodePath from "node:path";
+import { pathToFileURL } from "node:url";
+import { viteSupportsPortZero } from "@alchemy.run/cloudflare-runtime/core/internal/Port";
 import cloudflare, {
   type CloudflareVitePluginOptions,
 } from "@alchemy.run/cloudflare-runtime/vite";
@@ -5,21 +9,17 @@ import * as ConsoleService from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
-import { createRequire } from "node:module";
-import nodePath from "node:path";
-import { pathToFileURL } from "node:url";
 import type * as vite from "vite";
 import {
   viteBuildOutputPlugin,
   type ViteBuildOutput,
 } from "../../../Bundle/Vite.ts";
-import { viteSupportsPortZero } from "@alchemy.run/cloudflare-runtime/core/internal/Port";
+import { hashDirectory, type MemoOptions } from "../../../Command/Memo.ts";
+import { findAvailablePort, initialCwd } from "../../../Util/Node.ts";
 import {
   makeResourceLogger,
   makeResourceOutput,
 } from "../../../Util/ResourceOutput.ts";
-import { hashDirectory, type MemoOptions } from "../../../Command/Memo.ts";
-import { findAvailablePort, initialCwd } from "../../../Util/Node.ts";
 import { sha256Object } from "../../../Util/sha256.ts";
 import { readAssets } from "../Assets.ts";
 import type { SourceDevHandle, SourceProvider } from "../Source.ts";
@@ -356,12 +356,16 @@ export const hashViteInput = Effect.fn(function* <E, R>(
   }
   const [root, workspaces] = yield* Effect.all(
     [hashRoot, additionalWorkspaces],
-    { concurrency: "unbounded" },
+    {
+      concurrency: "unbounded",
+    },
   );
   const workspaceHashes = yield* Effect.forEach(
     workspaces,
     (cwd) => hashWorkspaceDirectory(cwd),
-    { concurrency: "unbounded" },
+    {
+      concurrency: "unbounded",
+    },
   );
   const hash = yield* sha256Object([root, ...workspaceHashes.sort()]);
   return { hash, workspaces: Array.from(workspaces).map(relativeToRoot) };

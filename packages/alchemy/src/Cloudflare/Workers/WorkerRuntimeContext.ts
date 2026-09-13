@@ -9,8 +9,10 @@ import {
   unpackEnvValue,
 } from "../../RuntimeContext.ts";
 import type * as Serverless from "../../Serverless/index.ts";
+import type { WorkflowExport } from "../Workflows/Workflow.ts";
 import type { DurableObjectExport } from "./DurableObject.ts";
 import { makeRequestHandler } from "./HttpServer.ts";
+import type { SqlMigrationsExport } from "./SqlMigrationsRuntime.ts";
 import {
   ExportedHandlerMethods,
   WorkerEnvironment,
@@ -19,8 +21,6 @@ import {
   deferredExecutionContext,
   type WorkerEvent,
 } from "./WorkerRuntime.ts";
-import type { WorkflowExport } from "../Workflows/Workflow.ts";
-import type { SqlMigrationsExport } from "./SqlMigrationsRuntime.ts";
 
 export type WorkerExport =
   | DurableObjectExport

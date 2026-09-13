@@ -1,21 +1,21 @@
+import { gunzipSync } from "node:zlib";
+import { describe, expect, it } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as HttpClient from "effect/http/HttpClient";
+import * as Path from "effect/Path";
+import * as ChildProcess from "effect/process/ChildProcess";
+import { ChildProcessSpawner } from "effect/process/ChildProcessSpawner";
+import * as Schedule from "effect/Schedule";
+import { createComputeArchive } from "@/Prisma/ComputeArchive";
 import {
   runBuildCommand,
   runComputeAutoBuild,
   runComputeStaticBuild,
 } from "@/Prisma/ComputeBuild";
-import { createComputeArchive } from "@/Prisma/ComputeArchive";
-import { PlatformServices } from "@/Util/PlatformServices";
 import { findAvailablePort } from "@/Util/Node";
-import { describe, expect, it } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
-import * as Schedule from "effect/Schedule";
-import * as FetchHttpClient from "effect/http/FetchHttpClient";
-import * as HttpClient from "effect/http/HttpClient";
-import * as ChildProcess from "effect/process/ChildProcess";
-import { ChildProcessSpawner } from "effect/process/ChildProcessSpawner";
-import { gunzipSync } from "node:zlib";
+import { PlatformServices } from "@/Util/PlatformServices";
 
 const inspectBuildEnvironmentCommand = [
   JSON.stringify(process.execPath),

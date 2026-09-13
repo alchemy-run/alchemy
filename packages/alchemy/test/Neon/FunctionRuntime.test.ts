@@ -1,20 +1,20 @@
-import * as Alchemy from "@/index";
-import { Function } from "@/Neon/Function";
-import { NeonAuth } from "@/Neon/AuthProvider";
-import { fromAuthProvider } from "@/Neon/Credentials";
-import * as Layer from "effect/Layer";
 import * as NeonApi from "@distilled.cloud/neon";
-import * as Exit from "effect/Exit";
-import { providers } from "@/Neon/Providers";
-import { FunctionLogs } from "@/Neon/FunctionProvider";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
-import * as Option from "effect/Option";
-import * as Stream from "effect/Stream";
-import * as ChildProcess from "effect/process/ChildProcess";
+import * as Exit from "effect/Exit";
 import * as HttpClient from "effect/http/HttpClient";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as ChildProcess from "effect/process/ChildProcess";
+import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
+import * as Alchemy from "@/index";
+import { NeonAuth } from "@/Neon/AuthProvider";
+import { fromAuthProvider } from "@/Neon/Credentials";
+import { Function } from "@/Neon/Function";
+import { FunctionLogs } from "@/Neon/FunctionProvider";
+import { providers } from "@/Neon/Providers";
+import * as Test from "@/Test/Alchemy";
 import RuntimeFunction from "./fixtures/function-effect.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({

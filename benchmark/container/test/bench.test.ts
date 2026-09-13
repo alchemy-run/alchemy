@@ -1,8 +1,8 @@
-import * as AWS from "alchemy/AWS";
+import { expect } from "bun:test";
 import * as Alchemy from "alchemy";
+import * as AWS from "alchemy/AWS";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Test from "alchemy/Test/Bun";
-import { expect } from "bun:test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -120,7 +120,10 @@ const waitForHost = (url: string) =>
       ),
       Effect.timeout("30 seconds"),
       Effect.retry({
-        schedule: Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("3 seconds")]),
+        schedule: Schedule.min([
+          Schedule.exponential("500 millis"),
+          Schedule.spaced("3 seconds"),
+        ]),
         times: 30,
       }),
     );
@@ -217,7 +220,9 @@ const runTarget = (t: Target, nonce: string) =>
       const outcomes = yield* Effect.forEach(
         keys,
         (key) => bootOne(t, b, key),
-        { concurrency: t.concurrency },
+        {
+          concurrency: t.concurrency,
+        },
       );
       samples.push(...outcomes.map((o) => o.sample));
       yield* Effect.forEach(

@@ -8,11 +8,12 @@
   // Opt in once per machine via Command Palette -> "TypeScript: Select
   // TypeScript Version" -> "Use Workspace Version".
   // (`enablePromptUseWorkspaceTsdk` below makes the editor prompt for this.)
-  "typescript.tsdk": "node_modules/typescript/lib",
-  "typescript.enablePromptUseWorkspaceTsdk": true,
-  "typescript.preferences.importModuleSpecifier": "relative",
-  "typescript.preferences.importModuleSpecifierEnding": "ts",
+  "js/ts.tsdk.path": "node_modules/typescript/lib",
+  "js/ts.tsdk.promptToUseWorkspaceVersion": true,
+  "js/ts.preferences.importModuleSpecifier": "relative",
+  "js/ts.preferences.importModuleSpecifierEnding": "js",
   "oxc.enable": true,
+  "oxc.enable.oxfmt": true,
   "oxc.lint.run": "onSave",
   "json.schemaDownload.enable": true,
   "editor.defaultFormatter": "oxc.oxc-vscode",
@@ -24,8 +25,7 @@
   "editor.indentSize": 2,
   "editor.insertSpaces": true,
   "editor.codeActionsOnSave": {
-    "source.fixAll": "explicit",
-    "source.organizeImports": "explicit"
+    "source.fixAll": "explicit"
   },
   "[toml]": {
     "editor.defaultFormatter": "tamasfe.even-better-toml"
@@ -48,7 +48,7 @@
     "**/__pycache__": true,
     "**/*.pyc": true,
     "packages/alchemy/bin/**/*.d*": true,
-    "packages/alchemy/bin/**/*.map": true,
+    "packages/alchemy/bin/**/*.map": true
   },
   // The client watcher feeds the tsgo LSP (workspace/didChangeWatchedFiles);
   // every unexcluded change storm forces a session-snapshot clone + program
@@ -68,7 +68,7 @@
     "**/.alchemy/**": true
   },
   // Keep the 200MB generated distilled surface out of the auto-import index.
-  "typescript.preferences.autoImportFileExcludePatterns": [ "**/submodules/**" ],
+  "js/ts.preferences.autoImportFileExcludePatterns": ["**/submodules/**"],
   "[typescript]": {
     "editor.indentSize": 2,
     "editor.defaultFormatter": "oxc.oxc-vscode"
@@ -84,6 +84,5 @@
   "[javascriptreact]": {
     "editor.indentSize": 2,
     "editor.defaultFormatter": "oxc.oxc-vscode"
-  },
-  "oxc.enable.oxfmt": true
+  }
 }

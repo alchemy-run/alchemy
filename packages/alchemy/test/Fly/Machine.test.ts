@@ -1,15 +1,15 @@
 import * as machines from "@distilled.cloud/fly-io/machines";
 import * as Retry from "@distilled.cloud/fly-io/Retry";
-import * as Fly from "@/Fly";
-import { ensureStarted } from "@/Fly/replicas";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
-import * as Schedule from "effect/Schedule";
 import * as Result from "effect/Result";
+import * as Schedule from "effect/Schedule";
+import * as Fly from "@/Fly";
 import type { MachineContainer } from "@/Fly/Machine";
+import { ensureStarted } from "@/Fly/replicas";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Fly.providers() });
 

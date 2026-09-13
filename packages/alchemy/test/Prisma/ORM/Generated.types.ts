@@ -1,12 +1,12 @@
-import { makeSchemas } from "@/Prisma/ORM/Schema.ts";
 import type * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import type * as Schema from "effect/Schema";
 import type { PostgresDatabase } from "@/Prisma/ORM/Postgres.ts";
-import type { Contract } from "./fixtures/psl/generated/contract.js";
-import { makeDatabase } from "./fixtures/psl/generated/client.ts";
-import { schemas } from "./fixtures/psl/generated/schemas.ts";
+import { makeSchemas } from "@/Prisma/ORM/Schema.ts";
 import { contract } from "./fixtures/client/contract.ts";
+import { makeDatabase } from "./fixtures/psl/generated/client.ts";
+import type { Contract } from "./fixtures/psl/generated/contract.js";
+import { schemas } from "./fixtures/psl/generated/schemas.ts";
 
 type Equal<A, B> =
   (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2

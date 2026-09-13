@@ -2,7 +2,6 @@ import * as emailSecurity from "@distilled.cloud/cloudflare/email-security";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -105,7 +104,9 @@ export type BlockSender = Resource<
  */
 export const BlockSender = Resource<BlockSender>(
   EmailSecurityBlockSenderTypeId,
-  { aliases: ["Cloudflare.EmailSecurity.BlockSender"] },
+  {
+    aliases: ["Cloudflare.EmailSecurity.BlockSender"],
+  },
 );
 
 /**

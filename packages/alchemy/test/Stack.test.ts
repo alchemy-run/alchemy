@@ -1,21 +1,21 @@
-import * as Alchemy from "@/index.ts";
-import * as Deploy from "@/Deploy.ts";
-import * as Destroy from "@/Destroy.ts";
-import * as Plan from "@/Plan.ts";
-import * as Cause from "effect/Cause";
-import * as EffectExit from "effect/Exit";
-import { TestLayers, TestResource } from "./test.resources.ts";
-import { Stage } from "@/Stage.ts";
-import * as State from "@/State/index.ts";
-import * as Test from "@/Test/Alchemy.ts";
-import * as TestCore from "@/Test/Core.ts";
-import type { TestApi as BunTestApi } from "@/Test/Bun.ts";
-import type { TestApi as VitestTestApi } from "@/Test/Vitest.ts";
 import { describe, expect, it } from "alchemy-test";
+import * as Cause from "effect/Cause";
 import type { ConfigError } from "effect/Config";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
+import * as EffectExit from "effect/Exit";
 import * as Layer from "effect/Layer";
+import * as Deploy from "@/Deploy.ts";
+import * as Destroy from "@/Destroy.ts";
+import * as Alchemy from "@/index.ts";
+import * as Plan from "@/Plan.ts";
+import { Stage } from "@/Stage.ts";
+import * as State from "@/State/index.ts";
+import * as Test from "@/Test/Alchemy.ts";
+import type { TestApi as BunTestApi } from "@/Test/Bun.ts";
+import * as TestCore from "@/Test/Core.ts";
+import type { TestApi as VitestTestApi } from "@/Test/Vitest.ts";
+import { TestLayers, TestResource } from "./test.resources.ts";
 
 // These tests are compile-time assertions: they verify that the
 // `Alchemy.Stack` effect permits a `ConfigError` in its body without

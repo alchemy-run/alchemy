@@ -85,7 +85,9 @@ export const PlaybackKeyPair = Resource<PlaybackKeyPair>(
  */
 export class IvsPlaybackKeyPairIncomplete extends Data.TaggedError(
   "IvsPlaybackKeyPairIncomplete",
-)<{ message: string }> {}
+)<{
+  message: string;
+}> {}
 
 /**
  * DeletePlaybackKeyPair intermittently returns InternalServerException even

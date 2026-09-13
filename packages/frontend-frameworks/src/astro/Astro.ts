@@ -1,4 +1,3 @@
-import * as FrameworkCore from "../core/index.ts";
 import type { AstroInlineConfig, AstroIntegration } from "astro";
 import type * as AstroNamespace from "astro";
 import * as Effect from "effect/Effect";
@@ -6,6 +5,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import type * as ViteModule from "vite";
+import * as FrameworkCore from "../core/index.ts";
 import { NODE_ENVIRONMENTS } from "./environments.ts";
 import {
   DEFAULT_TARGET_SPECIFIER,

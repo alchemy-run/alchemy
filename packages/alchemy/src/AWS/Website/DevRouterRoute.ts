@@ -1,5 +1,5 @@
-import * as Effect from "effect/Effect";
 import { createHash } from "node:crypto";
+import * as Effect from "effect/Effect";
 import { toPath } from "../../FQN.ts";
 import type { Input } from "../../Input.ts";
 import * as Namespace from "../../Namespace.ts";

@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 import { PlatformServices, runMain } from "alchemy/Util/PlatformServices";
+import { CliConfig, CliError, Command, Flag, GlobalFlag } from "effect/cli";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
-import * as Layer from "effect/Layer";
-import { CliConfig, CliError, Command, Flag, GlobalFlag } from "effect/cli";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import pkg from "../../package.json" with { type: "json" };
 import { Group, pack } from "./pack.ts";
 import { publish } from "./publish.ts";

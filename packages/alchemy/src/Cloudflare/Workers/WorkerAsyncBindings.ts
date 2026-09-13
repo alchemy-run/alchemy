@@ -2,10 +2,10 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import type { Json } from "effect/Schema";
 import type { InputProps } from "../../Input.ts";
-import * as Output from "../../Output.ts";
-import type { ResourceBinding } from "../../Resource.ts";
 import * as Namespace from "../../Namespace.ts";
+import * as Output from "../../Output.ts";
 import { defaultProviderMode } from "../../ProviderMode.ts";
+import type { ResourceBinding } from "../../Resource.ts";
 import { isYieldableEffectLike } from "../../Util/effect.ts";
 import {
   Application,

@@ -14,16 +14,16 @@ import {
   diffTags,
   hasAlchemyTags,
 } from "../../Tags.ts";
+import { toWireSeconds } from "../../Util/Duration.ts";
 import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import type { PolicyDocument, PolicyStatement } from "./Policy.ts";
-import { toWireSeconds } from "../../Util/Duration.ts";
 import {
   parsePolicyDocument,
   stringifyPolicyDocument,
   toTagRecord,
 } from "./common.ts";
+import type { PolicyDocument, PolicyStatement } from "./Policy.ts";
 
 export type RoleName = string;
 export type RoleArn = `arn:aws:iam::${AccountID}:role/${RoleName}`;

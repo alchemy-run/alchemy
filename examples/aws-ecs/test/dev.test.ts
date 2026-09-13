@@ -15,10 +15,10 @@
  *     image without a redeploy
  */
 import { afterAll, expect, test } from "bun:test";
-import { DevCli, fetchOk } from "alchemy-test/DevCli";
 import { spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { DevCli, fetchOk } from "alchemy-test/DevCli";
 
 const root = path.resolve(import.meta.dirname, "..");
 const STAGE = "dev-cli-test";

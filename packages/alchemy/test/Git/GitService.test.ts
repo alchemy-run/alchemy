@@ -1,3 +1,11 @@
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as HttpApiClient from "effect/http-api/HttpApiClient";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import { MinimumLogLevel } from "effect/References";
+import * as Result from "effect/Result";
+import * as Schedule from "effect/Schedule";
 /**
  * Tier-2 deployed REST lifecycle suite (DESIGN.md §9): drives the typed
  * `HttpApiClient` against a real Cloudflare deployment of the git-service
@@ -9,16 +17,8 @@
  * local dev-mode mirror of this suite is `GitService.local.test.ts`.
  */
 import * as Cloudflare from "@/Cloudflare";
-import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import { MinimumLogLevel } from "effect/References";
-import * as Result from "effect/Result";
-import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/http/HttpClient";
-import * as HttpClientRequest from "effect/http/HttpClientRequest";
-import * as HttpApiClient from "effect/http-api/HttpApiClient";
 import { GitApi, type Oid } from "@/Git/Api.ts";
+import * as Test from "@/Test/Alchemy";
 import { makeTestStack, TEST_SECRET } from "./fixtures/stack.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({

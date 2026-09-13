@@ -1,10 +1,10 @@
-import * as AWS from "@/AWS";
-import { CapacityProvider } from "@/AWS/ECS";
-import * as Test from "@/Test/Alchemy";
 import * as ecs from "@distilled.cloud/aws/ecs";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import * as AWS from "@/AWS";
+import { CapacityProvider } from "@/AWS/ECS";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

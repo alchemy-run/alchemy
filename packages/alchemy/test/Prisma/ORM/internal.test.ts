@@ -1,10 +1,10 @@
-import { rewriteEmittedTypes, runPrismaCli } from "@/Prisma/ORM/internal.ts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, layer } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Result from "effect/Result";
+import { rewriteEmittedTypes, runPrismaCli } from "@/Prisma/ORM/internal.ts";
 
 const describe = layer(NodeServices.layer);
 

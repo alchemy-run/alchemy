@@ -3,16 +3,15 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-
 import { deepEqual, isResolved } from "../../Diff.ts";
 import * as Output from "../../Output.ts";
-import { canonicalCidr } from "../../Utils/ip-address.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { Stack } from "../../Stack.ts";
 import { State, isActionState } from "../../State/State.ts";
-import type { Providers } from "../Providers.ts";
 import { createInternalTags, createTagsList, diffTags } from "../../Tags.ts";
+import { canonicalCidr } from "../../Utils/ip-address.ts";
+import type { Providers } from "../Providers.ts";
 import {
   getDefaultVpcDefaultSecurityGroupId,
   getDefaultVpcScope,

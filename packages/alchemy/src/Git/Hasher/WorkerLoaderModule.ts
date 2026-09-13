@@ -6,13 +6,13 @@
  * nothing else; it has no bindings and no network.
  */
 import * as Effect from "effect/Effect";
+import { resolveDeltas, scanPart } from "../Protocol/PartialScan.ts";
 import {
   decodeDeltaBatch,
   encodeDeltaResults,
   encodeScanResult,
   frame,
 } from "./Protocol.ts";
-import { resolveDeltas, scanPart } from "../Protocol/PartialScan.ts";
 
 export default {
   async fetch(request: Request): Promise<Response> {
@@ -29,12 +29,16 @@ export default {
         const failure = resolved.failure;
         return new Response(
           `${failure._tag}: ${"reason" in failure ? failure.reason : ""}`,
-          { status: 422 },
+          {
+            status: 422,
+          },
         );
       }
       return new Response(
         frame(encodeDeltaResults(resolved.success)) as unknown as BodyInit,
-        { headers: { "content-type": "application/octet-stream" } },
+        {
+          headers: { "content-type": "application/octet-stream" },
+        },
       );
     }
     const base = Number(query.get("base"));
@@ -59,7 +63,9 @@ export default {
       const failure = result.failure;
       return new Response(
         `${failure._tag}: ${"reason" in failure ? failure.reason : ""}`,
-        { status: 422 },
+        {
+          status: 422,
+        },
       );
     }
     return new Response(

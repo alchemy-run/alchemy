@@ -1,3 +1,12 @@
+import { describe, expect, it } from "alchemy-test";
+import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Option from "effect/Option";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import * as Stacks from "@/Alchemist/routes/stack.ts";
+import * as Alchemist from "@/Alchemist/Runtime.ts";
 import { UserInputError } from "@/Cli/commands/errors.ts";
 import {
   resolveConfig,
@@ -6,16 +15,7 @@ import {
   validateSelectionOptions,
 } from "@/Cli/commands/flags.ts";
 import { DevOptions } from "@/Cli/DevOptions.ts";
-import * as Stacks from "@/Alchemist/routes/stack.ts";
-import * as Alchemist from "@/Alchemist/Runtime.ts";
 import { PlatformServices } from "@/Util/PlatformServices.ts";
-import * as Option from "effect/Option";
-import * as Schema from "effect/Schema";
-import * as Exit from "effect/Exit";
-import * as Cause from "effect/Cause";
-import * as Effect from "effect/Effect";
-import * as Result from "effect/Result";
-import { describe, expect, it } from "alchemy-test";
 
 describe("stack command config paths", { tags: ["unit", "local"] }, () => {
   it.effect("uses the positional config path", () =>

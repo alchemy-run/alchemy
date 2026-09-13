@@ -1,7 +1,3 @@
-import { adopt } from "@/AdoptPolicy";
-import * as Planetscale from "@/Planetscale";
-import * as RemovalPolicy from "@/RemovalPolicy.ts";
-import * as Test from "@/Test/Alchemy";
 import * as ps from "@distilled.cloud/planetscale";
 import { describe, expect } from "alchemy-test";
 import { Data, Schedule } from "effect";
@@ -9,6 +5,10 @@ import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import { MinimumLogLevel } from "effect/References";
+import { adopt } from "@/AdoptPolicy";
+import * as Planetscale from "@/Planetscale";
+import * as RemovalPolicy from "@/RemovalPolicy.ts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Planetscale.providers() });
 

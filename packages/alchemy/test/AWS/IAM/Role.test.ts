@@ -1,12 +1,12 @@
+import * as IAM from "@distilled.cloud/aws/iam";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import { adopt } from "@/AdoptPolicy";
 import * as AWS from "@/AWS";
 import { Role } from "@/AWS/IAM";
 import * as Provider from "@/Provider";
 import { State } from "@/State";
 import * as Test from "@/Test/Alchemy";
-import * as IAM from "@distilled.cloud/aws/iam";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -15,9 +15,7 @@ const assumeRolePolicy = {
   Statement: [
     {
       Effect: "Allow" as const,
-      Principal: {
-        Service: "lambda.amazonaws.com",
-      },
+      Principal: { Service: "lambda.amazonaws.com" },
       Action: ["sts:AssumeRole"],
     },
   ],
@@ -49,16 +47,12 @@ test.provider(
                 ],
               },
             },
-            tags: {
-              env: "test",
-            },
+            tags: { env: "test" },
           });
         }),
       );
 
-      const created = yield* IAM.getRole({
-        RoleName: role.roleName,
-      });
+      const created = yield* IAM.getRole({ RoleName: role.roleName });
       expect(created.Role.RoleName).toBe(role.roleName);
       // Duration.Input prop converts to whole wire seconds.
       expect(created.Role.MaxSessionDuration).toBe(7200);
@@ -81,23 +75,17 @@ test.provider(
                 ],
               },
             },
-            tags: {
-              env: "prod",
-            },
+            tags: { env: "prod" },
           });
         }),
       );
 
-      const updatedTags = yield* IAM.listRoleTags({
-        RoleName: role.roleName,
-      });
+      const updatedTags = yield* IAM.listRoleTags({ RoleName: role.roleName });
       expect(
         Object.fromEntries(
           (updatedTags.Tags ?? []).map((tag) => [tag.Key, tag.Value]),
         ),
-      ).toMatchObject({
-        env: "prod",
-      });
+      ).toMatchObject({ env: "prod" });
 
       // The reconcile sync path applies the changed Duration prop.
       const updated = yield* IAM.getRole({ RoleName: role.roleName });
@@ -105,9 +93,9 @@ test.provider(
 
       yield* stack.destroy();
 
-      const deleted = yield* IAM.getRole({
-        RoleName: role.roleName,
-      }).pipe(Effect.option);
+      const deleted = yield* IAM.getRole({ RoleName: role.roleName }).pipe(
+        Effect.option,
+      );
       expect(deleted._tag).toBe("None");
     }),
   { tags: ["provider:aws", "provider:aws:iam", "live"] },
@@ -226,9 +214,7 @@ test.provider(
         Effect.gen(function* () {
           return yield* Role("ListRole", {
             assumeRolePolicyDocument: assumeRolePolicy,
-            tags: {
-              env: "test",
-            },
+            tags: { env: "test" },
           });
         }),
       );
@@ -242,9 +228,9 @@ test.provider(
 
       yield* stack.destroy();
 
-      const deleted = yield* IAM.getRole({
-        RoleName: role.roleName,
-      }).pipe(Effect.option);
+      const deleted = yield* IAM.getRole({ RoleName: role.roleName }).pipe(
+        Effect.option,
+      );
       expect(deleted._tag).toBe("None");
     }),
   { tags: ["provider:aws", "provider:aws:iam", "live"] },

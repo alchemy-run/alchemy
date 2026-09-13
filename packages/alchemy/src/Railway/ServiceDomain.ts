@@ -1,4 +1,3 @@
-import { waitUntilDeleted } from "./GraphQL.ts";
 import { Query, type UnwrapPlan } from "@distilled.cloud/core/query";
 import {
   Railway,
@@ -7,6 +6,7 @@ import {
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { waitUntilDeleted } from "./GraphQL.ts";
 import { sanitizeRailwayName } from "./Metadata.ts";
 import { withEnvironmentConfigLock } from "./transient.ts";
 

@@ -1,3 +1,9 @@
+import * as chatbot from "@distilled.cloud/aws/chatbot";
+import { expect } from "alchemy-test";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import * as AWS from "@/AWS";
 import {
   Association,
@@ -6,12 +12,6 @@ import {
 } from "@/AWS/Chatbot";
 import { Role } from "@/AWS/IAM/Role.ts";
 import * as Test from "@/Test/Alchemy";
-import * as chatbot from "@distilled.cloud/aws/chatbot";
-import { expect } from "alchemy-test";
-import * as Data from "effect/Data";
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
-import * as Stream from "effect/Stream";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

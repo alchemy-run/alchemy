@@ -1,11 +1,11 @@
 import type { CloudflareVitePluginOptions } from "@alchemy.run/cloudflare-runtime/vite";
 import type { Framework } from "@alchemy.run/frontend-frameworks/core";
-import type * as Miniflare from "../miniflare/miniflare.ts";
 import * as Effect from "effect/Effect";
 import type * as FileSystem from "effect/FileSystem";
 import type * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Predicate from "effect/Predicate";
+import type * as Miniflare from "../miniflare/miniflare.ts";
 import { Cwd } from "./Cwd.ts";
 
 const kOptions = Symbol("@alchemy.run/cloudflare-test-tools/e2e/Options");

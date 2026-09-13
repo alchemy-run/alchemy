@@ -15,7 +15,6 @@ import { isResourceOfType, Resource } from "../../Resource.ts";
 import { Stack } from "../../Stack.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { localAccountId } from "../LocalAccount.ts";
-import { detachQueueConsumersOfScript } from "./Consumer.ts";
 import {
   generateLocalId,
   isLiveId,
@@ -24,6 +23,7 @@ import {
   localRuntimeServices,
 } from "../LocalRuntime.ts";
 import type { Providers } from "../Providers.ts";
+import { detachQueueConsumersOfScript } from "./Consumer.ts";
 
 export const isQueue = (value: unknown): value is Queue =>
   isResourceOfType(value, "Cloudflare.Queues.Queue");

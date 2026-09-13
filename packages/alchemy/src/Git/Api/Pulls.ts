@@ -9,8 +9,8 @@
  * server never writes conflict markers.
  */
 import * as HttpApiEndpoint from "effect/http-api/HttpApiEndpoint";
-import * as Schema from "effect/Schema";
 import * as HttpApiGroup from "effect/http-api/HttpApiGroup";
+import * as Schema from "effect/Schema";
 import {
   BranchMissing,
   MergeConflict,

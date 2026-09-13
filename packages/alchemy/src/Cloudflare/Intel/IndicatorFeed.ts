@@ -1,9 +1,8 @@
+import crypto from "node:crypto";
 import * as intel from "@distilled.cloud/cloudflare/intel";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-import crypto from "node:crypto";
-
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";

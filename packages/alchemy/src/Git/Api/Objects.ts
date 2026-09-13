@@ -5,8 +5,8 @@
  * no success schema and answer with the response they build.
  */
 import * as HttpApiEndpoint from "effect/http-api/HttpApiEndpoint";
-import * as Schema from "effect/Schema";
 import * as HttpApiGroup from "effect/http-api/HttpApiGroup";
+import * as Schema from "effect/Schema";
 import {
   CommitDiff,
   CommitInfo,

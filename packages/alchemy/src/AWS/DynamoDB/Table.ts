@@ -1,6 +1,6 @@
+import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import type * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import type { TimeToLiveSpecification } from "@distilled.cloud/aws/dynamodb";
-import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import * as dynamodb from "@distilled.cloud/aws/dynamodb";
 import type * as lambda from "aws-lambda";
 import * as Data from "effect/Data";
@@ -8,7 +8,6 @@ import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import { havePropsChanged, isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";

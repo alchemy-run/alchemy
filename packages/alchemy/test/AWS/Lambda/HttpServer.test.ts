@@ -1,13 +1,13 @@
-import { makeFunctionHttpHandler } from "@/AWS/Lambda/HttpServer";
+import { describe, expect, it } from "alchemy-test";
 import type {
   LambdaFunctionURLEvent,
   LambdaFunctionURLResult,
 } from "aws-lambda";
 import * as Effect from "effect/Effect";
-import type { Scope } from "effect/Scope";
 import * as HttpServerRequest from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
-import { describe, expect, it } from "alchemy-test";
+import type { Scope } from "effect/Scope";
+import { makeFunctionHttpHandler } from "@/AWS/Lambda/HttpServer";
 import { TestHttpEffect } from "./HttpServer.fixture";
 
 describe(

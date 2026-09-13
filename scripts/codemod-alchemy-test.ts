@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import path from "node:path";
 /**
  * Codemod: migrate the test suite from vitest to the alchemy-test harness.
  *
@@ -19,7 +20,6 @@
  *   bun scripts/codemod-alchemy-test.ts [--dry-run]
  */
 import { Glob } from "bun";
-import path from "node:path";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const TEST_DIR = path.join(ROOT, "packages", "alchemy", "test");

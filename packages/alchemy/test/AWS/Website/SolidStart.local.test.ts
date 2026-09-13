@@ -1,10 +1,10 @@
-import * as AWS from "@/AWS";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as pathe from "pathe";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains, expectUrlOk } from "../../Cloudflare/Utils/Http.ts";
 
@@ -74,9 +74,7 @@ describe(
             Effect.gen(function* () {
               const site = yield* AWS.Website.SolidStart("SolidStartSite", {
                 rootDir,
-                env: {
-                  SOLIDSTART_ENV_MARKER: "solidstart-aws-dev-env-marker",
-                },
+                env: { SOLIDSTART_ENV_MARKER: "solidstart-aws-dev-env-marker" },
               });
               return { site };
             }),
@@ -125,9 +123,7 @@ describe(
             Effect.gen(function* () {
               const site = yield* AWS.Website.SolidStart("SolidStartSite", {
                 rootDir,
-                env: {
-                  SOLIDSTART_ENV_MARKER: "solidstart-aws-dev-env-marker",
-                },
+                env: { SOLIDSTART_ENV_MARKER: "solidstart-aws-dev-env-marker" },
               });
               return { site };
             }),

@@ -1,11 +1,9 @@
 /* @refresh reload */
 import "solid-devtools";
 import "./index.css";
-
-import { hydrate, render } from "solid-js/web";
-
-import App from "./app";
 import { Router } from "@solidjs/router";
+import { hydrate, render } from "solid-js/web";
+import App from "./app";
 import { routes } from "./routes";
 
 const root = document.getElementById("root")!;

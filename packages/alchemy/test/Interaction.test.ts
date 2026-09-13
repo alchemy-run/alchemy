@@ -1,12 +1,12 @@
+import { PassThrough } from "node:stream";
+import { fileURLToPath } from "node:url";
+import { expect, it } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as ChildProcess from "effect/process/ChildProcess";
+import * as Stream from "effect/Stream";
 import { Interaction, layerNonInteractive, accessors } from "@/Interaction.ts";
 import { nodeLoaderArgs } from "@/Util/Node.ts";
 import { PlatformServices } from "@/Util/PlatformServices.ts";
-import { expect, it } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Stream from "effect/Stream";
-import * as ChildProcess from "effect/process/ChildProcess";
-import { PassThrough } from "node:stream";
-import { fileURLToPath } from "node:url";
 import { nodePath, nodeSupportsDevMode } from "./nodeProbe.ts";
 
 class CaptureStream extends PassThrough {

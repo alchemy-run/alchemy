@@ -1,15 +1,15 @@
-import * as AWS from "@/AWS";
-import { FlowLog, Vpc } from "@/AWS/EC2";
-import { LogGroup } from "@/AWS/Logs/LogGroup.ts";
-import { Role } from "@/AWS/IAM/Role.ts";
-import * as Provider from "@/Provider";
-import * as Test from "./VpcTest.ts";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { FlowLog, Vpc } from "@/AWS/EC2";
+import { Role } from "@/AWS/IAM/Role.ts";
+import { LogGroup } from "@/AWS/Logs/LogGroup.ts";
+import * as Provider from "@/Provider";
+import * as Test from "./VpcTest.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

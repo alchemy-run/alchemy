@@ -1,13 +1,13 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as amp from "@distilled.cloud/aws/amp";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import AmpTestFunctionLive, { AmpTestFunction } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
@@ -156,9 +156,7 @@ describe(
                 schedule: Schedule.spaced("3 seconds"),
                 until: (b): boolean => {
                   const result = (
-                    b as {
-                      result: { resultType: string; result: unknown[] };
-                    }
+                    b as { result: { resultType: string; result: unknown[] } }
                   ).result;
                   return (
                     result.resultType === "vector" && result.result.length > 0

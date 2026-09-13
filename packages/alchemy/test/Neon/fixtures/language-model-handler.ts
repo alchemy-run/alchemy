@@ -1,12 +1,12 @@
-import * as Neon from "@/Neon";
+import { LanguageModel, Tool, Toolkit } from "effect/ai";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import { LanguageModel, Tool, Toolkit } from "effect/ai";
-import { HttpServerRequest } from "effect/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Neon from "@/Neon";
 import { languageModelGateway } from "./language-model-resources.ts";
 
 const Sum = Tool.make("sum", {

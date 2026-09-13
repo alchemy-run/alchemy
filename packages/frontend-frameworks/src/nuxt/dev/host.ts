@@ -1,3 +1,7 @@
+import * as NodePath from "node:path";
+import { fileURLToPath } from "node:url";
+import * as Effect from "effect/Effect";
+import type * as Scope from "effect/Scope";
 /**
  * Cloudflare dev transport — HOST half.
  *
@@ -12,10 +16,6 @@
  * (`platform-proxy/connect`) with live-shared binding state.
  */
 import { DeployTargetError } from "../../core/index.ts";
-import * as Effect from "effect/Effect";
-import type * as Scope from "effect/Scope";
-import * as NodePath from "node:path";
-import { fileURLToPath } from "node:url";
 import type { NuxtDevPlatform, NuxtDevPlatformContext } from "../Nuxt.ts";
 import { RUNTIME_CONFIG_KEY, type DevConnectInfo } from "./shared.ts";
 

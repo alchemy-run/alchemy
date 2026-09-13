@@ -1,3 +1,9 @@
+import { describe, expect, it } from "alchemy-test";
+import * as Cause from "effect/Cause";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Stream from "effect/Stream";
 import {
   RpcDecodeError,
   RpcCallError,
@@ -17,12 +23,6 @@ import {
   type RpcErrorEnvelope,
   type RpcStreamEnvelope,
 } from "@/Cloudflare/Workers/Rpc";
-import { describe, expect, it } from "alchemy-test";
-import * as Cause from "effect/Cause";
-import * as Data from "effect/Data";
-import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
-import * as Stream from "effect/Stream";
 
 class MyError extends Data.TaggedError("MyError")<{
   readonly message: string;

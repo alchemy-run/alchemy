@@ -1,3 +1,6 @@
+import { describe, expect, test } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 /**
  * The spilled-pack reader (src/Git/Store/PackSource.ts): windowed random
  * access over blob storage. Reads within a window must be VIEWS of the
@@ -21,9 +24,6 @@ import * as Zlib from "@/Git/Protocol/Zlib.ts";
 import { makeObjectStore } from "@/Git/Store/ObjectStore.ts";
 import { blobRandomAccess, sliceRandomAccess } from "@/Git/Store/PackSource.ts";
 import { makeStreamingSource } from "@/Git/Store/StreamingSource.ts";
-import * as Fiber from "effect/Fiber";
-import { describe, expect, test } from "alchemy-test";
-import * as Effect from "effect/Effect";
 import { RuntimeContext } from "@/RuntimeContext.ts";
 import { concat } from "./harness/pack.ts";
 import { makeMemoryBlobStore, makeTestSqlClient } from "./harness/store.ts";

@@ -1,15 +1,15 @@
-import * as Cloudflare from "@/Cloudflare";
-import * as Test from "@/Test/Alchemy";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import { CloudflareApiLive } from "@/Cloudflare/Providers.ts";
-import { waitForMetadata, waitForVectorize } from "./Readiness.ts";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import { MinimumLogLevel } from "effect/References";
-import * as Schedule from "effect/Schedule";
 import { HttpClientResponse } from "effect/http";
 import * as HttpClient from "effect/http/HttpClient";
+import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import { CloudflareApiLive } from "@/Cloudflare/Providers.ts";
+import * as Test from "@/Test/Alchemy";
 import Stack from "./fixtures/stack.ts";
+import { waitForMetadata, waitForVectorize } from "./Readiness.ts";
 
 /**
  * End-to-end test of the `Cloudflare.Vectorize` native worker binding against a

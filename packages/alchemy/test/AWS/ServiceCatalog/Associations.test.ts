@@ -1,3 +1,9 @@
+import * as s3 from "@distilled.cloud/aws/s3";
+import * as servicecatalog from "@distilled.cloud/aws/service-catalog";
+import { expect } from "alchemy-test";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import { Role } from "@/AWS/IAM";
 import { Bucket } from "@/AWS/S3";
@@ -9,12 +15,6 @@ import {
 } from "@/AWS/ServiceCatalog";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import * as s3 from "@distilled.cloud/aws/s3";
-import * as servicecatalog from "@distilled.cloud/aws/service-catalog";
-import { expect } from "alchemy-test";
-import * as Data from "effect/Data";
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -28,7 +28,9 @@ const TEMPLATE = JSON.stringify({
 
 class PortfolioStillExists extends Data.TaggedError(
   "AssocPortfolioStillExists",
-)<{ portfolioId: string }> {}
+)<{
+  portfolioId: string;
+}> {}
 
 const assertPortfolioGone = (portfolioId: string) =>
   servicecatalog.describePortfolio({ Id: portfolioId }).pipe(

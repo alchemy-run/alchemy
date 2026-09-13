@@ -1,10 +1,10 @@
-import * as AWS from "@/AWS";
-import * as Test from "@/Test/Alchemy";
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -82,7 +82,10 @@ test.provider(
 
       // Update — description and rate limit sync in place (no replace).
       const { connection: updatedConnection, destination: updatedDestination } =
-        yield* deployOnce({ description: "updated connection", rateLimit: 10 });
+        yield* deployOnce({
+          description: "updated connection",
+          rateLimit: 10,
+        });
       expect(updatedConnection.connectionArn).toBe(connection.connectionArn);
       expect(updatedDestination.apiDestinationArn).toBe(
         destination.apiDestinationArn,

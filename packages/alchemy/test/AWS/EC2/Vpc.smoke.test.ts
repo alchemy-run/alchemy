@@ -1,3 +1,9 @@
+import * as EC2 from "@distilled.cloud/aws/ec2";
+import * as ec2 from "@distilled.cloud/aws/ec2";
+import { expect } from "alchemy-test";
+import { Data, Schedule } from "effect";
+import * as Effect from "effect/Effect";
+import { MinimumLogLevel } from "effect/References";
 import * as AWS from "@/AWS";
 import {
   EgressOnlyInternetGateway,
@@ -16,12 +22,6 @@ import {
   VpcEndpoint,
 } from "@/AWS/EC2";
 import * as Test from "./VpcTest.ts";
-import * as EC2 from "@distilled.cloud/aws/ec2";
-import * as ec2 from "@distilled.cloud/aws/ec2";
-import { expect } from "alchemy-test";
-import { Data, Schedule } from "effect";
-import * as Effect from "effect/Effect";
-import { MinimumLogLevel } from "effect/References";
 
 const logLevel = Effect.provideService(
   MinimumLogLevel,

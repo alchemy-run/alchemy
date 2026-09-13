@@ -1,17 +1,17 @@
+import * as rum from "@distilled.cloud/aws/rum";
+import * as sts from "@distilled.cloud/aws/sts";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import * as AWS from "@/AWS";
-import * as Output from "@/Output";
 import {
   AppMonitor,
   type MetricDefinition,
   MetricsDestination,
   ResourcePolicy,
 } from "@/AWS/RUM";
+import * as Output from "@/Output";
 import * as Test from "@/Test/Alchemy";
-import * as rum from "@distilled.cloud/aws/rum";
-import * as sts from "@distilled.cloud/aws/sts";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Stream from "effect/Stream";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -139,7 +139,9 @@ test.provider(
       ]);
       expect(
         defsAfterUpdate.find((d) => d.Name === "SessionCount")?.DimensionKeys,
-      ).toEqual({ "metadata.browserName": "BrowserName" });
+      ).toEqual({
+        "metadata.browserName": "BrowserName",
+      });
 
       // Update: drop SessionCount (batch delete) and rotate the policy
       // document (revision changes).

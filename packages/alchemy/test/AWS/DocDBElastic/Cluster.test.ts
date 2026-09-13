@@ -1,13 +1,13 @@
-import * as AWS from "@/AWS";
-import { Cluster } from "@/AWS/DocDBElastic";
-import { AWSEnvironment } from "@/AWS/Environment";
-import * as Test from "@/Test/Alchemy";
 import * as docdbelastic from "@distilled.cloud/aws/docdb-elastic";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Cluster } from "@/AWS/DocDBElastic";
+import { AWSEnvironment } from "@/AWS/Environment";
+import * as Test from "@/Test/Alchemy";
 import { getDefaultVpc } from "../DefaultVpc.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });

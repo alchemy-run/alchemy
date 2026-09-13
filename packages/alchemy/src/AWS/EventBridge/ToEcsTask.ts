@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import * as Effect from "effect/Effect";
-import * as IAM from "../IAM/index.ts";
 import type { Cluster } from "../ECS/Cluster.ts";
+import * as IAM from "../IAM/index.ts";
 import type { EventBus } from "./EventBus.ts";
 import { Rule, type RuleProps, type RuleTarget } from "./Rule.ts";
 

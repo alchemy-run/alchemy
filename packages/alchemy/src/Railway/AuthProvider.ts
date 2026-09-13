@@ -1,13 +1,13 @@
+import * as Os from "node:os";
 import {
   DEFAULT_API_BASE_URL,
   type GqlTransport,
 } from "@distilled.cloud/railway";
 import * as Effect from "effect/Effect";
 import * as Match from "effect/Match";
+import type { ChildProcessSpawner } from "effect/process/ChildProcessSpawner";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
-import type { ChildProcessSpawner } from "effect/process/ChildProcessSpawner";
-import * as Os from "node:os";
 import {
   AuthError,
   AuthProviderLayer,

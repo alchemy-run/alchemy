@@ -1,12 +1,12 @@
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
 import * as pathe from "pathe";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../Utils/Fixture.ts";
 import { expectDirectStatus, expectUrlContains } from "../Utils/Http.ts";
 import {
@@ -41,10 +41,7 @@ const memoInclude = ["index.html", "src/**", "package.json", "vite.config.ts"];
 const foldkitProps = (rootDir: string) => ({
   rootDir,
   workersDev: true,
-  compatibility: {
-    date: "2024-09-23",
-    flags: ["nodejs_compat"],
-  },
+  compatibility: { date: "2024-09-23", flags: ["nodejs_compat"] },
   memo: { include: memoInclude },
 });
 
@@ -113,10 +110,7 @@ describe.concurrent(
           yield* expectUrlContains(
             `${site.url!}/counter/42`,
             "Foldkit Fixture",
-            {
-              timeout: "60 seconds",
-              label: "foldkit spa fallback",
-            },
+            { timeout: "60 seconds", label: "foldkit spa fallback" },
           );
 
           yield* stack.destroy();
@@ -146,9 +140,7 @@ describe.concurrent(
             Effect.gen(function* () {
               return yield* Cloudflare.Website.Foldkit("FixFoldkitOverride", {
                 ...foldkitProps(rootDir),
-                assets: {
-                  notFoundHandling: "none",
-                },
+                assets: { notFoundHandling: "none" },
               });
             }),
           );
@@ -197,12 +189,8 @@ describe.concurrent(
               return yield* Cloudflare.Website.Foldkit("FixFoldkitWorker", {
                 ...foldkitProps(rootDir),
                 main: "src/worker.ts",
-                assets: {
-                  runWorkerFirst: ["/api/*"],
-                },
-                env: {
-                  GREETING: "foldkit-worker-fixture",
-                },
+                assets: { runWorkerFirst: ["/api/*"] },
+                env: { GREETING: "foldkit-worker-fixture" },
               });
             }),
           );
@@ -226,10 +214,7 @@ describe.concurrent(
           yield* expectUrlContains(
             `${site.url!}/counter/42`,
             "Foldkit Fixture",
-            {
-              timeout: "60 seconds",
-              label: "foldkit worker spa fallback",
-            },
+            { timeout: "60 seconds", label: "foldkit worker spa fallback" },
           );
 
           yield* stack.destroy();

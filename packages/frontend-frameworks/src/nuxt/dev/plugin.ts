@@ -1,3 +1,4 @@
+import { pathToFileURL } from "node:url";
 /**
  * Dev-only nitro plugin: serves the `cloudflare_module` preset's runtime
  * contract inside nitro's dev SSR worker thread, wrangler-free.
@@ -27,7 +28,6 @@
  */
 import type * as ConnectClient from "@alchemy.run/cloudflare-runtime/core/platform-proxy/connect";
 import { defineNitroPlugin, useRuntimeConfig } from "nitropack/runtime";
-import { pathToFileURL } from "node:url";
 import { RUNTIME_CONFIG_KEY, type DevConnectInfo } from "./shared.ts";
 
 /** The runtime-free client module's shape (`platform-proxy/connect`). */

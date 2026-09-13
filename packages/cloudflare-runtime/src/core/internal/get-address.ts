@@ -1,5 +1,5 @@
-import * as Effect from "effect/Effect";
 import type * as NodeHttp from "node:http";
+import * as Effect from "effect/Effect";
 import { SystemError } from "../RuntimeError.shared.ts";
 
 /**

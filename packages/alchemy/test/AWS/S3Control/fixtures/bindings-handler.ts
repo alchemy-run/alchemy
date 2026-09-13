@@ -1,13 +1,13 @@
-import * as AWS from "@/AWS";
-import * as Output from "@/Output";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
-import { HttpServerRequest } from "effect/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as AWS from "@/AWS";
+import * as Output from "@/Output";
 
 // Bindings fixture: an S3 bucket + access point plus a Lambda that exercises
 // the nine ungated S3 Control runtime bindings against them — the three
@@ -33,7 +33,9 @@ export const BoundAccessPointLive = Layer.effect(
     const bucket = yield* AWS.S3.Bucket("S3ControlBindingsBucket", {});
     const accessPoint = yield* AWS.S3Control.AccessPoint(
       "S3ControlBindingsAccessPoint",
-      { bucket: bucket.bucketName },
+      {
+        bucket: bucket.bucketName,
+      },
     );
     // Execution role handed to S3 Batch Operations via CreateJob. The job is
     // cancelled while suspended, so the role's policy only needs to satisfy

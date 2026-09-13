@@ -1,9 +1,9 @@
 import * as PgClient from "@effect/sql-pg/PgClient";
+import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import { resolveConnectionOptions, resolveSsl } from "@/SQL/PostgresTls.ts";
-import { describe, expect, it } from "alchemy-test";
-import * as Redacted from "effect/Redacted";
 
 const url = (s: string) => Redacted.make(s);
 
@@ -73,9 +73,7 @@ describe(
       expect(parsed.searchParams.get("connect_timeout")).toBe("7");
       expect(parsed.searchParams.get("application_name")).toBe("app");
       expect(parsed.password).toBe("p%40ss");
-      expect(options.ssl).toEqual({
-        rejectUnauthorized: false,
-      });
+      expect(options.ssl).toEqual({ rejectUnauthorized: false });
       expect(Redacted.value(railwayUrl)).toContain("sslmode=no-verify");
     });
 

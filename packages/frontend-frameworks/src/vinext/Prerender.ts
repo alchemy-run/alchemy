@@ -1,8 +1,8 @@
+import { pathToFileURL } from "node:url";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import { pathToFileURL } from "node:url";
 import {
   loadProjectModule,
   resolveProjectPackageDirectory,

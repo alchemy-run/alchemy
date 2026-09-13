@@ -7,7 +7,6 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
-import { cachedInScope } from "./Util/Memoize.ts";
 import { asEffect } from ".//Util/types.ts";
 import { isAction, type ActionLike } from "./Action.ts";
 import {
@@ -18,16 +17,16 @@ import {
 } from "./AdoptPolicy.ts";
 import { AlchemyContext } from "./AlchemyContext.ts";
 import {
-  demandRemoteCredentials,
-  failCredentialsRequired,
-} from "./Auth/Demand.ts";
-import {
   Artifacts,
   ArtifactStore,
   createArtifactStore,
   ensureArtifactStore,
   makeScopedArtifacts,
 } from "./Artifacts.ts";
+import {
+  demandRemoteCredentials,
+  failCredentialsRequired,
+} from "./Auth/Demand.ts";
 import {
   dedupeBindings,
   diffBindings,
@@ -37,7 +36,6 @@ import {
   type ReplaceDiff,
   type UpdateDiff,
 } from "./Diff.ts";
-import { capturedEnvKeys } from "./RuntimeContext.ts";
 import { parseFqn } from "./FQN.ts";
 import { generateInstanceId, InstanceId } from "./InstanceId.ts";
 import * as Output from "./Output.ts";
@@ -73,6 +71,8 @@ import {
   type ResourceSelection,
   type SelectionOutput,
 } from "./ResourceSelection.ts";
+import { capturedEnvKeys } from "./RuntimeContext.ts";
+import { cachedInScope } from "./Util/Memoize.ts";
 export {
   InvalidResourceSelection,
   UnsafeSelectionBoundary,

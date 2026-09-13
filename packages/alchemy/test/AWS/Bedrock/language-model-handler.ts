@@ -1,5 +1,3 @@
-import * as Bedrock from "@/AWS/Bedrock";
-import * as Lambda from "@/AWS/Lambda";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
@@ -8,6 +6,8 @@ import { LanguageModel as AiLanguageModel, Tool, Toolkit } from "effect/ai";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import path from "pathe";
+import * as Bedrock from "@/AWS/Bedrock";
+import * as Lambda from "@/AWS/Lambda";
 
 const main = path.resolve(import.meta.dirname, "language-model-handler.ts");
 

@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Namespace from "../../Namespace.ts";
-import { ref } from "../ref.ts";
 import { REDIS_URL_ENV, type Redis } from "../Redis.ts";
+import { ref } from "../ref.ts";
 import { makeFrameworkSite, type FrameworkSiteProps } from "./FrameworkSite.ts";
 
 /**

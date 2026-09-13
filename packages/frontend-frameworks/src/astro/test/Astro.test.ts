@@ -1,12 +1,12 @@
-import { Framework, type BuildOutput } from "../../core/index.ts";
+import * as NodeFsPromises from "node:fs/promises";
+import * as NodePath from "node:path";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import type { AstroIntegration } from "astro";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as NodeFsPromises from "node:fs/promises";
-import * as NodePath from "node:path";
 import type * as ViteModule from "vite";
 import { describe, expect, it } from "vitest";
+import { Framework, type BuildOutput } from "../../core/index.ts";
 import cloudflareTarget, {
   distilledCloudflare,
   IMAGE_PASSTHROUGH_ENDPOINT,

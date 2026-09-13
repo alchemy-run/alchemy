@@ -1,6 +1,6 @@
-import { describe, expect, it } from "@effect/vitest";
 import * as NodeFs from "node:fs";
 import * as NodeNet from "node:net";
+import { describe, expect, it } from "@effect/vitest";
 import {
   closeLoopbackUnixSockets,
   CONTAINER_LOOPBACK_ALIAS,

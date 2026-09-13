@@ -1,8 +1,8 @@
+import * as NodeV8 from "node:v8";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Stdio from "effect/Stdio";
 import * as Stream from "effect/Stream";
-import * as NodeV8 from "node:v8";
 import { PlatformServices, runMain } from "../../Util/PlatformServices.ts";
 import { viteBuildInProcess } from "./Sources/Vite.ts";
 import type {

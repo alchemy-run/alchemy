@@ -1,11 +1,11 @@
-import * as Output from "@/Output.ts";
-import * as Provider from "@/Provider.ts";
-import { GitHubCredentials } from "@/GitHub/Credentials.ts";
-import { Octokit } from "@/GitHub/Octokit.ts";
-import * as GitHub from "@/GitHub/index.ts";
-import * as Test from "@/Test/Alchemy.ts";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import { GitHubCredentials } from "@/GitHub/Credentials.ts";
+import * as GitHub from "@/GitHub/index.ts";
+import { Octokit } from "@/GitHub/Octokit.ts";
+import * as Output from "@/Output.ts";
+import * as Provider from "@/Provider.ts";
+import * as Test from "@/Test/Alchemy.ts";
 
 const { test } = Test.make({
   providers: GitHub.providers({ baseUrl: "github.com" }),

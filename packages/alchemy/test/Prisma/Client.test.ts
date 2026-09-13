@@ -1,3 +1,13 @@
+import { describe, expect, it } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
+import * as HttpBody from "effect/http/HttpBody";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientError from "effect/http/HttpClientError";
+import * as HttpClientResponse from "effect/http/HttpClientResponse";
+import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
+import { TestClock } from "effect/testing";
 import {
   extractConnectionSecrets,
   PrismaApiDecodeError,
@@ -7,16 +17,6 @@ import {
   type PrismaManagementClient,
 } from "@/Prisma/Client";
 import { PrismaEnvironment } from "@/Prisma/PrismaEnvironment";
-import { describe, expect, it } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Fiber from "effect/Fiber";
-import * as Layer from "effect/Layer";
-import * as Redacted from "effect/Redacted";
-import { TestClock } from "effect/testing";
-import * as HttpBody from "effect/http/HttpBody";
-import * as HttpClient from "effect/http/HttpClient";
-import * as HttpClientError from "effect/http/HttpClientError";
-import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import { productionManagementApiRoutes } from "./fixtures/ManagementApiContract.ts";
 
 interface Captured {
@@ -1435,7 +1435,9 @@ describe("PrismaClient", { tags: ["unit", "provider:prisma", "local"] }, () => {
           yield* client.stopDeployment("deployment-1");
           const deploymentLogsRequest = yield* client.getDeploymentLogsRequest(
             "deployment-1",
-            { tail: 10 },
+            {
+              tail: 10,
+            },
           );
           expect(deploymentLogsRequest.url).toBe(
             "wss://api.prisma.test/v1/deployments/deployment-1/logs?tail=10",
@@ -1445,7 +1447,10 @@ describe("PrismaClient", { tags: ["unit", "provider:prisma", "local"] }, () => {
           ).toBe("Bearer test-token");
           const buildLogsRequest = yield* client.getBuildLogsRequest(
             "build-1",
-            { follow: true, cursor: "cursor-1" },
+            {
+              follow: true,
+              cursor: "cursor-1",
+            },
           );
           expect(buildLogsRequest.url).toBe(
             "https://api.prisma.test/v1/builds/build-1/logs?follow=true&cursor=cursor-1",

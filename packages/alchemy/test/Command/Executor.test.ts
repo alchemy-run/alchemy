@@ -1,6 +1,3 @@
-import type { ScopedPlanStatusSession } from "@/Report.ts";
-import * as Command from "@/Command";
-import * as Test from "@/Test/Alchemy";
 import { assert, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -18,6 +15,9 @@ import {
   pidAlive,
 } from "./fixture/lifecycle-support.ts";
 import * as pathe from "pathe";
+import * as Command from "@/Command";
+import type { ScopedPlanStatusSession } from "@/Report.ts";
+import * as Test from "@/Test/Alchemy";
 const { test } = Test.make({ providers: Command.providers() });
 
 const session = (notes: Array<string>) =>

@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import * as Test from "@/Test/Alchemy";
+import { spawn } from "node:child_process";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import { spawn } from "node:child_process";
-import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/http/HttpClient";
+import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 
@@ -128,10 +128,7 @@ describe.skipIf(!runLive || runEmulated)(
           yield* expectUrlContains(
             `${deployed.site.serverUrl!}`,
             "NEXTJS_AWS_PAGE_MARKER",
-            {
-              timeout: "120 seconds",
-              label: "SSR direct from Lambda URL",
-            },
+            { timeout: "120 seconds", label: "SSR direct from Lambda URL" },
           );
 
           // SSR page rendered by the Lambda through CloudFront.
@@ -156,17 +153,13 @@ describe.skipIf(!runLive || runEmulated)(
           yield* expectUrlContains(
             `${url}/static`,
             "NEXTJS_AWS_STATIC_MARKER",
-            {
-              label: "static (prerendered) page",
-            },
+            { label: "static (prerendered) page" },
           );
           // Public file served from S3 via the KV file manifest.
           yield* expectUrlContains(
             `${url}/robots.txt`,
             "nextjs-aws-robots-marker",
-            {
-              label: "public asset from S3",
-            },
+            { label: "public asset from S3" },
           );
           // Client asset (hashed chunk) served from S3: the SSR page links
           // /_next/static/* files uploaded by the asset deployment.

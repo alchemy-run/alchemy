@@ -1,10 +1,10 @@
-import * as Cloudflare from "@/Cloudflare";
-import type { Named, PlatformIdentity } from "@/index.ts";
 import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
 import * as Rpc from "effect/rpc/Rpc";
 import * as RpcGroup from "effect/rpc/RpcGroup";
 import * as RpcServer from "effect/rpc/RpcServer";
+import * as Schema from "effect/Schema";
+import * as Cloudflare from "@/Cloudflare";
+import type { Named, PlatformIdentity } from "@/index.ts";
 
 const ping = Rpc.make("ping", {
   success: Schema.Void,

@@ -1,3 +1,4 @@
+import * as NodeNet from "node:net";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, expect, layer } from "@effect/vitest";
 import * as Effect from "effect/Effect";
@@ -5,7 +6,6 @@ import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
-import * as NodeNet from "node:net";
 import * as Internet from "../../globals/Internet.ts";
 import * as WorkerProxy from "../../proxy/WorkerProxy.ts";
 import { ConfigError } from "../../RuntimeError.shared.ts";

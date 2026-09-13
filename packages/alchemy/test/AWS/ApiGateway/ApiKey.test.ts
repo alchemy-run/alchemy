@@ -1,10 +1,10 @@
-import * as AWS from "@/AWS";
-import * as Provider from "@/Provider";
-import * as Test from "./Test.ts";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import * as AWS from "@/AWS";
+import * as Provider from "@/Provider";
 import { assertApiKeyDeleted } from "./assertions.ts";
+import * as Test from "./Test.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

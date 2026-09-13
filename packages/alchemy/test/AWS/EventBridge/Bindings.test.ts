@@ -1,15 +1,15 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import * as SQS from "@distilled.cloud/aws/sqs";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Layer from "effect/Layer";
+import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import EventBridgeTestFunctionLive, {
   BusAndQueues,
   BusAndQueuesLive,
@@ -282,9 +282,7 @@ describe(
                 HttpClientRequest.post(`${baseUrl}/rule-names-by-target`),
                 { targetArn: functionArn },
               ),
-            ).pipe(Effect.flatMap((r) => r.json))) as {
-              ruleNames: string[];
-            };
+            ).pipe(Effect.flatMap((r) => r.json))) as { ruleNames: string[] };
 
             // The default-bus consume loop's rule targets the Lambda.
             expect(Array.isArray(response.ruleNames)).toBe(true);

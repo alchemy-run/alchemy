@@ -1,18 +1,18 @@
-import { Credentials } from "@distilled.cloud/planetscale/Credentials";
 import * as planetscale from "@distilled.cloud/planetscale";
+import { Credentials } from "@distilled.cloud/planetscale/Credentials";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { havePropsChanged, isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import { hashImports, hashMigrations } from "../../SQL/SqlFile.ts";
 import {
   diffMigrations,
   migrationsAttrs,
   migrationsInputOf,
   stampedOf,
 } from "../../SQL/Migrations/index.ts";
+import { hashImports, hashMigrations } from "../../SQL/SqlFile.ts";
 import { recordsEqual } from "../../Util/equal.ts";
 import type { BaseDatabaseAttributes, BaseDatabaseProps } from "../Database.ts";
 import type { Providers } from "../Providers.ts";

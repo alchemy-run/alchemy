@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import { DBSubnetGroup } from "@/AWS/RDS/DBSubnetGroup.ts";
-import type { SubnetId } from "@/AWS/EC2/Subnet.ts";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
+import type { SubnetId } from "@/AWS/EC2/Subnet.ts";
+import { DBSubnetGroup } from "@/AWS/RDS/DBSubnetGroup.ts";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

@@ -1,7 +1,3 @@
-import * as AWS from "@/AWS";
-import { Image, type ImageProps } from "@/AWS/ECR/Image.ts";
-import { Repository } from "@/AWS/ECR/Repository.ts";
-import * as Test from "@/Test/Alchemy";
 import * as ecr from "@distilled.cloud/aws/ecr";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
@@ -9,6 +5,10 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Image, type ImageProps } from "@/AWS/ECR/Image.ts";
+import { Repository } from "@/AWS/ECR/Repository.ts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

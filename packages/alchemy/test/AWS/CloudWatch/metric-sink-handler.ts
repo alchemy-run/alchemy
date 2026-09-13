@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
 import * as Console from "effect/Console";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
+import * as Stream from "effect/Stream";
 import path from "pathe";
+import * as AWS from "@/AWS";
 
 const main = path.resolve(import.meta.dirname, "metric-sink-handler.ts");
 

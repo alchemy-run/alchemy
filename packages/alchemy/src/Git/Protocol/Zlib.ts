@@ -1,3 +1,4 @@
+import zlib from "node:zlib";
 /**
  * The zlib boundary — the ONLY module in `src/Git/Protocol/` allowed to touch
  * `node:zlib` (per DESIGN §7).
@@ -18,7 +19,6 @@
  */
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
-import zlib from "node:zlib";
 
 /**
  * Error raised on zlib failures: corrupt streams, truncated input, or an

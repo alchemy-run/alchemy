@@ -2,9 +2,9 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../Binding.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { Object, ObjectDecodeError } from "./Object.ts";
-import type { WriteBucketClient } from "./WriteBucket.ts";
 import type { ReadBucketClient } from "./ReadBucket.ts";
 import type { StorageBindingOptions } from "./StorageBinding.ts";
+import type { WriteBucketClient } from "./WriteBucket.ts";
 
 export interface WriteObjectClient<T> {
   /** Serialize a typed JSON value, or upload exact bytes/text to a raw object. */

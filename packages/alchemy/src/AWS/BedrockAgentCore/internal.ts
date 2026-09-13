@@ -12,7 +12,9 @@ import { diffTags } from "../../Tags.ts";
  */
 export class AgentCoreProvisioningFailed extends Data.TaggedError(
   "AgentCoreProvisioningFailed",
-)<{ message: string }> {}
+)<{
+  message: string;
+}> {}
 
 /**
  * Unwrap an AgentCore `SensitiveString` (decoded as `Redacted`) to its plain

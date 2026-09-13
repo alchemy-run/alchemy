@@ -1,3 +1,12 @@
+import { promises as fs } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import {
+  copyEditor,
+  markdownBlocks,
+  markdownFiles,
+  type MarkdownFilesOptions,
+} from "@alchemy.run/vite-plugin-copy-editor";
 import mdx from "@astrojs/mdx";
 import react from "@astrojs/react";
 import sitemap from "@astrojs/sitemap";
@@ -5,19 +14,10 @@ import starlight from "@astrojs/starlight";
 import tailwindcss from "@tailwindcss/vite";
 import type { AstroIntegration } from "astro";
 import { defineConfig } from "astro/config";
-import {
-  copyEditor,
-  markdownBlocks,
-  markdownFiles,
-  type MarkdownFilesOptions,
-} from "@alchemy.run/vite-plugin-copy-editor";
-import { promises as fs } from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import starlightBlog from "starlight-blog";
+import { JSDOC_COPY_STYLE } from "../scripts/jsdoc-blocks.ts";
 import { buildOutputChecks, noindexPaths } from "./plugins/build-output.ts";
 import { jsdocCopyHandler, jsdocMarkdownStyle } from "./plugins/jsdoc-copy.ts";
-import { JSDOC_COPY_STYLE } from "../scripts/jsdoc-blocks.ts";
 import providersSidebar from "./src/generated/providers-sidebar.json" with { type: "json" };
 import { rewriteReferenceLinks } from "./src/reference-links.ts";
 
@@ -213,7 +213,9 @@ function copyMarkdownSources(): AstroIntegration {
         // /content/docs/ → /<path>.md, lowercased to match Starlight's URLs.
         await walk(
           fileURLToPath(new URL("./src/content/docs/", import.meta.url)),
-          { lowercase: true },
+          {
+            lowercase: true,
+          },
         );
         // Marketing pages (top-level Astro pages) — exposes /<page>.md so
         // agents can fetch raw MDX via the worker's content negotiation. Astro

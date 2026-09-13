@@ -1,24 +1,16 @@
-import type {
-  ResourceSelection,
-  SelectionOutput,
-} from "../ResourceSelection.ts";
-/** @effect-diagnostics anyUnknownInErrorContext:off */
-
 import * as Floci from "@alchemy.run/floci";
+/** @effect-diagnostics anyUnknownInErrorContext:off */
 import * as Config from "effect/Config";
 import { ConfigProvider } from "effect/ConfigProvider";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
-import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
-import * as Scope from "effect/Scope";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
-
-import { DEFAULT_LOCAL_ENDPOINT } from "../AWS/AuthProvider.ts";
-import { flociServices } from "../AWS/Local/FlociServices.ts";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Scope from "effect/Scope";
 import { AdoptPolicy } from "../AdoptPolicy.ts";
 import { AlchemyContext, AlchemyContextLive } from "../AlchemyContext.ts";
 import { apply } from "../Apply.ts";
@@ -27,16 +19,22 @@ import { AuthProviders } from "../Auth/AuthProvider.ts";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
 import { ProfileStoreLive } from "../Auth/Profile.ts";
 import { withProfileOverride } from "../Auth/Resolve.ts";
-import * as Interaction from "../Interaction.ts";
+import { DEFAULT_LOCAL_ENDPOINT } from "../AWS/AuthProvider.ts";
+import { flociServices } from "../AWS/Local/FlociServices.ts";
 import { userStage } from "../Cli/commands/flags.ts";
 import { LoggingCli } from "../Cli/LoggingCli.ts";
 import { deploy as _deploy } from "../Deploy.ts";
 import { destroy as _destroy } from "../Destroy.ts";
 import type { Input } from "../Input.ts";
+import * as Interaction from "../Interaction.ts";
 import * as RpcProviderProxy from "../Local/RpcProviderProxy.ts";
 import * as RpcSpawner from "../Local/RpcSpawner.ts";
 import { ALCHEMY_DEV } from "../Phase.ts";
 import * as Plan from "../Plan.ts";
+import type {
+  ResourceSelection,
+  SelectionOutput,
+} from "../ResourceSelection.ts";
 import {
   type CompiledStack,
   make as makeStack,

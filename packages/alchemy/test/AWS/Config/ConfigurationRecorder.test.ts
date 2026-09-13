@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import { ConfigurationRecorder, DeliveryChannel } from "@/AWS/Config";
-import { Bucket } from "@/AWS/S3";
-import * as Test from "@/Test/Alchemy";
 import * as config from "@distilled.cloud/aws/config-service";
 import * as iam from "@distilled.cloud/aws/iam";
 import * as sts from "@distilled.cloud/aws/sts";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
+import { ConfigurationRecorder, DeliveryChannel } from "@/AWS/Config";
+import { Bucket } from "@/AWS/S3";
+import * as Test from "@/Test/Alchemy";
 import { makeConfigTestLease } from "./TestLease.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });

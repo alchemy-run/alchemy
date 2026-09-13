@@ -2,6 +2,10 @@ import * as ecr from "@distilled.cloud/aws/ecr";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
+import {
+  hashDockerBuildInputs,
+  resolveDockerBuildPaths,
+} from "../../Docker/BuildHash.ts";
 import { Docker } from "../../Docker/Docker.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import {
@@ -10,10 +14,6 @@ import {
   hasAlchemyTags,
 } from "../../Tags.ts";
 import { sha256Object } from "../../Util/sha256.ts";
-import {
-  hashDockerBuildInputs,
-  resolveDockerBuildPaths,
-} from "../../Docker/BuildHash.ts";
 import { buildAndPushEcrImage } from "../ECR/Image.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import { normalizePolicyDocument } from "../IAM/Policy.ts";

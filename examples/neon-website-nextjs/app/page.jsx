@@ -1,7 +1,7 @@
+import Image from "next/image";
+import { submitName } from "./actions";
 import { Card } from "./components/Card";
 import { Counter } from "./components/Counter";
-import { submitName } from "./actions";
-import Image from "next/image";
 
 // Server-rendered in the Neon Functions runtime on every request.
 export const dynamic = "force-dynamic";

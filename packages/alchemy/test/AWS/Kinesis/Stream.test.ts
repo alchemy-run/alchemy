@@ -1,14 +1,14 @@
+import * as Kinesis from "@distilled.cloud/aws/kinesis";
+import { describe, expect } from "alchemy-test";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import { adopt } from "@/AdoptPolicy";
 import * as AWS from "@/AWS";
 import { Stream } from "@/AWS/Kinesis";
 import * as Provider from "@/Provider";
 import { State } from "@/State";
 import * as Test from "@/Test/Alchemy";
-import * as Kinesis from "@distilled.cloud/aws/kinesis";
-import { describe, expect } from "alchemy-test";
-import * as Data from "effect/Data";
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

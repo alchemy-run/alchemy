@@ -1,3 +1,13 @@
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import { expect, it } from "alchemy-test";
+import * as ConfigProvider from "effect/ConfigProvider";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+import path from "pathe";
 import {
   AuthError,
   AuthProvider,
@@ -18,16 +28,6 @@ import {
   validateProfileName,
 } from "@/Auth/Profile.ts";
 import { resolveProfileName, resolveProviderConfig } from "@/Auth/Resolve.ts";
-import * as NodeServices from "@effect/platform-node/NodeServices";
-import { expect, it } from "alchemy-test";
-import * as ConfigProvider from "effect/ConfigProvider";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Layer from "effect/Layer";
-import * as Logger from "effect/Logger";
-import * as Option from "effect/Option";
-import * as Schema from "effect/Schema";
-import path from "pathe";
 import { messageForCapabilities } from "@/Util/interactive.ts";
 
 const FAKE_PROVIDER = "FakeAuthProvider";

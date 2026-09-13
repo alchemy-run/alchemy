@@ -1,8 +1,8 @@
+import { describe, expect, it } from "alchemy-test";
 import {
   formatResourceTag,
   stripChildEffectPrefix,
 } from "@/Util/ResourceOutput.ts";
-import { describe, expect, it } from "alchemy-test";
 
 describe("stripChildEffectPrefix", { tags: ["unit", "local"] }, () => {
   it("removes an Effect pretty prefix", () => {

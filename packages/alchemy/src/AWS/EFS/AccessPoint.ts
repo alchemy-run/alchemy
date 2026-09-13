@@ -126,7 +126,10 @@ export const AccessPoint = Resource<AccessPoint>("AWS.EFS.AccessPoint");
  */
 export class AccessPointNotAvailable extends Data.TaggedError(
   "AccessPointNotAvailable",
-)<{ accessPointId: string; state: string }> {}
+)<{
+  accessPointId: string;
+  state: string;
+}> {}
 
 /**
  * Access points settle to `available` in seconds. Bounded poll (~60s),
@@ -330,7 +333,10 @@ export const AccessPointProvider = () =>
                 PosixUser: toWirePosixUser(news.posixUser),
                 RootDirectory: toWireRootDirectory(news.rootDirectory),
                 Tags: Object.entries({ ...news.tags, ...internalTags }).map(
-                  ([Key, Value]) => ({ Key, Value }),
+                  ([Key, Value]) => ({
+                    Key,
+                    Value,
+                  }),
                 ),
               })
               .pipe(

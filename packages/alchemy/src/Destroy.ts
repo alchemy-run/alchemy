@@ -1,5 +1,5 @@
-import type { ConfigError } from "effect/Config";
 import { Effect } from "effect";
+import type { ConfigError } from "effect/Config";
 import type * as Scope from "effect/Scope";
 import type { AlchemyContext } from "./AlchemyContext.ts";
 import * as Apply from "./Apply.ts";

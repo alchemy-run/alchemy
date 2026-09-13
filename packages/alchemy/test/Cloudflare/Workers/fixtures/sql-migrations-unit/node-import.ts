@@ -1,11 +1,11 @@
+import * as NodeServices from "@effect/platform-node/NodeServices";
 import { Worker } from "alchemy/Cloudflare";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
 import {
   makeWorkerRuntimeContext,
   type WorkerRuntimeContext,
 } from "@/Cloudflare/Workers/WorkerRuntimeContext.ts";
-import * as NodeServices from "@effect/platform-node/NodeServices";
-import * as Context from "effect/Context";
-import * as Effect from "effect/Effect";
 import SqlMigrationsUnitObject, { implementation } from "./object.ts";
 
 const WorkerHost = Context.Service<Worker, WorkerRuntimeContext>(

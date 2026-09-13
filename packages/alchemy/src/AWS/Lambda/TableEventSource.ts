@@ -10,7 +10,6 @@ import {
   type StreamsProps,
   type TableEventSourceService,
 } from "../DynamoDB/Stream.ts";
-
 import type { Table } from "../DynamoDB/Table.ts";
 import { EventSourceMapping } from "./EventSourceMapping.ts";
 import * as Lambda from "./Function.ts";

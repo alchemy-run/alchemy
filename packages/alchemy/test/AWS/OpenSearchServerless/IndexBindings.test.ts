@@ -1,14 +1,13 @@
+import * as aoss from "@distilled.cloud/aws/opensearchserverless";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import { AccessPolicy } from "@/AWS/OpenSearchServerless";
 import * as Output from "@/Output";
 import * as Test from "@/Test/Alchemy";
-import * as aoss from "@distilled.cloud/aws/opensearchserverless";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/http/HttpClient";
-import * as HttpClientRequest from "effect/http/HttpClientRequest";
-
 import AossIndexFunctionLive, {
   AossIndexFunction,
   COLLECTION_NAME,

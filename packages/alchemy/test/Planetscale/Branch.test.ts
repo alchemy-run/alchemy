@@ -1,11 +1,11 @@
-import * as Planetscale from "@/Planetscale";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as ps from "@distilled.cloud/planetscale";
 import { describe, expect } from "alchemy-test";
 import { Data, Schedule } from "effect";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import * as Planetscale from "@/Planetscale";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Planetscale.providers() });
 

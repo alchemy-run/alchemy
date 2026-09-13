@@ -2,7 +2,6 @@ import type lambda from "aws-lambda";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
-
 import * as Namespace from "../../Namespace.ts";
 import type { Bucket } from "../S3/Bucket.ts";
 import {
@@ -13,8 +12,8 @@ import type {
   BucketNotification,
   NotificationsProps,
 } from "../S3/BucketNotifications.ts";
-import type { S3EventType } from "../S3/S3Event.ts";
 import { normalizeBucketNotification } from "../S3/normalizeBucketNotification.ts";
+import type { S3EventType } from "../S3/S3Event.ts";
 import * as Lambda from "./Function.ts";
 import { Permission as LambdaPermission } from "./Permission.ts";
 

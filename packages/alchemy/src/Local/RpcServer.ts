@@ -2,15 +2,15 @@ import * as Console from "effect/Console";
 import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import type { HttpClient } from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import type * as Scope from "effect/Scope";
-import * as FetchHttpClient from "effect/http/FetchHttpClient";
-import { makePlainConsoleSink } from "../Util/ConsoleSink.ts";
-import type { HttpClient } from "effect/http/HttpClient";
 import { ArtifactStore, createArtifactStore } from "../Artifacts.ts";
 import type { ProviderService } from "../Provider.ts";
 import type { ResourceLike } from "../Resource.ts";
+import { makePlainConsoleSink } from "../Util/ConsoleSink.ts";
 import {
   platformLayer,
   PlatformServices,

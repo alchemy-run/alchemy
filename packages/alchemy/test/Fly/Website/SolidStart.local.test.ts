@@ -1,8 +1,8 @@
-import * as Fly from "@/Fly";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as pathe from "pathe";
+import * as Fly from "@/Fly";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 
@@ -48,9 +48,7 @@ describe(
 
           const deployed = yield* stack.deploy(
             Effect.gen(function* () {
-              const site = yield* Fly.Website.SolidStart("Web", {
-                rootDir,
-              });
+              const site = yield* Fly.Website.SolidStart("Web", { rootDir });
               return { site };
             }),
           );
@@ -80,9 +78,7 @@ describe(
 
           const deployed = yield* stack.deploy(
             Effect.gen(function* () {
-              const site = yield* Fly.Website.SolidStart("Web", {
-                rootDir,
-              });
+              const site = yield* Fly.Website.SolidStart("Web", { rootDir });
               return { site };
             }),
           );
