@@ -1,10 +1,5 @@
 import { waitUntilDeleted } from "./GraphQL.ts";
-import type {
-  SandboxNetworkIsolation,
-  SandboxStatus,
-  SandboxTemplateInput,
-} from "@distilled.cloud/railway";
-import * as railway from "@distilled.cloud/railway/graphql";
+import * as railway from "@distilled.cloud/railway";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -17,6 +12,10 @@ import { Resource } from "../Resource.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import { ownedProjects, projectEnvironmentIds } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
+
+type SandboxNetworkIsolation = railway.Scalars["SandboxNetworkIsolation"];
+type SandboxStatus = railway.Scalars["SandboxStatus"];
+type SandboxTemplateInput = railway.Inputs["SandboxTemplateInput"];
 
 const selection = {
   id: true,
