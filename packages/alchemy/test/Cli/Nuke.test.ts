@@ -1,9 +1,9 @@
-import * as Nuke from "@/Nuke.ts";
-import type { ProviderService } from "@/Provider.ts";
+import { expect, it } from "alchemy-test";
 import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
-import { expect, it } from "alchemy-test";
+import * as Nuke from "@/Nuke.ts";
+import type { ProviderService } from "@/Provider.ts";
 
 it.effect("reports each deletion before a slow coordinated pass finishes", () =>
   Effect.gen(function* () {

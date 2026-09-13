@@ -2,14 +2,8 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { isResolved } from "../Diff.ts";
-import * as Provider from "../Provider.ts";
-import {
-  attrOrRedactedString,
-  attrOrString,
-  devId,
-  devProvider,
-} from "./Internal/DevStub.ts";
 import * as ProviderLayer from "../Local/ProviderLayer.ts";
+import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import type { Bucket } from "./Bucket.ts";
 import {
@@ -17,6 +11,12 @@ import {
   isNotFound,
   type PrismaManagementClient,
 } from "./Client.ts";
+import {
+  attrOrRedactedString,
+  attrOrString,
+  devId,
+  devProvider,
+} from "./Internal/DevStub.ts";
 import { physicalInstanceName } from "./Internal/EnvName.ts";
 import type { Providers } from "./Providers.ts";
 import {

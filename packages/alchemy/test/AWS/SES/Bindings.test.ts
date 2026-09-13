@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import SESTestFunctionLive, { SESTestFunction } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
@@ -686,9 +686,7 @@ describe("SES Bindings", () => {
     const domainStatistics = (domain?: string) =>
       send(
         HttpClientRequest.get(
-          `${baseUrl}/domain-statistics${
-            domain ? `?domain=${encodeURIComponent(domain)}` : ""
-          }`,
+          `${baseUrl}/domain-statistics${domain ? `?domain=${encodeURIComponent(domain)}` : ""}`,
         ),
       ).pipe(Effect.flatMap((r) => r.json)) as Effect.Effect<
         { days?: number; error?: string },
@@ -733,9 +731,7 @@ describe("SES Bindings", () => {
     const blacklistReports = (ip?: string) =>
       send(
         HttpClientRequest.get(
-          `${baseUrl}/blacklist-reports${
-            ip ? `?ip=${encodeURIComponent(ip)}` : ""
-          }`,
+          `${baseUrl}/blacklist-reports${ip ? `?ip=${encodeURIComponent(ip)}` : ""}`,
         ),
       ).pipe(Effect.flatMap((r) => r.json)) as Effect.Effect<
         { ips?: string[]; error?: string },

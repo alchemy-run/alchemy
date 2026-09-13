@@ -1,3 +1,14 @@
+import { Credentials, fromCredentials } from "@distilled.cloud/aws/Credentials";
+import { Region } from "@distilled.cloud/aws/Region";
+import * as S3 from "@distilled.cloud/aws/s3";
+import { NodeServices } from "@effect/platform-node";
+import { describe, expect, it } from "alchemy-test";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Schedule from "effect/Schedule";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import * as HttpClient from "effect/unstable/http/HttpClient";
 import { AlchemyContext } from "@/AlchemyContext.ts";
 import { ArtifactStore, createArtifactStore } from "@/Artifacts.ts";
 import * as AWS from "@/AWS";
@@ -11,17 +22,6 @@ import { Stack, type StackSpec } from "@/Stack.ts";
 import { Stage } from "@/Stage.ts";
 import { State } from "@/State";
 import * as Test from "@/Test/Alchemy";
-import { Credentials, fromCredentials } from "@distilled.cloud/aws/Credentials";
-import { Region } from "@distilled.cloud/aws/Region";
-import * as S3 from "@distilled.cloud/aws/s3";
-import { NodeServices } from "@effect/platform-node";
-import { describe, expect, it } from "alchemy-test";
-import * as Data from "effect/Data";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Schedule from "effect/Schedule";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import * as HttpClient from "effect/unstable/http/HttpClient";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

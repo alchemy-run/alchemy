@@ -1,9 +1,9 @@
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import { stringify } from "yaml";
 import { havePropsChanged } from "../Diff.ts";
 import * as Output from "../Output.ts";
 import { isPlainData } from "../Util/data.ts";
-import { stringify } from "yaml";
 
 export type YamlDisplayValue =
   | string

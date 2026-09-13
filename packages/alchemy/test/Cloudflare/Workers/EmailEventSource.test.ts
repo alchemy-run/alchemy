@@ -1,14 +1,14 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import { findZoneByName } from "@/Cloudflare/Zone/lookup";
-import * as Alchemy from "@/index.ts";
-import * as Test from "@/Test/Alchemy";
 import * as emailRouting from "@distilled.cloud/cloudflare/email-routing";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Alchemy from "@/index.ts";
+import * as Test from "@/Test/Alchemy";
 import EmailCatchAllWorker from "./fixtures/email-catchall-worker.ts";
 import EmailTestWorker from "./fixtures/email-worker.ts";
 

@@ -1,10 +1,10 @@
-import * as AWS from "@/AWS";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as pathe from "pathe";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains, expectUrlOk } from "../../Cloudflare/Utils/Http.ts";
 
@@ -141,20 +141,26 @@ describe("AWS.Website.SolidStart local", () => {
         yield* expectUrlContains(
           `${url}/`,
           "config:solidstart-aws-user-config-loaded",
-          { label: "user vite.config.ts applied (dev)" },
+          {
+            label: "user vite.config.ts applied (dev)",
+          },
         );
         // server.environment reaches the dev server's process env — the
         // same values the Lambda gets on deploy (dev/live parity).
         yield* expectUrlContains(
           `${url}/`,
           "env:solidstart-aws-dev-env-marker",
-          { label: "server.environment injected into dev server" },
+          {
+            label: "server.environment injected into dev server",
+          },
         );
         // API route through the dev server.
         yield* expectUrlContains(
           `${url}/api/hello?echo=dev`,
           "SOLIDSTART_AWS_API_MARKER",
-          { label: "API route (dev)" },
+          {
+            label: "API route (dev)",
+          },
         );
 
         // ── HMR: edit the API route in place. The stack is NOT re-applied —
@@ -172,7 +178,10 @@ describe("AWS.Website.SolidStart local", () => {
         yield* expectUrlContains(
           `${url}/api/hello?echo=dev`,
           "SOLIDSTART_AWS_API_MARKER_V2",
-          { timeout: "90 seconds", label: "API route after HMR edit" },
+          {
+            timeout: "90 seconds",
+            label: "API route after HMR edit",
+          },
         );
 
         yield* stack.destroy();

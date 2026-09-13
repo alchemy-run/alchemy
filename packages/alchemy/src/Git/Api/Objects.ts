@@ -1,3 +1,5 @@
+import * as Schema from "effect/Schema";
+import * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup";
 /**
  * The `objects` group: commit, log, tree, blob, diff, and compare reads,
  * plus the two raw streaming reads (DESIGN.md §5): a blob's bytes as an
@@ -5,8 +7,6 @@
  * no success schema and answer with the response they build.
  */
 import * as Http from "../../Http/index.ts";
-import * as Schema from "effect/Schema";
-import * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup";
 import {
   CommitDiff,
   CommitInfo,

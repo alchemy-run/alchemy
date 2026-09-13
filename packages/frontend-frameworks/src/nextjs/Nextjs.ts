@@ -1,16 +1,17 @@
+import * as NodeNet from "node:net";
+import * as NodePath from "node:path";
 import type {
   BindingHooks,
   Module,
   RuntimeWorker,
 } from "@alchemy.run/cloudflare-runtime/core";
+import * as Assets from "@alchemy.run/cloudflare-runtime/core/bindings/assets/Assets";
+import * as DurableObjectNamespace from "@alchemy.run/cloudflare-runtime/core/bindings/DurableObjectNamespace";
+import * as Service from "@alchemy.run/cloudflare-runtime/core/bindings/Service";
 import { DEFAULT_COMPATIBILITY_DATE } from "@alchemy.run/cloudflare-runtime/core/internal/constants";
 import * as Runtime from "@alchemy.run/cloudflare-runtime/core/Runtime";
 import * as RuntimeServices from "@alchemy.run/cloudflare-runtime/core/RuntimeServices";
-import * as DurableObjectNamespace from "@alchemy.run/cloudflare-runtime/core/bindings/DurableObjectNamespace";
-import * as Service from "@alchemy.run/cloudflare-runtime/core/bindings/Service";
-import * as Assets from "@alchemy.run/cloudflare-runtime/core/bindings/assets/Assets";
 import * as Credentials from "@distilled.cloud/cloudflare/Credentials";
-import * as FrameworkCore from "../core/index.ts";
 import * as NodeChildProcessSpawner from "@effect/platform-node/NodeChildProcessSpawner";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import type * as Context from "effect/Context";
@@ -20,8 +21,7 @@ import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import type * as Scope from "effect/Scope";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import * as NodeNet from "node:net";
-import * as NodePath from "node:path";
+import * as FrameworkCore from "../core/index.ts";
 import * as Bundle from "./Bundle.ts";
 import * as DevServer from "./DevServer.ts";
 import * as Runner from "./Runner.ts";

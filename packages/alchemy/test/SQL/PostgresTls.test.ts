@@ -1,9 +1,9 @@
 import * as PgClient from "@effect/sql-pg/PgClient";
+import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import { resolveConnectionOptions, resolveSsl } from "@/SQL/PostgresTls.ts";
-import { describe, expect, it } from "alchemy-test";
-import * as Redacted from "effect/Redacted";
 
 const url = (s: string) => Redacted.make(s);
 
@@ -129,7 +129,9 @@ describe("SQL/PostgresTls resolveConnectionOptions", () => {
     expect(
       resolveConnectionOptions(url("postgres://u@[::1]/db?sslmode=no-verify"))
         .ssl,
-    ).toEqual({ rejectUnauthorized: false });
+    ).toEqual({
+      rejectUnauthorized: false,
+    });
   });
 
   it("preserves unmodified and malformed URLs for driver validation", () => {

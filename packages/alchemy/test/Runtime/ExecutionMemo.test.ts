@@ -1,4 +1,3 @@
-import { makeExecutionMemo } from "@/Runtime/ExecutionMemo";
 import { describe, expect, it } from "alchemy-test";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -8,6 +7,7 @@ import * as Layer from "effect/Layer";
 import * as Result from "effect/Result";
 import * as Scope from "effect/Scope";
 import * as TestClock from "effect/testing/TestClock";
+import { makeExecutionMemo } from "@/Runtime/ExecutionMemo";
 
 interface Pool {
   readonly id: number;

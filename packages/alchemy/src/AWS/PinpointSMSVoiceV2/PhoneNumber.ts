@@ -151,7 +151,9 @@ export const PhoneNumber = Resource<PhoneNumber>(
  */
 export class SmsVoicePhoneNumberMissing extends Data.TaggedError(
   "SmsVoicePhoneNumberMissing",
-)<{ message: string }> {}
+)<{
+  message: string;
+}> {}
 
 /**
  * Poll a freshly-requested number out of `PENDING` on a bounded schedule

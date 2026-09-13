@@ -4,7 +4,6 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
-
 import type { Job } from "./Job.ts";
 
 export class NotifyJobError extends Data.TaggedError("NotifyJobError")<{

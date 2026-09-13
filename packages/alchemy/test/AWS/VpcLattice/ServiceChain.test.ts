@@ -1,3 +1,8 @@
+import * as vpclattice from "@distilled.cloud/aws/vpc-lattice";
+import { expect } from "alchemy-test";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import { Subnet, Vpc } from "@/AWS/EC2";
 import {
@@ -9,11 +14,6 @@ import {
   TargetGroup,
 } from "@/AWS/VpcLattice";
 import * as Test from "@/Test/Alchemy";
-import * as vpclattice from "@distilled.cloud/aws/vpc-lattice";
-import { expect } from "alchemy-test";
-import * as Data from "effect/Data";
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

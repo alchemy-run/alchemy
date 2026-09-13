@@ -1,3 +1,4 @@
+import * as os from "node:os";
 import {
   Runtime,
   type RuntimeServices,
@@ -27,21 +28,25 @@ import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import type * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
-import * as os from "node:os";
+import {
+  Artifacts as AlchemyArtifacts,
+  createArtifactStore,
+  makeScopedArtifacts,
+} from "../../Artifacts.ts";
 import type * as Bundle from "../../Bundle/Bundle.ts";
-import { ANSI_RESET, ansiFg, colorsEnabled } from "../../Util/Terminal.ts";
-import { theme } from "../../Util/Theme.ts";
+import { FQN_SEPARATOR } from "../../FQN.ts";
+import { makeDevLogDirectory, makeDevLogOpener } from "../../Local/DevLog.ts";
+import * as LocalProvider from "../../Local/LocalProvider.ts";
+import { Stack } from "../../Stack.ts";
+import { unwrapRedacted } from "../../Util/index.ts";
 import {
   formatResourceTag,
   makeResourceLogger,
   makeResourceOutput,
 } from "../../Util/ResourceOutput.ts";
-import { makeDevLogDirectory, makeDevLogOpener } from "../../Local/DevLog.ts";
-import { FQN_SEPARATOR } from "../../FQN.ts";
-import * as LocalProvider from "../../Local/LocalProvider.ts";
-import { Stack } from "../../Stack.ts";
-import { unwrapRedacted } from "../../Util/index.ts";
 import { sha256 } from "../../Util/sha256.ts";
+import { ANSI_RESET, ansiFg, colorsEnabled } from "../../Util/Terminal.ts";
+import { theme } from "../../Util/Theme.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import {
   isLiveId,
@@ -53,26 +58,21 @@ import type { ConsumerSettings } from "../Queues/Consumer.ts";
 import type { WorkerAssetsConfig, WorkerProps } from "../Workers/Worker.ts";
 import { readAssetsConfigFiles } from "./Assets.ts";
 import { getCompatibility } from "./Compatibility.ts";
-import { watchPrebuiltWorkerBundle } from "./Sources/Prebuilt.ts";
-import { isPythonMain, watchPythonWorkerBundle } from "./Sources/Python.ts";
-import {
-  Artifacts as AlchemyArtifacts,
-  createArtifactStore,
-  makeScopedArtifacts,
-} from "../../Artifacts.ts";
-import { loadSource, SourceProviderError, type DevContext } from "./Source.ts";
-import { isSelfUrl, Worker } from "./Worker.ts";
-import { getCronBindings } from "./WorkerAsyncBindings.ts";
-import type { WorkerBinding } from "./WorkerBinding.ts";
-import { WorkerBundle, type WorkerBundleOptions } from "./Sources/Rolldown.ts";
-import { createWorkerName } from "./WorkerName.ts";
-import { resolveTailConsumers } from "./WorkerProvider.ts";
 import {
   materializeRuntimeBindings,
   WorkerValidationError,
 } from "./RuntimeBindings.ts";
-import { startViteChild } from "./ViteChild.ts";
+import { loadSource, SourceProviderError, type DevContext } from "./Source.ts";
+import { watchPrebuiltWorkerBundle } from "./Sources/Prebuilt.ts";
+import { isPythonMain, watchPythonWorkerBundle } from "./Sources/Python.ts";
+import { WorkerBundle, type WorkerBundleOptions } from "./Sources/Rolldown.ts";
 import { DEFAULT_DEV_PORT, type ViteChildConfig } from "./ViteChild.shared.ts";
+import { startViteChild } from "./ViteChild.ts";
+import { isSelfUrl, Worker } from "./Worker.ts";
+import { getCronBindings } from "./WorkerAsyncBindings.ts";
+import type { WorkerBinding } from "./WorkerBinding.ts";
+import { createWorkerName } from "./WorkerName.ts";
+import { resolveTailConsumers } from "./WorkerProvider.ts";
 
 /** Local dev-server options (the worker-mode arm of `WorkerProps["dev"]`). */
 type DevServerOptions = Extract<WorkerProps["dev"], { mode?: "worker" }> & {

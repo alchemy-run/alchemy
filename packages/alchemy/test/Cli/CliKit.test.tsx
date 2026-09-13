@@ -1,6 +1,14 @@
 /** @jsxImportSource @alchemy.run/sigil */
 import { PassThrough } from "node:stream";
 import { stripVTControlCharacters } from "node:util";
+import { expect, it } from "alchemy-test";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
+import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
+import * as NukeRoute from "@/Alchemist/routes/nuke.ts";
 import {
   NonInteractiveTerminal,
   Application,
@@ -9,6 +17,7 @@ import {
   CliKit,
   layer as cliKitLayer,
 } from "@/Cli/CliKit/index.ts";
+import { renderApply } from "@/Cli/commands/render.ts";
 import {
   AnsweredPrompt,
   Alert,
@@ -32,9 +41,7 @@ import {
 } from "@/Cli/components/ui/index.ts";
 import { Menu } from "@/Cli/components/ui/Interactive.tsx";
 import { tabsWindow } from "@/Cli/components/ui/Layout.tsx";
-import { makeRuntime } from "@/Cli/components/view/Runtime.tsx";
-import { sigilCli } from "@/Cli/components/view/SigilCli.tsx";
-import { Cli, Progress } from "@/Report.ts";
+import { ApprovePlan } from "@/Cli/components/view/ApprovePlan.tsx";
 import {
   NukeProgress,
   NukeProgressStore,
@@ -43,16 +50,7 @@ import {
   renderNukeDelete,
   renderNukeScan,
 } from "@/Cli/components/view/Nuke.tsx";
-import { renderApply } from "@/Cli/commands/render.ts";
-import { isInProgress } from "@/Cli/components/view/statusStyle.ts";
-import { spinnerFramesFor } from "@/Util/Theme.ts";
-import {
-  makeResourceLogger,
-  makeResourceOutput,
-} from "@/Util/ResourceOutput.ts";
-import { stackOutputsView } from "@/Cli/components/view/StackOutputs.tsx";
 import { Plan, PlanTree } from "@/Cli/components/view/PlanView.tsx";
-import { ApprovePlan } from "@/Cli/components/view/ApprovePlan.tsx";
 import {
   ProfileDetailsBody,
   providerBlockHeight,
@@ -63,21 +61,23 @@ import {
   DashStore,
   runProfileDashboardSession,
 } from "@/Cli/components/view/ProfileDashboard.tsx";
+import { makeRuntime } from "@/Cli/components/view/Runtime.tsx";
+import { sigilCli } from "@/Cli/components/view/SigilCli.tsx";
+import { stackOutputsView } from "@/Cli/components/view/StackOutputs.tsx";
 import {
   buildStageNodes,
   stateExplorerScreen,
   StateExplorerStore,
   type StateExplorerSource,
 } from "@/Cli/components/view/StateExplorer.tsx";
-import * as Effect from "effect/Effect";
-import * as Context from "effect/Context";
-import * as NukeRoute from "@/Alchemist/routes/nuke.ts";
+import { isInProgress } from "@/Cli/components/view/statusStyle.ts";
 import type { ProviderService } from "@/Provider.ts";
-import * as Exit from "effect/Exit";
-import * as Fiber from "effect/Fiber";
-import * as Layer from "effect/Layer";
-import * as Logger from "effect/Logger";
-import { expect, it } from "alchemy-test";
+import { Cli, Progress } from "@/Report.ts";
+import {
+  makeResourceLogger,
+  makeResourceOutput,
+} from "@/Util/ResourceOutput.ts";
+import { spinnerFramesFor } from "@/Util/Theme.ts";
 import { deleteNode, noopNode, planWith, updateNode } from "./PlanTestNodes.ts";
 
 class CaptureStream extends PassThrough {
@@ -594,7 +594,9 @@ it.effect("renders completed dev plans as a hideable output view", () =>
     const { service: staticService } = makeStatic();
     const hiddenOutput = staticService.output.format(
       <Plan tree={tree} collapsible />,
-      { columns: 80 },
+      {
+        columns: 80,
+      },
     );
     expect(hiddenOutput).not.toContain("Plan ·");
     expect(hiddenOutput).not.toContain("Worker");
@@ -864,7 +866,9 @@ it("windows the profile dashboard's providers to the terminal height", () => {
   });
   const output = service.output.format(
     <Dashboard store={store} initialSelected={0} />,
-    { columns: 80 },
+    {
+      columns: 80,
+    },
   );
 
   expect(output.split("\n").length).toBeLessThanOrEqual(stdout.rows);
@@ -2557,7 +2561,10 @@ it.effect(
         const { service, stdout } = makeStatic();
         const result = yield* reviewNuke(
           [{ providerId: "AWS.S3.Bucket", displayName: "bucket" }],
-          { ...options, mode: "local" },
+          {
+            ...options,
+            mode: "local",
+          },
         ).pipe(Effect.provideService(CliKit, service));
         expect(result).toBe(true);
         expect(stdout.output).toContain("1 to delete");
@@ -2573,7 +2580,11 @@ it.live("defaults nuke plan approval to Cancel", () =>
     const { service, stdout } = yield* makeLive({ stdin });
     const review = yield* reviewNuke(
       [{ providerId: "AWS.S3.Bucket", displayName: "bucket" }],
-      { mode: "local", yes: false, dryRun: false },
+      {
+        mode: "local",
+        yes: false,
+        dryRun: false,
+      },
     ).pipe(Effect.provideService(CliKit, service), Effect.forkChild);
     yield* Effect.promise(flushEffects);
     yield* Effect.raceFirst(

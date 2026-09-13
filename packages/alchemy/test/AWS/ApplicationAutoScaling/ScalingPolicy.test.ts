@@ -1,3 +1,7 @@
+import * as aas from "@distilled.cloud/aws/application-auto-scaling";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import { ScalableTarget, ScalingPolicy } from "@/AWS/ApplicationAutoScaling";
 import { Table } from "@/AWS/DynamoDB";
@@ -6,10 +10,6 @@ import * as Provider from "@/Provider";
 import { Stack } from "@/Stack";
 import { State, type ResourceState } from "@/State";
 import * as Test from "@/Test/Alchemy";
-import * as aas from "@distilled.cloud/aws/application-auto-scaling";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -282,7 +282,10 @@ test.provider(
       // including when the Output-valued `resourceId` prop was lost too.
       const provider = yield* Provider.findProvider(ScalingPolicy);
       const { resourceId: _droppedProp, ...partialProps } =
-        partialRow.props as { resourceId?: string; [key: string]: unknown };
+        partialRow.props as {
+          resourceId?: string;
+          [key: string]: unknown;
+        };
       const observed = yield* provider.read!({
         id: "AasPartialPolicy",
         fqn: partialRow.fqn,

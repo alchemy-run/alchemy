@@ -1,5 +1,4 @@
 import type * as cf from "@cloudflare/workers-types";
-
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as HttpClient from "effect/unstable/http/HttpClient";

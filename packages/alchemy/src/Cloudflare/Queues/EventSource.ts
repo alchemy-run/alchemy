@@ -10,8 +10,8 @@ import { RuntimeContext } from "../../RuntimeContext.ts";
 import type { FunctionContext } from "../../Serverless/Function.ts";
 import * as DurationUtil from "../../Util/Duration.ts";
 import { isWorkerEvent, Worker } from "../Workers/Worker.ts";
-import type { Queue } from "./Queue.ts";
 import { Consumer } from "./Consumer.ts";
+import type { Queue } from "./Queue.ts";
 
 /**
  * Subscriber settings — the same shape Cloudflare's `Consumer`

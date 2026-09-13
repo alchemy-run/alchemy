@@ -1,3 +1,6 @@
+import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
+import { RuntimeContext } from "../../RuntimeContext.ts";
 /**
  * The delete-purge alarm job (DESIGN.md §2.3 Delete).
  *
@@ -20,9 +23,6 @@
  * the caller re-arms the alarm instead of blowing the 15-minute budget.
  */
 import type { BlobStoreError, BlobStoreShape } from "../BlobStore.ts";
-import { RuntimeContext } from "../../RuntimeContext.ts";
-import * as Effect from "effect/Effect";
-import * as Stream from "effect/Stream";
 import { StoreError } from "../Protocol/Store.ts";
 import { repoPrefix } from "../Store/Keys.ts";
 

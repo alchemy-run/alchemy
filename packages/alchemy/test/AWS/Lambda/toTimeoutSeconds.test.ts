@@ -1,6 +1,6 @@
-import { toTimeoutSeconds } from "@/AWS/Lambda/Function.ts";
-import * as Duration from "effect/Duration";
 import { describe, expect, it } from "alchemy-test";
+import * as Duration from "effect/Duration";
+import { toTimeoutSeconds } from "@/AWS/Lambda/Function.ts";
 
 describe("toTimeoutSeconds", () => {
   it("returns undefined for undefined", () => {

@@ -1,10 +1,10 @@
 import type { Alarm } from "./Alarm.ts";
 import type { AlarmMuteRule } from "./AlarmMuteRule.ts";
+import { sortByLogicalId } from "./common.ts";
 import type { CompositeAlarm } from "./CompositeAlarm.ts";
 import type { Dashboard } from "./Dashboard.ts";
 import type { InsightRule } from "./InsightRule.ts";
 import type { MetricStream } from "./MetricStream.ts";
-import { sortByLogicalId } from "./common.ts";
 
 export type AlarmResource = Alarm | CompositeAlarm;
 

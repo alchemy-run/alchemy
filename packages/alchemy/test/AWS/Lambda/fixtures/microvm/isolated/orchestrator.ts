@@ -1,4 +1,3 @@
-import * as AWS from "@/AWS";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -7,6 +6,7 @@ import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as AWS from "@/AWS";
 import { IsolatedSandbox } from "./sandbox.ts";
 
 /**
@@ -82,7 +82,9 @@ export default class IsolatedOrchestrator extends AWS.Lambda.Function<IsolatedOr
             const echoRes = yield* client
               .get(
                 `https://${vm.endpoint}/echo?message=${encodeURIComponent(message)}`,
-                { headers },
+                {
+                  headers,
+                },
               )
               .pipe(
                 Effect.retry({

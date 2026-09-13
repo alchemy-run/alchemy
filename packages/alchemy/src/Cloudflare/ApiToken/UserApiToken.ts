@@ -105,7 +105,9 @@ export type UserApiToken = Resource<
  */
 export const UserApiToken = Resource<UserApiToken>(
   "Cloudflare.ApiToken.UserApiToken",
-  { aliases: ["Cloudflare.UserApiToken"] },
+  {
+    aliases: ["Cloudflare.UserApiToken"],
+  },
 );
 
 type UserApiTokenAttributes = UserApiToken["Attributes"];

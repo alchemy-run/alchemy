@@ -1,9 +1,9 @@
-import * as AWS from "@/AWS";
-import { Alias, Key } from "@/AWS/PaymentCryptography";
-import * as Test from "@/Test/Alchemy";
 import * as paymentcryptography from "@distilled.cloud/aws/payment-cryptography";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
+import { Alias, Key } from "@/AWS/PaymentCryptography";
+import * as Test from "@/Test/Alchemy";
 import { reapLeakedKeys } from "./reapKeys.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });

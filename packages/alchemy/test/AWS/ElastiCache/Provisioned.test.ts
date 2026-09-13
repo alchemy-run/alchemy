@@ -1,3 +1,8 @@
+import * as ElastiCache from "@distilled.cloud/aws/elasticache";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
 import {
   CacheCluster,
   cacheClusterConnectEnvPrefix,
@@ -9,15 +14,10 @@ import {
   replicationGroupConnectEnvPrefix,
   validateReplicationGroupProps,
 } from "@/AWS/ElastiCache";
-import * as AWS from "@/AWS";
 import { sameStringSet } from "@/AWS/ElastiCache/internal.ts";
-import * as Test from "@/Test/Alchemy";
-import * as ElastiCache from "@distilled.cloud/aws/elasticache";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 import * as Output from "@/Output.ts";
 import { RuntimeContext } from "@/RuntimeContext.ts";
-import * as Schedule from "effect/Schedule";
+import * as Test from "@/Test/Alchemy";
 import {
   assertCacheClusterGone,
   assertReplicationGroupGone,

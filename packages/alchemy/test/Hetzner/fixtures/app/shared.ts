@@ -1,5 +1,5 @@
-import * as Hetzner from "@/Hetzner";
 import * as Effect from "effect/Effect";
+import * as Hetzner from "@/Hetzner";
 
 export const VOLUME_PATH = "/var/lib/api";
 export const MARKER_FILE = `${VOLUME_PATH}/hello.txt`;

@@ -1,12 +1,12 @@
+import { fileURLToPath } from "node:url";
+import * as Lambda from "@distilled.cloud/aws/lambda";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import * as Provider from "@/Provider";
 import { destroy } from "@/RemovalPolicy";
 import { isResourceState, State, type ResourceState } from "@/State";
 import * as Test from "@/Test/Alchemy";
-import * as Lambda from "@distilled.cloud/aws/lambda";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import { fileURLToPath } from "node:url";
 
 const handlerV1Path = fileURLToPath(
   new URL("./fixtures/version-handler-v1.ts", import.meta.url),

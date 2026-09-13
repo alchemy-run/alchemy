@@ -59,7 +59,9 @@ const retryWhileRolePropagating = <A, E extends { readonly _tag: string }, R>(
  */
 export class MediaLiveChannelFailed extends Data.TaggedError(
   "MediaLiveChannelFailed",
-)<{ message: string }> {}
+)<{
+  message: string;
+}> {}
 
 export interface ChannelProps {
   /**

@@ -29,6 +29,7 @@ import {
   type ObjectType,
   type Oid,
 } from "./ObjectCodec.ts";
+import { ObjectTooLargeError, PackFormatError } from "./PackParser.ts";
 import {
   deflate,
   inflate,
@@ -36,7 +37,6 @@ import {
   inflateExactSpan,
   type InflatedEntry,
 } from "./Zlib.ts";
-import { ObjectTooLargeError, PackFormatError } from "./PackParser.ts";
 
 export interface ScannedEntry {
   readonly oid: Oid;

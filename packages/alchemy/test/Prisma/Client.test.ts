@@ -1,12 +1,3 @@
-import {
-  extractConnectionSecrets,
-  PrismaApiDecodeError,
-  PrismaApiError,
-  PrismaClient,
-  PrismaClientLive,
-  type PrismaManagementClient,
-} from "@/Prisma/Client";
-import { PrismaEnvironment } from "@/Prisma/PrismaEnvironment";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
@@ -17,6 +8,15 @@ import * as HttpBody from "effect/unstable/http/HttpBody";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientError from "effect/unstable/http/HttpClientError";
 import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
+import {
+  extractConnectionSecrets,
+  PrismaApiDecodeError,
+  PrismaApiError,
+  PrismaClient,
+  PrismaClientLive,
+  type PrismaManagementClient,
+} from "@/Prisma/Client";
+import { PrismaEnvironment } from "@/Prisma/PrismaEnvironment";
 import { productionManagementApiRoutes } from "./fixtures/ManagementApiContract.ts";
 
 interface Captured {
@@ -1435,7 +1435,9 @@ describe("PrismaClient", () => {
           yield* client.stopDeployment("deployment-1");
           const deploymentLogsRequest = yield* client.getDeploymentLogsRequest(
             "deployment-1",
-            { tail: 10 },
+            {
+              tail: 10,
+            },
           );
           expect(deploymentLogsRequest.url).toBe(
             "wss://api.prisma.test/v1/deployments/deployment-1/logs?tail=10",
@@ -1445,7 +1447,10 @@ describe("PrismaClient", () => {
           ).toBe("Bearer test-token");
           const buildLogsRequest = yield* client.getBuildLogsRequest(
             "build-1",
-            { follow: true, cursor: "cursor-1" },
+            {
+              follow: true,
+              cursor: "cursor-1",
+            },
           );
           expect(buildLogsRequest.url).toBe(
             "https://api.prisma.test/v1/builds/build-1/logs?follow=true&cursor=cursor-1",

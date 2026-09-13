@@ -1,9 +1,9 @@
+import { fileURLToPath } from "node:url";
+import { describe, expect, test } from "alchemy-test";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Option from "effect/Option";
-import { fileURLToPath } from "node:url";
-import { describe, expect, test } from "alchemy-test";
 import { importStack } from "@/Alchemist/Session.ts";
 import { devKeepAlive } from "../../src/Cli/exec";
 import { PlatformServices } from "../../src/Util/PlatformServices";

@@ -1,3 +1,5 @@
+import { SecretsStore } from "@alchemy.run/cloudflare-runtime/core/bindings";
+import { open } from "@alchemy.run/cloudflare-runtime/core/platform-proxy";
 /**
  * Node-side seeding path into the local workerd Secrets Store simulator,
  * built on the runtime's platform proxy (`PlatformProxy.open` — our
@@ -17,8 +19,6 @@
  * NOT exported from `index.ts` — provider-internal scaffolding.
  */
 import type * as runtime from "@cloudflare/workers-types";
-import { SecretsStore } from "@alchemy.run/cloudflare-runtime/core/bindings";
-import { open } from "@alchemy.run/cloudflare-runtime/core/platform-proxy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { gatewayName } from "../LocalGateway.ts";

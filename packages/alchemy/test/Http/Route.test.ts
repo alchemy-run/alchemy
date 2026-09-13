@@ -1,14 +1,9 @@
-/**
- * alchemy/Http routes: a class per endpoint, an implementation per Layer,
- * mounted into Effect's HttpApi unchanged.
- */
-import * as Http from "@/Http/index.ts";
-import { RuntimeContext } from "@/RuntimeContext.ts";
 import { describe, expect, it } from "alchemy-test";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
+import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpRouter from "effect/unstable/http/HttpRouter";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpApi from "effect/unstable/httpapi/HttpApi";
@@ -17,7 +12,12 @@ import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
 import * as HttpApiEndpoint from "effect/unstable/httpapi/HttpApiEndpoint";
 import * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup";
 import * as HttpApiMiddleware from "effect/unstable/httpapi/HttpApiMiddleware";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+/**
+ * alchemy/Http routes: a class per endpoint, an implementation per Layer,
+ * mounted into Effect's HttpApi unchanged.
+ */
+import * as Http from "@/Http/index.ts";
+import { RuntimeContext } from "@/RuntimeContext.ts";
 
 class Caller extends Context.Service<Caller, { readonly name: string }>()(
   "test/Caller",

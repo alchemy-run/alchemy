@@ -2,14 +2,8 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { Unowned } from "../AdoptPolicy.ts";
 import { isResolved } from "../Diff.ts";
-import * as Provider from "../Provider.ts";
-import {
-  DEV_TIMESTAMP,
-  attrOrString,
-  devId,
-  devProvider,
-} from "./Internal/DevStub.ts";
 import * as ProviderLayer from "../Local/ProviderLayer.ts";
+import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import {
   PrismaClient,
@@ -17,6 +11,12 @@ import {
   isNotFound,
   type PrismaManagementClient,
 } from "./Client.ts";
+import {
+  DEV_TIMESTAMP,
+  attrOrString,
+  devId,
+  devProvider,
+} from "./Internal/DevStub.ts";
 import type { Project } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 import {
@@ -394,7 +394,9 @@ const ProviderLive = () =>
               limit: 100,
             })).map((app) => app.id);
             const previouslyUnassignedDatabases =
-              (yield* client.listProjectDatabases(projectId, { limit: 100 }))
+              (yield* client.listProjectDatabases(projectId, {
+                limit: 100,
+              }))
                 .filter((database) => database.branchId === null)
                 .map((database) => database.id);
             repo = yield* client

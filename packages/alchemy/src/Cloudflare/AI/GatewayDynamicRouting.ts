@@ -546,7 +546,9 @@ const listRoutes = (accountId: string, gatewayId: string) =>
     const hydrated = yield* Effect.forEach(
       ids,
       (id) => getRoute(accountId, gatewayId, id),
-      { concurrency: 10 },
+      {
+        concurrency: 10,
+      },
     );
     return hydrated
       .filter((r) => r !== undefined)

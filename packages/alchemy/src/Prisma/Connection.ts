@@ -3,16 +3,8 @@ import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import { Unowned } from "../AdoptPolicy.ts";
 import { isResolved } from "../Diff.ts";
-import * as Provider from "../Provider.ts";
-import {
-  DEV_TIMESTAMP,
-  attrOrNullableString,
-  attrOrRedactedString,
-  attrOrString,
-  devId,
-  devProvider,
-} from "./Internal/DevStub.ts";
 import * as ProviderLayer from "../Local/ProviderLayer.ts";
+import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import {
   PrismaClient,
@@ -26,6 +18,14 @@ import {
   deriveConnectionAttrs,
   hasCanonicalConnectionSecrets,
 } from "./Internal/DatabaseSecrets.ts";
+import {
+  DEV_TIMESTAMP,
+  attrOrNullableString,
+  attrOrRedactedString,
+  attrOrString,
+  devId,
+  devProvider,
+} from "./Internal/DevStub.ts";
 import { physicalInstanceName } from "./Internal/EnvName.ts";
 import type { PostgresOrigin } from "./PostgresOrigin.ts";
 import type { Providers } from "./Providers.ts";

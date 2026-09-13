@@ -5,8 +5,9 @@ import * as Redacted from "effect/Redacted";
 import * as Artifacts from "../../Artifacts.ts";
 import { hashDirectory } from "../../Command/Memo.ts";
 import { isResolved } from "../../Diff.ts";
-import type { ResourceBinding } from "../../Resource.ts";
+import { isInlineDockerfile } from "../../Docker/Dockerfile.ts";
 import * as RpcProvider from "../../Local/RpcProvider.ts";
+import type { ResourceBinding } from "../../Resource.ts";
 import { sha256Object } from "../../Util/sha256.ts";
 import { normalizeNulls } from "../../Util/stable.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -16,7 +17,6 @@ import type {
   ContainerApplication,
   DevContainerImage,
 } from "./ContainerApplication.ts";
-import { isInlineDockerfile } from "../../Docker/Dockerfile.ts";
 import {
   createContainerApplicationName,
   makeContainerEnv,

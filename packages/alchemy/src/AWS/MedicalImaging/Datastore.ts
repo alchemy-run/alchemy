@@ -110,7 +110,9 @@ export class DatastoreNotReady extends Data.TaggedError("DatastoreNotReady")<{
  */
 export class DatastoreIncomplete extends Data.TaggedError(
   "DatastoreIncomplete",
-)<{ message: string }> {}
+)<{
+  message: string;
+}> {}
 
 /** CreateDatastore requires a client token; derive it from the instance id
  * so engine retries of the same instance are idempotent. */

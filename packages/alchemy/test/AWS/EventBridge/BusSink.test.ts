@@ -1,5 +1,3 @@
-import * as AWS from "@/AWS";
-import * as Test from "@/Test/Alchemy";
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import * as SQS from "@distilled.cloud/aws/sqs";
 import { expect } from "alchemy-test";
@@ -8,6 +6,8 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpBody from "effect/unstable/http/HttpBody";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
 import { BusSinkFunction, BusSinkFunctionLive } from "./sink-handler.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });

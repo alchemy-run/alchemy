@@ -235,7 +235,10 @@ export const DBProxyTargetGroupProvider = () =>
                         const targetGroupName =
                           group.TargetGroupName ?? "default";
                         const { observedClusters, observedInstances } =
-                          yield* readTargets({ dbProxyName, targetGroupName });
+                          yield* readTargets({
+                            dbProxyName,
+                            targetGroupName,
+                          });
                         return {
                           dbProxyName: group.DBProxyName ?? dbProxyName,
                           targetGroupName,

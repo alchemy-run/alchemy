@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import * as Alchemy from "@/index.ts";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as AWS from "@/AWS";
+import * as Alchemy from "@/index.ts";
+import * as Test from "@/Test/Alchemy";
 import {
   materializeIsolatedProject,
   removeIsolatedProject,

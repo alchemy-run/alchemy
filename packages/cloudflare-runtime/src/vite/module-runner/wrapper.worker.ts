@@ -3,7 +3,6 @@ import {
   WorkerEntrypoint,
   WorkflowEntrypoint,
 } from "cloudflare:workers";
-
 import { INIT_PATH } from "./constants.shared.ts";
 import type { Env as WrapperEnv } from "./env.worker.ts";
 import { stripInternalEnv } from "./env.worker.ts";

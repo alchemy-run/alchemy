@@ -1,7 +1,7 @@
 import * as S3 from "@distilled.cloud/aws/s3";
 import * as Layer from "effect/Layer";
-import { makeBucketHttpBinding } from "./BindingHttp.ts";
 import { AbortMultipartUpload } from "./AbortMultipartUpload.ts";
+import { makeBucketHttpBinding } from "./BindingHttp.ts";
 
 export const AbortMultipartUploadHttp = Layer.effect(
   AbortMultipartUpload,

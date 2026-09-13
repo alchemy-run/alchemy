@@ -1,3 +1,5 @@
+import * as NodeCrypto from "node:crypto";
+import { createRequire } from "node:module";
 import type {
   BindingHook,
   BindingServices,
@@ -7,7 +9,6 @@ import type {
   QueueConsumer as RuntimeQueueConsumer,
   RuntimeServices,
 } from "@alchemy.run/cloudflare-runtime/core";
-import * as FrameworkCore from "../core/index.ts";
 import type * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -17,9 +18,8 @@ import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
 import type * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
-import * as NodeCrypto from "node:crypto";
-import { createRequire } from "node:module";
 import { runBuildChild } from "../core/BuildChild.ts";
+import * as FrameworkCore from "../core/index.ts";
 import { makeWakuCloudflareTarget } from "./cloudflare.ts";
 import { layer as wakuFrameworkLayer } from "./Waku.ts";
 

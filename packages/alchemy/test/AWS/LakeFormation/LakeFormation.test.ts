@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import * as Test from "@/Test/Alchemy";
 import * as iam from "@distilled.cloud/aws/iam";
 import * as lf from "@distilled.cloud/aws/lakeformation";
 import * as sts from "@distilled.cloud/aws/sts";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -77,7 +77,9 @@ describe.sequential("LakeFormation", () => {
             });
             const settings = yield* AWS.LakeFormation.DataLakeSettings(
               "Settings",
-              { dataLakeAdmins: [role.roleArn] },
+              {
+                dataLakeAdmins: [role.roleArn],
+              },
             );
             return { role, settings };
           }),
@@ -116,7 +118,9 @@ describe.sequential("LakeFormation", () => {
           Effect.gen(function* () {
             const settings = yield* AWS.LakeFormation.DataLakeSettings(
               "Admin",
-              { dataLakeAdmins: [admin] },
+              {
+                dataLakeAdmins: [admin],
+              },
             );
             const database = yield* AWS.Glue.Database("LfDb", {});
             const role = yield* AWS.IAM.Role("LfAnalyst", {
@@ -151,7 +155,9 @@ describe.sequential("LakeFormation", () => {
           Effect.gen(function* () {
             const settings = yield* AWS.LakeFormation.DataLakeSettings(
               "Admin",
-              { dataLakeAdmins: [admin] },
+              {
+                dataLakeAdmins: [admin],
+              },
             );
             const database = yield* AWS.Glue.Database("LfDb", {});
             const role = yield* AWS.IAM.Role("LfAnalyst", {
@@ -180,7 +186,9 @@ describe.sequential("LakeFormation", () => {
           Effect.gen(function* () {
             const settings = yield* AWS.LakeFormation.DataLakeSettings(
               "Admin",
-              { dataLakeAdmins: [admin] },
+              {
+                dataLakeAdmins: [admin],
+              },
             );
             const database = yield* AWS.Glue.Database("LfDb", {});
             const role = yield* AWS.IAM.Role("LfAnalyst", {
@@ -212,7 +220,9 @@ describe.sequential("LakeFormation", () => {
           Effect.gen(function* () {
             const settings = yield* AWS.LakeFormation.DataLakeSettings(
               "Admin",
-              { dataLakeAdmins: [admin] },
+              {
+                dataLakeAdmins: [admin],
+              },
             );
             const tag = yield* AWS.LakeFormation.LFTag("EnvTag", {
               catalogId: settings.catalogId,
@@ -257,7 +267,9 @@ describe.sequential("LakeFormation", () => {
           Effect.gen(function* () {
             const settings = yield* AWS.LakeFormation.DataLakeSettings(
               "Admin",
-              { dataLakeAdmins: [admin] },
+              {
+                dataLakeAdmins: [admin],
+              },
             );
             const tag = yield* AWS.LakeFormation.LFTag("EnvTag", {
               catalogId: settings.catalogId,
@@ -301,7 +313,9 @@ describe.sequential("LakeFormation", () => {
           Effect.gen(function* () {
             const settings = yield* AWS.LakeFormation.DataLakeSettings(
               "Admin",
-              { dataLakeAdmins: [admin] },
+              {
+                dataLakeAdmins: [admin],
+              },
             );
             return { settings };
           }),
@@ -334,7 +348,9 @@ describe.sequential("LakeFormation", () => {
           Effect.gen(function* () {
             const settings = yield* AWS.LakeFormation.DataLakeSettings(
               "Admin",
-              { dataLakeAdmins: [admin] },
+              {
+                dataLakeAdmins: [admin],
+              },
             );
             const tag = yield* AWS.LakeFormation.LFTag("ExprTag", {
               catalogId: settings.catalogId,
@@ -469,7 +485,9 @@ describe.sequential("LakeFormation", () => {
           Effect.gen(function* () {
             const settings = yield* AWS.LakeFormation.DataLakeSettings(
               "Admin",
-              { dataLakeAdmins: [admin] },
+              {
+                dataLakeAdmins: [admin],
+              },
             );
             return { settings };
           }),

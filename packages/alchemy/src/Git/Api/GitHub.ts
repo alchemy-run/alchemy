@@ -1,3 +1,4 @@
+import * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup";
 /**
  * The `github` group: a GitHub REST v3 facade at `/api/v3`, so `gh api`
  * and Octokit work against the host unmodified (DESIGN.md §5). The routes
@@ -5,7 +6,6 @@
  * success schema.
  */
 import * as Http from "../../Http/index.ts";
-import * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup";
 
 /** `GET /user`: the credential probe `gh` makes; answer it from your own user record. */
 export class GitHubUser extends Http.get<GitHubUser>()("user", "/user", {}) {}

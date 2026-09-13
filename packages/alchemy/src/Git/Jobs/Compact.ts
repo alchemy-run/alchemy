@@ -1,4 +1,5 @@
-import { LIVE_OBJECTS } from "../Store/ObjectStore.ts";
+import * as Effect from "effect/Effect";
+import { RuntimeContext } from "../../RuntimeContext.ts";
 /**
  * The compaction alarm job (DESIGN.md §12.1) — the v2 storage plane.
  *
@@ -29,8 +30,6 @@ import { LIVE_OBJECTS } from "../Store/ObjectStore.ts";
  * moved per alarm, and the job reports whether more remain.
  */
 import type { BlobStoreError, BlobStoreShape } from "../BlobStore.ts";
-import { RuntimeContext } from "../../RuntimeContext.ts";
-import * as Effect from "effect/Effect";
 import {
   concatBytes,
   bytesToHex,
@@ -40,6 +39,7 @@ import {
 } from "../Protocol/ObjectCodec.ts";
 import { StoreError } from "../Protocol/Store.ts";
 import { packKey, isWirePackId, packKeyOf } from "../Store/Keys.ts";
+import { LIVE_OBJECTS } from "../Store/ObjectStore.ts";
 import type { SqlClient } from "../Store/Sql.ts";
 
 /** Objects moved per alarm run. */

@@ -123,7 +123,9 @@ export const RouteCalculatorProvider = () =>
             const hydrated = yield* Effect.forEach(
               names,
               (name) => readCalculator(name),
-              { concurrency: 10 },
+              {
+                concurrency: 10,
+              },
             );
             return hydrated.filter(
               (attrs): attrs is RouteCalculator["Attributes"] =>

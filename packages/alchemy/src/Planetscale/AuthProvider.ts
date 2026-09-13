@@ -18,19 +18,19 @@ import {
   NeedsReauth,
   type ProviderDetails,
 } from "../Auth/AuthProvider.ts";
-import {
-  storedSecret,
-  storedValueText,
-  validateFieldValues,
-} from "../Auth/StoredAuthProvider.ts";
+import { browserOAuth } from "../Auth/BrowserOAuth.ts";
 import { displayRedacted } from "../Auth/Credentials.ts";
-import { withProfileCredentialsLock } from "../Auth/Lock.ts";
 import {
   getEnvRedactedRequired,
   getEnvRequired,
   mapPromptCancellation,
 } from "../Auth/Env.ts";
-import { browserOAuth } from "../Auth/BrowserOAuth.ts";
+import { withProfileCredentialsLock } from "../Auth/Lock.ts";
+import {
+  storedSecret,
+  storedValueText,
+  validateFieldValues,
+} from "../Auth/StoredAuthProvider.ts";
 import * as Interaction from "../Interaction.ts";
 import * as OAuthClient from "./OAuthClient.ts";
 

@@ -1,8 +1,8 @@
-import * as Railway from "@/Railway";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as pathe from "pathe";
+import * as Railway from "@/Railway";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 
@@ -49,12 +49,16 @@ describe("Railway.Website.SvelteKit local", () => {
         yield* expectUrlContains(
           `${url}/api/hello?echo=roundtrip`,
           "SVELTEKIT_AWS_API_MARKER",
-          { label: "api route (dev)" },
+          {
+            label: "api route (dev)",
+          },
         );
         yield* expectUrlContains(
           `${url}/prerendered`,
           "SVELTEKIT_AWS_PRERENDERED_MARKER",
-          { label: "extra route (dev)" },
+          {
+            label: "extra route (dev)",
+          },
         );
 
         yield* stack.destroy();

@@ -1,6 +1,6 @@
-import { createMiniflareFromRolldown } from "../../../../cloudflare-test-tools/src/miniflare/miniflare.ts";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { createMiniflareFromRolldown } from "../../../../cloudflare-test-tools/src/miniflare/miniflare.ts";
 import { buildFixture } from "./utils/build-fixture.ts";
 
 describe("module resolution", async () => {

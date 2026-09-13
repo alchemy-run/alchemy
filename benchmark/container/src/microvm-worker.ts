@@ -10,9 +10,9 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { BunMicrovm } from "./bun-image.ts";
-import { ExternalMicrovm } from "./external-image.ts";
 import { EffectfulBun } from "./effectful-bun.ts";
 import { EffectfulNode } from "./effectful-node.ts";
+import { ExternalMicrovm } from "./external-image.ts";
 import { NodeMicrovm } from "./node-image.ts";
 import { OpencodeMicrovm } from "./opencode-image.ts";
 
@@ -56,10 +56,7 @@ export default Cloudflare.Worker(
   Effect.gen(function* () {
     const rawReachable = (
       endpoint: string,
-      authToken: Record<
-        string,
-        string | Redacted.Redacted<string> | undefined
-      >,
+      authToken: Record<string, string | Redacted.Redacted<string> | undefined>,
     ) =>
       Effect.gen(function* () {
         const client = yield* HttpClient.HttpClient;
@@ -172,7 +169,8 @@ export default Cloudflare.Worker(
       external,
       opencode,
     };
-    const pick = (v: string | null): Variant => variants[v ?? ""] ?? effectfulBun;
+    const pick = (v: string | null): Variant =>
+      variants[v ?? ""] ?? effectfulBun;
 
     const boot = (v: Variant) =>
       Effect.gen(function* () {

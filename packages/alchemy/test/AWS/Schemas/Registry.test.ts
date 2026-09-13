@@ -1,18 +1,18 @@
+import * as schemas from "@distilled.cloud/aws/schemas";
+import { describe, expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
+import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import { AWSEnvironment } from "@/AWS/Environment.ts";
-import type { ScopedPlanStatusSession } from "@/Report.ts";
 import {
   normalizePolicyDocument,
   type PolicyDocument,
 } from "@/AWS/IAM/Policy.ts";
 import { Registry } from "@/AWS/Schemas";
 import * as Provider from "@/Provider";
+import type { ScopedPlanStatusSession } from "@/Report.ts";
 import * as Test from "@/Test/Alchemy";
-import * as schemas from "@distilled.cloud/aws/schemas";
-import { describe, expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Result from "effect/Result";
-import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 const stubSession = {

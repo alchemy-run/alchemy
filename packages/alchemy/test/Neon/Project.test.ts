@@ -1,9 +1,3 @@
-import * as Neon from "@/Neon";
-import { runSql, withPgClient } from "@/Neon/Migrations.ts";
-import { makePgMigrationExecutor } from "@/SQL/Migrations/index.ts";
-import * as Provider from "@/Provider";
-import { hashMigrations } from "@/SQL/SqlFile.ts";
-import * as Test from "@/Test/Alchemy";
 import { getProject } from "@distilled.cloud/neon";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -11,6 +5,12 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
+import * as Neon from "@/Neon";
+import { runSql, withPgClient } from "@/Neon/Migrations.ts";
+import * as Provider from "@/Provider";
+import { makePgMigrationExecutor } from "@/SQL/Migrations/index.ts";
+import { hashMigrations } from "@/SQL/SqlFile.ts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Neon.providers() });
 

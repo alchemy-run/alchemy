@@ -1,5 +1,5 @@
-import * as Effect from "effect/Effect";
 import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
@@ -15,18 +15,18 @@ import type { HttpClientResponse } from "effect/unstable/http/HttpClientResponse
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import type { ChildProcessHandle } from "effect/unstable/process/ChildProcessSpawner";
 import type * as rolldown from "rolldown";
-import { AlchemyContext } from "../AlchemyContext.ts";
 import { Unowned } from "../AdoptPolicy.ts";
+import { AlchemyContext } from "../AlchemyContext.ts";
 import * as Bundle from "../Bundle/Bundle.ts";
 import { findCwdForBundle } from "../Bundle/TempRoot.ts";
-import { createPhysicalName } from "../PhysicalName.ts";
 import { isResolved } from "../Diff.ts";
 import { HttpServer, type HttpEffect } from "../Http.ts";
 import type { InputProps } from "../Input.ts";
+import * as ProviderLayer from "../Local/ProviderLayer.ts";
 import * as Output from "../Output.ts";
+import { createPhysicalName } from "../PhysicalName.ts";
 import { Platform, type Main, type PlatformProps } from "../Platform.ts";
 import * as Provider from "../Provider.ts";
-import * as ProviderLayer from "../Local/ProviderLayer.ts";
 import { Resource, type ResourceBinding } from "../Resource.ts";
 import { RuntimeContext } from "../RuntimeContext.ts";
 import type * as Server from "../Server/index.ts";
@@ -38,12 +38,12 @@ import {
   isNotFound,
   type PrismaManagementClient,
 } from "./Client.ts";
+import { createComputeArchive, normalizeEntrypoint } from "./ComputeArchive.ts";
 import {
   runBuildCommand,
   runComputeAutoBuild,
   type ComputeAutoBuildFramework,
 } from "./ComputeBuild.ts";
-import { createComputeArchive, normalizeEntrypoint } from "./ComputeArchive.ts";
 import {
   destroyApp,
   destroyDeployment,
@@ -51,10 +51,7 @@ import {
   toDeploymentUrl,
   waitForDeploymentStatus,
 } from "./ComputeLifecycle.ts";
-import {
-  startDeploymentIdempotent,
-  stopDeploymentIdempotent,
-} from "./Internal/DeploymentActions.ts";
+import { readUploadArtifact, uploadArtifact } from "./Deployment.ts";
 import { ensureAppImmutableIdentity } from "./Internal/AppIdentity.ts";
 import {
   promoteAppObserved,
@@ -62,6 +59,10 @@ import {
 } from "./Internal/AppPromotion.ts";
 import { normalizeBundleFilePath } from "./Internal/BundlePaths.ts";
 import { aggregateCleanupFailure } from "./Internal/CleanupFailure.ts";
+import {
+  startDeploymentIdempotent,
+  stopDeploymentIdempotent,
+} from "./Internal/DeploymentActions.ts";
 import { ensureDeploymentMembership } from "./Internal/DeploymentIdentity.ts";
 import { observeDeployment } from "./Internal/DeploymentObserve.ts";
 import { tailDeploymentLogs } from "./PrismaLogs.ts";
@@ -80,7 +81,6 @@ import type {
   EnvironmentVariable as ApiEnvironmentVariable,
   PrismaRegionId,
 } from "./Types.ts";
-import { readUploadArtifact, uploadArtifact } from "./Deployment.ts";
 
 type ObservedDeployment = Omit<ApiDeployment, "createdAt"> & {
   createdAt?: string;

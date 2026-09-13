@@ -1,5 +1,4 @@
 import { Server } from "foldkit/experimental";
-
 import { renderPage } from "./entry.server.ts";
 
 // Minimal binding shape, so the example needs no Workers type package.

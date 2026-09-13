@@ -1,7 +1,7 @@
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
 import * as Layer from "effect/Layer";
+import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import { isBindingHost } from "../Lambda/Function.ts";

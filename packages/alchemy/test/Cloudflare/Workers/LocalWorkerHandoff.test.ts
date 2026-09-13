@@ -1,15 +1,15 @@
-import * as Cloudflare from "@/Cloudflare";
-import * as Alchemy from "@/index.ts";
-import * as Test from "@/Test/Alchemy";
+import * as Os from "node:os";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as Option from "effect/Option";
-import * as Os from "node:os";
+import * as Cloudflare from "@/Cloudflare";
+import * as Alchemy from "@/index.ts";
+import * as Test from "@/Test/Alchemy";
 import HandoffWorkerLive, {
   HandoffWorker,
   setDeployN,

@@ -1,3 +1,6 @@
+import { describe, expect, it } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 /**
  * The Repository block's seams, as the docs show them: a route of your
  * own over `Git.GitRepo`, and a decorated namespace that hooks pushes.
@@ -5,9 +8,6 @@
  */
 import * as Git from "@/Git/index.ts";
 import * as Http from "@/Http/index.ts";
-import { describe, expect, it } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import { RuntimeContext } from "@/RuntimeContext.ts";
 
 // ── a route of your own ──────────────────────────────────────────────────────

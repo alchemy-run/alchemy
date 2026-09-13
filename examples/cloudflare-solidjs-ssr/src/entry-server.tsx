@@ -1,5 +1,5 @@
-import { renderToStringAsync, generateHydrationScript } from "solid-js/web";
 import { StaticRouter } from "@solidjs/router";
+import { renderToStringAsync, generateHydrationScript } from "solid-js/web";
 import App from "./app";
 import { routes } from "./routes";
 

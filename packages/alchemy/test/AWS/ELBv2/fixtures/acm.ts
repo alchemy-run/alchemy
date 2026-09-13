@@ -6,7 +6,9 @@ import * as Stream from "effect/Stream";
 
 class CertificateImportFailed extends Data.TaggedError(
   "CertificateImportFailed",
-)<{ readonly domainName: string }> {}
+)<{
+  readonly domainName: string;
+}> {}
 
 /**
  * Find an existing imported test certificate by domain (a previous run may

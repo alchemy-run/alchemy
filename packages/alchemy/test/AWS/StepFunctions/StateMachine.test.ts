@@ -1,6 +1,3 @@
-import * as AWS from "@/AWS";
-import { StateMachine } from "@/AWS/StepFunctions";
-import * as Test from "@/Test/Alchemy";
 import * as iam from "@distilled.cloud/aws/iam";
 import * as sfn from "@distilled.cloud/aws/sfn";
 import { expect } from "alchemy-test";
@@ -8,6 +5,9 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { StateMachine } from "@/AWS/StepFunctions";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -16,7 +16,9 @@ const plain = (value: string | Redacted.Redacted<string>): string =>
 
 class StateMachineStillExists extends Data.TaggedError(
   "StateMachineStillExists",
-)<{ readonly stateMachineArn: string }> {}
+)<{
+  readonly stateMachineArn: string;
+}> {}
 
 // Deletion is asynchronous and slow — a machine stays visible in DELETING
 // for minutes after deleteStateMachine returns. Deletion having been

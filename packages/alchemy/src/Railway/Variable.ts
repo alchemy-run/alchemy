@@ -1,4 +1,3 @@
-import { waitUntilDeleted } from "./GraphQL.ts";
 import { createHash } from "node:crypto";
 import * as railway from "@distilled.cloud/railway";
 import * as Data from "effect/Data";
@@ -9,6 +8,7 @@ import { Unowned } from "../AdoptPolicy.ts";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
+import { waitUntilDeleted } from "./GraphQL.ts";
 import { createRailwayName, matchesAlchemyPhysicalName } from "./Metadata.ts";
 import {
   ownedProjects,

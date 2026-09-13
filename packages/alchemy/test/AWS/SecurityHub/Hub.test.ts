@@ -1,10 +1,10 @@
+import * as securityhub from "@distilled.cloud/aws/securityhub";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { Hub } from "@/AWS/SecurityHub/Hub.ts";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import * as securityhub from "@distilled.cloud/aws/securityhub";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 import { makeSecurityHubTestLease } from "./TestLease.ts";
 
 const { test, beforeAll, afterAll } = Test.make({ providers: AWS.providers() });

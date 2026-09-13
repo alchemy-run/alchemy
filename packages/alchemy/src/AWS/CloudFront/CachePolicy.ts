@@ -2,10 +2,10 @@ import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import { isResolved } from "../../Diff.ts";
-import { toWireSeconds } from "../../Util/Duration.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { toWireSeconds } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
 
 export interface CachePolicyProps {

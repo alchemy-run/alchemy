@@ -1,7 +1,7 @@
-import { proxyChain } from "@/Util/proxy-chain.ts";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import { proxyChain } from "@/Util/proxy-chain.ts";
 
 const TIMEOUT = 5_000;
 

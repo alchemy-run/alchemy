@@ -1,14 +1,3 @@
-/**
- * Tier-3 — the money suite (DESIGN.md §9 steps 1–14): the real `git` binary
- * driven via the Effect `ChildProcess` service against a deployed
- * git-service stack, work-trees under `FileSystem.makeTempDirectory`.
- *
- * Every git invocation is bounded (60s command timeout inside ≤120s tests);
- * slow cases are `skipIf(process.env.FAST)`. `NO_DESTROY=1` keeps the
- * deployment between local iterations.
- */
-import * as Cloudflare from "@/Cloudflare";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -21,7 +10,18 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
+/**
+ * Tier-3 — the money suite (DESIGN.md §9 steps 1–14): the real `git` binary
+ * driven via the Effect `ChildProcess` service against a deployed
+ * git-service stack, work-trees under `FileSystem.makeTempDirectory`.
+ *
+ * Every git invocation is bounded (60s command timeout inside ≤120s tests);
+ * slow cases are `skipIf(process.env.FAST)`. `NO_DESTROY=1` keeps the
+ * deployment between local iterations.
+ */
+import * as Cloudflare from "@/Cloudflare";
 import { GitApi, type Oid } from "@/Git/Api.ts";
+import * as Test from "@/Test/Alchemy";
 import { makeTestStack, TEST_SECRET } from "./fixtures/stack.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({

@@ -1,7 +1,7 @@
 import * as ssm from "@distilled.cloud/aws/ssm-contacts";
 import * as Layer from "effect/Layer";
-import { makeContactChannelHttpBinding } from "./BindingHttp.ts";
 import { ActivateContactChannel } from "./ActivateContactChannel.ts";
+import { makeContactChannelHttpBinding } from "./BindingHttp.ts";
 
 export const ActivateContactChannelHttp = Layer.effect(
   ActivateContactChannel,

@@ -1,13 +1,13 @@
-import * as AWS from "@/AWS";
-import { AWSEnvironment } from "@/AWS/Environment";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as healthlake from "@distilled.cloud/aws/healthlake";
 import * as s3 from "@distilled.cloud/aws/s3";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as AWS from "@/AWS";
+import { AWSEnvironment } from "@/AWS/Environment";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import HealthLakeTestFunctionLive, {
   HealthLakeTestFunction,
   IMPORT_PREFIX,
@@ -215,7 +215,10 @@ test.provider.skipIf(!process.env.AWS_TEST_HEALTHLAKE)(
         // DescribeFHIRImportJob — the job is observable immediately.
         const describedImport = (yield* getJson(
           `/describe-import?jobId=${importJob.jobId}`,
-        )) as { status?: string; errorTag?: string };
+        )) as {
+          status?: string;
+          errorTag?: string;
+        };
         expect(describedImport.errorTag).toBeUndefined();
         expect(describedImport.status).toBeTruthy();
 
@@ -249,7 +252,10 @@ test.provider.skipIf(!process.env.AWS_TEST_HEALTHLAKE)(
 
         const describedExport = (yield* getJson(
           `/describe-export?jobId=${exportJob.jobId}`,
-        )) as { status?: string; errorTag?: string };
+        )) as {
+          status?: string;
+          errorTag?: string;
+        };
         expect(describedExport.errorTag).toBeUndefined();
         expect(describedExport.status).toBeTruthy();
 

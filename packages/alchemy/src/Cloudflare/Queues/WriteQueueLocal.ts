@@ -4,8 +4,8 @@ import type * as HttpClient from "effect/unstable/http/HttpClient";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Credentials } from "../Credentials.ts";
 import type { Queue } from "./Queue.ts";
-import { makeWriteQueueHttpClient } from "./WriteQueueHttp.ts";
 import { WriteQueue } from "./WriteQueue.ts";
+import { makeWriteQueueHttpClient } from "./WriteQueueHttp.ts";
 
 /**
  * Local implementation of the {@link WriteQueue} binding — pushes messages

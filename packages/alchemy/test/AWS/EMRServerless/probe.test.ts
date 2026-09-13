@@ -1,8 +1,8 @@
-import * as AWS from "@/AWS";
-import * as Test from "@/Test/Alchemy";
 import * as emr from "@distilled.cloud/aws/emr-serverless";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

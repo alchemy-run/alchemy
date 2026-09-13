@@ -1,5 +1,5 @@
-import { RuntimeSubpathExportPlugin } from "../../internal/build-tools/RuntimeSubpathExportPlugin.ts";
 import { describe, expect, it } from "vitest";
+import { RuntimeSubpathExportPlugin } from "../../internal/build-tools/RuntimeSubpathExportPlugin.ts";
 
 describe("runtime subpath exports", () => {
   it.each([

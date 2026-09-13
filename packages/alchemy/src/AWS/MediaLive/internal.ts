@@ -10,7 +10,9 @@ import { diffTags } from "../../Tags.ts";
  */
 export class MediaLiveResourcePending extends Data.TaggedError(
   "MediaLiveResourcePending",
-)<{ message: string }> {}
+)<{
+  message: string;
+}> {}
 
 // Explicitly-typed pipeable retry helpers. Inlining `Effect.retry` in a
 // provider lifecycle op leaks `Retry.Return`'s conditional into declaration
@@ -44,7 +46,9 @@ export const retryWhileConflict = <A, E extends { readonly _tag: string }, R>(
  */
 export class MediaLiveIncompleteResponse extends Data.TaggedError(
   "MediaLiveIncompleteResponse",
-)<{ message: string }> {}
+)<{
+  message: string;
+}> {}
 
 /** Narrow an optional wire field to defined with a typed failure. */
 export const ensurePresent = <T>(

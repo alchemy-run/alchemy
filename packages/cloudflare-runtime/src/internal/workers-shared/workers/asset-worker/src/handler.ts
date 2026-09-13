@@ -14,6 +14,8 @@ import {
   TemporaryRedirectResponse,
 } from "../../../shared/responses.ts";
 import { mockJaegerBinding } from "../../../shared/tracing.ts";
+import type { AssetConfig } from "../../../shared/types.ts";
+import type { Analytics, ServedBy } from "./analytics.ts";
 import {
   flagIsEnabled,
   SEC_FETCH_MODE_NAVIGATE_HEADER_PREFERS_ASSET_SERVING,
@@ -23,8 +25,6 @@ import {
   generateRedirectsMatcher,
   staticRedirectsMatcher,
 } from "./utils/rules-engine.ts";
-import type { AssetConfig } from "../../../shared/types.ts";
-import type { Analytics, ServedBy } from "./analytics.ts";
 import type EntrypointType from "./worker.ts";
 import type { Env } from "./worker.ts";
 
@@ -1067,9 +1067,7 @@ const handleRedirects = (
         const destination = new URL(to, request.url);
         const location =
           destination.origin === new URL(request.url).origin
-            ? `${destination.pathname}${destination.search || search}${
-                destination.hash
-              }`
+            ? `${destination.pathname}${destination.search || search}${destination.hash}`
             : `${destination.href.slice(0, destination.href.length - (destination.search.length + destination.hash.length))}${
                 destination.search ? destination.search : search
               }${destination.hash}`;

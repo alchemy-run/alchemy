@@ -1,9 +1,9 @@
-import * as Bundle from "@/Bundle/Bundle";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, layer } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Result from "effect/Result";
+import * as Bundle from "@/Bundle/Bundle";
 import {
   isolatedProject,
   materializeIsolatedProject,

@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import { PublicRepository } from "@/AWS/ECRPublic";
-import * as Test from "@/Test/Alchemy";
 import * as ecrpublic from "@distilled.cloud/aws/ecr-public";
 import { Region } from "@distilled.cloud/aws/Region";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { PublicRepository } from "@/AWS/ECRPublic";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

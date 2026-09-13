@@ -1,8 +1,8 @@
-import { VpcId } from "@/AWS/EC2";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { VpcId } from "@/AWS/EC2";
 
 class DefaultVpcNotVisible extends Data.TaggedError(
   "DefaultVpcNotVisible",

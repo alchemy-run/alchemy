@@ -4,9 +4,9 @@ import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
+import type { Output as OutputType } from "../../Output.ts";
 import { isBindingHost } from "../Lambda/Function.ts";
 import type { Bucket } from "../S3/Bucket.ts";
-import type { Output as OutputType } from "../../Output.ts";
 import {
   AthenaQueryFailed,
   Query,

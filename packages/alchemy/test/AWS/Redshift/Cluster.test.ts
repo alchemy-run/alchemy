@@ -1,13 +1,13 @@
-import * as AWS from "@/AWS";
-import type { SubnetId } from "@/AWS/EC2/Subnet.ts";
-import { Cluster, ClusterSubnetGroup } from "@/AWS/Redshift";
-import * as Test from "@/Test/Alchemy";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import * as redshift from "@distilled.cloud/aws/redshift";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import type { SubnetId } from "@/AWS/EC2/Subnet.ts";
+import { Cluster, ClusterSubnetGroup } from "@/AWS/Redshift";
+import * as Test from "@/Test/Alchemy";
 import { getDefaultVpc } from "../DefaultVpc.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });

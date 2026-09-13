@@ -3,8 +3,8 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
-import * as Schema from "effect/Schema";
 import * as Schedule from "effect/Schedule";
+import * as Schema from "effect/Schema";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
@@ -14,6 +14,7 @@ import { getStableContextDir } from "../../Bundle/TempRoot.ts";
 import { hashDirectory } from "../../Command/Memo.ts";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import { Docker } from "../../Docker/Docker.ts";
+import { isInlineDockerfile } from "../../Docker/Dockerfile.ts";
 import { repositoryFromImageRef } from "../../Docker/Registry.ts";
 import * as Provider from "../../Provider.ts";
 import { type ResourceBinding } from "../../Resource.ts";
@@ -26,7 +27,6 @@ import type {
   AnyContainerApplicationProps,
   ContainerApplication,
 } from "./ContainerApplication.ts";
-import { isInlineDockerfile } from "../../Docker/Dockerfile.ts";
 import {
   buildFinalDockerfile,
   bundleContainerProgram,

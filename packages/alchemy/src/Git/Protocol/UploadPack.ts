@@ -23,6 +23,7 @@
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { concatBytes, isOid, type Oid } from "./ObjectCodec.ts";
+import { packDataBytes, type PackEvent, writePack } from "./PackWriter.ts";
 import {
   decodePktLines,
   flushPkt,
@@ -31,7 +32,6 @@ import {
   pktText,
   ProtocolError,
 } from "./Pkt.ts";
-import { packDataBytes, type PackEvent, writePack } from "./PackWriter.ts";
 import { progressMessage, sidebandFrames } from "./Sideband.ts";
 import type { ClosureResult, ClosureSource, ObjectSource } from "./Store.ts";
 import { StoreError } from "./Store.ts";

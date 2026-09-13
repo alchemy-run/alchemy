@@ -1,23 +1,4 @@
-import {
-  Compute,
-  ComputeDevProvider,
-  ComputeProvider,
-  syncComputeEnvironment,
-  waitForDeploymentUrl,
-  type ComputeProps,
-} from "@/Prisma/Compute";
-import { Unowned } from "@/AdoptPolicy";
-import { AlchemyContext } from "@/AlchemyContext";
-import {
-  PrismaApiError,
-  PrismaClient,
-  type PrismaManagementClient,
-} from "@/Prisma/Client";
-import * as Output from "@/Output";
-import type { ResourceBinding } from "@/Resource";
-import { Stack } from "@/Stack";
-import { PlatformServices } from "@/Util/PlatformServices";
-import type { Branch as ApiBranch } from "@/Prisma/Types";
+import { gunzipSync } from "node:zlib";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -29,8 +10,27 @@ import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpBody from "effect/unstable/http/HttpBody";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
-import { gunzipSync } from "node:zlib";
 import { WebSocketServer } from "ws";
+import { Unowned } from "@/AdoptPolicy";
+import { AlchemyContext } from "@/AlchemyContext";
+import * as Output from "@/Output";
+import {
+  PrismaApiError,
+  PrismaClient,
+  type PrismaManagementClient,
+} from "@/Prisma/Client";
+import {
+  Compute,
+  ComputeDevProvider,
+  ComputeProvider,
+  syncComputeEnvironment,
+  waitForDeploymentUrl,
+  type ComputeProps,
+} from "@/Prisma/Compute";
+import type { Branch as ApiBranch } from "@/Prisma/Types";
+import type { ResourceBinding } from "@/Resource";
+import { Stack } from "@/Stack";
+import { PlatformServices } from "@/Util/PlatformServices";
 
 const testBranch = (
   id: string,
@@ -531,9 +531,7 @@ describe("Prisma Compute", () => {
 
   it.live("bounds the inspected prefix of a large Prisma edge 404", () => {
     let requests = 0;
-    const hugeBody = `${"There is no service on this URL"}${"x".repeat(
-      256 * 1024,
-    )}`;
+    const hugeBody = `${"There is no service on this URL"}${"x".repeat(256 * 1024)}`;
     const http = HttpClient.make((request) => {
       requests += 1;
       return requests === 1
@@ -3866,7 +3864,10 @@ describe("Prisma Compute", () => {
           client,
           "project-1",
           "production",
-          { A: "one", B: "two" },
+          {
+            A: "one",
+            B: "two",
+          },
         ).pipe(Effect.flip);
 
         expect(error).toBe(createError);
@@ -3899,7 +3900,10 @@ describe("Prisma Compute", () => {
         client,
         "project-1",
         "production",
-        { A: "one", B: "two" },
+        {
+          A: "one",
+          B: "two",
+        },
       ).pipe(Effect.flip);
 
       expect(error).toBeInstanceOf(AggregateError);
@@ -3937,7 +3941,10 @@ describe("Prisma Compute", () => {
         client,
         "project-1",
         "production",
-        { A: "one", B: "two" },
+        {
+          A: "one",
+          B: "two",
+        },
       ).pipe(Effect.flip);
 
       expect((error as Error).message).toContain("is not owned");

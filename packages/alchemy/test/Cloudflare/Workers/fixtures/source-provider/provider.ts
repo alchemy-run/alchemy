@@ -1,11 +1,11 @@
+import * as crypto from "node:crypto";
+import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import type * as Bundle from "@/Bundle/Bundle.ts";
 import type {
   SourceProvider,
   WorkerSourceModule,
 } from "@/Cloudflare/Workers/Source.ts";
-import * as Effect from "effect/Effect";
-import * as Stream from "effect/Stream";
-import * as crypto from "node:crypto";
 
 /**
  * Minimal external source-provider fixture for the loadSource unit

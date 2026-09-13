@@ -31,7 +31,9 @@ export default {
         .run();
       const all = await env.DB.prepare(
         "SELECT name FROM users ORDER BY name",
-      ).all<{ name: string }>();
+      ).all<{
+        name: string;
+      }>();
       const first = await env.DB.prepare(
         "SELECT COUNT(*) AS n FROM users",
       ).first<{ n: number }>();
@@ -55,7 +57,9 @@ export default {
     if (url.pathname === "/users") {
       const rows = await env.DB.prepare(
         "SELECT name FROM users ORDER BY name",
-      ).all<{ name: string }>();
+      ).all<{
+        name: string;
+      }>();
       return Response.json({ users: rows.results.map((r) => r.name) });
     }
     return new Response("not found", { status: 404 });

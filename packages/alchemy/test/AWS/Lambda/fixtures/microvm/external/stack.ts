@@ -1,7 +1,7 @@
+import { fileURLToPath } from "node:url";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import * as Alchemy from "@/index.ts";
-import * as Effect from "effect/Effect";
-import { fileURLToPath } from "node:url";
 
 /**
  * External MicroVM stack: builds a user-provided Dockerfile + context

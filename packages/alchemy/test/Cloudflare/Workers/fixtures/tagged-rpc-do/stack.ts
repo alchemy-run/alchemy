@@ -1,6 +1,6 @@
+import * as Effect from "effect/Effect";
 import * as Cloudflare from "@/Cloudflare";
 import * as Alchemy from "@/index";
-import * as Effect from "effect/Effect";
 import WorkerALayer, { WorkerA } from "./workerA.ts";
 import WorkerB from "./workerB.ts";
 import WorkerCLayer, { WorkerC } from "./workerC.ts";

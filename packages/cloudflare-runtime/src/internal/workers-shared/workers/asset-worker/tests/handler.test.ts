@@ -2,11 +2,11 @@
 // This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
 import { describe, it, vi } from "vitest";
 import { mockJaegerBinding } from "../../../shared/tracing.ts";
+import type { AssetConfig } from "../../../shared/types.ts";
 import { Analytics } from "../src/analytics.ts";
 import { SEC_FETCH_MODE_NAVIGATE_HEADER_PREFERS_ASSET_SERVING } from "../src/compatibility-flags.ts";
 import { normalizeConfiguration } from "../src/configuration.ts";
 import { canFetch, handleRequest } from "../src/handler.ts";
-import type { AssetConfig } from "../../../shared/types.ts";
 
 const mockEnv = {
   JAEGER: mockJaegerBinding(),

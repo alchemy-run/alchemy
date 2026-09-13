@@ -1,3 +1,6 @@
+import { describe, expect, test } from "alchemy-test";
+import { PlanTree } from "@/Cli/components/view/PlanView.tsx";
+import { formatPlanLines } from "@/Cli/LoggingCli.ts";
 /**
  * Local-vs-live mode indicators in the plan/deploy renderers.
  *
@@ -13,11 +16,8 @@
  *   - mode-switch replacements always show the transition (`local → live`)
  */
 import { formatModeNote, modeLabel } from "@/Cli/ModeTag.ts";
-import { formatPlanLines } from "@/Cli/LoggingCli.ts";
-import { PlanTree } from "@/Cli/components/view/PlanView.tsx";
 import type { CRUD, Plan } from "@/Plan.ts";
 import type { ProviderMode } from "@/ProviderMode.ts";
-import { describe, expect, test } from "alchemy-test";
 
 describe("formatModeNote", () => {
   test("mode-agnostic rows (no resolved mode) show nothing", () => {

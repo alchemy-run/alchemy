@@ -1,9 +1,9 @@
-import * as Lambda from "@/AWS/Lambda";
-import * as SQS from "@/AWS/SQS";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as Lambda from "@/AWS/Lambda";
+import * as SQS from "@/AWS/SQS";
 
 // Minimal host Function for the EventSourceMapping `list()` test: it owns an
 // SQS Queue and subscribes to it via `consumeQueueMessages(queue, ...)`, which

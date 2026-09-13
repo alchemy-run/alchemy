@@ -1,9 +1,9 @@
-import * as AWS from "@/AWS";
-import { Cluster, ClusterPolicy } from "@/AWS/DSQL";
-import * as Test from "@/Test/Alchemy";
 import * as dsql from "@distilled.cloud/aws/dsql";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
+import { Cluster, ClusterPolicy } from "@/AWS/DSQL";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

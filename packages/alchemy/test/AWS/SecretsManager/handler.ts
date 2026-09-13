@@ -1,5 +1,3 @@
-import * as Lambda from "@/AWS/Lambda";
-import * as SecretsManager from "@/AWS/SecretsManager";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
@@ -8,6 +6,8 @@ import * as Schedule from "effect/Schedule";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as Lambda from "@/AWS/Lambda";
+import * as SecretsManager from "@/AWS/SecretsManager";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 

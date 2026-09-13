@@ -1,10 +1,10 @@
-import * as AWS from "@/AWS";
-import * as Test from "@/Test/Alchemy";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 
@@ -85,12 +85,16 @@ describe.skipIf(!runLive || runEmulated)("AWS.Website.Astro", () => {
         yield* expectUrlContains(
           `${url}/api/hello?echo=roundtrip`,
           "ASTRO_AWS_API_MARKER",
-          { label: "API route" },
+          {
+            label: "API route",
+          },
         );
         yield* expectUrlContains(
           `${url}/api/hello?echo=roundtrip`,
           "roundtrip",
-          { label: "API route query echo" },
+          {
+            label: "API route query echo",
+          },
         );
         // Public file served from S3 via the KV file manifest.
         yield* expectUrlContains(
@@ -105,7 +109,9 @@ describe.skipIf(!runLive || runEmulated)("AWS.Website.Astro", () => {
         yield* expectUrlContains(
           `${url}/prerendered/`,
           "ASTRO_AWS_PRERENDERED_MARKER",
-          { label: "prerendered page" },
+          {
+            label: "prerendered page",
+          },
         );
 
         const distributionId = deployed.site.distribution!.distributionId;

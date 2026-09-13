@@ -1,3 +1,5 @@
+import * as NodeCrypto from "node:crypto";
+import * as NodeOs from "node:os";
 import * as Floci from "@alchemy.run/floci";
 import * as DistilledAuth from "@distilled.cloud/aws/Auth";
 import type { CredentialsError } from "@distilled.cloud/aws/Credentials";
@@ -23,8 +25,6 @@ import * as Stream from "effect/Stream";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import { ChildProcess } from "effect/unstable/process";
 import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
-import * as NodeCrypto from "node:crypto";
-import * as NodeOs from "node:os";
 import {
   AuthError,
   AuthProviderLayer,
@@ -893,7 +893,9 @@ const loginSSO = (
       const process = Effect.gen(function* () {
         const [exitCode] = yield* Effect.all(
           [handle.exitCode, collectStdout, collectStderr],
-          { concurrency: 3 },
+          {
+            concurrency: 3,
+          },
         );
         if (exitCode !== 0) {
           const detail = (yield* Ref.get(stderr)).trim();

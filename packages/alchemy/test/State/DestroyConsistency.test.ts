@@ -1,3 +1,9 @@
+import { expect } from "alchemy-test";
+import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
 /**
  * Destroy/state consistency: a destroy that cannot see the stack's
  * persisted state must FAIL LOUDLY — never report "no changes" and leak
@@ -22,16 +28,10 @@ import { apply } from "@/Apply.ts";
 import { provideFreshArtifactStore } from "@/Artifacts";
 import * as Plan from "@/Plan.ts";
 import { Stack } from "@/Stack";
+import { Stage } from "@/Stage.ts";
 import * as State from "@/State/index";
 import { makeLocalState } from "@/State/LocalState.ts";
-import { Stage } from "@/Stage.ts";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Cause from "effect/Cause";
-import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
-import * as FileSystem from "effect/FileSystem";
-import * as Layer from "effect/Layer";
 import { TestLayers, TestResourceHooks } from "../test.resources.ts";
 
 const { test } = Test.make({ providers: TestLayers() });

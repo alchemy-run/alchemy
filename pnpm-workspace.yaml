@@ -258,11 +258,11 @@ minimumReleaseAgeExclude:
   - "@cloudflare/workerd-linux-arm64@1.20260901.1"
   - "@cloudflare/workerd-windows-64@1.20260901.1"
   - workerd@1.20260901.1
-  - '@typescript/typescript-darwin-arm64@7.1.0-dev.20260905.1'
-  - '@typescript/typescript-darwin-x64@7.1.0-dev.20260905.1'
-  - '@typescript/typescript-linux-arm64@7.1.0-dev.20260905.1'
-  - '@typescript/typescript-linux-arm@7.1.0-dev.20260905.1'
-  - '@typescript/typescript-linux-x64@7.1.0-dev.20260905.1'
-  - '@typescript/typescript-win32-arm64@7.1.0-dev.20260905.1'
-  - '@typescript/typescript-win32-x64@7.1.0-dev.20260905.1'
+  - "@typescript/typescript-darwin-arm64@7.1.0-dev.20260905.1"
+  - "@typescript/typescript-darwin-x64@7.1.0-dev.20260905.1"
+  - "@typescript/typescript-linux-arm64@7.1.0-dev.20260905.1"
+  - "@typescript/typescript-linux-arm@7.1.0-dev.20260905.1"
+  - "@typescript/typescript-linux-x64@7.1.0-dev.20260905.1"
+  - "@typescript/typescript-win32-arm64@7.1.0-dev.20260905.1"
+  - "@typescript/typescript-win32-x64@7.1.0-dev.20260905.1"
   - typescript@7.1.0-dev.20260905.1

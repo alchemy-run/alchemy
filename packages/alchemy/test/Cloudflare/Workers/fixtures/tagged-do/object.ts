@@ -1,6 +1,6 @@
+import * as Effect from "effect/Effect";
 import * as Cloudflare from "@/Cloudflare";
 import type { RuntimeContext } from "@/index";
-import * as Effect from "effect/Effect";
 
 export const MyDB = Cloudflare.D1.Database("MyDB");
 

@@ -1,6 +1,6 @@
 import type { Credentials } from "@distilled.cloud/aws/Credentials";
-import { Region } from "@distilled.cloud/aws/Region";
 import * as ec2 from "@distilled.cloud/aws/ec2";
+import { Region } from "@distilled.cloud/aws/Region";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Stream from "effect/Stream";
@@ -15,17 +15,17 @@ import { Resource } from "../../Resource.ts";
 import { Stack } from "../../Stack.ts";
 import { Stage } from "../../Stage.ts";
 import { createInternalTags, diffTags, hasTags } from "../../Tags.ts";
-import type { SecurityGroupId } from "../EC2/SecurityGroup.ts";
 import {
   createEc2HostRuntimeContext,
   createEc2HostedSupport,
   type Ec2HostRuntimeContext,
 } from "../EC2/hosted.ts";
+import type { SecurityGroupId } from "../EC2/SecurityGroup.ts";
 import type { AccountID } from "../Environment.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
+import { AWSEnvironment } from "../index.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
-import { AWSEnvironment } from "../index.ts";
 
 export type LaunchTemplateId = `lt-${string}`;
 export type LaunchTemplateName = string;

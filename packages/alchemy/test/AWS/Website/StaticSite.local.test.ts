@@ -1,10 +1,10 @@
-import * as AWS from "@/AWS";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as pathe from "pathe";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 
@@ -117,7 +117,9 @@ describe("AWS.Website.StaticSite local", () => {
         yield* expectUrlContains(
           `${url}/__dev-env`,
           "aws-staticsite-dev-env-marker",
-          { label: "dev.command env passthrough after live edit" },
+          {
+            label: "dev.command env passthrough after live edit",
+          },
         );
 
         yield* stack.destroy();

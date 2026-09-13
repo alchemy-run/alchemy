@@ -1,3 +1,17 @@
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Cloudflare from "@/Cloudflare";
+import {
+  BlobStoreR2,
+  GIT_WORKER_OPTIONS,
+  Handlers,
+  HasherInline,
+  Hooks,
+  ReposDurableObject,
+  RegistryDurableObject,
+  Server,
+} from "@/Git/index.ts";
 /**
  * A SECOND building-block assembly with a `Git.Hooks` in the graph: the
  * suite's middleware, plus one branch-protection rule. This is the
@@ -10,20 +24,6 @@
  * per entry module.
  */
 import * as Alchemy from "@/index.ts";
-import * as Cloudflare from "@/Cloudflare";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
-import {
-  BlobStoreR2,
-  GIT_WORKER_OPTIONS,
-  Handlers,
-  HasherInline,
-  Hooks,
-  ReposDurableObject,
-  RegistryDurableObject,
-  Server,
-} from "@/Git/index.ts";
 import { TestApi, TestAuthLive, TestCaller } from "./test-auth.ts";
 
 /**

@@ -1,12 +1,13 @@
-import type { InputProps } from "../../Input.ts";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import type { MemoOptions } from "../../Command/Memo.ts";
+import type { InputProps } from "../../Input.ts";
 import type { Input } from "../../Input.ts";
 import * as Namespace from "../../Namespace.ts";
 import * as Output from "../../Output.ts";
 import { ProviderModePolicy } from "../../ProviderMode.ts";
+import { Server, type ServerDevProps } from "../../Website/Server.ts";
 import { Table } from "../DynamoDB/Table.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import { EventSourceMapping } from "../Lambda/EventSourceMapping.ts";
@@ -18,8 +19,6 @@ import { Bucket } from "../S3/Bucket.ts";
 import { Queue } from "../SQS/Queue.ts";
 import { AssetDeployment } from "./AssetDeployment.ts";
 import { asRouterDomain, registerDevRouterRoute } from "./DevRouterRoute.ts";
-import { Server, type ServerDevProps } from "../../Website/Server.ts";
-import { makeKvSite, type StaticSiteProps } from "./StaticSite.ts";
 import {
   normalizeWebsiteDomain,
   type WebsiteAssetsConfig,
@@ -27,6 +26,7 @@ import {
   type WebsiteEdgeProps,
   type WebsiteInvalidationProps,
 } from "./shared.ts";
+import { makeKvSite, type StaticSiteProps } from "./StaticSite.ts";
 
 /**
  * The framework-integration module that drives the `@opennextjs/aws` build

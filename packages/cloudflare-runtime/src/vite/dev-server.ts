@@ -1,16 +1,5 @@
-import { DEFAULT_COMPATIBILITY_DATE } from "../core/internal/constants.ts";
-import { loadInternalWorker } from "../core/internal/internal-worker.ts";
-import type { ExportTypes } from "../rolldown/export-types.ts";
-import { EXPORT_TYPES_MODULE_ID } from "../rolldown/export-types.ts";
-import { MODULE_REFERENCE_REGEX } from "../rolldown/plugins/index.ts";
-import type { BindingHooks, Module } from "../core/index.ts";
-import * as Runtime from "../core/Runtime.ts";
-import * as RuntimeServices from "../core/RuntimeServices.ts";
-import * as DurableObjectNamespace from "../core/bindings/DurableObjectNamespace.ts";
-import * as Json from "../core/bindings/Json.ts";
-import * as Loopback from "../core/bindings/Loopback.ts";
-import * as UnsafeEval from "../core/bindings/UnsafeEval.ts";
-import { PlatformServices } from "../Platform.ts";
+import * as NodeFs from "node:fs/promises";
+import * as NodeHttp from "node:http";
 import * as Credentials from "@distilled.cloud/cloudflare/Credentials";
 import type * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -22,9 +11,20 @@ import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as Headers from "effect/unstable/http/Headers";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import * as NodeFs from "node:fs/promises";
-import * as NodeHttp from "node:http";
 import type * as vite from "vite";
+import * as DurableObjectNamespace from "../core/bindings/DurableObjectNamespace.ts";
+import * as Json from "../core/bindings/Json.ts";
+import * as Loopback from "../core/bindings/Loopback.ts";
+import * as UnsafeEval from "../core/bindings/UnsafeEval.ts";
+import type { BindingHooks, Module } from "../core/index.ts";
+import { DEFAULT_COMPATIBILITY_DATE } from "../core/internal/constants.ts";
+import { loadInternalWorker } from "../core/internal/internal-worker.ts";
+import * as Runtime from "../core/Runtime.ts";
+import * as RuntimeServices from "../core/RuntimeServices.ts";
+import { PlatformServices } from "../Platform.ts";
+import type { ExportTypes } from "../rolldown/export-types.ts";
+import { EXPORT_TYPES_MODULE_ID } from "../rolldown/export-types.ts";
+import { MODULE_REFERENCE_REGEX } from "../rolldown/plugins/index.ts";
 const ModuleRunnerWorker = {
   worker: () =>
     loadInternalWorker(

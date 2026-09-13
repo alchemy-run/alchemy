@@ -1,9 +1,9 @@
+import * as Effect from "effect/Effect";
 // Deep imports keep the Compute bundle lean: the `@/Prisma` barrel pulls in
 // the local dev-database machinery (@prisma/dev -> pglite), which balloons
 // the bundle and has no business inside a deployed app.
 import { Bucket } from "@/Prisma/Bucket.ts";
 import { Project } from "@/Prisma/Project.ts";
-import * as Effect from "effect/Effect";
 
 /**
  * Project owning the shared bucket. No default database is created — the

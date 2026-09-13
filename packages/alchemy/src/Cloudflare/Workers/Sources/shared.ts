@@ -1,7 +1,7 @@
+import { fileURLToPath } from "node:url";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Stream from "effect/Stream";
-import { fileURLToPath } from "node:url";
 import path from "pathe";
 import type * as Bundle from "../../../Bundle/Bundle.ts";
 import type {

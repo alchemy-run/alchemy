@@ -1,9 +1,9 @@
+import { describe, expect, test } from "vitest";
 import {
   configuredExportTypes,
   mergeExportTypes,
   renderExportWrappers,
 } from "../export-types.ts";
-import { describe, expect, test } from "vitest";
 
 describe("configuredExportTypes", () => {
   test("is empty without a worker config", () => {

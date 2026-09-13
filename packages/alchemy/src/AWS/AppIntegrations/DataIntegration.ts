@@ -143,7 +143,9 @@ export const DataIntegration = Resource<DataIntegration>(
  */
 export class DataIntegrationIncomplete extends Data.TaggedError(
   "DataIntegrationIncomplete",
-)<{ message: string }> {}
+)<{
+  message: string;
+}> {}
 
 export const DataIntegrationProvider = () =>
   Provider.effect(

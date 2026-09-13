@@ -255,7 +255,9 @@ export const ControlProvider = () =>
             const hydrated = yield* Effect.forEach(
               ids,
               (controlId) => readControlById(controlId),
-              { concurrency: 5 },
+              {
+                concurrency: 5,
+              },
             );
             return hydrated.flatMap((control) =>
               control === undefined ? [] : [toAttributes(control)],

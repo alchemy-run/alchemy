@@ -18,9 +18,9 @@
  * the notification publish ride the local Subscription.
  */
 import { afterAll, expect, test } from "bun:test";
-import { DevCli, fetchOk } from "alchemy-test/DevCli";
 import { spawnSync } from "node:child_process";
 import * as path from "node:path";
+import { DevCli, fetchOk } from "alchemy-test/DevCli";
 
 const root = path.resolve(import.meta.dirname, "..");
 const STAGE = "dev-cli-test";
@@ -47,7 +47,10 @@ test.skipIf(!dockerAvailable)(
     const url = await cli.pollUntil(
       "url in stack outputs",
       () => cli.outputUrl("url"),
-      { tries: 300, delayMs: 1000 },
+      {
+        tries: 300,
+        delayMs: 1000,
+      },
     );
 
     // Dev identity: the function URL is served locally, not by AWS
@@ -82,7 +85,10 @@ test.skipIf(!dockerAvailable)(
     // Read it back through the local DynamoDB storage.
     const job = (await (
       await fetchOk(new URL(`/?jobId=${created.jobId}`, api))
-    ).json()) as { id: string; content: string };
+    ).json()) as {
+      id: string;
+      content: string;
+    };
     expect(job.id).toBe(created.jobId);
     expect(job.content).toBe(content);
   },

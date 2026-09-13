@@ -1,8 +1,8 @@
-import { wrapWorkflowStep } from "@/Cloudflare/Workflows/WorkflowBridge.ts";
 import { describe, expect, it } from "alchemy-test";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import { wrapWorkflowStep } from "@/Cloudflare/Workflows/WorkflowBridge.ts";
 
 describe("WorkflowBridge", () => {
   it.effect("preserves native Workflow control-flow rejections", () =>

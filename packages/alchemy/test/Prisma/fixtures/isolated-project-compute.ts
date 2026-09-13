@@ -1,9 +1,9 @@
-// Deep imports keep the Compute bundle lean (see ./bucket.ts).
-import { Compute } from "@/Prisma/Compute.ts";
-import { Project } from "@/Prisma/Project.ts";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+// Deep imports keep the Compute bundle lean (see ./bucket.ts).
+import { Compute } from "@/Prisma/Compute.ts";
+import { Project } from "@/Prisma/Project.ts";
 import { isolatedProject } from "../../IsolatedProject.ts";
 
 /**

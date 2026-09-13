@@ -1,3 +1,4 @@
+import * as NodePath from "node:path";
 /**
  * `@alchemy.run/frontend-frameworks/waku/node` — the Node container deploy
  * target for the Waku integration.
@@ -15,16 +16,15 @@
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import * as NodePath from "node:path";
 import type { Config as WakuConfig } from "waku/config";
 import { runBuildChild } from "../core/BuildChild.ts";
+import { DeployTargetError, makeDeployTarget } from "../core/index.ts";
 import {
   NODE_BUNDLE_CONDITIONS,
   NODE_SERVE_ENTRY_FILE_NAME,
   relativeClientDirExpression,
   writeNodeServeEntry,
 } from "../core/NodeServe.ts";
-import { DeployTargetError, makeDeployTarget } from "../core/index.ts";
 import { make, type WakuTarget, type WakuTargetBuildContext } from "./Waku.ts";
 
 export type { WakuTarget, WakuTargetContext } from "./Waku.ts";

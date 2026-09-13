@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import { AccountConfiguration } from "@/AWS/ACM/AccountConfiguration.ts";
-import * as Test from "@/Test/Alchemy";
-import { Region as AwsRegion } from "@distilled.cloud/aws/Region";
 import * as acm from "@distilled.cloud/aws/acm";
+import { Region as AwsRegion } from "@distilled.cloud/aws/Region";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { AccountConfiguration } from "@/AWS/ACM/AccountConfiguration.ts";
+import * as Test from "@/Test/Alchemy";
 
 // The AccountConfiguration provider pins its calls to us-east-1; every
 // out-of-band ACM call in this file must target the same region.

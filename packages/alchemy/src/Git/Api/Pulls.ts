@@ -1,3 +1,5 @@
+import * as Schema from "effect/Schema";
+import * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup";
 /**
  * The `pulls` group: pull-request lifecycle + merge (DESIGN.md §5).
  *
@@ -9,8 +11,6 @@
  * server never writes conflict markers.
  */
 import * as Http from "../../Http/index.ts";
-import * as Schema from "effect/Schema";
-import * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup";
 import {
   BranchMissing,
   MergeConflict,

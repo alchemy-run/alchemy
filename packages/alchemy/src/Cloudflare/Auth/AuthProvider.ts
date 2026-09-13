@@ -1,6 +1,6 @@
 import * as cfAccounts from "@distilled.cloud/cloudflare/accounts";
-import * as cfMemberships from "@distilled.cloud/cloudflare/memberships";
 import * as CfCredentialsModule from "@distilled.cloud/cloudflare/Credentials";
+import * as cfMemberships from "@distilled.cloud/cloudflare/memberships";
 import * as Clock from "effect/Clock";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -20,22 +20,21 @@ import {
   type ConfigureMethod,
   type ProviderDetails,
 } from "../../Auth/AuthProvider.ts";
-import {
-  storedSecret,
-  storedValueText,
-  validateFieldValues,
-} from "../../Auth/StoredAuthProvider.ts";
+import { browserOAuth } from "../../Auth/BrowserOAuth.ts";
 import { CredentialsStore, displayRedacted } from "../../Auth/Credentials.ts";
-import { withProfileCredentialsLock } from "../../Auth/Lock.ts";
 import {
   getEnvRedacted,
   getEnvRequired,
   mapPromptCancellation,
 } from "../../Auth/Env.ts";
-import { browserOAuth } from "../../Auth/BrowserOAuth.ts";
+import { withProfileCredentialsLock } from "../../Auth/Lock.ts";
+import {
+  storedSecret,
+  storedValueText,
+  validateFieldValues,
+} from "../../Auth/StoredAuthProvider.ts";
 import * as Interaction from "../../Interaction.ts";
 import { CREDENTIALS_FILE as STATE_STORE_CREDENTIALS_FILE } from "../StateStore/CredentialsFile.ts";
-import * as OAuthClient from "./OAuthClient.ts";
 import {
   CLOUDFLARE_AUTH_PROVIDER_NAME,
   CloudflareAuthConfigSchema,
@@ -44,6 +43,7 @@ import {
   type CloudflareAuthConfig,
   type CloudflareResolvedCredentials,
 } from "./AuthConfig.ts";
+import * as OAuthClient from "./OAuthClient.ts";
 import {
   ALL_SCOPE_IDS,
   BASIC_SCOPES,

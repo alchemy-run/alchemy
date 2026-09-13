@@ -1,10 +1,10 @@
-import * as Cloudflare from "@/Cloudflare";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as ddos from "@distilled.cloud/cloudflare/ddos-protection";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import * as Cloudflare from "@/Cloudflare";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 

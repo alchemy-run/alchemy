@@ -7,10 +7,17 @@ export default defineConfig({
   useTabs: false,
   printWidth: 80,
   endOfLine: "lf",
+  trailingComma: "all",
   ternaries: true,
-  sortImports: false,
+  sortPackageJson: true,
+  insertFinalNewline: true,
+  embeddedLanguageFormatting: "auto",
+  sortImports: {
+    newlinesBetween: false,
+  },
   ignorePatterns: [
     "dist/**",
+    "./submodules",
     "*.min.js",
     "**/lib/**",
     "**/mdx/**",
@@ -22,8 +29,6 @@ export default defineConfig({
     "**/test-results/**",
     "examples/prisma-tanstack-start/src/prisma/contract.d.ts",
     "examples/prisma-tanstack-start/src/prisma/contract.json",
-    "**/package.json",
-    "./submodules",
     "**/fixtures/chart/templates/**",
   ],
 });

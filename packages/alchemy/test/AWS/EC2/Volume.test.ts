@@ -1,8 +1,3 @@
-import * as AWS from "@/AWS";
-import { Volume } from "@/AWS/EC2";
-import { Alias, Key, type AliasName } from "@/AWS/KMS";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import * as kms from "@distilled.cloud/aws/kms";
 import { expect } from "alchemy-test";
@@ -10,6 +5,11 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Volume } from "@/AWS/EC2";
+import { Alias, Key, type AliasName } from "@/AWS/KMS";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

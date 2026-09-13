@@ -6,9 +6,8 @@ import * as Stream from "effect/Stream";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import type { Providers } from "../Providers.ts";
 import { createInternalTags, tagRecord } from "../../Tags.ts";
-
+import type { Providers } from "../Providers.ts";
 import { syncTags } from "./common.ts";
 
 export interface DomainNameProps {

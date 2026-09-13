@@ -1,6 +1,6 @@
 import type { Credentials } from "@distilled.cloud/aws/Credentials";
-import type { Region } from "@distilled.cloud/aws/Region";
 import * as obs from "@distilled.cloud/aws/observabilityadmin";
+import type { Region } from "@distilled.cloud/aws/Region";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";

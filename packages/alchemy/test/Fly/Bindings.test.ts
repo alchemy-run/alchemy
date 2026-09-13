@@ -1,6 +1,3 @@
-import * as Fly from "@/Fly";
-import * as Alchemy from "@/index.ts";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -9,6 +6,9 @@ import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import type * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
+import * as Fly from "@/Fly";
+import * as Alchemy from "@/index.ts";
+import * as Test from "@/Test/Alchemy";
 import BindingsApi from "./fixtures/bindings-api.ts";
 import {
   BoxKey,

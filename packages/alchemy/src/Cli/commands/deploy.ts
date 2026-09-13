@@ -2,14 +2,12 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Command from "effect/unstable/cli/Command";
 import * as Flag from "effect/unstable/cli/Flag";
-
 import * as Drift from "../../Alchemist/routes/drift.ts";
 import * as Stacks from "../../Alchemist/routes/stack.ts";
 import { Cli } from "../../Report.ts";
 import * as CliKit from "../CliKit/index.ts";
 import { planDecisionScreen } from "../components/view/PlanDecision.tsx";
 import { stackOutputsView } from "../components/view/StackOutputs.tsx";
-
 import { exitDeclined } from "./errors.ts";
 import {
   configPath,

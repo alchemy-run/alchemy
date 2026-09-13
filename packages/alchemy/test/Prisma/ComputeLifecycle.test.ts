@@ -1,3 +1,5 @@
+import { describe, expect, it } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import { PrismaApiError, type PrismaManagementClient } from "@/Prisma/Client";
 import {
   destroyApp,
@@ -5,8 +7,6 @@ import {
   destroyProjectApps,
   waitForDeploymentStatus,
 } from "@/Prisma/ComputeLifecycle";
-import { describe, expect, it } from "alchemy-test";
-import * as Effect from "effect/Effect";
 
 const apiError = (
   method: "GET" | "POST" | "DELETE",
@@ -39,7 +39,10 @@ describe("Prisma canonical Compute lifecycle", () => {
         client,
         "deployment-1",
         "running",
-        { pollIntervalMs: 1, timeoutSeconds: 1 },
+        {
+          pollIntervalMs: 1,
+          timeoutSeconds: 1,
+        },
       );
       expect(result.status).toBe("running");
       expect(observed).toBe(2);
@@ -73,7 +76,10 @@ describe("Prisma canonical Compute lifecycle", () => {
         client,
         "deployment-1",
         "running",
-        { timeoutSeconds: 0.01, pollIntervalMs: 1 },
+        {
+          timeoutSeconds: 0.01,
+          pollIntervalMs: 1,
+        },
       ).pipe(Effect.flip);
       expect((error as Error).message).toContain("Timed out");
       expect((error as Error).message).toContain("provisioning");
@@ -91,7 +97,10 @@ describe("Prisma canonical Compute lifecycle", () => {
         client,
         "deployment-hung",
         "running",
-        { timeoutSeconds: 0.05, pollIntervalMs: 1 },
+        {
+          timeoutSeconds: 0.05,
+          pollIntervalMs: 1,
+        },
       ).pipe(Effect.flip);
       const elapsed = Date.now() - startedAt;
 
@@ -111,13 +120,17 @@ describe("Prisma canonical Compute lifecycle", () => {
         client,
         "deployment-1",
         "running",
-        { timeoutSeconds: 0 },
+        {
+          timeoutSeconds: 0,
+        },
       ).pipe(Effect.flip);
       const intervalError = yield* waitForDeploymentStatus(
         client,
         "deployment-1",
         "running",
-        { pollIntervalMs: Number.NaN },
+        {
+          pollIntervalMs: Number.NaN,
+        },
       ).pipe(Effect.flip);
 
       expect((timeoutError as Error).message).toContain("timeoutSeconds");

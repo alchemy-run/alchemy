@@ -8,8 +8,8 @@ import { AlchemyContext } from "../AlchemyContext.ts";
 import * as RpcProvider from "../Local/RpcProvider.ts";
 import { LOCAL_ID_PREFIX } from "../ProviderMode.ts";
 import { CloudflareEnvironment } from "./CloudflareEnvironment.ts";
-import type { Queue } from "./Queues/Queue.ts";
 import type { Consumer } from "./Queues/Consumer.ts";
+import type { Queue } from "./Queues/Queue.ts";
 
 export const LOCAL_ENTRY_URL = import.meta.resolve(
   // `import.meta.resolve(<string>)` is a runtime API — TypeScript's

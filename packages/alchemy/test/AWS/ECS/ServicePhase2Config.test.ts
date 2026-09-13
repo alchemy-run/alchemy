@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import { Cluster } from "@/AWS/ECS/Cluster.ts";
-import { Service } from "@/AWS/ECS/Service.ts";
-import * as Test from "@/Test/Alchemy";
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as ecs from "@distilled.cloud/aws/ecs";
 import * as sd from "@distilled.cloud/aws/servicediscovery";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
+import { Cluster } from "@/AWS/ECS/Cluster.ts";
+import { Service } from "@/AWS/ECS/Service.ts";
+import * as Test from "@/Test/Alchemy";
 import { getDefaultVpcNetwork } from "../DefaultVpc.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });

@@ -1,3 +1,4 @@
+import * as Data from "effect/Data";
 /**
  * The shared typed Step Functions program exercised by BOTH the live
  * `StateMachine.fromProgram` test and the in-process `Sfn.simulate` unit
@@ -8,7 +9,6 @@
  * and `Sfn.fail` + `Sfn.catchTag` (typed failure, recovered).
  */
 import { Sfn } from "@/AWS/StepFunctions";
-import * as Data from "effect/Data";
 
 export class OrderRejected extends Data.TaggedError("OrderRejected")<{
   readonly reason: string;

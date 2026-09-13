@@ -172,7 +172,10 @@ export const DataAutomationProject = Resource<DataAutomationProject>(
  */
 export class DataAutomationProjectFailed extends Data.TaggedError(
   "DataAutomationProjectFailed",
-)<{ projectArn: string; message: string }> {}
+)<{
+  projectArn: string;
+  message: string;
+}> {}
 
 export const DataAutomationProjectProvider = () =>
   Provider.effect(

@@ -1,3 +1,14 @@
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import os from "node:os";
+import path from "node:path";
 /**
  * Scripted terminal demo of the Alchemy CLI, recorded with tcut
  * (https://github.com/AmanVarshney01/tcut).
@@ -36,17 +47,6 @@
  * would (edit a file, watch the reload) and then sends Ctrl+C.
  */
 import { defineVideo } from "tcut";
-import {
-  chmodSync,
-  existsSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
-import os from "node:os";
-import path from "node:path";
 
 const here = path.dirname(new URL(import.meta.url).pathname);
 const realHome = path.join(os.homedir(), ".alchemy");
@@ -132,7 +132,9 @@ const writeCredentialEnvFile = () => {
   writeFileSync(
     envFile,
     `CLOUDFLARE_API_TOKEN=${token}\nCLOUDFLARE_ACCOUNT_ID=${accountId}\n`,
-    { mode: 0o600 },
+    {
+      mode: 0o600,
+    },
   );
   return { token, accountId };
 };
@@ -152,7 +154,9 @@ const deployedVisitsNamespace = () => {
   }
   const state = JSON.parse(
     readFileSync(path.join(stackDir, stage, "Visits.json"), "utf8"),
-  ) as { attr: { title: string; namespaceId: string; accountId: string } };
+  ) as {
+    attr: { title: string; namespaceId: string; accountId: string };
+  };
   return state.attr;
 };
 
@@ -418,7 +422,9 @@ export default defineVideo(
       const consentPage = /Select account\(s\)|Authorize/i;
       await t.browser.waitFor(
         new RegExp(`Sign in to Cloudflare|${consentPage.source}`, "i"),
-        { timeout: "60s" },
+        {
+          timeout: "60s",
+        },
       );
       const pageText = async () =>
         String(

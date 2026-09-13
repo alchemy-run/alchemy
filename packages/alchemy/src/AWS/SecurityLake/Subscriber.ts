@@ -146,7 +146,9 @@ export { SubscriberResource as Subscriber };
  */
 export class SubscriberCreateFailed extends Data.TaggedError(
   "SubscriberCreateFailed",
-)<{ readonly subscriberName: string }> {}
+)<{
+  readonly subscriberName: string;
+}> {}
 
 const buildAttrs = (subscriber: securitylake.SubscriberResource) => ({
   subscriberId: subscriber.subscriberId,

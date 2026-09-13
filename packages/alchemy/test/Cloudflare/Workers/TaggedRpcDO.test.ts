@@ -1,6 +1,3 @@
-import * as Cloudflare from "@/Cloudflare";
-import * as Test from "@/Test/Alchemy";
-import { poll } from "@/Util/poll.ts";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -13,6 +10,9 @@ import type { HttpClientResponse } from "effect/unstable/http/HttpClientResponse
 import * as RpcClient from "effect/unstable/rpc/RpcClient";
 import { RpcClientError } from "effect/unstable/rpc/RpcClientError";
 import * as RpcSerialization from "effect/unstable/rpc/RpcSerialization";
+import * as Cloudflare from "@/Cloudflare";
+import * as Test from "@/Test/Alchemy";
+import { poll } from "@/Util/poll.ts";
 import { CounterRpcs } from "./fixtures/tagged-rpc-do/group.ts";
 import Stack from "./fixtures/tagged-rpc-do/stack.ts";
 
@@ -198,7 +198,9 @@ const stack = beforeAll(
           resetHttp(urlB, "warmup"),
           resetHttp(urlC, "warmup"),
         ],
-        { concurrency: "unbounded" },
+        {
+          concurrency: "unbounded",
+        },
       ),
     ),
     // just give it some extra time to propagate

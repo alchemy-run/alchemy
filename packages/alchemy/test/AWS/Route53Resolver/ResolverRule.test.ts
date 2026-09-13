@@ -1,9 +1,9 @@
-import * as AWS from "@/AWS";
-import { ResolverEndpoint, ResolverRule } from "@/AWS/Route53Resolver";
-import * as Test from "@/Test/Alchemy";
 import * as r53r from "@distilled.cloud/aws/route53resolver";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
+import { ResolverEndpoint, ResolverRule } from "@/AWS/Route53Resolver";
+import * as Test from "@/Test/Alchemy";
 import {
   assertEndpointDeleting,
   assertRuleGone,

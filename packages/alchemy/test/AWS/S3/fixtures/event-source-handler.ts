@@ -1,10 +1,10 @@
-import * as Lambda from "@/AWS/Lambda";
-import * as S3 from "@/AWS/S3";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as Lambda from "@/AWS/Lambda";
+import * as S3 from "@/AWS/S3";
 
 // Keys written by the `fetch` route live under `incoming/`; the subscription
 // only listens to that prefix and writes its derived object under `processed/`.

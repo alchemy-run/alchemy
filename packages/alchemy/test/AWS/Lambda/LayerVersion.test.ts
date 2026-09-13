@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
-import { zipFiles } from "@/Util/zip.ts";
+import { fileURLToPath } from "node:url";
 import * as Lambda from "@distilled.cloud/aws/lambda";
 import * as S3 from "@distilled.cloud/aws/s3";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import { fileURLToPath } from "node:url";
+import * as AWS from "@/AWS";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
+import { zipFiles } from "@/Util/zip.ts";
 
 const layerV1Path = fileURLToPath(
   new URL("./fixtures/layer-v1", import.meta.url),

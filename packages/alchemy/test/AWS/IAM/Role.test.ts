@@ -1,12 +1,12 @@
+import * as IAM from "@distilled.cloud/aws/iam";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import { adopt } from "@/AdoptPolicy";
 import * as AWS from "@/AWS";
 import { Role } from "@/AWS/IAM";
 import * as Provider from "@/Provider";
 import { State } from "@/State";
 import * as Test from "@/Test/Alchemy";
-import * as IAM from "@distilled.cloud/aws/iam";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -196,7 +196,9 @@ test.provider("bindings can supply the role's trust policy", (stack) =>
     const live = yield* IAM.getRole({ RoleName: role.roleName });
     const trust = JSON.parse(
       decodeURIComponent(live.Role.AssumeRolePolicyDocument!),
-    ) as { Statement: Array<{ Principal?: { Service?: string } }> };
+    ) as {
+      Statement: Array<{ Principal?: { Service?: string } }>;
+    };
     expect(trust.Statement).toEqual(
       expect.arrayContaining([
         expect.objectContaining({

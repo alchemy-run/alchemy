@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import { Bucket } from "@/AWS/S3";
-import { AccessPoint } from "@/AWS/S3Control";
-import * as Test from "@/Test/Alchemy";
 import * as s3control from "@distilled.cloud/aws/s3-control";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Bucket } from "@/AWS/S3";
+import { AccessPoint } from "@/AWS/S3Control";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -21,7 +21,9 @@ const findAccessPoint = (name: string) =>
 
 class AccessPointStillExists extends Data.TaggedError(
   "AccessPointStillExists",
-)<{ readonly name: string }> {}
+)<{
+  readonly name: string;
+}> {}
 
 const assertAccessPointDeleted = (name: string) =>
   findAccessPoint(name).pipe(

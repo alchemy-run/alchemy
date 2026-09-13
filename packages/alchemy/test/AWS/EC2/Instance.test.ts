@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import { amazonLinux2023, Instance, Subnet, Vpc } from "@/AWS/EC2";
-import * as Provider from "@/Provider";
 import * as ec2 from "@distilled.cloud/aws/ec2";
-import * as Test from "./VpcTest.ts";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import * as AWS from "@/AWS";
+import { amazonLinux2023, Instance, Subnet, Vpc } from "@/AWS/EC2";
+import * as Provider from "@/Provider";
 import { assertInstanceTerminated, assertVpcGone } from "./Gone.ts";
+import * as Test from "./VpcTest.ts";
 
 // Two permits: the list test and the replacement test each hold a custom VPC
 // and may run concurrently within this file.

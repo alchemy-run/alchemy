@@ -1,3 +1,15 @@
+import { fileURLToPath } from "node:url";
+import * as acm from "@distilled.cloud/aws/acm";
+import * as cloudfront from "@distilled.cloud/aws/cloudfront";
+import { Credentials } from "@distilled.cloud/aws/Credentials";
+import type { RegionName } from "@distilled.cloud/aws/Region";
+import * as route53 from "@distilled.cloud/aws/route-53";
+import { describe, expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 /**
  * Wave 3 — Site→Router hostname binding.
  *
@@ -20,18 +32,6 @@ import * as Stack from "@/Stack";
 import { Stage } from "@/Stage";
 import { inMemoryState } from "@/State";
 import * as Test from "@/Test/Alchemy";
-import * as acm from "@distilled.cloud/aws/acm";
-import * as cloudfront from "@distilled.cloud/aws/cloudfront";
-import { Credentials } from "@distilled.cloud/aws/Credentials";
-import type { RegionName } from "@distilled.cloud/aws/Region";
-import * as route53 from "@distilled.cloud/aws/route-53";
-import { describe, expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Redacted from "effect/Redacted";
-import * as Schedule from "effect/Schedule";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import { fileURLToPath } from "node:url";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

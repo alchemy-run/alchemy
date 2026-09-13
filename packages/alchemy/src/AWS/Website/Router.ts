@@ -1,5 +1,5 @@
-import * as Effect from "effect/Effect";
 import { createHash } from "node:crypto";
+import * as Effect from "effect/Effect";
 import { toPath } from "../../FQN.ts";
 import type { Input } from "../../Input.ts";
 import * as Namespace from "../../Namespace.ts";
@@ -7,6 +7,7 @@ import * as Output from "../../Output.ts";
 import { Stack } from "../../Stack.ts";
 import { Stage } from "../../Stage.ts";
 import { Certificate } from "../ACM/Certificate.ts";
+import { CachePolicy } from "../CloudFront/CachePolicy.ts";
 import {
   Distribution,
   type DistributionBehavior,
@@ -16,7 +17,6 @@ import { Invalidation } from "../CloudFront/Invalidation.ts";
 import { KeyValueStore } from "../CloudFront/KeyValueStore.ts";
 import { KvEntries } from "../CloudFront/KvEntries.ts";
 import { KvRoutesUpdate } from "../CloudFront/KvRoutesUpdate.ts";
-import { CachePolicy } from "../CloudFront/CachePolicy.ts";
 import { MANAGED_ALL_VIEWER_EXCEPT_HOST_HEADER_POLICY_ID } from "../CloudFront/ManagedPolicies.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import { Record as Route53Record } from "../Route53/Record.ts";

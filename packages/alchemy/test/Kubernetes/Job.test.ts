@@ -1,10 +1,10 @@
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as AWS from "@/AWS";
 import * as Kubernetes from "@/Kubernetes";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 
 const testOptions = {
   providers: Layer.mergeAll(AWS.providers(), Kubernetes.providers()),

@@ -1,7 +1,7 @@
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 
 // AWS permits only one OAM sink per account and Region. Files still run in
 // parallel globally, but the distributed and Lambda quota lanes are separate

@@ -1,12 +1,12 @@
 import { useMemo, useState } from "@alchemy.run/sigil/react";
 import { useTerminalInput } from "../ui/index.ts";
-import { stackOutputLineCount } from "./StackOutputs.tsx";
 import {
   type PlanRow,
   type PlanTree,
   type PlanTreeState,
   type PlanView,
 } from "./PlanTree.ts";
+import { stackOutputLineCount } from "./StackOutputs.tsx";
 import { isTerminalStatus } from "./statusStyle.ts";
 
 export type VirtualPlanLine =
@@ -122,7 +122,10 @@ export const usePlanViewport = (options: {
         );
   const [manualOffsets, setManualOffsets] = useState<
     Record<PlanView, number | undefined>
-  >({ plan: undefined, output: undefined });
+  >({
+    plan: undefined,
+    output: undefined,
+  });
   const offset = virtual
     ? Math.min(maxOffset, manualOffsets[selectedView] ?? followedOffset)
     : 0;

@@ -1,9 +1,9 @@
-import * as AWS from "@/AWS";
-import { PublicDnsNamespace } from "@/AWS/CloudMap";
-import * as Test from "@/Test/Alchemy";
 import * as sd from "@distilled.cloud/aws/servicediscovery";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
+import { PublicDnsNamespace } from "@/AWS/CloudMap";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

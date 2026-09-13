@@ -1,3 +1,5 @@
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 /**
  * The Git host with its bytes on S3 (DESIGN §22): the same building-block
  * assembly as `stack.ts`, with `BlobStoreS3()` in place of R2. Needs BOTH
@@ -6,9 +8,6 @@
  */
 import * as AWS from "@/AWS";
 import * as Cloudflare from "@/Cloudflare";
-import * as Alchemy from "@/index.ts";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import {
   BlobStoreS3,
   GIT_WORKER_OPTIONS,
@@ -18,7 +17,7 @@ import {
   RegistryDurableObject,
   Server,
 } from "@/Git/index.ts";
-
+import * as Alchemy from "@/index.ts";
 import { TEST_SECRET, TestApi, TestAuthLive } from "./stack.ts";
 export { TEST_SECRET };
 

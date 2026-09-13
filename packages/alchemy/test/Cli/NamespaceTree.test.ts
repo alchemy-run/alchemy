@@ -1,5 +1,5 @@
-import { buildNamespaceTree, flattenTree } from "@/Cli/NamespaceTree.ts";
 import { describe, expect, test } from "alchemy-test";
+import { buildNamespaceTree, flattenTree } from "@/Cli/NamespaceTree.ts";
 import { createNode, replaceNode, updateNode } from "./PlanTestNodes.ts";
 
 describe("NamespaceTree YAML properties", () => {

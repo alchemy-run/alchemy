@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import { ConfigurationSet, ConfigurationSetEventDestination } from "@/AWS/SES";
-import { Topic } from "@/AWS/SNS";
-import * as Test from "@/Test/Alchemy";
 import * as sesv2 from "@distilled.cloud/aws/sesv2";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { ConfigurationSet, ConfigurationSetEventDestination } from "@/AWS/SES";
+import { Topic } from "@/AWS/SNS";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -16,7 +16,9 @@ const TRACKING_REDIRECT_DOMAIN = process.env.AWS_TEST_SES_REDIRECT_DOMAIN;
 
 class ConfigurationSetStillExists extends Data.TaggedError(
   "ConfigurationSetStillExists",
-)<{ readonly name: string }> {}
+)<{
+  readonly name: string;
+}> {}
 
 const assertConfigurationSetDeleted = (name: string) =>
   sesv2.getConfigurationSet({ ConfigurationSetName: name }).pipe(

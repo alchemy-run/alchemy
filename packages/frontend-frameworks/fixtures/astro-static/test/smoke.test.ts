@@ -1,6 +1,6 @@
+import { readFile } from "node:fs/promises";
 import * as Playwright from "@alchemy.run/cloudflare-test-tools/e2e/Playwright";
 import { expect, test } from "@playwright/test";
-import { readFile } from "node:fs/promises";
 
 // The static-output path: a pure `output: "static"` Astro site deploys
 // ASSETS-ONLY (no worker, `BuildOutput.serverModules` undefined/empty).

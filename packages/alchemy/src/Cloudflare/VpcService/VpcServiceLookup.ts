@@ -2,7 +2,6 @@ import * as connectivity from "@distilled.cloud/cloudflare/connectivity";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
-
 import * as Output from "../../Output.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { formatVpcService, type Attributes } from "./VpcService.ts";

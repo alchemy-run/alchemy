@@ -1,6 +1,3 @@
-import * as AWS from "@/AWS";
-import { connectEnvPrefix } from "@/AWS/ElastiCache";
-import * as Test from "@/Test/Alchemy";
 import * as ElastiCache from "@distilled.cloud/aws/elasticache";
 import * as Lambda from "@distilled.cloud/aws/lambda";
 import { expect } from "alchemy-test";
@@ -8,6 +5,9 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as AWS from "@/AWS";
+import { connectEnvPrefix } from "@/AWS/ElastiCache";
+import * as Test from "@/Test/Alchemy";
 import ElastiCacheTestFunctionLive, {
   ElastiCacheTestFunction,
   FixtureCache,
@@ -148,7 +148,10 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       const snapshot = (yield* getJson(
         `/snapshot?name=${SNAPSHOT_NAME}`,
         10,
-      )) as { name: string; status: string };
+      )) as {
+        name: string;
+        status: string;
+      };
       expect(snapshot.name).toBe(SNAPSHOT_NAME);
       expect(["creating", "available", "exists"]).toContain(snapshot.status);
       const describedSnapshots =

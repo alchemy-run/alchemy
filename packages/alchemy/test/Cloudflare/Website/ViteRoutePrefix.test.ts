@@ -1,3 +1,14 @@
+import * as dns from "@distilled.cloud/cloudflare/dns";
+import * as workers from "@distilled.cloud/cloudflare/workers";
+import { describe, expect } from "alchemy-test";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
+import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
+import * as pathe from "pathe";
 /**
  * Regression test for serving a Vite site on a zone route with a path
  * prefix.
@@ -17,17 +28,6 @@ import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
 import * as Test from "@/Test/Alchemy";
-import * as dns from "@distilled.cloud/cloudflare/dns";
-import * as workers from "@distilled.cloud/cloudflare/workers";
-import { describe, expect } from "alchemy-test";
-import * as Data from "effect/Data";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
-import { MinimumLogLevel } from "effect/References";
-import * as Schedule from "effect/Schedule";
-import * as Stream from "effect/Stream";
-import * as pathe from "pathe";
 import { cloneFixture } from "../Utils/Fixture.ts";
 import { waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
 

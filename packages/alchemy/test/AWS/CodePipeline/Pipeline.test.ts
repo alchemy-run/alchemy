@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import { Pipeline } from "@/AWS/CodePipeline/Pipeline.ts";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as codepipeline from "@distilled.cloud/aws/codepipeline";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
+import { Pipeline } from "@/AWS/CodePipeline/Pipeline.ts";
 import * as Output from "@/Output";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

@@ -1,8 +1,8 @@
 import { RuntimeContext } from "alchemy";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import { Database } from "@/index.ts";
 import { Drizzle } from "@/Drizzle.ts";
+import { Database } from "@/index.ts";
 
 describe("BetterAuth (drizzle)", () => {
   it.live("wraps an existing drizzle db via the official adapter", () =>

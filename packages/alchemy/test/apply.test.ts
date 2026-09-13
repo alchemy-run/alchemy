@@ -1,22 +1,3 @@
-import { Action } from "@/Action";
-import { adopt, Unowned } from "@/AdoptPolicy";
-import type { DestroyError } from "@/Apply";
-import { Cli } from "@/Report.ts";
-import * as Namespace from "@/Namespace.ts";
-import * as Output from "@/Output";
-import * as Provider from "@/Provider";
-import * as RemovalPolicy from "@/RemovalPolicy.ts";
-import { renamedFrom } from "@/Rename.ts";
-import { remote } from "@/ProviderMode.ts";
-import { Stack } from "@/Stack";
-import {
-  type CreatingResourceState,
-  type ReplacedResourceState,
-  type ReplacingResourceState,
-  type ResourceState,
-  State,
-} from "@/State";
-import * as Test from "@/Test/Alchemy";
 import { assert, describe, expect } from "alchemy-test";
 import { Data, Layer } from "effect";
 import * as Cause from "effect/Cause";
@@ -26,6 +7,25 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Redacted from "effect/Redacted";
+import { Action } from "@/Action";
+import { adopt, Unowned } from "@/AdoptPolicy";
+import type { DestroyError } from "@/Apply";
+import * as Namespace from "@/Namespace.ts";
+import * as Output from "@/Output";
+import * as Provider from "@/Provider";
+import { remote } from "@/ProviderMode.ts";
+import * as RemovalPolicy from "@/RemovalPolicy.ts";
+import { renamedFrom } from "@/Rename.ts";
+import { Cli } from "@/Report.ts";
+import { Stack } from "@/Stack";
+import {
+  type CreatingResourceState,
+  type ReplacedResourceState,
+  type ReplacingResourceState,
+  type ResourceState,
+  State,
+} from "@/State";
+import * as Test from "@/Test/Alchemy";
 import {
   AliasedWidget,
   aliasedWidgetDeletes,

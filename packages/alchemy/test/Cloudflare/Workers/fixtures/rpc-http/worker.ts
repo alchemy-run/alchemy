@@ -1,5 +1,3 @@
-import * as Cloudflare from "@/Cloudflare";
-import type { HttpEffect } from "@/Http";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
@@ -7,6 +5,8 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as RpcClient from "effect/unstable/rpc/RpcClient";
 import * as RpcSerialization from "effect/unstable/rpc/RpcSerialization";
 import * as RpcServer from "effect/unstable/rpc/RpcServer";
+import * as Cloudflare from "@/Cloudflare";
+import type { HttpEffect } from "@/Http";
 import { DoRpcs, WorkerRpcs } from "./group.ts";
 import RpcHttpTestObject from "./object.ts";
 

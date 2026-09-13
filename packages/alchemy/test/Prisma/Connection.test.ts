@@ -1,4 +1,9 @@
+import { describe, expect, it } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
 import { Unowned } from "@/AdoptPolicy";
+import { AlchemyContext } from "@/AlchemyContext";
 import {
   PrismaApiError,
   PrismaClient,
@@ -10,11 +15,6 @@ import type {
   DatabaseConnection,
   DatabaseConnectionWithSecrets,
 } from "@/Prisma/Types";
-import { describe, expect, it } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Redacted from "effect/Redacted";
-import { AlchemyContext } from "@/AlchemyContext";
 
 const createdAt = "2026-01-01T00:00:00.000Z";
 const instanceId = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";

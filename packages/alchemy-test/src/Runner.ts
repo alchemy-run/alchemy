@@ -1,3 +1,5 @@
+import { pathToFileURL } from "node:url";
+import { inspect } from "node:util";
 /**
  * Single-process test runner.
  *
@@ -20,9 +22,6 @@ import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Semaphore from "effect/Semaphore";
-import { inspect } from "node:util";
-import { pathToFileURL } from "node:url";
-
 import { makeFileLog } from "./FileLog.ts";
 import type { FileSuite, Hook, LogEntry, Suite, TestCase } from "./Model.ts";
 import { containsOnly, forEachTest, titlePath } from "./Model.ts";

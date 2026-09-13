@@ -1,3 +1,26 @@
+import crypto from "node:crypto";
+import * as Config from "effect/Config";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Encoding from "effect/Encoding";
+import * as Fiber from "effect/Fiber";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Redacted from "effect/Redacted";
+import * as Result from "effect/Result";
+import * as Scope from "effect/Scope";
+import * as Semaphore from "effect/Semaphore";
+import * as Stream from "effect/Stream";
+import * as Headers from "effect/unstable/http/Headers";
+import * as HttpMiddleware from "effect/unstable/http/HttpMiddleware";
+import * as HttpRouter from "effect/unstable/http/HttpRouter";
+import type * as HttpServerError from "effect/unstable/http/HttpServerError";
+import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import type * as HttpApi from "effect/unstable/httpapi/HttpApi";
+import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
+import type * as HttpApiEndpoint from "effect/unstable/httpapi/HttpApiEndpoint";
+import type * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup";
 /**
  * The stateless git-service Worker (DESIGN.md §2.1, §2.2, §5, §8).
  *
@@ -49,26 +72,8 @@
  * ```
  */
 import * as Cloudflare from "../Cloudflare/index.ts";
-import crypto from "node:crypto";
-import * as Config from "effect/Config";
-import * as Context from "effect/Context";
-import * as Effect from "effect/Effect";
-import * as Encoding from "effect/Encoding";
-import * as Layer from "effect/Layer";
-import * as Stream from "effect/Stream";
-import * as Redacted from "effect/Redacted";
-import * as Result from "effect/Result";
-import * as Scope from "effect/Scope";
-import * as Headers from "effect/unstable/http/Headers";
-import * as HttpRouter from "effect/unstable/http/HttpRouter";
-import type * as HttpServerError from "effect/unstable/http/HttpServerError";
-import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import * as HttpMiddleware from "effect/unstable/http/HttpMiddleware";
-import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
-import type * as HttpApi from "effect/unstable/httpapi/HttpApi";
-import type * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup";
 import * as Http from "../Http/index.ts";
+import { RuntimeContext } from "../RuntimeContext.ts";
 import {
   CommitDiff,
   CommitInfo,
@@ -135,13 +140,19 @@ import {
   TreeEntry,
   type Oid,
 } from "./Api.ts";
-import { Hooks, type HooksShape, type RefUpdate } from "./Hooks.ts";
-import type * as HttpApiEndpoint from "effect/unstable/httpapi/HttpApiEndpoint";
-import { gitHubCompatRoutes } from "./GitHubCompat.ts";
 import { BlobStore, type BlobStoreError } from "./BlobStore.ts";
+import { gitHubCompatRoutes } from "./GitHubCompat.ts";
+import { Hasher } from "./Hasher/Hasher.ts";
+import {
+  decodeBoundsRequest,
+  encodeScanResult,
+  frame,
+  HASHER_BINDING,
+  InternalSecret,
+} from "./Hasher/Hasher.ts";
+import { decodeDeltaBatch, encodeDeltaResults } from "./Hasher/Protocol.ts";
+import { Hooks, type HooksShape, type RefUpdate } from "./Hooks.ts";
 import { bundleCovers, type BundleInfo } from "./Jobs/Bundle.ts";
-import { headKey } from "./Store/Keys.ts";
-import { decodeHeadSnapshot } from "./Store/HeadSnapshot.ts";
 import {
   concatBytes,
   parseCommit,
@@ -151,35 +162,19 @@ import {
   ZERO_OID,
   type ObjectType,
 } from "./Protocol/ObjectCodec.ts";
-import { ulid } from "./RegistryObject.ts";
+import { hashBounds, resolveDeltas, scanPart } from "./Protocol/PartialScan.ts";
 import { decodePktLines, errPkt, flushPkt, pktText } from "./Protocol/Pkt.ts";
-import * as Fiber from "effect/Fiber";
-import * as Option from "effect/Option";
-import * as Semaphore from "effect/Semaphore";
-import { Hasher } from "./Hasher/Hasher.ts";
-import { encodeStagedBatch } from "./PushWire.ts";
-import { feedBody, HEAD_BYTES } from "./Store/IncomingBody.ts";
-import { makeStreamingSource } from "./Store/StreamingSource.ts";
-import { sliceRandomAccess } from "./Store/PackSource.ts";
-import { incomingKey, wirePackId } from "./Store/Keys.ts";
-import { StoreError as StoreErrorClass } from "./Protocol/Store.ts";
-import { RuntimeContext } from "../RuntimeContext.ts";
 import {
   progressMessage,
   pumpPackBody,
   sidebandFrames,
   wrapSideband,
 } from "./Protocol/Sideband.ts";
-import {
-  decodeBoundsRequest,
-  encodeScanResult,
-  frame,
-  HASHER_BINDING,
-  InternalSecret,
-} from "./Hasher/Hasher.ts";
-import { decodeDeltaBatch, encodeDeltaResults } from "./Hasher/Protocol.ts";
-import { hashBounds, resolveDeltas, scanPart } from "./Protocol/PartialScan.ts";
+import { StoreError as StoreErrorClass } from "./Protocol/Store.ts";
 import type { StoreError } from "./Protocol/Store.ts";
+import { encodeStagedBatch } from "./PushWire.ts";
+import { ulid } from "./RegistryObject.ts";
+import { RegistryStore, type RegistryEntry } from "./RegistryObject.ts";
 import {
   buildAdvertisement,
   parseUploadPackRequest,
@@ -208,7 +203,12 @@ import {
   type RepoMetaData,
   type RepoStub,
 } from "./RepoObject.ts";
-import { RegistryStore, type RegistryEntry } from "./RegistryObject.ts";
+import { decodeHeadSnapshot } from "./Store/HeadSnapshot.ts";
+import { feedBody, HEAD_BYTES } from "./Store/IncomingBody.ts";
+import { headKey } from "./Store/Keys.ts";
+import { incomingKey, wirePackId } from "./Store/Keys.ts";
+import { sliceRandomAccess } from "./Store/PackSource.ts";
+import { makeStreamingSource } from "./Store/StreamingSource.ts";
 
 /** A `Bearer` credential from the `Authorization` header (the hash route's internal secret). */
 const parseBearer = (
@@ -424,7 +424,9 @@ const makeCore = Effect.gen(function* () {
   // otherwise. Runs here in the Worker, inside the request.
   const hooks: HooksShape = Option.getOrElse(
     yield* Effect.serviceOption(Hooks),
-    () => ({ preReceive: () => Effect.succeed([]) }),
+    () => ({
+      preReceive: () => Effect.succeed([]),
+    }),
   );
   const internalSecret = yield* InternalSecret;
   // The push pipeline's verifier (DESIGN §22.10): pack parts are inflated
@@ -2073,7 +2075,9 @@ const makeCore = Effect.gen(function* () {
       }
       return HttpServerResponse.uint8Array(
         frame(encodeDeltaResults(resolved.success)),
-        { contentType: "application/octet-stream" },
+        {
+          contentType: "application/octet-stream",
+        },
       );
     }
     // A requested spill part uploads concurrently with the scan (DESIGN

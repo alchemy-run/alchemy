@@ -1,6 +1,3 @@
-import * as AWS from "@/AWS";
-import * as IoTWireless from "@/AWS/IoTWireless";
-import * as Lambda from "@/AWS/Lambda";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
@@ -12,6 +9,9 @@ import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as AWS from "@/AWS";
+import * as IoTWireless from "@/AWS/IoTWireless";
+import * as Lambda from "@/AWS/Lambda";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -282,7 +282,9 @@ export default IoTWirelessTestFunction.make(
           Effect.succeed(
             HttpServerResponse.text(
               `IoTWireless fixture error: ${String(Cause.squash(cause))}`,
-              { status: 500 },
+              {
+                status: 500,
+              },
             ),
           ),
         ),

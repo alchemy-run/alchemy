@@ -1,13 +1,13 @@
-import * as Cloudflare from "@/Cloudflare";
-import * as Alchemy from "@/index.ts";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
-import { Gateway } from "./fixtures/Gateway.ts";
+import * as Cloudflare from "@/Cloudflare";
+import * as Alchemy from "@/index.ts";
+import * as Test from "@/Test/Alchemy";
 import ChatPersistenceTestWorker from "./fixtures/ChatPersistenceWorker.ts";
+import { Gateway } from "./fixtures/Gateway.ts";
 
 // Fresh `workers.dev` URLs return non-200 (404 / 500 "Script not
 // found") for a few seconds while the edge propagates. Each test uses

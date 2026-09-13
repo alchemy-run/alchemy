@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
-import type { Input } from "../Input.ts";
 import { isResolved } from "../Diff.ts";
+import type { Input } from "../Input.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { gitHubBaseUrlChanged, Octokit, octokitFor } from "./Octokit.ts";
