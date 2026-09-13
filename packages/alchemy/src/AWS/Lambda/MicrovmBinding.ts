@@ -5,13 +5,10 @@ import type { Input } from "../../Input.ts";
 import * as Output from "../../Output.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import {
-  isWorkerHost,
+  hostAwsAccess,
   regionFromArn,
   withRuntimeCredentials,
-  workerAwsAccess,
-  type WorkerAwsAccess,
 } from "./BindingHttp.ts";
-import { isBindingHost } from "./Function.ts";
 import type { MicrovmImage } from "./MicrovmImage.ts";
 
 // Shared scaffolding for the MicroVM runtime bindings. Every `*Http` impl is
@@ -148,8 +145,6 @@ export const makeImageBinding = <Req, Res, Err, Self>(
       const run = yield* options.operation;
       return Effect.fn(function* (image: MicrovmImage) {
         const host = yield* Binding.Host;
-        const statements = imagePolicyStatements(image, options);
-        const label = `Allow(${host?.LogicalId}, AWS.Lambda.${options.name}(${image.LogicalId}))`;
 
         // Accessors (registered on the host at deploy, resolved at runtime).
         const imageArn = yield* image.imageArn;
@@ -158,17 +153,10 @@ export const makeImageBinding = <Req, Res, Err, Self>(
         // the mapper's source text and is brittle).
         const region = Effect.map(imageArn, regionFromArn);
 
-        let access: WorkerAwsAccess | undefined;
-        if (isBindingHost(host)) {
-          if (!globalThis.__ALCHEMY_RUNTIME__) {
-            yield* host.bind`${label}`({ policyStatements: statements });
-          }
-        } else if (host !== undefined && isWorkerHost(host)) {
-          access = yield* workerAwsAccess(host);
-          if (!globalThis.__ALCHEMY_RUNTIME__) {
-            yield* access.role.bind`${label}`({ policyStatements: statements });
-          }
-        }
+        const access = yield* hostAwsAccess(host, () => ({
+          label: `Allow(${host?.LogicalId}, AWS.Lambda.${options.name}(${image.LogicalId}))`,
+          policyStatements: imagePolicyStatements(image, options),
+        }));
 
         return Effect.fn(`AWS.Lambda.${options.name}(${image.LogicalId})`)(
           function* (request: Req) {
@@ -211,22 +199,12 @@ export const makeAccountBinding = <Req, Res, Err, Self>(
       const run = yield* options.operation;
       return Effect.fn(function* () {
         const host = yield* Binding.Host;
-        const label = `Allow(${host?.LogicalId}, AWS.Lambda.${options.name}())`;
-        const statements: Input<PolicyStatement>[] = [
-          { Effect: "Allow", Action: options.actions, Resource: ["*"] },
-        ];
-
-        let access: WorkerAwsAccess | undefined;
-        if (isBindingHost(host)) {
-          if (!globalThis.__ALCHEMY_RUNTIME__) {
-            yield* host.bind`${label}`({ policyStatements: statements });
-          }
-        } else if (host !== undefined && isWorkerHost(host)) {
-          access = yield* workerAwsAccess(host);
-          if (!globalThis.__ALCHEMY_RUNTIME__) {
-            yield* access.role.bind`${label}`({ policyStatements: statements });
-          }
-        }
+        const access = yield* hostAwsAccess(host, () => ({
+          label: `Allow(${host?.LogicalId}, AWS.Lambda.${options.name}())`,
+          policyStatements: [
+            { Effect: "Allow", Action: options.actions, Resource: ["*"] },
+          ],
+        }));
 
         return Effect.fn(`AWS.Lambda.${options.name}()`)(function* (
           request: Req,

@@ -2,12 +2,9 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
 import {
-  isWorkerHost,
+  hostAwsAccess,
   withRuntimeCredentials,
-  workerAwsAccess,
-  type WorkerAwsAccess,
 } from "../Lambda/BindingHttp.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
 import type { Bucket } from "./Bucket.ts";
 
 /**
@@ -67,37 +64,28 @@ export const makeBucketHttpBinding = <
       const BucketName = yield* bucket.bucketName;
       const BucketRegion = yield* bucket.region;
       const host = yield* Binding.Host;
-      const statements = [
-        {
-          Effect: "Allow" as const,
-          Action: [...options.actions],
-          Resource:
-            options.iamResources === "bucket"
-              ? [bucket.bucketArn]
-              : [Output.interpolate`${bucket.bucketArn}/*`],
-        },
-        ...(options.listBucket
-          ? [
-              {
-                Effect: "Allow" as const,
-                Action: ["s3:ListBucket"],
-                Resource: [bucket.bucketArn],
-              },
-            ]
-          : []),
-      ];
-      const label = `Allow(${host?.LogicalId}, ${options.tag}(${bucket.LogicalId}))`;
-      let access: WorkerAwsAccess | undefined;
-      if (isBindingHost(host)) {
-        if (!globalThis.__ALCHEMY_RUNTIME__) {
-          yield* host.bind`${label}`({ policyStatements: statements });
-        }
-      } else if (host !== undefined && isWorkerHost(host)) {
-        access = yield* workerAwsAccess(host);
-        if (!globalThis.__ALCHEMY_RUNTIME__) {
-          yield* access.role.bind`${label}`({ policyStatements: statements });
-        }
-      }
+      const access = yield* hostAwsAccess(host, () => ({
+        label: `Allow(${host?.LogicalId}, ${options.tag}(${bucket.LogicalId}))`,
+        policyStatements: [
+          {
+            Effect: "Allow",
+            Action: [...options.actions],
+            Resource:
+              options.iamResources === "bucket"
+                ? [bucket.bucketArn]
+                : [Output.interpolate`${bucket.bucketArn}/*`],
+          },
+          ...(options.listBucket
+            ? [
+                {
+                  Effect: "Allow" as const,
+                  Action: ["s3:ListBucket"],
+                  Resource: [bucket.bucketArn],
+                },
+              ]
+            : []),
+        ],
+      }));
       return Effect.fn(`${options.tag}(${bucket.LogicalId})`)(function* (
         request?: Omit<I, "Bucket">,
       ) {

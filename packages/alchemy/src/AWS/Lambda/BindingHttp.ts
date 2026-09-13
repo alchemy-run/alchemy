@@ -12,6 +12,7 @@ import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import * as Binding from "../../Binding.ts";
 import type { Input } from "../../Input.ts";
+import type { PolicyStatement } from "../IAM/Policy.ts";
 import type { Output as OutputType } from "../../Output.ts";
 import type { ResourceLike } from "../../Resource.ts";
 import { DEFAULT_LOCAL_ENDPOINT } from "../AuthProvider.ts";
@@ -70,10 +71,11 @@ export interface WorkerAwsAccess {
 }
 
 /**
- * The IAM identity a Cloudflare Worker uses to reach AWS. The logical ids keep
- * their original `microvm` names: renaming them would replace deployed
- * identities. Yielding the key and role attributes registers them on the
- * Worker at deploy and reads them from its env at runtime.
+ * The IAM identity a Cloudflare Worker uses to reach AWS: `${id}User` holding
+ * `${id}AccessKey`, allowed to assume `${id}Role`, which every binding on the
+ * Worker grants its statements to. Yielding the key and role attributes
+ * registers them on the Worker at deploy and reads them from its env at
+ * runtime, so the declarations run in both phases.
  */
 export const workerAwsAccess = Effect.fn(function* (host: WorkerHost) {
   const id = host.LogicalId;
@@ -86,9 +88,9 @@ export const workerAwsAccess = Effect.fn(function* (host: WorkerHost) {
   // The user may assume any role that trusts it; the role's trust policy is
   // what restricts assumption to this user, which avoids a User↔Role ARN
   // dependency cycle.
-  const user = yield* IamUser(`${id}-microvm-user`, {
+  const user = yield* IamUser(`${id}User`, {
     inlinePolicies: {
-      "assume-microvm-role": {
+      AssumeRole: {
         Version: "2012-10-17",
         Statement: [
           { Effect: "Allow", Action: ["sts:AssumeRole"], Resource: ["*"] },
@@ -96,10 +98,10 @@ export const workerAwsAccess = Effect.fn(function* (host: WorkerHost) {
       },
     },
   });
-  const accessKey = yield* IamAccessKey(`${id}-microvm-key`, {
+  const accessKey = yield* IamAccessKey(`${id}AccessKey`, {
     userName: user.userName,
   });
-  const role = yield* IamRole(`${id}-microvm-role`, {
+  const role = yield* IamRole(`${id}Role`, {
     assumeRolePolicyDocument: {
       Version: "2012-10-17",
       Statement: [
@@ -118,7 +120,7 @@ export const workerAwsAccess = Effect.fn(function* (host: WorkerHost) {
   if (!globalThis.__ALCHEMY_RUNTIME__) {
     const context = yield* Effect.serviceOption(AlchemyContext);
     if (Option.isSome(context) && context.value.dev) {
-      yield* host.bind`${id}-microvm-endpoint`({
+      yield* host.bind`${id}Endpoint`({
         bindings: [
           {
             type: "plain_text",
@@ -160,6 +162,43 @@ export const workerAwsAccess = Effect.fn(function* (host: WorkerHost) {
     region: "us-east-1",
   });
   return { role, credentials } satisfies WorkerAwsAccess;
+});
+
+/**
+ * What a binding grants its host: the IAM statements, under a label that
+ * names the grant. Built only at deploy.
+ */
+export interface HostGrant {
+  readonly label: string;
+  readonly policyStatements: Input<PolicyStatement>[];
+}
+
+/**
+ * Resolve how this binding's host reaches AWS and grant it `grant()`.
+ *
+ * A Lambda-like host has ambient credentials and takes the statements on its
+ * execution role, so the result is `undefined`. A Cloudflare Worker gets a
+ * {@link WorkerAwsAccess}, whose role takes the statements. The identity is
+ * needed at runtime (it is where the credentials come from); the grant is
+ * deploy-only and sits behind the one `__ALCHEMY_RUNTIME__` guard so the
+ * bundler drops it from the Worker.
+ */
+export const hostAwsAccess = Effect.fn(function* (
+  host: ResourceLike | undefined,
+  grant: () => HostGrant,
+) {
+  const access =
+    host !== undefined && isWorkerHost(host)
+      ? yield* workerAwsAccess(host)
+      : undefined;
+  if (!globalThis.__ALCHEMY_RUNTIME__) {
+    const grantee = isBindingHost(host) ? host : access?.role;
+    if (grantee !== undefined) {
+      const { label, policyStatements } = grant();
+      yield* grantee.bind`${label}`({ policyStatements });
+    }
+  }
+  return access;
 });
 
 /**
@@ -215,25 +254,16 @@ export const makeFunctionHttpBinding = <
     return Effect.fn(function* (func: Function) {
       const FunctionArn = yield* func.functionArn;
       const host = yield* Binding.Host;
-      const statements = [
-        {
-          Effect: "Allow" as const,
-          Action: [...options.actions],
-          Resource: options.resources?.(func) ?? [func.functionArn],
-        },
-      ];
-      const label = `Allow(${host?.LogicalId}, ${options.tag}(${func.LogicalId}))`;
-      let access: WorkerAwsAccess | undefined;
-      if (isBindingHost(host)) {
-        if (!globalThis.__ALCHEMY_RUNTIME__) {
-          yield* host.bind`${label}`({ policyStatements: statements });
-        }
-      } else if (host !== undefined && isWorkerHost(host)) {
-        access = yield* workerAwsAccess(host);
-        if (!globalThis.__ALCHEMY_RUNTIME__) {
-          yield* access.role.bind`${label}`({ policyStatements: statements });
-        }
-      }
+      const access = yield* hostAwsAccess(host, () => ({
+        label: `Allow(${host?.LogicalId}, ${options.tag}(${func.LogicalId}))`,
+        policyStatements: [
+          {
+            Effect: "Allow",
+            Action: [...options.actions],
+            Resource: options.resources?.(func) ?? [func.functionArn],
+          },
+        ],
+      }));
       const region = Effect.map(FunctionArn, regionFromArn);
       return Effect.fn(`${options.tag}(${func.LogicalId})`)(function* (
         request?: Omit<I, "FunctionName">,
