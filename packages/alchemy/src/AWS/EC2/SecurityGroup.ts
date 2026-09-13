@@ -610,8 +610,14 @@ export const SecurityGroupProvider = () =>
           // is full-replace each reconcile. Default egress (-1, 0.0.0.0/0)
           // is restored when no explicit egress is desired.
           const currentRules = yield* describeSecurityGroupRules(groupId);
-          const currentIngress = currentRules.filter((r) => !r.IsEgress);
-          const currentEgress = currentRules.filter((r) => r.IsEgress);
+          const isStandaloneRule = (rule: ec2.SecurityGroupRule) =>
+            rule.Tags?.some((tag) => tag.Key === "alchemy::id") ?? false;
+          const currentIngress = currentRules.filter(
+            (rule) => !rule.IsEgress && !isStandaloneRule(rule),
+          );
+          const currentEgress = currentRules.filter(
+            (rule) => rule.IsEgress && !isStandaloneRule(rule),
+          );
           if (currentIngress.length > 0) {
             yield* ec2
               .revokeSecurityGroupIngress({
