@@ -19,7 +19,7 @@ import yaml from "highlight.js/lib/languages/yaml";
 import { Marked } from "marked";
 import { markedHighlight } from "marked-highlight";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { ApiError } from "./api.ts";
+import { ApiError } from "./client.ts";
 import { useTheme } from "./theme.tsx";
 
 // ── markdown rendering ──────────────────────────────────────────────────────

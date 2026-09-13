@@ -1,6 +1,6 @@
 /** The Commits tab: paged history of the selected ref. */
 import { useEffect, useState } from "react";
-import { getLog, type CommitInfo } from "../api.ts";
+import { getLog, type CommitInfo } from "../client.ts";
 import { Button, CopyButton, ErrorBox, Spinner } from "../components.tsx";
 import { shortOid, subject, timeAgo } from "../format.ts";
 import { href, Link } from "../router.tsx";

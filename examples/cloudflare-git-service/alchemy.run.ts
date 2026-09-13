@@ -1,39 +1,33 @@
 /**
- * Deployable git-service example: a git host assembled from
- * `alchemy/Git` building blocks, plus a GitHub-style web UI, on ONE
- * origin.
+ * The git-service example: a git host embedded in the app's own API, plus
+ * a GitHub-style web UI, on one origin.
  *
- * - `src/git-host.ts` — the block assembly: `Git.ServerLive` +
- *   `Git.ReposDurableObject` + `Git.RegistryDurableObject` wired into a
- *   `Cloudflare.Worker` the example owns.
- * - `src/worker.ts` — the site's front door: forwards `/api/v1`,
- *   `/api/v3`, and the git wire paths to the GitHost over a private
- *   service binding; serves the Vite SPA for everything else. Clone URLs
- *   are therefore same-host.
- *
- * Set the deployer admin secret before deploying:
+ * - `src/api/` — the backend, one file per piece: `auth.ts` (Better Auth
+ *   and who a user is), `middleware.ts` (who may call what), `routes.ts`
+ *   (the app's own routes), `api.ts` (the git routes plus ours behind the
+ *   middleware), `git.ts` (the `alchemy/Git` block assembly), and
+ *   `host.ts` (the `Cloudflare.Worker` that serves it).
+ * - `src/ui/` — the Vite SPA, a plain-fetch client of the API.
+ * - `src/worker.ts` — the website's Worker: forwards `/api/**` and the git
+ *   wire paths to the GitHost over a service binding and serves the SPA for
+ *   everything else, so clone URLs and the session cookie are same-host.
  *
  * ```sh
- * export GIT_SERVICE_ADMIN_TOKEN="$(openssl rand -base64 32)"
  * bun run deploy
  * ```
  *
- * Then open the printed `webUrl` and create a repo — or from the terminal:
+ * Open the printed `webUrl`, sign up, mint an API key on the settings page,
+ * and it is the password of your git remote:
  *
  * ```sh
- * curl -X POST "$WEB/api/v1/repos" \
- *   -H "Authorization: Bearer $GIT_SERVICE_ADMIN_TOKEN" \
- *   -H "Content-Type: application/json" \
- *   -d '{"owner":"acme","name":"web","public":true}'
- *
- * git remote add origin "https://x:gs_...@<host>/acme/web.git"
+ * git remote add origin "https://x:<key>@<host>/<you>/web.git"
  * git push origin main
  * ```
  */
 import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
-import GitHost from "./src/git-host.ts";
+import GitHost from "./src/api/host.ts";
 
 export default Alchemy.Stack(
   "GitServiceExample",

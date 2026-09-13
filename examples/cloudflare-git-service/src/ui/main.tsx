@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import ReactDOM from "react-dom/client";
-import { getConnection, getSession, signOut, type User } from "./api.ts";
+import { getConnection, getSession, signOut, type User } from "./client.ts";
 import { RepoIcon, ThemeToggle } from "./components.tsx";
 import { RepoPage } from "./pages/Repo.tsx";
 import { ReposPage } from "./pages/Repos.tsx";

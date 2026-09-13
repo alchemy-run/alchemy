@@ -17,7 +17,7 @@ import {
   updatePull,
   type Comparison,
   type PullDetail,
-} from "../api.ts";
+} from "../client.ts";
 import {
   Button,
   CopyButton,

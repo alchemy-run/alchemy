@@ -15,7 +15,7 @@ import {
   getCommitDiff,
   type CommitDiff,
   type CommitInfo,
-} from "../api.ts";
+} from "../client.ts";
 import { CopyButton, ErrorBox, Spinner } from "../components.tsx";
 import { shortOid, subject, timeAgo } from "../format.ts";
 import { href, Link } from "../router.tsx";

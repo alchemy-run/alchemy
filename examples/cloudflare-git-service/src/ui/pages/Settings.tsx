@@ -8,7 +8,7 @@ import {
   listApiKeys,
   updateRepo,
   type ApiKey,
-} from "../api.ts";
+} from "../client.ts";
 import {
   Badge,
   Button,

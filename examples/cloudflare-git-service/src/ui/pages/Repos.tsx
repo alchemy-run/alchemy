@@ -7,7 +7,7 @@ import {
   type Repo,
   type RepoCreated,
   type User,
-} from "../api.ts";
+} from "../client.ts";
 import {
   Badge,
   Button,

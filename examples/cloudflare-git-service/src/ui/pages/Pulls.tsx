@@ -9,7 +9,7 @@
  * detail page (`Pull.tsx`) is a separate lazy chunk.
  */
 import { useEffect, useState } from "react";
-import { createPull, listPulls, type Pull, type PullState } from "../api.ts";
+import { createPull, listPulls, type Pull, type PullState } from "../client.ts";
 import {
   Button,
   ErrorBox,

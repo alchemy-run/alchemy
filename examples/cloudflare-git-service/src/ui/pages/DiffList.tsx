@@ -21,7 +21,7 @@ import {
 } from "@pierre/diffs";
 import { FileDiff } from "@pierre/diffs/react";
 import { useEffect, useState, type ReactNode } from "react";
-import { getBlob, type DiffEntry, type FileStatus } from "../api.ts";
+import { getBlob, type DiffEntry, type FileStatus } from "../client.ts";
 import { Button, ErrorBox } from "../components.tsx";
 import { blobLimiter, MAX_RENDER_BYTES, useFileDiffOptions } from "../diff.tsx";
 import { decodeText, formatBytes } from "../format.ts";

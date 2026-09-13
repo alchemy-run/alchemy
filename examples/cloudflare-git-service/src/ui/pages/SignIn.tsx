@@ -1,6 +1,6 @@
 /** Sign in or create an account. Sessions come from Better Auth. */
 import { useState } from "react";
-import { getConnection, signIn, signUp, type User } from "../api.ts";
+import { getConnection, signIn, signUp, type User } from "../client.ts";
 import { Button, ErrorBox, Input, RepoIcon } from "../components.tsx";
 
 export const SignInPage = ({
