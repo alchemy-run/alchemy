@@ -1,5 +1,5 @@
-import { Region as AwsRegion } from "@distilled.cloud/aws/Region";
 import * as acm from "@distilled.cloud/aws/acm";
+import { Region as AwsRegion } from "@distilled.cloud/aws/Region";
 import * as route53 from "@distilled.cloud/aws/route-53";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";

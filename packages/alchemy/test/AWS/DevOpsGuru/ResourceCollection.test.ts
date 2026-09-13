@@ -1,9 +1,9 @@
-import * as AWS from "@/AWS";
-import { ResourceCollection } from "@/AWS/DevOpsGuru/ResourceCollection.ts";
-import * as Test from "@/Test/Alchemy";
 import * as devopsguru from "@distilled.cloud/aws/devops-guru";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
+import { ResourceCollection } from "@/AWS/DevOpsGuru/ResourceCollection.ts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

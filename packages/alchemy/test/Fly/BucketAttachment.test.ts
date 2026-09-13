@@ -1,16 +1,16 @@
 import * as machines from "@distilled.cloud/fly-io/machines";
-import * as Fly from "@/Fly";
-import { attachBucketSecrets } from "@/Fly/Bucket";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/http/HttpClient";
+import * as Fly from "@/Fly";
+import { attachBucketSecrets } from "@/Fly/Bucket";
+import * as Test from "@/Test/Alchemy";
 
 const requests: Array<{ method: string; path: string }> = [];
 const providers = Layer.effect(

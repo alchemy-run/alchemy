@@ -1,3 +1,11 @@
+import { spawnSync } from "node:child_process";
+import { describe, expect } from "alchemy-test";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as HttpClient from "effect/http/HttpClient";
+import * as Path from "effect/Path";
+import * as Schedule from "effect/Schedule";
 /**
  * Mode-scoped local dev for ECS: `Test.make({ dev: true })` routes the
  * dualized `ECS.Cluster` / `ECS.Task` (and `ECS.TaskDefinition` /
@@ -24,17 +32,9 @@
  * Requires Docker (floci runs as a container); skipped when unavailable.
  */
 import * as AWS from "@/AWS";
-import { State, type ResourceState } from "@/State";
 import { Stack } from "@/Stack";
+import { State, type ResourceState } from "@/State";
 import * as Test from "@/Test/Alchemy";
-import { describe, expect } from "alchemy-test";
-import * as Data from "effect/Data";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
-import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/http/HttpClient";
-import { spawnSync } from "node:child_process";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import EcsDevMainTask from "./fixtures/ecs-dev/main-task.ts";
 import { dockerAvailable, rawAwsJson } from "./fixtures/raw.ts";
@@ -63,11 +63,9 @@ const FLOCI_REGION = "us-east-1";
 const getState = Effect.fn(function* (fqn: string) {
   const state = yield* yield* State;
   const stk = yield* Stack;
-  return (yield* state.get({
-    stack: stk.name,
-    stage: stk.stage,
-    fqn,
-  })) as ResourceState | undefined;
+  return (yield* state.get({ stack: stk.name, stage: stk.stage, fqn })) as
+    | ResourceState
+    | undefined;
 });
 
 class RunTaskRejected extends Data.TaggedError("RunTaskRejected")<{
@@ -170,10 +168,7 @@ const runTaskRoundTrip = Effect.fn(function* (options: {
   // the hostPort as the containerPort, so the literal port — equal by
   // construction in the Task's port mapping — is the reliable address.)
   const body = yield* client.get(`http://localhost:${options.port}/`).pipe(
-    Effect.retry({
-      schedule: Schedule.exponential("500 millis"),
-      times: 10,
-    }),
+    Effect.retry({ schedule: Schedule.exponential("500 millis"), times: 10 }),
     Effect.flatMap((response) => response.text),
   );
   expect(body).toContain(options.marker);

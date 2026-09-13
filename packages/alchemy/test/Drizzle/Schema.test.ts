@@ -1,13 +1,13 @@
-import * as Drizzle from "@/Drizzle";
-import * as Provider from "@/Provider";
-import * as Stack from "@/Stack";
-import { State } from "@/State";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Result from "effect/Result";
+import * as Drizzle from "@/Drizzle";
+import * as Provider from "@/Provider";
+import * as Stack from "@/Stack";
+import { State } from "@/State";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Drizzle.providers() });
 

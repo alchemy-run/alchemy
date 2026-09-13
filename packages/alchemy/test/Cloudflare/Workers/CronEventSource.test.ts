@@ -1,13 +1,13 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Test from "@/Test/Alchemy";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
-import * as HttpClient from "effect/http/HttpClient";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Test from "@/Test/Alchemy";
 import Stack from "./fixtures/cron/stack.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({

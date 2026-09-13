@@ -1,16 +1,16 @@
-import * as AWS from "@/AWS";
-import { reapFarmChildren } from "@/AWS/Deadline/internal.ts";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as deadline from "@distilled.cloud/aws/deadline";
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
-import * as EffectStream from "effect/Stream";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Schedule from "effect/Schedule";
+import * as EffectStream from "effect/Stream";
+import * as AWS from "@/AWS";
+import { reapFarmChildren } from "@/AWS/Deadline/internal.ts";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import DeadlineTestFunctionLive, { DeadlineTestFunction } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
@@ -231,9 +231,7 @@ describe.sequential(
             // fresh farm can take minutes to index its first job, so exercise
             // the live binding and validate its response without polling past
             // the suite's provisioning budget.
-            const searched = (yield* postJson("/search")) as {
-              ids: string[];
-            };
+            const searched = (yield* postJson("/search")) as { ids: string[] };
             expect(Array.isArray(searched.ids)).toBe(true);
 
             // Reprioritize and verify the mutation landed. GetJob is

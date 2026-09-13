@@ -1,3 +1,4 @@
+import * as Effect from "effect/Effect";
 /**
  * A {@link RandomAccess} over a blob-store object, for pack ingestion
  * (DESIGN.md §3.6 upgrade seam) — this is what removes the push size cap.
@@ -17,7 +18,6 @@
  * a retained window too.
  */
 import { RuntimeContext } from "../../RuntimeContext.ts";
-import * as Effect from "effect/Effect";
 import type { BlobStoreShape } from "../BlobStore.ts";
 import type { RandomAccess } from "../Protocol/PackParser.ts";
 import { StoreError } from "../Protocol/Store.ts";

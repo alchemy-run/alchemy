@@ -1,3 +1,5 @@
+import { describe, expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { ClientVpnEndpoint } from "@/AWS/EC2/ClientVpnEndpoint.ts";
 import {
@@ -7,8 +9,6 @@ import {
 import * as Alchemy from "@/index.ts";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import { describe, expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 import {
   assertClientVpnAssociationDeleted,
   assertClientVpnCertificateDeleted,

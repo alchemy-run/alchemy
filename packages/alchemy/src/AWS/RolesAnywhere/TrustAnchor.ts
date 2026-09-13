@@ -22,7 +22,9 @@ import {
  */
 export class TrustAnchorSourceConflict extends Data.TaggedError(
   "TrustAnchorSourceConflict",
-)<{ readonly message: string }> {}
+)<{
+  readonly message: string;
+}> {}
 
 /**
  * A customized expiry notification for the trust anchor. AWS installs

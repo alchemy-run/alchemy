@@ -1,3 +1,6 @@
+import * as NodeCrypto from "node:crypto";
+import * as NodePath from "node:path";
+import { fileURLToPath } from "node:url";
 /**
  * `@alchemy.run/frontend-frameworks/octane/source` — alchemy Worker source provider for
  * OctaneJS projects.
@@ -37,9 +40,6 @@ import type * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
 import type * as Scope from "effect/Scope";
 import { glob } from "tinyglobby";
-import * as NodeCrypto from "node:crypto";
-import * as NodePath from "node:path";
-import { fileURLToPath } from "node:url";
 import { runBuildChild } from "../core/BuildChild.ts";
 import { makeCloudflareTarget } from "./cloudflare.ts";
 import { make as makeOctane, type OctaneOptions } from "./Octane.ts";

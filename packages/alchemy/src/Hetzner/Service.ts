@@ -10,10 +10,6 @@ import * as Provider from "../Provider.ts";
 import { Resource, type ResourceBinding } from "../Resource.ts";
 import type { ServerHost } from "../Server/Process.ts";
 import { Stack } from "../Stack.ts";
-import type { ServiceBinding } from "./MountVolume.ts";
-import type { Providers } from "./Providers.ts";
-import type { Server } from "./Server.ts";
-import { SshError, sshClientForServer } from "./Ssh.ts";
 import {
   collectBindingState,
   createHetznerHostedSupport,
@@ -21,6 +17,10 @@ import {
   type HetznerBuildOptions,
   type HetznerHostRuntimeContext,
 } from "./hosted.ts";
+import type { ServiceBinding } from "./MountVolume.ts";
+import type { Providers } from "./Providers.ts";
+import type { Server } from "./Server.ts";
+import { SshError, sshClientForServer } from "./Ssh.ts";
 
 /**
  * A resource-valued prop: the resource itself, or an Effect that produces

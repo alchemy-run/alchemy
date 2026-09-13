@@ -1,14 +1,14 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
+import { fileURLToPath } from "node:url";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import * as efs from "@distilled.cloud/aws/efs";
 import { describe, expect } from "alchemy-test";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/http/HttpClient";
-import { fileURLToPath } from "node:url";
+import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import { getDefaultVpc } from "../DefaultVpc.ts";
 
 // Flagship EFS e2e: a VPC-attached Lambda mounts an EFS access point at
@@ -166,7 +166,9 @@ describe.skipIf(!process.env.AWS_TEST_SLOW).sequential(
           const written = (yield* getJsonWithRetry(
             `${baseUrl}/write?content=hello-from-efs`,
             5,
-          )) as { written: string };
+          )) as {
+            written: string;
+          };
           expect(written.written).toBe("hello-from-efs");
 
           const read = (yield* getJsonWithRetry(`${baseUrl}/read`, 5)) as {

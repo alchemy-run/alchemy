@@ -1,10 +1,10 @@
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as NodeFsPromises from "node:fs/promises";
 import * as NodePath from "node:path";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type * as ViteModule from "vite";
-import { describe, expect, it } from "vitest";
 import { mergeConfig } from "vite";
+import { describe, expect, it } from "vitest";
 import framework, {
   DEFAULT_TARGET_SPECIFIER,
   layer,

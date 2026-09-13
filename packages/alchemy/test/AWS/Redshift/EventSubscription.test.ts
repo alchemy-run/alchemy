@@ -1,10 +1,10 @@
+import * as redshift from "@distilled.cloud/aws/redshift";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { EventSubscription } from "@/AWS/Redshift";
 import * as SNS from "@/AWS/SNS";
 import * as Test from "@/Test/Alchemy";
-import * as redshift from "@distilled.cloud/aws/redshift";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

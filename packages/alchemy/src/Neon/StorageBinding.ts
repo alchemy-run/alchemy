@@ -1,22 +1,22 @@
 import { createHash } from "node:crypto";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
-import * as HttpClient from "effect/http/HttpClient";
-import * as FetchHttpClient from "effect/http/FetchHttpClient";
-import { defaultProviderMode } from "../ProviderMode.ts";
 import * as Binding from "../Binding.ts";
 import * as Output from "../Output.ts";
+import { defaultProviderMode } from "../ProviderMode.ts";
 import {
   CurrentRuntimeContext,
   type RuntimeContext,
 } from "../RuntimeContext.ts";
 import { bindBackendEnvironment } from "./BackendConnection.ts";
-import { scopeIdentity, usesInjectedCredentials } from "./CredentialScope.ts";
 import type { Bucket } from "./Bucket.ts";
 import { Credential, validateCredential } from "./Credential.ts";
+import { scopeIdentity, usesInjectedCredentials } from "./CredentialScope.ts";
 import { FunctionEnvironment } from "./FunctionEnvironment.ts";
 import {
   makeStorageClient,

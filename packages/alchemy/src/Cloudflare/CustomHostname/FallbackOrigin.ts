@@ -1,7 +1,6 @@
 import * as customHostnames from "@distilled.cloud/cloudflare/custom-hostnames";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -79,7 +78,9 @@ export type FallbackOrigin = Resource<
  */
 export const FallbackOrigin = Resource<FallbackOrigin>(
   "Cloudflare.CustomHostname.FallbackOrigin",
-  { aliases: ["Cloudflare.FallbackOrigin"] },
+  {
+    aliases: ["Cloudflare.FallbackOrigin"],
+  },
 );
 
 export const isFallbackOrigin = (value: unknown): value is FallbackOrigin =>

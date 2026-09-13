@@ -1,7 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
-
 import * as Namespace from "../../Namespace.ts";
 import { sanitizeRuleName } from "../IoT/internal.ts";
 import { TopicRule } from "../IoT/TopicRule.ts";

@@ -1,3 +1,10 @@
+import * as sfn from "@distilled.cloud/aws/sfn";
+import { expect } from "alchemy-test";
+import * as Data from "effect/Data";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
 /**
  * Live test for `StateMachine.fromProgram`: deploy a typed `Sfn` program
  * (Lambda invoke + retry, inline Map, Choice, typed Fail + catchTag) as an
@@ -9,13 +16,6 @@ import * as AWS from "@/AWS";
 import * as Lambda from "@/AWS/Lambda";
 import { StateMachine } from "@/AWS/StepFunctions";
 import * as Test from "@/Test/Alchemy";
-import * as sfn from "@distilled.cloud/aws/sfn";
-import { expect } from "alchemy-test";
-import * as Data from "effect/Data";
-import * as Duration from "effect/Duration";
-import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
-import * as Schedule from "effect/Schedule";
 import {
   makeOrderProgram,
   type OrderOutput,

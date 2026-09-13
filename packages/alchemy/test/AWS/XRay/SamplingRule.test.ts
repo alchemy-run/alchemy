@@ -1,6 +1,3 @@
-import * as AWS from "@/AWS";
-import { SamplingRule } from "@/AWS/XRay";
-import * as Test from "@/Test/Alchemy";
 import * as xray from "@distilled.cloud/aws/xray";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
@@ -8,6 +5,9 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import * as AWS from "@/AWS";
+import { SamplingRule } from "@/AWS/XRay";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -20,7 +20,9 @@ const findRule = (ruleName: string) =>
 
 class SamplingRuleStillExists extends Data.TaggedError(
   "SamplingRuleStillExists",
-)<{ readonly ruleName: string }> {}
+)<{
+  readonly ruleName: string;
+}> {}
 
 const assertRuleDeleted = (ruleName: string) =>
   findRule(ruleName).pipe(

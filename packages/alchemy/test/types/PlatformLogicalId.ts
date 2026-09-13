@@ -1,9 +1,9 @@
+import * as Effect from "effect/Effect";
 import { Worker } from "@/Cloudflare/Workers/Worker.ts";
 import type { Named, PlatformIdentity } from "@/index.ts";
 import type { Platform, PlatformProps } from "@/Platform.ts";
 import type { Resource } from "@/Resource.ts";
 import type { BaseRuntimeContext } from "@/RuntimeContext.ts";
-import * as Effect from "effect/Effect";
 
 interface TestProps extends PlatformProps {
   env?: Record<string, string>;

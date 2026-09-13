@@ -6,12 +6,12 @@ import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { hasAlchemyTags } from "../../Tags.ts";
-import type { Providers } from "../Providers.ts";
 import type { ServiceControlPolicyDocument } from "../IAM/Policy.ts";
 import {
   normalizePolicyDocument,
   stringifyPolicyDocument,
 } from "../IAM/Policy.ts";
+import type { Providers } from "../Providers.ts";
 import {
   collectPages,
   createName,
@@ -223,7 +223,9 @@ export const PolicyProvider = () =>
             const hydrated = yield* Effect.forEach(
               ids,
               (policyId) => readPolicyById(policyId),
-              { concurrency: 10 },
+              {
+                concurrency: 10,
+              },
             );
 
             return hydrated.filter(

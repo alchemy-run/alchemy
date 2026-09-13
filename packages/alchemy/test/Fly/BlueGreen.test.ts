@@ -1,6 +1,42 @@
+import { randomBytes, createHash } from "node:crypto";
+import {
+  GatewayTimeout,
+  HTTP_STATUS_MAP,
+  RETRYABLE_HTTP_STATUSES,
+} from "@distilled.cloud/core/errors";
+import { Credentials } from "@distilled.cloud/fly-io/Credentials";
+import { GatewayTimeout as GatewayTimeoutErrors } from "@distilled.cloud/fly-io/Errors";
 import * as machines from "@distilled.cloud/fly-io/machines";
 import { type Machine } from "@distilled.cloud/fly-io/machines";
+import * as Retry from "@distilled.cloud/fly-io/Retry";
+import { expect, assert, it, describe } from "alchemy-test";
+import * as Cause from "effect/Cause";
+import * as Clock from "effect/Clock";
+import * as ConfigProvider from "effect/ConfigProvider";
+import * as Data from "effect/Data";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
+import * as FileSystem from "effect/FileSystem";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Path from "effect/Path";
+import * as Redacted from "effect/Redacted";
+import * as Ref from "effect/Ref";
+import * as Result from "effect/Result";
+import * as Schedule from "effect/Schedule";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
+import { DestroyError } from "@/Apply";
+import * as Docker from "@/Docker";
 import * as Fly from "@/Fly";
+import { AppDeletionAmbiguous } from "@/Fly/App";
+import { readinessRoles, DeploymentRecoveryAmbiguous } from "@/Fly/bluegreen";
+import { makeMachineLeases } from "@/Fly/leases";
+import { type MachineContainer, type MachineProps } from "@/Fly/Machine";
+import { alchemyMetadataKeys as keys } from "@/Fly/Metadata";
 import {
   waitHealthy,
   autostopMode,
@@ -14,10 +50,35 @@ import {
   retireMachines,
   retireMachine,
 } from "@/Fly/replicas";
+import { ReplicaChecksNotPassing } from "@/Fly/replicas";
+import * as Alchemy from "@/index";
+import { localState, makeLocalState } from "@/State/LocalState";
 import * as Test from "@/Test/Alchemy";
-import { expect, assert, it, describe } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Result from "effect/Result";
+import type { ScratchStack } from "@/Test/Alchemy";
+import * as TestCore from "@/Test/Core";
+import { scratchStack, withProviders } from "@/Test/Core";
+import { engineActor } from "./fixtures/actors.ts";
+import { dropCompletedCreate } from "./fixtures/bluegreen-create-proxy.ts";
+import {
+  Site,
+  Token,
+  TRIGGER_SECRET,
+  Writer,
+  writerLayer,
+} from "./fixtures/bluegreen-runtime-secrets/writer.ts";
+import {
+  BoundSecrets,
+  CacheOne,
+  CacheTwo,
+  Site as SiteBluegreenSecrets,
+} from "./fixtures/bluegreen-secrets.ts";
+import {
+  assertOrder,
+  assertReplacement,
+  assertStopped,
+  makeScenario,
+  requireValue,
+} from "./fixtures/bluegreen-worker-test.ts";
 import {
   assertAppGone,
   census,
@@ -25,35 +86,11 @@ import {
   deployWorker,
   assertCommitted,
 } from "./fixtures/bluegreen.ts";
-import * as Retry from "@distilled.cloud/fly-io/Retry";
-import { DestroyError } from "@/Apply";
-import { AppDeletionAmbiguous } from "@/Fly/App";
-import * as Cause from "effect/Cause";
-import * as Fiber from "effect/Fiber";
-import * as FetchHttpClient from "effect/http/FetchHttpClient";
-import { engineActor } from "./fixtures/actors.ts";
-import {
-  transportProxy,
-  throughProxy,
-  type TransportEvent,
-} from "./fixtures/transport.ts";
-import { readinessRoles, DeploymentRecoveryAmbiguous } from "@/Fly/bluegreen";
-import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/http/HttpClient";
-import * as Exit from "effect/Exit";
+import { sanitizeExecFailure } from "./fixtures/exec-lease.ts";
 import {
   makeReadinessControl,
   repairReadiness,
 } from "./fixtures/http-readiness-control.ts";
-import { makeMachineLeases } from "@/Fly/leases";
-import * as Clock from "effect/Clock";
-import * as HttpClientRequest from "effect/http/HttpClientRequest";
-import { sanitizeExecFailure } from "./fixtures/exec-lease.ts";
-import { type MachineContainer, type MachineProps } from "@/Fly/Machine";
-import { ReplicaChecksNotPassing } from "@/Fly/replicas";
-import type { ScratchStack } from "@/Test/Alchemy";
-import * as Path from "effect/Path";
-import * as Deferred from "effect/Deferred";
 import {
   assertReadinessCommit,
   readinessActor,
@@ -62,25 +99,12 @@ import {
   retires,
   type ReadinessEvent,
 } from "./fixtures/idle-cadence-readiness.ts";
-import * as Docker from "@/Docker";
-import * as TestCore from "@/Test/Core";
-import { scratchStack, withProviders } from "@/Test/Core";
-import * as Redacted from "effect/Redacted";
-import {
-  GatewayTimeout,
-  HTTP_STATUS_MAP,
-  RETRYABLE_HTTP_STATUSES,
-} from "@distilled.cloud/core/errors";
-import { Credentials } from "@distilled.cloud/fly-io/Credentials";
-import * as Ref from "effect/Ref";
-import * as Schema from "effect/Schema";
-import { dropCompletedCreate } from "./fixtures/bluegreen-create-proxy.ts";
 import {
   observeStops,
   type StopRequest,
   writeLegacyProtocol,
 } from "./fixtures/legacy-protocol-writer.ts";
-import * as FileSystem from "effect/FileSystem";
+import MountedBlueGreen from "./fixtures/mounted-bluegreen.ts";
 import {
   assertBarrierInventory,
   assertClean,
@@ -103,8 +127,6 @@ import {
   type Phase,
   type Witness,
 } from "./fixtures/process-death.ts";
-import { GatewayTimeout as GatewayTimeoutErrors } from "@distilled.cloud/fly-io/Errors";
-import { alchemyMetadataKeys as keys } from "@/Fly/Metadata";
 import {
   appName,
   candidateId,
@@ -114,30 +136,6 @@ import {
   reply,
   withControlledClient,
 } from "./fixtures/protocol-branches.ts";
-import * as Data from "effect/Data";
-import { randomBytes, createHash } from "node:crypto";
-import {
-  Site,
-  Token,
-  TRIGGER_SECRET,
-  Writer,
-  writerLayer,
-} from "./fixtures/bluegreen-runtime-secrets/writer.ts";
-import * as ConfigProvider from "effect/ConfigProvider";
-import {
-  BoundSecrets,
-  CacheOne,
-  CacheTwo,
-  Site as SiteBluegreenSecrets,
-} from "./fixtures/bluegreen-secrets.ts";
-import * as Stream from "effect/Stream";
-import {
-  assertOrder,
-  assertReplacement,
-  assertStopped,
-  makeScenario,
-  requireValue,
-} from "./fixtures/bluegreen-worker-test.ts";
 import {
   Finalized,
   RunnerInterrupted,
@@ -159,13 +157,15 @@ import {
   successful,
   type SignalCase,
 } from "./fixtures/signal-overlap.ts";
-import * as Alchemy from "@/index";
-import { localState, makeLocalState } from "@/State/LocalState";
 import {
   delayedResourceWrite,
   ResourceRow,
 } from "./fixtures/state-persistence.ts";
-import MountedBlueGreen from "./fixtures/mounted-bluegreen.ts";
+import {
+  transportProxy,
+  throughProxy,
+  type TransportEvent,
+} from "./fixtures/transport.ts";
 
 describe.sequential(
   "deployment",

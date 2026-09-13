@@ -1,3 +1,8 @@
+import * as chatbot from "@distilled.cloud/aws/chatbot";
+import { expect } from "alchemy-test";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import {
   MicrosoftTeamsChannelConfiguration,
@@ -5,11 +10,6 @@ import {
 } from "@/AWS/Chatbot";
 import { Role } from "@/AWS/IAM/Role.ts";
 import * as Test from "@/Test/Alchemy";
-import * as chatbot from "@distilled.cloud/aws/chatbot";
-import { expect } from "alchemy-test";
-import * as Data from "effect/Data";
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -122,7 +122,9 @@ const chatbotAssumeRolePolicy: AWS.IAM.PolicyDocument = {
 
 class ConfigurationStillExists extends Data.TaggedError(
   "ConfigurationStillExists",
-)<{ readonly arn: string }> {}
+)<{
+  readonly arn: string;
+}> {}
 
 const assertSlackConfigurationDeleted = (arn: string) =>
   chatbot

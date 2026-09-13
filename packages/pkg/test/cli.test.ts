@@ -2,20 +2,12 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
-import * as Result from "effect/Result";
-import * as Schema from "effect/Schema";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import * as UrlParams from "effect/http/UrlParams";
-import { GroupName, PackageName, type Manifest } from "../src/Manifest.ts";
-import { manifestArtifactName, tarballUrl } from "../src/Protocol.ts";
-import { Policy } from "../src/Registry.ts";
-import {
-  installTag,
-  parseInstallPath,
-  tagsFor,
-} from "../src/Registry/Handler.ts";
+import * as Path from "effect/Path";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import {
   selectPackages,
   dependencyLevels,
@@ -25,6 +17,14 @@ import {
   tarballFile,
 } from "../src/cli/pack.ts";
 import { publish } from "../src/cli/publish.ts";
+import { GroupName, PackageName, type Manifest } from "../src/Manifest.ts";
+import { manifestArtifactName, tarballUrl } from "../src/Protocol.ts";
+import { Policy } from "../src/Registry.ts";
+import {
+  installTag,
+  parseInstallPath,
+  tagsFor,
+} from "../src/Registry/Handler.ts";
 
 describe("registry", () => {
   const run = {

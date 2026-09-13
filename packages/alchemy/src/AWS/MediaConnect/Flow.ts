@@ -17,7 +17,9 @@ import type { Providers } from "../Providers.ts";
  */
 export class FlowOutputNameMissing extends Data.TaggedError(
   "FlowOutputNameMissing",
-)<{ message: string }> {}
+)<{
+  message: string;
+}> {}
 
 export interface FlowProps {
   /**

@@ -9,15 +9,15 @@ import {
   SPLAT_REGEX,
 } from "../../shared/configuration/constants.ts";
 import type {
+  ParsedHeaders,
+  ParsedRedirects,
+} from "../../shared/configuration/types.ts";
+import type {
   AssetConfig,
   MetadataHeaders,
   MetadataRedirects,
   MetadataStaticRedirects,
 } from "../../shared/types.ts";
-import type {
-  ParsedHeaders,
-  ParsedRedirects,
-} from "../../shared/configuration/types.ts";
 
 export const constructRedirects = Effect.fn("constructRedirects")(function* ({
   redirects,

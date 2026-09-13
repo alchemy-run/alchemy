@@ -1,8 +1,8 @@
+import { describe, expect, it } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import { inMemoryState } from "@/State/InMemoryState.ts";
 import type { ResourceState } from "@/State/ResourceState.ts";
 import { deleteState, listState, readState } from "@/State/Tree.ts";
-import { describe, expect, it } from "alchemy-test";
-import * as Effect from "effect/Effect";
 
 const resource = {
   resourceType: "test:resource",

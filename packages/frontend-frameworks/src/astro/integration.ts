@@ -1,3 +1,14 @@
+import {
+  appendFile,
+  readFile,
+  rename,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
+import { fileURLToPath } from "node:url";
+import { KvNamespace } from "@alchemy.run/cloudflare-runtime/core/bindings";
+import type { CloudflareVitePluginOptions } from "@alchemy.run/cloudflare-runtime/vite";
+import cloudflareVitePlugin from "@alchemy.run/cloudflare-runtime/vite";
 // Alchemy modifications are licensed under Apache-2.0.
 // This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
 /**
@@ -31,23 +42,12 @@ import {
   createRedirectsFromAstroRoutes,
   printAsRedirects,
 } from "@astrojs/underscore-redirects";
-import type { CloudflareVitePluginOptions } from "@alchemy.run/cloudflare-runtime/vite";
-import cloudflareVitePlugin from "@alchemy.run/cloudflare-runtime/vite";
-import { KvNamespace } from "@alchemy.run/cloudflare-runtime/core/bindings";
 import type {
   AstroConfig,
   AstroIntegration,
   IntegrationResolvedRoute,
 } from "astro";
 import { passthroughImageService, sessionDrivers } from "astro/config";
-import {
-  appendFile,
-  readFile,
-  rename,
-  unlink,
-  writeFile,
-} from "node:fs/promises";
-import { fileURLToPath } from "node:url";
 import type * as vite from "vite";
 import { createConfigPlugin } from "./config-plugin.ts";
 import { NODE_ENVIRONMENTS } from "./environments.ts";

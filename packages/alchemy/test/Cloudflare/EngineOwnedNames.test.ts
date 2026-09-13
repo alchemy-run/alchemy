@@ -1,3 +1,16 @@
+import {
+  apiTokenCredentials,
+  Credentials,
+} from "@distilled.cloud/cloudflare/Credentials";
+import { NodeServices } from "@effect/platform-node";
+import { describe, expect, it } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as Layer from "effect/Layer";
+import * as MutableHashMap from "effect/MutableHashMap";
+import * as Redacted from "effect/Redacted";
+import { AlchemyContext } from "@/AlchemyContext.ts";
+import { ArtifactStore, createArtifactStore } from "@/Artifacts.ts";
 import type { CloudflareResolvedCredentials } from "@/Cloudflare/Auth/AuthConfig.ts";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment.ts";
 import { type Database, DatabaseProvider } from "@/Cloudflare/D1/Database.ts";
@@ -9,30 +22,17 @@ import {
   type Namespace,
   NamespaceProvider,
 } from "@/Cloudflare/KV/Namespace.ts";
+import { LocalRuntimeState } from "@/Cloudflare/LocalRuntime.ts";
 import { type Queue, QueueProvider } from "@/Cloudflare/Queues/Queue.ts";
 import { type Bucket, BucketProvider } from "@/Cloudflare/R2/Bucket.ts";
 import {
   type Index,
   IndexProvider,
 } from "@/Cloudflare/Vectorize/VectorizeIndex.ts";
-import { AlchemyContext } from "@/AlchemyContext.ts";
-import { ArtifactStore, createArtifactStore } from "@/Artifacts.ts";
-import { LocalRuntimeState } from "@/Cloudflare/LocalRuntime.ts";
 import { InstanceId } from "@/InstanceId.ts";
 import { Provider } from "@/Provider.ts";
 import { Stack, type StackSpec } from "@/Stack.ts";
 import { Stage } from "@/Stage.ts";
-import {
-  apiTokenCredentials,
-  Credentials,
-} from "@distilled.cloud/cloudflare/Credentials";
-import { NodeServices } from "@effect/platform-node";
-import { describe, expect, it } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as MutableHashMap from "effect/MutableHashMap";
-import * as Redacted from "effect/Redacted";
-import * as FetchHttpClient from "effect/http/FetchHttpClient";
 
 // Regression tests for the "engine-owned names" invariant: a provider's
 // `diff` must never order a replace (or rename) because the physical-name

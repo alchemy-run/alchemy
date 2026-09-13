@@ -9,12 +9,8 @@ import type {
 } from "@distilled.cloud/fly-io/machines";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-
-import type { Input } from "../Input.ts";
-import type { DiskSpec, MountedDisk, ServiceBinding } from "./MountVolume.ts";
-import type { Providers } from "./Providers.ts";
-
 import { deepEqual, isResolved } from "../Diff.ts";
+import type { Input } from "../Input.ts";
 import * as Provider from "../Provider.ts";
 import { Resource, type ResourceBinding } from "../Resource.ts";
 import { App } from "./App.ts";
@@ -36,6 +32,8 @@ import {
   diffMachineMetadata,
   sanitizeFlyAppName,
 } from "./Metadata.ts";
+import type { DiskSpec, MountedDisk, ServiceBinding } from "./MountVolume.ts";
+import type { Providers } from "./Providers.ts";
 import {
   deleteReplicaSet,
   listReplicaSets,

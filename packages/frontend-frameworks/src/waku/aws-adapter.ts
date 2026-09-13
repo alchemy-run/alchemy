@@ -1,3 +1,4 @@
+import * as NodePath from "node:path";
 /**
  * AWS Lambda adapter for waku, forked from waku's own aws-lambda adapter
  * (upstream `packages/waku/src/adapters/aws-lambda.ts` @ waku 1.0.0-beta.7).
@@ -30,7 +31,6 @@
 import type { Context, MiddlewareHandler, Next } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { Hono } from "hono/tiny";
-import * as NodePath from "node:path";
 import { unstable_createServerEntryAdapter as createServerEntryAdapter } from "waku/adapter-builders";
 import {
   unstable_constants as constants,

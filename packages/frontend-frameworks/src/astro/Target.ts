@@ -1,3 +1,5 @@
+import type { AstroInlineConfig, AstroIntegration } from "astro";
+import type * as Effect from "effect/Effect";
 /**
  * The Astro-specific deploy-target contract.
  *
@@ -24,8 +26,6 @@ import {
   type DeployTargetServices,
   type ServerEntryChunk,
 } from "../core/index.ts";
-import type { AstroInlineConfig, AstroIntegration } from "astro";
-import type * as Effect from "effect/Effect";
 
 /**
  * The context an Astro target's wholesale `build` takeover receives: the

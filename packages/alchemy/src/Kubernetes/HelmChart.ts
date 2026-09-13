@@ -1,17 +1,17 @@
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
-import { isResolved } from "../Diff.ts";
 import { hashDirectory } from "../Command/Memo.ts";
+import { isResolved } from "../Diff.ts";
 import { createPhysicalName } from "../PhysicalName.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { sha256Object } from "../Util/sha256.ts";
+import type { ClusterTransport } from "./ClusterAdapter.ts";
 import {
   toConnection,
   type ClusterLike,
   type Connection,
 } from "./Connection.ts";
-import type { ClusterTransport } from "./ClusterAdapter.ts";
 import {
   connectCluster,
   deleteObjects,

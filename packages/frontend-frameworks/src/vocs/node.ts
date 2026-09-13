@@ -1,3 +1,4 @@
+import * as NodePath from "node:path";
 /**
  * `@alchemy.run/frontend-frameworks/vocs/node` — the Node container deploy
  * target for Vocs.
@@ -12,21 +13,20 @@
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import * as NodePath from "node:path";
 import { runBuildChild } from "../core/BuildChild.ts";
 import { isInsideDevChild, runDevChild } from "../core/DevChild.ts";
-import {
-  NODE_BUNDLE_CONDITIONS,
-  NODE_SERVE_ENTRY_FILE_NAME,
-  relativeClientDirExpression,
-  writeNodeServeEntry,
-} from "../core/NodeServe.ts";
 import {
   DeployTargetError,
   Framework,
   makeDeployTarget,
   type Framework as FrameworkService,
 } from "../core/index.ts";
+import {
+  NODE_BUNDLE_CONDITIONS,
+  NODE_SERVE_ENTRY_FILE_NAME,
+  relativeClientDirExpression,
+  writeNodeServeEntry,
+} from "../core/NodeServe.ts";
 import type { VocsTarget } from "./Target.ts";
 import { make as makeVocsLayer } from "./Vocs.ts";
 

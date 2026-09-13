@@ -1,8 +1,8 @@
-import { isDeployTarget } from "../../core/index.ts";
-import * as Effect from "effect/Effect";
 import * as NodePath from "node:path";
+import * as Effect from "effect/Effect";
 import type * as ViteModule from "vite";
 import { describe, expect, it } from "vitest";
+import { isDeployTarget } from "../../core/index.ts";
 import cloudflareTargetFactory, {
   makeWakuCloudflareTarget,
   makeWakuPluginOptions,

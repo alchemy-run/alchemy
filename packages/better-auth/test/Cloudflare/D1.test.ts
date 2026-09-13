@@ -1,9 +1,8 @@
 import * as Alchemy from "alchemy";
+import { expect } from "alchemy-test";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Test from "alchemy/Test/Alchemy";
-import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import AuthWorker from "./fixtures/auth-worker.ts";
 import {
   AuthHttpError,
   edgeRetry,
@@ -11,6 +10,7 @@ import {
   postJson,
   toCookieHeader,
 } from "../http.ts";
+import AuthWorker from "./fixtures/auth-worker.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),

@@ -1,7 +1,7 @@
-import { functionEnvironment, functionSlug } from "@/Neon/FunctionConfig";
 import { expect, test } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import { functionEnvironment, functionSlug } from "@/Neon/FunctionConfig";
 
 const props = {
   branch: { projectId: "project", branchId: "branch" },

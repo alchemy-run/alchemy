@@ -1,14 +1,14 @@
+import { expect } from "alchemy-test";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as Layer from "effect/Layer";
+import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
 import * as Cloudflare from "@/Cloudflare";
 import * as Neon from "@/Neon";
 import * as Prisma from "@/Prisma";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Data from "effect/Data";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import { MinimumLogLevel } from "effect/References";
-import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/http/HttpClient";
 import Stack from "./fixtures/prisma-orm/stack.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({

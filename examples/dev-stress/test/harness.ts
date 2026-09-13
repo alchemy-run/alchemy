@@ -59,7 +59,12 @@ const SKIP_COPY = new Set([
 export const resetFlociEmulator = (): void => {
   const names = spawnSync(
     "docker",
-    ["ps", "-aq", "--filter", "name=^(alchemy-floci$|floci-ec2|floci-ecs|floci-microvm)"],
+    [
+      "ps",
+      "-aq",
+      "--filter",
+      "name=^(alchemy-floci$|floci-ec2|floci-ecs|floci-microvm)",
+    ],
     { encoding: "utf8", timeout: 30_000 },
   )
     .stdout?.trim()
@@ -161,19 +166,15 @@ export class DevServer {
     this.stage = options.stage;
     this.logPath = path.join(options.cwd, "dev-stress.log");
     this.logStream = fs.createWriteStream(this.logPath, { flags: "a" });
-    this.proc = spawn(
-      "bun",
-      [ALCHEMY_BIN, "dev", "--stage", options.stage],
-      {
-        cwd: options.cwd,
-        // Own process group so teardown can deliver Ctrl-C to the whole
-        // tree (CLI + `--watch` exec child + provider sidecars) the way a
-        // terminal would.
-        detached: true,
-        stdio: ["ignore", "pipe", "pipe"],
-        env: hermeticEnv(options.env),
-      },
-    );
+    this.proc = spawn("bun", [ALCHEMY_BIN, "dev", "--stage", options.stage], {
+      cwd: options.cwd,
+      // Own process group so teardown can deliver Ctrl-C to the whole
+      // tree (CLI + `--watch` exec child + provider sidecars) the way a
+      // terminal would.
+      detached: true,
+      stdio: ["ignore", "pipe", "pipe"],
+      env: hermeticEnv(options.env),
+    });
     const pump = (stream: NodeJS.ReadableStream | null) =>
       stream?.on("data", (chunk: Buffer) => {
         const text = chunk.toString();
@@ -380,16 +381,12 @@ export class DevServer {
 
   /** Tear the stack's local resources down out of band. */
   destroyStack(timeoutMs = 180_000): void {
-    spawnSync(
-      "bun",
-      [ALCHEMY_BIN, "destroy", "--stage", this.stage, "--yes"],
-      {
-        cwd: this.cwd,
-        stdio: process.env.DEBUG ? "inherit" : "ignore",
-        timeout: timeoutMs,
-        env: hermeticEnv(),
-      },
-    );
+    spawnSync("bun", [ALCHEMY_BIN, "destroy", "--stage", this.stage, "--yes"], {
+      cwd: this.cwd,
+      stdio: process.env.DEBUG ? "inherit" : "ignore",
+      timeout: timeoutMs,
+      env: hermeticEnv(),
+    });
   }
 }
 
@@ -413,7 +410,10 @@ export const fetchWithDeadline = (
   init?: RequestInit,
   timeoutMs = REQUEST_TIMEOUT_MS,
 ): Promise<Response> =>
-  fetch(url, { ...init, signal: init?.signal ?? AbortSignal.timeout(timeoutMs) });
+  fetch(url, {
+    ...init,
+    signal: init?.signal ?? AbortSignal.timeout(timeoutMs),
+  });
 
 /** Bounded poll for a (possibly async) producer to yield a value. */
 export const pollUntil = async <T>(
@@ -515,5 +515,5 @@ export const at = (port: number, path = "/"): URL =>
 
 /** Docker gate — floci (the AWS emulator) and Containers both need it. */
 export const dockerAvailable =
-  spawnSync("docker", ["info"], { stdio: "ignore", timeout: 30_000 })
-    .status === 0;
+  spawnSync("docker", ["info"], { stdio: "ignore", timeout: 30_000 }).status ===
+  0;

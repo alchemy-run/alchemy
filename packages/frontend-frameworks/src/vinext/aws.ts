@@ -1,3 +1,9 @@
+import { fileURLToPath } from "node:url";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
+import type * as Scope from "effect/Scope";
+import { runBuildChild } from "../core/BuildChild.ts";
 /**
  * `@alchemy.run/frontend-frameworks/vinext/aws` — vinext on AWS Lambda.
  *
@@ -18,18 +24,12 @@
  * the deploy target (same shape as `nextjs/aws`).
  */
 import * as FrameworkCore from "../core/index.ts";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
-import type * as Scope from "effect/Scope";
-import { fileURLToPath } from "node:url";
-import { resolveProjectPackageDirectory } from "../core/Loader.ts";
-import { runBuildChild } from "../core/BuildChild.ts";
 import {
   DeployTargetError,
   makeDeployTarget,
   type DeployTarget,
 } from "../core/index.ts";
+import { resolveProjectPackageDirectory } from "../core/Loader.ts";
 import {
   awaitVinextDevReady,
   collectVinextDist,

@@ -1,12 +1,12 @@
 /** @jsxImportSource @alchemy.run/sigil */
-import type { ReactNode } from "react";
 import { useSyncExternalStore } from "@alchemy.run/sigil/react";
+import type { ReactNode } from "react";
+import { theme } from "../../../Util/Theme.ts";
 import { useGlyphs } from "./Environment.tsx";
 import { SpinnerGlyph } from "./Feedback.tsx";
-import { ProgressBar } from "./ProgressBar.tsx";
 import { Box, Row, Stack } from "./Layout.tsx";
+import { ProgressBar } from "./ProgressBar.tsx";
 import { Text } from "./Typography.tsx";
-import { theme } from "../../../Util/Theme.ts";
 
 export interface TaskRowProps {
   /** Status glyph. Ignored while `spinning`; defaults to the bullet glyph. */

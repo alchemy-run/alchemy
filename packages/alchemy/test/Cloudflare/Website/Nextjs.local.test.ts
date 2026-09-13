@@ -1,19 +1,19 @@
+import * as kv from "@distilled.cloud/cloudflare/kv";
+import { describe, expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Path from "effect/Path";
+import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
+import * as pathe from "pathe";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import { isLocalId } from "@/Cloudflare/LocalRuntime";
 import * as Alchemy from "@/index.ts";
 import * as Test from "@/Test/Alchemy";
-import * as kv from "@distilled.cloud/cloudflare/kv";
-import { describe, expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
-import { MinimumLogLevel } from "effect/References";
-import * as Schedule from "effect/Schedule";
-import * as Stream from "effect/Stream";
-import * as HttpClient from "effect/http/HttpClient";
-import * as HttpClientRequest from "effect/http/HttpClientRequest";
-import * as pathe from "pathe";
 import { cloneFixture } from "../Utils/Fixture.ts";
 import { expectUrlContains } from "../Utils/Http.ts";
 import { prepareNextjsFixture } from "./TypeScriptCompat.ts";
@@ -126,10 +126,7 @@ describe.concurrent(
                 rootDir,
                 dev: { port: 0 },
                 memo: { include: memoInclude },
-                env: {
-                  TEST_TEXT: bindingMarker,
-                  FIXTURE_KV: siteKv,
-                },
+                env: { TEST_TEXT: bindingMarker, FIXTURE_KV: siteKv },
               });
               return { site, siteKv };
             }),
@@ -208,9 +205,7 @@ describe.concurrent(
                 rootDir,
                 dev: { mode: "hmr", port: 0 },
                 memo: { include: memoInclude },
-                env: {
-                  TEST_TEXT: bindingMarker,
-                },
+                env: { TEST_TEXT: bindingMarker },
               });
               return { site };
             }),

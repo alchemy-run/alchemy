@@ -1,12 +1,12 @@
-import * as sshKeys from "@distilled.cloud/hetzner/ssh_keys";
 import { generateKeyPairSync } from "node:crypto";
-import * as Hetzner from "@/Hetzner";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
+import * as sshKeys from "@distilled.cloud/hetzner/ssh_keys";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Hetzner from "@/Hetzner";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Hetzner.providers() });
 

@@ -1,15 +1,15 @@
-import { makeFunctionBridge } from "@/Neon/FunctionBridge";
-import { FunctionRequest } from "@/Neon/FunctionEnvironment";
-import { makeFunctionRuntimeContext } from "@/Neon/FunctionRuntimeContext";
-import { FunctionUpgradeSockets } from "@/Neon/FunctionUpgrade";
 import { expect, test } from "alchemy-test";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
-import * as Stream from "effect/Stream";
-import * as Scope from "effect/Scope";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Scope from "effect/Scope";
+import * as Stream from "effect/Stream";
+import { makeFunctionBridge } from "@/Neon/FunctionBridge";
+import { FunctionRequest } from "@/Neon/FunctionEnvironment";
+import { makeFunctionRuntimeContext } from "@/Neon/FunctionRuntimeContext";
+import { FunctionUpgradeSockets } from "@/Neon/FunctionUpgrade";
 
 for (const cancellation of ["abort", "body"] as const)
   test.live(

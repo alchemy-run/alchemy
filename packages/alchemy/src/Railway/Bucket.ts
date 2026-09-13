@@ -1,4 +1,3 @@
-import { projectBuckets } from "./GraphQL.ts";
 import { Query, type UnwrapPlan } from "@distilled.cloud/core/query";
 import {
   Railway,
@@ -14,6 +13,7 @@ import { Unowned } from "../AdoptPolicy.ts";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
+import { projectBuckets } from "./GraphQL.ts";
 import {
   createRailwayName,
   matchesAlchemyPhysicalName,

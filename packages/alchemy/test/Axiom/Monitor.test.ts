@@ -1,10 +1,10 @@
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import { MinimumLogLevel } from "effect/References";
 import * as Axiom from "@/Axiom";
 import * as Output from "@/Output";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import { MinimumLogLevel } from "effect/References";
 
 const { test } = Test.make({ providers: Axiom.providers() });
 

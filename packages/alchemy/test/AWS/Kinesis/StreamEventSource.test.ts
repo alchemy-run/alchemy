@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import * as Test from "@/Test/Alchemy";
 import * as Kinesis from "@distilled.cloud/aws/kinesis";
 import * as Lambda from "@distilled.cloud/aws/lambda";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/http/HttpClient";
+import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
 import KinesisStreamFunctionLive, {
   KinesisStreamFunction,
 } from "./stream-handler.ts";

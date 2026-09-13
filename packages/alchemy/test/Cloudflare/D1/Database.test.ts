@@ -1,8 +1,3 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import { hashMigrations } from "@/SQL/SqlFile.ts";
-import { State } from "@/State";
-import * as Test from "@/Test/Alchemy";
 import * as d1 from "@distilled.cloud/cloudflare/d1";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
@@ -12,6 +7,11 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import { hashMigrations } from "@/SQL/SqlFile.ts";
+import { State } from "@/State";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 

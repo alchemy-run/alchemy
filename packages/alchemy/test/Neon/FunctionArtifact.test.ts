@@ -1,13 +1,13 @@
-import {
-  buildFunctionArtifact,
-  validateFunctionZip,
-} from "@/Neon/FunctionArtifact";
-import { zipFiles } from "@/Util/zip";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, test } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import {
+  buildFunctionArtifact,
+  validateFunctionZip,
+} from "@/Neon/FunctionArtifact";
+import { zipFiles } from "@/Util/zip";
 
 const scope = { branch: { projectId: "project", branchId: "branch" } };
 

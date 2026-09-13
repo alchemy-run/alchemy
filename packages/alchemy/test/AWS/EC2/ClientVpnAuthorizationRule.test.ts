@@ -1,12 +1,12 @@
+import * as ec2 from "@distilled.cloud/aws/ec2";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { ClientVpnAuthorizationRule } from "@/AWS/EC2/ClientVpnAuthorizationRule.ts";
 import { ClientVpnEndpoint } from "@/AWS/EC2/ClientVpnEndpoint.ts";
 import * as Alchemy from "@/index.ts";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import * as ec2 from "@distilled.cloud/aws/ec2";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 import {
   assertClientVpnAuthorizationDeleted,
   assertClientVpnCertificateDeleted,

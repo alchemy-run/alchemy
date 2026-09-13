@@ -1,3 +1,6 @@
+import * as mediapackagev2 from "@distilled.cloud/aws/mediapackagev2";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import {
   deleteChannelWithEndpoints,
@@ -6,9 +9,6 @@ import {
   retryWhileMpConflict,
 } from "@/AWS/MediaPackageV2/internal.ts";
 import * as Test from "@/Test/Alchemy";
-import * as mediapackagev2 from "@distilled.cloud/aws/mediapackagev2";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

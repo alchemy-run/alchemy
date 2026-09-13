@@ -1,10 +1,10 @@
-import * as AWS from "@/AWS";
-import * as Test from "@/Test/Alchemy";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 
@@ -82,10 +82,7 @@ describe.skipIf(!runLive)(
           yield* expectUrlContains(
             `${deployed.site.serverUrl!}`,
             "NUXT_AWS_PAGE_MARKER",
-            {
-              timeout: "120 seconds",
-              label: "SSR direct from Lambda URL",
-            },
+            { timeout: "120 seconds", label: "SSR direct from Lambda URL" },
           );
 
           // SSR page rendered by the Lambda through CloudFront.
@@ -97,9 +94,7 @@ describe.skipIf(!runLive)(
           yield* expectUrlContains(
             `${url}/`,
             "config:nuxt-aws-user-config-loaded",
-            {
-              label: "user nuxt.config.ts applied",
-            },
+            { label: "user nuxt.config.ts applied" },
           );
           // Server API route through the streaming Function URL origin.
           yield* expectUrlContains(
@@ -116,9 +111,7 @@ describe.skipIf(!runLive)(
           yield* expectUrlContains(
             `${url}/robots.txt`,
             "nuxt-aws-robots-marker",
-            {
-              label: "public asset from S3",
-            },
+            { label: "public asset from S3" },
           );
           // Prerendered page (nitro wrote it into .output/public at build
           // time; the edge router serves it from S3 by exact match).
@@ -159,9 +152,7 @@ describe.skipIf(!runLive)(
                 rootDir,
                 forceDestroy: true,
                 domain: { router },
-                env: {
-                  NUXT_PUBLIC_ENV_MARKER: "nuxt-aws-live-env-marker",
-                },
+                env: { NUXT_PUBLIC_ENV_MARKER: "nuxt-aws-live-env-marker" },
               });
               return { router, site };
             }),
@@ -208,9 +199,7 @@ describe.skipIf(!runLive)(
           yield* expectUrlContains(
             `${url}/robots.txt`,
             "nuxt-aws-robots-marker",
-            {
-              label: "public asset via router",
-            },
+            { label: "public asset via router" },
           );
           // Prerendered page from S3 by exact match.
           yield* expectUrlContains(

@@ -1,5 +1,3 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Test from "@/Test/Alchemy";
 import { describe } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -7,6 +5,8 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../Utils/Fixture.ts";
 import { expectUrlContains } from "../Utils/Http.ts";
 
@@ -16,11 +16,7 @@ const fixtureDir = pathe.resolve(import.meta.dirname, "fixtures/assets-only");
 
 class NotFoundAssertionFailed extends Data.TaggedError(
   "NotFoundAssertionFailed",
-)<{
-  url: string;
-  status: number;
-  bodyExcerpt: string;
-}> {}
+)<{ url: string; status: number; bodyExcerpt: string }> {}
 
 /**
  * Assert `url` serves the custom 404 page: status 404 with the fixture's
@@ -142,10 +138,7 @@ describe.concurrent(
           yield* stack.destroy();
 
           class Site extends Cloudflare.Worker<Site>()("AssetsOnlyClass", {
-            assets: {
-              directory: fixtureDir,
-              notFoundHandling: "404-page",
-            },
+            assets: { directory: fixtureDir, notFoundHandling: "404-page" },
             workersDev: true,
             compatibility: { date: "2024-01-01" },
           }) {}

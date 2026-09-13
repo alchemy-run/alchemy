@@ -18,7 +18,10 @@ import type { Providers } from "../Providers.ts";
  */
 export class ReplicationSetNotActive extends Data.TaggedError(
   "ReplicationSetNotActive",
-)<{ message: string; status: string }> {}
+)<{
+  message: string;
+  status: string;
+}> {}
 
 export interface ReplicationSetProps {
   /**

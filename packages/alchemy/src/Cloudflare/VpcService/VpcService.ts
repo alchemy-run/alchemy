@@ -2,7 +2,6 @@ import * as connectivity from "@distilled.cloud/cloudflare/connectivity";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
-
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -123,7 +122,9 @@ export type VpcService = Resource<
  */
 export const VpcService = Resource<VpcService>(
   "Cloudflare.VpcService.VpcService",
-  { aliases: ["Cloudflare.VpcService"] },
+  {
+    aliases: ["Cloudflare.VpcService"],
+  },
 );
 
 export const isVpcService = (value: unknown): value is VpcService =>

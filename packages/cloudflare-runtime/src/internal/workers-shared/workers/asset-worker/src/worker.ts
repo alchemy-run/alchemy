@@ -4,13 +4,6 @@ import { WorkerEntrypoint } from "cloudflare:workers";
 import { PerformanceTimer } from "../../../shared/performance.ts";
 import { setupSentry } from "../../../shared/sentry.ts";
 import { mockJaegerBinding } from "../../../shared/tracing.ts";
-import { Analytics, EntrypointType, getRequestKind } from "./analytics.ts";
-import { AssetsManifest } from "./assets-manifest.ts";
-import { normalizeConfiguration } from "./configuration.ts";
-import { ExperimentAnalytics } from "./experiment-analytics.ts";
-import { canFetch, handleRequest } from "./handler.ts";
-import { handleError, submitMetrics } from "./utils/final-operations.ts";
-import { getAssetWithMetadataFromKV } from "./utils/kv.ts";
 import type {
   AssetConfig,
   ColoMetadata,
@@ -19,7 +12,14 @@ import type {
   UnsafePerformanceTimer,
 } from "../../../shared/types.ts";
 import type { AccountCohortQuerierBinding } from "../worker-configuration.d.ts";
+import { Analytics, EntrypointType, getRequestKind } from "./analytics.ts";
+import { AssetsManifest } from "./assets-manifest.ts";
+import { normalizeConfiguration } from "./configuration.ts";
+import { ExperimentAnalytics } from "./experiment-analytics.ts";
+import { canFetch, handleRequest } from "./handler.ts";
 import type { Environment, ReadyAnalytics } from "./types.ts";
+import { handleError, submitMetrics } from "./utils/final-operations.ts";
+import { getAssetWithMetadataFromKV } from "./utils/kv.ts";
 
 // ============================================================
 // SECTION 1: SHARED TYPES & INTERFACE CONTRACT

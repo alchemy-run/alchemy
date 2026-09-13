@@ -1,4 +1,3 @@
-import { cachedInScope } from "@/Util/Memoize.ts";
 import { describe, expect, it } from "alchemy-test";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
@@ -6,6 +5,7 @@ import * as Deferred from "effect/Deferred";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Scope from "effect/Scope";
+import { cachedInScope } from "@/Util/Memoize.ts";
 
 // `Effect.cached` runs the computation on the first caller's fiber, so
 // interrupting that caller while others wait fails every waiter with an
@@ -49,7 +49,9 @@ describe("cachedInScope", { tags: ["unit", "local"] }, () => {
       );
       const [a, b] = yield* Effect.all(
         [Effect.result(memo), Effect.result(memo)],
-        { concurrency: "unbounded" },
+        {
+          concurrency: "unbounded",
+        },
       );
       expect(a._tag).toBe("Failure");
       expect(b._tag).toBe("Failure");

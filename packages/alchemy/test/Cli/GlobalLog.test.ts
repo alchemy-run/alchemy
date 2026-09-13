@@ -1,10 +1,10 @@
-import { consoleLogFloor, makeConsoleLogger } from "@/Cli/GlobalLog.ts";
-import { makePlainConsoleSink } from "@/Util/ConsoleSink.ts";
 import { describe, expect, it } from "alchemy-test";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Logger from "effect/Logger";
 import { MinimumLogLevel } from "effect/References";
+import { consoleLogFloor, makeConsoleLogger } from "@/Cli/GlobalLog.ts";
+import { makePlainConsoleSink } from "@/Util/ConsoleSink.ts";
 
 /**
  * The console sink keeps an Info floor by default so `~/.alchemy/logs` stays

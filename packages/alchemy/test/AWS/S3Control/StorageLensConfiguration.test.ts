@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import { StorageLensConfiguration } from "@/AWS/S3Control";
-import * as Test from "@/Test/Alchemy";
 import * as s3control from "@distilled.cloud/aws/s3-control";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { StorageLensConfiguration } from "@/AWS/S3Control";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -21,7 +21,9 @@ const findConfiguration = (configId: string) =>
 
 class ConfigurationStillExists extends Data.TaggedError(
   "ConfigurationStillExists",
-)<{ readonly configId: string }> {}
+)<{
+  readonly configId: string;
+}> {}
 
 const assertConfigurationDeleted = (configId: string) =>
   findConfiguration(configId).pipe(

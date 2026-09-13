@@ -1,14 +1,14 @@
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import { WorkerDomainConfigError } from "@/Cloudflare/Workers/WorkerProvider.ts";
-import { findZoneByName } from "@/Cloudflare/Zone/lookup";
-import * as Test from "@/Test/Alchemy";
 import * as rulesets from "@distilled.cloud/cloudflare/rulesets";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import { WorkerDomainConfigError } from "@/Cloudflare/Workers/WorkerProvider.ts";
+import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Test from "@/Test/Alchemy";
 import { expectUrlContains } from "../Utils/Http.ts";
 import { waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
 
@@ -45,7 +45,10 @@ const waitForDns = Effect.fn(function* (hostname: string) {
     try: async (signal) => {
       const res = await fetch(
         `https://1.1.1.1/dns-query?name=${hostname}&type=AAAA`,
-        { headers: { accept: "application/dns-json" }, signal },
+        {
+          headers: { accept: "application/dns-json" },
+          signal,
+        },
       );
       const body = (await res.json()) as { Answer?: unknown[] };
       if (!body.Answer?.length) throw new Error("no answer");

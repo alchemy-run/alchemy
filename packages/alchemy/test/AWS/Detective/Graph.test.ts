@@ -1,10 +1,10 @@
+import * as detective from "@distilled.cloud/aws/detective";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { Graph } from "@/AWS/Detective/Graph.ts";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import * as detective from "@distilled.cloud/aws/detective";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 import { makeDetectiveTestLease } from "./TestLease.ts";
 
 const { test, beforeAll, afterAll } = Test.make({

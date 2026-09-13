@@ -1,8 +1,8 @@
 import * as Effect from "effect/Effect";
 import * as Binding from "../Binding.ts";
-import type { Zone } from "./Zone.ts";
 import { type ReadDnsClient } from "./ReadDns.ts";
 import { type WriteDnsClient } from "./WriteDns.ts";
+import type { Zone } from "./Zone.ts";
 
 /**
  * Binding that lets runtime code perform the full Hetzner Cloud DNS RRSet

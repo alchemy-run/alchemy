@@ -315,7 +315,9 @@ export const Queue = Resource<Queue>("AWS.SQS.Queue");
  */
 export class SqsEncryptionConflict extends Data.TaggedError(
   "SqsEncryptionConflict",
-)<{ message: string }> {}
+)<{
+  message: string;
+}> {}
 
 /** Raised when a queue identity depends on an unresolved resource output. */
 export class UnresolvedQueueIdentity extends Data.TaggedError(

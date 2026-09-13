@@ -1,16 +1,16 @@
 import * as machines from "@distilled.cloud/fly-io/machines";
+import { expect } from "alchemy-test";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as Layer from "effect/Layer";
+import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
 import * as Fly from "@/Fly";
 import * as Alchemy from "@/index.ts";
 import { Stack as StackService } from "@/Stack.ts";
 import { Stage } from "@/Stage.ts";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Data from "effect/Data";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import { MinimumLogLevel } from "effect/References";
-import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/http/HttpClient";
 import Api from "./fixtures/app/api.ts";
 import {
   Marker,

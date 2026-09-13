@@ -1,3 +1,4 @@
+import type { WorkflowEvent } from "cloudflare:workers";
 // Alchemy modifications are licensed under Apache-2.0.
 // This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
 import type { ResolvedStepConfig } from "./context.ts";
@@ -6,7 +7,6 @@ import type {
   DatabaseVersion,
   DatabaseWorkflow,
 } from "./engine.ts";
-import type { WorkflowEvent } from "cloudflare:workers";
 
 export type Instance = {
   id: string;

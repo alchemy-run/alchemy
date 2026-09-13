@@ -1,3 +1,5 @@
+import * as NodeCrypto from "node:crypto";
+import { createRequire } from "node:module";
 /**
  * The alchemy Worker source-provider entry for Next.js
  * (`@alchemy.run/frontend-frameworks/nextjs/source`).
@@ -28,16 +30,14 @@ import type {
   BindingHooks,
   RuntimeWorker,
 } from "@alchemy.run/cloudflare-runtime/core";
-import * as FrameworkCore from "../core/index.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
 import type * as Scope from "effect/Scope";
-import * as NodeCrypto from "node:crypto";
-import { createRequire } from "node:module";
 import { runBuildChild } from "../core/BuildChild.ts";
+import * as FrameworkCore from "../core/index.ts";
 import * as Nextjs from "./Nextjs.ts";
 import * as Runner from "./Runner.ts";
 

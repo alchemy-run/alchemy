@@ -1,12 +1,12 @@
+import { inflateRawSync } from "node:zlib";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import { inflateRawSync } from "node:zlib";
 import * as Bundle from "../Bundle/Bundle.ts";
 import * as TempRoot from "../Bundle/TempRoot.ts";
-import { sha256 } from "../Util/sha256.ts";
 import { moduleExtension } from "../Util/Node.ts";
+import { sha256 } from "../Util/sha256.ts";
 import { zipFiles, type ZipFile } from "../Util/zip.ts";
 import type { FunctionProps } from "./Function.ts";
 import { nativeArtifactError } from "./NativeArtifact.ts";

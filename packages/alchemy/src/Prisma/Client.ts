@@ -1,5 +1,5 @@
-import * as Data from "effect/Data";
 import * as Context from "effect/Context";
+import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -1096,13 +1096,18 @@ function makePrismaClient(): Effect.Effect<
         request<BackupListResponse>(
           "GET",
           `/v1/databases/${pathSegment(databaseId)}/backups`,
-          { query },
+          {
+            query,
+          },
         ),
       restoreDatabase: (targetDatabaseId, input) =>
         data<RestoredDatabase>(
           "POST",
           `/v1/databases/${pathSegment(targetDatabaseId)}/restore`,
-          { body: input, timeout: PROVISIONING_REQUEST_TIMEOUT },
+          {
+            body: input,
+            timeout: PROVISIONING_REQUEST_TIMEOUT,
+          },
         ),
       getDatabaseUsage: (databaseId, query) =>
         request<DatabaseUsage>(
@@ -1171,7 +1176,9 @@ function makePrismaClient(): Effect.Effect<
         data<BucketKeyWithSecret>(
           "POST",
           `/v1/buckets/${pathSegment(bucketId)}/keys`,
-          { body: input },
+          {
+            body: input,
+          },
         ),
       deleteBucketKey: (bucketId, keyId) =>
         request<void>(
@@ -1297,7 +1304,9 @@ function makePrismaClient(): Effect.Effect<
         data<EnvironmentVariable>(
           "PATCH",
           `/v1/environment-variables/${pathSegment(id)}`,
-          { body: input },
+          {
+            body: input,
+          },
         ),
       deleteEnvironmentVariable: (id) =>
         request<void>("DELETE", `/v1/environment-variables/${pathSegment(id)}`),

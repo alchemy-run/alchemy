@@ -37,21 +37,21 @@
 
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
-import * as Artifacts from "../../Artifacts.ts";
 import * as Path from "effect/Path";
 import * as Stream from "effect/Stream";
 import { AlchemyContext } from "../../AlchemyContext.ts";
+import * as Artifacts from "../../Artifacts.ts";
 import { getStableContextDir } from "../../Bundle/TempRoot.ts";
+import { hashDirectory } from "../../Command/Memo.ts";
 import { Docker, DockerLive } from "../../Docker/Docker.ts";
 import { isInlineDockerfile } from "../../Docker/Dockerfile.ts";
-import { hashDirectory } from "../../Command/Memo.ts";
 import { sha256 } from "../../Util/sha256.ts";
+import type { ImageSourceLike } from "../ECR/ImageSource.ts";
 import {
   flociProvidersUrl,
   makeDevWatchProvider,
 } from "../Local/DevWatchProvider.ts";
 import { imageSourceTrigger } from "../Local/ImageSourceTrigger.ts";
-import type { ImageSourceLike } from "../ECR/ImageSource.ts";
 import {
   buildMicrovmDockerfile,
   bundleMicrovmProgram,

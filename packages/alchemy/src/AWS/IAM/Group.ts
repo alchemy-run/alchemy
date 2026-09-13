@@ -6,8 +6,8 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
-import type { PolicyDocument } from "./Policy.ts";
 import { parsePolicyDocument, stringifyPolicyDocument } from "./common.ts";
+import type { PolicyDocument } from "./Policy.ts";
 
 export interface GroupProps {
   /**

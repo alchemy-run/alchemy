@@ -1,8 +1,3 @@
-import { withEnvironmentConfigLock } from "./transient.ts";
-import {
-  waitUntilDeleted,
-  projectServices as fetchProjectServices,
-} from "./GraphQL.ts";
 import { Query, type UnwrapPlan } from "@distilled.cloud/core/query";
 import {
   Railway,
@@ -14,9 +9,14 @@ import * as Schedule from "effect/Schedule";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
+import {
+  waitUntilDeleted,
+  projectServices as fetchProjectServices,
+} from "./GraphQL.ts";
 import { matchesAlchemyPhysicalName } from "./Metadata.ts";
 import { ownedProjects, projectEnvironmentIds } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
+import { withEnvironmentConfigLock } from "./transient.ts";
 
 const domainFields = <E>(domain: Query<RailwayCustomDomain, E>) => ({
   id: domain.id,

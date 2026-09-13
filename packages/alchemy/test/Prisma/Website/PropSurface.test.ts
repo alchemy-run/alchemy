@@ -1,5 +1,5 @@
-import * as Prisma from "@/Prisma/index.ts";
 import { expect, it } from "alchemy-test";
+import * as Prisma from "@/Prisma/index.ts";
 
 const constructors = [
   "Astro",

@@ -1,7 +1,3 @@
-import * as Data from "effect/Data";
-import * as Duration from "effect/Duration";
-import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
 import * as Category from "@distilled.cloud/core/category";
 import {
   type GetServicesResponse,
@@ -10,6 +6,10 @@ import {
   deleteProject,
   getServices,
 } from "@distilled.cloud/prisma/management";
+import * as Data from "effect/Data";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import { stopDeploymentIdempotent } from "./Internal/DeploymentActions.ts";
 import { observeDeployment } from "./Internal/DeploymentObserve.ts";
 import type { ObservedDeployment } from "./Internal/Observed.ts";

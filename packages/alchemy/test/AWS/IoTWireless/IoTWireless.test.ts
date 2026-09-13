@@ -1,3 +1,7 @@
+import * as iotw from "@distilled.cloud/aws/iot-wireless";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import * as AWS from "@/AWS";
 import { Role } from "@/AWS/IAM/Role.ts";
 import {
@@ -8,10 +12,6 @@ import {
   WirelessGateway,
 } from "@/AWS/IoTWireless";
 import * as Test from "@/Test/Alchemy";
-import * as iotw from "@distilled.cloud/aws/iot-wireless";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

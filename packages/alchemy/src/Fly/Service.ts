@@ -6,13 +6,16 @@ import type {
   FlyStatic,
   Machine as FlyMachine,
 } from "@distilled.cloud/fly-io/machines";
+import * as machines from "@distilled.cloud/fly-io/machines";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
 import { AlchemyContext } from "../AlchemyContext.ts";
 import * as Bundle from "../Bundle/Bundle.ts";
 import { deepEqual, isResolved } from "../Diff.ts";
 import { DockerLive, Docker } from "../Docker/Docker.ts";
+import type { Input } from "../Input.ts";
 import {
   Platform,
   type Main,
@@ -20,11 +23,14 @@ import {
   type PlatformProps,
 } from "../Platform.ts";
 import * as Provider from "../Provider.ts";
-import type { Input } from "../Input.ts";
+import { makeRandom } from "../Random.ts";
 import type { Resource } from "../Resource.ts";
+import { packEnvValue } from "../RuntimeContext.ts";
 import type { ServerHost } from "../Server/Process.ts";
 import { Stack } from "../Stack.ts";
 import { App, deleteApp, ensureApp } from "./App.ts";
+import { boundTargetEnvKeys } from "./BindService.ts";
+import { attachBucketSecrets } from "./Bucket.ts";
 import {
   deploymentPolicy,
   validateDeployment,
@@ -32,30 +38,28 @@ import {
   type MachineShutdown,
   type MachineCheck,
 } from "./Deployment.ts";
-import type {
-  MachineGuest,
-  MachineImageRef,
-  MachineService,
-} from "./Machine.ts";
+import { resolveOrgSlug } from "./Environment.ts";
+import {
+  collectBindingState,
+  createFlyHostedSupport,
+  createFlyHostRuntimeContext,
+  defaultHttpServices,
+  DEFAULT_PORT,
+  toEnvRecord,
+  type FlyBuildOptions,
+  type FlyHostRuntimeContext,
+  type HostedProgramProps,
+} from "./hosted.ts";
 import {
   ensureFlycastAddress,
   hasPublicAddress,
   syncOwnedAppAddresses,
 } from "./IpAssignment.ts";
-import * as machines from "@distilled.cloud/fly-io/machines";
-import * as Redacted from "effect/Redacted";
-import { makeRandom } from "../Random.ts";
-import { resolveOrgSlug } from "./Environment.ts";
-import { bindingPortOf, findPortConflict, portsOfFly } from "./ports.ts";
-import { packEnvValue } from "../RuntimeContext.ts";
-import { boundTargetEnvKeys } from "./BindService.ts";
-import {
-  BINDING_PORT_ENV,
-  DEFAULT_BINDING_PORT,
-  RPC_ORG_ENV,
-  RPC_TOKEN_ENV,
-} from "./rpc.ts";
-import { type Region, regionList } from "./Region.ts";
+import type {
+  MachineGuest,
+  MachineImageRef,
+  MachineService,
+} from "./Machine.ts";
 import {
   alchemyMetadataKeys,
   createFlyAppName,
@@ -68,21 +72,11 @@ import type {
   MountedDisk,
   ServiceBinding,
 } from "./MountVolume.ts";
-import type { Providers } from "./Providers.ts";
-import {
-  collectBindingState,
-  createFlyHostedSupport,
-  createFlyHostRuntimeContext,
-  defaultHttpServices,
-  DEFAULT_PORT,
-  toEnvRecord,
-  type FlyBuildOptions,
-  type FlyHostRuntimeContext,
-  type HostedProgramProps,
-} from "./hosted.ts";
-import { attachBucketSecrets } from "./Bucket.ts";
+import { bindingPortOf, findPortConflict, portsOfFly } from "./ports.ts";
 import { attachPostgresSecrets } from "./Postgres.ts";
+import type { Providers } from "./Providers.ts";
 import { attachRedisSecrets } from "./Redis.ts";
+import { type Region, regionList } from "./Region.ts";
 import {
   deleteReplicaSet,
   hasPublishedService,
@@ -96,6 +90,12 @@ import {
   type Replica,
   type ReplicaSet,
 } from "./replicas.ts";
+import {
+  BINDING_PORT_ENV,
+  DEFAULT_BINDING_PORT,
+  RPC_ORG_ENV,
+  RPC_TOKEN_ENV,
+} from "./rpc.ts";
 
 /**
  * A resource-valued prop: the resource itself, or an Effect that produces

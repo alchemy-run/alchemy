@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import { AttributeGroup } from "@/AWS/AppRegistry";
-import * as Test from "@/Test/Alchemy";
 import * as appregistry from "@distilled.cloud/aws/service-catalog-appregistry";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { AttributeGroup } from "@/AWS/AppRegistry";
+import * as Test from "@/Test/Alchemy";
 import { makeAppRegistryTestLease } from "./TestLease.ts";
 
 const { test, beforeAll, afterAll } = Test.make({ providers: AWS.providers() });
@@ -16,7 +16,9 @@ afterAll(serviceLease.release);
 
 class AttributeGroupStillExists extends Data.TaggedError(
   "AttributeGroupStillExists",
-)<{ specifier: string }> {}
+)<{
+  specifier: string;
+}> {}
 
 const assertAttributeGroupGone = (specifier: string) =>
   appregistry.getAttributeGroup({ attributeGroup: specifier }).pipe(

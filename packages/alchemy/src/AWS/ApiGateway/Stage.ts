@@ -8,11 +8,10 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags } from "../../Tags.ts";
 import { toWireSeconds } from "../../Util/Duration.ts";
-import type { Providers } from "../Providers.ts";
-
 import { AWSEnvironment } from "../Environment.ts";
-import type { RestApi } from "./RestApi.ts";
+import type { Providers } from "../Providers.ts";
 import { retryOnApiStatusUpdating, stageArn, syncTags } from "./common.ts";
+import type { RestApi } from "./RestApi.ts";
 
 /**
  * Per-method override settings for a stage. Mirrors the API's

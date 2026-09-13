@@ -1,3 +1,8 @@
+import * as snippets from "@distilled.cloud/cloudflare/snippets";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
 import { adopt } from "@/AdoptPolicy";
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
@@ -5,11 +10,6 @@ import { findZoneByName } from "@/Cloudflare/Zone/lookup";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
 import { poll } from "@/Util/poll";
-import * as snippets from "@distilled.cloud/cloudflare/snippets";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import { MinimumLogLevel } from "effect/References";
-import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 

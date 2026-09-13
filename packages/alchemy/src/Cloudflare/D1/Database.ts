@@ -1,11 +1,10 @@
 import type { RuntimeServices } from "@alchemy.run/cloudflare-runtime/core";
 import * as d1 from "@distilled.cloud/cloudflare/d1";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
-import * as HttpClient from "effect/http/HttpClient";
-
 import { isResolved } from "../../Diff.ts";
 import * as ProviderLayer from "../../Local/ProviderLayer.ts";
 import * as RpcProvider from "../../Local/RpcProvider.ts";

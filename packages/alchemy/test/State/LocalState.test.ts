@@ -1,12 +1,12 @@
+import { describe, expect, it } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import { STATE_STORE_VERSION } from "@/State/HttpStateApi.ts";
 import { makeLocalState } from "@/State/LocalState.ts";
 import type { ResourceState } from "@/State/ResourceState.ts";
 import { initialCwd } from "@/Util/Node.ts";
 import { PlatformServices } from "@/Util/PlatformServices";
-import { describe, expect, it } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
 
 const resource = (
   fqn: string,

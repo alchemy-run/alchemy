@@ -1,4 +1,7 @@
-import { loadInternalWorker } from "../../internal/internal-worker.ts";
+import * as NodeChildProcess from "node:child_process";
+import * as NodeFs from "node:fs";
+import * as NodeOs from "node:os";
+import * as NodePath from "node:path";
 import type {
   InstalledBrowser,
   InstallOptions,
@@ -15,10 +18,7 @@ import {
 } from "@puppeteer/browsers";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as NodeChildProcess from "node:child_process";
-import * as NodeFs from "node:fs";
-import * as NodeOs from "node:os";
-import * as NodePath from "node:path";
+import { loadInternalWorker } from "../../internal/internal-worker.ts";
 const BrowserWorker = {
   worker: () =>
     loadInternalWorker(
@@ -27,12 +27,12 @@ const BrowserWorker = {
 };
 import * as Loopback from "../../globals/Loopback.ts";
 import type * as LoopbackServer from "../../globals/LoopbackServer.ts";
+import { DEFAULT_COMPATIBILITY_DATE } from "../../internal/constants.ts";
 import { formatInternalWorkerModules } from "../../internal/internal-modules.ts";
 import * as Plugin from "../../Plugin.ts";
 import type { BindingHook, PluginContext } from "../../PluginContext.ts";
 import { makeRemoteBinding } from "../../remote-bindings/RemoteBindings.ts";
 import type { ConfigError } from "../../RuntimeError.shared.ts";
-import { DEFAULT_COMPATIBILITY_DATE } from "../../internal/constants.ts";
 import { kVoid } from "../../workerd/Config.ts";
 import type * as WorkerdConfig from "../../workerd/Config.ts";
 import type { BrowserProps } from "./BrowserOptions.shared.ts";

@@ -1,12 +1,12 @@
-import * as Cloudflare from "@/Cloudflare";
-import * as Planetscale from "@/Planetscale";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Cloudflare from "@/Cloudflare";
+import * as Planetscale from "@/Planetscale";
+import * as Test from "@/Test/Alchemy";
 import { exerciseSqlSurface, postJson } from "./exercise.ts";
-import type { UserRow } from "./fixtures/routes.ts";
 import Stack from "./fixtures/mysql-stack.ts";
+import type { UserRow } from "./fixtures/routes.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Layer.merge(Cloudflare.providers(), Planetscale.providers()),

@@ -1,9 +1,9 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
-import { Repos } from "./shared.ts";
+import * as Cloudflare from "@/Cloudflare/index.ts";
 import { artifactsRoutes } from "./routes.ts";
+import { Repos } from "./shared.ts";
 
 /**
  * Effect-native Worker fixture for the Artifacts namespace binding. Yielding

@@ -1,4 +1,26 @@
-import * as Provider from "@/Provider";
+import { gunzipSync } from "node:zlib";
+import { fromApiToken } from "@distilled.cloud/prisma";
+import { describe, expect, it } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as HttpBody from "effect/http/HttpBody";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientResponse from "effect/http/HttpClientResponse";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Path from "effect/Path";
+import * as Redacted from "effect/Redacted";
+import * as Stream from "effect/Stream";
+import { WebSocketServer } from "ws";
+import { Unowned } from "@/AdoptPolicy";
+import { AlchemyContext } from "@/AlchemyContext";
+import * as Output from "@/Output";
+import {
+  PrismaApiError,
+  PrismaClient,
+  type PrismaManagementClient,
+} from "@/Prisma/Client";
 import {
   Compute,
   ComputeDevProvider,
@@ -7,34 +29,12 @@ import {
   waitForDeploymentUrl,
   type ComputeProps,
 } from "@/Prisma/Compute";
-import { Unowned } from "@/AdoptPolicy";
-import { AlchemyContext } from "@/AlchemyContext";
-import {
-  PrismaApiError,
-  PrismaClient,
-  type PrismaManagementClient,
-} from "@/Prisma/Client";
-import * as Output from "@/Output";
+import { Credentials } from "@/Prisma/Credentials";
+import type { Branch as ApiBranch } from "@/Prisma/Types";
+import * as Provider from "@/Provider";
 import type { ResourceBinding } from "@/Resource";
 import { Stack } from "@/Stack";
 import { PlatformServices } from "@/Util/PlatformServices";
-import type { Branch as ApiBranch } from "@/Prisma/Types";
-import { describe, expect, it } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
-import * as Path from "effect/Path";
-import * as Redacted from "effect/Redacted";
-import * as Stream from "effect/Stream";
-import * as FetchHttpClient from "effect/http/FetchHttpClient";
-import * as HttpBody from "effect/http/HttpBody";
-import * as HttpClient from "effect/http/HttpClient";
-import * as HttpClientResponse from "effect/http/HttpClientResponse";
-import { gunzipSync } from "node:zlib";
-import { WebSocketServer } from "ws";
-import { fromApiToken } from "@distilled.cloud/prisma";
-import { Credentials } from "@/Prisma/Credentials";
 import {
   type Captured,
   data,

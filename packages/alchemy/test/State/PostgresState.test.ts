@@ -1,20 +1,20 @@
 import * as PgClient from "@effect/sql-pg/PgClient";
-import {
-  makePostgresState,
-  type PostgresStateOptions,
-} from "@/State/PostgresState";
-import { StateStoreError, type StateService } from "@/State/State";
 import { describe, expect, it } from "alchemy-test";
 import * as Config from "effect/Config";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
-import * as Redacted from "effect/Redacted";
-import * as Stream from "effect/Stream";
 import * as Reactivity from "effect/reactivity/Reactivity";
+import * as Redacted from "effect/Redacted";
 import * as SqlClient from "effect/sql/SqlClient";
 import type * as SqlConnection from "effect/sql/SqlConnection";
 import * as SqlError from "effect/sql/SqlError";
+import * as Stream from "effect/Stream";
+import {
+  makePostgresState,
+  type PostgresStateOptions,
+} from "@/State/PostgresState";
+import { StateStoreError, type StateService } from "@/State/State";
 
 interface FakeQuery {
   text: string;

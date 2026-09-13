@@ -1,9 +1,9 @@
+import * as NodeNet from "node:net";
+import * as NodeOs from "node:os";
 import * as Cache from "effect/Cache";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Semaphore from "effect/Semaphore";
-import * as NodeNet from "node:net";
-import * as NodeOs from "node:os";
 import { ConfigError, SystemError } from "../RuntimeError.shared.ts";
 
 export const MAX_PORT = 65535;

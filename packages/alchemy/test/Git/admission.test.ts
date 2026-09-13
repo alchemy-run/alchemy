@@ -1,3 +1,10 @@
+import { describe, expect, test } from "alchemy-test";
+import {
+  MAX_PACK_BYTES,
+  PUSH_MEMORY_BUDGET_MB,
+  pushPermitsFor,
+  STAGE_BATCH_BYTES,
+} from "@/Git/RepoObject.ts";
 /**
  * Push admission (src/Git/RepoObject.ts `pushPermitsFor`): the permit a
  * push takes from the isolate-wide memory gate must reflect what it can
@@ -8,13 +15,6 @@ import {
   BACKPRESSURE_BYTES,
   RETAIN_BYTES,
 } from "@/Git/Store/StreamingSource.ts";
-import {
-  MAX_PACK_BYTES,
-  PUSH_MEMORY_BUDGET_MB,
-  pushPermitsFor,
-  STAGE_BATCH_BYTES,
-} from "@/Git/RepoObject.ts";
-import { describe, expect, test } from "alchemy-test";
 
 const MiB = 1024 * 1024;
 const spilled = Math.ceil(

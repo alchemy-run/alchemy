@@ -1,8 +1,8 @@
-import * as AWS from "@/AWS";
-import * as Test from "@/Test/Alchemy";
 import * as ElastiCache from "@distilled.cloud/aws/elasticache";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
 import {
   assertReplicationGroupGone,
   getProvisionedNetwork,

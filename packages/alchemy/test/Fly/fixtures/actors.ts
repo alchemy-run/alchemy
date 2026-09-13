@@ -1,7 +1,7 @@
-import type { ScratchStack } from "@/Test/Alchemy";
-import { scratchStack } from "@/Test/Core";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import type { ScratchStack } from "@/Test/Alchemy";
+import { scratchStack } from "@/Test/Core";
 import { throughProxy } from "./transport.ts";
 
 /** Fresh engine/provider/state layers address the same durable test.provider rows. */

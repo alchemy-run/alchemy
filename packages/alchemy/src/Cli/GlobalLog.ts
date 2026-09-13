@@ -1,6 +1,6 @@
 import * as Clock from "effect/Clock";
-import * as Effect from "effect/Effect";
 import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
@@ -8,8 +8,8 @@ import * as LogLevel from "effect/LogLevel";
 import * as Option from "effect/Option";
 import { Path } from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
-import { rootDir } from "../Auth/Paths.ts";
 import packageJson from "../../package.json" with { type: "json" };
+import { rootDir } from "../Auth/Paths.ts";
 import { makePlainConsoleSink } from "../Util/ConsoleSink.ts";
 
 /** Logs older than this are pruned (by mtime) on CLI start. */

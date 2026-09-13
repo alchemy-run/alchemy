@@ -1,15 +1,15 @@
+import * as NodeFs from "node:fs/promises";
+import type { IncomingMessage, ServerResponse } from "node:http";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import type * as vite from "vite";
+import * as Assets from "../../core/bindings/assets/Assets.ts";
+import * as Loopback from "../../core/globals/Loopback.ts";
+import { DEFAULT_COMPATIBILITY_DATE } from "../../core/internal/constants.ts";
 // Alchemy modifications are licensed under Apache-2.0.
 // This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
 import { loadInternalWorker } from "../../core/internal/internal-worker.ts";
-import * as Assets from "../../core/bindings/assets/Assets.ts";
-import { DEFAULT_COMPATIBILITY_DATE } from "../../core/internal/constants.ts";
-import * as Loopback from "../../core/globals/Loopback.ts";
 import { PluginContext } from "../../core/PluginContext.ts";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as NodeFs from "node:fs/promises";
-import type { IncomingMessage, ServerResponse } from "node:http";
-import type * as vite from "vite";
 const AssetsWorker = {
   worker: () =>
     loadInternalWorker("#cloudflare-runtime-vite-worker/assets/assets.worker"),

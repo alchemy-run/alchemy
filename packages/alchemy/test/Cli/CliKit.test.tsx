@@ -1,6 +1,14 @@
 /** @jsxImportSource @alchemy.run/sigil */
 import { PassThrough } from "node:stream";
 import { stripVTControlCharacters } from "node:util";
+import { expect, it } from "alchemy-test";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
+import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
+import * as NukeRoute from "@/Alchemist/routes/nuke.ts";
 import {
   NonInteractiveTerminal,
   Application,
@@ -9,6 +17,7 @@ import {
   CliKit,
   layer as cliKitLayer,
 } from "@/Cli/CliKit/index.ts";
+import { renderApply } from "@/Cli/commands/render.ts";
 import {
   AnsweredPrompt,
   Alert,
@@ -32,9 +41,7 @@ import {
 } from "@/Cli/components/ui/index.ts";
 import { Menu } from "@/Cli/components/ui/Interactive.tsx";
 import { tabsWindow } from "@/Cli/components/ui/Layout.tsx";
-import { makeRuntime } from "@/Cli/components/view/Runtime.tsx";
-import { sigilCli } from "@/Cli/components/view/SigilCli.tsx";
-import { Cli, Progress } from "@/Report.ts";
+import { ApprovePlan } from "@/Cli/components/view/ApprovePlan.tsx";
 import {
   NukeProgress,
   NukeProgressStore,
@@ -43,16 +50,7 @@ import {
   renderNukeDelete,
   renderNukeScan,
 } from "@/Cli/components/view/Nuke.tsx";
-import { renderApply } from "@/Cli/commands/render.ts";
-import { isInProgress } from "@/Cli/components/view/statusStyle.ts";
-import { spinnerFramesFor } from "@/Util/Theme.ts";
-import {
-  makeResourceLogger,
-  makeResourceOutput,
-} from "@/Util/ResourceOutput.ts";
-import { stackOutputsView } from "@/Cli/components/view/StackOutputs.tsx";
 import { Plan, PlanTree } from "@/Cli/components/view/PlanView.tsx";
-import { ApprovePlan } from "@/Cli/components/view/ApprovePlan.tsx";
 import {
   ProfileDetailsBody,
   providerBlockHeight,
@@ -63,21 +61,23 @@ import {
   DashStore,
   runProfileDashboardSession,
 } from "@/Cli/components/view/ProfileDashboard.tsx";
+import { makeRuntime } from "@/Cli/components/view/Runtime.tsx";
+import { sigilCli } from "@/Cli/components/view/SigilCli.tsx";
+import { stackOutputsView } from "@/Cli/components/view/StackOutputs.tsx";
 import {
   buildStageNodes,
   stateExplorerScreen,
   StateExplorerStore,
   type StateExplorerSource,
 } from "@/Cli/components/view/StateExplorer.tsx";
-import * as Effect from "effect/Effect";
-import * as Context from "effect/Context";
-import * as NukeRoute from "@/Alchemist/routes/nuke.ts";
+import { isInProgress } from "@/Cli/components/view/statusStyle.ts";
 import type { ProviderService } from "@/Provider.ts";
-import * as Exit from "effect/Exit";
-import * as Fiber from "effect/Fiber";
-import * as Layer from "effect/Layer";
-import * as Logger from "effect/Logger";
-import { expect, it } from "alchemy-test";
+import { Cli, Progress } from "@/Report.ts";
+import {
+  makeResourceLogger,
+  makeResourceOutput,
+} from "@/Util/ResourceOutput.ts";
+import { spinnerFramesFor } from "@/Util/Theme.ts";
 import { deleteNode, noopNode, planWith, updateNode } from "./PlanTestNodes.ts";
 
 class CaptureStream extends PassThrough {
@@ -584,11 +584,7 @@ it.effect(
       const { service, stdout } = yield* makeLive();
       const tree = new PlanTree(
         planWith([updateNode({ version: 1 }, { version: 2 })]),
-        {
-          mode: "apply",
-          label: "Deploying stack",
-          busy: true,
-        },
+        { mode: "apply", label: "Deploying stack", busy: true },
       );
       tree.emit({
         _tag: "apply.resource.status",
@@ -766,9 +762,7 @@ it(
       actual: { value: "changed-out-of-band" },
     };
     const tree = new PlanTree(planWith([node]), { viewport: "full" });
-    const output = service.output.format(<Plan tree={tree} />, {
-      columns: 80,
-    });
+    const output = service.output.format(<Plan tree={tree} />, { columns: 80 });
 
     expect(output).not.toContain("drift:");
     expect(output).toContain("│ - value: declared");
@@ -1320,10 +1314,7 @@ it.effect(
     Effect.gen(function* () {
       const { service } = makeStatic();
       const failure = yield* service.prompt
-        .select({
-          message: "Choose",
-          options: [{ label: "One", value: 1 }],
-        })
+        .select({ message: "Choose", options: [{ label: "One", value: 1 }] })
         .pipe(Effect.flip);
 
       expect(failure).toBeInstanceOf(NonInteractiveTerminal);
@@ -2232,11 +2223,7 @@ it.effect(
         }),
       );
 
-      expect(result).toEqual({
-        action: "add",
-        name: "cloudflare",
-        done: true,
-      });
+      expect(result).toEqual({ action: "add", name: "cloudflare", done: true });
       // Clearing an inline application first renders an empty frame. Its final
       // row must be reclaimed before teardown or the next shell prompt starts
       // one line too low.
@@ -2353,12 +2340,7 @@ it.effect(
           <TaskRow icon="+" label="worker" depth={1} />
           <ProgressGroup
             rows={[
-              {
-                id: "providers",
-                label: "providers",
-                completed: 2,
-                total: 4,
-              },
+              { id: "providers", label: "providers", completed: 2, total: 4 },
             ]}
           />
           <Status>q quit</Status>

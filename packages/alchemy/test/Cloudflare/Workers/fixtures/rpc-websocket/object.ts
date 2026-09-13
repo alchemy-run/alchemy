@@ -1,8 +1,8 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
+import * as Cloudflare from "@/Cloudflare/index.ts";
 import { Greeting, Rejected, SocketRpcs } from "./rpcs.ts";
 
 export class SocketObject extends Cloudflare.RpcDurableObject<SocketObject>()(

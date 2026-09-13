@@ -1,8 +1,8 @@
+import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
 import * as Cloudflare from "@/Cloudflare";
 import { applySqlMigrations } from "@/Cloudflare/Workers/SqlMigrationsApply.ts";
 import * as Drizzle from "@/Drizzle/Cloudflare.ts";
-import * as Effect from "effect/Effect";
-import * as Result from "effect/Result";
 import { relations, users } from "./schema.ts";
 
 export type HistoryRow = {

@@ -1,21 +1,21 @@
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
-import type { PlatformError } from "effect/PlatformError";
 import * as Path from "effect/Path";
+import type { PlatformError } from "effect/PlatformError";
 import { dotAlchemyDirectory } from "../AlchemyContext.ts";
 import { isPathWithin } from "../Util/isPathWithin.ts";
-import {
-  inspectArtifactFile,
-  inspectVerifiedFile,
-  readArtifactFile,
-  type ArtifactFile,
-} from "./Internal/ArtifactFile.ts";
 import {
   isArchivedRegularFile,
   readDirectoryEntriesSecure,
   writeCompressedArchiveSecure,
   type ArchiveTarEntry,
 } from "./Internal/ArchivePlatform.ts";
+import {
+  inspectArtifactFile,
+  inspectVerifiedFile,
+  readArtifactFile,
+  type ArtifactFile,
+} from "./Internal/ArtifactFile.ts";
 
 export const COMPUTE_MANIFEST_VERSION = "1";
 

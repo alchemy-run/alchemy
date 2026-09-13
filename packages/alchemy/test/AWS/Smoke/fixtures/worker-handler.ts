@@ -1,8 +1,8 @@
-import * as AWS from "@/AWS";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
+import * as AWS from "@/AWS";
 import {
   ServerlessResources,
   ServerlessResourcesLive,

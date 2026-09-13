@@ -1,29 +1,3 @@
-import { Action } from "@/Action";
-import { adopt, AdoptPolicy, Unowned } from "@/AdoptPolicy";
-import { dedupeBindings } from "@/Diff";
-import type { Input, InputProps } from "@/Input";
-import * as Namespace from "@/Namespace.ts";
-import * as Output from "@/Output";
-import * as Plan from "@/Plan";
-import * as Provider from "@/Provider";
-import { UnsatisfiedResourceCycle } from "@/Plan";
-import { remote } from "@/ProviderMode.ts";
-import { renamedFrom } from "@/Rename.ts";
-import { Progress, type ProgressEvent } from "@/Report.ts";
-import { Resource, type ResourceBinding } from "@/Resource";
-import { packEnvValue } from "@/RuntimeContext.ts";
-import { AuthProviders } from "@/Auth/AuthProvider.ts";
-import * as Stack from "@/Stack";
-import { Stage } from "@/Stage";
-import { hashInput } from "@/Util/sha256";
-import {
-  InMemoryService,
-  inMemoryState,
-  State,
-  type ResourceState,
-  type ResourceStatus,
-} from "@/State";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Cause from "effect/Cause";
 import * as Config from "effect/Config";
@@ -33,6 +7,32 @@ import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
+import { Action } from "@/Action";
+import { adopt, AdoptPolicy, Unowned } from "@/AdoptPolicy";
+import { AuthProviders } from "@/Auth/AuthProvider.ts";
+import { dedupeBindings } from "@/Diff";
+import type { Input, InputProps } from "@/Input";
+import * as Namespace from "@/Namespace.ts";
+import * as Output from "@/Output";
+import * as Plan from "@/Plan";
+import { UnsatisfiedResourceCycle } from "@/Plan";
+import * as Provider from "@/Provider";
+import { remote } from "@/ProviderMode.ts";
+import { renamedFrom } from "@/Rename.ts";
+import { Progress, type ProgressEvent } from "@/Report.ts";
+import { Resource, type ResourceBinding } from "@/Resource";
+import { packEnvValue } from "@/RuntimeContext.ts";
+import * as Stack from "@/Stack";
+import { Stage } from "@/Stage";
+import {
+  InMemoryService,
+  inMemoryState,
+  State,
+  type ResourceState,
+  type ResourceStatus,
+} from "@/State";
+import * as Test from "@/Test/Alchemy";
+import { hashInput } from "@/Util/sha256";
 import {
   AliasedWidget,
   aliasedWidgetProvider,

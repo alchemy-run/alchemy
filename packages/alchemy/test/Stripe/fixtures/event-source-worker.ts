@@ -1,8 +1,8 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Stripe from "@/Stripe/index.ts";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Stripe from "@/Stripe/index.ts";
 
 export default class StripeEventSourceWorker extends Cloudflare.Worker<StripeEventSourceWorker>()(
   "StripeEventSourceWorker",

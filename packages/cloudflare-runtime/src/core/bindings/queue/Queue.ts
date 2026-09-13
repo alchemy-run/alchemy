@@ -1,8 +1,8 @@
-import { loadInternalWorker } from "../../internal/internal-worker.ts";
 import * as queues from "@distilled.cloud/cloudflare/queues";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import { loadInternalWorker } from "../../internal/internal-worker.ts";
 const QueueBrokerWorker = {
   worker: () =>
     loadInternalWorker(

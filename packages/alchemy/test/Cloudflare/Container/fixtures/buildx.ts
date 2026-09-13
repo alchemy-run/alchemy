@@ -1,7 +1,7 @@
-import { Docker } from "@/Docker/Docker.ts";
-import { Stage } from "@/Stage.ts";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
+import { Docker } from "@/Docker/Docker.ts";
+import { Stage } from "@/Stage.ts";
 
 export const withBuilder =
   (prefix: string, options?: { attestations?: boolean }) =>

@@ -1,11 +1,6 @@
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as rds from "@distilled.cloud/aws/rds";
 import * as secretsmanager from "@distilled.cloud/aws/secrets-manager";
-import {
-  normalizePolicyDocument,
-  stringifyPolicyDocument,
-  type PolicyDocument,
-} from "../IAM/Policy.ts";
 import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -13,13 +8,18 @@ import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
-import { toWireDays, toWireSeconds } from "../../Util/Duration.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import type { Providers } from "../Providers.ts";
 import { createInternalTags, diffTags } from "../../Tags.ts";
+import { toWireDays, toWireSeconds } from "../../Util/Duration.ts";
 import { sha256 } from "../../Util/sha256.ts";
+import {
+  normalizePolicyDocument,
+  stringifyPolicyDocument,
+  type PolicyDocument,
+} from "../IAM/Policy.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface DBInstanceProps {
   /**

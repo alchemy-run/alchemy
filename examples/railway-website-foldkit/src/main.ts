@@ -1,7 +1,6 @@
 import { Schema as S } from "effect";
 import type { Runtime, Update } from "foldkit";
 import type { Document, HtmlBuilder } from "foldkit/html";
-
 import { card } from "./components/Card.ts";
 
 // MODEL
@@ -19,7 +18,9 @@ export type Message = never;
 export const update = (
   model: Model,
   _message: Message,
-): Update.Return<Model, Message> => ({ model });
+): Update.Return<Model, Message> => ({
+  model,
+});
 
 // INIT
 

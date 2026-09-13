@@ -1,3 +1,8 @@
+import * as ci from "@distilled.cloud/aws/cognito-identity";
+import { expect } from "alchemy-test";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import {
   IdentityPool,
@@ -8,17 +13,14 @@ import {
 import { Role } from "@/AWS/IAM";
 import * as Output from "@/Output";
 import * as Test from "@/Test/Alchemy";
-import * as ci from "@distilled.cloud/aws/cognito-identity";
-import { expect } from "alchemy-test";
-import * as Data from "effect/Data";
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
 class IdentityPoolStillExists extends Data.TaggedError(
   "IdentityPoolStillExists",
-)<{ readonly identityPoolId: string }> {}
+)<{
+  readonly identityPoolId: string;
+}> {}
 
 const assertIdentityPoolDeleted = (identityPoolId: string) =>
   ci.describeIdentityPool({ IdentityPoolId: identityPoolId }).pipe(

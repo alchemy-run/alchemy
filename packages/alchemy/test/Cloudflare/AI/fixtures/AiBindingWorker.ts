@@ -1,10 +1,10 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import type { RuntimeContext } from "@/RuntimeContext.ts";
-import * as Effect from "effect/Effect";
-import * as Stream from "effect/Stream";
 import { LanguageModel as AiLanguageModel } from "effect/ai";
+import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Stream from "effect/Stream";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import type { RuntimeContext } from "@/RuntimeContext.ts";
 
 // `@cf/meta/llama-3.1-8b-instruct` was deprecated by Cloudflare on
 // 2026-05-30 (the API answers 410), so use the supported fast 3.3 model.

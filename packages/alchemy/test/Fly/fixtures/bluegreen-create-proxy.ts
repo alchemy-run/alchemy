@@ -1,14 +1,14 @@
+import { createServer } from "node:http";
 import { Credentials } from "@distilled.cloud/fly-io/Credentials";
 import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import * as NodeHttpServerRequest from "@effect/platform-node/NodeHttpServerRequest";
 import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
-import * as Ref from "effect/Ref";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
-import { createServer } from "node:http";
+import * as Redacted from "effect/Redacted";
+import * as Ref from "effect/Ref";
 
 export const dropCompletedCreate = Effect.fn(function* (appName: string) {
   const resolveCredentials = yield* Credentials;

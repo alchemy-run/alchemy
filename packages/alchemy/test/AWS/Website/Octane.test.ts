@@ -1,5 +1,3 @@
-import * as AWS from "@/AWS";
-import * as Test from "@/Test/Alchemy";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -7,6 +5,8 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 
@@ -93,10 +93,7 @@ describe.skipIf(!runLive || runEmulated)(
           yield* expectUrlContains(
             `${deployed.site.serverUrl!}`,
             "OCTANE_AWS_PAGE_MARKER",
-            {
-              timeout: "120 seconds",
-              label: "SSR direct from Lambda URL",
-            },
+            { timeout: "120 seconds", label: "SSR direct from Lambda URL" },
           );
 
           // SSR page rendered by the Lambda through CloudFront.
@@ -119,9 +116,7 @@ describe.skipIf(!runLive || runEmulated)(
           yield* expectUrlContains(
             `${url}/robots.txt`,
             "octane-aws-robots-marker",
-            {
-              label: "public asset from S3",
-            },
+            { label: "public asset from S3" },
           );
 
           const distributionId = deployed.site.distribution!.distributionId;

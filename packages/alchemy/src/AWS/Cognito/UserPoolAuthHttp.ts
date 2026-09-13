@@ -51,7 +51,9 @@ export const UserPoolAuthHttp = Layer.effect(
           // No IAM is required for the public auth flows; the binding is
           // recorded so the app client deploys before the function.
           yield* host.bind`Allow(${host}, AWS.Cognito.UserPoolAuth(${client}))`(
-            { policyStatements: [] },
+            {
+              policyStatements: [],
+            },
           );
         }
       }

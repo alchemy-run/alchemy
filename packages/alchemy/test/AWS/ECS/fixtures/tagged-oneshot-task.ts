@@ -1,5 +1,5 @@
-import { Task } from "@/AWS/ECS/Task.ts";
 import * as Effect from "effect/Effect";
+import { Task } from "@/AWS/ECS/Task.ts";
 
 /**
  * A one-shot `AWS.ECS.Task` in the TAGGED form: the class declares the task

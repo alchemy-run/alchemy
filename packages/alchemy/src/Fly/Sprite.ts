@@ -19,18 +19,18 @@ import type { ServerHost } from "../Server/Process.ts";
 import { Stack } from "../Stack.ts";
 import { createInternalTags } from "../Tags.ts";
 import {
-  createFlyResourceName,
-  matchesAlchemyPhysicalName,
-  sanitizeFlyAppName,
-} from "./Metadata.ts";
-import type { Providers } from "./Providers.ts";
-import {
   createFlyHostRuntimeContext,
   createSpriteHostedSupport,
   DEFAULT_PORT,
   type FlyHostRuntimeContext,
   type HostedProgramProps,
 } from "./hosted.ts";
+import {
+  createFlyResourceName,
+  matchesAlchemyPhysicalName,
+  sanitizeFlyAppName,
+} from "./Metadata.ts";
+import type { Providers } from "./Providers.ts";
 
 const DEFAULT_URL_AUTH: UrlAuth = "public";
 const APP_DIR = "/home/sprite/alchemy";

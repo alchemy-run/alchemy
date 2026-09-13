@@ -1,13 +1,13 @@
-import * as Effect from "effect/Effect";
+import type { Server, ServerOptions } from "@prisma/dev";
 import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import * as ChildProcess from "effect/process/ChildProcess";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
-import * as ChildProcess from "effect/process/ChildProcess";
-import type { Server, ServerOptions } from "@prisma/dev";
 import type { DatabaseDev } from "./Database.ts";
 
 export interface PrismaDevDatabaseAttrs {

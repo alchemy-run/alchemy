@@ -1,5 +1,5 @@
-import * as Neon from "@distilled.cloud/neon";
 import type { CORSRule } from "@distilled.cloud/aws/s3";
+import * as Neon from "@distilled.cloud/neon";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";

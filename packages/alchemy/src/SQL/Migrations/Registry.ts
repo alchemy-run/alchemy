@@ -1,8 +1,8 @@
 import * as Effect from "effect/Effect";
 import type * as FileSystem from "effect/FileSystem";
 import type * as Path from "effect/Path";
-import { hashMigrations } from "../SqlFile.ts";
 import { recordsEqual } from "../../Util/equal.ts";
+import { hashMigrations } from "../SqlFile.ts";
 import { ALCHEMY_DEFAULT_TABLE, applyAlchemyFormat } from "./AlchemyFormat.ts";
 import {
   MigrationError,

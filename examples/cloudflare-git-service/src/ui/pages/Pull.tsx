@@ -130,7 +130,10 @@ const PullPage = ({
             connection,
             repo.owner,
             repo.name,
-            { base: pull.baseRef, head: pull.headRef },
+            {
+              base: pull.baseRef,
+              head: pull.headRef,
+            },
           );
           if (!cancelled) setCompare(comparison);
         } else {

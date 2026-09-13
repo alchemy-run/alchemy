@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import * as Test from "@/Test/Alchemy";
 import * as iam from "@distilled.cloud/aws/iam";
 import * as lf from "@distilled.cloud/aws/lakeformation";
 import * as sts from "@distilled.cloud/aws/sts";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -259,9 +259,7 @@ describe.sequential(
             "prod",
           ]);
           const observedAssignment = yield* lf.getResourceLFTags({
-            Resource: {
-              Database: { Name: created.database.databaseName },
-            },
+            Resource: { Database: { Name: created.database.databaseName } },
           });
           expect(
             observedAssignment.LFTagOnDatabase?.find(
@@ -301,9 +299,7 @@ describe.sequential(
             "staging",
           ]);
           const updatedAssignment = yield* lf.getResourceLFTags({
-            Resource: {
-              Database: { Name: created.database.databaseName },
-            },
+            Resource: { Database: { Name: created.database.databaseName } },
           });
           expect(
             updatedAssignment.LFTagOnDatabase?.find(
@@ -457,12 +453,8 @@ describe.sequential(
             observedFilter.DataCellsFilter?.ColumnWildcard?.ExcludedColumnNames,
           ).toEqual(["email"]);
           const observedOptIns = yield* lf.listLakeFormationOptIns({
-            Principal: {
-              DataLakePrincipalIdentifier: created.role.roleArn,
-            },
-            Resource: {
-              Database: { Name: created.database.databaseName },
-            },
+            Principal: { DataLakePrincipalIdentifier: created.role.roleArn },
+            Resource: { Database: { Name: created.database.databaseName } },
           });
           expect(
             observedOptIns.LakeFormationOptInsInfoList?.length,
@@ -508,9 +500,7 @@ describe.sequential(
             );
           expect(goneExpr).toBeUndefined();
           const goneOptIns = yield* lf.listLakeFormationOptIns({
-            Principal: {
-              DataLakePrincipalIdentifier: created.role.roleArn,
-            },
+            Principal: { DataLakePrincipalIdentifier: created.role.roleArn },
           });
           expect(goneOptIns.LakeFormationOptInsInfoList ?? []).toHaveLength(0);
 

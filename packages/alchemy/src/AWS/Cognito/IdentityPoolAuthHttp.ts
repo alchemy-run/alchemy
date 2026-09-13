@@ -33,7 +33,9 @@ export const IdentityPoolAuthHttp = Layer.effect(
           // No IAM is required for the public identity flows; the binding is
           // recorded so the identity pool deploys before the function.
           yield* host.bind`Allow(${host}, AWS.Cognito.IdentityPoolAuth(${pool}))`(
-            { policyStatements: [] },
+            {
+              policyStatements: [],
+            },
           );
         }
       }

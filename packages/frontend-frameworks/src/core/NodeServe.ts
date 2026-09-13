@@ -1,3 +1,4 @@
+import * as NodePath from "node:path";
 /**
  * Shared Node HTTP serve-entry generator for container deploy targets.
  *
@@ -10,7 +11,6 @@
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import * as NodePath from "node:path";
 import {
   toOutputFile,
   type BuildOutput,

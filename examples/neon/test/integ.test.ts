@@ -1,9 +1,9 @@
+import { expect } from "bun:test";
 import * as SDK from "@distilled.cloud/neon";
 import * as Alchemy from "alchemy";
 import * as Neon from "alchemy/Neon";
 import * as SQL from "alchemy/SQL/Postgres";
 import * as Test from "alchemy/Test/Bun";
-import { expect } from "bun:test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";

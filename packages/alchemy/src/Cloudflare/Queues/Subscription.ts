@@ -15,11 +15,11 @@ import {
   Resource,
   type ResourceClass,
 } from "../../Resource.ts";
-import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
-import type { Providers } from "../Providers.ts";
 import type { Model } from "../AI/Model.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Variant } from "../Images/Variant.ts";
 import type { Namespace } from "../KV/Namespace.ts";
+import type { Providers } from "../Providers.ts";
 import type { Bucket } from "../R2/Bucket.ts";
 import type { SuperSlurperJob } from "../R2/SuperSlurperJob.ts";
 import type { Index } from "../Vectorize/VectorizeIndex.ts";

@@ -1,3 +1,14 @@
+import { expect } from "alchemy-test";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as HttpApiClient from "effect/http-api/HttpApiClient";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as ChildProcess from "effect/process/ChildProcess";
+import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 /**
  * The pack hasher on dynamically loaded Workers, end to end (DESIGN
  * §22.12): pushes stream through four loaded hasher isolates, and the
@@ -6,17 +17,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { GitApi } from "@/Git/Api.ts";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Data from "effect/Data";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import { MinimumLogLevel } from "effect/References";
-import * as Schedule from "effect/Schedule";
-import * as Stream from "effect/Stream";
-import * as HttpClient from "effect/http/HttpClient";
-import * as HttpClientRequest from "effect/http/HttpClientRequest";
-import * as HttpApiClient from "effect/http-api/HttpApiClient";
-import * as ChildProcess from "effect/process/ChildProcess";
 import { makeLoaderTestStack, TEST_SECRET } from "./fixtures/loader-stack.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({

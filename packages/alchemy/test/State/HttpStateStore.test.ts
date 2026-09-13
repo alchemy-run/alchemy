@@ -1,20 +1,20 @@
+import { describe, expect, it } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
+import * as HttpApiError from "effect/http-api/HttpApiError";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as HttpClientError from "effect/http/HttpClientError";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as HttpClientResponse from "effect/http/HttpClientResponse";
+import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
+import * as Redacted from "effect/Redacted";
+import * as TestClock from "effect/testing/TestClock";
 import {
   checkHttpStateStoreAuth,
   describeStateStoreFailure,
   makeHttpStateStore,
 } from "@/State/HttpStateStore.ts";
-import { describe, expect, it } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Fiber from "effect/Fiber";
-import * as TestClock from "effect/testing/TestClock";
-import * as Layer from "effect/Layer";
-import * as Logger from "effect/Logger";
-import * as Redacted from "effect/Redacted";
-import * as FetchHttpClient from "effect/http/FetchHttpClient";
-import * as HttpClientError from "effect/http/HttpClientError";
-import * as HttpClientRequest from "effect/http/HttpClientRequest";
-import * as HttpClientResponse from "effect/http/HttpClientResponse";
-import * as HttpApiError from "effect/http-api/HttpApiError";
 
 /**
  * Hermetic tests driven by the production failure modes observed in

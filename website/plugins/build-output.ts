@@ -1,10 +1,10 @@
-import { SOCIAL_REDIRECTS } from "../src/social-redirects.ts";
-import type { AstroIntegration } from "astro";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { rewriteForPagefind } from "./pagefind-ignore-noise.ts";
+import type { AstroIntegration } from "astro";
 import { rewriteReferenceLinks } from "../src/reference-links.ts";
+import { SOCIAL_REDIRECTS } from "../src/social-redirects.ts";
+import { rewriteForPagefind } from "./pagefind-ignore-noise.ts";
 
 /** Populated before the sitemap integration runs. */
 export const noindexPaths = new Set();

@@ -1,7 +1,4 @@
-import * as Alchemy from "alchemy";
-import * as Cloudflare from "alchemy/Cloudflare";
-import * as Stripe from "alchemy/Stripe";
-import * as Test from "alchemy/Test/Bun";
+import { expect } from "bun:test";
 import {
   CreatePaymentMethod,
   CreatePaymentMethodAttach,
@@ -11,7 +8,10 @@ import {
   GetCheckoutSession,
   GetWebhookEndpoints,
 } from "@distilled.cloud/stripe/stripe";
-import { expect } from "bun:test";
+import * as Alchemy from "alchemy";
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Stripe from "alchemy/Stripe";
+import * as Test from "alchemy/Test/Bun";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";

@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import * as Test from "@/Test/Alchemy";
 import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import * as HttpBody from "effect/http/HttpBody";
 import * as HttpClient from "effect/http/HttpClient";
+import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
 import { TableSinkFunction, TableSinkFunctionLive } from "./sink-handler";
 
 const { test } = Test.make({ providers: AWS.providers() });

@@ -1,6 +1,5 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-
 import * as ts from "typescript-api/unstable/ast";
 import type { Node, SourceFile } from "typescript-api/unstable/ast";
 import {

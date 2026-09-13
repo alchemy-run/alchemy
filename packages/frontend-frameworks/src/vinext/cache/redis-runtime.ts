@@ -13,8 +13,8 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
 import { makeDataCacheHandler, type DataCacheStore } from "./handler.ts";
-import { readEnvString } from "./shared.ts";
 import { seedStoreFromPrerenderLogged } from "./seed.ts";
+import { readEnvString } from "./shared.ts";
 
 export interface RedisAdapterOptions extends Record<string, unknown> {
   /** Env var holding the Redis URL. @default "REDIS_URL" */

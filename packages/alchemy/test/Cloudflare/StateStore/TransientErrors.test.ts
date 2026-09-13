@@ -1,3 +1,9 @@
+import { describe, expect, it } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as Layer from "effect/Layer";
+import * as TestClock from "effect/testing/TestClock";
 import { EdgeSessionError } from "@/Cloudflare/EdgeSession.ts";
 import {
   isTransientBootstrapWriteError,
@@ -5,12 +11,6 @@ import {
 } from "@/Cloudflare/StateStore/State.ts";
 import { makeHttpStateStore } from "@/State/HttpStateStore.ts";
 import type { StateStoreError } from "@/State/State.ts";
-import { describe, expect, it } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Fiber from "effect/Fiber";
-import * as TestClock from "effect/testing/TestClock";
-import * as Layer from "effect/Layer";
-import * as FetchHttpClient from "effect/http/FetchHttpClient";
 
 /**
  * Predicate coverage for the retry policies added in response to

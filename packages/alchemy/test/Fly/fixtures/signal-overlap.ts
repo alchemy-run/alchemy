@@ -1,12 +1,12 @@
 import * as machines from "@distilled.cloud/fly-io/machines";
 import * as Retry from "@distilled.cloud/fly-io/Retry";
-import type { ScratchStack } from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
+import type { ScratchStack } from "@/Test/Alchemy";
 import {
   Witness as ProcessDeathWitness,
   census,

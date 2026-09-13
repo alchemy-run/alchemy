@@ -1,3 +1,7 @@
+import * as r53r from "@distilled.cloud/aws/route53resolver";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import {
   ResolverEndpoint,
@@ -5,10 +9,6 @@ import {
   ResolverRuleAssociation,
 } from "@/AWS/Route53Resolver";
 import * as Test from "@/Test/Alchemy";
-import * as r53r from "@distilled.cloud/aws/route53resolver";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import {
   assertEndpointDeleting,
   assertRuleGone,

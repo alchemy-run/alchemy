@@ -2,8 +2,8 @@ import type { Input } from "../../Input.ts";
 import type { Certificate } from "../ACM/Certificate.ts";
 import type { Distribution } from "../CloudFront/Distribution.ts";
 import type { Records } from "../Route53/Records.ts";
-import type { AssetFileOption } from "./AssetDeployment.ts";
 import type { Bucket } from "../S3/Bucket.ts";
+import type { AssetFileOption } from "./AssetDeployment.ts";
 
 /**
  * Same-stack resources a Router-attached site binds its concrete hostnames

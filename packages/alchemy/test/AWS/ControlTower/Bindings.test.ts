@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import ControlTowerTestFunctionLive, {
   ControlTowerTestFunction,
 } from "./handler";
@@ -131,9 +131,7 @@ describe.sequential(
     describe("binding registration", () => {
       test.provider("all 11 capabilities initialize in the runtime", (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* getJson("/bindings")) as {
-            bound: string[];
-          };
+          const response = (yield* getJson("/bindings")) as { bound: string[] };
           expect(response.bound).toHaveLength(11);
         }),
       );
@@ -303,9 +301,7 @@ describe.sequential(
           Effect.gen(function* () {
             const response = (yield* getJson(
               "/control-operation-not-found",
-            )) as {
-              tag: string;
-            };
+            )) as { tag: string };
             expect([
               "ResourceNotFoundException",
               "ValidationException",

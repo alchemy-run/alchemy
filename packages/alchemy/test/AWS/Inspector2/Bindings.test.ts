@@ -1,13 +1,13 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as sts from "@distilled.cloud/aws/sts";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import Inspector2TestFunctionLive, { Inspector2TestFunction } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
@@ -221,11 +221,7 @@ describe.sequential(
           const { Account } = yield* sts.getCallerIdentity({});
           const response = (yield* getJson(
             `/free-trial?account=${Account}`,
-          )) as {
-            accounts?: number;
-            failed?: number;
-            errorTag?: string;
-          };
+          )) as { accounts?: number; failed?: number; errorTag?: string };
           if (response.errorTag) {
             expect(DISABLED_OK).toContain(response.errorTag);
           } else {

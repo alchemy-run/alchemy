@@ -1,10 +1,10 @@
-import * as AWS from "@/AWS";
-import { QApp } from "@/AWS/QApps";
-import * as Test from "@/Test/Alchemy";
 import * as qapps from "@distilled.cloud/aws/qapps";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { QApp } from "@/AWS/QApps";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

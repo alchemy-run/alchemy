@@ -1,13 +1,12 @@
+import { AlchemyContext } from "alchemy/AlchemyContext";
 import * as Clock from "effect/Clock";
 import * as Console from "effect/Console";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
 import * as HttpClient from "effect/http/HttpClient";
-
-import { AlchemyContext } from "alchemy/AlchemyContext";
+import * as Path from "effect/Path";
 import packageJson from "../../package.json" with { type: "json" };
 import {
   ANSI_RESET,

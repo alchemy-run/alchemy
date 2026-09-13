@@ -1,4 +1,3 @@
-import { regionOfReplica } from "./Region.ts";
 import * as machines from "@distilled.cloud/fly-io/machines";
 import type { Machine } from "@distilled.cloud/fly-io/machines";
 import * as Retry from "@distilled.cloud/fly-io/Retry";
@@ -7,8 +6,6 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { deepEqual } from "../Diff.ts";
 import { sha256Object } from "../Util/sha256.ts";
-import { canonicalContainers } from "./MachineContainers.ts";
-import { alchemyMetadataKeys as keys } from "./Metadata.ts";
 import {
   applyImageSet,
   encodeImageSet,
@@ -21,6 +18,9 @@ import {
   validProtocol2Generation,
 } from "./DeploymentState.ts";
 import { usingMachineLeases, type MachineLeases } from "./leases.ts";
+import { canonicalContainers } from "./MachineContainers.ts";
+import { alchemyMetadataKeys as keys } from "./Metadata.ts";
+import { regionOfReplica } from "./Region.ts";
 import {
   autostopMode,
   checksPassing,

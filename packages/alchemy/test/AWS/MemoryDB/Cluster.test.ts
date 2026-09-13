@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import { ACL, Cluster, SubnetGroup, User } from "@/AWS/MemoryDB";
-import * as Test from "@/Test/Alchemy";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import * as memorydb from "@distilled.cloud/aws/memorydb";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { ACL, Cluster, SubnetGroup, User } from "@/AWS/MemoryDB";
+import * as Test from "@/Test/Alchemy";
 import { getDefaultVpc } from "../DefaultVpc.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });

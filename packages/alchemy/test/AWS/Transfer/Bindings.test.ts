@@ -1,14 +1,14 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import * as transfer from "@distilled.cloud/aws/transfer";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
-import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import TransferTestFunctionLive, { TransferTestFunction } from "./handler";
 import TransferWorkflowTestFunctionLive, {
   TransferWorkflowTestFunction,
@@ -294,7 +294,9 @@ describe.runIf(!!process.env.AWS_TEST_SLOW)(
           const deleted = (yield* send(
             "DELETE",
             `/key?id=${encodeURIComponent(keyId)}`,
-          )) as { ok: boolean };
+          )) as {
+            ok: boolean;
+          };
           expect(deleted.ok).toBe(true);
         }),
       { timeout: 120_000 },

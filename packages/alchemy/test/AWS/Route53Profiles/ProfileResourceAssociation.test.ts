@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import { Profile, ProfileResourceAssociation } from "@/AWS/Route53Profiles";
-import * as Test from "@/Test/Alchemy";
 import * as profiles from "@distilled.cloud/aws/route53profiles";
 import * as resolver from "@distilled.cloud/aws/route53resolver";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Profile, ProfileResourceAssociation } from "@/AWS/Route53Profiles";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -112,7 +112,9 @@ test.provider(
           JSON.parse(
             live.ProfileResourceAssociation?.ResourceProperties ?? "{}",
           ),
-        ).toEqual({ priority: 102 });
+        ).toEqual({
+          priority: 102,
+        });
 
         // Priority updates in place — same association id.
         const second = yield* deploy(103);
@@ -127,7 +129,9 @@ test.provider(
           JSON.parse(
             updated.ProfileResourceAssociation?.ResourceProperties ?? "{}",
           ),
-        ).toEqual({ priority: 103 });
+        ).toEqual({
+          priority: 103,
+        });
 
         yield* stack.destroy();
         yield* assertAssociationGone(

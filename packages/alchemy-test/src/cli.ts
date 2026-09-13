@@ -22,20 +22,18 @@
 
 import * as BunRuntime from "@effect/platform-bun/BunRuntime";
 import * as BunServices from "@effect/platform-bun/BunServices";
+import * as Argument from "effect/cli/Argument";
+import * as Command from "effect/cli/Command";
+import * as Flag from "effect/cli/Flag";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Runtime from "effect/Runtime";
-import * as Argument from "effect/cli/Argument";
-import * as Command from "effect/cli/Command";
-import * as Flag from "effect/cli/Flag";
-
-import { parsePlan } from "./Plan.ts";
-
 import packageJson from "../package.json" with { type: "json" };
 import { PlainReporterLive, printSummary } from "./PlainReporter.ts";
+import { parsePlan } from "./Plan.ts";
 import { Reporter } from "./Reporter.ts";
 import { run, type RunOptions } from "./Runner.ts";
 import { captureStrayOutput } from "./StrayOutput.ts";

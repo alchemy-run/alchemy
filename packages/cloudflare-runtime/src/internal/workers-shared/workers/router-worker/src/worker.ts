@@ -1,11 +1,18 @@
 // Alchemy modifications are licensed under Apache-2.0.
 // This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
 import { WorkerEntrypoint } from "cloudflare:workers";
-import { generateStaticRoutingRuleMatcher } from "../../asset-worker/src/utils/rules-engine.ts";
 import { PerformanceTimer } from "../../../shared/performance.ts";
 import { TemporaryRedirectResponse } from "../../../shared/responses.ts";
 import { setupSentry } from "../../../shared/sentry.ts";
 import { mockJaegerBinding } from "../../../shared/tracing.ts";
+import type {
+  EyeballRouterConfig,
+  JaegerTracing,
+  RouterConfig,
+  UnsafePerformanceTimer,
+} from "../../../shared/types.ts";
+import type AssetWorker from "../../asset-worker/index.ts";
+import { generateStaticRoutingRuleMatcher } from "../../asset-worker/src/utils/rules-engine.ts";
 import {
   Analytics,
   DISPATCH_TYPE,
@@ -16,13 +23,6 @@ import {
   applyRouterConfigDefaults,
 } from "./configuration.ts";
 import { renderLimitedResponse } from "./limited-response.ts";
-import type AssetWorker from "../../asset-worker/index.ts";
-import type {
-  EyeballRouterConfig,
-  JaegerTracing,
-  RouterConfig,
-  UnsafePerformanceTimer,
-} from "../../../shared/types.ts";
 import type { ColoMetadata, Environment, ReadyAnalytics } from "./types.ts";
 
 export interface Env {

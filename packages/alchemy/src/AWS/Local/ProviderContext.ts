@@ -1,7 +1,7 @@
 /** @effect-diagnostics anyUnknownInErrorContext:off */
 
-import { Credentials } from "@distilled.cloud/aws/Credentials";
 import { Endpoint } from "@distilled.cloud/aws";
+import { Credentials } from "@distilled.cloud/aws/Credentials";
 import { Region } from "@distilled.cloud/aws/Region";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";

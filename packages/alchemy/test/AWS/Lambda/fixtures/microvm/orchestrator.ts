@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Schedule from "effect/Schedule";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Layer from "effect/Layer";
+import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
 import { Sandbox } from "./sandbox.ts";
 
 /**
@@ -149,7 +149,9 @@ export default class Orchestrator extends AWS.Lambda.Function<Orchestrator>()(
             const echoRes = yield* client
               .get(
                 `https://${vm.endpoint}/echo?message=${encodeURIComponent(message)}`,
-                { headers },
+                {
+                  headers,
+                },
               )
               .pipe(
                 Effect.retry({

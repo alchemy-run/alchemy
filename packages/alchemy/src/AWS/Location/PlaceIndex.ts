@@ -138,7 +138,9 @@ export const PlaceIndexProvider = () =>
             const hydrated = yield* Effect.forEach(
               names,
               (name) => readIndex(name),
-              { concurrency: 10 },
+              {
+                concurrency: 10,
+              },
             );
             return hydrated.filter(
               (attrs): attrs is PlaceIndex["Attributes"] => attrs !== undefined,

@@ -1,13 +1,13 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import { findZoneByName } from "@/Cloudflare/Zone/lookup";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as contentScanning from "@distilled.cloud/cloudflare/content-scanning";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -71,14 +71,16 @@ describe.sequential(
 
           // The standard testing zone has Content Scanning disabled (and lacks
           // the add-on entirely) — payload calls must fail with the typed tag.
-          const error = yield* contentScanning.listPayloads({ zoneId }).pipe(
-            Effect.retry({
-              while: (e) => e._tag === "Forbidden",
-              schedule: forbiddenRetrySchedule,
-              times: 8,
-            }),
-            Effect.flip,
-          );
+          const error = yield* contentScanning
+            .listPayloads({ zoneId })
+            .pipe(
+              Effect.retry({
+                while: (e) => e._tag === "Forbidden",
+                schedule: forbiddenRetrySchedule,
+                times: 8,
+              }),
+              Effect.flip,
+            );
           expect(error._tag).toEqual("ContentScanningNotEnabled");
 
           yield* stack.destroy();
@@ -108,9 +110,7 @@ describe.sequential(
               const scanning =
                 yield* Cloudflare.ContentScanning.ContentScanning(
                   "UploadScanning",
-                  {
-                    zoneId,
-                  },
+                  { zoneId },
                 );
               return yield* Cloudflare.ContentScanning.Expression("ScanField", {
                 zoneId: scanning.zoneId,
@@ -134,9 +134,7 @@ describe.sequential(
               const scanning =
                 yield* Cloudflare.ContentScanning.ContentScanning(
                   "UploadScanning",
-                  {
-                    zoneId,
-                  },
+                  { zoneId },
                 );
               return yield* Cloudflare.ContentScanning.Expression("ScanField", {
                 zoneId: scanning.zoneId,

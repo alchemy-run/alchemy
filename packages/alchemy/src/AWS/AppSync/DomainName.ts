@@ -1,11 +1,11 @@
 import * as appsync from "@distilled.cloud/aws/appsync";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
+import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
-import { Unowned } from "../../AdoptPolicy.ts";
 import type { Providers } from "../Providers.ts";
 import {
   retryConcurrentModification,

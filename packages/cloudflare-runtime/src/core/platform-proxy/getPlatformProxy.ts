@@ -12,9 +12,10 @@
 import type * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
-import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import { PlatformServices } from "../../Platform.ts";
 import * as Docker from "../Docker.ts";
 import * as Globals from "../globals/Globals.ts";
 import * as Internet from "../globals/Internet.ts";
@@ -26,7 +27,6 @@ import * as Runtime from "../Runtime.ts";
 import * as RuntimeServices from "../RuntimeServices.ts";
 import type { BindingHooks } from "../RuntimeWorker.ts";
 import * as Workerd from "../workerd/Workerd.ts";
-import { PlatformServices } from "../../Platform.ts";
 import type {
   PlatformProxyInstance,
   PlatformProxyOptions,

@@ -1,13 +1,13 @@
-import * as AWS from "@/AWS";
-import { Bucket } from "@/AWS/S3";
-import { AccessPoint, AccessPointPolicy } from "@/AWS/S3Control";
-import * as Output from "@/Output";
-import * as Test from "@/Test/Alchemy";
 import * as s3control from "@distilled.cloud/aws/s3-control";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Bucket } from "@/AWS/S3";
+import { AccessPoint, AccessPointPolicy } from "@/AWS/S3Control";
+import * as Output from "@/Output";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -23,7 +23,9 @@ const findPolicy = (name: string) =>
 
 class AccessPointStillExists extends Data.TaggedError(
   "AccessPointStillExists",
-)<{ readonly name: string }> {}
+)<{
+  readonly name: string;
+}> {}
 
 // The policy's access point (and transitively its bucket) must be destroyed
 // too — a destroy that only removes the policy would orphan them.

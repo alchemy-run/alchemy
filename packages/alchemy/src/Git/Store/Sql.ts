@@ -17,11 +17,11 @@
  * failures surface as typed {@link StoreError}s instead of defects.
  */
 import type * as cf from "@cloudflare/workers-types";
+import * as Effect from "effect/Effect";
 import type {
   DurableObjectState,
   SqlStorageValue,
 } from "../../Cloudflare/Workers/index.ts";
-import * as Effect from "effect/Effect";
 import { StoreError } from "../Protocol/Store.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────

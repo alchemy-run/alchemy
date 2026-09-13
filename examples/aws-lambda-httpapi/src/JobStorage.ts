@@ -10,7 +10,6 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
-
 import type { Job } from "./Job.ts";
 
 export class PutJobError extends Data.TaggedError("PutJobError")<{
@@ -50,23 +49,26 @@ export const JobStorageDynamoDB = Layer.provideMerge(
       const putItem = yield* DynamoDB.PutItem(table);
       const sink = yield* SQS.QueueSink(queue);
 
-      yield* DynamoDB.consumeTableChanges(table, {
-        streamViewType: "NEW_AND_OLD_IMAGES",
-        startingPosition: "LATEST",
-        batchSize: 10,
-      }, (stream) =>
-        stream.pipe(
-          Stream.map((record) => ({
-            MessageBody: JSON.stringify({
-              eventName: record.eventName,
-              keys: record.dynamodb.Keys,
-              newImage: record.dynamodb.NewImage,
-              oldImage: record.dynamodb.OldImage,
-            }),
-          })),
-          Stream.run(sink),
-          Effect.orDie,
-        ),
+      yield* DynamoDB.consumeTableChanges(
+        table,
+        {
+          streamViewType: "NEW_AND_OLD_IMAGES",
+          startingPosition: "LATEST",
+          batchSize: 10,
+        },
+        (stream) =>
+          stream.pipe(
+            Stream.map((record) => ({
+              MessageBody: JSON.stringify({
+                eventName: record.eventName,
+                keys: record.dynamodb.Keys,
+                newImage: record.dynamodb.NewImage,
+                oldImage: record.dynamodb.OldImage,
+              }),
+            })),
+            Stream.run(sink),
+            Effect.orDie,
+          ),
       );
 
       const putJob = (job: Job) =>

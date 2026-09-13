@@ -1,6 +1,6 @@
-import { orderedParts } from "@/Git/BlobStore.ts";
 import { describe, expect, test } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import { orderedParts } from "@/Git/BlobStore.ts";
 import { RuntimeContext } from "@/RuntimeContext.ts";
 import { makeMemoryBlobStore } from "./harness/store.ts";
 

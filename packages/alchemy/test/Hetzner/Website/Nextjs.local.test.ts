@@ -1,11 +1,11 @@
-import * as Hetzner from "@/Hetzner";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as pathe from "pathe";
-import { prepareNextjsFixture } from "../../Cloudflare/Website/TypeScriptCompat.ts";
+import * as Hetzner from "@/Hetzner";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
+import { prepareNextjsFixture } from "../../Cloudflare/Website/TypeScriptCompat.ts";
 
 const { test } = Test.make({ providers: Hetzner.providers(), dev: true });
 
@@ -43,9 +43,7 @@ describe(
 
           const deployed = yield* stack.deploy(
             Effect.gen(function* () {
-              const site = yield* Hetzner.Website.Nextjs("Web", {
-                rootDir,
-              });
+              const site = yield* Hetzner.Website.Nextjs("Web", { rootDir });
               return { site };
             }),
           );
@@ -67,9 +65,7 @@ describe(
           yield* expectUrlContains(
             `${url}/static`,
             "NEXTJS_AWS_STATIC_MARKER",
-            {
-              label: "extra route (dev)",
-            },
+            { label: "extra route (dev)" },
           );
 
           yield* stack.destroy();

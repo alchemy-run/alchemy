@@ -1,10 +1,10 @@
-import * as AWS from "@/AWS";
-import { ConfigurationSet } from "@/AWS/PinpointSMSVoiceV2";
-import * as Test from "@/Test/Alchemy";
 import * as smsvoice from "@distilled.cloud/aws/pinpoint-sms-voice-v2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { ConfigurationSet } from "@/AWS/PinpointSMSVoiceV2";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

@@ -1,7 +1,7 @@
-import { Task } from "@/AWS/ECS/Task.ts";
-import * as Dockerfile from "@/Docker/Dockerfile.ts";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import { Task } from "@/AWS/ECS/Task.ts";
+import * as Dockerfile from "@/Docker/Dockerfile.ts";
 
 /**
  * A one-shot `AWS.ECS.Task` whose ENVIRONMENT is inline Dockerfile content

@@ -3,19 +3,19 @@ import {
   GraphQLLive,
   toConfig,
 } from "@distilled.cloud/railway";
+import { describe, expect, it } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientResponse from "effect/http/HttpClientResponse";
+import * as Layer from "effect/Layer";
+import * as TestClock from "effect/testing/TestClock";
+import { RailwayEnvironment } from "@/Railway/Environment.ts";
 import {
   Sandbox,
   SandboxProvider,
   type SandboxProps,
 } from "@/Railway/Sandbox.ts";
-import { describe, expect, it } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Fiber from "effect/Fiber";
-import * as Layer from "effect/Layer";
-import { RailwayEnvironment } from "@/Railway/Environment.ts";
-import * as TestClock from "effect/testing/TestClock";
-import * as HttpClient from "effect/http/HttpClient";
-import * as HttpClientResponse from "effect/http/HttpClientResponse";
 
 const testLayer = (client: HttpClient.HttpClient) =>
   SandboxProvider().pipe(

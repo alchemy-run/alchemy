@@ -100,7 +100,10 @@ export const MountTarget = Resource<MountTarget>("AWS.EFS.MountTarget");
  */
 export class MountTargetNotAvailable extends Data.TaggedError(
   "MountTargetNotAvailable",
-)<{ mountTargetId: string; state: string }> {}
+)<{
+  mountTargetId: string;
+  state: string;
+}> {}
 
 /**
  * Internal marker error used to drive the bounded wait for a mount target to
@@ -108,7 +111,10 @@ export class MountTargetNotAvailable extends Data.TaggedError(
  */
 export class MountTargetStillDeleting extends Data.TaggedError(
   "MountTargetStillDeleting",
-)<{ mountTargetId: string; state: string }> {}
+)<{
+  mountTargetId: string;
+  state: string;
+}> {}
 
 /**
  * Mount-target provisioning takes 1–3 minutes. Bounded poll (5s × 36 ≈

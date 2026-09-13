@@ -1,5 +1,5 @@
-import { Region as AwsRegion } from "@distilled.cloud/aws/Region";
 import * as kvs from "@distilled.cloud/aws/cloudfront-keyvaluestore";
+import { Region as AwsRegion } from "@distilled.cloud/aws/Region";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";

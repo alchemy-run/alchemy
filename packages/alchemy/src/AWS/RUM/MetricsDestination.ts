@@ -164,7 +164,9 @@ export const MetricsDestination = Resource<MetricsDestination>(
  */
 export class RumMetricDefinitionsError extends Data.TaggedError(
   "RumMetricDefinitionsError",
-)<{ message: string }> {}
+)<{
+  message: string;
+}> {}
 
 const toWireDefinition = (
   def: MetricDefinition,

@@ -1,3 +1,8 @@
+import * as iotfleetwise from "@distilled.cloud/aws/iotfleetwise";
+import { Region } from "@distilled.cloud/aws/Region";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import {
   Campaign,
@@ -10,11 +15,6 @@ import {
 } from "@/AWS/IoTFleetWise";
 import { Bucket } from "@/AWS/S3";
 import * as Test from "@/Test/Alchemy";
-import { Region } from "@distilled.cloud/aws/Region";
-import * as iotfleetwise from "@distilled.cloud/aws/iotfleetwise";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

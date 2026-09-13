@@ -1,3 +1,6 @@
+import * as IAM from "@distilled.cloud/aws/iam";
+import { describe, expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import {
   ServiceSpecificCredential,
@@ -6,9 +9,6 @@ import {
   User,
 } from "@/AWS/IAM";
 import * as Test from "@/Test/Alchemy";
-import * as IAM from "@distilled.cloud/aws/iam";
-import { describe, expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 import { testCertificateBody, testSshPublicKey } from "./fixtures.ts";
 import { withSigningCertificateFixture } from "./SigningCertificateTestLease.ts";
 

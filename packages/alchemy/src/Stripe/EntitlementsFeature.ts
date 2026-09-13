@@ -21,8 +21,8 @@ import {
   stripInternalMetadata,
   toMetadata,
 } from "./Metadata.ts";
-import type { Providers } from "./Providers.ts";
 import { isMissingStripeResource } from "./missing.ts";
+import type { Providers } from "./Providers.ts";
 
 const NAME_MAX_LENGTH = 80;
 const LOOKUP_KEY_MAX_LENGTH = 80;

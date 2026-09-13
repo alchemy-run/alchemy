@@ -3,8 +3,8 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import { Worker, WorkerEnvironment } from "../Workers/Worker.ts";
-import type { Secret } from "./Secret.ts";
 import { ReadSecret, SecretError } from "./ReadSecret.ts";
+import type { Secret } from "./Secret.ts";
 
 export const ReadSecretBinding = Layer.effect(
   ReadSecret,

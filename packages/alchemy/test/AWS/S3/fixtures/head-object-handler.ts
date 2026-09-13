@@ -1,8 +1,8 @@
-import * as Lambda from "@/AWS/Lambda";
-import * as S3 from "@/AWS/S3";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Lambda from "@/AWS/Lambda";
+import * as S3 from "@/AWS/S3";
 
 export class HeadObjectTestFunction extends Lambda.Function<HeadObjectTestFunction>()(
   "HeadObjectTestFunction",

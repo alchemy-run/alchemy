@@ -1,3 +1,4 @@
+import * as Effect from "effect/Effect";
 import type {
   Apply,
   Create,
@@ -10,7 +11,6 @@ import type {
 import type { ProviderService } from "@/Provider.ts";
 import type { ResourceLike } from "@/Resource.ts";
 import type { CreatedResourceState } from "@/State/index.ts";
-import * as Effect from "effect/Effect";
 
 const provider: ProviderService<ResourceLike> = {
   list: () => Effect.succeed([]),

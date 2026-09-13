@@ -1,3 +1,8 @@
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
+import type * as Scope from "effect/Scope";
+import { runBuildChild } from "../core/BuildChild.ts";
 /**
  * `@alchemy.run/frontend-frameworks/vinext/node` — vinext on a Node
  * container (vinext's Vite build + vinext's production server).
@@ -17,21 +22,16 @@
  * the deploy target (same shape as `nextjs/node`).
  */
 import * as FrameworkCore from "../core/index.ts";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
-import type * as Scope from "effect/Scope";
-import { runBuildChild } from "../core/BuildChild.ts";
-import {
-  NODE_BUNDLE_CONDITIONS,
-  NODE_DEFAULT_PORT,
-  NODE_SERVE_ENTRY_FILE_NAME,
-} from "../core/NodeServe.ts";
 import {
   DeployTargetError,
   makeDeployTarget,
   type DeployTarget,
 } from "../core/index.ts";
+import {
+  NODE_BUNDLE_CONDITIONS,
+  NODE_DEFAULT_PORT,
+  NODE_SERVE_ENTRY_FILE_NAME,
+} from "../core/NodeServe.ts";
 import {
   awaitVinextDevReady,
   collectVinextDist,

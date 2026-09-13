@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import PaymentCryptographyTestFunctionLive, {
   PaymentCryptographyTestFunction,
 } from "./handler.ts";
@@ -154,9 +154,7 @@ describe.skipIf(gated)(
               HttpClientRequest.post(`${baseUrl}/encrypt-decrypt`),
               { plainTextHex: "41414141414141414141414141414141" },
             ),
-          ).pipe(Effect.flatMap((r) => r.json))) as {
-            plainText: string;
-          };
+          ).pipe(Effect.flatMap((r) => r.json))) as { plainText: string };
 
           expect(response.plainText.toUpperCase()).toBe(
             "41414141414141414141414141414141",
@@ -173,9 +171,7 @@ describe.skipIf(gated)(
               HttpClientRequest.post(`${baseUrl}/mac`),
               { messageDataHex: "31323334353637383930313233343536" },
             ),
-          ).pipe(Effect.flatMap((r) => r.json))) as {
-            mac: string;
-          };
+          ).pipe(Effect.flatMap((r) => r.json))) as { mac: string };
 
           expect(response.mac).toBeTruthy();
           expect(response.mac).toMatch(/^[0-9A-Fa-f]+$/);
@@ -236,9 +232,7 @@ describe.skipIf(gated)(
               HttpClientRequest.post(`${baseUrl}/card`),
               { pan: "9123456789012345", expiry: "0130" },
             ),
-          ).pipe(Effect.flatMap((r) => r.json))) as {
-            cvv2: string;
-          };
+          ).pipe(Effect.flatMap((r) => r.json))) as { cvv2: string };
 
           expect(response.cvv2).toMatch(/^\d{3}$/);
         }),

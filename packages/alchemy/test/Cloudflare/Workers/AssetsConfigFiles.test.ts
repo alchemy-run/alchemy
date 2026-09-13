@@ -1,10 +1,10 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Test from "@/Test/Alchemy";
 import { describe } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as pathe from "pathe";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../Utils/Fixture.ts";
 import {
   expectUrlAbsent,
@@ -50,9 +50,7 @@ describe.concurrent(
                   script: workerScript(marker),
                   assets,
                   workersDev: true,
-                  compatibility: {
-                    date: "2024-01-01",
-                  },
+                  compatibility: { date: "2024-01-01" },
                 });
               }),
             );

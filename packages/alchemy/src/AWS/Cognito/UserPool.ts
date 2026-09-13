@@ -702,7 +702,9 @@ export const UserPoolProvider = () =>
         return yield* Effect.forEach(
           candidates,
           (candidate) => describePool(candidate.Id!),
-          { concurrency: 3 },
+          {
+            concurrency: 3,
+          },
         ).pipe(
           Effect.map((pools) => pools.filter((pool) => pool !== undefined)),
         );
@@ -991,7 +993,10 @@ export const UserPoolProvider = () =>
           canonicalRecovery(news.accountRecovery) !==
             canonicalRecovery(
               (observed.AccountRecoverySetting?.RecoveryMechanisms ?? []).map(
-                (m) => ({ priority: m.Priority, name: m.Name }),
+                (m) => ({
+                  priority: m.Priority,
+                  name: m.Name,
+                }),
               ),
             )
         ) {

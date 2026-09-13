@@ -1,9 +1,9 @@
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Binding from "@/Binding.ts";
 import type { Bucket } from "@/Cloudflare/R2/Bucket.ts";
 import type { Resource, ResourceLike } from "@/Resource.ts";
 import type { RuntimeContext } from "@/RuntimeContext.ts";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 
 /**
  * The env var the binding injects into whichever host it is provided on.

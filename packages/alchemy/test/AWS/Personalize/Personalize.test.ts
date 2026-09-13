@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import { Dataset, DatasetGroup, EventTracker, Schema } from "@/AWS/Personalize";
-import { toTagRecord } from "@/AWS/Personalize/internal.ts";
-import * as Test from "@/Test/Alchemy";
 import * as personalize from "@distilled.cloud/aws/personalize";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Dataset, DatasetGroup, EventTracker, Schema } from "@/AWS/Personalize";
+import { toTagRecord } from "@/AWS/Personalize/internal.ts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -24,7 +24,9 @@ const INTERACTIONS_SCHEMA = JSON.stringify({
 
 class DatasetGroupStillExists extends Data.TaggedError(
   "DatasetGroupStillExists",
-)<{ readonly arn: string }> {}
+)<{
+  readonly arn: string;
+}> {}
 
 const assertDatasetGroupDeleted = (arn: string) =>
   personalize.describeDatasetGroup({ datasetGroupArn: arn }).pipe(

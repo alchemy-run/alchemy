@@ -1,4 +1,3 @@
-import { waitUntilDeleted } from "./GraphQL.ts";
 import { createHash } from "node:crypto";
 import { Query } from "@distilled.cloud/core/query";
 import { Railway, type VariableUpsertInput } from "@distilled.cloud/railway";
@@ -10,6 +9,7 @@ import { Unowned } from "../AdoptPolicy.ts";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
+import { waitUntilDeleted } from "./GraphQL.ts";
 import { createRailwayName, matchesAlchemyPhysicalName } from "./Metadata.ts";
 import {
   ownedProjects,

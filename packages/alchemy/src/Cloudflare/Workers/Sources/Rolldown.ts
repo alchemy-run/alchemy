@@ -1,21 +1,21 @@
 import * as Effect from "effect/Effect";
-import { dotAlchemyDirectory } from "../../../AlchemyContext.ts";
 import * as FileSystem from "effect/FileSystem";
 import { flow } from "effect/Function";
 import type * as Path from "effect/Path";
 import * as Stream from "effect/Stream";
 import path from "pathe";
 import type * as rolldown from "rolldown";
+import { dotAlchemyDirectory } from "../../../AlchemyContext.ts";
 import * as Artifacts from "../../../Artifacts.ts";
 import * as Bundle from "../../../Bundle/Bundle.ts";
 import { findCwdForBundle, resolveMainPath } from "../../../Bundle/TempRoot.ts";
 import { isWorkflowExport } from "../../Workflows/Workflow.ts";
 import { isDurableObjectExport } from "../DurableObject.ts";
 import type { SourceContext, SourceProvider } from "../Source.ts";
+import type { SqlMigrationSnapshot } from "../SqlMigrationsRuntime.ts";
+import type { WorkerExport } from "../WorkerRuntimeContext.ts";
 import { bundleSource } from "./shared.ts";
 import { workerModulePlugin } from "./WorkerModulePlugin.ts";
-import type { WorkerExport } from "../WorkerRuntimeContext.ts";
-import type { SqlMigrationSnapshot } from "../SqlMigrationsRuntime.ts";
 
 /**
  * Bundler options for a Worker: Rolldown input/output overrides and

@@ -153,7 +153,9 @@ export const SamplingRule = Resource<SamplingRule>("AWS.XRay.SamplingRule");
  */
 export class XRayReservedRuleName extends Data.TaggedError(
   "XRayReservedRuleName",
-)<{ message: string }> {}
+)<{
+  message: string;
+}> {}
 
 const validateRuleName = (props: Pick<SamplingRuleProps, "ruleName">) =>
   props.ruleName === "Default"

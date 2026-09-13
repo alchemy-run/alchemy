@@ -1,8 +1,8 @@
 import * as Effect from "effect/Effect";
-import * as Output from "../../Output.ts";
 import * as Redacted from "effect/Redacted";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import type { MemoOptions } from "../../Command/Memo.ts";
+import * as Output from "../../Output.ts";
 import { ProviderModePolicy } from "../../ProviderMode.ts";
 import type { WebsiteAssetsProps } from "../../Website/assets.ts";
 import { Server, type ServerDevProps } from "../../Website/Server.ts";

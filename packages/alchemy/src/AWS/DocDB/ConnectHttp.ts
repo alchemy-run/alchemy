@@ -5,13 +5,13 @@ import * as Redacted from "effect/Redacted";
 import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
 import { isBindingHost } from "../Lambda/Function.ts";
-import type { DBCluster } from "./DBCluster.ts";
 import {
   Connect,
   connectEnvPrefix,
   type ConnectOptions,
   formatMongoConnectionUrl,
 } from "./Connect.ts";
+import type { DBCluster } from "./DBCluster.ts";
 
 export const ConnectHttp = Layer.effect(
   Connect,

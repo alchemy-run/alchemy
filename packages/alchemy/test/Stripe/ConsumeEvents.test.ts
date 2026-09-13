@@ -1,14 +1,14 @@
-import * as Alchemy from "@/index.ts";
-import * as Cloudflare from "@/Cloudflare";
-import * as Stripe from "@/Stripe";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Layer from "effect/Layer";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/http/HttpClient";
-import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Cloudflare from "@/Cloudflare";
+import * as Alchemy from "@/index.ts";
+import * as Stripe from "@/Stripe";
+import * as Test from "@/Test/Alchemy";
 import StripeEventSourceWorker from "./fixtures/event-source-worker.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({

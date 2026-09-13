@@ -250,9 +250,9 @@ test(
     server.assertAlive("boot");
 
     // ── Cloudflare, Effect-native worker ──
-    expect(
-      await fetchJson<{ marker: string }>(echo("/marker")),
-    ).toEqual({ marker: "echo-v1" });
+    expect(await fetchJson<{ marker: string }>(echo("/marker"))).toEqual({
+      marker: "echo-v1",
+    });
 
     expect(await fetchJson<{ value: string }>(echo("/kv?key=boot"))).toEqual({
       value: "kv:boot",
@@ -292,7 +292,10 @@ test(
     // ── Cloudflare, path-`main` worker ──
     expect(
       await fetchJson<{ marker: string; message: string }>(api("/marker")),
-    ).toEqual({ marker: "api-v1", message: "message-v1" });
+    ).toEqual({
+      marker: "api-v1",
+      message: "message-v1",
+    });
 
     const env = await fetchJson<{
       API_VARIABLE: string;
@@ -306,7 +309,10 @@ test(
     const lambda = await fetchJson<{ marker: string; variable: string }>(
       api("/aws/"),
       undefined,
-      { tries: 120, delayMs: 1_000 },
+      {
+        tries: 120,
+        delayMs: 1_000,
+      },
     );
     expect(lambda).toEqual({
       marker: "lambda-v1",
@@ -342,7 +348,9 @@ test(
       "the context-built ECS service to serve",
       ecs("/"),
       "ecs-site-v1",
-      { tries: 300 },
+      {
+        tries: 300,
+      },
     );
     await waitForText(
       "the ECS service's baked Dockerfile marker",
@@ -418,9 +426,8 @@ test(
   "hot reload (bundler path): editing a file the stack never imports swaps the script without re-running the stack",
   async () => {
     const plansBefore = server.planCount;
-    const counterBefore = (
-      await fetchJson<{ count: number }>(echo("/counter"))
-    ).count;
+    const counterBefore = (await fetchJson<{ count: number }>(echo("/counter")))
+      .count;
 
     server.write("src/api/marker.ts", markerModule("API_MARKER", "api-v2"));
 
@@ -470,14 +477,15 @@ test(
     server.assertAlive("watch-path reload");
 
     // The sidecar-hosted dev server was NOT bounced by a user-code reload.
-    const sitePidAfter = (await fetchJson<{ pid: number }>(awsSite("/__dev-env")))
-      .pid;
+    const sitePidAfter = (
+      await fetchJson<{ pid: number }>(awsSite("/__dev-env"))
+    ).pid;
     expect(sitePidAfter).toBe(sitePidBefore);
 
     // The bundler-path worker was not disturbed either.
-    expect(
-      (await fetchJson<{ marker: string }>(api("/marker"))).marker,
-    ).toBe("api-v2");
+    expect((await fetchJson<{ marker: string }>(api("/marker"))).marker).toBe(
+      "api-v2",
+    );
   },
   PHASE_TIMEOUT,
 );
@@ -528,9 +536,9 @@ test(
     // What must hold is that the dev server lives and every unrelated
     // resource is untouched.
     server.assertAlive("broken import window");
-    expect(
-      (await fetchJson<{ marker: string }>(echo("/marker"))).marker,
-    ).toBe("echo-v2");
+    expect((await fetchJson<{ marker: string }>(echo("/marker"))).marker).toBe(
+      "echo-v2",
+    );
     expect(await (await fetchOk(awsSite("/"))).text()).toContain("aws-site-v1");
 
     // Complete the move, with a NEW value so "the rebuild happened" cannot
@@ -583,9 +591,9 @@ test(
     // EchoWorker is down (its bundle no longer builds), but every resource
     // that does not depend on the broken module keeps serving: they live in
     // the provider sidecar, which the exec child's crash does not touch.
-    expect(
-      (await fetchJson<{ marker: string }>(api("/marker"))).marker,
-    ).toBe("api-v2");
+    expect((await fetchJson<{ marker: string }>(api("/marker"))).marker).toBe(
+      "api-v2",
+    );
     expect(await (await fetchOk(awsSite("/"))).text()).toContain("aws-site-v1");
 
     // Recovery on the next save.
@@ -658,12 +666,12 @@ test(
     expect(server.since(cleanCursor)).toContain("already in use");
 
     // Everything healthy is still healthy.
-    expect(
-      (await fetchJson<{ marker: string }>(echo("/marker"))).marker,
-    ).toBe("echo-v4");
-    expect(
-      (await fetchJson<{ marker: string }>(api("/marker"))).marker,
-    ).toBe("api-v2");
+    expect((await fetchJson<{ marker: string }>(echo("/marker"))).marker).toBe(
+      "echo-v4",
+    );
+    expect((await fetchJson<{ marker: string }>(api("/marker"))).marker).toBe(
+      "api-v2",
+    );
     expect((await fetchJson<{ text: string }>(api("/aws/s3"))).text).toBe(
       "hello from s3",
     );
@@ -712,7 +720,11 @@ test(
     await pollUntil(
       "extraUrl in the stack outputs",
       () => server.outputUrl("extraUrl"),
-      { tries: 120, delayMs: 500, server },
+      {
+        tries: 120,
+        delayMs: 500,
+        server,
+      },
     );
     server.assertAlive("worker added");
 
@@ -753,9 +765,9 @@ test(
     server.assertAlive("worker removed");
 
     // The survivors are untouched.
-    expect(
-      (await fetchJson<{ marker: string }>(echo("/marker"))).marker,
-    ).toBe("echo-v5");
+    expect((await fetchJson<{ marker: string }>(echo("/marker"))).marker).toBe(
+      "echo-v5",
+    );
     cleanCursor = server.mark();
   },
   PHASE_TIMEOUT,
@@ -891,8 +903,9 @@ test(
     server.assertAlive("queue + consumer + DO added");
 
     // The Worker's pre-existing bindings still work after the graft.
-    expect((await fetchJson<{ value: string }>(echo("/kv?key=graft"))).value)
-      .toBe("kv:graft");
+    expect(
+      (await fetchJson<{ value: string }>(echo("/kv?key=graft"))).value,
+    ).toBe("kv:graft");
     expect(
       (await fetchJson<{ count: number }>(echo("/counter"))).count,
     ).toBeGreaterThan(0);
@@ -922,9 +935,9 @@ test(
       { tries: 480, delayMs: 500, server },
     );
     server.assertAlive("queue + consumer + DO removed");
-    expect(
-      (await fetchJson<{ marker: string }>(echo("/marker"))).marker,
-    ).toBe("echo-v5");
+    expect((await fetchJson<{ marker: string }>(echo("/marker"))).marker).toBe(
+      "echo-v5",
+    );
     cleanCursor = server.mark();
   },
   PHASE_TIMEOUT,
@@ -1069,7 +1082,11 @@ test(
     const dns = await pollUntil(
       "ec2Dns in the stack outputs",
       () => server.outputValue("ec2Dns"),
-      { tries: 240, delayMs: 500, server },
+      {
+        tries: 240,
+        delayMs: 500,
+        server,
+      },
     );
     expect(dns).toMatch(/\.localhost\.floci\.io$/);
     const marker = at2(dns, PORTS.ec2, "/marker");
@@ -1130,7 +1147,10 @@ test(
     const hostFetch = await fetchJson<{ body: string }>(
       echo("/sandbox/host-fetch"),
       undefined,
-      { tries: 60, delayMs: 1_000 },
+      {
+        tries: 60,
+        delayMs: 1_000,
+      },
     );
     expect(hostFetch.body).toContain("aws-site-env-v1");
     cleanCursor = server.mark();
@@ -1244,7 +1264,10 @@ test(
         await fetchJson<{ marker: string }>(
           microvm("/roundtrip?message=sibling"),
           undefined,
-          { tries: 300, delayMs: 1_000 },
+          {
+            tries: 300,
+            delayMs: 1_000,
+          },
         )
       ).marker,
     ).toBe("vm-v1");
@@ -1305,9 +1328,9 @@ test(
     server.assertAlive("aws half deleted");
 
     // Cloudflare is completely unaffected by the AWS half vanishing.
-    expect(
-      (await fetchJson<{ marker: string }>(echo("/marker"))).marker,
-    ).toBe("echo-v5");
+    expect((await fetchJson<{ marker: string }>(echo("/marker"))).marker).toBe(
+      "echo-v5",
+    );
     expect((await fetchJson<{ text: string }>(echo("/r2"))).text).toBe(
       "hello from r2",
     );
@@ -1467,7 +1490,10 @@ test(
     // One tick, four surfaces: the bundler path, the watch path, the AWS
     // half, and the stack graph itself.
     server.write("src/api/marker.ts", markerModule("API_MARKER", "api-final"));
-    server.write("src/echo/marker.ts", markerModule("ECHO_MARKER", "echo-final"));
+    server.write(
+      "src/echo/marker.ts",
+      markerModule("ECHO_MARKER", "echo-final"),
+    );
     server.write(
       "src/lambda/marker.ts",
       markerModule("LAMBDA_MARKER", "lambda-final"),
@@ -1517,8 +1543,9 @@ test(
     server.assertAlive("final health check");
 
     // Cloudflare
-    expect((await fetchJson<{ value: string }>(echo("/kv?key=final"))).value)
-      .toBe("kv:final");
+    expect(
+      (await fetchJson<{ value: string }>(echo("/kv?key=final"))).value,
+    ).toBe("kv:final");
     expect((await fetchJson<{ text: string }>(echo("/r2"))).text).toBe(
       "hello from r2",
     );
@@ -1558,7 +1585,9 @@ test(
       "the inline ECS service post-churn",
       ecsInline("/"),
       "ecs-inline-v2",
-      { tries: 60 },
+      {
+        tries: 60,
+      },
     );
 
     // Websites. The Cloudflare site's port is not pinned (a
@@ -1589,7 +1618,10 @@ test(
         await fetchJson<{ marker: string }>(
           microvm("/roundtrip?message=post-churn"),
           undefined,
-          { tries: 240, delayMs: 1_000 },
+          {
+            tries: 240,
+            delayMs: 1_000,
+          },
         )
       ).marker,
     ).toBe("vm-v1");

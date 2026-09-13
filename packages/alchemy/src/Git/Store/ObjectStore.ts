@@ -1,3 +1,7 @@
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
+import { RuntimeContext } from "../../RuntimeContext.ts";
 /**
  * The concrete object store: DO SQLite rows + R2 overflow (DESIGN.md §3.3).
  *
@@ -20,10 +24,6 @@
  * the final `transactionSync` flips them live.
  */
 import type { BlobBody, BlobStoreError, BlobStoreShape } from "../BlobStore.ts";
-import { RuntimeContext } from "../../RuntimeContext.ts";
-import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
-import * as Stream from "effect/Stream";
 import type { ObjectType, Oid } from "../Protocol/ObjectCodec.ts";
 import {
   concatBytes,

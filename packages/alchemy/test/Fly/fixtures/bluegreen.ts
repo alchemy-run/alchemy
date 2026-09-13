@@ -1,11 +1,11 @@
 import * as machines from "@distilled.cloud/fly-io/machines";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as Schedule from "effect/Schedule";
 import * as Fly from "@/Fly";
 import type { MachineProps } from "@/Fly/Machine";
 import type { ScratchStack } from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
-import * as FetchHttpClient from "effect/http/FetchHttpClient";
 
 export const checks = {
   ready: {

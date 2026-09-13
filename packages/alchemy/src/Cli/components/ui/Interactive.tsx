@@ -7,6 +7,7 @@ import {
   useStdout,
   type DOMElement,
 } from "@alchemy.run/sigil";
+import { stringWidth } from "@alchemy.run/sigil/ansi";
 import {
   useEffect,
   useLayoutEffect,
@@ -14,10 +15,9 @@ import {
   useState,
 } from "@alchemy.run/sigil/react";
 import type { JSX, ReactNode } from "react";
-import { stringWidth } from "@alchemy.run/sigil/ansi";
-import type { AwaitExternalOptions, Choice, CycleChoice } from "../types.ts";
-import { theme } from "../../../Util/Theme.ts";
 import { copyToClipboard, truncate } from "../../../Util/Terminal.ts";
+import { theme } from "../../../Util/Theme.ts";
+import type { AwaitExternalOptions, Choice, CycleChoice } from "../types.ts";
 import { useCliEnvironment, useGlyphs, useKeyGlyphs } from "./Environment.tsx";
 import { KeyBar, Spinner } from "./Feedback.tsx";
 import { Box, overflowListWindow } from "./Layout.tsx";

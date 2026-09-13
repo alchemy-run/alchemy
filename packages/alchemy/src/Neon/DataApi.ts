@@ -3,9 +3,9 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { OwnedBySomeoneElse, Unowned } from "../AdoptPolicy.ts";
 import { isResolved } from "../Diff.ts";
+import type { Input } from "../Input.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import type { Input } from "../Input.ts";
 import {
   authPlanScope,
   authRequest,

@@ -1,13 +1,13 @@
-import * as AWS from "@/AWS";
-import * as Test from "@/Test/Alchemy";
 import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as SQS from "@distilled.cloud/aws/sqs";
 import { describe, expect } from "alchemy-test";
 import * as Clock from "effect/Clock";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/http/HttpClient";
+import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
 import LogGroupEventSourceFunctionLive, {
   LogGroupEventSourceFunction,
 } from "./event-source-handler.ts";

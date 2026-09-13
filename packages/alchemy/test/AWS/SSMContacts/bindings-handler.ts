@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Schedule from "effect/Schedule";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Layer from "effect/Layer";
+import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
 
 // Bindings fixture: a personal contact with a deferred-activation email
 // channel and a daily rotation, plus a Lambda that exercises the SSM
