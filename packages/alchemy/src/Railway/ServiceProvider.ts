@@ -9,7 +9,7 @@ import * as Stream from "effect/Stream";
 import { AlchemyContext } from "../AlchemyContext.ts";
 import { Unowned } from "../AdoptPolicy.ts";
 import * as Bundle from "../Bundle/Bundle.ts";
-import { deepEqual, isResolved } from "../Diff.ts";
+import { deepEqual, isResolved, stripEffects } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Stack } from "../Stack.ts";
 import { createRailwayName, matchesAlchemyPhysicalName } from "./Metadata.ts";
@@ -896,7 +896,11 @@ export const ServiceProvider = () =>
         stables: ["serviceId", "projectId", "environmentId"],
         nuke: { dependsOn: ["Railway.Project"] },
 
-        diff: Effect.fn(function* ({ news, output }) {
+        diff: Effect.fn(function* ({ news: desired, output }) {
+          // Runtime exports contain Effects that remain unevaluated during
+          // planning. The bundle hash covers their code; they must not prevent
+          // code-only changes from reaching the hash comparison below.
+          const news = stripEffects(desired);
           if (news === undefined || !isResolved(news)) return undefined;
           if (output === undefined) return undefined;
           const nextProject = projectIdOf(news.project);

@@ -12,20 +12,20 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
-    "cookie": "^2.0.1",
-    "devalue": "5.8.1",
-    "uuid": "catalog:shared"
+    "cookie": "catalog:",
+    "devalue": "catalog:",
+    "uuid": "catalog:"
   },
   "devDependencies": {
     "@alchemy.run/cloudflare-runtime": "workspace:*",
     "@alchemy.run/cloudflare-test-tools": "workspace:*",
     "@alchemy.run/frontend-frameworks": "workspace:*",
-    "@playwright/test": "catalog:testing",
-    "@sveltejs/kit": "catalog:frontend",
-    "@sveltejs/vite-plugin-svelte": "catalog:frontend",
+    "@playwright/test": "catalog:",
+    "@sveltejs/kit": "catalog:",
+    "@sveltejs/vite-plugin-svelte": "catalog:",
     "@types/node": "catalog:node24",
-    "effect": "catalog:effect",
-    "svelte": "catalog:frontend",
-    "vite": "catalog:build"
+    "effect": "catalog:",
+    "svelte": "catalog:",
+    "vite": "catalog:"
   }
 }

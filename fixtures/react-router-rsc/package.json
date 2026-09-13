@@ -12,19 +12,19 @@
     "pretest": "playwright install chromium"
   },
   "dependencies": {
-    "react": "catalog:frontend",
-    "react-dom": "catalog:frontend",
-    "react-router": "catalog:frontend"
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "react-router": "catalog:"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "catalog:cloudflare-runtime",
+    "@cloudflare/workers-types": "catalog:",
     "@alchemy.run/cloudflare-test-tools": "workspace:*",
-    "@playwright/test": "catalog:testing",
+    "@playwright/test": "catalog:",
     "@types/node": "catalog:node24",
-    "@types/react": "catalog:frontend",
-    "@types/react-dom": "catalog:frontend",
-    "@vitejs/plugin-react": "catalog:frontend",
-    "@vitejs/plugin-rsc": "catalog:frontend",
-    "vite": "catalog:build"
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@vitejs/plugin-react": "catalog:",
+    "@vitejs/plugin-rsc": "catalog:",
+    "vite": "catalog:"
   }
 }

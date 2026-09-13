@@ -60,14 +60,14 @@
     }
   },
   "dependencies": {
-    "chokidar": "^5.0.0",
-    "rolldown": "catalog:build"
+    "chokidar": "catalog:",
+    "rolldown": "catalog:"
   },
   "publishConfig": {
     "access": "public"
   },
   "devDependencies": {
-    "@types/bun": "catalog:tooling",
-    "typescript": "catalog:build"
+    "@types/bun": "catalog:",
+    "typescript": "catalog:"
   }
 }

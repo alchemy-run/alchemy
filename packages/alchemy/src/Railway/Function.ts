@@ -13,7 +13,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Schedule from "effect/Schedule";
 import { Unowned } from "../AdoptPolicy.ts";
 import * as Bundle from "../Bundle/Bundle.ts";
-import { isResolved } from "../Diff.ts";
+import { isResolved, stripEffects } from "../Diff.ts";
 import type { InputProps } from "../Input.ts";
 import {
   Platform,
@@ -987,7 +987,10 @@ export const FunctionProvider = () =>
         stables: ["serviceId", "projectId", "environmentId"],
         nuke: { dependsOn: ["Railway.Project"] },
 
-        diff: Effect.fn(function* ({ news, output }) {
+        diff: Effect.fn(function* ({ news: desired, output }) {
+          // Runtime exports are covered by the bundle hash, not evaluated
+          // as infrastructure inputs during planning.
+          const news = stripEffects(desired);
           if (news === undefined || !isResolved(news)) return undefined;
           if (output === undefined) return undefined;
           const nextProject = projectIdOf(news.project);
