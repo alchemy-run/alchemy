@@ -154,26 +154,4 @@ export class SpecifierResolver {
     }
     return result.path;
   }
-
-  /**
-   * Given a file path Node failed to find (typically an `exports`/`main`
-   * target that names emitted JavaScript that was never built), finds the
-   * TypeScript source it was emitted from via extension substitution.
-   */
-  resolveMissing(
-    missingPath: string,
-    conditions: ReadonlyArray<string>,
-  ): string | undefined {
-    const directory = path.dirname(missingPath);
-    const base = path.basename(missingPath);
-    try {
-      const result = this.#resolver(conditions, true).sync(
-        directory,
-        `./${base}`,
-      );
-      return result.path;
-    } catch {
-      return undefined;
-    }
-  }
 }
