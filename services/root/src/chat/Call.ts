@@ -54,7 +54,14 @@ export class Calls extends Context.Service<
       utterance: { readonly author: string; readonly text: string },
     ) => Effect.Effect<void>;
     readonly read: (id: string) => Effect.Effect<CallView | undefined>;
-    readonly close: (id: string, summary: string) => Effect.Effect<void>;
+    /** The utterances `member` has not yet seen (excluding its own),
+     *  advancing its watermark — the DELTA an ask on the call delivers
+     *  as pre-history, so a member receives the meeting exactly once,
+     *  as the sequence of messages it is. */
+    readonly since: (
+      id: string,
+      member: string,
+    ) => Effect.Effect<ReadonlyArray<CallUtterance>>;
     /** The call's live view — a WebSocket upgrade. */
     readonly socket: (
       id: string,
@@ -72,6 +79,14 @@ const topic = AI.Thing("topic", S.String)`
 const callId = AI.Thing("call", S.String)`
   The call's id: pass it to ask so every exchange lands in the call;
   the humans watch the thread live and can join it.`;
+
+/** One utterance, as it enters a member's session (one message each —
+ *  the group-chat projection; attribution is this text convention,
+ *  never a platform field). */
+export const renderUtterance = (
+  callId: string,
+  utterance: CallUtterance,
+): string => `[${callId} #${utterance.seq}] ${utterance.author}\n${utterance.text}`;
 
 /**
  * The call tool — a CLASS tool so it rides the typed wire (renderer

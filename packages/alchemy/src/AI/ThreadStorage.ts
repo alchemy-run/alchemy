@@ -52,6 +52,17 @@ export interface ThreadHandle {
     input: unknown,
     options?: { readonly quiet?: boolean },
   ) => Effect.Effect<number>;
+  /**
+   * Durably queue SEVERAL inputs in ONE write (one storage put on the
+   * durable placement — a dispatch's pre-history plus its waking input
+   * land atomically, in order). Answers each row's seq, in input order.
+   */
+  readonly putInboxBatch: (
+    inputs: ReadonlyArray<{
+      readonly input: unknown;
+      readonly quiet?: boolean;
+    }>,
+  ) => Effect.Effect<ReadonlyArray<number>>;
   /** Pending inbox rows at or above the drain watermark, in order. */
   readonly listInbox: Effect.Effect<ReadonlyArray<InboxRow>>;
   /** Drop consumed inbox rows (best-effort — the watermark already

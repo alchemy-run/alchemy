@@ -1945,6 +1945,15 @@ export interface SessionEngine {
     options?: {
       readonly key?: string;
       readonly parent?: { readonly term: string; readonly key: string };
+      /**
+       * PRE-HISTORY: recorded into the session as discrete quiet
+       * messages, in order, immediately before `input` — then the
+       * round runs over all of it. How a conversation held elsewhere
+       * (a call's transcript) enters a session as the SEQUENCE it is,
+       * not a blob: each entry is one message. Strings are the whole
+       * contract — attribution/rendering is the caller's convention.
+       */
+      readonly history?: ReadonlyArray<string>;
     },
   ) => Effect.Effect<unknown, unknown>;
   /**
@@ -3036,11 +3045,20 @@ export const makeSessionEngine = (
         dispatchOptions?.parent,
       );
       if (s.settledOutcome !== undefined) return s.settledOutcome.outcome;
-      // the waiter RIDES the input (paired by inbox seq): it joins
-      // the answerable round only when its own message is drained, so
-      // an in-flight earlier round can never answer it
+      // ONE atomic batch: the pre-history (quiet, in order) and the
+      // waking input land in a single storage write. The waiter RIDES
+      // the input (paired by inbox seq): it joins the answerable round
+      // only when its own message is drained, so an in-flight earlier
+      // round can never answer it.
       const waiter = yield* Deferred.make<unknown, unknown>();
-      yield* enqueue(s, input, { waiter });
+      const seqs = yield* s.handle.putInboxBatch([
+        ...(dispatchOptions?.history ?? []).map((entry) => ({
+          input: entry,
+          quiet: true,
+        })),
+        { input },
+      ]);
+      s.pendingWaiters.push({ seq: seqs[seqs.length - 1]!, waiter });
       yield* kick(s.key);
       return yield* Deferred.await(waiter);
     },

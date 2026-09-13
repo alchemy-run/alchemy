@@ -155,6 +155,30 @@ export const ThreadStorageSqlite = (path: string): Layer.Layer<ThreadStorage> =>
                     return seq;
                   })(),
                 ),
+              putInboxBatch: (inputs) =>
+                Effect.sync(() =>
+                  db.transaction(() => {
+                    ensureRow();
+                    const first = (readRow()?.inbox_seq ?? 0) as number;
+                    const insert = db.query(
+                      "INSERT INTO session_inbox (term, key, seq, data, quiet) VALUES (?, ?, ?, ?, ?)",
+                    );
+                    const seqs = inputs.map((entry, index) => {
+                      insert.run(
+                        term,
+                        key,
+                        first + index,
+                        JSON.stringify(entry.input ?? null),
+                        entry.quiet === true ? 1 : 0,
+                      );
+                      return first + index;
+                    });
+                    db.query(
+                      "UPDATE session_meta SET inbox_seq = ? WHERE term = ? AND key = ?",
+                    ).run(first + inputs.length, term, key);
+                    return seqs;
+                  })(),
+                ),
               listInbox: Effect.sync(() => {
                 const drained = readRow()?.drained ?? 0;
                 return (

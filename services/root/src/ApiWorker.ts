@@ -14,7 +14,7 @@ import { GeneralEngineer } from "./engineering/Engineer.ts";
 import { EngineeringManagerLive } from "./engineering/Manager.ts";
 import { TriageLive, TasksLive } from "./engineering/TriageDO.ts";
 import { TriagePump } from "./engineering/Triage.ts";
-import { CallsLive } from "./chat/CallDO.ts";
+import { AsksLive, CallsLive } from "./chat/ChatDO.ts";
 import { HeadLive } from "./Head.ts";
 import { OrgDoctrine } from "./OrgGuidance.ts";
 import { ProposalsLive } from "./proposals/ProposalsDO.ts";
@@ -74,6 +74,7 @@ import { CallToolLive } from "./chat/Call.ts";
  *  the colleague addresses and the call store. */
 const Conversation = Layer.mergeAll(AskLive, TellLive, CallToolLive).pipe(
   Layer.provide(ColleaguesLive),
+  Layer.provide(AsksLive),
   Layer.provide(CallsLive),
 );
 
@@ -180,6 +181,7 @@ const Company = Layer.mergeAll(
   Layer.provideMerge(Layer.mergeAll(TriageLive, TasksLive)),
   Layer.provideMerge(ProposalsLive),
   Layer.provideMerge(CallsLive),
+  Layer.provideMerge(AsksLive),
   Layer.provideMerge(CheckoutsRouter),
   Layer.provideMerge(DriverCloudflare),
   Layer.provideMerge(GitHubWorker),

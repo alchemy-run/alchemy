@@ -379,6 +379,9 @@ export const DriverLocal: Layer.Layer<
                     ...(options?.parent !== undefined
                       ? { parent: options.parent }
                       : {}),
+                    ...(options?.history !== undefined
+                      ? { history: options.history }
+                      : {}),
                   }),
                 );
           }),

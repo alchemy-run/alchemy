@@ -111,6 +111,15 @@ export class Sessions extends Context.Service<
       input: unknown,
       options?: {
         readonly parent?: { readonly term: string; readonly key: string };
+        /**
+         * PRE-HISTORY: recorded into the session as discrete quiet
+         * messages, in order, atomically before `input` — how a
+         * conversation held elsewhere (a call's transcript) enters a
+         * session as the SEQUENCE it is. Strings only — attribution
+         * and rendering are the caller's convention, never the
+         * platform's.
+         */
+        readonly history?: ReadonlyArray<string>;
       },
     ) => Effect.Effect<unknown, never, RuntimeContext>;
     /**

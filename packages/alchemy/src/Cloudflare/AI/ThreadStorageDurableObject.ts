@@ -192,6 +192,33 @@ export const makeThreadStorageDurableObject = (
           return full.seq;
         }),
       ),
+    putInboxBatch: (inputs) =>
+      sealed(
+        Effect.gen(function* () {
+          const full = yield* readMeta;
+          // every row AND the advanced counter in ONE storage put —
+          // a dispatch's pre-history and its waking input are atomic
+          const seqs = inputs.map((_, index) => full.seq + index);
+          yield* storage
+            .put({
+              ...Object.fromEntries(
+                inputs.map((entry, index) => [
+                  seqKey(INBOX, full.seq + index),
+                  {
+                    input: entry.input,
+                    quiet: entry.quiet === true,
+                  } satisfies InboxEnvelope,
+                ]),
+              ),
+              [META]: {
+                ...full,
+                seq: full.seq + inputs.length,
+              } satisfies DurableSessionMeta,
+            })
+            .pipe(Effect.orDie);
+          return seqs;
+        }),
+      ),
     listInbox: sealed(
       Effect.gen(function* () {
         const full = yield* readMeta;

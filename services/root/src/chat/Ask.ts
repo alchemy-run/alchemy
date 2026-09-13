@@ -3,10 +3,12 @@ import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Clock from "effect/Clock";
 import * as Option from "effect/Option";
 import * as S from "effect/Schema";
 import { nameOfKey } from "../Root.ts";
-import { Calls } from "./Call.ts";
+import { Asks } from "./Asks.ts";
+import { Calls, renderUtterance } from "./Call.ts";
 
 /**
  * ASK — conversation as function calling, the ONLY way agents talk.
@@ -71,13 +73,16 @@ export class Colleagues extends Context.Service<
   }
 >()("Colleagues") {}
 
-const HEADER = /^\[ask ([^\]]+)\]/;
+const HEADER = /^\[ask ([a-z0-9-]+) \| ([^\]]+)\]/;
 
-/** The delivered form: the chain header, then the question. */
+/** The delivered form: the ask's ID and its chain, then the question.
+ *  The id is the tree edge — an ask made while answering this one
+ *  records it as its parent (Asks.ts). */
 export const withChain = (
+  id: string,
   chain: ReadonlyArray<string>,
   question: string,
-): string => `[ask ${chain.join(" > ")}]\n${question}`;
+): string => `[ask ${id} | ${chain.join(" > ")}]\n${question}`;
 
 /** Pull text out of a prompt message's content, defensively. */
 const textOf = (message: unknown): string => {
@@ -108,18 +113,22 @@ const currentThread = Effect.gen(function* () {
     : thread;
 });
 
-/** The chain this session is currently answering (the latest ask
- *  header in its transcript), else the empty chain. */
-const currentChain = Effect.gen(function* () {
+/** The ask this session is currently ANSWERING (the latest ask header
+ *  in its transcript): its id (the parent edge for asks made while
+ *  answering) and its chain (the cycle/hop guard). */
+const currentAsk = Effect.gen(function* () {
   const thread = yield* currentThread;
   const entries = yield* thread.entries;
   for (let index = entries.length - 1; index >= 0; index--) {
     const match = HEADER.exec(textOf(entries[index]));
     if (match !== null) {
-      return match[1]!.split(">").map((name) => name.trim());
+      return {
+        parent: match[1]!,
+        chain: match[2]!.split(">").map((name) => name.trim()),
+      };
     }
   }
-  return [] as ReadonlyArray<string>;
+  return { parent: undefined, chain: [] as ReadonlyArray<string> };
 });
 
 const agent = AI.Thing("agent", S.String)`
@@ -134,6 +143,10 @@ const question = AI.Thing("question", S.String)`
 const answer = AI.Thing("answer", S.String)`
   The target's settled answer — it may have asked others to produce it.`;
 
+const askId = AI.Thing("ask", S.String)`
+  This ask's id in the company's ask tree — the UI renders the chain
+  under it.`;
+
 const call = AI.Thing("call", S.optionalKey(S.String))`
   A call id (from the call tool): the exchange is mirrored into that
   call's thread, where the humans watch and can join.`;
@@ -142,7 +155,7 @@ const note = AI.Thing("note", S.String)`
   A short note — context, a heads-up, a report. No answer expected.`;
 
 export class Ask extends (AI.Tool<Ask>(import.meta)("ask")`
-  Ask ${agent} one ${question} and wait for the ${AI.out(answer)}. The
+  Ask ${agent} one ${question} and wait for the ${AI.out(answer, askId)}. The
   target may ask others while answering — the chain bubbles back to
   you. Refused (${ChainRefused}) when the chain would cycle or the hop
   budget is spent: answer with what you have. Unknown names fail with
@@ -154,12 +167,15 @@ export class Tell extends (AI.Tool<Tell>(import.meta)("tell")`
   (use ask when you need one). The note lands in their session.
   Unknown names fail with ${TeammateUnknown} and the roster.`) {}
 
-/** The ask physics: resolve, guard the chain, dispatch, bubble up. */
+/** The ask physics: resolve, guard the chain, record the tree node,
+ *  deliver (with the call's DELTA as pre-history when on one), settle
+ *  the node with the answer, bubble it up. */
 export const AskLive = Layer.effect(
   Ask,
   Effect.gen(function* () {
     const colleagues = yield* Colleagues;
     const sessions = yield* AI.Sessions;
+    const asks = yield* Asks;
     const calls = yield* Effect.serviceOption(Calls);
 
     const mirror = Effect.fn(function* (
@@ -178,25 +194,76 @@ export const AskLive = Layer.effect(
     }) {
       const me = yield* currentThread;
       const myName = nameOfKey(me.key);
-      const behind = yield* currentChain;
+      const { parent, chain: behind } = yield* currentAsk;
       const chain = behind.includes(myName) ? behind : [...behind, myName];
       const target = yield* colleagues.resolve(p.agent);
       if (chain.includes(target.name) || chain.length >= MAX_HOPS) {
         return yield* new ChainRefused({ chain, target: target.name });
       }
+
+      // on a call: the asker and the target must both be MEMBERS, and
+      // the target receives the meeting-so-far it has not yet seen —
+      // one message per utterance (its own words never echoed back)
+      let history: ReadonlyArray<string> | undefined;
+      if (p.call !== undefined && Option.isSome(calls)) {
+        const view = yield* calls.value.read(p.call);
+        if (view === undefined) {
+          return yield* new TeammateUnknown({
+            member: `call ${p.call}`,
+            roster: ["(no such call — open one with the call tool)"],
+          });
+        }
+        if (!view.members.includes(myName) || !view.members.includes(target.name)) {
+          return yield* new TeammateUnknown({
+            member: target.name,
+            roster: view.members,
+          });
+        }
+        const delta = yield* calls.value.since(p.call, target.name);
+        history = delta.map((utterance) => renderUtterance(p.call!, utterance));
+      }
+
+      const minted = yield* Clock.currentTimeMillis;
+      const id = `a-${minted.toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+      yield* asks
+        .open({
+          id,
+          ...(parent !== undefined ? { parent } : {}),
+          ...(p.call !== undefined ? { call: p.call } : {}),
+          asker: myName,
+          target: target.name,
+          question: p.question,
+        })
+        .pipe(Effect.ignore);
       yield* mirror(p.call, myName, `→ ${target.name}: ${p.question}`);
-      const outcome = yield* sessions.dispatch(
-        target.term,
-        target.key,
-        withChain([...chain, target.name], p.question),
-        { parent: { term: target.term, key: me.key } },
-      );
+
+      const outcome = yield* sessions
+        .dispatch(
+          target.term,
+          target.key,
+          withChain(id, [...chain, target.name], p.question),
+          {
+            parent: { term: target.term, key: me.key },
+            ...(history !== undefined && history.length > 0
+              ? { history }
+              : {}),
+          },
+        )
+        .pipe(
+          Effect.tapDefect((defect) =>
+            asks
+              .settle(id, "failed", String(defect).slice(0, 2_000))
+              .pipe(Effect.ignore),
+          ),
+        );
+
       const text =
         typeof outcome === "string" ? outcome : JSON.stringify(outcome);
       const clipped =
         text.length > 8_000 ? `${text.slice(0, 8_000)}\n[… clipped]` : text;
+      yield* asks.settle(id, "answered", clipped).pipe(Effect.ignore);
       yield* mirror(p.call, target.name, clipped);
-      return { answer: clipped };
+      return { answer: clipped, ask: id };
     });
   }),
 );

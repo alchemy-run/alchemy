@@ -200,7 +200,11 @@ interface SessionRpc extends MainRpc<DurableObjectState> {
   ) => Effect.Effect<void, unknown, RuntimeContext>;
   readonly dispatch: (
     input: unknown,
-    options?: { readonly parent?: SessionRef },
+    options?: {
+      readonly parent?: SessionRef;
+      /** Quiet pre-history rows recorded before `input` (Sessions). */
+      readonly history?: ReadonlyArray<string>;
+    },
   ) => Effect.Effect<unknown, unknown, RuntimeContext>;
   /** One METHOD of this session's API (`agent.at(key).method(…)`) —
    *  args and result cross the wire, so they are structured-clonable
@@ -888,11 +892,17 @@ export const DurableObjectHost: Layer.Layer<
           }),
           dispatch: Effect.fn(function* (
             input: unknown,
-            options?: { parent?: SessionRef },
+            options?: {
+              parent?: SessionRef;
+              history?: ReadonlyArray<string>;
+            },
           ) {
             return yield* (yield* engine).dispatch(input, {
               key: me.key,
               parent: options?.parent,
+              ...(options?.history !== undefined
+                ? { history: options.history }
+                : {}),
             });
           }),
           // a method runs in THIS isolate, inside the session frame;
@@ -1177,6 +1187,9 @@ export const DurableObjectHost: Layer.Layer<
             .dispatch(input, {
               ...(options?.parent !== undefined
                 ? { parent: options.parent }
+                : {}),
+              ...(options?.history !== undefined
+                ? { history: options.history }
                 : {}),
             })
             .pipe(Effect.orDie),

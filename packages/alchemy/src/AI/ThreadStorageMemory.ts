@@ -63,6 +63,18 @@ export const makeThreadStorageMemory = (): ThreadStorageService => {
                 });
                 return seq;
               }),
+            putInboxBatch: (inputs) =>
+              Effect.sync(() =>
+                inputs.map((entry) => {
+                  const seq = session.inboxSeq++;
+                  session.inbox.push({
+                    seq,
+                    input: entry.input,
+                    quiet: entry.quiet === true,
+                  });
+                  return seq;
+                }),
+              ),
             listInbox: Effect.sync(() =>
               session.inbox.filter(
                 (inboxRow) => inboxRow.seq >= session.drained,
