@@ -4330,7 +4330,7 @@ importers:
         specifier: 'catalog:'
         version: 8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)
 
-  fixtures/astro:
+  packages/frontend-frameworks/fixtures/astro:
     dependencies:
       astro:
         specifier: 'catalog:'
@@ -4338,13 +4338,13 @@ importers:
     devDependencies:
       '@alchemy.run/cloudflare-runtime':
         specifier: workspace:*
-        version: link:../../packages/cloudflare-runtime
+        version: link:../../../cloudflare-runtime
       '@alchemy.run/cloudflare-test-tools':
         specifier: workspace:*
-        version: link:../../packages/cloudflare-test-tools
+        version: link:../../../cloudflare-test-tools
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
-        version: link:../../packages/frontend-frameworks
+        version: link:../../../frontend-frameworks
       '@cloudflare/workers-types':
         specifier: 5.20260901.1
         version: 5.20260901.1
@@ -4361,7 +4361,7 @@ importers:
         specifier: 'catalog:'
         version: 8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)
 
-  fixtures/astro-ssr:
+  packages/frontend-frameworks/fixtures/astro-ssr:
     dependencies:
       astro:
         specifier: 'catalog:'
@@ -4369,13 +4369,13 @@ importers:
     devDependencies:
       '@alchemy.run/cloudflare-runtime':
         specifier: workspace:*
-        version: link:../../packages/cloudflare-runtime
+        version: link:../../../cloudflare-runtime
       '@alchemy.run/cloudflare-test-tools':
         specifier: workspace:*
-        version: link:../../packages/cloudflare-test-tools
+        version: link:../../../cloudflare-test-tools
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
-        version: link:../../packages/frontend-frameworks
+        version: link:../../../frontend-frameworks
       '@cloudflare/workers-types':
         specifier: 5.20260901.1
         version: 5.20260901.1
@@ -4392,7 +4392,7 @@ importers:
         specifier: 'catalog:'
         version: 8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)
 
-  fixtures/astro-static:
+  packages/frontend-frameworks/fixtures/astro-static:
     dependencies:
       astro:
         specifier: 'catalog:'
@@ -4400,13 +4400,13 @@ importers:
     devDependencies:
       '@alchemy.run/cloudflare-runtime':
         specifier: workspace:*
-        version: link:../../packages/cloudflare-runtime
+        version: link:../../../cloudflare-runtime
       '@alchemy.run/cloudflare-test-tools':
         specifier: workspace:*
-        version: link:../../packages/cloudflare-test-tools
+        version: link:../../../cloudflare-test-tools
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
-        version: link:../../packages/frontend-frameworks
+        version: link:../../../frontend-frameworks
       '@cloudflare/workers-types':
         specifier: 5.20260901.1
         version: 5.20260901.1
@@ -4423,14 +4423,14 @@ importers:
         specifier: 'catalog:'
         version: 8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)
 
-  fixtures/monorepo-workspace:
+  packages/frontend-frameworks/fixtures/monorepo-workspace:
     devDependencies:
       '@alchemy.run/cloudflare-test-tools':
         specifier: workspace:*
-        version: link:../../packages/cloudflare-test-tools
+        version: link:../../../cloudflare-test-tools
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
-        version: link:../../packages/frontend-frameworks
+        version: link:../../../frontend-frameworks
       '@cloudflare/workers-types':
         specifier: 5.20260901.1
         version: 5.20260901.1
@@ -4444,7 +4444,7 @@ importers:
         specifier: 'catalog:'
         version: 8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)
 
-  fixtures/nextjs:
+  packages/frontend-frameworks/fixtures/nextjs:
     dependencies:
       next:
         specifier: 'catalog:'
@@ -4458,13 +4458,13 @@ importers:
     devDependencies:
       '@alchemy.run/cloudflare-runtime':
         specifier: workspace:*
-        version: link:../../packages/cloudflare-runtime
+        version: link:../../../cloudflare-runtime
       '@alchemy.run/cloudflare-test-tools':
         specifier: workspace:*
-        version: link:../../packages/cloudflare-test-tools
+        version: link:../../../cloudflare-test-tools
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
-        version: link:../../packages/frontend-frameworks
+        version: link:../../../frontend-frameworks
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.0.0-rc.115(effect@4.0.0-rc.115)(redis@6.2.1)
@@ -4482,9 +4482,9 @@ importers:
         version: 4.20260722.0
       wrangler:
         specifier: workspace:*
-        version: link:../../packages/frontend-frameworks/src/nextjs/wrangler-stub
+        version: link:../../../frontend-frameworks/src/nextjs/wrangler-stub
 
-  fixtures/nextjs-isr:
+  packages/frontend-frameworks/fixtures/nextjs-isr:
     dependencies:
       next:
         specifier: 'catalog:'
@@ -4498,13 +4498,13 @@ importers:
     devDependencies:
       '@alchemy.run/cloudflare-runtime':
         specifier: workspace:*
-        version: link:../../packages/cloudflare-runtime
+        version: link:../../../cloudflare-runtime
       '@alchemy.run/cloudflare-test-tools':
         specifier: workspace:*
-        version: link:../../packages/cloudflare-test-tools
+        version: link:../../../cloudflare-test-tools
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
-        version: link:../../packages/frontend-frameworks
+        version: link:../../../frontend-frameworks
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.0.0-rc.115(effect@4.0.0-rc.115)(redis@6.2.1)
@@ -4522,9 +4522,9 @@ importers:
         version: 4.20260722.0
       wrangler:
         specifier: workspace:*
-        version: link:../../packages/frontend-frameworks/src/nextjs/wrangler-stub
+        version: link:../../../frontend-frameworks/src/nextjs/wrangler-stub
 
-  fixtures/nuxt:
+  packages/frontend-frameworks/fixtures/nuxt:
     dependencies:
       nitropack:
         specifier: 'catalog:'
@@ -4535,13 +4535,13 @@ importers:
     devDependencies:
       '@alchemy.run/cloudflare-runtime':
         specifier: workspace:*
-        version: link:../../packages/cloudflare-runtime
+        version: link:../../../cloudflare-runtime
       '@alchemy.run/cloudflare-test-tools':
         specifier: workspace:*
-        version: link:../../packages/cloudflare-test-tools
+        version: link:../../../cloudflare-test-tools
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
-        version: link:../../packages/frontend-frameworks
+        version: link:../../../frontend-frameworks
       '@cloudflare/workers-types':
         specifier: 5.20260901.1
         version: 5.20260901.1
@@ -4555,7 +4555,7 @@ importers:
         specifier: 4.0.0-rc.115
         version: 4.0.0-rc.115
 
-  fixtures/octane:
+  packages/frontend-frameworks/fixtures/octane:
     dependencies:
       '@octanejs/adapter-cloudflare':
         specifier: 'catalog:'
@@ -4572,10 +4572,10 @@ importers:
     devDependencies:
       '@alchemy.run/cloudflare-test-tools':
         specifier: workspace:*
-        version: link:../../packages/cloudflare-test-tools
+        version: link:../../../cloudflare-test-tools
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
-        version: link:../../packages/frontend-frameworks
+        version: link:../../../frontend-frameworks
       '@cloudflare/workers-types':
         specifier: 5.20260901.1
         version: 5.20260901.1
@@ -4586,7 +4586,7 @@ importers:
         specifier: catalog:node24
         version: 24.13.3
 
-  fixtures/react-router-rsc:
+  packages/frontend-frameworks/fixtures/react-router-rsc:
     dependencies:
       react:
         specifier: 'catalog:'
@@ -4600,7 +4600,7 @@ importers:
     devDependencies:
       '@alchemy.run/cloudflare-test-tools':
         specifier: workspace:*
-        version: link:../../packages/cloudflare-test-tools
+        version: link:../../../cloudflare-test-tools
       '@cloudflare/workers-types':
         specifier: 5.20260901.1
         version: 5.20260901.1
@@ -4626,7 +4626,7 @@ importers:
         specifier: 'catalog:'
         version: 8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)
 
-  fixtures/solid-spa:
+  packages/frontend-frameworks/fixtures/solid-spa:
     dependencies:
       '@solidjs/router':
         specifier: catalog:solid-v1
@@ -4637,7 +4637,7 @@ importers:
     devDependencies:
       '@alchemy.run/cloudflare-test-tools':
         specifier: workspace:*
-        version: link:../../packages/cloudflare-test-tools
+        version: link:../../../cloudflare-test-tools
       '@playwright/test':
         specifier: 'catalog:'
         version: 1.62.0
@@ -4660,7 +4660,7 @@ importers:
         specifier: 'catalog:'
         version: 2.11.14(solid-js@1.9.15)(supports-color@10.2.2)(vite@7.3.6(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
 
-  fixtures/solidstart:
+  packages/frontend-frameworks/fixtures/solidstart:
     dependencies:
       '@solidjs/meta':
         specifier: 'catalog:'
@@ -4683,16 +4683,16 @@ importers:
     devDependencies:
       '@alchemy.run/cloudflare-test-tools':
         specifier: workspace:*
-        version: link:../../packages/cloudflare-test-tools
+        version: link:../../../cloudflare-test-tools
       '@playwright/test':
         specifier: 'catalog:'
         version: 1.62.0
 
-  fixtures/static-website:
+  packages/frontend-frameworks/fixtures/static-website:
     devDependencies:
       '@alchemy.run/cloudflare-test-tools':
         specifier: workspace:*
-        version: link:../../packages/cloudflare-test-tools
+        version: link:../../../cloudflare-test-tools
       '@playwright/test':
         specifier: 'catalog:'
         version: 1.62.0
@@ -4700,7 +4700,7 @@ importers:
         specifier: 'catalog:'
         version: 8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)
 
-  fixtures/sveltekit:
+  packages/frontend-frameworks/fixtures/sveltekit:
     dependencies:
       cookie:
         specifier: 'catalog:'
@@ -4714,13 +4714,13 @@ importers:
     devDependencies:
       '@alchemy.run/cloudflare-runtime':
         specifier: workspace:*
-        version: link:../../packages/cloudflare-runtime
+        version: link:../../../cloudflare-runtime
       '@alchemy.run/cloudflare-test-tools':
         specifier: workspace:*
-        version: link:../../packages/cloudflare-test-tools
+        version: link:../../../cloudflare-test-tools
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
-        version: link:../../packages/frontend-frameworks
+        version: link:../../../frontend-frameworks
       '@playwright/test':
         specifier: 'catalog:'
         version: 1.62.0
@@ -4743,17 +4743,17 @@ importers:
         specifier: 'catalog:'
         version: 8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)
 
-  fixtures/sveltekit-spa:
+  packages/frontend-frameworks/fixtures/sveltekit-spa:
     devDependencies:
       '@alchemy.run/cloudflare-runtime':
         specifier: workspace:*
-        version: link:../../packages/cloudflare-runtime
+        version: link:../../../cloudflare-runtime
       '@alchemy.run/cloudflare-test-tools':
         specifier: workspace:*
-        version: link:../../packages/cloudflare-test-tools
+        version: link:../../../cloudflare-test-tools
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
-        version: link:../../packages/frontend-frameworks
+        version: link:../../../frontend-frameworks
       '@playwright/test':
         specifier: 'catalog:'
         version: 1.62.0
@@ -4776,7 +4776,7 @@ importers:
         specifier: 'catalog:'
         version: 8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)
 
-  fixtures/tanstack-start:
+  packages/frontend-frameworks/fixtures/tanstack-start:
     dependencies:
       '@effect/sql-pg':
         specifier: 'catalog:'
@@ -4808,10 +4808,10 @@ importers:
     devDependencies:
       '@alchemy.run/cloudflare-runtime':
         specifier: workspace:*
-        version: link:../../packages/cloudflare-runtime
+        version: link:../../../cloudflare-runtime
       '@alchemy.run/cloudflare-test-tools':
         specifier: workspace:*
-        version: link:../../packages/cloudflare-test-tools
+        version: link:../../../cloudflare-test-tools
       '@cloudflare/workers-types':
         specifier: 5.20260901.1
         version: 5.20260901.1
@@ -4846,11 +4846,11 @@ importers:
         specifier: 'catalog:'
         version: 8.2.1(@types/node@22.20.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)
 
-  fixtures/vite-hmr:
+  packages/frontend-frameworks/fixtures/vite-hmr:
     devDependencies:
       '@alchemy.run/cloudflare-test-tools':
         specifier: workspace:*
-        version: link:../../packages/cloudflare-test-tools
+        version: link:../../../cloudflare-test-tools
       '@playwright/test':
         specifier: 'catalog:'
         version: 1.62.0
@@ -4858,7 +4858,7 @@ importers:
         specifier: 'catalog:'
         version: 8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)
 
-  fixtures/vocs:
+  packages/frontend-frameworks/fixtures/vocs:
     dependencies:
       hono:
         specifier: 'catalog:'
@@ -4881,13 +4881,13 @@ importers:
     devDependencies:
       '@alchemy.run/cloudflare-runtime':
         specifier: workspace:*
-        version: link:../../packages/cloudflare-runtime
+        version: link:../../../cloudflare-runtime
       '@alchemy.run/cloudflare-test-tools':
         specifier: workspace:*
-        version: link:../../packages/cloudflare-test-tools
+        version: link:../../../cloudflare-test-tools
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
-        version: link:../../packages/frontend-frameworks
+        version: link:../../../frontend-frameworks
       '@cloudflare/unenv-preset':
         specifier: 'catalog:'
         version: 2.16.1(unenv@2.0.0-rc.24)(workerd@1.20260901.1)
@@ -4922,7 +4922,7 @@ importers:
         specifier: 'catalog:'
         version: 8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)
 
-  fixtures/waku:
+  packages/frontend-frameworks/fixtures/waku:
     dependencies:
       hono:
         specifier: 'catalog:'
@@ -4942,13 +4942,13 @@ importers:
     devDependencies:
       '@alchemy.run/cloudflare-runtime':
         specifier: workspace:*
-        version: link:../../packages/cloudflare-runtime
+        version: link:../../../cloudflare-runtime
       '@alchemy.run/cloudflare-test-tools':
         specifier: workspace:*
-        version: link:../../packages/cloudflare-test-tools
+        version: link:../../../cloudflare-test-tools
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
-        version: link:../../packages/frontend-frameworks
+        version: link:../../../frontend-frameworks
       '@cloudflare/workers-types':
         specifier: 5.20260901.1
         version: 5.20260901.1
@@ -4968,7 +4968,7 @@ importers:
         specifier: 'catalog:'
         version: 8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)
 
-  fixtures/waku-durable-objects:
+  packages/frontend-frameworks/fixtures/waku-durable-objects:
     dependencies:
       hono:
         specifier: 'catalog:'
@@ -4988,13 +4988,13 @@ importers:
     devDependencies:
       '@alchemy.run/cloudflare-runtime':
         specifier: workspace:*
-        version: link:../../packages/cloudflare-runtime
+        version: link:../../../cloudflare-runtime
       '@alchemy.run/cloudflare-test-tools':
         specifier: workspace:*
-        version: link:../../packages/cloudflare-test-tools
+        version: link:../../../cloudflare-test-tools
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
-        version: link:../../packages/frontend-frameworks
+        version: link:../../../frontend-frameworks
       '@cloudflare/workers-types':
         specifier: 5.20260901.1
         version: 5.20260901.1

@@ -21,7 +21,7 @@ packages:
   - benchmark/*
   - demos/*
   - submodules/distilled/packages/*
-  - fixtures/*
+  - packages/frontend-frameworks/fixtures/*
   - packages/frontend-frameworks/src/nextjs/wrangler-stub
 catalog:
   "@alchemy.run/sigil": "0.0.0-alpha.10"

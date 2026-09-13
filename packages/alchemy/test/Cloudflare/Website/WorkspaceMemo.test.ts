@@ -25,7 +25,7 @@ import { cloneFixture } from "../Utils/Fixture.ts";
 // Workspace-aware input-hash memoization (no cloud, no build)
 //
 // The `fixtures/monorepo-workspace` fixture mirrors ct's
-// `fixtures/monorepo-workspace`: `app/` is the Vite root and `lib/` is a
+// `packages/frontend-frameworks/fixtures/monorepo-workspace`: `app/` is the Vite root and `lib/` is a
 // sibling directory (its own package.json, NOT a package-manager
 // workspace member) that `app/src` imports by relative path. At build
 // time the toolchain discovers `lib/` from the module graph and reports
